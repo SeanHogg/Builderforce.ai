@@ -71,6 +71,17 @@ function stripComments(text) {
  * failed the build for it — the worst kind of guard, one that is louder about
  * being obeyed than about being correct.
  *
+ * ── WHY RENAMES ARE READ TOO ────────────────────────────────────────────────
+ * Same argument, one step further, and it arrived the same way. A table can be
+ * GENERALISED: `gig_disputes` (0425) became `marketplace_disputes` (0986) when
+ * escrow's `disputed` milestone status needed the record it already was, and
+ * adding a second dispute table beside it would have been two answers to "what
+ * disputes exist". Reading only CREATE and DROP made the guard demand a `pgTable`
+ * for `gig_disputes` — a relation Postgres no longer has, under a name the schema
+ * was RIGHT not to declare. That is the same failure the DROP handling above was
+ * added to fix, so it gets the same fix rather than a baseline entry: a renamed
+ * table is not an unreachable table, it is a reachable table with a better name.
+ *
  * Order matters: a table dropped and then re-created later is created, so this
  * walks the files in sequence and lets the last statement win.
  */
@@ -85,6 +96,15 @@ export function collectCreatedTables(migrationsDir) {
     }
     for (const m of text.matchAll(/DROP TABLE\s+(?:IF EXISTS\s+)?"?([a-z0-9_]+)"?/gi)) {
       created.delete(m[1]);
+    }
+    // `ALTER TABLE old RENAME TO new`. The new name carries the ORIGINAL creating
+    // migration when it is not already tracked, because that is the file a reader
+    // sent here needs to look at — the rename only moved it.
+    for (const m of text.matchAll(/ALTER TABLE\s+(?:IF EXISTS\s+)?"?([a-z0-9_]+)"?\s+RENAME\s+TO\s+"?([a-z0-9_]+)"?/gi)) {
+      const [, from, to] = m;
+      const origin = created.get(from);
+      created.delete(from);
+      if (origin && !created.has(to)) created.set(to, origin);
     }
   }
   return created;

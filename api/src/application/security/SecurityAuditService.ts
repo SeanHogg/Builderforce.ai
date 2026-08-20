@@ -26,6 +26,7 @@ import { TaskRepository } from '../../infrastructure/repositories/TaskRepository
 import { ProjectRepository } from '../../infrastructure/repositories/ProjectRepository';
 import { TaskType, TaskPriority } from '../../domain/shared/types';
 import type { Db } from '../../infrastructure/database/connection';
+import { taskCreatedHook } from '../task/taskCreationHook';
 
 export type FindingSeverity = 'critical' | 'high' | 'medium' | 'low' | 'info';
 /** The five SOC 2 Trust Service Criteria a finding maps to. */
@@ -80,7 +81,7 @@ export class SecurityAuditService {
   private readonly tasks: TaskService;
 
   constructor(private readonly db: Db) {
-    this.tasks = new TaskService(new TaskRepository(db), new ProjectRepository(db));
+    this.tasks = new TaskService(new TaskRepository(db), new ProjectRepository(db), undefined, undefined, undefined, undefined, undefined, taskCreatedHook(db));
   }
 
   /** The project id, tenant-scoped. Null on cross-tenant / missing. */

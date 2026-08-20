@@ -39,11 +39,22 @@ const SURFACE_ICON: Partial<Record<CanvasSurfaceId, () => React.JSX.Element>> = 
   graph: GraphSurfaceIcon,
   scene3d: ThreeDIcon,
   app: AppSurfaceIcon,
+  calendar: CalendarSurfaceIcon,
   page: PageSurfaceIcon,
   play: PlaySurfaceIcon,
   site: SiteSurfaceIcon,
   timeline: TimelineSurfaceIcon,
 };
+
+/** A month: a grid under a header bar, which is the axis the flat board never had. */
+export function CalendarSurfaceIcon() {
+  return <svg viewBox="0 0 16 16" aria-hidden="true">
+    <rect x="1.7" y="3" width="12.6" height="11" rx="1.4" fill="none" stroke="currentColor" strokeWidth="1.25" />
+    <path d="M1.7 6.4h12.6M5.1 1.9v2.2M10.9 1.9v2.2" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
+    <rect x="4.3" y="8.4" width="2.2" height="2.1" rx=".5" fill="currentColor" />
+    <rect x="9.5" y="8.4" width="2.2" height="2.1" rx=".5" fill="currentColor" />
+  </svg>;
+}
 
 /** A sheet with a line of text on it — the page runtime's own axis is the measure. */
 export function PageSurfaceIcon() {

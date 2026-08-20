@@ -249,7 +249,30 @@ export const NAV_GROUPS: NavGroup[] = [
   { id: 'finance', labelKey: 'group.finance', icon: '💰', href: '/seat/finance', match: ['/seat/finance'], seat: 'CFO', stage: 'run', rung: RUNG.WORKSPACE },
   { id: 'revenue', labelKey: 'group.revenue', icon: '📈', href: '/seat/revenue', match: ['/seat/revenue'], seat: 'CRO', stage: 'run', rung: RUNG.WORKSPACE },
   { id: 'people', labelKey: 'group.people', icon: '🧑‍🤝‍🧑', href: '/seat/people', match: ['/seat/people'], seat: 'HR', stage: 'run', rung: RUNG.WORKSPACE },
-  { id: 'hiring', labelKey: 'group.hiring', icon: '🤝', href: '/seat/hiring', match: ['/seat/hiring'], seat: 'Recruiter', stage: 'run', rung: RUNG.WORKSPACE },
+  {
+    // Hiring keeps `/hiring` rather than resolving to `/seat/hiring`, for the reason
+    // stated on Growth two rows up: where a real product surface exists it wins over the
+    // kernel's generic domain view, and one destination may not have two hrefs. The ATS
+    // is that surface — the board of candidates by stage, the interview kits that score
+    // them and the offers that close them. `/seat/hiring` stays in `match` so the row
+    // still lights up on the generic entity view of the same domain.
+    id: 'hiring', labelKey: 'group.hiring', icon: '🤝', href: '/hiring',
+    seat: 'Recruiter', stage: 'run', rung: RUNG.WORKSPACE,
+    match: ['/hiring', '/seat/hiring'],
+    tabKind: 'query', basePath: '/hiring',
+    tabs: [
+      { id: '', labelKey: 'tab.pipeline', icon: '🪜' },
+      { id: 'kits', labelKey: 'tab.interviewKits', icon: '📋' },
+      { id: 'offers', labelKey: 'tab.offers', icon: '✍' },
+    ],
+  },
+  // The résumé workbench — the same Recruiter seat, turned around. `/seat/hiring` is the
+  // EMPLOYER's view (requisitions, candidates, offers); this is the document side, which
+  // the platform has measured for a long time and could not, until now, help anybody
+  // write: rewrite a bullet to XYZ, merge four versions into one, grade it with the gaps
+  // named, and put it in front of a colleague for review. A tab of `/seat/hiring` would
+  // file "help me with my résumé" inside somebody else's funnel.
+  { id: 'career', labelKey: 'group.career', icon: '📄', href: '/career', match: ['/career'], seat: 'Recruiter', stage: 'run', rung: RUNG.WORKSPACE },
   { id: 'investor', labelKey: 'group.investor', icon: '💼', href: '/seat/investor', match: ['/seat/investor'], seat: 'CEO', stage: 'run', rung: RUNG.WORKSPACE },
   { id: 'governance', labelKey: 'group.governance', icon: '🛡', href: '/seat/governance', match: ['/seat/governance'], seat: 'Security', stage: 'run', rung: RUNG.WORKSPACE },
   { id: 'support', labelKey: 'group.support', icon: '💬', href: '/seat/support', match: ['/seat/support'], seat: 'Support', stage: 'run', rung: RUNG.WORKSPACE },
@@ -326,6 +349,10 @@ export const NAV_GROUPS: NavGroup[] = [
   // audience is a company that may not be a customer at all — which is the whole
   // premise of a publisher being distinct from a tenant.
   { id: 'developers', labelKey: 'group.developers', icon: '🧩', href: '/developers', match: ['/developers'], seat: 'platform', stage: 'market', rung: RUNG.SIGNED_IN },
+  // Escrow mediation, from the workspace's side. Owned by the CFO because what a
+  // ruling decides is where held money goes, and filed under RUN rather than ADMIN
+  // because a dispute is live work with a counterparty waiting on it, not a setting.
+  { id: 'disputes', labelKey: 'group.disputes', icon: '⚖', href: '/disputes', match: ['/disputes'], seat: 'CFO', stage: 'run', rung: RUNG.WORKSPACE },
   // ── ADMIN ────────────────────────────────────────────────────────────────
   {
     id: 'settings', labelKey: 'group.settings', icon: '⚙', href: '/settings',
@@ -340,6 +367,10 @@ export const NAV_GROUPS: NavGroup[] = [
       { id: '/settings/viewpoint', labelKey: 'tab.viewpoint', icon: '🎯' },
       { id: '/security', labelKey: 'tab.security', icon: '🔒' },
       { id: '/settings/integrations', labelKey: 'tab.integrations', icon: '🔌' },
+      // The tenant's named model configs (`tenant_models`). These have fed every
+      // model picker since 0211 while having no front door of their own — the only
+      // way a row appeared was as a side effect of publishing from LLM Studio.
+      { id: '/settings/my-llms', labelKey: 'tab.myLlms', icon: '🧠' },
       // `/billing`, NOT `/pricing`. A signed-in customer clicking "Billing" is
       // asking what they are on and where their money goes — `/pricing` is the
       // marketing comparison for somebody deciding whether to buy, and it answers
@@ -490,6 +521,15 @@ export const FOR_HIRE_NAV_GROUPS: NavGroup[] = [
   { id: 'freelancer-gigs', labelKey: 'group.findWork', icon: '🔎', href: '/marketplace?family=talent&kind=gig', match: ['/marketplace', '/freelancer/gigs'], seat: 'platform', stage: 'market', rung: RUNG.SIGNED_IN },
   { id: 'freelancer-workspace', labelKey: 'group.myWorkspace', icon: '🛠', href: '/freelancer/workspace', match: ['/freelancer/workspace'], seat: 'platform', stage: 'make', rung: RUNG.SIGNED_IN },
   { id: 'freelancer-timecard', labelKey: 'group.timecard', icon: '⏱', href: '/freelancer/timecard', match: ['/freelancer/timecard'], seat: 'platform', stage: 'make', rung: RUNG.SIGNED_IN },
+  // What I have earned, what the platform took, and where the money goes. A
+  // destination rather than a Timecard tab: a timecard is hours on ONE engagement,
+  // while earnings span every workspace that has ever paid this person — which is the
+  // second axis (`subject_own_rows`) the whole for-hire shell is built on.
+  { id: 'freelancer-earnings', labelKey: 'group.earnings', icon: '💰', href: '/freelancer/earnings', match: ['/freelancer/earnings'], seat: 'platform', stage: 'measure', rung: RUNG.SIGNED_IN },
+  // Mediation. Listed even when there are none, because a dim row is an invitation
+  // and a missing one is a secret — and "what happens if this goes wrong" is a
+  // question somebody asks BEFORE it does.
+  { id: 'freelancer-disputes', labelKey: 'group.disputes', icon: '⚖', href: '/freelancer/disputes', match: ['/freelancer/disputes'], seat: 'platform', stage: 'run', rung: RUNG.SIGNED_IN },
 ];
 
 export const FREELANCER_NAV_GROUPS: NavGroup[] = [

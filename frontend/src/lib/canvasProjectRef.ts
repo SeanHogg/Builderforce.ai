@@ -54,3 +54,24 @@ export function connectedCanvasProjectNode<T extends CanvasNodeRef>(
     (edge.source === nodeId && edge.target === project.id) || (edge.target === nodeId && edge.source === project.id)))
     ?? projects[0];
 }
+
+/** The canonical `resourceId` a canvas object carries to bind to a tenant project. */
+export function canvasProjectRef(projectId: number): string {
+  return `project:${projectId}`;
+}
+
+/**
+ * Bind a real tenant project onto a canvas Project object.
+ *
+ * The counterpart of `canvasProjectId`: written once here so a caller that
+ * PROVISIONS a project (publishing a Website that has none) puts exactly the
+ * binding on the board that every reader already looks for, and the next action
+ * resolves it the ordinary way instead of provisioning a second one.
+ */
+export function canvasProjectPatch(project: { id: number; name?: string | null }): Partial<CreationNodeData> {
+  return {
+    title: (project.name ?? '').trim() || `Project ${project.id}`,
+    resourceId: canvasProjectRef(project.id),
+    status: 'Active',
+  };
+}

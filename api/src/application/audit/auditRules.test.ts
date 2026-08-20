@@ -6,6 +6,7 @@ const emptySignals = (): AuditSignals => ({
   changesRequestedRoles: new Set(),
   ranDiagnostics: new Set(),
   failedDiagnostics: new Set(),
+  sectionAuthoredRoles: new Set(),
   performedRoles: new Set(),
 });
 
@@ -162,5 +163,21 @@ describe('verdictSignature', () => {
 
   it('separates a passing verdict from a flagged one with no listed gaps', () => {
     expect(verdictSignature('pass', [])).not.toBe(verdictSignature('flagged', []));
+  });
+});
+
+describe('PRD section-authored evidence', () => {
+  it('satisfies a PRODUCER requirement when the role authored its anchored PRD section', () => {
+    const s = emptySignals();
+    const producer = req({ kind: 'role', responsibility: 'owner', ref: 'business-analyst' });
+    expect(requirementUnmetReason(producer, s)).toBe('missing');
+    s.sectionAuthoredRoles.add('business-analyst');
+    expect(requirementUnmetReason(producer, s)).toBeNull();
+  });
+
+  it('does NOT satisfy a REVIEWER requirement — writing your own Review section is not a review', () => {
+    const s = emptySignals();
+    s.sectionAuthoredRoles.add('code-reviewer');
+    expect(requirementUnmetReason(req({ ref: 'code-reviewer' }), s)).toBe('missing');
   });
 });

@@ -5,7 +5,7 @@
  * a warning, so the deck always renders and the user sees what data was missing.
  */
 
-import type { DeckData, TokenManifest, ResolvedBindings, ResolvedValue, BindingFormat } from './types';
+import type { DeckData, TokenManifest, ResolvedBindings, ResolvedValue, BindingFormat, TokenBinding, ChartSeries } from './types';
 
 /** Walk a dot-path (`quality.uptimePct`) into a nested object; undefined if absent. */
 function dig(obj: unknown, path: string): unknown {
@@ -35,6 +35,49 @@ export function formatValue(raw: unknown, format: BindingFormat | undefined): st
 }
 
 /**
+ * Parse a cell that a table renders as text but a chart has to plot. The deck's
+ * assembled matrices are already display-formatted (`"$12,400"`, `"87%"`,
+ * `"(1,200)"`), so a chart binding has to undo that rather than demand a second,
+ * parallel numeric shape of the same data.
+ *
+ * An unparseable cell becomes `null` — a gap in the plot — never 0. A quarter
+ * with no figure and a quarter that spent nothing are different statements, and
+ * a board deck that draws them identically is the reason this returns null.
+ */
+export function parseNumericCell(raw: unknown): number | null {
+  if (typeof raw === 'number') return Number.isFinite(raw) ? raw : null;
+  const s = String(raw ?? '').trim();
+  if (!s) return null;
+  const negative = /^\(.*\)$/.test(s);
+  const cleaned = s.replace(/[()]/g, '').replace(/[^0-9.\-]/g, '');
+  if (!cleaned || cleaned === '-' || cleaned === '.') return null;
+  const n = Number(cleaned);
+  if (!Number.isFinite(n)) return null;
+  return negative ? -Math.abs(n) : n;
+}
+
+/**
+ * Turn a bound `string[][]` matrix into plottable series. Column 0 is the category
+ * axis; the declared `chartSeries` columns (or every remaining column) become the
+ * plotted series.
+ */
+export function matrixToChart(rows: string[][], binding: TokenBinding): ChartSeries {
+  const categories = rows.map((r) => String(r?.[0] ?? ''));
+  const width = rows.reduce((max, r) => Math.max(max, r?.length ?? 0), 0);
+  const columns = binding.chartSeries?.length
+    ? binding.chartSeries
+    : Array.from({ length: Math.max(0, width - 1) }, (_, i) => ({ column: i + 1, name: `Series ${i + 1}` }));
+
+  return {
+    categories,
+    series: columns.map((col) => ({
+      name: col.name,
+      values: rows.map((r) => parseNumericCell(r?.[col.column])),
+    })),
+  };
+}
+
+/**
  * Resolve every binding in the manifest against the data bundle. Returns a token→
  * value map plus a list of human-readable warnings for missing data.
  */
@@ -43,6 +86,17 @@ export function resolveBindings(manifest: TokenManifest, data: DeckData): Resolv
   const warnings: string[] = [];
 
   for (const b of manifest.bindings ?? []) {
+    if (b.kind === 'chart') {
+      const raw = dig(data, b.bindingKey);
+      const rows = Array.isArray(raw)
+        ? (raw as unknown[]).filter(Array.isArray).map((r) => (r as unknown[]).map((c) => String(c ?? '')))
+        : [];
+      const chart = matrixToChart(rows, b);
+      const hasPoint = chart.series.some((s) => s.values.some((v) => v != null));
+      if (!hasPoint) warnings.push(`No plottable numbers for chart "${b.token}" (${b.bindingKey}) — it keeps its uploaded figures.`);
+      byToken.set(b.token, { kind: 'chart', label: b.fallback ?? b.token, ...chart });
+      continue;
+    }
     if (b.kind === 'table') {
       const raw = dig(data, b.bindingKey);
       const rows = Array.isArray(raw) ? (raw as unknown[]).map((r) => (Array.isArray(r) ? r.map((c) => String(c ?? '')) : [String(r ?? '')])) : [];

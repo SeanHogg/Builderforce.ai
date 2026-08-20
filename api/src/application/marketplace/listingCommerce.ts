@@ -113,11 +113,23 @@ function wholeNumberOrNull(value: unknown): number | null {
  * Extracted so the take-rate resolver and the earnings page read the same
  * number. Two queries answering "what has this seller earned" is how the rate a
  * buyer is charged and the figure the seller is shown drift apart.
+ *
+ * `accountKind` DEFAULTS TO 'user' BECAUSE MOST SELLERS ARE PEOPLE — a creation,
+ * a knowledge listing and a hosted site all name an author, and their earnings
+ * accrue to that person's account. A marketplace AGENT names none (`ide_agents`
+ * has no author column), so its earnings accrue to the publishing WORKSPACE.
+ * The parameter exists so both read the same function: the threshold a seller is
+ * measured against and the account the money lands in have to be the same
+ * account, or a seller crosses the threshold in one query and never in the other
+ * and is charged 0% forever.
  */
+export type SellerAccountKind = 'user' | 'tenant';
+
 export async function lifetimeSellerCents(
   db: Db,
   tenantId: number,
-  userId: string,
+  accountRef: string,
+  accountKind: SellerAccountKind = 'user',
 ): Promise<{ earnedCents: number; salesCount: number }> {
   const [row] = await db
     .select({
@@ -127,8 +139,8 @@ export async function lifetimeSellerCents(
     .from(ledgerEntries)
     .where(and(
       eq(ledgerEntries.tenantId, tenantId),
-      eq(ledgerEntries.accountKind, 'user'),
-      eq(ledgerEntries.accountRef, userId),
+      eq(ledgerEntries.accountKind, accountKind),
+      eq(ledgerEntries.accountRef, accountRef),
       eq(ledgerEntries.denomination, USD_CENTS),
       sql`${ledgerEntries.entryKind} in ('commission', 'refund')`,
     ));
@@ -175,7 +187,7 @@ export interface ResolvedTakeRate {
 export async function resolveTakeRateBps(
   db: Db,
   env: Env,
-  seller: { tenantId: number | null; ref: string | null },
+  seller: { tenantId: number | null; ref: string | null; accountKind?: SellerAccountKind },
 ): Promise<ResolvedTakeRate> {
   const thresholdCents = takeRateThresholdCents(env);
   const configured = platformTakeRateBps(env);
@@ -187,7 +199,7 @@ export async function resolveTakeRateBps(
     return { bps: configured, lifetimeCents: 0, thresholdCents, underThreshold: false };
   }
 
-  const { earnedCents } = await lifetimeSellerCents(db, seller.tenantId, seller.ref);
+  const { earnedCents } = await lifetimeSellerCents(db, seller.tenantId, seller.ref, seller.accountKind ?? 'user');
   const underThreshold = earnedCents < thresholdCents;
   return {
     bps: underThreshold ? 0 : configured,

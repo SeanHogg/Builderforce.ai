@@ -26,8 +26,15 @@ import type { EffectiveManagerPolicy } from '../manager/managerPolicy';
 /** The resolved verdict stored on `ceremony_participants.attendance` (0365). */
 export type AttendanceVerdict = 'unknown' | 'present' | 'absent' | 'excused';
 
-/** Where a verdict came from — `ceremony_participants.attendance_source` (0366). */
-export type AttendanceSource = 'derived' | 'pto' | 'manual';
+/**
+ * Where a verdict came from — `ceremony_participants.attendance_source` (0366).
+ *
+ * `rsvp` (added 2026-08-19): the person DECLINED the companion meeting's invitation.
+ * Distinct from `pto` because it is a different act — leave is a calendar state the
+ * platform reads, a decline is a person answering this specific invitation — and an
+ * operator auditing "why is this excused?" needs to see which one it was.
+ */
+export type AttendanceSource = 'derived' | 'pto' | 'manual' | 'rsvp';
 
 /** The participant fields attendance resolution reads. */
 export interface AttendanceInput {
@@ -47,6 +54,19 @@ export interface AttendanceInput {
   storedSource?: AttendanceSource;
   /** True when approved leave (`member_profiles.pto`) covered the ceremony (0366). */
   onPto?: boolean;
+  /**
+   * True when this person DECLINED the companion meeting's invitation
+   * (`meeting_attendees.response = 'declined'`).
+   *
+   * `POST /api/meetings/:id/rsvp` and the `response` column have existed since 0292 and
+   * nothing in the product ever called the endpoint, so every row that was not
+   * auto-accepted by joining read `'invited'`. Now that a ceremony's attendance is fed by
+   * its companion meeting (0366), an explicit decline is exactly the signal that should
+   * excuse someone — it is the same act as approved leave, only made per-invitation.
+   * Until this existed, someone who explicitly declined a standup was still recorded as
+   * a no-show, and `absentHumans` is what hands their tickets to an agent.
+   */
+  declinedInvite?: boolean;
 }
 
 export interface AttendanceResult extends AttendanceInput {
@@ -83,7 +103,10 @@ export function isHumanSeat(memberKind: string): boolean {
  *   4. ON APPROVED LEAVE ⇒ 'excused'. Planned absence is not a no-show, and since
  *      `absentHumans` is what the reassignment rules read, this is what stops a holiday
  *      from contributing to someone's tickets being handed to an agent.
- *   5. EXPECTED and never seen ⇒ 'absent'. An optional seat is 'excused' instead.
+ *   5. DECLINED THE INVITE ⇒ 'excused'. The same reasoning one step more explicit: this
+ *      person was ASKED and said no, in writing, before the meeting. Ranked after leave
+ *      only because leave is the broader state; either alone is sufficient.
+ *   6. EXPECTED and never seen ⇒ 'absent'. An optional seat is 'excused' instead.
  */
 export function resolveAttendanceVerdict(p: AttendanceInput): { verdict: AttendanceVerdict; source: AttendanceSource } {
   if (!isHumanSeat(p.memberKind)) return { verdict: 'present', source: 'derived' };
@@ -92,6 +115,7 @@ export function resolveAttendanceVerdict(p: AttendanceInput): { verdict: Attenda
   }
   if (p.joinedAt != null || p.durationMs > 0) return { verdict: 'present', source: 'derived' };
   if (p.onPto) return { verdict: 'excused', source: 'pto' };
+  if (p.declinedInvite) return { verdict: 'excused', source: 'rsvp' };
   return { verdict: p.required ? 'absent' : 'excused', source: 'derived' };
 }
 

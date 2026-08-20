@@ -17,6 +17,7 @@ import { WORKFORCE_WIDGETS } from '@/components/widgets/registry-modules/workfor
 import { WORKFORCE_PLAN_WIDGETS } from '@/components/widgets/registry-modules/workforcePlanWidgets';
 import { EMP_METRICS_WIDGETS } from '@/components/widgets/registry-modules/empMetricsWidgets';
 import { PAID_MEDIA_WIDGETS } from '@/components/widgets/registry-modules/paidMediaWidgets';
+import { WORKFORCE_HEALTH_WIDGETS } from '@/components/insights/workforceHealthWidget';
 
 /**
  * The single aggregation point for the app-wide widget registry.
@@ -56,4 +57,5 @@ export const ALL_WIDGETS: WidgetDef[] = [
   ...WORKFORCE_WIDGETS,
   ...WORKFORCE_PLAN_WIDGETS,
   ...EMP_METRICS_WIDGETS,
+  ...WORKFORCE_HEALTH_WIDGETS,
 ];

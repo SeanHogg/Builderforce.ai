@@ -65,11 +65,45 @@ const CATALOG_FILE = path.join('src', 'application', 'llm', 'builtinMcpService.t
 
 const advertisedName = (tool) => `builtin_${tool.replace(/[^a-zA-Z0-9]+/g, '_')}`;
 
-/** Every tool id in the builtin catalog, read from the catalog itself. */
+/**
+ * Every tool id the model is actually advertised — read from the catalog AND from
+ * every module the catalog SPREADS INTO ITSELF.
+ *
+ * The catalog stopped being one file. `builtinMcpService.ts` now does
+ * `import { CAREER_TOOLS } from './careerToolCatalog'` and `...CAREER_TOOLS,`, so
+ * those ids are advertised to the model exactly like the ones written inline —
+ * and reading only the one file left every one of them unguarded. A prompt naming
+ * `recruiter.grade_resume` in prose would have been the fourth-and-fifth instance
+ * of the defect above, passing green.
+ *
+ * The spread list is DERIVED rather than hard-coded: a sixth catalog module is
+ * picked up by adding the import and the spread, which is what its author does
+ * anyway. A module that is imported but never spread is not part of the catalog
+ * and is deliberately not read.
+ */
+function readToolIds(text, into) {
+  for (const m of text.matchAll(/\{\s*tool:\s*'([a-z0-9_]+\.[a-z0-9_]+)'/g)) into.add(m[1]);
+}
+
+/** Relative paths of the modules the catalog spreads in. Filled by `loadCatalogIds`. */
+const CATALOG_MODULES = new Set();
+
 function loadCatalogIds() {
-  const text = fs.readFileSync(path.resolve(CATALOG_FILE), 'utf8');
+  const catalogText = fs.readFileSync(path.resolve(CATALOG_FILE), 'utf8');
   const ids = new Set();
-  for (const m of text.matchAll(/\{\s*tool:\s*'([a-z0-9_]+\.[a-z0-9_]+)'/g)) ids.add(m[1]);
+  readToolIds(catalogText, ids);
+
+  // Names that are spread into an array literal somewhere in the catalog.
+  const spread = new Set([...catalogText.matchAll(/\.\.\.([A-Z][A-Z0-9_]*),/g)].map((m) => m[1]));
+  const dir = path.dirname(path.resolve(CATALOG_FILE));
+  for (const m of catalogText.matchAll(/import\s*\{([^}]+)\}\s*from\s*'\.\/([A-Za-z0-9_]+)'/g)) {
+    const names = m[1].split(',').map((n) => n.trim().split(/\s+as\s+/)[0].trim());
+    if (!names.some((n) => spread.has(n))) continue;
+    const file = path.join(dir, `${m[2]}.ts`);
+    if (!fs.existsSync(file)) continue;
+    readToolIds(fs.readFileSync(file, 'utf8'), ids);
+    CATALOG_MODULES.add(path.relative(process.cwd(), file));
+  }
   return ids;
 }
 
@@ -94,8 +128,9 @@ for (const root of TS_ROOTS) walk(root);
 const violations = [];
 for (const filePath of files) {
   const rel = path.relative(process.cwd(), filePath);
-  // The catalog defines the ids and the mapping; it is the one file that must name both.
-  if (rel === CATALOG_FILE) continue;
+  // The catalog modules define the ids and the mapping; they are the files that must
+  // name both. That is the catalog itself and every module it spreads in.
+  if (rel === CATALOG_FILE || CATALOG_MODULES.has(rel)) continue;
 
   const sourceFile = ts.createSourceFile(
     filePath, fs.readFileSync(filePath, 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS,

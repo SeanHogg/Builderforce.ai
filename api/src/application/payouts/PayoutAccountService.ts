@@ -321,8 +321,30 @@ export class PayoutAccountService {
     });
   }
 
-  /** Total already paid out in this workspace, in cents. One indexed SUM, never
-   *  a fetch-and-add. */
+  /**
+   * Total already paid out of this workspace TO A BANK, in cents. One indexed SUM,
+   * never a fetch-and-add.
+   *
+   * ── THE `payout` COLLISION THIS FILTERS ─────────────────────────────────────
+   * Two different acts write `entry_kind = 'payout'` on the same user account:
+   *
+   *   · this service, when money LEAVES the platform to a person's destination;
+   *   · `application/marketplace/milestones.ts`, when an escrow milestone is
+   *     RELEASED — which credits the freelancer's in-platform balance and moves
+   *     nothing outward.
+   *
+   * Summing both made an escrow release look like a withdrawal, so it inflated
+   * "already paid out" and correspondingly REDUCED `availableCents` — the balance
+   * a seller is told they may withdraw. A freelancer who had been released a
+   * milestone was shown less money than they held, by exactly the amount they had
+   * just earned.
+   *
+   * The two are separable because escrow stamps its own reference namespace
+   * (`escrowLedgerReference` → `escrow:<milestoneId>:<action>`), which nothing else
+   * writes. Filtering on it here rather than splitting the entry kind keeps every
+   * existing row correct with no backfill: an escrow release IS a payout to the
+   * freelancer's balance, it is simply not a withdrawal.
+   */
   async paidCents(tenantId: number, userId: string): Promise<number> {
     const [row] = await this.db.select({ total: sql<string>`coalesce(sum(abs(${ledgerEntries.amount})), 0)` })
       .from(ledgerEntries)
@@ -332,6 +354,7 @@ export class PayoutAccountService {
         eq(ledgerEntries.accountRef, userId),
         eq(ledgerEntries.entryKind, 'payout'),
         eq(ledgerEntries.denomination, USD_CENTS),
+        sql`(${ledgerEntries.reference} is null or ${ledgerEntries.reference} not like 'escrow:%')`,
       ));
     return Math.round(Number(row?.total ?? 0));
   }

@@ -76,8 +76,8 @@ describe('CONTAINER_SURFACE_CAPS → container toolset (must match server.mjs)',
     expect(names(CONTAINER_AGENT_TOOLS)).toEqual([
       'ask_human', 'claim_resource', 'finish', 'git_diff', 'git_history', 'git_redo', 'git_status',
       'git_sync_latest', 'git_undo', 'list_files', 'memory_forget', 'memory_recall', 'memory_remember',
-      'read_file', 'release_resource', 'run_command', 'update_prd', 'workspace_note', 'workspace_read',
-      'write_file',
+      'read_file', 'release_resource', 'run_command', 'update_prd', 'web_search', 'workspace_note',
+      'workspace_read', 'write_file',
     ]);
   });
 
@@ -114,6 +114,20 @@ describe('CONTAINER_SURFACE_CAPS → container toolset (must match server.mjs)',
   it('backs `human` — the image parks the run and is redispatched with the answer', () => {
     expect(CONTAINER_SURFACE_CAPS.has('human')).toBe(true);
     expect(names(CONTAINER_AGENT_TOOLS)).toContain('ask_human');
+  });
+
+  it('backs `web.search` — parity with the durable surface, on the shared `search` op', () => {
+    // This was the last capability the two cloud surfaces disagreed on, and the
+    // disagreement was structural rather than intentional: the container's tools come
+    // from its image's own loop, and there was no op behind search, so advertising it
+    // would have surfaced a tool that 400s mid-run. The `search` container-op is that
+    // backing, and BOTH images that share this capability set dispatch `web_search` to
+    // it (api/container/server.mjs and githubActionsRunner.ts).
+    expect(CONTAINER_SURFACE_CAPS.has('web.search')).toBe(true);
+    expect(names(CONTAINER_AGENT_TOOLS)).toContain('web_search');
+    // Still NOT `web` (fetch): there is no `fetch` op, and a shell can curl.
+    expect(CONTAINER_SURFACE_CAPS.has('web')).toBe(false);
+    expect(names(CONTAINER_AGENT_TOOLS)).not.toContain('web_fetch');
   });
 
   it('backs `prd.write` — both images relay `update_prd` through the shared `prd` op', () => {

@@ -38,12 +38,14 @@ import { acrossTenants, scopedToTenant } from '../../infrastructure/database/ten
 import { credentialSecret, decryptCredentials } from '../integrations/credentialCrypto';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import {
-  AGS_SCOPE, NRPS_SCOPE, agsScoreBody, readLaunchClaims, readMembers, rosterFromMembers,
-  type AgsScore, type CohortRosterRow, type LtiLaunchContext, type LtiMember,
+  AGS_SCOPE, NRPS_SCOPE, agsScoreBody, readDeepLinkingSettings, readLaunchClaims, readMembers,
+  rosterFromMembers,
+  type AgsScore, type CohortRosterRow, type LtiDeepLinkingSettings, type LtiLaunchContext,
+  type LtiMember,
 } from '../../domain/lti/ltiClaims';
 import type { Env } from '../../env';
 
-export type { LtiLaunchContext, LtiMember, CohortRosterRow, AgsScore };
+export type { LtiLaunchContext, LtiMember, CohortRosterRow, AgsScore, LtiDeepLinkingSettings };
 export { AGS_SCOPE, NRPS_SCOPE, rosterFromMembers };
 
 /**
@@ -301,7 +303,12 @@ export const randomToken = randomUrlToken;
 // ---------------------------------------------------------------------------
 
 export type LaunchResult =
-  | { ok: true; context: LtiLaunchContext }
+  /** `deepLinking` is non-null only for an `LtiDeepLinkingRequest` that carried a
+   *  return URL. It rides the RESULT rather than the context because it is not a
+   *  property of the launching user or their course — it is the platform's terms
+   *  for one exchange — and because the raw payload it is read from must not
+   *  escape this module. */
+  | { ok: true; context: LtiLaunchContext; deepLinking: LtiDeepLinkingSettings | null }
   | { ok: false; error: string };
 
 /**
@@ -360,7 +367,7 @@ export async function verifyLaunch(
   if (!registration.deploymentIds.includes(claims.context.deploymentId)) {
     return { ok: false, error: 'Launch deployment is not registered for this tool.' };
   }
-  return claims;
+  return { ok: true, context: claims.context, deepLinking: readDeepLinkingSettings(payload) };
 }
 
 // ---------------------------------------------------------------------------
@@ -446,15 +453,29 @@ async function consumeNonce(env: Env, issuer: string, nonce: string): Promise<bo
 // Service access tokens (client credentials, signed assertion)
 // ---------------------------------------------------------------------------
 
-async function signClientAssertion(
+/**
+ * Sign a set of claims with THIS registration's tool key. RS256, `kid` from the
+ * registration, and the private half fetched fresh and never cached.
+ *
+ * ── WHY ONE FUNCTION ─────────────────────────────────────────────────────────
+ * Two things are signed with the tool key: the client assertion that buys a
+ * service access token, and the deep-linking response the browser posts back to
+ * the LMS. They are the same operation — import the key, encode two segments,
+ * RS256 — and written twice they drift: the second copy is where the `kid` gets
+ * omitted, or `typ` is spelled differently, and the platform's answer to both is
+ * `invalid_client` with no further detail. So the claims differ and the signing
+ * does not.
+ *
+ * Returns null rather than throwing when there is no key: the registration is
+ * half-written or the envelope secret rotated, and a caller reporting "could not
+ * sign" beats an exception whose message could carry key material.
+ */
+async function signWithToolKey(
   env: Env,
   registration: LtiRegistration,
-  audience: string,
+  payload: Record<string, unknown>,
 ): Promise<string | null> {
   const privateJwk = await toolPrivateKey(env, registration);
-  // No key means the registration is half-written or the envelope secret rotated.
-  // Returning null makes that a "could not obtain a token" the caller reports,
-  // rather than an exception whose message could carry key material.
   if (!privateJwk) return null;
   const key = await crypto.subtle.importKey(
     'jwk',
@@ -463,16 +484,7 @@ async function signClientAssertion(
     false,
     ['sign'],
   );
-  const now = Math.floor(Date.now() / 1000);
   const header = { alg: 'RS256', typ: 'JWT', kid: registration.toolKeyId };
-  const payload = {
-    iss: registration.clientId,
-    sub: registration.clientId,
-    aud: audience,
-    iat: now,
-    exp: now + 300,
-    jti: randomToken(16),
-  };
   const signingInput = `${encodeJwsSegment(header)}.${encodeJwsSegment(payload)}`;
   const signature = await crypto.subtle.sign(
     'RSASSA-PKCS1-v1_5',
@@ -480,6 +492,39 @@ async function signClientAssertion(
     new TextEncoder().encode(signingInput),
   );
   return `${signingInput}.${bytesToBase64Url(new Uint8Array(signature))}`;
+}
+
+async function signClientAssertion(
+  env: Env,
+  registration: LtiRegistration,
+  audience: string,
+): Promise<string | null> {
+  const now = Math.floor(Date.now() / 1000);
+  return signWithToolKey(env, registration, {
+    iss: registration.clientId,
+    sub: registration.clientId,
+    aud: audience,
+    iat: now,
+    exp: now + 300,
+    jti: randomToken(16),
+  });
+}
+
+/**
+ * Sign a deep-linking response.
+ *
+ * The claims are built by `deepLinkingResponseClaims` in the domain — this side
+ * owns only the key. The result is a JWT the BROWSER form-posts to the
+ * platform's `deep_link_return_url`; it is never sent from here, because the
+ * platform's return endpoint authenticates the instructor's own session and a
+ * server-to-server POST would arrive with nobody signed in.
+ */
+export async function signDeepLinkingResponse(
+  env: Env,
+  registration: LtiRegistration,
+  payload: Record<string, unknown>,
+): Promise<string | null> {
+  return signWithToolKey(env, registration, payload);
 }
 
 /**

@@ -437,6 +437,25 @@ const ADJUDICATED = new Map([
       'authenticates as the user rather than holding a secret of its own. The `connections` ' +
       'primitive exists to hold that secret.',
   ],
+  [
+    'job_invites',
+      'the kernel `invitations` primitive grants ACCESS to something the invitee is not ' +
+      'yet inside — it carries a `role`, a NOT NULL UNIQUE `token_hash`, and an ' +
+      '`object_id` into the objects registry, because the invitee is typically not a user ' +
+      'yet and the token IS the credential that admits them. A job invite is the opposite ' +
+      'act: the invitee is an already-authenticated platform user with a for-hire profile, ' +
+      'no role is being granted, and the invitation is answered in-app — folding it in ' +
+      'would mean minting a bearer credential per invite that grants nothing and must ' +
+      'never be honoured, which is a worse security posture than the row it replaced. ' +
+      'The decisive column is `proposal_id`: accepting an invite OPENS that person’s ' +
+      '`job_proposals` row and records its id, which is precisely what makes this a step ' +
+      'in the bidding flow rather than a notification, and `invitations` has nowhere to ' +
+      'put it. `job_id` is likewise a real ON DELETE CASCADE foreign key to ' +
+      '`job_postings`; `invitations.object_id` points at the objects registry, which ' +
+      'postings are not in, so the move would trade an enforced key for an unenforced ' +
+      'one. Two nouns that share a word: one admits somebody to a workspace, the other ' +
+      'asks somebody already here to bid on a posting.',
+  ],
 ]);
 
 const tables = parseDrizzleTables(srcDir);

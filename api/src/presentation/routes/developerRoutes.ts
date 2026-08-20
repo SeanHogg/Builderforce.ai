@@ -14,6 +14,16 @@
  *     POST   /packages/:id/publish          make an approved version the head, and list it
  *     POST   /packages/:id/listing          list / delist
  *
+ *   Directory (PRD 24 Phase 3 — discovery)
+ *     GET    /directory/categories          the category taxonomy, which is DATA
+ *     GET    /directory                     search + filter + ranked results
+ *
+ *   Review evidence
+ *     GET    /versions/:versionId/review     what each stage exercised, per action
+ *
+ *   Analytics (publisher-facing, AGGREGATE ONLY — see `installAnalytics.ts`)
+ *     GET    /analytics                     installs, churn, version adoption, errors
+ *
  *   Catalog + installs (tenant-facing)
  *     GET    /catalog                       every listed package
  *     GET    /catalog/:slug                 one listing
@@ -61,11 +71,17 @@ import {
   getPublicPackage,
   listPackagesForPublisher,
   listPublicCatalog,
+  listReviewStages,
   listVersions,
   publishVersion,
   setListingState,
   submitVersion,
 } from '../../application/developer/extensionPackages';
+import {
+  listDirectoryCategories,
+  searchDirectory,
+} from '../../application/developer/catalogSearch';
+import { publisherAnalytics } from '../../application/developer/installAnalytics';
 import {
   installPackage,
   listInstalls,
@@ -284,6 +300,69 @@ export function createDeveloperRoutes(db: Db): Hono<HonoEnv> {
     } catch (error) {
       const { body: b, status } = fail(error);
       return c.json(b, status);
+    }
+  });
+
+  // ── Directory ─────────────────────────────────────────────────────────────
+  //
+  // Separate from `/catalog` and not a replacement for it. `/catalog` returns the
+  // whole listed set and is what the `/integrations` projection merges onto our
+  // own ports; this answers a PERSON's question, which is narrower, ordered and
+  // paged. One of them would have to be two endpoints anyway, so they are two.
+
+  router.get('/directory/categories', async (c) => {
+    const { env } = ctx(c);
+    return c.json({ categories: await listDirectoryCategories(db, env) });
+  });
+
+  router.get('/directory', async (c) => {
+    const { env } = ctx(c);
+    const q = c.req.query();
+    // Every bound is applied inside `searchDirectory` (which normalizes once, for
+    // both the query and its cache key) rather than here, so a second caller
+    // cannot pass a limit this route would have rejected.
+    const result = await searchDirectory(db, env, {
+      query: q.q ?? null,
+      category: q.category ?? null,
+      kind: q.kind ?? null,
+      limit: q.limit ? Number(q.limit) : undefined,
+      offset: q.offset ? Number(q.offset) : undefined,
+    });
+    return c.json(result);
+  });
+
+  // ── Review evidence ───────────────────────────────────────────────────────
+  //
+  // Addressed by VERSION id rather than nested under a package, because a version
+  // id already determines its package and a path that repeated both would let a
+  // caller pass a mismatched pair for the service to reconcile. Authority is
+  // resolved from the version's package inside `listReviewStages`.
+
+  router.get('/versions/:versionId/review', async (c) => {
+    const { userId } = ctx(c);
+    if (!userId) return c.json({ error: 'Authentication required' }, 401);
+    try {
+      return c.json({ stages: await listReviewStages(db, c.req.param('versionId'), userId) });
+    } catch (error) {
+      const { body, status } = fail(error);
+      return c.json(body, status);
+    }
+  });
+
+  // ── Analytics ─────────────────────────────────────────────────────────────
+  //
+  // No id in the path: the publisher is the caller's workspace, on the JWT. The
+  // response is AGGREGATE ONLY and cannot be asked to be otherwise — the boundary
+  // and the reasoning are at the top of `installAnalytics.ts`.
+
+  router.get('/analytics', async (c) => {
+    const { userId, tenantId, env } = ctx(c);
+    if (!userId || !tenantId) return c.json({ error: 'Authentication required' }, 401);
+    try {
+      return c.json({ analytics: await publisherAnalytics(db, env, tenantId, userId) });
+    } catch (error) {
+      const { body, status } = fail(error);
+      return c.json(body, status);
     }
   });
 

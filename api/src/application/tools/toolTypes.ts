@@ -12,6 +12,7 @@
  * serve verbatim to logged-out visitors.
  */
 
+import type { ToolCopy } from './analyzerCopy';
 import { DEFAULT_TOOL_LOCALE, resultCopy, type ResultCopy } from './resultCopy';
 
 export type ToolCategory = 'delivery' | 'finops' | 'governance' | 'quality' | 'career';
@@ -162,7 +163,21 @@ export interface AnalyzerField {
 export interface AnalyzerTool extends ToolBase {
   kind: 'analyzer';
   fields: AnalyzerField[];
-  analyze: (values: Record<string, string>) => ToolResult;
+  /**
+   * REQUIRED here, unlike every other kind: an analyzer composes all of its own
+   * prose, so without a declared copy map it has nothing to translate against.
+   *
+   * Server-side only — deliberately absent from `ToolDefinition`, because the
+   * client never composes a result and shipping the templates would be shipping
+   * the scoring prose to a page that has no use for it.
+   */
+  copy: Readonly<Record<string, string>>;
+  /**
+   * Score a document. STILL PURE — `copy` is a parameter, never an import-time
+   * global and never a fetch, so the same paste scores identically in every
+   * language and the function is unit-testable without a locale registry.
+   */
+  analyze: (values: Record<string, string>, copy: ToolCopy) => ToolResult;
 }
 
 // ── Tool definition (discriminated by kind) ───────────────────────────────────
@@ -175,6 +190,19 @@ interface ToolBase {
   category: ToolCategory;
   /** A one-paragraph "what this measures / why it matters". */
   about: string;
+  /**
+   * The ENGLISH source for result prose this tool's own code composes, by slug.
+   *
+   * A questionnaire rarely needs one — its result IS its translated section names
+   * and advancement actions, so translating the definition translated the result.
+   * The two kinds that DO need one are the analyzers (which compose findings in
+   * their own function) and the four tools with a telemetry-derived data mode
+   * (whose provider in `toolDataProviders.ts` composes prose the definition never
+   * carried). Both read it through `toolMessages.toolCopy`, and the completeness
+   * test derives its key set from it, so a new sentence ships translated or the
+   * build goes red.
+   */
+  copy?: Readonly<Record<string, string>>;
 }
 
 export interface CalculatorTool extends ToolBase {

@@ -56,13 +56,19 @@ export const DEFAULT_AGING_THRESHOLD_HOURS = 72;
 /** Top-N oldest stuck tasks surfaced in the actionable list. */
 export const AGING_TOP_N = 10;
 
-export const median = (xs: number[]): number | null => {
-  if (!xs.length) return null;
-  const s = [...xs].sort((a, b) => a - b);
-  const mid = Math.floor(s.length / 2);
-  return s.length % 2 ? s[mid]! : (s[mid - 1]! + s[mid]!) / 2;
-};
-export const avg = (xs: number[]): number | null => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
+/**
+ * The summary statistics now live in `shared/stats.ts` and are re-exported here
+ * so every existing importer is unaffected.
+ *
+ * They moved because this module imports the Drizzle schema, and a PURE domain
+ * module (`people/orgReview.ts`, `people/teamHealth.ts`) cannot take that
+ * dependency to get a median. Two copies of an even-length median is a real
+ * hazard rather than a stylistic one: mean-of-the-middle-two and
+ * lower-of-the-middle-two disagree on every even sample.
+ */
+import { avg, median } from '../shared/stats';
+
+export { avg, median };
 
 // ── inputs (DB-shaped but plain, so tests construct them directly) ─────────────
 

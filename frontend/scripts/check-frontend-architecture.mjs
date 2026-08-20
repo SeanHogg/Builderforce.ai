@@ -2,6 +2,20 @@
 /**
  * Frontend architecture ratchets. Counts and sets that may shrink but not grow.
  *
+ * `oversizedProductionFiles` +1 (2026-08-20) — `lib/structured-data.ts` (995),
+ * crossing 800 when the per-entity SEO pass added detail schemas for personas,
+ * prompts and published agents beside the marketplace-skill one that was already
+ * there. It is the same shape as the entries below: ONE module holding every
+ * JSON-LD builder, which is the only reason `@id` references like
+ * `${BRAND.url}/#organization` resolve consistently across the site and the only
+ * place to look when a graph is wrong. The four shared helpers at its top
+ * (`breadcrumbs`, `faqSchema`, `organization`, `skillApplicationNode`) are used
+ * by nearly every builder, so a split by page family would either duplicate them
+ * or invent a fifth module to hold them — more files, same lines, and a second
+ * place for a graph to drift. The pass it landed with went the other way on
+ * duplication: the skill node was extracted so the marketplace and catalog
+ * schemas share it rather than forking.
+ *
  * `oversizedProductionFiles` +2 (2026-08-19) — `lib/founderObjects.ts` (1162) and
  * `lib/founderOpsApi.ts` (1007), the founder-operations pass. Both are the shape
  * `creationObjectRegistry.ts` and `workflow-builder/nodeKinds.ts` were allowlisted
@@ -246,6 +260,19 @@
  *   shape the `IdentityProvidersPanel.tsx` note above describes. A redundant
  *   `'use client'` is not free: it is what makes this number drift upward without any
  *   new interactivity, which is the drift this ratchet exists to see.
+ *
+ *   807 -> 808 (`useClientFiles`, 2026-08-20) -- `app/career/CareerAiClient.tsx`, the
+ *   résumé workbench. It is the client entry point under a Server Component route root,
+ *   the shape this changelog has accepted every time it was argued, and it holds exactly
+ *   one piece of state: which of the four tools is on screen. It is +1 and not +6
+ *   because the rest of the feature deliberately does not spend the budget --
+ *   `components/career/` holds five modules (`RewriteBulletsPanel`, `MergeBulletsPanel`,
+ *   `GradePanel`, `ReviewQueuePanel`, `careerAiShared`) and NONE of them carries a
+ *   directive. Every one is imported only from this file, which is already a boundary,
+ *   so the directive would mark nothing and change nothing except this number -- the
+ *   exact finding of the "800 -> 798" and "803 -> 802" tightenings above. `page.tsx`
+ *   stays a Server Component and reads its heading through `getTranslations`, so the
+ *   feature costs one client file and zero client-rooted pages.
  */
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, relative, resolve } from 'node:path';

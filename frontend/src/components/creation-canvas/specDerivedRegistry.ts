@@ -23,7 +23,8 @@
 
 import type {
   AcademicObjectKind, CareerObjectKind, DataScienceObjectKind, FounderObjectKind, HiringObjectKind,
-  LegalObjectKind, OperationsObjectKind, PeopleObjectKind, SellMotionObjectKind, SharedObjectKind,
+  LegalObjectKind, MarketingObjectKind, OperationsObjectKind, PeopleObjectKind, SellMotionObjectKind,
+  SharedObjectKind,
 } from '@builderforce/creation-canvas-contract';
 import { OPERATIONS_LABELS, OPERATIONS_OBJECT_SPECS, OPERATIONS_STATUSES } from '@/lib/operationsObjects';
 import { ACADEMIC_LABELS, ACADEMIC_OBJECT_SPECS, ACADEMIC_STATUSES } from '@/lib/academicObjects';
@@ -32,6 +33,7 @@ import { DATA_SCIENCE_LABELS, DATA_SCIENCE_OBJECT_SPECS, DATA_SCIENCE_STATUSES }
 import { FOUNDER_OBJECT_SPECS } from '@/lib/founderObjects';
 import { HIRING_LABELS, HIRING_OBJECT_SPECS, HIRING_STATUSES } from '@/lib/hiringObjects';
 import { LEGAL_LABELS, LEGAL_OBJECT_SPECS, LEGAL_STATUSES } from '@/lib/legalObjects';
+import { MARKETING_LABELS, MARKETING_OBJECT_SPECS, MARKETING_STATUSES } from '@/lib/marketingObjects';
 import { MODEL_LABELS, MODEL_OBJECT_SPECS, MODEL_STATUSES } from '@/lib/modelObjects';
 import { PEOPLE_LABELS, PEOPLE_OBJECT_SPECS, PEOPLE_STATUSES } from '@/lib/peopleObjects';
 import { SELL_MOTION_LABELS, SELL_MOTION_OBJECT_SPECS, SELL_MOTION_STATUSES } from '@/lib/sellMotionObjects';
@@ -151,8 +153,10 @@ export const DATA_SCIENCE_REGISTRY = lower({ specs: DATA_SCIENCE_OBJECT_SPECS, l
  *  property, clinical, fleet, logistics, manufacturing and professional practice from
  *  one vocabulary, because the industry is a value and not a kind. See `operations.ts`. */
 export const OPERATIONS_REGISTRY = lower({ specs: OPERATIONS_OBJECT_SPECS, labels: OPERATIONS_LABELS, statuses: OPERATIONS_STATUSES });
-/** The secure legal FILE — one kind, uploaded and encrypted rather than authored.
- *  See `legalObjects.ts` for why it is not folded into `contract`. */
+/** The legal seat — the secure FILE (uploaded and encrypted rather than authored) plus
+ *  the three RECORD kinds it is held against: the entity, the IP asset and the matter.
+ *  See `legalObjects.ts` for why the file is not folded into `contract` and why every
+ *  field on the three records is a projection. */
 export const LEGAL_REGISTRY = lower({ specs: LEGAL_OBJECT_SPECS, labels: LEGAL_LABELS, statuses: LEGAL_STATUSES });
 /** The commercial half of the motion — the priced quote a buyer accepts, the cadence that
  *  follows up, the call that happened, the trial, the trust packet and the mutual plan.
@@ -164,6 +168,12 @@ export const SELL_MOTION_REGISTRY = lower({ specs: SELL_MOTION_OBJECT_SPECS, lab
  *  hook, which is why the LLM cost projector sat unimported for a release. See
  *  `modelObjects.ts`. */
 export const MODEL_REGISTRY = lower({ specs: MODEL_OBJECT_SPECS, labels: MODEL_LABELS, statuses: MODEL_STATUSES });
+/** The brand a generative board composes against, and the audience a send may lawfully
+ *  reach. Two kinds over three tables (`brand_kits`, `marketing_audiences`,
+ *  `marketing_suppressions`) that shipped with the growth domain and had nothing on the
+ *  board able to read them — which is why every creative object composed unbranded and a
+ *  campaign could be fired with no visible consent state. See `marketing.ts`. */
+export const MARKETING_REGISTRY = lower({ specs: MARKETING_OBJECT_SPECS, labels: MARKETING_LABELS, statuses: MARKETING_STATUSES });
 
 /**
  * The authorable fields per vocabulary.
@@ -187,6 +197,11 @@ export const SELL_MOTION_MUTABLE_FIELDS = specMutableFieldMap<SellMotionObjectKi
  *  `derive`, and `specMutableFields` omits every computed field. That single line is what
  *  makes "the model cannot assert a price" a property of the declaration. */
 export const MODEL_MUTABLE_FIELDS = specMutableFieldMap<'llm'>(MODEL_OBJECT_SPECS);
+/** `size`, `suppressedCount`, `sendableCount`, `suppressedShare` and `refreshedAt` are
+ *  absent from this map BY CONSTRUCTION — every one of them is `derived` or computed, so
+ *  `specMutableFields` drops it. That is what makes "the model cannot assert how many
+ *  people unsubscribed" a property of the declaration rather than a rule in a handler. */
+export const MARKETING_MUTABLE_FIELDS = specMutableFieldMap<MarketingObjectKind>(MARKETING_OBJECT_SPECS);
 
 /** Actions, from the same declaration that gives each kind its fields — so a kind cannot
  *  advertise an action its body has no affordance for. */
@@ -195,6 +210,6 @@ export const SPEC_ACTIONS: Readonly<Record<string, readonly string[]>> = Object.
     ...FOUNDER_OBJECT_SPECS, ...ACADEMIC_OBJECT_SPECS, ...HIRING_OBJECT_SPECS, ...CAREER_OBJECT_SPECS,
     ...PEOPLE_OBJECT_SPECS, ...SHARED_OBJECT_SPECS, ...DATA_SCIENCE_OBJECT_SPECS,
     ...OPERATIONS_OBJECT_SPECS, ...LEGAL_OBJECT_SPECS, ...SELL_MOTION_OBJECT_SPECS,
-    ...MODEL_OBJECT_SPECS,
+    ...MODEL_OBJECT_SPECS, ...MARKETING_OBJECT_SPECS,
   ].map((spec) => [spec.kind, spec.actions]),
 );

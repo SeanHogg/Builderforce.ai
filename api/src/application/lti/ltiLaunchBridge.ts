@@ -32,13 +32,27 @@
  *    every later message to that person silently undeliverable.
  *
  * 3. ONLY A STAFF LAUNCH OPENS THE COHORT BOARD. `teach` and `assist` land on it;
- *    `learn` does not, and is told why. This is not a stub — the cohort board
- *    carries the whole roster and every submission's mark, so opening it for a
- *    student would disclose their classmates' grades. A learner reaches their own
- *    work through `assignment.distribute`, which is what that action is for.
+ *    `learn` never does, because that board carries the whole roster and every
+ *    submission's mark, and opening it for a student would disclose their
+ *    classmates' grades.
+ *
+ *    A learner lands on A BOARD OF THEIR OWN instead. That destination used to be
+ *    a sentence and nothing else: the refusal said "your instructor distributes
+ *    your own copy of the work", and `assignment.distribute` was a client-side
+ *    canvas action that added one `submission` object per roster row TO THE
+ *    COHORT BOARD. Nothing minted a per-learner board and no table could have
+ *    named one. `lti_learner_boards` (migration 0980) is that table, and
+ *    `resolveLearnerBoard` below is the path: it finds the submission distribute
+ *    already wrote for this person, copies the brief and THAT ONE SUBMISSION onto
+ *    a new board, and remembers it so the next launch resumes rather than mints.
+ *    What may be copied — and what must not be, marks especially — is decided in
+ *    `domain/lti/learnerBoards.ts`, which is pure and argues it there.
+ *
+ *    A learner whose work has NOT been distributed is still refused, and the
+ *    refusal now says that instead of promising a destination.
  */
 
-import { and, count, eq } from 'drizzle-orm';
+import { and, count, eq, isNull } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import {
   creationSessionEvents,
@@ -47,6 +61,7 @@ import {
   creationSessionSnapshots,
   creationSessions,
   ltiContextBindings,
+  ltiLearnerBoards,
   ltiResourceBindings,
   oauthAccounts,
   tenantMembers,
@@ -55,6 +70,10 @@ import {
 import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { resolveSegment } from '../../infrastructure/auth/segmentResolver';
 import type { LtiLaunchContext } from '../../domain/lti/ltiClaims';
+import {
+  findLearnerSubmission, learnerAssignmentCopy, learnerBoardTitle, learnerRefKey,
+  learnerSubmissionCopy, type DistributedSubmission,
+} from '../../domain/lti/learnerBoards';
 import type { LtiRegistration } from './LtiService';
 
 /** The provider value on `oauth_accounts`. Fixed and short: the column is
@@ -199,6 +218,73 @@ function assignmentContent(context: LtiLaunchContext): Record<string, unknown> {
  *  all on the origin. */
 const placement = (index: number) => ({ x: 80 + (index % 3) * 360, y: 80 + Math.floor(index / 3) * 260, w: 320, h: 220 });
 
+/** One object to seed a new board with. The caller decides the CONTENT — which
+ *  is where the disclosure decisions live — and this shape carries nothing else. */
+interface SeedObject {
+  id: string;
+  kind: string;
+  content: Record<string, unknown>;
+  searchText: string;
+}
+
+/**
+ * Write a launch-created board: the session, its first member, its objects, the
+ * revision-1 snapshot and the `session.launched` event, in ONE batch.
+ *
+ * Extracted because there are now two callers — the cohort board a staff launch
+ * opens, and the learner's own copy of the work — and they must agree on the
+ * shape of a board that a launch created. A second hand-written batch is how one
+ * of them ends up without a revision-1 snapshot, which is invisible until the
+ * canvas tries to rebase an edit onto a history that starts at nothing.
+ *
+ * All five statements go together on purpose: a session row with no snapshot is
+ * a board that opens empty, and `db.batch` is what makes that unreachable.
+ */
+async function insertBoard(
+  db: Db,
+  input: {
+    sessionId: string;
+    tenantId: number;
+    segmentId: string | null;
+    title: string;
+    description: string;
+    userId: string;
+    objects: readonly SeedObject[];
+    eventPayload: Record<string, unknown>;
+  },
+): Promise<void> {
+  const { sessionId, userId } = input;
+  const rows = input.objects.map((object, index) => ({
+    id: object.id,
+    sessionId,
+    kind: object.kind,
+    canvasData: placement(index),
+    content: object.content,
+    searchText: object.searchText.slice(0, 2000),
+    createdBy: userId,
+    updatedBy: userId,
+  }));
+
+  await db.batch([
+    db.insert(creationSessions).values({
+      id: sessionId, tenantId: input.tenantId, segmentId: input.segmentId, title: input.title,
+      description: input.description,
+      createdBy: userId, updatedBy: userId, canvasRevision: 1, mode: 'work',
+    }),
+    db.insert(creationSessionMembers).values({ sessionId, userId, role: 'owner', invitedBy: userId }),
+    db.insert(creationSessionObjects).values(rows),
+    db.insert(creationSessionSnapshots).values({
+      sessionId, revision: 1,
+      graph: { objects: rows.map((object) => ({ id: object.id, kind: object.kind, canvasData: object.canvasData, content: object.content })), connections: [] },
+      createdBy: userId,
+    }),
+    db.insert(creationSessionEvents).values({
+      sessionId, revision: 1, actorType: 'user', actorRef: userId, eventType: 'session.launched',
+      payload: input.eventPayload,
+    }),
+  ] as unknown as Parameters<typeof db.batch>[0]);
+}
+
 async function createBoard(
   db: Db,
   registration: LtiRegistration,
@@ -209,37 +295,59 @@ async function createBoard(
   const sessionId = crypto.randomUUID();
   const cohortObjectId = crypto.randomUUID();
   const title = context.contextTitle || context.contextLabel || 'Course';
-  const objects = [{
-    id: cohortObjectId,
-    sessionId,
-    kind: 'cohort',
-    canvasData: placement(0),
-    content: cohortContent(context),
-    searchText: `${title} ${context.contextLabel}`.trim().slice(0, 2000),
-    createdBy: userId,
-    updatedBy: userId,
-  }];
 
-  await db.batch([
-    db.insert(creationSessions).values({
-      id: sessionId, tenantId: registration.tenantId, segmentId, title,
-      description: `Bound to ${registration.label} — ${context.contextLabel || context.contextId}.`,
-      createdBy: userId, updatedBy: userId, canvasRevision: 1, mode: 'work',
-    }),
-    db.insert(creationSessionMembers).values({ sessionId, userId, role: 'owner', invitedBy: userId }),
-    db.insert(creationSessionObjects).values(objects),
-    db.insert(creationSessionSnapshots).values({
-      sessionId, revision: 1,
-      graph: { objects: objects.map((object) => ({ id: object.id, kind: object.kind, canvasData: object.canvasData, content: object.content })), connections: [] },
-      createdBy: userId,
-    }),
-    db.insert(creationSessionEvents).values({
-      sessionId, revision: 1, actorType: 'user', actorRef: userId, eventType: 'session.launched',
-      payload: { issuer: context.issuer, contextId: context.contextId, deploymentId: context.deploymentId },
-    }),
-  ] as unknown as Parameters<typeof db.batch>[0]);
+  await insertBoard(db, {
+    sessionId,
+    tenantId: registration.tenantId,
+    segmentId,
+    title,
+    description: `Bound to ${registration.label} — ${context.contextLabel || context.contextId}.`,
+    userId,
+    objects: [{
+      id: cohortObjectId,
+      kind: 'cohort',
+      content: cohortContent(context),
+      searchText: `${title} ${context.contextLabel}`.trim(),
+    }],
+    eventPayload: { issuer: context.issuer, contextId: context.contextId, deploymentId: context.deploymentId },
+  });
 
   return { sessionId, cohortObjectId };
+}
+
+/** The board bound to this launch's course, or null when nobody has ever
+ *  launched it here.
+ *
+ *  Extracted from `resolveBoard`, which read it twice (once before creating and
+ *  once after losing the create race), and now shared with the learner path —
+ *  which must FIND a binding and must never create one, because a student's
+ *  launch is not what brings a course into existence — and with the deep-linking
+ *  picker, which needs the binding to know what there is to offer.
+ *
+ *  A launch carries no session, so the row reports its own tenant — the same
+ *  declared cross-tenant read the registration lookup makes, with the signed
+ *  (issuer, deployment, context) triple as the access predicate. */
+export async function findContextBinding(
+  db: Db,
+  context: LtiLaunchContext,
+): Promise<{ id: number; tenantId: number; sessionId: string; cohortObjectId: string | null } | null> {
+  const [row] = await db
+    .select({
+      id: ltiContextBindings.id,
+      tenantId: ltiContextBindings.tenantId,
+      sessionId: ltiContextBindings.sessionId,
+      cohortObjectId: ltiContextBindings.cohortObjectId,
+    })
+    .from(ltiContextBindings)
+    .where(acrossTenants(
+      ltiContextBindings,
+      'share_token',
+      eq(ltiContextBindings.issuer, context.issuer),
+      eq(ltiContextBindings.deploymentId, context.deploymentId),
+      eq(ltiContextBindings.contextId, context.contextId),
+    ))
+    .limit(1);
+  return row ?? null;
 }
 
 /**
@@ -256,20 +364,7 @@ async function resolveBoard(
   context: LtiLaunchContext,
   userId: string,
 ): Promise<{ bindingId: number; sessionId: string; cohortObjectId: string | null }> {
-  const [existing] = await db
-    .select({ id: ltiContextBindings.id, sessionId: ltiContextBindings.sessionId, cohortObjectId: ltiContextBindings.cohortObjectId })
-    .from(ltiContextBindings)
-    // A launch carries no session, so the row reports its own tenant — the same
-    // declared cross-tenant read the registration lookup makes, with the signed
-    // (issuer, deployment, context) triple as the access predicate.
-    .where(acrossTenants(
-      ltiContextBindings,
-      'share_token',
-      eq(ltiContextBindings.issuer, context.issuer),
-      eq(ltiContextBindings.deploymentId, context.deploymentId),
-      eq(ltiContextBindings.contextId, context.contextId),
-    ))
-    .limit(1);
+  const existing = await findContextBinding(db, context);
 
   if (existing) {
     // The service URLs are re-stamped on every launch: a platform re-issues them
@@ -315,17 +410,7 @@ async function resolveBoard(
   // Lost the race. Adopt the winner's board and drop ours — an orphan board with
   // one cohort object is worse than a wasted uuid.
   await db.delete(creationSessions).where(scopedToTenant(creationSessions, registration.tenantId, eq(creationSessions.id, created.sessionId)));
-  const [winner] = await db
-    .select({ id: ltiContextBindings.id, sessionId: ltiContextBindings.sessionId, cohortObjectId: ltiContextBindings.cohortObjectId })
-    .from(ltiContextBindings)
-    .where(acrossTenants(
-      ltiContextBindings,
-      'share_token',
-      eq(ltiContextBindings.issuer, context.issuer),
-      eq(ltiContextBindings.deploymentId, context.deploymentId),
-      eq(ltiContextBindings.contextId, context.contextId),
-    ))
-    .limit(1);
+  const winner = await findContextBinding(db, context);
   if (!winner) throw new Error('LTI context binding vanished between insert and read.');
   await joinBoard(db, winner.sessionId, userId);
   return { bindingId: winner.id, sessionId: winner.sessionId, cohortObjectId: winner.cohortObjectId };
@@ -430,6 +515,240 @@ async function resolveAssignment(
 }
 
 // ---------------------------------------------------------------------------
+// Where a LEARNER lands — their own copy of the work
+// ---------------------------------------------------------------------------
+
+/**
+ * The two honest refusals a learner can get.
+ *
+ * Both are the shape the LTI landing page renders verbatim, and both name a
+ * state rather than an error, because neither is one: an assignment nobody has
+ * opened here, and an assignment nobody has distributed yet, are ordinary points
+ * in a module's calendar. The sentence they replace claimed a destination that
+ * did not exist, which is the failure this whole path closes.
+ */
+const NOT_OPENED_HERE =
+  'This assignment has not been opened on Builderforce yet. Your instructor opens it once from your LMS before it can be handed out — try again after they have.';
+const NOT_DISTRIBUTED_YET =
+  'Your instructor has not handed this assignment out yet, so there is no copy of the work for you to open. Your own board appears here as soon as they distribute it.';
+
+/** The submissions sitting on a cohort board.
+ *
+ *  Bounded at the roster ceiling `readMembers` already enforces (2,000), and
+ *  narrowed to `kind = 'submission'` in SQL rather than in memory: the rest of a
+ *  three-term-old cohort board — the briefs, the rubrics, the gradebook — is not
+ *  what decides whose work this is, and reading it would be the unbounded-read
+ *  anti-pattern with a learner's launch latency attached to it. */
+async function distributedSubmissions(db: Db, sessionId: string): Promise<DistributedSubmission[]> {
+  const rows = await db
+    .select({ id: creationSessionObjects.id, content: creationSessionObjects.content })
+    .from(creationSessionObjects)
+    .where(and(
+      eq(creationSessionObjects.sessionId, sessionId),
+      eq(creationSessionObjects.kind, 'submission'),
+    ))
+    .limit(2_000);
+  return rows.map((row) => ({
+    objectId: row.id,
+    content: row.content && typeof row.content === 'object' ? row.content as Record<string, unknown> : {},
+  }));
+}
+
+/** One canvas object's content, by id, on a known board. */
+async function objectContent(db: Db, sessionId: string, objectId: string): Promise<Record<string, unknown> | null> {
+  const [row] = await db
+    .select({ content: creationSessionObjects.content })
+    .from(creationSessionObjects)
+    .where(and(eq(creationSessionObjects.id, objectId), eq(creationSessionObjects.sessionId, sessionId)))
+    .limit(1);
+  if (!row) return null;
+  return row.content && typeof row.content === 'object' ? row.content as Record<string, unknown> : {};
+}
+
+/** The learner's board row for this (course, assignment, learner), or null. */
+async function findLearnerBoard(
+  db: Db,
+  tenantId: number,
+  bindingId: number,
+  assignmentKey: string,
+  learnerKey: string,
+): Promise<{ id: number; sessionId: string; learnerUserId: string | null } | null> {
+  const [row] = await db
+    .select({
+      id: ltiLearnerBoards.id,
+      sessionId: ltiLearnerBoards.sessionId,
+      learnerUserId: ltiLearnerBoards.learnerUserId,
+    })
+    .from(ltiLearnerBoards)
+    .where(scopedToTenant(
+      ltiLearnerBoards,
+      tenantId,
+      eq(ltiLearnerBoards.bindingId, bindingId),
+      eq(ltiLearnerBoards.assignmentRef, assignmentKey),
+      eq(ltiLearnerBoards.learnerRef, learnerKey),
+    ))
+    .limit(1);
+  return row ?? null;
+}
+
+/**
+ * Route a learner's launch to a board of their own, minting it on first launch.
+ *
+ * ── THE ORDER, AND WHY ───────────────────────────────────────────────────────
+ * 1. The COURSE must already be bound. A learner's launch never creates one:
+ *    the first launch of a course is a staff act, and letting a student's click
+ *    mint the cohort board would make them its owner.
+ * 2. The LAUNCH must name a resource link. A course-navigation launch says
+ *    "this course" and not "this assignment", and there is no defensible way to
+ *    guess which of a module's six pieces of work somebody meant.
+ * 3. An existing board is RESUMED. This is the common case after the first week
+ *    and it must not re-mint — a second copy of the work would silently split a
+ *    learner's drafts across two boards.
+ * 4. Otherwise the board is minted FROM THE DISTRIBUTED SUBMISSION, and only if
+ *    one exists. `assignment.distribute` writing that object is the instructor's
+ *    act of handing the work out; without it there is nothing to hand over, and
+ *    saying so is the honest answer.
+ */
+async function resolveLearnerBoard(
+  db: Db,
+  registration: LtiRegistration,
+  context: LtiLaunchContext,
+  userId: string,
+): Promise<LaunchBridgeResult> {
+  const binding = await findContextBinding(db, context);
+  if (!binding) return { ok: false, status: 404, error: NOT_OPENED_HERE };
+  if (!context.resourceLinkId) return { ok: false, status: 403, error: NOT_OPENED_HERE };
+
+  const [resource] = await db
+    .select({ id: ltiResourceBindings.id, assignmentObjectId: ltiResourceBindings.assignmentObjectId })
+    .from(ltiResourceBindings)
+    .where(scopedToTenant(
+      ltiResourceBindings,
+      registration.tenantId,
+      eq(ltiResourceBindings.bindingId, binding.id),
+      eq(ltiResourceBindings.resourceLinkId, context.resourceLinkId),
+    ))
+    .limit(1);
+  if (!resource?.assignmentObjectId) return { ok: false, status: 404, error: NOT_OPENED_HERE };
+
+  const assignment = await objectContent(db, binding.sessionId, resource.assignmentObjectId);
+  if (!assignment) return { ok: false, status: 404, error: NOT_OPENED_HERE };
+
+  // The assignment's TITLE is the ref `distribute` stamps onto every submission,
+  // so it — and not the object's uuid — is what the two sides join on.
+  const assignmentTitle = typeof assignment.title === 'string' ? assignment.title : (context.resourceLinkTitle || 'Assignment');
+  const assignmentKey = learnerRefKey(assignmentTitle);
+  // `sub` and not the email: it is the identifier the roster row carries, which
+  // is the whole reason `rosterFromMembers` fills `ref` from `userId`.
+  const learnerKey = learnerRefKey(context.subject);
+
+  const existing = await findLearnerBoard(db, registration.tenantId, binding.id, assignmentKey, learnerKey);
+  if (existing) {
+    // Claim the row for this account the first time its owner actually arrives —
+    // it can be minted before they have ever signed in.
+    if (!existing.learnerUserId) {
+      await db
+        .update(ltiLearnerBoards)
+        .set({ learnerUserId: userId, updatedAt: new Date() })
+        .where(scopedToTenant(
+          ltiLearnerBoards,
+          registration.tenantId,
+          eq(ltiLearnerBoards.id, existing.id),
+          isNull(ltiLearnerBoards.learnerUserId),
+        ));
+    }
+    await joinOwnBoard(db, existing.sessionId, userId);
+    return { ok: true, userId, sessionId: existing.sessionId, redirect: `/create/${existing.sessionId}`, capability: context.capability };
+  }
+
+  const submission = findLearnerSubmission(
+    await distributedSubmissions(db, binding.sessionId),
+    assignmentKey,
+    learnerKey,
+  );
+  if (!submission) return { ok: false, status: 403, error: NOT_DISTRIBUTED_YET };
+
+  const sessionId = crypto.randomUUID();
+  const submissionObjectId = crypto.randomUUID();
+  const courseTitle = context.contextTitle || context.contextLabel || '';
+  const title = learnerBoardTitle(assignmentTitle, courseTitle);
+
+  await insertBoard(db, {
+    sessionId,
+    tenantId: registration.tenantId,
+    segmentId: await resolveSegment(db, registration.tenantId),
+    title,
+    description: `Your copy of ${assignmentTitle}${courseTitle ? ` for ${courseTitle}` : ''}.`,
+    userId,
+    // TWO objects, and never a third. The cohort is the roster and the roster is
+    // everyone; the other submissions are other people's work. `learnerRefKey`'s
+    // module argues both, and the marking fields come off here too.
+    objects: [
+      {
+        id: crypto.randomUUID(),
+        kind: 'assignment',
+        content: learnerAssignmentCopy(assignment),
+        searchText: assignmentTitle,
+      },
+      {
+        id: submissionObjectId,
+        kind: 'submission',
+        content: learnerSubmissionCopy(submission.content),
+        searchText: typeof submission.content.title === 'string' ? submission.content.title : assignmentTitle,
+      },
+    ],
+    eventPayload: {
+      issuer: context.issuer,
+      contextId: context.contextId,
+      deploymentId: context.deploymentId,
+      resourceLinkId: context.resourceLinkId,
+      distributedFrom: submission.objectId,
+    },
+  });
+
+  const [recorded] = await db
+    .insert(ltiLearnerBoards)
+    .values({
+      tenantId: registration.tenantId,
+      bindingId: binding.id,
+      resourceBindingId: resource.id,
+      assignmentRef: assignmentKey,
+      learnerRef: learnerKey,
+      learnerUserId: userId,
+      sessionId,
+      submissionObjectId,
+    })
+    .onConflictDoNothing({
+      target: [ltiLearnerBoards.bindingId, ltiLearnerBoards.assignmentRef, ltiLearnerBoards.learnerRef],
+    })
+    .returning({ id: ltiLearnerBoards.id });
+
+  if (recorded) {
+    return { ok: true, userId, sessionId, redirect: `/create/${sessionId}`, capability: context.capability };
+  }
+
+  // Lost the race — a double-click on an LMS link is two launches. The unique
+  // index decides, exactly as it does for the cohort board, and the loser adopts
+  // the winner's board rather than leaving the learner with two copies of one
+  // piece of work.
+  await db.delete(creationSessions).where(scopedToTenant(creationSessions, registration.tenantId, eq(creationSessions.id, sessionId)));
+  const winner = await findLearnerBoard(db, registration.tenantId, binding.id, assignmentKey, learnerKey);
+  if (!winner) throw new Error('LTI learner board vanished between insert and read.');
+  await joinOwnBoard(db, winner.sessionId, userId);
+  return { ok: true, userId, sessionId: winner.sessionId, redirect: `/create/${winner.sessionId}`, capability: context.capability };
+}
+
+/** The learner on their own board. `owner` because it IS theirs — the work, the
+ *  drafts and the declaration on it are the learner's own — and
+ *  `onConflictDoNothing` so a re-launch is not a role reset. */
+async function joinOwnBoard(db: Db, sessionId: string, userId: string): Promise<void> {
+  await db
+    .insert(creationSessionMembers)
+    .values({ sessionId, userId, role: 'owner', invitedBy: userId })
+    .onConflictDoNothing({ target: [creationSessionMembers.sessionId, creationSessionMembers.userId] });
+}
+
+// ---------------------------------------------------------------------------
 // The whole bridge
 // ---------------------------------------------------------------------------
 
@@ -446,13 +765,6 @@ export async function bridgeLaunch(
   registration: LtiRegistration,
   context: LtiLaunchContext,
 ): Promise<LaunchBridgeResult> {
-  if (context.capability === 'learn') {
-    return {
-      ok: false,
-      status: 403,
-      error: 'This link opens the cohort board, which carries the whole roster and every mark on it. Your instructor distributes your own copy of the work — open the assignment in your LMS once they have.',
-    };
-  }
   if (!registration.tenantId) {
     return {
       ok: false,
@@ -464,7 +776,20 @@ export async function bridgeLaunch(
   const resolved = await resolveLaunchUser(db, context);
   if (!resolved.ok) return resolved;
 
+  // The workspace membership comes first for EVERY capability, learner included:
+  // a person with no membership cannot open a board in that workspace at all, so
+  // routing them to one without it would be a redirect into a 403. `viewer` is
+  // what that helper grants, and it is the right floor for a learner — the board
+  // they land on is theirs through its own membership row, not through the
+  // workspace.
   await ensureWorkspaceMembership(db, registration.tenantId, resolved.userId);
+
+  // A learner NEVER reaches `resolveBoard`. That path creates and joins the
+  // cohort board, which is the disclosure this whole branch exists to prevent.
+  if (context.capability === 'learn') {
+    return resolveLearnerBoard(db, registration, context, resolved.userId);
+  }
+
   const board = await resolveBoard(db, registration, context, resolved.userId);
   await resolveAssignment(db, registration, context, board.bindingId, board.sessionId, resolved.userId);
 

@@ -8,6 +8,17 @@ author: Sean Hogg
 
 # The Best Resume Template for Software Engineers and Developers
 
+```bf-figure
+{
+  "kind": "templates",
+  "title": "Dev Graphite — the layout this article recommends",
+  "templateIds": [
+    "software-engineer-graphite"
+  ],
+  "caption": "Rendered live from the same template registry the editor reads, so this is the real Software engineering layout — not a screenshot of one."
+}
+```
+
 ## Engineers Aren't Designers — Their Resumes Shouldn't Look Alike
 
 Most resume templates labeled "creative" lump designers and engineers together. They shouldn't. A product designer's resume is a piece of design work — restraint, hierarchy, and craft are the message. A software engineer's resume is closer to a well-written README — the message is what was built, with what, at what scale, and with what outcome.
@@ -74,7 +85,7 @@ A weak entry: "Personal project — built a chat app with React." If you can't s
 
 ### Can I use Dev Graphite for non-engineering technical roles?
 
-Yes — the layout works well for data scientists, ML engineers, DevOps/SRE, and security engineers. Anyone whose primary signal is a technical stack benefits from the permanent sidebar. For technical product managers, Dev Graphite can work but Builderforce Default or Trusted Taupe may better fit a PM-track interview.
+Yes — the layout works well for data scientists, ML engineers, DevOps/SRE, and security engineers. Anyone whose primary signal is a technical stack benefits from the permanent sidebar. For technical product managers, Dev Graphite can work but the Standard template or Trusted Taupe may better fit a PM-track interview.
 
 ### Should I include leetcode/competitive-programming achievements?
 

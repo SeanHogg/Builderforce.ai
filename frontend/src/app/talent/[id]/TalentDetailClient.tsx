@@ -9,6 +9,7 @@ import { useOptionalAuth } from '@/lib/AuthContext';
 import { TalentProfileView } from '@/components/freelance/TalentProfileView';
 import { getFreelancer, hireFreelancer, type FreelancerProfile } from '@/lib/freelancerApi';
 import { MessagesButton } from '@/components/freelance/MessagesButton';
+import { ShortlistToggle } from '@/components/talent/ShortlistToggle';
 import { Icon } from '@/components/ui/Icon';
 
 const card: React.CSSProperties = {
@@ -63,6 +64,9 @@ export default function TalentDetailClient() {
     </Link>
   ) : canHire ? (
     <>
+      {/* Shortlisting comes BEFORE hiring in the real sequence: a client comparing five
+          people needs somewhere to put them that is not a browser tab. */}
+      <ShortlistToggle freelancerUserId={profile.userId} />
       <MessagesButton side="employer" context={{ freelancerUserId: profile.userId, title: profile.displayName ?? undefined }} label={t('message')} />
       <button type="button" onClick={() => doHire('interviewing')} disabled={hireState === 'busy' || hireState !== 'idle'}
         style={{ padding: '9px 16px', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontWeight: 600, fontSize: 'var(--font-size-small)', cursor: 'pointer' }}>

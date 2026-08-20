@@ -1,4 +1,13 @@
+import dynamic from 'next/dynamic';
+import Link from 'next/link';
 import styles from './BlogFigure.module.css';
+
+/**
+ * The template gallery pulls `RESUME_TEMPLATES`, and through it the whole canvas
+ * contract. 113 of the 125 posts embed no template, so it is deferred rather
+ * than statically imported — a component-level split, not a library one.
+ */
+const BlogResumeTemplates = dynamic(() => import('./BlogResumeTemplates'), { ssr: false });
 
 /**
  * BlogFigure — the figure vocabulary for blog posts.
@@ -17,11 +26,11 @@ import styles from './BlogFigure.module.css';
  *     { "kind": "flow", "title": "…", "steps": [ … ] }
  *     ```
  *
- * and this renders it. Five kinds, chosen because they are the five shapes the
+ * and this renders it. Seven kinds, chosen because they are the shapes the
  * product's own ideas actually have — a sequence, a trade-off, a ladder, a
- * ranking and a contrast — rather than five chart types looking for a use. A
- * sixth is a case in this switch plus a block in the stylesheet; it is not a
- * post embedding markup.
+ * ranking, a contrast, a résumé template and a deep link — rather than chart
+ * types looking for a use. An eighth is a case in this switch plus a block in
+ * the stylesheet; it is not a post embedding markup.
  *
  * Every colour is a token, so a figure is legible in both themes, and every
  * width is fluid or scrolls inside its own container, so a wide figure never
@@ -98,7 +107,33 @@ interface CompareFigure extends FigureBase {
   columns: Array<{ title: string; hue?: FigureHue; items: string[] }>;
 }
 
-export type FigureSpec = FlowFigure | MatrixFigure | StackFigure | BarsFigure | CompareFigure;
+/**
+ * Résumé templates, drawn from the registry the editor reads.
+ *
+ * The ported hired.video posts carried `previewTemplateIds` and rendered a
+ * scaled card per template; the port dropped them because there was no fence
+ * for a figure that resolves an ID against a registry rather than carrying its
+ * own data. This is that fence. It stays DATA — the post names ids, the
+ * renderer owns every pixel — so it does not reopen the raw-HTML hole the whole
+ * figure vocabulary exists to keep shut.
+ */
+interface TemplatesFigure extends FigureBase {
+  kind: 'templates';
+  templateIds: string[];
+}
+
+/**
+ * A deep link into a Studio project the post is teaching. `href` is validated
+ * as site-relative for the same reason the pipeline has no `rehype-raw`: a
+ * figure is authored content, and an absolute href in authored content is an
+ * open redirect waiting to be pasted into a shared canvas note.
+ */
+interface LaunchFigure extends FigureBase {
+  kind: 'launch';
+  links: Array<{ label: string; href: string; note?: string; hue?: FigureHue }>;
+}
+
+export type FigureSpec = FlowFigure | MatrixFigure | StackFigure | BarsFigure | CompareFigure | TemplatesFigure | LaunchFigure;
 
 /** Parse a fenced block's body. A malformed figure returns null and the caller
  *  falls back to rendering the block as code — a post with a typo shows its
@@ -240,6 +275,24 @@ function Bars({ spec }: { spec: BarsFigure }) {
   );
 }
 
+/** Site-relative only — see `LaunchFigure`. */
+const isInternalHref = (href: string): boolean => href.startsWith('/') && !href.startsWith('//');
+
+function Launch({ spec }: { spec: LaunchFigure }) {
+  const links = spec.links.filter((link) => isInternalHref(link.href));
+  if (!links.length) return null;
+  return (
+    <ul className={styles.launch}>
+      {links.map((link) => (
+        <li key={link.href} className={styles.launchItem} style={{ '--hue': hueOf(link.hue) } as React.CSSProperties}>
+          <Link href={link.href} className={styles.launchLink}>{link.label}</Link>
+          {link.note && <span className={styles.launchNote}>{link.note}</span>}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function Compare({ spec }: { spec: CompareFigure }) {
   return (
     <div className={styles.compare}>
@@ -264,6 +317,8 @@ export default function BlogFigure({ spec }: { spec: FigureSpec }) {
       {spec.kind === 'stack' && <Stack spec={spec} />}
       {spec.kind === 'bars' && <Bars spec={spec} />}
       {spec.kind === 'compare' && <Compare spec={spec} />}
+      {spec.kind === 'templates' && <BlogResumeTemplates templateIds={spec.templateIds} />}
+      {spec.kind === 'launch' && <Launch spec={spec} />}
       {spec.caption && <figcaption className={styles.caption}>{spec.caption}</figcaption>}
     </figure>
   );

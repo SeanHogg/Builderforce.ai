@@ -6,6 +6,8 @@ export interface DefaultSwimlaneSeed {
   position: number;
   isTerminal: boolean;
   gate: 'auto' | 'human';
+  /** PARKED — off the delivery path (`swimlanes.is_parking`, migration 1080). */
+  isParking?: boolean;
 }
 
 /**
@@ -62,6 +64,9 @@ export const DEFAULT_SWIMLANES: DefaultSwimlaneSeed[] = [
   { key: TaskStatus.READY, name: 'Ready', position: 2, isTerminal: false, gate: 'auto' },
   { key: TaskStatus.IN_PROGRESS, name: 'In Progress', position: 3, isTerminal: false, gate: 'auto' },
   { key: TaskStatus.IN_REVIEW, name: 'In Review', position: 4, isTerminal: false, gate: 'auto' },
-  { key: TaskStatus.BLOCKED, name: 'Blocked', position: 5, isTerminal: false, gate: 'auto' },
+  // PARKED, not a stage: a blocked ticket is waiting on a dependency, so its lane
+  // position says nothing about progress. Without the flag `computeCompletion` ranked it
+  // at position 6 of 7 and reported ~87% complete. See migration 1080.
+  { key: TaskStatus.BLOCKED, name: 'Blocked', position: 5, isTerminal: false, gate: 'auto', isParking: true },
   { key: TaskStatus.DONE, name: 'Done', position: 6, isTerminal: true, gate: 'auto' },
 ];

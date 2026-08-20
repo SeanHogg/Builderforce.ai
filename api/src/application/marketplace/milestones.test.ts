@@ -430,7 +430,11 @@ describe('the actions a surface is handed', () => {
 
     const rows = await readFreelancerMilestones(db as unknown as Db, 'user-f');
 
-    expect(rows[0]?.actions).toEqual(['submit']);
+    // `dispute` sits beside `submit` because a freelancer holding a funded milestone
+    // owns both moves — deliver, or say that something is wrong. Before the dispute
+    // verb was declared, this list was `['submit']` and the second option did not
+    // exist for them at all.
+    expect(rows[0]?.actions.sort()).toEqual(['dispute', 'submit']);
     // The context that says whose work it is, joined in the same read rather than
     // fetched per row.
     expect(rows[0]?.engagementTitle).toBe('Redesign');

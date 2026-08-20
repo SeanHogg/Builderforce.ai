@@ -17,6 +17,7 @@ import type { ReasoningParamOpts } from '../reasoningCapability';
 import { parseSseDataLine } from '../sseFrames';
 
 import type { AgentExecParams } from '@builderforce/agent-tools';
+import { needsMessageShapeSanitizing, sanitizeMessageShape, type ChatMessageLike } from '../messageShapeSanitizer';
 
 export type VendorId =
   // ── Bespoke wire-format vendors (hand-rolled modules)
@@ -297,6 +298,26 @@ export interface VendorStreamResult {
  *  structured/ocr requests instead of relying on OpenRouter-centric id sets [1429]. */
 export type AiCapability = 'tools' | 'structured_output' | 'vision' | 'ocr';
 
+/**
+ * How much of a STRICT `response_format: json_schema` a model's constrained-decoding
+ * engine will actually accept.
+ *
+ *   'full'    — arbitrary nesting; the request goes through as written.
+ *   'limited' — accepts strict schemas but rejects complex ones with a 400
+ *               (`schema_too_complex`). Gemini's decoder is the known case: it 400s on
+ *               schemas OpenAI and Anthropic accept without comment.
+ *   'none'    — no constrained decoding; a strict schema must be downgraded to loose
+ *               `json_object` before dispatch or it 400s outright.
+ *
+ * This is CATALOG METADATA, not a heuristic. `isLowSchemaCeilingModel` used to be a
+ * bare `/gemini/i` regex with its own comment saying the authoritative ceilings
+ * belonged here — which meant every new vendor with a weak decoder was invisible to
+ * routing until someone hit the 400 in production and widened the regex. It is also
+ * what `/v1/models` advertises, so a consumer can choose loose JSON up front instead
+ * of discovering the ceiling from a failure.
+ */
+export type SchemaSupport = 'full' | 'limited' | 'none';
+
 export interface VendorModelEntry {
   id: string;
   label: string;
@@ -305,6 +326,9 @@ export interface VendorModelEntry {
   /** Optional shape capabilities for capability-aware routing. Absent = unknown
    *  (the legacy literal-id sets still apply for OpenRouter models). */
   capabilities?: AiCapability[];
+  /** This model's strict-`json_schema` ceiling, when it differs from its vendor's
+   *  default ({@link VendorModule.schemaDialect}.strictSchema). Absent = inherit. */
+  strictSchema?: SchemaSupport;
   /** Optional max context window (tokens). Absent = unknown/large. Small-window
    *  models (e.g. some Cloudflare checkpoints at 24K-32K) must NOT lead a coding
    *  pool — a coding context routinely exceeds that and the model 413s; ordering by
@@ -354,7 +378,14 @@ export interface VendorModule {
    * in `jsonSchemaSanitize.ts` — a stricter future vendor declares its own set
    * here instead of editing the sanitizer (see jsonSchemaSanitize.ts).
    */
-  schemaDialect?: { stripKeywords: readonly string[] };
+  schemaDialect?: {
+    stripKeywords: readonly string[];
+    /** Vendor-wide strict-`json_schema` ceiling. Absent = 'full'. A per-model entry
+     *  may override it — an aggregator like OpenRouter is 'full' overall while the
+     *  Gemini models it routes are 'limited', because the ceiling belongs to the
+     *  DECODER, not to the vendor that fronts it. */
+    strictSchema?: SchemaSupport;
+  };
   /**
    * Whether this vendor's upstream REFUSES the Worker's own egress and must therefore
    * be called from the tenant's connected runtime when one is available — see
@@ -943,7 +974,18 @@ export function buildOpenAIChatBody(params: VendorCallParams, opts?: OpenAIChatB
   const { model, messages, tools, toolChoice, maxTokens, temperature, topP, extraBody } = params;
   const mtField = opts?.maxTokensField ?? 'max_tokens';
   // Cache the stable prefix on EVERY call by default (no-op for non-caching models).
-  const msgs = opts?.noCache ? messages : applyPromptCaching(messages, model, params.cacheTtl);
+  // Strict vendors (Gemini and anything else the catalog marks as a limited
+  // decoder) reject histories every other vendor accepts — a non-user-leading
+  // transcript, an empty tool-call `arguments`, consecutive same-role turns — with a
+  // bare `INVALID_ARGUMENT` that names no field. Reshaping happens HERE because this
+  // is the one seam every OpenAI-shaped vendor builds its body through, and because
+  // it is PER CANDIDATE: the same conversation must be sent verbatim to a permissive
+  // vendor and reshaped only for the strict one it might fail over to. Returns the
+  // same array by reference when nothing needed fixing.
+  const shaped = needsMessageShapeSanitizing(model)
+    ? sanitizeMessageShape(messages as unknown as ChatMessageLike[]) as unknown as typeof messages
+    : messages;
+  const msgs = opts?.noCache ? shaped : applyPromptCaching(shaped, model, params.cacheTtl);
   const extra = opts?.transformExtra ? opts.transformExtra(extraBody) : extraBody;
   return {
     model,

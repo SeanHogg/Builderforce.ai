@@ -196,6 +196,50 @@ export async function loadManagedProjects(db: Db, limit: number): Promise<Manage
   return rows;
 }
 
+/**
+ * Why a scheduled sweep declined a project. Machine-readable so the overview can render
+ * a localized sentence rather than shipping English from the cron.
+ */
+export type ManagerSweepSkipReason =
+  /** The tenant is out of token budget (or its BYO gate refused). */
+  | 'tenant_token_limit'
+  /** The tick's shared dispatch ceiling was already spent by the autonomous executor. */
+  | 'tick_budget_exhausted'
+  /** The project's own config (or the workspace tier) says the manager is off. */
+  | 'project_unmanaged'
+  /** The pass threw. A defect, not a policy — and previously indistinguishable from one. */
+  | 'pass_error';
+
+export type ManagerSweepDecision = 'ran' | 'skipped';
+
+/**
+ * Stamp what this sweep decided about ONE project. Best-effort by contract: the
+ * telemetry must never be able to fail a sweep that otherwise worked.
+ *
+ * Written to `project_manager_configs` rather than a per-visit history table because it
+ * is a single current-state fact ("what happened last time") sitting next to
+ * `last_run_at`, which answers the adjacent question. Pass HISTORY has its own home in
+ * `manager_runs` (1082).
+ */
+async function recordSweepDecision(
+  db: Db,
+  p: ManagedProject,
+  decision: ManagerSweepDecision,
+  reason: ManagerSweepSkipReason | null,
+): Promise<void> {
+  try {
+    await db
+      .update(projectManagerConfigs)
+      .set({ lastSweepDecision: decision, lastSweepReason: reason, lastSweepAt: new Date() })
+      .where(and(
+        eq(projectManagerConfigs.tenantId, p.tenantId),
+        eq(projectManagerConfigs.projectId, p.projectId),
+      ));
+  } catch (err) {
+    reportCaughtError(err, { source: "application/manager/runManagerSweep.ts", operation: "recordSweepDecision", context: { details: { projectId: p.projectId } } });
+  }
+}
+
 export async function runManagerSweep(
   env: Env,
   /** Shared per-tick dispatch ceiling (see tickDispatchBudget). The manager pass and
@@ -242,12 +286,22 @@ export async function runManagerSweep(
 
   const runOne = async (p: ManagedProject) => {
     try {
-      if (!await tenantHasTokens(p.tenantId)) return;
+      // RECORD THE DECISION, NOT JUST THE RUN (migration 1083). Every branch below —
+      // including the two that decline — writes what it decided and why, so a stale
+      // `last_run_at` stops being four indistinguishable causes. See
+      // {@link recordSweepDecision}.
+      if (!await tenantHasTokens(p.tenantId)) {
+        await recordSweepDecision(db, p, 'skipped', 'tenant_token_limit');
+        return;
+      }
 
       // A tenant that already spent its tick budget in the autonomous executor gets
       // no further manager-initiated runs until the next tick. Checked per project
       // because one tenant can own many managed projects.
-      if (!budget.hasRoom(p.tenantId)) return;
+      if (!budget.hasRoom(p.tenantId)) {
+        await recordSweepDecision(db, p, 'skipped', 'tick_budget_exhausted');
+        return;
+      }
 
       const s = await runManagerForProject(env, db, runtimeService, {
         tenantId: p.tenantId, projectId: p.projectId, submittedBy: 'system:manager-cron',
@@ -257,7 +311,11 @@ export async function runManagerSweep(
         dispatchBudget: budget,
         prManagementEnabled: options.prManagementEnabled,
       });
-      if (s.skipped) return;
+      if (s.skipped) {
+        await recordSweepDecision(db, p, 'skipped', 'project_unmanaged');
+        return;
+      }
+      await recordSweepDecision(db, p, 'ran', null);
       result.managed += 1;
       result.scored += s.scored;
       result.ranked += s.ranked;
@@ -289,6 +347,9 @@ export async function runManagerSweep(
       result.systemicFindings += s.systemicFindings;
       result.systemicTicketsCreated += s.systemicTicketsCreated;
     } catch (err) {
+      // A pass that THREW is its own decision — the fourth cause a stale `last_run_at`
+      // used to hide, and the only one that is a defect rather than a policy.
+      await recordSweepDecision(db, p, 'skipped', 'pass_error').catch(() => undefined);
       reportCaughtError(err, { source: "application/manager/runManagerSweep.ts", operation: "runManagerSweep", context: { logMessage: `[cron:manager] project=${p.projectId} tenant=${p.tenantId} failed`, details: err } });
     }
   };

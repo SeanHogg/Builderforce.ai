@@ -47,11 +47,13 @@ import {
 import {
   SOURCES_FIELD,
   SUMMARY_FIELD,
+  deriveDaysBetween,
   deriveNumber,
   derivePercent,
   deriveRows,
   registerSpecObjectSet,
   specMutableFields,
+  specRefKey,
   sumColumn,
   type SpecDeriveBoard,
   type SpecField,
@@ -178,33 +180,266 @@ export function resolveCounterpartyAccount(label: unknown, board: SpecDeriveBoar
 }
 
 /**
- * The companion field a counterparty field carries its resolution through.
+ * THE resolver shape a "this object points at that one" field takes.
  *
- * READ-ONLY and `derive`d rather than authored: the resolution is a fact about the
- * BOARD (which accounts exist right now), not about the invoice, bill, contract or
- * placement it renders on — storing it would be the drift `SpecField.derive` exists to
- * prevent. Absent entirely when the source field is empty, so a card with no
- * counterparty yet does not draw a section telling it so.
+ * ── WHY THIS IS ONE HELPER AND NOT THREE SIMILAR DERIVATIONS ────────────────────
+ * `counterpartyAccountField` was written first and was the whole pattern: read a
+ * REFERENCE off this object, find the ONE board object it names, and render either what
+ * was found or an honest sentence saying nothing was. FO-G2 needed the identical shape
+ * twice more — an invoice and a bill each resolving the `contract` they were raised
+ * under — and three copies of "trim the ref, look it up, apologise if it is missing"
+ * would have been three chances for one of them to fail SILENTLY instead, which is the
+ * one behaviour that must not vary: a bill whose contract cannot be found and which
+ * draws no section at all reads as a bill nobody needed to check.
+ *
+ * READ-ONLY and `derive`d rather than authored, for the reason the counterparty field
+ * carried from the start: the resolution is a fact about the BOARD (which accounts, which
+ * contracts exist right now), not about the object it renders on — storing it would be
+ * the drift `SpecField.derive` exists to prevent. Absent entirely when the source field
+ * is empty, so a card with no reference yet does not draw a section telling it so.
+ *
+ * `resolve` defaults to `board.byRef`, which matches on the target's title and then on
+ * its identifying keys (`reference` among them — see `REF_KEYS` in `specObjects.ts`).
+ * The counterparty case overrides it because an `account` also answers to every name in
+ * its `alsoKnownAs` list, which is a rule about accounts and not about references.
  */
-export function counterpartyAccountField(sourceField: string): FounderField {
+export function boardRefField(options: {
+  /** The field name on the HOST object. */
+  name: string;
+  /** i18n key suffix under `<namespace>.field`. */
+  label: string;
+  /** Which authored field on the host carries the reference. */
+  sourceField: string;
+  /** Which kind the reference names. Quoted verbatim in the not-found sentence. */
+  targetKind: string;
+  hint: string;
+  /** How to find the target. Defaults to `board.byRef(targetKind, ref)`. */
+  resolve?: (ref: string, board: SpecDeriveBoard) => Record<string, unknown> | null;
+  /** What to say once it IS found. The not-found sentence is not overridable — that is
+   *  the half this helper exists to keep identical. */
+  describe: (target: Record<string, unknown>, data: Record<string, unknown>, board: SpecDeriveBoard) => string;
+}): FounderField {
+  const { name, label, sourceField, targetKind, hint, resolve, describe } = options;
   return {
-    name: `${sourceField}Account`,
+    name,
     render: 'verdict',
-    label: 'counterpartyAccount',
-    hint: `READ-ONLY. Resolved automatically by matching \`${sourceField}\` against the \`account\` objects on this board — never author it directly.`,
+    label,
+    hint,
     derived: true,
     derive: (data, board) => {
-      const name = typeof data[sourceField] === 'string' ? (data[sourceField] as string).trim() : '';
-      if (!name) return undefined;
-      const account = resolveCounterpartyAccount(name, board);
-      if (!account) return `No \`account\` matches "${name}" yet — author one to link this.`;
-      const title = typeof account.title === 'string' && account.title.trim() ? account.title.trim() : name;
+      const ref = typeof data[sourceField] === 'string' ? (data[sourceField] as string).trim() : '';
+      if (!ref) return undefined;
+      const target = resolve ? resolve(ref, board) : board.byRef(targetKind, ref);
+      if (!target) return `No \`${targetKind}\` matches "${ref}" yet — author one to link this.`;
+      return describe(target, data, board);
+    },
+  };
+}
+
+/**
+ * The companion field a counterparty field carries its resolution through.
+ *
+ * One call of {@link boardRefField} since FO-G2. It kept its own name and its own
+ * exported identity because four call sites already spell it that way and because
+ * "resolve the counterparty" is the concept, not "resolve a reference" — but there is
+ * nothing left in it that could disagree with the invoice-to-contract resolver about
+ * what a missing target reads like.
+ */
+export function counterpartyAccountField(sourceField: string): FounderField {
+  return boardRefField({
+    name: `${sourceField}Account`,
+    label: 'counterpartyAccount',
+    sourceField,
+    targetKind: 'account',
+    hint: `READ-ONLY. Resolved automatically by matching \`${sourceField}\` against the \`account\` objects on this board — never author it directly.`,
+    resolve: resolveCounterpartyAccount,
+    describe: (account, data) => {
+      const fallback = typeof data[sourceField] === 'string' ? (data[sourceField] as string).trim() : '';
+      const title = typeof account.title === 'string' && account.title.trim() ? account.title.trim() : fallback;
       const relationship = typeof account.relationship === 'string' && account.relationship ? account.relationship : 'contact';
       const owner = typeof account.owner === 'string' ? account.owner.trim() : '';
       return owner
         ? `Linked to \`account\` "${title}" (${relationship}), owned by ${owner}.`
         : `Linked to \`account\` "${title}" (${relationship}).`;
     },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// FO-G2 — the obligation, and the documents raised against it
+// ---------------------------------------------------------------------------
+
+/**
+ * What a contractual obligation IS, as columns rather than as a sentence.
+ *
+ * ── WHY THESE EIGHT ─────────────────────────────────────────────────────────────
+ * `{obligation, owner, due}` was prose in a table: it could say "invoice monthly for
+ * support" and nothing anywhere could tell whether that had happened. An obligation
+ * becomes actionable at exactly the point it carries (a) an identity something else can
+ * point AT, (b) whether money moves and in which direction, (c) how much and how often,
+ * and (d) whether it has been discharged. That is the whole list, and each column earns
+ * its place by being the one that makes a specific question answerable:
+ *
+ *   `reference`  THE IDENTITY. Without it an invoice cannot name the obligation it
+ *                satisfies, and the join falls back to matching prose — which is the
+ *                exact defect FO-A1/FO-A2 removed from the counterparty. Unique within
+ *                one contract; short enough to type ("SUPPORT-M", "MILESTONE-2").
+ *   `obligation` What is actually owed, in a clause a reader recognises.
+ *   `kind`       receivable | payable | deliverable | report | notice. ONE column and
+ *                not a `kind`/`direction` pair, because the two facts are never
+ *                independent: an obligation that generates an invoice is a receivable
+ *                and one that arrives as a bill is a payable, while a deliverable, a
+ *                report and a notice move no money at all and must never be counted as
+ *                un-invoiced revenue.
+ *   `owner`      The single person accountable. An obligation with nobody against it is
+ *                a clause, not a commitment.
+ *   `due`        ISO date this instance is judged against.
+ *   `cadence`    once | monthly | quarterly | annual. What makes "invoice monthly"
+ *                checkable against a `bill.recurring` of `annual`.
+ *   `amount`     A plain number in the CONTRACT's currency, empty for a non-monetary
+ *                obligation. Per-row currency is deliberately absent: `contract.currency`
+ *                holds it once, which is the same one-currency-per-object rule every
+ *                operated-money kind already states, and a mixed-currency contract is
+ *                two contracts.
+ *   `status`     pending | invoiced | met | waived | breached. `waived` is a real and
+ *                common answer and is not the same as `met`.
+ */
+export const OBLIGATION_COLUMNS = ['reference', 'obligation', 'kind', 'owner', 'due', 'cadence', 'amount', 'status'] as const;
+
+/** The obligation kinds that SHOULD produce a document, and which one. Everything else
+ *  moves no money and must never be reported as un-invoiced. */
+const OBLIGATION_DOCUMENT_KIND: Readonly<Record<string, 'invoice' | 'bill'>> = {
+  receivable: 'invoice',
+  payable: 'bill',
+};
+
+/**
+ * The refs by which an invoice or a bill may name THIS contract.
+ *
+ * The mirror question `specRefKey` is exported for — not "which object does this ref
+ * name" but "does this ref name me". `reference` first because it is the identity;
+ * `title` too, because `SpecDeriveBoard.byRef` resolves a title and a board authored
+ * before `contract.reference` existed has only that.
+ */
+function contractRefKeys(data: Record<string, unknown>): ReadonlySet<string> {
+  return new Set([specRefKey(data.reference), specRefKey(data.title)].filter(Boolean));
+}
+
+/** A contract's display name, for a sentence rendered on some other card. */
+function contractLabel(contract: Record<string, unknown>): string {
+  const title = typeof contract.title === 'string' ? contract.title.trim() : '';
+  const reference = typeof contract.reference === 'string' ? contract.reference.trim() : '';
+  return title || reference || 'this contract';
+}
+
+/** `bill.recurring` says `none` where an obligation says `once`. One vocabulary at the
+ *  comparison, so the two fields can keep the words their own readers use. */
+function cadenceKey(value: unknown): string {
+  const text = String(value ?? '').trim().toLowerCase();
+  return text === 'none' ? 'once' : text;
+}
+
+/** The reference an invoice or a bill is known by, for naming it in a verdict. */
+function documentLabel(document: Record<string, unknown>): string {
+  for (const key of ['invoiceNumber', 'reference', 'title']) {
+    const value = document[key];
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return 'an untitled document';
+}
+
+/**
+ * The field an `invoice` and a `bill` each carry to say which obligation they discharge.
+ *
+ * ONE builder for both, because the check is one check. The only real difference is that
+ * a bill declares a recurrence (`recurring`) and an invoice does not, so `cadenceSource`
+ * is a parameter rather than two near-identical derivations — and the confirming sentence
+ * names only the axes actually compared, so an invoice never claims a cadence agreed that
+ * nothing on it states.
+ */
+function contractObligationField(options: { host: 'invoice' | 'bill'; cadenceSource?: string }): FounderField {
+  const { host, cadenceSource } = options;
+  return boardRefField({
+    name: 'contractObligation',
+    label: 'contractObligation',
+    sourceField: 'contractRef',
+    targetKind: 'contract',
+    hint: `READ-ONLY. Resolved by matching \`contractRef\` to a \`contract\` on this board and \`obligationRef\` to one of its obligation rows, then comparing what this ${host} actually says against what was agreed. Never author it — and never treat its silence as approval: a ${host} with no \`contractRef\` draws nothing here at all, which is the state to fix rather than the state to trust.`,
+    describe: (contract, data) => {
+      const label = contractLabel(contract);
+      const rows = deriveRows(contract.obligations);
+      const wanted = specRefKey(data.obligationRef);
+      if (!wanted) {
+        const available = rows.map((row) => String(row.reference ?? '').trim()).filter(Boolean);
+        return available.length
+          ? `Raised under contract "${label}", but no \`obligationRef\` says WHICH obligation it discharges. Set it to one of: ${available.join(', ')}.`
+          : `Raised under contract "${label}", whose obligations carry no \`reference\` values — so nothing on this ${host} can be checked against what was agreed. Give each obligation a reference on the contract first.`;
+      }
+      const row = rows.find((candidate) => specRefKey(candidate.reference) === wanted);
+      if (!row) {
+        return `Contract "${label}" has NO obligation with the reference "${String(data.obligationRef).trim()}" — this is a charge with no matching obligation. Either the contract's obligations are out of date or this ${host} should not have been raised.`;
+      }
+      const named = String(row.obligation ?? row.reference ?? '').trim() || wanted;
+
+      const problems: string[] = [];
+      const checked: string[] = [];
+
+      const agreedAmount = deriveNumber(row.amount);
+      const actualAmount = deriveNumber(data.amount);
+      if (agreedAmount !== undefined && actualAmount !== undefined) {
+        checked.push('amount');
+        if (Math.abs(agreedAmount - actualAmount) > 0.01) {
+          problems.push(`the amount is ${actualAmount} where the obligation says ${agreedAmount}`);
+        }
+      }
+
+      const drift = deriveDaysBetween(row.due, data.dueAt);
+      if (drift !== undefined) {
+        checked.push('date');
+        if (drift !== 0) {
+          problems.push(`it falls due ${Math.abs(drift)} day${Math.abs(drift) === 1 ? '' : 's'} ${drift > 0 ? 'after' : 'before'} the obligation's ${String(row.due).trim()}`);
+        }
+      }
+
+      if (cadenceSource) {
+        const agreedCadence = cadenceKey(row.cadence);
+        const actualCadence = cadenceKey(data[cadenceSource]);
+        if (agreedCadence && actualCadence) {
+          checked.push('cadence');
+          if (agreedCadence !== actualCadence) {
+            problems.push(`it recurs ${actualCadence} where the obligation says ${agreedCadence}`);
+          }
+        }
+      }
+
+      if (problems.length) {
+        return `Points at obligation "${named}" on contract "${label}", but ${problems.join('; ')}. Check it against the agreement before ${host === 'bill' ? 'approving or paying it' : 'issuing it'}.`;
+      }
+      return checked.length
+        ? `Discharges obligation "${named}" on contract "${label}" — ${checked.join(', ')} agree${checked.length === 1 ? 's' : ''} with what was agreed.`
+        : `Points at obligation "${named}" on contract "${label}". Nothing comparable is filled in on either side, so this is a link and not yet a check.`;
+    },
+  });
+}
+
+/** The `contractRef` an invoice and a bill each author. Declared once because the
+ *  instruction is one instruction — see `COUNTERPARTY_HINT` for the same argument. */
+function contractRefField(host: 'invoice' | 'bill'): FounderField {
+  return {
+    name: 'contractRef',
+    render: 'stat',
+    label: 'contractRef',
+    hint: `The \`reference\` of the \`contract\` this ${host} is raised under — its reference verbatim, or its title where it has no reference yet. This is an EXPLICIT binding and not a guess: never infer it from the counterparty matching a contract's counterparty, because two agreements with one company is the normal case and the wrong one would be charged. Leave it empty for a ${host} that genuinely has no contract behind it, which is itself worth saying out loud.`,
+  };
+}
+
+/** The `obligationRef` that says WHICH clause is being discharged. */
+function obligationRefField(host: 'invoice' | 'bill'): FounderField {
+  return {
+    name: 'obligationRef',
+    render: 'stat',
+    label: 'obligationRef',
+    hint: `The \`reference\` of the obligation row on that contract this ${host} discharges — one of the values in the contract's own \`obligations\` table. Without it the ${host} is joined to the contract and to none of its clauses, so "has the support fee been billed this quarter" stays unanswerable.`,
   };
 }
 
@@ -346,7 +581,33 @@ export const FOUNDER_OBJECT_SPECS: readonly FounderObjectSpec[] = [
       { name: 'primaryMetric', render: 'stat', label: 'primaryMetric', hint: 'The ONE metric that decides it. Naming two is how an experiment is declared a success afterwards.' },
       { name: 'sampleSize', render: 'stat', label: 'sampleSize', hint: 'Units observed, as an integer.' },
       { name: 'result', render: 'stat', label: 'result', hint: 'The measured outcome, with its confidence where one was computed.' },
-      { name: 'variants', render: 'rows', label: 'variants', columns: ['variant', 'exposure', 'conversion', 'lift'], hint: 'One row per variant: {variant, exposure, conversion, lift}. The FIRST row is the control — every other row is tested against it.' },
+      {
+        name: 'abTestKey', render: 'stat', label: 'abTestKey',
+        // ── THE BINDING THAT MAKES "WE TESTED IT" MEAN SOMETHING ─────────────────
+        // `growth.ts` has had `ab_tests`, `ab_test_variants` and `ab_test_segments`
+        // since the domain landed, and this card's `variants` table was AUTHORED: a
+        // place to type numbers you got somewhere else. That is the empty-shell defect
+        // `emptyShellProblem()` exists to stop, reappearing one level up as a
+        // CREDIBILITY shell — an object whose fields are all filled and whose contents
+        // nothing produced. Naming the test binds the card to the live split, and
+        // `builtin_canvas_bind_ab_test` overwrites `variants` with what the split
+        // actually measured.
+        hint: 'The `ab_tests.key` this experiment is bound to. When set, `variants` is REPLACED by the live split\'s own exposure and conversion counts on every refresh and must not be hand-edited. Empty means the numbers below were typed, which `evidence` will say out loud.',
+        bookkeeping: true,
+      },
+      { name: 'trafficAllocation', render: 'rows', label: 'trafficAllocation', columns: ['variant', 'percent'], hint: 'How traffic is split, one row per arm. Written by the binding from `ab_test_variants.traffic_percent`; on an unbound experiment it is the allocation you INTEND, which is worth recording because an intended 50/50 that ran 90/10 is the most common reason a result is wrong.', derived: true },
+      { name: 'variants', render: 'rows', label: 'variants', columns: ['variant', 'exposure', 'conversion', 'lift'], hint: 'One row per variant: {variant, exposure, conversion, lift}. The FIRST row is the control — every other row is tested against it. On a BOUND experiment these are the live split\'s counts and are overwritten on refresh; on an unbound one they are authored.' },
+      {
+        name: 'evidence', render: 'verdict', label: 'evidence',
+        hint: 'COMPUTED. Where the numbers under this experiment came from. An experiment nobody bound to a live split is a report, and saying so on the card is the difference between a measurement and a claim.',
+        derive: (data) => {
+          const bound = String(data.abTestKey ?? '').trim();
+          const rows = deriveRows(data.variants);
+          if (!rows.length) return undefined;
+          if (bound) return `Bound to the live split "${bound}" — every exposure and conversion below was counted by the platform, not entered.`;
+          return 'AUTHORED. Nothing produced these numbers: they were typed onto the card. Bind this experiment to an `ab_tests` key before quoting the result as a measurement.';
+        },
+      },
       {
         name: 'significance',
         render: 'verdict',
@@ -476,7 +737,11 @@ export const FOUNDER_OBJECT_SPECS: readonly FounderObjectSpec[] = [
     defaultStatus: 'armed',
     actions: ['evaluate', 'mute'],
     fields: [
-      { name: 'watches', render: 'stat', label: 'watches', hint: 'Title of the object on this board that this trigger evaluates — a `liveMetric` for a numeric comparator, or any deadline-bearing object (contract, invoice, bill, fundingRound, obligation, policy, offer, assignment, grant, peerReview) for a date one.' },
+      // The examples are examples. The AUTHORITATIVE list is `deadlineBearingKinds()`,
+      // which the trigger tool's own description is built from — this hint cannot call
+      // it, because it is evaluated while this vocabulary is still registering and the
+      // other vocabularies may not have loaded yet.
+      { name: 'watches', render: 'stat', label: 'watches', hint: 'Title of the object on this board that this trigger evaluates — a `liveMetric` for a numeric comparator, or any deadline-bearing object for a date one (contract, invoice, bill, fundingRound, obligation, policy, offer, assignment, grant, peerReview, legalEntity, ipAsset, legalMatter among them; canvas_evaluate_triggers names the full list).' },
       { name: 'watchesField', render: 'stat', label: 'watchesField', hint: 'Which field on the watched object to read. Leave EMPTY unless the object has more than one deadline — the object\'s first declared deadline field is used, which is the right one for every kind that has only one.' },
       { name: 'comparator', render: 'stat', label: 'comparator', hint: 'For a number: below | above | equals | changes-by. For a deadline: due-within (breaches when the date is `threshold` days away or closer, INCLUDING already past — the "warn me before" case) | overdue-by (breaches only once the date is `threshold` days past; 0 means the day after it lapses — the "chase it" case).' },
       { name: 'threshold', render: 'stat', label: 'threshold', hint: 'The number the comparator tests against. For a date comparator this is a number of DAYS, never a date — the date lives on the object being watched, which is what keeps the trigger true next quarter without being re-typed.' },
@@ -912,6 +1177,12 @@ export const FOUNDER_OBJECT_SPECS: readonly FounderObjectSpec[] = [
       { name: 'customer', render: 'stat', label: 'customer', hint: `The party that owes this. ${COUNTERPARTY_HINT}` },
       counterpartyAccountField('customer'),
       { name: 'invoiceNumber', render: 'stat', label: 'invoiceNumber', hint: 'Your own reference for it. This is the key everything else joins to — the lines, the payments and the collections history — so set it once and never edit it after the invoice is issued.' },
+      // FO-G2 — the explicit binding back to what was agreed. An invoice raised under a
+      // contract and unable to say so is why "have we billed everything in the MSA" was
+      // a question somebody answered by reading both documents.
+      contractRefField('invoice'),
+      obligationRefField('invoice'),
+      contractObligationField({ host: 'invoice' }),
       { name: 'customerEmail', render: 'stat', label: 'customerEmail', hint: 'Where the issued invoice is SENT, and where the collections ladder chases. Without it an invoice can still be issued — for one handed over in person — but nothing will ever leave the building for it.' },
       CURRENCY_FIELD,
       { name: 'amount', render: 'stat', label: 'amount', hint: `${EXACT_MONEY_HINT} The total payable including tax.` },
@@ -937,13 +1208,19 @@ export const FOUNDER_OBJECT_SPECS: readonly FounderObjectSpec[] = [
       { name: 'vendor', render: 'stat', label: 'vendor', hint: `The party owed — a bill without its counterparty cannot be checked against what was agreed. ${COUNTERPARTY_HINT}` },
       counterpartyAccountField('vendor'),
       { name: 'reference', render: 'stat', label: 'reference', hint: "The vendor's own invoice reference." },
+      // FO-G2 — the binding that makes `risks`'s "a charge with no matching contract"
+      // computable instead of a thing somebody has to notice. `contractObligation`
+      // below checks amount, cadence and date against the clause this names.
+      contractRefField('bill'),
+      obligationRefField('bill'),
+      contractObligationField({ host: 'bill', cadenceSource: 'recurring' }),
       CURRENCY_FIELD,
       { name: 'amount', render: 'stat', label: 'amount', hint: `${EXACT_MONEY_HINT} The total payable including tax.` },
       { name: 'dueAt', render: 'stat', label: 'dueAt', hint: 'ISO date payment is due. Bind a `trigger` with comparator "due-within" so a payment run is prepared before the date, not after it.', deadline: true },
       { name: 'category', render: 'stat', label: 'category', hint: 'Which budget line this lands on. This is what connects a bill to a `budget` — an uncategorised bill cannot appear in a variance.' },
       { name: 'approvedBy', render: 'stat', label: 'approvedBy', hint: 'Who authorised it. Never fill this in on the requester\'s behalf: an approval nobody gave is the one field on this object that can cause real harm.', bookkeeping: true },
       { name: 'recurring', render: 'stat', label: 'recurring', hint: 'none | monthly | quarterly | annual. A recurring bill is a committed cost and belongs in the forecast, not just in this month.' },
-      { name: 'risks', render: 'chips', label: 'risks', hint: 'Anything worth a second look — an unexpected increase, an auto-renewal, a charge with no matching contract, a duplicate.' },
+      { name: 'risks', render: 'chips', label: 'risks', hint: 'Anything worth a second look — an unexpected increase, an auto-renewal, a duplicate. NOT "a charge with no matching contract": that one is computed by `contractObligation` above from the contract this bill actually names, so writing it here as an observation is a second, staler answer to a question the card already answers.' },
       SUMMARY_FIELD,
     ],
   },
@@ -1005,13 +1282,74 @@ export const FOUNDER_OBJECT_SPECS: readonly FounderObjectSpec[] = [
     defaultStatus: 'draft',
     actions: ['review', 'sign'],
     fields: [
+      {
+        name: 'reference',
+        render: 'stat',
+        label: 'reference',
+        hint: 'THIS agreement\'s own short reference — "MSA-ACME-2026", "SOW-3". The identity every invoice and bill raised under it points at through `contractRef`, and what `SpecDeriveBoard.byRef` resolves before it falls back to the title. Two agreements with one company is the normal case, so a contract without a reference is one nothing can be charged against without ambiguity.',
+      },
       { name: 'counterparty', render: 'stat', label: 'counterparty', hint: COUNTERPARTY_HINT },
       counterpartyAccountField('counterparty'),
       { name: 'contractType', render: 'stat', label: 'contractType', hint: 'msa | sow | nda | employment | vendor | formation.' },
       { name: 'effectiveAt', render: 'stat', label: 'effectiveAt', hint: 'ISO start date.' },
       { name: 'renewsAt', render: 'stat', label: 'renewsAt', hint: 'ISO renewal or expiry date — the field that makes a contract something the board can warn about. Bind a `trigger` with comparator "due-within" to be told before an auto-renewal rather than after it.', deadline: true },
+      CURRENCY_FIELD,
       { name: 'valueAmount', render: 'stat', label: 'valueAmount', hint: MONEY_HINT },
-      { name: 'obligations', render: 'rows', label: 'obligations', columns: ['obligation', 'owner', 'due'], hint: 'What this commits us to: {obligation, owner, due}. The reason to hold a contract on a board rather than in a drive.' },
+      {
+        name: 'obligations',
+        render: 'rows',
+        label: 'obligations',
+        columns: OBLIGATION_COLUMNS,
+        hint: `What this commits either side to, one row per clause somebody has to DO something about: {${OBLIGATION_COLUMNS.join(', ')}}. \`reference\` is the identity an \`invoice\` or a \`bill\` points at through its own \`obligationRef\` — an obligation without one can never be shown to have been discharged, which is what made this table prose. \`kind\` is receivable (we invoice for it) | payable (they bill us for it) | deliverable | report | notice; only the first two should ever produce a document, so a deliverable is never counted as un-invoiced revenue. \`cadence\` is once | monthly | quarterly | annual, \`amount\` is a plain number in this contract's \`currency\`, and \`status\` is pending | invoiced | met | waived | breached.`,
+      },
+      {
+        name: 'obligationCoverage',
+        render: 'verdict',
+        label: 'obligationCoverage',
+        // FO-G2. The half that makes the table above worth structuring: a contract
+        // stating "invoice monthly for support" and a board holding no such invoice
+        // used to be two facts nothing compared. This reads the board's own invoices
+        // and bills — the ones that explicitly name this contract, never the ones whose
+        // counterparty merely looks the same — and reports both directions of the gap.
+        hint: 'COMPUTED. Which of this contract\'s billable obligations have an invoice or a bill against them, which have nothing raised yet, and which documents point here matching no obligation at all.',
+        derive: (data, board) => {
+          const rows = deriveRows(data.obligations);
+          if (!rows.length) return undefined;
+          const mine = contractRefKeys(data);
+          if (!mine.size) {
+            return 'This contract has neither a `reference` nor a title, so no invoice or bill can name it. Give it a reference before raising anything against it.';
+          }
+
+          const documents = [...board.ofKind('invoice'), ...board.ofKind('bill')]
+            .filter((document) => mine.has(specRefKey(document.contractRef)));
+
+          const billable = rows.filter((row) => OBLIGATION_DOCUMENT_KIND[String(row.kind ?? '').trim().toLowerCase()]);
+          const unreferenced = rows.filter((row) => !specRefKey(row.reference)).length;
+          const covered: string[] = [];
+          const open: string[] = [];
+          for (const row of billable) {
+            const key = specRefKey(row.reference);
+            const raised = !!key && documents.some((document) => specRefKey(document.obligationRef) === key);
+            (raised ? covered : open).push(String(row.obligation ?? row.reference ?? '').trim() || 'an unnamed obligation');
+          }
+
+          const known = new Set(rows.map((row) => specRefKey(row.reference)).filter(Boolean));
+          const orphans = documents.filter((document) => !known.has(specRefKey(document.obligationRef)));
+
+          const parts: string[] = [];
+          parts.push(billable.length
+            ? `${covered.length} of ${billable.length} billable obligation${billable.length === 1 ? '' : 's'} ${covered.length === 1 ? 'has' : 'have'} a document raised against ${billable.length === 1 ? 'it' : 'them'}.`
+            : 'No obligation here is a receivable or a payable, so nothing on this contract should generate an invoice or a bill.');
+          if (open.length) parts.push(`Nothing raised yet for: ${open.join(', ')}.`);
+          if (orphans.length) {
+            parts.push(`${orphans.length} document${orphans.length === 1 ? '' : 's'} name${orphans.length === 1 ? 's' : ''} this contract and match no obligation on it — ${orphans.map(documentLabel).join(', ')}.`);
+          }
+          if (unreferenced) {
+            parts.push(`${unreferenced} obligation${unreferenced === 1 ? '' : 's'} carr${unreferenced === 1 ? 'ies' : 'y'} no \`reference\`, so nothing can ever be shown to discharge ${unreferenced === 1 ? 'it' : 'them'}.`);
+          }
+          return parts.join(' ');
+        },
+      },
       {
         name: 'documentBody',
         render: 'text',

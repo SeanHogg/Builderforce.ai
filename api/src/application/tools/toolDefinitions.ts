@@ -30,15 +30,71 @@ export const tierName = (t: number): string => TIER_NAME[Math.max(1, Math.min(5,
  * annual payroll and three-year build-vs-buy totals, where cents are noise; the
  * attributed-spend provider deals in real per-ticket cost, where a run that
  * actually cost $4.37 must not be reported as `$4`. One formatter with a
- * threshold rather than two that disagree about the same number. `en-US` is
- * pinned because a tool report is generated server-side with no viewer locale.
+ * threshold rather than two that disagree about the same number.
+ *
+ * `en-US` is the DEFAULT, not a pin. The estimators here render server-side with
+ * no viewer, but a SAVED run is re-rendered for whoever opens the history — and a
+ * German reader expects `1.234,56 $`. The currency stays USD (it is what the
+ * platform bills in); only the grouping and the symbol placement follow the
+ * reader.
  */
-export const money = (n: number): string =>
-  n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: Math.abs(n) >= 100 ? 0 : 2 });
+export const money = (n: number, locale = 'en-US'): string =>
+  n.toLocaleString(locale, { style: 'currency', currency: 'USD', maximumFractionDigits: Math.abs(n) >= 100 ? 0 : 2 });
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DORA Quick-Check (calculator)
 // ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * DORA copy shared by BOTH of this tool's modes.
+ *
+ * The estimate mode reads these English strings directly; the telemetry mode
+ * reads the SAME slugs through `toolMessages.toolCopy`, so a workspace looking at
+ * "Elite" from real deployments and "Elite" from the same numbers typed in is
+ * looking at one sentence, translated once. The provider used to carry its own
+ * copy of the four remediations, which is exactly how the two modes come to
+ * disagree about what to do about a low change-failure rate.
+ */
+const DORA_COPY = {
+  'tier.1': 'Low',
+  'tier.2': 'Low',
+  'tier.3': 'Medium',
+  'tier.4': 'High',
+  'tier.5': 'Elite',
+  headline: '{tier} performer',
+  'rec.frequency.title': 'Deploy more often',
+  'rec.frequency.detail': 'Shrink batch sizes and automate the release pipeline so deploys are routine, not events. Aim for at least weekly, then daily.',
+  'rec.leadTime.title': 'Cut lead time',
+  'rec.leadTime.detail': 'Reduce hand-offs and manual gates between commit and production. Trunk-based development and CI on every change are the biggest levers.',
+  'rec.changeFailure.title': 'Lower change-failure rate',
+  'rec.changeFailure.detail': 'Add automated tests and progressive delivery (canary / feature flags) so risky changes are caught or contained before full rollout.',
+  'rec.restore.title': 'Restore faster',
+  'rec.restore.detail': 'Invest in alerting, one-click rollback, and runbooks so a failed change is reverted in minutes, not hours.',
+  'rec.sustain.title': 'Sustain elite performance',
+  'rec.sustain.detail': 'Keep the four keys under continuous review and protect them as you scale — elite teams optimize, they do not coast.',
+  // ── telemetry mode only; emitted by `toolDataProviders.ts` ────────────────
+  'metric.frequency': 'Deployment frequency',
+  'metric.leadTime': 'Lead time for changes',
+  'metric.changeFailure': 'Change-failure rate',
+  'metric.restore': 'Time to restore',
+  'value.perWeek': '{n}/week',
+  'value.hours': '{n}h',
+  'value.percent': '{n}%',
+  'empty.deployments': 'No deployments recorded',
+  'empty.tickets': 'No completed tickets in window',
+  'empty.restores': 'No restored failures in window',
+  window: 'Window',
+  'window.days': '{days} days',
+  'telemetry.headline': 'Not enough delivery telemetry yet',
+  'telemetry.summary': 'No deployments or completed tickets in the last {days} days. Record deployments (or complete some tickets) and check back, or use the estimate mode.',
+  'telemetry.title': 'Start recording deployments',
+  'telemetry.detail': 'Deployment events are what turn the four keys from a self-assessment into a measurement. Wire your release pipeline to the deployments API, or let the cloud agent record them as it ships.',
+  'scored.summary.one': 'Scored from your real delivery data over the last {days} days — {n} deployment.',
+  'scored.summary.other': 'Scored from your real delivery data over the last {days} days — {n} deployments.',
+  'scored.partial.one': 'Scored from your real delivery data over the last {days} days — {n} deployment, {unmeasured} of the four keys not yet measurable.',
+  'scored.partial.other': 'Scored from your real delivery data over the last {days} days — {n} deployments, {unmeasured} of the four keys not yet measurable.',
+  'estimate.summary': 'Your overall DORA performance tier across the four keys.',
+} as const;
 
 const doraQuickCheck: CalculatorTool = {
   id: 'dora-quickcheck',
@@ -49,6 +105,7 @@ const doraQuickCheck: CalculatorTool = {
   kind: 'calculator',
   about:
     'The four DORA metrics — deployment frequency, lead time for changes, change-failure rate, and time to restore — are the industry-standard measure of software delivery performance. Enter rough numbers to see your performance tier and what to improve first. Sign in to score this automatically from your real deployment data.',
+  copy: DORA_COPY,
   inputs: [
     { id: 'deploysPerWeek', label: 'Deployments to production per week', type: 'number', min: 0, step: 0.5, default: 2 },
     { id: 'leadTimeHours', label: 'Lead time for a change (commit → production)', type: 'number', unit: 'hours', min: 0, step: 1, default: 48 },
@@ -62,23 +119,28 @@ const doraQuickCheck: CalculatorTool = {
     const mttrTier = v.mttrHours! <= 1 ? 5 : v.mttrHours! <= 24 ? 4 : v.mttrHours! <= 168 ? 3 : 2;
     const overall = Math.round((freqTier + leadTier + cfrTier + mttrTier) / 4);
 
+    // The estimate mode reads the SHARED copy map; the telemetry mode reads the
+    // same slugs translated. One sentence, so the two modes cannot advise
+    // differently about the same low tier.
+    const rec = (key: 'frequency' | 'leadTime' | 'changeFailure' | 'restore' | 'sustain') =>
+      ({ title: DORA_COPY[`rec.${key}.title`], detail: DORA_COPY[`rec.${key}.detail`] });
     const recs: ToolResult['recommendations'] = [];
-    if (freqTier < 4) recs.push({ title: 'Deploy more often', detail: 'Shrink batch sizes and automate the release pipeline so deploys are routine, not events. Aim for at least weekly, then daily.' });
-    if (leadTier < 4) recs.push({ title: 'Cut lead time', detail: 'Reduce hand-offs and manual gates between commit and production. Trunk-based development and CI on every change are the biggest levers.' });
-    if (cfrTier < 4) recs.push({ title: 'Lower change-failure rate', detail: 'Add automated tests and progressive delivery (canary / feature flags) so risky changes are caught or contained before full rollout.' });
-    if (mttrTier < 4) recs.push({ title: 'Restore faster', detail: 'Invest in alerting, one-click rollback, and runbooks so a failed change is reverted in minutes, not hours.' });
-    if (recs.length === 0) recs.push({ title: 'Sustain elite performance', detail: 'Keep the four keys under continuous review and protect them as you scale — elite teams optimize, they do not coast.' });
+    if (freqTier < 4) recs.push(rec('frequency'));
+    if (leadTier < 4) recs.push(rec('leadTime'));
+    if (cfrTier < 4) recs.push(rec('changeFailure'));
+    if (mttrTier < 4) recs.push(rec('restore'));
+    if (recs.length === 0) recs.push(rec('sustain'));
 
     return {
-      headline: `${tierName(overall)} performer`,
-      summary: 'Your overall DORA performance tier across the four keys.',
+      headline: DORA_COPY.headline.replace('{tier}', tierName(overall)),
+      summary: DORA_COPY['estimate.summary'],
       score: overall,
       scoreLabel: tierName(overall),
       metrics: [
-        { label: 'Deployment frequency', value: `${v.deploysPerWeek}/week`, hint: tierName(freqTier), tier: freqTier },
-        { label: 'Lead time for changes', value: `${v.leadTimeHours}h`, hint: tierName(leadTier), tier: leadTier },
-        { label: 'Change-failure rate', value: `${v.changeFailurePct}%`, hint: tierName(cfrTier), tier: cfrTier },
-        { label: 'Time to restore', value: `${v.mttrHours}h`, hint: tierName(mttrTier), tier: mttrTier },
+        { label: DORA_COPY['metric.frequency'], value: `${v.deploysPerWeek}/week`, hint: tierName(freqTier), tier: freqTier },
+        { label: DORA_COPY['metric.leadTime'], value: `${v.leadTimeHours}h`, hint: tierName(leadTier), tier: leadTier },
+        { label: DORA_COPY['metric.changeFailure'], value: `${v.changeFailurePct}%`, hint: tierName(cfrTier), tier: cfrTier },
+        { label: DORA_COPY['metric.restore'], value: `${v.mttrHours}h`, hint: tierName(mttrTier), tier: mttrTier },
       ],
       recommendations: recs,
     };
@@ -91,6 +153,48 @@ const doraQuickCheck: CalculatorTool = {
 
 const PRICE_PER_MTOK = [9, 2, 0.3]; // frontier, mid, budget/local — blended $/1M tokens
 
+/**
+ * The telemetry mode's copy — read by `toolDataProviders.ts`, declared here.
+ *
+ * It lives on the TOOL rather than beside the provider so there is exactly one
+ * place the completeness test looks for a translatable string: `toolMessageEntries`
+ * walks `tool.copy`, and a data mode whose prose lived somewhere else would be the
+ * one corner of the catalog nothing checks.
+ */
+const AI_COST_COPY = {
+  'empty.headline': 'No attributed spend yet',
+  'empty.summary': 'No agent LLM calls recorded in the last {days} days. Run some agent work and check back, or use the estimate mode.',
+  'empty.summaryProject': 'No agent LLM calls recorded in the last {days} days for this project. Run some agent work and check back, or use the estimate mode.',
+  'empty.title': 'Attribute and budget',
+  'empty.detail': 'Every agent run stamps its tokens with a task and project, so cost rolls up ticket → project → account the moment work starts flowing. Set a budget with overspend alerts once it does.',
+  window: 'Window',
+  'window.days': '{days} days',
+  headline: '{amount} / month',
+  summary: 'Real attributed agent spend over the last {days} days, projected to a month. Cost is stamped per call at the resolved model’s price, including cache tiers.',
+  'metric.spend': 'Spend in window',
+  'metric.projected': 'Projected monthly cost',
+  'metric.tokens': 'Tokens',
+  'metric.cache': 'Prompt tokens served from cache',
+  'metric.calls': 'Agent LLM calls',
+  'metric.attributed': 'Tickets carrying spend',
+  'metric.perTicket': 'Cost per delivered ticket',
+  'metric.byo': 'Calls on your own credential',
+  'value.millions': '{n}M',
+  'value.percent': '{n}%',
+  'value.byo': '{n} (billed at $0)',
+  'rec.cache.title': 'Raise your cache hit rate',
+  'rec.cache.detail': 'Only {pct}% of your prompt tokens are being served from cache. Prompt caching reuses the stable prefix of a conversation at roughly a tenth of the input rate — pushing this toward 40–60% cuts spend with no quality loss.',
+  'rec.attribute.title': 'Attribute spend to tickets',
+  'rec.attribute.detail': 'None of this spend carries a task id, so it can be totalled but not explained. Cost is stamped from the run’s task — dispatching work from a ticket rather than an ad-hoc prompt is what makes cost-per-outcome answerable.',
+  'rec.outcome.title': 'Track cost per outcome, not per token',
+  'rec.outcome.detail.one': 'You spent {amount} to deliver {n} ticket. Watch this ratio rather than the token count — the cheapest model that fails twice is more expensive than the right one.',
+  'rec.outcome.detail.other': 'You spent {amount} to deliver {n} tickets. Watch this ratio rather than the token count — the cheapest model that fails twice is more expensive than the right one.',
+  'rec.byo.title': 'BYO traffic is excluded from cost',
+  'rec.byo.detail': '{byo} of {calls} calls ran on your own provider credential, so they cost the platform nothing and are recorded at zero. Rank those by tokens rather than by spend when comparing model usage.',
+  'rec.measured.title': 'Spend is measured and attributed',
+  'rec.measured.detail': 'Set a budget with overspend alerts so cost stays managed rather than discovered on the invoice.',
+} as const;
+
 const aiCostEstimator: CalculatorTool = {
   id: 'ai-cost-estimator',
   name: 'AI Cost Estimator',
@@ -100,6 +204,7 @@ const aiCostEstimator: CalculatorTool = {
   kind: 'calculator',
   about:
     'Estimate what an AI agent workforce costs per month based on team size, task volume, token usage, and model tier — and see how much a semantic cache saves. Sign in to replace the estimate with your real, attributed spend (cost per task, per project, per merged PR).',
+  copy: AI_COST_COPY,
   inputs: [
     { id: 'developers', label: 'People using agents', type: 'number', min: 1, step: 1, default: 10 },
     { id: 'tasksPerWeek', label: 'AI tasks per person per week', type: 'number', min: 0, step: 1, default: 10 },
@@ -783,6 +888,34 @@ const aiDevMaturity: QuizTool = {
 // objectively from the per-ticket audit ledger (ticket_audits).
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * The telemetry mode's copy — read by `toolDataProviders.ts`, declared here for
+ * the same reason as the estimator's above: one place the completeness test looks.
+ *
+ * The band NAMES are not here. They come from `resultCopy.ts`, so this scorecard
+ * cannot drift from every other scorer's idea of what "Level 3" is called.
+ */
+const TICKET_COVERAGE_COPY = {
+  'empty.headline': 'No audited tickets yet',
+  'empty.summary': 'Move some tickets through a role-gated board (or apply a kanban template) and check back.',
+  'empty.metric': 'Audited tickets',
+  'empty.title': 'Apply a kanban template',
+  'empty.detail': 'Give each lane a responsible role + required checks so tickets can be audited.',
+  'summary.clean': '{pct}% of tickets with required checks passed their audit.',
+  'summary.flagged.one': '{pct}% of tickets with required checks passed their audit — {n} flagged for review.',
+  'summary.flagged.other': '{pct}% of tickets with required checks passed their audit — {n} flagged for review.',
+  'metric.audited': 'Tickets audited',
+  'metric.passing': 'Passing coverage',
+  'metric.flagged': 'Flagged for review',
+  'metric.coverage': 'Avg. required-check coverage',
+  'value.percent': '{n}%',
+  'rec.flagged.title.one': 'Resolve {n} flagged ticket',
+  'rec.flagged.title.other': 'Resolve {n} flagged tickets',
+  'rec.flagged.detail': 'Open the Ticket Audit panel to see which required role or diagnostic each flagged ticket is missing, and route it back to the responsible role.',
+  'rec.healthy.title': 'Coverage is healthy',
+  'rec.healthy.detail': 'Keep required roles + diagnostics attached to your lanes as the board evolves.',
+} as const;
+
 const ticketRoleCoverage: QuestionnaireTool = {
   id: 'ticket-role-coverage',
   name: 'Ticket Role & Diagnostic Coverage',
@@ -792,6 +925,7 @@ const ticketRoleCoverage: QuestionnaireTool = {
   kind: 'questionnaire',
   about:
     'Audits whether each ticket passed through its required roles (BA, Architect, Developer, Review, QA) and diagnostics before it advanced. The "from your data" mode scores this objectively from the per-ticket audit ledger and lists flagged tickets to fix first.',
+  copy: TICKET_COVERAGE_COPY,
   scale: [
     { value: 1, label: 'Never' }, { value: 2, label: 'Rarely' }, { value: 3, label: 'Sometimes' },
     { value: 4, label: 'Usually' }, { value: 5, label: 'Always' },

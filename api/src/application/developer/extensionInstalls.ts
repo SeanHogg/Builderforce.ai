@@ -25,13 +25,13 @@ import {
   tenantExtensionInstalls,
   tenants,
 } from '../../infrastructure/database/schema';
-import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { parseConnectorManifest, type ConnectorManifest } from '../connectors/connectorManifest';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { PublisherError } from './publishers';
 import { isExtensionScope, scopeUpgrade, SENSITIVE_SCOPES } from './extensionContract';
-import { loadPackage, loadVersion } from './extensionPackages';
+import { installsCacheKey, invalidateInstalls, loadPackage, loadVersion } from './extensionRepository';
 
 export interface InstallView {
   id: string;
@@ -50,25 +50,14 @@ export interface InstallView {
   createdAt: string | null;
 }
 
-const installsCacheKey = (tenantId: number): string => `extension-installs:${tenantId}`;
-
 /**
- * Drop every cache a tenant's installs feed.
- *
- * The connector catalog is one of them: an install adds manifests to it, so
- * invalidating installs without invalidating the catalog would leave a
- * just-installed connector missing from the agent tool list for five minutes.
- * Doing both here means a caller cannot do one and forget the other — the same
- * argument `invalidateConnectorCatalog` already makes about the action catalog.
+ * `invalidateInstalls` and the install cache key moved to `extensionRepository.ts`
+ * — re-exported here because this is where every caller already looks for them.
+ * They moved because `reviewSandbox` needs the same invalidation after it installs
+ * a candidate version, and importing this module from there would have closed a
+ * cycle through the connector registry. The keys did not change.
  */
-export async function invalidateInstalls(env: Env, tenantId: number): Promise<void> {
-  await Promise.all([
-    invalidateCached(env, installsCacheKey(tenantId)),
-    invalidateCached(env, `connectors:catalog:${tenantId}`),
-    invalidateCached(env, `connector-action-catalog:${tenantId}`),
-    invalidateCached(env, `mcp-tools:tenant:${tenantId}`),
-  ]);
-}
+export { invalidateInstalls } from './extensionRepository';
 
 /**
  * What an install of this package WOULD grant — the consent screen's data.

@@ -170,3 +170,39 @@ async function provisionOwnedWorkspace(
     return { created: false, reason: 'failed' };
   }
 }
+
+/**
+ * THE WORKSPACE A TENANTLESS PERSON'S OWN ARTEFACTS LIVE IN — resolved, or provisioned.
+ *
+ * A for-hire account holds a web JWT and belongs to no workspace, but several things it
+ * owns are tenant-scoped by construction: a résumé object, and a payout destination
+ * whose credential is sealed with a PER-TENANT key (`credentialCrypto`). Both need one
+ * stable answer to "which workspace is mine", and both must SELF-HEAL — a `freelancer`
+ * provisioned before for-hire accounts got workspaces at all would otherwise be told
+ * "upload failed" / "could not save that destination" forever, with no way to fix it.
+ *
+ * Extracted from `freelancerRoutes.resolveResumeTenantId`, which was this function under
+ * a résumé-shaped name. A second copy in the withdrawal-method path would have been two
+ * places that decide where a person's private data lives, and the day they disagreed a
+ * credential would have been sealed under one tenant and read back under another.
+ *
+ * Returns null when the account cannot own a workspace at all, or when provisioning
+ * failed — `ensurePersonalWorkspace` never throws, so the caller gets a null to handle
+ * rather than an exception in the middle of a request.
+ */
+export async function resolveOwnWorkspaceTenantId(
+  env: Env,
+  db: Db,
+  user: { id: string; email?: string | null; displayName?: string | null },
+): Promise<number | null> {
+  const repo = new TenantRepository(db);
+  const owned = await repo.findByUserId(user.id);
+  const first = owned[0] as { id?: number } | undefined;
+  if (typeof first?.id === 'number') return first.id;
+
+  await ensurePersonalWorkspace(env, db, { ...user, accountType: 'freelancer' });
+
+  const after = await repo.findByUserId(user.id);
+  const created = after[0] as { id?: number } | undefined;
+  return typeof created?.id === 'number' ? created.id : null;
+}

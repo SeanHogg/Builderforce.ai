@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { VSCODE_WEBVIEW_SCHEME } from '@/lib/embed/embedTrust';
 import { LOCALES, DEFAULT_LOCALE, LOCALE_COOKIE, type Locale } from '@/i18n/config';
+import { isUnknownRootSlug, NOT_FOUND_REWRITE_PATH } from '@/lib/rootRoutes';
 
 /**
  * Route protection rules:
@@ -44,6 +45,37 @@ const NO_ISOLATION_HEADERS: Record<string, string> = {
   'Cross-Origin-Opener-Policy': 'unsafe-none',
   'Cross-Origin-Embedder-Policy': 'unsafe-none',
 };
+const PROTECTED_PATHS = [
+  '/dashboard',
+  '/ide',
+  '/projects',
+  '/training',
+  '/tasks',
+  '/workforce',
+  '/contributors',
+  '/brainstorm',
+  '/content-manager',
+  '/skills',
+  '/personas',
+  '/security',
+  '/settings',
+  '/sales',
+  '/debug',
+];
+
+/**
+ * Root segments middleware genuinely acts on. The `/:slug` matcher added for
+ * the unknown-slug 404 check drags every public marketing path into the
+ * Worker as a side effect; without this gate they would newly pick up the
+ * locale `Set-Cookie` at the bottom of `middleware()`, which would make an
+ * otherwise cacheable static page uncacheable. So a known root slug that is
+ * not on this list leaves with exactly the response it had before.
+ */
+const MIDDLEWARE_ROOT_SEGMENTS = new Set<string>([
+  'webcontainer', 'embed', 'logs', 'timeline', 'observability', 'create', 'ide', 'tenants',
+  ...PROTECTED_PATHS.map((p) => p.slice(1)),
+]);
+
 function withHeaders(res: NextResponse, headers: Record<string, string>): NextResponse {
   for (const [k, v] of Object.entries(headers)) res.headers.set(k, v);
   return res;
@@ -80,6 +112,30 @@ function ensureLocaleCookie(request: NextRequest, res: NextResponse): NextRespon
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  // HARD 404 for unknown root-level slugs. `app/[burnrateDomain]/page.tsx` is a
+  // catch-all over the whole root level, so every mistyped URL on the site
+  // reached it and got `notFound()` — a branded 404 BODY served with a 200
+  // status, because the edge response has already streamed by the time the
+  // throw propagates. The status has to be chosen before rendering starts, so
+  // it is chosen here. `isUnknownRootSlug` consults the declared route matrix
+  // (`lib/rootRoutes.ts`, asserted exhaustive against `src/app` by its test) and
+  // answers true ONLY for a single-segment, dot-free, non-underscore path that
+  // no route and no public destination claims; everything else falls straight
+  // through to the rules below. The rewrite target has two segments and no
+  // matching directory, so next-on-pages serves its own not-found — the same
+  // branded body, with a real 404.
+  if (isUnknownRootSlug(pathname)) {
+    const url = request.nextUrl.clone();
+    url.pathname = NOT_FOUND_REWRITE_PATH;
+    return NextResponse.rewrite(url);
+  }
+
+  // A known root slug that middleware has no rule for: hand it back untouched.
+  const rootSegment = pathname.slice(1);
+  if (rootSegment && !rootSegment.includes('/') && !MIDDLEWARE_ROOT_SEGMENTS.has(rootSegment)) {
+    return NextResponse.next();
+  }
 
   // WebContainer connect handshake tab — public, and must be served WITHOUT
   // cross-origin isolation (see NO_ISOLATION_HEADERS). Handle first so it never
@@ -166,24 +222,7 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const protectedPaths = [
-    '/dashboard',
-    '/ide',
-    '/projects',
-    '/training',
-    '/tasks',
-    '/workforce',
-    '/contributors',
-    '/brainstorm',
-    '/content-manager',
-    '/skills',
-    '/personas',
-    '/security',
-    '/settings',
-    '/sales',
-    '/debug',
-  ];
-  const isProtected = protectedPaths.some((p) => pathname === p || pathname.startsWith(p + '/'));
+  const isProtected = PROTECTED_PATHS.some((p) => pathname === p || pathname.startsWith(p + '/'));
 
   if (isProtected) {
     // Logged out → DON'T redirect to login. Let the request through so the app
@@ -200,6 +239,11 @@ export function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
+    // Single root-level segment: the surface `[burnrateDomain]` catches, and the
+    // only reason middleware sees marketing paths at all. Known segments fall
+    // through untouched (see `isUnknownRootSlug`), so behaviour for every
+    // existing route is unchanged.
+    '/:slug',
     '/webcontainer/connect',
     '/webcontainer/connect/:path*',
     '/embed/:path*',

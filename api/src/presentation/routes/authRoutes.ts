@@ -34,6 +34,7 @@ import { hashPassword, hashSecret, verifyPassword } from '../../infrastructure/a
 import { decodeJwtPayload, signJwt, signWebJwt, verifyWebJwt } from '../../infrastructure/auth/JwtService';
 import { mintTenantSessionToken } from '../../infrastructure/auth/tenantSessionToken';
 import type { Db } from '../../infrastructure/database/connection';
+import { persistWebSessionToken } from '../../application/auth/webSessionStore';
 import {
   buildOtpAuthUrl,
   decryptSecretFromStorage,
@@ -160,86 +161,6 @@ async function provisionFreelancer(
 
 function normalizeEmail(input: string): string {
   return input.trim().toLowerCase();
-}
-
-async function ensureSession(
-  db: Db,
-  opts: {
-    sessionId: string;
-    userId: string;
-    sessionName?: string | null;
-    userAgent?: string | null;
-    ipAddress?: string | null;
-  },
-) {
-  const [existing] = await db
-    .select({ id: authUserSessions.id })
-    .from(authUserSessions)
-    .where(eq(authUserSessions.id, opts.sessionId))
-    .limit(1);
-
-  if (existing) {
-    await db
-      .update(authUserSessions)
-      .set({
-        sessionName: opts.sessionName ?? undefined,
-        userAgent: opts.userAgent ?? undefined,
-        ipAddress: opts.ipAddress ?? undefined,
-        isActive: true,
-        revokedAt: null,
-        lastSeenAt: sql`now()`,
-      })
-      .where(eq(authUserSessions.id, opts.sessionId));
-    return;
-  }
-
-  await db.insert(authUserSessions).values({
-    id: opts.sessionId,
-    userId: opts.userId,
-    sessionName: opts.sessionName ?? null,
-    userAgent: opts.userAgent ?? null,
-    ipAddress: opts.ipAddress ?? null,
-  });
-}
-
-async function persistToken(
-  db: Db,
-  token: string,
-  opts: {
-    userId: string;
-    tenantId?: number;
-    tokenType: 'web' | 'tenant';
-    sessionName?: string | null;
-    userAgent?: string | null;
-    ipAddress?: string | null;
-    fallbackSessionId?: string;
-  },
-) {
-  const payload = decodeJwtPayload<TokenPayload>(token);
-  if (!payload.jti) return;
-
-  const sessionId = payload.sid ?? opts.fallbackSessionId;
-  if (sessionId) {
-    await ensureSession(db, {
-      sessionId,
-      userId: opts.userId,
-      sessionName: opts.sessionName,
-      userAgent: opts.userAgent,
-      ipAddress: opts.ipAddress,
-    });
-  }
-
-  await db.insert(authTokens).values({
-    jti: payload.jti,
-    userId: opts.userId,
-    sessionId: sessionId ?? null,
-    tenantId: opts.tenantId ?? null,
-    tokenType: opts.tokenType,
-    issuedAt: new Date(),
-    expiresAt: parseTokenTimeToDate(payload.exp),
-    userAgent: opts.userAgent ?? null,
-    ipAddress: opts.ipAddress ?? null,
-  });
 }
 
 async function assertMfa(
@@ -946,7 +867,7 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
       expiresIn,
     );
 
-    await persistToken(db, token, {
+    await persistWebSessionToken(db, token, {
       userId: user.id,
       tokenType: 'web',
       sessionName: body.sessionName ?? 'Current device',
@@ -1056,7 +977,7 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
       86_400,
     );
 
-    await persistToken(db, token, {
+    await persistWebSessionToken(db, token, {
       userId: user.id,
       tokenType: 'web',
       sessionName: body.sessionName ?? 'Current device',
@@ -1128,7 +1049,7 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
       .set({ mfaLastVerifiedAt: sql`now()`, updatedAt: sql`now()` })
       .where(eq(users.id, user.id));
 
-    await persistToken(db, token, {
+    await persistWebSessionToken(db, token, {
       userId: user.id,
       tokenType: 'web',
       sessionName: body.sessionName ?? 'Current device',
@@ -1393,7 +1314,7 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
     const sessionId = c.get('sessionId') as string | undefined;
     const result = await authService.tenantToken(userId, body.tenantId, sessionId);
 
-    await persistToken(db, result.token, {
+    await persistWebSessionToken(db, result.token, {
       userId,
       tenantId: body.tenantId,
       tokenType: 'tenant',

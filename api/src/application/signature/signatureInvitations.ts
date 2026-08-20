@@ -29,7 +29,13 @@
 
 import type { Env } from '../../env';
 import { resolveAppBaseUrl } from '../../env';
+import type { Db } from '../../infrastructure/database/connection';
 import { deliverShareInvitations, type ShareInvitation } from '../security/shareInvitationMailer';
+import {
+  publisherEmailLocale,
+  shareInvitationMessage,
+  type InvitationPublisher,
+} from '../security/shareInvitationCopy';
 import type { SignatureIntent } from '@builderforce/creation-canvas-contract';
 
 const SOURCE = 'application/signature/signatureInvitations.ts';
@@ -46,10 +52,12 @@ export function signerUrl(baseUrl: string, token: string): string {
   return `${baseUrl}/sign/${encodeURIComponent(token)}`;
 }
 
-/** `sign` and `acknowledge` are different acts with different evidentiary
- *  weight — the whole reason `intent` is a column — so the message says which. */
-const verbFor = (intent: SignatureIntent): string => (intent === 'acknowledge' ? 'acknowledge' : 'sign');
-
+/**
+ * `sign` and `acknowledge` are different acts with different evidentiary weight —
+ * the whole reason `intent` is a column — so the message says which. It is carried
+ * to the copy module as the INTENT rather than as an English verb: the reminder
+ * used to build `${verb}d`, a past tense that exists in no other language here.
+ */
 export interface SignatureRequestForInvitation {
   subject: string;
   documentTitle: string;
@@ -57,34 +65,36 @@ export interface SignatureRequestForInvitation {
   expiresAt?: Date | string | null;
 }
 
-function expiryNote(expiresAt: Date | string | null | undefined): string | undefined {
-  if (!expiresAt) return undefined;
-  const date = expiresAt instanceof Date ? expiresAt : new Date(expiresAt);
-  if (Number.isNaN(date.getTime())) return undefined;
-  return `This request expires on ${date.toISOString().slice(0, 10)}.`;
-}
-
 /**
  * Send each party the document they have been asked to answer, at send time.
  *
  * Called with the plaintext tokens `createSignatureRequest` returned, which is the
  * only moment they exist. Never throws — see the mailer's failure policy.
+ *
+ * Written in the SENDER's language: a counterparty on a contract has no account
+ * here to hold a language of their own.
  */
 export async function deliverSignatureInvitations(
   env: Env,
+  db: Db,
   request: SignatureRequestForInvitation,
   invitations: readonly ShareInvitation[],
+  publisher: InvitationPublisher = {},
 ): Promise<{ sent: number; failed: number }> {
   if (!invitations.length) return { sent: 0, failed: 0 };
   const base = resolveAppBaseUrl(env);
-  const verb = verbFor(request.intent);
-  return deliverShareInvitations(env, invitations, {
-    subject: request.subject,
-    body: `You have been asked to ${verb} "${request.documentTitle}".`,
-    actionLabel: verb === 'acknowledge' ? 'Review and acknowledge' : 'Review and sign',
-    ...(expiryNote(request.expiresAt) ? { footnote: expiryNote(request.expiresAt)! } : {}),
-    linkFor: (token) => signerUrl(base, token),
-  }, SOURCE);
+  const locale = await publisherEmailLocale(env, db, publisher);
+  return deliverShareInvitations(env, invitations, shareInvitationMessage(
+    locale,
+    {
+      kind: 'signatureInvitation',
+      subject: request.subject,
+      documentTitle: request.documentTitle,
+      intent: request.intent,
+      expiresAt: request.expiresAt ?? null,
+    },
+    (token) => signerUrl(base, token),
+  ), SOURCE);
 }
 
 export interface SignatureReminderMessageInput {
@@ -102,17 +112,22 @@ export interface SignatureReminderMessageInput {
  */
 export async function deliverSignatureReminders(
   env: Env,
+  db: Db,
   request: SignatureReminderMessageInput,
   invitations: readonly ShareInvitation[],
+  publisher: InvitationPublisher = {},
 ): Promise<{ sent: number; failed: number }> {
   if (!invitations.length) return { sent: 0, failed: 0 };
   const base = resolveAppBaseUrl(env);
-  const verb = verbFor(request.intent);
-  return deliverShareInvitations(env, invitations, {
-    subject: `Reminder: ${request.documentTitle}`,
-    body: `You have not yet ${verb}d "${request.documentTitle}". Your link is below — it replaces the one you were sent.`,
-    actionLabel: verb === 'acknowledge' ? 'Review and acknowledge' : 'Review and sign',
-    footnote: request.subject,
-    linkFor: (token) => signerUrl(base, token),
-  }, SOURCE);
+  const locale = await publisherEmailLocale(env, db, publisher);
+  return deliverShareInvitations(env, invitations, shareInvitationMessage(
+    locale,
+    {
+      kind: 'signatureReminder',
+      subject: request.subject,
+      documentTitle: request.documentTitle,
+      intent: request.intent,
+    },
+    (token) => signerUrl(base, token),
+  ), SOURCE);
 }

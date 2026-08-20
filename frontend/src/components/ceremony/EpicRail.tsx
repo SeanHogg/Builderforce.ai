@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { Task } from '@/lib/builderforceApi';
 import { useIsMobile } from '@/lib/useIsMobile';
+import { placeTargetProps, useCeremonyPick } from './pickToPlace';
 import { DRAG_TASK } from './types';
 
 /** One Epic container — a drop target that nests the dropped task under the Epic. */
@@ -21,6 +22,7 @@ function EpicCard({
 }) {
   const [over, setOver] = useState(false);
   const t = useTranslations('ceremony');
+  const pick = useCeremonyPick();
   return (
     <div
       onDragOver={(e) => { e.preventDefault(); setOver(true); }}
@@ -31,7 +33,13 @@ function EpicCard({
         const id = Number(e.dataTransfer.getData(DRAG_TASK));
         if (id && id !== epic.id) onDropTask(id);
       }}
+      // A pick in flight turns this card into a DESTINATION rather than a link:
+      // `placeTargetProps` supplies its own onClick and must win, so it is
+      // spread after the open handler.
       onClick={() => onOpen(epic)}
+      {...placeTargetProps(pick, t('groupIntoEpic', { title: epic.title }), (taskId) => {
+        if (taskId !== epic.id) onDropTask(taskId);
+      })}
       style={{
         padding: 10,
         borderRadius: 'var(--radius-lg)',

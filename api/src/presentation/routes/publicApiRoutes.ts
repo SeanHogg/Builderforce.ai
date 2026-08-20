@@ -25,46 +25,16 @@ import { eq, and, desc, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import * as schema from '../../infrastructure/database/schema';
 import type { HonoEnv } from '../../env';
-import {
-  originAllowed,
-  resolveTenantApiKey,
-  touchTenantApiKey,
-  type TenantApiScope,
-} from '../../application/llm/tenantApiKeyService';
-
-// ---------------------------------------------------------------------------
-// Auth middleware
-// ---------------------------------------------------------------------------
-
-interface ApiCaller { keyId: string; tenantId: number }
-
-/**
- * Resolve the key on the request, check it carries `required`, and check the
- * browser origin if there is one.
- *
- * Header parsing is genuinely the presentation layer's job; the hash/lookup/
- * revoked/scope triple is not, and lives in the shared service. The ORIGIN check
- * is new to this surface and is the reason migration 0472 grandfathered every
- * copied key onto the any-origin allowlist: these endpoints exist to be called
- * from an external site's page, and inheriting the tenant default of server-only
- * would have revoked exactly that usage on deploy day.
- */
-async function requireApiKey(
-  db: Db,
-  authHeader: string | undefined,
-  origin: string | null,
-  required: TenantApiScope,
-): Promise<{ ok: false; error: string; status: 401 | 403 } | ({ ok: true } & ApiCaller)> {
-  if (!authHeader?.startsWith('Bearer ')) {
-    return { ok: false, error: 'Missing or malformed Authorization header', status: 401 };
-  }
-  const resolved = await resolveTenantApiKey(db, authHeader.slice(7), required);
-  if (!resolved) return { ok: false, error: 'Invalid or revoked API key', status: 401 };
-  if (!originAllowed(resolved.allowedOrigins, origin)) {
-    return { ok: false, error: 'This key is not allowed from this origin', status: 403 };
-  }
-  return { ok: true, keyId: resolved.keyId, tenantId: resolved.tenantId };
-}
+import { touchTenantApiKey } from '../../application/llm/tenantApiKeyService';
+// THE `/api/v1` credential check. It used to be a private `requireApiKey` right
+// here, which was right while this file was the only router on the mount; the
+// canvas, webhook and widget routers are three more callers, and a second copy of
+// an authorization check is the copy that keeps granting access after the original
+// learns to refuse. See `publicApiAuth.ts`.
+import { requirePublicApiKey } from '../../application/publicApi/publicApiAuth';
+import { createPublicCanvasRoutes } from '../../application/publicApi/publicCanvasApiService';
+import { createPublicWebhookRoutes } from '../../application/publicApi/publicWebhookApiService';
+import { createPublicWidgetRoutes } from '../../application/publicApi/publicWidgetApiService';
 
 // ---------------------------------------------------------------------------
 // Factory
@@ -73,6 +43,14 @@ async function requireApiKey(
 export function createPublicApiRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
 
+  // ── The canvas surface (spec: `docs/public-canvas-api.md`) ────────────────
+  // Board + item CRUD, outbound webhooks, and the third-party widget registry.
+  // Mounted here rather than at their own top-level path so ONE credential, one
+  // origin allowlist and one rate limiter govern the whole public API.
+  router.route('/', createPublicCanvasRoutes(db));
+  router.route('/', createPublicWebhookRoutes(db));
+  router.route('/', createPublicWidgetRoutes(db));
+
   // ── Public read endpoints (tenant API key, `read:catalog`) ────────────────
 
   /**
@@ -80,7 +58,7 @@ export function createPublicApiRoutes(db: Db): Hono<HonoEnv> {
    * Query: ?q=&skill=&page=1&limit=24
    */
   router.get('/agents', async (c) => {
-    const auth = await requireApiKey(db, c.req.header('Authorization'), c.req.header('Origin') ?? null, 'read:catalog');
+    const auth = await requirePublicApiKey(db, c.req.header('Authorization'), c.req.header('Origin') ?? null, 'read:catalog');
     if (!auth.ok) return c.json({ error: auth.error }, auth.status);
 
     // Update last_used_at (fire-and-forget)
@@ -117,7 +95,7 @@ export function createPublicApiRoutes(db: Db): Hono<HonoEnv> {
    * GET /api/v1/agents/:id – get a single agent
    */
   router.get('/agents/:id', async (c) => {
-    const auth = await requireApiKey(db, c.req.header('Authorization'), c.req.header('Origin') ?? null, 'read:catalog');
+    const auth = await requirePublicApiKey(db, c.req.header('Authorization'), c.req.header('Origin') ?? null, 'read:catalog');
     if (!auth.ok) return c.json({ error: auth.error }, auth.status);
 
     c.executionCtx.waitUntil(touchTenantApiKey(db, auth.keyId));
@@ -146,7 +124,7 @@ export function createPublicApiRoutes(db: Db): Hono<HonoEnv> {
    * Query: ?q=&category=&page=1&limit=24
    */
   router.get('/skills', async (c) => {
-    const auth = await requireApiKey(db, c.req.header('Authorization'), c.req.header('Origin') ?? null, 'read:catalog');
+    const auth = await requirePublicApiKey(db, c.req.header('Authorization'), c.req.header('Origin') ?? null, 'read:catalog');
     if (!auth.ok) return c.json({ error: auth.error }, auth.status);
 
     c.executionCtx.waitUntil(touchTenantApiKey(db, auth.keyId));
@@ -222,7 +200,7 @@ export function createPublicApiRoutes(db: Db): Hono<HonoEnv> {
    * Returns the canonical list — no auth required.
    */
   router.get('/personas', async (c) => {
-    const auth = await requireApiKey(db, c.req.header('Authorization'), c.req.header('Origin') ?? null, 'read:catalog');
+    const auth = await requirePublicApiKey(db, c.req.header('Authorization'), c.req.header('Origin') ?? null, 'read:catalog');
     if (!auth.ok) return c.json({ error: auth.error }, auth.status);
 
     // Platform personas from DB (admin-managed)

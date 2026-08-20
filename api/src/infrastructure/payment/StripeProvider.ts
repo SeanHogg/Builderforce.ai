@@ -9,6 +9,7 @@
  *        STRIPE_WEBHOOK_SECRET       — whsec_... (from Stripe dashboard webhook config)
  *   2. Configure Stripe webhook → https://api.builderforce.ai/api/webhooks/payment
  *      Events: checkout.session.completed, customer.subscription.updated,
+ *              payment_method.detached,
  *              customer.subscription.deleted, invoice.payment_failed,
  *              setup_intent.setup_failed
  *
@@ -816,6 +817,36 @@ export class StripeProvider implements PaymentProvider {
           type: 'payment.failed',
           externalCustomerId: obj['customer'] as string,
           externalSubscriptionId: obj['subscription'] as string ?? '',
+          raw: event,
+        };
+      }
+
+      /**
+       * THE CARD WENT AWAY.
+       *
+       * `card_validated_at` was stamped once and only `setup_intent.setup_failed`
+       * ever cleared it — so a card that later expired, was removed by the customer,
+       * or was detached after a failed charge kept PREMIUM unlocked indefinitely. The
+       * validation is a claim about a card that still exists; when the card stops
+       * existing the claim has to stop with it.
+       *
+       * `payment_method.detached` fires whether the removal came from the customer
+       * portal, from our own replace flow, or from Stripe expiring it. The replace
+       * case is harmless: the replacement's `card.validated` has already landed by
+       * the time we detach the displaced card (see the webhook route's ordering), so
+       * this arrives at an already-revalidated row and the tenant never loses access.
+       */
+      case 'payment_method.detached': {
+        const customer = obj['customer'];
+        // A detach event carries the customer it was detached FROM. Without one there
+        // is nothing to resolve the tenant by, so acknowledge and ignore rather than
+        // guess — clearing the wrong tenant's premium would be far worse than missing
+        // one revocation, which the staleness window catches anyway.
+        if (typeof customer !== 'string' || !customer) return null;
+        return {
+          type: 'card.validation_failed',
+          externalCustomerId: customer,
+          externalSubscriptionId: '',
           raw: event,
         };
       }

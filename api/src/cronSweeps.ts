@@ -43,14 +43,18 @@ import { runDueTriggers } from './application/workflow/runDueTriggers';
 import { processPendingCloudWorkflows } from './application/workflow/cloudExecutor';
 import { runCampaignSendSweep } from './application/marketing/campaignEngine';
 import { runAdInsightsSweep } from './application/advertising/adInsightsSync';
+import { runLedgerSyncSweep } from './application/finance/ledgerSync';
 import { runSocialCampaignSweep } from './application/social/socialCampaignService';
 import { runMailboxAutomationSweep } from './application/mailbox/mailboxAutomationService';
 import { runCustomDomainSweep } from './application/ide/customDomain';
+import { runSsoDomainSweep } from './application/auth/enterpriseSso';
+import { purgeExpiredPasskeyChallenges } from './application/auth/PasskeyService';
 import { runHostedListingSweep } from './application/marketplace/creationListings.hostedSweep';
 import { runJobAlertSweep } from './application/marketplace/jobAlerts';
 import { reapStaleExecutions } from './application/runtime/staleExecutionReaper';
 import { sweepIdlePreviews } from './application/runtime/previewSessions';
 import { reconcileGithubActionsRuns } from './application/runtime/githubActionsReconcile';
+import { runAgentWorkflowRefreshSweep } from './application/runtime/agentWorkflowRefresh';
 import { runExecutionLifecycleOutboxSweep } from './application/runtime/executionLifecycleOutbox';
 import { runApprovalExpirySweep } from './application/approvals/runApprovalExpirySweep';
 import { runEscalationSweep } from './application/incident/runEscalationSweep';
@@ -345,8 +349,12 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     description: 'Mail every published release note not yet sent to consenting users.',
     run: async ({ env }) => {
       const r = await runReleaseDigest(env);
+      // `complete=false` means the run hit its per-invocation send ceiling and
+      // left the audience part-mailed. It is a normal outcome for a large base,
+      // not an error — the next invocation resumes at the persisted cursor — but
+      // it must be visible, because the notes stay unstamped until it drains.
       return r.notes > 0
-        ? `notes=${r.notes} sent=${r.sent} suppressed=${r.suppressed} failed=${r.failed}`
+        ? `notes=${r.notes} sent=${r.sent} suppressed=${r.suppressed} failed=${r.failed} complete=${r.complete}`
         : null;
     },
   },
@@ -423,6 +431,33 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     },
   },
   {
+    key: 'ledger-sync',
+    cadence: 'daily',
+    // `metric-rollups` reads the rows this sweep writes, and the two are dispatched
+    // CONCURRENTLY — `dispatchCronSweeps` gives each its own `waitUntil` — so this
+    // is deliberately NOT relied on to land first. The consequence is bounded and
+    // acceptable: a book synced after a rollup pass is picked up by the next one,
+    // so a figure is at worst one cycle behind. What is not acceptable is a person
+    // connecting their books and seeing nothing change until tomorrow, and that is
+    // what `POST /api/ledger/sync` exists for — the same function, called on demand.
+    //
+    // DAILY rather than frequent, for the ad sweep's reasoning verbatim: a book
+    // reports on a daily grain and restates for weeks, so a five-minute cadence
+    // would re-read the same unchanged month ~288 times a day against a Neon budget
+    // that has to stay under $5/month, for numbers that cannot have moved.
+    description:
+      'Pull transactions and account balances from every connected set of books — QuickBooks, '
+      + 'Xero, NetSuite, a Plaid bank feed, Stripe revenue — into the `ledger_entries` rows and '
+      + '`ledger_accounts` balances that `financeRollup` reads. The half that makes burn, cash '
+      + 'and runway live over a company\'s actuals instead of over what somebody typed.',
+    run: async ({ env }) => {
+      const r = await runLedgerSyncSweep(env, buildDatabase(env));
+      return r.written > 0 || r.removed > 0 || r.failed > 0
+        ? `tenants=${r.tenants} books=${r.connections} written=${r.written} removed=${r.removed} failed=${r.failed}`
+        : null;
+    },
+  },
+  {
     key: 'mailbox-automation',
     cadence: 'frequent',
     description: 'Evaluate unread connected-mailbox messages against AI response rules.',
@@ -441,6 +476,33 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     run: async ({ env }) => {
       const r = await runCustomDomainSweep(env, buildDatabase(env));
       return r.activated > 0 ? `checked=${r.checked} activated=${r.activated}` : null;
+    },
+  },
+  {
+    key: 'sso-domains',
+    // Same cadence as `custom-domains`, and for the same reason: a TXT record is
+    // published by somebody else's administrator at a moment we cannot predict,
+    // and the claim is worthless to the customer until we notice it landed.
+    cadence: 'frequent',
+    description: 'Re-check unverified SSO domain claims for their DNS proof; verify the ones that published it.',
+    run: async ({ env }) => {
+      const r = await runSsoDomainSweep(buildDatabase(env));
+      return r.verified > 0 ? `checked=${r.checked} verified=${r.verified}` : null;
+    },
+  },
+  {
+    key: 'passkey-challenges',
+    // Frequent, because the rows expire in five minutes and the table is on the
+    // sign-in path: an unclaimed challenge past its expiry can never be used
+    // again, so keeping it only slows down the index the next assertion reads.
+    // CONSUMED rows are deliberately not swept here — a burst of
+    // consumed-then-failed challenges is evidence, and the purge only takes rows
+    // whose expiry has passed.
+    cadence: 'frequent',
+    description: 'Drop expired WebAuthn challenges so the sign-in path reads a small table.',
+    run: async ({ env }) => {
+      const removed = await purgeExpiredPasskeyChallenges(buildDatabase(env));
+      return removed > 0 ? `removed=${removed}` : null;
     },
   },
   {
@@ -516,6 +578,17 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     run: async ({ env }) => {
       const r = await reconcileGithubActionsRuns(env);
       return r.failed > 0 ? `checked=${r.checked} failed=${r.failed} stillQueued=${r.stillQueued}` : null;
+    },
+  },
+  {
+    key: 'gh-agent-workflow-refresh',
+    cadence: 'daily',
+    description: 'Re-commit the current agent workflow to enabled repos still carrying an older revision, so their runs carry an execution id the reconcile sweep can attribute.',
+    run: async ({ env }) => {
+      const r = await runAgentWorkflowRefreshSweep(env);
+      return r.checked > 0
+        ? `checked=${r.checked} refreshed=${r.refreshed} skipped=${r.skipped} deferred=${r.deferred} dropped=${r.dropped}`
+        : null;
     },
   },
   {

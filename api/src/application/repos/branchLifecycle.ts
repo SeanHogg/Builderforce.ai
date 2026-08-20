@@ -17,10 +17,8 @@
  * destructive operation that quietly does nothing is worse than one that refuses
  * out loud.
  */
-import {
-  bitbucketServerRepoPath, buildBitbucketServerBranchUtilsBase, buildGitApiBaseUrl,
-  resolveGitApiFlavor, type GitApiFlavor,
-} from './gitProxy';
+import { resolveGitApiFlavor, type GitApiFlavor } from './gitProxy';
+import { encodePathSegments, resolveRepoApiTarget } from './repoApiTarget';
 
 const SUPPORTED: ReadonlySet<string> = new Set(['github', 'gitlab', 'bitbucket']);
 
@@ -31,24 +29,6 @@ export interface RepoTarget {
   owner: string;
   repo: string;
   token: string;
-}
-
-function gitlabProject(owner: string, repo: string): string {
-  return encodeURIComponent(`${owner}/${repo}`);
-}
-
-/** Resolve the REST dialect + its API base in one step. Every builder below goes
- *  through this so the Bitbucket Cloud/Server split is decided ONCE. Throws on an
- *  unmapped provider, which each executor maps to `unsupported`. */
-function apiFor(target: { provider: string; host: string | null }): { flavor: GitApiFlavor; apiBase: string } {
-  const flavor = resolveGitApiFlavor(target.provider, target.host);
-  return { flavor, apiBase: buildGitApiBaseUrl(target.provider, target.host, { allowBitbucketServer: true }) };
-}
-
-/** Encode a ref for a URL PATH segment while preserving its slashes — a ticket
- *  branch is `builderforce/task-12`, and collapsing that slash 404s. */
-function encodeRefPath(ref: string): string {
-  return ref.split('/').map(encodeURIComponent).join('/');
 }
 
 function headers(token: string, agent: string): Record<string, string> {
@@ -74,18 +54,19 @@ export type DeleteBranchResult =
  *  `body` is present only for Bitbucket Server, which names the ref in the payload
  *  rather than the path. */
 export function buildDeleteBranchRequest(input: DeleteBranchInput): { url: string; method: 'DELETE'; body?: Record<string, unknown> } {
-  const { flavor, apiBase } = apiFor(input);
+  const api = resolveRepoApiTarget(input);
+  const { flavor } = api;
   if (flavor === 'gitlab') {
     // DELETE /projects/:id/repository/branches/:branch — GitLab wants the branch
     // FULLY encoded here (slash included) as a single path component.
     return {
-      url: `${apiBase}/projects/${gitlabProject(input.owner, input.repo)}/repository/branches/${encodeURIComponent(input.branch)}`,
+      url: `${api.branches()}/${encodeURIComponent(input.branch)}`,
       method: 'DELETE',
     };
   }
   if (flavor === 'bitbucket-cloud') {
     return {
-      url: `${apiBase}/repositories/${input.owner}/${input.repo}/refs/branches/${encodeRefPath(input.branch)}`,
+      url: `${api.branches()}/${encodePathSegments(input.branch)}`,
       method: 'DELETE',
     };
   }
@@ -94,14 +75,14 @@ export function buildDeleteBranchRequest(input: DeleteBranchInput): { url: strin
     // takes the ref in the BODY (fully qualified). `dryRun: false` is explicit so
     // the destructive intent is visible in the request, not just its absence.
     return {
-      url: `${buildBitbucketServerBranchUtilsBase(input.host)}${bitbucketServerRepoPath(input.owner, input.repo)}/branches`,
+      url: `${api.branchUtilsBase()}/branches`,
       method: 'DELETE',
       body: { name: `refs/heads/${input.branch}`, dryRun: false },
     };
   }
   // GitHub: DELETE /repos/:owner/:repo/git/refs/heads/:branch.
   return {
-    url: `${apiBase}/repos/${input.owner}/${input.repo}/git/refs/heads/${encodeRefPath(input.branch)}`,
+    url: `${api.branches()}/${encodePathSegments(input.branch)}`,
     method: 'DELETE',
   };
 }
@@ -158,11 +139,11 @@ export type ClosePrResult =
 
 /** Build the provider-specific close-PR request. Pure + exported for tests. */
 export function buildClosePrRequest(input: ClosePrInput): { url: string; method: 'PATCH' | 'PUT' | 'POST'; body: Record<string, unknown> } {
-  const { flavor, apiBase } = apiFor(input);
+  const { flavor, ...api } = resolveRepoApiTarget(input);
   if (flavor === 'gitlab') {
     // PUT /projects/:id/merge_requests/:iid with the `close` state event.
     return {
-      url: `${apiBase}/projects/${gitlabProject(input.owner, input.repo)}/merge_requests/${input.number}`,
+      url: api.pullRequest(input.number),
       method: 'PUT',
       body: { state_event: 'close' },
     };
@@ -170,7 +151,7 @@ export function buildClosePrRequest(input: ClosePrInput): { url: string; method:
   if (flavor === 'bitbucket-cloud') {
     // Bitbucket calls this "decline"; it is the same end state (PR no longer open).
     return {
-      url: `${apiBase}/repositories/${input.owner}/${input.repo}/pullrequests/${input.number}/decline`,
+      url: `${api.pullRequest(input.number)}/decline`,
       method: 'POST',
       body: {},
     };
@@ -180,14 +161,14 @@ export function buildClosePrRequest(input: ClosePrInput): { url: string; method:
     // current version is", which is what we want — we are declining the PR
     // outright, not merging a concurrent edit.
     return {
-      url: `${apiBase}${bitbucketServerRepoPath(input.owner, input.repo)}/pull-requests/${input.number}/decline?version=-1`,
+      url: `${api.pullRequest(input.number)}/decline?version=-1`,
       method: 'POST',
       body: {},
     };
   }
   // GitHub: PATCH /repos/:owner/:repo/pulls/:n { state: 'closed' }.
   return {
-    url: `${apiBase}/repos/${input.owner}/${input.repo}/pulls/${input.number}`,
+    url: api.pullRequest(input.number),
     method: 'PATCH',
     body: { state: 'closed' },
   };
@@ -276,26 +257,26 @@ const MAX_COMMIT_PAGES = Math.ceil(MAX_TOTAL_BRANCH_COMMITS / MAX_BRANCH_COMMITS
  * payload, so it can never verify a long branch, while the commits endpoint pages.
  */
 export function buildListBranchCommitsUrl(input: ListBranchCommitsInput, page = 1): string {
-  const { flavor, apiBase } = apiFor(input);
+  const { flavor, repoBase } = resolveRepoApiTarget(input);
   if (flavor === 'gitlab') {
-    return `${apiBase}/projects/${gitlabProject(input.owner, input.repo)}/repository/commits`
+    return `${repoBase}/repository/commits`
       + `?ref_name=${encodeURIComponent(`${input.base}..${input.branch}`)}`
       + `&per_page=${MAX_BRANCH_COMMITS}&page=${page}`;
   }
   if (flavor === 'bitbucket-cloud') {
     // Bitbucket Cloud has no compare endpoint; `include`/`exclude` on /commits is
     // the documented equivalent of `base..branch`.
-    return `${apiBase}/repositories/${input.owner}/${input.repo}/commits`
+    return `${repoBase}/commits`
       + `?include=${encodeURIComponent(input.branch)}&exclude=${encodeURIComponent(input.base)}`
       + `&pagelen=${MAX_BRANCH_COMMITS}&page=${page}`;
   }
   if (flavor === 'bitbucket-server') {
     // Server pages by absolute offset (`start`), not page number.
-    return `${apiBase}${bitbucketServerRepoPath(input.owner, input.repo)}/commits`
+    return `${repoBase}/commits`
       + `?until=${encodeURIComponent(input.branch)}&since=${encodeURIComponent(input.base)}`
       + `&limit=${MAX_BRANCH_COMMITS}&start=${(page - 1) * MAX_BRANCH_COMMITS}`;
   }
-  return `${apiBase}/repos/${input.owner}/${input.repo}/compare/${encodeURIComponent(input.base)}...${encodeURIComponent(input.branch)}`
+  return `${repoBase}/compare/${encodeURIComponent(input.base)}...${encodeURIComponent(input.branch)}`
     + `?per_page=${MAX_BRANCH_COMMITS}&page=${page}`;
 }
 

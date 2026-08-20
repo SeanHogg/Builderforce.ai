@@ -31,6 +31,21 @@ export interface SealedOAuthTokens {
   refreshToken?: string;
   expiresAtMs?: number;
   scope?: string;
+  /**
+   * Non-token secrets that belong to the SAME grant.
+   *
+   * Added for the ledger port, whose NetSuite provider connects by typed fields
+   * rather than by a redirect: an administrator provisions an integration record
+   * inside the NetSuite account and the operator arrives holding a consumer
+   * key/secret and a token id/secret. Those are credentials for one connection
+   * exactly as an access token is, and the alternative — a second sealed column, or
+   * `encryptCredentials` called directly beside this module — would mean two
+   * storage paths for one connection and a fix to sealing landing on only one.
+   *
+   * Every existing caller (mailbox, drive, YouTube) leaves it undefined and is
+   * unaffected: an absent key seals to an absent key.
+   */
+  fields?: Record<string, string>;
 }
 
 /** The subset of a token response both providers agree on. */
@@ -51,7 +66,13 @@ export async function sealOAuthTokens(
 
 /** Returns null when the blob cannot be opened or carries no access token — a
  * row we cannot read is treated as a grant that must be reconnected, never as
- * an empty-string token that would 401 on every call. */
+ * an empty-string token that would 401 on every call.
+ *
+ * A `fields`-only credential (NetSuite's token pair) is sealed with an EMPTY
+ * `accessToken` rather than none, so it opens here and the caller reads its
+ * {@link SealedOAuthTokens.fields}. That keeps the "cannot be opened ⇒ reconnect"
+ * rule intact instead of adding a second null case every caller would have to
+ * learn. */
 export async function unsealOAuthTokens(
   env: Env,
   tenantId: number,
@@ -60,11 +81,15 @@ export async function unsealOAuthTokens(
 ): Promise<SealedOAuthTokens | null> {
   const blob = await decryptCredentials(enc, iv, credentialSecret(env), tenantId);
   if (!blob || typeof blob.accessToken !== 'string') return null;
+  const fields = blob.fields;
   return {
     accessToken: blob.accessToken,
     refreshToken: typeof blob.refreshToken === 'string' ? blob.refreshToken : undefined,
     expiresAtMs: typeof blob.expiresAtMs === 'number' ? blob.expiresAtMs : undefined,
     scope: typeof blob.scope === 'string' ? blob.scope : undefined,
+    ...(fields && typeof fields === 'object' && !Array.isArray(fields)
+      ? { fields: Object.fromEntries(Object.entries(fields as Record<string, unknown>).map(([k, v]) => [k, String(v)])) }
+      : {}),
   };
 }
 
@@ -89,6 +114,10 @@ export function mergeRefreshedTokens(previous: SealedOAuthTokens, refreshed: Ref
     refreshToken: refreshed.refresh_token ?? previous.refreshToken,
     expiresAtMs: refreshed.expires_in ? Date.now() + refreshed.expires_in * 1000 : undefined,
     scope: refreshed.scope ?? previous.scope,
+    // Carried across verbatim. A refresh rotates TOKENS; the fields beside them —
+    // a NetSuite account id, a Plaid item's environment — are properties of the
+    // connection, and dropping them here would silently unconfigure it.
+    ...(previous.fields ? { fields: previous.fields } : {}),
   };
 }
 

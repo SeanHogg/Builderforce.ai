@@ -30,6 +30,9 @@
  */
 
 import { assertSafeUrl } from '../../infrastructure/net/ssrfGuard';
+import type { ConnectorSoap } from './soapEnvelope';
+
+export type { ConnectorSoap };
 
 /** Broad grouping used by the catalog UI. Kept small on purpose. */
 export const CONNECTOR_CATEGORIES = [
@@ -137,6 +140,18 @@ export interface ConnectorAction {
    * older APIs that reject a JSON body outright.
    */
   bodyFormat?: 'json' | 'form';
+  /**
+   * Speak SOAP instead of JSON on this action.
+   *
+   * A TRANSPORT, not a second subsystem: the same SSRF guard, the same sealed
+   * credentials and the same audit-log row. Declaring it makes the runtime build an
+   * envelope out of the `in: 'body'` params, set `SOAPAction`, and parse the XML answer
+   * into the same object shape a REST action returns — so `resultPath`, `required` and
+   * every caller above stay unchanged. It exists because Microsoft Advertising's
+   * Campaign Management API has no REST surface, and "the vendor chose SOAP" is a
+   * reason to add a transport, not a reason to have no Microsoft Ads.
+   */
+  soap?: ConnectorSoap;
   /** Dot path into the JSON response to return instead of the whole body. */
   resultPath?: string;
 }
@@ -299,6 +314,11 @@ function validateAction(raw: unknown, index: number, errors: string[]): Connecto
     if (!params[r]) errors.push(`${where}.required: "${r}" is not a declared param`);
   }
 
+  const soap = validateSoap(raw.soap, where, errors);
+  // A SOAP operation is a POST of a document. Declaring it on a GET would produce a
+  // request with an envelope no service ever sees, which fails as an unhelpful 404.
+  if (soap && method !== 'POST') errors.push(`${where}.soap: SOAP actions must use POST`);
+
   return {
     key,
     label: String(raw.label ?? key),
@@ -313,7 +333,58 @@ function validateAction(raw: unknown, index: number, errors: string[]): Connecto
       ? { headers: Object.fromEntries(Object.entries(raw.headers).map(([k, v]) => [k, String(v)])) }
       : {}),
     ...(raw.bodyFormat === 'form' ? { bodyFormat: 'form' as const } : {}),
+    ...(soap ? { soap } : {}),
     ...(typeof raw.resultPath === 'string' ? { resultPath: raw.resultPath } : {}),
+  };
+}
+
+/**
+ * Validate a SOAP declaration on an untrusted action.
+ *
+ * The namespace is the only field that reaches the wire as markup rather than as a
+ * text node, so it is the one that must be constrained — everything else is escaped by
+ * `buildSoapEnvelope`. Returning `null` on a malformed declaration would silently
+ * DOWNGRADE the action to JSON and send a JSON body to a SOAP endpoint, so a broken
+ * declaration is an error the author sees, not a fallback.
+ */
+function validateSoap(raw: unknown, where: string, errors: string[]): ConnectorSoap | null {
+  if (raw === undefined || raw === null) return null;
+  if (!isPlainObject(raw)) { errors.push(`${where}.soap: must be an object`); return null; }
+
+  const action = String(raw.action ?? '').trim();
+  const namespace = String(raw.namespace ?? '').trim();
+  const operation = String(raw.operation ?? '').trim();
+  if (!operation) errors.push(`${where}.soap.operation: required`);
+  if (!/^[A-Za-z_][A-Za-z0-9_.-]*$/.test(operation || '_')) {
+    errors.push(`${where}.soap.operation: must be an XML element name`);
+  }
+  // A namespace is a URI in an xmlns attribute; a quote or an angle bracket in it would
+  // escape the attribute and rewrite the document.
+  if (!namespace || /["'<>&\s]/.test(namespace)) {
+    errors.push(`${where}.soap.namespace: required, and must be a URI with no quotes, angle brackets or spaces`);
+  }
+  const version = raw.version === '1.2' ? '1.2' as const : '1.1' as const;
+
+  const header: Record<string, string> = {};
+  if (raw.header !== undefined) {
+    if (!isPlainObject(raw.header)) errors.push(`${where}.soap.header: must be an object of element names to values`);
+    else {
+      for (const [key, value] of Object.entries(raw.header)) {
+        if (!/^[A-Za-z_][A-Za-z0-9_.:-]*$/.test(key)) {
+          errors.push(`${where}.soap.header: "${key}" is not an XML element name`);
+          continue;
+        }
+        header[key] = String(value);
+      }
+    }
+  }
+
+  return {
+    action,
+    namespace,
+    operation,
+    version,
+    ...(Object.keys(header).length ? { header } : {}),
   };
 }
 

@@ -19,6 +19,7 @@ import type { ListingHarness, StageCheck } from '@builderforce/creation-canvas-c
 import type { StageSandboxState, StageSandboxStatus } from './stageSandboxChecks';
 import { dispatchStageSandbox } from './dispatchStageSandbox';
 import { enforceStageSandboxCap } from './stageSandboxLedger';
+import { isUniqueViolation } from '../../infrastructure/database/uniqueViolation';
 
 /** A run still `running` after this long is presumed dead — the container
  *  crashed without reporting, or the DO binding silently dropped the request.
@@ -90,15 +91,6 @@ export async function resolveStageSandboxState(
     errorMessage: null,
     lastVerifiedAt: previous?.finishedAt?.toISOString() ?? null,
   };
-}
-
-/** Expected loser of two near-simultaneous Stage presses racing to insert the
- *  same in-flight row. Mirrors `isCreationEventWriteConflict`'s reading. */
-function isUniqueViolation(error: unknown): boolean {
-  const detail = error && typeof error === 'object' ? (error as { code?: unknown; message?: unknown }) : null;
-  const text = [detail?.message, error instanceof Error ? error.message : String(error)]
-    .filter((v): v is string => typeof v === 'string').join(' ');
-  return detail?.code === '23505' || /duplicate key|unique constraint/i.test(text);
 }
 
 /**

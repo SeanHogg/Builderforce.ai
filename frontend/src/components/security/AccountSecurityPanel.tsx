@@ -18,6 +18,7 @@ import {
   type MySession, type MyAdminAccessSession,
 } from '@/lib/builderforceApi';
 import { SessionList } from '@/components/security/SessionList';
+import PasskeysPanel from '@/components/security/PasskeysPanel';
 import { useFormat } from "@/i18n/useFormat";
 
 const cardStyle: React.CSSProperties = {
@@ -67,6 +68,11 @@ export default function AccountSecurityPanel() {
 
   return (
     <>
+      {/* Passkeys. First, because it is the only thing on this panel a person can
+          ACT on to make their account safer — the two below are a record of what
+          has already happened. */}
+      <PasskeysPanel />
+
       {/* My active sessions */}
       <div style={{ ...cardStyle, marginBottom: 16 }}>
         <div style={{ ...sectionTitle, marginBottom: 4 }}>{t('mySessions')}</div>

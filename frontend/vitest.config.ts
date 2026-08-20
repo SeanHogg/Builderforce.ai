@@ -93,6 +93,7 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, './src'),
       '@builderforce/creation-canvas-contract': path.resolve(__dirname, '../packages/creation-canvas-contract/src/index.ts'),
+      '@builderforce/canvas-widget-protocol': path.resolve(__dirname, '../packages/canvas-widget-protocol/src/index.ts'),
     },
     // The `link:`ed sibling packages (brain-embedded, brain-ui) ship their deps as
     // external peers and import them bare. Vite follows the symlink into the sibling's

@@ -11,10 +11,14 @@
  * to look like from above.
  */
 import {
+  extensionCategories,
   extensionPackages,
+  extensionReviewStages,
   extensionVersions,
   mailboxAutomationReplies,
   mailboxAutomationRules,
+  mailboxPushReceipts,
+  mailboxWatches,
   tenantExtensionInstalls,
 } from '../../../infrastructure/database/schema/integrations';
 import { defineDomainEntities, entity } from '../entityDefinition';
@@ -22,6 +26,15 @@ import { defineDomainEntities, entity } from '../entityDefinition';
 export const INTEGRATIONS_ENTITIES = defineDomainEntities('integrations', [
   entity(mailboxAutomationRules, { readOnly: true }),
   entity(mailboxAutomationReplies, { readOnly: true }),
+  /** The provider push subscription behind a connected mailbox (migration 1095),
+   *  and the claim check that keeps one email to one workflow run. Read-only to
+   *  the generic layer because neither is a record of anything: `cursor`,
+   *  `expires_at` and `subscription_id` are LIVE protocol state that only means
+   *  something while it agrees with Gmail or Graph, and a receipt edited by hand
+   *  either re-fires a workflow for mail already handled or silently swallows the
+   *  next one. `mailboxWatch.ts` is the single writer of both. */
+  entity(mailboxWatches, { readOnly: true }),
+  entity(mailboxPushReceipts, { readOnly: true }),
 
   // ── Developer portal (PRD 24) ───────────────────────────────────────────
   // Every one of these is readOnly to the GENERIC layer. Their invariants are
@@ -39,4 +52,17 @@ export const INTEGRATIONS_ENTITIES = defineDomainEntities('integrations', [
   entity(extensionPackages, { kind: 'extension', registers: true, readOnly: true }),
   entity(extensionVersions, { readOnly: true }),
   entity(tenantExtensionInstalls, { readOnly: true }),
+
+  // The directory taxonomy (1094). Read-only here for a different reason than the
+  // three above: it is not that a generic write would route around a gate, it is
+  // that a category is PLATFORM configuration and every listing on the deployment
+  // files itself under one. A generic PATCH from any tenant's entity route would
+  // let one workspace rename the category every other workspace's package sits in.
+  entity(extensionCategories, { readOnly: true }),
+
+  // The per-stage review record. Read-only for the same reason `extension_versions`
+  // is: its invariant is not "a valid row", it is "this is what the pipeline
+  // actually observed". A generic write that could set `verdict: 'pass'` would be
+  // a review nobody ran, recorded as one that did.
+  entity(extensionReviewStages, { readOnly: true }),
 ]);

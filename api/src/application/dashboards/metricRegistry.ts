@@ -19,6 +19,7 @@ import { computeDora } from '../metrics/workforceMetrics';
 import { computeQualityInsights } from '../insights/qualityInsights';
 import { computePeopleInsights } from '../insights/peopleInsights';
 import { computeRdFinancials } from '../insights/rdFinancialsInsights';
+import { computeWorkforceHealth, UNDER_UTILISED_PCT } from './workforceHealth';
 import { errorEvents, executions, llmUsageLog, deploymentEvents, alertEvents } from '../../infrastructure/database/schema';
 import { dailyCountSeries, dailySumSeries, seriesTotal, type MetricPoint } from './dailySeries';
 
@@ -229,6 +230,39 @@ export const METRIC_REGISTRY: Record<string, MetricDef> = {
     goodWhenUp: true,
     async compute(db, tenantId, days) {
       return (await computePeopleInsights(db, tenantId, Math.max(1, Math.round(days / 30)))).devSatisfaction.score;
+    },
+  },
+
+  // ── Workforce health (computeWorkforceHealth → cohort sizes) ───────────────
+  // The three halves of "who is not working, and who is drowning?". They pluck
+  // COHORT LENGTHS off one composed read (see workforceHealth.ts) rather than
+  // aggregating here — same contract as every other entry. Registered as three
+  // scalars, not one, because a dashboard tile answers one question and a manager
+  // watching for burnout is not watching for slack.
+  'people.overAllocated': {
+    label: 'Over-allocated members',
+    unit: '',
+    description: 'Members carrying more open work than their declared WIP ceiling.',
+    goodWhenUp: false,
+    async compute(db, tenantId, days) {
+      return (await computeWorkforceHealth(db, tenantId, days)).overAllocated.length;
+    },
+  },
+  'people.underUtilised': {
+    label: 'Under-utilised members',
+    unit: '',
+    description: `Members holding work but at or below ${UNDER_UTILISED_PCT}% of their WIP ceiling — visible spare capacity.`,
+    async compute(db, tenantId, days) {
+      return (await computeWorkforceHealth(db, tenantId, days)).underUtilised.length;
+    },
+  },
+  'people.idle': {
+    label: 'Idle members',
+    unit: '',
+    description: 'Members active in the window who currently hold no open work at all.',
+    goodWhenUp: false,
+    async compute(db, tenantId, days) {
+      return (await computeWorkforceHealth(db, tenantId, days)).idle.length;
     },
   },
 

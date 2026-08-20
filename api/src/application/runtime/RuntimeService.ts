@@ -200,6 +200,22 @@ export class RuntimeService {
     /** Authoritative workspace kill switch. Appended to preserve constructor
      * compatibility; production always wires it at the composition root. */
     private readonly isAgentExecutionEnabled?: (tenantId: number) => Promise<boolean>,
+    /**
+     * Resolver for the lane a ticket belongs in when a run STARTS — the last hardcoded
+     * hop. This path wrote `TaskStatus.IN_PROGRESS` unconditionally, so a board whose
+     * lanes are `intake → spec → build → qa → ship` had its ticket written to a status
+     * matching NO column the instant an agent picked it up, and only a human editing the
+     * status could bring it back. Wired at the composition root to
+     * {@link ../swimlane/nextLane.resolveRunningTaskStatus}, which prefers the lane the
+     * run was DISPATCHED FOR (position-driven, off the payload's `laneKey`) over any
+     * constant. Returns null for "leave the ticket where it is".
+     *
+     * Appended to preserve constructor compatibility in tests; absent ⇒ the legacy
+     * constant, so nothing changes for a caller that has not wired it.
+     */
+    private readonly resolveRunningStatus?: (info: {
+      projectId: number; fromStatus: string; dispatchedLaneKey: string | null;
+    }) => Promise<string | null>,
   ) {}
 
   /**
@@ -684,13 +700,29 @@ export class RuntimeService {
         if (coordinatorOwnsTransition) toStatus = managedResult.toStatus;
 
         if (!coordinatorOwnsTransition && !holdsLane && dto.status === ExecutionStatus.RUNNING && fromStatus !== TaskStatus.IN_PROGRESS) {
-          toStatus = TaskStatus.IN_PROGRESS;
-          await this.runEffect(
-            'task_status_running',
-            effectContext,
-            () => this.tasks.update(task.update({ status: TaskStatus.IN_PROGRESS })),
-            task,
-          );
+          // The board decides which lane "work is happening" IS — see
+          // {@link resolveRunningStatus}. Falls back to the legacy constant only when no
+          // resolver is wired (tests, a non-board task), and a null verdict means the
+          // ticket stays put rather than being written to a lane the board does not have.
+          const runningKey = this.resolveRunningStatus
+            ? await this.runEffect(
+                'resolve_running_status',
+                effectContext,
+                () => this.resolveRunningStatus!({
+                  projectId, fromStatus, dispatchedLaneKey: parseLaneKey(execution.payload) ?? null,
+                }),
+                null,
+              )
+            : TaskStatus.IN_PROGRESS;
+          if (runningKey) {
+            toStatus = runningKey;
+            await this.runEffect(
+              'task_status_running',
+              effectContext,
+              () => this.tasks.update(task.update({ status: runningKey })),
+              task,
+            );
+          }
         }
         if (!coordinatorOwnsTransition && !holdsLane && dto.status === ExecutionStatus.COMPLETED) {
           const resultText = dto.result ?? '';

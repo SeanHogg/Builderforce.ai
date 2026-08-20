@@ -1,4 +1,5 @@
 import { reportCaughtError } from '../observability/caughtErrorReporter';
+import { coordinatorVoice, resolveTicketCoordinator } from '../kanban/ticketCoordinator';
 /**
  * Parking a cloud run on `ask_human` — the ONE place a run becomes `paused`.
  *
@@ -32,6 +33,7 @@ import { ProjectRepository } from '../../infrastructure/repositories/ProjectRepo
 import { TaskStatus } from '../../domain/shared/types';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
+import { taskCreatedHook } from '../task/taskCreationHook';
 
 /**
  * How long an unanswered agent question waits before the /escalate sweep expires it
@@ -268,7 +270,7 @@ async function moveTicketToLane(
   const originLane = row?.status ?? null;
   if (!originLane || originLane === args.laneKey) return null;
 
-  const taskService = new TaskService(new TaskRepository(db), new ProjectRepository(db));
+  const taskService = new TaskService(new TaskRepository(db), new ProjectRepository(db), undefined, undefined, undefined, undefined, undefined, taskCreatedHook(db, env));
   await taskService.updateTask(args.taskId, { status: args.laneKey });
   await onTaskLandedInLane(env, db, {
     tenantId: args.tenantId, projectId: args.projectId, taskId: args.taskId,
@@ -303,10 +305,17 @@ export async function pauseExecutionForQuestion(
     loopState?: PausedLoopState | null;
   },
 ): Promise<{ approvalId: string }> {
+  // SINGLE VOICE PER TICKET (PRD §5.5). An `ask_human` escalation is exterior
+  // communication, which the ticket's Coordinator owns — so the approval is requested by
+  // the Coordinator ON BEHALF OF the agent that blocked, not by whichever agent happened
+  // to be running. `cloudAgentRef` below still carries the acting agent, so provenance is
+  // unchanged; only the accountable name on the request changes. Best-effort: an
+  // unresolvable coordinator (an unowned ticket) keeps today's label.
+  const coordinator = await resolveTicketCoordinator(db, args.tenantId, args.taskId).catch(() => null);
   const approvalId = await createCloudQuestion(env, db, {
     tenantId: args.tenantId, executionId: args.executionId,
     ...(args.cloudAgentRef ? { cloudAgentRef: args.cloudAgentRef } : {}),
-    agentLabel: args.agentLabel, question: args.question,
+    agentLabel: coordinatorVoice(coordinator, args.agentLabel), question: args.question,
     ...(args.context ? { context: args.context } : {}),
   });
 

@@ -28,6 +28,8 @@ import type { WorkflowDefinition } from './workflowGraph';
  *     changing status. Emitted by MonitoringService / IncidentService.
  *   • Delivery    — a board event (task created / moved / completed, comment
  *     added). Emitted by the task application service.
+ *   • Correspondence — an email arriving in a CONNECTED mailbox. Emitted by the
+ *     Gmail / Microsoft Graph push handler (application/mailbox/mailboxWatch.ts).
  *   • Growth      — a form submission, a page view, a signup, a purchase, an
  *     email open / click, and a generic integration event. Emitted by the
  *     collection, site, commerce, campaign and webhook services that own them.
@@ -46,6 +48,9 @@ export const EVENT_TRIGGER_TYPES = [
   'incident-status-change',
   // Delivery
   'board-event',
+  // Correspondence — an email arriving in a mailbox the tenant CONNECTED. See
+  // the note below the array for why this is not the same thing as inbound-email.
+  'mailbox-received',
   // Quality — the Agentic Tester events. See the note below the array.
   'qa-finding',
   'qa-exploration-complete',
@@ -59,6 +64,28 @@ export const EVENT_TRIGGER_TYPES = [
   'integration',
 ] as const;
 export type EventTriggerType = (typeof EVENT_TRIGGER_TYPES)[number];
+
+/**
+ * CORRESPONDENCE — why `mailbox-received` is not `inbound-email`.
+ *
+ * `inbound-email` is a TRANSPORT trigger: the workflow is handed a private address
+ * we own (`wf+<token>@inbound.builderforce.ai`) and fires when something is sent
+ * to it. It can only ever see mail addressed deliberately at a robot.
+ *
+ * `mailbox-received` is the other half, and it is the one people ask for: mail
+ * arriving in the mailbox they already read. It cannot be a transport trigger,
+ * because nothing addresses it — the cause is a Gmail or Microsoft Graph push
+ * against a mailbox the tenant connected, which is a domain event exactly like a
+ * task moving. `application/mailbox/mailboxWatch.ts` owns that subscription and
+ * calls `fireEventTriggers`; the payload is deliberately the same four fields
+ * `inbound-email` delivers, so a workflow written against one reads the other.
+ *
+ * PROVIDER-NEUTRAL BY NAME. It is `mailbox-received` and not `gmail-received`
+ * because the mailbox port is provider-neutral by construction — one adapter
+ * interface over Gmail and Graph. A trigger named after one vendor would have
+ * forced a second one the day the other provider was wired up, and the two would
+ * have drifted the way every pair of vendor-shaped triggers does.
+ */
 
 /**
  * QUALITY EVENTS — why the Agentic Tester belongs in this list.
@@ -96,6 +123,12 @@ export const TRIGGER_FILTER_KEYS = [
   'severity', 'affectedSystem', 'incidentSource', 'monitorType', 'status',
   // Delivery
   'boardEvent',
+  // Correspondence. `mailboxAccount` narrows to one connected mailbox (matched
+  // against its address OR its connection id); `mailboxSender` narrows to who
+  // sent it. Both are exact matches, which is what the shared matcher does — a
+  // workflow that wants "anything from this domain" leaves them blank and
+  // branches inside itself.
+  'mailboxAccount', 'mailboxSender',
   // Quality. `findingSeverity` is deliberately its own key rather than reusing
   // `severity`: the incident taxonomy is sev1..sev4 and the QA one is
   // low/medium/high/critical, so one key would silently never match.

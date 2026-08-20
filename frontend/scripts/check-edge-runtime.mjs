@@ -57,6 +57,16 @@ const DYNAMIC_SIGNALS = [
     why: "imports 'next-intl/server' (reads the locale cookie)",
   },
   { test: /from\s+['"]next\/headers['"]/, why: "imports 'next/headers' (cookies/headers)" },
+  {
+    // A LOCAL module that is itself dynamic. This guard reads one file at a
+    // time, so a helper that calls `getTranslations()` on the route's behalf is
+    // invisible to the rules above — and `routeTeaserMetadata` exists precisely
+    // to be called from a route's `generateMetadata`. Named explicitly rather
+    // than by following imports: one entry is cheaper than a module graph, and
+    // a second such helper should be added here deliberately.
+    test: /from\s+['"]@\/lib\/routeTeaserMetadata['"]/,
+    why: "imports '@/lib/routeTeaserMetadata' (which reads the locale cookie)",
+  },
   { test: /export\s+const\s+dynamic\s*=\s*['"]force-dynamic['"]/, why: "declares dynamic = 'force-dynamic'" },
   { test: /export\s+const\s+revalidate\s*=\s*0\b/, why: 'declares revalidate = 0' },
 ];

@@ -23,6 +23,7 @@ import { acrossTenants } from '../../infrastructure/database/tenantScope';
 import {
   freelancerEngagements,
   freelancerNotifications,
+  jobInvites,
   jobPostings,
   jobProposals,
   proposalEvaluations,
@@ -38,14 +39,39 @@ import { compareResumeToJob, tailorResume } from '../../application/career/jobMa
 import { readProfileResume, resolvePersonalTenantId } from '../../application/resume/profileResume';
 import { ensurePersonalWorkspace } from '../../application/tenant/starterWorkspace';
 import type { Db } from '../../infrastructure/database/connection';
-import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { notify } from '../../application/notifications/notify';
 import { admitCandidate } from '../../application/hiring/candidateIntake';
 import { parseJsonArray } from '../../domain/shared/json';
 import { resolveTenantPlan } from './llmRoutes';
 import { gatewayJudge } from '../../application/eval/gatewayJudge';
-import { evaluateProposal, evalPercent } from '../../application/marketplace/proposalEval';
+import { evaluateProposal, evalPercent, readProposalEvalLens } from '../../application/marketplace/proposalEval';
 import { jobFilterConditions, jobFilterIsEmpty, normalizeJobFilters } from '../../application/marketplace/jobFilters';
+import {
+  ATTACHMENT_MAX_BYTES,
+  ATTACHMENT_MIME,
+  BudgetShapeError,
+  JOBS_PUBLIC_CACHE_KEY,
+  MAX_ATTACHMENTS,
+  experienceLevel,
+  invalidatePostingCaches,
+  normalizeAttachments,
+  normalizeBudget,
+  normalizeCategory,
+  normalizeScreeningAnswers,
+  normalizeScreeningQuestions,
+  postingTypeIfStated,
+  projectLength,
+  upsertJobPosting,
+  type PostingAttachment,
+} from '../../application/marketplace/jobPostings';
+import {
+  createInvite, hasLiveInvite, markInviteViewed, readInvitesForJob, readInvitesForUser,
+  respondToInvite, withdrawInvite,
+} from '../../application/marketplace/jobInvites';
+import {
+  recommendPostingsForFreelancer, recommendTalentForPosting,
+} from '../../application/marketplace/talentRecommendations';
 import {
   bindScheduleToEngagement, createMilestone, readJobSchedule,
   readProposalSchedule, readProposalSchedules, replaceProposalSchedule,
@@ -56,9 +82,10 @@ import { summariseEscrow } from '../../application/marketplace/escrow';
 import type { EvalJudge } from '../../application/eval/semanticEval';
 import type { Env, HonoEnv } from '../../env';
 
-const JOBS_PUBLIC_CACHE_KEY = 'jobs:public:open';
-const DISCIPLINES = ['developer', 'dba', 'designer', 'devops', 'qa', 'pm', 'data', 'security', 'other'];
-const POSTING_TYPES = ['project_bid', 'design', 'fte'];
+// `JOBS_PUBLIC_CACHE_KEY`, the posting-type vocabulary and the discipline vocabulary all
+// live with the writer now (`application/marketplace/jobPostings.ts` and `jobFilters.ts`).
+// They used to be re-declared here AND in `gigMarketplaceRoutes`, which is how the two
+// publish paths came to validate `discipline` differently.
 
 function parseSkills(raw: unknown): string[] {
   return parseJsonArray<string>(raw);
@@ -88,6 +115,12 @@ const jobColumns = {
   posting_type:       jobPostings.postingType,
   engagement_type:    jobPostings.engagementType,
   requirements:       jobPostings.requirements,
+  budget_total_cents: jobPostings.budgetTotalCents,
+  experience_level:   jobPostings.experienceLevel,
+  project_length:     jobPostings.projectLength,
+  specialty:          jobPostings.specialty,
+  screening_questions: jobPostings.screeningQuestions,
+  attachments:        jobPostings.attachments,
   created_by_user_id: jobPostings.createdByUserId,
   closed_at:          jobPostings.closedAt,
   created_at:         jobPostings.createdAt,
@@ -105,6 +138,8 @@ const proposalColumns = {
   status:             jobProposals.status,
   last_eval_overall:  jobProposals.lastEvalOverall,
   decline_reason:     jobProposals.declineReason,
+  screening_answers:  jobProposals.screeningAnswers,
+  attachments:        jobProposals.attachments,
   created_at:         jobProposals.createdAt,
   updated_at:         jobProposals.updatedAt,
 };
@@ -136,6 +171,16 @@ const mapJob = (r: Record<string, unknown>) => ({
   postingType: r.posting_type ?? 'project_bid',
   engagementType: r.engagement_type ?? null,
   requirements: r.requirements ?? null,
+  // 0985. A rate BAND and a whole-job TOTAL are different quantities in different units,
+  // so both travel and `engagementType` says which one the reader should believe.
+  budgetTotalCents: r.budget_total_cents == null ? null : Number(r.budget_total_cents),
+  experienceLevel: r.experience_level ?? null,
+  projectLength: r.project_length ?? null,
+  specialty: r.specialty ?? null,
+  // Re-validated on the way OUT as well as in: a hand-edited JSONB row degrades to "asks
+  // nothing" rather than to a 500 on a public browse surface.
+  screeningQuestions: normalizeScreeningQuestions(r.screening_questions),
+  attachments: normalizeAttachments(r.attachments),
   sourceTicketId: r.source_ticket_id == null ? null : Number(r.source_ticket_id),
   proposalCount: r.proposal_count == null ? undefined : Number(r.proposal_count),
   // The client's (employer's) two-way reputation, so freelancers can vet who they bid with.
@@ -156,6 +201,10 @@ const mapProposal = (r: Record<string, unknown>) => ({
   status: r.status,
   lastEvalOverall: r.last_eval_overall == null ? null : Number(r.last_eval_overall),
   declineReason: r.decline_reason ?? null,
+  /** The bidder's answers to the posting's screening questions, each carrying the prompt
+   *  AS ASKED so a later edit to the posting cannot rewrite the question retroactively. */
+  screeningAnswers: parseJsonArray(r.screening_answers),
+  attachments: normalizeAttachments(r.attachments),
   /** The schedule this bidder counter-proposed, when the caller asked for one. Absent
    *  (rather than empty) on the surfaces that do not read it, so a caller can tell
    *  "no schedule proposed" from "schedules not loaded". */
@@ -187,6 +236,27 @@ const proposedMilestones = (raw: unknown): ProposedMilestoneInput[] => {
       dueAt: dueAt && !Number.isNaN(dueAt.getTime()) ? dueAt : null,
     }];
   });
+};
+
+/**
+ * What each invite failure says to the person who caused it.
+ *
+ * The application service returns CODES, not sentences: it has no opinion about HTTP and
+ * no business holding user-facing prose. The route owns the wording, one table, so a
+ * status and a message can never be chosen independently at four call sites.
+ */
+const INVITE_MESSAGES: Record<'job_not_found' | 'job_not_open' | 'person_not_found' | 'self_invite', string> = {
+  job_not_found: 'Not found',
+  job_not_open: 'This posting is no longer open, so nobody can be invited to bid on it',
+  person_not_found: 'That account no longer exists',
+  self_invite: 'You cannot invite yourself to your own posting',
+};
+
+const INVITE_RESPONSE_MESSAGES: Record<'not_found' | 'expired' | 'already_answered' | 'job_closed', string> = {
+  not_found: 'Not found',
+  expired: 'This invitation has expired',
+  already_answered: 'You have already answered this invitation',
+  job_closed: 'This job is no longer open',
 };
 
 /** Upload ceiling for a job description, matching the résumé upload. */
@@ -224,6 +294,64 @@ async function seekerTenantId(db: Db, env: Env, userId: string): Promise<number 
     id: userId, email: user.email, displayName: user.displayName, accountType: 'freelancer',
   });
   return resolvePersonalTenantId(db, userId);
+}
+
+
+// ---------------------------------------------------------------------------
+// Attachments (0985) — the EXISTING bucket, not a new blob store
+// ---------------------------------------------------------------------------
+//
+// `env.UPLOADS` is the same R2 bucket `POST /api/freelancers/me/resume` and
+// `/me/avatar` already put into, and the shape here is theirs: a prefixed key, an
+// `httpMetadata.contentType`, and a row that holds METADATA pointing at the bytes.
+// Nothing about a job brief justifies a second storage mechanism, and a second one is
+// how a deployment ends up with files it cannot enumerate.
+//
+// The key prefix encodes ownership (`job-attachments/<tenant>/<job>/…`,
+// `proposal-attachments/<job>/<proposal>/…`) but the ACCESS CHECK is never the key: an
+// attachment is served only after its id has been found on a row the caller is entitled
+// to read. A key is a name, not a credential.
+
+/** Read one uploaded file off a multipart body, validated. */
+async function readUpload(c: { req: { formData(): Promise<FormData> } }): Promise<
+  { ok: true; file: File } | { ok: false; error: string; status: 400 | 413 | 415 }
+> {
+  const form = await c.req.formData();
+  const entry = form.get('file');
+  if (!entry || typeof entry === 'string') return { ok: false, error: 'file is required', status: 400 };
+  const file = entry as unknown as File;
+  if (file.size > ATTACHMENT_MAX_BYTES) return { ok: false, error: 'File too large (max 10MB)', status: 413 };
+  const type = file.type || 'application/octet-stream';
+  if (!ATTACHMENT_MIME.has(type)) return { ok: false, error: `File type ${type} is not allowed`, status: 415 };
+  return { ok: true, file };
+}
+
+/** Put the bytes and describe them. The caller owns where the description is stored. */
+async function putAttachment(env: Env, prefix: string, file: File): Promise<PostingAttachment | null> {
+  if (!env.UPLOADS) return null;
+  const ext = (file.name.split('.').pop() ?? 'bin').toLowerCase().replace(/[^a-z0-9]/g, '') || 'bin';
+  const id = crypto.randomUUID();
+  const key = `${prefix}/${id}.${ext}`;
+  await env.UPLOADS.put(key, file.stream(), {
+    httpMetadata: { contentType: file.type || 'application/octet-stream' },
+  });
+  return { id, key, name: file.name.slice(0, 200), mime: file.type || null, size: file.size };
+}
+
+/** Stream one already-authorised attachment out of R2. */
+async function serveAttachment(env: Env, attachments: PostingAttachment[], attachmentId: string): Promise<Response> {
+  const found = attachments.find((a) => a.id === attachmentId);
+  if (!found) return new Response(JSON.stringify({ error: 'Not found' }), { status: 404, headers: { 'content-type': 'application/json' } });
+  if (!env.UPLOADS) return new Response(JSON.stringify({ error: 'File storage is not configured' }), { status: 503, headers: { 'content-type': 'application/json' } });
+  const obj = await env.UPLOADS.get(found.key);
+  if (!obj) return new Response(JSON.stringify({ error: 'Not found' }), { status: 404, headers: { 'content-type': 'application/json' } });
+  const headers = new Headers();
+  headers.set('Content-Type', found.mime ?? obj.httpMetadata?.contentType ?? 'application/octet-stream');
+  // An attachment is somebody's brief or work sample: shown in the app, never cached by
+  // a shared proxy.
+  headers.set('Cache-Control', 'private, max-age=300');
+  headers.set('Content-Disposition', `inline; filename="${found.name.replace(/[^\w.\- ]/g, '_')}"`);
+  return new Response(obj.body, { headers });
 }
 
 export function createJobRoutes(): Hono<HonoEnv> {
@@ -288,6 +416,57 @@ export function createJobRoutes(): Hono<HonoEnv> {
       eq(jobProposals.status, 'saved'),
     ));
     return c.json({ ok: true });
+  });
+
+  // ---- Job seeker: invites addressed to me, and what to bid on ----------------
+  //
+  // Registered before `/:id` so a literal first segment is never swallowed by the
+  // posting-detail route.
+
+  // GET /invites/mine — the invitee's side of the marketplace. Without this the invite
+  // is a notification nobody can act on, which is the thing it exists not to be.
+  router.get('/invites/mine', webAuthMiddleware, async (c) => {
+    const db = buildDatabase(c.env);
+    const invites = await readInvitesForUser(db, c.get('userId') as string, {
+      liveOnly: c.req.query('live') === '1',
+    });
+    return c.json(invites);
+  });
+
+  // POST /invites/:inviteId/viewed — the invitee opened it. `sent` -> `viewed` only, so
+  // this can never move an answered or lapsed invite.
+  router.post('/invites/:inviteId/viewed', webAuthMiddleware, async (c) => {
+    const db = buildDatabase(c.env);
+    await markInviteViewed(db, c.get('userId') as string, c.req.param('inviteId'));
+    return c.json({ ok: true });
+  });
+
+  // POST /invites/:inviteId/respond { accept } — accepting OPENS THE PROPOSAL.
+  //
+  // The returned `proposalId` is the whole point: the client navigates straight into the
+  // bid form on a row that already exists, rather than being told "you have been invited"
+  // and left to find the posting again.
+  router.post('/invites/:inviteId/respond', webAuthMiddleware, async (c) => {
+    const db = buildDatabase(c.env);
+    const b = await c.req.json<{ accept?: boolean }>().catch((): { accept?: boolean } => ({}));
+    const result = await respondToInvite(db, c.env as Env, {
+      userId: c.get('userId') as string,
+      inviteId: c.req.param('inviteId'),
+      accept: b.accept === true,
+    });
+    if ('error' in result) {
+      const status = result.error === 'not_found' ? 404 : 409;
+      return c.json({ error: INVITE_RESPONSE_MESSAGES[result.error], code: result.error }, status);
+    }
+    return c.json(result);
+  });
+
+  // GET /recommended — the cached match query, seeker direction. Postings ranked for the
+  // signed-in freelancer's own profile; empty (honestly) when they have no profile to
+  // match on.
+  router.get('/recommended', webAuthMiddleware, async (c) => {
+    const db = buildDatabase(c.env);
+    return c.json(await recommendPostingsForFreelancer(db, c.env as Env, { userId: c.get('userId') as string }));
   });
 
   // ---- Job seeker: job alerts -------------------------------------------------
@@ -442,6 +621,75 @@ export function createJobRoutes(): Hono<HonoEnv> {
     return c.json(rows.map(mapProposal));
   });
 
+  // POST /proposals/:pid/attachments — the BIDDER attaches a work sample to their own
+  // proposal (multipart `file`). Scoped to their proposal, so this can never write onto
+  // somebody else's bid.
+  router.post('/proposals/:pid/attachments', webAuthMiddleware, async (c) => {
+    const db = buildDatabase(c.env);
+    const userId = c.get('userId') as string;
+    const pid = c.req.param('pid');
+    const [proposal] = await db
+      .select({ id: jobProposals.id, jobId: jobProposals.jobId, attachments: jobProposals.attachments })
+      .from(jobProposals)
+      .where(and(eq(jobProposals.id, pid), eq(jobProposals.freelancerUserId, userId)))
+      .limit(1);
+    if (!proposal) return c.json({ error: 'Not found' }, 404);
+    const existing = normalizeAttachments(proposal.attachments);
+    if (existing.length >= MAX_ATTACHMENTS) return c.json({ error: `A proposal may carry at most ${MAX_ATTACHMENTS} attachments` }, 409);
+    const upload = await readUpload(c);
+    if (!upload.ok) return c.json({ error: upload.error }, upload.status);
+    const attachment = await putAttachment(c.env as Env, `proposal-attachments/${proposal.jobId}/${pid}`, upload.file);
+    if (!attachment) return c.json({ error: 'File storage is not configured on this deployment.' }, 503);
+    const attachments = [...existing, attachment];
+    await db.update(jobProposals)
+      .set({ attachments, updatedAt: sql`NOW()` })
+      .where(and(eq(jobProposals.id, pid), eq(jobProposals.freelancerUserId, userId)));
+    return c.json({ attachment, attachments }, 201);
+  });
+
+  // GET /proposals/:pid/attachments/:attachmentId — the BIDDER reads back their own.
+  // The employer's copy of this read hangs off the posting (`/:id/proposals/:pid/…`), so
+  // each side has exactly one auth rather than one route trying to satisfy two.
+  router.get('/proposals/:pid/attachments/:attachmentId', webAuthMiddleware, async (c) => {
+    const db = buildDatabase(c.env);
+    const [row] = await db
+      .select({ attachments: jobProposals.attachments })
+      .from(jobProposals)
+      .where(and(
+        eq(jobProposals.id, c.req.param('pid')),
+        eq(jobProposals.freelancerUserId, c.get('userId') as string),
+      ))
+      .limit(1);
+    if (!row) return c.json({ error: 'Not found' }, 404);
+    return serveAttachment(c.env as Env, normalizeAttachments(row.attachments), c.req.param('attachmentId'));
+  });
+
+  // DELETE /proposals/:pid/attachments/:attachmentId — the bidder removes their own.
+  router.delete('/proposals/:pid/attachments/:attachmentId', webAuthMiddleware, async (c) => {
+    const db = buildDatabase(c.env);
+    const userId = c.get('userId') as string;
+    const pid = c.req.param('pid');
+    const [row] = await db
+      .select({ attachments: jobProposals.attachments })
+      .from(jobProposals)
+      .where(and(eq(jobProposals.id, pid), eq(jobProposals.freelancerUserId, userId)))
+      .limit(1);
+    if (!row) return c.json({ error: 'Not found' }, 404);
+    const existing = normalizeAttachments(row.attachments);
+    const target = existing.find((a) => a.id === c.req.param('attachmentId'));
+    if (!target) return c.json({ error: 'Not found' }, 404);
+    const attachments = existing.filter((a) => a.id !== target.id);
+    await db.update(jobProposals)
+      .set({ attachments, updatedAt: sql`NOW()` })
+      .where(and(eq(jobProposals.id, pid), eq(jobProposals.freelancerUserId, userId)));
+    if (c.env.UPLOADS) {
+      await c.env.UPLOADS.delete(target.key).catch((error) => {
+        reportCaughtError(error, { source: 'presentation/routes/jobRoutes.ts', operation: 'deleteProposalAttachment', level: 'warning', context: { key: target.key } });
+      });
+    }
+    return c.json({ ok: true, attachments });
+  });
+
   // POST /proposals/:pid/withdraw — freelancer withdraws their bid.
   router.post('/proposals/:pid/withdraw', webAuthMiddleware, async (c) => {
     const db = buildDatabase(c.env);
@@ -526,6 +774,7 @@ export function createJobRoutes(): Hono<HonoEnv> {
         project_id: jobPostings.projectId,
         job_title: jobPostings.title,
         job_engagement_type: jobPostings.engagementType,
+        source_ticket_id: jobPostings.sourceTicketId,
       }).from(jobProposals)
         .innerJoin(jobPostings, eq(jobPostings.id, jobProposals.jobId))
         .where(and(eq(jobProposals.id, pid), inArray(jobProposals.status, ['submitted', 'shortlisted'])));
@@ -585,7 +834,7 @@ export function createJobRoutes(): Hono<HonoEnv> {
     });
     if (!accepted) return c.json({ error: 'Not found' }, 404);
     if (accepted.conflict) return c.json({ error: 'This job has already been filled' }, 409);
-    await invalidateCached(c.env as Env, JOBS_PUBLIC_CACHE_KEY);
+    await invalidatePostingCaches(c.env as Env, tenantId, accepted.proposal.source_ticket_id as number | null);
     const [ten] = await db.select({ name: tenants.name }).from(tenants).where(eq(tenants.id, tenantId));
     await notify(db, c.env, { userId: accepted.proposal.freelancer_user_id, tenantId, kind: 'hired', title: `${ten?.name ?? 'A workspace'} accepted your proposal for "${accepted.proposal.job_title}"`, ref: accepted.engagementId });
     return c.json({ ok: true, engagementId: accepted.engagementId });
@@ -686,6 +935,140 @@ export function createJobRoutes(): Hono<HonoEnv> {
     return c.json({ ...scores, overall100 });
   });
 
+  // ---- Employer: invites, recommendations, the eval lens, attachments ---------
+
+  // GET /:id/invites — who this posting has invited, and what they said.
+  router.get('/:id/invites', authMiddleware, async (c) => {
+    const db = buildDatabase(c.env);
+    return c.json(await readInvitesForJob(db, c.get('tenantId') as number, c.req.param('id')));
+  });
+
+  // POST /:id/invites — invite ONE named freelancer. Idempotent per (posting, person).
+  router.post('/:id/invites', authMiddleware, async (c) => {
+    const db = buildDatabase(c.env);
+    const b = await c.req.json<{ freelancerUserId?: string; message?: string; expiresInDays?: number }>()
+      .catch((): { freelancerUserId?: string; message?: string; expiresInDays?: number } => ({}));
+    const freelancerUserId = String(b.freelancerUserId ?? '').trim();
+    if (!freelancerUserId) return c.json({ error: 'freelancerUserId is required' }, 400);
+    const result = await createInvite(db, c.env as Env, {
+      tenantId: c.get('tenantId') as number,
+      jobId: c.req.param('id'),
+      freelancerUserId,
+      invitedByUserId: c.get('userId') as string,
+      message: b.message,
+      expiresInDays: b.expiresInDays,
+    });
+    if ('error' in result) {
+      const status = result.error === 'job_not_found' || result.error === 'person_not_found' ? 404 : 409;
+      return c.json({ error: INVITE_MESSAGES[result.error], code: result.error }, status);
+    }
+    return c.json(result.invite, 201);
+  });
+
+  // DELETE /:id/invites/:inviteId — withdraw an UNANSWERED invite. An answered one is
+  // left alone: deleting somebody's "no" is rewriting the record of the exchange.
+  router.delete('/:id/invites/:inviteId', authMiddleware, async (c) => {
+    const db = buildDatabase(c.env);
+    const removed = await withdrawInvite(db, c.get('tenantId') as number, c.req.param('inviteId'));
+    return removed ? c.json({ ok: true }) : c.json({ error: 'Not found' }, 404);
+  });
+
+  // GET /:id/recommendations — the cached match query, client direction: who should be
+  // invited to bid on this posting. People who have already bid are excluded — their
+  // proposal is in the next tab.
+  router.get('/:id/recommendations', authMiddleware, async (c) => {
+    const db = buildDatabase(c.env);
+    const matches = await recommendTalentForPosting(db, c.env as Env, {
+      tenantId: c.get('tenantId') as number,
+      jobId: c.req.param('id'),
+    });
+    return matches === null ? c.json({ error: 'Not found' }, 404) : c.json(matches);
+  });
+
+  // GET /:id/evaluations — the INSIGHTS lens over this posting's AI evaluations:
+  // distribution, the lexical-vs-LLM split, and the drift between each proposal's cached
+  // headline and its newest evaluation. See `proposalEval.ts` for why the third one is
+  // the reading that decides whether the first two mean anything.
+  router.get('/:id/evaluations', authMiddleware, async (c) => {
+    const db = buildDatabase(c.env);
+    const lens = await readProposalEvalLens(db, { tenantId: c.get('tenantId') as number, jobId: c.req.param('id') });
+    return lens === null ? c.json({ error: 'Not found' }, 404) : c.json(lens);
+  });
+
+  // POST /:id/attachments — attach a brief to a posting (multipart `file`).
+  router.post('/:id/attachments', authMiddleware, async (c) => {
+    const db = buildDatabase(c.env);
+    const tenantId = c.get('tenantId') as number;
+    const id = c.req.param('id');
+    const [job] = await db
+      .select({ id: jobPostings.id, attachments: jobPostings.attachments, source_ticket_id: jobPostings.sourceTicketId })
+      .from(jobPostings)
+      .where(and(eq(jobPostings.id, id), eq(jobPostings.tenantId, tenantId)))
+      .limit(1);
+    if (!job) return c.json({ error: 'Not found' }, 404);
+    const existing = normalizeAttachments(job.attachments);
+    if (existing.length >= MAX_ATTACHMENTS) return c.json({ error: `A posting may carry at most ${MAX_ATTACHMENTS} attachments` }, 409);
+    const upload = await readUpload(c);
+    if (!upload.ok) return c.json({ error: upload.error }, upload.status);
+    const attachment = await putAttachment(c.env as Env, `job-attachments/${tenantId}/${id}`, upload.file);
+    if (!attachment) return c.json({ error: 'File storage is not configured on this deployment.' }, 503);
+    const attachments = [...existing, attachment];
+    await db.update(jobPostings)
+      .set({ attachments, updatedAt: sql`NOW()` })
+      .where(and(eq(jobPostings.id, id), eq(jobPostings.tenantId, tenantId)));
+    await invalidatePostingCaches(c.env as Env, tenantId, job.source_ticket_id);
+    return c.json({ attachment, attachments }, 201);
+  });
+
+  // DELETE /:id/attachments/:attachmentId — detach. The R2 object goes too: an orphaned
+  // blob nothing references is a file we cannot answer a deletion request about.
+  router.delete('/:id/attachments/:attachmentId', authMiddleware, async (c) => {
+    const db = buildDatabase(c.env);
+    const tenantId = c.get('tenantId') as number;
+    const id = c.req.param('id');
+    const [job] = await db
+      .select({ attachments: jobPostings.attachments, source_ticket_id: jobPostings.sourceTicketId })
+      .from(jobPostings)
+      .where(and(eq(jobPostings.id, id), eq(jobPostings.tenantId, tenantId)))
+      .limit(1);
+    if (!job) return c.json({ error: 'Not found' }, 404);
+    const existing = normalizeAttachments(job.attachments);
+    const target = existing.find((a) => a.id === c.req.param('attachmentId'));
+    if (!target) return c.json({ error: 'Not found' }, 404);
+    const attachments = existing.filter((a) => a.id !== target.id);
+    await db.update(jobPostings)
+      .set({ attachments, updatedAt: sql`NOW()` })
+      .where(and(eq(jobPostings.id, id), eq(jobPostings.tenantId, tenantId)));
+    if (c.env.UPLOADS) {
+      await c.env.UPLOADS.delete(target.key).catch((error) => {
+        // The row is already detached, so the file is unreachable either way; a failed
+        // blob delete is a cleanup problem, not a failed request. Logged, never silent.
+        reportCaughtError(error, { source: 'presentation/routes/jobRoutes.ts', operation: 'deleteJobAttachment', level: 'warning', context: { key: target.key } });
+      });
+    }
+    await invalidatePostingCaches(c.env as Env, tenantId, job.source_ticket_id);
+    return c.json({ ok: true, attachments });
+  });
+
+  // GET /:id/proposals/:pid/attachments/:attachmentId — the EMPLOYER reads a bidder's
+  // work sample. Two ownership hops in one predicate: the posting must be this tenant's
+  // and the proposal must be on that posting.
+  router.get('/:id/proposals/:pid/attachments/:attachmentId', authMiddleware, async (c) => {
+    const db = buildDatabase(c.env);
+    const [row] = await db
+      .select({ attachments: jobProposals.attachments })
+      .from(jobProposals)
+      .innerJoin(jobPostings, eq(jobPostings.id, jobProposals.jobId))
+      .where(and(
+        eq(jobProposals.id, c.req.param('pid')),
+        eq(jobProposals.jobId, c.req.param('id')),
+        eq(jobPostings.tenantId, c.get('tenantId') as number),
+      ))
+      .limit(1);
+    if (!row) return c.json({ error: 'Not found' }, 404);
+    return serveAttachment(c.env as Env, normalizeAttachments(row.attachments), c.req.param('attachmentId'));
+  });
+
   // ---- Employer: my jobs ----
   router.get('/mine', authMiddleware, async (c) => {
     const db = buildDatabase(c.env);
@@ -731,44 +1114,28 @@ export function createJobRoutes(): Hono<HonoEnv> {
   });
 
   // POST / — EMPLOYER posts a job.
+  //
+  // The SECOND door onto `upsertJobPosting`; `POST /api/marketplace/publish` is the
+  // first. Everything that decides what a posting IS — its identity when it names a
+  // ticket, its category, its money, its shape, the caches it dirties — is in the
+  // service, so a posting created either way is the same row. Before that, a `POST
+  // /api/jobs` carrying a `sourceTicketId` minted a duplicate posting for a ticket that
+  // already had one, and stamped the ticket's back-ref onto whichever landed last.
   router.post('/', authMiddleware, async (c) => {
     const db = buildDatabase(c.env);
-    const tenantId = c.get('tenantId') as number;
-    const actor = c.get('userId') as string;
     const b = await c.req.json<Record<string, unknown>>();
-    const title = typeof b.title === 'string' ? b.title.trim().slice(0, 200) : '';
-    if (!title) return c.json({ error: 'title required' }, 400);
-    const discipline = DISCIPLINES.includes(b.discipline as string) ? (b.discipline as string) : null;
-    const skills = Array.isArray(b.skills) ? JSON.stringify((b.skills as unknown[]).filter((s) => typeof s === 'string').slice(0, 30)) : null;
-    const postingType = POSTING_TYPES.includes(b.postingType as string) ? (b.postingType as string) : 'project_bid';
-    const engagementType = hireShape(b.engagementType);
-    const requirements = typeof b.requirements === 'string' ? b.requirements.slice(0, 8000) : null;
-    const sourceTicketId = typeof b.sourceTicketId === 'number' ? Math.round(b.sourceTicketId) : null;
-    const id = crypto.randomUUID();
-    await db.insert(jobPostings).values({
-      id,
-      tenantId,
-      projectId: typeof b.projectId === 'number' ? b.projectId : null,
-      title,
-      description: typeof b.description === 'string' ? b.description.slice(0, 5000) : null,
-      discipline,
-      skills,
-      rateMinCents: typeof b.rateMinCents === 'number' ? Math.round(b.rateMinCents) : null,
-      rateMaxCents: typeof b.rateMaxCents === 'number' ? Math.round(b.rateMaxCents) : null,
-      currency: typeof b.currency === 'string' ? (b.currency as string).slice(0, 3).toUpperCase() : 'USD',
-      visibility: b.visibility === 'private' ? 'private' : 'public',
-      postingType,
-      engagementType,
-      requirements,
-      sourceTicketId,
-      createdByUserId: actor,
-    });
-    // Keep the ticket's hireable back-ref in sync when a posting is created FROM a ticket.
-    if (sourceTicketId != null) {
-      await db.update(tasks).set({ hireable: true, jobPostingId: id }).where(eq(tasks.id, sourceTicketId));
+    try {
+      const result = await upsertJobPosting(db, c.env as Env, {
+        tenantId: c.get('tenantId') as number,
+        actorUserId: c.get('userId') as string,
+        draft: b,
+      });
+      return c.json({ id: result.id, reused: result.reused }, result.reused ? 200 : 201);
+    } catch (error) {
+      if (error instanceof BudgetShapeError) return c.json({ error: error.message }, 400);
+      if (error instanceof Error && error.message === 'title required') return c.json({ error: 'title required' }, 400);
+      throw error;
     }
-    await invalidateCached(c.env as Env, JOBS_PUBLIC_CACHE_KEY);
-    return c.json({ id }, 201);
   });
 
   // PATCH /:id — EMPLOYER edits or closes a job.
@@ -776,26 +1143,65 @@ export function createJobRoutes(): Hono<HonoEnv> {
     const db = buildDatabase(c.env);
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
-    const b = await c.req.json<{ status?: string; title?: string; description?: string; requirements?: string; postingType?: string; engagementType?: string }>();
-    const status = ['open', 'closed', 'filled'].includes(b.status ?? '') ? (b.status as string) : null;
-    const postingType = POSTING_TYPES.includes(b.postingType ?? '') ? (b.postingType as string) : null;
+    const b = await c.req.json<Record<string, unknown>>();
+    const status = ['open', 'closed', 'filled'].includes(String(b.status ?? '')) ? String(b.status) : null;
+    const postingType = postingTypeIfStated(b.postingType);
     const engagementType = hireShape(b.engagementType);
+    // The pair is validated TOGETHER (a specialty is only meaningful under its parent),
+    // so a patch that moves the discipline without restating the specialty clears the
+    // leaf rather than leaving it hanging off a branch that no longer exists.
+    const category = b.discipline === undefined && b.specialty === undefined
+      ? null
+      : normalizeCategory(b.discipline ?? null, b.specialty ?? null);
+    // The shape has to be known before the money can be checked, and a patch may change
+    // only one of them — so the CURRENT shape is the fallback.
+    const [current] = await db
+      .select({ engagementType: jobPostings.engagementType })
+      .from(jobPostings)
+      .where(and(eq(jobPostings.id, id), eq(jobPostings.tenantId, tenantId)))
+      .limit(1);
+    if (!current) return c.json({ error: 'Not found' }, 404);
+    let budget;
+    try {
+      budget = normalizeBudget({
+        engagementType: engagementType ?? hireShape(current.engagementType),
+        rateMinCents: b.rateMinCents,
+        rateMaxCents: b.rateMaxCents,
+        budgetTotalCents: b.budgetTotalCents,
+      });
+    } catch (error) {
+      if (error instanceof BudgetShapeError) return c.json({ error: error.message }, 400);
+      throw error;
+    }
+    const questions = b.screeningQuestions === undefined ? null : normalizeScreeningQuestions(b.screeningQuestions);
     const rows = await db
       .update(jobPostings)
       .set({
-        status:         sql`COALESCE(${status}, status)`,
-        title:          sql`COALESCE(${typeof b.title === 'string' ? b.title.slice(0, 200) : null}, title)`,
-        description:    sql`COALESCE(${typeof b.description === 'string' ? b.description.slice(0, 5000) : null}, description)`,
-        requirements:   sql`COALESCE(${typeof b.requirements === 'string' ? b.requirements.slice(0, 8000) : null}, requirements)`,
-        postingType:    sql`COALESCE(${postingType}, posting_type)`,
-        engagementType: sql`COALESCE(${engagementType}, engagement_type)`,
-        closedAt:       sql`CASE WHEN ${status} IN ('closed', 'filled') THEN NOW() ELSE closed_at END`,
-        updatedAt:      sql`NOW()`,
+        status:           sql`COALESCE(${status}, status)`,
+        title:            sql`COALESCE(${typeof b.title === 'string' ? b.title.slice(0, 200) : null}, title)`,
+        description:      sql`COALESCE(${typeof b.description === 'string' ? b.description.slice(0, 5000) : null}, description)`,
+        requirements:     sql`COALESCE(${typeof b.requirements === 'string' ? b.requirements.slice(0, 8000) : null}, requirements)`,
+        postingType:      sql`COALESCE(${postingType}, posting_type)`,
+        engagementType:   sql`COALESCE(${engagementType}, engagement_type)`,
+        rateMinCents:     sql`COALESCE(${budget.rateMinCents}, rate_min_cents)`,
+        rateMaxCents:     sql`COALESCE(${budget.rateMaxCents}, rate_max_cents)`,
+        budgetTotalCents: sql`COALESCE(${budget.budgetTotalCents}, budget_total_cents)`,
+        experienceLevel:  sql`COALESCE(${experienceLevel(b.experienceLevel)}, experience_level)`,
+        projectLength:    sql`COALESCE(${projectLength(b.projectLength)}, project_length)`,
+        discipline:       sql`COALESCE(${category?.discipline ?? null}, discipline)`,
+        // The leaf is set from the pair, and only when the caller mentioned either half.
+        specialty:        category === null ? sql`specialty` : category.specialty,
+        ...(questions === null ? {} : { screeningQuestions: questions }),
+        closedAt:         sql`CASE WHEN ${status} IN ('closed', 'filled') THEN NOW() ELSE closed_at END`,
+        updatedAt:        sql`NOW()`,
       })
       .where(and(eq(jobPostings.id, id), eq(jobPostings.tenantId, tenantId)))
-      .returning({ id: jobPostings.id });
-    if (rows.length === 0) return c.json({ error: 'Not found' }, 404);
-    await invalidateCached(c.env as Env, JOBS_PUBLIC_CACHE_KEY);
+      .returning({ id: jobPostings.id, source_ticket_id: jobPostings.sourceTicketId });
+    const updated = rows[0];
+    if (!updated) return c.json({ error: 'Not found' }, 404);
+    // Every cache a posting write dirties, in one call — including the per-ticket board
+    // badge, which the old inline invalidation here forgot.
+    await invalidatePostingCaches(c.env as Env, tenantId, updated.source_ticket_id);
     return c.json({ ok: true });
   });
 
@@ -858,7 +1264,12 @@ export function createJobRoutes(): Hono<HonoEnv> {
     // rather than from the caller — this route has no tenant JWT.
     const postingSchedule = await readJobSchedule(db, Number(job.tenant_id), id);
     let myProposal: unknown = null;
+    let myInvite: unknown = null;
     if (viewer) {
+      // The invite the VIEWER holds on this posting, so the detail page can offer
+      // "accept and bid" in place of a plain bid button. Their own row only — scoped by
+      // the verified subject, never by a parameter.
+      myInvite = (await readInvitesForUser(db, viewer)).find((invite) => invite.jobId === id) ?? null;
       const [mine] = await db
         .select({ id: jobProposals.id, status: jobProposals.status })
         .from(jobProposals)
@@ -874,7 +1285,30 @@ export function createJobRoutes(): Hono<HonoEnv> {
         };
       }
     }
-    return c.json({ ...mapJob(job), milestones: postingSchedule, myProposal });
+    return c.json({ ...mapJob(job), milestones: postingSchedule, myProposal, myInvite });
+  });
+
+  // GET /:id/attachments/:attachmentId — a posting's brief, as public as its description.
+  //
+  // A posting's attachments are part of the OFFER. Locking them behind the employer's
+  // tenant token would mean bidders could read the scope and not the spec they were being
+  // asked to price, which is a bid on a different job. So the access rule is exactly the
+  // one `GET /:id` already applies: public postings are world-readable, a private one
+  // needs a signed-in viewer. The cross-tenant read is declared with the same
+  // public-catalogue reason and the same predicate as the anonymous browse.
+  router.get('/:id/attachments/:attachmentId', async (c) => {
+    const db = buildDatabase(c.env);
+    const id = c.req.param('id');
+    const [job] = await db
+      .select({ visibility: jobPostings.visibility, attachments: jobPostings.attachments })
+      .from(jobPostings)
+      .where(acrossTenants(jobPostings, 'public_catalogue', eq(jobPostings.id, id)))
+      .limit(1);
+    if (!job) return c.json({ error: 'Not found' }, 404);
+    if (job.visibility === 'private' && !(await optionalUserId(c))) {
+      return c.json({ error: 'Sign in to view this job', code: 'AUTH_REQUIRED' }, 401);
+    }
+    return serveAttachment(c.env as Env, normalizeAttachments(job.attachments), c.req.param('attachmentId'));
   });
 
   // POST /:id/proposals — FREELANCER bids on a job.
@@ -882,7 +1316,7 @@ export function createJobRoutes(): Hono<HonoEnv> {
     const db = buildDatabase(c.env);
     const userId = c.get('userId') as string;
     const id = c.req.param('id');
-    const b = await c.req.json<{ coverNote?: string; rateCents?: number; milestones?: unknown }>();
+    const b = await c.req.json<{ coverNote?: string; rateCents?: number; milestones?: unknown; screeningAnswers?: unknown }>();
     const [job] = await db
       .select({
         id: jobPostings.id,
@@ -891,12 +1325,17 @@ export function createJobRoutes(): Hono<HonoEnv> {
         created_by_user_id: jobPostings.createdByUserId,
         status: jobPostings.status,
         visibility: jobPostings.visibility,
+        screening_questions: jobPostings.screeningQuestions,
       })
       .from(jobPostings)
       .where(eq(jobPostings.id, id));
     if (!job) return c.json({ error: 'Not found' }, 404);
     if (job.status !== 'open') return c.json({ error: 'This job is no longer open' }, 409);
     if (job.visibility === 'private') {
+      // TWO ways in, and the second one is why invites are rows. An ACTIVE engagement is
+      // the standing relationship; a LIVE INVITE is the client having asked this specific
+      // person. Inviting a stranger to a private posting and then refusing their bid
+      // would be the product contradicting itself in two clicks.
       const [relationship] = await db.select({ id: freelancerEngagements.id })
         .from(freelancerEngagements)
         .where(and(
@@ -904,7 +1343,9 @@ export function createJobRoutes(): Hono<HonoEnv> {
           eq(freelancerEngagements.freelancerUserId, userId),
           isNull(freelancerEngagements.terminatedAt),
         )).limit(1);
-      if (!relationship) return c.json({ error: 'This private job is not available to this account' }, 403);
+      if (!relationship && !(await hasLiveInvite(db, id, userId))) {
+        return c.json({ error: 'This private job is not available to this account' }, 403);
+      }
     }
     // Must be open to being hired — a dedicated freelancer account OR a builder who
     // opted in (available_for_hire). Keyed on the opt-in flag, not the account type,
@@ -914,6 +1355,15 @@ export function createJobRoutes(): Hono<HonoEnv> {
       .from(users)
       .where(eq(users.id, userId));
     if (!me || !me.available_for_hire) return c.json({ error: 'Enable "Available for hire" to bid on gigs' }, 403);
+    // Screening answers are checked against the questions the posting ASKS RIGHT NOW, and
+    // each stored answer freezes the prompt it answered — so an employer who rewrites a
+    // question tomorrow cannot retroactively change what this person was asked. A missing
+    // REQUIRED answer is refused, and it names the questions rather than saying "invalid".
+    const questions = normalizeScreeningQuestions(job.screening_questions);
+    const screening = normalizeScreeningAnswers(b.screeningAnswers, questions);
+    if (screening.missingRequired.length > 0) {
+      return c.json({ error: 'Answer the required screening questions', code: 'SCREENING_REQUIRED', questions: screening.missingRequired }, 400);
+    }
     const [bid] = await db
       .insert(jobProposals)
       .values({
@@ -922,12 +1372,18 @@ export function createJobRoutes(): Hono<HonoEnv> {
         freelancerUserId: userId,
         coverNote: typeof b.coverNote === 'string' ? b.coverNote.slice(0, 3000) : null,
         rateCents: typeof b.rateCents === 'number' ? Math.round(b.rateCents) : null,
+        screeningAnswers: screening.answers,
       })
       .onConflictDoUpdate({
         target: [jobProposals.jobId, jobProposals.freelancerUserId],
         set: {
           coverNote: sql`excluded.cover_note`,
           rateCents: sql`excluded.rate_cents`,
+          // A revision replaces the answers wholesale — one bid is one set of answers,
+          // not an accumulation. Attachments are NOT touched: they are uploaded by their
+          // own route after the row exists, and re-submitting a revised cover note must
+          // not delete the work samples already attached to it.
+          screeningAnswers: sql`excluded.screening_answers`,
           status: 'submitted',
           updatedAt: sql`NOW()`,
         },
@@ -964,6 +1420,14 @@ export function createJobRoutes(): Hono<HonoEnv> {
       userId,
       tenantId: Number(job.tenant_id),
       source: 'job_proposal',
+      // NAMING THE POSTING is what puts this person into the employer's ATS pipeline
+      // rather than merely into their candidate list. Without it `admitCandidate` records
+      // the party role and stops, and a marketplace bid would be invisible to the hiring
+      // surface that exists to review it — a candidate with no application. The cover note
+      // rides along because it IS the application's letter; the proposal is the same act.
+      jobPostingId: id,
+      coverLetter: typeof b.coverNote === 'string' ? b.coverNote.slice(0, 3000) : null,
+      env: c.env as Env,
     });
     if (job.created_by_user_id) {
       await notify(db, c.env, { userId: job.created_by_user_id, tenantId: Number(job.tenant_id), kind: 'proposal', title: `${me.display_name ?? 'A freelancer'} bid on "${job.title}"`, ref: id });

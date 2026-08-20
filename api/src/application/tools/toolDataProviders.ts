@@ -28,14 +28,74 @@ import { memberMetricsPeriod, deploymentEvents, llmUsageLog, projects, runModelO
 import { computeDora, computeProjectDeliveryMetrics } from '../metrics/workforceMetrics';
 import { MILLICENTS_PER_USD } from '../../domain/shared/money';
 import { notSystemTask } from '../task/taskScope';
-import { getTool, money, tierName } from './toolDefinitions';
+import { getTool, money } from './toolDefinitions';
+import { pluralSlug, type ToolCopy } from './analyzerCopy';
 import { DEFAULT_TOOL_LOCALE, resultCopy, type ResultCopy } from './resultCopy';
-import type { QuestionnaireTool, ToolResult, ToolMetric, ToolRecommendation } from './toolTypes';
+import type { QuestionnaireTool, Tool, ToolResult, ToolMetric, ToolRecommendation } from './toolTypes';
 
-/** A data provider derives a tool's result from real telemetry. When `projectId`
- *  is supplied the result is scoped to that project (sections that cannot be
- *  attributed to a project fall back to "insufficient data"). */
-export type ToolDataProvider = (db: Db, tenantId: number, days: number, projectId?: number | null) => Promise<ToolResult>;
+/**
+ * Everything a data result needs that is NOT a number.
+ *
+ * `chrome` is the engine's shared band naming (`resultCopy.ts`), `copy` is this
+ * tool's own declared result prose, and `tool` is the LOCALIZED definition — a
+ * questionnaire's telemetry result is built from its own section names, so
+ * handing in the translated tool translates the result with no second catalog.
+ */
+export interface DataScoreContext {
+  chrome: ResultCopy;
+  copy: ToolCopy;
+  tool: Tool;
+}
+
+/**
+ * A data provider, split in two halves — and the split is the whole point.
+ *
+ * `collect` does the IO: it reads a telemetry WINDOW that will have passed by the
+ * time anyone re-reads the run. `score` is pure and turns those figures into
+ * prose in ONE language.
+ *
+ * Before the split, a saved `kind='data'` run stored only the rendered English
+ * and there was nothing to re-render from, so a snapshot taken by a German
+ * manager read as German to an English teammate forever. Now the figures are
+ * persisted as data (see `storedToolResult.ts`) and the chrome is composed at
+ * READ time in the reader's language — which is also why the collected figures,
+ * not the rendered result, are what the read-through cache holds: one telemetry
+ * aggregation now serves all five locales instead of five.
+ *
+ * When `projectId` is supplied the collection is scoped to that project (sections
+ * that cannot be attributed to a project fall back to "insufficient data").
+ */
+export interface ToolDataProvider {
+  collect: (db: Db, tenantId: number, days: number, projectId?: number | null) => Promise<unknown>;
+  score: (figures: unknown, ctx: DataScoreContext) => ToolResult;
+}
+
+/**
+ * Bind a TYPED provider into the type-erased registry.
+ *
+ * The registry has to be erased — `ToolService` looks a provider up by id and
+ * cannot know which figures shape it will get back — but each provider should
+ * still be written against its own type. `score`'s parameter is contravariant, so
+ * a `ToolDataProvider<DoraFigures>` is genuinely not a `ToolDataProvider<unknown>`
+ * and TypeScript is right to refuse it.
+ *
+ * The one narrowing lives here rather than at four call sites. It is sound
+ * because `collect` and `score` are two halves of ONE provider: the payload
+ * `score` receives is always the payload this provider's own `collect` produced,
+ * or a payload read back out of a run this provider wrote. The read side already
+ * defends the remaining case — a stored payload whose shape has since moved on
+ * degrades to the run's stored rendering rather than scoring garbage.
+ */
+function dataProvider<F>(p: {
+  collect: (db: Db, tenantId: number, days: number, projectId?: number | null) => Promise<F>;
+  score: (figures: F, ctx: DataScoreContext) => ToolResult;
+}): ToolDataProvider {
+  return { collect: p.collect, score: (figures, ctx) => p.score(figures as F, ctx) };
+}
+
+/** A counted phrase: `<slug>.one` at exactly one, `<slug>.other` otherwise. */
+const counted = (c: ToolCopy, slug: string, n: number, vars?: Record<string, string | number>): string =>
+  c(pluralSlug(slug, n), { n, ...vars });
 
 // ── Pure scoring: aggregated telemetry → per-practice levels → ToolResult ──────
 
@@ -156,7 +216,7 @@ function norm01(v: number | null | undefined): number | null {
   return v > 1 ? Math.min(1, v / 100) : Math.max(0, v);
 }
 
-const agenticMaturityProvider: ToolDataProvider = async (db, tenantId, days, projectId) => {
+const collectAgenticMaturity = async (db: Db, tenantId: number, days: number, projectId?: number | null): Promise<MaturityDataInputs> => {
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
   const forProject = projectId != null;
 
@@ -219,23 +279,34 @@ const agenticMaturityProvider: ToolDataProvider = async (db, tenantId, days, pro
   const runs = Number(o.runs) || 0;
   const deployTotal = Number(d.total) || 0;
 
-  return scoreAgenticMaturityData({
+  return {
     delivery: completed > 0 ? { avgCycleTimeHours: m.avgCycle ?? null, reworkRate, completed } : null,
     projectManagement: completed > 0 ? { completed, avgHygiene: norm01(m.avgHygiene ?? null) } : null,
     devops: deployTotal > 0 ? { deploysPerWeek: deployTotal / weeks, changeFailureRate: Number(d.failures) / deployTotal, mttrHours: d.avgMttrHours ?? null, total: deployTotal } : null,
     quality: runs > 0 ? { ciGreenRate: Number(o.ciGreen) / runs, avgScore: o.avgScore ?? null, runs } : null,
     agenticOps: runs > 0 ? { runs, avgScore: o.avgScore ?? null, mergeRate: Number(o.merged) / runs } : null,
-  });
+  };
 };
+
+const agenticMaturityProvider = dataProvider<MaturityDataInputs>({
+  collect: collectAgenticMaturity,
+  // Every string in this result already came from the tool or the shared chrome,
+  // so it needed no copy map of its own — translating the questionnaire had
+  // always translated its telemetry twin too.
+  score: (figures, ctx) => scoreAgenticMaturityData(figures, ctx.chrome, ctx.tool as QuestionnaireTool),
+});
 
 /**
  * Ticket Role & Diagnostic Coverage — scored objectively from the per-ticket audit
  * ledger (ticket_audits). Backs the Manager AI agent's ticket-coverage diagnostic.
  */
-const ticketRoleCoverageProvider: ToolDataProvider = async (db, tenantId, _days, projectId) => {
-  // This provider's bespoke prose is still authored in English; the band naming is
-  // taken from the shared chrome so it cannot drift from every other scorer's.
-  const english = resultCopy(DEFAULT_TOOL_LOCALE);
+interface TicketCoverageFigures {
+  withReqs: number;
+  flagged: number;
+  avgCoverage: number | null;
+}
+
+const collectTicketRoleCoverage = async (db: Db, tenantId: number, _days: number, projectId?: number | null): Promise<TicketCoverageFigures> => {
   const forProject = projectId != null;
   const [agg] = await db
     .select({
@@ -248,38 +319,57 @@ const ticketRoleCoverageProvider: ToolDataProvider = async (db, tenantId, _days,
     .innerJoin(tasks, eq(ticketAudits.taskId, tasks.id))
     .where(and(eq(ticketAudits.tenantId, tenantId), ...(forProject ? [eq(tasks.projectId, projectId!)] : [])));
 
-  const withReqs = Number(agg?.withReqs) || 0;
-  const flagged = Number(agg?.flagged) || 0;
+  return {
+    withReqs: Number(agg?.withReqs) || 0,
+    flagged: Number(agg?.flagged) || 0,
+    avgCoverage: agg?.avgCoverage != null ? Math.round(Number(agg.avgCoverage)) : null,
+  };
+};
+
+/** Pure: the audit ledger's figures → a scorecard in ONE language. The band
+ *  NAMES come from the shared chrome, never from a private list here, so this
+ *  scorecard cannot disagree with every other scorer about what "Level 3" is. */
+const scoreTicketRoleCoverage = (f: TicketCoverageFigures, { chrome, copy: c }: DataScoreContext): ToolResult => {
+  const { withReqs, flagged, avgCoverage } = f;
   if (withReqs === 0) {
     return {
-      headline: 'No audited tickets yet',
-      summary: 'Move some tickets through a role-gated board (or apply a kanban template) and check back.',
+      headline: c('empty.headline'),
+      summary: c('empty.summary'),
       score: null, scoreLabel: null,
-      metrics: [{ label: 'Audited tickets', value: '0' }],
-      recommendations: [{ title: 'Apply a kanban template', detail: 'Give each lane a responsible role + required checks so tickets can be audited.' }],
+      metrics: [{ label: c('empty.metric'), value: (0).toLocaleString(c.locale) }],
+      recommendations: [{ title: c('empty.title'), detail: c('empty.detail') }],
     };
   }
 
   const passRate = (withReqs - flagged) / withReqs;
-  const avgCoverage = agg?.avgCoverage != null ? Math.round(Number(agg.avgCoverage)) : null;
+  const pct = Math.round(passRate * 100);
   const level = passRate >= 0.95 ? 5 : passRate >= 0.85 ? 4 : passRate >= 0.6 ? 3 : passRate >= 0.3 ? 2 : 1;
+  const percent = (n: number) => c('value.percent', { n: n.toLocaleString(c.locale) });
 
   return {
-    headline: english.levelValue(level, english.levelNames[level - 1]!),
-    summary: `${Math.round(passRate * 100)}% of tickets with required checks passed their audit${flagged ? ` — ${flagged} flagged for review.` : '.'}`,
+    headline: chrome.levelValue(level, chrome.levelNames[level - 1]!),
+    // Two whole sentences, chosen by the count — never one sentence with a
+    // clause concatenated onto it, which is untranslatable into a language whose
+    // verb comes last.
+    summary: flagged ? counted(c, 'summary.flagged', flagged, { pct }) : c('summary.clean', { pct }),
     score: level,
-    scoreLabel: english.levelNames[level - 1]!,
+    scoreLabel: chrome.levelNames[level - 1]!,
     metrics: [
-      { label: 'Tickets audited', value: String(withReqs) },
-      { label: 'Passing coverage', value: `${Math.round(passRate * 100)}%`, tier: level },
-      { label: 'Flagged for review', value: String(flagged), tier: flagged === 0 ? 5 : Math.max(1, 5 - Math.min(4, flagged)) },
-      ...(avgCoverage != null ? [{ label: 'Avg. required-check coverage', value: `${avgCoverage}%` }] : []),
+      { label: c('metric.audited'), value: withReqs.toLocaleString(c.locale) },
+      { label: c('metric.passing'), value: percent(pct), tier: level },
+      { label: c('metric.flagged'), value: flagged.toLocaleString(c.locale), tier: flagged === 0 ? 5 : Math.max(1, 5 - Math.min(4, flagged)) },
+      ...(avgCoverage != null ? [{ label: c('metric.coverage'), value: percent(avgCoverage) }] : []),
     ],
     recommendations: flagged > 0
-      ? [{ title: `Resolve ${flagged} flagged ${flagged === 1 ? 'ticket' : 'tickets'}`, detail: 'Open the Ticket Audit panel to see which required role or diagnostic each flagged ticket is missing, and route it back to the responsible role.' }]
-      : [{ title: 'Coverage is healthy', detail: 'Keep required roles + diagnostics attached to your lanes as the board evolves.' }],
+      ? [{ title: counted(c, 'rec.flagged.title', flagged), detail: c('rec.flagged.detail') }]
+      : [{ title: c('rec.healthy.title'), detail: c('rec.healthy.detail') }],
   };
 };
+
+const ticketRoleCoverageProvider = dataProvider<TicketCoverageFigures>({
+  collect: collectTicketRoleCoverage,
+  score: scoreTicketRoleCoverage,
+});
 
 // ── DORA Quick-Check, scored from real deployments ────────────────────────────
 
@@ -305,52 +395,81 @@ const doraTier = {
   restore: (hours: number) => (hours <= 1 ? 5 : hours <= 24 ? 4 : hours <= 168 ? 3 : 2),
 };
 
-/** The calculator's remediation copy, keyed so both modes read one source. */
-const DORA_RECOMMENDATIONS: Record<string, ToolRecommendation> = {
-  frequency: { title: 'Deploy more often', detail: 'Shrink batch sizes and automate the release pipeline so deploys are routine, not events. Aim for at least weekly, then daily.' },
-  leadTime: { title: 'Cut lead time', detail: 'Reduce hand-offs and manual gates between commit and production. Trunk-based development and CI on every change are the biggest levers.' },
-  changeFailure: { title: 'Lower change-failure rate', detail: 'Add automated tests and progressive delivery (canary / feature flags) so risky changes are caught or contained before full rollout.' },
-  restore: { title: 'Restore faster', detail: 'Invest in alerting, one-click rollback, and runbooks so a failed change is reverted in minutes, not hours.' },
+/** The four keys this provider scores. Named here so the FIGURES a saved run
+ *  carries have a declared shape, and so the remediation lookup is exhaustive. */
+type DoraKey = 'frequency' | 'leadTime' | 'changeFailure' | 'restore';
+
+interface DoraFigures {
+  days: number;
+  totalDeployments: number;
+  deploymentFrequencyPerDay: number;
+  leadTimeHours: number | null;
+  changeFailureRatePct: number | null;
+  mttrHours: number | null;
+}
+
+const collectDoraQuickCheck = async (db: Db, tenantId: number, days: number, projectId?: number | null): Promise<DoraFigures> => {
+  const dora = await computeDora(db, tenantId, days, projectId ?? undefined);
+  return {
+    days,
+    totalDeployments: dora.totalDeployments,
+    deploymentFrequencyPerDay: dora.deploymentFrequencyPerDay,
+    leadTimeHours: dora.leadTimeHours,
+    changeFailureRatePct: dora.changeFailureRatePct,
+    mttrHours: dora.mttrHours,
+  };
 };
 
-const doraQuickCheckProvider: ToolDataProvider = async (db, tenantId, days, projectId) => {
-  const dora = await computeDora(db, tenantId, days, projectId ?? undefined);
-  const perWeek = dora.deploymentFrequencyPerDay * 7;
+/**
+ * Pure: the four keys → a tier and a plan, in ONE language.
+ *
+ * The remediation copy is READ FROM THE TOOL, not restated here. It used to be a
+ * private `DORA_RECOMMENDATIONS` map that happened to match the calculator's
+ * literals, which is precisely how the estimate mode and the telemetry mode come
+ * to advise two different things about the same low change-failure rate.
+ */
+const scoreDoraQuickCheck = (f: DoraFigures, { copy: c }: DataScoreContext): ToolResult => {
+  const { days } = f;
+  const perWeek = f.deploymentFrequencyPerDay * 7;
+  const tierLabel = (t: number) => c(`tier.${Math.max(1, Math.min(5, Math.round(t)))}`);
+  const rec = (key: DoraKey | 'sustain'): ToolRecommendation =>
+    ({ title: c(`rec.${key}.title`), detail: c(`rec.${key}.detail`) });
+  const num = (n: number, digits = 1) => n.toLocaleString(c.locale, { minimumFractionDigits: digits, maximumFractionDigits: digits });
 
   // Each key is scored only when it HAS a number. A tenant that deploys through
   // Builderforce but has not recorded a restore has no MTTR, and inventing one
   // (0h reads as Elite) would be the same lie the hand-entered default was.
-  const scored: Array<{ key: keyof typeof DORA_RECOMMENDATIONS; label: string; value: string; tier: number }> = [];
+  const scored: Array<{ key: DoraKey; label: string; value: string; tier: number }> = [];
   const unscored: ToolMetric[] = [];
 
-  if (dora.totalDeployments > 0) {
-    scored.push({ key: 'frequency', label: 'Deployment frequency', value: `${perWeek.toFixed(1)}/week`, tier: doraTier.frequency(perWeek) });
+  if (f.totalDeployments > 0) {
+    scored.push({ key: 'frequency', label: c('metric.frequency'), value: c('value.perWeek', { n: num(perWeek) }), tier: doraTier.frequency(perWeek) });
   } else {
-    unscored.push({ label: 'Deployment frequency', value: 'No deployments recorded' });
+    unscored.push({ label: c('metric.frequency'), value: c('empty.deployments') });
   }
-  if (dora.leadTimeHours != null) {
-    scored.push({ key: 'leadTime', label: 'Lead time for changes', value: `${Math.round(dora.leadTimeHours)}h`, tier: doraTier.leadTime(dora.leadTimeHours) });
+  if (f.leadTimeHours != null) {
+    scored.push({ key: 'leadTime', label: c('metric.leadTime'), value: c('value.hours', { n: num(f.leadTimeHours, 0) }), tier: doraTier.leadTime(f.leadTimeHours) });
   } else {
-    unscored.push({ label: 'Lead time for changes', value: 'No completed tickets in window' });
+    unscored.push({ label: c('metric.leadTime'), value: c('empty.tickets') });
   }
-  if (dora.changeFailureRatePct != null) {
-    scored.push({ key: 'changeFailure', label: 'Change-failure rate', value: `${dora.changeFailureRatePct.toFixed(1)}%`, tier: doraTier.changeFailure(dora.changeFailureRatePct) });
+  if (f.changeFailureRatePct != null) {
+    scored.push({ key: 'changeFailure', label: c('metric.changeFailure'), value: c('value.percent', { n: num(f.changeFailureRatePct) }), tier: doraTier.changeFailure(f.changeFailureRatePct) });
   } else {
-    unscored.push({ label: 'Change-failure rate', value: 'No deployments recorded' });
+    unscored.push({ label: c('metric.changeFailure'), value: c('empty.deployments') });
   }
-  if (dora.mttrHours != null) {
-    scored.push({ key: 'restore', label: 'Time to restore', value: `${dora.mttrHours.toFixed(1)}h`, tier: doraTier.restore(dora.mttrHours) });
+  if (f.mttrHours != null) {
+    scored.push({ key: 'restore', label: c('metric.restore'), value: c('value.hours', { n: num(f.mttrHours) }), tier: doraTier.restore(f.mttrHours) });
   } else {
-    unscored.push({ label: 'Time to restore', value: 'No restored failures in window' });
+    unscored.push({ label: c('metric.restore'), value: c('empty.restores') });
   }
 
   if (scored.length === 0) {
     return {
-      headline: 'Not enough delivery telemetry yet',
-      summary: `No deployments or completed tickets in the last ${days} days. Record deployments (or complete some tickets) and check back, or use the estimate mode.`,
+      headline: c('telemetry.headline'),
+      summary: c('telemetry.summary', { days }),
       score: null, scoreLabel: null,
-      metrics: [{ label: 'Window', value: `${days} days` }, ...unscored],
-      recommendations: [{ title: 'Start recording deployments', detail: 'Deployment events are what turn the four keys from a self-assessment into a measurement. Wire your release pipeline to the deployments API, or let the cloud agent record them as it ships.' }],
+      metrics: [{ label: c('window'), value: c('window.days', { days }) }, ...unscored],
+      recommendations: [{ title: c('telemetry.title'), detail: c('telemetry.detail') }],
     };
   }
 
@@ -358,23 +477,30 @@ const doraQuickCheckProvider: ToolDataProvider = async (db, tenantId, days, proj
   const recommendations = scored
     .filter((metric) => metric.tier < 4)
     .sort((a, b) => a.tier - b.tier)
-    .map((metric) => DORA_RECOMMENDATIONS[metric.key]!);
-  if (recommendations.length === 0) {
-    recommendations.push({ title: 'Sustain elite performance', detail: 'Keep the four keys under continuous review and protect them as you scale — elite teams optimize, they do not coast.' });
-  }
+    .map((metric) => rec(metric.key));
+  if (recommendations.length === 0) recommendations.push(rec('sustain'));
 
+  const unmeasured = 4 - scored.length;
   return {
-    headline: `${tierName(overall)} performer`,
-    summary: `Scored from your real delivery data over the last ${days} days — ${dora.totalDeployments} deployment${dora.totalDeployments === 1 ? '' : 's'}${scored.length < 4 ? `, ${4 - scored.length} of the four keys not yet measurable` : ''}.`,
+    headline: c('headline', { tier: tierLabel(overall) }),
+    // Two whole sentences rather than one with an optional clause welded on: the
+    // "not yet measurable" caveat only appears sometimes, so it has to be
+    // translatable as its own sentence.
+    summary: counted(c, unmeasured > 0 ? 'scored.partial' : 'scored.summary', f.totalDeployments, { days, unmeasured }),
     score: overall,
-    scoreLabel: tierName(overall),
+    scoreLabel: tierLabel(overall),
     metrics: [
-      ...scored.map((metric) => ({ label: metric.label, value: metric.value, hint: tierName(metric.tier), tier: metric.tier })),
+      ...scored.map((metric) => ({ label: metric.label, value: metric.value, hint: tierLabel(metric.tier), tier: metric.tier })),
       ...unscored,
     ],
     recommendations,
   };
 };
+
+const doraQuickCheckProvider = dataProvider<DoraFigures>({
+  collect: collectDoraQuickCheck,
+  score: scoreDoraQuickCheck,
+});
 
 // ── AI Cost Estimator, replaced by real attributed spend ──────────────────────
 
@@ -397,7 +523,20 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  *
  * One grouped query, no fan-out: this is a monthly-ish read on a small result set.
  */
-const aiCostEstimatorProvider: ToolDataProvider = async (db, tenantId, days, projectId) => {
+interface AiSpendFigures {
+  days: number;
+  forProject: boolean;
+  calls: number;
+  costUsd: number;
+  tokens: number;
+  promptTokens: number;
+  cacheReadTokens: number;
+  byoCalls: number;
+  attributedTasks: number;
+  completedTickets: number;
+}
+
+const collectAiSpend = async (db: Db, tenantId: number, days: number, projectId?: number | null): Promise<AiSpendFigures> => {
   const since = new Date(Date.now() - days * DAY_MS);
   const forProject = projectId != null;
 
@@ -419,26 +558,6 @@ const aiCostEstimatorProvider: ToolDataProvider = async (db, tenantId, days, pro
     ));
 
   const calls = Number(usage?.calls) || 0;
-  if (calls === 0) {
-    return {
-      headline: 'No attributed spend yet',
-      summary: `No agent LLM calls recorded in the last ${days} days${forProject ? ' for this project' : ''}. Run some agent work and check back, or use the estimate mode.`,
-      score: null, scoreLabel: null,
-      metrics: [{ label: 'Window', value: `${days} days` }, { label: 'Agent LLM calls', value: '0' }],
-      recommendations: [{ title: 'Attribute and budget', detail: 'Every agent run stamps its tokens with a task and project, so cost rolls up ticket → project → account the moment work starts flowing. Set a budget with overspend alerts once it does.' }],
-    };
-  }
-
-  const costUsd = Number(usage!.millicents) / MILLICENTS_PER_USD;
-  const tokens = Number(usage!.tokens) || 0;
-  const promptTokens = Number(usage!.promptTokens) || 0;
-  const cacheReadTokens = Number(usage!.cacheReadTokens) || 0;
-  const byoCalls = Number(usage!.byoCalls) || 0;
-  const attributedTasks = Number(usage!.attributedTasks) || 0;
-  // Cache hit rate measured the way the estimator asks for it: the share of
-  // PROMPT tokens served from cache (cache reads are a subset of prompt tokens).
-  const cacheHitPct = promptTokens > 0 ? (cacheReadTokens / promptTokens) * 100 : 0;
-  const perMonth = costUsd * (30 / Math.max(days, 1));
 
   // Delivered tickets in the same window — the "cost per outcome" the estimator's
   // last recommendation asks for, from the same task table DORA's lead time uses.
@@ -453,43 +572,89 @@ const aiCostEstimatorProvider: ToolDataProvider = async (db, tenantId, days, pro
       ...(forProject ? [eq(tasks.projectId, projectId!)] : []),
       notSystemTask,
     ));
-  const completed = Number(delivered?.completed) || 0;
+  return {
+    days,
+    forProject,
+    calls,
+    costUsd: Number(usage?.millicents ?? 0) / MILLICENTS_PER_USD,
+    tokens: Number(usage?.tokens) || 0,
+    promptTokens: Number(usage?.promptTokens) || 0,
+    cacheReadTokens: Number(usage?.cacheReadTokens) || 0,
+    byoCalls: Number(usage?.byoCalls) || 0,
+    attributedTasks: Number(usage?.attributedTasks) || 0,
+    completedTickets: Number(delivered?.completed) || 0,
+  };
+};
+
+/** Pure: attributed spend → the cost scorecard, in ONE language. */
+const scoreAiSpend = (f: AiSpendFigures, { copy: c }: DataScoreContext): ToolResult => {
+  const { days, calls } = f;
+  // Money renders in the READER's numbering — a German reader expects
+  // `1.234,56 $`, and a stored figure that only ever rendered `en-US` was half
+  // the reason a saved snapshot read as somebody else's.
+  const amount = (n: number) => money(n, c.locale);
+  const int = (n: number) => n.toLocaleString(c.locale);
+
+  if (calls === 0) {
+    return {
+      headline: c('empty.headline'),
+      summary: c(f.forProject ? 'empty.summaryProject' : 'empty.summary', { days }),
+      score: null, scoreLabel: null,
+      metrics: [
+        { label: c('window'), value: c('window.days', { days }) },
+        { label: c('metric.calls'), value: int(0) },
+      ],
+      recommendations: [{ title: c('empty.title'), detail: c('empty.detail') }],
+    };
+  }
+
+  // Cache hit rate measured the way the estimator asks for it: the share of
+  // PROMPT tokens served from cache (cache reads are a subset of prompt tokens).
+  const cacheHitPct = f.promptTokens > 0 ? (f.cacheReadTokens / f.promptTokens) * 100 : 0;
+  const perMonth = f.costUsd * (30 / Math.max(days, 1));
+  const completed = f.completedTickets;
+  const pct = (n: number) => c('value.percent', { n: n.toLocaleString(c.locale, { maximumFractionDigits: 0 }) });
 
   const recommendations: ToolRecommendation[] = [];
   if (cacheHitPct < 40) {
-    recommendations.push({ title: 'Raise your cache hit rate', detail: `Only ${cacheHitPct.toFixed(0)}% of your prompt tokens are being served from cache. Prompt caching reuses the stable prefix of a conversation at roughly a tenth of the input rate — pushing this toward 40–60% cuts spend with no quality loss.` });
+    recommendations.push({ title: c('rec.cache.title'), detail: c('rec.cache.detail', { pct: cacheHitPct.toLocaleString(c.locale, { maximumFractionDigits: 0 }) }) });
   }
-  if (attributedTasks === 0) {
-    recommendations.push({ title: 'Attribute spend to tickets', detail: 'None of this spend carries a task id, so it can be totalled but not explained. Cost is stamped from the run\'s task — dispatching work from a ticket rather than an ad-hoc prompt is what makes cost-per-outcome answerable.' });
+  if (f.attributedTasks === 0) {
+    recommendations.push({ title: c('rec.attribute.title'), detail: c('rec.attribute.detail') });
   }
   if (completed > 0) {
-    recommendations.push({ title: 'Track cost per outcome, not per token', detail: `You spent ${money(costUsd)} to deliver ${completed} ticket${completed === 1 ? '' : 's'}. Watch this ratio rather than the token count — the cheapest model that fails twice is more expensive than the right one.` });
+    recommendations.push({ title: c('rec.outcome.title'), detail: counted(c, 'rec.outcome.detail', completed, { amount: amount(f.costUsd) }) });
   }
-  if (byoCalls > 0) {
-    recommendations.push({ title: 'BYO traffic is excluded from cost', detail: `${byoCalls} of ${calls} calls ran on your own provider credential, so they cost the platform nothing and are recorded at zero. Rank those by tokens rather than by spend when comparing model usage.` });
+  if (f.byoCalls > 0) {
+    recommendations.push({ title: c('rec.byo.title'), detail: c('rec.byo.detail', { byo: int(f.byoCalls), calls: int(calls) }) });
   }
   if (recommendations.length === 0) {
-    recommendations.push({ title: 'Spend is measured and attributed', detail: 'Set a budget with overspend alerts so cost stays managed rather than discovered on the invoice.' });
+    recommendations.push({ title: c('rec.measured.title'), detail: c('rec.measured.detail') });
   }
 
   return {
-    headline: `${money(perMonth)} / month`,
-    summary: `Real attributed agent spend over the last ${days} days, projected to a month. Cost is stamped per call at the resolved model's price, including cache tiers.`,
+    headline: c('headline', { amount: amount(perMonth) }),
+    summary: c('summary', { days }),
     score: null,
     scoreLabel: null,
     metrics: [
-      { label: 'Spend in window', value: money(costUsd) },
-      { label: 'Projected monthly cost', value: money(perMonth) },
-      { label: 'Tokens', value: `${(tokens / 1_000_000).toFixed(1)}M` },
-      { label: 'Prompt tokens served from cache', value: `${cacheHitPct.toFixed(0)}%` },
-      { label: 'Agent LLM calls', value: calls.toLocaleString('en-US') },
-      { label: 'Tickets carrying spend', value: attributedTasks.toLocaleString('en-US') },
-      ...(completed > 0 ? [{ label: 'Cost per delivered ticket', value: `$${(costUsd / completed).toFixed(2)}` }] : []),
-      ...(byoCalls > 0 ? [{ label: 'Calls on your own credential', value: `${byoCalls.toLocaleString('en-US')} (billed at $0)` }] : []),
+      { label: c('metric.spend'), value: amount(f.costUsd) },
+      { label: c('metric.projected'), value: amount(perMonth) },
+      { label: c('metric.tokens'), value: c('value.millions', { n: (f.tokens / 1_000_000).toLocaleString(c.locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) }) },
+      { label: c('metric.cache'), value: pct(cacheHitPct) },
+      { label: c('metric.calls'), value: int(calls) },
+      { label: c('metric.attributed'), value: int(f.attributedTasks) },
+      ...(completed > 0 ? [{ label: c('metric.perTicket'), value: amount(f.costUsd / completed) }] : []),
+      ...(f.byoCalls > 0 ? [{ label: c('metric.byo'), value: c('value.byo', { n: int(f.byoCalls) }) }] : []),
     ],
     recommendations,
   };
 };
+
+const aiCostEstimatorProvider = dataProvider<AiSpendFigures>({
+  collect: collectAiSpend,
+  score: scoreAiSpend,
+});
 
 export const TOOL_DATA_PROVIDERS: Record<string, ToolDataProvider> = {
   'agentic-maturity': agenticMaturityProvider,

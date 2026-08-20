@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Quality-trend and finding-routing sections of the Agentic QA tab.
  *
@@ -10,6 +8,11 @@
  * which model or agent produced the code they escaped from, and whether a new
  * finding should open a ticket by itself. They read their data as props and own
  * no fetching, so the parent stays the single place the tab talks to the API.
+ *
+ * No `'use client'` directive of its own: it is imported only from
+ * `QaContent.tsx`, which declares the boundary, and a module inside an existing
+ * client boundary inherits it. The directive marks WHERE server rendering stops,
+ * not every file on the client side of it.
  */
 
 import type React from 'react';

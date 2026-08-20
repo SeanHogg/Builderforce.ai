@@ -21,6 +21,7 @@ import { openAiCodexModule } from './openaiCodex';
 import { xaiOAuthModule } from './xaiOAuth';
 import { openAICompatibleModules, openAICompatibleModulesById } from './openaiCompatibleVendors';
 import { registerSchemaDialectResolver } from '../jsonSchemaSanitize';
+import { registerStrictShapeResolver } from '../messageShapeSanitizer';
 import { reasoningParamsForModel } from '../reasoningCapability';
 import {
   VendorRetryableError,
@@ -39,6 +40,7 @@ import {
   type VendorModule,
   type VendorStreamResult,
   type UpstreamDiagnostic,
+  type SchemaSupport,
 } from './types';
 
 /**
@@ -95,6 +97,12 @@ const MODULES_BY_ID: Record<VendorId, VendorModule> = {
  *  the registry (metadata-driven strip sets, no hardcoded vendor-id list).
  *  Done at module-init to avoid a circular import (the sanitizer is imported by
  *  the vendor modules themselves). Unknown ids resolve to no strip set. */
+/** Same injection, same reason: the message-shape sanitizer is imported BY the
+ *  vendor body builders, so it cannot import the registry back. A vendor whose
+ *  constrained decoder is `limited` is a vendor whose request validator is strict —
+ *  one piece of catalog metadata answers both questions. */
+registerStrictShapeResolver((model: string): boolean => strictSchemaSupport(model) !== 'full');
+
 registerSchemaDialectResolver((vendorId: string): readonly string[] => {
   const mod = (MODULES_BY_ID as Record<string, VendorModule | undefined>)[vendorId];
   return mod?.schemaDialect?.stripKeywords ?? [];
@@ -206,6 +214,35 @@ export function tierForModel(modelId: string): AiModelTier {
  */
 export function modelSupportsTools(modelId: string): boolean {
   return MODULES_BY_ID[vendorForModel(modelId)].supportsTools !== false;
+}
+
+/**
+ * A family-level fallback for models we do NOT catalog.
+ *
+ * The premium OpenRouter long tail is off our catalog by definition — hundreds of
+ * ids, of which the Gemini family shares the decoder whose complexity ceiling
+ * produces `schema_too_complex`. Matching on the family name catches both
+ * `googleai/gemini-*` (direct) and `google/gemini-*` (OpenRouter-routed), which the
+ * catalog cannot because one of them isn't in it.
+ *
+ * Deliberately LAST: an explicit catalog entry always wins. This exists so an
+ * uncatalogued id degrades to a known ceiling rather than to a wrong assumption of
+ * 'full', which is what turns into a 400 the caller cannot have anticipated.
+ */
+function familySchemaSupport(modelId: string): SchemaSupport | null {
+  return /gemini/i.test(modelId) ? 'limited' : null;
+}
+
+/**
+ * How much of a strict `json_schema` this model's decoder will accept.
+ * Resolution order: catalog entry → vendor default → family fallback → 'full'.
+ */
+export function strictSchemaSupport(modelId: string): SchemaSupport {
+  const entry = catalogEntry(modelId);
+  if (entry?.strictSchema) return entry.strictSchema;
+  const vendorDefault = entry ? MODULES_BY_ID[entry.vendor]?.schemaDialect?.strictSchema : undefined;
+  if (vendorDefault) return vendorDefault;
+  return familySchemaSupport(modelId) ?? 'full';
 }
 
 export function catalogEntry(modelId: string): (VendorModelEntry & { vendor: VendorId }) | null {

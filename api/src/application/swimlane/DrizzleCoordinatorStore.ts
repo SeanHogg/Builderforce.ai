@@ -8,7 +8,6 @@ import { and, asc, desc, eq, notInArray } from 'drizzle-orm';
 import {
   boards,
   swimlanes,
-  swimlaneAgentAssignments,
   swimlaneRequirements,
   ticketRoleSignoffs,
   ticketRuns,
@@ -29,6 +28,7 @@ import type {
   TicketRunLite,
   TransitionRecord,
 } from './coordinatorStore';
+import { forLane, laneAgentAssignments } from './laneAgentAssignments';
 
 export class DrizzleCoordinatorStore implements CoordinatorStore {
   constructor(private readonly db: Db) {}
@@ -85,14 +85,11 @@ export class DrizzleCoordinatorStore implements CoordinatorStore {
   async listAssignments(swimlaneId: string, tenantId: number): Promise<AssignmentLite[]> {
     const rows = await this.db
       .select()
-      .from(swimlaneAgentAssignments)
-      .where(
-        and(
-          eq(swimlaneAgentAssignments.swimlaneId, swimlaneId),
-          eq(swimlaneAgentAssignments.tenantId, tenantId),
-        ),
-      )
-      .orderBy(asc(swimlaneAgentAssignments.position));
+      .from(laneAgentAssignments)
+      // Lane staffing lives in the canonical `agent_assignments` since 1085; `forLane`
+      // is the ONE place the `scope = 'swimlane'` predicate is written.
+      .where(forLane(swimlaneId, eq(laneAgentAssignments.tenantId, tenantId)))
+      .orderBy(asc(laneAgentAssignments.position));
     return rows.map((a) => ({
       id: a.id,
       role: a.role,

@@ -27,9 +27,11 @@ import { recordManagerAction } from '../manager/ManagerService';
 import { computeCoverage, verdictSignature, type AuditSignals, type RequirementInput } from './auditRules';
 import type { CoverageResult, UnmetRequirement } from './auditRules';
 import { requirementApplies } from '../kanban/types';
+import { hasNonDraftPr, loadTaskPrSignal } from '../kanban/taskPrSignal';
 import { findCanonicalBoard } from '../swimlane/canonicalBoard';
 import { isReviewRole } from '../kanban/roleCatalog';
 import { publishSignoffToPr } from '../validation/publishReviewToPr';
+import { authoredPrdRoleSections, findTaskPrimarySpec } from '../prd/taskPrd';
 
 const flaggedKey = (tenantId: number) => `audit:flagged:${tenantId}`;
 
@@ -133,6 +135,9 @@ export class TicketAuditService {
     if (!task) throw new Error('task not found');
 
     const board = await findCanonicalBoard(this.db, task.projectId, tenantId);
+    // The `has_pr` predicate's input — resolved once for the whole requirement scan so
+    // every lane's requirements agree about whether this ticket has a pull request.
+    const hasPr = hasNonDraftPr(await loadTaskPrSignal(this.db, tenantId, taskId));
 
     let reqs: RequirementInput[] = [];
     if (board) {
@@ -156,7 +161,7 @@ export class TicketAuditService {
           // Ticket-type / condition scoping: a requirement only counts for the ticket
           // types it applies to (a Security ticket requires the security role; a docs
           // ticket doesn't require QA). Shared with the manifest + gate for consistency.
-          .filter((r) => requirementApplies({ ticketType: r.ticketType, condition: r.condition }, { taskType: task.taskType, actionType: task.actionType }))
+          .filter((r) => requirementApplies({ ticketType: r.ticketType, condition: r.condition }, { taskType: task.taskType, actionType: task.actionType, hasPr }))
           .map((r): RequirementInput => {
             const lane = laneById.get(r.swimlaneId)!;
             return {
@@ -282,7 +287,7 @@ export class TicketAuditService {
   }
 
   private async gatherSignals(taskId: number): Promise<AuditSignals> {
-    const [signoffs, diagnostics] = await Promise.all([
+    const [signoffs, diagnostics, prdRow] = await Promise.all([
       this.db
         .select({ roleKey: ticketRoleSignoffs.roleKey, verdict: ticketRoleSignoffs.verdict, createdAt: ticketRoleSignoffs.createdAt })
         .from(ticketRoleSignoffs)
@@ -293,6 +298,10 @@ export class TicketAuditService {
         .from(toolRuns)
         .where(eq(toolRuns.taskId, taskId))
         .orderBy(asc(toolRuns.createdAt)),
+      // The task's primary PRD, for the per-role SECTION-AUTHORED evidence. One
+      // indexed lookup on a path that already issues two; null (no PRD yet) simply
+      // contributes no roles, so nothing regresses on a ticket without one.
+      findTaskPrimarySpec(this.db, taskId).catch(() => null),
     ]);
 
     // Latest verdict per role wins (append-only ledger; a later approval clears an
@@ -333,6 +342,7 @@ export class TicketAuditService {
       changesRequestedRoles,
       ranDiagnostics,
       failedDiagnostics,
+      sectionAuthoredRoles: new Set(authoredPrdRoleSections(prdRow?.prd ?? null)),
       performedRoles: performed,
     };
   }

@@ -27,7 +27,7 @@ import { reportCaughtError } from '../../application/observability/caughtErrorRe
  * Session mutations are MANAGER+; the facilitator's client broadcasts `changed`
  * over the room so peers re-fetch (no server-side room coupling).
  */
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { and, desc, eq, lt, ne } from 'drizzle-orm';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
@@ -45,6 +45,7 @@ import { ensureCeremonyMeeting } from '../../application/ceremony/ceremonyMeetin
 import { getActivityLog, recordActivity, resolveActorFromContext } from '../../application/activity/activityLog';
 import { isValidCron, nextCronTime } from '../../domain/workflowSchedule';
 import { relayToRoom } from './realtimeRelay';
+import { broadcastCeremonyChanged, ceremonyRoomName } from '../../infrastructure/relay/broadcastRoom';
 
 /** Cache key for a project's ceremony schedules list. */
 function schedulesCacheKey(tenantId: number, segmentId: string, projectId: number): string {
@@ -70,7 +71,29 @@ export function createCeremonyRoutes(db: Db): Hono<HonoEnv> {
   const r = new Hono<HonoEnv>();
 
   // Live channel: clients hold this WebSocket for presence + relayed updates.
-  r.get('/rooms/:id/ws', (c) => relayToRoom(c, c.env?.CEREMONY_ROOM, `ceremony:${c.req.param('id')}`));
+  //
+  // TWO THINGS THE ROUTE MUST ASSERT, because the DO cannot:
+  //
+  //  1. WHO. A Durable Object sees a socket, never a session — it has no JWT and no
+  //     secret to verify one against, so "re-verify per frame" is not a thing it can
+  //     do. What it CAN stop doing is trusting the client: the seat identity used to be
+  //     whatever the browser put in its `join` frame, so anyone who could open the
+  //     socket could sit at the table as anyone. The route already authenticated this
+  //     request, so it stamps the identity through the relay headers
+  //     (`relayIdentityFromHeaders`) — stripped-then-set, so a forged header cannot
+  //     survive the hop — and the DO uses that over the join frame from then on.
+  //  2. WHICH TENANT. `ceremony:<projectId>` is an enumerable integer with no tenant
+  //     prefix, so two tenants' project 11 shared one relay room. Qualified the same
+  //     way `projectRoomName` is, and for the same reason.
+  r.get('/rooms/:id/ws', (c) => relayToRoom(
+    c,
+    c.env?.CEREMONY_ROOM,
+    ceremonyRoomName(c.get('tenantId') as number, c.req.param('id')),
+    {
+      ref: `u:${(c.get('userId') as string | undefined) ?? 'anon'}`,
+      kind: 'human',
+    },
+  ));
 
   // ── Tenant-wide ceremonies rollup ("insights everywhere") ───────────────────
   // Cadence + engagement across ALL projects' standups/plannings — the per-project
@@ -109,7 +132,44 @@ export function createCeremonyRoutes(db: Db): Hono<HonoEnv> {
         .from(meetings).where(scopedToTenant(meetings, tenantId, eq(meetings.id, session.meetingId))).limit(1);
       meetingRoomKey = m?.roomKey ?? null;
     }
-    return { session: { ...session, meetingRoomKey }, participants };
+
+    // The board's default per-member WIP cap (migration 1084), for the round table's
+    // POWER METER. Resolved server-side like `meetingRoomKey`, and for the same reason:
+    // the client used a hardcoded `DEFAULT_CAP = 8`, so the meter that says "this person
+    // is overloaded" measured against a number nobody chose and nobody could change.
+    const [boardRow] = await db
+      .select({ defaultMemberWipCap: boards.defaultMemberWipCap })
+      .from(boards)
+      .where(scopedToTenant(boards, tenantId, eq(boards.projectId, session.projectId)))
+      .limit(1);
+
+    return {
+      session: { ...session, meetingRoomKey, defaultMemberWipCap: boardRow?.defaultMemberWipCap ?? null },
+      participants,
+    };
+  }
+
+  /**
+   * Hydrate a session AFTER a mutation, and push the room's `changed` signal.
+   *
+   * The `changed` frame used to be sent by the CLIENT that made the mutation, relayed
+   * verbatim by the DO. That made the refresh fan-out depend on the mutating client being
+   * connected and choosing to send it — a session started by the AI Manager, advanced by
+   * a schedule, or mutated from a second tab reached nobody — and it let any connected
+   * client fabricate one. The DO now DROPS a client-sent `changed`, so every real one is
+   * produced here, on the server, from the mutation that caused it.
+   *
+   * Best-effort: the relay push never fails the mutation.
+   */
+  async function hydrateChanged(c: Context<HonoEnv>, tenantId: number, segmentId: string, sessionId: string) {
+    const out = await hydrate(tenantId, segmentId, sessionId);
+    const projectId = out?.session?.projectId;
+    if (projectId != null) {
+      c.executionCtx.waitUntil(
+        broadcastCeremonyChanged((c.env as Env).CEREMONY_ROOM, tenantId, projectId),
+      );
+    }
+    return out;
   }
 
   /** Add `elapsedMs` to the participant currently in `turnOrder` of a session. */
@@ -157,7 +217,7 @@ export function createCeremonyRoutes(db: Db): Hono<HonoEnv> {
       eq(ceremonySessions.projectId, body.projectId), eq(ceremonySessions.kind, kind),
       eq(ceremonySessions.status, 'active'),
     ));
-    if (existing) return c.json(await hydrate(tenantId, segmentId, existing.id));
+    if (existing) return c.json(await hydrateChanged(c, tenantId, segmentId, existing.id));
 
     // Snapshot the board's standup turn settings onto the session.
     const [board] = await db.select({ mode: boards.standupTurnMode, seconds: boards.standupTurnSeconds })
@@ -201,7 +261,7 @@ export function createCeremonyRoutes(db: Db): Hono<HonoEnv> {
       reportCaughtError(err, { source: "presentation/routes/ceremonyRoutes.ts", operation: "createCeremonyRoutes", context: { logMessage: `[ceremony:start] companion meeting failed session=${session.id}`, details: err } });
     });
 
-    return c.json(await hydrate(tenantId, segmentId, session.id), 201);
+    return c.json(await hydrateChanged(c, tenantId, segmentId, session.id), 201);
   });
 
   // PATCH /sessions/:id/turn — advance the speaker, accruing the outgoing turn.
@@ -220,7 +280,60 @@ export function createCeremonyRoutes(db: Db): Hono<HonoEnv> {
     await db.update(ceremonySessions)
       .set({ currentTurn: body.currentTurn, turnStartedAt: now, updatedAt: now })
       .where(scopedToTenant(ceremonySessions, tenantId, eq(ceremonySessions.id, id)));
-    return c.json(await hydrate(tenantId, segmentId, id));
+    return c.json(await hydrateChanged(c, tenantId, segmentId, id));
+  });
+
+  /**
+   * POST /sessions/:id/turn/pause — STOP THE CLOCK on the current speaker.
+   *
+   * Turn time accrued on wall-clock unconditionally: `turnStartedAt` was set when the
+   * speaker took the floor and the elapsed span was banked when the floor moved. So a
+   * standup that broke off for ten minutes — a demo, an interruption, someone fetching a
+   * laptop — charged all ten of them to whoever happened to be speaking, and the
+   * per-member turn durations that feed the ceremony rollup were simply wrong.
+   *
+   * PAUSE = bank what has elapsed and clear `turnStartedAt`. RESUME = restart it. That
+   * makes `currentTurn != null && turnStartedAt == null` the paused state, derived from
+   * columns that already exist rather than a new one: `concludeCeremony` already skips
+   * accrual when `turnStartedAt` is null, so a session concluded while paused banks
+   * exactly what it should and nothing more.
+   */
+  r.post('/sessions/:id/turn/pause', requireRole(TenantRole.MANAGER), async (c) => {
+    const { tenantId, segmentId } = scope(c);
+    const id = c.req.param('id');
+    const [session] = await db.select().from(ceremonySessions)
+      .where(and(eq(ceremonySessions.id, id), eq(ceremonySessions.tenantId, tenantId), eq(ceremonySessions.segmentId, segmentId)));
+    if (!session) return c.json({ error: 'Not found' }, 404);
+    // Already paused (or nobody holds the floor) — idempotent, so a double-click or a
+    // retried request cannot bank the same span twice.
+    if (session.currentTurn == null || !session.turnStartedAt) {
+      return c.json(await hydrate(tenantId, segmentId, id));
+    }
+    const now = new Date();
+    await accrueTurn(id, session.currentTurn, now.getTime() - session.turnStartedAt.getTime());
+    await db.update(ceremonySessions)
+      .set({ turnStartedAt: null, updatedAt: now })
+      .where(scopedToTenant(ceremonySessions, tenantId, eq(ceremonySessions.id, id)));
+    return c.json(await hydrateChanged(c, tenantId, segmentId, id));
+  });
+
+  /** POST /sessions/:id/turn/resume — restart the clock on the current speaker. */
+  r.post('/sessions/:id/turn/resume', requireRole(TenantRole.MANAGER), async (c) => {
+    const { tenantId, segmentId } = scope(c);
+    const id = c.req.param('id');
+    const [session] = await db.select().from(ceremonySessions)
+      .where(and(eq(ceremonySessions.id, id), eq(ceremonySessions.tenantId, tenantId), eq(ceremonySessions.segmentId, segmentId)));
+    if (!session) return c.json({ error: 'Not found' }, 404);
+    // Not paused — nothing to resume, and restarting a running clock would DISCARD the
+    // span accrued so far rather than adding to it.
+    if (session.currentTurn == null || session.turnStartedAt) {
+      return c.json(await hydrate(tenantId, segmentId, id));
+    }
+    const now = new Date();
+    await db.update(ceremonySessions)
+      .set({ turnStartedAt: now, updatedAt: now })
+      .where(scopedToTenant(ceremonySessions, tenantId, eq(ceremonySessions.id, id)));
+    return c.json(await hydrateChanged(c, tenantId, segmentId, id));
   });
 
   // POST /sessions/:id/attendance — "I am in the room right now".
@@ -339,7 +452,7 @@ export function createCeremonyRoutes(db: Db): Hono<HonoEnv> {
       reportCaughtError(error, { source: "presentation/routes/ceremonyRoutes.ts", operation: "createCeremonyRoutes" });
     });
 
-    return c.json(await hydrate(tenantId, segmentId, id));
+    return c.json(await hydrateChanged(c, tenantId, segmentId, id));
   });
 
   // POST /sessions/:id/complete — end the session.
@@ -361,7 +474,7 @@ export function createCeremonyRoutes(db: Db): Hono<HonoEnv> {
       actor: await resolveActorFromContext(c.env as Env, db, c),
     });
 
-    return c.json(await hydrate(tenantId, segmentId, id));
+    return c.json(await hydrateChanged(c, tenantId, segmentId, id));
   });
 
   // GET /sessions/history?projectId=&kind=&limit=&before= — the ceremonies that HAVE run.

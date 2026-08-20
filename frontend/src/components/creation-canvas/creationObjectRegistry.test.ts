@@ -209,8 +209,8 @@ describe('creation object registry', () => {
     const resumeFamily = {
       version: 1, originalRevisionId: 'original', activeRevisionId: 'derived', masterRevisionId: 'original',
       revisions: [
-        { id: 'original', kind: 'original', title: 'Uploaded', markdown: '# Original', templateId: 'hired-default', sourceRevisionId: null, createdAt: '2026-08-11', updatedAt: '2026-08-11', document: { basics: { name: 'Ada' }, work: [{ name: 'Engines', position: 'Programmer', highlights: ['Algorithms'] }] } },
-        { id: 'derived', kind: 'derived', title: 'Tailored', markdown: '# Tailored', templateId: 'hired-default', sourceRevisionId: 'original', createdAt: '2026-08-11', updatedAt: '2026-08-11', document: { basics: { name: 'Ada' }, skills: [{ name: 'Computing' }] } },
+        { id: 'original', kind: 'original', title: 'Uploaded', markdown: '# Original', templateId: 'standard', sourceRevisionId: null, createdAt: '2026-08-11', updatedAt: '2026-08-11', document: { basics: { name: 'Ada' }, work: [{ name: 'Engines', position: 'Programmer', highlights: ['Algorithms'] }] } },
+        { id: 'derived', kind: 'derived', title: 'Tailored', markdown: '# Tailored', templateId: 'standard', sourceRevisionId: 'original', createdAt: '2026-08-11', updatedAt: '2026-08-11', document: { basics: { name: 'Ada' }, skills: [{ name: 'Computing' }] } },
       ],
     };
     const context = creationObjectAiContext({ kind: 'resume', title: 'Ada', resumeFamily });

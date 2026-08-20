@@ -325,3 +325,31 @@ describe('selectReassignments — the whole rule', () => {
     expect(plan.blocked).toBe('capped');
   });
 });
+
+describe('resolveAttendanceVerdict — a DECLINED invite excuses the seat', () => {
+  const seat = (over: Partial<AttendanceInput> = {}): AttendanceInput => ({
+    memberKind: 'human', memberRef: 'u:7', memberName: 'Dana',
+    required: true, joinedAt: null, durationMs: 0, ...over,
+  });
+
+  it('excuses a required human who declined the companion meeting', () => {
+    // Before this, `POST /meetings/:id/rsvp` had no caller at all, so a decline could
+    // not exist — and someone who explicitly said no was recorded as a no-show, which
+    // is what hands their tickets to an agent.
+    expect(resolveAttendanceVerdict(seat({ declinedInvite: true })))
+      .toEqual({ verdict: 'excused', source: 'rsvp' });
+  });
+
+  it('still reports absent when the invite was merely never answered', () => {
+    expect(resolveAttendanceVerdict(seat({ declinedInvite: false })).verdict).toBe('absent');
+  });
+
+  it('presence outranks a decline — someone who declined and came anyway was there', () => {
+    expect(resolveAttendanceVerdict(seat({ declinedInvite: true, joinedAt: new Date() })).verdict).toBe('present');
+  });
+
+  it('approved leave outranks a decline as the reported SOURCE', () => {
+    expect(resolveAttendanceVerdict(seat({ declinedInvite: true, onPto: true })))
+      .toEqual({ verdict: 'excused', source: 'pto' });
+  });
+});

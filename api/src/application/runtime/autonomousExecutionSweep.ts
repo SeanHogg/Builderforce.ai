@@ -32,7 +32,8 @@ import { alias } from 'drizzle-orm/pg-core';
 import { buildDatabase, type Db } from '../../infrastructure/database/connection';
 import { buildRuntimeService } from '../../buildRuntimeService';
 import { createTickDispatchBudget, MAX_TENANT_DISPATCHES_PER_TICK, tenantDispatchReserver, type TickDispatchBudget } from './tickDispatchBudget';
-import { executions, tasks, projects, boards, pullRequests, swimlanes, swimlaneAgentAssignments } from '../../infrastructure/database/schema';
+import { executions, tasks, projects, boards, pullRequests, swimlanes } from '../../infrastructure/database/schema';
+import { laneAgentAssignments, laneJoinOn } from '../swimlane/laneAgentAssignments';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { RuntimeService } from './RuntimeService';
 import { TaskStatus } from '../../domain/shared/types';
@@ -145,8 +146,8 @@ export function autonomousCandidatesQuery(db: Db, limit: number) {
   const laneStaffed = exists(
     db
       .select({ one: sql`1` })
-      .from(swimlaneAgentAssignments)
-      .innerJoin(swimlanes, eq(swimlanes.id, swimlaneAgentAssignments.swimlaneId))
+      .from(laneAgentAssignments)
+      .innerJoin(swimlanes, laneJoinOn(swimlanes.id))
       .innerJoin(boards, eq(boards.id, swimlanes.boardId))
       .where(and(eq(boards.projectId, tasks.projectId), eq(swimlanes.key, tasks.status))),
   );

@@ -36,11 +36,10 @@ import { extractResumeText } from '../../application/career/resumeExtract';
 import { resumeDocumentFromText } from '@builderforce/creation-canvas-contract';
 import {
   readProfileResume,
-  resolvePersonalTenantId,
   saveImportedResume,
   writeProfileResumeFamily,
 } from '../../application/resume/profileResume';
-import { ensurePersonalWorkspace } from '../../application/tenant/starterWorkspace';
+import { resolveOwnWorkspaceTenantId } from '../../application/tenant/starterWorkspace';
 import { notify } from '../../application/notifications/notify';
 import { provisionForHireProfile } from '../../application/freelance/provisionForHire';
 import { normalizeSeeking, normalizeWorkMode } from '../../application/career/listing';
@@ -55,6 +54,21 @@ import {
   readFreelancerMilestones,
 } from '../../application/marketplace/milestones';
 import { summariseEscrow, type MilestoneAction } from '../../application/marketplace/escrow';
+import {
+  disputeTenantForFreelancer,
+  fileDisputeStatement,
+  listFreelancerDisputes,
+  raiseDispute,
+  withdrawDispute,
+  type DisputeRefusal,
+} from '../../application/marketplace/disputes';
+import {
+  AVATAR_WIDTHS,
+  deleteAvatarWithVariants,
+  parseAvatarWidth,
+  readAvatarVariant,
+} from '../../application/media/imageVariants';
+import { invalidateEarnings } from '../../application/finance/earningsLedger';
 import { hireShape } from '../../application/marketplace/engagementShape';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import {
@@ -449,20 +463,17 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
   /**
    * The workspace this person's résumé object lives in, provisioning it if missing.
    *
-   * Self-heals accounts created before 0471 — a `freelancer` provisioned when for-hire
-   * accounts got no workspace has nowhere to put a résumé, and would otherwise be told
-   * "upload failed" forever with no way to fix it themselves.
+   * A thin adapter now: the resolve-or-provision decision moved to
+   * `tenant/starterWorkspace.resolveOwnWorkspaceTenantId` when the withdrawal-method
+   * surface needed the same answer, because two places deciding where a tenantless
+   * person's private data lives is how a credential gets sealed under one workspace and
+   * read back under another. All this adds is the user row the shared helper needs.
    */
   async function resolveResumeTenantId(db: Db, env: Env, userId: string): Promise<number | null> {
-    const existing = await resolvePersonalTenantId(db, userId);
-    if (existing !== null) return existing;
     const [user] = await db.select({ email: users.email, displayName: users.displayName })
       .from(users).where(eq(users.id, userId)).limit(1);
     if (!user) return null;
-    await ensurePersonalWorkspace(env, db, {
-      id: userId, email: user.email, displayName: user.displayName, accountType: 'freelancer',
-    });
-    return resolvePersonalTenantId(db, userId);
+    return resolveOwnWorkspaceTenantId(env, db, { id: userId, email: user.email, displayName: user.displayName });
   }
 
   /** The owner's own profile row (profile + joined user fields + email). */
@@ -763,6 +774,13 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
     if (!AVATAR_MIME.has(type)) return c.json({ error: 'Unsupported image type (PNG, JPEG, WebP, or GIF)' }, 415);
     if (!c.env.UPLOADS) return c.json({ error: 'Image storage not configured' }, 503);
 
+    // What is being replaced, read BEFORE the upsert overwrites the pointer to it.
+    // Every avatar key carries a fresh UUID, so nothing else can be referencing the old
+    // one once this row moves on — and with derived sizes in the bucket beside it, an
+    // uncleaned upload now orphans SIX objects rather than one.
+    const [previous] = await db.select({ avatarKey: freelancerProfiles.avatarKey })
+      .from(freelancerProfiles).where(eq(freelancerProfiles.userId, userId)).limit(1);
+
     const ext = type === 'image/png' ? 'png' : type === 'image/webp' ? 'webp' : type === 'image/gif' ? 'gif' : 'jpg';
     const key = `avatars/${userId}/${crypto.randomUUID()}.${ext}`;
     await c.env.UPLOADS.put(key, file.stream(), { httpMetadata: { contentType: type } });
@@ -777,6 +795,11 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
         set: { avatarKey: key, updatedAt: sql`NOW()` },
       });
     await db.update(users).set({ avatarUrl, updatedAt: sql`NOW()` }).where(eq(users.id, userId));
+    // Only AFTER the pointer has moved: deleting first would leave a window in which the
+    // profile still names an object that no longer exists.
+    if (previous?.avatarKey && previous.avatarKey !== key) {
+      await deleteAvatarWithVariants(c.env.UPLOADS, previous.avatarKey);
+    }
     await invalidateCached(c.env as Env, FREELANCER_PUBLIC_LIST_CACHE_KEY);
     return c.json({ ok: true, avatarUrl });
   });
@@ -845,24 +868,66 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
     return c.json({ items: items.map(mapPublicProfile), total, page: filters.page, pageSize: filters.pageSize });
   });
 
-  // GET /:id/avatar — serve a freelancer's uploaded profile picture from R2. Public
+  // GET /:id/avatar[?w=] — serve a freelancer's uploaded profile picture from R2. Public
   // (profiles are public), so the talent card / detail / marketplace <img> all resolve
   // without a token. Registered before /:id so it isn't swallowed by it.
+  //
+  // ── THE `w` PARAMETER ────────────────────────────────────────────────────────────
+  // Without it this serves the ORIGINAL bytes, exactly as it always has — every
+  // `users.avatar_url` already stored points at that URL and must keep working. With it
+  // the response is a square WebP at one of `AVATAR_WIDTHS`, derived once and kept in R2
+  // beside the original (see `application/media/imageVariants.ts` for why R2 rather than
+  // the edge cache, and why the widths are a closed set rather than any integer).
+  //
+  // A browse page of twenty-four 40px cards was pulling up to 24 × 5 MB to draw about a
+  // thousand pixels of image; `?w=64` makes that a few kilobytes.
   router.get('/:id/avatar', async (c) => {
     const db = buildDatabase(c.env);
     const id = c.req.param('id');
     if (!c.env.UPLOADS) return c.json({ error: 'Not found' }, 404);
+
+    const width = parseAvatarWidth(c.req.query('w'));
+    // A width that is not on the list is refused rather than quietly served full-size:
+    // an unbounded integer here is a resource-exhaustion vector with an R2 write behind
+    // every step, and a silent fallback would hide the typo that caused it.
+    if (width === 'invalid') {
+      return c.json({ error: `w must be one of ${AVATAR_WIDTHS.join(', ')}` }, 400);
+    }
+
     const [row] = await db.select({ avatar_key: freelancerProfiles.avatarKey })
       .from(freelancerProfiles)
       .where(or(eq(freelancerProfiles.userId, id), sql`lower(${freelancerProfiles.slug}) = ${id.toLowerCase()}`));
     const key = row?.avatar_key as string | undefined;
     if (!key) return c.json({ error: 'Not found' }, 404);
-    const obj = await c.env.UPLOADS.get(key);
-    if (!obj) return c.json({ error: 'Not found' }, 404);
+
+    if (width === null) {
+      const obj = await c.env.UPLOADS.get(key);
+      if (!obj) return c.json({ error: 'Not found' }, 404);
+      const headers = new Headers();
+      headers.set('Content-Type', obj.httpMetadata?.contentType ?? 'image/jpeg');
+      headers.set('Cache-Control', 'public, max-age=86400');
+      return new Response(obj.body, { headers });
+    }
+
+    // The transform reads the ORIGINAL through this same route with no `w`, so there is
+    // no recursion: the un-sized branch above answers it directly from R2.
+    const sourceUrl = `${new URL(c.req.url).origin}/api/freelancers/${encodeURIComponent(id)}/avatar`;
+    const variant = await readAvatarVariant(c.env.UPLOADS, key, width, sourceUrl);
+    if (!variant) return c.json({ error: 'Not found' }, 404);
+
     const headers = new Headers();
-    headers.set('Content-Type', obj.httpMetadata?.contentType ?? 'image/jpeg');
-    headers.set('Cache-Control', 'public, max-age=86400');
-    return new Response(obj.body, { headers });
+    headers.set('Content-Type', variant.contentType);
+    // A DERIVED size is immutable — the key contains the original's UUID, so this exact
+    // response can never change and may be cached hard. An ORIGINAL served because the
+    // transform was unavailable must NOT be: caching the fallback for a day would pin a
+    // full-size image at a small width long after the resize started working.
+    headers.set('Cache-Control', variant.origin === 'derived'
+      ? 'public, max-age=31536000, immutable'
+      : 'public, max-age=300');
+    // Says which was served, so a cache, a probe or a person can tell a real resize from
+    // the honest fallback without measuring the bytes.
+    headers.set('X-Image-Variant', variant.origin);
+    return new Response(variant.body, { headers });
   });
 
   // GET /:id — one freelancer's public detail (+ rating + recent reviews). `:id` is
@@ -1257,8 +1322,13 @@ export function createEngagementRoutes(_db: Db): Hono<HonoEnv> {
    *  bug, and one told "403" knows the action belongs to the client. */
   const refusalStatus = (reason: string): 400 | 403 | 404 | 409 =>
     reason === 'not_found' ? 404
-    : reason === 'wrong_party' ? 403
-    : reason === 'wrong_status' || reason === 'conflict' ? 409
+    : reason === 'wrong_party' || reason === 'not_mediator' ? 403
+    // `already_disputed` and `already_closed` are state conflicts in exactly the sense
+    // `wrong_status` is: the row moved on, and the caller should re-read rather than
+    // re-format their request. Mapped here rather than in the dispute module because
+    // `DisputeRefusal` extends `EscrowRefusal` precisely so ONE translation serves both.
+    : reason === 'wrong_status' || reason === 'conflict'
+      || reason === 'already_disputed' || reason === 'already_closed' ? 409
     : 400;
 
   // GET /mine/milestones — WORKER: every milestone I am engaged on, with the money
@@ -1288,6 +1358,80 @@ export function createEngagementRoutes(_db: Db): Hono<HonoEnv> {
     return result.ok
       ? c.json({ milestone: result.milestone })
       : c.json({ error: result.reason }, refusalStatus(result.reason));
+  });
+
+  // ----------------------------------------------------------- DISPUTES (worker) ----
+  //
+  // The freelancer's half of mediation. The CLIENT's half — and the mediator's — is
+  // `/api/disputes` (tenant JWT); the split is the same authority split every other
+  // escrow route draws, and it is what makes "either party may raise a dispute"
+  // structural: the two doors authenticate two different subjects and each supplies its
+  // own `party` rather than reading one off the request body.
+
+  // GET /mine/disputes — every dispute I am party to, across every workspace that has
+  // hired me. Includes disputes the CLIENT raised: those are the ones I most need to
+  // answer, and filtering on who raised it would hide exactly them.
+  router.get('/mine/disputes', webAuthMiddleware, async (c) => {
+    const db = buildDatabase(c.env);
+    const disputes = await listFreelancerDisputes(db, c.env as Env, c.get('userId') as string);
+    return c.json({ disputes });
+  });
+
+  // POST /mine/milestones/:milestoneId/dispute — WORKER: raise a dispute. The money
+  // stays held; nothing moves until somebody rules.
+  router.post('/mine/milestones/:milestoneId/dispute', webAuthMiddleware, async (c) => {
+    const db = buildDatabase(c.env);
+    const userId = c.get('userId') as string;
+    const milestoneId = c.req.param('milestoneId');
+    const tenantId = await milestoneTenantForFreelancer(db, milestoneId, userId);
+    if (tenantId === null) return c.json({ error: 'not_found' }, 404);
+    const b = await c.req.json<{ reason?: string; detail?: string }>().catch(() => ({} as { reason?: string; detail?: string }));
+    const reason = String(b.reason ?? '').trim();
+    if (!reason) return c.json({ error: 'reason is required' }, 400);
+    const result = await raiseDispute(c.env as Env, db, {
+      tenantId, milestoneId, party: 'freelancer', actorUserId: userId, reason, detail: b.detail ?? null,
+    });
+    return result.ok
+      ? c.json({ dispute: result.dispute }, 201)
+      : c.json({ error: result.reason }, refusalStatus(result.reason as DisputeRefusal));
+  });
+
+  // POST /mine/disputes/:disputeId/statement — WORKER: file (or revise) my position and
+  // the evidence behind it.
+  router.post('/mine/disputes/:disputeId/statement', webAuthMiddleware, async (c) => {
+    const db = buildDatabase(c.env);
+    const userId = c.get('userId') as string;
+    const disputeId = Number(c.req.param('disputeId'));
+    if (!Number.isInteger(disputeId)) return c.json({ error: 'not_found' }, 404);
+    // Resolved BY the acting user, so the tenant comes from the row — the same reason
+    // `milestoneTenantForFreelancer` exists rather than a tenant parameter.
+    const tenantId = await disputeTenantForFreelancer(db, disputeId, userId);
+    if (tenantId === null) return c.json({ error: 'not_found' }, 404);
+    const b = await c.req.json<{ position?: string; evidence?: unknown }>()
+      .catch(() => ({} as { position?: string; evidence?: unknown }));
+    const position = String(b.position ?? '').trim();
+    if (!position) return c.json({ error: 'position is required' }, 400);
+    const result = await fileDisputeStatement(c.env as Env, db, {
+      tenantId, disputeId, party: 'freelancer', authorRef: userId, position, evidence: b.evidence,
+    });
+    return result.ok
+      ? c.json({ dispute: result.dispute })
+      : c.json({ error: result.reason }, refusalStatus(result.reason as DisputeRefusal));
+  });
+
+  // POST /mine/disputes/:disputeId/withdraw — WORKER: call off a dispute I raised. The
+  // module refuses one raised by the other side, in the predicate rather than after it.
+  router.post('/mine/disputes/:disputeId/withdraw', webAuthMiddleware, async (c) => {
+    const db = buildDatabase(c.env);
+    const userId = c.get('userId') as string;
+    const disputeId = Number(c.req.param('disputeId'));
+    if (!Number.isInteger(disputeId)) return c.json({ error: 'not_found' }, 404);
+    const tenantId = await disputeTenantForFreelancer(db, disputeId, userId);
+    if (tenantId === null) return c.json({ error: 'not_found' }, 404);
+    const result = await withdrawDispute(c.env as Env, db, { tenantId, disputeId, actorUserId: userId });
+    return result.ok
+      ? c.json({ dispute: result.dispute })
+      : c.json({ error: result.reason }, refusalStatus(result.reason as DisputeRefusal));
   });
 
   // GET /:id/milestones — CLIENT: one engagement's schedule, its escrow summary, and
@@ -1352,12 +1496,44 @@ export function createEngagementRoutes(_db: Db): Hono<HonoEnv> {
       actorUserId: c.get('userId') as string,
       note: b.note ?? null,
     });
+    // A move that moved money changed the freelancer's statement. Invalidated HERE
+    // rather than inside `moveMilestone` because that module is the escrow writer and
+    // knows nothing about the earnings report — and a report that lagged a release by
+    // its TTL would tell somebody they had not been paid for work they had been.
+    if (result.ok && result.movedMoney && result.milestone.freelancerUserId) {
+      await invalidateEarnings(c.env as Env, result.milestone.freelancerUserId);
+    }
     return result.ok
       // `payoutConfigured: false` is not an error — the ledger entry is the platform's
       // own record and a self-hosted deployment with no payout webhook still releases.
       // The surface reads it to say "recorded, settle manually" rather than "paid".
       ? c.json({ milestone: result.milestone, movedMoney: result.movedMoney, payoutConfigured: result.payoutConfigured })
       : c.json({ error: result.reason }, refusalStatus(result.reason));
+  });
+
+  // POST /milestones/:milestoneId/dispute — CLIENT: raise a dispute.
+  //
+  // Deliberately NOT folded into the shared `:action` route above. That route's whole
+  // safety property is that `CLIENT_ESCROW_ACTIONS` is a closed list of moves the escrow
+  // machine already understands, and `dispute` is not one of them — adding a word to
+  // that list that `evaluateEscrow` cannot judge would put an unjudged verb through the
+  // gate the list exists to be.
+  router.post('/milestones/:milestoneId/dispute', authMiddleware, async (c) => {
+    const db = buildDatabase(c.env);
+    const b = await c.req.json<{ reason?: string; detail?: string }>().catch(() => ({} as { reason?: string; detail?: string }));
+    const reason = String(b.reason ?? '').trim();
+    if (!reason) return c.json({ error: 'reason is required' }, 400);
+    const result = await raiseDispute(c.env as Env, db, {
+      tenantId: c.get('tenantId') as number,
+      milestoneId: c.req.param('milestoneId'),
+      party: 'client',
+      actorUserId: c.get('userId') as string,
+      reason,
+      detail: b.detail ?? null,
+    });
+    return result.ok
+      ? c.json({ dispute: result.dispute }, 201)
+      : c.json({ error: result.reason }, refusalStatus(result.reason as DisputeRefusal));
   });
 
   // DELETE /milestones/:milestoneId — CLIENT: drop a draft. Refuses anything further

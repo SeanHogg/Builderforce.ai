@@ -108,6 +108,61 @@ export type PostingType = 'project_bid' | 'design' | 'fte';
 /** How the work is billed once hired. */
 export type EngagementType = 'fixed_bid' | 'hourly' | 'fte';
 
+/** The seniority a posting is pitched at (0985). */
+export const EXPERIENCE_LEVELS = ['entry', 'intermediate', 'expert'] as const;
+export type ExperienceLevel = (typeof EXPERIENCE_LEVELS)[number];
+
+/** Expected duration. `ongoing` is the absence of an end, not a length. */
+export const PROJECT_LENGTHS = ['lt_1_month', '1_3_months', '3_6_months', 'gt_6_months', 'ongoing'] as const;
+export type ProjectLength = (typeof PROJECT_LENGTHS)[number];
+
+/**
+ * The category tree, as DATA — mirroring `api/src/application/marketplace/jobFilters.ts`.
+ *
+ * Deepening the tree is an edit to this literal and to its server twin, never a
+ * migration: `job_postings.specialty` is a plain column that stores whichever leaf the
+ * registry named. The two copies exist because a browser cannot import a Worker module;
+ * they are asserted equal by neither side, so the server is the authority and this list
+ * is what the picker OFFERS.
+ */
+export const JOB_SPECIALTIES: Record<string, readonly string[]> = {
+  developer: ['frontend', 'backend', 'fullstack', 'mobile', 'games', 'embedded', 'blockchain', 'ai_engineering'],
+  dba: ['postgres', 'mysql', 'sql_server', 'nosql', 'data_warehouse'],
+  designer: ['product_design', 'brand_identity', 'motion', 'illustration', 'ux_research', 'presentation'],
+  devops: ['cloud_infrastructure', 'kubernetes', 'ci_cd', 'observability', 'cost_optimisation'],
+  qa: ['manual_testing', 'test_automation', 'performance_testing', 'accessibility'],
+  pm: ['product_management', 'delivery_management', 'business_analysis', 'scrum_coaching'],
+  data: ['data_engineering', 'analytics', 'machine_learning', 'data_science', 'bi_reporting'],
+  security: ['appsec', 'penetration_testing', 'compliance', 'incident_response'],
+  other: ['technical_writing', 'devrel', 'localisation', 'support'],
+};
+
+/** One question every bidder on a posting is asked. */
+export interface ScreeningQuestion {
+  id: string;
+  prompt: string;
+  type: 'text' | 'yes_no' | 'number';
+  required: boolean;
+}
+
+/** A bidder's answer, carrying the prompt AS ASKED so a later edit to the posting cannot
+ *  rewrite the question this person actually answered. */
+export interface ScreeningAnswer {
+  questionId: string;
+  prompt: string;
+  answer: string;
+}
+
+/** A file on a posting or a proposal. Metadata only — the bytes are streamed from the
+ *  attachment route, never embedded. */
+export interface PostingAttachment {
+  id: string;
+  key: string;
+  name: string;
+  mime: string | null;
+  size: number;
+}
+
 /** RAG-style AI evaluation scores (0..1) plus a 0..100 headline the UI shows as a chip. */
 export interface EvalScores {
   faithfulness: number;
@@ -133,9 +188,21 @@ export interface JobPosting {
   currency: string;
   status: 'open' | 'closed' | 'filled';
   visibility: 'public' | 'private';
+  /** The WHOLE-JOB total for fixed-price work. Never a rate: `rateMinCents`/`rateMaxCents`
+   *  are a per-hour band, and `engagementType` says which of the two to read. */
+  budgetTotalCents?: number | null;
+  experienceLevel?: ExperienceLevel | null;
+  projectLength?: ProjectLength | null;
+  /** The sub-category beneath `discipline` (0985). */
+  specialty?: string | null;
+  screeningQuestions?: ScreeningQuestion[];
+  attachments?: PostingAttachment[];
   proposalCount?: number;
   createdAt: string | null;
   myProposal?: { id: string; status: string; milestones?: MilestoneRow[] } | null;
+  /** The invite the VIEWER holds on this posting, when they hold one. Present on the
+   *  detail read so the page can offer "accept and bid" instead of a bare bid button. */
+  myInvite?: JobInvite | null;
   /** The posting's PUBLISHED payment schedule — part of the offer, returned on detail. */
   milestones?: MilestoneRow[];
   /** Marketplace posting shape — returned by GET /api/jobs/mine and /:id. */
@@ -164,6 +231,10 @@ export interface JobProposal {
   lastEvalOverall?: number | null;
   /** Courteous note left when the proposal was declined. */
   declineReason?: string | null;
+  /** The bidder's answers to the posting's screening questions. */
+  screeningAnswers?: ScreeningAnswer[];
+  /** Work samples the bidder attached. */
+  attachments?: PostingAttachment[];
   /** The payment schedule this bidder COUNTER-PROPOSED, on the surfaces that read it.
    *  Absent (rather than empty) where schedules were not loaded, so a caller can tell
    *  "proposed nothing" from "not asked for". Accepting the bid binds this schedule in
@@ -478,11 +549,26 @@ export async function reviewClient(engagementId: string, rating: number, comment
 }
 
 // ---- Jobs + proposals (bidding) -----------------------------------------
-export async function listJobs(filters: { q?: string; discipline?: string; skill?: string } = {}): Promise<JobPosting[]> {
+export interface JobBrowseFilters {
+  q?: string;
+  discipline?: string;
+  skill?: string;
+  /** 0985 — the four criteria the browse surface and the alert sweep now share. */
+  specialty?: string;
+  experienceLevel?: string;
+  projectLength?: string;
+  engagementType?: string;
+}
+
+export async function listJobs(filters: JobBrowseFilters = {}): Promise<JobPosting[]> {
   const p = new URLSearchParams();
   if (filters.q) p.set('q', filters.q);
   if (filters.discipline) p.set('discipline', filters.discipline);
   if (filters.skill) p.set('skill', filters.skill);
+  if (filters.specialty) p.set('specialty', filters.specialty);
+  if (filters.experienceLevel) p.set('experienceLevel', filters.experienceLevel);
+  if (filters.projectLength) p.set('projectLength', filters.projectLength);
+  if (filters.engagementType) p.set('engagementType', filters.engagementType);
   const res = await apiRequestStream(`/api/jobs${p.toString() ? `?${p}` : ''}`, { auth: 'web' });
   return jsonOrThrow<JobPosting[]>(res, 'Failed to load jobs');
 }
@@ -497,12 +583,36 @@ export async function listMyJobs(): Promise<JobPosting[]> {
   return jsonOrThrow<JobPosting[]>(res, 'Failed to load jobs');
 }
 
-export async function postJob(input: { title: string; description?: string; requirements?: string; discipline?: string; skills?: string[]; postingType?: PostingType; engagementType?: EngagementType; rateMinCents?: number; rateMaxCents?: number; projectId?: number; visibility?: 'public' | 'private' }): Promise<{ id: string }> {
+export interface JobPostingDraft {
+  title: string;
+  description?: string;
+  requirements?: string;
+  discipline?: string;
+  specialty?: string;
+  skills?: string[];
+  postingType?: PostingType;
+  engagementType?: EngagementType;
+  rateMinCents?: number;
+  rateMaxCents?: number;
+  /** Fixed-price TOTAL. The API refuses this on hourly work rather than storing a number
+   *  whose unit contradicts the posting's shape. */
+  budgetTotalCents?: number;
+  experienceLevel?: ExperienceLevel;
+  projectLength?: ProjectLength;
+  screeningQuestions?: Array<Omit<ScreeningQuestion, 'id'> & { id?: string }>;
+  projectId?: number;
+  visibility?: 'public' | 'private';
+  /** When present, the posting is the one this ticket owns — created or reopened, never
+   *  duplicated. The same service `POST /api/marketplace/publish` calls. */
+  sourceTicketId?: number;
+}
+
+export async function postJob(input: JobPostingDraft): Promise<{ id: string }> {
   const res = await apiRequestStream(`/api/jobs`, { method: 'POST', auth: 'tenant', body: JSON.stringify(input) });
   return jsonOrThrow(res, 'Failed to post job');
 }
 
-export async function updateJob(id: string, patch: { status?: string; title?: string; description?: string }): Promise<void> {
+export async function updateJob(id: string, patch: Partial<JobPostingDraft> & { status?: string }): Promise<void> {
   const res = await apiRequestStream(`/api/jobs/${id}`, { method: 'PATCH', auth: 'tenant', body: JSON.stringify(patch) });
   await jsonOrThrow(res, 'Failed to update job');
 }
@@ -518,7 +628,7 @@ export async function bidJob(
   // instead of (or in the absence of) the posting's published schedule. Sent WITH the
   // bid rather than written afterwards, because the proposal row does not exist until
   // this call returns and a two-step would leave a bid whose schedule never landed.
-  input: { coverNote?: string; rateCents?: number; milestones?: MilestoneDraft[] },
+  input: { coverNote?: string; rateCents?: number; milestones?: MilestoneDraft[]; screeningAnswers?: Array<{ questionId: string; answer: string }> },
 ): Promise<{ id: string; proposedMilestones?: number }> {
   const res = await apiRequestStream(`/api/jobs/${jobId}/proposals`, { method: 'POST', auth: 'web', body: JSON.stringify(input) });
   return jsonOrThrow(res, 'Failed to submit proposal');
@@ -748,4 +858,252 @@ export async function listNotifications(): Promise<{ unread: number; items: Noti
 export async function markNotificationsRead(ids?: number[]): Promise<void> {
   const res = await apiRequestStream(`/api/notifications/read`, { method: 'POST', auth: 'web', body: JSON.stringify({ ids }) });
   await jsonOrThrow(res, 'Failed');
+}
+
+
+// ---- Attachments (0985) --------------------------------------------------
+//
+// Uploaded to the SAME R2 bucket the résumé and avatar uploads use — there is no second
+// blob store, and there is deliberately no direct-to-bucket URL: an attachment is served
+// only after its id has been found on a row the caller is entitled to read.
+
+export async function uploadJobAttachment(jobId: string, file: File): Promise<{ attachment: PostingAttachment; attachments: PostingAttachment[] }> {
+  const fd = new FormData();
+  fd.append('file', file);
+  const res = await apiRequestStream(`/api/jobs/${jobId}/attachments`, { method: 'POST', auth: 'tenant', body: fd });
+  return jsonOrThrow(res, 'Failed to attach file');
+}
+
+/**
+ * Fetch one attachment's bytes and hand back an object URL.
+ *
+ * NOT an `<a href>` to the API route: the attachment endpoints are authenticated, and a
+ * plain link carries no Bearer token — it would 401 for the very people entitled to the
+ * file. Fetching through the same transport as every other call and wrapping the blob is
+ * what makes "open the brief" work for a signed-in client and impossible for anybody
+ * else. The caller MUST revoke the URL when it is finished with it.
+ */
+async function attachmentObjectUrl(path: string, auth: 'tenant' | 'web'): Promise<string> {
+  const res = await apiRequestStream(path, { auth });
+  if (!res.ok) throw new Error('Failed to open attachment');
+  return URL.createObjectURL(await res.blob());
+}
+
+/** A posting's brief. As public as the posting's description — a bidder who can read the
+ *  scope must be able to read the spec they are being asked to price. */
+export function openJobAttachment(jobId: string, attachmentId: string): Promise<string> {
+  return attachmentObjectUrl(`/api/jobs/${jobId}/attachments/${attachmentId}`, 'web');
+}
+
+export function openProposalAttachmentAsEmployer(jobId: string, proposalId: string, attachmentId: string): Promise<string> {
+  return attachmentObjectUrl(`/api/jobs/${jobId}/proposals/${proposalId}/attachments/${attachmentId}`, 'tenant');
+}
+
+/** The BIDDER reading back their own work sample. */
+export function openMyProposalAttachment(proposalId: string, attachmentId: string): Promise<string> {
+  return attachmentObjectUrl(`/api/jobs/proposals/${proposalId}/attachments/${attachmentId}`, 'web');
+}
+
+export async function deleteJobAttachment(jobId: string, attachmentId: string): Promise<{ attachments: PostingAttachment[] }> {
+  const res = await apiRequestStream(`/api/jobs/${jobId}/attachments/${attachmentId}`, { method: 'DELETE', auth: 'tenant' });
+  return jsonOrThrow(res, 'Failed to remove attachment');
+}
+
+export async function uploadProposalAttachment(proposalId: string, file: File): Promise<{ attachment: PostingAttachment; attachments: PostingAttachment[] }> {
+  const fd = new FormData();
+  fd.append('file', file);
+  const res = await apiRequestStream(`/api/jobs/proposals/${proposalId}/attachments`, { method: 'POST', auth: 'web', body: fd });
+  return jsonOrThrow(res, 'Failed to attach file');
+}
+
+export async function deleteProposalAttachment(proposalId: string, attachmentId: string): Promise<{ attachments: PostingAttachment[] }> {
+  const res = await apiRequestStream(`/api/jobs/proposals/${proposalId}/attachments/${attachmentId}`, { method: 'DELETE', auth: 'web' });
+  return jsonOrThrow(res, 'Failed to remove attachment');
+}
+
+// ---- Job invites (0985) --------------------------------------------------
+
+/** An invitation to ONE named freelancer to bid on ONE posting. A state machine with an
+ *  expiry and an outcome — not a notification. */
+export interface JobInvite {
+  id: string;
+  jobId: string;
+  jobTitle: string | null;
+  tenantId: number;
+  tenantName: string | null;
+  freelancerUserId: string;
+  freelancerName: string | null;
+  message: string | null;
+  status: 'sent' | 'viewed' | 'accepted' | 'declined' | 'expired';
+  expiresAt: string | null;
+  respondedAt: string | null;
+  /** The proposal an acceptance opened — the reason this lands in the bid flow. */
+  proposalId: string | null;
+  createdAt: string | null;
+}
+
+/** The invitee's side of the marketplace. */
+export async function listMyInvites(liveOnly = false): Promise<JobInvite[]> {
+  const res = await apiRequestStream(`/api/jobs/invites/mine${liveOnly ? '?live=1' : ''}`, { auth: 'web' });
+  return jsonOrThrow<JobInvite[]>(res, 'Failed to load invitations');
+}
+
+export async function markInviteViewed(inviteId: string): Promise<void> {
+  const res = await apiRequestStream(`/api/jobs/invites/${inviteId}/viewed`, { method: 'POST', auth: 'web' });
+  await jsonOrThrow(res, 'Failed');
+}
+
+/** Accept or decline. Accepting returns the `proposalId` it opened, so the caller can go
+ *  straight to the bid form rather than back to a list. */
+export async function respondToInvite(inviteId: string, accept: boolean): Promise<{ invite: JobInvite; proposalId: string | null }> {
+  const res = await apiRequestStream(`/api/jobs/invites/${inviteId}/respond`, { method: 'POST', auth: 'web', body: JSON.stringify({ accept }) });
+  return jsonOrThrow(res, 'Failed to respond to the invitation');
+}
+
+/** The employer's side: who this posting has invited, and what they said. */
+export async function listJobInvites(jobId: string): Promise<JobInvite[]> {
+  const res = await apiRequestStream(`/api/jobs/${jobId}/invites`, { auth: 'tenant' });
+  return jsonOrThrow<JobInvite[]>(res, 'Failed to load invitations');
+}
+
+export async function inviteToJob(jobId: string, input: { freelancerUserId: string; message?: string; expiresInDays?: number }): Promise<JobInvite> {
+  const res = await apiRequestStream(`/api/jobs/${jobId}/invites`, { method: 'POST', auth: 'tenant', body: JSON.stringify(input) });
+  return jsonOrThrow<JobInvite>(res, 'Failed to send the invitation');
+}
+
+export async function withdrawJobInvite(jobId: string, inviteId: string): Promise<void> {
+  const res = await apiRequestStream(`/api/jobs/${jobId}/invites/${inviteId}`, { method: 'DELETE', auth: 'tenant' });
+  await jsonOrThrow(res, 'Failed to withdraw the invitation');
+}
+
+// ---- Saved talent — the client's shortlist (0985) -------------------------
+
+export interface SavedTalentEntry {
+  id: string;
+  freelancerUserId: string;
+  listName: string;
+  note: string | null;
+  createdAt: string | null;
+  displayName: string | null;
+  avatarUrl: string | null;
+  headline: string | null;
+  discipline: string | null;
+  skills: string[];
+  hourlyRateCents: number | null;
+  currency: string;
+  availability: string | null;
+  rating: number | null;
+  ratingCount: number;
+}
+
+export async function listSavedTalent(list?: string): Promise<{ items: SavedTalentEntry[]; lists: Array<{ name: string; count: number }> }> {
+  const res = await apiRequestStream(`/api/marketplace/saved-talent${list ? `?list=${encodeURIComponent(list)}` : ''}`, { auth: 'tenant' });
+  return jsonOrThrow(res, 'Failed to load your shortlist');
+}
+
+export async function saveTalent(input: { freelancerUserId: string; list?: string; note?: string }): Promise<{ id: string }> {
+  const res = await apiRequestStream(`/api/marketplace/saved-talent`, { method: 'POST', auth: 'tenant', body: JSON.stringify(input) });
+  return jsonOrThrow(res, 'Failed to shortlist');
+}
+
+export async function unsaveTalent(freelancerUserId: string, list?: string): Promise<void> {
+  const res = await apiRequestStream(`/api/marketplace/saved-talent/${freelancerUserId}${list ? `?list=${encodeURIComponent(list)}` : ''}`, { method: 'DELETE', auth: 'tenant' });
+  await jsonOrThrow(res, 'Failed to remove from your shortlist');
+}
+
+// ---- Recommendations — the cached match query, both directions ------------
+
+/** Why a match ranked where it did. A CODE, localised by the UI: the server never
+ *  assembles an English sentence for a five-language product. */
+export interface MatchReason {
+  code: 'skills' | 'discipline' | 'specialty' | 'rate' | 'reputation' | 'available' | 'shape';
+  points: number;
+}
+
+export interface TalentMatch {
+  freelancerUserId: string;
+  displayName: string | null;
+  avatarUrl: string | null;
+  headline: string | null;
+  discipline: string | null;
+  skills: string[];
+  hourlyRateCents: number | null;
+  currency: string;
+  availability: string | null;
+  rating: number | null;
+  ratingCount: number;
+  completedEngagements: number;
+  score: number;
+  reasons: MatchReason[];
+  matchedSkills: string[];
+  missingSkills: string[];
+  invited: boolean;
+}
+
+export interface PostingMatch {
+  id: string;
+  title: string;
+  description: string | null;
+  tenantId: number;
+  tenantName: string | null;
+  discipline: string | null;
+  specialty: string | null;
+  skills: string[];
+  engagementType: EngagementType | null;
+  experienceLevel: ExperienceLevel | null;
+  projectLength: ProjectLength | null;
+  rateMinCents: number | null;
+  rateMaxCents: number | null;
+  budgetTotalCents: number | null;
+  currency: string;
+  createdAt: string | null;
+  score: number;
+  reasons: MatchReason[];
+  matchedSkills: string[];
+  missingSkills: string[];
+}
+
+/** Who should be invited to bid on this posting. */
+export async function listJobRecommendations(jobId: string): Promise<TalentMatch[]> {
+  const res = await apiRequestStream(`/api/jobs/${jobId}/recommendations`, { auth: 'tenant' });
+  return jsonOrThrow<TalentMatch[]>(res, 'Failed to load recommendations');
+}
+
+/** What this freelancer should bid on. */
+export async function listRecommendedJobs(): Promise<PostingMatch[]> {
+  const res = await apiRequestStream(`/api/jobs/recommended`, { auth: 'web' });
+  return jsonOrThrow<PostingMatch[]>(res, 'Failed to load recommendations');
+}
+
+// ---- The proposal-evaluation insights lens (0985) -------------------------
+
+export interface EvalBand { from: number; to: number; count: number }
+
+export interface EvalLensRow {
+  proposalId: string;
+  cachedOverall: number | null;
+  latestOverall: number | null;
+  method: 'llm' | 'lexical' | null;
+  evaluatedAt: string | null;
+  /** |cached − latest|. Non-zero means a list is showing a number the evidence no longer
+   *  supports — the reading that decides whether the rest of the lens means anything. */
+  drift: number;
+}
+
+export interface ProposalEvalLens {
+  proposalCount: number;
+  evaluatedCount: number;
+  averageOverall: number | null;
+  medianOverall: number | null;
+  bands: EvalBand[];
+  methodSplit: { llm: number; lexical: number };
+  totalRuns: number;
+  driftedCount: number;
+  maxDrift: number;
+  rows: EvalLensRow[];
+}
+
+export async function getProposalEvalLens(jobId: string): Promise<ProposalEvalLens> {
+  const res = await apiRequestStream(`/api/jobs/${jobId}/evaluations`, { auth: 'tenant' });
+  return jsonOrThrow<ProposalEvalLens>(res, 'Failed to load evaluation insights');
 }

@@ -65,4 +65,7 @@ export interface FeedbackLabels {
   errorRequired: string;
   errorGeneric: string;
   errorRateLimited: string;
+  /** Shown when the WORKSPACE's monthly allowance is spent, not this visitor's
+   *  burst — a different wait, so a different sentence. */
+  errorQuotaExceeded: string;
 }

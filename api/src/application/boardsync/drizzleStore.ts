@@ -19,6 +19,7 @@ import {
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
+import { recordTaskCreated } from '../activity/taskCreated';
 import { onTaskLandedInLane } from '../swimlane/laneEntryTrigger';
 import type {
   BoardSyncStore,
@@ -195,6 +196,22 @@ export function createDrizzleStore(db: Db, env?: Env): BoardSyncStore {
         })
         .returning({ id: tasks.id });
       if (!row) throw new Error('upsertTask returned no row');
+      // CREATION ATTRIBUTION. Board-sync is the ONE ticket writer that cannot use
+      // `TaskService` (it inserts directly, keyed on the provider's external id), so it
+      // is the one path that has to call the shared emitter itself — see
+      // `activity/taskCreated.ts`. Only on the INSERT branch: an update is a sync, not
+      // a creation, and recording one would date every re-synced ticket to its last poll.
+      await recordTaskCreated(env, db, {
+        tenantId:  input.tenantId,
+        segmentId: input.segmentId ?? null,
+        taskId:    row.id,
+        projectId: input.projectId,
+        title:     input.title,
+        key,
+        via:       'board_sync',
+        actor:     { type: 'system', ref: input.provider, name: `${input.provider} board sync` },
+        metadata:  { provider: input.provider, externalId: input.externalId },
+      });
       // Inbound board-sync is a LANE WRITER like any other: route the new ticket
       // through the ONE funnel so a synced-in ticket that lands in a staffed,
       // auto-gated lane starts its agent immediately instead of waiting for the

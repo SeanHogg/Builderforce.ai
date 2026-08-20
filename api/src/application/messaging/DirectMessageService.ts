@@ -11,6 +11,14 @@
  * row of kind `'thread'` — which is the containment record the canvas and the
  * activity log read anyway.
  *
+ * ── AND ZERO SECOND COPIES OF THE MECHANICS ──────────────────────────────────
+ * Those mechanics — register the object, hang memberships off it, bump the
+ * denormalised `message_count`, treat `last_seen_at` as the read cursor — were
+ * written HERE first and now live in `kernelThreads.ts`, because the résumé
+ * review queue is the second conversation to need every one of them. What stays
+ * in this file is the only part that is actually about direct messages: who may
+ * reach whom, and how a member ref becomes a named person.
+ *
  * ── WHO MAY TALK TO WHOM ─────────────────────────────────────────────────────
  * Deliberately narrow, and decided HERE rather than at the route: an associate
  * may open a thread with the platform owners, and a platform owner may open one
@@ -26,12 +34,16 @@
  * the top-bar badge lights up for someone who has no thread open.
  */
 
-import { and, desc, eq, gt, inArray, ne, or, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, ne } from 'drizzle-orm';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
-import { memberships, messages, objects, tenantMembers, threads, users } from '../../infrastructure/database/schema';
+import { memberships, tenantMembers, users } from '../../infrastructure/database/schema';
 import { broadcastRoom } from '../../infrastructure/relay/broadcastRoom';
 import { notify } from '../notifications/notify';
+import {
+  appendKernelMessage, getKernelThread, isThreadParticipant, listKernelMessages, listKernelThreads,
+  markKernelThreadRead, memberThreadIds, openKernelThread, threadMemberRefs,
+} from './kernelThreads';
 
 /** The live room for one conversation. */
 export const dmThreadRoomName = (threadId: string): string => `dm:${threadId}`;
@@ -162,88 +174,51 @@ export class DirectMessageService {
     return (me.isSuperadmin && them.accountType === 'sales') || (them.isSuperadmin && me.accountType === 'sales');
   }
 
-  /** Thread ids this person is a participant of. */
-  private async myThreadIds(userId: string, tenantIds: number[]): Promise<string[]> {
-    if (tenantIds.length === 0) return [];
-    const rows = await this.db.select({ objectId: memberships.objectId, updatedAt: memberships.updatedAt })
-      .from(memberships)
-      .where(and(
-        inArray(memberships.tenantId, tenantIds),
-        eq(memberships.memberKind, 'user'),
-        eq(memberships.memberRef, userId),
-        eq(memberships.state, 'active'),
-      ))
-      .orderBy(desc(memberships.updatedAt))
-      .limit(THREADS_PAGE * 4);
-    if (rows.length === 0) return [];
-    // `memberships` is the kernel's presence table for EVERY object, so the rows
-    // have to be narrowed to threads — a board membership is not a conversation.
-    const objectRows = await this.db.select({ id: objects.id, refId: objects.refId })
-      .from(objects).where(and(
-        inArray(objects.tenantId, tenantIds),
-        inArray(objects.id, rows.map((row) => row.objectId)),
-        eq(objects.kind, 'thread'),
-      ));
-    return objectRows.map((row) => row.refId);
+  /**
+   * Display details for a set of user ids — the one thing a DM view needs that a
+   * generic thread does not.
+   *
+   * `listKernelThreads` returns member REFS, because the kernel's presence table holds
+   * agents and teams as readily as people and a primitive cannot assume a `users` row
+   * exists for one. A direct message is the case where it always does, so the decoration
+   * happens here, keyed on the refs already returned.
+   */
+  private async peopleByRef(ids: readonly string[]): Promise<Map<string, DirectMessageParticipant>> {
+    const unique = [...new Set(ids)].filter(Boolean);
+    if (unique.length === 0) return new Map();
+    const rows = await this.db.select({
+      id: users.id, email: users.email, name: users.displayName, isSuperadmin: users.isSuperadmin,
+    }).from(users).where(inArray(users.id, unique));
+    return new Map(rows.map((row) => [row.id, {
+      userId: row.id, name: row.name, email: row.email, isSuperadmin: row.isSuperadmin,
+    }]));
   }
 
   /**
    * Every conversation this person is in, newest first, with unread counts.
    *
-   * Unread is `messages since my membership's lastSeenAt`, counted in ONE grouped
-   * query rather than one COUNT per thread — the N+1 the performance rule names.
+   * The thread rows, their participants and the unread arithmetic all come from
+   * {@link listKernelThreads} — the primitive the résumé review queue shares. What stays
+   * here is the only DM-specific part: turning member refs into named people.
    */
   async threads(userId: string): Promise<DirectMessageThreadView[]> {
     const tenantIds = await this.reachableTenantIds(userId);
-    const ids = await this.myThreadIds(userId, tenantIds);
+    const ids = await memberThreadIds(this.db, tenantIds, userId, THREADS_PAGE * 4);
     if (ids.length === 0) return [];
 
-    const [threadRows, memberRows] = await Promise.all([
-      this.db.select().from(threads)
-        .where(and(inArray(threads.tenantId, tenantIds), inArray(threads.id, ids)))
-        .orderBy(desc(threads.lastMessageAt)).limit(THREADS_PAGE),
-      this.db.select({
-        objectRefId: objects.refId, memberRef: memberships.memberRef, lastSeenAt: memberships.lastSeenAt,
-        name: users.displayName, email: users.email, isSuperadmin: users.isSuperadmin,
-      }).from(memberships)
-        .innerJoin(objects, eq(objects.id, memberships.objectId))
-        .leftJoin(users, eq(users.id, memberships.memberRef))
-        .where(and(
-          inArray(memberships.tenantId, tenantIds),
-          eq(objects.kind, 'thread'), inArray(objects.refId, ids), eq(memberships.state, 'active'),
-        )),
-    ]);
+    const views = await listKernelThreads(this.db, {
+      tenantIds, threadIds: ids, readerRef: userId, limit: THREADS_PAGE,
+    });
+    const people = await this.peopleByRef(views.flatMap((view) => view.members.map((member) => member.memberRef)));
 
-    const participantsByThread = new Map<string, DirectMessageParticipant[]>();
-    const myCursor = new Map<string, Date>();
-    for (const row of memberRows) {
-      const list = participantsByThread.get(row.objectRefId) ?? [];
-      list.push({ userId: row.memberRef, name: row.name ?? null, email: row.email ?? '', isSuperadmin: row.isSuperadmin ?? false });
-      participantsByThread.set(row.objectRefId, list);
-      if (row.memberRef === userId) myCursor.set(row.objectRefId, row.lastSeenAt ?? new Date(0));
-    }
-
-    // Unread, in ONE grouped query rather than one COUNT per thread. Each thread
-    // carries its OWN read cursor, so the predicate is an OR of per-thread
-    // clauses — bounded by the page size, and still a single round trip.
-    const clauses = threadRows.map((row) => and(
-      eq(messages.threadId, row.id),
-      gt(messages.createdAt, myCursor.get(row.id) ?? new Date(0)),
-    ));
-    const unreadRows = clauses.length === 0 ? [] : await this.db
-      .select({ threadId: messages.threadId, total: sql<string>`count(*)` })
-      .from(messages)
-      .where(and(inArray(messages.tenantId, tenantIds), ne(messages.authorRef, userId), or(...clauses)))
-      .groupBy(messages.threadId);
-    const unreadByThread = new Map(unreadRows.map((row) => [row.threadId, Number(row.total) || 0]));
-
-    return threadRows.map((row) => ({
-      id: row.id,
-      subject: row.title ?? '',
-      lastMessageAtISO: row.lastMessageAt ? row.lastMessageAt.toISOString() : null,
-      messageCount: row.messageCount,
-      unread: unreadByThread.get(row.id) ?? 0,
-      participants: participantsByThread.get(row.id) ?? [],
+    return views.map((view) => ({
+      id: view.id,
+      subject: view.title,
+      lastMessageAtISO: view.lastMessageAtISO,
+      messageCount: view.messageCount,
+      unread: view.unread,
+      participants: view.members.map((member) => people.get(member.memberRef)
+        ?? { userId: member.memberRef, name: null, email: '', isSuperadmin: false }),
     }));
   }
 
@@ -253,37 +228,19 @@ export class DirectMessageService {
     return list.reduce((sum, thread) => sum + thread.unread, 0);
   }
 
-  private async isParticipant(threadId: string, userId: string, tenantIds: number[]): Promise<boolean> {
-    if (tenantIds.length === 0) return false;
-    const [row] = await this.db.select({ id: memberships.id }).from(memberships)
-      .innerJoin(objects, eq(objects.id, memberships.objectId))
-      .where(and(
-        inArray(memberships.tenantId, tenantIds),
-        eq(objects.kind, 'thread'), eq(objects.refId, threadId),
-        eq(memberships.memberKind, 'user'), eq(memberships.memberRef, userId), eq(memberships.state, 'active'),
-      )).limit(1);
-    return row != null;
-  }
-
   /** One conversation's messages, oldest first (a transcript reads downward). */
   async messages(threadId: string, userId: string): Promise<DirectMessageView[] | null> {
     const tenantIds = await this.reachableTenantIds(userId);
-    if (!await this.isParticipant(threadId, userId, tenantIds)) return null;
-    const rows = await this.db.select({
-      id: messages.id, threadId: messages.threadId, authorRef: messages.authorRef,
-      body: messages.body, createdAt: messages.createdAt, name: users.displayName,
-    }).from(messages)
-      .leftJoin(users, eq(users.id, messages.authorRef))
-      .where(and(inArray(messages.tenantId, tenantIds), eq(messages.threadId, threadId)))
-      .orderBy(messages.createdAt)
-      .limit(MESSAGES_PAGE);
+    if (!await isThreadParticipant(this.db, tenantIds, threadId, userId)) return null;
+    const rows = await listKernelMessages(this.db, tenantIds, threadId, MESSAGES_PAGE);
+    const people = await this.peopleByRef(rows.map((row) => row.authorRef ?? ''));
     return rows.map((row) => ({
       id: row.id,
       threadId: row.threadId,
       authorUserId: row.authorRef ?? '',
-      authorName: row.name ?? null,
-      body: row.body ?? '',
-      createdAtISO: row.createdAt.toISOString(),
+      authorName: people.get(row.authorRef ?? '')?.name ?? null,
+      body: row.body,
+      createdAtISO: row.createdAtISO,
       mine: row.authorRef === userId,
     }));
   }
@@ -312,28 +269,17 @@ export class DirectMessageService {
       if (existing) return existing;
     }
 
-    const [thread] = await this.db.insert(threads).values({
-      tenantId, kind: 'dm', title: title || null, mode: 'chat', status: 'open', createdBy: userId,
-    }).returning();
-    if (!thread) return null;
-
-    const [object] = await this.db.insert(objects).values({
-      tenantId, kind: 'thread', refId: thread.id, domain: 'CRO', title: title || 'Direct message',
-    }).onConflictDoUpdate({
-      target: [objects.tenantId, objects.kind, objects.refId],
-      set: { title: title || 'Direct message', updatedAt: new Date() },
-    }).returning();
-    if (!object) return null;
-
-    await this.db.insert(memberships).values([userId, otherUserId].map((memberRef) => ({
-      tenantId, objectId: object.id, memberKind: 'user', memberRef,
-      role: memberRef === userId ? 'owner' : 'member', state: 'active', joinedAt: new Date(),
-    }))).onConflictDoNothing({
-      target: [memberships.tenantId, memberships.objectId, memberships.memberKind, memberships.memberRef],
+    const opened = await openKernelThread(this.db, {
+      tenantId, kind: 'dm', title: title || null, domain: 'CRO',
+      objectTitle: 'Direct message', createdBy: userId,
+      members: [userId, otherUserId].map((memberRef) => ({
+        memberKind: 'user' as const, memberRef, role: memberRef === userId ? 'owner' : 'member',
+      })),
     });
+    if (!opened) return null;
 
     await broadcastRoom(this.env.SESSION_ROOM, dmUserRoomName(otherUserId));
-    const [view] = (await this.threads(userId)).filter((row) => row.id === thread.id);
+    const [view] = (await this.threads(userId)).filter((row) => row.id === opened.threadId);
     return view ?? null;
   }
 
@@ -342,27 +288,21 @@ export class DirectMessageService {
     const text = clean(body, MAX_BODY);
     if (!text) return null;
     const tenantIds = await this.reachableTenantIds(userId);
-    if (!await this.isParticipant(threadId, userId, tenantIds)) return null;
+    if (!await isThreadParticipant(this.db, tenantIds, threadId, userId)) return null;
 
-    const [thread] = await this.db.select({ id: threads.id, tenantId: threads.tenantId, title: threads.title })
-      .from(threads).where(and(inArray(threads.tenantId, tenantIds), eq(threads.id, threadId))).limit(1);
+    const thread = await getKernelThread(this.db, tenantIds, threadId);
     if (!thread) return null;
 
-    const now = new Date();
-    const [row] = await this.db.insert(messages).values({
+    // The primitive owns the insert AND the denormalised `messageCount` / `lastMessageAt`
+    // bump, so a second conversation kind cannot ship having forgotten one of them.
+    const row = await appendKernelMessage(this.db, {
       tenantId: thread.tenantId, threadId, authorKind: 'user', authorRef: userId, role: 'user', body: text,
-    }).returning();
+    });
     if (!row) return null;
-
-    await this.db.update(threads)
-      // `messageCount` is denormalised on purpose (the kernel says so): a thread
-      // list must not fan out one COUNT per row.
-      .set({ lastMessageAt: now, messageCount: sql`${threads.messageCount} + 1`, updatedAt: now })
-      .where(and(eq(threads.tenantId, thread.tenantId), eq(threads.id, threadId)));
     // The sender has, by definition, seen their own message.
-    await this.markRead(threadId, userId, now);
+    await this.markRead(threadId, userId, new Date());
 
-    const participants = await this.participantIds(threadId, thread.tenantId);
+    const participants = await threadMemberRefs(this.db, thread.tenantId, threadId);
     const me = await this.person(userId);
     await Promise.all([
       broadcastRoom(this.env.SESSION_ROOM, dmThreadRoomName(threadId)),
@@ -381,38 +321,14 @@ export class DirectMessageService {
 
     return {
       id: row.id, threadId, authorUserId: userId, authorName: me?.name ?? null,
-      body: text, createdAtISO: row.createdAt.toISOString(), mine: true,
+      body: text, createdAtISO: row.createdAtISO, mine: true,
     };
   }
 
-  private async participantIds(threadId: string, tenantId: number): Promise<string[]> {
-    const rows = await this.db.select({ memberRef: memberships.memberRef }).from(memberships)
-      .innerJoin(objects, eq(objects.id, memberships.objectId))
-      .where(and(
-        eq(memberships.tenantId, tenantId),
-        eq(objects.kind, 'thread'), eq(objects.refId, threadId), eq(memberships.state, 'active'),
-      ));
-    return rows.map((row) => row.memberRef);
-  }
-
-  /** Mark everything up to `at` seen. `lastSeenAt` on the membership IS the read
-   *  cursor — a separate read-state table would be a second copy of presence. */
+  /** Mark everything up to `at` seen, then light the reader's own badge down. */
   async markRead(threadId: string, userId: string, at = new Date()): Promise<boolean> {
     const tenantIds = await this.reachableTenantIds(userId);
-    if (tenantIds.length === 0) return false;
-    const [object] = await this.db.select({ id: objects.id }).from(objects)
-      .where(and(
-        inArray(objects.tenantId, tenantIds),
-        eq(objects.kind, 'thread'), eq(objects.refId, threadId),
-      )).limit(1);
-    if (!object) return false;
-    await this.db.update(memberships).set({ lastSeenAt: at, updatedAt: at })
-      .where(and(
-        inArray(memberships.tenantId, tenantIds),
-        eq(memberships.objectId, object.id),
-        eq(memberships.memberKind, 'user'),
-        eq(memberships.memberRef, userId),
-      ));
+    if (!await markKernelThreadRead(this.db, tenantIds, threadId, userId, at)) return false;
     await broadcastRoom(this.env.SESSION_ROOM, dmUserRoomName(userId));
     return true;
   }

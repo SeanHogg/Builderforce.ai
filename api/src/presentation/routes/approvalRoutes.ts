@@ -48,6 +48,12 @@ import { sendSlackNotification, notifyApprovalRequested } from '../../applicatio
 import { resumePausedExecution } from '../../application/runtime/executionResume';
 import { dispatchCloudRunForTask } from './runtimeRoutes';
 import { parseApprovalReplay } from '../../application/runtime/executionApprovalGate';
+import { approvalSubjectRef } from '../../application/approval/approvalGate';
+import {
+  startApprovedWorkflowRun,
+  WORKFLOW_RUN_ACTION_TYPE,
+  WORKFLOW_RUN_SUBJECT_KEY,
+} from '../../application/workflow/workflowRunApproval';
 import { TicketAuditService } from '../../application/audit/ticketAuditService';
 import { TicketParticipantsService } from '../../application/kanban/ticketParticipants';
 import { resolveMemberDisplayName } from '../../application/kanban/roleCapability';
@@ -393,6 +399,17 @@ export function createApprovalRoutes(db: Db, runtimeService: RuntimeService): Ho
             force: true,
           },
         ).catch(() => null);
+      }
+    }
+
+    // Same reason as the `task.execution` replay above: approving a workflow-run
+    // gate must actually START the run. An approval that only unlocks the gate
+    // leaves the workflow idle until somebody goes back to the board and clicks
+    // Run again, which reads to the approver as though their decision did nothing.
+    if (body.status === 'approved' && existing.actionType === WORKFLOW_RUN_ACTION_TYPE) {
+      const definitionId = approvalSubjectRef(existing.metadata, WORKFLOW_RUN_SUBJECT_KEY);
+      if (definitionId) {
+        await startApprovedWorkflowRun(db, tenantId, c.get('segmentId') ?? null, definitionId).catch(() => null);
       }
     }
 

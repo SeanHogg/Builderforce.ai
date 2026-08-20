@@ -1,10 +1,15 @@
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Feedback engine — the ONE write path a product feedback request takes, whatever
- * channel it arrived on (public snippet POST, or the signed-in in-app panel).
+ * channel it arrived on (public snippet POST, the signed-in in-app panel, or a
+ * Sentry/PostHog provider webhook).
  *
- * It records the submission, collapses duplicates, enforces the collector's
- * rolling-24h abuse ceiling, and opens the backlog ticket. The ticket is marked
+ * That every channel funnels here is the point: the meter, the two ceilings, the
+ * duplicate collapse and the human triage gate are properties of the PATH, not of
+ * any one door, so a second ingest path would be a second set of rules to keep in
+ * step. It records the submission, collapses duplicates, enforces the collector's
+ * rolling-24h abuse ceiling AND the tenant's monthly plan quota
+ * ({@link enforceFeedbackSubmissionsCap}), and opens the backlog ticket. The ticket is marked
  * `source = FEEDBACK_TASK_SOURCE`, which {@link evaluateTaskAutoRun} treats as a
  * hard stop BEFORE any board/lane/agent resolution — so an external request can
  * never be executed by an agent, autonomously or via Run-now, until a human
@@ -16,6 +21,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  */
 
 import { and, count, desc, eq, gte, sql } from 'drizzle-orm';
+import type { TenantPlan } from '../../domain/shared/types';
 import {
   feedbackCollectors, feedbackSubmissions, projects, tasks,
 } from '../../infrastructure/database/schema';
@@ -25,6 +31,7 @@ import type { Env } from '../../env';
 import { bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import { TaskPriority, TaskStatus } from '../../domain/shared/types';
 import { withDirectTaskKey } from '../task/taskKeys';
+import { enforceFeedbackSubmissionsCap } from './feedbackLedger';
 import {
   FEEDBACK_APPROVED_TASK_SOURCE, FEEDBACK_TASK_SOURCE,
   buildFeedbackTaskDraft, computeFeedbackFingerprint,
@@ -62,6 +69,22 @@ export interface SubmitResult {
 }
 
 /**
+ * The tenant is over its monthly plan allowance for feedback submissions.
+ *
+ * Distinct from `rateLimited` on purpose — they are different refusals with
+ * different remedies, and collapsing them would tell a customer to "wait a day"
+ * when the actual answer is "upgrade the plan". Carries the same
+ * `effectivePlan / used / limit` triple every other consumption gate reports, so
+ * one client can render any cap refusal.
+ */
+export interface SubmitQuotaExceeded {
+  quotaExceeded: true;
+  effectivePlan: TenantPlan;
+  used: number;
+  limit: number;
+}
+
+/**
  * Record a feedback request and (when the collector opts in) open its human-gated
  * backlog ticket. Best-effort on the ticket: a submission is never lost because
  * the board write failed — it stays visible in triage and can be promoted later.
@@ -72,7 +95,7 @@ export async function submitFeedback(
   target: FeedbackTarget,
   feedback: NormalizedFeedback,
   actor: { userId?: string | null } = {},
-): Promise<SubmitResult | { rateLimited: true }> {
+): Promise<SubmitResult | { rateLimited: true } | SubmitQuotaExceeded> {
   // Abuse ceiling. A public, unauthenticated endpoint that opens TICKETS needs a
   // hard cap — the error-ingest path's monthly plan quota is far too coarse for
   // something that puts cards on a human's board.
@@ -83,6 +106,17 @@ export async function submitFeedback(
       .from(feedbackSubmissions)
       .where(and(eq(feedbackSubmissions.collectorId, target.collectorId), gte(feedbackSubmissions.createdAt, since)));
     if (Number(row?.n ?? 0) >= target.dailyLimit) return { rateLimited: true };
+  }
+
+  // Monthly PLAN quota, on top of the per-collector burst ceiling above. Applies
+  // to every channel — snippet, in-app panel and provider webhook — because the
+  // cost it protects (a stored row plus a human's triage attention) is the same
+  // whichever door the request came through, and a tenant that could dodge the cap
+  // by switching channels would not be capped at all. Fails OPEN (see the ledger):
+  // a metering hiccup must never swallow a customer's request.
+  const cap = await enforceFeedbackSubmissionsCap(db, target.tenantId, env);
+  if (!cap.allowed) {
+    return { quotaExceeded: true, effectivePlan: cap.effectivePlan, used: cap.used, limit: cap.limit };
   }
 
   const fingerprint = await computeFeedbackFingerprint(feedback);

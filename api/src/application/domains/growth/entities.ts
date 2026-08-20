@@ -64,6 +64,7 @@ import {
   videos,
   waitlistEntries,
   websitePages,
+  youtubeUploads,
 } from '../../../infrastructure/database/schema/growth';
 import { defineDomainEntities, entity } from '../entityDefinition';
 
@@ -129,6 +130,13 @@ export const GROWTH_ENTITIES = defineDomainEntities('growth', [
    *  already saw, and the retry counter that bounds a requeue is only sound
    *  while the publisher is its single writer. */
   entity(socialCampaignPosts, { readOnly: true }),
+  /** One resumable YouTube upload (migration 1095). Read-only to the generic
+   *  layer for the same reason the delivery ledger is, and one more: the row IS
+   *  the resume protocol. `bytes_sent` mirrors what Google acknowledged and
+   *  `upload_url` is a live session URI — a generic PATCH over either would
+   *  either re-send bytes YouTube already has or point the sweep at a session
+   *  that never existed. The sweep is the single writer. */
+  entity(youtubeUploads, { readOnly: true }),
   /** A published build, kept so a worse one can be rolled back. Written by the
    *  publish path; `project_sites.r2_prefix` is the pointer to the current one,
    *  so a hand-edited release row would point serving at a build nobody chose. */

@@ -54,7 +54,10 @@ describe('pmoRoutes — tracker CRUD (shared factory)', () => {
     const { db, captured } = makeDb({ insertReturn: [{ id: 'i1' }] });
     const res = await createPmoRoutes(db).request(
       '/initiatives',
-      json('POST', { name: 'Self-serve onboarding', portfolioId: 'p1', evil: 'x' }),
+      json('POST', {
+        name: 'Self-serve onboarding', portfolioId: 'p1', evil: 'x',
+        startDate: '2026-04-01', targetDate: '2026-06-30',
+      }),
     );
     expect(res.status).toBe(201);
     expect(captured.insertValues.tenantId).toBe(TENANT);
@@ -64,9 +67,47 @@ describe('pmoRoutes — tracker CRUD (shared factory)', () => {
     expect('evil' in captured.insertValues).toBe(false);
   });
 
+  // A CONTAINER'S WINDOW IS REQUIRED AT CREATION (SCHED-R2). Deriving one from
+  // descendants covers the populated case, but a brand-new objective/initiative has
+  // no descendants — so it landed on the planning spine permanently undated and
+  // nobody was ever asked when it was supposed to happen. Enforced server-side, not
+  // only in the form, because the MCP tool and raw API callers create these too.
+  it('rejects an initiative with no window', async () => {
+    const { db } = makeDb();
+    const noDates = await createPmoRoutes(db).request('/initiatives', json('POST', { name: 'Untimed' }));
+    expect(noDates.status).toBe(400);
+    const noEnd = await createPmoRoutes(db).request(
+      '/initiatives',
+      json('POST', { name: 'Half-timed', startDate: '2026-04-01' }),
+    );
+    expect(noEnd.status).toBe(400);
+  });
+
+  it('creates an objective with a window', async () => {
+    const { db, captured } = makeDb({ insertReturn: [{ id: 'o1' }] });
+    const res = await createPmoRoutes(db).request(
+      '/objectives',
+      json('POST', { title: 'Unlock recurring revenue', startDate: '2026-04-01', endDate: '2026-06-30' }),
+    );
+    expect(res.status).toBe(201);
+    expect(captured.insertValues.title).toBe('Unlock recurring revenue');
+    // ISO day strings are coerced to Dates by the shared tracker factory.
+    expect(captured.insertValues.startDate).toBeInstanceOf(Date);
+    expect(captured.insertValues.endDate).toBeInstanceOf(Date);
+  });
+
   it('rejects an objective with no title', async () => {
     const { db } = makeDb();
-    const res = await createPmoRoutes(db).request('/objectives', json('POST', { period: '2026-Q2' }));
+    const res = await createPmoRoutes(db).request(
+      '/objectives',
+      json('POST', { period: '2026-Q2', startDate: '2026-04-01', endDate: '2026-06-30' }),
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it('rejects an objective with no window', async () => {
+    const { db } = makeDb();
+    const res = await createPmoRoutes(db).request('/objectives', json('POST', { title: 'Untimed goal' }));
     expect(res.status).toBe(400);
   });
 

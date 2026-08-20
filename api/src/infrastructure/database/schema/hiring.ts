@@ -25,6 +25,7 @@
  * See migration 0419.
  */
 
+import { sql } from 'drizzle-orm';
 import {
   boolean,
   index,
@@ -46,7 +47,22 @@ export const jobApplications = pgTable('job_applications', {
   id:           serial('id').primaryKey(),
   tenantId:     integer('tenant_id').notNull(),
   objectId:     uuid('object_id').references(() => objects.id, { onDelete: 'cascade' }),
-  jobPostingId: integer('job_posting_id'),
+  /**
+   * The posting applied to — `job_postings.id`, which is `varchar(36)`.
+   *
+   * It was `integer` from 0419 until 0983, and that single word is why this table had no
+   * writer for four months. The ATS half of hiring was designed integer-keyed against
+   * string `candidate_ref`s; the marketplace half (0273/0293) was designed uuid-keyed;
+   * the two were built independently and an application therefore could not name the
+   * posting it was an application TO. `admitCandidate` sidestepped it by writing only
+   * `party_roles` and `candidate_resumes`, which is how applying came to create a
+   * candidate but not an application.
+   *
+   * Widened rather than bridged. The alternative on the table was matching postings by
+   * title, and string matching between two identifier spaces is the exact defect
+   * `candidateIntake.ts` already documents removing from the party module. See 0983.
+   */
+  jobPostingId: varchar('job_posting_id', { length: 36 }),
   /** party_roles.party_ref for the candidate role — a person, not a candidate row. */
   candidateRef: varchar('candidate_ref', { length: 64 }).notNull(),
   source:       varchar('source', { length: 48 }).notNull().default('direct'),
@@ -131,6 +147,10 @@ export const jobPipelineEntries = pgTable('job_pipeline_entries', {
   updatedAt:     timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
   index('idx_job_pipeline_entries_stage').on(t.tenantId, t.pipelineRef, t.stage, t.position),
+  /** The BOARD's read: one pipeline's still-open entries, in order (0983). The full
+   *  index above answers "what happened in this stage"; a board asks "who is live", and
+   *  every entry that ever exited is noise it would otherwise scan past. */
+  index('idx_job_pipeline_entries_open').on(t.tenantId, t.pipelineRef, t.position).where(sql`exited_at IS NULL`),
 ]);
 
 /** The stages a pipeline moves through. A lookup with an order, not an enum:
@@ -319,6 +339,10 @@ export const hiringDecisions = pgTable('hiring_decisions', {
   createdAt:     timestamp('created_at').notNull().defaultNow(),
 }, (t) => [
   index('idx_hiring_decisions_application').on(t.applicationId, t.decidedAt),
+  /** The candidate drawer reads a person's decision history, and `application_id` is
+   *  null for anyone sourced straight into a pipeline rather than through a posting
+   *  (0983). Indexing only the application would leave those unreachable by index. */
+  index('idx_hiring_decisions_candidate').on(t.tenantId, t.candidateRef, t.decidedAt),
 ]);
 
 /** An offer, from draft to signature. The rendered letter is an `artifact`; the
@@ -336,6 +360,18 @@ export const offerLetters = pgTable('offer_letters', {
   startDate:     timestamp('start_date'),
   /** 'draft' | 'approved' | 'sent' | 'accepted' | 'declined' | 'expired'. */
   status:        varchar('status', { length: 16 }).notNull().default('draft'),
+  /**
+   * The `signature_requests` row this offer was sent as — the ONE answer to "is it
+   * signed" (0983).
+   *
+   * Stored as a column rather than a key inside `terms` for the same reason
+   * `legal_document_files.signature_request_id` is: it is the guard that makes sending
+   * idempotent. An offer whose request id is already set cannot be sent again, so one
+   * offer can never have two signature requests and therefore never two conflicting
+   * answers about whether the candidate signed. The signing LINK is still a
+   * `share_links` row minted by the engine; this is only the pointer to the request.
+   */
+  signatureRequestId: integer('signature_request_id'),
   expiresAt:     timestamp('expires_at'),
   sentAt:        timestamp('sent_at'),
   respondedAt:   timestamp('responded_at'),
@@ -344,6 +380,17 @@ export const offerLetters = pgTable('offer_letters', {
   updatedAt:     timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
   index('idx_offer_letters_status').on(t.tenantId, t.status, t.sentAt),
+  /**
+   * ONE live offer per candidate per application (0983).
+   *
+   * The application layer refuses a second draft; this is the same rule where it cannot
+   * be raced by two recruiters clicking at once. PARTIAL deliberately: an offer that was
+   * declined and then re-made at a higher number is a negotiation, not a duplicate, so
+   * only the states that mean "this offer is live" are constrained.
+   */
+  uniqueIndex('uq_offer_letters_open')
+    .on(t.tenantId, t.applicationId, t.candidateRef)
+    .where(sql`status IN ('draft', 'approved', 'sent')`),
 ]);
 
 /** A completed placement — the revenue event hiring exists to produce. */

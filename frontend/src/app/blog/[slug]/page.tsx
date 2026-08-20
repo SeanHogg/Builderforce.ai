@@ -22,6 +22,11 @@ export async function generateMetadata({
     path: `/blog/${slug}`,
     type: 'article',
   });
+  // Per-article card, rendered at build time by `scripts/gen-blog-og.mjs`.
+  // Without it all 125 posts shared the site-wide `/og-image.png`, so a link to
+  // one article previewed identically to a link to the home page — the one
+  // thing a share is supposed to distinguish.
+  const ogImage = { url: `/blog/og/${slug}.png`, width: 1200, height: 630, alt: post.title };
   return {
     ...base,
     openGraph: {
@@ -31,7 +36,9 @@ export async function generateMetadata({
       modifiedTime: post.date,
       authors: [post.author || BRAND.founder.name],
       tags: post.tags,
+      images: [ogImage],
     },
+    twitter: { ...base.twitter, images: [ogImage.url] },
   };
 }
 

@@ -36,7 +36,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import {
   boards, managerActions, projectManagerConfigs, projects, pullRequests,
-  swimlaneAgentAssignments, swimlaneRequirements, swimlanes, taskStatusTransitions,
+  swimlaneRequirements, swimlanes, taskStatusTransitions,
   ticketParticipants, ticketRoleSignoffs, tasks, executions,
 } from '../../infrastructure/database/schema';
 import { getCacheVersion, getOrSetCached } from '../../infrastructure/cache/readThroughCache';
@@ -45,6 +45,7 @@ import { liveExecution } from '../rehearsal/executionMode';
 import { isParticipantSatisfied } from '../kanban/participantStates';
 import { expectsCodeDeliverable } from '../manager/evaluateTicketReadiness';
 import { ExecutionStatus, TaskStatus } from '../../domain/shared/types';
+import { laneAgentAssignments } from '../swimlane/laneAgentAssignments';
 
 /** How bad a violation is. `critical` = autonomy CANNOT complete work in this state. */
 export type WiringSeverity = 'critical' | 'warning' | 'info';
@@ -241,7 +242,10 @@ export async function auditAutonomyWiring(db: Db, args: { tenantId: number }): P
         isTerminal: swimlanes.isTerminal,
         projectId: boards.projectId,
         requirementCount: sql<number>`(SELECT count(*)::int FROM ${swimlaneRequirements} WHERE ${swimlaneRequirements.swimlaneId} = ${swimlanes}.id)`,
-        agentCount: sql<number>`(SELECT count(*)::int FROM ${swimlaneAgentAssignments} WHERE ${swimlaneAgentAssignments.swimlaneId} = ${swimlanes}.id)`,
+        // Lane staffing lives in `agent_assignments` since 1085 — the `scope` predicate
+        // and the uuid cast are both mandatory here (`scope_id` is varchar, `swimlanes.id`
+        // is uuid, and the table also holds project/workflow/brain-scoped rows).
+        agentCount: sql<number>`(SELECT count(*)::int FROM ${laneAgentAssignments} WHERE ${laneAgentAssignments.scope} = 'swimlane' AND ${laneAgentAssignments.scopeId}::uuid = ${swimlanes}.id)`,
       })
       .from(swimlanes)
       .innerJoin(boards, eq(boards.id, swimlanes.boardId))

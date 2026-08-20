@@ -52,6 +52,19 @@ export function coerceRunTarget(input: {
   };
 }
 
+/**
+ * Whether a run of this definition must first be approved by a human.
+ * `autonomous` is the default because it is what every definition written before
+ * migration 1092 has always done; only a definition authored with the canvas
+ * card's "Approval required" carries `required`.
+ */
+export type WorkflowApprovalMode = 'autonomous' | 'required';
+
+/** Normalise an authored approval mode to the two the column stores. */
+export function coerceApprovalMode(v: string | null | undefined): WorkflowApprovalMode {
+  return v === 'required' ? 'required' : 'autonomous';
+}
+
 /** Normalise execution scope to the two allowed values. */
 export function coerceExecutionScope(v: string | null | undefined): 'project' | 'global' {
   return v === 'global' ? 'global' : 'project';
@@ -78,6 +91,9 @@ export interface CreateDefinitionArgs {
   projectId?: number | null;
   definition: WorkflowDefinition;
   target: StoredRunTarget;
+  /** Defaults to 'autonomous' — an ungated run, which is what every caller that
+   *  does not author a gate means. */
+  approvalMode?: WorkflowApprovalMode;
   executionScope?: string | null;
   /** Fork lineage, when this definition is a copy of another. */
   parentDefinitionId?: string | null;
@@ -110,6 +126,7 @@ export async function createWorkflowDefinition(
     projectId: args.projectId ?? null,
     definition: JSON.stringify(args.definition),
     ...args.target,
+    approvalMode: args.approvalMode ?? 'autonomous',
     executionScope: scopeFromProject(args.projectId, args.executionScope),
     ...(args.parentDefinitionId ? { parentDefinitionId: args.parentDefinitionId } : {}),
     createdAt: now,

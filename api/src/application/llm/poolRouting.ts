@@ -12,7 +12,7 @@
 
 import type { ChatCompletionRequest } from './LlmProxyService';
 import { CODING_MODEL_POOL, CODING_DEFAULT_MODEL, RECOGNIZED_CODER_MODELS } from './modelPool';
-import { catalogEntry, tierForModel, type AiCapability } from './vendors';
+import { catalogEntry, strictSchemaSupport, tierForModel, type AiCapability } from './vendors';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Shape-driven routing — single source of truth for "which capability does
@@ -94,7 +94,14 @@ export function capabilitiesForModel(model: string): AiCapability[] {
  * capability" item); this is the known-bad case wired into routing now.
  */
 export function isLowSchemaCeilingModel(model: string): boolean {
-  return /gemini/i.test(model);
+  // CATALOG-DRIVEN now, not a `/gemini/i` regex. The regex carried its own comment
+  // saying the authoritative ceilings belonged in the catalog — which meant every
+  // new vendor with a weak constrained-decoding engine stayed invisible to routing
+  // until somebody hit the 400 in production and widened it. `strictSchemaSupport`
+  // resolves catalog entry → vendor default → family fallback, so the Gemini case
+  // still holds (including the uncatalogued OpenRouter-routed ids) while a new
+  // limited decoder is one metadata field away from being routed around.
+  return strictSchemaSupport(model) !== 'full';
 }
 
 interface ShapeFlags {

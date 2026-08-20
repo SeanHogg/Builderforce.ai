@@ -124,6 +124,19 @@ export const securityAudits = pgTable('security_audits', {
   findingsCount:    integer('findings_count').notNull().default(0),
   countsBySeverity: jsonb('counts_by_severity'),
   countsByTsc:      jsonb('counts_by_tsc'),
+  /**
+   * Which stages of a 'web' scan actually ran — `[{stage,status,reason,findingCount}]`
+   * (migration 1078). Two checks a real scanner performs cannot be observed from a
+   * Cloudflare Worker at all (the peer TLS certificate needs a socket; a CVE lookup
+   * needs an advisory feed), so they run from the Node container and report back
+   * asynchronously. Without this column a scan that could not reach the container was
+   * indistinguishable from a scan of a site with a perfect certificate — the absence
+   * of a finding read as a pass. The column makes the coverage explicit, and it is
+   * also the idempotency key: a stage already recorded as 'ran' refuses a second
+   * report, so a retried container run cannot double-file its findings.
+   * Null on 'codebase' runs and on every row written before the column existed.
+   */
+  stages:           jsonb('stages'),
   startedAt:        timestamp('started_at').notNull().defaultNow(),
   finishedAt:       timestamp('finished_at'),
 });

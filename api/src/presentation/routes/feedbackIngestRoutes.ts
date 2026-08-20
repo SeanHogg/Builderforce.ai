@@ -8,10 +8,11 @@
  *   GET  /config    widget bootstrap (project label + accepted kinds) — Bearer bff_… or ?key=
  *   POST /submit    one feedback request                              — same key
  *
- * Authorization is the collector's ingest key; abuse is bounded by the
- * collector's rolling-24h ceiling inside the engine. Everything a submission
- * becomes — the recorded row, the human-gated backlog ticket — happens in
- * feedbackEngine so this route stays a thin, validating shell.
+ * Authorization is the collector's ingest key; volume is bounded twice inside the
+ * engine — by the collector's rolling-24h abuse ceiling and by the tenant's
+ * monthly plan quota (the consumption meter). Everything a submission becomes
+ * — the recorded row, the human-gated backlog ticket — happens in feedbackEngine
+ * so this route stays a thin, validating shell.
  */
 
 import { Hono } from 'hono';
@@ -20,6 +21,7 @@ import { feedbackCollectors, projects } from '../../infrastructure/database/sche
 import { hashSecret } from '../../infrastructure/auth/HashService';
 import { normalizeFeedback, FEEDBACK_KINDS } from '../../application/feedback/feedbackSpec';
 import { submitFeedback, type FeedbackTarget } from '../../application/feedback/feedbackEngine';
+import { respondToFeedbackSubmit } from './feedbackHttp';
 import type { HonoEnv, Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
@@ -113,11 +115,9 @@ export function createFeedbackIngestRoutes(db: Db): Hono<HonoEnv> {
     // The submitter's UA is more trustworthy from the header than the payload.
     const value = { ...normalized.value, userAgent: c.req.header('User-Agent')?.slice(0, 1000) ?? normalized.value.userAgent };
 
-    const result = await submitFeedback(db, c.env as Env, collector, value);
-    if ('rateLimited' in result && result.rateLimited) {
-      return c.json({ error: 'Daily feedback limit reached for this collector' }, 429);
-    }
-    return c.json(result, 202);
+    // One shared renderer for every refusal: the collector's rolling-24h ceiling
+    // and the tenant's monthly plan quota must read the same on every door.
+    return respondToFeedbackSubmit(c, await submitFeedback(db, c.env as Env, collector, value), 202);
   });
 
   return router;

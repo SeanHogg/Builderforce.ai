@@ -20,6 +20,23 @@
  * containing that" — because a fabricated résumé bullet is a lie the candidate
  * has to defend in a room. The recommendation list is that plan; the person (or
  * the model in the conversation with them) writes the replacement.
+ *
+ * ── EVERY FINDING IS TRANSLATED ──────────────────────────────────────────────────
+ * Each analyzer declares its result copy as DATA (`copy`) and composes findings
+ * through the `c` lookup its `analyze()` is handed. Two rules hold everywhere in
+ * this file, and both exist to prevent a specific failure:
+ *
+ *   1. `c` is a PARAMETER. The function stays pure — the same paste scores the
+ *      same in every language, and a test can run it without a locale registry.
+ *   2. Numbers go in through `{placeholders}`, never by concatenating around a
+ *      translated fragment, so a sentence is translated as a whole sentence.
+ *      `"Level " + n` cannot be rendered by a language that puts the number
+ *      first, and `n + " skills are missing"` cannot agree with its noun.
+ *
+ * Values the DOMAIN authors (a category label, a recommendation the résumé
+ * analyzer wrote, an interview question) pass through untranslated: they are the
+ * career module's copy, shared verbatim with the MCP agent tools, and translating
+ * them belongs to that module rather than to this adapter.
  */
 import {
   analyzeSalary, auditProfile, compareResumeToJob, computeRunway, consolidateResumes,
@@ -28,6 +45,7 @@ import {
   valueProposition, ROLE_PROFILES,
 } from '../career';
 import { parseResume } from '@builderforce/creation-canvas-contract';
+import { enumSlug, pluralSlug, type ToolCopy } from './analyzerCopy';
 import type { AnalyzerTool, ToolMetric, ToolRecommendation, ToolResult } from './toolTypes';
 
 // ── shared shaping ────────────────────────────────────────────────────────────
@@ -36,21 +54,24 @@ import type { AnalyzerTool, ToolMetric, ToolRecommendation, ToolResult } from '.
 const tier = (pct: number): number =>
   pct >= 90 ? 5 : pct >= 75 ? 4 : pct >= 60 ? 3 : pct >= 40 ? 2 : 1;
 
-/** The letter people recognise from an ATS score, not an invented scale. */
+/** The letter people recognise from an ATS score, not an invented scale. Left
+ *  untranslated on purpose: A/B/C grading is read as the American academic scale
+ *  it borrows, and a localized letter would be a different measurement. */
 const grade = (pct: number): string =>
   pct >= 93 ? 'A' : pct >= 90 ? 'A−' : pct >= 87 ? 'B+' : pct >= 83 ? 'B'
     : pct >= 80 ? 'B−' : pct >= 77 ? 'C+' : pct >= 73 ? 'C' : pct >= 70 ? 'C−'
       : pct >= 60 ? 'D' : 'F';
 
-const pctMetric = (label: string, pct: number, hint?: string): ToolMetric =>
-  ({ label, value: `${Math.round(pct)}%`, hint, tier: tier(pct) });
+/** A percentage renders in the reader's numbering, which is not always Latin. */
+const pctMetric = (c: ToolCopy, label: string, pct: number, hint?: string): ToolMetric =>
+  ({ label, value: `${Math.round(pct).toLocaleString(c.locale)}%`, hint, tier: tier(pct) });
 
 const countMetric = (label: string, value: number | string, hint?: string): ToolMetric =>
   ({ label, value: String(value), hint });
 
 /** A list rendered into one metric, or an honest "none" rather than an empty row. */
-const listMetric = (label: string, items: readonly string[], empty: string): ToolMetric =>
-  ({ label, value: items.length ? items.slice(0, 12).join(', ') : empty, hint: items.length > 12 ? `+${items.length - 12} more` : undefined });
+const listMetric = (c: ToolCopy, label: string, items: readonly string[], empty: string): ToolMetric =>
+  ({ label, value: items.length ? items.slice(0, 12).join(', ') : empty, hint: items.length > 12 ? c('andMore', { n: items.length - 12 }) : undefined });
 
 const text = (values: Record<string, string>, id: string): string => (values[id] ?? '').trim();
 
@@ -61,10 +82,18 @@ const num = (values: Record<string, string>, id: string): number | undefined => 
   return Number.isFinite(parsed) ? parsed : undefined;
 };
 
-/** Every analyzer answers the same way when handed nothing. */
-const needsInput = (what: string): ToolResult => ({
-  headline: 'Nothing to read yet',
-  summary: `Paste ${what} to see the result.`,
+/**
+ * Every analyzer answers the same way when handed nothing.
+ *
+ * The headline is shared; the sentence under it is the analyzer's OWN
+ * `needsInput` slug rather than a shared template with a "what to paste"
+ * fragment spliced in. That split is the placeholder rule applied honestly: "a
+ * résumé and a job description" is a noun phrase that has to agree with the verb
+ * around it, so the whole sentence belongs to the analyzer that says it.
+ */
+const needsInput = (c: ToolCopy): ToolResult => ({
+  headline: c('nothingToRead'),
+  summary: c('needsInput'),
   score: null,
   scoreLabel: null,
   metrics: [],
@@ -72,8 +101,19 @@ const needsInput = (what: string): ToolResult => ({
 });
 
 /** The instruction every career reading carries — the caller's next move. */
-const instructionRec = (instruction: string): ToolRecommendation[] =>
-  instruction ? [{ title: 'How to use this', detail: instruction, priority: 'low' }] : [];
+const instructionRec = (c: ToolCopy, instruction: string): ToolRecommendation[] =>
+  instruction ? [{ title: c('howToUseThis'), detail: instruction, priority: 'low' }] : [];
+
+/** The four match verdicts, in the reader's language. Shared by the tailor and
+ *  the job–résumé match, which both surface the same domain value. */
+const verdictText = (c: ToolCopy, verdict: string): string => c(enumSlug('verdict', verdict));
+
+/** A counted phrase: `{n} skill` / `{n} skills`, chosen by the count. */
+const counted = (c: ToolCopy, slug: string, n: number, vars?: Record<string, string | number>): string =>
+  c(pluralSlug(slug, n), { n, ...vars });
+
+/** One quoted excerpt, elided at the length a title can carry. */
+const excerpt = (value: string, max = 70): string => `${value.slice(0, max)}${value.length > max ? '…' : ''}`;
 
 // ── 1. AI Résumé Scorer ───────────────────────────────────────────────────────
 
@@ -89,22 +129,37 @@ const resumeScorer: AnalyzerTool = {
   fields: [
     { id: 'resume', label: 'Résumé text', type: 'document', required: true, placeholder: 'Paste your résumé…', help: 'Plain text is fine — headings, bullets and dates are detected.' },
   ],
-  analyze: (values) => {
+  copy: {
+    needsInput: 'Paste a résumé to see the result.',
+    headline: '{grade} · {score}/100',
+    summary: 'Scored against the five categories a screener filters on.',
+    bullets: 'Bullets',
+    bulletsValue: '{quantified} of {total} quantified',
+    bulletsHint: 'Numbers are what separate a claim from an achievement.',
+    openers: 'Openers',
+    openersValue: '{strong} strong · {weak} weak',
+    openersHint: 'A weak opener describes presence rather than contribution.',
+    length: 'Length',
+    lengthValue: '{words} words',
+    sections: 'Sections found',
+    sectionsEmpty: 'No standard headings detected',
+  },
+  analyze: (values, c) => {
     const resume = text(values, 'resume');
-    if (!resume) return needsInput('a résumé');
+    if (!resume) return needsInput(c);
     const scored = scoreResume(resume);
     const m = scored.measured;
     return {
-      headline: `${grade(scored.overall)} · ${scored.overall}/100`,
-      summary: scored.strengths[0] ?? 'Scored against the five categories a screener filters on.',
+      headline: c('headline', { grade: grade(scored.overall), score: scored.overall }),
+      summary: scored.strengths[0] ?? c('summary'),
       score: scored.overall,
       scoreLabel: grade(scored.overall),
       metrics: [
-        ...scored.categories.map((c) => pctMetric(c.label, c.score, c.evidence)),
-        countMetric('Bullets', `${m.quantifiedBullets} of ${m.bullets} quantified`, 'Numbers are what separate a claim from an achievement.'),
-        countMetric('Openers', `${m.strongOpeners} strong · ${m.weakOpeners} weak`, 'A weak opener describes presence rather than contribution.'),
-        countMetric('Length', `${m.words} words`),
-        listMetric('Sections found', m.sections, 'No standard headings detected'),
+        ...scored.categories.map((cat) => pctMetric(c, cat.label, cat.score, cat.evidence)),
+        countMetric(c('bullets'), c('bulletsValue', { quantified: m.quantifiedBullets, total: m.bullets }), c('bulletsHint')),
+        countMetric(c('openers'), c('openersValue', { strong: m.strongOpeners, weak: m.weakOpeners }), c('openersHint')),
+        countMetric(c('length'), c('lengthValue', { words: m.words })),
+        listMetric(c, c('sections'), m.sections, c('sectionsEmpty')),
       ],
       recommendations: scored.recommendations.map((r) => ({ title: r.title, detail: r.detail, priority: r.priority })),
     };
@@ -126,29 +181,46 @@ const resumeOptimizer: AnalyzerTool = {
     { id: 'resume', label: 'Résumé text', type: 'document', required: true, placeholder: 'Paste your résumé…' },
     { id: 'job', label: 'Job description', type: 'document', required: false, placeholder: 'Optional — paste a posting to also get its missing keywords.' },
   ],
-  analyze: (values) => {
+  copy: {
+    needsInput: 'Paste a résumé to see the result.',
+    'headline.one': '{n} edit to make',
+    'headline.other': '{n} edits to make',
+    'summaryJob.one': 'Scored {score}/100 against this posting, with {n} keyword missing.',
+    'summaryJob.other': 'Scored {score}/100 against this posting, with {n} keywords missing.',
+    summaryNoJob: 'Scored {score}/100. Add a job description to also see the keywords it is missing.',
+    missingKeywords: 'Missing keywords',
+    missingKeywordsEmpty: 'None — the posting is well covered',
+    editTitle: '{kind} — “{target}”',
+    'kind.rewrite_bullet': 'Rewrite bullet',
+    'kind.shorten_bullet': 'Shorten bullet',
+    'kind.quantify_bullet': 'Quantify bullet',
+    'kind.add_section': 'Add section',
+    'kind.normalize_dates': 'Normalise dates',
+    'kind.add_skill': 'Add skill',
+  },
+  analyze: (values, c) => {
     const resume = text(values, 'resume');
-    if (!resume) return needsInput('a résumé');
+    if (!resume) return needsInput(c);
     const job = text(values, 'job');
     const opt = optimizeResume(resume, job || undefined);
     return {
-      headline: `${opt.edits.length} edit${opt.edits.length === 1 ? '' : 's'} to make`,
+      headline: counted(c, 'headline', opt.edits.length),
       summary: job
-        ? `Scored ${opt.score.overall}/100 against this posting, with ${opt.missingKeywords.length} keyword${opt.missingKeywords.length === 1 ? '' : 's'} missing.`
-        : `Scored ${opt.score.overall}/100. Add a job description to also see the keywords it is missing.`,
+        ? counted(c, 'summaryJob', opt.missingKeywords.length, { score: opt.score.overall })
+        : c('summaryNoJob', { score: opt.score.overall }),
       score: opt.score.overall,
       scoreLabel: grade(opt.score.overall),
       metrics: [
-        ...opt.score.categories.map((c) => pctMetric(c.label, c.score, c.evidence)),
-        ...(job ? [listMetric('Missing keywords', opt.missingKeywords, 'None — the posting is well covered')] : []),
+        ...opt.score.categories.map((cat) => pctMetric(c, cat.label, cat.score, cat.evidence)),
+        ...(job ? [listMetric(c, c('missingKeywords'), opt.missingKeywords, c('missingKeywordsEmpty'))] : []),
       ],
       recommendations: [
         ...opt.edits.map((e) => ({
-          title: `${e.kind.replace(/_/g, ' ')} — “${e.target.slice(0, 70)}${e.target.length > 70 ? '…' : ''}”`,
+          title: c('editTitle', { kind: c(enumSlug('kind', e.kind)), target: excerpt(e.target) }),
           detail: `${e.reason} ${e.requirement}`,
           priority: e.priority,
         })),
-        ...instructionRec(opt.instruction),
+        ...instructionRec(c, opt.instruction),
       ],
     };
   },
@@ -169,31 +241,48 @@ const resumeTailor: AnalyzerTool = {
     { id: 'resume', label: 'Résumé text', type: 'document', required: true, placeholder: 'Paste your résumé…' },
     { id: 'job', label: 'Job description', type: 'document', required: true, placeholder: 'Paste the posting you are applying to…' },
   ],
-  analyze: (values) => {
+  copy: {
+    needsInput: 'Paste both a résumé and a job description to see the result.',
+    headline: '{score}% match · {verdict}',
+    'summaryUnevidenced.one': '{n} skill is claimed but not demonstrated by any achievement.',
+    'summaryUnevidenced.other': '{n} skills are claimed but not demonstrated by any achievement.',
+    summaryEvidenced: 'Every skill this posting asks for is evidenced by at least one achievement.',
+    claimed: 'Claimed but unevidenced',
+    claimedEmpty: 'None — every claim has evidence',
+    leadWith: 'Lead with',
+    leadWithEmpty: 'No clearly relevant bullet found',
+    moveTitle: '{kind} — “{target}”',
+    'kind.lead_with': 'Lead with',
+    'kind.emphasise': 'Emphasise',
+    'kind.add_keyword': 'Add keyword',
+    'kind.declare_gap': 'Declare the gap',
+    'kind.evidence_claim': 'Evidence the claim',
+  },
+  analyze: (values, c) => {
     const resume = text(values, 'resume');
     const job = text(values, 'job');
-    if (!resume || !job) return needsInput('both a résumé and a job description');
+    if (!resume || !job) return needsInput(c);
     const plan = tailorResume(resume, job);
     const top = plan.bulletRelevance.slice(0, 3);
     return {
-      headline: `${plan.match.score}% match · ${plan.match.verdict}`,
+      headline: c('headline', { score: plan.match.score, verdict: verdictText(c, plan.match.verdict) }),
       summary: plan.claimedButUnevidenced.length
-        ? `${plan.claimedButUnevidenced.length} skill${plan.claimedButUnevidenced.length === 1 ? ' is' : 's are'} claimed but not demonstrated by any achievement.`
-        : 'Every skill this posting asks for is evidenced by at least one achievement.',
+        ? counted(c, 'summaryUnevidenced', plan.claimedButUnevidenced.length)
+        : c('summaryEvidenced'),
       score: plan.match.score,
-      scoreLabel: plan.match.verdict,
+      scoreLabel: verdictText(c, plan.match.verdict),
       metrics: [
-        listMetric('Claimed but unevidenced', plan.claimedButUnevidenced, 'None — every claim has evidence'),
-        listMetric('Lead with', top.map((b) => b.text.slice(0, 60)), 'No clearly relevant bullet found'),
-        ...plan.match.byArea.map((a) => pctMetric(a.area, a.coverage, `${a.matched} of ${a.required} matched`)),
+        listMetric(c, c('claimed'), plan.claimedButUnevidenced, c('claimedEmpty')),
+        listMetric(c, c('leadWith'), top.map((b) => b.text.slice(0, 60)), c('leadWithEmpty')),
+        ...plan.match.byArea.map((a) => pctMetric(c, a.area, a.coverage, c('areaCoverage', { matched: a.matched, required: a.required }))),
       ],
       recommendations: [
         ...plan.moves.map((mv) => ({
-          title: `${mv.kind.replace(/_/g, ' ')} — “${mv.target.slice(0, 70)}${mv.target.length > 70 ? '…' : ''}”`,
+          title: c('moveTitle', { kind: c(enumSlug('kind', mv.kind)), target: excerpt(mv.target) }),
           detail: `${mv.reason} ${mv.requirement}`,
           priority: mv.kind === 'declare_gap' ? ('medium' as const) : ('high' as const),
         })),
-        ...instructionRec(plan.instruction),
+        ...instructionRec(c, plan.instruction),
       ],
     };
   },
@@ -214,30 +303,43 @@ const jobResumeMatch: AnalyzerTool = {
     { id: 'resume', label: 'Résumé text', type: 'document', required: true, placeholder: 'Paste your résumé…' },
     { id: 'job', label: 'Job description', type: 'document', required: true, placeholder: 'Paste the posting…' },
   ],
-  analyze: (values) => {
+  copy: {
+    needsInput: 'Paste both a résumé and a job description to see the result.',
+    headline: '{score}% · {verdict}',
+    summary: '{matched} of {required} required skills are on your résumé.',
+    matched: 'Matched',
+    matchedEmpty: 'None matched',
+    missing: 'Missing',
+    missingEmpty: 'Nothing missing',
+    missingContext: 'Missing context terms',
+    surplus: 'Surplus you carry',
+    addEvidenceTitle: 'Add evidence for “{skill}”',
+    addEvidenceDetail: 'The posting names {skill} and your résumé does not. If you have done it, say so in an achievement; if you have not, decide whether to address the gap directly.',
+  },
+  analyze: (values, c) => {
     const resume = text(values, 'resume');
     const job = text(values, 'job');
-    if (!resume || !job) return needsInput('both a résumé and a job description');
+    if (!resume || !job) return needsInput(c);
     const match = compareResumeToJob(resume, job);
     return {
-      headline: `${match.score}% · ${match.verdict}`,
-      summary: `${match.evidence.matchedSkillCount} of ${match.evidence.requiredSkillCount} required skills are on your résumé.`,
+      headline: c('headline', { score: match.score, verdict: verdictText(c, match.verdict) }),
+      summary: c('summary', { matched: match.evidence.matchedSkillCount, required: match.evidence.requiredSkillCount }),
       score: match.score,
-      scoreLabel: match.verdict,
+      scoreLabel: verdictText(c, match.verdict),
       metrics: [
-        ...match.byArea.map((a) => pctMetric(a.area, a.coverage, `${a.matched} of ${a.required} matched`)),
-        listMetric('Matched', match.overlap.matched, 'None matched'),
-        listMetric('Missing', match.overlap.missing, 'Nothing missing'),
-        listMetric('Missing context terms', match.overlap.missingContext, 'None'),
-        listMetric('Surplus you carry', match.overlap.surplus, 'None'),
+        ...match.byArea.map((a) => pctMetric(c, a.area, a.coverage, c('areaCoverage', { matched: a.matched, required: a.required }))),
+        listMetric(c, c('matched'), match.overlap.matched, c('matchedEmpty')),
+        listMetric(c, c('missing'), match.overlap.missing, c('missingEmpty')),
+        listMetric(c, c('missingContext'), match.overlap.missingContext, c('none')),
+        listMetric(c, c('surplus'), match.overlap.surplus, c('none')),
       ],
       recommendations: [
         ...match.overlap.missing.slice(0, 6).map((skill) => ({
-          title: `Add evidence for “${skill}”`,
-          detail: `The posting names ${skill} and your résumé does not. If you have done it, say so in an achievement; if you have not, decide whether to address the gap directly.`,
+          title: c('addEvidenceTitle', { skill }),
+          detail: c('addEvidenceDetail', { skill }),
           priority: 'high' as const,
         })),
-        ...instructionRec(match.instruction),
+        ...instructionRec(c, match.instruction),
       ],
     };
   },
@@ -261,26 +363,37 @@ const skillExtractor: AnalyzerTool = {
       options: [{ value: 'resume', label: 'A résumé' }, { value: 'job', label: 'A job description' }],
     },
   ],
-  analyze: (values) => {
+  copy: {
+    needsInput: 'Paste a résumé or a job description to see the result.',
+    'headline.one': '{n} skill found',
+    'headline.other': '{n} skills found',
+    'summaryUnrecognised.one': '{n} repeated term was not in the lexicon — check whether it is domain vocabulary worth keeping.',
+    'summaryUnrecognised.other': '{n} repeated terms were not in the lexicon — check whether they are domain vocabulary worth keeping.',
+    summaryRecognised: 'Every repeated term was recognised.',
+    unrecognised: 'Unrecognised repeated terms',
+    decideTitle: 'Decide on the unrecognised terms',
+    decideDetail: 'These repeat in the document but are not known skills: {terms}. Domain vocabulary belongs in your skills section; noise does not.',
+  },
+  analyze: (values, c) => {
     const body = text(values, 'text');
-    if (!body) return needsInput('a résumé or a job description');
+    if (!body) return needsInput(c);
     const source = text(values, 'source') === 'job' ? 'job' : 'resume';
     const found = extractSkills(body, source);
     return {
-      headline: `${found.total} skill${found.total === 1 ? '' : 's'} found`,
+      headline: counted(c, 'headline', found.total),
       summary: found.unrecognisedTerms.length
-        ? `${found.unrecognisedTerms.length} repeated term${found.unrecognisedTerms.length === 1 ? '' : 's'} were not in the lexicon — check whether they are domain vocabulary worth keeping.`
-        : 'Every repeated term was recognised.',
+        ? counted(c, 'summaryUnrecognised', found.unrecognisedTerms.length)
+        : c('summaryRecognised'),
       score: null,
       scoreLabel: null,
       metrics: [
-        ...found.groups.map((g) => listMetric(g.group, g.skills, 'None')),
-        listMetric('Unrecognised repeated terms', found.unrecognisedTerms, 'None'),
+        ...found.groups.map((g) => listMetric(c, g.group, g.skills, c('none'))),
+        listMetric(c, c('unrecognised'), found.unrecognisedTerms, c('none')),
       ],
       recommendations: found.unrecognisedTerms.length
         ? [{
-          title: 'Decide on the unrecognised terms',
-          detail: `These repeat in the document but are not known skills: ${found.unrecognisedTerms.slice(0, 10).join(', ')}. Domain vocabulary belongs in your skills section; noise does not.`,
+          title: c('decideTitle'),
+          detail: c('decideDetail', { terms: found.unrecognisedTerms.slice(0, 10).join(', ') }),
           priority: 'medium' as const,
         }]
         : [],
@@ -302,25 +415,38 @@ const toneCheck: AnalyzerTool = {
   fields: [
     { id: 'resume', label: 'Résumé text', type: 'document', required: true, placeholder: 'Paste your résumé…' },
   ],
-  analyze: (values) => {
+  copy: {
+    needsInput: 'Paste a résumé to see the result.',
+    headline: '{score}/100 · reads as {label}',
+    'summaryFlagged.one': '{n} line describes presence rather than contribution.',
+    'summaryFlagged.other': '{n} lines describe presence rather than contribution.',
+    summaryClean: 'No hedging or passive openers found.',
+    overallTone: 'Overall tone',
+    positiveSignals: 'Contribution signals',
+    negativeSignals: 'Negative signals',
+    hedges: 'Hedges',
+    hedgesHint: 'Words like “helped”, “assisted”, “involved in”.',
+    rewriteTitle: 'Rewrite “{line}”',
+  },
+  analyze: (values, c) => {
     const resume = text(values, 'resume');
-    if (!resume) return needsInput('a résumé');
+    if (!resume) return needsInput(c);
     const tone = resumeSentiment(resume);
     return {
-      headline: `${tone.score}/100 · reads as ${tone.label}`,
+      headline: c('headline', { score: tone.score, label: tone.label }),
       summary: tone.flagged.length
-        ? `${tone.flagged.length} line${tone.flagged.length === 1 ? '' : 's'} describe presence rather than contribution.`
-        : 'No hedging or passive openers found.',
+        ? counted(c, 'summaryFlagged', tone.flagged.length)
+        : c('summaryClean'),
       score: tone.score,
       scoreLabel: tone.label,
       metrics: [
-        pctMetric('Overall tone', tone.score),
-        countMetric('Contribution signals', tone.positiveSignals),
-        countMetric('Negative signals', tone.negativeSignals),
-        countMetric('Hedges', tone.hedges, 'Words like "helped", "assisted", "involved in".'),
+        pctMetric(c, c('overallTone'), tone.score),
+        countMetric(c('positiveSignals'), tone.positiveSignals),
+        countMetric(c('negativeSignals'), tone.negativeSignals),
+        countMetric(c('hedges'), tone.hedges, c('hedgesHint')),
       ],
       recommendations: tone.flagged.map((f) => ({
-        title: `Rewrite “${f.text.slice(0, 70)}${f.text.length > 70 ? '…' : ''}”`,
+        title: c('rewriteTitle', { line: excerpt(f.text) }),
         detail: f.reason,
         priority: 'medium' as const,
       })),
@@ -342,26 +468,42 @@ const summaryWriter: AnalyzerTool = {
   fields: [
     { id: 'resume', label: 'Résumé text', type: 'document', required: true, placeholder: 'Paste your résumé…' },
   ],
-  analyze: (values) => {
+  copy: {
+    needsInput: 'Paste a résumé to see the result.',
+    headlineHas: 'You already have a summary',
+    headlineNone: 'No summary section found',
+    yearsSpanned: 'Years spanned',
+    yearsUnknown: 'Not derivable from the dates',
+    distinctSkills: 'Distinct skills',
+    topSkills: 'Top skills',
+    topSkillsEmpty: 'None detected',
+    evidence: 'Strongest evidence',
+    evidenceEmpty: 'No quantified bullets found',
+    currentSummary: 'Current summary',
+    writeItTitle: 'Write it from this',
+    scaleTitle: 'Lead with scale',
+    scaleDetail: 'These are the numbers worth putting in the first sentence: {figures}',
+  },
+  analyze: (values, c) => {
     const resume = text(values, 'resume');
-    if (!resume) return needsInput('a résumé');
+    if (!resume) return needsInput(c);
     const brief = summarizeResume(resume);
     return {
-      headline: brief.existingSummary ? 'You already have a summary' : 'No summary section found',
+      headline: brief.existingSummary ? c('headlineHas') : c('headlineNone'),
       summary: brief.brief.whatTheyDo,
       score: null,
       scoreLabel: null,
       metrics: [
-        countMetric('Years spanned', brief.yearsSpanned ?? 'Not derivable from the dates'),
-        countMetric('Distinct skills', brief.brief.distinctSkills),
-        listMetric('Top skills', brief.topSkills, 'None detected'),
-        listMetric('Strongest evidence', brief.evidenceBullets.map((b) => b.slice(0, 80)), 'No quantified bullets found'),
-        ...(brief.existingSummary ? [countMetric('Current summary', brief.existingSummary.slice(0, 160))] : []),
+        countMetric(c('yearsSpanned'), brief.yearsSpanned ?? c('yearsUnknown')),
+        countMetric(c('distinctSkills'), brief.brief.distinctSkills),
+        listMetric(c, c('topSkills'), brief.topSkills, c('topSkillsEmpty')),
+        listMetric(c, c('evidence'), brief.evidenceBullets.map((b) => b.slice(0, 80)), c('evidenceEmpty')),
+        ...(brief.existingSummary ? [countMetric(c('currentSummary'), brief.existingSummary.slice(0, 160))] : []),
       ],
       recommendations: [
-        { title: 'Write it from this', detail: brief.brief.instruction, priority: 'high' },
+        { title: c('writeItTitle'), detail: brief.brief.instruction, priority: 'high' },
         ...(brief.brief.scaleEvidence.length
-          ? [{ title: 'Lead with scale', detail: `These are the numbers worth putting in the first sentence: ${brief.brief.scaleEvidence.slice(0, 4).join(' · ')}`, priority: 'medium' as const }]
+          ? [{ title: c('scaleTitle'), detail: c('scaleDetail', { figures: brief.brief.scaleEvidence.slice(0, 4).join(' · ') }), priority: 'medium' as const }]
           : []),
       ],
     };
@@ -385,27 +527,39 @@ const valuePropositionTool: AnalyzerTool = {
     { id: 'role', label: 'Role', type: 'line', required: true, placeholder: 'Senior Product Manager' },
     { id: 'job', label: 'Job description', type: 'document', required: false, placeholder: 'Optional, but the alignment is only real with it.' },
   ],
-  analyze: (values) => {
+  copy: {
+    needsInput: 'Paste a résumé and name the company and the role to see the result.',
+    headline: '{role} at {company}',
+    'summaryAligned.one': '{n} of the things they asked for is already on your résumé.',
+    'summaryAligned.other': '{n} of the things they asked for are already on your résumé.',
+    summaryNoJob: 'Add the job description to see what genuinely aligns.',
+    aligned: 'Aligned with their ask',
+    alignedEmpty: 'Nothing measured — no job description supplied',
+    differentiators: 'Your differentiators',
+    differentiatorsEmpty: 'None beyond what they asked for',
+    toAddress: 'Gaps to address',
+  },
+  analyze: (values, c) => {
     const resume = text(values, 'resume');
     const company = text(values, 'company');
     const role = text(values, 'role');
-    if (!resume || !company || !role) return needsInput('a résumé, a company and a role');
+    if (!resume || !company || !role) return needsInput(c);
     const vp = valueProposition({ resumeText: resume, company, role, jobDescription: text(values, 'job') || undefined });
     return {
-      headline: `${vp.role} at ${vp.company}`,
+      headline: c('headline', { role: vp.role, company: vp.company }),
       summary: vp.aligned.length
-        ? `${vp.aligned.length} of the things they asked for are already on your résumé.`
-        : 'Add the job description to see what genuinely aligns.',
+        ? counted(c, 'summaryAligned', vp.aligned.length)
+        : c('summaryNoJob'),
       score: null,
       scoreLabel: null,
       metrics: [
-        listMetric('Aligned with their ask', vp.aligned, 'Nothing measured — no job description supplied'),
-        listMetric('Your differentiators', vp.differentiators, 'None beyond what they asked for'),
-        listMetric('Gaps to address', vp.toAddress, 'None'),
+        listMetric(c, c('aligned'), vp.aligned, c('alignedEmpty')),
+        listMetric(c, c('differentiators'), vp.differentiators, c('differentiatorsEmpty')),
+        listMetric(c, c('toAddress'), vp.toAddress, c('none')),
       ],
       recommendations: [
         ...vp.structure.map((s) => ({ title: s.part, detail: s.guidance, priority: 'high' as const })),
-        ...instructionRec(vp.instruction),
+        ...instructionRec(c, vp.instruction),
       ],
     };
   },
@@ -427,33 +581,50 @@ const resumeConsolidator: AnalyzerTool = {
     { id: 'b', label: 'Résumé 2', type: 'document', required: true, placeholder: 'Paste the second…' },
     { id: 'c', label: 'Résumé 3', type: 'document', required: false, placeholder: 'Optional third.' },
   ],
-  analyze: (values) => {
+  copy: {
+    needsInput: 'Paste at least two résumés to see the result.',
+    'headline.one': '{n} line exists in only one version',
+    'headline.other': '{n} lines exist in only one version',
+    'summary.one': 'Across {sources} résumés, {n} achievement appears in more than one.',
+    'summary.other': 'Across {sources} résumés, {n} achievements appear in more than one.',
+    sources: 'Sources compared',
+    duplicates: 'Overlapping achievements',
+    unique: 'Unique to one version',
+    uniqueHint: 'These are what a hand-merge loses.',
+    mergedSkills: 'Merged skills',
+    mergedSkillsEmpty: 'None detected',
+    keepTitle: 'Keep this line',
+    keepDetail: '“{line}” appears in only one of your résumés — decide deliberately whether the master keeps it.',
+    pickTitle: 'Pick one wording',
+    pickDetail: '“{line}” is written {count} different ways. Choose the strongest and use it everywhere.',
+  },
+  analyze: (values, c) => {
     const sources = ['a', 'b', 'c'].map((id) => text(values, id)).filter(Boolean);
-    if (sources.length < 2) return needsInput('at least two résumés');
+    if (sources.length < 2) return needsInput(c);
     const merged = consolidateResumes(sources);
     return {
-      headline: `${merged.uniqueBullets.length} line${merged.uniqueBullets.length === 1 ? '' : 's'} exist in only one version`,
-      summary: `Across ${merged.sourceCount} résumés, ${merged.duplicateGroups.length} achievement${merged.duplicateGroups.length === 1 ? ' appears' : 's appear'} in more than one.`,
+      headline: counted(c, 'headline', merged.uniqueBullets.length),
+      summary: counted(c, 'summary', merged.duplicateGroups.length, { sources: merged.sourceCount }),
       score: null,
       scoreLabel: null,
       metrics: [
-        countMetric('Sources compared', merged.sourceCount),
-        countMetric('Overlapping achievements', merged.duplicateGroups.length),
-        countMetric('Unique to one version', merged.uniqueBullets.length, 'These are what a hand-merge loses.'),
-        listMetric('Merged skills', merged.mergedSkills, 'None detected'),
+        countMetric(c('sources'), merged.sourceCount),
+        countMetric(c('duplicates'), merged.duplicateGroups.length),
+        countMetric(c('unique'), merged.uniqueBullets.length, c('uniqueHint')),
+        listMetric(c, c('mergedSkills'), merged.mergedSkills, c('mergedSkillsEmpty')),
       ],
       recommendations: [
         ...merged.uniqueBullets.slice(0, 8).map((b) => ({
-          title: 'Keep this line',
-          detail: `“${b}” appears in only one of your résumés — decide deliberately whether the master keeps it.`,
+          title: c('keepTitle'),
+          detail: c('keepDetail', { line: b }),
           priority: 'high' as const,
         })),
         ...merged.duplicateGroups.slice(0, 5).map((g) => ({
-          title: 'Pick one wording',
-          detail: `“${g.canonical}” is written ${g.variants.length + 1} different ways. Choose the strongest and use it everywhere.`,
+          title: c('pickTitle'),
+          detail: c('pickDetail', { line: g.canonical, count: g.variants.length + 1 }),
           priority: 'medium' as const,
         })),
-        ...instructionRec(merged.instruction),
+        ...instructionRec(c, merged.instruction),
       ],
     };
   },
@@ -473,30 +644,52 @@ const resumeParser: AnalyzerTool = {
   fields: [
     { id: 'resume', label: 'Résumé text', type: 'document', required: true, placeholder: 'Paste your résumé…' },
   ],
-  analyze: (values) => {
+  copy: {
+    needsInput: 'Paste a résumé to see the result.',
+    // Two counted NOUN PHRASES joined by a template, rather than one sentence
+    // with two plural axes. Four `.one_one`-style slugs per language would be a
+    // combinatorial catalog nobody maintains, and each phrase here is still
+    // translated whole — which is the property the rule is protecting.
+    headline: '{sections}, {bullets}',
+    'sectionCount.one': '{n} section',
+    'sectionCount.other': '{n} sections',
+    'bulletCount.one': '{n} bullet',
+    'bulletCount.other': '{n} bullets',
+    summaryFound: 'Anything missing from this list is something a screener may also fail to find.',
+    summaryNone: 'No standard sections were recognised — that is usually a formatting problem, not a content one.',
+    sections: 'Sections recognised',
+    bullets: 'Bullets parsed',
+    quantified: 'Quantified bullets',
+    quantifiedValue: '{quantified} of {total}',
+    skills: 'Skills detected',
+    headingsTitle: 'Use standard section headings',
+    headingsDetail: 'Write “Experience”, “Education” and “Skills” as their own lines. Decorative or renamed headings are the single most common reason a parser returns nothing.',
+  },
+  analyze: (values, c) => {
     const resume = text(values, 'resume');
-    if (!resume) return needsInput('a résumé');
+    if (!resume) return needsInput(c);
     const parsed = parseResume(resume);
     const sections = parsed.sections.map((s) => s.kind);
     const quantified = parsed.bullets.filter((b) => b.quantified).length;
     return {
-      headline: `${parsed.sections.length} section${parsed.sections.length === 1 ? '' : 's'}, ${parsed.bullets.length} bullet${parsed.bullets.length === 1 ? '' : 's'}`,
-      summary: sections.length
-        ? 'Anything missing from this list is something a screener may also fail to find.'
-        : 'No standard sections were recognised — that is usually a formatting problem, not a content one.',
+      headline: c('headline', {
+        sections: counted(c, 'sectionCount', parsed.sections.length),
+        bullets: counted(c, 'bulletCount', parsed.bullets.length),
+      }),
+      summary: sections.length ? c('summaryFound') : c('summaryNone'),
       score: null,
       scoreLabel: null,
       metrics: [
-        listMetric('Sections recognised', sections, 'None'),
-        countMetric('Bullets parsed', parsed.bullets.length),
-        countMetric('Quantified bullets', `${quantified} of ${parsed.bullets.length}`),
-        listMetric('Skills detected', parsed.skillTokens.slice(0, 20), 'None'),
+        listMetric(c, c('sections'), sections, c('none')),
+        countMetric(c('bullets'), parsed.bullets.length),
+        countMetric(c('quantified'), c('quantifiedValue', { quantified, total: parsed.bullets.length })),
+        listMetric(c, c('skills'), parsed.skillTokens.slice(0, 20), c('none')),
       ],
       recommendations: sections.length
         ? []
         : [{
-          title: 'Use standard section headings',
-          detail: 'Write "Experience", "Education" and "Skills" as their own lines. Decorative or renamed headings are the single most common reason a parser returns nothing.',
+          title: c('headingsTitle'),
+          detail: c('headingsDetail'),
           priority: 'high' as const,
         }],
     };
@@ -524,10 +717,21 @@ const profileAudit: AnalyzerTool = {
     { id: 'discipline', label: 'Discipline', type: 'line', required: false, placeholder: 'Product' },
     { id: 'location', label: 'Location', type: 'line', required: false, placeholder: 'Austin, TX' },
   ],
-  analyze: (values) => {
+  copy: {
+    needsInput: 'Fill in at least a headline or a bio to see the result.',
+    headline: '{grade} · {score}/100',
+    'summaryMissing.one': '{n} field is empty or too thin to be useful.',
+    'summaryMissing.other': '{n} fields are empty or too thin to be useful.',
+    summaryComplete: 'Every checked field carries something.',
+    present: 'Present',
+    thin: 'Missing or thin',
+    fillTitle: 'Fill in {field}',
+    fillDetail: '{field} is one of the fields a visitor reads first, and yours is empty or too short to say anything.',
+  },
+  analyze: (values, c) => {
     const skills = text(values, 'skills').split(',').map((s) => s.trim()).filter(Boolean);
     const hasAnything = ['headline', 'bio', 'discipline', 'location'].some((id) => text(values, id)) || skills.length > 0;
-    if (!hasAnything) return needsInput('at least a headline or a bio');
+    if (!hasAnything) return needsInput(c);
     const audit = auditProfile({
       headline: text(values, 'headline') || null,
       bio: text(values, 'bio') || null,
@@ -536,25 +740,25 @@ const profileAudit: AnalyzerTool = {
       location: text(values, 'location') || null,
     });
     return {
-      headline: `${grade(audit.score)} · ${audit.score}/100`,
+      headline: c('headline', { grade: grade(audit.score), score: audit.score }),
       summary: audit.missing.length
-        ? `${audit.missing.length} field${audit.missing.length === 1 ? ' is' : 's are'} empty or too thin to be useful.`
-        : 'Every checked field carries something.',
+        ? counted(c, 'summaryMissing', audit.missing.length)
+        : c('summaryComplete'),
       score: audit.score,
       scoreLabel: grade(audit.score),
-      metrics: audit.checks.map((c) => ({
-        label: c.field,
-        value: c.ok ? 'Present' : 'Missing or thin',
-        hint: c.detail,
-        tier: c.ok ? 5 : 1,
+      metrics: audit.checks.map((check) => ({
+        label: check.field,
+        value: check.ok ? c('present') : c('thin'),
+        hint: check.detail,
+        tier: check.ok ? 5 : 1,
       })),
       recommendations: [
         ...audit.missing.map((field) => ({
-          title: `Fill in ${field}`,
-          detail: `${field} is one of the fields a visitor reads first, and yours is empty or too short to say anything.`,
+          title: c('fillTitle', { field }),
+          detail: c('fillDetail', { field }),
           priority: 'high' as const,
         })),
-        ...instructionRec(audit.instruction),
+        ...instructionRec(c, audit.instruction),
       ],
     };
   },
@@ -578,28 +782,60 @@ const career360: AnalyzerTool = {
       options: [{ value: '', label: 'Suggest targets for me' }, ...ROLE_PROFILES.map((r) => ({ value: r.id, label: r.title }))],
     },
   ],
-  analyze: (values) => {
+  copy: {
+    needsInput: 'Paste a résumé to see the result.',
+    headlineClosest: 'Closest: {role}',
+    headlineUnranked: 'No target ranked',
+    summarySuggest: 'Every ranking below is computed from what your résumé EVIDENCES — a skill you have but never wrote down is invisible here, and the fix is to write it down. Pick a target and run this again for the plan.',
+    suggestValue: '{readiness}% · {distance}',
+    suggestMissing: 'Missing: {skills}',
+    suggestComplete: 'Nothing missing',
+    chooseTitle: 'Choose a target',
+    chooseDetail: 'A target you are already qualified for produces an empty roadmap; one three levels up produces a roadmap you abandon. Pick from the “ready now” or “one gap away” rows and run this again.',
+    unknownTarget: 'Unknown target role',
+    availableTargets: 'Available targets',
+    headlineReady: '{readiness}% ready for {role}',
+    'summaryGaps.one': '{n} skill stands between you and {role}.',
+    'summaryGaps.other': '{n} skills stand between you and {role}.',
+    summaryNoGaps: 'Your résumé already evidences everything {role} asks for.',
+    readiness: 'Readiness',
+    readinessHint: '{family} · {level}',
+    have: 'Already evidenced',
+    haveEmpty: 'Nothing yet',
+    missing: 'Still missing',
+    missingEmpty: 'Nothing missing',
+    stepTitle: '{horizon} — {title}',
+    stepDetail: '{detail} Produces: {produces}.',
+    'distance.ready_now': 'Ready now',
+    'distance.one_gap_away': 'One gap away',
+    'distance.a_season_away': 'A season away',
+    'distance.a_genuine_change': 'A genuine change',
+    'horizon.this_week': 'This week',
+    'horizon.this_month': 'This month',
+    'horizon.this_quarter': 'This quarter',
+  },
+  analyze: (values, c) => {
     const resume = text(values, 'resume');
-    if (!resume) return needsInput('a résumé');
+    if (!resume) return needsInput(c);
     const targetId = text(values, 'target');
 
     if (!targetId) {
       const suggested = suggestTargets(resume);
       const best = suggested.suggestions[0];
       return {
-        headline: best ? `Closest: ${best.role.title}` : 'No target ranked',
-        summary: 'Every ranking below is computed from what your résumé EVIDENCES — a skill you have but never wrote down is invisible here, and the fix is to write it down. Pick a target and run this again for the plan.',
+        headline: best ? c('headlineClosest', { role: best.role.title }) : c('headlineUnranked'),
+        summary: c('summarySuggest'),
         score: best ? best.readiness : null,
-        scoreLabel: best ? best.distance : null,
+        scoreLabel: best ? c(enumSlug('distance', best.distance)) : null,
         metrics: suggested.suggestions.map((s) => ({
           label: s.role.title,
-          value: `${s.readiness}% · ${s.distance}`,
-          hint: s.missing.length ? `Missing: ${s.missing.slice(0, 5).join(', ')}` : 'Nothing missing',
+          value: c('suggestValue', { readiness: s.readiness, distance: c(enumSlug('distance', s.distance)) }),
+          hint: s.missing.length ? c('suggestMissing', { skills: s.missing.slice(0, 5).join(', ') }) : c('suggestComplete'),
           tier: tier(s.readiness),
         })),
         recommendations: [{
-          title: 'Choose a target',
-          detail: 'A target you are already qualified for produces an empty roadmap; one three levels up produces a roadmap you abandon. Pick from the "ready now" or "one gap away" rows and run this again.',
+          title: c('chooseTitle'),
+          detail: c('chooseDetail'),
           priority: 'high',
         }],
       };
@@ -608,33 +844,33 @@ const career360: AnalyzerTool = {
     const plan = planForTarget(resume, targetId);
     if ('error' in plan) {
       return {
-        headline: 'Unknown target role',
+        headline: c('unknownTarget'),
         summary: plan.error,
         score: null,
         scoreLabel: null,
-        metrics: [listMetric('Available targets', plan.availableTargets, 'None')],
+        metrics: [listMetric(c, c('availableTargets'), plan.availableTargets, c('none'))],
         recommendations: [],
       };
     }
     return {
-      headline: `${plan.readiness}% ready for ${plan.target.title}`,
+      headline: c('headlineReady', { readiness: plan.readiness, role: plan.target.title }),
       summary: plan.missing.length
-        ? `${plan.missing.length} skill${plan.missing.length === 1 ? '' : 's'} stand between you and ${plan.target.title}.`
-        : `Your résumé already evidences everything ${plan.target.title} asks for.`,
+        ? counted(c, 'summaryGaps', plan.missing.length, { role: plan.target.title })
+        : c('summaryNoGaps', { role: plan.target.title }),
       score: plan.readiness,
       scoreLabel: plan.target.title,
       metrics: [
-        pctMetric('Readiness', plan.readiness, `${plan.target.family} · ${plan.target.level}`),
-        listMetric('Already evidenced', plan.have, 'Nothing yet'),
-        listMetric('Still missing', plan.missing, 'Nothing missing'),
+        pctMetric(c, c('readiness'), plan.readiness, c('readinessHint', { family: plan.target.family, level: plan.target.level })),
+        listMetric(c, c('have'), plan.have, c('haveEmpty')),
+        listMetric(c, c('missing'), plan.missing, c('missingEmpty')),
       ],
       recommendations: [
         ...plan.steps.map((step) => ({
-          title: `${step.horizon} — ${step.title}`,
-          detail: `${step.detail} Produces: ${step.produces}.`,
+          title: c('stepTitle', { horizon: c(enumSlug('horizon', step.horizon)), title: step.title }),
+          detail: c('stepDetail', { detail: step.detail, produces: step.produces }),
           priority: (step.horizon === 'this week' ? 'high' : step.horizon === 'this month' ? 'medium' : 'low') as 'high' | 'medium' | 'low',
         })),
-        ...instructionRec(plan.instruction),
+        ...instructionRec(c, plan.instruction),
       ],
     };
   },
@@ -665,9 +901,22 @@ const salaryCalculator: AnalyzerTool = {
     },
     { id: 'currentBase', label: 'Current or offered base', type: 'line', required: false, placeholder: 'Optional — e.g. 150000' },
   ],
-  analyze: (values) => {
+  copy: {
+    needsInput: 'Name a role or discipline to see the result.',
+    money: '{currency} {amount}',
+    summary: '{seniority} {discipline}, {region}, {workMode}. {basis}',
+    low: 'Low (P25)',
+    median: 'Median (P50)',
+    high: 'High (P75)',
+    yourFigure: 'Your figure',
+    yourFigureValue: '{amount} · P{percentile}',
+    assumptions: 'Assumptions',
+    anchorTitle: 'Anchor at the upper quartile',
+    anchorDetail: 'If you name a number first, {amount} is the anchor this band supports — not the median. Give a range whose bottom you would still accept.',
+  },
+  analyze: (values, c) => {
     const discipline = text(values, 'discipline');
-    if (!discipline) return needsInput('a role or discipline');
+    if (!discipline) return needsInput(c);
     const mode = text(values, 'workMode');
     const analysis = analyzeSalary({
       discipline,
@@ -676,28 +925,37 @@ const salaryCalculator: AnalyzerTool = {
       workMode: mode === 'remote' || mode === 'onsite' ? mode : 'hybrid',
       currentBase: num(values, 'currentBase'),
     });
-    const money = (n: number) => `${analysis.band.currency} ${n.toLocaleString()}`;
+    // Currency SYMBOL placement differs by language (`1 234 € ` in French,
+    // `€1,234` in English), so the money template is copy and the digit grouping
+    // is the reader's, not en-US's.
+    const money = (n: number) => c('money', { currency: analysis.band.currency, amount: n.toLocaleString(c.locale) });
     return {
       headline: money(analysis.band.median),
-      summary: `${analysis.seniority} ${analysis.discipline}, ${analysis.region}, ${analysis.workMode}. ${analysis.basis}`,
+      summary: c('summary', {
+        seniority: analysis.seniority,
+        discipline: analysis.discipline,
+        region: analysis.region,
+        workMode: c.option('workMode', analysis.workMode),
+        basis: analysis.basis,
+      }),
       score: null,
       scoreLabel: null,
       metrics: [
-        countMetric('Low (P25)', money(analysis.band.low)),
-        countMetric('Median (P50)', money(analysis.band.median)),
-        countMetric('High (P75)', money(analysis.band.high)),
+        countMetric(c('low'), money(analysis.band.low)),
+        countMetric(c('median'), money(analysis.band.median)),
+        countMetric(c('high'), money(analysis.band.high)),
         ...(analysis.position
-          ? [countMetric('Your figure', `${money(analysis.position.value)} · P${analysis.position.percentile}`, analysis.position.verdict)]
+          ? [countMetric(c('yourFigure'), c('yourFigureValue', { amount: money(analysis.position.value), percentile: analysis.position.percentile }), analysis.position.verdict)]
           : []),
-        listMetric('Assumptions', analysis.assumptions, 'None'),
+        listMetric(c, c('assumptions'), analysis.assumptions, c('none')),
       ],
       recommendations: [
         {
-          title: 'Anchor at the upper quartile',
-          detail: `If you name a number first, ${money(analysis.band.high)} is the anchor this band supports — not the median. Give a range whose bottom you would still accept.`,
+          title: c('anchorTitle'),
+          detail: c('anchorDetail', { amount: money(analysis.band.high) }),
           priority: 'high',
         },
-        ...instructionRec(analysis.instruction),
+        ...instructionRec(c, analysis.instruction),
       ],
     };
   },
@@ -735,10 +993,39 @@ const personalRunway: AnalyzerTool = {
     { id: 'monthlyIncome', label: 'Monthly income still arriving', type: 'line', required: false, placeholder: 'Optional — benefits, a partner’s contribution, residual income' },
     { id: 'currency', label: 'Currency', type: 'line', required: false, placeholder: 'GBP' },
   ],
-  analyze: (values) => {
+  copy: {
+    needsInput: 'Enter the cash you have now and what leaves the account each month to see the result.',
+    money: '{currency} {amount}',
+    headlineSolvent: 'The money is not running out',
+    'headlineWeeks.one': '{n} week',
+    'headlineWeeks.other': '{n} weeks',
+    summarySolvent: 'Income covers the outgoings, so there is no cliff to plan against. Net position {amount} a month.',
+    summaryBurn: 'Net burn {burn} a month against {savings}.',
+    summaryCliff: 'The balance reaches zero in month {month}.',
+    weeks: 'Weeks remaining',
+    weeksHint: 'The number every other career decision is paced against.',
+    months: 'Months remaining',
+    burn: 'Net monthly burn',
+    burnNone: 'None — income covers it',
+    pressure: 'Pressure',
+    pressureHint: 'Under about 13 weeks, contract work while interviewing usually beats holding out.',
+    assumptions: 'Assumptions',
+    bridgeTitle: 'Take the bridge work and keep interviewing',
+    bridgeDetail: 'With {weeks} weeks left, a salaried role that starts in three months arrives after the balance does. Contract or part-time work that starts sooner buys the runway to hold out for the right permanent role instead of accepting the first one.',
+    targetedTitle: 'Search for the right role, not any role',
+    targetedDetail: 'The runway supports a targeted search. Spend the time on fewer, better-tailored applications — the reply rate on a tailored application is several times that of a volume one, and you can afford to find out which.',
+    statementTitle: 'Check the outgoings against a real statement',
+    statementDetail: 'The single most common error in this calculation is an under-stated monthly figure, because the annual bills are forgotten. Divide them by twelve and add them in before trusting the weeks above.',
+    'pressure.none': 'None',
+    'pressure.comfortable': 'Comfortable',
+    'pressure.planning': 'Planning',
+    'pressure.urgent': 'Urgent',
+    'pressure.critical': 'Critical',
+  },
+  analyze: (values, c) => {
     const savings = num(values, 'savings');
     const monthlyExpenses = num(values, 'monthlyExpenses');
-    if (savings === undefined || monthlyExpenses === undefined) return needsInput('the cash you have now and what leaves the account each month');
+    if (savings === undefined || monthlyExpenses === undefined) return needsInput(c);
 
     const reading = computeRunway({
       savings,
@@ -746,51 +1033,58 @@ const personalRunway: AnalyzerTool = {
       monthlyIncome: num(values, 'monthlyIncome'),
       currency: text(values, 'currency') || undefined,
     });
-    const amount = (n: number) => `${reading.currency} ${Math.round(n).toLocaleString()}`;
+    const amount = (n: number) => c('money', { currency: reading.currency, amount: Math.round(n).toLocaleString(c.locale) });
+    const pressure = c(enumSlug('pressure', reading.pressure));
 
     // The bands are the domain's, restated ONLY as a tier for the shared meter. A
     // second set of thresholds here would let the page disagree with the same reading
     // taken through `hr.runway` or drawn on a canvas `runway` card.
     const PRESSURE_TIER: Record<string, number> = { none: 5, comfortable: 4, planning: 3, urgent: 2, critical: 1 };
     const cliff = reading.projection.find((month) => month.balance <= 0);
+    // Two whole sentences joined, never one sentence assembled from fragments:
+    // the cliff clause is optional, so it has to stand on its own.
+    const burnSummary = [
+      c('summaryBurn', { burn: amount(reading.netMonthlyBurn), savings: amount(savings) }),
+      cliff ? c('summaryCliff', { month: cliff.month }) : '',
+    ].filter(Boolean).join(' ');
 
     return {
       headline: reading.weeksRemaining === null
-        ? 'The money is not running out'
-        : `${reading.weeksRemaining} weeks`,
+        ? c('headlineSolvent')
+        : counted(c, 'headlineWeeks', reading.weeksRemaining),
       summary: reading.weeksRemaining === null
-        ? `Income covers the outgoings, so there is no cliff to plan against. Net position ${amount(-reading.netMonthlyBurn)} a month.`
-        : `Net burn ${amount(reading.netMonthlyBurn)} a month against ${amount(savings)}. ${cliff ? `The balance reaches zero in month ${cliff.month}.` : ''}`.trim(),
+        ? c('summarySolvent', { amount: amount(-reading.netMonthlyBurn) })
+        : burnSummary,
       score: reading.weeksRemaining === null ? null : Math.min(100, Math.round((reading.weeksRemaining / 52) * 100)),
-      scoreLabel: reading.pressure,
+      scoreLabel: pressure,
       metrics: [
-        { label: 'Weeks remaining', value: reading.weeksRemaining === null ? '—' : String(reading.weeksRemaining), hint: 'The number every other career decision is paced against.', tier: PRESSURE_TIER[reading.pressure] },
-        countMetric('Months remaining', reading.monthsRemaining === null ? '—' : String(reading.monthsRemaining)),
-        countMetric('Net monthly burn', reading.netMonthlyBurn <= 0 ? 'None — income covers it' : amount(reading.netMonthlyBurn)),
-        { label: 'Pressure', value: reading.pressure, hint: 'Under about 13 weeks, contract work while interviewing usually beats holding out.', tier: PRESSURE_TIER[reading.pressure] },
-        listMetric('Assumptions', reading.assumptions, 'None'),
+        { label: c('weeks'), value: reading.weeksRemaining === null ? '—' : reading.weeksRemaining.toLocaleString(c.locale), hint: c('weeksHint'), tier: PRESSURE_TIER[reading.pressure] },
+        countMetric(c('months'), reading.monthsRemaining === null ? '—' : reading.monthsRemaining.toLocaleString(c.locale)),
+        countMetric(c('burn'), reading.netMonthlyBurn <= 0 ? c('burnNone') : amount(reading.netMonthlyBurn)),
+        { label: c('pressure'), value: pressure, hint: c('pressureHint'), tier: PRESSURE_TIER[reading.pressure] },
+        listMetric(c, c('assumptions'), reading.assumptions, c('none')),
       ],
       recommendations: [
         ...(reading.weeksRemaining !== null && reading.weeksRemaining < 13
           ? [{
-            title: 'Take the bridge work and keep interviewing',
-            detail: `With ${reading.weeksRemaining} weeks left, a salaried role that starts in three months arrives after the balance does. Contract or part-time work that starts sooner buys the runway to hold out for the right permanent role instead of accepting the first one.`,
+            title: c('bridgeTitle'),
+            detail: c('bridgeDetail', { weeks: reading.weeksRemaining }),
             priority: 'high' as const,
           }]
           : []),
         ...(reading.weeksRemaining !== null && reading.weeksRemaining >= 26
           ? [{
-            title: 'Search for the right role, not any role',
-            detail: 'The runway supports a targeted search. Spend the time on fewer, better-tailored applications — the reply rate on a tailored application is several times that of a volume one, and you can afford to find out which.',
+            title: c('targetedTitle'),
+            detail: c('targetedDetail'),
             priority: 'medium' as const,
           }]
           : []),
         {
-          title: 'Check the outgoings against a real statement',
-          detail: 'The single most common error in this calculation is an under-stated monthly figure, because the annual bills are forgotten. Divide them by twelve and add them in before trusting the weeks above.',
+          title: c('statementTitle'),
+          detail: c('statementDetail'),
           priority: 'medium' as const,
         },
-        ...instructionRec(reading.instruction),
+        ...instructionRec(c, reading.instruction),
       ],
     };
   },
@@ -811,23 +1105,31 @@ const employerResearch: AnalyzerTool = {
     { id: 'company', label: 'Company', type: 'line', required: true, placeholder: 'Northwind' },
     { id: 'role', label: 'Role', type: 'line', required: false, placeholder: 'Senior Product Manager' },
   ],
-  analyze: (values) => {
+  copy: {
+    needsInput: 'Name a company to see the result.',
+    'headline.one': '{n} question about {company}',
+    'headline.other': '{n} questions about {company}',
+    summary: 'Answer these before the first conversation — a specific, recent observation is the one thing in an interview that cannot be prepared generically.',
+    questionLabel: 'Question {n}',
+    detail: '{why} Where to look: {where}',
+  },
+  analyze: (values, c) => {
     const company = text(values, 'company');
-    if (!company) return needsInput('a company name');
+    if (!company) return needsInput(c);
     const brief = employerResearchBrief(company, text(values, 'role') || undefined);
     return {
-      headline: `${brief.questions.length} questions about ${brief.company}`,
-      summary: 'Answer these before the first conversation — a specific, recent observation is the one thing in an interview that cannot be prepared generically.',
+      headline: counted(c, 'headline', brief.questions.length, { company: brief.company }),
+      summary: c('summary'),
       score: null,
       scoreLabel: null,
       metrics: brief.questions.map((q, i) => ({
-        label: `Question ${i + 1}`,
+        label: c('questionLabel', { n: i + 1 }),
         value: q.question,
         hint: q.whereToLook,
       })),
       recommendations: brief.questions.map((q) => ({
         title: q.question,
-        detail: `${q.whyItMatters} Where to look: ${q.whereToLook}`,
+        detail: c('detail', { why: q.whyItMatters, where: q.whereToLook }),
         priority: 'medium' as const,
       })),
     };
@@ -848,27 +1150,39 @@ const vendorSync: AnalyzerTool = {
   fields: [
     { id: 'resume', label: 'Résumé text', type: 'document', required: true, placeholder: 'Paste your résumé…' },
   ],
-  analyze: (values) => {
+  copy: {
+    needsInput: 'Paste a résumé to see the result.',
+    headline: 'Blocks ready to paste',
+    summary: 'Each block is capped at the length the corresponding field actually accepts.',
+    headlineBlock: 'Headline (120 chars)',
+    bioBlock: 'Short bio (300 chars)',
+    skills: 'Skills list',
+    skillsEmpty: 'None detected',
+    achievements: 'Achievements available',
+    sourceTitle: 'Keep one source of truth',
+    sourceDetail: 'Edit the résumé, re-run this, and re-paste. Editing a profile site directly is how four profiles drift into four different people.',
+  },
+  analyze: (values, c) => {
     const resume = text(values, 'resume');
-    if (!resume) return needsInput('a résumé');
+    if (!resume) return needsInput(c);
     const brief = summarizeResume(resume);
     const parsed = parseResume(resume);
     const headlineSource = brief.existingSummary ?? brief.brief.whatTheyDo;
     return {
-      headline: 'Blocks ready to paste',
-      summary: 'Each block is capped at the length the corresponding field actually accepts.',
+      headline: c('headline'),
+      summary: c('summary'),
       score: null,
       scoreLabel: null,
       metrics: [
-        countMetric('Headline (120 chars)', headlineSource.slice(0, 120)),
-        countMetric('Short bio (300 chars)', headlineSource.slice(0, 300)),
-        listMetric('Skills list', brief.topSkills, 'None detected'),
-        countMetric('Achievements available', parsed.bullets.length),
+        countMetric(c('headlineBlock'), headlineSource.slice(0, 120)),
+        countMetric(c('bioBlock'), headlineSource.slice(0, 300)),
+        listMetric(c, c('skills'), brief.topSkills, c('skillsEmpty')),
+        countMetric(c('achievements'), parsed.bullets.length),
       ],
       recommendations: [
         {
-          title: 'Keep one source of truth',
-          detail: 'Edit the résumé, re-run this, and re-paste. Editing a profile site directly is how four profiles drift into four different people.',
+          title: c('sourceTitle'),
+          detail: c('sourceDetail'),
           priority: 'medium',
         },
       ],
@@ -902,9 +1216,24 @@ const interviewPrep: AnalyzerTool = {
       ],
     },
   ],
-  analyze: (values) => {
+  copy: {
+    needsInput: 'Paste a job description to see the result.',
+    'headline.one': '{n} question for {role}',
+    'headline.other': '{n} questions for {role}',
+    summaryRisk: 'Your exposed flank: {areas} — named in the posting, not evidenced on your résumé.',
+    summaryCovered: 'Nothing the posting asks for is missing from your résumé.',
+    type: 'Interview type',
+    riskAreas: 'Risk areas',
+    riskAreasEmpty: 'None — or add your résumé to find out',
+    questionLabel: '{category} · {difficulty}',
+    answerDetail: 'A strong answer contains: {points}.',
+    'difficulty.warmup': 'Warm-up',
+    'difficulty.core': 'Core',
+    'difficulty.hard': 'Hard',
+  },
+  analyze: (values, c) => {
     const job = text(values, 'job');
-    if (!job) return needsInput('a job description');
+    if (!job) return needsInput(c);
     const chosen = text(values, 'type');
     const type = (['behavioral', 'technical', 'situational', 'leadership', 'screening'] as const)
       .find((t) => t === chosen) ?? 'behavioral';
@@ -915,17 +1244,20 @@ const interviewPrep: AnalyzerTool = {
       resumeText: text(values, 'resume') || undefined,
     });
     return {
-      headline: `${kit.questions.length} questions for ${kit.role}`,
+      headline: counted(c, 'headline', kit.questions.length, { role: kit.role }),
       summary: kit.riskAreas.length
-        ? `Your exposed flank: ${kit.riskAreas.slice(0, 4).join(', ')} — named in the posting, not evidenced on your résumé.`
-        : 'Nothing the posting asks for is missing from your résumé.',
+        ? c('summaryRisk', { areas: kit.riskAreas.slice(0, 4).join(', ') })
+        : c('summaryCovered'),
       score: null,
       scoreLabel: null,
       metrics: [
-        countMetric('Interview type', type),
-        listMetric('Risk areas', kit.riskAreas, 'None — or add your résumé to find out'),
+        // Read back through the FIELD's own option label rather than a private
+        // copy of it: the result echoes a choice made in the form above it, and
+        // two spellings of "Screening call" on one page is the drift this avoids.
+        countMetric(c('type'), c.option('type', type)),
+        listMetric(c, c('riskAreas'), kit.riskAreas, c('riskAreasEmpty')),
         ...kit.questions.map((q) => ({
-          label: `${q.category} · ${q.difficulty}`,
+          label: c('questionLabel', { category: q.category, difficulty: c(enumSlug('difficulty', q.difficulty)) }),
           value: q.question,
           hint: q.why,
         })),
@@ -933,10 +1265,10 @@ const interviewPrep: AnalyzerTool = {
       recommendations: [
         ...kit.questions.map((q) => ({
           title: q.question,
-          detail: `A strong answer contains: ${q.lookFor.join('; ')}.`,
+          detail: c('answerDetail', { points: q.lookFor.join('; ') }),
           priority: (q.difficulty === 'hard' ? 'high' : q.difficulty === 'core' ? 'medium' : 'low') as 'high' | 'medium' | 'low',
         })),
-        ...instructionRec(kit.instruction),
+        ...instructionRec(c, kit.instruction),
       ],
     };
   },

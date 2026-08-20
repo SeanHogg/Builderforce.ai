@@ -127,6 +127,56 @@ export interface OutgoingMessage {
   listUnsubscribeUrl?: string;
 }
 
+/**
+ * A live push subscription against one mailbox, as the adapter reports it.
+ *
+ * Three fields because the two providers disagree about all three, and collapsing
+ * any two of them breaks one of them:
+ *   • `subscriptionId` — Graph hands back a subscription resource to renew and
+ *     delete. Gmail has no per-watch handle at all (the mailbox IS the watch), so
+ *     it reports null.
+ *   • `expiresAtMs`    — Gmail 7 days, Graph about 3. Both must be renewed BEFORE
+ *     this instant or the mailbox silently stops notifying.
+ *   • `cursor`         — how far we have read. Opaque above the adapter: a Gmail
+ *     historyId, a Graph receivedDateTime instant.
+ */
+export interface MailboxWatchRegistration {
+  /** `push` when the provider will notify us; `poll` when this deployment cannot
+   *  receive one and the sweep must drain the same cursor itself. */
+  mode: 'push' | 'poll';
+  subscriptionId: string | null;
+  cursor: string;
+  expiresAtMs: number | null;
+}
+
+/** What the caller must give an adapter to register a push. */
+export interface MailboxWatchTarget {
+  /**
+   * Where the provider should notify. Graph puts this on the subscription; Gmail
+   * IGNORES it, because Gmail publishes to a Pub/Sub topic and the push
+   * subscription on that topic — an operator artifact — is what carries the URL.
+   */
+  notifyUrl: string;
+  /** Echoed back by Graph on every notification, so a guessed URL is not enough
+   *  to forge one. Unused by Gmail, whose payload names the mailbox instead. */
+  clientState: string;
+  /** `projects/<p>/topics/<t>`. Gmail only; absent means poll mode. */
+  pubsubTopic?: string;
+}
+
+/** Messages that arrived since `cursor`, and the cursor to store for next time. */
+export interface MailboxDelta {
+  messages: MailboxMessage[];
+  cursor: string;
+  /**
+   * True when the provider could not honour the cursor (Gmail expires a historyId
+   * after about a week) and the adapter re-baselined instead. The caller stores the
+   * new cursor and must NOT treat the empty result as "nothing happened" in any
+   * user-visible way — the mail in that gap is simply unrecoverable as a delta.
+   */
+  rebaselined?: boolean;
+}
+
 export interface MailboxProvider {
   name: MailboxProviderName;
   label: string;
@@ -159,6 +209,32 @@ export interface MailboxProvider {
     attachmentId: string,
     maxBytes: number,
   ): Promise<MailboxAttachmentContent | null>;
+
+  // ── Push ──────────────────────────────────────────────────────────────────
+  // The three calls that make a mailbox a CAUSE rather than something to re-read.
+  // They are on the port and not beside it for the reason every other method is:
+  // the two vendors express a subscription completely differently, and one shape
+  // above them is what lets the workflow trigger and the canvas inbox tile share a
+  // single registration instead of each registering its own.
+
+  /** Register (or re-register) a push subscription and return the cursor to start
+   *  reading from. Idempotent by contract: calling it again re-arms the clock. */
+  startWatch(accessToken: string, target: MailboxWatchTarget): Promise<MailboxWatchRegistration>;
+
+  /**
+   * Extend an existing subscription without disturbing the cursor.
+   *
+   * Returns null when the provider cannot extend this one — Graph 404s a
+   * subscription that already lapsed, Gmail has nothing to extend — which is the
+   * caller's signal to call {@link startWatch} again rather than an error.
+   */
+  renewWatch(accessToken: string, registration: MailboxWatchRegistration, target: MailboxWatchTarget): Promise<MailboxWatchRegistration | null>;
+
+  /** Best-effort teardown when a mailbox is disconnected. */
+  stopWatch(accessToken: string, registration: MailboxWatchRegistration): Promise<void>;
+
+  /** Everything that arrived after `cursor`, oldest first, plus the next cursor. */
+  fetchDelta(accessToken: string, cursor: string | null, limit: number): Promise<MailboxDelta>;
 }
 
 /**
@@ -661,6 +737,127 @@ const googleMailbox: MailboxProvider = {
     if (!res.ok) return providerError('Gmail modify', res);
   },
 
+  // ── Push (Gmail: users.watch + Pub/Sub, history.list for the delta) ────────
+
+  /**
+   * Arm a Gmail watch, or fall back to a cursor-only arm.
+   *
+   * `users.watch` publishes to a Pub/Sub TOPIC — there is no callback URL on this
+   * call, which is why `target.notifyUrl` is unused here and why the absence of a
+   * topic is not an error: without one the mailbox is armed in `poll` mode and the
+   * sweep drains the identical `history.list` cursor on its own tick. Push makes it
+   * instant; the fallback makes it late, never wrong.
+   *
+   * The cursor comes from the watch response when there is one and from the profile
+   * otherwise, so both modes start from a real historyId rather than from zero
+   * (which would replay the entire mailbox as "new").
+   */
+  async startWatch(accessToken, target) {
+    if (!target.pubsubTopic) {
+      const profile = await fetch(`${GMAIL_BASE}/profile`, { headers: { Authorization: `Bearer ${accessToken}` } });
+      if (!profile.ok) return providerError('Gmail profile', profile);
+      const body = await profile.json() as { historyId?: string | number };
+      return { mode: 'poll', subscriptionId: null, cursor: String(body.historyId ?? ''), expiresAtMs: null };
+    }
+    const res = await fetch(`${GMAIL_BASE}/watch`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      // INBOX only: a watch over every label re-notifies on a draft being saved and
+      // on our own sends, which would fire a workflow for mail the tenant wrote.
+      body: JSON.stringify({ topicName: target.pubsubTopic, labelIds: ['INBOX'], labelFilterBehavior: 'INCLUDE' }),
+    });
+    if (!res.ok) return providerError('Gmail watch', res);
+    const body = await res.json() as { historyId?: string | number; expiration?: string | number };
+    return {
+      mode: 'push',
+      subscriptionId: null,
+      cursor: String(body.historyId ?? ''),
+      // Gmail reports the expiry as epoch MILLISECONDS in a string.
+      expiresAtMs: Number(body.expiration) || null,
+    };
+  },
+
+  /**
+   * Gmail has no extend operation — re-arming IS the renewal, and it deliberately
+   * keeps the cursor the caller already holds rather than adopting the fresh
+   * historyId the watch reports. Adopting it would skip every message that arrived
+   * between the last drain and the renewal.
+   */
+  async renewWatch(accessToken, registration, target) {
+    const armed = await this.startWatch(accessToken, target);
+    return { ...armed, cursor: registration.cursor || armed.cursor };
+  },
+
+  async stopWatch(accessToken) {
+    const res = await fetch(`${GMAIL_BASE}/stop`, {
+      method: 'POST', headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    // 404 means there was no watch to stop, which is the state we wanted anyway.
+    if (!res.ok && res.status !== 404) return providerError('Gmail stop', res);
+  },
+
+  /**
+   * Everything added since `cursor`, via `users.history.list`.
+   *
+   * Two things this must get right. `historyTypes=messageAdded` is what keeps a
+   * read receipt or a label change from looking like new mail. And a 404 means the
+   * cursor aged out (Gmail keeps roughly a week of history) — the only honest
+   * response is to re-baseline from the profile and say so, because the mail in
+   * that gap cannot be reconstructed as a delta and pretending otherwise would
+   * either replay the mailbox or silently stall the cursor forever.
+   */
+  async fetchDelta(accessToken, cursor, limit) {
+    const auth = { Authorization: `Bearer ${accessToken}` };
+    const rebaseline = async (): Promise<MailboxDelta> => {
+      const profile = await fetch(`${GMAIL_BASE}/profile`, { headers: auth });
+      if (!profile.ok) return providerError('Gmail profile', profile);
+      const body = await profile.json() as { historyId?: string | number };
+      return { messages: [], cursor: String(body.historyId ?? ''), rebaselined: true };
+    };
+    if (!cursor) return rebaseline();
+
+    const params = new URLSearchParams({
+      startHistoryId: cursor,
+      historyTypes: 'messageAdded',
+      labelId: 'INBOX',
+      maxResults: String(Math.max(1, Math.min(limit, MAILBOX_MAX_LIMIT))),
+    });
+    const res = await fetch(`${GMAIL_BASE}/history?${params}`, { headers: auth });
+    if (res.status === 404) return rebaseline();
+    if (!res.ok) return providerError('Gmail history', res);
+    const body = await res.json() as {
+      historyId?: string | number;
+      history?: Array<{ messagesAdded?: Array<{ message?: { id?: string } }> }>;
+    };
+    const nextCursor = String(body.historyId ?? cursor);
+
+    // De-duplicated here as well as in the receipt ledger: one history page can
+    // name the same message in two entries, and fetching it twice would be two
+    // needless round trips before the ledger ever sees it.
+    const ids = [...new Set((body.history ?? [])
+      .flatMap((entry) => entry.messagesAdded ?? [])
+      .map((added) => String(added.message?.id ?? ''))
+      .filter(Boolean))].slice(0, MAILBOX_MAX_LIMIT);
+    if (ids.length === 0) return { messages: [], cursor: nextCursor };
+
+    const settled = await Promise.allSettled(ids.map(async (id) => {
+      const one = await fetch(`${GMAIL_BASE}/messages/${encodeURIComponent(id)}?format=full`, { headers: auth });
+      // A message deleted between the notification and the read is not an error.
+      if (one.status === 404) return null;
+      if (!one.ok) return providerError('Gmail get', one);
+      return gmailToMessage(await one.json() as Record<string, unknown>);
+    }));
+    const messages: MailboxMessage[] = [];
+    for (const result of settled) {
+      if (result.status === 'fulfilled') { if (result.value) messages.push(result.value); }
+      else reportCaughtError(result.reason, {
+        source: 'application/mailbox/mailboxProviders.ts', operation: 'googleMailbox.fetchDelta',
+      });
+    }
+    messages.sort((a, b) => a.receivedAtISO.localeCompare(b.receivedAtISO));
+    return { messages, cursor: nextCursor };
+  },
+
   async sendMessage(accessToken, message) {
     const { email } = await this.accountInfo(accessToken);
     const raw = base64Url(buildMimeMessage({ email }, message));
@@ -769,6 +966,37 @@ function graphToAttachment(raw: GraphAttachment): MailboxAttachment {
     byteSize: Number(raw.size ?? 0) || 0,
     inline: raw.isInline === true,
   };
+}
+
+/**
+ * How long a Graph mail subscription is asked to live.
+ *
+ * Graph caps an Outlook message subscription at 4230 minutes (a little under three
+ * days) and rejects anything longer outright. 4200 leaves half an hour of slack so
+ * a clock skew between this Worker and Graph cannot turn a valid request into a
+ * 400 — which is the failure mode that would silently stop every renewal.
+ */
+const GRAPH_SUBSCRIPTION_TTL_MS = 4_200 * 60 * 1000;
+
+/**
+ * The instant of the newest message already in the inbox — the cursor a fresh
+ * watch starts from.
+ *
+ * Starting from "now" instead would drop anything that arrived between the consent
+ * redirect and this call; starting from zero would replay the entire mailbox as new
+ * mail and fire a workflow for every message the tenant has ever received.
+ */
+async function graphNewestReceivedAt(accessToken: string): Promise<string> {
+  const params = new URLSearchParams({
+    $select: 'receivedDateTime', $orderby: 'receivedDateTime desc', $top: '1',
+  });
+  const res = await fetch(`${GRAPH_BASE}/mailFolders('inbox')/messages?${params}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) return providerError('Graph newest message', res);
+  const body = await res.json() as { value?: Array<{ receivedDateTime?: string }> };
+  const newest = body.value?.[0]?.receivedDateTime;
+  return newest ? toIso(newest) : new Date().toISOString();
 }
 
 const microsoftMailbox: MailboxProvider = {
@@ -892,6 +1120,115 @@ const microsoftMailbox: MailboxProvider = {
       throw new MailboxProviderError(attachmentTooLargeMessage(meta.filename, bytes.byteLength), 413);
     }
     return { ...meta, byteSize: bytes.byteLength, bytes };
+  },
+
+  // ── Push (Graph: /subscriptions + a receivedDateTime cursor) ──────────────
+
+  /**
+   * Create a Graph change subscription on the inbox.
+   *
+   * Creation is a HANDSHAKE, and it happens INSIDE this call: Graph immediately
+   * calls `notificationUrl` with `?validationToken=<opaque>` and refuses the
+   * subscription unless the endpoint answers 200 with that token as `text/plain`.
+   * That is why the push route has to accept an unauthenticated request and answer
+   * the validation before anything else — see `mailboxPushRoutes`.
+   *
+   * The cursor is the newest `receivedDateTime` already in the mailbox, NOT a delta
+   * token. Graph delta requires walking the entire folder to reach the first
+   * `@odata.deltaLink`, which on a real mailbox is thousands of requests spent to
+   * learn a fact a single `$top=1` query answers — and every subsequent read is the
+   * same `$filter=receivedDateTime gt <cursor>` either way.
+   */
+  async startWatch(accessToken, target) {
+    const cursor = await graphNewestReceivedAt(accessToken);
+    const expiresAtMs = Date.now() + GRAPH_SUBSCRIPTION_TTL_MS;
+    const res = await fetch('https://graph.microsoft.com/v1.0/subscriptions', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        changeType: 'created',
+        notificationUrl: target.notifyUrl,
+        resource: "/me/mailFolders('inbox')/messages",
+        expirationDateTime: new Date(expiresAtMs).toISOString(),
+        clientState: target.clientState,
+      }),
+    });
+    if (!res.ok) return providerError('Graph subscribe', res);
+    const body = await res.json() as { id?: string; expirationDateTime?: string };
+    return {
+      mode: 'push',
+      subscriptionId: String(body.id ?? ''),
+      cursor,
+      expiresAtMs: Date.parse(String(body.expirationDateTime ?? '')) || expiresAtMs,
+    };
+  },
+
+  /**
+   * PATCH the expiry. A 404 means the subscription already lapsed and cannot be
+   * extended — returning null rather than throwing is what tells the sweep to
+   * create a fresh one instead of marking the mailbox broken.
+   */
+  async renewWatch(accessToken, registration) {
+    if (!registration.subscriptionId) return null;
+    const expiresAtMs = Date.now() + GRAPH_SUBSCRIPTION_TTL_MS;
+    const res = await fetch(
+      `https://graph.microsoft.com/v1.0/subscriptions/${encodeURIComponent(registration.subscriptionId)}`,
+      {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ expirationDateTime: new Date(expiresAtMs).toISOString() }),
+      },
+    );
+    if (res.status === 404 || res.status === 410) return null;
+    if (!res.ok) return providerError('Graph renew subscription', res);
+    const body = await res.json() as { expirationDateTime?: string };
+    return {
+      ...registration,
+      expiresAtMs: Date.parse(String(body.expirationDateTime ?? '')) || expiresAtMs,
+    };
+  },
+
+  async stopWatch(accessToken, registration) {
+    if (!registration.subscriptionId) return;
+    const res = await fetch(
+      `https://graph.microsoft.com/v1.0/subscriptions/${encodeURIComponent(registration.subscriptionId)}`,
+      { method: 'DELETE', headers: { Authorization: `Bearer ${accessToken}` } },
+    );
+    // Already gone is the outcome we asked for.
+    if (!res.ok && res.status !== 404 && res.status !== 410) return providerError('Graph unsubscribe', res);
+  },
+
+  /**
+   * Everything received strictly after `cursor`, oldest first.
+   *
+   * `gt` and not `ge` on purpose: the boundary message is the one the cursor was
+   * SET from, and re-emitting it on every drain is exactly the double-fire the
+   * receipt ledger exists to catch — it should never have to.
+   */
+  async fetchDelta(accessToken, cursor, limit) {
+    if (!cursor) return { messages: [], cursor: await graphNewestReceivedAt(accessToken), rebaselined: true };
+    const since = new Date(cursor);
+    if (Number.isNaN(since.getTime())) {
+      return { messages: [], cursor: await graphNewestReceivedAt(accessToken), rebaselined: true };
+    }
+    const params = new URLSearchParams({
+      $select: GRAPH_SELECT,
+      $filter: `receivedDateTime gt ${since.toISOString()}`,
+      $orderby: 'receivedDateTime asc',
+      $top: String(Math.max(1, Math.min(limit, MAILBOX_MAX_LIMIT))),
+    });
+    const res = await fetch(`${GRAPH_BASE}/mailFolders('inbox')/messages?${params}`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!res.ok) return providerError('Graph delta', res);
+    const body = await res.json() as { value?: GraphMessage[] };
+    const messages = (body.value ?? []).map(graphToMessage);
+    // Advance only as far as we actually read. A page cut short by `$top` leaves the
+    // cursor on the last message we HAVE, so the next drain resumes rather than skips.
+    const nextCursor = messages.length
+      ? messages[messages.length - 1]!.receivedAtISO
+      : since.toISOString();
+    return { messages, cursor: nextCursor };
   },
 
   async sendMessage(accessToken, message) {

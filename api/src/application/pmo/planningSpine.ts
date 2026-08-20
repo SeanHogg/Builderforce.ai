@@ -42,6 +42,7 @@ import {
   type AllocationCategory,
 } from '../llm/allocationCategories';
 import { MILLICENTS_PER_USD } from '../../domain/shared/money';
+import { loadPlanVerdicts } from '../planning/planVerdictStore';
 
 export type CostClass = 'capex' | 'opex';
 export type CostClassSource = 'manual' | 'inherited' | 'agent';
@@ -126,6 +127,13 @@ export interface RawTask {
   costClass: string | null; costClassSource: string; costClassVerified: boolean;
   /** Investment-allocation signals (shared taxonomy) — drive the category default. */
   actionType: string | null; source: string | null; allocationCategory: string | null;
+  /**
+   * For an EPIC: which reasoning step produced its children — 'llm', 'heuristic'
+   * (the degraded markdown fallback) or 'manual'. Carried onto the spine because a
+   * ROW of heuristic Epics is a model-availability incident, not a run of
+   * mysteriously poor tickets, and the spine is where a PM reads the whole plan.
+   */
+  decompositionSource?: string | null;
 }
 export interface RawObjectiveLink { objectiveId: string; linkKind: string; initiativeId: string | null; taskId: number | null }
 /** Roadmap item folded into the spine (0225/SPINE-4): targetDate-only, no cost. */
@@ -136,6 +144,18 @@ export interface RawMemberRate { memberRef: string; costRateUsdCents: number | n
 export interface RawTaskDependency { predecessorTaskId: number; successorTaskId: number; depType: string }
 
 export interface SpineCost { llmUsd: number; humanUsd: number; totalUsd: number; capexUsd: number; opexUsd: number }
+
+/** The stored plan verdict as the spine hands it to the UI. */
+export interface SpinePlanVerdict {
+  /** Estimates were scaled DOWN to fit the parent's window. */
+  compressed: boolean;
+  /** Child ids that still end after the parent's due date. */
+  overruns: string[];
+  /** Child ids caught in a precedence cycle — their order is a guess, not a plan. */
+  cyclic: string[];
+  /** Child ids whose start was pushed out by their owner's capacity. */
+  capacityDeferred: string[];
+}
 
 export interface SpineNode {
   key: string;                 // 'portfolio:uuid' | 'objective:uuid' | 'initiative:uuid' | 'epic:12' | 'task:12'
@@ -154,6 +174,28 @@ export interface SpineNode {
    * keeps the UI honest that nobody committed to those dates explicitly.
    */
   datesDerived: boolean;
+  /**
+   * TRUE for a CONTAINER (portfolio / objective / initiative / epic) that has no
+   * window of its own AND nothing inside it to derive one from.
+   *
+   * That state is not "undated" in the same sense a task is — a freshly created
+   * objective has simply not been scoped yet, and rendering it identically to a
+   * ticket somebody forgot to date told the reader the wrong thing. Computed here
+   * rather than in each component so the spine, the OKR surface and every other
+   * date-rendering surface agree about what an empty container means.
+   */
+  notYetScoped: boolean;
+  /**
+   * For an EPIC: which reasoning step produced its children ('llm' | 'heuristic' |
+   * 'manual'), or null when it was never decomposed.
+   */
+  decompositionSource: string | null;
+  /**
+   * The planner's verdict on this node's own plan — set only where one was
+   * recorded (an Epic whose fan-out did NOT fit its window, or whose children sit
+   * in a dependency cycle). Null means the plan was clean; see planVerdictStore.
+   */
+  planVerdict: SpinePlanVerdict | null;
   /**
    * Keys of the nodes that must FINISH before this one starts — the precedence the
    * Gantt draws as arrows. Sourced from `task_dependencies` (task/epic nodes only);
@@ -215,6 +257,12 @@ export function buildSpine(input: {
   roadmapItems?: RawRoadmapItem[];
   /** Task precedence edges (0121) surfaced as `dependsOn` so the Gantt can draw sequence. */
   taskDeps?: RawTaskDependency[];
+  /**
+   * Plan verdicts by parent task id (migration 1075). Only misfitting plans have a
+   * row, so an absent entry means "this plan was fine" — the spine never has to
+   * distinguish "clean" from "never planned" in the UI.
+   */
+  planVerdicts?: Map<number, SpinePlanVerdict>;
   /** Drop container nodes (portfolio/objective/initiative) with no leaf descendant
    *  — used by the project-scoped view (SPINE-3) so empty parents don't show. */
   prune?: boolean;
@@ -260,6 +308,8 @@ export function buildSpine(input: {
   for (const tk of input.tasks) {
     const kind: SpineNodeKind = tk.taskType === 'epic' ? 'epic' : 'task';
     const node = baseNode(kind, String(tk.id), tk.title, tk.status, iso(tk.startDate), iso(tk.dueDate), declared(tk.costClass), source(tk.costClassSource), tk.costClassVerified, classifyCostClass(tk));
+    node.decompositionSource = tk.decompositionSource ?? null;
+    node.planVerdict = input.planVerdicts?.get(tk.id) ?? null;
     nodes.set(`${kind}:${tk.id}`, node);
     categoryDefaultByKey.set(`${kind}:${tk.id}`, defaultCostClassFor(categoryOf(tk)));
   }
@@ -437,6 +487,19 @@ export function buildSpine(input: {
     node.datesDerived = true;
   }
 
+  // ── "not yet scoped" vs "undated" (SCHED-R2) ──────────────────────────────
+  // Deriving a container's window covers the POPULATED case, but a freshly created
+  // objective or initiative has nothing to derive from — and rendering it exactly
+  // like a ticket somebody forgot to date told the reader the wrong thing. A
+  // container with no window and no descendants to infer one from is NOT YET
+  // SCOPED, which is a state a PM can act on. Decided once, here, so every surface
+  // that draws a date agrees on what an empty container means.
+  const CONTAINER_KINDS = new Set<SpineNodeKind>(['portfolio', 'objective', 'initiative', 'epic']);
+  for (const node of nodes.values()) {
+    node.notYetScoped = CONTAINER_KINDS.has(node.kind)
+      && node.startDate == null && node.endDate == null;
+  }
+
   const list = [...nodes.values()];
   const totals = emptyCost();
   for (const node of list) if (node.parentKey == null) {
@@ -463,7 +526,8 @@ function baseNode(
 ): SpineNode {
   return {
     key: `${kind}:${id}`, id, kind, parentKey: null, title, status, startDate, endDate,
-    datesDerived: false, dependsOn: [], depth: 0,
+    datesDerived: false, notYetScoped: false, decompositionSource: null, planVerdict: null,
+    dependsOn: [], depth: 0,
     declaredCostClass, costClassSource, inheritedCostClass: null, effectiveCostClass: declaredCostClass,
     costClassVerified, anomaly: false, hasDescendantAnomaly: false, suggestion,
     cost: emptyCost(), childCount: 0,
@@ -496,6 +560,7 @@ export async function loadPlanningSpine(db: Db, tenantId: number, segmentId: str
       startDate: tasks.startDate, dueDate: tasks.dueDate, createdAt: tasks.createdAt, completedAt: tasks.completedAt,
       assignedUserId: tasks.assignedUserId, costClass: tasks.costClass, costClassSource: tasks.costClassSource, costClassVerified: tasks.costClassVerified,
       actionType: tasks.actionType, source: tasks.source, allocationCategory: tasks.allocationCategory,
+      decompositionSource: tasks.decompositionSource,
     }).from(tasks).where(scopedToTenant(tasks, tenantId, opts.projectId != null ? and(eq(tasks.segmentId, segmentId), eq(tasks.projectId, opts.projectId), notSystemTask) : and(eq(tasks.segmentId, segmentId), notSystemTask))),
     db.select({ objectiveId: objectiveLinks.objectiveId, linkKind: objectiveLinks.linkKind, initiativeId: objectiveLinks.initiativeId, taskId: objectiveLinks.taskId })
       .from(objectiveLinks).where(and(eq(objectiveLinks.tenantId, tenantId), eq(objectiveLinks.segmentId, segmentId))),
@@ -513,7 +578,7 @@ export async function loadPlanningSpine(db: Db, tenantId: number, segmentId: str
   const llmWhere = opts.window
     ? and(eq(llmUsageLog.tenantId, tenantId), inArray(llmUsageLog.taskId, taskIds), gte(llmUsageLog.createdAt, new Date(opts.window.from)), lte(llmUsageLog.createdAt, new Date(`${opts.window.to}T23:59:59.999Z`)))
     : and(eq(llmUsageLog.tenantId, tenantId), inArray(llmUsageLog.taskId, taskIds));
-  const [llmRows, rateRows, loggedMin, depRows] = await Promise.all([
+  const [llmRows, rateRows, loggedMin, depRows, verdictRows] = await Promise.all([
     taskIds.length
       ? db.select({ taskId: llmUsageLog.taskId, millicents: sql<string>`coalesce(sum(${llmUsageLog.costUsdMillicents}),0)` })
           .from(llmUsageLog).where(llmWhere).groupBy(llmUsageLog.taskId)
@@ -527,6 +592,10 @@ export async function loadPlanningSpine(db: Db, tenantId: number, segmentId: str
       successorTaskId: taskDependencies.successorTaskId,
       depType: taskDependencies.depType,
     }).from(taskDependencies).where(depsWhere),
+    // The planner's verdict on each Epic's plan (1075). Only a misfitting plan has a
+    // row, so this stays a small read even tenant-wide — and it is the ONLY place
+    // "compressed" survives, because a squeezed plan's windows fit perfectly.
+    loadPlanVerdicts(db, tenantId, opts.projectId),
   ]);
 
   return buildSpine({
@@ -541,6 +610,12 @@ export async function loadPlanningSpine(db: Db, tenantId: number, segmentId: str
     loggedMinutesByTask: loggedMin,
     roadmapItems: roadmapRows,
     taskDeps: depRows,
+    planVerdicts: new Map([...verdictRows].map(([taskId, v]) => [taskId, {
+      compressed: v.compressed,
+      overruns: v.overruns,
+      cyclic: v.cyclic,
+      capacityDeferred: v.capacityDeferred,
+    }])),
     prune: opts.projectId != null,
   });
 }

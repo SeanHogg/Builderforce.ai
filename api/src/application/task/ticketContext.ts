@@ -49,12 +49,25 @@ export interface CompletionBasis {
 }
 
 export interface TicketCompletion {
-  percent: number;
+  /**
+   * 0..100 — or `null` when the ticket is PARKED, where no percentage is honest.
+   * See {@link computeCompletion}. A surface must render {@link isParked} instead of
+   * substituting 0.
+   */
+  percent: number | null;
   laneKey: string;
-  /** 0-based index of this ticket's lane among the board's ordered lanes. */
+  /** 0-based index of this ticket's lane among the board's ordered DELIVERY lanes
+   *  (parked lanes excluded). -1 when the lane is parked or matches none. */
   laneIndex: number;
+  /** Count of DELIVERY lanes — the denominator parked lanes are excluded from. */
   laneCount: number;
   isTerminal: boolean;
+  /**
+   * The ticket sits in a PARKED lane (blocked / on hold / cancelled — `is_parking`,
+   * migration 1080). It is off the delivery path, so its lane position says nothing
+   * about progress and the headline is "parked", not a number.
+   */
+  isParked: boolean;
   basis: CompletionBasis[];
 }
 
@@ -125,9 +138,15 @@ const pct = (done: number, total: number): number => (total <= 0 ? 0 : Math.roun
  * returns index -1 / count 0, and the caller falls back to the other signals.
  */
 export function laneRank(status: string, ordinals: OrdinalMap): { index: number; count: number } {
-  const positions = [...new Set(Object.values(ordinals).map((l) => l.position))].sort((a, b) => a - b);
+  // PARKED lanes are excluded from the ordering ENTIRELY — from the denominator and
+  // from the ranked positions. The default board puts `Blocked` at position 7 of 9, so
+  // counting it made a blocked ticket ~87% complete, and merely excluding it from the
+  // numerator would still have inflated every OTHER lane's rank by carrying a stage
+  // nothing flows through in the denominator. See `swimlanes.is_parking`.
+  const delivery = Object.entries(ordinals).filter(([, l]) => !l.isParking);
+  const positions = [...new Set(delivery.map(([, l]) => l.position))].sort((a, b) => a - b);
   const lane = ordinals[status];
-  if (!lane || positions.length === 0) return { index: -1, count: positions.length };
+  if (!lane || lane.isParking || positions.length === 0) return { index: -1, count: positions.length };
   return { index: positions.indexOf(lane.position), count: positions.length };
 }
 
@@ -156,6 +175,7 @@ export function computeCompletion(input: {
   const { status, ordinals, isEpic, childDone, childTotal, signoffCompleted, signoffRequired } = input;
   const { index, count } = laneRank(status, ordinals);
   const isTerminal = isDoneLane(status, ordinals);
+  const isParked = ordinals[status]?.isParking === true;
   // Lane progress spans first → last lane, so the first lane is 0% and the last
   // is 100%. A single-lane board (or an unmatched status) contributes nothing.
   const lanePercent = isTerminal ? 100 : index < 0 || count < 2 ? 0 : Math.round((index / (count - 1)) * 100);
@@ -164,7 +184,23 @@ export function computeCompletion(input: {
   };
 
   if (isTerminal) {
-    return { percent: 100, laneKey: status, laneIndex: index, laneCount: count, isTerminal, basis: [{ ...laneBasis, weight: 1 }] };
+    return { percent: 100, laneKey: status, laneIndex: index, laneCount: count, isTerminal, isParked: false, basis: [{ ...laneBasis, weight: 1 }] };
+  }
+
+  // PARKED: refuse to report a percentage at all.
+  //
+  // Not 0 and not the lane rank. A ticket that has been blocked in review for three
+  // weeks HAS had most of its work done, so 0 lies in one direction; and the lane it is
+  // parked in says nothing about that work, so its position lies in the other. The
+  // honest answer is a word, not a number — the surface renders "Parked", and the
+  // sign-off basis below is still returned so a reader can see how far it actually got.
+  if (isParked) {
+    const parkedBasis: CompletionBasis[] = signoffRequired > 0
+      ? [{ kind: 'signoff', percent: pct(signoffCompleted, signoffRequired), weight: 1, done: signoffCompleted, total: signoffRequired }]
+      : isEpic && childTotal > 0
+        ? [{ kind: 'children', percent: pct(childDone, childTotal), weight: 1, done: childDone, total: childTotal }]
+        : [];
+    return { percent: null, laneKey: status, laneIndex: -1, laneCount: count, isTerminal: false, isParked: true, basis: parkedBasis };
   }
 
   const basis: CompletionBasis[] = [];
@@ -181,13 +217,65 @@ export function computeCompletion(input: {
     ? 0
     : Math.round(basis.reduce((sum, b) => sum + b.percent * b.weight, 0));
 
-  return { percent, laneKey: status, laneIndex: index, laneCount: count, isTerminal, basis };
+  return { percent, laneKey: status, laneIndex: index, laneCount: count, isTerminal, isParked: false, basis };
 }
 
 /** Roll a set of child statuses up into {total, done, percent}. */
 export function rollupChildren(statuses: string[], ordinals: OrdinalMap): { total: number; done: number; percent: number } {
   const done = statuses.filter((s) => isDoneLane(s, ordinals)).length;
   return { total: statuses.length, done, percent: pct(done, statuses.length) };
+}
+
+/** One `objective_links` row that reaches a real task. */
+export interface ObjectiveDeliveryLink {
+  objectiveId: string;
+  linkKind: string;
+  taskId: number | null;
+  status: string;
+}
+
+/**
+ * The DELIVERY SET behind each objective — the denominator a ticket's share is 1 of. PURE.
+ *
+ * A link is one row, but a link to an EPIC is a link to everything under it. Counting the
+ * Epic itself made the denominator 1, so every child of that Epic reported a 100% share
+ * of the objective — ten tickets each claiming to be the whole thing.
+ *
+ * So an epic-kind link contributes its CHILDREN (non-archived) when it has any, and
+ * itself when it has none (an Epic with no children is still one work item, not zero).
+ * Every other link contributes itself. De-duplicated by task id, because an objective
+ * linked BOTH to an Epic and to one of its children must not count that child twice.
+ */
+export function foldObjectiveDelivery(
+  links: readonly ObjectiveDeliveryLink[],
+  childrenByEpic: ReadonlyMap<number, ReadonlyArray<{ id: number; status: string }>>,
+  isDone: (status: string) => boolean,
+): Map<string, { total: number; done: number }> {
+  const seen = new Map<string, Set<number>>();
+  const out = new Map<string, { total: number; done: number }>();
+
+  const count = (objectiveId: string, taskId: number | null, status: string): void => {
+    const ids = seen.get(objectiveId) ?? new Set<number>();
+    if (taskId != null) {
+      if (ids.has(taskId)) return;
+      ids.add(taskId);
+      seen.set(objectiveId, ids);
+    }
+    const agg = out.get(objectiveId) ?? { total: 0, done: 0 };
+    agg.total += 1;
+    if (isDone(status)) agg.done += 1;
+    out.set(objectiveId, agg);
+  };
+
+  for (const l of links) {
+    const children = l.linkKind === 'epic' && l.taskId != null ? childrenByEpic.get(l.taskId) : undefined;
+    if (children && children.length > 0) {
+      for (const c of children) count(l.objectiveId, c.id, c.status);
+    } else {
+      count(l.objectiveId, l.taskId, l.status);
+    }
+  }
+  return out;
 }
 
 /** Nearest-link-wins precedence for objective lineage (lower = closer). */
@@ -387,7 +475,12 @@ async function loadObjectiveLineage(
       metricType: keyResults.metricType, startValue: keyResults.startValue, targetValue: keyResults.targetValue,
       currentValue: keyResults.currentValue, unit: keyResults.unit,
     }).from(keyResults).where(and(eq(keyResults.tenantId, o.tenantId), inArray(keyResults.objectiveId, ids))),
-    db.select({ objectiveId: objectiveLinks.objectiveId, status: tasks.status })
+    db.select({
+      objectiveId: objectiveLinks.objectiveId,
+      linkKind: objectiveLinks.linkKind,
+      taskId: objectiveLinks.taskId,
+      status: tasks.status,
+    })
       .from(objectiveLinks)
       .innerJoin(tasks, eq(tasks.id, objectiveLinks.taskId))
       .where(and(
@@ -397,6 +490,23 @@ async function loadObjectiveLineage(
         eq(tasks.archived, false),
       )),
   ]);
+
+  // ── THE EPIC'S CHILDREN ARE THE WORK SET ────────────────────────────────────
+  //
+  // An objective linked at EPIC granularity produced one `objective_links` row, so the
+  // denominator was 1 and every one of that Epic's children reported a 100% share of the
+  // objective. Ten tickets each claiming to be the whole objective is not a rounding
+  // error — it is the number an operator uses to decide what to work on next.
+  //
+  // Walking `tasks.parent_task_id` for the epic-kind links folds the real work set in:
+  // one extra indexed read, only when an epic link exists at all.
+  const epicTaskIds = [...new Set(
+    deliveryRows.filter((d) => d.linkKind === 'epic' && d.taskId != null).map((d) => d.taskId as number),
+  )];
+  const epicChildRows = epicTaskIds.length === 0 ? [] : await db
+    .select({ parentTaskId: tasks.parentTaskId, id: tasks.id, status: tasks.status })
+    .from(tasks)
+    .where(scopedToTenant(tasks, o.tenantId, inArray(tasks.parentTaskId, epicTaskIds), eq(tasks.archived, false)));
 
   const krByObjective = new Map<string, TicketKeyResult[]>();
   const progressByObjective = new Map<string, number[]>();
@@ -414,13 +524,19 @@ async function loadObjectiveLineage(
     krByObjective.set(kr.objectiveId, list);
   }
 
-  const deliveryByObjective = new Map<string, { total: number; done: number }>();
-  for (const d of deliveryRows) {
-    const agg = deliveryByObjective.get(d.objectiveId) ?? { total: 0, done: 0 };
-    agg.total += 1;
-    if (isDoneLane(d.status, o.ordinals) || isDoneStatus(d.status)) agg.done += 1;
-    deliveryByObjective.set(d.objectiveId, agg);
+  const childrenByEpic = new Map<number, { id: number; status: string }[]>();
+  for (const c of epicChildRows) {
+    if (c.parentTaskId == null) continue;
+    const list = childrenByEpic.get(c.parentTaskId) ?? [];
+    list.push({ id: Number(c.id), status: c.status });
+    childrenByEpic.set(c.parentTaskId, list);
   }
+
+  const deliveryByObjective = foldObjectiveDelivery(
+    deliveryRows.map((d) => ({ objectiveId: d.objectiveId, linkKind: d.linkKind, taskId: d.taskId, status: d.status })),
+    childrenByEpic,
+    (status) => isDoneLane(status, o.ordinals) || isDoneStatus(status),
+  );
 
   const byId = new Map(objRows.map((r) => [r.id, r]));
   return nearest

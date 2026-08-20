@@ -255,7 +255,29 @@ export function AccountabilityTab({ taskId }: { taskId: number }) {
                       </td>
                       <td style={tdStyle}>{so?.memberName ?? p.assigneeName ?? <span style={{ color: 'var(--text-muted)' }}>{t('unassigned')}</span>}</td>
                       <td style={tdStyle}><StateChip state={p.state} label={stateLabel(p.state)} /></td>
-                      <td style={tdStyle}>{so ? verdictLabel(so.verdict) : <span style={{ color: 'var(--text-muted)' }}>—</span>}</td>
+                      <td style={tdStyle}>
+                        {so ? (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                            {verdictLabel(so.verdict)}
+                            {/* AUTO-ATTESTED ≠ REVIEWED. `attestRoleRun` credits a producer's
+                                completed run so the slot can leave `in_progress`; the API has
+                                carried the flag since, and until now nothing rendered it — so a
+                                credit the PLATFORM asserted looked exactly like a verdict a member
+                                considered. */}
+                            {so.autoAttested && (
+                              <span
+                                title={t('autoAttested.help')}
+                                style={{
+                                  padding: '1px 6px', borderRadius: 'var(--radius-full)', fontSize: 10, fontWeight: 700,
+                                  background: 'var(--warning-bg)', color: 'var(--warning-text)', whiteSpace: 'nowrap',
+                                }}
+                              >
+                                {t('autoAttested.badge')}
+                              </span>
+                            )}
+                          </span>
+                        ) : <span style={{ color: 'var(--text-muted)' }}>—</span>}
+                      </td>
                       <td style={tdMutedStyle}>{so ? fmt.dateTime(so.createdAt) : '—'}</td>
                       <td style={tdMutedStyle}>{so?.summary ?? so?.waiveReason ?? '—'}</td>
                       <td style={tdStyle}><ContributionLinks p={p} contribution={so?.contribution} /></td>

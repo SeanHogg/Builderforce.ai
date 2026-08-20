@@ -270,8 +270,25 @@ export function checklistItemTitle(rawLine: string): string | null {
   const bullet = line.match(BULLET_RE)?.[1]?.trim();
   if (!bullet) return null;
 
+  return workItemTitle(bullet);
+}
+
+/**
+ * The WORK test itself, applied to bullet-free text: is this a title somebody
+ * could be assigned, or is it structure?
+ *
+ * Split out of {@link checklistItemTitle} so the exact same rule can be asked of a
+ * title that already exists as a row (see {@link isWorkItemTitle}). The two must
+ * never diverge: a cleanup review that flagged a different set than the parser
+ * rejects would be offering to delete tickets the parser would happily re-create.
+ */
+export function workItemTitle(text: string): string | null {
+  const content = text.trim();
+  // A heading is structure whether it arrived as a bullet or as a stored title.
+  if (!content || HEADING_RE.test(content)) return null;
+
   // `**Data Model**: Create a Capability entity` → `Create a Capability entity`.
-  const item = (bullet.match(LEADING_LABEL_RE)?.[1] ?? bullet).trim();
+  const item = (content.match(LEADING_LABEL_RE)?.[1] ?? content).trim();
 
   // Compare on the de-emphasised text so `**API Endpoints**:` is judged as
   // `API Endpoints:` — a label, not an instruction.
@@ -296,4 +313,30 @@ function parseChecklist(description: string | null): ChildTaskPlan[] {
     if (title) out.push({ title });
   }
   return out;
+}
+
+/**
+ * Identity key for a child title — case/whitespace-insensitive.
+ *
+ * The ONE definition, because two places have to agree on it or they create the
+ * bug between them: {@link TaskService.decomposeEpic} reconciles a re-decomposition
+ * against existing children by this key, and the decomposition-cleanup review finds
+ * DUPLICATE siblings by it. If those two ever normalised differently, re-planning
+ * would create the very duplicates the cleanup review then offered to merge.
+ */
+export function normalizeChildTitle(title: string): string {
+  return title.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+/**
+ * Does this stored task TITLE describe a unit of work?
+ *
+ * {@link checklistItemTitle} answers that for a markdown LINE at parse time. This is
+ * the same question asked of a row that already exists — the tickets the pre-guard
+ * decomposer created (`**API Endpoints**:`, one-word categories, `## Data model`)
+ * are still live on the board, and finding them has to use the same rule that now
+ * rejects them, or the review would flag a different set than the parser would.
+ */
+export function isWorkItemTitle(title: string): boolean {
+  return workItemTitle(title) != null;
 }

@@ -1421,7 +1421,16 @@ export const workflowTaskStatusEnum = pgEnum('workflow_task_status', ['pending',
 export const approvalStatusEnum = pgEnum('approval_status', ['pending', 'approved', 'rejected', 'expired', 'answered']);
 
 
-export const artifactTypeEnum = pgEnum('artifact_type', ['skill', 'persona', 'content']);
+/**
+ * What the marketplace sells and what a scope can be given (migration 0982).
+ *
+ * `'content'` was retired: it named browser-only "content blocks" that no table
+ * ever held, so every assignment/like/purchase of one pointed at a slug the
+ * server could not resolve. Content lives in `knowledge_documents` now.
+ * `'agent'` replaced it — a marketplace agent's purchase is recorded in
+ * `marketplace_purchases` like every other artifact sale.
+ */
+export const artifactTypeEnum = pgEnum('artifact_type', ['skill', 'persona', 'agent']);
 
 export const assignmentScopeEnum = pgEnum('assignment_scope', ['tenant', 'host', 'project', 'task', 'agent']);
 

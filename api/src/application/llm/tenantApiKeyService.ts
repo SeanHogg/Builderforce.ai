@@ -41,6 +41,16 @@ export const TENANT_API_SCOPES = [
   'read:catalog',      // GET /api/v1/agents, /skills, /personas
   'read:installs',     // how many workspaces run this publisher's packages
   'write:packages',    // submit and publish extension versions from CI
+  // ── The public canvas surface (`/api/v1/boards`, `/api/v1/widgets`) ────────
+  // Read and write are SEPARATE scopes and not one `canvas` scope, because the
+  // overwhelmingly common integration — a dashboard that mirrors boards into
+  // somebody else's tool — needs only the first, and a credential that can also
+  // delete every object on every board in the workspace is not the credential to
+  // hand it. `webhooks:manage` above is deliberately NOT duplicated for canvas:
+  // subscriptions are one primitive with one scope, whatever the event vocabulary.
+  'read:canvas',       // list/read boards and the objects on them
+  'write:canvas',      // create/update/delete objects on a board
+  'manage:widgets',    // register and update third-party canvas widgets
 ] as const;
 
 export type TenantApiScope = (typeof TENANT_API_SCOPES)[number];

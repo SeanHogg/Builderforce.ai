@@ -1,5 +1,5 @@
 import type { CreationNodeData, CreationObjectKind } from './types';
-import { CREATION_CONNECTION_KINDS, defaultConfidentialityForKind, emptyCanvasVideoTimeline, emptyCanvasWorldScene, FOUNDER_OBJECT_KINDS, type AcademicObjectKind, type CareerObjectKind, type CreationConnectionKind, type DataScienceObjectKind, type FounderObjectKind, type HiringObjectKind, type LegalObjectKind, type OperationsObjectKind, type PeopleObjectKind, type SellMotionObjectKind, type SharedObjectKind } from '@builderforce/creation-canvas-contract';
+import { BRAND_BINDING_FIELD, CREATION_CONNECTION_KINDS, defaultConfidentialityForKind, isBrandBoundKind, emptyCanvasVideoTimeline, emptyCanvasWorldScene, FOUNDER_OBJECT_KINDS, type AcademicObjectKind, type CareerObjectKind, type CreationConnectionKind, type DataScienceObjectKind, type FounderObjectKind, type HiringObjectKind, type LegalObjectKind, type OperationsObjectKind, type PeopleObjectKind, type SellMotionObjectKind, type SharedObjectKind } from '@builderforce/creation-canvas-contract';
 import { FOUNDER_BOOKKEEPING_FIELDS, FOUNDER_FIELD_NAMES, FOUNDER_OBJECT_SPECS, founderMutableFields } from '@/lib/founderObjects';
 // Importing the vocabulary registers it (see `specObjects.ts`), which is what makes the
 // academic kinds resolvable everywhere else without a second list of them here.
@@ -35,6 +35,7 @@ import {
   LEGAL_MUTABLE_FIELDS, LEGAL_REGISTRY,
   SELL_MOTION_MUTABLE_FIELDS, SELL_MOTION_REGISTRY,
   MODEL_MUTABLE_FIELDS, MODEL_REGISTRY,
+  MARKETING_MUTABLE_FIELDS, MARKETING_REGISTRY,
 } from './specDerivedRegistry';
 import {
   DATA_ARCHITECTURE_FIELD_NAMES, DATA_ARCHITECTURE_SPECS, dataArchitectureMutableFields, dataArchitectureSeed,
@@ -348,7 +349,11 @@ const BASE_MUTABLE_FIELDS = {
   // object to a real, runnable tenant resource is the compile endpoint's job,
   // not something an LLM patch may assert.
   workflow: ['content', 'steps', 'approvalMode', 'runTarget'],
-  website: ['content', 'websiteHeadline', 'websiteBody', 'websiteCta', 'websiteAccent', 'websiteTheme', 'activeWebsitePageId', 'viewport', 'pages', 'subdomain', 'url', 'siteUrl', 'pathUrl'],
+  // `abTestKey`/`variantKey` are the SPLIT half of the `experiment` binding: an
+  // experiment names the test, and the page names which arm of it this page IS. Without
+  // the pair, "bind experiment to `ab_tests`" would give the card a live exposure count
+  // and still leave nothing on the board that says which page a visitor was shown.
+  website: ['content', 'websiteHeadline', 'websiteBody', 'websiteCta', 'websiteAccent', 'websiteTheme', 'activeWebsitePageId', 'viewport', 'pages', 'subdomain', 'url', 'siteUrl', 'pathUrl', 'abTestKey', 'variantKey'],
   // A Builder object owns a real workspace: the scaffold lives in R2 and the
   // whole Builder surface (files, editor, dev server, checks, publish) opens on
   // Canvas. `modality` picks its starter template. The `ideProjectId` field is a
@@ -407,7 +412,7 @@ const BASE_MUTABLE_FIELDS = {
   projectComparison: ['content', 'projects', 'sources', 'fetchedAt', 'recommendations'],
   roadmap: ['content', 'items', 'milestones', 'sources'],
   note: ['content', 'markdown'],
-  prototype: ['content', 'websiteHeadline', 'websiteBody', 'websiteCta', 'websiteAccent', 'websiteTheme', 'activeWebsitePageId', 'viewport', 'pages'],
+  prototype: ['content', 'websiteHeadline', 'websiteBody', 'websiteCta', 'websiteAccent', 'websiteTheme', 'activeWebsitePageId', 'viewport', 'pages', 'abTestKey', 'variantKey'],
   code: ['content', 'code', 'language', 'path'],
   browser: ['content', 'url', 'viewport', 'pageTitle'],
   repository: ['content', 'url', 'branch'],
@@ -455,6 +460,12 @@ const BASE_MUTABLE_FIELDS = {
   // and is the reason an inbox is an OBJECT rather than a chat answer.
   inbox: ['content', 'connectionId', 'accountEmail', 'provider', 'filter', 'messages', 'unreadCount', 'fetchedAt', 'summary'],
   email: ['content', 'messageId', 'connectionId', 'accountEmail', 'from', 'fromName', 'to', 'subject', 'receivedAt', 'bodyText', 'unread', 'hasAttachments', 'webUrl', 'summary'],
+  // `audienceId`/`audienceName` are the BINDING, and they are the only audience fields
+  // here on purpose. The size, the suppression count and the lawful basis are NOT copied
+  // onto the campaign: they are read at render time off the `audience` card this binds
+  // to, so nothing an LLM patch can write is able to assert that nobody unsubscribed.
+  // A count the model could type is a count the model could type to zero, and zero is
+  // what unblocks the send. See `marketing.ts` and `campaignSendReadiness()` below.
   emailCampaign: ['content', 'campaignId', 'audienceId', 'audienceName', 'templateId', 'subject', 'bodyHtml', 'transport', 'senderIdentityId', 'mailboxConnectionId', 'connectorConnectionId', 'fromName', 'recipients', 'sent', 'failed', 'opened', 'clicked', 'blockers'],
   emailTemplate: ['content', 'templateId', 'subject', 'bodyHtml', 'mergeFields', 'assetId', 'logoUrl'],
   // `posts` is the last read, kept so the tile is not blank while it refreshes;
@@ -574,6 +585,7 @@ const MUTABLE_FIELDS: Record<CreationObjectKind, readonly string[]> = {
   ...LEGAL_MUTABLE_FIELDS,
   ...SELL_MOTION_MUTABLE_FIELDS,
   ...MODEL_MUTABLE_FIELDS,
+  ...MARKETING_MUTABLE_FIELDS,
   // Cast to the named kind union rather than left as an index signature: an
   // index-signature map satisfies ANY key, so spreading one silently switched the
   // exhaustiveness annotation below off for these six kinds.
@@ -635,7 +647,19 @@ function sanitizeMutationValue(value: unknown, depth = 0): unknown {
 }
 
 export function creationObjectMutableFields(kind: CreationObjectKind): readonly string[] {
-  return [...COMMON_MUTABLE_FIELDS, ...MUTABLE_FIELDS[kind]];
+  return [
+    ...COMMON_MUTABLE_FIELDS,
+    ...MUTABLE_FIELDS[kind],
+    // ── THE BRAND BINDING, ADDED IN ONE PLACE ──────────────────────────────────
+    // Seventeen kinds compose an artifact somebody's customers will see, and every one
+    // of them reached `builtin_creative_compose` or its authoring fields with no brand
+    // binding at all — no palette, no logo, no typography, no voice, no claim list. The
+    // list of which kinds those are lives in the CONTRACT (`BRAND_BOUND_KINDS`) rather
+    // than being spelled onto seventeen entries above, because seventeen hand-edits is
+    // seventeen chances to forget the eighteenth. A kind added to that list gains the
+    // field here, and `resolveBrandBinding` reads it, without either side being touched.
+    ...(isBrandBoundKind(kind) ? [BRAND_BINDING_FIELD] : []),
+  ];
 }
 
 /**
@@ -688,6 +712,12 @@ const SHELL_IS_LEGITIMATE: ReadonlySet<CreationObjectKind> = new Set<CreationObj
   // freshly authored card legitimately has nothing else to show until a real file
   // lands on it.
   'legalDocument',
+  // The three legal RECORD kinds, for the same reason one axis over: every field on
+  // each is a projection of a `legal_entities`, `intellectual_property` or
+  // `legal_matters` row that `canvas_sync_legal` writes. A card placed from the palette
+  // before the sync runs is legitimately empty — and the alternative, letting the model
+  // fill it to satisfy the shell rule, is the invented record `legalObjects.ts` refuses.
+  'legalEntity', 'ipAsset', 'legalMatter',
 ]);
 
 /** Identity and bookkeeping — present on an empty object, so authoring one of these
@@ -822,6 +852,7 @@ export const CREATION_OBJECT_REGISTRY: readonly CreationObjectDefinition[] = [
   ...LEGAL_REGISTRY,
   ...SELL_MOTION_REGISTRY,
   ...MODEL_REGISTRY,
+  ...MARKETING_REGISTRY,
 ].map((definition) => ({
   ...definition,
   ...(CAPABILITIES[definition.kind] ? { capability: CAPABILITIES[definition.kind] } : {}),

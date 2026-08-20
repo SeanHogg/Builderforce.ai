@@ -4,12 +4,16 @@
  *
  * Used to land an agent-authored `PRD.md` as a real **pending change** on a
  * dedicated branch even when no local git runtime is available (the cloud path
- * runs in a Cloudflare Worker with no filesystem). GitHub + GitLab are
- * implemented; Bitbucket Cloud's `/src` write API (form-encoded, deletion via a
- * `files` field) is the remaining provider and returns `unsupported` for now, so
- * callers degrade gracefully.
+ * runs in a Cloudflare Worker with no filesystem).
+ *
+ * GitHub, GitLab, Bitbucket Cloud (`/src`, form-encoded, deletion via a `files`
+ * field) and Bitbucket Server (`PUT /browse/{path}`, multipart) all commit. Only
+ * DELETION on Bitbucket Server still refuses: `/rest/api/1.0` has no delete-file
+ * endpoint at all — see `bitbucketServerDelete` for the concrete gap — so that one
+ * refusal is real rather than an artefact of the base URL being unknown.
  */
 import { buildGitApiBaseUrl } from './gitProxy';
+import { resolveRepoApiTarget, type RepoApiTarget } from './repoApiTarget';
 
 export interface CommitFileInput {
   provider: string;
@@ -33,23 +37,47 @@ export type CommitFileResult =
 
 export async function resolveRepoRefSha(input: Pick<CommitFileInput, 'provider' | 'host' | 'owner' | 'repo' | 'token'>, ref: string): Promise<string | null> {
   try {
-    const apiBase = buildGitApiBaseUrl(input.provider, input.host);
+    const api = resolveRepoApiTarget(input);
     const headers = { Authorization: `Bearer ${input.token}`, Accept: 'application/json', 'User-Agent': 'BuilderForce-Agent/1.0' };
-    if (input.provider === 'github') {
-      const res = await fetch(`${apiBase}/repos/${input.owner}/${input.repo}/git/ref/heads/${encodeURIComponent(ref)}`, { headers });
+    if (api.flavor === 'github') {
+      const res = await fetch(`${api.repoBase}/git/ref/heads/${encodeURIComponent(ref)}`, { headers });
       return res.ok ? ((await res.json()) as { object?: { sha?: string } }).object?.sha ?? null : null;
     }
-    if (input.provider === 'gitlab') {
-      const project = encodeURIComponent(`${input.owner}/${input.repo}`);
-      const res = await fetch(`${apiBase}/projects/${project}/repository/branches/${encodeURIComponent(ref)}`, { headers });
+    if (api.flavor === 'gitlab') {
+      const res = await fetch(`${api.branches()}/${encodeURIComponent(ref)}`, { headers });
       return res.ok ? ((await res.json()) as { commit?: { id?: string } }).commit?.id ?? null : null;
     }
-    if (input.provider === 'bitbucket') {
-      const res = await fetch(`${apiBase}/repositories/${input.owner}/${input.repo}/refs/branches/${encodeURIComponent(ref)}`, { headers });
+    if (api.flavor === 'bitbucket-cloud') {
+      const res = await fetch(`${api.branches()}/${encodeURIComponent(ref)}`, { headers });
       return res.ok ? ((await res.json()) as { target?: { hash?: string } }).target?.hash ?? null : null;
     }
+    if (api.flavor === 'bitbucket-server') return bitbucketServerBranchHead(api, ref, headers);
     return null;
   } catch { return null; }
+}
+
+/**
+ * Bitbucket Server has no "get branch by name" resource — `/branches` is a SEARCH,
+ * and `filterText` is a substring match, so `main` also returns `maintenance`.
+ * The exact `displayId` must therefore be picked out of the page rather than
+ * trusting the first hit; returning the wrong branch's head here would make a
+ * commit fork from the wrong place. Null means "no such branch" (which the commit
+ * path reads as "create it"), never "lookup failed silently".
+ */
+async function bitbucketServerBranchHead(
+  api: RepoApiTarget,
+  ref: string,
+  headers: Record<string, string>,
+): Promise<string | null> {
+  const res = await fetch(`${api.branches()}?filterText=${encodeURIComponent(ref)}&limit=100`, { headers }).catch(() => null);
+  if (!res || !res.ok) return null;
+  const body = (await res.json().catch(() => null)) as {
+    values?: Array<{ displayId?: string; id?: string; latestCommit?: string }>;
+  } | null;
+  const exact = (body?.values ?? []).find(
+    (b) => b.displayId === ref || b.id === `refs/heads/${ref}`,
+  );
+  return exact?.latestCommit ?? null;
 }
 
 /** UTF-8-safe base64 (Workers `btoa` is latin1-only). */
@@ -128,9 +156,10 @@ async function gitlabCommit(input: CommitFileInput): Promise<CommitFileResult> {
  *  `hash`), then commit via the form-encoded `/src` API (create-or-update auto).
  *  Existence is probed for the `existed` signal. */
 async function bitbucketCommit(input: CommitFileInput): Promise<CommitFileResult> {
-  let apiBase: string;
-  try { apiBase = buildGitApiBaseUrl('bitbucket', input.host); } catch (e) { return { ok: false, code: 'unsupported', reason: e instanceof Error ? e.message : 'unsupported host' }; }
-  const repoBase = `${apiBase}/repositories/${input.owner}/${input.repo}`;
+  let api: RepoApiTarget;
+  try { api = resolveRepoApiTarget(input); } catch (e) { return { ok: false, code: 'unsupported', reason: e instanceof Error ? e.message : 'unsupported host' }; }
+  if (api.flavor === 'bitbucket-server') return bitbucketServerCommit(input, api);
+  const repoBase = api.repoBase;
   const jsonHeaders = { Authorization: `Bearer ${input.token}`, 'Content-Type': 'application/json', Accept: 'application/json', 'User-Agent': 'BuilderForce-PRD/1.0' };
   const encPath = input.path.split('/').map(encodeURIComponent).join('/');
 
@@ -150,7 +179,7 @@ async function bitbucketCommit(input: CommitFileInput): Promise<CommitFileResult
   form.set('branch', input.branch);
   form.set('message', input.message);
   form.set(input.path, input.content);
-  const res = await fetch(`${repoBase}/src`, {
+  const res = await fetch(api.fileWrite(input.path), {
     method: 'POST',
     headers: { Authorization: `Bearer ${input.token}`, 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'BuilderForce-PRD/1.0' },
     body: form.toString(),
@@ -163,6 +192,66 @@ async function bitbucketCommit(input: CommitFileInput): Promise<CommitFileResult
     commitUrl: bitbucketCommitUrlFromLocation(res.headers.get('location'), input.owner, input.repo),
     existed,
   };
+}
+
+/**
+ * Bitbucket SERVER path - `PUT /rest/api/1.0/.../browse/{path}`, multipart.
+ *
+ * Nothing about Cloud's `/src` flow transfers. Server writes ONE file per request
+ * with a multipart form, and its optimistic-locking field is what decides between
+ * create and update:
+ *   - `sourceCommitId` - the branch's current head. REQUIRED to modify an existing
+ *     file; sending a stale one is how Server tells you someone else committed
+ *     first (409), which is exactly the protection we want.
+ *   - `sourceBranch` - the branch to FORK FROM when `branch` does not exist yet.
+ *     This is why there is no separate create-branch call here (unlike Cloud, which
+ *     needs one): Server creates the branch as part of the same commit.
+ * A file's existence is probed through the raw endpoint on the branch, so `existed`
+ * stays the authoritative created-vs-modified signal it is on the other providers.
+ */
+async function bitbucketServerCommit(input: CommitFileInput, api: RepoApiTarget): Promise<CommitFileResult> {
+  const authHeaders = { Authorization: `Bearer ${input.token}`, Accept: 'application/json', 'User-Agent': 'BuilderForce-PRD/1.0' };
+  const branchHead = await bitbucketServerBranchHead(api, input.branch, authHeaders);
+
+  let existed = false;
+  if (branchHead) {
+    const probe = await fetch(api.fileContent(input.path, input.branch), { headers: authHeaders }).catch(() => null);
+    existed = !!probe && probe.ok;
+  }
+
+  // multipart/form-data - the boundary must be generated by the runtime, so the
+  // Content-Type header is deliberately NOT set here (setting it strips the boundary
+  // and Server rejects the body as malformed).
+  const form = new FormData();
+  form.set('content', input.content);
+  form.set('message', input.message);
+  form.set('branch', input.branch);
+  if (branchHead) form.set('sourceCommitId', branchHead);
+  else form.set('sourceBranch', input.base);
+
+  const res = await fetch(api.fileWrite(input.path), { method: 'PUT', headers: authHeaders, body: form }).catch(() => null);
+  if (!res) return { ok: false, code: 'provider_error', reason: 'commit request failed (network)' };
+  if (!res.ok) { const t = await res.text().catch(() => ''); return { ok: false, code: 'provider_error', reason: `Bitbucket Server ${res.status}: ${t.slice(0, 200)}` }; }
+  const commit = (await res.json().catch(() => null)) as { id?: string } | null;
+  return {
+    ok: true,
+    branch: input.branch,
+    commitUrl: bitbucketServerCommitUrl(input.host, input.owner, input.repo, commit?.id),
+    existed,
+  };
+}
+
+/** Server's web URL for a commit - `/projects/{KEY}/repos/{slug}/commits/{id}`. The
+ *  write response carries the new commit id but no link, exactly like Cloud's. */
+function bitbucketServerCommitUrl(
+  host: string | null,
+  owner: string,
+  repo: string,
+  id: string | undefined,
+): string | null {
+  const h = (host ?? '').trim();
+  if (!h || !id) return null;
+  return `https://${h}/projects/${encodeURIComponent(owner)}/repos/${encodeURIComponent(repo)}/commits/${id}`;
 }
 
 export async function commitFileToRepo(input: CommitFileInput): Promise<CommitFileResult> {
@@ -273,9 +362,21 @@ async function gitlabDelete(input: DeleteFileInput): Promise<DeleteFileResult> {
 /** Bitbucket Cloud path — delete via the form-encoded `/src` API: a `files`
  *  field names the path(s) to remove (no per-path content). 404 probe → not_found. */
 async function bitbucketDelete(input: DeleteFileInput): Promise<DeleteFileResult> {
-  let apiBase: string;
-  try { apiBase = buildGitApiBaseUrl('bitbucket', input.host); } catch (e) { return { ok: false, code: 'unsupported', reason: e instanceof Error ? e.message : 'unsupported host' }; }
-  const repoBase = `${apiBase}/repositories/${input.owner}/${input.repo}`;
+  let api: RepoApiTarget;
+  try { api = resolveRepoApiTarget(input); } catch (e) { return { ok: false, code: 'unsupported', reason: e instanceof Error ? e.message : 'unsupported host' }; }
+  if (api.flavor === 'bitbucket-server') {
+    // A REAL capability gap, not a missing base URL: `/rest/api/1.0` has a
+    // single-file WRITE (`PUT /browse/{path}`) and no delete counterpart of any
+    // kind - no `files` field like Cloud's `/src`, no DELETE verb on `/browse`.
+    // The only server-side removal is a push, which this Worker cannot do. The
+    // refusal is therefore kept, and named, so the caller records the residue.
+    return {
+      ok: false,
+      code: 'unsupported',
+      reason: 'Bitbucket Server exposes no delete-file REST endpoint (/rest/api/1.0/.../browse/{path} is write-only) - remove the file with a push and re-run',
+    };
+  }
+  const repoBase = api.repoBase;
   const encPath = input.path.split('/').map(encodeURIComponent).join('/');
   const probe = await fetch(`${repoBase}/src/${encodeURIComponent(input.branch)}/${encPath}`, { headers: { Authorization: `Bearer ${input.token}`, Accept: 'application/json', 'User-Agent': 'BuilderForce-PRD/1.0' } }).catch(() => null);
   if (probe && probe.status === 404) return { ok: false, code: 'not_found', reason: `file not on branch ${input.branch}: ${input.path}` };
@@ -283,7 +384,7 @@ async function bitbucketDelete(input: DeleteFileInput): Promise<DeleteFileResult
   form.set('branch', input.branch);
   form.set('message', input.message);
   form.set('files', input.path);
-  const res = await fetch(`${repoBase}/src`, {
+  const res = await fetch(api.fileWrite(input.path), {
     method: 'POST',
     headers: { Authorization: `Bearer ${input.token}`, 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'BuilderForce-PRD/1.0' },
     body: form.toString(),

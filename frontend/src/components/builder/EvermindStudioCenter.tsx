@@ -11,10 +11,16 @@
  * on wide, stacked under 1100px.
  */
 
+import dynamic from 'next/dynamic';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getProjectEvermindContributions, type ProjectEvermindContributions } from '@/lib/projectEvermindApi';
 import type { EvermindRegionKey } from '@/lib/evermindRegions';
-import { EvermindBrainMap } from './EvermindBrainMap';
+// The live brain map is a 600-line force-directed render nobody sees until the
+// Studio's map tab is opened. Deferred so the Studio shell paints without it.
+const EvermindBrainMap = dynamic(
+  () => import('./EvermindBrainMap').then((module) => module.EvermindBrainMap),
+  { ssr: false },
+);
 import { EvermindLearnings } from './EvermindLearnings';
 import { useEvermindValidation } from './EvermindValidationContext';
 

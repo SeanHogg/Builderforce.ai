@@ -31,7 +31,7 @@ import { and, eq, inArray } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import {
-  ceremonyParticipants, ceremonySchedules, ceremonySessions, projects, tasks,
+  ceremonyParticipants, ceremonySchedules, ceremonySessions, meetingAttendees, projects, tasks,
 } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { TaskStatus } from '../../domain/shared/types';
@@ -149,6 +149,26 @@ async function applyReassignments(
  * per project. Best-effort: if profiles cannot be read, nobody is marked on leave, which
  * degrades to the pre-0366 behaviour rather than excusing everyone.
  */
+/**
+ * The member refs that DECLINED this ceremony's companion meeting.
+ *
+ * Never throws — attendance resolution must survive a meetings-table problem, and the
+ * pre-existing behaviour (no decline signal at all) is the safe degrade.
+ */
+async function loadDeclinedRsvps(db: Db, meetingId: string | null): Promise<Set<string>> {
+  if (!meetingId) return new Set();
+  try {
+    const rows = await db
+      .select({ memberRef: meetingAttendees.memberRef })
+      .from(meetingAttendees)
+      .where(and(eq(meetingAttendees.meetingId, meetingId), eq(meetingAttendees.response, 'declined')));
+    return new Set(rows.map((r) => r.memberRef));
+  } catch (err) {
+    reportCaughtError(err, { source: "application/ceremony/concludeCeremony.ts", operation: "loadDeclinedRsvps", context: { details: { meetingId } } });
+    return new Set();
+  }
+}
+
 async function loadPtoAt(
   env: Env,
   db: Db,
@@ -240,6 +260,11 @@ export async function concludeCeremonySession(
   // read, so without it a holiday counts toward having your tickets handed to an agent.
   // ONE cached profiles read for the whole tenant — not per participant.
   const onPtoByRef = await loadPtoAt(env, db, session.tenantId, roster, now);
+  // DECLINED INVITES (0292's `meeting_attendees.response`, first read here). An explicit
+  // decline excuses the seat for the same reason approved leave does — see
+  // `resolveAttendanceVerdict` step 5. One indexed read, skipped entirely for a ceremony
+  // with no companion meeting.
+  const declinedRefs = await loadDeclinedRsvps(db, session.meetingId ?? null);
 
   const attendance = resolveAttendance(roster.map((p) => ({
     memberKind: p.memberKind,
@@ -253,6 +278,7 @@ export async function concludeCeremonySession(
     storedVerdict: p.attendance as AttendanceVerdict,
     storedSource: p.attendanceSource as AttendanceSource,
     onPto: onPtoByRef.get(p.memberRef) ?? false,
+    declinedInvite: declinedRefs.has(p.memberRef),
   })));
 
   for (const p of roster) {

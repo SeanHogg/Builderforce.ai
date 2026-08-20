@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   addWorkingDays, estimateDaysFromStoryPoints, normalizeEstimateDays,
   nextWorkingDay, scheduleItems, workingDaysBetween,
+  DEFAULT_WORKING_CALENDAR, normalizeWorkingCalendar, type WorkingCalendar,
 } from './scheduleWork';
 
 /** A Monday, so weekend arithmetic in the assertions is easy to read. */
@@ -133,5 +134,139 @@ describe('scheduleItems', () => {
     const r = scheduleItems([], { anchor: MONDAY });
     expect(r.span).toBeNull();
     expect(r.windows.size).toBe(0);
+  });
+});
+
+// ── SCHED-R4: capacity, the working calendar, and the sprint cadence ─────────
+// Before these, the planner modelled an infinitely available workforce on a
+// permanent Mon-Fri week: two tickets on one person overlapped completely, a
+// sprint boundary meant nothing, and a public holiday did not exist.
+
+/** Mon-Fri with Wednesday 5 Aug 2026 declared a holiday. */
+const WITH_HOLIDAY: WorkingCalendar = normalizeWorkingCalendar({
+  workingWeekdays: [1, 2, 3, 4, 5],
+  holidays: ['2026-08-05'],
+});
+
+describe('working calendar', () => {
+  it('defaults to Mon-Fri, so an unconfigured tenant schedules exactly as before', () => {
+    expect([...DEFAULT_WORKING_CALENDAR.workingWeekdays]).toEqual([1, 2, 3, 4, 5]);
+    expect([...DEFAULT_WORKING_CALENDAR.holidays]).toEqual([]);
+  });
+
+  it('refuses an empty working week rather than making every day non-working', () => {
+    // An empty week would hang any forward walk; it degrades to the default instead.
+    expect([...normalizeWorkingCalendar({ workingWeekdays: [] }).workingWeekdays]).toEqual([1, 2, 3, 4, 5]);
+    expect([...normalizeWorkingCalendar({ workingWeekdays: ['nonsense', 99] }).workingWeekdays]).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  it('honours a configured working week (Sun-Thu)', () => {
+    const sunThu = normalizeWorkingCalendar({ workingWeekdays: [0, 1, 2, 3, 4] });
+    // Friday 7 Aug 2026 is not worked; the next working day is Sunday the 9th.
+    expect(iso(nextWorkingDay(new Date('2026-08-07T00:00:00Z'), sunThu))).toBe('2026-08-09');
+  });
+
+  it('skips a configured HOLIDAY when advancing', () => {
+    // Mon 3rd + 2 working days would be Wed 5th, which is a holiday → Thu 6th.
+    expect(iso(addWorkingDays(MONDAY, 2, WITH_HOLIDAY))).toBe('2026-08-06');
+    expect(workingDaysBetween(MONDAY, new Date('2026-08-07T00:00:00Z'), WITH_HOLIDAY)).toBe(4);
+  });
+
+  it('pushes a scheduled item across a configured holiday', () => {
+    const plain = scheduleItems([{ key: 'a', estimateDays: 3 }], { anchor: MONDAY });
+    expect(iso(plain.windows.get('a')!.endDate)).toBe('2026-08-05');
+
+    const withHoliday = scheduleItems([{ key: 'a', estimateDays: 3 }], { anchor: MONDAY, calendar: WITH_HOLIDAY });
+    // Same three days of WORK, one day later, because nobody works the 5th.
+    expect(iso(withHoliday.windows.get('a')!.endDate)).toBe('2026-08-06');
+  });
+});
+
+describe('assignee capacity', () => {
+  it('SERIALISES two tickets on one assignee instead of overlapping them', () => {
+    const r = scheduleItems(
+      [
+        { key: 'a', estimateDays: 2, assigneeKey: 'human:ada' },
+        { key: 'b', estimateDays: 2, assigneeKey: 'human:ada' },
+      ],
+      { anchor: MONDAY },
+    );
+    expect(iso(r.windows.get('a')!.startDate)).toBe('2026-08-03');
+    expect(iso(r.windows.get('a')!.endDate)).toBe('2026-08-04');
+    // b cannot start until a is done — one person, one ticket.
+    expect(iso(r.windows.get('b')!.startDate)).toBe('2026-08-05');
+    expect(r.capacityDeferred).toEqual(['b']);
+  });
+
+  it('still runs two tickets on DIFFERENT assignees in parallel', () => {
+    const r = scheduleItems(
+      [
+        { key: 'a', estimateDays: 2, assigneeKey: 'human:ada' },
+        { key: 'b', estimateDays: 2, assigneeKey: 'cloud_agent:grace' },
+      ],
+      { anchor: MONDAY },
+    );
+    expect(iso(r.windows.get('b')!.startDate)).toBe('2026-08-03');
+    expect(r.capacityDeferred).toEqual([]);
+  });
+
+  it('leaves unowned work unconstrained — nobody\u2019s time is being spent', () => {
+    const r = scheduleItems(
+      [{ key: 'a', estimateDays: 2 }, { key: 'b', estimateDays: 2 }],
+      { anchor: MONDAY },
+    );
+    expect(iso(r.windows.get('b')!.startDate)).toBe('2026-08-03');
+  });
+
+  it('stretches an item for a half-available owner rather than pretending it is free', () => {
+    const r = scheduleItems(
+      [{ key: 'a', estimateDays: 2, assigneeKey: 'human:ada' }],
+      { anchor: MONDAY, capacity: new Map([['human:ada', { availability: 0.5 }]]) },
+    );
+    expect(r.windows.get('a')!.days).toBe(4);
+  });
+
+  it('lets an owner with real concurrency hold two at once', () => {
+    const r = scheduleItems(
+      [
+        { key: 'a', estimateDays: 2, assigneeKey: 'host_agent:7' },
+        { key: 'b', estimateDays: 2, assigneeKey: 'host_agent:7' },
+      ],
+      { anchor: MONDAY, capacity: { 'host_agent:7': { concurrency: 2 } } },
+    );
+    expect(iso(r.windows.get('b')!.startDate)).toBe('2026-08-03');
+  });
+});
+
+describe('sprint boundaries', () => {
+  /** Two consecutive one-week sprints, Mon 3rd-Fri 7th and Mon 10th-Fri 14th. */
+  const SPRINTS = [
+    { startDate: new Date('2026-08-03T00:00:00Z'), endDate: new Date('2026-08-07T00:00:00Z') },
+    { startDate: new Date('2026-08-10T00:00:00Z'), endDate: new Date('2026-08-14T00:00:00Z') },
+  ];
+
+  it('pushes work that would STRADDLE a boundary into the next sprint', () => {
+    const r = scheduleItems(
+      [
+        { key: 'a', estimateDays: 4, assigneeKey: 'human:ada' },
+        // 3 days starting Fri the 7th would run into the next sprint.
+        { key: 'b', estimateDays: 3, assigneeKey: 'human:ada' },
+      ],
+      { anchor: MONDAY, sprints: SPRINTS },
+    );
+    expect(iso(r.windows.get('a')!.endDate)).toBe('2026-08-06');
+    expect(iso(r.windows.get('b')!.startDate)).toBe('2026-08-10');
+    expect(iso(r.windows.get('b')!.endDate)).toBe('2026-08-12');
+  });
+
+  it('leaves work that fits inside its sprint exactly where it is', () => {
+    const r = scheduleItems([{ key: 'a', estimateDays: 3 }], { anchor: MONDAY, sprints: SPRINTS });
+    expect(iso(r.windows.get('a')!.startDate)).toBe('2026-08-03');
+  });
+
+  it('lets an item LONGER than a whole sprint span, rather than refusing to place it', () => {
+    const r = scheduleItems([{ key: 'big', estimateDays: 8 }], { anchor: MONDAY, sprints: SPRINTS });
+    expect(iso(r.windows.get('big')!.startDate)).toBe('2026-08-03');
+    expect(iso(r.windows.get('big')!.endDate)).toBe('2026-08-12');
   });
 });

@@ -53,11 +53,77 @@ describe('career tool catalog', () => {
   it('marks exactly the outward-facing tools as mutating', () => {
     const mutating = CAREER_TOOLS.filter((t) => t.mutates).map((t) => t.tool).sort();
     expect(mutating).toEqual([
+      // Writes a message another person reads, under the caller's name.
+      'recruiter.ai_review_resume',
+      'recruiter.answer_review',
+      'recruiter.request_review',
       'listing.set_available_for_hire',
       'listing.update',
       'proposals.submit',
       'proposals.withdraw',
-    ]);
+      // Writes employee records from the connected HRMS. The only row here that
+      // mutates a TENANT'S OWN data rather than something another person reads —
+      // and the reason its description insists on a dry run first.
+      'hr.hrms_sync',
+    ].sort());
+  });
+
+  /**
+   * The five PRD 18 §1.2 named and that deliberately did not ship with the other
+   * twenty, because each needs a roster, departments, requisitions and bands that
+   * only an HRMS can supply. The connectors landed (`defaults/hrms.ts`,
+   * `payroll.ts`, `hiring.ts`), so the honest work became binding them to the
+   * connector port — which is what this asserts arrived.
+   */
+  it('declares the five HRMS-backed hr tools', () => {
+    const ids = new Set(CAREER_TOOLS.map((t) => t.tool));
+    for (const required of [
+      'hr.org_review', 'hr.headcount_plan', 'hr.performance_review', 'hr.team_health', 'hr.hrms_sync',
+    ]) {
+      expect(ids.has(required), `PRD 18 §1.2 declares "${required}" and the catalog does not`).toBe(true);
+    }
+  });
+
+  it('keeps the HRMS-backed rows out of the anonymous vocabulary', () => {
+    // They decrypt a tenant's connector credentials and call an external provider
+    // under them. `GUEST_SAFE_CAREER_TOOLS` is derived from the pure half, so this
+    // is a check that none of the five was filed there by mistake.
+    const guest = new Set(GUEST_SAFE_CAREER_TOOLS);
+    for (const id of [
+      'hr.org_review', 'hr.headcount_plan', 'hr.performance_review', 'hr.team_health', 'hr.hrms_sync',
+    ]) {
+      expect(guest.has(id), `${id} reaches a tenant's HR system and must not be guest-safe`).toBe(false);
+    }
+  });
+
+  /**
+   * The gap the roadmap named: the Recruiter agent had keyword overlap and a score, and
+   * nothing that would write the next sentence for the person reading them. A capability
+   * that exists behind a route and not in this catalog is a capability the agent cannot
+   * reach, and — worse — one it will narrate having used.
+   */
+  it('gives the recruiter the model-assisted capabilities, not only the measuring ones', () => {
+    const ids = new Set(CAREER_TOOLS.map((t) => t.tool));
+    for (const required of [
+      'recruiter.rewrite_bullets', 'recruiter.merge_bullets', 'recruiter.grade_resume',
+      'recruiter.review_queue', 'recruiter.review_thread', 'recruiter.request_review',
+      'recruiter.answer_review', 'recruiter.ai_review_resume',
+    ]) {
+      expect(ids.has(required), `the roadmap's model-assisted résumé work declares "${required}" and the catalog does not`).toBe(true);
+    }
+  });
+
+  it('keeps the generative rows OUT of the anonymous vocabulary', () => {
+    // They spend a tenant's model budget and, for the review rows, write tenant-owned
+    // rows. `GUEST_SAFE_CAREER_TOOLS` is derived from the pure half, so this is really a
+    // check that none of them was filed there by mistake.
+    const guest = new Set(GUEST_SAFE_CAREER_TOOLS);
+    for (const id of [
+      'recruiter.rewrite_bullets', 'recruiter.merge_bullets', 'recruiter.grade_resume',
+      'recruiter.review_queue', 'recruiter.request_review',
+    ]) {
+      expect(guest.has(id), `${id} reaches a tenant and must not be guest-safe`).toBe(false);
+    }
   });
 });
 

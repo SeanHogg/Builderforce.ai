@@ -6,6 +6,7 @@ import type { Task } from '@/lib/builderforceApi';
 import { taskTypeBadgeClass, taskTypeLabelKey } from '@/lib/taskType';
 import { taskPriorityBadgeClass } from '@/lib/taskPriority';
 import { BuildStatusBadge } from '@/components/board/BuildStatusBadge';
+import { decompositionSourceBadge, planWarnings } from '@/lib/pm/planning';
 
 /**
  * The ticket's badge row — priority, work-item type, review verdict, audit flag,
@@ -24,8 +25,9 @@ import { BuildStatusBadge } from '@/components/board/BuildStatusBadge';
 export interface TaskBadgeSignals {
   /** From the project's ticket audit — a required role/artifact is missing. */
   flagged?: boolean;
-  /** Required-role sign-off rollup, when the board tracks participants. */
-  participants?: { completed: number; required: number; percent: number } | null;
+  /** Required-role sign-off rollup, when the board tracks participants. `unstaffed` is
+   *  optional so an older API response (or a test fixture) still renders the count. */
+  participants?: { completed: number; required: number; percent: number; unstaffed?: number } | null;
 }
 
 const chip = {
@@ -56,6 +58,13 @@ export function TaskBadges({
 }) {
   const tBoard = useTranslations('board');
   const tCommon = useTranslations('common');
+  const tPlanning = useTranslations('planning');
+  // WHICH planner produced this Epic's children, and what it concluded about the
+  // plan. Both were recorded on every decomposition and displayed nowhere — so a
+  // squeezed plan, a cyclic one, and a plan produced by the degraded markdown
+  // fallback all looked exactly like a clean LLM plan on the card AND in the drawer.
+  const sourceBadge = task.taskType === 'epic' ? decompositionSourceBadge(task.decompositionSource) : null;
+  const warnings = task.taskType === 'epic' ? planWarnings(task.planVerdict) : [];
   const typeClass = taskTypeBadgeClass(task.taskType);
   const review = reviewTone(task.lastReviewVerdict);
 
@@ -110,6 +119,23 @@ export function TaskBadges({
           <Icon source="✅" size="1em" /> {participants.completed}/{participants.required}
         </span>
       )}
+      {/* UNSTAFFED REQUIRED ROLES — the roster fact that lived only on the Sign-off tab.
+          A slot's assignee is auto-resolved to the first role-capable agent in the tenant
+          when nobody pinned one, so a ticket can acquire up to ten required reviewers no
+          operator ever staffed; those slots gate completion and merge, and the card and
+          header showed nothing, so the ticket read as unassigned while the manager
+          correctly reported ten outstanding sign-offs. */}
+      {participants && (participants.unstaffed ?? 0) > 0 && (
+        <span
+          title={tBoard('audit.unstaffedTitle', { count: participants.unstaffed ?? 0 })}
+          style={{
+            ...chip, display: 'inline-flex', alignItems: 'center', gap: 3, fontWeight: 700,
+            background: 'var(--danger-bg)', color: 'var(--danger-text)',
+          }}
+        >
+          <Icon source="👤" size="1em" /> {tBoard('audit.unstaffed', { count: participants.unstaffed ?? 0 })}
+        </span>
+      )}
       {task.businessValue != null && (
         <span
           title={task.businessValueRationale ?? tBoard('businessValue.badgeTitle')}
@@ -126,6 +152,35 @@ export function TaskBadges({
           and because the table row and the drawer show this row too, which is how the
           card and the ticket stopped disagreeing about whether the build was red. */}
       <BuildStatusBadge status={task.buildStatus} />
+      {sourceBadge && (
+        <span
+          title={tPlanning(sourceBadge.titleKey)}
+          style={{
+            ...chip,
+            display: 'inline-flex', alignItems: 'center', gap: 3, fontWeight: 700,
+            background: sourceBadge.tone === 'warn' ? 'var(--warning-bg, var(--bg-elevated))' : 'var(--bg-elevated)',
+            color: sourceBadge.tone === 'warn'
+              ? 'var(--warning-text, var(--warning))'
+              : sourceBadge.tone === 'accent' ? 'var(--accent)' : 'var(--text-secondary)',
+          }}
+        >
+          <Icon source={sourceBadge.tone === 'warn' ? '⚠' : '✨'} size="1em" /> {tPlanning(sourceBadge.labelKey)}
+        </span>
+      )}
+      {warnings.map((w) => (
+        <span
+          key={w.kind}
+          title={tPlanning(w.titleKey, { count: w.count })}
+          style={{
+            ...chip,
+            display: 'inline-flex', alignItems: 'center', gap: 3, fontWeight: 700,
+            background: w.tone === 'danger' ? 'var(--danger-bg)' : 'var(--warning-bg, var(--bg-elevated))',
+            color: w.tone === 'danger' ? 'var(--danger-text)' : 'var(--warning-text, var(--warning))',
+          }}
+        >
+          <Icon source={w.kind === 'cyclic' ? '🔁' : '⏱'} size="1em" /> {tPlanning(w.labelKey, { count: w.count })}
+        </span>
+      ))}
       {task.specCount ? (
         <span
           title={tBoard('prdBadgeTitle', { count: task.specCount })}

@@ -34,14 +34,17 @@ describe('revertMergedPullRequest — refusals', () => {
       .toMatchObject({ ok: false, code: 'unsupported' });
   });
 
-  it('refuses Bitbucket (both editions) rather than pretending — no server-side revert exists', async () => {
-    const cloud = await revertMergedPullRequest({ ...input, provider: 'bitbucket' });
-    expect(cloud).toMatchObject({ ok: false, code: 'unsupported' });
-    if (!cloud.ok) expect(cloud.reason).toMatch(/Bitbucket Cloud/);
-
+  it('refuses Bitbucket SERVER only, naming the endpoint it lacks', async () => {
+    // The refusal survives for the ONE dialect that genuinely cannot express a
+    // revert. Cloud is served (see the Bitbucket Cloud block below), so a blanket
+    // "Bitbucket cannot revert" would now be a defect rather than a limitation.
     const server = await revertMergedPullRequest({ ...input, provider: 'bitbucket', host: 'git.acme.internal' });
     expect(server).toMatchObject({ ok: false, code: 'unsupported' });
-    if (!server.ok) expect(server.reason).toMatch(/Bitbucket Server/);
+    if (!server.ok) {
+      expect(server.reason).toMatch(/Bitbucket Server/);
+      expect(server.reason).toMatch(/browse/);           // the write endpoint it does have
+      expect(server.reason).toMatch(/delete-file|no delete/); // the one it does not
+    }
   });
 
   it('NEVER commits onto the base branch', async () => {
@@ -181,5 +184,91 @@ describe('revertMergedPullRequest — GitLab', () => {
 describe('revertBranchName', () => {
   it('is task- and PR-scoped so a retry collides instead of duplicating', () => {
     expect(revertBranchName(12, 7)).toBe('builderforce/revert-task-12-pr-7');
+  });
+});
+
+describe('revertMergedPullRequest — Bitbucket Cloud', () => {
+  const bb = { ...input, provider: 'bitbucket', host: 'bitbucket.org' };
+  const PR = /GET .*\/repositories\/acme\/app\/pullrequests\/7$/;
+  const MERGE_COMMIT = /GET .*\/commit\/m3rge$/;
+  const DIFF_MERGE = /GET .*\/diffstat\/m3rge\.\.parent1/;
+  const DIFF_SINCE = /GET .*\/diffstat\/main\.\.m3rge/;
+  const BRANCH_HEAD = /GET .*\/refs\/branches\/main$/;
+
+  const mergedPr = { state: 'MERGED', merge_commit: { hash: 'm3rge' } };
+  const commit = { parents: [{ hash: 'parent1' }] };
+
+  it('refuses a PR that is not merged', async () => {
+    stubRoutes([[PR, { body: { state: 'OPEN' } }]]);
+    expect(await revertMergedPullRequest(bb)).toMatchObject({ ok: false, code: 'not_merged' });
+  });
+
+  it('refuses when newer work landed on the same files after the merge', async () => {
+    stubRoutes([
+      [PR, { body: mergedPr }],
+      [MERGE_COMMIT, { body: commit }],
+      [DIFF_MERGE, { body: { values: [{ new: { path: 'src/a.ts' } }] } }],
+      [DIFF_SINCE, { body: { values: [{ new: { path: 'src/a.ts' } }] } }],
+    ]);
+    const r = await revertMergedPullRequest(bb);
+    expect(r).toMatchObject({ ok: false, code: 'conflict' });
+    if (!r.ok) expect(r.reason).toMatch(/src\/a\.ts/);
+  });
+
+  it('restores pre-merge content and DELETES files the merge added, in one /src commit', async () => {
+    // src/a.ts existed before the merge (restore its bytes); src/new.ts did not
+    // (404 at the pre-merge sha), so reverting it means removing it.
+    const fn = vi.fn(async (url: string, init?: RequestInit) => {
+      const key = `${init?.method ?? 'GET'} ${url}`;
+      const json = (body: unknown, status = 200) => ({
+        ok: status >= 200 && status < 300, status,
+        json: async () => body, text: async () => JSON.stringify(body),
+        headers: new Headers(),
+      });
+      if (PR.test(key)) return json(mergedPr);
+      if (MERGE_COMMIT.test(key)) return json(commit);
+      if (DIFF_MERGE.test(key)) return json({ values: [{ new: { path: 'src/a.ts' } }, { new: { path: 'src/new.ts' } }] });
+      if (DIFF_SINCE.test(key)) return json({ values: [] });
+      if (BRANCH_HEAD.test(key)) return json({ target: { hash: 'head9' } });
+      if (/GET .*\/src\/parent1\/src\/a\.ts$/.test(key)) {
+        return { ok: true, status: 200, text: async () => 'export const a = 1;\n', json: async () => null, headers: new Headers() };
+      }
+      if (/GET .*\/src\/parent1\/src\/new\.ts$/.test(key)) {
+        return { ok: false, status: 404, text: async () => '', json: async () => null, headers: new Headers() };
+      }
+      if (/POST .*\/repositories\/acme\/app\/src$/.test(key)) return json({});
+      // The revert PR itself.
+      if (/POST .*\/pullrequests$/.test(key)) return json({ id: 42, links: { html: { href: 'https://bitbucket.org/acme/app/pull-requests/42' } } });
+      return json(null, 404);
+    });
+    vi.stubGlobal('fetch', fn);
+
+    const r = await revertMergedPullRequest(bb);
+    expect(r).toMatchObject({ ok: true, number: 42, branch: bb.revertBranch, revertedSha: 'm3rge' });
+
+    const post = fn.mock.calls.find(([u, i]) => (i as RequestInit | undefined)?.method === 'POST' && String(u).endsWith('/src'));
+    expect(post).toBeDefined();
+    const form = new URLSearchParams(String((post![1] as RequestInit).body));
+    expect(form.get('branch')).toBe(bb.revertBranch);
+    // Parented to the CURRENT head of base, never rewriting base itself.
+    expect(form.get('parents')).toBe('head9');
+    expect(form.get('src/a.ts')).toBe('export const a = 1;\n');
+    expect(form.getAll('files')).toEqual(['src/new.ts']);
+    // The file being restored must NOT also be queued for deletion.
+    expect(form.getAll('files')).not.toContain('src/a.ts');
+  });
+
+  it('never guesses: an unreadable pre-merge file aborts rather than committing', async () => {
+    stubRoutes([
+      [PR, { body: mergedPr }],
+      [MERGE_COMMIT, { body: commit }],
+      [DIFF_MERGE, { body: { values: [{ new: { path: 'src/a.ts' } }] } }],
+      [DIFF_SINCE, { body: { values: [] } }],
+      [BRANCH_HEAD, { body: { target: { hash: 'head9' } } }],
+      [/GET .*\/src\/parent1\//, { status: 500 }],
+    ]);
+    const r = await revertMergedPullRequest(bb);
+    expect(r).toMatchObject({ ok: false, code: 'provider_error' });
+    if (!r.ok) expect(r.reason).toMatch(/pre-merge content/);
   });
 });

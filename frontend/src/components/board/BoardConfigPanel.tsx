@@ -22,7 +22,7 @@ import {
   type WorkflowDefinitionSummary,
 } from '@/lib/builderforceApi';
 import type { TemplateSummary } from '@/lib/kanban';
-import { loadAgentPool, type PoolAgent } from '@/lib/agentPool';
+import { loadProjectAgentPool, type PoolAgent } from '@/lib/agentPool';
 import {
   listTeams,
   listTeamsByProject,
@@ -165,6 +165,8 @@ function LanesTab({ board, lanes, agentsByLane, reload }: {
   const confirm = useConfirm();
   const [laneName, setLaneName] = useState('');
   const [adding, setAdding] = useState(false);
+  /** Per-lane merge target for the delete-as-merge flow, keyed by lane id. */
+  const [mergeTarget, setMergeTarget] = useState<Record<string, string>>({});
   // Workflow definitions are the targets for a lane's "Run workflow" action.
   // Loaded once for the whole tab (not per lane) to avoid an N+1.
   const [workflows, setWorkflows] = useState<WorkflowDefinitionSummary[]>([]);
@@ -191,7 +193,19 @@ function LanesTab({ board, lanes, agentsByLane, reload }: {
     await boardsApi.swimlanes.create(board.id, { key: keyFor(name), name, position: lanes.length });
     setLaneName(''); setAdding(false); reload();
   };
-  const removeLane = async (id: string) => { if (await confirm(t('confirmDeleteLane'))) { await boardsApi.swimlanes.remove(board.id, id); reload(); } };
+  /**
+   * Delete a lane = MERGE it. The tickets sitting in it have to go somewhere, and until
+   * the operator could choose, the server's fallback policy silently decided — so
+   * folding `Ready` into `To Do` could send its tickets to a third lane entirely. The
+   * merge target is chosen here and passed through; leaving it blank keeps the policy.
+   */
+  const removeLane = async (id: string) => {
+    const survivors = lanes.filter((l) => l.id !== id);
+    if (!(await confirm(t('confirmDeleteLane')))) return;
+    await boardsApi.swimlanes.remove(board.id, id, mergeTarget[id] ?? survivors[0]?.key ?? null);
+    setMergeTarget((m) => { const next = { ...m }; delete next[id]; return next; });
+    reload();
+  };
   const patchLane = async (id: string, body: Record<string, unknown>) => { await boardsApi.swimlanes.patch(board.id, id, body); reload(); };
   // Swap a lane's position with its neighbour to reorder the board columns.
   const moveLane = async (index: number, dir: -1 | 1) => {
@@ -238,8 +252,45 @@ function LanesTab({ board, lanes, agentsByLane, reload }: {
             <label style={{ fontSize: 12, color: 'var(--text-secondary)', display: 'flex', gap: 4, alignItems: 'center' }}>
               <input type="checkbox" checked={lane.isTerminal} onChange={(e) => patchLane(lane.id, { isTerminal: e.target.checked })} /> {t('terminal')}
             </label>
+            {/* PARKED — off the delivery path. Not the same as terminal: a parked lane
+                does not end the ticket, it steps it out of the flow. Excluded from the
+                %-complete denominator (a blocked ticket used to read ~87% complete purely
+                because `Blocked` sits late in the lane order) and never auto-advanced into. */}
+            <label style={{ fontSize: 12, color: 'var(--text-secondary)', display: 'flex', gap: 4, alignItems: 'center' }} title={t('parkingTitle')}>
+              <input type="checkbox" checked={lane.isParking ?? false} onChange={(e) => patchLane(lane.id, { isParking: e.target.checked })} /> {t('parking')}
+            </label>
+            {/* The merge target, next to the button that needs it. */}
+            {lanes.length > 1 && (
+              <Select
+                value={mergeTarget[lane.id] ?? ''}
+                onChange={(e) => setMergeTarget((m) => ({ ...m, [lane.id]: e.target.value }))}
+                style={{ ...inputStyle, minWidth: 130 }}
+                title={t('mergeIntoTitle')}
+                aria-label={t('mergeInto')}
+              >
+                <option value="">{t('mergeIntoAuto')}</option>
+                {lanes.filter((l) => l.id !== lane.id).map((l) => <option key={l.id} value={l.key}>{l.name}</option>)}
+              </Select>
+            )}
             <button type="button" style={{ ...btnSubtle, color: 'var(--danger)' }} onClick={() => removeLane(lane.id)}>{t('delete')}</button>
           </div>
+          {/* AN UNSTAFFED AUTO-GATED LANE IS A MISCONFIGURATION, and it must LOOK like
+              one. Measured: only 3 of 61 auto-gated lanes carried any agent assignment,
+              so autonomy fell through to the ticket's owner — and 466 of 821 tickets
+              (57%) had zero runs and zero autonomous hops as a result. The board looked
+              configured. Terminal and parked lanes are excluded: neither has work to do. */}
+          {!lane.isTerminal && !lane.isParking && lane.gate === 'auto' && (agentsByLane[lane.id] ?? []).length === 0 && (
+            <div
+              role="status"
+              style={{
+                marginTop: 10, padding: '8px 10px', borderRadius: 'var(--radius-md)',
+                border: '1px solid var(--warning-border)', background: 'var(--warning-bg)',
+                color: 'var(--warning-text)', fontSize: 12,
+              }}
+            >
+              {t('laneUnstaffed')}
+            </div>
+          )}
           <LaneActionRow lane={lane} lanes={lanes} workflows={workflows} patchLane={patchLane} />
           <AgentList board={board} lane={lane} agents={agentsByLane[lane.id] ?? []} reload={reload} />
           <LaneRequirementsRow board={board} lane={lane} patchLane={patchLane} />
@@ -420,14 +471,17 @@ function AgentList({ board, lane, agents, reload }: { board: Board; lane: Swimla
   const [available, setAvailable] = useState<PoolAgent[]>([]);
   const [adding, setAdding] = useState(false);
 
-  // Any agent registered to the tenant (workforce + registered) can be assigned
-  // to a lane — register once, assign anywhere — not just project-attached ones.
+  // SCOPED TO THIS BOARD'S TEAMS. An agent is registered once to the tenant and can be
+  // assigned to any surface, but a board belongs to a team: offering the whole workspace
+  // here let an operator staff a lane with an agent from a team that has nothing to do
+  // with the project. `loadProjectAgentPool` narrows to the project's team membership and
+  // falls back to the full pool when the project has no teams (see its doc).
   useEffect(() => {
     if (!adding) return;
     let live = true;
-    loadAgentPool().then((a) => { if (live) setAvailable(a); }).catch(() => {});
+    loadProjectAgentPool(board.projectId).then((a) => { if (live) setAvailable(a); }).catch(() => {});
     return () => { live = false; };
-  }, [adding]);
+  }, [adding, board.projectId]);
 
   const add = async () => {
     if (!agentSel) return;
@@ -614,6 +668,10 @@ function SettingsTab({ board, projectId, onSaved }: { board: Board; projectId: n
   const [name, setName] = useState(board.name);
   const [turnMode, setTurnMode] = useState<'facilitator' | 'timeboxed'>(board.standupTurnMode ?? 'facilitator');
   const [turnSeconds, setTurnSeconds] = useState(board.standupTurnSeconds ?? 90);
+  // The round table's POWER METER measured every member against a hardcoded 8 whenever
+  // their profile set no cap — which is almost always. 8 stays the default so no board's
+  // meter changes reading; what changes is that it is now a decision.
+  const [wipCap, setWipCap] = useState(board.defaultMemberWipCap ?? 8);
   const [hideDoneItems, setHideDoneItems] = useState(board.hideDoneItems ?? false);
   // Default true: a board with the flag unset still gates high/urgent work.
   const [requireApproval, setRequireApproval] = useState(board.requireExecutionApproval ?? true);
@@ -668,6 +726,7 @@ function SettingsTab({ board, projectId, onSaved }: { board: Board; projectId: n
         maxConcurrentTickets: maxConcurrent,
         standupTurnMode: turnMode,
         standupTurnSeconds: turnSeconds,
+        defaultMemberWipCap: wipCap,
         hideDoneItems,
         requireExecutionApproval: requireApproval,
       });
@@ -767,6 +826,19 @@ function SettingsTab({ board, projectId, onSaved }: { board: Board; projectId: n
             <input type="number" min={10} step={5} style={{ ...inputStyle, width: 120, marginTop: 4 }} value={turnSeconds} onChange={(e) => setTurnSeconds(Number(e.target.value))} />
           </label>
         )}
+        <label style={{ fontSize: 13, color: 'var(--text-secondary)', display: 'block', marginTop: 10 }}>
+          {t('wipCapLabel')}
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{t('wipCapHint')}</div>
+          <input
+            type="number"
+            min={1}
+            max={100}
+            step={1}
+            style={{ ...inputStyle, width: 120, marginTop: 4 }}
+            value={wipCap}
+            onChange={(e) => setWipCap(Number(e.target.value))}
+          />
+        </label>
       </div>
 
       <div>

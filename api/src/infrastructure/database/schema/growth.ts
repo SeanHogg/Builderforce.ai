@@ -40,8 +40,8 @@ import {
   varchar,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
-import { catalogItems, objects } from './kernel';
-import { creationSessions } from './canvas';
+import { catalogItems, connections, objects } from './kernel';
+import { creationSessionObjects, creationSessions } from './canvas';
 import { tenants, users } from './identity';
 import { mailboxConnections } from './integrations';
 import { connectorConnections } from './platform';
@@ -634,6 +634,69 @@ export const socialCampaignPosts = pgTable('social_campaign_posts', {
 }, (t) => [
   uniqueIndex('uq_social_posts_campaign_connection').on(t.campaignId, t.connectionId),
   index('idx_social_posts_campaign_status').on(t.campaignId, t.status),
+]);
+
+/**
+ * One resumable YouTube upload, as durable state (migration 1095).
+ *
+ * YouTube was the single network declared `publishMode: 'none'`, and the reason
+ * given was true: publishing a video is a resumable multipart upload of the bytes,
+ * which a declarative HTTP manifest cannot express and a Worker cannot hold open
+ * inside one request. What was wrong was the conclusion — the answer to "this does
+ * not fit in a request" is a JOB, not a refusal.
+ *
+ * `bytesSent` is what GOOGLE has acknowledged, never what we believe we sent. Each
+ * tick pushes a bounded number of chunks with `Content-Range`, and the 308 reply
+ * carries a `Range:` header naming the last byte that actually landed. A tick that
+ * is evicted mid-chunk therefore loses one chunk and no correctness: the next tick
+ * asks Google where it got to before it sends anything.
+ *
+ * `uploadUrl` is Google's resumable session URI. It carries its own authorization
+ * and lives about a week, which is what lets this row outlive the isolate — and is
+ * why it is stored rather than re-initiated (re-initiating would upload the whole
+ * file again from zero).
+ *
+ * The three back-references are where a finished upload is written: a canvas video
+ * object, its session, and/or the campaign post that queued it. Three real foreign
+ * keys rather than a `subject_type`/`subject_id` pair, because a polymorphic pair
+ * is a reference no constraint can hold to.
+ */
+export const youtubeUploads = pgTable('youtube_uploads', {
+  id:            uuid('id').primaryKey().defaultRandom(),
+  tenantId:      integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  /** users.id. No FK, mirroring `mailbox_connections.user_id`: a deleted user's
+   *  in-flight upload must fail closed rather than cascade away the record of it. */
+  userId:        varchar('user_id', { length: 64 }).notNull(),
+  /** The kernel `connections` row (vendor 'google', capability 'youtube'). */
+  connectionId:  integer('connection_id').notNull().references(() => connections.id, { onDelete: 'cascade' }),
+  /** Exactly one source is set: R2 for a canvas render, a URL for campaign media.
+   *  Both are read in ranges, so one engine serves both. */
+  storageKey:    varchar('storage_key', { length: 512 }),
+  sourceUrl:     text('source_url'),
+  mimeType:      varchar('mime_type', { length: 128 }).notNull().default('video/mp4'),
+  byteSize:      bigint('byte_size', { mode: 'number' }).notNull().default(0),
+  title:         varchar('title', { length: 200 }).notNull(),
+  description:   text('description').notNull().default(''),
+  privacyStatus: varchar('privacy_status', { length: 16 }).notNull().default('private'),
+  uploadUrl:     text('upload_url'),
+  bytesSent:     bigint('bytes_sent', { mode: 'number' }).notNull().default(0),
+  videoId:       varchar('video_id', { length: 64 }),
+  /** 'queued' | 'uploading' | 'processing' | 'succeeded' | 'failed'. */
+  state:         varchar('state', { length: 24 }).notNull().default('queued'),
+  /** YouTube's own processingDetails.processingStatus, once a video exists. */
+  processingStatus: varchar('processing_status', { length: 32 }),
+  attempts:      integer('attempts').notNull().default(0),
+  lastError:     text('last_error'),
+  sessionId:     uuid('session_id').references(() => creationSessions.id, { onDelete: 'set null' }),
+  objectId:      uuid('object_id').references(() => creationSessionObjects.id, { onDelete: 'set null' }),
+  campaignPostId: bigint('campaign_post_id', { mode: 'number' }).references(() => socialCampaignPosts.id, { onDelete: 'set null' }),
+  startedAt:     timestamp('started_at'),
+  completedAt:   timestamp('completed_at'),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+  updatedAt:     timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  index('idx_youtube_uploads_pending').on(t.state, t.updatedAt),
+  index('idx_youtube_uploads_tenant').on(t.tenantId, t.createdAt),
 ]);
 
 // ═══ PRD 20 §5 step 2 — target-schema tables ═══

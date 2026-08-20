@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { TrackerRow } from '@/lib/builderforceApi';
 import { usePmScope } from '@/lib/pm/scope';
 import { usePmData } from '@/lib/pm/usePmData';
@@ -16,7 +16,7 @@ import { useConfirm } from '@/components/ConfirmProvider';
  * through the shared RoadmapItemPanel (DRY with the Gantt view). Project view
  * (scoped) or portfolio (all segment rows) per the active PM scope.
  */
-export function RoadmapTimeline() {
+export function RoadmapTimeline({ focusItemId }: { focusItemId?: string | null } = {}) {
   const { projectId } = usePmScope();
   const confirm = useConfirm();
   const tc = useTranslations('common');
@@ -28,6 +28,20 @@ export function RoadmapTimeline() {
 
   // Panel state: undefined = closed, null = create, row = edit.
   const [editing, setEditing] = useState<TrackerRow | null | undefined>(undefined);
+
+  // Deep-link from a Brain chat's "Open" on a roadmap item (`?section=roadmap&roadmap=<id>`):
+  // open THAT row's panel as soon as the list resolves it. Consumed once per requested
+  // id, so closing the panel does not immediately re-open it — a second "Open" on a
+  // different item still lands, because the guard keys on the id, not on a boolean.
+  const consumedFocus = useRef<string | null>(null);
+  useEffect(() => {
+    if (!focusItemId || !data) return;
+    if (consumedFocus.current === focusItemId) return;
+    const row = data.find((r) => String(r.id) === focusItemId);
+    if (!row) return;
+    consumedFocus.current = focusItemId;
+    setEditing(row);
+  }, [focusItemId, data]);
 
   const remove = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();

@@ -12,6 +12,7 @@ import {
   type CostClass,
 } from '@/lib/builderforceApi';
 import { COST_CLASS_COLORS } from '@/lib/pm/costClass';
+import { windowState, windowStateLabelKey } from '@/lib/pm/planning';
 import { PmCard, ProgressBar } from './pmShared';
 import { useConfirm } from '@/components/ConfirmProvider';
 
@@ -74,15 +75,21 @@ export interface ObjectiveCardProps {
 
 export function ObjectiveCard({ o, busy, run, portfolios, initiatives, projects, epics, looseTasks, dragging, onDragStart, onDragEnd }: ObjectiveCardProps) {
   const t = useTranslations('pmo');
+  const tPlanning = useTranslations('planning');
   const confirm = useConfirm();
   const [kr, setKr] = useState<{ title: string; target: string }>({ title: '', target: '' });
   const [valueDraft, setValueDraft] = useState<Record<string, string>>({});
   const [linkDraft, setLinkDraft] = useState('');
 
   const setClass = (costClass: CostClass | null) => run(() => pmoApi.setCostClass('objective', o.id, costClass, 'manual'));
+  // An objective with NO window is "not yet scoped", not "undated": the dates are
+  // required at creation now, so an empty one is a legacy row waiting to be scoped
+  // — a state a PM can act on, and a different statement from a missing date on a
+  // ticket. Same shared rule the planning spine uses.
+  const emptySpanKey = windowStateLabelKey(windowState({ kind: 'objective', startDate: o.startDate, endDate: o.endDate }));
   const span = o.startDate || o.endDate
     ? `${toDateInput(o.startDate) || '…'} → ${toDateInput(o.endDate) || '…'}`
-    : t('okr.noDates');
+    : tPlanning(emptySpanKey ?? 'notYetScoped');
 
   const assignOwner = (sel: string) =>
     run(() => {
@@ -143,7 +150,16 @@ export function ObjectiveCard({ o, busy, run, portfolios, initiatives, projects,
                 </optgroup>
               )}
             </Select>
-            <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>{span}</span>
+            <span
+              style={{
+                fontSize: '0.74rem',
+                color: emptySpanKey === 'not-yet-scoped' ? 'var(--warning-text, var(--warning))' : 'var(--text-muted)',
+                fontStyle: emptySpanKey ? 'italic' : undefined,
+              }}
+              title={emptySpanKey === 'not-yet-scoped' ? tPlanning('notYetScopedTitle') : undefined}
+            >
+              {span}
+            </span>
             {o.period && <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>{o.period}</span>}
             <button type="button" style={ghostBtn} disabled={busy}
               title={t('okr.convertToEpicHint')}

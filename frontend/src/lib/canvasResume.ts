@@ -1,7 +1,9 @@
 import type { CreationNodeData } from '@/components/creation-canvas/types';
 import {
+  DEFAULT_RESUME_TEMPLATE_ID,
   RESUME_TEMPLATE_IDS,
   RESUME_SECTION_ORDER,
+  normalizeResumeTemplateId,
   activeResumeRevision,
   createResumeFamily,
   isResumeTemplateId,
@@ -94,7 +96,7 @@ const BASE_SECTIONS: Partial<Record<ResumeSectionId, ResumeSectionRule>> = {
 };
 
 const CANONICAL_RESUME_TEMPLATES: readonly ResumeTemplateDefinition[] = [
-  { id: 'hired-default', labelKey: 'template_hired-default', mode: 'hero', columns: 1, accent: '#7c3aed', paper: '#ffffff', ink: '#172033', font: 'sans', density: 'comfortable', headingStyle: 'plain', industry: 'General', sidebar: [], hero: { enabled: true, layout: 'split', showAvatar: true, showContactButtons: true, showSummary: true, showVideo: true }, sections: BASE_SECTIONS },
+  { id: 'standard', labelKey: 'template_standard', mode: 'hero', columns: 1, accent: '#7c3aed', paper: '#ffffff', ink: '#172033', font: 'sans', density: 'comfortable', headingStyle: 'plain', industry: 'General', sidebar: [], hero: { enabled: true, layout: 'split', showAvatar: true, showContactButtons: true, showSummary: true, showVideo: true }, sections: BASE_SECTIONS },
   { id: 'payroll-iron-gray', labelKey: 'template_payroll-iron-gray', mode: 'print', columns: 2, accent: '#475569', paper: '#ffffff', ink: '#1e293b', font: 'serif', density: 'compact', headingStyle: 'divider', industry: 'Payroll / Finance', sidebar: ['skills', 'education', 'certificates', 'languages'] },
   { id: 'risk-asphalt', labelKey: 'template_risk-asphalt', mode: 'print', columns: 2, accent: '#27272a', paper: '#ffffff', ink: '#18181b', font: 'sans', density: 'comfortable', headingStyle: 'caps', industry: 'Risk / Consulting', sidebar: ['skills', 'languages', 'certificates'] },
   { id: 'executive-taupe', labelKey: 'template_executive-taupe', mode: 'print', columns: 1, accent: '#78716c', paper: '#ffffff', ink: '#292524', font: 'serif', density: 'spacious', headingStyle: 'divider', industry: 'Executive', sidebar: [] },
@@ -108,7 +110,7 @@ const CANONICAL_RESUME_TEMPLATES: readonly ResumeTemplateDefinition[] = [
   { id: 'director-filmography-serif', labelKey: 'template_director-filmography-serif', mode: 'print', columns: 1, accent: '#78716c', paper: '#ffffff', ink: '#292524', font: 'serif', density: 'spacious', headingStyle: 'divider', industry: 'Film directing', sidebar: [] },
 ] as const;
 
-export const RESUME_TEMPLATES: readonly ResumeTemplateDefinition[] = CANONICAL_RESUME_TEMPLATES.map((template) => ({ ...template, creator: 'Hired.VIDEO', firstParty: true }));
+export const RESUME_TEMPLATES: readonly ResumeTemplateDefinition[] = CANONICAL_RESUME_TEMPLATES.map((template) => ({ ...template, creator: 'Builderforce.ai', firstParty: true }));
 
 export function normalizedResumeTemplate(template: ResumeTemplateDefinition): ResumeTemplateDefinition & { hero: NonNullable<ResumeTemplateDefinition['hero']>; sections: NonNullable<ResumeTemplateDefinition['sections']>; enabledSections: ResumeSectionId[] } {
   const hero = template.hero ?? (template.mode === 'hero'
@@ -440,8 +442,9 @@ export function resumeFamilyFromNode(data: CreationNodeData): CanvasResumeFamily
     const row = revision as Partial<CanvasResumeRevision>;
     return typeof row.id === 'string' && (row.kind === 'original' || row.kind === 'derived')
       && typeof row.title === 'string' && typeof row.markdown === 'string'
-      && RESUME_TEMPLATE_IDS.includes(row.templateId as ResumeTemplateId);
+      && normalizeResumeTemplateId(row.templateId) !== null;
   }).map((revision) => ({ ...revision,
+    templateId: normalizeResumeTemplateId(revision.templateId)!,
     pageSize: ['letter', 'legal', 'a4'].includes(String(revision.pageSize)) ? revision.pageSize : 'a4',
     orientation: ['portrait', 'landscape'].includes(String(revision.orientation)) ? revision.orientation : 'portrait',
   }));
@@ -453,7 +456,7 @@ export function resumeFamilyFromNode(data: CreationNodeData): CanvasResumeFamily
   return {
     version: 1, privacy, archivedAt: typeof family.archivedAt === 'string' ? family.archivedAt : null,
     watched: family.watched === true,
-    defaultTemplateId: RESUME_TEMPLATE_IDS.includes(family.defaultTemplateId as ResumeTemplateId) ? family.defaultTemplateId as ResumeTemplateId : 'hired-default',
+    defaultTemplateId: normalizeResumeTemplateId(family.defaultTemplateId) ?? DEFAULT_RESUME_TEMPLATE_ID,
     viewZoom: typeof family.viewZoom === 'number' && family.viewZoom >= 40 && family.viewZoom <= 125 ? family.viewZoom : 75,
     previewMode: ['continuous', 'paged', 'spread'].includes(String(family.previewMode)) ? family.previewMode as ResumePreviewMode : 'continuous',
     originalRevisionId: family.originalRevisionId, activeRevisionId, masterRevisionId, revisions,

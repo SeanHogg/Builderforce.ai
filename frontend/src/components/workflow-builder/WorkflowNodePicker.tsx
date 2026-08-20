@@ -4,6 +4,7 @@ import { useTranslations } from 'next-intl';
 import type { WorkflowNodeKind } from '@/lib/builderforceApi';
 import { SearchPicker, type SearchPickerSection } from '@/components/ui/SearchPicker';
 import { NODE_GROUPS, NODE_GROUP_KEYS, NODE_KINDS, nodeKindLabel, nodeKindBlurb, type NodeGroup } from './nodeKinds';
+import { integrationDescription } from './workflowBuilderI18n';
 import { INTEGRATIONS, INTEGRATION_CATEGORIES, INTEGRATION_CATEGORY_KEYS, integrationIcon, type Integration } from './integrations';
 import styles from './WorkflowNodePicker.module.css';
 
@@ -48,6 +49,7 @@ const PICKER_CLASS_NAMES = {
 export function WorkflowNodePicker({ anchor, onPickKind, onPickIntegration, onClose }: WorkflowNodePickerProps) {
   const t = useTranslations('evermindBuild');
   const tPicker = useTranslations('evermindBuild.nodePicker');
+  const wb = useTranslations('workflowBuilder');
 
   const sections = useMemo<SearchPickerSection<PickId>[]>(() => {
     const kindSections = NODE_GROUPS.map((group: NodeGroup) => ({
@@ -71,13 +73,13 @@ export function WorkflowNodePicker({ anchor, onPickKind, onPickIntegration, onCl
           kind: `integration:${integ.id}` as PickId,
           icon: integrationIcon(integ),
           label: integ.label,
-          description: integ.description,
+          description: integrationDescription(wb, integ.description),
         })),
       }))
       .filter((section) => section.items.length > 0);
 
     return [...kindSections, ...integrationSections];
-  }, [t]);
+  }, [t, wb]);
 
   const integrationsById = useMemo(() => new Map(INTEGRATIONS.map((integ) => [integ.id, integ])), []);
 

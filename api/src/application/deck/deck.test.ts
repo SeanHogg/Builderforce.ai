@@ -86,7 +86,7 @@ describe('fillTemplate (fflate round-trip)', () => {
       'ppt/media/image1.png': new Uint8Array([1, 2, 3]),
     });
     const resolved: ResolvedBindings = { byToken: new Map([['quarter', { kind: 'text', value: '2026-Q2' }]]), warnings: [] };
-    const out = fillTemplate(pkg, resolved);
+    const out = fillTemplate(pkg, resolved).bytes;
     const files = unzipSync(out);
     expect(strFromU8(files['ppt/slides/slide1.xml']!)).toContain('2026-Q2');
     // media is preserved untouched
@@ -102,4 +102,31 @@ describe('renderGenerativeDeck (pptxgenjs smoke)', () => {
     const files = unzipSync(bytes);
     expect(Object.keys(files)).toContain('[Content_Types].xml');
   }, 20_000);
+
+  /**
+   * The module's own doc comment claimed native charts for a long time while
+   * `addChart` was never called anywhere in it — a capability asserted in prose
+   * and absent from the package. This asserts the parts exist, not the prose.
+   */
+  it('emits real chart parts when the matrices carry numbers', async () => {
+    const data = emptyData();
+    data.investment.financialsByCategory = [['Platform', '$120,000', '$100,000', '+20%'], ['Growth', '$60,000', '$80,000', '-25%']];
+    data.quality.defectAging = [['0-30d', '4'], ['31-90d', '7'], ['90d+', '2']];
+    data.people.waterfall = [['Apr', '3', '1', '2', '41'], ['May', '2', '4', '-2', '39']];
+
+    const files = unzipSync(await renderGenerativeDeck(data, 'board'));
+    const charts = Object.keys(files).filter((p) => /^ppt\/charts\/chart\d+\.xml$/.test(p));
+    expect(charts.length).toBeGreaterThanOrEqual(3);
+    // …and the numbers are the tenant's, not a placeholder set.
+    expect(charts.map((p) => strFromU8(files[p]!)).join('')).toContain('120000');
+  }, 30_000);
+
+  it('says "no data" instead of drawing an axis pair over nothing', async () => {
+    const files = unzipSync(await renderGenerativeDeck(emptyData(), 'board'));
+    // (pptxgenjs always writes the empty `ppt/charts/` folder entries; what must
+    // be absent is a chart PART.)
+    expect(Object.keys(files).filter((p) => /^ppt\/charts\/chart\d+\.xml$/.test(p))).toHaveLength(0);
+    expect(Object.keys(files).filter((p) => /^ppt\/slides\/slide\d+\.xml$/.test(p))
+      .map((p) => strFromU8(files[p]!)).join('')).toContain('no data');
+  }, 30_000);
 });

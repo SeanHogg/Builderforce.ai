@@ -8,12 +8,20 @@
  * correlation — so a red PR-branch build on such a repo never triggers an auto-fix.
  * Asking the refs API which branch points at that hash restores the correlation.
  *
- * Two reads, cheapest first: the server-side `q=target.hash=…` filter, then a
- * most-recently-updated branch page scanned locally (older/self-managed responses
- * ignore the filter and return everything). Both go through the canonical
- * read-through cache — the branch head for a given sha is stable once the build has
- * concluded, and one build fans out several status posts that would otherwise each
- * re-query.
+ * On CLOUD: two reads, cheapest first — the server-side `q=target.hash=…` filter, then a
+ * most-recently-updated branch page scanned locally (older responses ignore the filter
+ * and return everything).
+ *
+ * On SERVER (Data Center) there is no hash filter of any kind: `/branches` only filters
+ * by NAME (`filterText`), so the only way to answer "which branch points at this sha" is
+ * to ask for the most recently modified branches WITH `details=true` — which is what
+ * populates `latestCommit` — and scan them locally. Same two-step shape, different
+ * envelope (`displayId`/`latestCommit` rather than `name`/`target.hash`), normalised to
+ * one branch name here.
+ *
+ * Both go through the canonical read-through cache — the branch head for a given sha is
+ * stable once the build has concluded, and one build fans out several status posts that
+ * would otherwise each re-query.
  *
  * Best-effort: never throws. A null result simply leaves `branch` null, so the event
  * falls back to post-merge sha correlation exactly as before.
@@ -22,7 +30,7 @@ import { and, eq } from 'drizzle-orm';
 import { projectRepositories } from '../../infrastructure/database/schema';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { resolveRepoCredential, isResolveError } from '../repos/resolveRepoCredential';
-import { buildGitApiBaseUrl } from '../repos/gitProxy';
+import { resolveRepoApiTarget } from '../repos/repoApiTarget';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 
@@ -34,7 +42,14 @@ export interface BitbucketRefCoords {
   sha: string;
 }
 
-interface BbBranch { name?: string; target?: { hash?: string } }
+/** Both editions in one shape: Cloud sends `name`/`target.hash`, Server sends
+ *  `displayId`/`latestCommit`. */
+interface BbBranch { name?: string; target?: { hash?: string }; displayId?: string; latestCommit?: string }
+
+/** The branch name and head sha, whichever edition answered. */
+function branchIdentity(b: BbBranch): { name: string | null; head: string | undefined } {
+  return { name: b.name ?? b.displayId ?? null, head: b.target?.hash ?? b.latestCommit };
+}
 
 async function getBranches(url: string, token: string): Promise<BbBranch[]> {
   const res = await fetch(url, {
@@ -52,21 +67,38 @@ function hashMatches(head: string | undefined, sha: string): boolean {
 }
 
 async function fetchUncached(coords: BitbucketRefCoords): Promise<string | null> {
-  let apiBase: string;
-  try { apiBase = buildGitApiBaseUrl('bitbucket', coords.host); } catch { return null; }
-  const repoBase = `${apiBase}/repositories/${encodeURIComponent(coords.owner)}/${encodeURIComponent(coords.repo)}/refs/branches`;
+  let api: ReturnType<typeof resolveRepoApiTarget>;
+  try { api = resolveRepoApiTarget({ provider: 'bitbucket', host: coords.host, owner: coords.owner, repo: coords.repo }); } catch { return null; }
+  const branchesUrl = api.branches();
+
+  if (api.flavor === 'bitbucket-server') {
+    // No hash filter exists on Server, so there is only the local scan. `details=true`
+    // is what makes `latestCommit` present at all — without it every entry's head is
+    // undefined and the scan silently matches nothing.
+    const recent = await getBranches(`${branchesUrl}?details=true&orderBy=MODIFICATION&limit=100`, coords.token);
+    return matchBranch(recent, coords.sha);
+  }
 
   const filtered = await getBranches(
-    `${repoBase}?q=${encodeURIComponent(`target.hash="${coords.sha}"`)}&pagelen=10`,
+    `${branchesUrl}?q=${encodeURIComponent(`target.hash="${coords.sha}"`)}&pagelen=10`,
     coords.token,
   );
-  const exact = filtered.find((b) => hashMatches(b.target?.hash, coords.sha));
-  if (exact?.name) return exact.name;
+  const exact = matchBranch(filtered, coords.sha);
+  if (exact) return exact;
 
   // The filter isn't honoured everywhere (and matches only full hashes) — scan the
   // most recently updated branches, which is where a just-built head will be.
-  const recent = await getBranches(`${repoBase}?sort=-target.date&pagelen=100`, coords.token);
-  return recent.find((b) => hashMatches(b.target?.hash, coords.sha))?.name ?? null;
+  const recent = await getBranches(`${branchesUrl}?sort=-target.date&pagelen=100`, coords.token);
+  return matchBranch(recent, coords.sha);
+}
+
+/** First branch in `list` whose head matches `sha`, by name. */
+function matchBranch(list: BbBranch[], sha: string): string | null {
+  for (const b of list) {
+    const { name, head } = branchIdentity(b);
+    if (name && hashMatches(head, sha)) return name;
+  }
+  return null;
 }
 
 /** Cached branch lookup for a commit hash. */

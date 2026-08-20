@@ -224,8 +224,21 @@ export async function completeForTenant(
     ...(opts?.codingOnly ? { codingOnly: true } : {}),
   });
   const model = byoAwareModel(opts?.explicitModel ?? request.model, byoVendors, registeredModels);
-  const result = await proxy.complete({ ...request, model }, undefined, opts?.traceId);
-  if (opts?.meterUseCase) {
+  // The exact-match response cache is offered HERE — the one tenant-facing seam —
+  // rather than to every caller individually, so the whole classify/extract/score
+  // family gets it without each service opting in separately. The proxy still applies
+  // its own eligibility rules on top (idempotent `useCase`, low temperature, no tools,
+  // not streaming), so passing the tenant is permission to cache, never an instruction.
+  const result = await proxy.complete(
+    { ...request, model },
+    undefined,
+    opts?.traceId,
+    undefined,
+    { responseCache: { tenantId } },
+  );
+  // A cache HIT dispatched nothing, so metering it would invent spend that did not
+  // happen and inflate every per-model and per-tenant rollup that sums these rows.
+  if (opts?.meterUseCase && result.outcome !== 'response_cache_hit') {
     void recordProxyUsage(buildDatabase(env), env, {
       tenantId,
       userId: opts.userId ?? null,

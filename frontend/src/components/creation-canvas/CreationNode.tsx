@@ -36,6 +36,9 @@ import {
   sanitizeGeoBounds, sanitizeMapCenter, sanitizeMapPoints, sanitizeMapZoom,
 } from '@/lib/canvasGeo';
 import { creativePreviewImageUrl } from '@/lib/creationDeliverables';
+// The consent state a send is gated on, read off the bound `audience` card rather than
+// copied onto the campaign — see `canvasMarketing.ts`.
+import { campaignSendReadiness } from '@/lib/canvasMarketing';
 import { GAME_FRAME_SANDBOX, gameDocumentFrom, gameRuntimeFor } from '@/lib/gameTargets';
 import type { CanvasSurfaceId } from '@/lib/canvasSurfaces';
 import { CanvasObjectSurfaceButton } from './CanvasObjectSurfaceButton';
@@ -412,6 +415,14 @@ function EmailCampaignBody({ data }: { data: CreationNodeData }) {
   const t = useTranslations('creationCanvas.node');
   const blockers = Array.isArray(data.blockers) ? data.blockers.map(String) : [];
   const stat = (value: unknown) => String(Number(value) || 0);
+  // ── THE CONSENT STATE, AT THE POINT OF SEND ─────────────────────────────────────
+  // A campaign could be authored and fired from this board with no visible consent or
+  // unsubscribe state at all, which is a CAN-SPAM/GDPR exposure created by the surface
+  // rather than by the sender. So the card reads the bound `audience` — never a copy of
+  // its numbers, which an LLM patch could write to zero — and says out loud how many may
+  // lawfully be mailed and what is stopping the send.
+  const neighbours = useBoardNeighbours(true);
+  const readiness = campaignSendReadiness({ data }, neighbours.map((entry) => ({ data: entry })));
   return <div className={styles.taskBody}>
     <div className={styles.campaignStats}>
       <span><small>{t('campaignSent')}</small><b>{stat(data.sent)}/{stat(data.recipients)}</b></span>
@@ -422,7 +433,15 @@ function EmailCampaignBody({ data }: { data: CreationNodeData }) {
       <span><small>{t('campaignAudience')}</small><b>{textValue(data.audienceName, '—')}</b></span>
       <span><small>{t('campaignVia')}</small><b>{textValue(data.transport, 'platform')}</b></span>
     </div>
+    <div className={styles.taskFacts}>
+      <span><small>{t('campaignSendable')}</small><b>{readiness.sendable === undefined ? '—' : String(readiness.sendable)}</b></span>
+      <span><small>{t('campaignConsent')}</small><b>{readiness.ready ? t('campaignConsentOk') : t('campaignConsentBlocked')}</b></span>
+    </div>
     {textValue(data.subject) && <div className={styles.taskContext}><small>{t('campaignSubject')}</small><b>{String(data.subject)}</b></div>}
+    {readiness.blockers.length > 0 && <div className={styles.taskContext}>
+      <small>{t('campaignConsentBlocked')}</small>
+      <p>{readiness.blockers.map((blocker) => t(`campaignBlocker.${blocker}`)).join(' · ')}</p>
+    </div>}
     {blockers.length > 0 && <div className={styles.taskContext}><small>{t('campaignBlocked')}</small><p>{blockers.join(' · ')}</p></div>}
   </div>;
 }
@@ -2608,9 +2627,8 @@ function useAuthoredNodeSize(id: string): { width?: number; height?: number } {
  */
 const NO_NEIGHBOURS: readonly CreationNodeData[] = [];
 
-function useSpecDeriveBoard(kind: CreationObjectKind): SpecDeriveBoard {
-  const reads = specKindReadsBoard(kind);
-  const neighbours = useStore(
+function useBoardNeighbours(reads: boolean): readonly CreationNodeData[] {
+  return useStore(
     (state) => {
       if (!reads) return NO_NEIGHBOURS;
       const out: CreationNodeData[] = [];
@@ -2619,6 +2637,10 @@ function useSpecDeriveBoard(kind: CreationObjectKind): SpecDeriveBoard {
     },
     (left, right) => left === right || (left.length === right.length && left.every((item, index) => item === right[index])),
   );
+}
+
+function useSpecDeriveBoard(kind: CreationObjectKind): SpecDeriveBoard {
+  const neighbours = useBoardNeighbours(specKindReadsBoard(kind));
   return useMemo(
     () => (neighbours.length ? makeSpecDeriveBoard(neighbours as unknown as Record<string, unknown>[]) : EMPTY_SPEC_BOARD),
     [neighbours],

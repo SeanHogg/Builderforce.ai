@@ -624,19 +624,29 @@ export function createMarketplaceRoutes(db: Db): Hono<HonoEnv> {
    * POST /marketplace/purchase – record a marketplace purchase (auth required)
    * Body: { artifactType, artifactSlug, stripePaymentIntentId? }
    * For free items (priceCents = 0) the purchase is recorded immediately without payment.
+   *
+   * 'agent' IS A VALID artifact_type (migration 0982) AND IS REFUSED HERE. This
+   * handler prices only 'skill' and records everything else at zero, so admitting
+   * an agent would mint a free entitlement for a priced agent — the exact hole the
+   * hire gate exists to close. An agent is bought through
+   * POST /api/workforce/agents/:id/checkout, which settles against the processor
+   * before it writes the row this route would have written for nothing.
    */
   router.post('/purchase', requireMarketplaceAuth, async (c) => {
     const userId = c.get('userId') as string;
     const body = await c.req.json<{
-      artifactType: 'skill' | 'persona' | 'content';
+      artifactType: 'skill' | 'persona';
       artifactSlug: string;
       stripePaymentIntentId?: string;
     }>();
     if (!body.artifactType || !body.artifactSlug) {
       return c.json({ error: 'artifactType and artifactSlug are required' }, 400);
     }
+    if (String(body.artifactType) === 'agent') {
+      return c.json({ error: 'Agents are purchased through the workforce checkout, not this route' }, 400);
+    }
 
-    // Look up price for skills (personas/content default to 0 for now)
+    // Look up price for skills (a persona has no price column — it records at 0).
     let priceCents = 0;
     let pricingModel: 'flat_fee' | 'consumption' = 'flat_fee';
     if (body.artifactType === 'skill') {
@@ -677,8 +687,25 @@ export function createMarketplaceRoutes(db: Db): Hono<HonoEnv> {
    */
   router.get('/purchases', requireMarketplaceAuth, async (c) => {
     const userId = c.get('userId') as string;
+    // USER-scoped by design, and `userId` is the access predicate: this is "what
+    // I have bought", across every workspace I belong to and the marketing
+    // marketplace (where the buyer has no workspace at all). `tenantId` is
+    // PROJECTED — not filtered — so an agent purchase, which is held by a
+    // workspace rather than by a person, says which workspace it landed in.
     const rows = await db
-      .select()
+      .select({
+        id:                    schema.marketplacePurchases.id,
+        userId:                schema.marketplacePurchases.userId,
+        tenantId:              schema.marketplacePurchases.tenantId,
+        artifactType:          schema.marketplacePurchases.artifactType,
+        artifactSlug:          schema.marketplacePurchases.artifactSlug,
+        priceCents:            schema.marketplacePurchases.priceCents,
+        pricingModel:          schema.marketplacePurchases.pricingModel,
+        stripePaymentIntentId: schema.marketplacePurchases.stripePaymentIntentId,
+        provider:              schema.marketplacePurchases.provider,
+        externalRef:           schema.marketplacePurchases.externalRef,
+        createdAt:             schema.marketplacePurchases.createdAt,
+      })
       .from(schema.marketplacePurchases)
       .where(eq(schema.marketplacePurchases.userId, userId))
       .orderBy(desc(schema.marketplacePurchases.createdAt));

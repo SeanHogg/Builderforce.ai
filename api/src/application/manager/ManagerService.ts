@@ -37,8 +37,8 @@ import type { Env } from '../../env';
 import { cronSweepEnabled, readCronControls } from '../runtime/cronControls';
 import type { RuntimeService } from '../runtime/RuntimeService';
 import {
-  tasks, boards, swimlanes, swimlaneAgentAssignments, pullRequests,
-  projectManagerConfigs, managerActions, managerStallWatch, projects, featureScores, taskFileChanges,
+  tasks, boards, swimlanes, pullRequests,
+  projectManagerConfigs, managerActions, managerRuns, managerStallWatch, projects, featureScores, taskFileChanges,
 } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { TaskStatus, TaskPriority, NON_TERMINAL_TASK_STATUSES } from '../../domain/shared/types';
@@ -47,6 +47,8 @@ import { nextProjectKeySeqBase } from '../task/taskKeys';
 import { rankBacklog, type RankableTask, type TaskPriorityTier } from './prioritize';
 import { listProjectDependencies } from '../task/taskDependencies';
 import { scheduleItems, estimateDaysFromStoryPoints } from '../planning/scheduleWork';
+import { assigneeKeyOf, loadSchedulingContext } from '../planning/schedulingContext';
+import { planVerdictCounts, summarizePlanVerdict } from '../planning/planVerdict';
 import {
   heuristicBusinessValue, riceBusinessValueFromFeature, normalizeFeatureName,
   type FeatureScoreRow, type ScoredValue,
@@ -214,6 +216,7 @@ export {
   recordManagerAction, recordManagerActionOnChange, stateFingerprint,
   type ManagerActionInput,
 } from './managerActionJournal';
+import { laneAgentAssignments, laneJoinOn } from '../swimlane/laneAgentAssignments';
 
 export interface ManagerActionRow {
   id: string; taskId: number | null; ticketKey: string | null; ticketTitle: string | null;
@@ -378,7 +381,7 @@ export async function createManagerRunTask(
  *  hard failure). Best-effort — the pass result stands regardless. */
 export async function finalizeManagerRunTask(
   db: Db,
-  args: { taskId: number; summary: ManagerRunSummary; ok: boolean },
+  args: { taskId: number; summary: ManagerRunSummary; ok: boolean; tenantId?: number; segmentId?: string | null },
 ): Promise<void> {
   const { taskId, summary, ok } = args;
   try {
@@ -403,11 +406,78 @@ export async function finalizeManagerRunTask(
         updatedAt: now,
       })
       .where(eq(tasks.id, taskId));
+
+    // ── THE SAME OUTCOME, AS DATA (migration 1082) ────────────────────────────
+    //
+    // The sentence above is for a human reading the run card. This row is for every
+    // query that used to be impossible: "did this pass change anything?" (the manager's
+    // load-bearing failure mode, previously detected by regexing that sentence), "how
+    // many passes scored anything this month?", and the pass-history chart. Written
+    // beside the description rather than instead of it, and upserted on `run_task_id` so
+    // a retried finalize cannot produce two rows for one pass.
+    const tenantId = args.tenantId ?? await resolveRunTaskTenant(db, taskId);
+    if (tenantId != null) {
+      await db.insert(managerRuns).values({
+        tenantId,
+        segmentId: args.segmentId ?? null,
+        projectId: summary.projectId,
+        runTaskId: taskId,
+        ok,
+        changed: managerPassChangedSomething(summary),
+        shedStages: summary.truncated?.length ? summary.truncated.join(',') : null,
+        summary,
+        createdAt: now,
+      }).onConflictDoUpdate({
+        target: [managerRuns.runTaskId],
+        set: {
+          ok,
+          changed: managerPassChangedSomething(summary),
+          shedStages: summary.truncated?.length ? summary.truncated.join(',') : null,
+          summary,
+          createdAt: now,
+        },
+      });
+    }
   } catch (error) {
     /* best-effort */
   
     reportCaughtError(error, { source: "application/manager/ManagerService.ts", operation: "finalizeManagerRunTask" });
   }
+}
+
+/**
+ * Did this pass CHANGE anything? PURE.
+ *
+ * The manager's most consequential failure is a pass that runs to completion, reports
+ * success, and moves nothing — every counter zero. It used to be detected by regexing
+ * the run card's English summary, which meant the detection depended on the wording of a
+ * UI string. This is the same question asked of the structure.
+ *
+ * A SKIPPED pass is not "unchanged" — it never ran, so it is excluded from the judgement
+ * by being marked `changed: false` alongside `ok`, and read together those two say
+ * "nothing happened because nothing was attempted".
+ */
+export function managerPassChangedSomething(s: ManagerRunSummary): boolean {
+  if (s.skipped) return false;
+  return (
+    s.scored > 0 || s.ranked > 0 || s.scheduled > 0 || s.assigned > 0
+    || s.prsConducted > 0 || s.prsMerged > 0 || s.dispatched > 0
+    || s.flagged > 0 || s.remediated > 0
+    || s.unstuck > 0 || s.escalated > 0 || s.stallsResolved > 0
+    || s.systemicFindings > 0 || s.systemicTicketsCreated > 0
+    || s.staleRunTasksClosed > 0
+  );
+}
+
+/** The tenant that owns a run task, for callers that finalize without one in hand. */
+async function resolveRunTaskTenant(db: Db, taskId: number): Promise<number | null> {
+  const [row] = await db
+    .select({ tenantId: projects.tenantId })
+    .from(tasks)
+    .innerJoin(projects, eq(projects.id, tasks.projectId))
+    .where(eq(tasks.id, taskId))
+    .limit(1);
+  return row?.tenantId ?? null;
 }
 
 // ── coaching → discrete task ─────────────────────────────────────────────────
@@ -1083,14 +1153,28 @@ export async function runManagerForProject(
         // An already-dated predecessor still constrains its successor, so the planner
         // sees every managed ticket — but only the unscheduled ones are WRITTEN.
         const anchorById = new Map(managed.map((t) => [t.id, t]));
+        // The constraints the pure planner cannot fetch: the tenant's working week
+        // and holidays, each owner's real load, and the sprint cadence. Without them
+        // this pass stacked every ticket on one person into the same week and drew
+        // work across shutdown days nobody was going to be there for.
+        const context = await loadSchedulingContext(env, db, tenantId, projectId).catch((error) => {
+          reportCaughtError(error, { source: "application/manager/ManagerService.ts", operation: "loadSchedulingContext" });
+          return null;
+        });
         const items = managed.map((t) => ({
           key: String(t.id),
           estimateDays: estimateDaysFromStoryPoints(t.storyPoints),
           afterKeys: edges
             .filter((e) => e.successorTaskId === t.id && anchorById.has(e.predecessorTaskId))
             .map((e) => String(e.predecessorTaskId)),
+          assigneeKey: assigneeKeyOf(t),
         }));
-        const plan = scheduleItems(items, { anchor: new Date(now) });
+        const plan = scheduleItems(items, {
+          anchor: new Date(now),
+          calendar: context?.calendar,
+          capacity: context?.capacity,
+          sprints: context?.sprints,
+        });
         const writes: unknown[] = [];
         const stampedAt = new Date();
         for (const t of unscheduled) {
@@ -1120,10 +1204,14 @@ export async function runManagerForProject(
               dependencyEdges: edges.length,
               from: span?.startDate.toISOString() ?? null,
               to: span?.endDate.toISOString() ?? null,
-              // A cycle in the project's dependency graph degrades scheduling (those
-              // tickets start at the anchor instead of after their predecessor), so it
-              // is reported rather than silently absorbed.
-              cyclic: plan.cyclic.length,
+              // The FULL planner verdict, through the same primitive the Epic fan-out
+              // uses. This used to record `cyclic` alone, so a compressed or
+              // overrunning plan left no trace anywhere — two journals with two
+              // different ideas of what a plan verdict is, and neither complete.
+              ...planVerdictCounts(summarizePlanVerdict(plan)),
+              // Owners the plan had to queue behind their own existing work — the
+              // evidence for "this date is late because one person is the constraint".
+              capacityDeferredTaskIds: plan.capacityDeferred.filter((k) => inScope.has(Number(k))),
             },
           });
         }
@@ -1370,6 +1458,37 @@ export async function runManagerForProject(
         // instead of looking like the manager ignored it.
         if (summary.remediated >= MAX_REMEDIATIONS_PER_RUN) { summary.remediationDeferred += 1; continue; }
 
+        // ── GIVE IT AN OWNER FIRST ────────────────────────────────────────────────
+        //
+        // `coordinateTicket` rewinds the lane and asks the lane gate to dispatch the
+        // missing role; it never touches `assigned_user_id` / `assigned_agent_ref`. On a
+        // project whose lanes are unstaffed the gate cannot dispatch anything, so the
+        // stage's ONLY lasting effect was moving tickets backwards, pass after pass,
+        // while `unowned` never fell. The journal line stopped CLAIMING staffing it had
+        // not done, but a flagged ticket still needed the `assign` path to actually gain
+        // an owner.
+        //
+        // Free: `assignTicketOwner` is a pick + one UPDATE, no run, so it costs nothing
+        // against the run budget and runs even when that budget is exhausted. It is the
+        // SAME implementation the assign stage and stall triage use, so a ticket cannot
+        // acquire a different owner depending on which stage reached it first.
+        const alreadyOwned = t.assignedUserId != null || t.assignedAgentRef != null || t.assignedAgentHostId != null;
+        let ownerAssigned: string | null = null;
+        if (!alreadyOwned) {
+          const owner = await assignTicketOwner(env, db, {
+            projectId, taskId: t.id, actionType: t.actionType,
+          });
+          if (owner.assigned) {
+            ownerAssigned = owner.label;
+            summary.assigned += 1;
+            await recordManagerAction(db, {
+              tenantId, projectId, taskId: t.id, runTaskId, actionType: 'assign',
+              summary: `Assigned "${t.title}" to ${owner.label} while remediating its coverage gaps.`,
+              detail: { memberKind: owner.memberKind, memberRef: owner.memberRef, via: 'audit_remediation' },
+            });
+          }
+        }
+
         // Coordination REWINDS and ADVANCES for free; only the run at the end is
         // billable. So the slot is reserved first and the coordination told whether it
         // may spend it — this stage used to start runs that no ceiling saw and no
@@ -1387,7 +1506,10 @@ export async function runManagerForProject(
         // Only journal a coordination that CHANGED something (rewound the lane or
         // started the missing role's run). A no-op tick on an already-staffed ticket
         // must stay silent, or the feed refills with noise every pass.
-        const moved = outcome.ok && (outcome.dispatched || outcome.status !== t.status);
+        // Gaining an OWNER is itself a change worth journalling: on an unstaffed board it
+        // is the only thing that ever happens to a flagged ticket, and treating it as a
+        // no-op is what made the stage look inert for four captures.
+        const moved = outcome.ok && (outcome.dispatched || outcome.status !== t.status || ownerAssigned != null);
         if (!moved) continue;
         summary.remediated += 1;
         const roles = [...new Set(result.missing.map((m) => m.ref))];
@@ -1403,11 +1525,14 @@ export async function runManagerForProject(
             ? `Staffed ${checks} on "${t.title}" — started ${roles.join(', ')}`
               + `${outcome.status !== t.status ? ` (moved to ${outcome.status})` : ''}.`
             : `Rewound "${t.title}" to ${outcome.status} for ${checks} — ${roles.join(', ')} still unfilled; `
-              + 'nothing was dispatched and the ticket has no owner yet.',
+              + (ownerAssigned
+                ? `nothing was dispatched, but the ticket now belongs to ${ownerAssigned}.`
+                : 'nothing was dispatched and the ticket has no owner yet.'),
           detail: {
             roles, missing: result.missing.length, fromStatus: t.status,
             toStatus: outcome.status, dispatched: outcome.dispatched,
             requiredOutstanding: outcome.requiredOutstanding,
+            ...(ownerAssigned ? { ownerAssigned } : {}),
           },
         });
       } catch (error) { /* skip this ticket */ 
@@ -1983,8 +2108,8 @@ async function coordinatePullRequests(
 export async function projectHasBoardStaffing(db: Db, projectId: number): Promise<boolean> {
   const [row] = await db
     .select({ one: sql`1` })
-    .from(swimlaneAgentAssignments)
-    .innerJoin(swimlanes, eq(swimlanes.id, swimlaneAgentAssignments.swimlaneId))
+    .from(laneAgentAssignments)
+    .innerJoin(swimlanes, laneJoinOn(swimlanes.id))
     .innerJoin(boards, eq(boards.id, swimlanes.boardId))
     .where(eq(boards.projectId, projectId))
     .limit(1);

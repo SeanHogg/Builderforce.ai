@@ -21,6 +21,7 @@ import GuestSessionsPanel from '@/components/admin/panels/GuestSessionsPanel';
 import CreationSessionsPanel from '@/components/admin/panels/CreationSessionsPanel';
 import TenantsPanel from '@/components/admin/panels/TenantsPanel';
 import SecurityPanel from '@/components/admin/panels/SecurityPanel';
+import SuspectAccountsPanel from '@/components/admin/panels/SuspectAccountsPanel';
 import LegalPanel from '@/components/admin/panels/LegalPanel';
 import NewsletterPanel from '@/components/admin/panels/NewsletterPanel';
 import ReleaseNotesPanel from '@/components/admin/panels/ReleaseNotesPanel';
@@ -62,6 +63,7 @@ const ADMIN_PANELS: Record<string, () => React.JSX.Element> = {
   sessions: GuestSessionsPanel,
   creationSessions: CreationSessionsPanel,
   security: SecurityPanel,
+  suspectAccounts: SuspectAccountsPanel,
   emulation: ImpersonationSessionsPanel,
   tenants: TenantsPanel,
   permissions: PermissionsPanel,

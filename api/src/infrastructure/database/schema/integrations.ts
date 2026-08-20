@@ -13,6 +13,7 @@
  */
 
 import {
+  bigserial,
   boolean,
   index,
   integer,
@@ -195,6 +196,81 @@ export const mailboxAutomationReplies = pgTable('mailbox_automation_replies', {
 ]);
 
 
+/**
+ * The provider push subscription behind one connected mailbox (migration 1095).
+ *
+ * A mailbox used to be pull-only: the canvas tile re-read on demand and the
+ * automation sweep re-listed unread mail. Both providers offer a real push, and
+ * both push subscriptions EXPIRE — Gmail's `users.watch` after 7 days, Graph's
+ * mail subscription after about 3 — so a watch is not a fact you record once. It
+ * is state with a lifetime, and this table is that lifetime.
+ *
+ * Three columns that look adjacent are genuinely different facts and cannot be
+ * collapsed: `subscriptionId` is WHERE the subscription lives (Graph only — Gmail
+ * has no per-watch handle), `expiresAt` is WHEN it dies, and `cursor` is HOW FAR
+ * we have read (a Gmail historyId, or a Graph deltaLink). Renewal needs the first
+ * two; a delta needs the third.
+ *
+ * `pushToken` is the addressing half. An inbound notification carries no bearer,
+ * so it is addressed the way a webhook trigger is — an unguessable 128-bit token
+ * in the path — and for Graph it doubles as the `clientState` the notification
+ * must echo back, so knowing the URL is not by itself enough to forge one.
+ */
+export const mailboxWatches = pgTable('mailbox_watches', {
+  id:             serial('id').primaryKey(),
+  tenantId:       integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  connectionId:   integer('connection_id').notNull().references(() => mailboxConnections.id, { onDelete: 'cascade' }),
+  /** 'microsoft' | 'google'. Denormalized so the push route picks an adapter from
+   *  the URL before it has read the connection. */
+  provider:       varchar('provider', { length: 24 }).notNull(),
+  /** 'push' — the provider notifies us. 'poll' — no push transport is available on
+   *  this deployment, so the renewal sweep drains the SAME cursor itself. One delta
+   *  engine; two ways of being woken. */
+  mode:           varchar('mode', { length: 16 }).notNull().default('push'),
+  subscriptionId: varchar('subscription_id', { length: 255 }),
+  pushToken:      varchar('push_token', { length: 64 }).notNull(),
+  cursor:         text('cursor'),
+  expiresAt:      timestamp('expires_at'),
+  lastNotifiedAt: timestamp('last_notified_at'),
+  lastDeltaAt:    timestamp('last_delta_at'),
+  lastError:      text('last_error'),
+  /** 'active' | 'error' | 'stopped'. */
+  status:         varchar('status', { length: 16 }).notNull().default('active'),
+  createdAt:      timestamp('created_at').notNull().defaultNow(),
+  updatedAt:      timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_mailbox_watches_connection').on(t.connectionId),
+  uniqueIndex('uq_mailbox_watches_token').on(t.pushToken),
+  index('idx_mailbox_watches_renewal').on(t.status, t.expiresAt),
+]);
+
+/**
+ * The claim check that makes a replayed push a no-op (migration 1095).
+ *
+ * Both providers guarantee AT LEAST ONCE delivery, and every replay names the same
+ * message. The cursor cannot prevent a double-fire because the cursor advances
+ * AFTER the work; this can, because the unique index is checked BEFORE it.
+ *
+ * The contract is the insert: `onConflictDoNothing().returning()` hands back only
+ * the rows that were genuinely new, and every consumer downstream — the
+ * `mailbox-received` workflow trigger, the canvas inbox delta — acts on that
+ * filtered set. That is the whole reason one email starts one workflow.
+ *
+ * Stores no mail, deliberately: a message id, and when we first saw it.
+ */
+export const mailboxPushReceipts = pgTable('mailbox_push_receipts', {
+  id:           bigserial('id', { mode: 'number' }).primaryKey(),
+  tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  connectionId: integer('connection_id').notNull().references(() => mailboxConnections.id, { onDelete: 'cascade' }),
+  messageId:    varchar('message_id', { length: 512 }).notNull(),
+  receivedAt:   timestamp('received_at'),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_mailbox_push_receipts_message').on(t.tenantId, t.connectionId, t.messageId),
+  index('idx_mailbox_push_receipts_pruning').on(t.connectionId, t.createdAt),
+]);
+
+
 // ═══ payouts (migration 0459) ═══
 // A payout destination has NO table here. It is a `connections` row with
 // capability='payout' and a `credentials` row holding the sealed credential —
@@ -279,6 +355,19 @@ export const extensionPackages = pgTable('extension_packages', {
   /** `draft` (only the publisher sees it) · `listed` · `delisted`. */
   listingState:     varchar('listing_state', { length: 24 }).notNull().default('draft'),
   currentVersionId: uuid('current_version_id'),
+  /**
+   * The searchable projection of this listing — name, tagline, description,
+   * category keys and the CAPABILITY names out of the published head's spec,
+   * lowercased and concatenated (migration 1094).
+   *
+   * A search index, not a stored total. The rule a derived column must obey is
+   * that it never asserts a figure its own rows can contradict; this asserts
+   * nothing — it is lossy by construction, rebuilt from the same source on every
+   * publish, and a stale one merely fails to match. It exists because the strings
+   * a buyer actually types are ACTION names, and those live inside
+   * `extension_versions.spec` where no query in the directory can reach them.
+   */
+  searchText:       text('search_text'),
   /** Cross-domain id into `catalog_items` — where price, plans and orders live.
    *  NULL means free. No price column here, deliberately: one fact, one place. */
   catalogItemId:    uuid('catalog_item_id'),
@@ -288,6 +377,77 @@ export const extensionPackages = pgTable('extension_packages', {
 }, (t) => [
   index('idx_extension_packages_tenant').on(t.tenantId),
   index('idx_extension_packages_listed').on(t.listingState, t.kind),
+  index('idx_extension_packages_directory').on(t.listingState, t.kind, t.installCount),
+]);
+
+/**
+ * The directory's CATEGORY TAXONOMY — data, not a TypeScript array.
+ *
+ * `INTEGRATION_CATEGORIES` stays where it is and stays code: it is a total map
+ * over our own port registries, and a port category with no home there is
+ * supposed to be a compile error. This is the other question. A vendor publishing
+ * into a vertical we have never served should not need a pull request and a
+ * deploy to become findable, so the taxonomy a stranger's listing is filed under
+ * is a row — seeded (1094) with exactly the twelve keys the code already speaks,
+ * so nothing that renders today stops rendering.
+ *
+ * `key` is the primary key because it IS the identity — it is the string already
+ * stored in `extension_packages.categories`, and a surrogate id would let two rows
+ * claim `finance` and leave a reader to work out which one a listing meant.
+ * `active` retires a category instead of deleting it: listings reference the key,
+ * and a deleted row turns their category into a dangling string.
+ */
+export const extensionCategories = pgTable('extension_categories', {
+  key:         varchar('key', { length: 48 }).primaryKey(),
+  label:       varchar('label', { length: 120 }).notNull(),
+  description: text('description'),
+  /** Chip order in the directory. Ties break on `key`, so the order is total. */
+  position:    integer('position').notNull().default(100),
+  active:      boolean('active').notNull().default(true),
+  createdAt:   timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('idx_extension_categories_active').on(t.active, t.position),
+]);
+
+/**
+ * ONE STAGE of the review pipeline, and what it can prove.
+ *
+ * `extension_versions.review_findings` is a flat `{check, severity, message}`
+ * list. That is the right shape for the static stage, whose every check is a
+ * statement about the submitted JSON, and the wrong shape for a stage that goes
+ * and DOES something: "the dynamic stage passed" means nothing without which
+ * actions were exercised, against what URL, with what status, in how long — and,
+ * the entry that keeps the whole stage honest, which ones were NOT invoked and
+ * why. A pipeline that reports a pass it cannot evidence converts an unknown into
+ * a false assurance, which is worse than having no stage at all.
+ *
+ * So a stage run is a ROW with its own verdict and its own `evidence` array, one
+ * entry per thing exercised. `sandboxTenantId` records the workspace the dynamic
+ * stage actually installed into, so a reader can go and look rather than trust.
+ *
+ * UNIQUE on (version, stage): a re-review REPLACES its stage rather than
+ * appending, so "what did the dynamic stage say about 1.2.0" has one answer.
+ */
+export const extensionReviewStages = pgTable('extension_review_stages', {
+  id:        uuid('id').primaryKey().defaultRandom(),
+  versionId: uuid('version_id').notNull().references(() => extensionVersions.id, { onDelete: 'cascade' }),
+  /** `static` · `dynamic` · `agentic`. A value, not a table — adding a stage is a
+   *  registry entry, exactly as adding a package kind is a validator. */
+  stage:     varchar('stage', { length: 24 }).notNull(),
+  /** `pass` · `warn` · `fail` · `skipped`. `skipped` is first-class: a stage that
+   *  could not reach its sandbox says so, and is never recorded as a pass. */
+  verdict:   varchar('verdict', { length: 16 }).notNull(),
+  findings:  jsonb('findings').$type<Array<Record<string, unknown>>>().notNull().default([]),
+  evidence:  jsonb('evidence').$type<Array<Record<string, unknown>>>().notNull().default([]),
+  /** Cross-domain id into `tenants`. Not an FK: deleting the sandbox workspace
+   *  must not delete the record that a review once ran against it. */
+  sandboxTenantId: integer('sandbox_tenant_id'),
+  durationMs: integer('duration_ms'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_extension_review_stage').on(t.versionId, t.stage),
+  index('idx_extension_review_stages_verdict').on(t.stage, t.verdict),
 ]);
 
 /**
@@ -454,4 +614,43 @@ export const ltiResourceBindings = pgTable('lti_resource_bindings', {
   updatedAt:          timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
   uniqueIndex('uq_lti_resource_bindings_link').on(t.bindingId, t.resourceLinkId),
+]);
+
+/**
+ * One (LMS course, assignment, learner) ↔ one board of that learner's OWN.
+ *
+ * The decision migration 0980 records. A `learn` launch must never open the
+ * cohort board — it carries the whole roster and every mark on it — and the
+ * refusal that said "your instructor distributes your own copy" was promising a
+ * destination the server had no way to name. This table names it.
+ *
+ * `assignmentRef` and `learnerRef` are NORMALISED refs (`learnerRefKey` in
+ * `domain/lti/learnerBoards.ts`, the API's mirror of the canvas's `specRefKey`),
+ * because that is the join the academic vocabulary already uses between an
+ * `assignment` and the `submission`s that name it. `learnerUserId` is nullable:
+ * a distributed submission exists before its owner has ever launched.
+ */
+export const ltiLearnerBoards = pgTable('lti_learner_boards', {
+  id:                 serial('id').primaryKey(),
+  tenantId:           integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  bindingId:          integer('binding_id').notNull().references(() => ltiContextBindings.id, { onDelete: 'cascade' }),
+  /** Null for an assignment authored on the board rather than launched into it. */
+  resourceBindingId:  integer('resource_binding_id').references(() => ltiResourceBindings.id, { onDelete: 'cascade' }),
+  assignmentRef:      varchar('assignment_ref', { length: 160 }).notNull(),
+  learnerRef:         varchar('learner_ref', { length: 160 }).notNull(),
+  /** users.id — matches the width every other user reference in this module
+   *  uses, and carries no Drizzle `.references()` for the same reason they do
+   *  not: an import of `users` here is a real read into Identity's tables and
+   *  `check-domain-boundary` counts it as a new cross-domain edge. The FOREIGN
+   *  KEY is declared in migration 0980, where referential integrity belongs. */
+  learnerUserId:      varchar('learner_user_id', { length: 36 }),
+  /** The learner's own board. Never the cohort board. */
+  sessionId:          uuid('session_id').notNull(),
+  /** The `submission` object copied onto it. */
+  submissionObjectId: uuid('submission_object_id'),
+  createdAt:          timestamp('created_at').notNull().defaultNow(),
+  updatedAt:          timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_lti_learner_boards_learner').on(t.bindingId, t.assignmentRef, t.learnerRef),
+  index('idx_lti_learner_boards_tenant_user').on(t.tenantId, t.learnerUserId),
 ]);

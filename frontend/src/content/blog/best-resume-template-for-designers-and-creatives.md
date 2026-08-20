@@ -8,6 +8,17 @@ author: Sean Hogg
 
 # The Best Resume Template for Designers, Creatives, and Product Builders
 
+```bf-figure
+{
+  "kind": "templates",
+  "title": "Creative Minimal — the layout this article recommends",
+  "templateIds": [
+    "creative-minimal"
+  ],
+  "caption": "Rendered live from the same template registry the editor reads, so this is the real Design and creative layout — not a screenshot of one."
+}
+```
+
 ## The Creative Resume Paradox: Less Is More
 
 Designers, art directors, and creative leads make a counterintuitive mistake on their resumes: they over-design them. Drop shadows, color gradients, custom fonts, infographic skill bars, full-bleed photography. The instinct is understandable — the resume is a creative artifact, so why not show range?

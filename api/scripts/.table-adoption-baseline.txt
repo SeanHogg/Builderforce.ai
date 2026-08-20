@@ -81,7 +81,6 @@ feed_posts
 follow_up_enrollments
 geocoder_cache
 gig_bids
-gig_disputes
 gig_projects
 headcount_impacts
 health_dimensions

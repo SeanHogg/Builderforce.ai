@@ -185,11 +185,22 @@ export interface AccountabilitySignoff {
   verdict: string;
   summary: string | null;
   contribution: SignoffContribution | null;
+  /**
+   * The platform credited this record from a completed run rather than a member
+   * recording a verdict of their own (`attestRoleRun`). A legitimate accountability
+   * record — it always links the execution it came from — but not a review, so the tab
+   * badges it. Without the badge an auto-attested credit is indistinguishable from a
+   * considered verdict.
+   */
+  autoAttested: boolean;
   waiveReason: string | null;
   createdAt: string;
 }
 
-export type AccountabilityGapKind = 'unsigned' | 'unstaffed' | 'no_contribution' | 'waived' | 'changes_requested';
+export type AccountabilityGapKind =
+  | 'unsigned' | 'unstaffed' | 'no_contribution' | 'waived' | 'changes_requested'
+  /** Approved by the platform from a completed run rather than judged by a member. */
+  | 'auto_attested';
 /** `blocking` = something is wrong; `advisory` = outstanding work or a reasoned waiver. */
 export type AccountabilityGapSeverity = 'blocking' | 'advisory';
 export interface AccountabilityGap {
@@ -228,6 +239,18 @@ export interface ParticipantsSummaryRow {
   completed: number;
   required: number;
   percent: number;
+  /**
+   * Required slots with NO assignee at all.
+   *
+   * `TicketParticipantsService.resolveAssignee` falls back to the first role-capable
+   * agent in the tenant when no `project_role_assignments` pin exists, so a ticket
+   * acquires up to ten required reviewers no operator ever staffed — and those slots gate
+   * completion and merge. They appeared ONLY on the ticket's Sign-off & Accountability
+   * tab: the header and the board card showed nothing, so the ticket read as unassigned
+   * while the manager correctly reported ten outstanding sign-offs. Counting them here is
+   * what lets both surfaces say so.
+   */
+  unstaffed: number;
 }
 
 /** An incident's implicated delivery ticket + its Accountability Report (RCA linkage). */

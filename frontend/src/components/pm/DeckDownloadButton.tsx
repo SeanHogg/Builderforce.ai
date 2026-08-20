@@ -33,6 +33,14 @@ export function DeckDownloadButton() {
   const [quarter, setQuarter] = useState<string>(quarterOptions()[0]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /**
+   * What the generation had to fall back on — a binding with no data behind it,
+   * or a chart in an uploaded template whose series count does not match the
+   * numbers bound to it. The API computed and stored these from the beginning
+   * and the button dropped them on the floor, so a deck quietly built on
+   * placeholders looked exactly like one built on real figures.
+   */
+  const [warnings, setWarnings] = useState<string[]>([]);
 
   useEffect(() => {
     let alive = true;
@@ -45,9 +53,10 @@ export function DeckDownloadButton() {
   const onDownload = async () => {
     setBusy(true);
     setError(null);
+    setWarnings([]);
     try {
       const tmpl = templates.find((x) => x.id === templateId);
-      await decksApi.download({ templateId: templateId || undefined, quarter, mode: tmpl?.fillable ? 'fill' : 'generative' });
+      setWarnings(await decksApi.download({ templateId: templateId || undefined, quarter, mode: tmpl?.fillable ? 'fill' : 'generative' }));
     } catch (e) {
       setError(e instanceof Error ? e.message : t('error'));
     } finally {
@@ -83,6 +92,16 @@ export function DeckDownloadButton() {
         {busy ? t('generating') : t('download')}
       </button>
       {error && <span style={{ fontSize: '0.75rem', color: 'var(--error-text)' }}>{error}</span>}
+      {warnings.length > 0 && (
+        <details style={{ flexBasis: '100%', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+          <summary style={{ cursor: 'pointer', color: 'var(--warning-text)' }}>
+            {t('warnings', { count: warnings.length })}
+          </summary>
+          <ul style={{ margin: '6px 0 0', paddingInlineStart: '1.1rem', display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {warnings.map((w, i) => <li key={i}>{w}</li>)}
+          </ul>
+        </details>
+      )}
     </div>
   );
 }

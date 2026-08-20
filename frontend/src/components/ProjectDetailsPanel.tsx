@@ -55,6 +55,9 @@ export interface ProjectDetailsPanelProps {
   /** When opening on the PRDs tab, the spec KIND whose document should auto-open
    *  (e.g. 'architecture' for "view the arch analysis"). */
   initialSpecKind?: string | null;
+  /** Same, but the EXACT spec id — how a Brain chat's "Open" on a created PRD lands
+   *  on that document rather than on the tab that lists it. Wins over the kind. */
+  initialSpecId?: string | null;
   /** Called when project is updated (e.g. name, description). */
   onProjectUpdate?: (project: Project) => void;
   /** Called when the user deletes the project. Component will prompt for confirmation. */
@@ -139,6 +142,7 @@ export function ProjectDetailsPanel({
   initialTab = 'analytics',
   initialAuditId,
   initialSpecKind = null,
+  initialSpecId = null,
   onProjectUpdate,
   onDelete,
 }: ProjectDetailsPanelProps) {
@@ -163,6 +167,7 @@ export function ProjectDetailsPanel({
   // PRDs list reports back once it has acted on it, and this clears — so the
   // drawer opens exactly once rather than on every re-render of the panel.
   const [pendingSpecKind, setPendingSpecKind] = useState<string | null>(initialSpecKind);
+  const [pendingSpecId, setPendingSpecId] = useState<string | null>(initialSpecId);
 
   /** Localized status label; falls back to the raw value for unknown statuses. */
   const statusLabel = (s: string) =>
@@ -177,6 +182,9 @@ export function ProjectDetailsPanel({
   useEffect(() => {
     if (open) setPendingSpecKind(initialSpecKind);
   }, [open, initialSpecKind]);
+  useEffect(() => {
+    if (open) setPendingSpecId(initialSpecId);
+  }, [open, initialSpecId]);
 
   useEffect(() => {
     if (activeTab !== 'details' && editingProject) {
@@ -699,7 +707,8 @@ export function ProjectDetailsPanel({
               projectId={project.id}
               projectName={project.name}
               initialSpecKind={pendingSpecKind}
-              onInitialSpecConsumed={() => setPendingSpecKind(null)}
+              initialSpecId={pendingSpecId}
+              onInitialSpecConsumed={() => { setPendingSpecKind(null); setPendingSpecId(null); }}
             />
           )}
 

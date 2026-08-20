@@ -1,9 +1,14 @@
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import {
   buildLoginRedirect, fetchRoster, nextLink, pushScore, randomToken,
-  publicHalfOf, rosterFromMembers, toolPublicJwks, verifyLaunch, type LtiRegistration,
+  publicHalfOf, rosterFromMembers, signDeepLinkingResponse, toolPublicJwks, verifyLaunch,
+  type LtiRegistration,
 } from './LtiService';
-import { AGS_SCOPE, LTI_CLAIM, capabilityFromRoles, readLaunchClaims } from '../../domain/lti/ltiClaims';
+import { contentItemsFor } from './deepLinking';
+import {
+  AGS_SCOPE, LTI_CLAIM, capabilityFromRoles, deepLinkingResponseClaims, readDeepLinkingSettings,
+  readLaunchClaims,
+} from '../../domain/lti/ltiClaims';
 import type { Env } from '../../env';
 
 /**
@@ -357,5 +362,111 @@ describe('tool JWKS', () => {
       signable({ issuer: 'https://other.edu' }),
     ];
     expect(toolPublicJwks(registrations).keys).toHaveLength(1);
+  });
+});
+
+/**
+ * Deep linking is the ONE exchange where this tool is the issuer and the
+ * platform is the audience, and getting that pair backwards produces an
+ * `invalid_client` the LMS reports with no further detail. So it is asserted
+ * here, against a real signature, rather than left to review.
+ */
+describe('deep linking', () => {
+  const DEEP_LINK_SETTINGS = {
+    deep_link_return_url: 'https://lms.university.edu/courses/9/deep_link_response',
+    accept_types: ['ltiResourceLink', 'link'],
+    accept_presentation_document_targets: ['iframe', 'window'],
+    accept_multiple: 'true',
+    auto_create: false,
+    title: 'Add Builderforce content',
+    data: 'opaque-platform-token',
+  };
+
+  it('reads the platform\'s terms off the settings claim, coercing the string booleans platforms send', () => {
+    const settings = readDeepLinkingSettings({ [LTI_CLAIM.deepLinkingSettings]: DEEP_LINK_SETTINGS });
+    expect(settings).toMatchObject({
+      returnUrl: DEEP_LINK_SETTINGS.deep_link_return_url,
+      acceptMultiple: true,
+      autoCreate: false,
+      data: 'opaque-platform-token',
+    });
+    expect(settings?.acceptTypes).toEqual(['ltiResourceLink', 'link']);
+  });
+
+  it('refuses a request with nowhere to answer rather than presenting a picker that cannot return', () => {
+    expect(readDeepLinkingSettings({})).toBeNull();
+    expect(readDeepLinkingSettings({ [LTI_CLAIM.deepLinkingSettings]: { accept_multiple: true } })).toBeNull();
+  });
+
+  it('carries the message type onto the context, so a picker request is not read as a launch', () => {
+    const claims = readLaunchClaims({
+      [LTI_CLAIM.messageType]: 'LtiDeepLinkingRequest',
+      [LTI_CLAIM.version]: '1.3.0',
+      [LTI_CLAIM.deploymentId]: 'dep-1',
+      sub: 'instructor-1',
+      aud: REGISTRATION.clientId,
+    });
+    expect(claims.ok).toBe(true);
+    if (!claims.ok) return;
+    expect(claims.context.messageType).toBe('LtiDeepLinkingRequest');
+  });
+
+  it('builds a response whose issuer is US and whose audience is the platform', () => {
+    const claims = deepLinkingResponseClaims({
+      clientId: REGISTRATION.clientId,
+      issuer: REGISTRATION.issuer,
+      deploymentId: 'dep-1',
+      nonce: 'nonce-1',
+      data: 'opaque-platform-token',
+      contentItems: [{ type: 'ltiResourceLink', url: 'https://api.builderforce.ai/api/lti/launch?object=abc', title: 'Essay 1' }],
+      nowSeconds: 1_700_000_000,
+    });
+    // The mirror of a launch — this is the pair that is most often inverted.
+    expect(claims.iss).toBe(REGISTRATION.clientId);
+    expect(claims.aud).toBe(REGISTRATION.issuer);
+    expect(claims[LTI_CLAIM.messageType]).toBe('LtiDeepLinkingResponse');
+    expect(claims[LTI_CLAIM.version]).toBe('1.3.0');
+    // The platform's opaque token, echoed verbatim — without it the platform
+    // cannot match the response to the request it made.
+    expect(claims[LTI_CLAIM.deepLinkingData]).toBe('opaque-platform-token');
+    expect(claims.exp).toBeGreaterThan(claims.iat as number);
+  });
+
+  it('omits the data claim entirely when the platform sent none, rather than echoing an empty string', () => {
+    const claims = deepLinkingResponseClaims({
+      clientId: 'c', issuer: 'i', deploymentId: 'd', nonce: 'n', data: '',
+      contentItems: [], nowSeconds: 1,
+    });
+    expect(LTI_CLAIM.deepLinkingData in claims).toBe(false);
+  });
+
+  it('signs the response with the SAME tool key the client assertion uses', async () => {
+    const env = memoryEnv();
+    const claims = deepLinkingResponseClaims({
+      clientId: REGISTRATION.clientId,
+      issuer: REGISTRATION.issuer,
+      deploymentId: 'dep-1',
+      nonce: 'nonce-1',
+      data: '',
+      contentItems: [],
+      nowSeconds: Math.floor(Date.now() / 1000),
+    });
+    const jwt = await signDeepLinkingResponse(env, signable(), claims);
+    expect(jwt).toBeTruthy();
+
+    const [header, payload, signature] = (jwt ?? '').split('.');
+    expect(JSON.parse(atob(header!.replace(/-/g, '+').replace(/_/g, '/')))).toMatchObject({ alg: 'RS256', kid: 'tool-1' });
+    expect(JSON.parse(atob(payload!.replace(/-/g, '+').replace(/_/g, '/')))).toMatchObject({ aud: REGISTRATION.issuer });
+    expect(signature).toBeTruthy();
+  });
+
+  it('links to the object on BOTH the url and the custom parameters, so a course copy cannot lose it', () => {
+    const [item] = contentItemsFor(
+      [{ id: 'obj-1', kind: 'assignment', title: 'Essay 1', status: 'published' }],
+      'https://api.builderforce.ai/api/lti/launch',
+    );
+    expect(item?.type).toBe('ltiResourceLink');
+    expect(item?.url).toContain('object=obj-1');
+    expect(item?.custom).toMatchObject({ builderforce_object_id: 'obj-1', builderforce_object_kind: 'assignment' });
   });
 });

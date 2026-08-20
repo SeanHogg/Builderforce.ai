@@ -4,7 +4,7 @@
  */
 
 /** How a token's resolved value is injected into the deck. */
-export type BindingKind = 'text' | 'table' | 'image';
+export type BindingKind = 'text' | 'table' | 'image' | 'chart';
 
 /** Display formatting applied to a scalar text value. */
 export type BindingFormat = 'number' | 'currency' | 'percent' | 'date' | 'quarter' | 'raw';
@@ -20,6 +20,24 @@ export interface TokenBinding {
   format?: BindingFormat;
   /** Fallback text when the binding resolves to null/undefined (default '—'). */
   fallback?: string;
+  /**
+   * `kind: 'chart'` only — which columns of the bound matrix become series, and
+   * what each is called in the legend.
+   *
+   * A chart binding reads the SAME `string[][]` matrices the table bindings read
+   * (`[category, actual, plan, …]`), because those are the shapes {@link DeckData}
+   * already assembles; declaring the numeric columns here is what turns one into
+   * a plot without a second data path. Column 0 is always the category axis.
+   * Omitted ⇒ every column after the first becomes a series named by the header
+   * declared in {@link chartSeries} or, failing that, `Series n`.
+   */
+  chartSeries?: Array<{ column: number; name: string }>;
+}
+
+/** Resolved plot data for a `kind: 'chart'` binding. */
+export interface ChartSeries {
+  categories: string[];
+  series: Array<{ name: string; values: Array<number | null> }>;
 }
 
 export interface TokenManifest {
@@ -31,7 +49,8 @@ export interface TokenManifest {
 export type ResolvedValue =
   | { kind: 'text'; value: string }
   | { kind: 'table'; rows: string[][] }
-  | { kind: 'image'; r2Key: string };
+  | { kind: 'image'; r2Key: string }
+  | ({ kind: 'chart'; label: string } & ChartSeries);
 
 export interface ResolvedBindings {
   /** token (without braces) → resolved value. */

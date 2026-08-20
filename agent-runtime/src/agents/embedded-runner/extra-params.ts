@@ -45,6 +45,29 @@ type CacheRetentionStreamOptions = Partial<SimpleStreamOptions> & {
  * Only applies to Anthropic provider (OpenRouter uses openai-completions API
  * with hardcoded cache_control, not the cacheRetention stream option).
  */
+/**
+ * The gateway's own long-cache opt-in, read off the request envelope.
+ *
+ * The gateway advertises `_builderforce.cacheTtl: '1h'` and honours it on its side
+ * (`modelPool.resolveCacheTtl` → the vendor's `cacheTtl` param). Agent-runtime read
+ * only its OWN hint names (`cacheRetention` / `cacheControlTtl`), so a caller that
+ * set the documented envelope key got the 1-hour retention when it went through the
+ * gateway and silently fell back to 5 minutes when the same request ran on the
+ * direct-Anthropic path — the surface where a warm prefix matters MOST, because an
+ * agent loop's system prompt is its largest stable block and its idle gaps between
+ * turns routinely exceed five minutes.
+ *
+ * Reading the envelope here (rather than at each call site) means both the
+ * direct-Anthropic retention and the OpenRouter breakpoint marker pick it up from
+ * one place and cannot disagree about what the caller asked for.
+ */
+function envelopeCacheTtl(extraParams: Record<string, unknown> | undefined): "5m" | "1h" | undefined {
+  const envelope = extraParams?._builderforce;
+  if (typeof envelope !== "object" || envelope === null) return undefined;
+  const ttl = (envelope as { cacheTtl?: unknown }).cacheTtl;
+  return ttl === "1h" ? "1h" : ttl === "5m" ? "5m" : undefined;
+}
+
 function resolveCacheRetention(
   extraParams: Record<string, unknown> | undefined,
   provider: string,
@@ -59,8 +82,11 @@ function resolveCacheRetention(
     return newVal;
   }
 
-  // Fall back to legacy cacheControlTtl with mapping
-  const legacy = extraParams?.cacheControlTtl;
+  // Fall back to legacy cacheControlTtl, then to the gateway envelope, with mapping.
+  // The envelope is LAST so an explicit runtime hint always wins over it: a caller
+  // that named `cacheRetention` directly is being more specific than one that set a
+  // transport-level default.
+  const legacy = extraParams?.cacheControlTtl ?? envelopeCacheTtl(extraParams);
   if (legacy === "5m") {
     return "short";
   }
@@ -240,12 +266,24 @@ const ANTHROPIC_EPHEMERAL_CACHE_1H = { type: "ephemeral", ttl: "1h" } as const;
  * (OpenRouter routes Anthropic models via the openai-completions API, so the `ttl`
  * must be baked into the body's `cache_control` marker, not passed as a stream option).
  *
- * Honours `cacheRetention: 'long'` (new) or `cacheControlTtl: '1h'` (legacy) — the SAME
- * hint the direct-Anthropic path reads — so a `_builderforce.cacheTtl:'1h'` /
- * per-useCase profile flips the marker on BOTH surfaces. Anything else → 5-min.
+ * Honours `cacheRetention: 'long'` (new), `cacheControlTtl: '1h'` (legacy), and the
+ * gateway's `_builderforce.cacheTtl: '1h'` envelope — the SAME three hints the
+ * direct-Anthropic path reads — so one opt-in flips the marker on BOTH surfaces.
+ * Anything else → 5-min.
  */
 function wantsLongCacheTtl(extraParams: Record<string, unknown> | undefined): boolean {
-  return extraParams?.cacheRetention === "long" || extraParams?.cacheControlTtl === "1h";
+  // Same PRECEDENCE as `resolveCacheRetention`, not a flat OR: an explicit runtime
+  // hint names the behaviour directly, while the gateway envelope is a transport-level
+  // default — so `cacheRetention: 'short'` must be able to override an inherited
+  // `_builderforce.cacheTtl: '1h'`. A flat OR would make the more specific instruction
+  // unenforceable, and the two functions would disagree about the same request.
+  const explicit = extraParams?.cacheRetention;
+  if (explicit === "long") return true;
+  if (explicit === "short" || explicit === "none") return false;
+  const legacy = extraParams?.cacheControlTtl;
+  if (legacy === "1h") return true;
+  if (legacy === "5m") return false;
+  return envelopeCacheTtl(extraParams) === "1h";
 }
 
 /**

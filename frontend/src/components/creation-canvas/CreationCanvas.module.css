@@ -4680,3 +4680,59 @@
    just drops it onto the input's top border and the height handle that sits there. */
 .composerDock[data-placement='docked'] .promptStarter { transform: none; }
 .composerDock[data-placement='docked'] .composerUtilities { margin-bottom: 6px; }
+
+/* ── The calendar surface ────────────────────────────────────────────────────────
+   The board's dates on the axis the board never had. Board-scoped, so it wears the
+   `.appSurface` shell rather than `CanvasObjectSurface`'s object header. Every value is a
+   canvas token so the month reads in both themes, and the grid collapses from seven
+   columns to a single scrolling list before 360px rather than overflowing the viewport. */
+.calendarHeader {
+  display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px;
+  flex:none; padding:6px 14px 10px;
+}
+.calendarNav { display:flex; align-items:center; gap:10px; min-width:0; }
+.calendarNav b { font:650 14px var(--font-sans); color:var(--canvas-ink); }
+.calendarNav button {
+  display:grid; place-items:center; width:28px; height:28px; flex:none;
+  border:1px solid var(--canvas-line); border-radius:var(--radius-md);
+  background:var(--canvas-panel); color:var(--canvas-ink); font-size:16px; line-height:1; cursor:pointer;
+}
+.calendarNav button:hover,.calendarNav button:focus-visible { background:var(--canvas-hover); outline:none; }
+.calendarSummary { margin:0; font:500 11px var(--font-sans); color:var(--canvas-ink-muted); }
+.calendarWeekdays {
+  display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:4px; flex:none; padding:0 14px 6px;
+  font:600 10px var(--font-sans); text-transform:uppercase; letter-spacing:.04em; color:var(--canvas-ink-muted);
+}
+.calendarGrid {
+  display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); grid-auto-rows:minmax(84px,1fr);
+  gap:4px; flex:1; min-height:0; padding:0 14px 14px; overflow:auto; overscroll-behavior:contain;
+}
+.calendarDay {
+  display:flex; flex-direction:column; gap:3px; min-width:0; padding:5px;
+  border:1px solid var(--canvas-line); border-radius:var(--radius-md);
+  background:var(--canvas-panel); color:var(--canvas-ink);
+}
+.calendarDay[data-outside='true'] { background:var(--canvas-panel-muted); color:var(--canvas-ink-muted); }
+.calendarDay[data-today='true'] { border-color:var(--canvas-accent); }
+.calendarDay > small { font:600 10px var(--font-sans); color:var(--canvas-ink-muted); }
+.calendarEntry {
+  display:flex; align-items:center; gap:5px; min-width:0; padding:3px 5px;
+  border:1px solid var(--canvas-line); border-radius:var(--radius-sm);
+  background:var(--canvas-panel-muted); color:var(--canvas-ink);
+  font:550 10px var(--font-sans); text-align:left; cursor:pointer;
+}
+.calendarEntry:hover,.calendarEntry:focus-visible { background:var(--canvas-hover); outline:none; }
+/* A COMMITMENT (`scheduledAt`) and a DEADLINE are drawn differently on purpose: one is a
+   thing going out, the other a thing owed. The distinction is decided in the contract so
+   two renderers cannot disagree about which is which. */
+.calendarEntry[data-scheduled='true'] { border-left:3px solid var(--canvas-accent); }
+.calendarEntry[data-conflict='true'] { border-color:var(--tone-danger-mark); color:var(--tone-danger-ink); }
+.calendarEntryTitle { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+@media (max-width:520px) {
+  /* Seven columns of 84px will not fit a phone, and a horizontally scrolling month is a
+     month nobody reads. One column, in date order, is the same information at a width
+     that works. */
+  .calendarWeekdays { display:none; }
+  .calendarGrid { grid-template-columns:1fr; grid-auto-rows:auto; }
+  .calendarDay:empty { display:none; }
+}

@@ -31,6 +31,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { projectSites } from '../../infrastructure/database/schema';
+import { isUniqueViolation as isUniqueConstraintViolation } from '../../infrastructure/database/uniqueViolation';
 import {
   challengeRecordName,
   newChallengeToken,
@@ -117,10 +118,7 @@ interface CfEnvelope {
  * the same statement must never be reported to the user as "that domain is taken".
  */
 export function isUniqueViolation(error: unknown): boolean {
-  const text = error instanceof Error ? error.message : String(error ?? '');
-  const code = (error as { code?: unknown } | null)?.code;
-  const isConflict = code === '23505' || text.includes('23505') || text.includes('duplicate key');
-  return isConflict && text.includes('uq_project_sites_custom_domain');
+  return isUniqueConstraintViolation(error, 'uq_project_sites_custom_domain');
 }
 
 function cfError(body: CfEnvelope, fallback: string): string {

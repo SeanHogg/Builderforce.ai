@@ -16,6 +16,8 @@ import { CopyButton } from '@/components/CopyButton';
 import { buildLifecycleDiagnosticsReport } from '@/lib/lifecycleDiagnostics';
 import { captureDiagnosticsContext } from '@/lib/diagnosticsCapture';
 import { formatDuration } from '@/lib/duration';
+import { dominantLane, laneOccupancy } from '@/lib/laneOccupancy';
+import { LifecycleSwimlane } from '@/components/charts/LifecycleSwimlane';
 
 /**
  * TicketLifecyclePanel — the per-ticket AUTONOMY PROOF.
@@ -212,6 +214,17 @@ export function TicketLifecyclePanel({ taskId, onClose }: TicketLifecyclePanelPr
     }
     return rows;
   }, [data?.gate, t]);
+
+  /**
+   * Where the item's time actually went. Derived from the SAME `lane_moved`
+   * events the timeline below already lists — there is no second read and no
+   * second source of truth, only a second reading of it.
+   */
+  const occupancy = useMemo(
+    () => laneOccupancy(data?.events ?? [], data?.createdAt ?? null),
+    [data?.events, data?.createdAt],
+  );
+  const dominant = useMemo(() => dominantLane(occupancy), [occupancy]);
 
   const tiles: Array<{ key: string; value: number; tone: Tone; hint?: string }> = verdict
     ? [
@@ -467,6 +480,37 @@ export function TicketLifecyclePanel({ taskId, onClose }: TicketLifecyclePanelPr
                 ))}
               </div>
             </section>
+
+            {/* 2b. WHERE THE TIME WENT — the item's own swimlane.
+                A single value item (no children) had no swimlane on any planning
+                surface, so its life rendered as a row: a start, an end, and no
+                answer to the only question a late ticket raises. Eleven days in
+                review and eleven days in the backlog are opposite problems and
+                they drew identically. */}
+            {occupancy.spans.length > 0 && (
+              <section>
+                <h4 style={{ margin: '0 0 2px', fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
+                  {t('swimlane.title')}
+                </h4>
+                <p style={{ margin: '0 0 8px', fontSize: 11.5, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                  {dominant
+                    ? t('swimlane.dominant', {
+                      lane: laneLabel(dominant.lane),
+                      duration: formatDuration(dominant.ms),
+                      pct: Math.round(dominant.share * 100),
+                    })
+                    : t('swimlane.help')}
+                </p>
+                <div style={{ ...cardStyle, padding: '8px 10px', overflowX: 'auto' }}>
+                  <LifecycleSwimlane
+                    occupancy={occupancy}
+                    laneLabel={laneLabel}
+                    formatDuration={formatDuration}
+                    ariaLabel={t('swimlane.aria', { title: data.title })}
+                  />
+                </div>
+              </section>
+            )}
 
             {/* 3. CHAIN OF CUSTODY — every row names the table it came from. */}
             <section>

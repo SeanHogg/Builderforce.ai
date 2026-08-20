@@ -25,7 +25,7 @@ import { loadCloudRunForSelfHeal, selfHealCloudRun } from './application/runtime
 import { wireExecutionEventSinks } from './application/runtime/wireExecutionEventSinks';
 import { syncExecutionTaskLifecycle } from './application/task/taskLifecycle';
 import { maybeAutoRunOnLaneEntry } from './presentation/routes/taskRoutes';
-import { resolveNextTaskStatus } from './application/swimlane/nextLane';
+import { resolveNextTaskStatus, resolveRunningTaskStatus } from './application/swimlane/nextLane';
 import { ChatTicketService } from './application/brain/ChatTicketService';
 import { attributeRunToManifest } from './application/kanban/attributeRunToManifest';
 import { coordinateCompletedStage } from './application/manager/coordinateTicket';
@@ -133,6 +133,11 @@ export function buildRuntimeService(env: Env, db: Db): RuntimeService {
       // database errors (which propagate) because this is an emergency control.
       return row?.enabled === true;
     },
+    // Config-driven RUNNING advance: the lane the run was dispatched for, resolved by
+    // the board's own lanes rather than the `in_progress` constant. On a board with no
+    // such lane the ticket now stays where it is instead of being written to a status
+    // that renders in no column. See `swimlane/nextLane.resolveRunningLaneKey`.
+    (info) => resolveRunningTaskStatus(db, info.projectId, info.fromStatus, info.dispatchedLaneKey),
   );
   return runtimeService;
 }

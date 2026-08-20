@@ -67,8 +67,9 @@ import { relayToRoom } from '../../presentation/routes/realtimeRelay';
 import { sendTransactionalEmail } from '../email/sendEmail';
 import { sendCreationSessionInviteEmail } from '../../infrastructure/email/EmailService';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
-import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
+import { bumpPublicCanvasVersion, getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { isOutcomePhase, normalizeOutcomeAction, recordOutcomeEvent } from '../outcomes/outcomeLedger';
+import { buildAttributedOutcomes } from '../outcomes/attributedOutcomes';
 import {
   NORTH_STAR_METRIC_KEY,
   OUTCOME_BASELINE_COHORT,
@@ -106,6 +107,27 @@ import {
 import {
   resolveSessionAccess, SESSION_ROLE_RANK, type SessionRole as SharedSessionRole,
 } from './sessionAccess';
+// THE graph write. The delete/re-insert/bump/event/snapshot sequence below used to be
+// spelled out twice in this file (`PUT /:id/graph` and `POST /:id/commands`) and had
+// already started to differ between the two copies; the public `/api/v1` item CRUD is
+// the third caller. See `creationGraphWriter.ts` for why it returns statements rather
+// than executing them.
+import {
+  buildPreview,
+  creationGraphStatements,
+  creationObjectSearchText,
+  newCreationSessionStatements,
+  CREATION_UUID_RE as UUID_RE,
+  uuidKey,
+  validCreationGraph,
+  type GraphConnectionInput,
+  type GraphObjectInput,
+} from './creationGraphWriter';
+
+// Re-exported because they MOVED, not because they changed: `creationListings.ts`,
+// the public `/api/v1` canvas service and this module's own tests import them from
+// here, and a move is not a reason to make every caller change its import.
+export { creationObjectSearchText, validCreationGraph };
 // The prospect share — the same `share_links` primitive the résumé shares already use,
 // pointed at a whole board or one commercial card. Kept in its own module because the
 // projection it serves is a BUYER's read (see `prospectShare.ts`), not a member's.
@@ -117,7 +139,6 @@ import {
 
 type SessionRole = SharedSessionRole;
 const ROLE_RANK = SESSION_ROLE_RANK;
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export function creationKindForModality(modality: string): CreationObjectKind {
   // An IDE project is one Builder object regardless of the studio it opens.
@@ -127,23 +148,6 @@ export function creationKindForModality(modality: string): CreationObjectKind {
   return 'build';
 }
 
-type GraphObjectInput = {
-  id: string;
-  kind: string;
-  resourceType?: string | null;
-  resourceId?: string | null;
-  resourceRevision?: string | null;
-  canvasData?: unknown;
-  content?: unknown;
-};
-type GraphConnectionInput = {
-  id: string;
-  sourceObjectId: string;
-  targetObjectId: string;
-  kind?: string;
-  label?: string | null;
-  metadata?: unknown;
-};
 type CreateSessionBody = { title?: string; description?: string; initialPrompt?: string; projectIds?: number[] };
 type PatchSessionBody = { title?: string; description?: string | null; folder?: string | null; status?: string; preview?: unknown; mode?: string };
 type SaveGraphBody = { objects?: GraphObjectInput[]; connections?: GraphConnectionInput[]; viewport?: unknown; expectedRevision?: number };
@@ -186,17 +190,6 @@ type OutcomeBody = {
 
 const BUILT_IN_TEMPLATE_IDS = ['campaign', 'product-discovery', 'data-story', 'stand-up', 'model-build', 'executive-review'] as const;
 
-/** Only user-visible labels are searchable. Never serialize arbitrary content. */
-export function creationObjectSearchText(content: unknown): string {
-  if (!content || typeof content !== 'object' || Array.isArray(content)) return '';
-  const source = content as Record<string, unknown>;
-  return ['title', 'subtitle', 'status', 'label']
-    .map((key) => typeof source[key] === 'string' ? source[key] as string : '')
-    .join(' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, 2_000);
-}
 
 export function creationSessionSearchStatus(raw: unknown): 'active' | 'archived' | 'all' {
   return raw === 'archived' || raw === 'all' ? raw : 'active';
@@ -386,39 +379,6 @@ async function ensureResumeObject(db: Db, env: Env, access: { session: SessionRe
   });
 }
 
-/**
- * Ids are compared the way POSTGRES compares them.
- *
- * `UUID_RE` accepts either case (`/i`), and every uniqueness check below used a
- * case-SENSITIVE `Set` — so `A1B2…` and `a1b2…` passed validation as two
- * distinct objects, and then hit a `uuid` column that considers them the same
- * value. The request died on `duplicate key value violates unique constraint
- * "creation_session_objects_pkey"`, i.e. a 500 for input the validator had
- * already declared valid. A `uuid` is case-insensitive by definition; the
- * validator has to agree with the column it is validating for.
- */
-const uuidKey = (id: string) => id.toLowerCase();
-
-export function validCreationGraph(objects: GraphObjectInput[], connections: GraphConnectionInput[]): string | null {
-  if (objects.length > 1_000) return 'A session may contain at most 1,000 objects';
-  if (connections.length > 4_000) return 'A session may contain at most 4,000 connections';
-  const ids = new Set<string>();
-  for (const object of objects) {
-    if (!UUID_RE.test(object.id)) return `Invalid object id: ${object.id}`;
-    if (!isCreationObjectKind(object.kind)) return `Unsupported object kind: ${object.kind || 'missing'}`;
-    if (ids.has(uuidKey(object.id))) return `Duplicate object id: ${object.id}`;
-    ids.add(uuidKey(object.id));
-  }
-  const connectionIds = new Set<string>();
-  for (const edge of connections) {
-    if (!UUID_RE.test(edge.id)) return `Invalid connection id: ${edge.id}`;
-    if (connectionIds.has(uuidKey(edge.id))) return `Duplicate connection id: ${edge.id}`;
-    connectionIds.add(uuidKey(edge.id));
-    if (!ids.has(uuidKey(edge.sourceObjectId)) || !ids.has(uuidKey(edge.targetObjectId))) return 'A connection references an object outside this session';
-    if (edge.kind && !isCreationConnectionKind(edge.kind)) return `Unsupported connection kind: ${edge.kind}`;
-  }
-  return null;
-}
 
 /**
  * Browser-local graph ids are only identities inside that draft. The database
@@ -927,21 +887,15 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     // so the only way the catch below can say WHICH write failed is to know what
     // it was about to run and in what order. See `pgFailureDetail`.
     const planned: PlannedClaimWrite[] = [
-      { table: 'creation_sessions', rows: 1, statement: db.insert(creationSessions).values({ id: sessionId, tenantId, segmentId, title, preview: buildPreview(objects), createdBy: userId, updatedBy: userId, canvasRevision: 1, viewport: body.viewport ?? { x: 0, y: 0, zoom: 1 } }) },
-      { table: 'creation_session_members', rows: 1, statement: db.insert(creationSessionMembers).values({ sessionId, userId, role: 'owner', invitedBy: userId, viewport: body.viewport ?? { x: 0, y: 0, zoom: 1 } }) },
+      ...newCreationSessionStatements(db, {
+        sessionId, tenantId, segmentId, title, objects, connections, authorUserId: userId,
+        eventType: 'session.claimed',
+        eventPayload: { clientSessionId, hadInitialPrompt: !!body.initialPrompt },
+        viewport: body.viewport ?? { x: 0, y: 0, zoom: 1 },
+        memberViewport: body.viewport ?? { x: 0, y: 0, zoom: 1 },
+      }),
       { table: 'creation_session_claims', rows: 1, statement: db.insert(creationSessionClaims).values({ userId, clientSessionId, serverSessionId: sessionId }) },
-      { table: 'creation_session_events', rows: 1, statement: db.insert(creationSessionEvents).values({ sessionId, revision: 1, actorType: 'user', actorRef: userId, eventType: 'session.claimed', payload: { clientSessionId, hadInitialPrompt: !!body.initialPrompt } }) },
-      { table: 'creation_session_snapshots', rows: 1, statement: db.insert(creationSessionSnapshots).values({ sessionId, revision: 1, graph: { objects, connections }, viewport: body.viewport ?? { x: 0, y: 0, zoom: 1 }, createdBy: userId }) },
     ];
-    if (objects.length) planned.push({ table: 'creation_session_objects', rows: objects.length, statement: db.insert(creationSessionObjects).values(objects.map((object) => ({
-      id: object.id, sessionId, kind: object.kind, resourceType: object.resourceType ?? null, resourceId: object.resourceId ?? null,
-      resourceRevision: object.resourceRevision ?? null, canvasData: object.canvasData ?? {}, content: object.content ?? null,
-      searchText: creationObjectSearchText(object.content), createdBy: userId, updatedBy: userId,
-    }))) });
-    if (connections.length) planned.push({ table: 'creation_session_connections', rows: connections.length, statement: db.insert(creationSessionConnections).values(connections.map((edge) => ({
-      id: edge.id, sessionId, sourceObjectId: edge.sourceObjectId, targetObjectId: edge.targetObjectId,
-      kind: edge.kind ?? 'reference', label: edge.label ?? null, metadata: edge.metadata ?? null, createdBy: userId,
-    }))) });
     const claimedTimeline = Array.isArray(body.timeline) ? body.timeline.slice(0, 500).flatMap((message) => {
       const text = typeof message.body === 'string' ? message.body.trim().slice(0, 50_000) : '';
       if (!text) return [];
@@ -1107,22 +1061,18 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       objects: objectRows.map((object) => ({ id: object.id, kind: object.kind, resourceType: object.resourceType, resourceId: object.resourceId, canvasData: object.canvasData, content: object.content })),
       connections: connectionRows.map((edge) => ({ id: edge.id, sourceObjectId: edge.sourceObjectId, targetObjectId: edge.targetObjectId, kind: edge.kind, label: edge.label, metadata: edge.metadata })),
     };
-    const statements: unknown[] = [
-      db.insert(creationSessions).values({
-        id: sessionId, tenantId, segmentId, title: cleanTitle(body.title, initialPrompt ? initialPrompt.slice(0, 80) : 'Untitled session'),
-        description: typeof body.description === 'string' ? body.description.slice(0, 2_000) : null,
-        preview: buildPreview(graph.objects as GraphObjectInput[]), createdBy: userId, updatedBy: userId, canvasRevision: 1,
-      }),
-      db.insert(creationSessionMembers).values({ sessionId, userId, role: 'owner', invitedBy: userId }),
-      db.insert(creationSessionEvents).values({
-        sessionId, revision: 1, actorType: 'user', actorRef: userId, eventType: 'session.created',
-        payload: { initialPrompt: !!initialPrompt, projectIds: validProjects.map((project) => project.id) }, idempotencyKey: requestKey || null,
-      }),
-      db.insert(creationSessionSnapshots).values({ sessionId, revision: 1, graph, viewport: { x: 0, y: 0, zoom: 1 }, createdBy: userId }),
-    ];
+    const statements: unknown[] = newCreationSessionStatements(db, {
+      sessionId, tenantId, segmentId,
+      title: cleanTitle(body.title, initialPrompt ? initialPrompt.slice(0, 80) : 'Untitled session'),
+      objects: graph.objects as GraphObjectInput[],
+      connections: graph.connections as GraphConnectionInput[],
+      authorUserId: userId,
+      eventType: 'session.created',
+      eventPayload: { initialPrompt: !!initialPrompt, projectIds: validProjects.map((project) => project.id) },
+      idempotencyKey: requestKey || null,
+      columns: { description: typeof body.description === 'string' ? body.description.slice(0, 2_000) : null },
+    }).map((write) => write.statement);
     if (requestClaimId) statements.push(db.insert(creationSessionClaims).values({ userId, clientSessionId: requestClaimId, serverSessionId: sessionId }));
-    if (objectRows.length) statements.push(db.insert(creationSessionObjects).values(objectRows.map((object) => ({ ...object, searchText: creationObjectSearchText(object.content) }))));
-    if (connectionRows.length) statements.push(db.insert(creationSessionConnections).values(connectionRows));
     if (validProjects.length) statements.push(db.insert(creationSessionProjectLinks).values(validProjects.map((project) => ({ sessionId, projectId: project.id, addedBy: userId }))));
     if (initialPrompt) statements.push(db.insert(creationSessionTimeline).values({ sessionId, clientMessageId: `initial:${requestKey || sessionId}`, messageRole: 'user', body: initialPrompt, createdBy: userId }));
     try {
@@ -1136,6 +1086,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       }
       throw error;
     }
+    c.executionCtx.waitUntil(bumpPublicCanvasVersion(c.env, tenantId));
     return c.json({ session: { id: sessionId, title: cleanTitle(body.title, initialPrompt ? initialPrompt.slice(0, 80) : 'Untitled session'), revision: 1 } }, 201);
   });
 
@@ -1273,6 +1224,36 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       { kvTtlSeconds: 60 },
     );
     if (!payload) return c.json({ error: 'Session metrics unavailable' }, 404);
+    return c.json(payload);
+  });
+
+  /**
+   * The OTHER half of Idea→delivery: what the thing this session built then did
+   * for somebody.
+   *
+   * The sibling route above measures the PROCESS — how fast and how reliably this
+   * board produced an artifact — and on its own that is a productivity report. It
+   * can say a board shipped faster than its peers and cannot say whether anybody
+   * outside the building ever touched what it shipped.
+   *
+   * This reads the ATTRIBUTED facts the rollups already stamp (`canvas.shipped`
+   * against `session:<id>`, `growth.leads` / `growth.conversions` against the
+   * `site:<id>` of the sites whose `site_collections.origin_session_id` traces
+   * back here). It computes nothing: a second computation of the same numbers
+   * beside the first is how the panel and the rollup come to disagree.
+   *
+   * Cached on the same short TTL as its sibling for the same reason — the panel
+   * re-polls on every open and these numbers do not move inside a minute.
+   */
+  router.get('/:id/attributed-outcomes', async (c) => {
+    const access = await requireSession(c, 'viewer');
+    if (!access) return c.json({ error: 'Session not found' }, 404);
+    const payload = await getOrSetCached(
+      c.env as Env,
+      `creation:attributed-outcomes:${access.session.tenantId}:${access.session.id}`,
+      () => buildAttributedOutcomes(db, { tenantId: access.session.tenantId, sessionId: access.session.id }),
+      { kvTtlSeconds: 60 },
+    );
     return c.json(payload);
   });
 
@@ -1711,6 +1692,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       title: `${access.session.title} was ${body.status === 'archived' ? 'archived' : 'restored'}`,
       allWatchers: true,
     });
+    c.executionCtx.waitUntil(bumpPublicCanvasVersion(c.env, access.session.tenantId));
     return c.json(updated);
   });
 
@@ -1734,6 +1716,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       eventType: 'session.deleted',
       payload: { retention: true },
     });
+    c.executionCtx.waitUntil(bumpPublicCanvasVersion(c.env, access.session.tenantId));
     return c.json({ session: deleted, recoverable: true });
   });
 
@@ -1881,14 +1864,16 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       objects: copiedObjects.map(({ id, kind, resourceType, resourceId, resourceRevision, canvasData, content }) => ({ id, kind, resourceType, resourceId, resourceRevision, canvasData, content })),
       connections: copiedConnections.map(({ id, sourceObjectId, targetObjectId, kind, label, metadata }) => ({ id, sourceObjectId, targetObjectId, kind, label, metadata })),
     };
-    const statements: unknown[] = [
-      db.insert(creationSessions).values({ id: sessionId, tenantId, segmentId, title: cleanTitle(`Copy of ${access.session.title}`), description: access.session.description, folder: access.session.folder, preview: buildPreview(graph.objects), createdBy: userId, updatedBy: userId, canvasRevision: 1 }),
-      db.insert(creationSessionMembers).values({ sessionId, userId, role: 'owner', invitedBy: userId }),
-      db.insert(creationSessionEvents).values({ sessionId, revision: 1, actorType: 'user', actorRef: userId, eventType: 'session.duplicated', payload: { sourceSessionId: access.session.id } }),
-      db.insert(creationSessionSnapshots).values({ sessionId, revision: 1, graph, viewport: access.session.viewport, createdBy: userId }),
-    ];
-    if (copiedObjects.length) statements.push(db.insert(creationSessionObjects).values(copiedObjects.map(({ createdAt: _createdAt, updatedAt: _updatedAt, ...object }) => object)));
-    if (copiedConnections.length) statements.push(db.insert(creationSessionConnections).values(copiedConnections.map(({ createdAt: _createdAt, ...edge }) => edge)));
+    const statements: unknown[] = newCreationSessionStatements(db, {
+      sessionId, tenantId, segmentId,
+      title: cleanTitle(`Copy of ${access.session.title}`),
+      objects: graph.objects, connections: graph.connections,
+      authorUserId: userId,
+      eventType: 'session.duplicated',
+      eventPayload: { sourceSessionId: access.session.id },
+      viewport: access.session.viewport,
+      columns: { description: access.session.description, folder: access.session.folder },
+    }).map((write) => write.statement);
     if (timeline.length) statements.push(db.insert(creationSessionTimeline).values(timeline.map((message) => ({ sessionId, clientMessageId: message.clientMessageId, messageRole: message.messageRole, body: message.body, metadata: message.metadata, createdBy: userId }))));
     const projectLinks = await db.select({ projectId: creationSessionProjectLinks.projectId }).from(creationSessionProjectLinks).where(and(eq(creationSessionProjectLinks.sessionId, access.session.id), copyableLinkFilter));
     if (projectLinks.length) statements.push(db.insert(creationSessionProjectLinks).values(projectLinks.map(({ projectId }) => ({ sessionId, projectId, addedBy: userId }))));
@@ -1984,14 +1969,18 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       connections: copiedConnections.map(({ id, sourceObjectId, targetObjectId, kind, label, metadata }) => ({ id, sourceObjectId, targetObjectId, kind, label, metadata })),
     };
     const title = cleanTitle(body.title, `${access.session.title} branch`);
-    const statements: unknown[] = [
-      db.insert(creationSessions).values({ id: sessionId, tenantId: access.session.tenantId, segmentId: access.session.segmentId, title, description: access.session.description, folder: access.session.folder, preview: buildPreview(graph.objects), branchParentSessionId: access.session.id, branchBaseRevision: access.session.canvasRevision, createdBy: userId, updatedBy: userId, canvasRevision: 1 }),
-      db.insert(creationSessionMembers).values({ sessionId, userId, role: 'owner', invitedBy: userId }),
-      db.insert(creationSessionEvents).values({ sessionId, revision: 1, actorType: 'user', actorRef: userId, eventType: 'session.branched', payload: { parentSessionId: access.session.id, baseRevision: access.session.canvasRevision } }),
-      db.insert(creationSessionSnapshots).values({ sessionId, revision: 1, graph, viewport: access.session.viewport, createdBy: userId }),
-    ];
-    if (copiedObjects.length) statements.push(db.insert(creationSessionObjects).values(copiedObjects.map(({ createdAt: _createdAt, updatedAt: _updatedAt, ...object }) => object)));
-    if (copiedConnections.length) statements.push(db.insert(creationSessionConnections).values(copiedConnections.map(({ createdAt: _createdAt, ...edge }) => edge)));
+    const statements: unknown[] = newCreationSessionStatements(db, {
+      sessionId, tenantId: access.session.tenantId, segmentId: access.session.segmentId, title,
+      objects: graph.objects, connections: graph.connections,
+      authorUserId: userId,
+      eventType: 'session.branched',
+      eventPayload: { parentSessionId: access.session.id, baseRevision: access.session.canvasRevision },
+      viewport: access.session.viewport,
+      columns: {
+        description: access.session.description, folder: access.session.folder,
+        branchParentSessionId: access.session.id, branchBaseRevision: access.session.canvasRevision,
+      },
+    }).map((write) => write.statement);
     if (timeline.length) statements.push(db.insert(creationSessionTimeline).values(timeline.map((message) => ({ sessionId, clientMessageId: message.clientMessageId, messageRole: message.messageRole, body: message.body, metadata: message.metadata, createdBy: userId }))));
     if (projectLinks.length) statements.push(db.insert(creationSessionProjectLinks).values(projectLinks.map(({ projectId }) => ({ sessionId, projectId, addedBy: userId }))));
     await db.batch(statements as unknown as Parameters<typeof db.batch>[0]);
@@ -2080,47 +2069,35 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     const userId = c.get('userId') as string;
     const nextRevision = access.session.canvasRevision + 1;
     // D1 batch is atomic: replacement graph + revision/event commit together, so
-    // a failed insert cannot leave the session empty after the deletes.
-    const statements: unknown[] = [
-      db.delete(creationSessionConnections).where(eq(creationSessionConnections.sessionId, access.session.id)),
-      db.delete(creationSessionObjects).where(eq(creationSessionObjects.sessionId, access.session.id)),
-    ];
-    if (objects.length) statements.push(db.insert(creationSessionObjects).values(objects.map((object) => ({
-      id: object.id, sessionId: access.session.id, kind: object.kind.slice(0, 48),
-      resourceType: object.resourceType?.slice(0, 64) || null, resourceId: object.resourceId?.slice(0, 128) || null,
-      resourceRevision: object.resourceRevision?.slice(0, 128) || null, canvasData: object.canvasData ?? {}, content: object.content ?? null,
-      searchText: creationObjectSearchText(object.content),
-      createdBy: userId, updatedBy: userId,
-    }))));
-    if (connections.length) statements.push(db.insert(creationSessionConnections).values(connections.map((edge) => ({
-      id: edge.id, sessionId: access.session.id, sourceObjectId: edge.sourceObjectId, targetObjectId: edge.targetObjectId,
-      kind: (edge.kind || 'reference').slice(0, 24), label: edge.label?.slice(0, 255) || null, metadata: edge.metadata ?? null, createdBy: userId,
-    }))));
-    statements.push(
-      db.update(creationSessions).set({
-        canvasRevision: nextRevision, viewport: body.viewport ?? access.session.viewport, updatedBy: userId,
-        updatedAt: new Date(), lastActivityAt: new Date(), preview: buildPreview(objects),
-      }).where(and(
-        eq(creationSessions.id, access.session.id),
-        eq(creationSessions.tenantId, access.session.tenantId),
-      )),
-      db.insert(creationSessionEvents).values({
-        sessionId: access.session.id, revision: nextRevision, actorType: 'user', actorRef: userId, eventType: 'canvas.saved',
-        payload: { objectCount: objects.length, connectionCount: connections.length },
-        idempotencyKey: c.req.header('Idempotency-Key')?.slice(0, 128) || null,
-      }),
-      db.insert(creationSessionSnapshots).values({
-        sessionId: access.session.id, revision: nextRevision, graph: { objects, connections },
-        viewport: body.viewport ?? access.session.viewport, createdBy: userId,
-      }).onConflictDoNothing(),
-    );
+    // a failed insert cannot leave the session empty after the deletes. The seven
+    // statements themselves are `creationGraphWriter`'s — see that module for why
+    // the ORDER is the part that must not be re-typed per caller.
+    const statements = creationGraphStatements(db, {
+      sessionId: access.session.id,
+      tenantId: access.session.tenantId,
+      objects, connections,
+      revision: nextRevision,
+      actorType: 'user', actorRef: userId, authorUserId: userId,
+      eventType: 'canvas.saved',
+      eventPayload: { objectCount: objects.length, connectionCount: connections.length },
+      idempotencyKey: c.req.header('Idempotency-Key')?.slice(0, 128) || null,
+      viewport: body.viewport ?? access.session.viewport,
+      snapshotOnConflictDoNothing: true,
+    });
     await db.batch(statements as unknown as Parameters<typeof db.batch>[0]);
     await pruneHistory(access.session.id, access.session.tenantId);
-    c.executionCtx.waitUntil(broadcastRoom(
-      c.env?.SESSION_ROOM,
-      creationSessionRoomName(access.session.tenantId, access.session.id),
-      JSON.stringify({ type: 'canvas.changed', revision: nextRevision }),
-    ));
+    c.executionCtx.waitUntil(Promise.all([
+      broadcastRoom(
+        c.env?.SESSION_ROOM,
+        creationSessionRoomName(access.session.tenantId, access.session.id),
+        JSON.stringify({ type: 'canvas.changed', revision: nextRevision }),
+      ),
+      // The public `/api/v1/boards` listing is cached under a tenant version token
+      // (see `publicCanvasVersionKey`). An in-product save changes what that listing
+      // says, so the in-product save is one of its writers — otherwise an integrator
+      // polling the API sees a board's activity go stale the moment a person edits it.
+      bumpPublicCanvasVersion(c.env, access.session.tenantId),
+    ]));
     return c.json({ revision: nextRevision, savedAt: new Date().toISOString() });
   });
 
@@ -2240,24 +2217,25 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     const nextRevision = access.session.canvasRevision + 1;
     const userId = c.get('userId') as string;
     const result = { accepted, rejected, serverIds: Object.fromEntries(clientIds), revision: nextRevision, savedAt: new Date().toISOString() };
-    const statements: unknown[] = [
-      db.delete(creationSessionConnections).where(eq(creationSessionConnections.sessionId, access.session.id)),
-      db.delete(creationSessionObjects).where(eq(creationSessionObjects.sessionId, access.session.id)),
-    ];
-    if (objects.length) statements.push(db.insert(creationSessionObjects).values(objects.map((object) => ({
-      id: object.id, sessionId: access.session.id, kind: object.kind.slice(0, 48), resourceType: object.resourceType?.slice(0, 64) || null,
-      resourceId: object.resourceId?.slice(0, 128) || null, resourceRevision: object.resourceRevision?.slice(0, 128) || null,
-      canvasData: object.canvasData ?? {}, content: object.content ?? null, searchText: creationObjectSearchText(object.content), createdBy: userId, updatedBy: userId,
-    }))));
-    if (connections.length) statements.push(db.insert(creationSessionConnections).values(connections.map((edge) => ({
-      id: edge.id, sessionId: access.session.id, sourceObjectId: edge.sourceObjectId, targetObjectId: edge.targetObjectId,
-      kind: (edge.kind || 'reference').slice(0, 24), label: edge.label?.slice(0, 255) || null, metadata: edge.metadata ?? null, createdBy: userId,
-    }))));
-    statements.push(
-      db.update(creationSessions).set({ canvasRevision: nextRevision, updatedBy: userId, updatedAt: new Date(), lastActivityAt: new Date(), preview: buildPreview(objects) }).where(and(eq(creationSessions.id, access.session.id), eq(creationSessions.tenantId, access.session.tenantId))),
-      db.insert(creationSessionEvents).values({ sessionId: access.session.id, revision: nextRevision, actorType: 'user', actorRef: userId, eventType: 'canvas.commands_applied', payload: { commands, result }, idempotencyKey }),
-      db.insert(creationSessionSnapshots).values({ sessionId: access.session.id, revision: nextRevision, graph: { objects, connections }, viewport: personalViewport ?? access.session.viewport, createdBy: userId }),
-    );
+    // The board viewport is left exactly as it was: `personalViewport` is a PERSONAL
+    // camera and belongs on the member row appended below, not on the session. It is
+    // still what the snapshot records, because a snapshot is a reading of what this
+    // writer saw.
+    const statements = creationGraphStatements(db, {
+      sessionId: access.session.id,
+      tenantId: access.session.tenantId,
+      objects, connections,
+      revision: nextRevision,
+      actorType: 'user', actorRef: userId, authorUserId: userId,
+      eventType: 'canvas.commands_applied',
+      eventPayload: { commands, result },
+      idempotencyKey,
+      viewport: access.session.viewport,
+      snapshotViewport: personalViewport ?? access.session.viewport,
+      // NOT swallowed here: a snapshot conflict means a concurrent writer took this
+      // revision, and the caller has to be told — it is translated into the 409 below.
+      snapshotOnConflictDoNothing: false,
+    });
     if (personalViewport) statements.push(db.update(creationSessionMembers).set({ viewport: personalViewport }).where(and(eq(creationSessionMembers.sessionId, access.session.id), eq(creationSessionMembers.userId, userId))));
     try {
       await db.batch(statements as unknown as Parameters<typeof db.batch>[0]);
@@ -2281,11 +2259,18 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       }, 409);
     }
     await pruneHistory(access.session.id, access.session.tenantId);
-    c.executionCtx.waitUntil(broadcastRoom(
-      c.env?.SESSION_ROOM,
-      creationSessionRoomName(access.session.tenantId, access.session.id),
-      JSON.stringify({ type: 'canvas.changed', revision: nextRevision }),
-    ));
+    c.executionCtx.waitUntil(Promise.all([
+      broadcastRoom(
+        c.env?.SESSION_ROOM,
+        creationSessionRoomName(access.session.tenantId, access.session.id),
+        JSON.stringify({ type: 'canvas.changed', revision: nextRevision }),
+      ),
+      // The public `/api/v1/boards` listing is cached under a tenant version token
+      // (see `publicCanvasVersionKey`). An in-product save changes what that listing
+      // says, so the in-product save is one of its writers — otherwise an integrator
+      // polling the API sees a board's activity go stale the moment a person edits it.
+      bumpPublicCanvasVersion(c.env, access.session.tenantId),
+    ]));
     return c.json(result);
   });
 
@@ -2686,18 +2671,17 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     const sessionId = crypto.randomUUID();
     const objectId = crypto.randomUUID();
     const projectObject: GraphObjectInput = { id: objectId, kind: 'project', resourceType: 'project', resourceId: String(projectId), canvasData: { x: 160, y: 120, w: 320, h: 220 }, content: { kind: 'project', title: project.name } };
-    await db.insert(creationSessions).values({ id: sessionId, tenantId, segmentId, title: project.name, createdBy: userId, updatedBy: userId, canvasRevision: 1, preview: buildPreview([projectObject]) });
+    // One batch, not a bare insert followed by one: the session row used to be
+    // written OUTSIDE the batch, so a failed member insert left a board with an
+    // owner nobody could be — the reason this path goes through the primitive.
     await db.batch([
-      db.insert(creationSessionMembers).values({ sessionId, userId, role: 'owner', invitedBy: userId }),
-      db.insert(creationSessionObjects).values({ id: objectId, sessionId, kind: 'project', resourceType: 'project', resourceId: String(projectId), canvasData: projectObject.canvasData ?? {}, content: projectObject.content, searchText: project.name, createdBy: userId, updatedBy: userId }),
+      ...newCreationSessionStatements(db, {
+        sessionId, tenantId, segmentId, title: project.name,
+        objects: [projectObject], authorUserId: userId,
+        eventType: 'session.created_from_project', eventPayload: { projectId },
+      }).map((write) => write.statement),
       db.insert(creationSessionProjectLinks).values({ sessionId, projectId, addedBy: userId }),
-      db.insert(creationSessionEvents).values({ sessionId, revision: 1, actorType: 'user', actorRef: userId, eventType: 'session.created_from_project', payload: { projectId } }),
-      db.insert(creationSessionSnapshots).values({
-        sessionId, revision: 1,
-        graph: { objects: [projectObject], connections: [] },
-        viewport: { x: 0, y: 0, zoom: 1 }, createdBy: userId,
-      }),
-    ]);
+    ] as unknown as Parameters<typeof db.batch>[0]);
     return c.json({ sessionId, objectId, created: true }, 201);
   });
 
@@ -2764,30 +2748,14 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       graphConnections.push({ id: crypto.randomUUID(), sourceObjectId: workflowObjectId, targetObjectId: objectId, kind: 'control', label: 'builds' });
     }
     const statements: unknown[] = [
-      db.insert(creationSessions).values({
-        id: sessionId, tenantId, segmentId, title: build.name, createdBy: userId, updatedBy: userId,
-        canvasRevision: 1, preview: buildPreview(graphObjects),
-      }),
-      db.insert(creationSessionMembers).values({ sessionId, userId, role: 'owner', invitedBy: userId }),
-      db.insert(creationSessionObjects).values(graphObjects.map((object) => ({
-        id: object.id, sessionId, kind: object.kind, resourceType: object.resourceType, resourceId: object.resourceId,
-        canvasData: object.canvasData ?? {}, content: object.content, searchText: creationObjectSearchText(object.content),
-        createdBy: userId, updatedBy: userId,
-      }))),
-      db.insert(creationSessionEvents).values({
-        sessionId, revision: 1, actorType: 'user', actorRef: userId, eventType: 'session.created_from_build',
-        objectId, payload: { ideProjectId: build.id, modality: build.modality, storageProjectId: build.storageProjectId },
-      }),
-      db.insert(creationSessionSnapshots).values({
-        sessionId, revision: 1, graph: { objects: graphObjects, connections: graphConnections },
-        viewport: { x: 0, y: 0, zoom: 1 }, createdBy: userId,
-      }),
+      ...newCreationSessionStatements(db, {
+        sessionId, tenantId, segmentId, title: build.name,
+        objects: graphObjects, connections: graphConnections, authorUserId: userId,
+        eventType: 'session.created_from_build', eventObjectId: objectId,
+        eventPayload: { ideProjectId: build.id, modality: build.modality, storageProjectId: build.storageProjectId },
+      }).map((write) => write.statement),
       db.insert(creationSessionProjectLinks).values({ sessionId, projectId: build.storageProjectId, addedBy: userId }).onConflictDoNothing(),
     ];
-    if (graphConnections.length) statements.push(db.insert(creationSessionConnections).values(graphConnections.map((edge) => ({
-      id: edge.id, sessionId, sourceObjectId: edge.sourceObjectId, targetObjectId: edge.targetObjectId,
-      kind: edge.kind ?? 'reference', label: edge.label ?? null, createdBy: userId,
-    }))));
     if (build.containerProjectId) statements.push(db.insert(creationSessionProjectLinks).values({ sessionId, projectId: build.containerProjectId, addedBy: userId }).onConflictDoNothing());
     await db.batch(statements as unknown as Parameters<typeof db.batch>[0]);
     return c.json({ sessionId, objectId, created: true }, 201);
@@ -2858,24 +2826,12 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       canvasData: { x: 160, y: 120, w: kind === 'workflow' ? 460 : 320, h: 280 },
       content: { kind, title, status: 'Live resource', ...resourceContent },
     };
-    const statements: unknown[] = [
-      db.insert(creationSessions).values({ id: sessionId, tenantId, segmentId, title, createdBy: userId, updatedBy: userId, canvasRevision: 1, preview: buildPreview([resourceObject]) }),
-      db.insert(creationSessionMembers).values({ sessionId, userId, role: 'owner', invitedBy: userId }),
-      db.insert(creationSessionObjects).values({
-        id: objectId, sessionId, kind, resourceType, resourceId,
-        canvasData: resourceObject.canvasData ?? {},
-        content: resourceObject.content, searchText: `${title} Live resource`, createdBy: userId, updatedBy: userId,
-      }),
-      db.insert(creationSessionEvents).values({
-        sessionId, revision: 1, actorType: 'user', actorRef: userId, eventType: `session.created_from_${resourceType}`,
-        objectId, payload: { resourceType, resourceId, projectId },
-      }),
-      db.insert(creationSessionSnapshots).values({
-        sessionId, revision: 1,
-        graph: { objects: [resourceObject], connections: [] },
-        viewport: { x: 0, y: 0, zoom: 1 }, createdBy: userId,
-      }),
-    ];
+    const statements: unknown[] = newCreationSessionStatements(db, {
+      sessionId, tenantId, segmentId, title,
+      objects: [resourceObject], authorUserId: userId,
+      eventType: `session.created_from_${resourceType}`, eventObjectId: objectId,
+      eventPayload: { resourceType, resourceId, projectId },
+    }).map((write) => write.statement);
     if (projectId) statements.push(db.insert(creationSessionProjectLinks).values({ sessionId, projectId, addedBy: userId }).onConflictDoNothing());
     if (initialTimeline.length) statements.push(db.insert(creationSessionTimeline).values(initialTimeline.map((message) => ({
       sessionId,
@@ -2893,18 +2849,3 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
   return router;
 }
 
-function buildPreview(objects: GraphObjectInput[]) {
-  return {
-    objectCount: objects.length,
-    kinds: [...new Set(objects.map((object) => object.kind))].slice(0, 8),
-    objects: objects.slice(0, 12).map((object) => ({
-      id: object.id, kind: object.kind,
-      x: Number((object.canvasData as { x?: number } | undefined)?.x ?? 0),
-      y: Number((object.canvasData as { y?: number } | undefined)?.y ?? 0),
-      title: String((object.content as { title?: string } | undefined)?.title ?? object.kind).slice(0, 80),
-      status: String((object.content as { status?: string } | undefined)?.status ?? '').slice(0, 48) || undefined,
-      resourceType: object.resourceType || undefined,
-      resourceId: object.resourceId || undefined,
-    })),
-  };
-}

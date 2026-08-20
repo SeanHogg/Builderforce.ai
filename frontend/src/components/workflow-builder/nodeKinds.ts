@@ -65,7 +65,7 @@ export const NODE_KINDS: NodeKindMeta[] = [
         // workflow can automate the response, plus marketing / data-collection events so
         // a workflow can start from a captured signal (form, signup, purchase…).
         options: [
-          'manual', 'webhook', 'schedule', 'board-event',
+          'manual', 'webhook', 'schedule', 'board-event', 'mailbox-received',
           'qa-finding', 'qa-exploration-complete',
           'monitor-breach', 'incident-created', 'incident-resolved', 'incident-status-change',
           'form-submit', 'page-view', 'signup', 'purchase',
@@ -106,6 +106,11 @@ export const NODE_KINDS: NodeKindMeta[] = [
       { key: 'feedUrl', label: 'Feed URL', type: 'text', placeholder: 'https://example.com/feed.xml', visibleWhen: { field: 'triggerType', equals: 'rss' } },
       { key: 'pollMinutes', label: 'Poll interval (min)', type: 'number', visibleWhen: { field: 'triggerType', equals: 'rss' } },
       { key: 'inbox', label: 'Inbox address', type: 'text', placeholder: 'e.g. leads@inbound.builderforce.ai', visibleWhen: { field: 'triggerType', equals: 'inbound-email' } },
+      // Connected-mailbox filters (blank = fire on any). Both are EXACT matches,
+      // because that is what fireEventTriggers does with a saved filter; a
+      // workflow that wants a domain or a substring leaves them blank and branches.
+      { key: 'mailboxAccount', label: 'Mailbox (blank = any connected)', type: 'text', placeholder: 'e.g. hello@acme.com', visibleWhen: { field: 'triggerType', equals: 'mailbox-received' } },
+      { key: 'mailboxSender', label: 'Only from (blank = any sender)', type: 'text', placeholder: 'e.g. billing@vendor.com', visibleWhen: { field: 'triggerType', equals: 'mailbox-received' } },
       { key: 'integrationEvent', label: 'Integration event', type: 'text', placeholder: 'e.g. invoice.paid', visibleWhen: { field: 'triggerType', equals: 'integration' } },
     ],
   },
@@ -120,7 +125,7 @@ export const NODE_KINDS: NodeKindMeta[] = [
     fields: [
       { key: 'role', label: 'Agent role', type: 'text', placeholder: 'e.g. code-creator, code-reviewer' },
       { key: 'runtime', label: 'Runtime', type: 'select', options: ['cloud', 'browser', 'local', 'remote'] },
-      { key: 'model', label: 'Model (blank = default)', type: 'text', placeholder: 'e.g. claude-opus-4-8' },
+      { key: 'model', label: 'Model (blank = default)', type: 'text', placeholder: 'e.g. claude-opus-5' },
       { key: 'task', label: 'Task / prompt', type: 'textarea', placeholder: 'What should this agent do?' },
     ],
   },
@@ -166,7 +171,7 @@ export const NODE_KINDS: NodeKindMeta[] = [
     defaultConfig: { provider: 'openai', model: '', system: '', prompt: '', temperature: 0.7 },
     fields: [
       { key: 'provider', label: 'Provider', type: 'text', placeholder: 'openai, anthropic, gemini, mistral…' },
-      { key: 'model', label: 'Model (blank = provider default)', type: 'text', placeholder: 'e.g. gpt-4o, claude-opus-4-8' },
+      { key: 'model', label: 'Model (blank = provider default)', type: 'text', placeholder: 'e.g. claude-opus-5, claude-sonnet-5' },
       { key: 'system', label: 'System prompt', type: 'textarea', placeholder: 'Optional system instructions' },
       { key: 'prompt', label: 'Prompt', type: 'textarea', placeholder: 'User prompt — supports {{input}}' },
       { key: 'temperature', label: 'Temperature', type: 'number' },

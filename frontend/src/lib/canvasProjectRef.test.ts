@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canvasProjectId, canvasProjectNodes, connectedCanvasProjectNode, isCanonicalProjectNode } from './canvasProjectRef';
+import { canvasProjectId, canvasProjectNodes, canvasProjectPatch, canvasProjectRef, connectedCanvasProjectNode, isCanonicalProjectNode } from './canvasProjectRef';
 import type { CreationNodeData } from '@/components/creation-canvas/types';
 
 function node(id: string, data: Partial<CreationNodeData> & { kind: CreationNodeData['kind'] }) {
@@ -67,5 +67,31 @@ describe('connectedCanvasProjectNode', () => {
 
   it('is undefined when the board has no canonical project', () => {
     expect(connectedCanvasProjectNode([node('site', { kind: 'website' })], [], 'site')).toBeUndefined();
+  });
+});
+
+describe('canvasProjectPatch', () => {
+  // Publishing a Website with no Project on the board provisions one; the patch it
+  // writes has to be the SAME binding every reader already looks for, or the next
+  // publish would provision a second project.
+  it('writes a binding the readers resolve', () => {
+    const patch = canvasProjectPatch({ id: 42, name: '  Rowan Coffee  ' });
+    expect(patch.resourceId).toBe(canvasProjectRef(42));
+    expect(patch.title).toBe('Rowan Coffee');
+    expect(canvasProjectId({ kind: 'project', title: 'p', ...patch } as CreationNodeData)).toBe(42);
+    expect(isCanonicalProjectNode({ kind: 'project', title: 'p', ...patch } as CreationNodeData)).toBe(true);
+  });
+
+  it('never leaves the object untitled', () => {
+    expect(canvasProjectPatch({ id: 7, name: '   ' }).title).toBe('Project 7');
+    expect(canvasProjectPatch({ id: 7 }).title).toBe('Project 7');
+  });
+
+  it('is what a second publish resolves, so no second project is created', () => {
+    const site = node('site', { kind: 'website' });
+    const provisioned = { id: 'p-new', data: { kind: 'project', ...canvasProjectPatch({ id: 9, name: 'Site' }) } as CreationNodeData };
+    const edges = [{ source: 'p-new', target: 'site' }];
+    const resolved = connectedCanvasProjectNode([site, provisioned], edges, 'site');
+    expect(resolved && canvasProjectId(resolved.data)).toBe(9);
   });
 });

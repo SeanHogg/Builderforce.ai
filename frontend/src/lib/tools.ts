@@ -130,6 +130,15 @@ export interface ToolResult {
   recommendations: ToolRecommendation[];
 }
 
+/**
+ * One kept run from the workspace's history.
+ *
+ * `result` arrives in the READER's language, not the saver's — the server
+ * re-scores a `self` run from its stored input and re-renders a `data` run from
+ * the figures it was saved with, both in the locale the request carried. So this
+ * is a snapshot of a measurement, and its prose is whatever the person looking at
+ * it can read. Nothing here needs translating client-side.
+ */
 export interface SavedToolRun {
   id: string;
   toolId: string;

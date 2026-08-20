@@ -26,6 +26,7 @@ import {
   setAvailableForHire as apiSetAvailableForHire,
   type AuthStepResult,
 } from './auth';
+import { signInWithPasskey } from './passkeys';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -53,6 +54,10 @@ interface AuthContextValue {
    *  be verified first — the caller flips to the code-entry step. Otherwise the
    *  session is set and it resolves to `{ needsVerification: false, ... }`. */
   login: (email: string, password: string) => Promise<AuthStepResult>;
+  /** Sign in with a registered passkey. Sets the session in place. Pass an email to
+   *  narrow to that account's credentials; omit it for the usernameless flow, where
+   *  the browser offers whatever discoverable credential it holds for this site. */
+  loginWithPasskey: (email?: string) => Promise<void>;
   register: (email: string, password: string, name: string | undefined, agreeToTerms: boolean, accountType?: 'standard' | 'freelancer' | 'sales', referralCode?: string, ageAttested?: boolean) => Promise<AuthStepResult>;
   /** Exchange the emailed OTP for a session (sets the session in place). `trustDevice`
    *  keeps the user signed in on this device for 30 days. */
@@ -91,39 +96,56 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setInitialized(true);
   }, []);
 
+  /**
+   * Take a freshly-issued session. Three statements that must always happen
+   * together — set the token, set the user, write both through to storage — and
+   * that were previously spelled out at every place a session begins. A rehydrate
+   * that reads a token with no matching user is a signed-in shell with nobody in
+   * it, so they cannot be allowed to drift apart.
+   */
+  const adoptSession = useCallback((token: string, nextUser: AuthUser) => {
+    setWebToken(token);
+    setUser(nextUser);
+    persistSession(token, nextUser);
+  }, []);
+
   const login = useCallback(async (email: string, password: string): Promise<AuthStepResult> => {
     const res = await apiLogin(email, password);
-    if (!res.needsVerification) {
-      setWebToken(res.token);
-      setUser(res.user);
-      persistSession(res.token, res.user);
-    }
+    if (!res.needsVerification) adoptSession(res.token, res.user);
     return res;
-  }, []);
+  }, [adoptSession]);
 
   const register = useCallback(
     async (email: string, password: string, name: string | undefined, agreeToTerms: boolean, accountType?: 'standard' | 'freelancer' | 'sales', referralCode?: string, ageAttested?: boolean): Promise<AuthStepResult> => {
       const res = await apiRegister(email, password, name, agreeToTerms, accountType, referralCode, ageAttested);
       // Registration returns no session — the email must be verified first — but keep
       // the session-setting branch for forward-compat if that ever changes.
-      if (!res.needsVerification) {
-        setWebToken(res.token);
-        setUser(res.user);
-        persistSession(res.token, res.user);
-      }
+      if (!res.needsVerification) adoptSession(res.token, res.user);
       return res;
     },
-    []
+    [adoptSession]
   );
 
   const verifyEmail = useCallback(
     async (email: string, code: string, trustDevice: boolean) => {
       const res = await apiVerifyEmailCode(email, code, trustDevice);
-      setWebToken(res.token);
-      setUser(res.user);
-      persistSession(res.token, res.user);
+      adoptSession(res.token, res.user);
     },
-    []
+    [adoptSession]
+  );
+
+  /**
+   * Sign in with a passkey. Separate from `login` rather than an overload of it
+   * because the two prove different things: `login` takes a secret the user typed
+   * and may still owe a second factor, this one takes an assertion the server has
+   * already verified against its own origin. The session it yields is final.
+   */
+  const loginWithPasskey = useCallback(
+    async (email?: string) => {
+      const res = await signInWithPasskey(email);
+      adoptSession(res.token, res.user as unknown as AuthUser);
+    },
+    [adoptSession]
   );
 
   const selectAccountType = useCallback(
@@ -184,6 +206,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       hasTenant: !!tenantToken,
       authReady: initialized,
       login,
+      loginWithPasskey,
       register,
       verifyEmail,
       selectAccountType,
@@ -199,6 +222,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       tenantToken,
       initialized,
       login,
+      loginWithPasskey,
       register,
       verifyEmail,
       selectAccountType,

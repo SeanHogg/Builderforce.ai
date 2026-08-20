@@ -3,6 +3,7 @@ import { render } from '@testing-library/react';
 import BlogFigure, { parseFigure, type FigureSpec } from './BlogFigure';
 import { BLOG_POSTS } from '@/lib/blogData';
 import { PROOF_FORMS } from '@/lib/methodology';
+import { RESUME_TEMPLATES } from '@/lib/canvasResume';
 
 /**
  * Figures are DATA inside a markdown file, which means a typo in one is a
@@ -45,7 +46,7 @@ describe('BlogFigure', () => {
   });
 
   it('every figure declares a kind this component renders', () => {
-    const KINDS = ['flow', 'matrix', 'stack', 'bars', 'compare'];
+    const KINDS = ['flow', 'matrix', 'stack', 'bars', 'compare', 'templates', 'launch'];
     const unknown = CORPUS
       .map((figure) => ({ ...figure, spec: parseFigure(figure.source) }))
       .filter((figure) => figure.spec && !KINDS.includes(figure.spec.kind))
@@ -62,6 +63,49 @@ describe('BlogFigure', () => {
       expect(container.textContent?.trim().length ?? 0).toBeGreaterThan(0);
       unmount();
     }
+  });
+
+  it('resolves every embedded template id against the résumé registry', () => {
+    // The `templates` figure names ids and owns no data of its own, so a
+    // renamed template silently renders an EMPTY gallery — the exact failure
+    // the port already produced once by dropping the embeds altogether.
+    const ids = new Set(RESUME_TEMPLATES.map((template) => template.id));
+    const dangling: string[] = [];
+    for (const figure of CORPUS) {
+      const spec = parseFigure(figure.source);
+      if (spec?.kind !== 'templates') continue;
+      for (const id of spec.templateIds) if (!ids.has(id as never)) dangling.push(`${figure.slug}: ${id}`);
+    }
+    expect(dangling).toEqual([]);
+  });
+
+  it('keeps every launch link site-relative', () => {
+    // A figure is authored content; an absolute href in authored content is an
+    // open redirect. The renderer drops them, so assert the corpus has none
+    // rather than letting a post ship a link that silently disappears.
+    const external: string[] = [];
+    for (const figure of CORPUS) {
+      const spec = parseFigure(figure.source);
+      if (spec?.kind !== 'launch') continue;
+      for (const link of spec.links) {
+        if (!link.href.startsWith('/') || link.href.startsWith('//')) external.push(`${figure.slug}: ${link.href}`);
+      }
+    }
+    expect(external).toEqual([]);
+  });
+
+  it('restored an inline embed to every ported template article', () => {
+    // The port dropped 14 posts' embeds. Twelve are restorable from registries
+    // that exist; the two that needed sample-people and platform-video fixtures
+    // stay text-only, and are named here so re-adding a fixture is noticed.
+    const withFigure = new Set(CORPUS.map((figure) => figure.slug));
+    const restored = BLOG_POSTS
+      .filter((post) => /^best-resume-template-for-/.test(post.slug) || post.slug === 'how-to-choose-the-right-resume-template')
+      .map((post) => post.slug);
+    expect(restored.length).toBe(9 + 1);
+    expect(restored.filter((slug) => !withFigure.has(slug))).toEqual([]);
+    expect(withFigure.has('video-resume-examples-that-land-interviews')).toBe(true);
+    expect(withFigure.has('how-to-build-a-3d-world-resume-in-hired-video-studio')).toBe(true);
   });
 
   it('rejects malformed JSON rather than throwing', () => {

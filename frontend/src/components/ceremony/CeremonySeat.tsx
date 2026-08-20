@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import type { Task } from '@/lib/builderforceApi';
 import { InitialAvatar } from '@/components/workforce/WorkforceCard';
 import MascotIcon from '@/components/MascotIcon';
@@ -8,11 +9,13 @@ import { CeremonyTaskCard } from './CeremonyTaskCard';
 import { PowerMeter } from './PowerMeter';
 import { BriefcaseBadge } from './BriefcaseBadge';
 import { DRAG_TASK, type CeremonyMember } from './types';
+import { placeTargetProps, useCeremonyPick } from './pickToPlace';
 
-const KIND_LABEL: Record<CeremonyMember['kind'], string> = {
-  human: 'Human',
-  cloud_agent: 'Agent',
-  host_agent: 'Remote',
+/** The chip under the name. i18n key per kind — it is UI copy, not an id. */
+const KIND_KEY: Record<CeremonyMember['kind'], 'kindHuman' | 'kindAgent' | 'kindRemote'> = {
+  human: 'kindHuman',
+  cloud_agent: 'kindAgent',
+  host_agent: 'kindRemote',
 };
 
 /**
@@ -53,6 +56,8 @@ export function CeremonySeat({
   onOpenAssigned: () => void;
 }) {
   const [over, setOver] = useState(false);
+  const t = useTranslations('ceremony');
+  const pick = useCeremonyPick();
   const isHuman = member.kind === 'human';
   const ringColor = isCurrentTurn ? 'var(--coral-bright)' : present ? 'var(--cyan-bright)' : 'var(--border-subtle)';
 
@@ -66,6 +71,7 @@ export function CeremonySeat({
         const id = Number(e.dataTransfer.getData(DRAG_TASK));
         if (id) onDropTask(id);
       }}
+      {...placeTargetProps(pick, t('assignTo', { name: member.name }), onDropTask)}
       style={{
         display: 'flex',
         flexDirection: 'column',
@@ -114,7 +120,7 @@ export function CeremonySeat({
         >
           {member.name}
         </div>
-        <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>{KIND_LABEL[member.kind]}</div>
+        <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>{t(KIND_KEY[member.kind])}</div>
       </div>
       <BriefcaseBadge tasks={assignedTasks} onClick={onOpenAssigned} />
       {showStack && stackTasks.length > 0 && (

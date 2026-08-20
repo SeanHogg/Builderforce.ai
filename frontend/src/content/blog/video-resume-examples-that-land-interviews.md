@@ -8,6 +8,34 @@ author: Sean Hogg
 
 # Video Resume Examples That Land Interviews (And the Patterns Behind Them)
 
+```bf-figure
+{
+  "kind": "launch",
+  "title": "The three starter patterns, in Studio",
+  "links": [
+    {
+      "label": "Hook-Led · 60s",
+      "hue": "idea",
+      "href": "/create/new?prompt=Start+a+video+r%C3%A9sum%C3%A9+on+the+Hook-led+Studio+template%3A+a+5-second+hook+that+leads+with+my+strongest+measurable+result%2C+then+problem%2C+what+I+did%2C+the+result%2C+what+I+am+looking+for%2C+and+a+close.",
+      "note": "Six beats. For senior individual contributors with one headline metric."
+    },
+    {
+      "label": "Story-Led · 75s",
+      "hue": "make",
+      "href": "/create/new?prompt=Start+a+video+r%C3%A9sum%C3%A9+on+the+Story-led+Studio+template%3A+open+on+one+memorable+project%2C+then+the+stakes%2C+the+hard+decision%2C+how+we+pulled+it+off%2C+the+outcome%2C+what+it+says+about+how+I+work%2C+and+a+close.",
+      "note": "Seven beats. For engineers, PMs and operators whose edge is judgment."
+    },
+    {
+      "label": "Pivot-Led · 60s",
+      "hue": "run",
+      "href": "/create/new?prompt=Start+a+video+r%C3%A9sum%C3%A9+on+the+Pivot-led+Studio+template%3A+name+the+career+pivot%2C+where+I+am+coming+from%2C+why+I+switched%2C+what+I+have+done+since%2C+what+my+background+adds%2C+and+the+role+I+want.",
+      "note": "Six beats. For career switchers whose paper résumé undersells them."
+    }
+  ],
+  "caption": "Each link opens a canvas seeded with that pattern; the video editor carries the matching starter (Hook-led, Story-led, Pivot-led) in its template picker."
+}
+```
+
 ## Three Worked Examples (Pick the Pattern That Fits You)
 
 The cards above are real Studio templates — each encodes one of the three patterns that show up in nearly every video resume that lands interviews. Click any of them to open Studio with the structure already laid out, then rewrite the example copy with your own story.

@@ -61,6 +61,8 @@ const TENANT_INDEPENDENT = new Map([
   // could be argued for at all is what this map is supposed to surface — the
   // reason is written down precisely so it can be re-read and overruled.
   ['extension_versions', 'the immutable versions of an `extension_packages` row. Tenancy is INHERITED through `package_id` — the publisher owns the package, and a version cannot belong to a different workspace than the package it versions. Copying `tenant_id` down would be a second place for the same fact to be wrong.'],
+  ['extension_categories', 'the public directory\'s category taxonomy (1094) — platform configuration, identical for every workspace, and the vocabulary a published listing files itself under. A tenant-scoped copy would mean one workspace\'s "finance" was a different category from another\'s, in a directory whose entire purpose is that a stranger can find a listing under the same name the publisher chose.'],
+  ['extension_review_stages', 'one stage of the review pipeline for an `extension_versions` row (1094). Tenancy is INHERITED through `version_id` → `package_id`, exactly as `extension_versions` inherits it. The `sandbox_tenant_id` column names the workspace the DYNAMIC stage installed into, which is a piece of evidence about where the stage ran and is deliberately not a scoping column — scoping a review by the sandbox it borrowed would hand the sandbox ownership of every publisher\'s submissions.'],
 ]);
 
 const tables = parseDrizzleTables(srcDir);

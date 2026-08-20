@@ -200,7 +200,3 @@ export function userSkillsKey(tenantId: string): string {
   return `bf-user-skills-${tenantId || 'default'}`;
 }
 
-/** localStorage key for content blocks (per tenant). */
-export function contentStorageKey(tenantId: string): string {
-  return `bf-content-${tenantId || 'default'}`;
-}

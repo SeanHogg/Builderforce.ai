@@ -1,7 +1,6 @@
 'use client';
 
 import { knowledgeApi } from '@/lib/knowledgeApi';
-import { contentStorageKey } from '@/lib/marketplaceData';
 
 /**
  * One-time client-side migration of the retired /content-manager.
@@ -11,7 +10,26 @@ import { contentStorageKey } from '@/lib/marketplaceData';
  * client-side: read the blocks, create a `knowledge_document` for each (publishing
  * + listing where the block was), then clear the old key so the data has exactly
  * one home. Idempotent via a per-tenant migrated flag.
+ *
+ * -- WHY THIS FILE SURVIVED THE RETIREMENT (migration 0982) -------------------
+ * 0982 deleted `artifact_type = 'content'` server-side and took the Content
+ * assignments panel with it. This drain is a DIFFERENT thing and it STAYS: a
+ * user who has not opened the app since the retirement still has blocks sitting
+ * in their browser, and this is the only code that can rescue them. Deleting it
+ * would not tidy anything up -- it would strand that data permanently, somewhere
+ * no server-side migration can reach.
+ *
+ * It is also now the ONLY code that knows the retired key, which is why the
+ * shared `contentStorageKey` helper was deleted from `marketplaceData` (a
+ * catalogue module with no remaining interest in it) and became the private
+ * `legacyBlocksKey` below -- one caller, one definition, no exported helper
+ * inviting a second use of a key nothing writes any more. When enough time has
+ * passed that no browser can plausibly still hold blocks, delete this file, its
+ * `/content-manager` caller and the key together.
  */
+
+/** The retired per-tenant localStorage key the blocks were written under. */
+const legacyBlocksKey = (tenantId: string) => `bf-content-${tenantId || 'default'}`;
 
 interface LegacyContentBlock {
   id: string;
@@ -42,7 +60,7 @@ function toContent(block: LegacyContentBlock): string {
 
 function readBlocks(tenantId: string): LegacyContentBlock[] {
   try {
-    const raw = localStorage.getItem(contentStorageKey(tenantId));
+    const raw = localStorage.getItem(legacyBlocksKey(tenantId));
     return raw ? (JSON.parse(raw) as LegacyContentBlock[]) : [];
   } catch {
     return [];
@@ -96,7 +114,7 @@ export async function migrateContentManager(tenantId: string): Promise<Migration
   if (allOk) {
     // Everything landed in Knowledge — retire the localStorage copy so there is a
     // single source of truth (and the marketplace no longer surfaces it).
-    localStorage.removeItem(contentStorageKey(tenantId));
+    localStorage.removeItem(legacyBlocksKey(tenantId));
     localStorage.setItem(migratedKey(tenantId), new Date().toISOString());
   }
   return { migrated, noop: false };

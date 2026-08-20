@@ -10,38 +10,32 @@
  * one unit), since error events are uniform and high-cardinality.
  */
 
-import { and, eq, gte, sql } from 'drizzle-orm';
 import { errorEvents } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { resolveErrorEventsMonthly } from '../../domain/tenant/PlanLimits';
 import { enforceMonthlyTenantCap, type MonthlyTenantCapResult } from '../shared/monthlyTenantCap';
+import { dailyTenantCounts, sumTenantRowCount, type DailyCount } from '../shared/dailyTenantCounts';
 
-/** Error events ingested by a tenant since `since` — the single window-sum the
- *  meter and the gate share. */
-export async function sumTenantErrorEvents(db: Db, tenantId: number, since: Date): Promise<number> {
-  const [row] = await db
-    .select({ used: sql<number>`COUNT(*)` })
-    .from(errorEvents)
-    .where(and(eq(errorEvents.tenantId, tenantId), gte(errorEvents.createdAt, since)));
-  return Math.max(0, Math.floor(Number(row?.used ?? 0)));
-}
+/** The rows that count as one ingested error event, in the one place both the
+ *  meter's series and the gate's total read them from. */
+const ERROR_EVENT_ROWS = {
+  table: errorEvents,
+  tenantColumn: errorEvents.tenantId,
+  createdAtColumn: errorEvents.createdAt,
+} as const;
 
 /** Per-day error-event count since `since` (UTC day buckets, sparse). Day totals
  *  sum to {@link sumTenantErrorEvents}; drives the consumption-meter sparkline. */
-export async function dailyTenantErrorEvents(
-  db: Db,
-  tenantId: number,
-  since: Date,
-): Promise<Array<{ day: string; value: number }>> {
-  const dayExpr = sql<string>`to_char(${errorEvents.createdAt}, 'YYYY-MM-DD')`;
-  const rows = await db
-    .select({ day: dayExpr, used: sql<number>`COUNT(*)` })
-    .from(errorEvents)
-    .where(and(eq(errorEvents.tenantId, tenantId), gte(errorEvents.createdAt, since)))
-    .groupBy(dayExpr)
-    .orderBy(dayExpr);
-  return rows.map((r) => ({ day: r.day, value: Math.max(0, Math.floor(Number(r.used ?? 0))) }));
+export async function dailyTenantErrorEvents(db: Db, tenantId: number, since: Date): Promise<DailyCount[]> {
+  return dailyTenantCounts(db, tenantId, since, ERROR_EVENT_ROWS);
+}
+
+/** Error events ingested by a tenant since `since` — the single window total the
+ *  meter and the gate share, over the same rows the day buckets scan. One
+ *  ungrouped query: the gate is on the hottest ingest path and wants one number. */
+export async function sumTenantErrorEvents(db: Db, tenantId: number, since: Date): Promise<number> {
+  return sumTenantRowCount(db, tenantId, since, ERROR_EVENT_ROWS);
 }
 
 export type ErrorEventsCapResult = MonthlyTenantCapResult;

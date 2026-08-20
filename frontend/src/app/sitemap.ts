@@ -1,7 +1,14 @@
 import type { MetadataRoute } from 'next';
 import { BLOG_POSTS } from '@/lib/blogData';
 import { COMPETITOR_SEO, SEO_INTEGRATIONS } from '@/lib/content';
-import { listPublishedSkillSlugs } from '@/lib/marketplaceSeo';
+import {
+  builtinPersonaSlugs,
+  builtinSkillSlugs,
+  listPublicAgentIds,
+  listPublicPersonaSlugs,
+  listPublicPromptSlugs,
+  listPublishedSkillSlugs,
+} from '@/lib/marketplaceSeo';
 import { indexableTeaserRoutes } from '@/lib/routeMarketing';
 import { getSalaryDirectory } from '@/lib/salary';
 import { legalDocHref } from '@/lib/legalDocs';
@@ -132,6 +139,62 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.6,
   }));
 
+  // ── Per-entity catalog pages ───────────────────────────────────────────────
+  // The rest of the catalog, now that skills, personas, prompts and published
+  // agents each have a real server-rendered detail route. All four reads are
+  // best-effort through `publicApi`, so an unreachable API costs those URLs and
+  // nothing else.
+  //
+  // Two placement rules decide which URL each entity is submitted under, and
+  // both exist to keep ONE entity from occupying two rows:
+  //
+  //  · A skill published to the registry is submitted as `/marketplace/<slug>`
+  //    (above). It is also reachable at `/skills/<slug>`, but that page
+  //    canonicalises to the marketplace URL, so only the BUILT-IN skills — which
+  //    have no marketplace row at all — are listed under `/skills/`.
+  //  · The `/skills`, `/personas` and `/prompts` INDEX pages are not listed
+  //    here: `/skills` and `/personas` arrive via `indexableTeaserRoutes()` (they
+  //    keep their marketing teaser and stay outside `PUBLIC_SHELL_PREFIXES`),
+  //    and `/prompts` is already in `staticPages`.
+  const [personaSlugs, promptSlugs, agentIds] = await Promise.all([
+    listPublicPersonaSlugs(),
+    listPublicPromptSlugs(),
+    listPublicAgentIds(),
+  ]);
+
+  // Built-ins first so a published persona that shadows a built-in slug does not
+  // produce two rows for one URL.
+  const personaUrls = [...new Set([...builtinPersonaSlugs(), ...personaSlugs])];
+
+  const catalogPages: MetadataRoute.Sitemap = [
+    ...builtinSkillSlugs().map((slug) => ({
+      url: `${BASE}/skills/${slug}`,
+      lastModified: now,
+      // Built-ins change with a release, not with traffic — same cadence as the
+      // other shipped-content pages rather than the marketplace's weekly.
+      changeFrequency: 'monthly' as const,
+      priority: 0.6,
+    })),
+    ...personaUrls.map((slug) => ({
+      url: `${BASE}/personas/${slug}`,
+      lastModified: now,
+      changeFrequency: 'weekly' as const,
+      priority: 0.6,
+    })),
+    ...promptSlugs.map((slug) => ({
+      url: `${BASE}/prompts/${slug}`,
+      lastModified: now,
+      changeFrequency: 'weekly' as const,
+      priority: 0.6,
+    })),
+    ...agentIds.map((id) => ({
+      url: `${BASE}/marketplace/agent/${id}`,
+      lastModified: now,
+      changeFrequency: 'weekly' as const,
+      priority: 0.6,
+    })),
+  ];
+
   // Public freelancer profiles — indexable Person pages. Best-effort.
   const talentPages: MetadataRoute.Sitemap = (await listPublicFreelancerIds()).map((id) => ({
     url: `${BASE}/talent/${id}`,
@@ -164,6 +227,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   return [
     ...staticPages, ...teaserPages, ...blogPages, ...comparePages,
-    ...integrationPages, ...marketplacePages, ...talentPages, ...salaryPages,
+    ...integrationPages, ...marketplacePages, ...catalogPages, ...talentPages,
+    ...salaryPages,
   ];
 }

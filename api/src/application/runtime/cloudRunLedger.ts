@@ -15,33 +15,32 @@
  * SEES equals the number ENFORCED.
  */
 
-import { and, eq, gte, isNotNull, sql } from 'drizzle-orm';
+import { and, eq, isNotNull, sql } from 'drizzle-orm';
 import { llmUsageLog } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { resolveCloudRunsMonthly } from '../../domain/tenant/PlanLimits';
 import { enforceMonthlyTenantCap, type MonthlyTenantCapResult } from '../shared/monthlyTenantCap';
+import { dailyTenantCounts, sumDailyCounts, type DailyCount } from '../shared/dailyTenantCounts';
 
 /** Only cloud-surface usage rows that carry an execution id count as a run. */
 const cloudRunRow = and(eq(llmUsageLog.surface, 'cloud'), isNotNull(llmUsageLog.executionId));
+
+/** One RUN = one distinct `execution_id`, so this meter counts ids, not rows. */
+const CLOUD_RUN_ROWS = {
+  table: llmUsageLog,
+  tenantColumn: llmUsageLog.tenantId,
+  createdAtColumn: llmUsageLog.createdAt,
+  where: cloudRunRow,
+  countExpr: sql<number>`COUNT(DISTINCT ${llmUsageLog.executionId})`,
+} as const;
 
 /**
  * Per-day distinct cloud-run count since `since` (UTC day buckets, sparse). Day
  * totals sum to {@link sumTenantCloudRuns}; drives the consumption-meter sparkline.
  */
-export async function dailyTenantCloudRuns(
-  db: Db,
-  tenantId: number,
-  since: Date,
-): Promise<Array<{ day: string; value: number }>> {
-  const dayExpr = sql<string>`to_char(${llmUsageLog.createdAt}, 'YYYY-MM-DD')`;
-  const rows = await db
-    .select({ day: dayExpr, used: sql<number>`COUNT(DISTINCT ${llmUsageLog.executionId})` })
-    .from(llmUsageLog)
-    .where(and(eq(llmUsageLog.tenantId, tenantId), gte(llmUsageLog.createdAt, since), cloudRunRow))
-    .groupBy(dayExpr)
-    .orderBy(dayExpr);
-  return rows.map((r) => ({ day: r.day, value: Math.max(0, Math.floor(Number(r.used ?? 0))) }));
+export async function dailyTenantCloudRuns(db: Db, tenantId: number, since: Date): Promise<DailyCount[]> {
+  return dailyTenantCounts(db, tenantId, since, CLOUD_RUN_ROWS);
 }
 
 /**
@@ -51,8 +50,7 @@ export async function dailyTenantCloudRuns(
  * day it touches, which is conservative for a cap and negligible in practice.
  */
 export async function sumTenantCloudRuns(db: Db, tenantId: number, since: Date): Promise<number> {
-  const daily = await dailyTenantCloudRuns(db, tenantId, since);
-  return daily.reduce((total, r) => total + r.value, 0);
+  return sumDailyCounts(await dailyTenantCloudRuns(db, tenantId, since));
 }
 
 export type CloudRunCapResult = MonthlyTenantCapResult;

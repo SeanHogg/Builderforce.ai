@@ -168,6 +168,40 @@ export const userMfaRecoveryCodes = pgTable('user_mfa_recovery_codes', {
 });
 
 
+/**
+ * A registered passkey (0988). Unlike `users.mfa_secret_enc` there is nothing here
+ * to seal — a WebAuthn public key is public by construction and the private half
+ * never leaves the authenticator, so possession of this row grants nothing.
+ *
+ * `credentialId` is unique platform-wide because a discoverable credential must
+ * resolve to exactly one account before the server knows who is asking; that is
+ * what makes a usernameless sign-in possible.
+ */
+export const webauthnCredentials = pgTable('webauthn_credentials', {
+  id:              serial('id').primaryKey(),
+  userId:          varchar('user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
+  credentialId:    varchar('credential_id', { length: 512 }).notNull(),
+  /** base64url COSE_Key. */
+  publicKey:       text('public_key').notNull(),
+  /** COSE algorithm identifier: -7 (ES256) or -257 (RS256). */
+  algorithm:       integer('algorithm').notNull(),
+  signCount:       bigint('sign_count', { mode: 'number' }).notNull().default(0),
+  aaguid:          varchar('aaguid', { length: 64 }),
+  transports:      varchar('transports', { length: 120 }),
+  backupEligible:  boolean('backup_eligible').notNull().default(false),
+  backedUp:        boolean('backed_up').notNull().default(false),
+  name:            varchar('name', { length: 120 }).notNull().default('Passkey'),
+  /** Recorded, never enforced — synced passkeys legitimately report 0 forever. */
+  lastSignCountRegressedAt: timestamp('last_sign_count_regressed_at'),
+  lastUsedAt:      timestamp('last_used_at'),
+  createdAt:       timestamp('created_at').notNull().defaultNow(),
+  updatedAt:       timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_webauthn_credentials_credential').on(t.credentialId),
+  index('idx_webauthn_credentials_user').on(t.userId, t.createdAt),
+]);
+
+
 export const authUserSessions = pgTable('auth_user_sessions', {
   id:          uuid('id').primaryKey(),
   userId:      varchar('user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),

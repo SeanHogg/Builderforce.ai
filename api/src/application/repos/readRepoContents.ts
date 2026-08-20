@@ -11,6 +11,7 @@
  */
 import { normalizeScopeDir, isUnderScopeDir } from '@builderforce/agent-tools';
 import { buildGitApiBaseUrl } from './gitProxy';
+import { bitbucketServerPathString, resolveRepoApiTarget } from './repoApiTarget';
 import { createRepoSource, makeRepoFetch } from './sources/RepoSource';
 
 export interface RepoReadContext {
@@ -252,25 +253,50 @@ async function gitlabBranchDiff(ctx: RepoReadContext, base: string, branch: stri
   return { ok: true, files, truncated };
 }
 
-/** Bitbucket Cloud branch diff via the diffstat API (`{branch}..{base}`). Clean
- *  paginated JSON GET (one page is plenty for the MAX_DIFF_ENTRIES cap). */
+/**
+ * Bitbucket branch diff, BOTH editions.
+ *
+ * The two are the same operation behind unrelated endpoints and envelopes:
+ *   • Cloud  `/diffstat/{branch}..{base}` → `values: [{ status, new.path, old.path }]`
+ *   • Server `/compare/changes?from={branch}&to={base}` → `values: [{ path.toString, type }]`
+ *     with SCREAMING type names (`ADD` / `DELETE` / `MOVE`) and offset pagination.
+ * Both map onto the one `BranchDiffEntry` union here, so `listBranchDiff`'s caller —
+ * the re-run reconciliation that decides which files a prior pass already committed —
+ * cannot tell which edition answered. One page covers MAX_DIFF_ENTRIES on both.
+ */
+function bitbucketDiffEntry(v: {
+  status?: string; type?: string;
+  new?: { path?: string } | null; old?: { path?: string } | null;
+  path?: { toString?: string } | null;
+}): BranchDiffEntry | null {
+  // Server nests the path in an object whose `toString` is a FIELD, not a method —
+  // reading it naively yields Object.prototype.toString, so it goes through the ONE
+  // guarded reader.
+  const path = v.new?.path ?? v.old?.path ?? bitbucketServerPathString(v.path);
+  if (!path) return null;
+  const raw = (v.status ?? v.type ?? '').toUpperCase();
+  const status: BranchDiffEntry['status'] =
+    raw === 'ADDED' || raw === 'ADD' ? 'added'
+      : raw === 'REMOVED' || raw === 'DELETE' ? 'removed'
+        : raw === 'RENAMED' || raw === 'MOVE' ? 'renamed'
+          : 'modified';
+  return { path, status };
+}
+
 async function bitbucketBranchDiff(ctx: RepoReadContext, base: string, branch: string): Promise<BranchDiffResult> {
   if (base.trim() === branch.trim()) return { ok: true, files: [], truncated: false };
-  let apiBase: string;
-  try { apiBase = buildGitApiBaseUrl('bitbucket', ctx.host); } catch (e) { return { ok: false, reason: e instanceof Error ? e.message : `compare not implemented for provider '${ctx.provider}'` }; }
-  const url = `${apiBase}/repositories/${ctx.owner}/${ctx.repo}/diffstat/${encodeURIComponent(branch)}..${encodeURIComponent(base)}?pagelen=100`;
+  let api: ReturnType<typeof resolveRepoApiTarget>;
+  try { api = resolveRepoApiTarget(ctx); } catch (e) { return { ok: false, reason: e instanceof Error ? e.message : `compare not implemented for provider '${ctx.provider}'` }; }
+  const url = api.flavor === 'bitbucket-server'
+    ? `${api.repoBase}/compare/changes?from=${encodeURIComponent(branch)}&to=${encodeURIComponent(base)}&limit=${MAX_DIFF_ENTRIES + 1}`
+    : `${api.repoBase}/diffstat/${encodeURIComponent(branch)}..${encodeURIComponent(base)}?pagelen=100`;
   const res = await fetch(url, { headers: { Authorization: `Bearer ${ctx.token}`, Accept: 'application/json' } }).catch(() => null);
   if (!res) return { ok: false, reason: 'compare request failed (network)' };
   if (res.status === 404) return { ok: true, files: [], truncated: false };
   if (!res.ok) { const t = await res.text().catch(() => ''); return { ok: false, reason: `Bitbucket ${res.status}: ${t.slice(0, 160)}` }; }
-  const json = (await res.json().catch(() => null)) as { values?: Array<{ status?: string; new?: { path?: string } | null; old?: { path?: string } | null }> } | null;
+  const json = (await res.json().catch(() => null)) as { values?: Array<Parameters<typeof bitbucketDiffEntry>[0]> } | null;
   let files = (json?.values ?? [])
-    .map((v): BranchDiffEntry | null => {
-      const path = v.new?.path ?? v.old?.path;
-      if (!path) return null;
-      const status: BranchDiffEntry['status'] = v.status === 'added' ? 'added' : v.status === 'removed' ? 'removed' : v.status === 'renamed' ? 'renamed' : 'modified';
-      return { path, status };
-    })
+    .map(bitbucketDiffEntry)
     .filter((f): f is BranchDiffEntry => f !== null);
   const truncated = files.length > MAX_DIFF_ENTRIES;
   if (truncated) files = files.slice(0, MAX_DIFF_ENTRIES);

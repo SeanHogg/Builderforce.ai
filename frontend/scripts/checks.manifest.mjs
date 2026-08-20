@@ -17,4 +17,5 @@ export default [
   ['check:route-exports', 'check-route-exports.mjs'],
   ['check:declared-deps', 'check-declared-deps.mjs'],
   ['check:methodology', 'check-methodology.mjs'],
+  ['check:canvas-glossary', 'check-canvas-glossary.mjs'],
 ];

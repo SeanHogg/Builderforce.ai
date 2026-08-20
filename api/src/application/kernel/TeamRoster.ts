@@ -11,6 +11,13 @@
  * navigation is organised by), the humans from `tenant_members`, and the agents
  * from `ide_agents`. A new kind is a column value, not a new table (PRD 20 §0).
  *
+ * "THE AGENTS" MEANS OWNED **AND HIRED**. A marketplace agent a workspace paid
+ * for has `ide_agents.tenant_id` pointing at the SELLER, so the obvious
+ * ownership filter left every bought agent off the team it was bought for. The
+ * predicate is `hiredAgents.usableByTenant` — the same one the assignee picker
+ * and swimlane dispatch use, so a hired agent is on the roster, in the picker and
+ * runnable, or in none of the three.
+ *
  * WHY THE SEAT ROWS ARE LISTED EVEN WHEN NOTHING BACKS THEM. PRD 21 §2.6 rule 7:
  * "disable, never hide". A seat whose agent a workspace has not provisioned is
  * rendered visible and `locked`, because hiding it turns "not set up yet" into
@@ -29,6 +36,7 @@ import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/rea
 import { ideAgents, tenantMembers, users, freelancerEngagements } from '../../infrastructure/database/schema';
 import type { Env } from '../../env';
 import { assignableWorkforceCacheKey } from '../kanban/assignableWorkforce';
+import { activeHiredAgentIds, usableByTenant } from '../workforce/hiredAgents';
 import { DOMAIN_MANIFEST } from './DomainService';
 import type { Domain } from './ObjectRegistry';
 
@@ -144,6 +152,8 @@ export function unprovisionedSeatRoster(): TeamRosterMember[] {
  * `now` is a parameter so the busy window is testable without faking the clock.
  */
 export async function loadTeamRoster(db: Db, tenantId: number, now = Date.now()): Promise<TeamRosterMember[]> {
+  // Resolved first because the agent predicate needs it (see usableByTenant).
+  const hiredIds = await activeHiredAgentIds(db, tenantId);
   const [agentRows, humanRows, hireRows] = await Promise.all([
     db
       .select({
@@ -154,7 +164,7 @@ export async function loadTeamRoster(db: Db, tenantId: number, now = Date.now())
         lastUsedAt: ideAgents.lastUsedAt,
       })
       .from(ideAgents)
-      .where(and(eq(ideAgents.tenantId, tenantId), eq(ideAgents.status, 'active'))),
+      .where(usableByTenant(tenantId, hiredIds)),
     db
       .select({
         id: users.id,

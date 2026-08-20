@@ -1,0 +1,53 @@
+{
+  "number": 19,
+  "kind": "pricing",
+  "eyebrow": "Business model",
+  "heading": "Land free. Expand on outcomes, not seats.",
+  "plans": [
+    {
+      "name": "Free",
+      "price": "$0",
+      "cadence": "/forever",
+      "features": [
+        "Self-updating model on-device",
+        "WebGPU training + dataset gen",
+        "5 projects · 10K tokens/day",
+        "1 agent host"
+      ]
+    },
+    {
+      "name": "Pro",
+      "price": "$29",
+      "cadence": "/seat / mo",
+      "featured": true,
+      "badge": "Most popular",
+      "features": [
+        "Everything in Free",
+        "Unlimited projects · 1M tok/day",
+        "Approval workflows + audit",
+        "Fleet mesh + custom roles"
+      ]
+    },
+    {
+      "name": "Teams",
+      "price": "$20",
+      "cadence": "/seat / mo",
+      "features": [
+        "Everything in Pro",
+        "Unlimited hosts · 5M tok/day",
+        "Shared approval inbox",
+        "Per-seat cost controls"
+      ]
+    }
+  ],
+  "expansion": {
+    "title": "Expansion revenue beyond seats",
+    "items": [
+      { "label": "Managed hosting", "value": "$49 / agent / mo" },
+      { "label": "Agent & template marketplace", "value": "Listing + transaction fee" },
+      { "label": "Enterprise license", "value": "On-prem Docker, annual" },
+      { "label": "B2B AI gateway", "value": "Metered LLM margin" }
+    ]
+  },
+  "footnote": "Teams is org-wide volume pricing — every seat in the workspace, 5-seat minimum. Pro is for individual professionals. Full details: builderforce.ai/pricing"
+}

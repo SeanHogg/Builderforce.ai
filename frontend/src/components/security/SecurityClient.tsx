@@ -17,6 +17,7 @@ import {
 import { getStoredTenant, getStoredUser } from '@/lib/auth';
 import { AgentAssignmentPanel } from '@/components/AgentAssignmentPanel';
 import { SessionList } from '@/components/security/SessionList';
+import AccountSecurityPanel from '@/components/security/AccountSecurityPanel';
 import { SecurityTicketAccessCard } from '@/components/security/SecurityTicketAccessCard';
 import { SecurityAuditPanel } from '@/components/security/SecurityAuditPanel';
 import { WebSecurityScanPanel } from '@/components/security/WebSecurityScanPanel';
@@ -100,6 +101,11 @@ export default function SecurityClient() {
 
   const subTabs: IndexItem[] = [
     { id: '', label: t('membersTab'), icon: '👥', href: '/security' },
+    // A person's OWN account — their passkeys, their signed-in devices, and any
+    // platform-admin access to their account. This panel existed and was reachable
+    // from nowhere; it is personal security, so it earns a tab rather than being
+    // folded into workspace governance beside it.
+    { id: 'account', label: t('accountTab'), icon: '🔑', href: '/security?sub=account' },
     { id: 'agents', label: t('agentsTab'), icon: '🛡', href: '/security?sub=agents' },
     { id: 'webscan', label: t('webTab'), icon: '🌐', href: '/security?sub=webscan' },
     { id: 'soc2', label: t('auditTab'), icon: '📋', href: '/security?sub=soc2' },
@@ -246,7 +252,8 @@ export default function SecurityClient() {
       ) : (
         <>
           <DestinationIndex items={subTabs} activeId={sub} ariaLabel={t('subnavLabel')} />
-          {sub === 'agents' ? renderAgents()
+          {sub === 'account' ? <AccountSecurityPanel />
+            : sub === 'agents' ? renderAgents()
             : sub === 'webscan' ? <WebSecurityScanPanel />
               : sub === 'soc2' ? renderSoc2()
                 : sub === 'policies' ? <PolicyPacksPanel />

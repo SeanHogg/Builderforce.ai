@@ -26,7 +26,10 @@
  */
 
 export { MAX_PARSEABLE_BYTES, openZip, decodeXmlText, type ZipArchive } from './office/container';
-export { PAGE_BREAK_MARKER, docxXmlToMarkdown, readDocx, type OfficeDocument } from './office/docx';
+export {
+  DOCX_EXTRAS_MARKER, DOCX_RELATIONSHIP_PARAM, PAGE_BREAK_MARKER, docxXmlToMarkdown, readDocx, withDocxRelationship,
+  type DocxConversionParts, type DocxExtrasLabels, type DocxMediaUploader, type OfficeDocument,
+} from './office/docx';
 export { readXlsx, type WorkbookCell, type WorkbookSheet } from './office/xlsx';
 export { readPptx, type OfficeSlide } from './office/pptx';
 export { readPdf, type PdfDocument } from './office/pdf';

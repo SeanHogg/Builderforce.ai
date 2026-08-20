@@ -11,64 +11,29 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * The one addition is a BASELINE: the run compares its score + finding set to the
  * previous completed scan of the same URL so the panel can show drift ("+2 new,
  * score 62 → 74").
+ *
+ * A run also carries STAGES: the peer-TLS and CVE checks that a Cloudflare Worker
+ * cannot perform run from the Node container and report back through
+ * {@link ingestWebScanStage}. The result always states what each of them did — ran,
+ * requested, or not run and why — because a report that omits a check it never made
+ * reads exactly like a report of a check that passed.
  */
-import { and, desc, eq, ne, inArray, isNotNull } from 'drizzle-orm';
-import { projects, tasks } from '../../infrastructure/database/schema';
-import { TaskStatus } from '../../domain/shared/types';
+import { and, desc, eq, isNotNull } from 'drizzle-orm';
+import { projects, securityAudits } from '../../infrastructure/database/schema';
 import { SecurityAuditService } from './SecurityAuditService';
 import { openTaskMarkers } from './findingMarkers';
 import { scanWebTarget, normalizeScanTarget, ScanTargetError, type WebFinding } from './WebSecurityScanner';
+import { dispatchWebScanStages, withStageSentence } from './webScanContainerStages';
+import { allStagesNotRun, type WebScanStageReport } from './webScanStages';
+import { autoCloseResolved } from './webFindingLifecycle';
+
+// The close rule lives in `webFindingLifecycle` so the container-stage ingest can
+// share it without importing this module back. Re-exported because the existing
+// importers (and its test) reach it through here.
+export { selectResolvedTicketIds, autoCloseResolved, workerOwnedCheck, type CheckOwnership } from './webFindingLifecycle';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
-
-/**
- * PURE decision: given the open tickets in a project, which ones should this re-scan
- * auto-close? A ticket is resolved when it carries a web marker for THIS origin that
- * the current scan no longer raises. Scoped to one origin's `[web:*]` markers so it
- * never touches SOC 2 / GitHub / manual tickets. Separated from IO so it is fully
- * unit-testable without a DB (mirrors the scanner's pure/IO split).
- */
-export function selectResolvedTicketIds(
-  openTickets: Array<{ id: number; title: string | null }>,
-  origin: string,
-  currentMarkers: Set<string>,
-): number[] {
-  const originLc = origin.toLowerCase();
-  const out: number[] = [];
-  for (const r of openTickets) {
-    const m = /\[web:[a-z0-9-]+:([^\]]+)\]/i.exec(r.title ?? '');
-    if (!m) continue;
-    if ((m[1] ?? '').toLowerCase() !== originLc) continue; // only this site's findings
-    if (currentMarkers.has(m[0].toLowerCase())) continue;   // still raised → keep open
-    out.push(r.id);
-  }
-  return out;
-}
-
-/**
- * Auto-close SECURITY tickets from a prior scan of the SAME origin whose finding the
- * current scan no longer raises. Safe precisely because this scanner is deterministic:
- * a check that fired before and doesn't now is objectively resolved (unlike an
- * external alert feed's silence, which is ambiguous — see githubAlerts). Returns the
- * number closed.
- */
-async function autoCloseResolved(db: Db, projectId: number, origin: string, currentMarkers: Set<string>): Promise<number> {
-  const rows = await db
-    .select({ id: tasks.id, title: tasks.title })
-    .from(tasks)
-    .where(and(
-      eq(tasks.projectId, projectId),
-      eq(tasks.archived, false),
-      ne(tasks.status, TaskStatus.DONE),
-    ));
-  const toClose = selectResolvedTicketIds(rows, origin, currentMarkers);
-  if (toClose.length === 0) return 0;
-  await db.update(tasks)
-    .set({ status: TaskStatus.DONE, updatedAt: new Date() })
-    .where(inArray(tasks.id, toClose));
-  return toClose.length;
-}
 
 /** How the current scan compares to the previous scan of the same URL. */
 export interface ScanBaseline {
@@ -96,6 +61,13 @@ export type WebScanResult =
       taskIds: number[];
       findings: WebFinding[];
       baseline: ScanBaseline;
+      /**
+       * What the checks that CANNOT run in a Worker did — the peer-TLS and CVE
+       * stages, which need a socket and an advisory feed respectively. Always
+       * present, always naming a status and (when it is not 'ran') a reason: a
+       * scan that silently omitted them would read as a scan those checks passed.
+       */
+      stages: WebScanStageReport[];
     }
   | { ok: false; code: WebScanCode; reason: string };
 
@@ -150,7 +122,17 @@ export async function getProjectScanTarget(db: Db, tenantId: number, projectId: 
 export async function runWebScan(
   db: Db,
   tenantId: number,
-  input: { targetUrl: string; projectId?: number; trigger?: 'cron' | 'manual'; agentRef?: string; fetchFn?: typeof fetch },
+  input: {
+    targetUrl: string;
+    projectId?: number;
+    trigger?: 'cron' | 'manual';
+    agentRef?: string;
+    fetchFn?: typeof fetch;
+    /** Worker env — required to reach the container runtime for the TLS/CVE stages.
+     *  Omitted (unit tests, callers with no binding) ⇒ those stages report `not_run`
+     *  with that as the stated reason, never silence. */
+    env?: Env;
+  },
 ): Promise<WebScanResult> {
   // Validate + scan first — no audit row is opened if the target is unscannable.
   let scan;
@@ -208,7 +190,7 @@ export async function runWebScan(
   // Auto-close tickets for findings this deterministic re-scan no longer raises, and
   // use the real closed count as the baseline's "resolved" number.
   const currentMarkers = new Set(scan.findings.map((f) => f.marker.toLowerCase()));
-  const resolvedFindings = await autoCloseResolved(db, projectId, scan.origin, currentMarkers);
+  const resolvedFindings = await autoCloseResolved(db, tenantId, projectId, scan.origin, currentMarkers);
 
   // Baseline: compare to the previous completed scan of the same URL.
   const prev = await svc.previousWebScan(tenantId, scan.origin, auditId);
@@ -220,19 +202,41 @@ export async function runWebScan(
     resolvedFindings,
   };
 
+  // The checks a Worker physically cannot make: ask the container runtime for them.
+  // This is dispatch only — the container posts its observations back through
+  // `ingestWebScanStage`, which files their findings onto THIS audit run. When there
+  // is no container the stages come back `not_run` carrying the reason, so the scan
+  // is complete and honest either way.
+  const dispatch = input.env
+    ? await dispatchWebScanStages(input.env, { auditId, origin: scan.origin })
+    : {
+        dispatched: false,
+        stages: allStagesNotRun('the scan ran without a runtime binding, so the container stages could not be requested'),
+      };
+
   const scorePhrase = prev?.score != null
     ? `Score ${prev.score} → ${scan.score}.`
     : `Score ${scan.score}/100.`;
+  const summary =
+    `Scanned ${scan.origin}. ${scorePhrase} ${scan.findings.length} issue(s) found` +
+    (deduped ? `, ${taskIds.length} newly filed (${deduped} already tracked)` : `, ${taskIds.length} filed`) +
+    (scan.server ? `. Server: ${scan.server}.` : '.');
   await svc.finishAudit(tenantId, auditId, {
     status: 'complete',
     score: scan.score,
-    summary:
-      `Scanned ${scan.origin}. ${scorePhrase} ${scan.findings.length} issue(s) found` +
-      (deduped ? `, ${taskIds.length} newly filed (${deduped} already tracked)` : `, ${taskIds.length} filed`) +
-      (scan.server ? `. Server: ${scan.server}.` : '.'),
+    summary: withStageSentence(summary, dispatch.stages),
   }).catch((error) => {
     reportCaughtError(error, { source: "application/security/webSecurityScan.ts", operation: "runWebScan" });
   });
+
+  // Persisted separately from finishAudit: the stage list belongs to the run, not to
+  // the rollup, and a failure to write it must not lose the finished audit.
+  await db.update(securityAudits)
+    .set({ stages: dispatch.stages })
+    .where(and(eq(securityAudits.id, auditId), eq(securityAudits.tenantId, tenantId)))
+    .catch((error) => {
+      reportCaughtError(error, { source: "application/security/webSecurityScan.ts", operation: "runWebScan", level: 'warning' });
+    });
 
   return {
     ok: true,
@@ -246,6 +250,7 @@ export async function runWebScan(
     taskIds,
     findings: scan.findings,
     baseline,
+    stages: dispatch.stages,
   };
 }
 
@@ -288,6 +293,7 @@ export async function runWebScanSweep(env: Env): Promise<WebScanSweepResult> {
         projectId: row.id,
         trigger: 'cron',
         agentRef: 'web-scanner',
+        env,
       });
       if (res.ok) { out.scanned += 1; out.findingsFiled += res.recorded; }
     } catch (e) {

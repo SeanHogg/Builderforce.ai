@@ -392,14 +392,25 @@ export function createMeetingRoutes(db: Db): Hono<HonoEnv> {
   });
 
   // ── RSVP ─────────────────────────────────────────────────────────────────────
+  //
+  // Load-bearing since 0366: a ceremony's attendance is fed by its companion meeting, so
+  // `response = 'declined'` is what EXCUSES a person from the ceremony instead of
+  // recording them as a no-show (which is what hands their tickets to an agent). See
+  // `ceremonyAttendance.resolveAttendanceVerdict` step 5.
   r.post('/:id/rsvp', async (c) => {
     const { tenantId } = scope(c);
     const id = c.req.param('id');
     const userId = (c.get('userId') as string) ?? '';
     const { response } = await c.req.json<{ response: string }>();
     if (!['accepted', 'declined', 'tentative'].includes(response)) return c.json({ error: 'Invalid response' }, 400);
-    await db.update(meetingAttendees).set({ response })
-      .where(and(eq(meetingAttendees.meetingId, id), eq(meetingAttendees.memberRef, userId), eq(meetingAttendees.tenantId, tenantId)));
+    // RETURNING makes the no-op visible. The update matched on (meeting, member, tenant)
+    // and reported success whether or not a row existed, so a caller who was never
+    // invited — or who mistyped the meeting id — got a 200 and an unchanged meeting,
+    // and the decline they believed they had recorded silently did not exist.
+    const updated = await db.update(meetingAttendees).set({ response })
+      .where(and(eq(meetingAttendees.meetingId, id), eq(meetingAttendees.memberRef, userId), eq(meetingAttendees.tenantId, tenantId)))
+      .returning({ id: meetingAttendees.id });
+    if (updated.length === 0) return c.json({ error: 'You are not an attendee of this meeting' }, 404);
     return c.json(await hydrate(tenantId, id));
   });
 

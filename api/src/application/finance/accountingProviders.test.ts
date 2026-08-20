@@ -9,7 +9,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   ACCOUNTING_PROVIDER_NAMES,
+  CAPABILITY_READS,
   accountingProvider,
+  accountingProviderIsLive,
   describeAccountingProviders,
   foldTransactionsToMonths,
   isAccountingProviderName,
@@ -48,6 +50,65 @@ describe('the registry', () => {
     expect(accountingProvider('plaid').capabilities).not.toContain('invoices');
     expect(providersWithCapability('invoices')).toEqual(['quickbooks', 'xero', 'netsuite', 'stripe-revenue']);
     expect(providersWithCapability('balances')).toContain('plaid');
+  });
+
+  it('implements the read behind every capability it declares', () => {
+    // The two lists are declared separately — `capabilities` on the registry entry,
+    // the `fetch*` members on the adapter — so this is what binds them. A provider
+    // claiming `balances` with no `fetchBalances` is not a smaller feature; it is a
+    // tab that renders permanently empty with nothing to explain it.
+    for (const name of ACCOUNTING_PROVIDER_NAMES) {
+      const provider = accountingProvider(name);
+      for (const capability of provider.capabilities) {
+        expect(provider[CAPABILITY_READS[capability]], `${name} declares ${capability}`).toBeTypeOf('function');
+      }
+    }
+  });
+
+  it('reports every provider LIVE, because every adapter now exists', () => {
+    // `live` is DERIVED from whether a read exists rather than declared, so this
+    // assertion is the honest one: it would have failed while the registry shipped
+    // ahead of its adapters, and it fails again the moment one is removed.
+    for (const name of ACCOUNTING_PROVIDER_NAMES) {
+      expect(accountingProviderIsLive(accountingProvider(name)), name).toBe(true);
+    }
+    expect(describeAccountingProviders({}).every((provider) => provider.live)).toBe(true);
+  });
+
+  it('says which providers see EVERYTHING that leaves, and Stripe is not one', () => {
+    // The flag that stops a founder's burn DOUBLING when they connect QuickBooks
+    // beside six months of typed expenses — and stops it COLLAPSING when they
+    // connect a revenue feed that never saw their rent.
+    const covering = ACCOUNTING_PROVIDER_NAMES.filter((name) => accountingProvider(name).coversAllSpend);
+    expect(covering).toEqual(['quickbooks', 'xero', 'netsuite', 'plaid']);
+    expect(accountingProvider('stripe-revenue').coversAllSpend).toBe(false);
+  });
+
+  it('asks Stripe for read_only, unlike the payout port asking the same vendor', () => {
+    // Reading revenue never needs the right to move money. Holding it anyway is how
+    // a credential with one job becomes a credential with two.
+    expect(accountingProvider('stripe-revenue').oauth?.scopes).toEqual(['read_only']);
+    // Xero without `offline_access` issues no refresh token and the connection dies
+    // in 30 minutes — which presents as "it synced once and then stopped".
+    expect(accountingProvider('xero').oauth?.scopes).toContain('offline_access');
+    // Intuit issues payment scopes from the same consent screen. This port takes
+    // the accounting scope and nothing else.
+    expect(accountingProvider('quickbooks').oauth?.scopes).toEqual(['com.intuit.quickbooks.accounting']);
+  });
+
+  it('advertises an OAuth provider only where this deployment holds both halves', () => {
+    const withKeys = describeAccountingProviders({
+      QUICKBOOKS_CLIENT_ID: 'id', QUICKBOOKS_CLIENT_SECRET: 'secret',
+      XERO_CLIENT_ID: 'id',
+    });
+    const byName = new Map(withKeys.map((provider) => [provider.name, provider]));
+    expect(byName.get('quickbooks')?.configured).toBe(true);
+    // Half a client is not a configured provider: it sends somebody to a consent
+    // screen that cannot complete.
+    expect(byName.get('xero')?.configured).toBe(false);
+    // A `fields` provider needs nothing from the deployment — the operator supplies
+    // the whole credential — so it is connectable on every install.
+    expect(byName.get('netsuite')?.configured).toBe(true);
   });
 
   it('connects NetSuite by typed fields rather than a redirect', () => {

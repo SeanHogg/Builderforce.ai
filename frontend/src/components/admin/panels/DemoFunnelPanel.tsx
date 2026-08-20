@@ -12,7 +12,22 @@ import { adminApi, type AdminDemoFunnel } from '@/lib/adminApi';
 import { AdminError, AdminLoading, AdminPanelHeader, useAdminData } from '@/components/admin/adminShared';
 import { useAdminFormat } from '@/components/admin/adminShared';
 
-const STAGES = ['demo_start', 'page_view', 'convert_prompt_shown', 'convert_clicked', 'book_demo_opened', 'lead_submitted', 'exit_prompt_shown', 'demo_exit'] as const;
+/**
+ * The funnel columns, in the order a visitor moves through them.
+ *
+ * The four `tour_*` kinds were already being EMITTED by `DemoTour` and stored in
+ * `demo_events`; they showed up in the "recent events" list and nowhere else,
+ * because this array did not name them — so "which persona's guided tour
+ * actually gets finished" was a question the data could answer and the screen
+ * could not. They sit between the first page view and the convert prompt, which
+ * is where the tour runs.
+ */
+const STAGES = [
+  'demo_start', 'page_view',
+  'tour_started', 'tour_step', 'tour_completed', 'tour_skipped',
+  'convert_prompt_shown', 'convert_clicked', 'book_demo_opened', 'lead_submitted',
+  'exit_prompt_shown', 'demo_exit',
+] as const;
 const PERSONAS = ['ai-team', 'insights', 'pmo', 'talent', 'governance'] as const;
 
 export default function DemoFunnelPanel() {
@@ -56,11 +71,22 @@ export default function DemoFunnelPanel() {
               const starts = row?.get('demo_start') ?? 0;
               const converts = row?.get('convert_clicked') ?? 0;
               const rate = starts > 0 ? Math.round((converts / starts) * 100) : 0;
+              // Tour completion is the question this panel was built to answer
+              // and could not: of the people who STARTED the guided tour, how
+              // many reached the end. Denominated on tour starts, not demo
+              // starts — a persona whose tour nobody opens is a different
+              // problem from one whose tour nobody finishes.
+              const tourStarts = row?.get('tour_started') ?? 0;
+              const tourDone = row?.get('tour_completed') ?? 0;
+              const tourRate = tourStarts > 0 ? Math.round((tourDone / tourStarts) * 100) : null;
               return (
                 <tr key={persona}>
                   <td>
                     <div style={{ fontWeight: 600 }}>{t(`personas.${persona}`)}</div>
                     <div className="text-muted" style={{ fontSize: 12 }}>{t('convRate', { rate })}</div>
+                    <div className="text-muted" style={{ fontSize: 12 }}>
+                      {tourRate == null ? t('tourRateNone') : t('tourRate', { rate: tourRate })}
+                    </div>
                   </td>
                   {STAGES.map((s) => (
                     <td key={s} style={{ textAlign: 'right' }}>{fmtNum(row?.get(s) ?? 0)}</td>

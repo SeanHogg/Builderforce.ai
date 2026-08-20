@@ -1,6 +1,7 @@
 'use client';
 
 import { Suspense, useEffect } from 'react';
+import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/AuthContext';
@@ -34,6 +35,7 @@ const AGENT_OPS_TABS: ReadonlyArray<AgentOpsTab> = ['coordination', 'memory', 'r
 function WorkforcePageInner() {
   const t = useTranslations('workforce.page');
   const tAgentOps = useTranslations('agentOps');
+  const tHire = useTranslations('agentCheckout');
   const { tenant } = useAuth();
   const router = useRouter();
   const tenantId = tenant?.id != null ? Number(tenant.id) : undefined;
@@ -60,8 +62,29 @@ function WorkforcePageInner() {
           <h1 className="page-title" style={{ margin: 0 }}>{t('title')}</h1>
           <p className="page-sub" style={{ fontSize: 'var(--font-size-small)', color: 'var(--muted)', margin: '4px 0 0' }}>{subtitle}</p>
         </div>
-        {/* Message the broader team — the tenant-wide team chat (humans + agents). */}
-        <TeamChatButton variant="labeled" />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          {/* The buying door. A standalone route rather than a ?tab= (like
+              /workforce/plan) because the payment processor redirects back to a
+              fixed path with its own query string — see AgentCheckoutPanel. */}
+          <Link
+            href="/workforce/hire"
+            style={{
+              padding: '6px 14px',
+              fontSize: 'var(--font-size-small)',
+              fontWeight: 600,
+              color: 'var(--text-primary)',
+              background: 'var(--bg-base)',
+              border: '1px solid var(--border-subtle)',
+              borderRadius: 'var(--radius-md)',
+              textDecoration: 'none',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {tHire('pageTitle')}
+          </Link>
+          {/* Message the broader team — the tenant-wide team chat (humans + agents). */}
+          <TeamChatButton variant="labeled" />
+        </div>
       </div>
 
       {tab === 'roles' ? (

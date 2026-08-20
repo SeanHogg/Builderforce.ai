@@ -128,18 +128,48 @@ export interface TicketReadiness {
 }
 
 /**
+ * TICKET KINDS whose deliverable is never a branch.
+ *
+ * `epic` delegates to children rather than producing directly. `product` is a scope
+ * brief a Product-Manager agent authors, and `design` is a UI/UX design or design review
+ * (both migration 0293, both publishable to the Gig Marketplace) — their deliverable is
+ * the document or the design, and neither can ever satisfy a "where is the branch?"
+ * check. Their absence from this set is what let the CONDUCT pass return a finished
+ * design brief to implementation, whereupon it re-ran, reached review with the same
+ * (correct) deliverable, and was returned again — bounded only by stall triage's
+ * 3-attempt escalation.
+ */
+const NON_CODE_TASK_TYPES: ReadonlySet<string> = new Set(['epic', 'product', 'design']);
+
+/**
+ * ACTION TYPES that are explicitly not code work.
+ *
+ * `docs` is the explicit non-code classification: its intended deliverable is the
+ * document itself, unlike a coding ticket that happens to have produced only a PRD.
+ * `analysis` / `provisioning` / `decision` are the spec-shaped remainder of
+ * {@link ACTION_TYPES}. Anything not listed here still has to MAP to a producing role
+ * below, so `other` and an unset action type are non-code by construction.
+ */
+const NON_CODE_ACTION_TYPES: ReadonlySet<string> = new Set(['docs', 'analysis', 'provisioning', 'decision']);
+
+/**
  * Does this ticket's shape imply a code deliverable?
  *
  * Reuses `producerRoleForActionType` rather than re-listing action types: if the work
  * maps to a PRODUCING role (developer / qa-tester / tech-writer / devops) then it is
- * meant to yield a branch. An `other`/unclassified ticket, and an Epic (which delegates
- * to children rather than producing directly), do not.
+ * meant to yield a branch. An `other`/unclassified ticket does not, and neither does a
+ * ticket whose KIND is non-code (see {@link NON_CODE_TASK_TYPES}).
+ *
+ * BOTH axes are consulted, and that is the point. The classification used to be
+ * action-type-first with `epic` as the only task-type exception, so a spec-shaped ticket
+ * carrying a coding action type (the common shape for a `product`/`design` brief, which
+ * inherits its action type from the work it describes) was judged code-bearing and
+ * bounced out of review with nothing to fix. The ticket KIND is the stronger signal
+ * about what the deliverable IS, so it decides first.
  */
 export function expectsCodeDeliverable(taskType: string | null, actionType: string | null): boolean {
-  if (taskType === 'epic') return false;
-  // `docs` is the explicit non-code classification. Its intended deliverable is the
-  // document itself, unlike a coding ticket that happens to have produced only a PRD.
-  if (actionType === 'docs' || actionType === 'analysis' || actionType === 'provisioning' || actionType === 'decision') return false;
+  if (taskType && NON_CODE_TASK_TYPES.has(taskType)) return false;
+  if (actionType && NON_CODE_ACTION_TYPES.has(actionType)) return false;
   return producerRoleForActionType(actionType) != null;
 }
 

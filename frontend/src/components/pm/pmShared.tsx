@@ -1,6 +1,6 @@
 'use client';
 
-import type { CSSProperties, ReactNode } from 'react';
+import { useEffect, useRef, type CSSProperties, type ReactNode } from 'react';
 import { InsightStat } from '@/components/dashboard/InsightStat';
 
 /**
@@ -35,6 +35,46 @@ export function PmCard({ title, action, children }: { title: string; action?: Re
         <h3 style={{ fontSize: '1rem', fontWeight: 700, margin: 0 }}>{title}</h3>
         {action}
       </div>
+      {children}
+    </div>
+  );
+}
+
+/**
+ * A card the URL can point AT.
+ *
+ * A deep-link that only selects the right TAB has not opened anything — the user still
+ * has to find the card among dozens. This wrapper gives one item a stable DOM id, rings
+ * it, and scrolls it into view when the link names it, so "Open" on a chat-created OKR
+ * lands on that OKR.
+ *
+ * The ring is a token-coloured `outline` (not a border) so it never reflows the card in
+ * either theme, and `scrollMarginTop` keeps the ringed card clear of the sticky app
+ * header. Motion respects the user's reduced-motion preference.
+ */
+export function FocusTarget({ id, active, children }: { id: string; active: boolean; children: ReactNode }) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!active || !ref.current) return;
+    const reduce = typeof window !== 'undefined'
+      && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    ref.current.scrollIntoView({ block: 'center', behavior: reduce ? 'auto' : 'smooth' });
+  }, [active]);
+  return (
+    <div
+      id={id}
+      ref={ref}
+      style={{
+        scrollMarginTop: 80,
+        ...(active
+          ? {
+              outline: '2px solid var(--accent)',
+              outlineOffset: 4,
+              borderRadius: 'var(--radius-lg)',
+            }
+          : null),
+      }}
+    >
       {children}
     </div>
   );

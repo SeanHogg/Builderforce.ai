@@ -188,7 +188,7 @@ async function applyBuildOutcome(
         const be = await fetchBuildError(env, {
           provider: resolved.repo.provider, host: resolved.repo.host,
           owner: resolved.repo.owner, repo: resolved.repo.repo, token: resolved.token,
-          runId: evt.runId, runUrl: evt.targetUrl,
+          runId: evt.runId, runUrl: evt.targetUrl, sha: evt.sha,
         });
         buildError = be.summary;
       }
@@ -333,7 +333,7 @@ async function ingestDesignerEvent(
         const be = await fetchBuildError(env, {
           provider: resolved.repo.provider, host: resolved.repo.host,
           owner: resolved.repo.owner, repo: resolved.repo.repo, token: resolved.token,
-          runId: evt.runId, runUrl: evt.targetUrl,
+          runId: evt.runId, runUrl: evt.targetUrl, sha: evt.sha,
         });
         buildError = be.summary;
       }

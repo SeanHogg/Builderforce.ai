@@ -41,6 +41,7 @@ import { enqueueBoardPush } from '../boardsync/outbound';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { advertisedName } from '../llm/toolNaming';
+import { taskCreatedHook } from '../task/taskCreationHook';
 
 /**
  * The live-room key for an incident's war room.
@@ -192,7 +193,7 @@ export class IncidentService {
   private readonly tasks: TaskService;
 
   constructor(private readonly db: Db) {
-    this.tasks = new TaskService(new TaskRepository(db), new ProjectRepository(db));
+    this.tasks = new TaskService(new TaskRepository(db), new ProjectRepository(db), undefined, undefined, undefined, undefined, undefined, taskCreatedHook(db));
   }
 
   /** Most-recently-updated project for the tenant (a home for the board task). */

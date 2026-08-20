@@ -22,6 +22,9 @@ import { reportCaughtError } from '../../application/observability/caughtErrorRe
  *   POST   /:id/page               page on-call now                            (MANAGER+)
  *   POST   /:id/war-room           open the on-call war-room chat              (MEMBER+)
  *   POST   /:id/triage             dispatch the Incident Manager agent         (MANAGER+)
+ *   GET    /:id/whys               the stored 5-Why ladder                     (MEMBER+)
+ *   PUT    /:id/whys               replace the whole 5-Why ladder              (MANAGER+)
+ *   GET    /:id/dependency-graph   derived RCA topology {nodes, edges}         (MEMBER+)
  * On-call:   /on-call/rotations…            (list MEMBER+, writes MANAGER+)
  * Escalation:/escalation/policies…          (list MEMBER+, writes MANAGER+)
  * Contacts:  /contacts…                     (list MEMBER+, writes MANAGER+)
@@ -32,8 +35,10 @@ import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
 import { businessContacts, workflows, workflowDefinitions } from '../../infrastructure/database/schema';
 import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
-import { incidentVersionKey } from '../../application/insights/versionKeys';
+import { incidentVersionKey, monitoringVersionKey } from '../../application/insights/versionKeys';
 import { IncidentService, incidentRoomKey, type IncidentSeverity, type IncidentStatus } from '../../application/incident/IncidentService';
+import { PostmortemWhyService, type WhyStepInput } from '../../application/incident/PostmortemWhyService';
+import { loadIncidentDependencyGraph } from '../../application/incident/incidentDependencyGraph';
 import { relayToRoom } from './realtimeRelay';
 import { prodIncidents } from '../../infrastructure/database/schema';
 import { OnCallService, type RotationKind } from '../../application/incident/OnCallService';
@@ -296,6 +301,56 @@ export function createIncidentRoutes(db: Db): Hono<HonoEnv> {
     await invalidate(c, tenantId);
     return c.json(res, 201);
   });
+  // ── 5-Why ladder (migration 1072) ────────────────────────────────────────────
+  // The ordered causal chain behind the RCA. Read is MEMBER+ like the timeline;
+  // the write is MANAGER+ like every other RCA write on this router.
+  router.get('/:id/whys', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const incidentId = c.req.param('id');
+    const ver = await getCacheVersion(c.env, incidentVersionKey(tenantId));
+    const whys = await getOrSetCached(c.env, `incidents:whys:${tenantId}:${incidentId}:v:${ver}`,
+      () => new PostmortemWhyService(db).listChain(tenantId, incidentId));
+    return c.json({ whys });
+  });
+  // PUT, not POST: the ladder is replaced as a UNIT. A per-step endpoint would let a
+  // client leave why₄ answering a why₃ that no longer exists, and would need a
+  // renumbering pass after every delete — see PostmortemWhyService.
+  router.put('/:id/whys', requireRole(TenantRole.MANAGER), async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const b = (await c.req.json().catch(() => ({}))) as { whys?: WhyStepInput[] };
+    if (!Array.isArray(b.whys)) return c.json({ error: 'whys must be an array' }, 400);
+    const userId = c.get('userId') as string | undefined;
+    const whys = await new PostmortemWhyService(db).replaceChain(tenantId, c.req.param('id'), b.whys, {
+      actorRef: `u:${userId ?? 'system'}`,
+      createdBy: userId ?? null,
+    });
+    await invalidate(c, tenantId);
+    return c.json({ whys });
+  });
+
+  /**
+   * The derived RCA topology: implicated change → system → monitor → incident, with
+   * the system's prior incidents hanging off it. Assembled from rows the platform
+   * already holds (see incidentDependencyGraph) rather than anything typed into the
+   * post-mortem, which is what makes it worth drawing at all.
+   *
+   * Folded on BOTH version tokens: it reads incidents and monitors, so a monitor
+   * breach must age it out too — keyed on the incident token alone it would keep
+   * serving a graph missing the monitor that just fired.
+   */
+  router.get('/:id/dependency-graph', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const incidentId = c.req.param('id');
+    const [iv, mv] = await Promise.all([
+      getCacheVersion(c.env, incidentVersionKey(tenantId)),
+      getCacheVersion(c.env, monitoringVersionKey(tenantId)),
+    ]);
+    const graph = await getOrSetCached(c.env, `incidents:depgraph:${tenantId}:${incidentId}:v:${iv}:${mv}`,
+      () => loadIncidentDependencyGraph(db, tenantId, incidentId));
+    if (!graph) return c.json({ error: 'Incident not found' }, 404);
+    return c.json(graph);
+  });
+
   router.post('/:id/triage', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const detail = await new IncidentService(db).getIncident(tenantId, c.req.param('id'));

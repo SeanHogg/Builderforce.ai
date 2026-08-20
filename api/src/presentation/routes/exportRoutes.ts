@@ -30,6 +30,7 @@ import { consumeGuestAllowance } from '../../application/guest/guestDailyCounter
 import { guestIdentityFromRequest } from '../../application/guest/guestToken';
 import { GUEST_EXPORT_LIMITS } from '../../domain/tenant/PlanLimits';
 import { markdownToDocx, type DocxTheme } from '../../application/office/docxWriter';
+import { DocxSourceUnusableError, markdownIntoDocxSource } from '../../application/office/docxSourceWriter';
 import { markdownToPdf, type PdfTheme } from '../../application/office/pdfWriter';
 import { markdownToPptx } from '../../application/office/slidesRenderer';
 import { MAX_XLSX_COLUMNS, MAX_XLSX_ROWS, rowsToXlsx, type XlsxCell } from '../../application/office/xlsxWriter';
@@ -43,7 +44,7 @@ const PDF_CT = 'application/pdf';
 /** Cap the payload so one chat message can't turn into an unbounded render. */
 const MAX_MARKDOWN_CHARS = 200_000;
 
-interface ExportBody { markdown?: string; title?: string; theme?: unknown; subtitle?: string; footer?: string }
+interface ExportBody { markdown?: string; title?: string; theme?: unknown; subtitle?: string; footer?: string; sourceFileKey?: string }
 interface SheetBody { columns?: unknown; rows?: unknown; title?: string }
 
 /** Validate + normalize the shared request body (markdown + a filename-safe title). */
@@ -101,6 +102,33 @@ function readSheet(body: SheetBody): { error: string } | { columns: string[]; ro
   return { columns, rows, title, name: slugify(title || 'sheet', { maxLen: 60, fallback: 'sheet' }) };
 }
 
+/** Ceiling on a source container the writer will open. Above this the export
+ *  regenerates rather than pulling an unbounded object into Worker memory. */
+const MAX_DOCX_SOURCE_BYTES = 20 * 1024 * 1024;
+
+/**
+ * The `.docx` a document was IMPORTED from, when it has one.
+ *
+ * `'foreign'` is a real authorization failure and must refuse — a storage key is
+ * a guessable string, and handing back somebody else's document because they
+ * pasted its key is the one outcome this route cannot have. Everything else —
+ * no key, no tenant (a signed guest, who has no R2 of their own), storage that
+ * is not configured, an object that has since been swept — resolves to `null`
+ * and the export regenerates. A missing source is a lost SOURCE, not a lost
+ * download.
+ */
+async function docxSourceBytes(c: Context<HonoEnv>, key: string | undefined): Promise<Uint8Array | null | 'foreign'> {
+  const sourceFileKey = (key ?? '').trim();
+  if (!sourceFileKey) return null;
+  const tenantId = c.get('tenantId') as number | undefined;
+  if (!tenantId) return null;
+  if (!sourceFileKey.startsWith(`${tenantId}/`)) return 'foreign';
+  if (!c.env.UPLOADS) return null;
+  const stored = await c.env.UPLOADS.get(sourceFileKey);
+  if (!stored || stored.size > MAX_DOCX_SOURCE_BYTES) return null;
+  return new Uint8Array(await stored.arrayBuffer());
+}
+
 function fileResponse(bytes: Uint8Array, filename: string, contentType: string): Response {
   return new Response(bytes as unknown as BodyInit, {
     headers: {
@@ -154,10 +182,31 @@ export function createExportRoutes(): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', exportAccess);
 
+  /**
+   * TWO PATHS, AND THE DIFFERENCE IS WHETHER THIS DOCUMENT EVER HAD A SOURCE.
+   *
+   * A document that arrived as a dropped `.docx` is EDITED: its own package is
+   * reopened and the new body is written into `word/document.xml`, so what comes
+   * back keeps the theme, the numbering and the section layout of the file the
+   * person started from. A document that was written here — a Brain reply, a
+   * canvas note — has no package to edit and is REGENERATED from the theme.
+   *
+   * A source that cannot be opened falls back to regenerating rather than
+   * failing: the export must always end with a real file.
+   */
   router.post('/docx', async (c) => {
     const body = await c.req.json<ExportBody>();
     const parsed = readBody(body);
     if ('error' in parsed) return c.json({ error: parsed.error }, 400);
+    const source = await docxSourceBytes(c, body.sourceFileKey);
+    if (source === 'foreign') return c.json({ error: 'That document does not belong to this workspace' }, 403);
+    if (source) {
+      try {
+        return fileResponse(markdownIntoDocxSource(source, parsed.markdown, parsed.title || undefined), `${parsed.name}.docx`, DOCX_CT);
+      } catch (error) {
+        if (!(error instanceof DocxSourceUnusableError)) throw error;
+      }
+    }
     const bytes = markdownToDocx(parsed.markdown, parsed.title || undefined, readDocxTheme(body.theme));
     return fileResponse(bytes, `${parsed.name}.docx`, DOCX_CT);
   });

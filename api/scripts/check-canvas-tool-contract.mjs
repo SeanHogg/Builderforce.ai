@@ -59,6 +59,13 @@ const CANVAS_FILES = [
   path.resolve('..', 'frontend', 'src', 'lib', 'canvasDataRoomTools.ts'),
   path.resolve('..', 'frontend', 'src', 'lib', 'canvasDocumentTemplateTools.ts'),
   path.resolve('..', 'frontend', 'src', 'lib', 'canvasLegalDocumentTools.ts'),
+  // The legal seat's RECORD projection (`canvas_sync_legal`), added with the three
+  // record kinds it fills. Listed the same day it was written, because a family absent
+  // from this array makes the guard pass VACUOUSLY — its tools are unclassified, which
+  // means they are advertised to a guest board rather than account-gated, and nothing
+  // says so. That is exactly how the five `canvas_legal_document_*`/`canvas_request_
+  // signature` tools three lines up went a release without rule 1 applying to them.
+  path.resolve('..', 'frontend', 'src', 'lib', 'canvasLegalRecordTools.ts'),
   path.resolve('..', 'frontend', 'src', 'lib', 'canvasSignatureTools.ts'),
   path.resolve('..', 'frontend', 'src', 'lib', 'canvasSellMotionTools.ts'),
 ];

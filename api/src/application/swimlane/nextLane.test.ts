@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolveNextLaneKey } from './nextLane';
+import { resolveNextLaneKey, resolveRunningLaneKey } from './nextLane';
 
 const defaultBoard = [
   { key: 'backlog', position: 0 },
@@ -109,5 +109,46 @@ describe('resolveNextLaneKey — parked lanes', () => {
     const shuffled = [collided[2]!, collided[0]!, collided[3]!, collided[1]!];
     expect(resolveNextLaneKey(collided, 'backlog')).toBe(resolveNextLaneKey(shuffled, 'backlog'));
     expect(resolveNextLaneKey(collided, 'backlog')).toBe('ready'); // 'ready' < 'todo'
+  });
+});
+
+describe('resolveRunningLaneKey — the RUNNING hop, driven by the board', () => {
+  const board = [
+    { key: 'backlog', position: 0 },
+    { key: 'todo', position: 1 },
+    { key: 'ready', position: 2 },
+    { key: 'in_progress', position: 3 },
+    { key: 'in_review', position: 4 },
+    { key: 'blocked', position: 5, isParking: true },
+    { key: 'done', position: 6, isTerminal: true },
+  ];
+
+  it('prefers the lane the run was DISPATCHED FOR over the in_progress constant', () => {
+    // A run dispatched to serve `ready` keeps the ticket in `ready` — it does not skip
+    // two lanes to land on a constant.
+    expect(resolveRunningLaneKey(board, 'todo', 'ready')).toBe('ready');
+  });
+
+  it('does not move a ticket already in the lane its run serves', () => {
+    expect(resolveRunningLaneKey(board, 'ready', 'ready')).toBeNull();
+  });
+
+  it('falls back to in_progress when the run names no lane', () => {
+    expect(resolveRunningLaneKey(board, 'backlog', null)).toBe('in_progress');
+  });
+
+  it('never rewinds: a run dispatched for an EARLIER lane leaves the ticket put', () => {
+    expect(resolveRunningLaneKey(board, 'in_review', 'todo')).toBeNull();
+  });
+
+  it('moves nothing on a board with no in_progress lane and no dispatched lane', () => {
+    // The defect this closes: writing `in_progress` here put the ticket in a status
+    // matching no column, so it vanished from the board the moment work started.
+    const custom = [
+      { key: 'intake', position: 0 }, { key: 'spec', position: 1 },
+      { key: 'build', position: 2 }, { key: 'ship', position: 3, isTerminal: true },
+    ];
+    expect(resolveRunningLaneKey(custom, 'intake', null)).toBeNull();
+    expect(resolveRunningLaneKey(custom, 'intake', 'build')).toBe('build');
   });
 });

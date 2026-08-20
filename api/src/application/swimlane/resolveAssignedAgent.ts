@@ -11,6 +11,16 @@
  *   registered → `agents` row (endpoint-based; dispatched as a cloud runtime)
  *   workforce  → `ide_agents` row: runtime_support/preferred_runtime → runtime,
  *                base_model → model (unless overridden)
+ *
+ * A WORKFORCE AGENT IS RESOLVABLE IF THE WORKSPACE OWNS IT **OR HIRED IT**. The
+ * lookup used to require `ide_agents.tenant_id = tenantId`, which is never true
+ * of a marketplace agent: its row belongs to the seller. So an agent a workspace
+ * had paid for could be shown, hired and counted, and then failed to assign with
+ * `Agent not found in registry` — the money moved and the agent could not be
+ * given work. The hire in `agent_purchases` (`unhired_at IS NULL`) is the second
+ * half of the predicate, and it is checked HERE at assign time rather than at
+ * dispatch time so a released agent cannot be freshly assigned while the
+ * assignments already compiled keep the fields they resolved to.
  */
 import { and, eq, sql } from 'drizzle-orm';
 import { agents } from '../../infrastructure/database/schema';
@@ -69,10 +79,22 @@ export async function resolveAssignedAgent(
   }
 
   // workforce: ide_agents is a raw-SQL table (not in the Drizzle schema).
+  // OWNED (tenant_id = caller) OR ACTIVELY HIRED (an agent_purchases row this
+  // workspace still holds). The EXISTS is a semi-join on the unique index
+  // (tenant_id, agent_id), so it costs an index probe, not a scan; `status` is
+  // checked on the hired branch because a seller may have retired the agent
+  // since the hire, and dispatching a retired agent is a run that cannot start.
   const result = await db.execute(sql`
     SELECT name, base_model, runtime_support, preferred_runtime
-    FROM ide_agents
-    WHERE id = ${opts.agentRef} AND tenant_id = ${tenantId}
+    FROM ide_agents a
+    WHERE a.id = ${opts.agentRef}
+      AND (
+        a.tenant_id = ${tenantId}
+        OR (a.status = 'active' AND EXISTS (
+          SELECT 1 FROM agent_purchases p
+          WHERE p.agent_id = a.id AND p.tenant_id = ${tenantId} AND p.unhired_at IS NULL
+        ))
+      )
     LIMIT 1
   `);
   const row = (result.rows as Array<{

@@ -15,6 +15,7 @@ import {
   renderResumeMarkdown,
   resumeDocumentFromJson,
   resumeDocumentFromNode,
+  resumeFamilyFromNode,
   resumeTemplateFromDescriptor,
   resumeTemplateVariants,
   selectResumeRevision,
@@ -29,10 +30,35 @@ const ids = (...values: string[]) => {
 };
 
 describe('Canvas resume lineage', () => {
-  it('attributes the built-in résumé catalog to Hired.VIDEO', () => {
+  it('attributes the built-in résumé catalog to this platform, not the retired vendor', () => {
     expect(RESUME_TEMPLATES).toHaveLength(12);
-    expect(RESUME_TEMPLATES.every((template) => template.firstParty && template.creator === 'Hired.VIDEO')).toBe(true);
+    expect(RESUME_TEMPLATES.every((template) => template.firstParty && template.creator === 'Builderforce.ai')).toBe(true);
+    expect(RESUME_TEMPLATES.some((template) => template.id === 'standard')).toBe(true);
+    expect(RESUME_TEMPLATES.some((template) => String(template.id).startsWith('hired'))).toBe(false);
   });
+  it('follows the retired `hired-default` id to `standard` instead of dropping the revision', () => {
+    // Pre-rename shape, exactly as it sits in `content.resumeFamily` and in a
+    // guest board's local storage. Before the alias the strict revision filter
+    // rejected it, which discarded the ORIGINAL and returned a null family —
+    // i.e. the résumé vanished.
+    const legacy = resumeFamilyFromNode({
+      kind: 'resume',
+      resumeFamily: {
+        version: 1, privacy: 'private', archivedAt: null, watched: false,
+        defaultTemplateId: 'hired-default', viewZoom: 75, previewMode: 'continuous',
+        originalRevisionId: 'r1', activeRevisionId: 'r1', masterRevisionId: 'r1',
+        revisions: [{
+          id: 'r1', kind: 'original', title: 'Original', markdown: '# Ada',
+          templateId: 'hired-default', sourceRevisionId: null,
+          createdAt: '2026-08-11', updatedAt: '2026-08-11',
+        }],
+      },
+    } as never);
+    expect(legacy).not.toBeNull();
+    expect(legacy!.defaultTemplateId).toBe('standard');
+    expect(legacy!.revisions[0]!.templateId).toBe('standard');
+  });
+
   it('validates and migrates Hired v1.0-v1.2 template descriptors', () => {
     const descriptor = resumeTemplateFromDescriptor({
       id: 'actor-headshot-hero', name: 'Actor', version: '1.2', documentMode: 'hero',

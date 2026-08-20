@@ -39,6 +39,7 @@ export interface NamedArtifact {
 export interface AgentManifest {
   skills: NamedArtifact[];
   personas: NamedArtifact[];
+  /** Always empty since migration 0982 retired `artifact_type = 'content'`. */
   content: NamedArtifact[];
 }
 
@@ -118,9 +119,10 @@ export async function loadAgentManifests(
         m.skills.push({ slug: r.artifactSlug, name: skillName.get(r.artifactSlug) ?? null });
       } else if (r.artifactType === ArtifactType.PERSONA) {
         m.personas.push({ slug: r.artifactSlug, name: personaName.get(r.artifactSlug) ?? null });
-      } else if (r.artifactType === ArtifactType.CONTENT) {
-        m.content.push({ slug: r.artifactSlug, name: null });
       }
+      // No 'content' branch: migration 0982 retired that artifact type, so
+      // `m.content` stays the empty array `ensure` seeded it with. The FIELD
+      // survives because the workforce manifest panel renders it.
     }
     for (const m of Object.values(manifests)) {
       m.skills.sort(byDisplay);

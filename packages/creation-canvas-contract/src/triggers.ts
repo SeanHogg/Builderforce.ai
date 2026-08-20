@@ -221,7 +221,11 @@ export const DEADLINE_FIELD_NAMES: readonly string[] = [
   // founder is ambushed by, and it is the one an `equityGrant` carries. Both are written
   // onto their card by the equity projection rather than authored, so the sweep — which
   // reads saved rows and cannot run a derivation — sees the same date the card shows.
-  'dueAt', 'renewsAt', 'closeTarget', 'cliffAt', 'maturesAt', 'reviewAt', 'deadlineAt', 'expiresAt',
+  // `nextActionAt` is a `legalMatter`'s filing deadline, hearing or response-by. It sits
+  // after the ownership dates and before `expiresAt` for the same reason `renewsAt` does:
+  // a matter that also carries an expiry is judged against the ACTION, and the expiry is
+  // the consequence of missing it rather than a second thing to watch.
+  'dueAt', 'renewsAt', 'closeTarget', 'cliffAt', 'maturesAt', 'reviewAt', 'deadlineAt', 'nextActionAt', 'expiresAt',
 ];
 
 /**

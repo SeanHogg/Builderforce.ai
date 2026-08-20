@@ -32,6 +32,18 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * UNATTRIBUTABLE — and the classifier deliberately waits on those rather than
  * guessing. Failing a live run is far worse than taking the 20-minute backstop.
  *
+ * That wait was once the NORMAL outcome for a whole cohort of repos, because the
+ * only way to get the current workflow onto one was an operator pressing "Enable
+ * agent runs" again. `agentWorkflowRefresh` (migration 1093) now re-commits it on
+ * its own, so the cohort drains rather than persisting.
+ *
+ * Two things keep the remaining wait rare rather than sticky. First, only runs
+ * created AT OR AFTER the dispatch count as unattributable: a repo's older
+ * anonymous runs sit in the last-50 window indefinitely, and counting them would
+ * wedge every future verdict at `wait` long after the refresh landed. Second, a
+ * run that predates its own dispatch cannot be that dispatch's run — so excluding
+ * it is not a heuristic, it is a fact about time.
+ *
  * ── Why it is not cached ─────────────────────────────────────────────────────
  * Every other GitHub read on this surface goes through `getOrSetCached`
  * (workflow presence is read on the dispatch hot path and changes only on write).
@@ -83,6 +95,40 @@ export interface ActionsRunView {
   conclusion: string | null;
   displayTitle: string | null;
   htmlUrl: string | null;
+  /** `created_at` as epoch ms, or null when GitHub omitted/garbled it. Null is
+   *  treated as "could be recent", because dropping a run we cannot date would
+   *  turn an unknown into a `fail`. */
+  createdAtMs: number | null;
+}
+
+/**
+ * Clock skew allowance between our `executions.created_at` and GitHub's
+ * `created_at` on the run that dispatch produced.
+ *
+ * GitHub stamps the run when it accepts the dispatch, a moment AFTER we wrote the
+ * execution row — so in principle no allowance is needed. In practice the two
+ * clocks are independent and a run that is genuinely ours can carry a timestamp a
+ * little before our row's. A minute is far shorter than the 6-minute grace window,
+ * so it cannot let an OLD anonymous run back in, and generous enough that a real
+ * run is never excluded by drift.
+ */
+export const ACTIONS_RUN_CLOCK_SKEW_MS = 60_000;
+
+/**
+ * Anonymous runs that could plausibly be this dispatch's: unattributable AND not
+ * older than the dispatch itself.
+ *
+ * The date filter is what stops the legacy cohort being sticky. A repo that ran
+ * the pre-`run-name` workflow keeps those anonymous runs in the last-50 dispatch
+ * window for as long as it takes 50 new runs to push them out; counting them
+ * would hold every verdict on that repo at `wait` forever, INCLUDING verdicts
+ * about executions dispatched long after the workflow was refreshed.
+ */
+export function countBlockingUnattributedRuns(runs: ActionsRunView[], dispatchedAtMs: number): number {
+  const floor = dispatchedAtMs - ACTIONS_RUN_CLOCK_SKEW_MS;
+  return runs.filter(
+    (r) => parseExecutionIdFromRunName(r.displayTitle) == null && (r.createdAtMs == null || r.createdAtMs >= floor),
+  ).length;
 }
 
 /** A run GitHub has scheduled but not finished. `waiting`/`requested`/`pending`
@@ -105,8 +151,9 @@ export function classifyActionsDispatch(args: {
   /** The workflow run whose `display_title` carries this execution's id, if any. */
   matched: ActionsRunView | null;
   /** How many runs of the agent workflow exist that we could NOT attribute to an
-   *  execution (an older workflow with no `run-name`). Non-zero means the repo is
-   *  running the legacy workflow, so "no match" proves nothing. */
+   *  execution AND are new enough to be this dispatch's — see
+   *  {@link countBlockingUnattributedRuns}. Non-zero means the repo produced an
+   *  anonymous run since we dispatched, so "no match" proves nothing. */
   unattributedRuns: number;
   /** Why the runs list could not be read, when it could not. */
   listError: { code: string; reason: string } | null;
@@ -134,11 +181,14 @@ export function classifyActionsDispatch(args: {
     return { action: 'fail', reason: githubActionsRunEndedReason(args.matched.conclusion, args.matched.htmlUrl) };
   }
 
-  // No run carries this execution's id. Conclusive ONLY if every run we can see is
-  // attributable — otherwise the repo is on the pre-`run-name` workflow and its
-  // runs are anonymous, so this execution's run may well be among them.
+  // No run carries this execution's id. Conclusive ONLY if every run since the
+  // dispatch is attributable — otherwise the repo produced an anonymous run in
+  // that window (it is still on a pre-`run-name` workflow, or was refreshed
+  // between the dispatch and now), so this execution's run may be among them.
+  // `agentWorkflowRefresh` drains that cohort; this branch is a transitional
+  // state per repo, not a standing one.
   if (args.unattributedRuns > 0) {
-    return { action: 'wait', why: 'repo has runs from a workflow without run-name — cannot attribute' };
+    return { action: 'wait', why: 'an un-named run appeared since dispatch — cannot attribute until this repo is refreshed' };
   }
   return { action: 'fail', reason: GITHUB_ACTIONS_NEVER_SCHEDULED_REASON };
 }
@@ -159,6 +209,8 @@ interface StrandedRow {
   taskId: number | null;
   payload: string | null;
   cloudAgentRef: string | null;
+  /** When we dispatched — the floor for "a run new enough to be this one". */
+  createdAtMs: number;
 }
 
 /**
@@ -192,7 +244,7 @@ export async function reconcileGithubActionsRuns(env: Env, nowMs = Date.now()): 
     }
 
     const matched = runs.runs.find((r) => parseExecutionIdFromRunName(r.displayTitle) === row.id) ?? null;
-    const unattributedRuns = runs.runs.filter((r) => parseExecutionIdFromRunName(r.displayTitle) == null).length;
+    const unattributedRuns = countBlockingUnattributedRuns(runs.runs, row.createdAtMs);
 
     const verdict = classifyActionsDispatch({ matched, unattributedRuns, listError: runs.error });
     if (verdict.action === 'wait') {
@@ -225,6 +277,7 @@ async function loadStrandedDispatches(db: Db, nowMs: number): Promise<StrandedRo
       taskId: executions.taskId,
       payload: executions.payload,
       cloudAgentRef: executions.cloudAgentRef,
+      createdAt: executions.createdAt,
     })
     .from(executions)
     .where(and(
@@ -244,7 +297,17 @@ async function loadStrandedDispatches(db: Db, nowMs: number): Promise<StrandedRo
 
   return rows
     .filter((r) => parseExecutor(r.payload) === 'github_actions')
-    .map((r) => ({ id: r.id, tenantId: r.tenantId, taskId: r.taskId, payload: r.payload, cloudAgentRef: r.cloudAgentRef }));
+    .map((r) => ({
+      id: r.id,
+      tenantId: r.tenantId,
+      taskId: r.taskId,
+      payload: r.payload,
+      cloudAgentRef: r.cloudAgentRef,
+      // A row cannot reach this sweep without a createdAt (the grace/reaper window
+      // is expressed on it), but the column is nullable in the schema — falling
+      // back to `nowMs` keeps every anonymous run in scope, which is the safe side.
+      createdAtMs: r.createdAt ? new Date(r.createdAt).getTime() : nowMs,
+    }));
 }
 
 /** List the agent workflow's `workflow_dispatch` runs for a repo. Never throws —
@@ -282,12 +345,21 @@ async function listAgentRuns(
     conclusion: str(r.conclusion),
     displayTitle: str(r.display_title) ?? str(r.name),
     htmlUrl: str(r.html_url),
+    createdAtMs: epochMs(r.created_at),
   }));
   return { runs, error: null };
 }
 
 function str(v: unknown): string | null {
   return typeof v === 'string' && v.trim() ? v.trim() : null;
+}
+
+/** GitHub's ISO-8601 `created_at` as epoch ms; null when absent or unparseable. */
+function epochMs(v: unknown): number | null {
+  const s = str(v);
+  if (!s) return null;
+  const t = Date.parse(s);
+  return Number.isFinite(t) ? t : null;
 }
 
 /**

@@ -44,7 +44,7 @@ import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import {
-  executions, managerStallWatch, swimlaneAgentAssignments, swimlanes, tasks, ticketParticipants,
+  executions, managerStallWatch, swimlanes, tasks, ticketParticipants,
 } from '../../infrastructure/database/schema';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
@@ -61,6 +61,7 @@ import { MAX_CONSECUTIVE_AUTORUN_FAILURES, type AutoRunReason } from '../swimlan
 import { diagnoseStall, STALL_AFTER_MS, type StallCause } from './stallTriage';
 import { getEffectiveManagerPolicy } from './managerPolicyStore';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
+import { laneAgentAssignments, laneJoinOn } from '../swimlane/laneAgentAssignments';
 
 const CENSUS_TTL_SECONDS = 120;
 
@@ -329,10 +330,10 @@ export async function loadCensusFacts(
         .from(swimlanes).where(scopedToTenant(swimlanes, args.tenantId, eq(swimlanes.boardId, board.id))).catch(() => [])
       : Promise.resolve([] as Array<{ id: string; key: string; gate: string; isTerminal: boolean }>),
     board
-      ? db.selectDistinct({ swimlaneId: swimlaneAgentAssignments.swimlaneId })
-        .from(swimlaneAgentAssignments)
-        .innerJoin(swimlanes, eq(swimlanes.id, swimlaneAgentAssignments.swimlaneId))
-        .where(scopedToTenant(swimlaneAgentAssignments, args.tenantId, eq(swimlanes.boardId, board.id))).catch(() => [])
+      ? db.selectDistinct({ swimlaneId: laneAgentAssignments.scopeId })
+        .from(laneAgentAssignments)
+        .innerJoin(swimlanes, laneJoinOn(swimlanes.id))
+        .where(scopedToTenant(laneAgentAssignments, args.tenantId, eq(swimlanes.boardId, board.id))).catch(() => [])
       : Promise.resolve([] as Array<{ swimlaneId: string }>),
     // Trailing failure streak per ticket, in ONE window query: the count of leading
     // `failed` rows before the first run that is not a failure. Doing this per ticket

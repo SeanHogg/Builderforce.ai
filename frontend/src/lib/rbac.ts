@@ -125,6 +125,11 @@ export const CAPABILITIES = {
   'insights.compliance':  'manager',   // CISO: audit / evidence packs
   'insights.autonomy':    'manager',   // Autonomy Health: per-origin lifecycle funnel, hop split & stall gates (mirrors requireRole(MANAGER) on /api/insights/autonomy)
 
+  // OKR lineage: linking a ticket/epic/initiative to an objective. Mirrors
+  // `requireRole(MANAGER)` on `POST /api/pmo/objectives/:id/links` so the ticket-side
+  // picker is disabled — never hidden — for everyone the route would refuse.
+  'pmo.objectives.link':  'manager',
+
   // Feature pages with their own destinations (manager-gated authoring).
   'devex.manage':         'manager',   // author DevEx survey templates & launch campaigns
   'dashboards.manage':    'manager',   // create/edit custom dashboards & widgets
@@ -150,6 +155,13 @@ export const CAPABILITIES = {
   'quality.view':          'developer', // browse error groups + triage status
   'quality.manageSources': 'manager',   // create/rotate/delete ingest sources
   'quality.fix':           'manager',   // dispatch a cloud agent to fix an error
+
+  // The ATS — applications, the stage board, interview kits, decisions and offers. Any
+  // member sees the pipeline; the acts with an external effect on a PERSON (moving them,
+  // recording a decision, drafting and sending an offer) are manager+, mirroring the
+  // requireRole(DEVELOPER)/requireRole(MANAGER) split on /api/ats.
+  'hiring.view':           'developer',
+  'hiring.manage':         'manager',
 
   // FACTS library — structured (subject,predicate,object) knowledge store. Reads
   // open to any member; writes developer+ (mirrors the API requireRole(DEVELOPER)).

@@ -16,6 +16,11 @@ import './founderObjects';
 import './peopleObjects';
 import './hiringObjects';
 import './academicObjects';
+// `nextActionAt` is declared by exactly one kind — `legalMatter` — so the drift guard
+// below cannot see it unless this vocabulary has registered. A name in
+// `DEADLINE_FIELD_NAMES` that no loaded spec flags is indistinguishable from a name no
+// spec flags at all, which is the failure the guard exists to catch.
+import './legalObjects';
 
 describe('numericValue', () => {
   it('reads a plain number', () => {

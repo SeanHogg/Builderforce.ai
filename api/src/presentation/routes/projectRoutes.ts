@@ -1,6 +1,6 @@
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 import { Hono, type Context } from 'hono';
-import { and, count, eq, inArray, max, min, sql } from 'drizzle-orm';
+import { and, count, desc, eq, gte, inArray, max, min, sql } from 'drizzle-orm';
 import { ProjectService } from '../../application/project/ProjectService';
 import { notSystemTask } from '../../application/task/taskScope';
 import { provisionProject } from '../../application/project/provisionProject';
@@ -22,6 +22,8 @@ import { nullableDateParam } from './queryParams';
 import { relayToRoom } from './realtimeRelay';
 import { buildPlanLimitsGuard } from '../middleware/planLimitsGuard';
 import { projectRoomName } from '../../infrastructure/relay/broadcastRoom';
+import { llmUsageLog } from '../../infrastructure/database/schema';
+import { resolveUsageDatabase } from '../../application/llm/usageLedger';
 
 type SourceControlProvider = 'github' | 'bitbucket';
 
@@ -603,6 +605,80 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
       { l1TtlMs: 5_000, kvTtlSeconds: 10 },
     );
     return c.json(model);
+  });
+
+  /**
+   * GET /api/projects/:id/spend?window=today|week|month
+   *
+   * What this project's AI work COST — the number the project page could not show.
+   * Per-project spend has been in the ledger since 0103 and rolled up in
+   * `/api/dashboard/usage`, but only as one row inside an account-wide payload of
+   * every project, user, team and repo — far too much to load to answer "what has
+   * this ticket board cost me". This is that one question, scoped and cached.
+   *
+   * Reads the SAME database the ledger writes to (`resolveUsageDatabase`), which is
+   * the boundary several other readers get wrong: with the operational secret bound,
+   * a primary-database read here would return zero forever.
+   *
+   * BYO rows record cost 0 by design (the tenant's own account paid), so `costUsd` is
+   * platform-funded spend and `byoTokens` reports the rest separately rather than
+   * letting a BYO-heavy project look free.
+   */
+  router.get('/:id/spend', requirePermission(PERMISSIONS.PROJECT_READ), async (c) => {
+    const tenantId = c.get('tenantId');
+    const project = await projectService.getProject(c.req.param('id'), tenantId);
+    const window = c.req.query('window') ?? 'month';
+
+    const windowStart = new Date();
+    windowStart.setUTCHours(0, 0, 0, 0);
+    if (window === 'week') windowStart.setUTCDate(windowStart.getUTCDate() - 6);
+    else if (window === 'month') windowStart.setUTCDate(1);
+
+    // Keyed on the hour so the window boundary can't serve yesterday's totals, and
+    // short-TTL because spend is a number people watch while work runs.
+    const payload = await getOrSetCached(
+      c.env as Env,
+      `project-spend:v1:${tenantId}:${project.id}:${window}:${windowStart.toISOString().slice(0, 13)}`,
+      async () => {
+        const usageDb = resolveUsageDatabase(c.env as Env, db);
+        const where = and(
+          eq(llmUsageLog.tenantId, tenantId),
+          eq(llmUsageLog.projectId, project.id),
+          gte(llmUsageLog.createdAt, windowStart),
+        );
+        const [totals, byModel] = await Promise.all([
+          usageDb.select({
+            totalTokens: sql<number>`COALESCE(SUM(${llmUsageLog.totalTokens}), 0)`,
+            costMc: sql<number>`COALESCE(SUM(${llmUsageLog.costUsdMillicents}), 0)`,
+            requests: sql<number>`COUNT(*)`,
+            byoTokens: sql<number>`COALESCE(SUM(CASE WHEN ${llmUsageLog.byo} THEN ${llmUsageLog.totalTokens} ELSE 0 END), 0)`,
+          }).from(llmUsageLog).where(where),
+          usageDb.select({
+            model: llmUsageLog.model,
+            totalTokens: sql<number>`COALESCE(SUM(${llmUsageLog.totalTokens}), 0)`,
+            costMc: sql<number>`COALESCE(SUM(${llmUsageLog.costUsdMillicents}), 0)`,
+          }).from(llmUsageLog).where(where)
+            .groupBy(llmUsageLog.model)
+            .orderBy(desc(sql`SUM(${llmUsageLog.costUsdMillicents})`))
+            .limit(5),
+        ]);
+        const t = totals[0];
+        return {
+          totalTokens: Number(t?.totalTokens ?? 0),
+          byoTokens: Number(t?.byoTokens ?? 0),
+          requests: Number(t?.requests ?? 0),
+          costUsd: Number(t?.costMc ?? 0) / 100_000,
+          topModels: byModel.map((m) => ({
+            model: m.model,
+            totalTokens: Number(m.totalTokens ?? 0),
+            costUsd: Number(m.costMc ?? 0) / 100_000,
+          })),
+        };
+      },
+      { kvTtlSeconds: 60, l1TtlMs: 30_000 },
+    );
+
+    return c.json({ projectId: project.id, window, windowStart: windowStart.toISOString(), ...payload });
   });
 
   // NOTE: the per-project chat CRUD (`GET/POST /:id/chats`, `GET/PATCH

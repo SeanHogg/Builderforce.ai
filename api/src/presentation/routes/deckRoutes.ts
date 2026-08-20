@@ -11,6 +11,7 @@
  *   DELETE /templates/:id            delete a tenant template             (MANAGER)
  *   POST   /generate                 generate (returns deckId+warnings)   (any member)
  *   GET    /download?template=&quarter=  generate & stream the .pptx      (any member)
+ *   GET    /:id/warnings             the data notes recorded at generation (any member)
  *   GET    /:id/download             stream a previously generated deck   (any member)
  */
 
@@ -20,7 +21,7 @@ import { TenantRole } from '../../domain/shared/types';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { listTemplates, createTemplateFromUpload, deleteTemplate } from '../../application/deck/TemplateLibraryService';
-import { generateDeck, loadGeneratedDeck } from '../../application/deck/DeckService';
+import { generateDeck, loadDeckWarnings, loadGeneratedDeck } from '../../application/deck/DeckService';
 import type { DeckMode } from '../../application/deck/types';
 import { isKeyOwnedByTenant } from '../../domain/shared/r2Keys';
 
@@ -98,11 +99,27 @@ export function createDeckRoutes(db: Db): Hono<HonoEnv> {
     try {
       const result = await generateDeck(db, c.env as Env, { tenantId, userId, mode, templateId, quarter });
       const res = pptxResponse(result.bytes, result.filename);
+      // The deck id travels with the binary so the caller can go and READ the
+      // warnings. Before this it could only learn there were `n` of them and
+      // never which — so "the chart in your uploaded template has five series
+      // and your data has two" was computed, persisted, and shown to nobody.
+      res.headers.set('x-deck-id', result.deckId);
       if (result.warnings.length) res.headers.set('x-deck-warnings', String(result.warnings.length));
       return res;
     } catch (err) {
       return c.json({ error: err instanceof Error ? err.message : 'generation failed' }, 400);
     }
+  });
+
+  // The data notes recorded when a deck was generated — which bindings fell back
+  // and which charts did not match their data. `generateDeck` already persists
+  // them on the `generated_decks` row; nothing ever read them back, so the
+  // streaming download could only ever report a COUNT in a header.
+  router.get('/:id/warnings', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const warnings = await loadDeckWarnings(db, tenantId, c.req.param('id'));
+    if (!warnings) return c.json({ error: 'not found' }, 404);
+    return c.json({ deckId: c.req.param('id'), warnings });
   });
 
   // Stream a previously generated deck.

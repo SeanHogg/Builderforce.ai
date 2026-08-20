@@ -8,7 +8,8 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { CANVAS_FIT_MIN_ZOOM, CanvasCommands, useCanvasCleanLayout } from '@/components/canvas/CanvasCommands';
-import { Canvas3DView, type Canvas3DMove } from '@/components/canvas/Canvas3DView';
+import dynamic from 'next/dynamic';
+import type { Canvas3DMove, Canvas3DViewProps } from '@/components/canvas/Canvas3DView';
 import { Canvas3DControlsProvider, useCanvasThreeD } from '@/components/canvas/canvas3dControls';
 import { applyCanvas3DMoves, canvas3dDepthOffset, type Canvas3DDescriptor } from '@/components/canvas/canvas3d';
 import { pmoApi, type ValueStream, type ValueStreamInitiative, type ValueStreamEdge } from '@/lib/builderforceApi';
@@ -22,6 +23,19 @@ import { PmCard, PmEmpty, PmError } from '@/components/pm/pmShared';
  * so "where is value stuck in the chain" is visible at a glance. Read-only; the
  * dependency math + node progress come pre-computed from /api/pmo/value-stream.
  */
+
+/**
+ * Real WebGL — three.js, react-three-fiber and Rapier's WASM physics — behind a
+ * toggle almost nobody flips on a delivery report. Statically imported it landed
+ * in this route's chunk for every reader of the 2D graph, which is the whole of
+ * the traffic; `CreationCanvas` already defers the same component for the same
+ * reason. `ssr: false` because there is no server render of a WebGL scene.
+ */
+const Canvas3DView = dynamic(
+  () => import('@/components/canvas/Canvas3DView')
+    .then((module) => module.Canvas3DView as unknown as React.ComponentType<Canvas3DViewProps<Node>>),
+  { ssr: false },
+);
 
 const STATUS_COLOR: Record<string, string> = {
   // Two greys, and they have to stay two: `proposed` is work that has not begun

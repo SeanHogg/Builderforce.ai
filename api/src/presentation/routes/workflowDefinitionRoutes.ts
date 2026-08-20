@@ -34,12 +34,16 @@ import {
   type RunTarget,
 } from '../../application/workflow/instantiateRun';
 import {
+  coerceApprovalMode,
   coerceExecutionScope,
   coerceRunTarget,
   createWorkflowDefinition,
   scopeFromProject,
   workflowDefinitionListCacheKey as listCacheKey,
 } from '../../application/workflow/definitionStore';
+import { resolveCanvasRunTarget } from '../../application/workflow/canvasRunTarget';
+import { evaluateWorkflowRunApprovalGate } from '../../application/workflow/workflowRunApproval';
+import { notifyApprovalRequested } from '../../application/approval/approvalNotifier';
 import { syncDefinitionTriggers } from '../../application/workflow/triggerSync';
 import { bumpEventTriggerListeners } from '../../application/workflow/eventTriggers';
 import { compileCanvasWorkflowSteps, connectorActionIndex } from '../../domain/canvasWorkflowSpec';
@@ -346,6 +350,10 @@ export function createWorkflowDefinitionRoutes(db: Db): Hono<HonoEnv> {
       description?: string;
       steps?: unknown;
       triggerType?: string;
+      /** The canvas Workflow card's own two-value select ('builderforce' | 'campaign-strategist'). */
+      runTarget?: string;
+      /** The canvas Workflow card's own gate ('autonomous' | 'required'). */
+      approvalMode?: string;
     } & RunTargetInput>();
     if (!body.name || !body.name.trim()) return c.json({ error: 'name is required' }, 400);
 
@@ -368,6 +376,20 @@ export function createWorkflowDefinitionRoutes(db: Db): Hono<HonoEnv> {
     const invalid = validateDefinition(compiled.definition);
     if (invalid) return c.json({ error: invalid, code: 'workflow_invalid_graph', details: { issues: [] } }, 400);
 
+    // The card's authored run target, resolved into the columns the platform
+    // stores. Unresolvable is a 400 rather than a quiet fall-back to the generic
+    // cloud runtime: this endpoint is all-or-nothing, and compiling a definition
+    // that runs on a different agent than the card names is the same false
+    // completeness the issue list exists to prevent.
+    let target = coerceRunTarget({ ...body, runTargetRuntime: body.runTargetRuntime ?? 'cloud' });
+    if (typeof body.runTarget === 'string' && body.runTarget) {
+      const resolved = await resolveCanvasRunTarget(db, tenantId, body.runTarget);
+      if (!resolved.ok) {
+        return c.json({ error: resolved.error, code: 'workflow_run_target_unresolved', details: { issues: [] } }, 400);
+      }
+      target = resolved.target;
+    }
+
     const row = await createWorkflowDefinition(db, c.env as Env, {
       tenantId,
       segmentId,
@@ -378,7 +400,10 @@ export function createWorkflowDefinitionRoutes(db: Db): Hono<HonoEnv> {
       // Canvas workflows default to the builderforce-hosted cloud runtime: the
       // canvas offers no host picker, and a `host` default would compile a
       // definition whose very first run fails on a missing agentHost.
-      target: coerceRunTarget({ ...body, runTargetRuntime: body.runTargetRuntime ?? 'cloud' }),
+      target,
+      // The card's "Approval required" is CONFIGURATION from here on: the run
+      // endpoint reads this column and opens a real approval (1092).
+      approvalMode: coerceApprovalMode(body.approvalMode),
       executionScope: body.executionScope ?? null,
     });
     return c.json({ ...row, definition: compiled.definition, compiledCount: compiled.compiledCount, issues: [] }, 201);
@@ -544,6 +569,33 @@ export function createWorkflowDefinitionRoutes(db: Db): Hono<HonoEnv> {
       .from(workflowDefinitions)
       .where(and(eq(workflowDefinitions.id, id), eq(workflowDefinitions.tenantId, tenantId)));
     if (!defRow) return c.json({ error: 'Workflow definition not found' }, 404);
+
+    // ── The approval gate ────────────────────────────────────────────────────
+    //
+    // A definition whose card says "Approval required" must not start a run until
+    // a human has approved one. Evaluated HERE, at the one endpoint every manual
+    // and canvas-initiated run passes through, and through the SAME `approvals`
+    // gate `task.execution` uses — a canvas-only approval concept would be an
+    // approval nobody could see in the approvals queue.
+    //
+    // 202, not 400: the request was accepted and something happened (a real
+    // approval is now pending); it simply is not a run yet, and the caller must
+    // not report one.
+    const gate = await evaluateWorkflowRunApprovalGate(db, tenantId, (c.get('userId') as string | undefined) ?? null, defRow);
+    if (!gate.allowed) {
+      // Notify only on the request that OPENED it — a reused pending approval has
+      // already been announced, and re-announcing it trains reviewers to ignore it.
+      if (gate.opened) {
+        await notifyApprovalRequested(c.env as Env, db, {
+          tenantId,
+          approvalId: gate.approvalId,
+          kind: 'approval',
+          actionType: 'workflow.run',
+          description: `Approve running the workflow "${defRow.name}"`,
+        }).catch(() => undefined);
+      }
+      return c.json({ status: 'pending' as const, approvalId: gate.approvalId, reason: gate.reason }, 202);
+    }
 
     // Request target wins; otherwise fall back to the definition's saved target.
     let target: RunTarget;

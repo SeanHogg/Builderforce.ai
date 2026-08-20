@@ -14,6 +14,7 @@ import { deckTemplates } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { unzipSync, strFromU8 } from 'fflate';
 import type { DeckTemplateRecord, TokenManifest, DeckArchetype } from './types';
+import { chartTokenOf } from './chartRewriter';
 
 const BUILTIN_TENANT = 0;
 
@@ -66,12 +67,35 @@ export function deriveManifest(templateBytes: Uint8Array): TokenManifest {
   const tokens = new Set<string>();
   for (const path of Object.keys(files)) {
     const part = files[path];
-    if (part && /^ppt\/slides\/.*\.xml$/.test(path)) {
+    // Chart parts are scanned as well as slides. A `{{chart:…}}` marker is
+    // authored in the CHART'S OWN TITLE — nowhere in the slide XML — so scanning
+    // slides alone derived a manifest with no chart binding in it, and the chart
+    // then kept the numbers it was uploaded with while every text token beside it
+    // went live. The token that binds a chart has to be findable where it lives.
+    if (part && /^ppt\/(slides|charts)\/[^/]*\.xml$/.test(path)) {
       const xml = strFromU8(part);
       for (const m of xml.matchAll(/\{\{([^{}]+)\}\}/g)) { const t = m[1]; if (t) tokens.add(t.trim()); }
+      // …and PowerPoint may have split the marker across runs, in which case the
+      // raw part never matches. Re-read the merged title text for chart parts.
+      if (/^ppt\/charts\//.test(path)) {
+        const merged = chartTokenOf(xml);
+        if (merged) tokens.add(`chart:${merged}`);
+      }
     }
   }
+
   const bindings = Array.from(tokens).map((token) => {
+    if (token.startsWith('chart:')) {
+      const name = token.slice('chart:'.length);
+      const known = KNOWN_CHART_BINDINGS[token];
+      return {
+        token,
+        bindingKey: known?.bindingKey ?? KNOWN_TOKEN_BINDINGS[`table:${name}`] ?? name,
+        kind: 'chart' as const,
+        fallback: known?.label ?? name,
+        ...(known?.chartSeries ? { chartSeries: known.chartSeries } : {}),
+      };
+    }
     const isTable = token.startsWith('table:');
     const guess = KNOWN_TOKEN_BINDINGS[token];
     return {
@@ -82,6 +106,43 @@ export function deriveManifest(templateBytes: Uint8Array): TokenManifest {
   });
   return { version: 1, bindings };
 }
+
+/**
+ * Chart tokens whose plotted columns we can name without asking.
+ *
+ * A chart binding reads the same `[label, …figures]` matrices the tables read, so
+ * the only thing it needs beyond a table binding is WHICH columns to plot and
+ * what to call them. Guessing that from column position alone would legend a
+ * board chart "Series 1" / "Series 2", so the shapes the platform assembles say
+ * it outright; an unrecognised token still resolves positionally.
+ */
+const KNOWN_CHART_BINDINGS: Record<string, { bindingKey: string; label: string; chartSeries?: Array<{ column: number; name: string }> }> = {
+  'chart:financials': {
+    bindingKey: 'investment.financialsByCategory',
+    label: 'Spend by category',
+    chartSeries: [{ column: 1, name: 'Actual' }, { column: 2, name: 'Plan' }],
+  },
+  'chart:defectAging': {
+    bindingKey: 'quality.defectAging',
+    label: 'Open defects by age',
+    chartSeries: [{ column: 1, name: 'Open' }],
+  },
+  'chart:headcount': {
+    bindingKey: 'people.waterfall',
+    label: 'Hires vs departures',
+    chartSeries: [{ column: 1, name: 'Hires' }, { column: 2, name: 'Departures' }],
+  },
+  'chart:aiAdoption': {
+    bindingKey: 'ai.adoption',
+    label: 'AI tool adoption',
+    chartSeries: [{ column: 1, name: 'Adoption %' }],
+  },
+  'chart:fte': {
+    bindingKey: 'investment.fteByCategory',
+    label: 'FTE by category',
+    chartSeries: [{ column: 1, name: 'FTE' }],
+  },
+};
 
 /** Best-effort token→bindingKey guesses for common board tokens in custom uploads. */
 const KNOWN_TOKEN_BINDINGS: Record<string, string> = {

@@ -22,15 +22,24 @@
  * the subrequest budget. A provider or repo that will not serve a trace degrades to
  * exactly the step-name summary it produced before.
  *
- * Bitbucket posts commit statuses with NO numeric run id, so its build number is
+ * Bitbucket CLOUD posts commit statuses with NO numeric run id, so its build number is
  * recovered from the status URL (`…/pipelines/results/123`); when it isn't there, the
  * summary degrades to the URL like any other unsupported case.
+ *
+ * Bitbucket SERVER (Data Center) has no pipelines product at all — CI is an external
+ * system (Bamboo, Jenkins, …) that POSTs results to the build-status plugin — so there
+ * are no jobs, no steps and no logs to read. What it does have is
+ * `GET /rest/build-status/1.0/commits/{sha}`, which names each failed build and carries
+ * the builder's own `description` and link. That is the whole diagnostic Server can
+ * offer, and it is strictly more than the bare "the build failed" this used to return,
+ * so it is mapped onto the same summary shape rather than refused. It is keyed by
+ * COMMIT, which is why `sha` is part of the coords.
  *
  * Served through the read-through cache — a concluded run is immutable, so it is
  * keyed by the run identity (runId, or the run URL for Bitbucket).
  */
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
-import { buildGitApiBaseUrl } from '../repos/gitProxy';
+import { resolveRepoApiTarget } from '../repos/repoApiTarget';
 import type { Env } from '../../env';
 
 /** How many trailing characters of a failed job's log to keep. A failing build prints
@@ -60,6 +69,9 @@ export interface BuildErrorCoords {
   runId: number | null;
   /** Fallback URL when the jobs API is unavailable / provider unsupported. */
   runUrl: string | null;
+  /** Head commit the build ran on. The ONLY key Bitbucket Server's build-status
+   *  plugin accepts; unused by the providers that address a run by id. */
+  sha?: string | null;
 }
 
 interface GhStep { name?: string; conclusion?: string; number?: number }
@@ -195,11 +207,11 @@ async function fetchGitlab(coords: BuildErrorCoords, apiBase: string): Promise<B
  * so the build number is recovered from the status URL; the steps endpoint reports
  * one `state.result` per step, which is Bitbucket's job/step unit in one.
  */
-async function fetchBitbucket(coords: BuildErrorCoords, apiBase: string): Promise<BuildError | null> {
+async function fetchBitbucket(coords: BuildErrorCoords, repoBase: string): Promise<BuildError | null> {
   const buildNumber = bitbucketBuildNumber(coords.runUrl);
   if (buildNumber == null) return null;
   const body = await getJson<{ values?: BbStep[] }>(
-    `${apiBase}/repositories/${encodeURIComponent(coords.owner)}/${encodeURIComponent(coords.repo)}/pipelines/${buildNumber}/steps/?pagelen=100`,
+    `${repoBase}/pipelines/${buildNumber}/steps/?pagelen=100`,
     { Authorization: `Bearer ${coords.token}`, Accept: 'application/json' },
   );
   const failed = (body?.values ?? []).filter((s) => {
@@ -220,16 +232,52 @@ async function fetchUncached(coords: BuildErrorCoords): Promise<BuildError> {
     runUrl: coords.runUrl,
   };
 
-  // A self-hosted host the provider has no REST base for (e.g. Bitbucket Server) throws.
-  let apiBase: string;
-  try { apiBase = buildGitApiBaseUrl(coords.provider, coords.host); } catch { return fallback; }
+  // A provider with no mapped REST dialect at all still throws → bare fallback.
+  let api: ReturnType<typeof resolveRepoApiTarget>;
+  try { api = resolveRepoApiTarget(coords); } catch { return fallback; }
 
   const detail =
-    coords.provider === 'github' ? await fetchGithub(coords, apiBase)
-    : coords.provider === 'gitlab' ? await fetchGitlab(coords, apiBase)
-    : coords.provider === 'bitbucket' ? await fetchBitbucket(coords, apiBase)
+    api.flavor === 'github' ? await fetchGithub(coords, api.apiBase)
+    : api.flavor === 'gitlab' ? await fetchGitlab(coords, api.apiBase)
+    : api.flavor === 'bitbucket-cloud' ? await fetchBitbucket(coords, api.repoBase)
+    : api.flavor === 'bitbucket-server' ? await fetchBitbucketServer(coords, api)
     : null;
   return detail ?? fallback;
+}
+
+/** One entry from Bitbucket Server's build-status plugin. */
+interface BsBuildStatus { state?: string; key?: string; name?: string; description?: string; url?: string }
+
+/**
+ * Bitbucket Server build failures, from `/rest/build-status/1.0/commits/{sha}`.
+ *
+ * There are no jobs to enumerate and no logs to tail here — the external CI system
+ * owns both — so the failed builds themselves are the failing "jobs", and the
+ * builder-supplied `description` stands in for the log tail. Without a sha there is
+ * nothing to key on, so it degrades to the bare fallback exactly as before.
+ */
+async function fetchBitbucketServer(
+  coords: BuildErrorCoords,
+  api: ReturnType<typeof resolveRepoApiTarget>,
+): Promise<BuildError | null> {
+  if (!coords.sha) return null;
+  const body = await getJson<{ values?: BsBuildStatus[] }>(
+    `${api.buildStatus(coords.sha)}?limit=100`,
+    { Authorization: `Bearer ${coords.token}`, Accept: 'application/json' },
+  );
+  const failed = (body?.values ?? []).filter((v) => (v.state ?? '').toUpperCase() === 'FAILED');
+  if (failed.length === 0) return null;
+
+  const failedJobs = failed.map((v) => v.name ?? v.key ?? 'unnamed build');
+  const lines = failed.map((v) => {
+    const name = v.name ?? v.key ?? 'unnamed build';
+    // The description is the only free-text diagnostic Server carries; keep it on
+    // the same line so the summary stays one bullet per failing unit.
+    return `• Build "${name}" failed.${v.description ? ` ${v.description.trim()}` : ''}`;
+  });
+  // Prefer the builder's own link over the status URL we were handed — it points at
+  // the CI system that actually holds the log.
+  return { summary: summarize(lines, failed[0]?.url ?? coords.runUrl), failedJobs, runUrl: coords.runUrl };
 }
 
 /**
@@ -238,7 +286,8 @@ async function fetchUncached(coords: BuildErrorCoords): Promise<BuildError> {
  * embeds Bitbucket's build number).
  */
 export async function fetchBuildError(env: Env, coords: BuildErrorCoords): Promise<BuildError> {
-  const runKey = coords.runId != null ? String(coords.runId) : (coords.runUrl ?? 'unknown');
+  const runKey = coords.runId != null ? String(coords.runId)
+    : (coords.runUrl ?? coords.sha ?? 'unknown');
   return getOrSetCached(env, `build-error:${coords.provider}:${coords.owner}/${coords.repo}:${runKey}`, () => fetchUncached(coords), {
     kvTtlSeconds: 3600,
     l1TtlMs: 60_000,

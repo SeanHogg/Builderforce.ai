@@ -18,6 +18,7 @@
  */
 import type { AccountabilitySignoff, AccountabilityGap, AccountabilityGapKind, ManifestParticipant } from './ticketParticipants';
 import { isParticipantSatisfied } from './participantStates';
+import { hasLinkedEvidence, isAutoAttestedContribution } from './signoffContribution';
 
 /** Severity buckets. `blocking` = something is wrong; `advisory` = outstanding or reasoned. */
 export type AccountabilityGapSeverity = 'blocking' | 'advisory';
@@ -25,9 +26,16 @@ export type AccountabilityGapSeverity = 'blocking' | 'advisory';
 /** Slot key shared by the manifest (`stageKey`) and the ledger (`laneKey`). */
 export const slotKey = (lane: string | null, roleKey: string): string => `${lane ?? ''}:${roleKey}`;
 
-/** True when the sign-off carries at least one piece of linked evidence. */
+/**
+ * True when the sign-off carries at least one piece of linked evidence.
+ *
+ * Delegates to the shared {@link hasLinkedEvidence}, which excludes PROVENANCE keys.
+ * The inline version this replaced counted any non-null value, so a bag containing only
+ * `autoAttested: true` — the flag that marks an approval as *not* judged by a member —
+ * satisfied the rubber-stamp check on its own.
+ */
 export function hasContribution(s: Pick<AccountabilitySignoff, 'contribution'>): boolean {
-  return !!s.contribution && Object.values(s.contribution).some((v) => v != null && (!Array.isArray(v) || v.length > 0));
+  return hasLinkedEvidence(s.contribution as Record<string, unknown> | null | undefined);
 }
 
 export function computeAccountabilityGaps(
@@ -71,6 +79,18 @@ export function computeAccountabilityGaps(
 
     if (s.verdict === 'approved' && !hasContribution(s)) {
       gaps.push(at('no_contribution', 'blocking', 'Approved with no linked contribution/interaction — a rubber-stamp risk.'));
+    }
+    // AUTO-ATTESTED ≠ REVIEWED, and the audit now says so out loud.
+    //
+    // `attestRoleRun` credits a PRODUCER's completed run to the ledger so the slot can
+    // leave `in_progress` without the agent volunteering a `kanban.signoff` call. That
+    // is a real record — it always links the execution it came from, so it is not a
+    // rubber stamp and must NOT be `blocking` — but nobody judged the work. Reported as
+    // ADVISORY so "how much of this ticket's accountability was asserted by the platform
+    // rather than by a member" is answerable from the same list a reviewer already reads.
+    if (s.verdict === 'approved' && isAutoAttestedContribution(s.contribution as Record<string, unknown> | null | undefined)) {
+      gaps.push(at('auto_attested', 'advisory',
+        'Credited automatically from a completed run — no member recorded a verdict of their own.'));
     }
     // A waiver WITH a recorded reason is a decision, not a defect; without one it is.
     if (s.verdict === 'waived') {

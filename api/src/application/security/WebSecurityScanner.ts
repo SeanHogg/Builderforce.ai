@@ -23,10 +23,14 @@
  *   - /.env, /.git/config, /.git/HEAD, /server-status
  *   - Missing /.well-known/security.txt (advisory)
  *
- * NOT covered here (needs infrastructure this runtime does not have): peer TLS
- * certificate chain / expiry / cipher inspection (Cloudflare Worker `fetch` does not
- * surface the peer certificate) and CVE-feed version fingerprinting (needs an
- * external advisory feed). Those remain in the gap register.
+ * NOT observable from THIS runtime, and therefore not checked in this file: the peer
+ * TLS certificate (Cloudflare Worker `fetch` exposes no socket, so there is no chain,
+ * expiry or negotiated cipher to read) and CVE version fingerprinting (which needs an
+ * advisory feed). Neither is missing from the product any more — both run as CONTAINER
+ * STAGES from a Node process that does have a socket, and their findings come back
+ * through the same ingest seam into the same audit run. The decision logic for them is
+ * pure and lives beside this file: {@link ./tlsCertificateScan} and
+ * {@link ./softwareFingerprint}; the dispatch/ingest seam is {@link ./webScanStages}.
  *
  * DESIGN
  * - The check logic is a PURE function of a normalized {@link ScanContext}
@@ -162,7 +166,29 @@ const SEVERITY_WEIGHT: Record<FindingSeverity, number> = {
 
 /** Roll a finding set up into a 0..100 posture score (100 = clean). */
 export function scoreFindings(findings: WebFinding[]): number {
-  const penalty = findings.reduce((sum, f) => sum + (SEVERITY_WEIGHT[f.severity] ?? 4), 0);
+  return scoreFromSeverityCounts(
+    findings.reduce<Record<string, number>>((acc, f) => {
+      acc[f.severity] = (acc[f.severity] ?? 0) + 1;
+      return acc;
+    }, {}),
+  );
+}
+
+/**
+ * The SAME score, computed from a severity histogram instead of the finding objects.
+ *
+ * A container stage reports back AFTER the run has already been scored and closed, at
+ * which point the earlier findings exist only as ticket rows — the `WebFinding`
+ * objects are long gone. Re-scoring from the audit's rolled-up counts is what lets
+ * the late stage's findings move the score instead of being visible in the list while
+ * the headline number still reflects a scan that had not finished. Sharing
+ * {@link SEVERITY_WEIGHT} is what stops the two paths from drifting into two scores.
+ */
+export function scoreFromSeverityCounts(counts: Record<string, number>): number {
+  let penalty = 0;
+  for (const [severity, n] of Object.entries(counts ?? {})) {
+    penalty += (SEVERITY_WEIGHT[severity as FindingSeverity] ?? 4) * (Number(n) || 0);
+  }
   return Math.max(0, Math.min(100, 100 - penalty));
 }
 
@@ -180,7 +206,28 @@ function maxAge(value: string | undefined): number | null {
   return m ? Number(m[1]) : null;
 }
 
-/** Build a finding, stamping the marker + criterion. */
+/**
+ * THE finding constructor for every web-scan check — the one place a `WebFinding` is
+ * built. Exported because the stages that cannot run inside the Worker (the peer-TLS
+ * and CVE-fingerprint stages, which need a Node socket / an advisory feed and so are
+ * observed from the container) must mint findings in exactly this shape: same
+ * severity vocabulary, same criterion, same `[web:<checkId>:<origin>]` marker. A
+ * second constructor is how a second, subtly-different finding shape starts, and the
+ * dedupe + auto-close logic keys on that marker being identical everywhere.
+ */
+export function makeWebFinding(
+  origin: string,
+  checkId: string,
+  severity: FindingSeverity,
+  tsc: TrustCriterion,
+  title: string,
+  detail: string,
+  recommendation: string,
+): WebFinding {
+  return { checkId, severity, tsc, title, detail, recommendation, marker: webMarker(checkId, origin) };
+}
+
+/** Build a finding for a scanned context, stamping the marker + criterion. */
 function make(
   ctx: ScanContext,
   checkId: string,
@@ -190,7 +237,7 @@ function make(
   detail: string,
   recommendation: string,
 ): WebFinding {
-  return { checkId, severity, tsc, title, detail, recommendation, marker: webMarker(checkId, ctx.origin) };
+  return makeWebFinding(ctx.origin, checkId, severity, tsc, title, detail, recommendation);
 }
 
 /** 180 days — the HSTS max-age below which a site is only weakly protected. */

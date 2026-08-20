@@ -27,7 +27,6 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  */
 import { and, asc, eq } from 'drizzle-orm';
 import {
-  swimlaneAgentAssignments,
   swimlaneRequirements,
   swimlanes,
   tasks,
@@ -35,6 +34,7 @@ import {
 } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { requirementApplies } from '../kanban/types';
+import { hasNonDraftPr, loadTaskPrSignal } from '../kanban/taskPrSignal';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import type { RuntimeService } from '../runtime/RuntimeService';
@@ -48,6 +48,7 @@ import { isParticipantSatisfied } from '../kanban/participantStates';
 import { requestRoleRun } from '../kanban/requestRoleRun';
 import { findCanonicalBoard } from './canonicalBoard';
 import { decideLaneAgentApproval, laneApprovalOwed, resolveLaneApprovers, type StaffedLaneApprover } from './laneApprover';
+import { laneAgentAssignments, laneJoinOn } from './laneAgentAssignments';
 
 export interface LaneGateOutcome {
   /** Suppress the lane's normal auto-run this hop (a reviewer round-trip or producer
@@ -57,6 +58,10 @@ export interface LaneGateOutcome {
   dispatchedReviewers: string[];
   /** Role-capable producers dispatched AS their role on a hard producer stage. */
   dispatchedProducers: string[];
+  /** Roles that still owe a verdict or a deliverable on this stage. Populated on the
+   *  blocking paths so a READ-ONLY caller can say WHICH role is holding the ticket
+   *  rather than only that something is. */
+  outstandingRoles?: string[];
 }
 
 // Display names come from the ONE resolver in `roleCatalog` (this module used to keep a
@@ -70,10 +75,10 @@ const roleName = roleDisplayName;
 async function resolveRoleAgent(env: Env, db: Db, tenantId: number, projectId: number, boardId: string, roleKey: string): Promise<string | null> {
   const nk = normalizeRoleText(roleKey);
   const staffed = await db
-    .select({ agentRef: swimlaneAgentAssignments.agentRef, role: swimlaneAgentAssignments.role })
-    .from(swimlaneAgentAssignments)
-    .innerJoin(swimlanes, eq(swimlaneAgentAssignments.swimlaneId, swimlanes.id))
-    .where(scopedToTenant(swimlaneAgentAssignments, tenantId, eq(swimlanes.boardId, boardId)));
+    .select({ agentRef: laneAgentAssignments.agentRef, role: laneAgentAssignments.role })
+    .from(laneAgentAssignments)
+    .innerJoin(swimlanes, laneJoinOn(swimlanes.id))
+    .where(scopedToTenant(laneAgentAssignments, tenantId, eq(swimlanes.boardId, boardId)));
   for (const s of staffed) if (s.agentRef && normalizeRoleText(s.role) === nk) return s.agentRef;
 
   const [capable] = await resolveRoleCapableAgents(env, db, tenantId, projectId, roleKey);
@@ -122,6 +127,8 @@ async function enforceLaneAgentApproval(
     taskTitle: string | null;
     /** Human-initiated tick — see the same field on {@link enforceLaneRequirements}. */
     force?: boolean;
+    /** Probe mode — see the same field on {@link enforceLaneRequirements}. */
+    dryRun?: boolean;
   },
   lane: { id: string; requirementGate: string; isTerminal: boolean },
 ): Promise<LaneGateOutcome> {
@@ -144,7 +151,10 @@ async function enforceLaneAgentApproval(
   // a run with PR evidence — and the point here is the sign-off, not the delivery.
   const approvers = decision.approvers.flatMap((a): StaffedLaneApprover[] =>
     a.agentRef ? [{ ...a, agentRef: a.agentRef }] : []);
-  for (const approver of approvers) {
+  // A PROBE materialises nothing. Reading the manifest as it already stands is also the
+  // honest answer for this tier: while no slot exists yet the lane's own work has not
+  // run, so nothing is owed and the normal agent is exactly what should go next.
+  for (const approver of args.dryRun ? [] : approvers) {
     await participants.addParticipant(env, args.tenantId, args.taskId, {
       roleKey: approver.roleKey,
       responsibility: 'reviewer',
@@ -186,7 +196,7 @@ async function enforceLaneAgentApproval(
   const dispatchedReviewers: string[] = [];
   if (decided.ask) {
     const approver = decided.ask;
-    const execId = await requestRoleRun(env, db, runtimeService, participants, {
+    const execId = args.dryRun ? -1 : await requestRoleRun(env, db, runtimeService, participants, {
       tenantId: args.tenantId,
       projectId: args.projectId,
       taskId: args.taskId,
@@ -210,6 +220,7 @@ async function enforceLaneAgentApproval(
     flagged: decided.flagged,
     dispatchedReviewers,
     dispatchedProducers: [],
+    outstandingRoles: decided.owed,
   };
 }
 
@@ -234,6 +245,24 @@ export async function enforceLaneRequirements(
      * unset — the breaker is what stops them re-asking a failing ticket forever.
      */
     force?: boolean;
+    /**
+     * PROBE ONLY. Run every read and every decision this function makes, but perform no
+     * write and dispatch nothing: no audit recompute, no `requestRoleRun`, no manifest
+     * slot materialisation. `dispatchedReviewers` / `dispatchedProducers` then report
+     * what the gate WOULD ask this hop.
+     *
+     * It exists so {@link ../swimlane/evaluateAutoRun.evaluateTaskAutoRun} can model the
+     * requirement gate without forking its logic. The alternative — a second
+     * implementation of the quorum, manifest-state and blocking rules living in the
+     * evaluator — is exactly the two-verdicts-that-disagree problem the probe is meant
+     * to end, so the probe reuses THIS function verbatim and only suppresses its writes.
+     *
+     * One honest caveat: a would-be ask is judged resolvable once a role-capable agent
+     * exists. The real dispatch can still be refused downstream (failure breaker, re-run
+     * cooldown), so a probe can over-report a block in that narrow case — which is still
+     * strictly better than the previous answer of `will_run`.
+     */
+    dryRun?: boolean;
   },
 ): Promise<LaneGateOutcome> {
   const none: LaneGateOutcome = { blocked: false, flagged: false, dispatchedReviewers: [], dispatchedProducers: [] };
@@ -249,9 +278,13 @@ export async function enforceLaneRequirements(
     if (!lane) return none;
 
     // Always compute the audit so entering any lane refreshes coverage / the flag.
-    await auditService.computeAudit(env, args.tenantId, args.taskId).catch((error) => {
-      reportCaughtError(error, { source: "application/swimlane/laneRequirementGate.ts", operation: "enforceLaneRequirements" });
-    });
+    // A PROBE must not: `computeAudit` persists a `ticket_audits` row, and a read-only
+    // caller writing one would put audit history on the wire for every board poll.
+    if (!args.dryRun) {
+      await auditService.computeAudit(env, args.tenantId, args.taskId).catch((error) => {
+        reportCaughtError(error, { source: "application/swimlane/laneRequirementGate.ts", operation: "enforceLaneRequirements" });
+      });
+    }
 
     if (lane.requirementGate === 'off') return none;
 
@@ -263,7 +296,11 @@ export async function enforceLaneRequirements(
       .from(swimlaneRequirements)
       .where(eq(swimlaneRequirements.swimlaneId, lane.id))
       .orderBy(asc(swimlaneRequirements.position));
-    const reqRows = allReqRows.filter((r) => requirementApplies({ ticketType: r.ticketType, condition: r.condition }, { taskType: taskRow?.taskType ?? null, actionType: taskRow?.actionType ?? null }));
+    // Resolved only when a `has_pr` requirement is actually declared on this lane, so
+    // the gate does not pay for a pull-request read on every lane entry.
+    const needsPrSignal = allReqRows.some((r) => r.condition === 'has_pr');
+    const hasPr = needsPrSignal ? hasNonDraftPr(await loadTaskPrSignal(db, args.tenantId, args.taskId)) : false;
+    const reqRows = allReqRows.filter((r) => requirementApplies({ ticketType: r.ticketType, condition: r.condition }, { taskType: taskRow?.taskType ?? null, actionType: taskRow?.actionType ?? null, hasPr }));
     const requiredReviewers = reqRows.filter(
       (r) => r.isRequired && (r.kind === 'review' || (r.kind === 'role' && r.responsibility === 'reviewer')),
     );
@@ -280,6 +317,7 @@ export async function enforceLaneRequirements(
     // old unconditional `return none` — which is why 10 of 11 boards never produced a
     // single sign-off — fall through to the lane's ASSIGNED AGENT as the approver.
     if (requiredReviewers.length === 0 && requiredProducers.length === 0) {
+      // `args` carries `force` and `dryRun` through unchanged.
       return await enforceLaneAgentApproval(env, db, runtimeService, participants, {
         ...args, taskTitle: taskRow?.title ?? null,
       }, lane);
@@ -299,6 +337,31 @@ export async function enforceLaneRequirements(
 
     const dispatchedReviewers: string[] = [];
     const dispatchedProducers: string[] = [];
+
+    // ONE ask seam for both role blocks below, so `dryRun` suppresses every dispatch in
+    // this function without a second `if` at each call site. In probe mode it returns a
+    // non-null sentinel meaning "an agent is resolved, so this ask would go out" — see
+    // the `dryRun` doc for the one case that over-reports.
+    const askRole = async (
+      roleKey: string,
+      kind: 'reviewer' | 'producer',
+      agentRef: string,
+    ): Promise<number | null> => {
+      if (args.dryRun) return -1;
+      return requestRoleRun(env, db, runtimeService, participants, {
+        tenantId: args.tenantId,
+        projectId: args.projectId,
+        taskId: args.taskId,
+        taskTitle: taskRow?.title ?? null,
+        roleKey,
+        roleName: roleName(roleKey),
+        agentRef,
+        laneKey: args.status,
+        kind,
+        submittedBy: composeDispatcherLabel(args.submittedBy, kind, roleKey),
+        ...(args.force ? { force: true } : {}),
+      });
+    };
 
     // The ticket's manifest state for THIS lane — loaded ONCE and shared by both blocks
     // below. The producer block used to load it privately and the reviewer block had no
@@ -335,19 +398,7 @@ export async function enforceLaneRequirements(
         // — see `kanban/signoffRequest.ts`.
         // Attribution (§5.6) + the activity row are the shared primitive's job, and it
         // performs BOTH only when a run actually started.
-        const execId = await requestRoleRun(env, db, runtimeService, participants, {
-          tenantId: args.tenantId,
-          projectId: args.projectId,
-          taskId: args.taskId,
-          taskTitle: taskRow?.title ?? null,
-          roleKey: req.ref,
-          roleName: roleName(req.ref),
-          agentRef,
-          laneKey: args.status,
-          kind: 'reviewer',
-          submittedBy: composeDispatcherLabel(args.submittedBy, 'reviewer', req.ref),
-          ...(args.force ? { force: true } : {}),
-        });
+        const execId = await askRole(req.ref, 'reviewer', agentRef);
         // A REFUSED dispatch is not an ask: leave the reviewer selectable next hop rather
         // than reporting a round-trip that never started.
         if (execId == null) continue;
@@ -373,19 +424,7 @@ export async function enforceLaneRequirements(
         // ONE shared contract with the reviewer paths. The string this replaced named
         // neither the `kanban.signoff` tool nor `laneKey`, so a producer that finished
         // real work still left its slot unsatisfied — see `kanban/signoffRequest.ts`.
-        const execId = await requestRoleRun(env, db, runtimeService, participants, {
-          tenantId: args.tenantId,
-          projectId: args.projectId,
-          taskId: args.taskId,
-          taskTitle: taskRow?.title ?? null,
-          roleKey: req.ref,
-          roleName: roleName(req.ref),
-          agentRef,
-          laneKey: args.status,
-          kind: 'producer',
-          submittedBy: composeDispatcherLabel(args.submittedBy, 'producer', req.ref),
-          ...(args.force ? { force: true } : {}),
-        });
+        const execId = await askRole(req.ref, 'producer', agentRef);
         if (execId == null) continue;
         dispatchedProducers.push(req.ref);
       }
@@ -400,7 +439,13 @@ export async function enforceLaneRequirements(
       // named producer is outstanding, even when the stage's advancement gate is soft.
       || (board.lifecycleManaged && producerUnmet)
       || (lane.requirementGate === 'hard' && (reviewerSetUnmet || producerUnmet));
-    return { blocked, flagged: reviewerSetUnmet || producerUnmet, dispatchedReviewers, dispatchedProducers };
+    // WHICH role is holding it — the fact the lifecycle ledger and the triage chip had
+    // no way to name. Reviewers short of quorum first, then unsatisfied producers.
+    const outstandingRoles = [...new Set([
+      ...(reviewerSetUnmet ? requiredReviewers.filter((r) => latest.get(r.ref) !== 'approved').map((r) => r.ref) : []),
+      ...(producerUnmet ? requiredProducers.filter((r) => !isParticipantSatisfied(stateByRole.get(r.ref) ?? '')).map((r) => r.ref) : []),
+    ])];
+    return { blocked, flagged: reviewerSetUnmet || producerUnmet, dispatchedReviewers, dispatchedProducers, outstandingRoles };
   } catch {
     return none;
   }

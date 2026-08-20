@@ -32,6 +32,7 @@ import { recordActivity, resolveActorByRef } from '../activity/activityLog';
 import { TaskPriority, TaskStatus } from '../../domain/shared/types';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
+import { taskCreatedHook } from '../task/taskCreationHook';
 
 export const DELTA_KINDS = ['improvement', 'fix', 'bug'] as const;
 export type DeltaKind = (typeof DELTA_KINDS)[number];
@@ -136,7 +137,9 @@ export class WorkDeltaService {
   constructor(private readonly db: Db, private readonly env: Env) {
     const taskRepo = new TaskRepository(db);
     const projectRepo = new ProjectRepository(db);
-    this.tasks = new TaskService(taskRepo, projectRepo);
+    // Creation attribution — see `activity/taskCreated.ts`. Without the hook a delta
+    // capture minted a ticket nobody could attribute.
+    this.tasks = new TaskService(taskRepo, projectRepo, undefined, undefined, undefined, undefined, undefined, taskCreatedHook(db, env));
     this.projects = new ProjectService(projectRepo);
     this.chatTickets = new ChatTicketService(db, env);
   }

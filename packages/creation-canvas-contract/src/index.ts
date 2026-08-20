@@ -65,6 +65,14 @@ export * from './dataGovernance';
 // Shared because the guest canvas authors these with no tenant and no API call, and the
 // runway band it lands in must be the band `application/career/runway.ts` would compute.
 export * from './career';
+// The MARKETING vocabulary — the brand a generative board composes against and the
+// audience a send may lawfully reach. Shared for two reasons the module argues in full:
+// the brand directive is composed into a prompt by BOTH the browser and the API's
+// creative dispatch, and the sendable arithmetic is printed on the campaign card AND
+// decides whether the send control refuses. It also owns the calendar projection, which
+// folds `scheduledAt` and the trigger engine's own deadline fields into one time axis
+// rather than a second store of dates that already exist.
+export * from './marketing';
 // `export *` re-exports a binding; it does not bring it INTO scope here, and the
 // kind list below spreads it — without this import the whole contract module
 // throws `PEOPLE_OBJECT_KINDS is not defined` at import time, which takes every
@@ -75,6 +83,7 @@ import { DATA_SCIENCE_OBJECT_KINDS } from './dataScience';
 import { OPERATIONS_OBJECT_KINDS } from './operations';
 import { SELL_MOTION_OBJECT_KINDS } from './sellMotion';
 import { CAREER_OBJECT_KINDS } from './career';
+import { MARKETING_OBJECT_KINDS } from './marketing';
 
 /**
  * The FOUNDER objects — the half of "idea to real" that is not a made artifact.
@@ -346,12 +355,51 @@ export function isHiringObjectKind(value: unknown): value is HiringObjectKind {
  * encrypted, checksummed NDA scan the same object, and a board could no longer tell
  * "what we agreed" from "the file that proves it".
  *
- * Only one kind today because the legal seat has one FILE shape — formation
- * certificates, NDAs, IP assignments and registrations all travel through the same
+ * One FILE kind, because the legal seat has one file SHAPE — formation certificates,
+ * NDAs, IP assignments and registrations all travel through the same
  * `legal_document_files` table, distinguished by `category`, not by a second kind per
  * document type.
+ *
+ * ── THE THREE RECORD KINDS BESIDE IT ─────────────────────────────────────────────
+ * `legalDocument.entityId`, `.matterId` and `.ipId` are foreign keys into
+ * `legal_entities`, `legal_matters` and `intellectual_property`, and until now the row
+ * each id named had NO card. A board could hold the executed IP assignment and could
+ * not hold the mark it assigns, the entity that owns it, or the opposition being argued
+ * over it — so "when does anything we own lapse" was a question the canvas could store
+ * the evidence for and never answer.
+ *
+ * They are declared HERE and not in `FOUNDER_OBJECT_KINDS` because they are projections
+ * of the legal seat's own tables — the three this vocabulary's header already names as
+ * the records the files are held against — and because a founder kind is authored prose
+ * while these are rows. Splitting one seat across two i18n namespaces, two label maps
+ * and two guidance blocks to file three cards next to `contract` would buy nothing and
+ * cost the property that makes `legalDocument.entityId` legible: the card its id names
+ * is in the same vocabulary as the document that points at it.
+ *
+ * ── WHY `legalMatter` AND NOT `matter` ───────────────────────────────────────────
+ * `api/src/application/domains/legal/entities.ts` registers `legal_matters` in the
+ * kernel `objects` table under `kind: 'matter'`. A canvas kind spelled the same way is
+ * the `interview` collision exactly — `canvas_read_domain('legal')` would hand the model
+ * domain rows it maps onto a canvas card, two different things under one word in the
+ * ubiquitous language. The founder set gave up the bare noun for `customerInterview` on
+ * that argument; this set gives it up for the same one. `legalEntity` and `ipAsset` need
+ * no such qualifier: their domain kinds are `legal_entity` and `ip_asset`, which no
+ * camelCase canvas kind can collide with.
  */
-export const LEGAL_OBJECT_KINDS = ['legalDocument'] as const;
+export const LEGAL_OBJECT_KINDS = [
+  'legalDocument',
+  // THE COMPANY ITSELF, and every subsidiary. `renewsAt` is the agent appointment or the
+  // entity's own standing lapsing — the first date on this board a founder is penalised
+  // for missing rather than merely embarrassed by.
+  'legalEntity',
+  // WHAT WE OWN THAT IS NOT A THING. A mark, a patent, a design, a domain — one shape,
+  // because each is "a right, in a jurisdiction, in a class, with a filing date and a
+  // renewal date", and `assignedFrom` is the founder-IP question a raise discovers.
+  'ipAsset',
+  // WHAT IS BEING ARGUED, with a cost and an adverse party. `nextActionAt` is a filing
+  // deadline or a hearing — a date somebody is judged against, not a date noted.
+  'legalMatter',
+] as const;
 
 export type LegalObjectKind = typeof LEGAL_OBJECT_KINDS[number];
 
@@ -580,7 +628,9 @@ export const CREATION_OBJECT_KINDS = [
   ...OPERATIONS_OBJECT_KINDS,
   // The secure legal FILE — an uploaded, encrypted document with a checksum, a
   // signature history and a share history, distinct from the AUTHORED `contract` in
-  // `FOUNDER_OBJECT_KINDS`. See the kind's own comment above for why they are two kinds.
+  // `FOUNDER_OBJECT_KINDS` — and the three RECORD kinds it is held against: the entity,
+  // the IP asset and the matter. See the kind's own comment above for why they are two
+  // shapes in one vocabulary, and why the matter carries a qualifier.
   ...LEGAL_OBJECT_KINDS,
   // The commercial half of the motion: a priced `quote` a buyer accepts, the `sequence`
   // that follows up across channels and stops on reply, the `call` that carries what they
@@ -595,6 +645,14 @@ export const CREATION_OBJECT_KINDS = [
   // `shortlist` transposed, and `runway` is a personal clock rather than a budget. See
   // `career.ts` for why none of the six folds into `HIRING_OBJECT_KINDS`.
   ...CAREER_OBJECT_KINDS,
+  // The brand a generative board composes against, and the audience a send is allowed
+  // to reach. Two kinds over tables (`brand_kits`, `marketing_audiences`,
+  // `marketing_suppressions`) that had existed since the growth domain landed with
+  // nothing on the board able to read them — which is why every creative object composed
+  // unbranded and a campaign could be fired with no visible consent state. See
+  // `marketing.ts` for why the brand is a bindable OBJECT rather than a canvas setting,
+  // and why there is no `campaignCalendar` kind to go with the calendar surface.
+  ...MARKETING_OBJECT_KINDS,
 ] as const;
 
 export type CreationObjectKind = typeof CREATION_OBJECT_KINDS[number];

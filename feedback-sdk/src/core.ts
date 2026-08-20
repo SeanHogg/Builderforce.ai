@@ -32,6 +32,7 @@ export const DEFAULT_LABELS: FeedbackLabels = {
   errorRequired: 'Please describe your feedback before sending.',
   errorGeneric: 'Something went wrong sending your feedback. Please try again.',
   errorRateLimited: 'We have received a lot of feedback today. Please try again tomorrow.',
+  errorQuotaExceeded: 'This app is not accepting new feedback right now. Please try again later.',
 };
 
 /** Trim a trailing slash (and a mistakenly-included /submit) off the endpoint. */
@@ -84,6 +85,16 @@ export interface SubmitOutcome {
   deduped?: boolean;
   /** Distinguishes the "come back tomorrow" message from a generic failure. */
   rateLimited?: boolean;
+  /**
+   * The WORKSPACE is out of monthly allowance, not this visitor out of burst.
+   *
+   * Both refusals arrive as 429, and telling someone to "try again tomorrow" when
+   * the real answer is "this month's allowance is spent" sends them back to a door
+   * that is still shut. The two are separated here so the widget can say something
+   * that is at least true — without ever mentioning our plans to a visitor who is
+   * a customer of the embedding app, not of us.
+   */
+  quotaExceeded?: boolean;
 }
 
 /** POST one request to the collector. Never throws — the widget renders the outcome. */
@@ -99,7 +110,16 @@ export async function postFeedback(
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
       body: JSON.stringify(payload),
     });
-    if (res.status === 429) return { ok: false, rateLimited: true };
+    if (res.status === 429) {
+      // The body names WHICH ceiling refused it. Read defensively: this snippet
+      // runs in someone else's page against whatever proxy sits in front of us,
+      // and a 429 with no readable body (a CDN's own throttle, say) must still
+      // produce a sentence. It falls back to the burst reading, which is the
+      // older and by far the more common of the two.
+      let refusal: { quotaExceeded?: boolean } | null = null;
+      try { refusal = await res.json(); } catch { refusal = null; }
+      return refusal?.quotaExceeded ? { ok: false, quotaExceeded: true } : { ok: false, rateLimited: true };
+    }
     if (!res.ok) return { ok: false };
     const json = (await res.json().catch(() => null)) as { submissionId?: string; deduped?: boolean } | null;
     return { ok: true, submissionId: json?.submissionId, deduped: !!json?.deduped };

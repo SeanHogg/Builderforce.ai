@@ -39,6 +39,20 @@ export interface AuditSignals {
   failedDiagnostics: Set<string>;
   /** Role keys that actually did work on the ticket (dispatched as that role / owned it). */
   performedRoles: Set<string>;
+  /**
+   * Role keys whose ANCHORED PRD SECTION is authored (`PRD_ROLE_SECTIONS`).
+   *
+   * For a SPEC role the written section IS the deliverable, and until this signal
+   * existed the audit had no way to see it: participation was verified from sign-offs, a
+   * pull request and child tasks, so a Business Analyst who authored the whole
+   * Requirements section satisfied nothing by doing so and its producer requirement
+   * stayed unmet.
+   *
+   * Producer requirements only. A REVIEWER still needs a recorded verdict — writing your
+   * own Review section is not a review, and letting a section satisfy a reviewer slot
+   * would reopen exactly the rubber-stamp hole `no_contribution` closes.
+   */
+  sectionAuthoredRoles: Set<string>;
 }
 
 export interface UnmetRequirement {
@@ -94,8 +108,12 @@ export function requirementUnmetReason(
     if (signals.changesRequestedRoles.has(req.ref)) return 'changes_requested';
     return signals.approvedRoles.has(req.ref) ? null : 'missing';
   }
-  // role owner / contributor → satisfied if that role performed work OR signed off.
-  const performed = signals.performedRoles.has(req.ref) || signals.approvedRoles.has(req.ref);
+  // role owner / contributor → satisfied if that role performed work, signed off, OR
+  // authored its anchored PRD section (for a spec role, that section IS the deliverable
+  // — see {@link AuditSignals.sectionAuthoredRoles}).
+  const performed = signals.performedRoles.has(req.ref)
+    || signals.approvedRoles.has(req.ref)
+    || signals.sectionAuthoredRoles.has(req.ref);
   return performed ? null : 'missing';
 }
 

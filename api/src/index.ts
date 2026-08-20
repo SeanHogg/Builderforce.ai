@@ -33,6 +33,8 @@ import { AgentService }    from './application/agent/AgentService';
 import { buildRuntimeService } from './buildRuntimeService';
 import { recommendTopAssignee } from './application/metrics/assigneeRecommender';
 import { addDependency } from './application/task/taskDependencies';
+import { loadSchedulingContext } from './application/planning/schedulingContext';
+import { recordPlanVerdict } from './application/planning/planVerdictStore';
 import { asProjectId } from './domain/shared/types';
 import { bumpCacheVersion } from './infrastructure/cache/readThroughCache';
 import { AuditService }    from './application/audit/AuditService';
@@ -54,6 +56,7 @@ import { createAgileRoutes }       from './presentation/routes/agileRoutes';
 import { createMeetingRoutes }     from './presentation/routes/meetingRoutes';
 import { createCandidateBookingRoutes } from './presentation/routes/candidateBookingRoutes';
 import { createHiringRoutes }      from './presentation/routes/hiringRoutes';
+import { createAtsRoutes }         from './presentation/routes/atsRoutes';
 import { createCalendarRoutes }    from './presentation/routes/calendarRoutes';
 import { createRoiRoutes }         from './presentation/routes/roiRoutes';
 import { createPmoRoutes }         from './presentation/routes/pmoRoutes';
@@ -77,6 +80,7 @@ import { createTenantApiKeyRoutes } from './presentation/routes/tenantApiKeyRout
 import { createMcpExtensionRoutes } from './presentation/routes/mcpExtensionRoutes';
 import { createAuthRoutes }        from './presentation/routes/authRoutes';
 import { createOAuthRoutes }       from './presentation/routes/oauthRoutes';
+import { createPasskeyLoginRoutes, createPasskeyRoutes } from './presentation/routes/passkeyRoutes';
 import { createAgentRoutes, createSkillRoutes } from './presentation/routes/agentRoutes';
 import { createAgentRegistrationRoutes } from './presentation/routes/agentRegistrationRoutes';
 import { AgentRegistrationService } from './application/agent/AgentRegistrationService';
@@ -86,6 +90,7 @@ import { createMarketplaceRoutes } from './presentation/routes/marketplaceRoutes
 import { createToolRoutes } from './presentation/routes/toolRoutes';
 import { createSalaryRoutes } from './presentation/routes/salaryRoutes';
 import { createReferenceRoutes } from './presentation/routes/referenceRoutes';
+import { createCareerAiRoutes } from './presentation/routes/careerAiRoutes';
 import { createRfpRoutes } from './presentation/routes/rfpRoutes';
 import { ToolService } from './application/tools/ToolService';
 import { AuditRunner } from './application/tools/AuditRunner';
@@ -106,6 +111,8 @@ import { createProjectAgentRoutes } from './presentation/routes/projectAgentRout
 import { createMarketplaceStatsRoutes } from './presentation/routes/marketplaceStatsRoutes';
 import { createWorkforceRoutes }        from './presentation/routes/workforceRoutes';
 import { createFreelancerRoutes, createEngagementRoutes } from './presentation/routes/freelancerRoutes';
+import { createDisputeRoutes } from './presentation/routes/disputeRoutes';
+import { createEarningsRoutes, createWithdrawalMethodRoutes } from './presentation/routes/earningsRoutes';
 import { createSalesRoutes } from './presentation/routes/salesRoutes';
 import { createMessageRoutes } from './presentation/routes/messageRoutes';
 import { createPayoutRoutes } from './presentation/routes/payoutRoutes';
@@ -184,6 +191,7 @@ import { createSiteManageRoutes } from './presentation/routes/siteManageRoutes';
 import { createGrowthRoutes, createCampaignTrackRoutes, createMarketingAssetRoutes } from './presentation/routes/campaignRoutes';
 import { createMailboxRoutes }      from './presentation/routes/mailboxRoutes';
 import { createDriveRoutes }        from './presentation/routes/driveRoutes';
+import { createLedgerRoutes }       from './presentation/routes/ledgerRoutes';
 import { createSocialRoutes }       from './presentation/routes/socialRoutes';
 import { createAdsRoutes }         from './presentation/routes/adsRoutes';
 import { createMeasurementRoutes } from './presentation/routes/measurementRoutes';
@@ -233,6 +241,7 @@ import { createBoardWebhookRoutes }    from './presentation/routes/boardWebhookR
 import { createQualityRoutes }         from './presentation/routes/qualityRoutes';
 import { createFeedbackRoutes }        from './presentation/routes/feedbackRoutes';
 import { createFeedbackIngestRoutes }  from './presentation/routes/feedbackIngestRoutes';
+import { createFeedbackWebhookRoutes } from './presentation/routes/feedbackWebhookRoutes';
 import { createQualityIngestRoutes }   from './presentation/routes/qualityIngestRoutes';
 import { createPrdRoutes }             from './presentation/routes/prdRoutes';
 import { createRepoRoutes }            from './presentation/routes/repoRoutes';
@@ -294,6 +303,7 @@ import {
   runWithCaughtErrorContext,
 } from './application/observability/caughtErrorReporter';
 import { persistCaughtError } from './infrastructure/observability/persistCaughtError';
+import { taskCreatedHook } from './application/task/taskCreationHook';
 
 configureCaughtErrorReporter(persistCaughtError);
 
@@ -348,7 +358,32 @@ export function buildApp(env: Env): Hono<HonoEnv> {
       if (result.ok) await bumpCacheVersion(env, `task-deps-version:project:${projectId}`).catch((error) => {
         reportCaughtError(error, { source: "index.ts", operation: "taskService" });
       });
-    });
+    },
+    // The scheduler is a PURE function, so the constraints it cannot fetch — the
+    // tenant's working calendar, each owner's capacity, the sprint cadence — are
+    // loaded here and passed in. Without them a fan-out modelled an infinitely
+    // available workforce on a permanent Mon-Fri week.
+    async (projectId) => {
+      const project = await projectRepo.findById(asProjectId(projectId));
+      if (!project) return null;
+      return loadSchedulingContext(env, db, project.tenantId as number, projectId);
+    },
+    // …and where the plan VERDICT lands. `decomposeEpic` always computed whether the
+    // plan had to be compressed to fit the Epic's window, which children overrun it
+    // and which sit in a cycle — and dropped all of it, so the one surface a PM
+    // could have acted on never saw it.
+    async (projectId, epicTaskId, verdict, source) => {
+      const project = await projectRepo.findById(asProjectId(projectId));
+      if (!project) return;
+      await recordPlanVerdict(env, db, {
+        tenantId: project.tenantId as number, projectId, taskId: epicTaskId, verdict, source,
+      });
+    },
+    // CREATION ATTRIBUTION — the one emitter every ticket-minting writer inherits by
+    // passing through this service. 722 of 821 tickets (88%) carried no `task.created`
+    // row before it, so "who opened this — the AI Manager or a person?" was unanswerable
+    // for the overwhelming majority. See `activity/taskCreated.ts`.
+    taskCreatedHook(db, env));
   const tenantService   = new TenantService(tenantRepo, paymentProvider, env);
   const toolService     = new ToolService(db);
   const auditRunner     = new AuditRunner(db, toolService, taskService);
@@ -537,6 +572,18 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // not the CRM's — sales is only the first audience with a reason to use them.
   app.route('/api/messages', createMessageRoutes(db));
   app.route('/api/engagements', createEngagementRoutes(db));
+
+  // Escrow mediation — the CLIENT's and the mediator's half (tenant JWT). The
+  // freelancer's half is `/api/engagements/mine/disputes` under the web JWT, because a
+  // for-hire account belongs to no workspace and has no tenant token to present.
+  app.route('/api/disputes', createDisputeRoutes(db));
+
+  // A person's own statement and where their money goes. Web JWT, deliberately:
+  // `/api/payouts` is behind the tenant token and was therefore unreachable for exactly
+  // the for-hire accounts it exists for. Both doors end up in the same `connections`
+  // rows via `PayoutAccountService`.
+  app.route('/api/earnings', createEarningsRoutes(db));
+  app.route('/api/withdrawal-methods', createWithdrawalMethodRoutes(db));
   app.route('/api/activity', createActivityRoutes(db));
   // LTI 1.3: the LMS-facing half of the teaching vocabulary — a signed launch, the
   // roster coming in through NRPS and marks going back through AGS. Unauthenticated
@@ -573,6 +620,11 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // The Recruiter seat: funnel conversion, candidate self-schedule links, lawful basis
   // and retention, and aggregate diversity reporting.
   app.route('/api/hiring', createHiringRoutes(db));
+  // The ATS itself: applications, the stage board, interview kits, decisions and offers.
+  // Separate from /api/hiring because that is the Recruiter's REPORTING and compliance
+  // surface (funnel, consent, erasure, diversity, booking links) while this is the one
+  // they WORK — different gate, different readers.
+  app.route('/api/ats', createAtsRoutes(db));
   app.route('/api/notifications', createNotificationRoutes());
 
   // Email language + consent. The /unsubscribe leg is intentionally PUBLIC (no
@@ -602,6 +654,10 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/salary', createSalaryRoutes());
   // Professional references — private per person; only /shared/:token is public.
   app.route('/api/references', createReferenceRoutes(db));
+  // Model-assisted résumé work — the generative half of the career domain (XYZ rewrite,
+  // bullet merge, graded read) plus the threaded review queue. Every capability is
+  // grounded on the deterministic reading in `application/career`, never a replacement.
+  app.route('/api/career-ai', createCareerAiRoutes(db));
   // RFP / RFQ Response — pre-sales proposal generation (PRD 15). Reuses the diagnostics
   // scan (freshness gate) + audit runner (re-scan) grounded in the same toolService.
   app.route('/api/rfp', createRfpRoutes(db, toolService, auditRunner, taskService));
@@ -686,6 +742,15 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // embeddable feedback snippet posts here from any application that carries it.
   app.route('/api/feedback-ingest', createFeedbackIngestRoutes(db));
 
+  // Public Product Feedback provider webhooks — Sentry / PostHog deliver here.
+  // No JWT and no ingest key: authorization is the provider's HMAC signature over
+  // the raw body, verified against the tenant's stored secret. Same ingest path,
+  // meter and human gate as the snippet above — only the door differs. Mounted
+  // BENEATH /api/feedback-ingest (mirroring /api/quality-ingest/webhooks) so it
+  // inherits the public-ingest CORS exemption rather than needing a second prefix
+  // added to a list somebody would have to remember.
+  app.route('/api/feedback-ingest/webhooks', createFeedbackWebhookRoutes(db));
+
   // Anonymous landing-prompt handoff: POST / is public (pre-auth); /claim applies
   // web-auth per-route so it can associate the row to the now-known user.
   app.route('/api/pending-prompts', createPendingPromptRoutes(db));
@@ -693,6 +758,11 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // Public endpoints (no JWT required)
   app.route('/api/auth',    createAuthRoutes(authService, db));
   app.route('/api/auth',    createOAuthRoutes(db));
+  // Passkeys. Two routers because the halves have opposite auth requirements:
+  // enrolment is web-JWT gated (you add a key to an account you are already in),
+  // sign-in cannot be, because signing in is what it does.
+  app.route('/api/auth/passkeys', createPasskeyRoutes(db));
+  app.route('/api/auth/passkey',  createPasskeyLoginRoutes(db));
   // Institutional single sign-on. The login half is unauthenticated by
   // construction — that is what signing in means — and the admin half is
   // manager-gated on its own path. See `ssoRoutes.ts` for the SAML decision.
@@ -759,6 +829,9 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // Where an earner's money goes — the sixth connection port, same shape as the
   // two above it (consent or a typed credential, sealed, with a reconnect state).
   app.route('/api/payouts',  createPayoutRoutes(db));
+  // Where the company's numbers COME FROM — the seventh port, and the one that
+  // makes burn, cash and runway live over a book instead of over typing.
+  app.route('/api/ledger',   createLedgerRoutes(db));
   // Connected social accounts — the feed the canvas renders and the accounts a
   // social campaign publishes to. Accounts themselves are connector connections,
   // so connecting one still happens through /api/connectors.

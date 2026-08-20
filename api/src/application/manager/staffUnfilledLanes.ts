@@ -37,7 +37,7 @@
 import { and, eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
-import { swimlaneAgentAssignments } from '../../infrastructure/database/schema';
+import { forLane, laneAgentAssignments, laneAssignmentValues } from '../swimlane/laneAgentAssignments';
 import {
   decideManagedLaneAuthority, loadBoardLaneAuthorities,
   type LaneAuthorityInputs, type ManagedTaskScope,
@@ -142,7 +142,13 @@ export function findBoardStaffingGaps(
   lanes: Iterable<readonly [string, LaneAuthorityInputs]>,
   shapes: readonly ManagedTaskScope[] = [],
 ): BoardStaffingGaps {
-  const probes: ManagedTaskScope[] = [{}, ...shapes];
+  // STAFFING IS FORWARD-LOOKING, so every shape is probed with the pull-request axis
+  // BOTH ways. `has_pr` requirements (a code reviewer required only once a PR exists)
+  // evaluate false on a ticket that has none yet — and staffing that reviewer only after
+  // the PR lands is precisely one pass too late, which is the same "invisible to a probe
+  // that is neither" failure the shape set above was widened to fix. Pure and small: a
+  // handful of shapes doubled.
+  const probes: ManagedTaskScope[] = [{}, ...shapes, ...[{}, ...shapes].map((sh) => ({ ...sh, hasPr: true }))];
   const unfilled = new Set<string>();
   const unauthorized: Array<Omit<UnauthorizedLane, 'ticketCount'>> = [];
 
@@ -471,16 +477,16 @@ async function staffLaneProducer(
   // `decideLaneApprovers` dedupes anyway, so the row would be pure write amplification on
   // a budget that cannot afford it.
   const [existing] = await db
-    .select({ id: swimlaneAgentAssignments.id })
-    .from(swimlaneAgentAssignments)
-    .where(and(
-      eq(swimlaneAgentAssignments.tenantId, args.tenantId),
-      eq(swimlaneAgentAssignments.swimlaneId, args.swimlaneId),
-      eq(swimlaneAgentAssignments.agentRef, staffed.agentRef),
+    .select({ id: laneAgentAssignments.id })
+    .from(laneAgentAssignments)
+    .where(forLane(
+      args.swimlaneId,
+      eq(laneAgentAssignments.tenantId, args.tenantId),
+      eq(laneAgentAssignments.agentRef, staffed.agentRef),
     ))
     .limit(1);
   if (!existing) {
-    await db.insert(swimlaneAgentAssignments).values({
+    await db.insert(laneAgentAssignments).values(laneAssignmentValues({
       tenantId: args.tenantId,
       swimlaneId: args.swimlaneId,
       agentKind: 'workforce',
@@ -490,9 +496,7 @@ async function staffLaneProducer(
       // one, so naming it here is what makes the lane's producer deterministic rather than
       // whatever the catalog happens to enumerate first.
       role: LANE_PRODUCER_ROLE_KEY,
-      runtime: 'cloud',
-      position: 0,
-    });
+    }));
   }
   return {
     action: staffed.action,

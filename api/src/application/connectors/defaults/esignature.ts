@@ -38,16 +38,21 @@ const docusign: ConnectorManifest = {
   category: 'productivity',
   icon: '✍️',
   // Account-specific: DocuSign issues a per-account base URI at authentication
-  // (`https://<region>.docusign.net/restapi`). Declared as a field rather than
-  // guessed, because guessing the wrong region 401s with a message about
-  // credentials and sends everybody looking in the wrong place.
-  baseUrl: 'https://demo.docusign.net/restapi/v2.1',
+  // (`https://<region>.docusign.net/restapi` for production, `demo.docusign.net`
+  // for the sandbox). It is a FIELD rather than a constant because the failure it
+  // prevents is silent: a production account pointed at `demo.docusign.net`
+  // authenticates against a different tenancy, so `send_envelope` reports success
+  // and no customer ever receives the document. Guessing the wrong REGION is only
+  // slightly better — it 401s with a message about credentials and sends everybody
+  // looking in the wrong place.
+  baseUrl: '{{auth.base_uri}}/restapi/v2.1',
   docsUrl: 'https://developers.docusign.com/docs/esign-rest-api/reference/envelopes/envelopes/',
   auth: {
     kind: 'bearer',
     fields: [
       { key: 'token', label: 'Access token', secret: true, required: true, help: 'A JWT or OAuth access token for the account. DocuSign tokens are short-lived — reconnect when calls start 401ing.' },
       { key: 'account_id', label: 'Account ID', secret: false, required: true, help: 'DocuSign → Settings → Apps and Keys → API Account ID.' },
+      { key: 'base_uri', label: 'Account base URI', secret: false, required: true, placeholder: 'https://na4.docusign.net', help: 'The account base URI DocuSign returns from /oauth/userinfo — e.g. https://na4.docusign.net for production, https://demo.docusign.net for the developer sandbox. No trailing slash.' },
     ],
   },
   actions: [

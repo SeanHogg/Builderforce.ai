@@ -27,6 +27,7 @@ import { TaskRepository } from '../../infrastructure/repositories/TaskRepository
 import { ProjectRepository } from '../../infrastructure/repositories/ProjectRepository';
 import { TaskType, TaskPriority } from '../../domain/shared/types';
 import type { Db } from '../../infrastructure/database/connection';
+import { taskCreatedHook } from '../task/taskCreationHook';
 
 export type ReviewVerdict = 'complete' | 'gaps';
 
@@ -80,7 +81,7 @@ export class ValidationService {
   constructor(private readonly db: Db) {
     const taskRepo = new TaskRepository(db);
     const projectRepo = new ProjectRepository(db);
-    this.tasks = new TaskService(taskRepo, projectRepo);
+    this.tasks = new TaskService(taskRepo, projectRepo, undefined, undefined, undefined, undefined, undefined, taskCreatedHook(db));
   }
 
   /** The reviewed task, tenant-scoped (via project join). Null on cross-tenant / missing. */

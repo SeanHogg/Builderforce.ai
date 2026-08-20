@@ -20593,4 +20593,18 @@ validate-only reports 344 source tables and 114 one-to-one targets; tenancy audi
 confirms the existing-shape/no-DDL contract. The production account map and ETL execution remain the
 Identity/Data gates and were not fabricated without read-only production credentials.
 
+## RESOLVED 2026-08-20 — scheduling, executive insight, delivery and hiring follow-through
+
+The pending delivery tranche closes the following previously-open roadmap items:
+
+- **Scheduling residuals SCHED-R1 through R5.** A reviewable decomposition-cleanup census now identifies legacy heuristic children and duplicate siblings; empty objective/initiative containers explicitly read as not yet scoped; decomposition source is surfaced; tenant working calendars and assignee capacity feed scheduling; and persisted plan verdicts expose compression, overrun and cycle warnings on the planning and manager surfaces.
+- **Vague-to-informed executive answers.** Ask now composes an answer from selected widgets, with a workforce-health view and an Executive dashboard preset. Incident RCA adds persisted 5-Why chains and a reusable dependency graph.
+- **Feedback intake.** Consumption metering and provider-webhook ingestion are implemented alongside the existing collector path.
+- **Canvas delivery controls.** Website publishing provisions or connects its delivery project instead of dead-ending. Canvas workflow `runTarget` and `approvalMode` are persisted by `from-canvas` and the latter gates execution.
+- **Finance, mailbox and advertising execution.** QuickBooks, Xero, NetSuite, Plaid and Stripe accounting adapters now normalize/sync ledger data; mailbox watches provide push/renewal handling; ad-set/ad creation and UTM ownership join campaign spend to measured outcomes.
+- **Identity and education flows.** SSO domain verification has a scheduled sweep. LTI learner launches now mint/resume a private learner board, while deep-link launches use a signed object picker/response. Share invitations localize from the publisher locale.
+- **Founder, marketplace and career operations.** Legal entity, IP asset and matter canvas records are available; the stale `content` artifact type is retired; rich job/proposal fields plus saved talent, invites and recommendations land on the marketplace; model-assisted résumé review tools and an ATS pipeline (applications, interviews, decisions and offers) are now reachable.
+- **People and publishing polish.** The HRMS-backed tools are connected to the supported connector path. Hired-video article embeds now resolve résumé templates, the stale `hired-default` template identifier is migrated to `standard`, release-digest delivery is resumable, and the deck generator/seat-specific slide 19 source are restored.
+
+The items still requiring external accounts, production credentials, provider approval, or an operator decision remain in ROADMAP.md.
 

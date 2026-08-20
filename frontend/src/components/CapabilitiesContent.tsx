@@ -3,16 +3,17 @@
 import { useState } from 'react';
 import { SkillAssignmentsContent } from './SkillAssignmentsContent';
 import { PersonaAssignmentsContent } from './PersonaAssignmentsContent';
-import { ContentAssignmentsContent } from './ContentAssignmentsContent';
 import { GovernanceContent } from './GovernanceContent';
 import type { ProjectAgent } from '@/lib/builderforceApi';
 
-type CapabilitySection = 'skills' | 'personas' | 'content' | 'governance';
+// 'content' was retired with migration 0982: content blocks only ever lived in
+// this browser's localStorage, so the tab could not name what it had assigned on
+// any other device. Content is a Knowledge document now.
+type CapabilitySection = 'skills' | 'personas' | 'governance';
 
 const SECTIONS: { id: CapabilitySection; label: string }[] = [
   { id: 'skills', label: 'Skills' },
   { id: 'personas', label: 'Personas' },
-  { id: 'content', label: 'Content' },
   { id: 'governance', label: 'Governance' },
 ];
 
@@ -23,7 +24,12 @@ export interface CapabilitiesContentProps {
   projectId?: number;
   /** When scope is 'agent', the agent whose governance is edited. */
   agentAssignment?: ProjectAgent;
-  /** Tenant ID for content block name resolution. */
+  /**
+   * @deprecated Unused. It existed only to resolve the names of localStorage
+   * content blocks for the Content tab, which migration 0982 retired. Kept
+   * (accepted and ignored) because callers outside this file still pass it;
+   * remove the prop once every caller has dropped it.
+   */
   tenantId?: string;
   /** Hide sections that don't apply. */
   hideSections?: CapabilitySection[];
@@ -36,7 +42,6 @@ export function CapabilitiesContent({
   scopeId,
   projectId,
   agentAssignment,
-  tenantId,
   hideSections,
   className,
   style,
@@ -74,9 +79,6 @@ export function CapabilitiesContent({
       )}
       {activeSection === 'personas' && (
         <PersonaAssignmentsContent scope={scope} scopeId={scopeId} />
-      )}
-      {activeSection === 'content' && (
-        <ContentAssignmentsContent scope={scope} scopeId={scopeId} tenantId={tenantId} />
       )}
       {activeSection === 'governance' && (
         scope === 'agent' && agentAssignment ? (

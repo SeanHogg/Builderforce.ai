@@ -10,8 +10,9 @@ import { TOOLS, getTool } from './toolDefinitions';
 import { TOOL_DATA_PROVIDERS, hasDataProvider } from './toolDataProviders';
 import { toSummary, toDefinition, type ToolSummary, type ToolDefinition, type ToolResult } from './toolTypes';
 import { applyMaturityFramework, maturityFramework, supportsMaturityFrameworks, type MaturityFrameworkId } from './maturityFrameworks';
-import { localizeTool, DEFAULT_TOOL_LOCALE, type ToolLocale } from './toolMessages';
-import { resultCopy } from './resultCopy';
+import { localizeTool, toolCopy, DEFAULT_TOOL_LOCALE, type ToolLocale } from './toolMessages';
+import { TOOL_LOCALES, resultCopy } from './resultCopy';
+import { storedFigures, storedResult, withFigures } from './storedToolResult';
 import { scoreQuestionnaire, scoreQuiz } from './toolTypes';
 
 import { ARCHITECTURE_DIAGNOSTIC_ID, EXTERNAL_DIAGNOSTIC_NAMES, EXTERNAL_DIAGNOSTIC_ICONS } from './auditIds';
@@ -21,9 +22,19 @@ import { ARCHITECTURE_DIAGNOSTIC_ID, EXTERNAL_DIAGNOSTIC_NAMES, EXTERNAL_DIAGNOS
  *  system-audit ids and their display names. */
 export { ARCHITECTURE_DIAGNOSTIC_ID };
 
-const LEVEL_NAMES = ['Initial', 'Managed', 'Defined', 'Quantitatively Managed', 'Optimizing'];
 const clampLevel = (n: number): number => Math.max(1, Math.min(5, Math.round(n)));
-const levelName = (n: number): string => LEVEL_NAMES[clampLevel(n) - 1]!;
+/**
+ * The five CMMI band names, from the SHARED chrome rather than a private list.
+ *
+ * This module carried its own copy of them, which meant the rollup could call a
+ * 3.0 "Defined" while a scorer that had been re-worded called it something else —
+ * two spellings of one band, on two surfaces, for the same number. English is
+ * pinned here on purpose: the rollup is not yet locale-aware (its cache key has
+ * no locale in it), so it must not silently render half a page in another
+ * language. Widening it is a matter of threading the reader's locale through
+ * `getProjectScore` / `getTenantRollup` and folding it into those keys.
+ */
+const levelName = (n: number): string => resultCopy(DEFAULT_TOOL_LOCALE).levelNames[clampLevel(n) - 1]!;
 
 /** Display name for any diagnostic id — a registered tool, or a special
  *  externally-scored diagnostic like the architecture analysis. */
@@ -108,10 +119,28 @@ export interface TenantDiagnosticsRollup {
   projects: TenantProjectScore[];
 }
 
-const runsKey = (tenantId: number, toolId: string, projectId?: number | null) =>
-  `tools:runs:tenant:${tenantId}:${toolId}:project:${projectId ?? 'none'}`;
+/**
+ * Saved-run history, keyed BY LOCALE.
+ *
+ * The locale is in the key because the cached value is the RENDERED history: a
+ * run is re-scored in the reader's language on read, so one cache entry cannot
+ * serve two readers. A write invalidates every locale's entry
+ * (see {@link ToolService.invalidateRuns}) — a partial invalidation would leave
+ * a French reader looking at a history that is missing the run they just saved.
+ */
+const runsKey = (tenantId: number, toolId: string, projectId: number | null | undefined, locale: ToolLocale) =>
+  `tools:runs:tenant:${tenantId}:${toolId}:project:${projectId ?? 'none'}:l:${locale}`;
+/**
+ * Collected telemetry FIGURES for one window — deliberately locale-free.
+ *
+ * `:v2` is a version token, not decoration. The same key held a rendered
+ * `ToolResult` before the collect/score split, and a stale KV entry read back as
+ * a figures payload would score as garbage; bumping the token orphans them
+ * instead of requiring a KV sweep. The win is real: one aggregation now serves
+ * all five languages rather than five.
+ */
 const dataKey = (tenantId: number, toolId: string, days: number, projectId?: number | null) =>
-  `tools:data:tenant:${tenantId}:${toolId}:days:${days}:project:${projectId ?? 'none'}`;
+  `tools:data:v2:tenant:${tenantId}:${toolId}:days:${days}:project:${projectId ?? 'none'}`;
 // Diagnostics score/rollup cache keys — shared in readThroughCache so a task PR/status
 // transition invalidates the SAME keys (keeps the remediation badge from lagging).
 const projectScoreKey = projectScoreCacheKey;
@@ -218,12 +247,12 @@ export class ToolService {
   analyze(id: string, input: Record<string, string>, locale: ToolLocale = DEFAULT_TOOL_LOCALE): ToolResult | null {
     const tool = getTool(id);
     if (!tool || tool.kind !== 'analyzer') return null;
-    // The analyzer's FIELDS are localized like every other definition (they are
-    // served through `getDefinition`); the prose its `analyze()` composes is
-    // still authored in English. That is the one remaining gap and it is logged
-    // in the Gap Register — the seam is here, only the copy is outstanding.
-    void locale;
-    return tool.analyze(input);
+    // The FIELDS are localized by `getDefinition` like every other definition;
+    // the findings are localized here, by handing `analyze()` the copy lookup for
+    // this locale. Both halves come out of the same four catalogs, so a French
+    // visitor can no longer get a translated résumé-scorer form with English
+    // findings under it. `analyze` stays pure — the copy is a parameter.
+    return tool.analyze(input, toolCopy(tool, locale));
   }
 
   /** Whether a tool has a telemetry-derived "from your data" mode. */
@@ -240,11 +269,37 @@ export class ToolService {
    * result, so three framework views share one computation instead of tripling
    * the cache keyspace and the telemetry aggregation behind it.
    */
-  async getDataDriven(env: Env, tenantId: number, id: string, days: number, projectId?: number | null, framework?: MaturityFrameworkId): Promise<ToolResult | null> {
-    const provider = TOOL_DATA_PROVIDERS[id];
-    if (!provider) return null;
-    const result = await getOrSetCached(env, dataKey(tenantId, id, days, projectId), () => provider(this.db, tenantId, days, projectId ?? null), { kvTtlSeconds: 300 });
+  async getDataDriven(env: Env, tenantId: number, id: string, days: number, projectId?: number | null, framework?: MaturityFrameworkId, locale: ToolLocale = DEFAULT_TOOL_LOCALE): Promise<ToolResult | null> {
+    const figures = await this.dataFigures(env, tenantId, id, days, projectId);
+    if (figures === undefined) return null;
+    const result = this.scoreData(id, figures, locale);
+    if (!result) return null;
     return applyMaturityFramework(result, maturityFramework(framework));
+  }
+
+  /**
+   * The collected telemetry for one window, cached. `undefined` for a tool with
+   * no provider — distinct from a provider that legitimately collected nothing.
+   *
+   * What is cached is the FIGURES, not the rendering, which is what lets the same
+   * aggregation be rendered into five languages and lets a saved run be
+   * re-rendered years later without touching the database.
+   */
+  private async dataFigures(env: Env, tenantId: number, id: string, days: number, projectId?: number | null): Promise<unknown | undefined> {
+    const provider = TOOL_DATA_PROVIDERS[id];
+    if (!provider) return undefined;
+    return getOrSetCached(env, dataKey(tenantId, id, days, projectId), () => provider.collect(this.db, tenantId, days, projectId ?? null), { kvTtlSeconds: 300 });
+  }
+
+  /** Pure: figures → a result in one language. Null when the tool or its provider
+   *  has since been removed, which is the caller's cue to fall back to whatever
+   *  rendering the run already carries. */
+  private scoreData(id: string, figures: unknown, locale: ToolLocale): ToolResult | null {
+    const provider = TOOL_DATA_PROVIDERS[id];
+    const source = getTool(id);
+    if (!provider || !source) return null;
+    const tool = localizeTool(source, locale);
+    return provider.score(figures, { chrome: resultCopy(locale), copy: toolCopy(tool, locale), tool });
   }
 
   /**
@@ -254,15 +309,25 @@ export class ToolService {
    * against that project and feeds its diagnostic rating.
    */
   async saveRun(env: Env, args: { tenantId: number; toolId: string; kind: 'self' | 'data'; input: Record<string, number>; projectId?: number | null; createdBy?: string | null }): Promise<SavedToolRun | null> {
-    let result: ToolResult | null;
+    // ALWAYS rendered in the default locale, whatever language the saver is
+    // reading in. The stored rendering is the FALLBACK a reader gets when the run
+    // can no longer be re-rendered, so it has to be written in one predictable
+    // language rather than in whichever one the manager happened to be using.
     if (args.kind === 'data') {
       const days = Math.min(Math.max(Number(args.input.days ?? 90), 7), 365);
-      result = await this.getDataDriven(env, args.tenantId, args.toolId, days, args.projectId ?? null);
-      args = { ...args, input: { days } };
-    } else {
-      result = this.compute(args.toolId, args.input);
+      const figures = await this.dataFigures(env, args.tenantId, args.toolId, days, args.projectId ?? null);
+      if (figures === undefined) return null;
+      const result = this.scoreData(args.toolId, figures, DEFAULT_TOOL_LOCALE);
+      if (!result) return null;
+      // The figures ride along, so this snapshot can be re-rendered in the
+      // reader's language later — the telemetry window it was taken over will
+      // have passed, and re-querying would answer a different question.
+      return this.persist(env, { ...args, input: { days }, result: withFigures(result, figures) });
     }
+    const result = this.compute(args.toolId, args.input);
     if (!result) return null;
+    // No figures needed: a self-assessment's `input` IS its figures, and it is
+    // already stored in its own column, so `listRuns` re-scores from there.
     return this.persist(env, { ...args, result });
   }
 
@@ -289,17 +354,37 @@ export class ToolService {
       })
       .returning();
     await Promise.all([
-      invalidateCached(env, runsKey(args.tenantId, args.toolId, args.projectId ?? null)),
+      this.invalidateRuns(env, args.tenantId, args.toolId, args.projectId ?? null),
       args.projectId != null ? invalidateCached(env, projectScoreKey(args.tenantId, args.projectId)) : Promise.resolve(),
       args.projectId != null ? invalidateCached(env, rollupKey(args.tenantId)) : Promise.resolve(),
     ]);
-    return this.rowToDto(row!);
+    return this.rowToDto(row!, DEFAULT_TOOL_LOCALE);
   }
 
-  /** Saved run history for a tool, cached + invalidated on save. Optionally
-   *  scoped to a single project. */
-  async listRuns(env: Env, tenantId: number, toolId: string, projectId?: number | null): Promise<SavedToolRun[]> {
-    return getOrSetCached(env, runsKey(tenantId, toolId, projectId), async () => {
+  /** Drop the saved history for EVERY language, not just the writer's. One
+   *  invalidation per locale is the price of caching a rendered list; skipping
+   *  the other four would hide a just-saved run from every other reader until the
+   *  TTL expired. */
+  private async invalidateRuns(env: Env, tenantId: number, toolId: string, projectId: number | null): Promise<void> {
+    await Promise.all(TOOL_LOCALES.map((locale) => invalidateCached(env, runsKey(tenantId, toolId, projectId, locale))));
+  }
+
+  /**
+   * Saved run history for a tool, IN THE READER'S LANGUAGE, cached + invalidated
+   * on save. Optionally scoped to a single project.
+   *
+   * A stored result is JSON, so a run saved by a German manager used to read as
+   * German to an English teammate looking at the same workspace history — and
+   * storing five renderings would be five times the row and still wrong the day a
+   * sixth locale ships. Instead each row is re-rendered on read: see
+   * {@link ToolService.renderRun} for how, and why the default locale short-
+   * circuits back to the stored snapshot untouched.
+   *
+   * The read goes through the canonical read-through cache, keyed WITH the locale,
+   * so the recompute is paid once per language per window rather than per view.
+   */
+  async listRuns(env: Env, tenantId: number, toolId: string, projectId?: number | null, locale: ToolLocale = DEFAULT_TOOL_LOCALE): Promise<SavedToolRun[]> {
+    return getOrSetCached(env, runsKey(tenantId, toolId, projectId, locale), async () => {
       const rows = await this.db
         .select()
         .from(toolRuns)
@@ -310,8 +395,42 @@ export class ToolService {
         ))
         .orderBy(desc(toolRuns.createdAt))
         .limit(50);
-      return rows.map((r) => this.rowToDto(r));
+      return rows.map((r) => this.rowToDto(r, locale));
     }, { kvTtlSeconds: 300 });
+  }
+
+  /**
+   * One saved run's result, in the reader's language.
+   *
+   * Two paths, plus one fallback that every path ends at:
+   *
+   *   - `self` re-scores from the stored `input`, which is sufficient on its own.
+   *   - `data` re-renders from the stored FIGURES; its telemetry window has
+   *     passed, so there is nothing else it could be scored from, and re-querying
+   *     today would quietly answer a different question.
+   *   - anything that cannot be re-rendered falls back to the stored rendering.
+   *     A row written before the envelope existed, a tool since deleted, a
+   *     payload whose shape moved on — all of them render, none of them throw.
+   *
+   * The re-render runs for EVERY locale, including the default, deliberately.
+   * Short-circuiting English would assume the stored rendering is English, and
+   * that is precisely the assumption this whole change exists to stop making: a
+   * row written by the old path carries whatever language its saver was reading
+   * in, and an English teammate has to be able to read it.
+   *
+   * The honest cost: a `self` run re-scored today is scored against TODAY's
+   * questionnaire, so an edited recommendation changes what an old snapshot says.
+   * That is the right trade — the alternative is a history in a language its
+   * reader does not have — and it does not apply to `data` runs at all, whose
+   * figures are frozen at the moment they were taken.
+   */
+  private renderRun(row: typeof toolRuns.$inferSelect, locale: ToolLocale): ToolResult {
+    const stored = storedResult(row.result);
+    if (row.kind === 'data') {
+      const figures = storedFigures(row.result);
+      return (figures === undefined ? null : this.scoreData(row.toolId, figures, locale)) ?? stored;
+    }
+    return this.compute(row.toolId, (row.input ?? {}) as Record<string, number>, undefined, locale) ?? stored;
   }
 
   /**
@@ -336,7 +455,10 @@ export class ToolService {
       const projectTasks = (await this.remediationTasksByProject([projectId])).get(projectId) ?? [];
 
       const diagnostics: ProjectDiagnostic[] = [...latest.values()].map((r) => {
-        const result = r.result as ToolResult;
+        // Through the envelope decoder, not a bare cast: a `data` run now carries
+        // its figures beside its rendering, and the two extra properties must not
+        // reach a caller that thinks it is holding a plain result.
+        const result = storedResult(r.result);
         const name = diagnosticName(r.toolId);
         return {
           toolId: r.toolId,
@@ -397,7 +519,7 @@ export class ToolService {
         if (r.projectId == null) continue;
         let entry = byProject.get(r.projectId);
         if (!entry) { entry = { latest: new Map(), lastRunAt: r.createdAt }; byProject.set(r.projectId, entry); }
-        if (!entry.latest.has(r.toolId)) entry.latest.set(r.toolId, r.result as ToolResult);
+        if (!entry.latest.has(r.toolId)) entry.latest.set(r.toolId, storedResult(r.result));
         if (r.createdAt > entry.lastRunAt) entry.lastRunAt = r.createdAt;
       }
 
@@ -460,14 +582,14 @@ export class ToolService {
     }, { kvTtlSeconds: 300 });
   }
 
-  private rowToDto(row: typeof toolRuns.$inferSelect): SavedToolRun {
+  private rowToDto(row: typeof toolRuns.$inferSelect, locale: ToolLocale): SavedToolRun {
     return {
       id: row.id,
       toolId: row.toolId,
       kind: row.kind,
       projectId: row.projectId ?? null,
       input: (row.input ?? {}) as Record<string, number>,
-      result: row.result as ToolResult,
+      result: this.renderRun(row, locale),
       createdBy: row.createdBy ?? null,
       createdAt: row.createdAt.toISOString(),
     };

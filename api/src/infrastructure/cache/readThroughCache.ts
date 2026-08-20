@@ -290,6 +290,34 @@ export async function bumpOutcomesVersion(env: Env, tenantId: number): Promise<v
   });
 }
 
+/**
+ * Version key for the PUBLIC canvas API's board listings (`GET /api/v1/boards`).
+ *
+ * The listing is the read an integration polls, and its keyspace is unbounded
+ * (page × limit × status × folder), so a token folded into the key is the right
+ * invalidation rather than enumerating every page.
+ *
+ * It lives here, next to the ticket-search and outcomes tokens, for the reason
+ * those do: the writers are not all in one file. A board's listed shape changes
+ * from the public item CRUD, from the in-product canvas save, and from the command
+ * batch — three writers, one format, no drift.
+ *
+ * The board's ITEM read is deliberately NOT versioned this way. It is keyed on the
+ * board's own `canvas_revision`, which every write already bumps, so it is exact
+ * rather than eventually-correct and no writer has to remember anything at all.
+ */
+export function publicCanvasVersionKey(tenantId: number): string {
+  return `public-canvas-version:tenant:${tenantId}`;
+}
+
+/** Orphan every cached public board listing for a tenant. Call from every canvas
+ *  write. Best-effort (never throws) so it can be fire-and-forget. */
+export async function bumpPublicCanvasVersion(env: Env, tenantId: number): Promise<void> {
+  await bumpCacheVersion(env, publicCanvasVersionKey(tenantId)).catch((error) => {
+    reportCaughtError(error, { source: 'infrastructure/cache/readThroughCache.ts', operation: 'bumpPublicCanvasVersion' });
+  });
+}
+
 /** Invalidate both cache layers for `key`. Call from every mutation that
  *  changes the cached data so the next read re-loads. */
 export async function invalidateCached(env: Env, key: string): Promise<void> {

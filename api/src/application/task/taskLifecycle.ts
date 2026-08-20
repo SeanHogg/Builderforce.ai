@@ -53,7 +53,14 @@ export function isReviewLane(status: string | null | undefined): boolean {
   return !!status && REVIEW_CLASS.has(status);
 }
 
-export type LaneInfo = { position: number; isTerminal: boolean };
+export type LaneInfo = {
+  position: number;
+  isTerminal: boolean;
+  /** PARKED — off the delivery path (`swimlanes.is_parking`, migration 1080). Optional so
+   *  a caller building an OrdinalMap by hand (tests, a non-board status) need not know
+   *  about it; absent reads as "not parked". */
+  isParking?: boolean;
+};
 export type OrdinalMap = Record<string, LaneInfo>;
 
 function ordinalsCacheKey(projectId: number): string {
@@ -70,12 +77,15 @@ function ordinalsCacheKey(projectId: number): string {
 export async function loadLaneOrdinals(env: Env, db: Db, projectId: number): Promise<OrdinalMap> {
   return getOrSetCached(env, ordinalsCacheKey(projectId), async () => {
     const rows = await db
-      .select({ key: swimlanes.key, position: swimlanes.position, isTerminal: swimlanes.isTerminal })
+      .select({
+        key: swimlanes.key, position: swimlanes.position,
+        isTerminal: swimlanes.isTerminal, isParking: swimlanes.isParking,
+      })
       .from(swimlanes)
       .innerJoin(boards, eq(boards.id, swimlanes.boardId))
       .where(eq(boards.projectId, projectId));
     const map: OrdinalMap = {};
-    for (const r of rows) map[r.key] = { position: r.position, isTerminal: r.isTerminal };
+    for (const r of rows) map[r.key] = { position: r.position, isTerminal: r.isTerminal, isParking: r.isParking };
     return map;
   });
 }

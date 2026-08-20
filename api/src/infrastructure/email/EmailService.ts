@@ -14,7 +14,7 @@
  * whether a send is transactional or lifecycle.
  */
 
-import { emailCopy, type EmailCopy, type NextStepsCopy } from './emailMessages';
+import { emailCopy, fillCopy, type EmailCopy, type NextStepsCopy } from './emailMessages';
 import { DEFAULT_EMAIL_LOCALE, type EmailLocale } from './emailLocale';
 
 // ---------------------------------------------------------------------------
@@ -224,14 +224,17 @@ function escapeHtml(str: string): string {
 }
 
 function render(template: string, vars: Record<string, string>): string {
-  return Object.entries(vars).reduce(
-    (acc, [key, val]) => acc.replaceAll(`{{${key}}}`, escapeHtml(val)),
+  // Same substitution as `fill`, with every value escaped FIRST — the two differ
+  // only in that escaping pass, so the marker syntax has one definition.
+  return fillCopy(
     template,
+    Object.fromEntries(Object.entries(vars).map(([key, val]) => [key, escapeHtml(val)])),
   );
 }
 
 /**
- * Substitute placeholders into a CATALOG string without escaping.
+ * Substitute placeholders into a CATALOG string without escaping — the shared
+ * `fillCopy` primitive under the name this file has always used it by.
  *
  * Catalog copy intentionally contains markup (`<strong>`), so it cannot go through
  * `render()`'s escaping pass — that would print the tags. Values passed here are
@@ -240,12 +243,7 @@ function render(template: string, vars: Record<string, string>): string {
  * `{{Placeholder}}` for the outer `render()` call to escape instead of being
  * interpolated here.
  */
-function fill(copy: string, vars: Record<string, string | number> = {}): string {
-  return Object.entries(vars).reduce(
-    (acc, [key, val]) => acc.replaceAll(`{{${key}}}`, String(val)),
-    copy,
-  );
-}
+const fill = fillCopy;
 
 /** Wraps every paragraph of body copy identically so templates stay declarative. */
 function p(copy: string, style?: string): string {

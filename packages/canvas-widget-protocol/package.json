@@ -1,0 +1,11 @@
+{
+  "name": "@builderforce/canvas-widget-protocol",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Transport contract for third-party canvas widgets: the manifest shape, the permission vocabulary, the sandboxed iframe attributes, and the postMessage message-type allowlist. Shared by the API (registration + permission checks) and the browser widget host. Source-only: every consumer aliases the bare specifier straight at src/index.ts.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "types": "./src/index.ts"
+}

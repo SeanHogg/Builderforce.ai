@@ -39,6 +39,7 @@ import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { Env } from '../../env';
 import { executeConnectorAction } from '../connectors/connectorRuntime';
 import { connectedConnectorKeys } from '../connectors/connectorTools';
+import { asRecord, pickNumber, pickText, rowsFrom } from '../connectors/providerPayload';
 import { setDocumentLines } from './payables';
 
 export class PayRunError extends Error {
@@ -67,7 +68,10 @@ const PAY_RUN_LINES = 'pay_run' as const;
 export const PAY_RUN_SOURCES: readonly { connectorKey: string; actionKey: string }[] = [
   { connectorKey: 'gusto', actionKey: 'list_pay_runs' },
   { connectorKey: 'rippling', actionKey: 'list_pay_runs' },
-  { connectorKey: 'adp', actionKey: 'list_pay_runs' },
+  // `adp-workforce`, not `adp`: the manifest key in `defaults/payroll.ts` carries
+  // the suffix, and a candidate whose key never matches a connected connector is
+  // a provider that silently never answers.
+  { connectorKey: 'adp-workforce', actionKey: 'list_pay_runs' },
   { connectorKey: 'deel', actionKey: 'list_payments' },
 ];
 
@@ -285,29 +289,17 @@ export async function hydratePayRuns(
   return { source: target.connectorKey, imported: runs.length, created, connectedSources, error: null };
 }
 
-const asRecord = (value: unknown): Record<string, unknown> =>
-  value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
-
-/** The first of these keys that carries a finite number. A candidate LIST rather
- *  than a per-vendor branch: the vendors differ only in spelling, and a new one
- *  is a string in an array. */
-const pick = (source: Record<string, unknown>, keys: readonly string[]): number | null => {
-  for (const key of keys) {
-    const raw = source[key];
-    const value = typeof raw === 'string' ? Number(raw) : raw;
-    if (typeof value === 'number' && Number.isFinite(value)) return value;
-  }
-  return null;
-};
-
-const pickText = (source: Record<string, unknown>, keys: readonly string[]): string | null => {
-  for (const key of keys) {
-    const value = source[key];
-    if (typeof value === 'string' && value.trim()) return value.trim();
-    if (typeof value === 'number') return String(value);
-  }
-  return null;
-};
+/**
+ * Reading the vendor's JSON is {@link ../connectors/providerPayload}'s job.
+ *
+ * `asRecord` / `pick` / `pickText` and the envelope search were written here
+ * first and then needed verbatim by the People roster reads, which call the same
+ * kind of connector action against several of the same vendors. Two copies of a
+ * per-vendor field table is how a spelling fixed in one place stays broken in the
+ * other, so the four functions moved and both callers import them. `pick` keeps
+ * its old name locally only because it appears twenty times below.
+ */
+const pick = pickNumber;
 
 /**
  * Turn a provider's JSON into pay runs.
@@ -317,17 +309,10 @@ const pickText = (source: Record<string, unknown>, keys: readonly string[]): str
  * that is missing: the second is visible.
  */
 export function normalisePayRuns(data: unknown): Array<Omit<PayRunInput, 'source'>> {
-  const rows = Array.isArray(data)
-    ? data
-    : Array.isArray(asRecord(data).payrolls) ? asRecord(data).payrolls as unknown[]
-    : Array.isArray(asRecord(data).results) ? asRecord(data).results as unknown[]
-    : Array.isArray(asRecord(data).data) ? asRecord(data).data as unknown[]
-    : Array.isArray(asRecord(data).items) ? asRecord(data).items as unknown[]
-    : [];
+  const rows = rowsFrom(data, ['payrolls']);
 
   const out: Array<Omit<PayRunInput, 'source'>> = [];
-  for (const raw of rows) {
-    const row = asRecord(raw);
+  for (const row of rows) {
     const totals = asRecord(row.totals);
     const externalRef = pickText(row, ['id', 'payroll_id', 'uuid', 'reference', 'payroll_uuid']);
     if (!externalRef) continue;

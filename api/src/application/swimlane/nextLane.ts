@@ -20,6 +20,10 @@ export interface LanePosition {
   position: number;
   /** Whether this lane finalizes the ticket (a Done/terminal lane). */
   isTerminal?: boolean;
+  /** `swimlanes.is_parking` (migration 1080) — the AUTHORITATIVE parked flag. When
+   *  absent (a caller that did not select the column, or a hand-built lane list) the
+   *  key-set fallback in {@link PARKED_LANE_KEYS} still applies. */
+  isParking?: boolean;
 }
 
 /**
@@ -43,8 +47,18 @@ export interface LanePosition {
  */
 export const PARKED_LANE_KEYS: ReadonlySet<string> = new Set(['blocked', 'on_hold', 'cancelled']);
 
-/** True when a lane is parked — off the delivery path. */
-export function isParkedLane(key: string): boolean {
+/**
+ * True when a lane is parked — off the delivery path.
+ *
+ * The key set is now the FALLBACK, not the rule. `swimlanes.is_parking` (migration 1080)
+ * is the authoritative flag, seeded from exactly this set, and it is what makes a
+ * tenant's own parking lane ("On Hold — Q3", "Waiting on Legal") work: those keys match
+ * nothing here, so before the column every custom board kept both bugs this set was
+ * added to fix. Callers that have the column pass it; callers that do not (a hand-built
+ * lane list, a status with no swimlane) still get the seeded behaviour.
+ */
+export function isParkedLane(key: string, isParking?: boolean | null): boolean {
+  if (isParking != null) return isParking;
   return PARKED_LANE_KEYS.has(key);
 }
 
@@ -73,7 +87,7 @@ export function resolveNextLaneKey(lanes: LanePosition[], fromStatus: string): s
   for (let i = idx + 1; i < sorted.length; i += 1) {
     const next = sorted[i];
     if (!next) break;
-    if (isParkedLane(next.key)) continue;
+    if (isParkedLane(next.key, next.isParking)) continue;
     // A terminal lane still stops the auto-advance (reaching Done stays explicit).
     return next.isTerminal ? null : next.key;
   }
@@ -94,10 +108,79 @@ export async function resolveNextTaskStatus(db: Db, projectId: number, fromStatu
   if (!board) return null;
 
   const lanes = await db
-    .select({ key: swimlanes.key, position: swimlanes.position, isTerminal: swimlanes.isTerminal })
+    .select({ key: swimlanes.key, position: swimlanes.position, isTerminal: swimlanes.isTerminal, isParking: swimlanes.isParking })
     .from(swimlanes)
     .where(eq(swimlanes.boardId, board.id))
     .orderBy(asc(swimlanes.position));
 
   return resolveNextLaneKey(lanes, fromStatus);
+}
+
+/**
+ * The lane a ticket belongs in the moment a run STARTS. PURE.
+ *
+ * The RUNNING transition was the last hardcoded hop: `RuntimeService` wrote
+ * `TaskStatus.IN_PROGRESS` unconditionally, whatever the board's lanes were called. On
+ * the default board that is right by coincidence — `in_progress` is a real lane there —
+ * but on a board whose lanes are `intake → spec → build → qa → ship` it wrote a status
+ * matching NO column, so a ticket disappeared from the board the instant an agent
+ * started working it, and only a human editing the status could bring it back.
+ *
+ * Resolution, in order:
+ *  1. **The lane the run was DISPATCHED FOR.** The lane trigger stamps `laneKey` on the
+ *     payload, so the board itself has already answered "which stage is this run
+ *     serving". This is what makes the walk position-driven rather than
+ *     constant-driven: a run dispatched for `backlog` keeps the ticket in `backlog`
+ *     instead of skipping `todo` and `ready` to land on a constant.
+ *  2. **A lane literally keyed `in_progress`**, when the board has one — every default
+ *     board does, so nothing that works today changes.
+ *  3. **Nothing.** Returning null means "leave the ticket where it is", which is the
+ *     honest answer for a board with neither: better a ticket in a lane you can see than
+ *     a ticket in a status no column renders.
+ *
+ * Never moves BACKWARD: if the resolved lane sits before the ticket's current one, the
+ * ticket stays. A run starting is not a reason to rewind a ticket that has progressed.
+ */
+export function resolveRunningLaneKey(
+  lanes: LanePosition[],
+  fromStatus: string,
+  dispatchedLaneKey?: string | null,
+): string | null {
+  const sorted = [...lanes].sort((a, b) => a.position - b.position || a.key.localeCompare(b.key));
+  const indexOf = (key: string) => sorted.findIndex((l) => l.key === key);
+  const from = indexOf(fromStatus);
+
+  const target = (() => {
+    if (dispatchedLaneKey && indexOf(dispatchedLaneKey) >= 0) return dispatchedLaneKey;
+    return sorted.some((l) => l.key === 'in_progress') ? 'in_progress' : null;
+  })();
+  if (!target || target === fromStatus) return null;
+
+  // Never rewind. `from < 0` (a status matching no lane) is treated as "before
+  // everything", so an off-board ticket is still pulled onto the board when a run starts.
+  const to = indexOf(target);
+  if (from >= 0 && to <= from) return null;
+  return target;
+}
+
+/**
+ * Resolve the RUNNING-phase lane for a task's project board. Null when the project has
+ * no board, or when the ticket should not move — see {@link resolveRunningLaneKey}.
+ */
+export async function resolveRunningTaskStatus(
+  db: Db,
+  projectId: number,
+  fromStatus: string,
+  dispatchedLaneKey?: string | null,
+): Promise<string | null> {
+  const board = await findCanonicalBoard(db, projectId);
+  if (!board) return null;
+
+  const lanes = await db
+    .select({ key: swimlanes.key, position: swimlanes.position, isTerminal: swimlanes.isTerminal, isParking: swimlanes.isParking })
+    .from(swimlanes)
+    .where(eq(swimlanes.boardId, board.id))
+    .orderBy(asc(swimlanes.position));
+
+  return resolveRunningLaneKey(lanes, fromStatus, dispatchedLaneKey);
 }

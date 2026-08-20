@@ -179,7 +179,11 @@ export class FeedbackWidget {
       this.draft = { kind: this.kinds[0]!, title: '', body: '', email: '' };
       this.opts.onSubmit?.({ submissionId: outcome.submissionId ?? '', deduped: !!outcome.deduped });
     } else {
-      this.error = outcome.rateLimited ? this.labels.errorRateLimited : this.labels.errorGeneric;
+      this.error = outcome.quotaExceeded
+        ? this.labels.errorQuotaExceeded
+        : outcome.rateLimited
+          ? this.labels.errorRateLimited
+          : this.labels.errorGeneric;
     }
     this.render();
   }

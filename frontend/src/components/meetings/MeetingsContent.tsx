@@ -13,6 +13,7 @@ import { MeetingRoom } from './MeetingRoom';
 import { MeetingNotes } from './MeetingNotes';
 import { TeamChatButton } from '@/components/brain/TeamChatButton';
 import { useFormat } from "@/i18n/useFormat";
+import { useAuth } from '@/lib/AuthContext';
 
 function KindBadge({ label }: { label: string }) {
   return (
@@ -40,6 +41,7 @@ export default function MeetingsContent({
 } = {}) {
   const fmt = useFormat();
   const t = useTranslations('meetings');
+  const { user } = useAuth();
   const router = useRouter();
   const params = useSearchParams();
 
@@ -110,6 +112,62 @@ export default function MeetingsContent({
     border: `1px solid ${primary ? 'var(--coral-bright)' : 'var(--border-subtle)'}`,
   });
 
+  /**
+   * RSVP — the control `POST /api/meetings/:id/rsvp` never had.
+   *
+   * The endpoint and `meeting_attendees.response` have existed since 0292 and nothing in
+   * the product ever called them, so `response` read `'invited'` on every row that was
+   * not auto-accepted by joining. That is not cosmetic: since a ceremony's attendance is
+   * fed by its companion meeting (0366), a DECLINE is what excuses someone from the
+   * ceremony — and without a way to record one, a person who could not attend was
+   * recorded as a no-show, which is what hands their tickets to an agent.
+   *
+   * Rendered only for a seat the signed-in user actually holds; nobody can RSVP on
+   * someone else's behalf, which is also exactly what the route enforces.
+   */
+  function RsvpControl({ detail }: { detail: MeetingDetail }) {
+    const mine = user?.id == null ? undefined : detail.attendees.find((a) => a.memberRef === String(user.id));
+    const [busy, setBusy] = useState(false);
+    if (!mine) return null;
+
+    const answer = async (response: 'accepted' | 'declined' | 'tentative') => {
+      setBusy(true);
+      try {
+        const updated = await meetingsApi.rsvp(detail.meeting.id, response);
+        // Replace the row in place so the chip reflects the new answer without a reload.
+        setMeetings((rows) => rows.map((r) => (r.meeting.id === updated.meeting.id ? updated : r)));
+      } catch { setToast(t('rsvpFailed')); } finally { setBusy(false); }
+    };
+
+    const options: Array<'accepted' | 'tentative' | 'declined'> = ['accepted', 'tentative', 'declined'];
+    return (
+      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }} role="group" aria-label={t('rsvpLabel')}>
+        {options.map((o) => {
+          const active = mine.response === o;
+          return (
+            <button
+              key={o}
+              type="button"
+              disabled={busy}
+              aria-pressed={active}
+              onClick={() => answer(o)}
+              style={{
+                padding: '5px 10px', fontSize: 12, fontWeight: 700, borderRadius: 'var(--radius-md)',
+                cursor: busy ? 'default' : 'pointer',
+                background: active ? 'var(--bg-elevated)' : 'transparent',
+                color: active ? 'var(--text-primary)' : 'var(--text-muted)',
+                border: `1px solid ${active ? 'var(--coral-bright)' : 'var(--border-subtle)'}`,
+                opacity: busy ? 0.6 : 1,
+              }}
+            >
+              {t(`rsvp_${o}` as never)}
+            </button>
+          );
+        })}
+      </div>
+    );
+  }
+
   function MeetingCard({ detail, isLive }: { detail: MeetingDetail; isLive: boolean }) {
     const m = detail.meeting;
     return (
@@ -125,6 +183,8 @@ export default function MeetingsContent({
           </span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          {/* Answering the invitation is what excuses a ceremony absence — see RsvpControl. */}
+          <RsvpControl detail={detail} />
           {/* The meeting IS a team chat — join the conversation; absentees post here too. */}
           {m.chatId != null && <TeamChatButton chatId={m.chatId} variant="labeled" label={t('teamChat')} />}
           <button type="button" onClick={() => setActiveMeetingId(m.id)} style={btn(true)}>

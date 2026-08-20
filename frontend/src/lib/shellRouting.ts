@@ -75,7 +75,24 @@ export function isFramedEmbed(pathname: string): boolean {
 // visitor who followed that button got the "This is part of Builderforce.ai"
 // teaser instead of the page the button promised. Same defect class as the
 // reference surfaces above, found while giving it the marketing column.
-const PUBLIC_SHELL_PREFIXES = ['/about', '/legal', '/product', '/blog', '/tutorials', '/agents', '/pricing', '/compare', '/marketplace', '/talent', '/prompts', '/models', '/diagnostics', '/tools', '/evermind', '/media', '/sell-builderforce', '/book-demo', '/demo', '/creation-canvas', '/crm/phone'];
+// `/skills/` and `/personas/` carry a TRAILING SLASH on purpose, and the
+// distinction is the whole fix for [per-entity SEO]. `underPrefix` treats a
+// trailing-slash prefix as "everything UNDER this route, not the route itself",
+// so the DETAIL pages (`/skills/<slug>`, `/personas/<slug>`) render for a
+// logged-out crawler while the INDEX pages keep their `RouteMarketing` teaser.
+//
+// That split is deliberate, not an oversight. `/skills` and `/personas` are
+// marketed registry entries (routeMarketing REGISTRY) whose real pages are
+// authenticated browse-and-install consoles with nothing to show a signed-out
+// visitor; their teaser is the better landing page and is already the URL the
+// sitemap submits via `indexableTeaserRoutes()`. A detail page is the opposite:
+// it is one entity, fully renderable without a session, and while it stayed on
+// the app side every slug URL served the SAME teaser — duplicate content under
+// hundreds of names, and no `generateMetadata` could run because the pages had
+// to be client components to fetch at all. So: index → teaser (indexed once),
+// detail → real page (indexed per entity). Sitemap and teaser registry agree
+// because neither list changed for the index routes.
+const PUBLIC_SHELL_PREFIXES = ['/about', '/legal', '/product', '/blog', '/tutorials', '/agents', '/pricing', '/compare', '/marketplace', '/talent', '/prompts', '/models', '/diagnostics', '/tools', '/evermind', '/media', '/sell-builderforce', '/book-demo', '/demo', '/creation-canvas', '/crm/phone', '/skills/', '/personas/'];
 
 /**
  * Routes an ANONYMOUS visitor gets the OPERATOR shell for, not marketing chrome.

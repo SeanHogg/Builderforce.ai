@@ -204,6 +204,17 @@ export function TaskMgmtContent({
   const [agentHostsList, setAgentHostsList] = useState<AgentHost[]>([]);
   const [cloudAgentsList, setCloudAgentsList] = useState<CloudAgentTarget[]>([]);
   const [membersList, setMembersList] = useState<TeamMember[]>([]);
+  /**
+   * Per-project team scope for the ALL-PROJECTS view, keyed by project id.
+   *
+   * A single-project board narrows its assignee picker to the project's teams (see the
+   * `teamSet` fold in `load`). The all-projects view could not: it has no one project, so
+   * it offered the entire workspace on every task's picker — including a task whose own
+   * project is scoped to a team the offered person is not in. Loaded lazily per DISTINCT
+   * project actually present in the task list, and `null` means "this project has no
+   * teams", which is a real answer (the full roster IS correct there) rather than a miss.
+   */
+  const [teamScopeByProject, setTeamScopeByProject] = useState<Map<number, Set<string> | null>>(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [approvalGate, setApprovalGate] = useState<{ approvalId: string; taskId: number; reason: string } | null>(null);
@@ -486,6 +497,47 @@ export function TaskMgmtContent({
   const taskAssigneeName = (t: { assignedAgentHostId?: number | null; assignedAgentRef?: string | null; assignedUserId?: string | null }) =>
     assigneeName(t.assignedAgentHostId, t.assignedAgentRef, t.assignedUserId, agentHostsList, cloudAgentsList, membersList);
   // The same encoded value the picker uses — the key the personality hovercard reads.
+  /**
+   * The assignee lists a task's OWN project allows.
+   *
+   * In the single-project view the lists are already team-scoped, so this is the
+   * identity. In the all-projects view it applies that task's project's scope — the
+   * difference between "who can I assign in this workspace" and "who can I assign on
+   * THIS ticket", which is the only one of the two an operator is ever actually asking.
+   */
+  const assigneeListsFor = useCallback((taskProjectId: number | null | undefined) => {
+    const scope = taskProjectId == null ? undefined : teamScopeByProject.get(taskProjectId);
+    if (projectId != null || !scope) return { hosts: agentHostsList, cloudAgents: cloudAgentsList, members: membersList };
+    return {
+      hosts: agentHostsList.filter((h) => scope.has(`host_agent:${h.id}`)),
+      cloudAgents: cloudAgentsList.filter((a) => scope.has(`cloud_agent:${a.ref}`)),
+      members: membersList.filter((m) => scope.has(`human:${m.id}`)),
+    };
+  }, [projectId, teamScopeByProject, agentHostsList, cloudAgentsList, membersList]);
+
+  // Load each distinct project's team scope ONCE, only in the all-projects view and only
+  // for projects the task list actually holds. A project already resolved is never
+  // re-fetched, so paging through a large board costs at most one request per project.
+  useEffect(() => {
+    if (projectId != null) return;
+    const wanted = [...new Set(tasks.map((t) => t.projectId).filter((id): id is number => id != null))]
+      .filter((id) => !teamScopeByProject.has(id));
+    if (wanted.length === 0) return;
+    let live = true;
+    void Promise.all(wanted.map(async (id) => {
+      const wf = await getProjectWorkforce(id).catch(() => null);
+      return [id, wf?.scopedToTeams ? new Set(wf.workforce.map((w) => `${w.kind}:${w.ref}`)) : null] as const;
+    })).then((entries) => {
+      if (!live) return;
+      setTeamScopeByProject((prev) => {
+        const next = new Map(prev);
+        for (const [id, scope] of entries) next.set(id, scope);
+        return next;
+      });
+    });
+    return () => { live = false; };
+  }, [projectId, tasks, teamScopeByProject]);
+
   const taskAssigneeSelectValue = (t: { assignedAgentHostId?: number | null; assignedAgentRef?: string | null; assignedUserId?: string | null }) =>
     assigneeSelectValue(t.assignedAgentHostId, t.assignedAgentRef, t.assignedUserId);
 
@@ -510,7 +562,7 @@ export function TaskMgmtContent({
 
   // Swimlanes + their configured agents for the selected board, shown discretely
   // in each column header. Only fetched for the board view of a single project.
-  const { board, lanes, agentsByLane, cloudRunAllowance } = useBoardConfig(
+  const { board, lanes, agentsByLane, cloudRunAllowance, reload: reloadBoardConfig } = useBoardConfig(
     effectiveProjectId,
     effectiveProjectId != null && view === 'board' && !compact,
   );
@@ -561,7 +613,13 @@ export function TaskMgmtContent({
     // the full-screen "Loading…" placeholder.
     void load({ background: true });
     refreshRuns();
-  }, [load, refreshRuns]);
+    // …AND the board's CONFIG. `useBoardConfig` loaded once, so staffing a lane from the
+    // config panel left the board's own column chips showing the pre-edit agent set until
+    // a full page reload — the run STATUS on those chips was live (polled + pushed) while
+    // the agents they described were a load-time snapshot. Cheap: the same push already
+    // triggers a task refetch.
+    void reloadBoardConfig();
+  }, [load, refreshRuns, reloadBoardConfig]);
   useRealtimeRoom(
     effectiveProjectId != null ? `/api/projects/${effectiveProjectId}/stream` : null,
     onRealtimeChange,
@@ -2452,9 +2510,7 @@ export function TaskMgmtContent({
                     {editingField === 'assignee' ? (
                       <AssigneeSelect
                         autoFocus
-                        hosts={agentHostsList}
-                        cloudAgents={cloudAgentsList}
-                        members={membersList}
+                        {...assigneeListsFor(drawerTask.projectId)}
                         hostId={drawerTask.assignedAgentHostId}
                         agentRef={drawerTask.assignedAgentRef}
                         userId={drawerTask.assignedUserId}

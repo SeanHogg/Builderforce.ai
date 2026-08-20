@@ -20,9 +20,9 @@
  * API bundle. Only the template IDENTIFIERS are shared, because a revision stores one.
  */
 
-/** Every résumé design a revision may name. Hired.VIDEO first-party templates. */
+/** Every résumé design a revision may name. Builderforce first-party templates. */
 export const RESUME_TEMPLATE_IDS = [
-  'hired-default',
+  'standard',
   'payroll-iron-gray',
   'risk-asphalt',
   'executive-taupe',
@@ -37,7 +37,28 @@ export const RESUME_TEMPLATE_IDS = [
 ] as const;
 export type ResumeTemplateId = (typeof RESUME_TEMPLATE_IDS)[number];
 
-export const DEFAULT_RESUME_TEMPLATE_ID: ResumeTemplateId = 'hired-default';
+export const DEFAULT_RESUME_TEMPLATE_ID: ResumeTemplateId = 'standard';
+
+/**
+ * Template ids retired by a rename, mapped to their replacement.
+ *
+ * `hired-default` was a vendor brand frozen into persisted data: every revision
+ * authored before the rename carries it, and the family reader DROPS a revision
+ * whose `templateId` it does not recognise — which, for the original revision,
+ * discards the whole résumé. Migration 1060 rewrites the rows this platform
+ * stores, but a guest board keeps its family in the browser and no migration
+ * reaches that, so the read boundary normalises too.
+ */
+const RETIRED_RESUME_TEMPLATE_IDS: Record<string, ResumeTemplateId> = {
+  'hired-default': 'standard',
+};
+
+/** A known template id for `value`, following a retired id to its replacement. */
+export function normalizeResumeTemplateId(value: unknown): ResumeTemplateId | null {
+  if (typeof value !== 'string') return null;
+  if ((RESUME_TEMPLATE_IDS as readonly string[]).includes(value)) return value as ResumeTemplateId;
+  return RETIRED_RESUME_TEMPLATE_IDS[value] ?? null;
+}
 
 export type ResumePageSize = 'letter' | 'legal' | 'a4';
 export type ResumeOrientation = 'portrait' | 'landscape';
@@ -158,7 +179,7 @@ export function createResumeFamily(args: {
   // The template travels WITH the family it belongs to, rather than being re-stamped
   // by the renderer — otherwise every résumé renders in the default no matter which
   // template was asked for.
-  const templateId = isResumeTemplateId(args.templateId) ? args.templateId : DEFAULT_RESUME_TEMPLATE_ID;
+  const templateId = normalizeResumeTemplateId(args.templateId) ?? DEFAULT_RESUME_TEMPLATE_ID;
   const original: CanvasResumeRevision = {
     id: revisionId,
     kind: 'original',
@@ -220,7 +241,10 @@ export function resumeFamilyFromValue(value: unknown): CanvasResumeFamily | null
     if (!revision || typeof revision !== 'object' || Array.isArray(revision)) return false;
     const row = revision as Partial<CanvasResumeRevision>;
     return typeof row.id === 'string' && typeof row.title === 'string' && typeof row.markdown === 'string';
-  });
+  }).map((revision) => ({
+    ...revision,
+    templateId: normalizeResumeTemplateId(revision.templateId) ?? DEFAULT_RESUME_TEMPLATE_ID,
+  }));
   if (revisions.length === 0) return null;
   const resolve = (candidate: unknown, fallback: string): string =>
     typeof candidate === 'string' && revisions.some((revision) => revision.id === candidate) ? candidate : fallback;
@@ -231,7 +255,7 @@ export function resumeFamilyFromValue(value: unknown): CanvasResumeFamily | null
     privacy: family.privacy ?? 'private',
     archivedAt: typeof family.archivedAt === 'string' ? family.archivedAt : null,
     watched: family.watched === true,
-    defaultTemplateId: isResumeTemplateId(family.defaultTemplateId) ? family.defaultTemplateId : DEFAULT_RESUME_TEMPLATE_ID,
+    defaultTemplateId: normalizeResumeTemplateId(family.defaultTemplateId) ?? DEFAULT_RESUME_TEMPLATE_ID,
     viewZoom: typeof family.viewZoom === 'number' ? family.viewZoom : 75,
     previewMode: family.previewMode ?? 'continuous',
     originalRevisionId,

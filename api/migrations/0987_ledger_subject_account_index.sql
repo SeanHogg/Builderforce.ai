@@ -1,0 +1,30 @@
+-- THE INDEX A PERSON'S OWN EARNINGS REPORT NEEDS.
+--
+-- `ledger_entries` already carries `idx_ledger_entries_account`
+-- (tenant_id, account_kind, account_ref, denomination, occurred_at), which is exactly
+-- right for every question a WORKSPACE asks: "what has this seller earned here", "what
+-- have we paid out this month". Every read in `listingCommerce.ts` and
+-- `PayoutAccountService.ts` is that shape and stays on that index.
+--
+-- The earnings/transaction-history report is the other shape, and it is the freelance
+-- marketplace's second axis (`tenantScope.ts`'s `subject_own_rows`): a for-hire account
+-- works for many client workspaces and is a member of none, so "what have I earned"
+-- legitimately spans every tenant that has ever hired them. There is no tenant on the
+-- web JWT to filter by, and asking the caller to supply one would be an IDOR wearing a
+-- parameter.
+--
+-- A leading `tenant_id` cannot serve a query with no tenant predicate: Postgres would
+-- have to scan every tenant's slice of the index, which is a full scan of the ledger
+-- wearing an index's name. So the same columns are indexed again WITHOUT the tenant,
+-- and the tenant comes back as data on each row (which is what the report renders --
+-- "who paid me").
+--
+-- This is a second index over overlapping columns, not a second copy of a fact. The
+-- 3NF rule governs stored facts; an index is a read path, and the two reads here are
+-- genuinely different questions with genuinely different leading columns.
+--
+-- `occurred_at DESC` because every consumer of this index reads newest-first: the
+-- transaction list, the period buckets, and the "recent activity" strip all order by
+-- it descending, and a descending index removes the sort node from all three.
+CREATE INDEX IF NOT EXISTS idx_ledger_entries_subject
+  ON ledger_entries (account_kind, account_ref, denomination, occurred_at DESC);

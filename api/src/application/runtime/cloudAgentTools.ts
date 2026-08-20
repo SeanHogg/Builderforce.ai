@@ -177,6 +177,17 @@ export const CLOUD_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capability>([
  */
 export const CONTAINER_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capability>([
   'repo.read', 'repo.write', 'shell', 'memory', 'memory.forget', 'coordinate', 'prd.write', 'human',
+  // `web.search` — PARITY with the durable surface, and only now safe to advertise.
+  // It was absent because the container's capabilities come from the image's own tool
+  // loop and there was no op behind them, so the tool would have 400'd mid-run. The
+  // `search` container-op is that backing (see `handleContainerOp`), and the image
+  // dispatches `web_search` to it, so the rule that kept this out — never advertise a
+  // tool that is certain to fail — is satisfied rather than waived.
+  //
+  // Deliberately NOT `web` (fetch): there is no `fetch` op, and a container with a
+  // shell can already curl. Search is the one that genuinely needs the Worker, because
+  // the vendor credential, the read-through cache and the meter all live there.
+  'web.search',
 ]);
 
 /** Durable/Worker schema array — derived from {@link CLOUD_SURFACE_CAPS}, not

@@ -11,11 +11,17 @@ import type { Db } from '../../infrastructure/database/connection';
  *  2. a seat with nothing provisioned behind it is `locked`, never omitted
  *     (§2.6 rule 7 — disable, never hide);
  *  3. a domain owned by `Platform` has no teammate, so it never appears.
+ *
+ * A fourth promise since the marketplace learned to charge: an agent this
+ * workspace HIRED is on the roster too. Its `ide_agents` row belongs to the
+ * seller, so the hire ids have to be read first — which is why the fake answers
+ * four statements now, not three.
  */
 
-/** The three reads run in `Promise.all`, so the fake answers them in array order. */
-function fakeDb(agentRows: unknown[], humanRows: unknown[], hireRows: unknown[]): Db {
-  const queue = [agentRows, humanRows, hireRows];
+/** The hire read runs first; the other three then run in `Promise.all`, so the
+ *  fake answers them in array order. */
+function fakeDb(agentRows: unknown[], humanRows: unknown[], hireRows: unknown[], hiredAgentIds: unknown[] = []): Db {
+  const queue = [hiredAgentIds, agentRows, humanRows, hireRows];
   const chain = (rows: unknown[]) => {
     const node: Record<string, unknown> = {};
     for (const method of ['from', 'innerJoin', 'where']) {
@@ -62,6 +68,21 @@ describe('team roster', () => {
     expect(roster.find((m) => m.id === 'agent-x')).toMatchObject({ kind: 'agent', alwaysOn: false, availability: 'available' });
     // Seats lead; the invited team follows.
     expect(roster.findIndex((m) => m.kind === 'human')).toBeGreaterThan(roster.findIndex((m) => m.alwaysOn));
+  });
+
+  it('lists an agent this workspace HIRED, whose ide_agents row belongs to the seller', async () => {
+    const db = fakeDb(
+      // The agent read now returns the hired row too, because the predicate it
+      // runs is "owned OR hired" rather than "tenant_id = mine".
+      [{ id: 'bought-1', name: 'Release Captain', title: null, builtinKind: null, lastUsedAt: null }],
+      [],
+      [],
+      [{ agentId: 'bought-1' }],
+    );
+    const roster = await loadTeamRoster(db, 1, NOW);
+    expect(roster.find((m) => m.id === 'bought-1')).toMatchObject({
+      kind: 'agent', name: 'Release Captain', alwaysOn: false, locked: false,
+    });
   });
 
   it('keeps a live engagement out of the roster twice over', async () => {

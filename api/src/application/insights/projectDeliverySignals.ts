@@ -22,7 +22,7 @@
  * but not to any per-project bundle. For a single-project tenant whose deploys
  * carry a project_id the card and the delivery tab match exactly.
  */
-import { and, desc, eq, gte, inArray, isNotNull } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { deploymentEvents, projects, tasks, taskStatusTransitions } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
@@ -67,25 +67,37 @@ export async function computeProjectDeliverySignals(
   const now = Date.now();
   const since = new Date(now - days * DAY_MS);
 
-  // 1. Deploys in window, attributed to a project (null project_id → tenant-only).
+  // 1. Deploys in window, attributed to a project.
+  //
+  // A deploy row may carry `project_id` directly, or only the TASK it shipped
+  // for. Requiring `project_id IS NOT NULL` counted the second kind in the
+  // tenant DORA rollup and dropped it from every per-project bundle — which is
+  // exactly the card-vs-tab health difference a tenant sees when its CI reports
+  // deploys against tickets rather than projects. So the task is followed:
+  // `COALESCE(deployment_events.project_id, tasks.project_id)`.
+  //
+  // A row with neither is genuinely tenant-wide (a platform deploy that shipped
+  // no project's work) and stays out of the per-project bundles by construction
+  // — `attributedProjectId` is null and the row is skipped below.
   const deployRows = (await db
     .select({
-      projectId: deploymentEvents.projectId,
+      projectId: sql<number | null>`COALESCE(${deploymentEvents.projectId}, ${tasks.projectId})`,
       deployedAt: deploymentEvents.deployedAt,
       isFailure: deploymentEvents.isFailure,
       restoredAt: deploymentEvents.restoredAt,
     })
     .from(deploymentEvents)
+    .leftJoin(tasks, eq(tasks.id, deploymentEvents.taskId))
     .where(and(
       eq(deploymentEvents.tenantId, tenantId),
-      isNotNull(deploymentEvents.projectId),
       gte(deploymentEvents.deployedAt, since),
-    ))) as DeployRow[];
+    ))) as Array<Omit<DeployRow, 'projectId'> & { projectId: number | null }>;
 
   const deploysByProject = new Map<number, DeployRow[]>();
   for (const d of deployRows) {
+    if (d.projectId == null) continue;
     const list = deploysByProject.get(d.projectId) ?? [];
-    list.push(d);
+    list.push({ ...d, projectId: d.projectId });
     deploysByProject.set(d.projectId, list);
   }
 

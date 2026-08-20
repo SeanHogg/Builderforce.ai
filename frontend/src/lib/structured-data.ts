@@ -706,6 +706,37 @@ export function routeMarketingSchema(opts: {
   return { '@context': 'https://schema.org', '@graph': graph };
 }
 
+/**
+ * The SoftwareApplication node for one skill, wherever it is rendered.
+ *
+ * A skill has TWO homes and the same node describes both: a published skill sits
+ * at `/marketplace/<slug>`, while the shipped built-ins have no marketplace row
+ * and sit at `/skills/<slug>`. Only the `url` and the breadcrumb trail differ,
+ * which is exactly why this is one function and not two near-copies.
+ */
+function skillApplicationNode(skill: {
+  name: string;
+  description: string;
+  url: string;
+  category?: string | null;
+  author?: string | null;
+  tags?: string[];
+  version?: string | null;
+}) {
+  return {
+    '@type': 'SoftwareApplication',
+    name: skill.name,
+    description: skill.description,
+    applicationCategory: skill.category || 'BusinessApplication',
+    url: skill.url,
+    operatingSystem: 'Web, Self-hosted',
+    offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+    ...(skill.author ? { author: { '@type': 'Person', name: skill.author } } : {}),
+    ...(skill.tags && skill.tags.length ? { keywords: skill.tags.join(', ') } : {}),
+    ...(skill.version ? { softwareVersion: skill.version } : {}),
+  };
+}
+
 /** Individual published marketplace skill detail (`/marketplace/[slug]`). */
 export function marketplaceSkillSchema(skill: {
   name: string;
@@ -715,24 +746,249 @@ export function marketplaceSkillSchema(skill: {
   author_display_name?: string | null;
   tags?: string[];
 }) {
+  const url = `${BRAND.url}/marketplace/${skill.slug}`;
+  return {
+    '@context': 'https://schema.org',
+    '@graph': [
+      skillApplicationNode({
+        name: skill.name,
+        description: skill.description,
+        url,
+        category: skill.category,
+        author: skill.author_display_name,
+        tags: skill.tags,
+      }),
+      breadcrumbs(
+        { name: 'Home', url: BRAND.url },
+        { name: 'Marketplace', url: `${BRAND.url}/marketplace` },
+        { name: skill.name, url },
+      ),
+    ],
+  };
+}
+
+/**
+ * A skill on its own catalog page (`/skills/[slug]`).
+ *
+ * Used for the BUILT-IN skills, which are the ones whose canonical URL this is —
+ * a marketplace-published skill rendered on this route canonicalises to
+ * `/marketplace/<slug>` instead, so its structured data is emitted by
+ * `marketplaceSkillSchema` under that URL and the two never compete.
+ */
+export function skillCatalogSchema(skill: {
+  name: string;
+  slug: string;
+  description: string;
+  category?: string | null;
+  author?: string | null;
+  tags?: string[];
+  version?: string | null;
+}) {
+  const url = `${BRAND.url}/skills/${skill.slug}`;
+  return {
+    '@context': 'https://schema.org',
+    '@graph': [
+      skillApplicationNode({ ...skill, url }),
+      breadcrumbs(
+        { name: 'Home', url: BRAND.url },
+        { name: 'Skills', url: `${BRAND.url}/skills` },
+        { name: skill.name, url },
+      ),
+    ],
+  };
+}
+
+/**
+ * One published persona (`/personas/[slug]`).
+ *
+ * `CreativeWork`, not `SoftwareApplication`: a persona is not a program you run,
+ * it is an authored specification of voice, perspective and decision style that
+ * an agent is compiled against. Its behaviour fields ride as `about` terms so a
+ * crawler can see what the persona actually IS rather than only its blurb.
+ */
+export function personaDetailSchema(persona: {
+  name: string;
+  slug: string;
+  description: string;
+  category?: string | null;
+  tags?: string[];
+  voice?: string;
+  perspective?: string;
+  decisionStyle?: string;
+  capabilities?: string[];
+  authorName?: string | null;
+  installCount?: number | null;
+  updatedAt?: string | null;
+}) {
+  const url = `${BRAND.url}/personas/${persona.slug}`;
+  const traits = [
+    persona.voice ? { name: 'Voice', value: persona.voice } : null,
+    persona.perspective ? { name: 'Perspective', value: persona.perspective } : null,
+    persona.decisionStyle ? { name: 'Decision style', value: persona.decisionStyle } : null,
+  ].filter((t): t is { name: string; value: string } => t !== null);
+  const keywords = [...(persona.tags ?? []), ...(persona.capabilities ?? [])];
+  return {
+    '@context': 'https://schema.org',
+    '@graph': [
+      {
+        '@type': 'CreativeWork',
+        name: persona.name,
+        description: persona.description,
+        url,
+        genre: persona.category || 'AI agent persona',
+        inLanguage: 'en',
+        isPartOf: { '@type': 'CollectionPage', name: 'Builderforce.ai Personas', url: `${BRAND.url}/personas` },
+        publisher: { '@id': `${BRAND.url}/#organization` },
+        ...(persona.authorName ? { author: { '@type': 'Person', name: persona.authorName } } : {}),
+        ...(keywords.length ? { keywords: keywords.join(', ') } : {}),
+        ...(persona.updatedAt ? { dateModified: persona.updatedAt } : {}),
+        ...(traits.length
+          ? {
+              additionalProperty: traits.map((t) => ({
+                '@type': 'PropertyValue',
+                name: t.name,
+                value: t.value,
+              })),
+            }
+          : {}),
+        ...(typeof persona.installCount === 'number'
+          ? {
+              interactionStatistic: {
+                '@type': 'InteractionCounter',
+                interactionType: 'https://schema.org/InstallAction',
+                userInteractionCount: persona.installCount,
+              },
+            }
+          : {}),
+      },
+      breadcrumbs(
+        { name: 'Home', url: BRAND.url },
+        { name: 'Personas', url: `${BRAND.url}/personas` },
+        { name: persona.name, url },
+      ),
+    ],
+  };
+}
+
+/**
+ * One public prompt (`/prompts/[slug]`).
+ *
+ * `CreativeWork` again, and `text` carries the prompt body itself — the prompt IS
+ * the content of this page, so a graph that described it without including it
+ * would be describing the wrapper.
+ */
+export function promptDetailSchema(prompt: {
+  title: string;
+  slug: string;
+  description: string;
+  body?: string;
+  category?: string | null;
+  tags?: string[];
+  authorName?: string | null;
+  currentVersion?: number | null;
+  usageCount?: number | null;
+  model?: string | null;
+  updatedAt?: string | null;
+}) {
+  const url = `${BRAND.url}/prompts/${prompt.slug}`;
+  return {
+    '@context': 'https://schema.org',
+    '@graph': [
+      {
+        '@type': 'CreativeWork',
+        name: prompt.title,
+        description: prompt.description,
+        url,
+        genre: prompt.category || 'AI prompt template',
+        inLanguage: 'en',
+        isPartOf: { '@type': 'CollectionPage', name: 'Builderforce.ai Prompt Library', url: `${BRAND.url}/prompts` },
+        publisher: { '@id': `${BRAND.url}/#organization` },
+        ...(prompt.body ? { text: prompt.body } : {}),
+        ...(prompt.authorName ? { author: { '@type': 'Person', name: prompt.authorName } } : {}),
+        ...(prompt.tags && prompt.tags.length ? { keywords: prompt.tags.join(', ') } : {}),
+        ...(prompt.currentVersion ? { version: String(prompt.currentVersion) } : {}),
+        ...(prompt.updatedAt ? { dateModified: prompt.updatedAt } : {}),
+        ...(prompt.model
+          ? { isBasedOn: { '@type': 'CreativeWork', name: prompt.model } }
+          : {}),
+        ...(typeof prompt.usageCount === 'number'
+          ? {
+              interactionStatistic: {
+                '@type': 'InteractionCounter',
+                interactionType: 'https://schema.org/UseAction',
+                userInteractionCount: prompt.usageCount,
+              },
+            }
+          : {}),
+      },
+      breadcrumbs(
+        { name: 'Home', url: BRAND.url },
+        { name: 'Prompts', url: `${BRAND.url}/prompts` },
+        { name: prompt.title, url },
+      ),
+    ],
+  };
+}
+
+/**
+ * One published workforce agent (`/marketplace/agent/[id]`).
+ *
+ * `SoftwareApplication` with a real `offers` block: unlike a skill, an agent can
+ * be priced, and a marketplace listing that hides its price from the graph is
+ * the one field a shopping crawler came for. Free agents still get an Offer at 0
+ * so the node never has to be read as "price unknown".
+ */
+export function publishedAgentSchema(agent: {
+  id: string;
+  name: string;
+  title?: string;
+  bio?: string;
+  skills?: string[];
+  baseModel?: string | null;
+  hireCount?: number | null;
+  evalScore?: number | null;
+  priceCents?: number | null;
+  pricingModel?: string | null;
+  priceUnit?: string | null;
+  updatedAt?: string | null;
+}) {
+  const url = `${BRAND.url}/marketplace/agent/${agent.id}`;
+  const cents = typeof agent.priceCents === 'number' ? agent.priceCents : 0;
   return {
     '@context': 'https://schema.org',
     '@graph': [
       {
         '@type': 'SoftwareApplication',
-        name: skill.name,
-        description: skill.description,
-        applicationCategory: skill.category || 'BusinessApplication',
-        url: `${BRAND.url}/marketplace/${skill.slug}`,
+        name: agent.name,
+        description: agent.bio || agent.title || `${agent.name}, a published agent on the Builderforce.ai Workforce Registry.`,
+        url,
+        applicationCategory: 'BusinessApplication',
         operatingSystem: 'Web, Self-hosted',
-        offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
-        ...(skill.author_display_name ? { author: { '@type': 'Person', name: skill.author_display_name } } : {}),
-        ...(skill.tags && skill.tags.length ? { keywords: skill.tags.join(', ') } : {}),
+        provider: { '@id': `${BRAND.url}/#organization` },
+        offers: {
+          '@type': 'Offer',
+          price: (cents / 100).toFixed(2),
+          priceCurrency: 'USD',
+          ...(agent.priceUnit ? { unitText: agent.priceUnit } : {}),
+        },
+        ...(agent.title ? { alternateName: agent.title } : {}),
+        ...(agent.skills && agent.skills.length ? { keywords: agent.skills.join(', ') } : {}),
+        ...(agent.baseModel ? { isBasedOn: { '@type': 'CreativeWork', name: agent.baseModel } } : {}),
+        ...(agent.updatedAt ? { dateModified: agent.updatedAt } : {}),
+        ...(typeof agent.hireCount === 'number'
+          ? {
+              interactionStatistic: {
+                '@type': 'InteractionCounter',
+                interactionType: 'https://schema.org/JoinAction',
+                userInteractionCount: agent.hireCount,
+              },
+            }
+          : {}),
       },
       breadcrumbs(
         { name: 'Home', url: BRAND.url },
         { name: 'Marketplace', url: `${BRAND.url}/marketplace` },
-        { name: skill.name, url: `${BRAND.url}/marketplace/${skill.slug}` },
+        { name: agent.name, url },
       ),
     ],
   };

@@ -36,7 +36,11 @@ export async function renderDeckBytes(
     if (!template.r2Key) throw new Error('Template has no uploaded .pptx to fill — use generative mode.');
     const bytes = await loadTemplateBytes(env, template.r2Key);
     if (!bytes) throw new Error('Template .pptx not found in storage.');
-    return { bytes: fillTemplate(bytes, resolved), warnings: resolved.warnings };
+    // The chart pass reports its own mismatches (a chart drawing fewer series
+    // than the data has), which are binding warnings by any other name — so they
+    // travel with the rest rather than being logged where nobody sees them.
+    const filled = fillTemplate(bytes, resolved);
+    return { bytes: filled.bytes, warnings: [...resolved.warnings, ...filled.warnings] };
   }
 
   // generative
@@ -92,6 +96,28 @@ export async function generateDeck(db: Db, env: Env, input: GenerateDeckInput): 
 
   const filename = `${slugify(template.name)}-${quarter}.pptx`;
   return { deckId, bytes, filename, warnings };
+}
+
+/**
+ * The data notes recorded when a deck was generated — which bindings fell back to
+ * a placeholder, and which charts did not match the data bound to them.
+ *
+ * `generateDeck` has always persisted these on the `generated_decks` row and
+ * nothing ever read them back, so the streaming download could only report a
+ * COUNT in a header: a reader could learn there were four notes and never which
+ * four. Returns null when the deck is not this tenant's, so a missing deck and
+ * another workspace's deck are indistinguishable from outside.
+ */
+export async function loadDeckWarnings(db: Db, tenantId: number, deckId: string): Promise<string[] | null> {
+  const rows = await db
+    .select({ tenantId: generatedDecks.tenantId, warningsJson: generatedDecks.warningsJson })
+    .from(generatedDecks)
+    .where(scopedToTenant(generatedDecks, tenantId, eq(generatedDecks.id, deckId)))
+    .limit(1);
+  const row = rows[0];
+  if (!row || Number(row.tenantId) !== tenantId) return null;
+  const raw = row.warningsJson;
+  return Array.isArray(raw) ? raw.map((w) => String(w)) : [];
 }
 
 /** Fetch a previously-generated deck's bytes from R2 (for the /:id/download route). */

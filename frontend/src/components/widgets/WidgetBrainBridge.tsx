@@ -1,15 +1,23 @@
 'use client';
 
 /**
- * Registers the widget Brain tools: `list_widgets`, `pin_widget`, `unpin_widget`
- * and `show_widget`. Lets the Brain manage the user's personal /insights home
- * dashboard and jump to any surface's insight — the conversational counterpart to
- * the pin control that lives on every widget.
+ * Registers the widget Brain tools: `list_widgets`, `pin_widget`, `unpin_widget`,
+ * `show_widget` and `answer_with_widgets`. Lets the Brain manage the user's
+ * personal /insights home dashboard and jump to any surface's insight — the
+ * conversational counterpart to the pin control that lives on every widget.
  *
  * Reads the SAME app-wide registry (listWidgets) + pin state (usePins) the
  * dashboard uses, so a widget id resolves identically for the Brain and the UI.
  * Mounted inside PinsProvider + the Brain action providers (see
  * ConditionalAppShell). Renders no UI — mirrors AiInsightPanelBrainBridge.
+ *
+ * `answer_with_widgets` is the odd one out and deliberately so: it is a READ, and
+ * it goes through the SAME `/api/dashboards/query` the Ask card posts to. That
+ * matters more than the convenience. The server maps the question to whitelisted
+ * metric keys and declared widget ids and computes the figures itself, so the
+ * model receives numbers it cannot have invented and widget ids it cannot have
+ * made up — a Brain answering "how are things looking?" from its own arithmetic is
+ * exactly the failure a metrics surface cannot survive.
  */
 
 import { useMemo } from 'react';
@@ -18,6 +26,7 @@ import { useTranslations } from 'next-intl';
 import { useRegisterBrainActions, type BrainAction } from '@/lib/brain';
 import { useOptionalPins } from '@/lib/widgets/PinsProvider';
 import { getWidget, listWidgets } from '@/lib/widgets/registry';
+import { dashboardsApi } from '@/lib/dashboardsApi';
 
 export function WidgetBrainBridge() {
   const pins = useOptionalPins();
@@ -100,6 +109,60 @@ export function WidgetBrainBridge() {
           const href = def.drill?.kind === 'route' ? def.drill.href : '/insights';
           router.push(href);
           return { opened: id, href };
+        },
+      },
+      {
+        name: 'answer_with_widgets',
+        description:
+          'Answer an OPEN-ENDED question about how the business is doing with real figures and the charts that show them. ' +
+          'Use this for "how are things looking?", "are we behind?", "how are we doing on cost?", "who is overworked / not working?", ' +
+          '"is anything broken?" and any other question with no single-number answer — the server picks the relevant metrics and ' +
+          'widgets itself, computes the values, and returns a headline built from them. ' +
+          'Prefer it over answering from memory: the numbers it returns are the only ones you may quote. ' +
+          'Set pin=true to also add the chosen charts to the user\'s /insights home dashboard.',
+        parameters: {
+          type: 'object',
+          properties: {
+            question: { type: 'string', description: 'The user\'s question, in their own words. Include any period they named ("this week").' },
+            pin: { type: 'boolean', description: 'Also pin the chosen widgets to the home dashboard. Default false.' },
+          },
+          required: ['question'],
+        },
+        // Reading the answer changes nothing; PINNING the charts does. A flat
+        // `false` would let `pin: true` write to the user's dashboard without the
+        // confirm gate the pin_widget tool goes through, so the answer depends on
+        // the args — which is exactly what a predicate is for.
+        mutates: (args: unknown) => (args as { pin?: unknown })?.pin === true,
+        run: async (args: unknown) => {
+          const question = (args as { question?: unknown })?.question;
+          if (typeof question !== 'string' || !question.trim()) {
+            return { error: 'A question is required.' };
+          }
+          const answer = await dashboardsApi.query(question.trim());
+          // Only ids this bundle can actually render are offered back, so the model
+          // never names a card the user cannot be shown.
+          const widgets = (answer.widgetIds ?? [])
+            .map((id) => ({ id, def: getWidget(id) }))
+            .filter((w): w is { id: string; def: NonNullable<typeof w.def> } => w.def != null)
+            .map((w) => ({ id: w.id, title: title(w.def.titleKey) }));
+
+          if ((args as { pin?: unknown })?.pin === true) {
+            for (const w of widgets) pins.pin(w.id);
+          }
+
+          return {
+            topic: answer.topic,
+            headline: answer.headline,
+            narrative: answer.narrative,
+            days: answer.days,
+            // `source: 'default'` means NOTHING recognised the question — pass it
+            // through so the model says so rather than presenting the fallback
+            // metric as the answer to what was asked.
+            source: answer.source,
+            metrics: (answer.metrics ?? []).map((m) => ({ key: m.matchedMetric, label: m.label, value: m.value, unit: m.unit })),
+            widgets,
+            pinned: (args as { pin?: unknown })?.pin === true ? widgets.map((w) => w.id) : [],
+          };
         },
       },
     ];

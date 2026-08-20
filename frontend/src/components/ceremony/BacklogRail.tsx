@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl';
 import type { Task } from '@/lib/builderforceApi';
 import { useIsMobile } from '@/lib/useIsMobile';
 import { CeremonyTaskCard } from './CeremonyTaskCard';
+import { placeTargetProps, useCeremonyPick } from './pickToPlace';
 import { DRAG_TASK } from './types';
 
 /**
@@ -29,6 +30,7 @@ export function BacklogRail({
   const [over, setOver] = useState(false);
   const isMobile = useIsMobile();
   const t = useTranslations('ceremony');
+  const pick = useCeremonyPick();
   return (
     <div
       onDragOver={onReturn ? (e) => { e.preventDefault(); setOver(true); } : undefined}
@@ -39,6 +41,7 @@ export function BacklogRail({
         const id = Number(e.dataTransfer.getData(DRAG_TASK));
         if (id) onReturn(id);
       } : undefined}
+      {...(onReturn ? placeTargetProps(pick, t('returnToBacklog'), onReturn) : {})}
       style={{
         width: isMobile ? '100%' : 240,
         flexShrink: 0,

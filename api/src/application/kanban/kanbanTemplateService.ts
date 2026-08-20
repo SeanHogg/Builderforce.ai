@@ -25,6 +25,8 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { findOrCreateBoard } from '../swimlane/findOrCreateBoard';
+import { isParkedLane } from '../swimlane/nextLane';
+import { seedLaneStaffingFromWorkforce } from '../swimlane/seedLaneStaffing';
 import { BUILTIN_TEMPLATES, getBuiltinTemplate, isBuiltinTemplateId } from './templateCatalog';
 import type { KanbanTemplate, TemplateLane, TemplateVisibility } from './types';
 import { slugify as slugifyBase } from '../../domain/shared/strings';
@@ -318,7 +320,7 @@ export class KanbanTemplateService {
     projectId: number,
     templateId: string,
     projectName: string,
-  ): Promise<{ boardId: string; lanesApplied: number; requirementsApplied: number }> {
+  ): Promise<{ boardId: string; lanesApplied: number; requirementsApplied: number; lanesStaffed: number }> {
     const template = await this.get(env, tenantId, templateId);
     if (!template) throw new Error(`template '${templateId}' not found`);
 
@@ -347,6 +349,10 @@ export class KanbanTemplateService {
             // by hand, and a future default change must not overwrite them the way
             // 0369 had to overwrite the seeded ones.
             gate: lane.gate, gateSource: 'operator',
+            // PARKED (1080): a template's blocked/on-hold lane is off the delivery path.
+            // Derived from the lane KEY because `TemplateLane` carries no flag of its
+            // own — the same seeded rule migration 1080 backfilled with.
+            isParking: isParkedLane(lane.key),
             requirementGate: lane.requirementGate, updatedAt: now,
           })
           .where(scopedToTenant(swimlanes, tenantId, eq(swimlanes.id, laneId)));
@@ -355,6 +361,7 @@ export class KanbanTemplateService {
         await this.db.insert(swimlanes).values({
           id: laneId, tenantId, segmentId: realBoard.segmentId ?? null, boardId,
           key: lane.key, name: lane.name, position: lane.position, isTerminal: lane.isTerminal,
+          isParking: isParkedLane(lane.key),
           gate: lane.gate, gateSource: 'operator', requirementGate: lane.requirementGate,
           executionMode: 'sequential', failurePolicy: 'needs_attention',
           createdAt: now, updatedAt: now,
@@ -383,7 +390,15 @@ export class KanbanTemplateService {
     await this.db.update(boards).set({ templateId, lifecycleManaged: template.lifecycleManaged === true, updatedAt: now }).where(scopedToTenant(boards, tenantId, eq(boards.id, boardId)));
     await this.db.update(projects).set({ kanbanTemplateId: templateId, updatedAt: now }).where(scopedToTenant(projects, tenantId, eq(projects.id, projectId)));
 
-    return { boardId, lanesApplied: template.lanes.length, requirementsApplied };
+    // STAFF WHAT WAS JUST DECLARED. Applying a template writes the lanes and their role
+    // requirements and stopped there, so every board in production shipped fully
+    // described and completely unstaffed — measured at 3 of 61 auto-gated lanes carrying
+    // any assignment, and 57% of tickets inert from creation as a result. This binds an
+    // agent the tenant ALREADY has to each lane's declared producer role; it never hires
+    // (that stays the manager's budgeted job) and never overwrites an existing binding.
+    const seeded = await seedLaneStaffingFromWorkforce(env, this.db, { tenantId, projectId, boardId });
+
+    return { boardId, lanesApplied: template.lanes.length, requirementsApplied, lanesStaffed: seeded.staffed };
   }
 
   private async invalidate(env: Env, tenantId: number, id: string): Promise<void> {

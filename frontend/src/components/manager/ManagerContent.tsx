@@ -21,6 +21,8 @@ import { ManagerCopyDiagnostics } from '@/components/manager/ManagerCopyDiagnost
 import { ManagerTodayDigest } from '@/components/manager/ManagerTodayDigest';
 import { ManagerChatPanel } from '@/components/manager/ManagerChatPanel';
 import { ManagerCanvas } from '@/components/manager/ManagerCanvas';
+import { WorkingCalendarSettings } from '@/components/manager/WorkingCalendarSettings';
+import { DecompositionCleanupPanel } from '@/components/pm/DecompositionCleanupPanel';
 import { ticketHref } from '@/lib/ticketHref';
 import { isManagerActionType, managerActionIcon } from '@/lib/managerActions';
 import {
@@ -131,6 +133,11 @@ export interface ManagerContentProps {
 export function ManagerContent({ projectId }: ManagerContentProps) {
   const fmt = useFormat();
   const t = useTranslations('manager');
+  // Planning facts (which planner produced a plan, whether it fits) and the cleanup
+  // review carry their own namespaces, shared with the board and the spine so one
+  // fact is never worded two ways.
+  const tPlanning = useTranslations('planning');
+  const tCleanup = useTranslations('cleanup');
   const format = useFormatter();
   const { allowed: canManage } = usePermission('manager.manage');
   // Sub-view is URL state (`?sub=`), not local state, so every view is
@@ -144,6 +151,8 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
   const askQuestion = searchParams.get('q');
 
   const [data, setData] = useState<ManagerOverview | null>(null);
+  /** The decomposition-cleanup REVIEW panel (non-destructive detail ⇒ a slide-out). */
+  const [cleanupOpen, setCleanupOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -585,7 +594,56 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
         <StatTile label={t('stat.unowned')} value={stats.unowned} tone={stats.unowned > 0 ? 'warn' : undefined} />
         <StatTile label={t('stat.flagged')} value={stats.flagged} tone={stats.flagged > 0 ? 'warn' : undefined} />
         <StatTile label={t('stat.openPullRequests')} value={stats.openPullRequests} />
+        {/* WHICH planner produced this project's Epics. Server-computed (the manager
+            read path carries `stats.decomposition`) — the component renders the
+            number, it does not derive one from a list it happens to have loaded. */}
+        {stats.decomposition && (
+          <StatTile
+            label={tPlanning('stat.heuristicEpics')}
+            value={stats.decomposition.heuristic}
+            tone={stats.decomposition.degraded ? 'warn' : undefined}
+          />
+        )}
       </div>
+
+      {/* A RUN of heuristic decompositions is a model-availability incident, not the
+          AI being bad at planning — which is exactly the wrong conclusion the missing
+          count used to invite. Said plainly, with the numbers behind it. */}
+      {stats.decomposition?.degraded && (
+        <div role="status" style={{ ...panelStyle, borderColor: 'var(--warning-text)', color: 'var(--warning-text)', fontSize: '0.85rem' }}>
+          <Icon source="⚠" size="1em" /> {tPlanning('degradedNudge', {
+            heuristic: stats.decomposition.heuristic,
+            decomposed: stats.decomposition.decomposed,
+            pct: stats.decomposition.heuristicPct,
+          })}
+        </div>
+      )}
+
+      {/* The rows the OLD decomposer shredded are still live on the board. This opens
+          a REVIEW of them — never a bulk purge; see DecompositionCleanupPanel. */}
+      <div style={{ ...panelStyle, display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={sectionTitleStyle}>{tCleanup('title')}</div>
+          <div style={mutedStyle}>{tCleanup('entryCaption')}</div>
+        </div>
+        <button
+          type="button"
+          onClick={() => setCleanupOpen(true)}
+          style={{ ...primaryBtn, marginLeft: 'auto', background: 'transparent', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)' }}
+        >
+          {tCleanup('open')}
+        </button>
+      </div>
+      <DecompositionCleanupPanel
+        projectId={projectId}
+        open={cleanupOpen}
+        onClose={() => setCleanupOpen(false)}
+        onApplied={() => { void load(); }}
+      />
+
+      {/* The tenant's working week + holidays — the calendar every date on this page
+          is computed against, and what replaced the hardcoded Mon-Fri rule. */}
+      <WorkingCalendarSettings />
 
       <div style={panelStyle}>
         <div style={{ ...sectionTitleStyle, marginBottom: 4 }}>{t('chart.title')}</div>

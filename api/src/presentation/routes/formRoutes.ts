@@ -27,6 +27,7 @@ import {
   summarizeForm,
 } from '../../application/collection/formPublishing';
 import { deliverFormInvitations } from '../../application/collection/formInvitations';
+import { headerHints } from '../../application/email/emailLocaleResolver';
 
 /** One translation of a refusal into a status, shared by every handler — so a
  *  new endpoint cannot invent a different code for the same rejection. */
@@ -79,11 +80,17 @@ export function createFormRoutes(db: Db): Hono<HonoEnv> {
         : undefined,
       createdBy: (c.get('userId') as string | undefined) ?? null,
     });
-    const delivery = await deliverFormInvitations(c.env as Env, {
+    const delivery = await deliverFormInvitations(c.env as Env, db, {
       slug: result.slug,
       title: String(body.title ?? ''),
       closesAt: typeof body.closesAt === 'string' ? body.closesAt : null,
-    }, result.invitations);
+      // The recipients are not users, so the invitation is written in the
+      // PUBLISHER's language: their stored choice, and failing that the language
+      // this very request is being made in.
+    }, result.invitations, {
+      userId: (c.get('userId') as string | undefined) ?? null,
+      headers: headerHints(c.req),
+    });
     return Response.json({ ...result, delivery });
   }));
 

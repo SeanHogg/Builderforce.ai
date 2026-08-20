@@ -99,6 +99,8 @@ import { nextSeedPromptStep } from '@/lib/brain/seedPrompt';
 import { usePersonalityBlock, getSessionPsychometric } from '@/lib/usePersonalityBlock';
 import { fetchLimbicBlock } from '@/lib/personalityApi';
 import { accountBrainPreferencesApi } from '@/lib/accountBrainPreferencesApi';
+import { AssigneeProfilesProvider } from '../workforce/AssigneeProfilesContext';
+import AssigneeHovercard from '../workforce/AssigneeHovercard';
 
 /**
  * Clock time for a message sent today, calendar date for anything older.
@@ -1443,7 +1445,16 @@ export function BrainPanel({
         {chats.activeChatId != null && <BrainCapabilityPicker surface={capabilitySurface} value={capabilityId} onSelect={selectCapability} layout="compact" disabled={conv.sending} />}
         {participants.length > 0 && <>
           <span style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)' }}>{tBrain('to')}</span>
-          {recipient && <Avatar name={recipient.name} kind={recipient.kind} size={18} />}
+          {/* WHO YOU ARE ADDRESSING, with their personality. The shared hovercard showed
+              on /settings, the Workforce card and task-assignee chips — everywhere except
+              the surface where you actually choose which agent to talk to. It reads the
+              same provider map (mounted once below) and self-hides for a participant with
+              no personality on file, so nothing changes for anyone who has not set one. */}
+          {recipient && (
+            <AssigneeHovercard selectValue={recipient.kind === 'agent' ? `c:${recipient.ref}` : `u:${recipient.ref}`}>
+              <Avatar name={recipient.name} kind={recipient.kind} size={18} />
+            </AssigneeHovercard>
+          )}
           <Select
             value={recipient ? recipient.ref : 'brain'}
             onChange={(e) => setRecipientChoice(e.target.value === 'brain' ? 'brain' : (participants.find((p) => p.ref === e.target.value) ?? 'brain'))}
@@ -1645,6 +1656,10 @@ export function BrainPanel({
 
   if (isPage) {
     return (
+      // ONE fetch of the tenant's personality map for the whole panel, so the recipient
+      // hovercard above costs no per-render request and self-hides for anyone with no
+      // personality on file.
+      <AssigneeProfilesProvider>
       <div className="bs-shell" style={{ marginBottom: 0 }}>
         <div className="bs-sidebar">
           <div className="bs-sidebar-header">
@@ -1682,11 +1697,13 @@ export function BrainPanel({
         </div>
         <div className="bs-main"><AiDisclosure />{conversation}</div>
       </div>
+      </AssigneeProfilesProvider>
     );
   }
 
   // Docked drawer
   return (
+    <AssigneeProfilesProvider>
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg-base)' }}>
       <div style={{ flexShrink: 0, padding: '10px 14px', borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
         <span style={{ fontWeight: 600, fontSize: 'var(--font-size-body)', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6 }}><Icon source="🧠" size="1em" /> {tBrain('brainTitle')}</span>
@@ -1762,6 +1779,7 @@ export function BrainPanel({
         </div>
       )}
     </div>
+    </AssigneeProfilesProvider>
   );
 }
 

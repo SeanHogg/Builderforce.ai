@@ -5,11 +5,25 @@ import { useTranslations } from 'next-intl';
 import { Select } from '@/components/Select';
 import { membersApi, empMetricsApi, type DisciplineRollup, type DoraRollup, type MemberScorecard } from '@/lib/builderforceApi';
 import { MemberProfileEditor } from './MemberProfileEditor';
+import { AssigneeProfilesProvider } from './AssigneeProfilesContext';
+import AssigneeHovercard from './AssigneeHovercard';
+import { assigneeSelectValue } from '@/lib/taskAssignee';
 import { EngagementSection } from './EngagementSection';
 import { fmtHrs, fmtScore, scoreColor, MEMBER_KIND_LABEL } from './workforceFormat';
 import { useProjectScope } from '@/lib/ProjectScopeContext';
 
 const DISCIPLINE_OPTIONS = ['engineering', 'product', 'design', 'qa', 'devops', 'data', 'other'] as const;
+
+/**
+ * A scorecard row's identity in the `u:`/`c:`/`h:` select-value vocabulary the shared
+ * personality provider is keyed by. One encoder rather than three inline ternaries, so
+ * the hovercard here and the ones on the board look themselves up identically.
+ */
+const memberSelectValue = (m: MemberScorecard): string => assigneeSelectValue(
+  m.memberKind === 'host_agent' ? Number(m.memberRef) : null,
+  m.memberKind === 'cloud_agent' ? m.memberRef : null,
+  m.memberKind === 'human' ? m.memberRef : null,
+);
 
 /**
  * Performance tab — workforce effectiveness/engagement scorecards (humans AND
@@ -75,6 +89,10 @@ export function WorkforceMetricsContent() {
   };
 
   return (
+    // ONE fetch of the tenant's personality map for the whole table — the same provider
+    // the board mounts, so a hovercard costs no per-row request. Every hovercard inside
+    // self-hides for a member with no personality on file.
+    <AssigneeProfilesProvider>
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <div style={{ fontWeight: 600, fontSize: 14 }}>{t('performance.title')}</div>
@@ -160,7 +178,14 @@ export function WorkforceMetricsContent() {
                 <tr key={`${m.memberKind}:${m.memberRef}`} onClick={() => setEditing(m)}
                   style={{ borderBottom: '1px solid var(--border-subtle)', cursor: 'pointer' }}>
                   <td style={{ ...td, textAlign: 'left' }}>
-                    <div style={{ fontWeight: 500 }}>{m.memberName}</div>
+                    {/* THE PERSON PROFILE SURFACE. Personality showed on /settings, the
+                        Workforce card and task-assignee hovercards, and nowhere a manager
+                        actually compares people — this scorecard table. The shared
+                        hovercard reads the same provider map (one fetch for the page) and
+                        self-hides for anyone with no personality on file. */}
+                    <AssigneeHovercard selectValue={memberSelectValue(m)}>
+                      <span style={{ fontWeight: 500 }}>{m.memberName}</span>
+                    </AssigneeHovercard>
                     <div style={{ fontSize: 11, color: 'var(--muted)' }}>{KIND_LABEL[m.memberKind]}</div>
                   </td>
                   <td style={{ ...td, textAlign: 'left', color: m.discipline ? undefined : 'var(--muted)' }}>{m.discipline ? disciplineLabel(m.discipline) : '—'}</td>
@@ -194,5 +219,6 @@ export function WorkforceMetricsContent() {
         />
       )}
     </div>
+    </AssigneeProfilesProvider>
   );
 }

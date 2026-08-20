@@ -270,6 +270,21 @@ export interface AdminOutcomeRollup {
 }
 
 // Sales-cycle demo accounts (migration 0360).
+/** One account flagged by the pre-OTP review (`GET /api/admin/accounts/suspect`). */
+export interface AdminSuspectAccount {
+  id: string;
+  email: string;
+  username: string;
+  createdAt: string;
+  lastLoginAt: string | null;
+  emailVerifiedAt: string | null;
+  /** Verified in the same second it was created — the migration-0285 signature. */
+  backfilledVerification: boolean;
+  neverSignedIn: boolean;
+  disposableDomain: boolean;
+  tenantCount: number;
+}
+
 export interface AdminDemoFunnelRow {
   persona: string | null;
   kind: string;
@@ -1079,6 +1094,21 @@ export const adminApi = {
     if (filters.projectId) params.set('projectId', String(filters.projectId));
     const query = params.toString();
     return adminRequest<AdminOutcomeRollup>(`/api/admin/outcome-metrics${query ? `?${query}` : ''}`);
+  },
+
+  /**
+   * Accounts the signup OTP gate never tested (migration 0285 backfilled every
+   * pre-existing account as verified). Review surface, not an auto-purge.
+   */
+  async suspectAccounts(): Promise<{ accounts: AdminSuspectAccount[] }> {
+    return adminRequest<{ accounts: AdminSuspectAccount[] }>('/api/admin/accounts/suspect');
+  },
+  /** Clear the backfilled verification stamp, so the address must be proven again. */
+  async revokeSuspectAccounts(userIds: string[]): Promise<{ revoked: number }> {
+    return adminRequest<{ revoked: number }>('/api/admin/accounts/suspect/revoke', {
+      method: 'POST',
+      body: JSON.stringify({ userIds }),
+    });
   },
 
   // Demo-account conversion funnel + book-a-demo pipeline (migration 0360).

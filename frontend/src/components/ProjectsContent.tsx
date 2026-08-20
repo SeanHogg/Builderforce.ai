@@ -84,6 +84,7 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
   const [detailsInitialTab, setDetailsInitialTab] = useState<ProjectPanelTab>('analytics');
   const [detailsInitialSpecKind, setDetailsInitialSpecKind] = useState<string | null>(null);
   const [detailsInitialAudit, setDetailsInitialAudit] = useState<string | null>(null);
+  const [detailsInitialSpecId, setDetailsInitialSpecId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ProjectsView>('card');
   const [selectedAgentHost, setSelectedAgentHost] = useState<AgentHost | null>(null);
   const [planError, setPlanError] = useState<PlanLimitError | null>(null);
@@ -135,9 +136,11 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
     if (searchParams.get('create') === '1') setShowForm(true);
   }, [searchParams]);
 
-  // Deep-link (e.g. an audit-complete notification): ?project=<id>&panel=diagnostics&audit=<id>
-  // opens that project's details panel on the given tab with the audit result
-  // pre-opened. Runs once the list is loaded so the project can be resolved.
+  // Deep-link into a project's information panel. Two callers today:
+  //   ?project=<id>&panel=diagnostics&audit=<id>  — an audit-complete notification
+  //   ?project=<id>&panel=prds&spec=<id>          — "Open" on a PRD a Brain chat created
+  // Both land on the DOCUMENT/result, not merely the tab that lists it (see
+  // `artifactRoutePath`). Runs once the list is loaded so the project can be resolved.
   useEffect(() => {
     const pid = searchParams.get('project');
     const panel = searchParams.get('panel');
@@ -146,6 +149,7 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
     if (!proj) return;
     setDetailsInitialTab(panel as ProjectPanelTab);
     setDetailsInitialAudit(searchParams.get('audit'));
+    setDetailsInitialSpecId(searchParams.get('spec'));
     setDetailsProject(proj);
   }, [searchParams, projects]);
 
@@ -195,6 +199,7 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
     // Which document the destination tab should open, not just which tab. Cleared
     // on every open so a later plain Details click doesn't inherit the last one.
     setDetailsInitialSpecKind(specKind ?? null);
+    setDetailsInitialSpecId(null);
     setDetailsProject(project);
   };
 
@@ -470,8 +475,9 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
           open={!!detailsProject}
           initialTab={detailsInitialTab}
           initialSpecKind={detailsInitialSpecKind}
+          initialSpecId={detailsInitialSpecId}
           initialAuditId={detailsInitialAudit}
-          onClose={() => { setDetailsProject(null); setDetailsInitialAudit(null); }}
+          onClose={() => { setDetailsProject(null); setDetailsInitialAudit(null); setDetailsInitialSpecId(null); }}
           onProjectUpdate={applyProjectPatch}
           onDelete={removeProject}
         />

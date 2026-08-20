@@ -55,7 +55,7 @@ export function makeExecutionBoardSink(env: Env, db: Db): ExecutionEventSink {
           ref = { projectId: row.projectId, tenantId: row.tenantId };
           projectRefByTask.set(taskId, ref);
         }
-        await broadcastProjectChanged(env.SESSION_ROOM, ref.tenantId, ref.projectId);
+        await broadcastProjectChanged(env, ref.tenantId, ref.projectId);
       } catch (error) {
         reportCaughtError(error, { source: "application/runtime/executionBoardBroadcast.ts", operation: "makeExecutionBoardSink", context: { logMessage: '[execution-board] project change broadcast failed', details: { taskId, error } } });
       }

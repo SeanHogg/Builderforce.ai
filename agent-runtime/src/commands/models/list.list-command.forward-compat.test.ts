@@ -36,9 +36,18 @@ const mocks = vi.hoisted(() => {
   };
 });
 
-vi.mock("../../config/config.js", () => ({
-  loadConfig: mocks.loadConfig,
-}));
+// PARTIAL, not total. A total mock drops every other export, and this module's
+// `STATE_DIR` is read at import time by `agents/sandbox/constants.ts` — which is
+// pulled in transitively by the command under test. Replacing the module wholesale
+// made the suite fail to LOAD ("No STATE_DIR export is defined on the mock"), so
+// none of its assertions ever ran. Only `loadConfig` needs stubbing here.
+vi.mock("../../config/config.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../config/config.js")>();
+  return {
+    ...actual,
+    loadConfig: mocks.loadConfig,
+  };
+});
 
 vi.mock("../../agents/auth-profiles.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../agents/auth-profiles.js")>();

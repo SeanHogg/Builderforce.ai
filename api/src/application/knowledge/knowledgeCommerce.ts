@@ -4,6 +4,9 @@
  * A priced listing used to be unbuyable: `POST /listings/:id/checkout` answered
  * `{ requiresConfig: true }`, recorded nothing, and `/install` therefore 402'd
  * forever. The listing could be published and priced, and no one could pay for it.
+ * That is history — the flow below is live, and Stripe is the only processor
+ * behind it (`buildPaymentProvider` has no `manual` branch to fall back to; an
+ * unconfigured deploy raises, it does not grant).
  *
  * ── ONE PAYMENT MACHINE, NOT A SECOND ONE ────────────────────────────────────
  * The processor round-trip is `finance/verifiedCheckout`, the same primitive the

@@ -10,6 +10,7 @@ import { reportCaughtError } from '../../application/observability/caughtErrorRe
  *
  *   GET    /dashboards                 list dashboards (+ widgets)        [member]
  *   POST   /dashboards                 create dashboard                   [manager]
+ *   POST   /dashboards/presets/:preset materialise a declared preset      [manager]
  *   PATCH  /dashboards/:id             rename / set default               [manager]
  *   DELETE /dashboards/:id             delete dashboard (+ widgets)       [manager]
  *   POST   /dashboards/:id/widgets     add widget                         [manager]
@@ -17,7 +18,8 @@ import { reportCaughtError } from '../../application/observability/caughtErrorRe
  *   DELETE /dashboards/:id/widgets/:w  remove widget                      [manager]
  *   GET    /dashboards/:id/data        resolve every widget's metric      [member]
  *   GET    /metrics                    list whitelisted metric keys       [member]
- *   POST   /query                      natural-language metric query      [member]
+ *   GET    /workforce-health           over-allocated / under-used / idle [member]
+ *   POST   /query                      natural-language composed answer   [member]
  */
 
 import { Hono } from 'hono';
@@ -28,7 +30,10 @@ import { scope } from './segmentTrackerRoutes';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { dashboardWidgets, savedDashboards, savedQueries } from '../../infrastructure/database/schema';
 import { METRIC_REGISTRY, isMetricKey, listMetricKeys } from '../../application/dashboards/metricRegistry';
-import { answerQuery } from '../../application/dashboards/nlQuery';
+import { metricCacheKey, type MetricCache } from '../../application/dashboards/nlQuery';
+import { composeAnswer } from '../../application/dashboards/answerComposer';
+import { applyDashboardPreset, isPresetKey, listPresetKeys } from '../../application/dashboards/dashboardPresets';
+import { computeWorkforceHealth } from '../../application/dashboards/workforceHealth';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { positiveIntOrNull } from './queryParams';
@@ -37,6 +42,22 @@ import { resolveTenantPlan } from './llmRoutes';
 import type { IntentRefiner } from '../../application/dashboards/nlQuery';
 
 const SHORT_TTL = { kvTtlSeconds: 60, l1TtlMs: 15_000 };
+
+/**
+ * The canonical read-through cache, bound to this request's env, handed to the
+ * application layer as a plain function.
+ *
+ * A composed answer resolves four or five registry metrics for ONE question, each
+ * of which is a windowed insight collector — the same expensive reads
+ * `GET /dashboards/:id/data` already caches. They share this helper (and, via
+ * {@link metricCacheKey}, the same keys), so a metric warmed by a dashboard render
+ * is warm for the Ask box a second later and there is exactly one place to reason
+ * about the TTL. The application layer never reaches for infrastructure itself and
+ * never grows a private Map+TTL beside this one.
+ */
+function metricCache(env: Env): MetricCache {
+  return (key, loader) => getOrSetCached(env, key, loader, SHORT_TTL);
+}
 
 /** Clamp a `?days=` window to a sane range (default 30). */
 function parseDays(raw: string | undefined, def = 30): number {
@@ -68,13 +89,19 @@ export function createDashboardsRoutes(db: Db): Hono<HonoEnv> {
     return c.json({ metrics });
   });
 
-  // ── AI-Powered Query (deterministic NL → whitelisted metric) ───────────────
+  // ── AI-Powered Query (deterministic NL → composed, whitelisted answer) ─────
   //
-  // The keyword mapper answers first and answers alone whenever it recognises the
-  // question. Only a question it does NOT recognise reaches the gateway refiner,
-  // which may pick a different WHITELISTED key and nothing else — so this stays a
-  // deterministic feature that an LLM sometimes improves, not an LLM feature with
-  // a deterministic fallback. `refine: false` opts out entirely.
+  // The keyword classifiers answer first and answer alone whenever they recognise
+  // the question — as a TOPIC (a whole situation: several metrics plus the widgets
+  // that draw them) or, failing that, as a single metric. Only a question NEITHER
+  // recognises reaches the gateway refiner, which may pick a different WHITELISTED
+  // topic or key and nothing else — so this stays a deterministic feature that an
+  // LLM sometimes improves, not an LLM feature with a deterministic fallback.
+  // `refine: false` opts out entirely.
+  //
+  // The response carries the composed shape AND the original single-metric fields,
+  // populated from `metrics[0]`: every existing client reads `.value` /
+  // `.explanation` / `.matchedMetric` and must keep working unchanged.
   router.post('/query', async (c) => {
     const { tenantId } = scope(c);
     const body = await c.req.json<{ question?: string; refine?: boolean }>().catch(() => ({}) as { question?: string; refine?: boolean });
@@ -88,7 +115,10 @@ export function createDashboardsRoutes(db: Db): Hono<HonoEnv> {
       if (plan) refiner = gatewayIntentRefiner(c.env as Env, plan.effectivePlan, plan.premiumOverride);
     }
 
-    const answer = await answerQuery(db, tenantId, question, refiner);
+    const composed = await composeAnswer(db, tenantId, question, { refiner, cache: metricCache(c.env as Env) });
+    // metrics[] is never empty (a topic declares its keys; the metric path returns
+    // one), but the fallback keeps a shape change from becoming a 500.
+    const lead = composed.metrics[0];
 
     // Record the question + matched metric for history/audit (best-effort).
     const createdBy = c.get('userId') as string | undefined;
@@ -96,14 +126,38 @@ export function createDashboardsRoutes(db: Db): Hono<HonoEnv> {
       await db.insert(savedQueries).values({
         tenantId,
         question,
-        matchedMetric: answer.matchedMetric,
+        matchedMetric: lead?.matchedMetric ?? composed.topic,
         createdBy: createdBy ?? null,
       });
-    } catch (error) { /* history is non-critical */ 
+    } catch (error) { /* history is non-critical */
       reportCaughtError(error, { source: "presentation/routes/dashboardsRoutes.ts", operation: "createDashboardsRoutes" });
     }
 
-    return c.json(answer);
+    return c.json({
+      matchedMetric: lead?.matchedMetric ?? '',
+      label: lead?.label ?? '',
+      value: lead?.value ?? null,
+      unit: lead?.unit ?? '',
+      explanation: lead?.explanation ?? composed.narrative,
+      ...composed,
+    });
+  });
+
+  // ── Workforce health (the three cohorts, one read) ─────────────────────────
+  //
+  // The rows behind `people.overAllocated` / `people.underUtilised` / `people.idle`
+  // — the scalars answer "how many", this answers "who". Member-visible: a manager
+  // needing to rebalance and a member checking their own load read the same thing.
+  router.get('/workforce-health', async (c) => {
+    const { tenantId } = scope(c);
+    const days = parseDays(c.req.query('days'));
+    const result = await getOrSetCached(
+      c.env as Env,
+      `dashboards:workforce-health:t:${tenantId}:d:${days}`,
+      () => computeWorkforceHealth(db, tenantId, days),
+      SHORT_TTL,
+    );
+    return c.json(result);
   });
 
   // ── Dashboards CRUD ────────────────────────────────────────────────────────
@@ -143,6 +197,28 @@ export function createDashboardsRoutes(db: Db): Hono<HonoEnv> {
       .values({ tenantId, segmentId, name, isDefault: !!body.isDefault, createdBy: createdBy ?? null })
       .returning();
     return c.json({ ...row, widgets: [] }, 201);
+  });
+
+  // ── Presets: a curated dashboard a manager gets by asking ──────────────────
+  //
+  // Manager-gated like every other dashboard WRITE — it materialises real
+  // `saved_dashboards` + `dashboard_widgets` rows, so it is a create, not a read
+  // with a nice name. Idempotent: re-applying reconciles against what is already
+  // there rather than duplicating tiles (see applyDashboardPreset).
+  //
+  // Declared BEFORE `/dashboards/:id` writes only in reading order; Hono matches
+  // the literal `presets` segment ahead of `:id` regardless, and an id is
+  // numeric-only so the two can never collide.
+  router.post('/dashboards/presets/:preset', requireRole(TenantRole.MANAGER), async (c) => {
+    const { tenantId, segmentId } = scope(c);
+    const preset = c.req.param('preset');
+    // THE GATE: a path segment names a preset only if the preset table declares it.
+    if (!isPresetKey(preset)) {
+      return c.json({ error: 'unknown preset', presets: listPresetKeys() }, 400);
+    }
+    const createdBy = c.get('userId') as string | undefined;
+    const result = await applyDashboardPreset(db, tenantId, segmentId, preset, createdBy ?? null);
+    return c.json(result, result.createdDashboard ? 201 : 200);
   });
 
   router.patch('/dashboards/:id', requireRole(TenantRole.MANAGER), async (c) => {
@@ -281,7 +357,8 @@ export function createDashboardsRoutes(db: Db): Hono<HonoEnv> {
         if (!def) {
           return { widgetId: w.id, widgetKey: null, metricKey: w.metricKey, title: w.title, viz: w.viz, value: null, unit: '', label: w.metricKey ?? '', days, series: null, error: 'unknown metric' };
         }
-        const key = `dashboards:metric:t:${tenantId}:k:${w.metricKey}:d:${days}`;
+        // Same key builder the Ask box uses, so one warm entry serves both.
+        const key = metricCacheKey(tenantId, w.metricKey as string, days);
         const value = await getOrSetCached(env, key, () => def.compute(db, tenantId, days), SHORT_TTL);
         // Date-windowed trend (sparkline/line/bar source), cached alongside the
         // scalar. Absent for point-in-time metrics → widget renders scalar-only.

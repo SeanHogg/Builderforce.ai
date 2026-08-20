@@ -15,7 +15,12 @@
 import { describe, it, expect } from 'vitest';
 import { CAREER_TOOLS } from './careerTools';
 import { getTool, TOOLS } from './toolDefinitions';
-import { toDefinition } from './toolTypes';
+import { TRANSLATED_TOOL_LOCALES, toolCopy } from './toolMessages';
+import { toDefinition, type AnalyzerTool } from './toolTypes';
+
+/** The English lookup, spelled once. `analyze` takes its copy as a PARAMETER —
+ *  that is what keeps it pure — so every call site has to supply one. */
+const en = (tool: AnalyzerTool) => toolCopy(tool, 'en');
 
 /** The ids the ported articles link to. Kept as literals deliberately. */
 const ARTICLE_SLUGS = [
@@ -131,7 +136,7 @@ describe('career tools — every analyzer survives any input', () => {
     for (const [label, value] of HOSTILE) {
       it(`${tool.id} handles ${label}`, () => {
         const input = Object.fromEntries(tool.fields.map((f) => [f.id, value]));
-        const result = tool.analyze(input);
+        const result = tool.analyze(input, en(tool));
         expect(result.headline).toBeTruthy();
         expect(Array.isArray(result.metrics)).toBe(true);
         expect(Array.isArray(result.recommendations)).toBe(true);
@@ -139,7 +144,7 @@ describe('career tools — every analyzer survives any input', () => {
     }
 
     it(`${tool.id} handles a missing input map entirely`, () => {
-      const result = tool.analyze({});
+      const result = tool.analyze({}, en(tool));
       expect(result.headline).toBeTruthy();
     });
   }
@@ -149,7 +154,7 @@ describe('career tools — the readings are real', () => {
   it('scores a résumé and ranks fixes', () => {
     const result = getTool('ai-resume-scorer')!;
     if (result.kind !== 'analyzer') throw new Error('expected analyzer');
-    const scored = result.analyze({ resume: SAMPLE_RESUME });
+    const scored = result.analyze({ resume: SAMPLE_RESUME }, en(result));
     expect(scored.score).toBeGreaterThan(0);
     expect(scored.score).toBeLessThanOrEqual(100);
     expect(scored.metrics.length).toBeGreaterThan(3);
@@ -160,7 +165,7 @@ describe('career tools — the readings are real', () => {
   it('matches a résumé against a posting and names what is missing', () => {
     const tool = getTool('job-resume-match')!;
     if (tool.kind !== 'analyzer') throw new Error('expected analyzer');
-    const match = tool.analyze({ resume: SAMPLE_RESUME, job: SAMPLE_JOB });
+    const match = tool.analyze({ resume: SAMPLE_RESUME, job: SAMPLE_JOB }, en(tool));
     expect(match.score).toBeGreaterThan(0);
     const missing = match.metrics.find((m) => m.label === 'Missing');
     expect(missing, 'the match must report a Missing row').toBeDefined();
@@ -174,7 +179,7 @@ describe('career tools — the readings are real', () => {
   it('reports per-area coverage as a real percentage', () => {
     const tool = getTool('job-resume-match')!;
     if (tool.kind !== 'analyzer') throw new Error('expected analyzer');
-    const match = tool.analyze({ resume: SAMPLE_RESUME, job: SAMPLE_JOB });
+    const match = tool.analyze({ resume: SAMPLE_RESUME, job: SAMPLE_JOB }, en(tool));
     // `byArea.coverage` already arrives 0..100. Multiplying it again rendered
     // "1 of 1 matched" as 10000%, which is how this assertion came to exist.
     for (const metric of match.metrics) {
@@ -186,15 +191,15 @@ describe('career tools — the readings are real', () => {
   it('is deterministic — the same document always scores the same', () => {
     const tool = getTool('ai-resume-scorer')!;
     if (tool.kind !== 'analyzer') throw new Error('expected analyzer');
-    const a = tool.analyze({ resume: SAMPLE_RESUME });
-    const b = tool.analyze({ resume: SAMPLE_RESUME });
+    const a = tool.analyze({ resume: SAMPLE_RESUME }, en(tool));
+    const b = tool.analyze({ resume: SAMPLE_RESUME }, en(tool));
     expect(a).toEqual(b);
   });
 
   it('places a figure inside the salary band it models', () => {
     const tool = getTool('salary-calculator')!;
     if (tool.kind !== 'analyzer') throw new Error('expected analyzer');
-    const result = tool.analyze({ discipline: 'Product Manager', seniority: 'senior', currentBase: '150000' });
+    const result = tool.analyze({ discipline: 'Product Manager', seniority: 'senior', currentBase: '150000' }, en(tool));
     expect(result.headline).toMatch(/\d/);
     expect(result.metrics.some((m) => m.label === 'Your figure')).toBe(true);
   });
@@ -202,7 +207,63 @@ describe('career tools — the readings are real', () => {
   it('needs both documents before the tailor will run', () => {
     const tool = getTool('resume-tailor')!;
     if (tool.kind !== 'analyzer') throw new Error('expected analyzer');
-    expect(tool.analyze({ resume: SAMPLE_RESUME }).headline).toBe('Nothing to read yet');
-    expect(tool.analyze({ resume: SAMPLE_RESUME, job: SAMPLE_JOB }).headline).not.toBe('Nothing to read yet');
+    expect(tool.analyze({ resume: SAMPLE_RESUME }, en(tool)).headline).toBe('Nothing to read yet');
+    expect(tool.analyze({ resume: SAMPLE_RESUME, job: SAMPLE_JOB }, en(tool)).headline).not.toBe('Nothing to read yet');
+  });
+});
+
+
+describe('career tools — a finding is read in the reader’s language', () => {
+  /**
+   * The gap this closes: the FIELDS above an analyzer were translated and the
+   * findings under them were not, so a French visitor got a French form and an
+   * English verdict. These assertions are on the composed RESULT, which is the
+   * half a definition-only translation could never reach.
+   */
+  const SCORER = getTool('ai-resume-scorer') as AnalyzerTool;
+
+  it.each(TRANSLATED_TOOL_LOCALES)('composes its own chrome in %s, not English', (locale) => {
+    const localized = SCORER.analyze({ resume: SAMPLE_RESUME }, toolCopy(SCORER, locale));
+    const english = SCORER.analyze({ resume: SAMPLE_RESUME }, en(SCORER));
+    // The metric LABELS this file authors ("Bullets", "Openers", "Length") are
+    // the ones that were stuck in English; the domain's own category labels ride
+    // through untranslated by design and are excluded by position.
+    const ours = (r: typeof english) => r.metrics.slice(-4).map((m) => m.label);
+    expect(ours(localized)).not.toEqual(ours(english));
+  });
+
+  it.each(TRANSLATED_TOOL_LOCALES)('scores identically in %s — a lens on words, not on numbers', (locale) => {
+    const localized = SCORER.analyze({ resume: SAMPLE_RESUME }, toolCopy(SCORER, locale));
+    const english = SCORER.analyze({ resume: SAMPLE_RESUME }, en(SCORER));
+    expect(localized.score).toBe(english.score);
+    expect(localized.metrics.length).toBe(english.metrics.length);
+    expect(localized.recommendations.length).toBe(english.recommendations.length);
+  });
+
+  it('translates the empty state every analyzer shares', () => {
+    for (const tool of CAREER_TOOLS) {
+      const de = tool.analyze({}, toolCopy(tool, 'de'));
+      expect(de.headline, tool.id).not.toBe('Nothing to read yet');
+      expect(de.headline, tool.id).toBeTruthy();
+      // …and the sentence under it is the analyzer's OWN, so "paste a résumé"
+      // and "paste both a résumé and a job description" stay distinguishable.
+      expect(de.summary, tool.id).toBeTruthy();
+    }
+  });
+
+  it('substitutes every placeholder — a visible {token} is a missing variable', () => {
+    for (const tool of CAREER_TOOLS) {
+      const input = Object.fromEntries(tool.fields.map((f) => [f.id, SAMPLE_RESUME]));
+      for (const locale of TRANSLATED_TOOL_LOCALES) {
+        const result = tool.analyze(input, toolCopy(tool, locale));
+        const prose = [
+          result.headline,
+          result.summary ?? '',
+          ...result.metrics.flatMap((m) => [m.label, m.value, m.hint ?? '']),
+          ...result.recommendations.flatMap((r) => [r.title, r.detail]),
+        ].join(' ');
+        expect(prose, `${tool.id} @ ${locale}`).not.toMatch(/\{[a-zA-Z]\w*\}/);
+      }
+    }
   });
 });

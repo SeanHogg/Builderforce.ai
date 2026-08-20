@@ -13,6 +13,7 @@ import {
   type WebScanRun,
   type WebScanFinding,
   type WebScanRunResult,
+  type WebScanStage,
 } from '@/lib/builderforceApi';
 import { useFormat } from "@/i18n/useFormat";
 
@@ -54,6 +55,59 @@ function ScoreGauge({ score, label }: { score: number; label: string }) {
       <div>
         <div style={{ fontSize: 12, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.4 }}>{label}</div>
         <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-primary)' }}>{score}<span style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 600 }}>/100</span></div>
+      </div>
+    </div>
+  );
+}
+
+/** Stage status → the token that colours its dot. `not_run` is deliberately NOT an
+ *  error colour: the stage did not fail, it did not happen, and painting it red would
+ *  train people to ignore it. */
+const STAGE_COLOR: Record<WebScanStage['status'], string> = {
+  ran: 'var(--success)',
+  requested: 'var(--warning)',
+  not_run: 'var(--text-muted)',
+};
+
+/**
+ * Scan coverage — which checks this scan actually performed.
+ *
+ * This block exists because its absence was the bug: the TLS-certificate and CVE
+ * stages cannot run inside a Worker, so on a deployment without the container runtime
+ * they produce no findings — and a findings list with no TLS entries is visually
+ * identical to a site with a flawless certificate. Rendering the stage, its status and
+ * (when it did not run) the reason is what stops a report from implying an all-clear
+ * it never earned.
+ */
+function StageCoverage({ stages, dense = false }: { stages: WebScanStage[] | null | undefined; dense?: boolean }) {
+  const t = useTranslations('security');
+  if (!stages || stages.length === 0) return null;
+  const label = (stage: WebScanStage['stage']) => (stage === 'tls' ? t('webStageTls') : t('webStageCve'));
+  const status = (s: WebScanStage) => {
+    if (s.status === 'ran') return t('webStageRan', { count: s.findingCount });
+    if (s.status === 'requested') return t('webStageRequested');
+    return t('webStageNotRun');
+  };
+  return (
+    <div style={{ marginTop: dense ? 8 : 14, borderTop: '1px solid var(--border-subtle)', paddingTop: dense ? 8 : 12 }}>
+      {!dense && (
+        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 8 }}>
+          {t('webStagesTitle')}
+        </div>
+      )}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {stages.map((s) => (
+          <div key={s.stage} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, flexWrap: 'wrap', minWidth: 0 }}>
+            <span aria-hidden style={{ width: 8, height: 8, borderRadius: '50%', background: STAGE_COLOR[s.status], flexShrink: 0, marginTop: 5 }} />
+            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', flexShrink: 0 }}>{label(s.stage)}</span>
+            <span style={{ fontSize: 12, color: 'var(--text-secondary)', flexShrink: 0 }}>{status(s)}</span>
+            {s.status !== 'ran' && s.reason && (
+              <span style={{ fontSize: 12, color: 'var(--text-muted)', flex: '1 1 220px', minWidth: 0, overflowWrap: 'anywhere' }}>
+                — {s.reason}
+              </span>
+            )}
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -202,6 +256,8 @@ export function WebSecurityScanPanel() {
             </div>
           </div>
 
+          <StageCoverage stages={result.stages} />
+
           <div style={{ marginTop: 14, borderTop: '1px solid var(--border-subtle)', paddingTop: 12 }}>
             {result.findings.length === 0 ? (
               <div style={{ fontSize: 13, color: 'var(--success-text)', fontWeight: 600 }}>✓ {t('webNoIssues')}</div>
@@ -251,17 +307,22 @@ export function WebSecurityScanPanel() {
             {scans.map((s) => {
               const sev = s.countsBySeverity ?? {};
               return (
-                <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 12, padding: '8px 12px', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', flexWrap: 'wrap' }}>
-                  {s.score != null && (
-                    <span style={{ fontWeight: 800, color: scoreColor(s.score), flexShrink: 0 }}>{s.score}</span>
-                  )}
-                  <span style={{ color: 'var(--text-primary)', fontWeight: 600, wordBreak: 'break-all', minWidth: 0 }}>{s.targetUrl ?? '—'}</span>
-                  <span style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                    {SEVERITY_ORDER.filter((k) => sev[k]).map((k) => (
-                      <span key={k} style={{ fontSize: 10, fontWeight: 700, color: SEVERITY_COLOR[k] }}>{sev[k]} {sevLabel(k)}</span>
-                    ))}
-                  </span>
-                  <span style={{ marginLeft: 'auto', color: 'var(--text-muted)', flexShrink: 0 }}>{fmt.dateTime(s.startedAt)}</span>
+                <div key={s.id} style={{ padding: '8px 12px', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 12, flexWrap: 'wrap' }}>
+                    {s.score != null && (
+                      <span style={{ fontWeight: 800, color: scoreColor(s.score), flexShrink: 0 }}>{s.score}</span>
+                    )}
+                    <span style={{ color: 'var(--text-primary)', fontWeight: 600, wordBreak: 'break-all', minWidth: 0 }}>{s.targetUrl ?? '—'}</span>
+                    <span style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                      {SEVERITY_ORDER.filter((k) => sev[k]).map((k) => (
+                        <span key={k} style={{ fontSize: 10, fontWeight: 700, color: SEVERITY_COLOR[k] }}>{sev[k]} {sevLabel(k)}</span>
+                      ))}
+                    </span>
+                    <span style={{ marginLeft: 'auto', color: 'var(--text-muted)', flexShrink: 0 }}>{fmt.dateTime(s.startedAt)}</span>
+                  </div>
+                  {/* Coverage travels with the run: a reader returning to the history a
+                      week later must still be able to see that the TLS stage never ran. */}
+                  <StageCoverage stages={s.stages} dense />
                 </div>
               );
             })}

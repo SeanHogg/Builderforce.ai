@@ -128,6 +128,11 @@ export async function maybeAutoRunOnLaneEntry(
       originLaneKey: args.originLaneKey,
       ...(args.tenantTokens ? { tenantTokens: args.tenantTokens } : {}),
       env,
+      // This trigger runs the REAL requirement gate a few lines below and records its
+      // own `lane_requirement_gate` skip from that authoritative outcome, so the
+      // evaluator's read-only probe would be duplicated work here — and a probe that
+      // disagreed with the enforcement in the same tick would be worse than no probe.
+      skipRequirementProbe: true,
     });
 
     // THE LANE, as the evaluator resolved it live from the row — NOT `args.status`.

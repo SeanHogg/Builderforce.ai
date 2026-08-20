@@ -1,6 +1,6 @@
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { eq } from 'drizzle-orm';
-import { boards, swimlanes } from '../../infrastructure/database/schema';
+import { boards, projects, swimlanes } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { DEFAULT_SWIMLANES } from './defaultSwimlanes';
 import type { Db } from '../../infrastructure/database/connection';
@@ -44,6 +44,8 @@ export function buildDefaultLaneRows(
     name: l.name,
     position: l.position,
     isTerminal: l.isTerminal,
+    // PARKED lanes are off the delivery path — see `swimlanes.is_parking` (1080).
+    isParking: l.isParking === true,
     gate: l.gate,
     executionMode: 'sequential',
     failurePolicy: 'needs_attention',
@@ -115,6 +117,17 @@ export async function findOrCreateBoard(
       throw e;
     }
   }
+
+  // STAMP THE PRIMARY-BOARD POINTER. `findCanonicalBoard` prefers it over the
+  // four-key re-sort, so a project's board becomes a stored fact the moment it exists
+  // rather than something re-derived (and, before migration 1081, re-derived across up
+  // to seven candidate rows). Best-effort: a board with no pointer still resolves.
+  await db.update(projects)
+    .set({ primaryBoardId: created.id })
+    .where(scopedToTenant(projects, input.tenantId, eq(projects.id, input.projectId)))
+    .catch((error) => {
+      reportCaughtError(error, { source: "application/swimlane/findOrCreateBoard.ts", operation: "stampPrimaryBoard" });
+    });
 
   return { board: created, created: true };
 }

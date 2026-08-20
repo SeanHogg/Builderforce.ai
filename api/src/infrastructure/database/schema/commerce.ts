@@ -35,7 +35,7 @@ import {
   varchar,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
-import { creationSessionObjects, creationSessions, freelancerEngagements } from './canvas';
+import { creationSessionObjects, creationSessions, engagementMilestones, freelancerEngagements } from './canvas';
 import { artifactTypeEnum, objects, pricingModelEnum } from './kernel';
 import { segments, tenants, users } from './identity';
 import { jobPostings, skills } from './agents';
@@ -43,19 +43,41 @@ import { projects, tasks } from './delivery';
 
 
 /**
- * Records completed marketplace purchases.
+ * Records completed marketplace purchases — the ONE purchase ledger for every
+ * artifact the marketplace sells.
+ *
  * Flat-fee: one row per purchase. Consumption: one row per billing cycle summary.
+ *
+ * TWO BUYER SHAPES, ONE TABLE (migration 0982). A skill or persona is bought by a
+ * PERSON from the marketing marketplace, where no workspace need exist — those
+ * rows carry `userId` and a null `tenantId`. A marketplace AGENT is bought by a
+ * WORKSPACE, because the entitlement it grants (the hire, and the runtime binding
+ * behind it) is workspace-wide — those rows carry both, and the partial unique
+ * index on `(tenant_id, artifact_type, artifact_slug)` is what makes a replayed
+ * checkout redirect land on the row that is already there instead of a second
+ * charge. `tenantId` is therefore nullable by design, not by omission.
  */
 export const marketplacePurchases = pgTable('marketplace_purchases', {
   id:                   serial('id').primaryKey(),
   userId:               varchar('user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
+  /** The buying WORKSPACE. Null for the user-scoped skill/persona rows. */
+  tenantId:             integer('tenant_id').references(() => tenants.id, { onDelete: 'cascade' }),
   artifactType:         artifactTypeEnum('artifact_type').notNull(),
   artifactSlug:         varchar('artifact_slug', { length: 255 }).notNull(),
   priceCents:           integer('price_cents').notNull().default(0),
   pricingModel:         pricingModelEnum('pricing_model').notNull().default('flat_fee'),
   stripePaymentIntentId: varchar('stripe_payment_intent_id', { length: 255 }),
+  /** Which processor took the money — mirrors `knowledge_listing_purchases`. */
+  provider:             varchar('provider', { length: 24 }),
+  /** The processor's own reference for the charge (Stripe payment intent id). */
+  externalRef:          varchar('external_ref', { length: 255 }),
   createdAt:            timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => [
+  uniqueIndex('uq_marketplace_purchases_tenant_artifact')
+    .on(t.tenantId, t.artifactType, t.artifactSlug)
+    .where(sql`${t.tenantId} IS NOT NULL`),
+  index('idx_marketplace_purchases_tenant').on(t.tenantId),
+]);
 
 
 // ---------------------------------------------------------------------------
@@ -855,25 +877,99 @@ export const gigBids = pgTable('gig_bids', {
   uniqueIndex('uq_gig_bids_bidder').on(t.gigProjectId, t.bidderRef),
 ]);
 
-/** A dispute on a gig. Its conversation is a `threads` + `messages` pair and its
- *  evidence is `artifacts`; what is here is the claim and the ruling. */
-export const gigDisputes = pgTable('gig_disputes', {
+/**
+ * ONE dispute record for everything sold on this platform (migration 0986).
+ *
+ * Was `gig_disputes`, whose only subject was a gig project and which had no writer
+ * anywhere in the repo. Escrow's `disputed` milestone status (migration 0924) needed
+ * exactly this row — a claim, a reason, an amount, a status, a ruling — so the table
+ * was GENERALISED rather than duplicated: adding an `escrow_disputes` beside it would
+ * have created two answers to "what disputes exist" on the day the first one was
+ * finally used.
+ *
+ * `gig_project_id` and `milestone_id` are both nullable with a CHECK that EXACTLY one
+ * is set. Two typed foreign keys rather than a `(subject_kind, subject_id)` pair,
+ * because a pair is not a foreign key — `scripts/check-polymorphic-fk.mjs` exists to
+ * say so — and the database can still refuse a dispute about work that does not exist.
+ *
+ * NO BALANCE COLUMN, for the reason 0924 gave: every hold, payout and refund is a
+ * `ledger_entries` row. The AWARD columns are the mediator's DECISION (how the held
+ * amount was split), which is not derivable from anything else. The ledger rows a
+ * ruling writes reuse `escrowLedgerReference()`'s references, so one milestone can
+ * never be paid twice or refunded twice however the money moved.
+ *
+ * The conversation is a `threads` + `messages` pair; the filings are
+ * `dispute_statements`; what is here is the claim and the ruling.
+ */
+export const marketplaceDisputes = pgTable('marketplace_disputes', {
   id:           serial('id').primaryKey(),
   tenantId:     integer('tenant_id').notNull(),
+  /** Subject A — a gig project. Exactly one subject is set (CHECK, migration 0986). */
   gigProjectId: integer('gig_project_id').references(() => gigProjects.id, { onDelete: 'cascade' }),
+  /** Subject B — a fixed-price escrow milestone. */
+  milestoneId:  varchar('milestone_id', { length: 36 }).references(() => engagementMilestones.id, { onDelete: 'cascade' }),
   raisedByRef:  varchar('raised_by_ref', { length: 64 }).notNull(),
+  /** 'client' | 'freelancer' — with what authority it was raised. Escrow's own moves
+   *  are each one-sided, so a dispute is the first transition whose acting party is a
+   *  value rather than a constant. */
+  raisedByParty: varchar('raised_by_party', { length: 12 }).notNull().default('client'),
   reason:       varchar('reason', { length: 200 }).notNull(),
   detail:       text('detail'),
   amountDisputedCents: integer('amount_disputed_cents'),
+  /** Where a `restore` ruling puts the milestone back. Captured at RAISE time: by the
+   *  time a mediator rules, the row says `disputed` and the prior state is gone. */
+  priorStatus:  varchar('prior_status', { length: 20 }),
   /** 'open' | 'mediating' | 'resolved' | 'withdrawn'. */
   status:       varchar('status', { length: 16 }).notNull().default('open'),
+  /** 'release_full' | 'refund_full' | 'split' | 'restore'. Null until ruled. */
+  outcome:      varchar('outcome', { length: 16 }),
+  /** The split as ruled. Both zero for `restore`; one carries the whole amount for
+   *  each of the two full outcomes, so no reader has to re-derive the arithmetic. */
+  awardFreelancerCents: integer('award_freelancer_cents').notNull().default(0),
+  awardClientCents:     integer('award_client_cents').notNull().default(0),
+  /** Assigned before they rule — the assignment is what moves `open` → `mediating`. */
+  mediatorUserId: varchar('mediator_user_id', { length: 36 }),
   resolution:   text('resolution'),
   resolvedBy:   varchar('resolved_by', { length: 64 }),
   resolvedAt:   timestamp('resolved_at'),
   createdAt:    timestamp('created_at').notNull().defaultNow(),
   updatedAt:    timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
-  index('idx_gig_disputes_status').on(t.tenantId, t.status, t.createdAt),
+  index('idx_marketplace_disputes_status').on(t.tenantId, t.status, t.createdAt),
+  index('idx_marketplace_disputes_milestone').on(t.milestoneId),
+  // Deliberately NOT led by tenant: the worker's own "what am I disputing" read has no
+  // tenant to filter by (see `tenantScope.ts`'s `subject_own_rows`).
+  index('idx_marketplace_disputes_raiser').on(t.raisedByRef, t.status, t.createdAt),
+]);
+
+/**
+ * One party's filed POSITION in a dispute, and what they are standing on.
+ *
+ * A dispute with a single free-text `detail` is one side's story. Mediation needs both,
+ * filed separately and attributable, plus the mediator's own note — a row per party
+ * rather than three more columns on the dispute.
+ *
+ * ONE STATEMENT PER PARTY, revisable (unique on tenant + dispute + party). A dispute is
+ * not a thread — the platform already has `threads`/`messages` for that — it is a
+ * filing, and the question a mediator asks is "what does each side say", not "what did
+ * each side say at 14:03". Every revision is still auditable: `activity_log` is the
+ * platform's ONE audit store and the writer appends there on every change.
+ */
+export const disputeStatements = pgTable('dispute_statements', {
+  id:         serial('id').primaryKey(),
+  tenantId:   integer('tenant_id').notNull(),
+  disputeId:  integer('dispute_id').notNull().references(() => marketplaceDisputes.id, { onDelete: 'cascade' }),
+  /** 'client' | 'freelancer' | 'mediator'. */
+  party:      varchar('party', { length: 12 }).notNull(),
+  authorRef:  varchar('author_ref', { length: 64 }).notNull(),
+  position:   text('position').notNull(),
+  /** `[{ label, url }]` — a value object of the statement: never queried on its own,
+   *  never joined to, meaningless apart from the position it supports. */
+  evidence:   jsonb('evidence').notNull().default([]),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+  updatedAt:  timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_dispute_statements_party').on(t.tenantId, t.disputeId, t.party),
 ]);
 
 /** A consultation booked with a consultant. */

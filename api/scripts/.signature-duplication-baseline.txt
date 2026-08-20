@@ -3,6 +3,19 @@
 agent_host_skill_assignments = tenant_skill_assignments
 board_type_mappings = import_type_mappings
 drive_connections = mailbox_connections
+# error_collector_integrations = feedback_collector_integrations (0.67)
+#   ACCEPTED, with an argument — not an omission.
+#   The two rows are children of DIFFERENT aggregates: one hangs off
+#   `error_collectors`, the other off `feedback_collectors`, and each cascades
+#   with its own parent. Folding them into one table means `collector_id` must
+#   point at two parents, which is either a polymorphic FK (forbidden by
+#   check-polymorphic-fk) or a pair of nullable FKs guarded by a CHECK — trading
+#   an enforced parent relationship for one the database can no longer enforce.
+#   The shape overlap is real but shallow: `provider` + an encrypted secret is
+#   what ANY signed-webhook configuration looks like. The behaviour that matters
+#   is NOT duplicated — the verification and normalisation live in one adapter
+#   registry per pillar and share `infrastructure/crypto/webhookHmac`.
+error_collector_integrations = feedback_collector_integrations
 initiatives = portfolios
 kanban_template_lane_requirements = swimlane_requirements
 marketing_tool_runs = tool_runs

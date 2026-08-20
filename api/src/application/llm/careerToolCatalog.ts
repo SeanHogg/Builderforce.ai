@@ -50,6 +50,11 @@ import {
   type WorkOption,
 } from '../career';
 import { parseResume } from '@builderforce/creation-canvas-contract';
+// The five HRMS-backed rows. They are the one group here that reaches neither a
+// route nor a text argument: their data lives in the customer's HRIS, payroll and
+// ATS, and it arrives through the connector port. See `application/people/`.
+import { headcountPlan, orgReview, performanceReview, teamHealth } from '../people/hrAnalytics';
+import { syncRoster } from '../people/hrmsSync';
 import { replayRoute, type BuiltinCtx, type BuiltinTool } from './builtinToolContext';
 
 type Json = Record<string, unknown>;
@@ -76,6 +81,25 @@ function requireResume(value: unknown, argName = 'resumeText'): string {
     throw new Error(`\`${argName}\` is empty or too short to analyse. Ask the person to paste their résumé text (or read it from their listing with listing.get_mine), then call this again. Do not invent a résumé to analyse.`);
   }
   return text;
+}
+
+/**
+ * The Worker env, or a message that says which door is shut.
+ *
+ * The five HRMS rows decrypt a tenant's connector credentials and call an
+ * external provider, which `BuiltinCtx.env` is what makes possible. A caller that
+ * did not thread it (a guest surface, a unit harness) gets this sentence rather
+ * than a `TypeError` on `undefined.AUTH_CACHE_KV` three frames down.
+ */
+function requireEnv(ctx: BuiltinCtx) {
+  if (!ctx.env) throw new Error('This tool reads the connected HR system and is not available in this context. Run it from a signed-in workspace session.');
+  return ctx.env;
+}
+
+/** The review period a cycle tool reads, defaulting to the current calendar year. */
+function reviewPeriod(value: unknown): string {
+  const text = str(value).trim();
+  return text || String(new Date().getUTCFullYear());
 }
 
 function requireText(value: unknown, argName: string, min = 20): string {
@@ -580,6 +604,176 @@ const TENANT_TOOLS: BuiltinTool[] = [
       const query = params.toString();
       return replayRoute(ctx, 'GET', `/api/freelancers${query ? `?${query}` : ''}`);
     },
+  },
+
+  // ── The HRMS-BACKED half (see `application/people/`) ──────────────────────
+  //
+  // PRD 18 §1.2 named these five and they did not ship with the other twenty. Not
+  // an oversight and not a backlog item somebody forgot: each of them needs the
+  // employee roster, the departments, the open requisitions and the compensation
+  // bands that live in an HRMS, and until 2026-08 no connector on this platform
+  // could supply any of it. Shipping them as stubs would have been worse than
+  // their absence — an agent handed a tool that returns invented headcount does
+  // not report the invention, it reports the headcount, which is the failure mode
+  // `packages/creation-canvas-contract/src/canvasTools.ts` documents at length.
+  //
+  // `connectors/defaults/hrms.ts` (six HRIS manifests), `payroll.ts` (Gusto,
+  // Rippling, Deel, ADP) and `hiring.ts` (Lever, Ashby, the careers feed) cleared
+  // that. So these five are bound to the CONNECTOR PORT rather than declared: the
+  // arithmetic is pure and unit-tested in `application/people/*.test.ts`, the port
+  // is the one module that reaches a provider, and every one of them refuses in
+  // full sentences — naming what to connect — when there is no roster to read.
+  {
+    tool: 'hr.org_review',
+    mutates: false,
+    description: 'Review the org STRUCTURE from the connected HR system: spans (how many report to each manager), layers (how deep the reporting graph runs), the manager-to-IC ratio, and the structural defects — reporting cycles, manager ids pointing at nobody, single-report managers, departments with nobody managing inside them. Every finding names the specific people behind it. It deliberately does NOT recommend a reorganisation: a span of 3 is right for some work and wrong for other work, and a roster cannot tell which. Requires an HRMS, payroll or directory connector; with none connected it says so and names what to connect rather than estimating anything.',
+    parameters: obj({ connectorKey: S, wideSpan: N }),
+    run: async (ctx, a) => orgReview(ctx.db, requireEnv(ctx), ctx.tenantId, {
+      connectorKey: str(a.connectorKey) || null,
+      ...(a.wideSpan == null ? {} : { wideSpan: num(a.wideSpan) }),
+    }),
+  },
+  {
+    tool: 'hr.headcount_plan',
+    mutates: false,
+    description: 'Cost the hiring plan: every OPEN requisition (from the connected ATS and this workspace\'s own open positions) priced against the published compensation bands, falling back to the median actual pay of the department it sits in. Returns per-role cost with the BASIS of each figure, the annual run-rate, the first-year cost pro-rated for time-to-fill, growth per department, and `coverage` — the share of the plan that could actually be priced. A role nothing can price appears in `uncosted` with the reason and is excluded from the totals; no salary is ever invented to fill a gap, because these numbers get pasted into a budget.',
+    parameters: obj({ connectorKey: S, currency: S, employerLoad: N, daysToFill: N }),
+    run: async (ctx, a) => headcountPlan(ctx.db, requireEnv(ctx), ctx.tenantId, {
+      connectorKey: str(a.connectorKey) || null,
+      ...(str(a.currency).trim() ? { currency: str(a.currency).trim() } : {}),
+      ...(a.employerLoad == null ? {} : { employerLoad: num(a.employerLoad) }),
+      ...(a.daysToFill == null ? {} : { daysToFill: num(a.daysToFill) }),
+    }),
+  },
+  {
+    tool: 'hr.performance_review',
+    mutates: false,
+    description: 'Where a review cycle actually stands, per person: who is eligible, who is not and why (short tenure, working notice), who is finalised, which MANAGERS have outstanding reviews, the rating distribution, and whether anything was calibrated. Use it to answer "what is still outstanding and who owns it?" — the question nobody in an HR team can answer without a week of chasing. It reports STATE only and never writes or drafts review narrative for an individual: a roster row is not evidence of performance, and text produced from one enters somebody\'s employment record. period defaults to the current calendar year.',
+    parameters: obj({ period: S, connectorKey: S, minTenureDays: N }),
+    run: async (ctx, a) => performanceReview(ctx.db, requireEnv(ctx), ctx.tenantId, {
+      period: reviewPeriod(a.period),
+      connectorKey: str(a.connectorKey) || null,
+      ...(a.minTenureDays == null ? {} : { minTenureDays: num(a.minTenureDays) }),
+    }),
+  },
+  {
+    tool: 'hr.team_health',
+    mutates: false,
+    description: 'The four signals a roster can honestly carry, per team: median TENURE and the share of recent joiners, the manager\'s SPAN, ATTRITION over the last twelve months (leavers over average headcount, not over today\'s), and pay COMPRESSION — whether people hired in the last year are paid at or above the people with two years or more, which needs payroll connected. The risk score is the sum of named signals, each returned with its measured value and weight, so it can be taken apart rather than argued with. It measures nothing about morale, engagement or workload: a roster cannot see those, and a number claiming to would be invented.',
+    parameters: obj({ connectorKey: S, windowMonths: N }),
+    run: async (ctx, a) => teamHealth(ctx.db, requireEnv(ctx), ctx.tenantId, {
+      connectorKey: str(a.connectorKey) || null,
+      ...(a.windowMonths == null ? {} : { windowMonths: num(a.windowMonths) }),
+    }),
+  },
+  {
+    tool: 'hr.hrms_sync',
+    mutates: true,
+    description: 'Pull the employee roster from the connected HRMS, payroll or directory and reconcile it into this workspace\'s employee records — the same rows the headcount metric and the capacity model already read, so nothing is duplicated. Returns what it created, updated and left unchanged, with the specific field changes. Run it with dryRun true the FIRST time and show the person the preview before writing. People present locally and absent from the provider are only ever PROPOSED as departures, never marked: absence can equally mean an incremental or truncated read, and a false termination date is a person\'s employment record. Pass markDepartures only after the person has confirmed each one.',
+    parameters: obj({ connectorKey: S, dryRun: B, markDepartures: B }),
+    run: async (ctx, a) => syncRoster(ctx.db, requireEnv(ctx), ctx.tenantId, {
+      connectorKey: str(a.connectorKey) || null,
+      dryRun: a.dryRun === true,
+      markDepartures: a.markDepartures === true,
+    }),
+  },
+
+  // ── The MODEL-ASSISTED half (see `application/career/resumeAi.ts`) ────────
+  //
+  // Every row above measures and refuses to write, for the reason set out at the top of
+  // this file: the caller is a language model, and a tool that writes the paragraph does
+  // the caller's job worse. These eight are the exception that proves it, and they are
+  // the exception for a specific reason — each one needs a SECOND model call whose inputs
+  // are the deterministic reading, and needs the answer VERIFIED against the source
+  // document before anyone sees it. Neither of those is something the calling model can
+  // do for itself mid-conversation: it cannot check its own rewrite against a metric it
+  // is at that moment inventing.
+  //
+  // So the split holds. `recruiter.optimize_resume` still says WHICH lines fail and why;
+  // `recruiter.rewrite_bullets` returns candidate wording that has already been checked
+  // for fabricated numbers, and reports the parts it honestly could not supply. They are
+  // complementary calls, not competing ones.
+  //
+  // All eight replay their route rather than reaching into the services directly, so the
+  // tenant scoping, the plan resolution, the BYO account and the usage metering are the
+  // route's — one implementation, not two.
+  {
+    tool: 'recruiter.rewrite_bullets',
+    mutates: false,
+    description: 'Rewrite the weak bullets into "accomplished [X] as measured by [Y], by doing [Z]". A deterministic pass picks which lines are worth rewriting and what numbers the résumé already contains; ONE model call rewrites only those; then every rewrite is CHECKED against the document and discarded if it asserts a figure the résumé does not contain. Each result carries the original, the rewrite, and the parts still missing — re-measured from the text, never the model\'s claim. When `missing` still lists "Y", ask the person for the number rather than supplying one: that is the tool working, not failing.',
+    parameters: obj({ resumeText: S, limit: N }, ['resumeText']),
+    run: async (ctx, a) => replayRoute(ctx, 'POST', '/api/career-ai/rewrite-bullets', {
+      resumeText: requireResume(a.resumeText),
+      ...(a.limit == null ? {} : { limit: num(a.limit) }),
+    }),
+  },
+  {
+    tool: 'recruiter.merge_bullets',
+    mutates: false,
+    description: 'Merge near-duplicate bullets across two or more versions of one résumé, and write the merged wording. The candidate groups come from the same deterministic consolidation the measuring tool uses, so nothing is grouped on a hunch; the model only chooses words, and a merged line asserting a number that appears in none of its variants is discarded in favour of the strongest existing variant. `uniqueBullets` comes back untouched — those exist in a single source and are exactly what a hand-merge loses.',
+    parameters: obj({ resumeTexts: SA }, ['resumeTexts']),
+    run: async (ctx, a) => {
+      const texts = strArray(a.resumeTexts).filter((text) => text.length >= 40);
+      if (texts.length < 2) throw new Error('Pass at least two résumé texts to merge. With one, call recruiter.rewrite_bullets instead.');
+      return replayRoute(ctx, 'POST', '/api/career-ai/merge-bullets', { resumeTexts: texts });
+    },
+  },
+  {
+    tool: 'recruiter.grade_resume',
+    mutates: false,
+    description: 'Grade a résumé TWICE — once by counting and once by reading — on the same five categories, and report both with the specific gaps that cost the points. Returns the measured score (stable across calls, a count over the document) beside the model\'s score (perceptive, and it moves), the per-category delta, and a plain statement of where the two disagree. Report the disagreement rather than averaging it: the places the two readings diverge are the places worth looking. Pass jobDescription to grade against a specific posting.',
+    parameters: obj({ resumeText: S, jobDescription: S }, ['resumeText']),
+    run: async (ctx, a) => replayRoute(ctx, 'POST', '/api/career-ai/grade', {
+      resumeText: requireResume(a.resumeText),
+      ...(str(a.jobDescription).trim() ? { jobDescription: str(a.jobDescription) } : {}),
+    }),
+  },
+  {
+    tool: 'recruiter.review_queue',
+    mutates: false,
+    description: 'The workspace\'s résumé review queue: every request for feedback, its status (open / in_review / answered / closed), when it was last spoken in, and how much of it this person has not read. Call it to answer "what is waiting on me?" before starting anything new — a review request that has sat open for a week is the most expensive thing on this list. Filter with status to see only one column of the queue.',
+    parameters: obj({ status: S }),
+    run: async (ctx, a) => {
+      const status = str(a.status).trim();
+      return replayRoute(ctx, 'GET', `/api/career-ai/reviews${status ? `?status=${encodeURIComponent(status)}` : ''}`);
+    },
+  },
+  {
+    tool: 'recruiter.review_thread',
+    mutates: false,
+    description: 'Read ONE review request in full: the exact résumé text as it stood when the question was asked, the job description it was asked against, the measured score at that moment, and every message since. The document is frozen at request time on purpose — a reviewer answering about a paragraph the person edited afterwards produces a transcript that reads as nonsense. Read the whole thread before adding to it.',
+    parameters: obj({ reviewId: S }, ['reviewId']),
+    run: async (ctx, a) => replayRoute(ctx, 'GET', `/api/career-ai/reviews/${encodeURIComponent(requireText(a.reviewId, 'reviewId', 1))}`),
+  },
+  {
+    tool: 'recruiter.request_review',
+    mutates: true,
+    description: 'Ask for feedback on a résumé — opens a review thread in this workspace that a colleague (or the model) can answer, and that stays open until somebody closes it. Pass reviewerUserIds to put named people on it immediately; leave it empty to post to the shared queue. The résumé text is stored with the request, so confirm with the person that this is the version they want reviewed before calling: it becomes the frozen document the whole thread argues about.',
+    parameters: obj({ title: S, resumeText: S, jobDescription: S, note: S, reviewerUserIds: SA }, ['title', 'resumeText']),
+    run: async (ctx, a) => replayRoute(ctx, 'POST', '/api/career-ai/reviews', {
+      title: requireText(a.title, 'title', 3),
+      resumeText: requireResume(a.resumeText),
+      ...(str(a.jobDescription).trim() ? { jobDescription: str(a.jobDescription) } : {}),
+      ...(str(a.note).trim() ? { note: str(a.note) } : {}),
+      ...(strArray(a.reviewerUserIds).length ? { reviewerUserIds: strArray(a.reviewerUserIds) } : {}),
+    }),
+  },
+  {
+    tool: 'recruiter.answer_review',
+    mutates: true,
+    description: 'Answer a review request, and optionally move its status in the same call (in_review when you pick it up, answered when you have said your piece, closed when it is done). Answering JOINS the thread, so everything said afterwards reaches you. This is written under the caller\'s name and another person reads it: show them the exact wording and get approval before calling.',
+    parameters: obj({ reviewId: S, body: S, status: S }, ['reviewId', 'body']),
+    run: async (ctx, a) => replayRoute(ctx, 'POST', `/api/career-ai/reviews/${encodeURIComponent(requireText(a.reviewId, 'reviewId', 1))}`, {
+      body: requireText(a.body, 'body', 10),
+      ...(str(a.status).trim() ? { status: str(a.status) } : {}),
+    }),
+  },
+  {
+    tool: 'recruiter.ai_review_resume',
+    mutates: true,
+    description: 'Post the graded read into a review thread as a message anybody can argue with. It grades the FROZEN document from the request rather than anything you pass in, so the model and every human reviewer are demonstrably reading the same words, and it moves an untouched request to in_review. Use it to give a waiting request a first substantive answer within seconds — then let a person disagree with it in the next message, which is the whole reason this is a thread and not a report.',
+    parameters: obj({ reviewId: S }, ['reviewId']),
+    run: async (ctx, a) => replayRoute(ctx, 'POST', `/api/career-ai/reviews/${encodeURIComponent(requireText(a.reviewId, 'reviewId', 1))}/ai`, {}),
   },
 ];
 

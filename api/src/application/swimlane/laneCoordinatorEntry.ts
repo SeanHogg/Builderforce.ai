@@ -20,7 +20,8 @@
 import { and, eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
-import { swimlanes, swimlaneAgentAssignments } from '../../infrastructure/database/schema';
+import { swimlanes } from '../../infrastructure/database/schema';
+import { forLane, laneAgentAssignments } from './laneAgentAssignments';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { findCanonicalBoard } from './canonicalBoard';
 import { makeSwimlaneCoordinator } from './makeCoordinator';
@@ -104,12 +105,12 @@ export async function tryCoordinatorLaneEntry(
   if (!lane || lane.isTerminal || lane.gate === 'human') return 'not_applicable';
 
   const assignments = await db
-    .select({ runtime: swimlaneAgentAssignments.runtime })
-    .from(swimlaneAgentAssignments)
+    .select({ runtime: laneAgentAssignments.runtime })
+    .from(laneAgentAssignments)
     // Tenant-scoped as well as lane-scoped: the lane id already came from a
     // tenant-scoped board read, but the isolation predicate belongs on the query that
     // reads a tenant-owned table, not on the one two steps upstream.
-    .where(scopedToTenant(swimlaneAgentAssignments, args.tenantId, eq(swimlaneAgentAssignments.swimlaneId, lane.id)));
+    .where(scopedToTenant(laneAgentAssignments, args.tenantId, forLane(lane.id)));
 
   if (!laneNeedsCoordinator(lane, assignments)) return 'not_applicable';
 

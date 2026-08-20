@@ -22,12 +22,27 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  *
  * Provider support follows the same convention as the rest of this directory: a
  * pure builder per documented endpoint, a `{ ok: true … } | { ok: false; code;
- * reason }` result, and NEVER a throw. GitLab has a first-class revert API and
- * GitHub is assembled from the Git Data API; Bitbucket (Cloud and Server) exposes
- * no server-side revert at all and returns a typed `unsupported` result rather
- * than pretending.
+ * reason }` result, and NEVER a throw.
+ *
+ * NO provider has a server-side "revert this PR" call — GitLab is the only one with
+ * even a commit-level revert. What decides whether an edition can be served is
+ * therefore whether the revert can be SYNTHESISED, which needs two things: reading
+ * the pre-merge content of each file the merge touched, and writing a multi-file
+ * commit onto a new branch.
+ *   • GitHub      — Git Data API (tree → commit → ref). Supported.
+ *   • GitLab      — first-class `/repository/commits/:sha/revert`, with real
+ *                    conflict detection. Supported.
+ *   • Bitbucket Cloud  — `/src` writes a whole multi-file commit in ONE form POST
+ *                    (`files=` deletes, `<path>=<content>` restores) and
+ *                    `/src/{sha}/{path}` reads the pre-merge bytes. Supported.
+ *   • Bitbucket Server — REFUSED, and this is the one real vendor limitation:
+ *                    `/rest/api/1.0` writes exactly ONE file per request
+ *                    (`PUT /browse/{path}`) and has NO delete-file endpoint at all,
+ *                    so a revert touching N files cannot be expressed as one commit
+ *                    and a revert that removes a file cannot be expressed at all.
  */
-import { buildGitApiBaseUrl, resolveGitApiFlavor } from './gitProxy';
+import { resolveGitApiFlavor } from './gitProxy';
+import { resolveRepoApiTarget, type RepoApiTarget } from './repoApiTarget';
 import { createPullRequest } from './createPullRequest';
 
 export interface RevertMergedPrInput {
@@ -95,12 +110,12 @@ interface TreeEntry { path: string; mode: string; type: 'blob'; sha: string | nu
  * assumed, and a violation refuses as `conflict`.
  */
 async function revertGithub(input: RevertMergedPrInput): Promise<RevertMergedPrResult> {
-  const apiBase = buildGitApiBaseUrl(input.provider, input.host);
-  const repoBase = `${apiBase}/repos/${input.owner}/${input.repo}`;
+  const api = resolveRepoApiTarget(input);
+  const { repoBase } = api;
   const { token } = input;
 
   // 1 — the PR must actually be merged, and we need the commit it merged as.
-  const pr = await getJson(`${repoBase}/pulls/${input.number}`, token);
+  const pr = await getJson(api.pullRequest(input.number), token);
   if (!pr) return fail('provider_error', 'PR lookup failed (network)');
   if (pr.status === 404) return fail('not_found', `pull request #${input.number} not found`);
   if (pr.status < 200 || pr.status >= 300) return fail('provider_error', `GitHub ${pr.status}: ${String(pr.body).slice(0, 200)}`);
@@ -195,12 +210,11 @@ async function revertGithub(input: RevertMergedPrInput): Promise<RevertMergedPrR
  * is cleaned up before returning.
  */
 async function revertGitlab(input: RevertMergedPrInput): Promise<RevertMergedPrResult> {
-  const apiBase = buildGitApiBaseUrl(input.provider, input.host);
-  const project = encodeURIComponent(`${input.owner}/${input.repo}`);
-  const projectBase = `${apiBase}/projects/${project}`;
+  const api = resolveRepoApiTarget(input);
+  const projectBase = api.repoBase;
   const { token } = input;
 
-  const mr = await getJson(`${projectBase}/merge_requests/${input.number}`, token);
+  const mr = await getJson(api.pullRequest(input.number), token);
   if (!mr) return fail('provider_error', 'MR lookup failed (network)');
   if (mr.status === 404) return fail('not_found', `merge request !${input.number} not found`);
   if (mr.status < 200 || mr.status >= 300) return fail('provider_error', `GitLab ${mr.status}: ${String(mr.body).slice(0, 200)}`);
@@ -241,6 +255,139 @@ async function revertGitlab(input: RevertMergedPrInput): Promise<RevertMergedPrR
   return openRevertPr(input, landedSha);
 }
 
+// ── Bitbucket Cloud ───────────────────────────────────────────────
+
+/**
+ * Reverse a merged Bitbucket CLOUD pull request by restoring each merged file to its
+ * PRE-merge content on a new branch, then opening a PR for it.
+ *
+ * Same algorithm as the GitHub path and for the same reason — no provider has a
+ * PR-level revert, and neither the Git Data API nor `/src` can do a three-way merge —
+ * so the "nothing else has touched these files since" precondition is CHECKED here
+ * too, and a violation refuses as `conflict` rather than discarding newer work.
+ *
+ * The Cloud-specific part is the write: `/src` takes ONE form POST carrying every
+ * changed file at once (`<path>=<content>` restores, repeated `files=<path>` deletes)
+ * plus `parents` to pin the commit's parent and `branch` to create the branch — so
+ * the whole revert is a single atomic commit, with no separate branch-create call.
+ */
+async function revertBitbucketCloud(input: RevertMergedPrInput, api: RepoApiTarget): Promise<RevertMergedPrResult> {
+  const { token } = input;
+
+  // 1 — the PR must be merged, and we need the commit it merged as.
+  const pr = await getJson(api.pullRequest(input.number), token);
+  if (!pr) return fail('provider_error', 'PR lookup failed (network)');
+  if (pr.status === 404) return fail('not_found', `pull request #${input.number} not found`);
+  if (pr.status < 200 || pr.status >= 300) return fail('provider_error', `Bitbucket ${pr.status}: ${String(pr.body).slice(0, 200)}`);
+  const prBody = (pr.body ?? {}) as { state?: string; merge_commit?: { hash?: string } | null };
+  if ((prBody.state ?? '').toUpperCase() !== 'MERGED') {
+    return fail('not_merged', `pull request #${input.number} is not merged — close it instead of reverting`);
+  }
+  const mergeSha = prBody.merge_commit?.hash;
+  if (!mergeSha) return fail('provider_error', `pull request #${input.number} is merged but reports no merge commit`);
+
+  // 2 — the merge commit's FIRST parent is the base as it stood before the merge.
+  const merge = await getJson(`${api.repoBase}/commit/${encodeURIComponent(mergeSha)}`, token);
+  if (!merge || merge.status < 200 || merge.status >= 300) {
+    return fail('provider_error', `could not read merge commit ${mergeSha.slice(0, 7)}`);
+  }
+  const parentSha = ((merge.body ?? {}) as { parents?: Array<{ hash?: string }> }).parents?.[0]?.hash;
+  if (!parentSha) return fail('provider_error', `merge commit ${mergeSha.slice(0, 7)} has no parent to restore from`);
+
+  // 3 — what the merge changed. Cloud has no compare, so the diffstat between the
+  //     merge and its first parent is the equivalent of GitHub's `commit.files`.
+  const merged = await bitbucketChangedPaths(api, parentSha, mergeSha, token);
+  if (!merged) return fail('provider_error', `could not list the files changed by ${mergeSha.slice(0, 7)}`);
+  if (merged.length === 0) return fail('provider_error', `merge commit ${mergeSha.slice(0, 7)} reports no changed files`);
+
+  // 4 — conflict guard: anything that landed on those paths AFTER the merge would be
+  //     silently discarded by a content restore.
+  const since = await bitbucketChangedPaths(api, mergeSha, input.base, token);
+  if (!since) return fail('provider_error', 'could not check for changes landed after the merge');
+  const touchedSince = new Set(since);
+  const clashes = merged.filter((p) => touchedSince.has(p));
+  if (clashes.length > 0) {
+    return fail('conflict', `${clashes.length} file(s) changed on '${input.base}' after the merge (${clashes.slice(0, 3).join(', ')}) — refusing to revert over newer work`);
+  }
+
+  // 5 — the head of base (the revert's parent) and the PRE-merge bytes of each path.
+  //     A path with no pre-merge content was ADDED by the merge, so reverting it is a
+  //     deletion — which on Cloud is a `files=` field rather than a content field.
+  const headSha = await bitbucketBranchHead(api, input.base, token);
+  if (!headSha) return fail('provider_error', `could not resolve the head of '${input.base}'`);
+
+  const restores: Array<{ path: string; content: string }> = [];
+  const deletes: string[] = [];
+  for (const path of merged) {
+    const res = await fetch(api.fileContent(path, parentSha), { headers: headers(token) }).catch(() => null);
+    if (res && res.ok) {
+      const content = await res.text().catch(() => null);
+      if (content === null) return fail('provider_error', `could not read the pre-merge content of ${path}`);
+      restores.push({ path, content });
+    } else if (res && res.status === 404) {
+      deletes.push(path);
+    } else {
+      // Anything other than a clean 200/404 means we do not KNOW the pre-merge state,
+      // and guessing there writes the wrong content or deletes a live file.
+      return fail('provider_error', `could not read the pre-merge content of ${path}${res ? ` (Bitbucket ${res.status})` : ''}`);
+    }
+  }
+
+  // 6 — one form POST: the revert commit, on its own branch, parented to the current
+  //     head of base. Nothing here touches `input.base`.
+  const form = new URLSearchParams();
+  form.set('branch', input.revertBranch);
+  form.set('message', input.title);
+  form.set('parents', headSha);
+  for (const r of restores) form.set(r.path, r.content);
+  for (const d of deletes) form.append('files', d);
+
+  const written = await fetch(api.fileWrite(''), {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'User-Agent': 'BuilderForce-Revert-Merge/1.0',
+    },
+    body: form.toString(),
+  }).catch(() => null);
+  if (!written) return fail('provider_error', 'revert-commit request failed (network)');
+  if (!written.ok) {
+    const text = await written.text().catch(() => '');
+    return fail('provider_error', `could not create the revert commit: Bitbucket ${written.status}: ${text.slice(0, 200)}`);
+  }
+
+  return openRevertPr(input, mergeSha);
+}
+
+/** Paths changed between two refs, via Cloud's `/diffstat/{to}..{from}`. Null means
+ *  the listing FAILED (which must never be read as "nothing changed"). */
+async function bitbucketChangedPaths(
+  api: RepoApiTarget,
+  from: string,
+  to: string,
+  token: string,
+): Promise<string[] | null> {
+  const url = `${api.repoBase}/diffstat/${encodeURIComponent(to)}..${encodeURIComponent(from)}?pagelen=100`;
+  const res = await fetch(url, { headers: headers(token) }).catch(() => null);
+  if (!res || !res.ok) return null;
+  const body = (await res.json().catch(() => null)) as {
+    values?: Array<{ new?: { path?: string } | null; old?: { path?: string } | null }>;
+  } | null;
+  if (!body || !Array.isArray(body.values)) return null;
+  return body.values
+    .map((v) => v.new?.path ?? v.old?.path)
+    .filter((p): p is string => !!p);
+}
+
+/** Current head commit of a branch on Bitbucket Cloud. */
+async function bitbucketBranchHead(api: RepoApiTarget, branch: string, token: string): Promise<string | null> {
+  const res = await fetch(`${api.branches()}/${encodeURIComponent(branch)}`, { headers: headers(token) }).catch(() => null);
+  if (!res || !res.ok) return null;
+  const body = (await res.json().catch(() => null)) as { target?: { hash?: string } } | null;
+  return body?.target?.hash ?? null;
+}
+
 // ── shared tail ───────────────────────────────────────────────────────────────
 
 /** Open the revert PR itself, reusing the one create-PR implementation (and its
@@ -271,10 +418,10 @@ async function openRevertPr(input: RevertMergedPrInput, revertedSha: string): Pr
 /**
  * Open a pull request that reverses a MERGED pull request's landed commits.
  *
- * Returns the same structured refusal shape as the rest of this directory for the
- * providers that cannot do it (both Bitbucket editions today) — the caller records
- * that refusal on the run's rollback row and in the audit trail, so "we did not
- * undo this" is a visible fact rather than a silent gap.
+ * Returns the same structured refusal shape as the rest of this directory for the ONE
+ * dialect that genuinely cannot do it (Bitbucket Server) — the caller records that
+ * refusal on the run's rollback row and in the audit trail, so "we did not undo this"
+ * is a visible fact rather than a silent gap.
  */
 export async function revertMergedPullRequest(input: RevertMergedPrInput): Promise<RevertMergedPrResult> {
   let flavor: ReturnType<typeof resolveGitApiFlavor>;
@@ -293,10 +440,15 @@ export async function revertMergedPullRequest(input: RevertMergedPrInput): Promi
 
   if (flavor === 'github') return revertGithub(input);
   if (flavor === 'gitlab') return revertGitlab(input);
+  if (flavor === 'bitbucket-cloud') return revertBitbucketCloud(input, resolveRepoApiTarget(input));
+  // Bitbucket Server ONLY. Named concretely, because a refusal whose reason is just
+  // "unsupported" is indistinguishable from one we never looked into.
   return fail(
     'unsupported',
-    `${flavor === 'bitbucket-server' ? 'Bitbucket Server' : 'Bitbucket Cloud'} exposes no server-side revert API — `
-    + `revert the merge commit manually and open a pull request against '${input.base}'`,
+    'Bitbucket Server cannot express a revert: `/rest/api/1.0` writes one file per request '
+    + '(`PUT /browse/{path}`) and has no delete-file endpoint, so a multi-file revert cannot be '
+    + `one commit and a removal cannot be written at all — revert the merge commit with a push and `
+    + `open a pull request against '${input.base}'`,
   );
 }
 

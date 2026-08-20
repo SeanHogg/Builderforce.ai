@@ -76,11 +76,13 @@ export async function runSignatureReminderSweep(env: Env, now = new Date()): Pro
     }
     if (!invitations.length) continue;
 
-    const delivery = await deliverSignatureReminders(env, {
+    const delivery = await deliverSignatureReminders(env, db, {
       subject: request.subject,
       documentTitle: request.documentTitle,
       intent: request.intent,
-    }, invitations);
+      // Written in the sender's language, exactly as the first message was — a
+      // sweep has no request of its own to read a locale from.
+    }, invitations, { userId: request.createdBy });
 
     reminded += delivery.sent;
     failed += delivery.failed;

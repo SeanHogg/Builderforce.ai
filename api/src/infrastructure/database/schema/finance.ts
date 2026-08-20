@@ -28,9 +28,9 @@ import {
   uuid,
   varchar,
 } from 'drizzle-orm/pg-core';
-import { freelancerEngagements, timecards } from './canvas';
-import { objects, reportTypeEnum } from './kernel';
-import { segments, tenants, users } from './identity';
+import { creationSessions, freelancerEngagements, timecards } from './canvas';
+import { connections, objects, reportTypeEnum } from './kernel';
+import { segments, tenantApiKeys, tenants, users } from './identity';
 import { initiatives } from './delivery';
 import { projects } from './delivery';
 /**
@@ -115,20 +115,44 @@ export const costCalculations = pgTable('cost_calculations', {
 
 
 /**
- * Host subscriptions to BuilderForce outbound events (spec 05 §4.3):
- * workitem.released / sprint.completed / roadmap.published. Segment-scoped.
+ * ONE outbound-event subscription, for every caller that has one.
+ *
+ * It started as the host's subscription to the channel-3 seams (spec 05 §4.3 —
+ * workitem.released / sprint.completed / roadmap.published) and was segment-scoped
+ * because the seam resolves a named end-client before it emits. The public canvas
+ * API (`/api/v1`) subscribes to board and item lifecycle events through this same
+ * table rather than a second one: a second subscription table means a second
+ * signing scheme, a second backoff curve and two answers to "did it land", only
+ * one of which gets the next fix.
+ *
+ * TENANT is therefore the scope that is always present, and `segment_id` is
+ * narrowing context (migration 1100) — a canvas board's segment is optional, so a
+ * mandatory one made a tenant-wide board subscription unrepresentable.
  */
 export const webhookSubscriptions = pgTable('webhook_subscriptions', {
   id:         uuid('id').primaryKey().defaultRandom(),
   tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  segmentId:  uuid('segment_id').notNull().references(() => segments.id, { onDelete: 'cascade' }),
+  /** Narrowing context, not the scope. NULL = every segment in the tenant. */
+  segmentId:  uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  /** Watch ONE board. NULL = every board in the tenant. Miro scopes a webhook to a
+   *  board, and an integration that must receive the whole workspace to react to
+   *  one canvas is an integration that gets switched off. */
+  sessionId:  uuid('session_id').references(() => creationSessions.id, { onDelete: 'cascade' }),
   url:        text('url').notNull(),
   secret:     varchar('secret', { length: 128 }).notNull(),
   events:     text('events').notNull().default('[]'), // JSON array of event types
   active:     boolean('active').notNull().default(true),
+  description: varchar('description', { length: 255 }),
+  /** Which credential registered this endpoint — the first question asked when a
+   *  subscription starts leaking events to a vendor whose contract ended. NULL for
+   *  the seam subscriptions, which predate `/api/v1` registration. */
+  createdByKeyId: uuid('created_by_key_id').references(() => tenantApiKeys.id, { onDelete: 'set null' }),
   createdAt:  timestamp('created_at').notNull().defaultNow(),
   updatedAt:  timestamp('updated_at').notNull().defaultNow(),
-});
+}, (t) => ({
+  byTenantActive: index('idx_webhook_subscriptions_tenant_active').on(t.tenantId, t.active),
+  bySession:      index('idx_webhook_subscriptions_session').on(t.sessionId),
+}));
 
 
 // ── Insight-lens object tiers (migration 0220) ───────────────────────────────
@@ -1164,4 +1188,59 @@ export const pointRedemptions = pgTable('point_redemptions', {
   updatedAt:   timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
   index('idx_point_redemptions_member').on(t.tenantId, t.memberRef, t.createdAt),
+]);
+
+/**
+ * ONE account inside a connected book, with the balance it last reported.
+ *
+ * ── WHY THIS IS THE ONLY NEW TABLE THE LEDGER PORT NEEDED ───────────────────
+ * The synced TRANSACTIONS do not get one. A money movement read out of
+ * QuickBooks, Xero, NetSuite, Plaid or Stripe is a `ledger_entries` row with
+ * `account_kind = 'external'` — the kernel ledger is exactly the shape (a signed
+ * amount, a denomination, an occurrence date and a unique `reference` that makes
+ * a re-sync idempotent), and PRD 20 §0 is explicit that needing a balance earns a
+ * denomination rather than a table. A `ledger_transactions` table would have been
+ * the 60th balance table the consolidation exists to prevent.
+ *
+ * A BALANCE is genuinely a different noun, and the difference is not stylistic.
+ * `ledger_entries` is append-only and models money MOVING; this row is STATE — the
+ * bank's own answer to "how much is in there right now", which is not derivable
+ * from the movements we have seen because the sync did not witness the opening
+ * balance. That is also why it matters: `finance.runway_months` is cash ÷ net burn,
+ * and without this the cash half would be the net flow since the day somebody
+ * connected the account, which is not a cash position at all.
+ *
+ * `accountKind` is stored rather than inferred because the three kinds NET
+ * differently: a `bank` balance is money held, a `credit` balance is money owed and
+ * the adapters negate it before it gets here, and `other` never counts toward cash.
+ *
+ * The natural key is (tenant, connection, external account) — one row per account
+ * per connection, UPDATED in place on every sync. A history of balances would be an
+ * event table, which is the shape `ledger_entries` already is.
+ */
+export const ledgerAccounts = pgTable('ledger_accounts', {
+  id:           serial('id').primaryKey(),
+  tenantId:     integer('tenant_id').notNull(),
+  /** The `connections` row (capability `ledger`) this account was read through. */
+  connectionId: integer('connection_id').notNull().references(() => connections.id, { onDelete: 'cascade' }),
+  /** 'quickbooks' | 'xero' | 'netsuite' | 'plaid' | 'stripe-revenue'. Denormalised
+   *  from the connection so the rollup never has to join to know the source. */
+  provider:     varchar('provider', { length: 24 }).notNull(),
+  /** The provider's own account id. Stable, so a re-sync updates rather than
+   *  duplicating — the same guarantee the transaction side gets from `reference`. */
+  externalId:   varchar('external_id', { length: 200 }).notNull(),
+  name:         varchar('name', { length: 300 }).notNull().default(''),
+  /** 'bank' | 'credit' | 'other'. See the note above on why it is stored. */
+  accountKind:  varchar('account_kind', { length: 16 }).notNull().default('other'),
+  /** Signed, in the account's own currency. A credit card arrives NEGATIVE. */
+  balance:      numeric('balance', { precision: 20, scale: 2 }).notNull().default('0'),
+  currency:     varchar('currency', { length: 8 }).notNull().default('USD'),
+  /** When the PROVIDER says the balance was true — not when we stored it. */
+  asOfAt:       timestamp('as_of_at').notNull().defaultNow(),
+  syncedAt:     timestamp('synced_at').notNull().defaultNow(),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+  updatedAt:    timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_ledger_accounts_external').on(t.tenantId, t.connectionId, t.externalId),
+  index('idx_ledger_accounts_tenant').on(t.tenantId, t.accountKind),
 ]);

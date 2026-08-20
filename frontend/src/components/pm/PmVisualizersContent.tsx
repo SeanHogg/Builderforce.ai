@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { ViewToggle } from '@/components/ViewToggle';
 import { EpicTreeView } from './EpicTreeView';
@@ -27,6 +28,23 @@ export function PmVisualizersContent() {
   const [section, setSection] = useState<Section>('spine');
   const [epicView, setEpicView] = useState<EpicView>('tree');
   const [roadmapView, setRoadmapView] = useState<RoadmapView>('timeline');
+
+  // Deep-link from a Brain chat's "Open" on a roadmap item (see `artifactRoutePath`):
+  // `?section=roadmap&roadmap=<id>` selects the section, the timeline view that can
+  // address a single row, and the row's own panel. Only `section` values this
+  // switchboard actually owns are honoured, so an unrelated `?section=` on some other
+  // page's link cannot move this one.
+  const searchParams = useSearchParams();
+  const sectionParam = searchParams.get('section');
+  const roadmapItemId = searchParams.get('roadmap');
+  useEffect(() => {
+    if (sectionParam && (['spine', 'epics', 'roadmap', 'roi'] as string[]).includes(sectionParam)) {
+      setSection(sectionParam as Section);
+    }
+  }, [sectionParam]);
+  useEffect(() => {
+    if (roadmapItemId) { setSection('roadmap'); setRoadmapView('timeline'); }
+  }, [roadmapItemId]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -70,7 +88,7 @@ export function PmVisualizersContent() {
 
       {section === 'roadmap' && (
         <>
-          {roadmapView === 'timeline' && <RoadmapTimeline />}
+          {roadmapView === 'timeline' && <RoadmapTimeline focusItemId={roadmapItemId} />}
           {roadmapView === 'gantt' && <RoadmapGantt />}
           {roadmapView === 'map' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>

@@ -22,6 +22,7 @@ function makeContext(over: Partial<TicketContext> = {}): TicketContext {
       laneIndex: 3,
       laneCount: 9,
       isTerminal: false,
+      isParked: false,
       basis: [
         { kind: 'lane', percent: 38, weight: 0.5, done: 4, total: 9 },
         { kind: 'signoff', percent: 0, weight: 0.5, done: 0, total: 10 },

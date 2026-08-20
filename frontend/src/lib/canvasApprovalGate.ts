@@ -139,8 +139,12 @@ export function actionIsGated(kind: string, action: string): boolean {
 export const ATTRIBUTED_FIELDS: Readonly<Record<string, readonly string[]>> = {
   budget: ['plannedTotal', 'lines', 'period', 'currency'],
   forecast: ['runwayMonths', 'drivers', 'scenarios', 'periods'],
-  invoice: ['amount', 'paidAmount', 'dueAt', 'lineItems'],
-  bill: ['amount', 'dueAt', 'approvedBy'],
+  // `contractRef` and `obligationRef` are attributed for the same reason `capTable.
+  // companyRef` is: they are the JOIN. Re-pointed silently, a charge is checked against
+  // a different agreement's terms and passes — which is the one way FO-G2's binding can
+  // be made to lie without any figure on the card changing.
+  invoice: ['amount', 'paidAmount', 'dueAt', 'lineItems', 'contractRef', 'obligationRef'],
+  bill: ['amount', 'dueAt', 'approvedBy', 'contractRef', 'obligationRef'],
   headcountPlan: ['annualCost', 'roles', 'loadingRate'],
   // The cap table's own figures are a PROJECTION as of 0927 and cannot be edited
   // at all, so the only thing left worth attributing is the JOIN — which company
@@ -154,7 +158,10 @@ export const ATTRIBUTED_FIELDS: Readonly<Record<string, readonly string[]>> = {
   convertible: ['principal', 'valuationCap', 'discountPercent', 'postMoney'],
   fundingRound: ['targetAmount', 'committed', 'valuation', 'useOfFunds'],
   pricing: ['tiers', 'grossMargin', 'unitEconomics'],
-  contract: ['valueAmount', 'renewsAt', 'obligations'],
+  // `reference` joined the list with FO-G2: it is the identity every invoice and bill
+  // points at, so editing it orphans every document raised under this agreement at once
+  // — a bigger silent change than any figure on the card.
+  contract: ['valueAmount', 'renewsAt', 'obligations', 'reference'],
   liveMetric: ['target'],
   role: ['salary', 'loadedCost', 'startAt'],
   // The priced deal itself. A discount changed after a buyer has seen the quote is the

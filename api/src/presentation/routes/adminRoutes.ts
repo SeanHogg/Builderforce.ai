@@ -343,6 +343,22 @@ function isSafeRelationName(value: unknown): value is string {
   return typeof value === 'string' && /^[a-z_][a-z0-9_]{0,62}$/.test(value);
 }
 
+/**
+ * Throwaway-mail domains, for the pre-OTP account review.
+ *
+ * Deliberately a short, hand-picked list rather than a downloaded blocklist:
+ * this is one signal out of three on a screen a human reads, and a 100k-entry
+ * list would put a megabyte in the Worker to make a heuristic marginally
+ * better at something nobody automates on.
+ */
+const DISPOSABLE_DOMAINS = [
+  'mailinator.com', 'guerrillamail.com', 'guerrillamail.info', 'sharklasers.com',
+  'yopmail.com', '10minutemail.com', 'tempmail.com', 'temp-mail.org',
+  'trashmail.com', 'getnada.com', 'dispostable.com', 'maildrop.cc',
+  'fakeinbox.com', 'throwawaymail.com', 'mailnesia.com', 'spamgourmet.com',
+  'discard.email', 'mohmal.com', 'moakt.com', 'emailondeck.com',
+];
+
 export function createAdminRoutes(): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
 
@@ -1267,6 +1283,74 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     `);
 
     return c.json({ users: rows.rows });
+  });
+
+  // -------------------------------------------------------------------------
+  // GET  /api/admin/accounts/suspect          — accounts the OTP gate never tested
+  // POST /api/admin/accounts/suspect/revoke   — make them prove the address
+  //
+  // Migration 0285 introduced the signup OTP gate and backfilled
+  // `email_verified_at = created_at` for EVERY account that already existed —
+  // necessary (nobody could be locked out retroactively) and, for the fake
+  // accounts created before the gate, a free pass. The gate only ever stopped
+  // NEW fake signups.
+  //
+  // The backfill left a signature: `email_verified_at = created_at` to the
+  // second is not something a real verification produces, because a real one
+  // happens after the code is typed. Combined with "never signed in" and a
+  // disposable mail domain, that is enough to review by hand — which is what
+  // this is, a review surface, not an automatic purge.
+  // -------------------------------------------------------------------------
+
+  router.get('/accounts/suspect', async (c) => {
+    const db = buildDatabase(c.env);
+    const rows = await db.execute(sql`
+      SELECT
+        u.id,
+        u.email,
+        u.username,
+        u.created_at        AS "createdAt",
+        u.last_login_at     AS "lastLoginAt",
+        u.email_verified_at AS "emailVerifiedAt",
+        -- The 0285 signature: verified in the same second the account was made.
+        (u.email_verified_at IS NOT NULL
+          AND ABS(EXTRACT(EPOCH FROM (u.email_verified_at - u.created_at))) < 2) AS "backfilledVerification",
+        (u.last_login_at IS NULL) AS "neverSignedIn",
+        (lower(split_part(u.email, '@', 2)) = ANY(${DISPOSABLE_DOMAINS})) AS "disposableDomain",
+        COUNT(DISTINCT tm.tenant_id)::int AS "tenantCount"
+      FROM users u
+      LEFT JOIN tenant_members tm ON tm.user_id = u.id AND tm.is_active = true
+      WHERE u.is_superadmin = false
+        AND (
+          u.last_login_at IS NULL
+          OR lower(split_part(u.email, '@', 2)) = ANY(${DISPOSABLE_DOMAINS})
+        )
+        AND u.email_verified_at IS NOT NULL
+        AND ABS(EXTRACT(EPOCH FROM (u.email_verified_at - u.created_at))) < 2
+      GROUP BY u.id, u.email, u.username, u.created_at, u.last_login_at, u.email_verified_at
+      ORDER BY u.created_at DESC
+      LIMIT 500
+    `);
+    return c.json({ accounts: rows.rows });
+  });
+
+  router.post('/accounts/suspect/revoke', async (c) => {
+    const body = await c.req.json<{ userIds?: string[] }>().catch(() => ({} as { userIds?: string[] }));
+    const userIds = (body.userIds ?? []).filter((id) => typeof id === 'string' && id.length > 0).slice(0, 500);
+    if (userIds.length === 0) return c.json({ error: 'userIds is required' }, 400);
+    const db = buildDatabase(c.env);
+    // Clearing the stamp, not deleting the account: the person gets the ordinary
+    // "verify your email" path on next sign-in, and a real account that was
+    // caught by the heuristic recovers itself without an admin doing anything.
+    // Superadmins are excluded in SQL as well as in the read — a wrong id here
+    // must not be able to lock the operator out.
+    const rows = await db.execute(sql`
+      UPDATE users
+      SET email_verified_at = NULL
+      WHERE id = ANY(${userIds}) AND is_superadmin = false
+      RETURNING id
+    `);
+    return c.json({ revoked: rows.rows.length });
   });
 
   // -------------------------------------------------------------------------

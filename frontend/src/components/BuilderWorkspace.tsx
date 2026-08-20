@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import dynamic from 'next/dynamic';
 import { useTranslations } from 'next-intl';
 import { repairScaffold } from '@/lib/scaffoldRepair';
 import { defaultsForModality, isScaffoldPath } from '@/lib/vanillaDefaults';
@@ -9,7 +10,14 @@ import { datasetNameForPath, looksLikeDatasetPath, parseJsonlDataset } from '@/l
 import { FileExplorer } from './FileExplorer';
 import { CodePane } from './CodePane';
 import { Terminal } from './Terminal';
-import { AITrainingPanel } from './AITrainingPanel';
+// WebGPU LoRA training — onnxruntime-web, the tokenizer and the whole training
+// loop, behind ONE tab of this workspace. Statically imported it shipped to
+// every builder who only ever edits files; `CreationCanvas` already defers the
+// same panel. `ssr: false`: there is no server-side WebGPU.
+const AITrainingPanel = dynamic(
+  () => import('./AITrainingPanel').then((module) => module.AITrainingPanel),
+  { ssr: false },
+);
 import { AgentPublishPanel } from './AgentPublishPanel';
 import { SitePublishPanel } from './SitePublishPanel';
 import { AgentStateViewer } from './AgentStateViewer';

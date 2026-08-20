@@ -13,15 +13,16 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  *
  * Best-effort by contract: never throws, never blocks the run.
  */
-import { and, asc, desc, eq } from 'drizzle-orm';
+import { and, asc, eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
-import { pullRequests, swimlaneRequirements, swimlanes, tasks } from '../../infrastructure/database/schema';
+import { swimlaneRequirements, swimlanes, tasks } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { TicketParticipantsService } from './ticketParticipants';
 import { attestCompletedRoleRun } from './attestRoleRun';
 import { findCanonicalBoard } from '../swimlane/canonicalBoard';
 import { producerRoleForActionType } from './roleCapability';
+import { loadTaskPrSignal, producerPrEvidence } from './taskPrSignal';
 
 export interface RunFinalizedInfo {
   tenantId: number;
@@ -71,18 +72,6 @@ async function producerRoleFromActionType(db: Db, taskId: number): Promise<strin
   return producerRoleForActionType(row?.actionType) ?? null;
 }
 
-/** Latest non-draft PR URL for a task (the producer completion evidence), or null. */
-async function taskPrEvidence(db: Db, tenantId: number, taskId: number): Promise<string | null> {
-  const [pr] = await db
-    .select({ url: pullRequests.url, status: pullRequests.status })
-    .from(pullRequests)
-    .where(and(eq(pullRequests.tenantId, tenantId), eq(pullRequests.taskId, taskId)))
-    .orderBy(desc(pullRequests.createdAt))
-    .limit(1);
-  if (!pr || pr.status === 'draft') return null;
-  return pr.url ?? `pr:task-${taskId}`;
-}
-
 export async function attributeRunToManifest(env: Env, db: Db, info: RunFinalizedInfo): Promise<void> {
   try {
     // A failed run attributes nothing (no participation credit for a failed attempt).
@@ -95,7 +84,12 @@ export async function attributeRunToManifest(env: Env, db: Db, info: RunFinalize
       ?? (info.laneServed ? await producerRoleOfLane(db, info.projectId, info.laneServed) : null)
       ?? await producerRoleFromActionType(db, info.taskId);
     if (!roleKey) return;
-    const prUrl = await taskPrEvidence(db, info.tenantId, info.taskId);
+    // Producer completion evidence: the latest PR, but only when its recorded build is
+    // not RED. Crediting a producer for a branch whose CI failed closes the slot and
+    // opens the reviewer stage on work that never built — see
+    // {@link ./taskPrSignal.isProducerPrEvidence} for why this is "not failure" rather
+    // than "must be success".
+    const prUrl = producerPrEvidence(await loadTaskPrSignal(db, info.tenantId, info.taskId), info.taskId);
     const participants = new TicketParticipantsService(db);
     await participants.recordRunAttribution(env, info.tenantId, info.taskId, {
       roleKey,

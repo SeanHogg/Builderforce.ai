@@ -26,7 +26,7 @@ import {
   ideAgents,
   projectAgents,
 } from '../../infrastructure/database/schema';
-import { scopedToTenant } from '../../infrastructure/database/tenantScope';
+import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { runtimeHiredAgentsCacheKey } from './runtimeRoutes';
@@ -36,6 +36,18 @@ import { assigneeProfilesCacheKey } from '../../application/kanban/assigneeProfi
 import { invalidateTeamCaches } from '../../application/kernel/TeamRoster';
 import { parseJsonArray } from '../../domain/shared/json';
 import { CLOUD_SURFACES } from '../../application/runtime/cloudDispatch';
+import {
+  completeAgentCheckout,
+  holdsAgentPurchase,
+  startAgentCheckout,
+} from '../../application/marketplace/agentCommerce';
+import { ListingError } from '../../application/marketplace/creationListings';
+import {
+  ensureAgentIdentity,
+  provisionHiredAgent,
+  removeAgentIdentities,
+  revokeHiredAgent,
+} from '../../application/workforce/hiredAgents';
 import type { Env, HonoEnv } from '../../env';
 
 /** Cache key for a tenant's purchased (marketplace-acquired) agents. */
@@ -45,6 +57,18 @@ const purchasedCacheKey = (tenantId: number): string => `wf:purchased:${tenantId
  *  same world-readable registry for everyone). Read-heavy + open to the world →
  *  served through getOrSetCached; invalidated on any write that changes a row that
  *  could appear in it (create/update/hire/delete), including an eval-score change. */
+/**
+ * "…and its tenant is not a demo tenant."
+ *
+ * A correlated EXISTS rather than a join: the public listing is cached and
+ * ordered by hire count, and a join would change the row shape every caller of
+ * `agentRowColumns` depends on. The demo flag lives on `tenants.is_demo`, which
+ * is where `demoSeedService` sets it.
+ */
+const notDemoTenant = sql`NOT EXISTS (
+  SELECT 1 FROM tenants t WHERE t.id = ${ideAgents.tenantId} AND t.is_demo = true
+)`;
+
 export const PUBLIC_LIST_CACHE_KEY = 'wf:public:agents';
 const PUBLIC_LIST_CACHE_TTL_SECONDS = 120;
 
@@ -355,18 +379,27 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
   });
 
   // POST /agents/:id/hire — acquire a published marketplace agent into this
-  // tenant's workforce. Records the purchase (idempotent) and bumps the agent's
-  // aggregate hire counter. Authenticated so the buyer (tenant) is known.
+  // tenant's workforce. Records the hire (idempotent), bumps the agent's
+  // aggregate hire counter, and PROVISIONS the agent into the hiring workspace
+  // so it is actually usable there. Authenticated so the buyer (tenant) is known.
+  //
+  // A PRICED agent 402s unless this workspace holds a completed purchase. The
+  // price column has been on `ide_agents` since the marketplace shipped and was
+  // never read: an owner could list an agent at $99 and every hire was free.
+  // Free agents (price_cents = 0) are unaffected and hire exactly as before.
   router.post('/agents/:id/hire', authMiddleware, async (c) => {
     const db = buildDatabase(c.env);
     const tenantId = c.get('tenantId') as number;
+    const userId = c.get('userId') as string | undefined;
     const id = c.req.param('id');
     const [agent] = await db
       .select({
         id: ideAgents.id,
+        name: ideAgents.name,
         published: ideAgents.published,
         status: ideAgents.status,
         tenant_id: ideAgents.tenantId,
+        price_cents: ideAgents.priceCents,
       })
       .from(ideAgents)
       .where(and(eq(ideAgents.id, id), eq(ideAgents.status, 'active')));
@@ -378,6 +411,15 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
       return c.json({ error: 'You already own this agent — it is already in your workforce.' }, 409);
     }
     if (!agent.published) return c.json({ error: 'Agent is not published to the marketplace' }, 409);
+
+    // THE PAY GATE. Checked before anything is written, so a refused hire leaves
+    // no row, no counter movement and no binding behind it. The entitlement is a
+    // PURCHASE, not a hire: unhiring does not un-buy, so re-hiring never charges
+    // a second time.
+    const priceCents = Number(agent.price_cents ?? 0);
+    if (priceCents > 0 && !(await holdsAgentPurchase(db, tenantId, id))) {
+      return c.json({ error: 'Purchase required', checkoutRequired: true, priceCents }, 402);
+    }
 
     // Insert a fresh purchase OR revive a previously soft-deleted (unhired) one.
     // The WHERE on the conflict path means re-hiring an ALREADY-active agent is a
@@ -402,8 +444,84 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
           eq(ideAgents.id, id),
           eq(ideAgents.tenantId, Number(agent.tenant_id)),
         ));
+    // PROVISION — the step that makes a hire more than a counter. Creates the
+    // canonical `project_agents` identity in the HIRING workspace, which is what
+    // the assignee picker, the per-agent capability panel and swimlane dispatch
+    // address the agent by. Run on every hire, not only a fresh one, so a hire
+    // that predates this route (or one whose identity was cleaned up) is repaired
+    // the next time the buyer presses Hire.
+    const { projectAgentId } = await provisionHiredAgent(db, {
+      tenantId,
+      agentId: id,
+      agentName: String(agent.name ?? id),
+      actorUserId: userId ?? null,
+    });
     await invalidateHireCaches(c.env as Env, tenantId, { publicListing: changed.length > 0 });
-    return c.json(mapAgentRow(row));
+    return c.json({ ...mapAgentRow(row), project_agent_id: projectAgentId });
+  });
+
+  // POST /agents/:id/checkout — start a hosted payment for a PRICED agent.
+  // Mirrors the knowledge-listing checkout: `{ free: true }` when there is
+  // nothing to pay, `{ purchased: true }` when this workspace already bought it,
+  // otherwise a processor URL. Records nothing — see agentCommerce.ts.
+  router.post('/agents/:id/checkout', authMiddleware, async (c) => {
+    const db = buildDatabase(c.env);
+    const tenantId = c.get('tenantId') as number;
+    const id = c.req.param('id');
+    // CROSS-TENANT BY DESIGN: a published agent is bought FROM another
+    // workspace, so `published` + `status` are the access predicate that
+    // replaces the tenant one. Declared rather than baselined.
+    const [agent] = await db
+      .select({ price_cents: ideAgents.priceCents })
+      .from(ideAgents)
+      .where(acrossTenants(ideAgents, 'public_catalogue',
+        eq(ideAgents.id, id), eq(ideAgents.status, 'active'), eq(ideAgents.published, true)));
+    if (!agent) return c.json({ error: 'Agent not found' }, 404);
+    if (Number(agent.price_cents ?? 0) <= 0) return c.json({ free: true });
+    if (await holdsAgentPurchase(db, tenantId, id)) return c.json({ purchased: true });
+
+    const body = await c.req
+      .json<{ returnUrl?: string; buyerEmail?: string }>()
+      .catch(() => ({} as { returnUrl?: string; buyerEmail?: string }));
+    // The buyer comes back to the page they left, so the return url is theirs to
+    // name — but only its origin and path are used, and the processor substitutes
+    // the session id, so it cannot be turned into an open redirect carrying data.
+    const returnUrl = body.returnUrl ?? `${new URL(c.req.url).origin}/workforce`;
+    try {
+      const { checkoutUrl } = await startAgentCheckout(db, c.env as Env, {
+        tenantId,
+        buyerUserId: c.get('userId') as string,
+        // Only prefills the processor's own email field; it collects one either way.
+        buyerEmail: typeof body.buyerEmail === 'string' ? body.buyerEmail : null,
+        agentId: id,
+        returnUrl,
+      });
+      return c.json({ checkoutUrl });
+    } catch (error) {
+      if (error instanceof ListingError) return c.json({ error: error.message }, error.status);
+      throw error;
+    }
+  });
+
+  // POST /agents/:id/checkout/complete — the processor's redirect lands here.
+  // The session is re-read FROM the processor before the purchase is recorded;
+  // the id in the body is untrusted until agentCommerce has verified it.
+  router.post('/agents/:id/checkout/complete', authMiddleware, async (c) => {
+    const db = buildDatabase(c.env);
+    const tenantId = c.get('tenantId') as number;
+    const body = await c.req.json<{ checkoutSessionId?: string }>().catch(() => ({ checkoutSessionId: undefined }));
+    if (!body.checkoutSessionId) return c.json({ error: 'checkoutSessionId is required' }, 400);
+    try {
+      const purchase = await completeAgentCheckout(db, c.env as Env, {
+        tenantId,
+        buyerUserId: c.get('userId') as string,
+        checkoutSessionId: body.checkoutSessionId,
+      });
+      return c.json({ purchased: true, purchase });
+    } catch (error) {
+      if (error instanceof ListingError) return c.json({ error: error.message }, error.status);
+      throw error;
+    }
   });
 
   // DELETE /agents/:id/hire — release a previously-hired marketplace agent from
@@ -425,6 +543,12 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
         isNull(agentPurchases.unhiredAt),
       ))
       .returning({ agent_id: agentPurchases.agentId });
+    // REVOKE the binding hire created. The purchase row is only soft-deleted (it
+    // is the provenance of work the agent did), but the LIVE wiring goes: the
+    // canonical identity the agent was assignable through, and the per-agent
+    // capabilities configured against it. Leaving them would keep a released
+    // agent in the assignee picker as work nothing could run.
+    if (removed.length > 0) await revokeHiredAgent(db, { tenantId, agentId: id });
     // hire_count is cumulative, so an unhire never reorders the public listing.
     await invalidateHireCaches(c.env as Env, tenantId, { publicListing: false });
     return c.json({ unhired: removed.length > 0 });
@@ -604,27 +728,8 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
       .returning({ id: ideAgents.id });
     if (rows.length === 0) return c.json({ error: 'Agent not found' }, 404);
 
-    const bridges = await db.select({ id: projectAgents.id }).from(projectAgents)
-      .where(and(
-        eq(projectAgents.tenantId, tenantId),
-        eq(projectAgents.agentKind, 'workforce'),
-        eq(projectAgents.agentRef, id),
-        isNull(projectAgents.projectId),
-      ));
-    const bridgeIds = bridges.map((bridge) => bridge.id);
-    if (bridgeIds.length > 0) {
-      await db
-        .delete(artifactAssignments)
-        .where(and(
-          eq(artifactAssignments.tenantId, tenantId),
-          eq(artifactAssignments.scope, 'agent'),
-          inArray(artifactAssignments.scopeId, bridgeIds),
-        ));
-      await db.delete(projectAgents).where(and(
-        eq(projectAgents.tenantId, tenantId),
-        inArray(projectAgents.id, bridgeIds),
-      ));
-    }
+    // Same teardown an unhire performs, from the one definition of it.
+    await removeAgentIdentities(db, { tenantId, agentId: id });
     await invalidateAgentCaches(c.env as Env, tenantId);
     return c.json({ deleted: true });
   });
@@ -641,40 +746,22 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
     const userId = c.get('userId') as string;
     const id = c.req.param('id');
 
+    // OWNED agents only. A HIRED agent gets the same identity, but from the hire
+    // route (which is the moment it is acquired) — see provisionHiredAgent.
     const [agent] = await db
       .select({ id: ideAgents.id, name: ideAgents.name })
       .from(ideAgents)
       .where(and(eq(ideAgents.id, id), eq(ideAgents.tenantId, tenantId)));
     if (!agent) return c.json({ error: 'Agent not found' }, 404);
 
-    /** The canonical (project-less) identity row for this workforce agent. */
-    const identityWhere = and(
-      eq(projectAgents.tenantId, tenantId),
-      eq(projectAgents.agentKind, 'workforce'),
-      eq(projectAgents.agentRef, id),
-      isNull(projectAgents.projectId),
-    );
-
-    const [existing] = await db.select({ id: projectAgents.id }).from(projectAgents).where(identityWhere);
-    if (existing) return c.json({ projectAgentId: existing.id });
-
-    const [created] = await db
-      .insert(projectAgents)
-      .values({ tenantId, projectId: null, agentKind: 'workforce', agentRef: id, name: agent.name, addedBy: userId })
-      // `where` here is the CONFLICT TARGET predicate (drizzle's name for the
-      // partial-index qualifier), matching the partial unique index the raw
-      // statement targeted: ON CONFLICT (...) WHERE project_id IS NULL DO NOTHING.
-      .onConflictDoNothing({
-        target: [projectAgents.tenantId, projectAgents.agentKind, projectAgents.agentRef],
-        where: isNull(projectAgents.projectId),
-      })
-      .returning({ id: projectAgents.id });
-    if (created) return c.json({ projectAgentId: created.id }, 201);
-
-    // Lost an insert race — read the row the other request created.
-    const [row] = await db.select({ id: projectAgents.id }).from(projectAgents).where(identityWhere);
-    if (!row) return c.json({ error: 'Failed to create agent identity' }, 500);
-    return c.json({ projectAgentId: row.id });
+    // The upsert used to be spelled out here and nowhere else; it now lives in
+    // `hiredAgents.ensureAgentIdentity` so this route and the hire path create
+    // the SAME canonical row rather than two subtly different ones.
+    const projectAgentId = await ensureAgentIdentity(db, {
+      tenantId, agentId: id, name: agent.name, addedBy: userId,
+    });
+    if (projectAgentId == null) return c.json({ error: 'Failed to create agent identity' }, 500);
+    return c.json({ projectAgentId });
   });
 
   // ----- Owner-only: agent performance + buyer feedback (gap [1247]) -------
@@ -744,10 +831,21 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
     const rows = await getOrSetCached(
       c.env as Env,
       PUBLIC_LIST_CACHE_KEY,
+      // The world-readable registry: the same listing for every visitor, signed
+      // in or not. `published` + `status` IS the access control.
+      //
+      // DEMO TENANTS ARE EXCLUDED. The Talent persona demo tenant publishes
+      // `coder`/`copywriter` agents, and they are FIXTURES — seeded to make a
+      // sales demo look inhabited, not offered for hire. Left in, the public
+      // registry advertised them alongside real ones, so a visitor's first
+      // impression of the marketplace was two agents nobody wrote. The admin
+      // "paid pro" rollups already discount `is_demo`; this is the same rule
+      // applied where the public can see it.
       () => db
         .select(agentRowColumns)
         .from(ideAgents)
-        .where(and(eq(ideAgents.status, 'active'), eq(ideAgents.published, true)))
+        .where(acrossTenants(ideAgents, 'public_catalogue',
+          eq(ideAgents.status, 'active'), eq(ideAgents.published, true), notDemoTenant))
         .orderBy(desc(ideAgents.hireCount), desc(ideAgents.createdAt))
         .limit(200),
       { kvTtlSeconds: PUBLIC_LIST_CACHE_TTL_SECONDS },
@@ -761,7 +859,8 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
     const [row] = await db
       .select(agentRowColumns)
       .from(ideAgents)
-      .where(and(eq(ideAgents.id, c.req.param('id')), eq(ideAgents.status, 'active'), eq(ideAgents.published, true)));
+      .where(acrossTenants(ideAgents, 'public_catalogue',
+        eq(ideAgents.id, c.req.param('id')), eq(ideAgents.status, 'active'), eq(ideAgents.published, true), notDemoTenant));
     if (!row) return c.json({ error: 'Agent not found' }, 404);
     return c.json(mapPublicAgentRow(row));
   });

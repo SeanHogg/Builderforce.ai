@@ -35,6 +35,7 @@ import {
   type ConnectorManifest,
 } from './connectorManifest';
 import { findAction, resolveConnector, type ResolvedConnector } from './connectorRegistry';
+import { buildSoapEnvelope, parseXml, soapBodyOf, soapContentType, soapFaultOf } from './soapEnvelope';
 
 /** Upstream calls are cut off here — an agent loop must not block on a hung API. */
 const CALL_TIMEOUT_MS = 20_000;
@@ -45,7 +46,8 @@ const MAX_RESPONSE_BYTES = 256 * 1024;
 export interface ConnectorCallResult {
   ok: boolean;
   status: number;
-  /** Parsed JSON (or `{ text }` for a non-JSON response), after `resultPath`. */
+  /** Parsed JSON — or the unwrapped SOAP `<Body>` for a `soap` action, or `{ text }`
+   *  for a body that is neither — after `resultPath`. */
   data: unknown;
   error?: string;
   durationMs: number;
@@ -238,10 +240,42 @@ export function buildConnectorRequest(args: {
     if (user || pass) headers.Authorization = `Basic ${btoa(`${user}:${pass}`)}`;
   }
 
-  const hasBody = action.method !== 'GET' && action.method !== 'DELETE' && Object.keys(body).length > 0;
-  if (hasBody) {
-    if (action.bodyFormat === 'form') headers['Content-Type'] = 'application/x-www-form-urlencoded';
-    else headers['Content-Type'] = 'application/json';
+  /**
+   * A SOAP action always carries a document, even when every field is defaulted.
+   *
+   * The REST rule — no body unless a param was mapped — is right for HTTP verbs and
+   * wrong here: `GetAccountsInfo` with no arguments is still a request that must be
+   * sent as an envelope, and skipping the body would post nothing to an endpoint whose
+   * only meaning is the operation name inside it.
+   */
+  const soap = action.soap ?? null;
+  const hasBody = soap
+    ? true
+    : action.method !== 'GET' && action.method !== 'DELETE' && Object.keys(body).length > 0;
+
+  let payload: string | undefined;
+  if (soap) {
+    const version = soap.version ?? '1.1';
+    headers['Content-Type'] = soapContentType(version);
+    // A service that routes on SOAPAction answers 500 without it, and one that does not
+    // ignores it — so it is always sent. 1.2 folds it into the content type instead.
+    if (version === '1.1') headers.SOAPAction = soap.action;
+    else if (soap.action) headers['Content-Type'] = `${soapContentType(version)}; action="${soap.action}"`;
+    // The JSON default is wrong here and some services honour it with a 406. A manifest
+    // that named its own Accept keeps it — it knew something this branch does not.
+    headers.Accept = manifest.defaultHeaders?.Accept ?? action.headers?.Accept ?? 'text/xml, application/soap+xml';
+    // Header values are templated from the SEALED credentials exactly as a param
+    // default is, so an envelope-borne developer token lives in the same store as an
+    // HTTP-header-borne one and never appears in the manifest.
+    const soapHeader = Object.fromEntries(
+      Object.entries(soap.header ?? {}).map(([key, value]) => [key, fillTemplate(value, auth)]),
+    );
+    payload = buildSoapEnvelope(soap, body, soapHeader);
+  } else if (hasBody) {
+    headers['Content-Type'] = action.bodyFormat === 'form'
+      ? 'application/x-www-form-urlencoded'
+      : 'application/json';
+    payload = action.bodyFormat === 'form' ? toFormBody(body) : JSON.stringify(body);
   }
 
   const qs = query.toString();
@@ -253,7 +287,7 @@ export function buildConnectorRequest(args: {
       method: action.method,
       headers,
       redirect: 'manual',
-      ...(hasBody ? { body: action.bodyFormat === 'form' ? toFormBody(body) : JSON.stringify(body) } : {}),
+      ...(payload !== undefined ? { body: payload } : {}),
     },
   };
 }
@@ -459,13 +493,29 @@ export async function executeConnectorAction(args: {
       if (raw.length > MAX_RESPONSE_BYTES) truncated = true;
       const clipped = truncated ? raw.slice(0, MAX_RESPONSE_BYTES) : raw;
       let parsed: unknown;
-      try {
-        parsed = clipped ? JSON.parse(clipped) : null;
-      } catch {
-        parsed = { text: clipped };
+      /** Set when the body is a SOAP fault — an HTTP 200 that is a failure. */
+      let faultText: string | null = null;
+      if (action.soap) {
+        // The XML is unwrapped to its `<Body>` contents so `resultPath` addresses the
+        // operation's own fields — a manifest must not have to know it is riding in an
+        // envelope, or the transport would leak into every path in it.
+        const document = parseXml(clipped);
+        parsed = soapBodyOf(document);
+        faultText = soapFaultOf(parsed);
+      } else {
+        try {
+          parsed = clipped ? JSON.parse(clipped) : null;
+        } catch {
+          parsed = { text: clipped };
+        }
       }
-      ok = res.ok;
-      if (ok) {
+      // A SOAP fault arrives as 200. Trusting the status code here would record a
+      // refused write as a success, cache it as one, and report it upward as one.
+      ok = res.ok && !faultText;
+      if (faultText) {
+        data = parsed;
+        errorText = redactSecrets(faultText.slice(0, 600), secrets);
+      } else if (ok) {
         data = action.resultPath ? getDeep(parsed, action.resultPath) ?? parsed : parsed;
       } else {
         data = parsed;

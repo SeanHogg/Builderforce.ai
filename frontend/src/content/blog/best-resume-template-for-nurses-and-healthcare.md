@@ -8,6 +8,17 @@ author: Sean Hogg
 
 # The Best Resume Template for Nurses, Physicians, and Allied Health Roles
 
+```bf-figure
+{
+  "kind": "templates",
+  "title": "Clinical Blue — the layout this article recommends",
+  "templateIds": [
+    "healthcare-clinical-blue"
+  ],
+  "caption": "Rendered live from the same template registry the editor reads, so this is the real Nursing and allied health layout — not a screenshot of one."
+}
+```
+
 ## Healthcare Resumes Are Credentialing Documents
 
 In healthcare, the resume's first job is credentialing. Before a recruiter or nurse manager evaluates your experience, they need to confirm: are you licensed in the right state, do you hold the required certifications (BLS, ACLS, PALS, NRP, CCRN, etc.), and what clinical settings have you actually worked in?

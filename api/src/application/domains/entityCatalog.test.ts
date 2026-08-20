@@ -159,7 +159,31 @@ describe('the entity catalog', () => {
     // generic reader redacts on column-name PATTERNS, and betting a sealed
     // channel credential on a regex is the bet those exemptions exist to avoid.
     // Registering it would put the hazard back.
-    expect(missing.length, `uncovered: ${missing.join(', ')}`).toBeLessThan(13);
+    //
+    // Ceiling moved 13 → 14 (2026-08-20) with `run_context_state` (migration 0947),
+    // adjudicated rather than counted: it is the Evermind fact store behind the run-context
+    // reconciler — one row per (continuity scope, subject key) holding the CURRENT belief a
+    // run has been told about one context block. It has no identity a person opens, no
+    // title and no status; its key is the belief's subject, and the only reader is
+    // `EvermindCognition` through `runContextService.runContextFactStore`. That is the same
+    // structural reason `stage_sandbox_runs` is exempt above — a content-keyed cache, not
+    // an object — and registering it would publish another run's recalled context as a
+    // browsable object on the generic reader.
+    //
+    // Ceiling moved 14 → 15 (2026-08-20) with `execution_pause_state` (migration 0945),
+    // adjudicated rather than counted: it is the exit-and-redispatch payload of a PAUSED
+    // run — one row per parked execution whose `loop_state` column holds
+    // `{ messages, writtenPaths, step }`, i.e. the run's entire frozen conversation with
+    // the model. It has no identity a person opens: its key is the execution, its
+    // lifetime is "until someone answers the question", and its only readers are
+    // `executionPause.ts` and `executionResume.ts`. Publishing it on the generic reader
+    // would make one run's full transcript a browsable object — the same structural
+    // reason written above for `run_context_state` and `stage_sandbox_runs`, and a
+    // strictly larger hazard, because this is the conversation itself rather than a
+    // recalled fragment of it. Its two SIBLINGS from the same pass are registered rather
+    // than exempted (`preview_sessions` as a capacity lease, `task_repo_bindings` as the
+    // ticket's repo set), so this ceiling moved by exactly one table, not by three.
+    expect(missing.length, `uncovered: ${missing.join(', ')}`).toBeLessThan(15);
   });
 
   it('declares nothing that no migration creates', () => {

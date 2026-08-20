@@ -113,10 +113,42 @@ export function autonomousHopShare(stats: AutonomyOriginStats): number | null {
   return total > 0 ? (stats.autonomousHops / total) * 100 : null;
 }
 
+/**
+ * Verdict compliance for one grouping key — mirrors the API's
+ * `VerdictComplianceStats` (`api/src/application/activity/verdictCompliance.ts`).
+ */
+export interface VerdictComplianceStats {
+  /** `null` for the tenant total. */
+  agentRef: string | null;
+  reviewerRuns: number;
+  reviewerAnswered: number;
+  reviewerMissed: number;
+  /** 0..100; null when there were no reviewer runs to judge. */
+  missRatePercent: number | null;
+  producerRuns: number;
+  producerMissed: number;
+  reviewerAutoAttestedOnly: number;
+}
+
+export interface VerdictComplianceReport {
+  windowDays: number;
+  generatedAt: string;
+  totals: VerdictComplianceStats;
+  byAgent: VerdictComplianceStats[];
+  truncated: boolean;
+}
+
+/** Below this many reviewer runs an agent's rate is not worth ranking on — kept in
+ *  step with `MIN_RUNS_FOR_AGENT_RANKING` on the API side. */
+export const MIN_RUNS_FOR_AGENT_RANKING = 3;
+
 export const autonomyApi = {
   get: (days = 30, projectId?: number | null): Promise<AutonomySummary> => {
     const q = new URLSearchParams({ days: String(days) });
     if (projectId != null) q.set('projectId', String(projectId));
     return apiRequest<AutonomySummary>(`/api/insights/autonomy?${q.toString()}`);
   },
+  /** Of the runs asked for a verdict, how many recorded one — and which agent did not. */
+  verdictCompliance: (days = 30): Promise<VerdictComplianceReport> =>
+    apiRequest<VerdictComplianceReport>(`/api/insights/autonomy/verdict-compliance?days=${days}`),
 };

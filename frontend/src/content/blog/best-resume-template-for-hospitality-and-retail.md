@@ -8,6 +8,17 @@ author: Sean Hogg
 
 # The Best Resume Template for Hospitality, Retail, and Customer-Facing Roles
 
+```bf-figure
+{
+  "kind": "templates",
+  "title": "Hospitality Amber — the layout this article recommends",
+  "templateIds": [
+    "hospitality-amber"
+  ],
+  "caption": "Rendered live from the same template registry the editor reads, so this is the real Hospitality and retail layout — not a screenshot of one."
+}
+```
+
 ## Hospitality Hiring Is About Personality and Reliability
 
 Hospitality, retail, and customer-facing hiring works differently from corporate hiring. The hiring manager has probably read 200 resumes that all list "customer service," "team player," and "detail-oriented." They're not looking for credentials. They're looking for two things: do you seem like a person guests would enjoy interacting with, and do you seem reliable enough to show up for the shift?

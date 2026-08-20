@@ -3,14 +3,24 @@ import { TOOLS, getTool } from './toolDefinitions';
 import {
   TRANSLATED_TOOL_LOCALES,
   localizeTool,
+  sharedAnalyzerEntries,
   toolCatalog,
+  toolCopy,
   toolMessageEntries,
 } from './toolMessages';
 import { resultCopy } from './resultCopy';
 import { scoreQuestionnaire, type QuestionnaireTool } from './toolTypes';
 
-/** Every key the registry's definitions need translated, with its English source. */
-const ENTRIES = TOOLS.flatMap((t) => toolMessageEntries(t));
+/**
+ * Every key the registry needs translated, with its English source.
+ *
+ * TWO sources, not one, and the second is the point: `toolMessageEntries` walks a
+ * tool's DEFINITION *and* an analyzer's declared result copy, while
+ * `sharedAnalyzerEntries` covers the chrome that belongs to no single tool. Left
+ * out, the shared namespace would be the one corner of the catalog nothing
+ * checked — which is exactly where an untranslated string survives to production.
+ */
+const ENTRIES = [...TOOLS.flatMap((t) => toolMessageEntries(t)), ...sharedAnalyzerEntries()];
 
 describe('the tool message catalog', () => {
   it.each(TRANSLATED_TOOL_LOCALES)('translates every string a tool definition serves — %s', (locale) => {
@@ -115,5 +125,44 @@ describe('a localized RESULT', () => {
       expect(localized.metrics.map((m) => m.key)).toEqual(en.metrics.map((m) => m.key));
       expect(localized.metrics.map((m) => m.tier)).toEqual(en.metrics.map((m) => m.tier));
     }
+  });
+});
+
+
+describe('a localized ANALYZER result', () => {
+  /**
+   * The seam this pins: an analyzer composes its findings inside its own pure
+   * function, so — unlike a questionnaire, whose result IS its translated section
+   * names — translating the definition did nothing for the result. The copy is a
+   * parameter, and this asserts it actually reaches the composed prose.
+   */
+  const RESUME = [
+    'Dana Okafor',
+    'Experience',
+    '- Led billing migration, cutting settlement time 40%.',
+    'Skills',
+    'SQL',
+  ].join('\n');
+
+  it('declares an English source for every result string it composes', () => {
+    for (const tool of TOOLS) {
+      if (tool.kind !== 'analyzer') continue;
+      expect(Object.keys(tool.copy).length, `${tool.id} declares no result copy`).toBeGreaterThan(0);
+      for (const [slug, english] of Object.entries(tool.copy)) {
+        expect(english, `${tool.id}.${slug}`).toBeTruthy();
+      }
+    }
+  });
+
+  it.each(TRANSLATED_TOOL_LOCALES)('renders a finding in %s', (locale) => {
+    const tool = getTool('ai-resume-scorer');
+    if (!tool || tool.kind !== 'analyzer') throw new Error('expected the résumé scorer');
+    const localized = tool.analyze({ resume: RESUME }, toolCopy(tool, locale));
+    const english = tool.analyze({ resume: RESUME }, toolCopy(tool, 'en'));
+    // Identical measurement, different words — the same guarantee the
+    // questionnaire scorer gives one section above.
+    expect(localized.score).toBe(english.score);
+    expect(localized.metrics.map((m) => m.tier)).toEqual(english.metrics.map((m) => m.tier));
+    expect(localized.metrics.at(-1)!.label).not.toBe(english.metrics.at(-1)!.label);
   });
 });

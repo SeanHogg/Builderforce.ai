@@ -22,6 +22,10 @@
 
 export * from './resumeExtract';
 export * from './resumeAnalysis';
+// The PROMPT and VERIFICATION half of the model-assisted capabilities. Pure, so it
+// belongs here; the model call itself lives in `resumeAi.ts`, which is not exported from
+// this barrel for the same reason `references.ts` is not — it needs a Worker env.
+export * from './resumeAiPrompts';
 export * from './jobMatch';
 export * from './jobDocument';
 export * from './interviewKit';

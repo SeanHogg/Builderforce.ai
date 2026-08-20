@@ -18,6 +18,7 @@ import { Canvas3DView, type Canvas3DMove } from '@/components/canvas/Canvas3DVie
 import { Canvas3DControlsProvider, useCanvasThreeD } from '@/components/canvas/canvas3dControls';
 import { applyCanvas3DMoves, canvas3dDepthOffset, type Canvas3DDescriptor } from '@/components/canvas/canvas3d';
 import { tasksApi, type Task, type DependencyEdge, type DepType } from '@/lib/builderforceApi';
+import { cycleEdges, edgeKey, layoutDag, type GraphEdgeRef } from '@/lib/graphLayout';
 import { usePmScope } from '@/lib/pm/scope';
 import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
 import { usePmData } from '@/lib/pm/usePmData';
@@ -55,56 +56,16 @@ const DEP_TYPE_META: Array<{ value: DepType; code: string; labelKey: string }> =
 ];
 const DEP_TYPE_CODE: Record<string, string> = Object.fromEntries(DEP_TYPE_META.map((o) => [o.value, o.code]));
 
-/** Longest-path layering over precedence edges; cycle nodes fall back to layer 0. */
-function layout(tasks: Task[], deps: DependencyEdge[]): Map<number, { x: number; y: number }> {
-  const succ = new Map<number, number[]>();
-  const indeg = new Map<number, number>();
-  for (const t of tasks) indeg.set(t.id, 0);
-  for (const d of deps) {
-    if (!indeg.has(d.predecessorTaskId) || !indeg.has(d.successorTaskId)) continue;
-    (succ.get(d.predecessorTaskId) ?? succ.set(d.predecessorTaskId, []).get(d.predecessorTaskId)!).push(d.successorTaskId);
-    indeg.set(d.successorTaskId, (indeg.get(d.successorTaskId) ?? 0) + 1);
-  }
-  const layer = new Map<number, number>(tasks.map((t) => [t.id, 0]));
-  const queue = tasks.filter((t) => (indeg.get(t.id) ?? 0) === 0).map((t) => t.id);
-  const remaining = new Map(indeg);
-  while (queue.length) {
-    const id = queue.shift()!;
-    for (const s of succ.get(id) ?? []) {
-      layer.set(s, Math.max(layer.get(s) ?? 0, (layer.get(id) ?? 0) + 1));
-      remaining.set(s, (remaining.get(s) ?? 0) - 1);
-      if ((remaining.get(s) ?? 0) === 0) queue.push(s);
-    }
-  }
-  // Pack rows per layer.
-  const rowOf = new Map<number, number>();
-  const pos = new Map<number, { x: number; y: number }>();
-  for (const t of tasks) {
-    const l = layer.get(t.id) ?? 0;
-    const row = rowOf.get(l) ?? 0;
-    rowOf.set(l, row + 1);
-    pos.set(t.id, { x: l * COL_W, y: row * ROW_H });
-  }
-  return pos;
-}
-
-/** Set of edge keys (`p->s`) that lie on a cycle: s can already reach p. */
-function cycleEdgeKeys(deps: DependencyEdge[]): Set<string> {
-  const adj = new Map<number, number[]>();
-  for (const d of deps) (adj.get(d.predecessorTaskId) ?? adj.set(d.predecessorTaskId, []).get(d.predecessorTaskId)!).push(d.successorTaskId);
-  const reaches = (from: number, target: number): boolean => {
-    const seen = new Set<number>([from]);
-    const q = [from];
-    while (q.length) {
-      const c = q.shift()!;
-      if (c === target) return true;
-      for (const n of adj.get(c) ?? []) if (!seen.has(n)) { seen.add(n); q.push(n); }
-    }
-    return false;
-  };
-  const bad = new Set<string>();
-  for (const d of deps) if (reaches(d.successorTaskId, d.predecessorTaskId)) bad.add(`${d.predecessorTaskId}->${d.successorTaskId}`);
-  return bad;
+/**
+ * Precedence edges as the shared graph module sees them: plain string ids.
+ *
+ * The layering and cycle detection used to live here as private copies. They moved
+ * to `@/lib/graphLayout` when a second graph surface (the incident RCA topology)
+ * needed the identical maths — one implementation, unit-tested there, instead of two
+ * that drift on what "layer" and "cycle" mean. This component keeps the pixels.
+ */
+function precedenceRefs(deps: DependencyEdge[]): GraphEdgeRef[] {
+  return deps.map((d) => ({ from: String(d.predecessorTaskId), to: String(d.successorTaskId) }));
 }
 
 /** The dependency graph for ONE project. `readOnly` hides the editor (rollup use). */
@@ -135,12 +96,15 @@ function OneProjectDependencyGraph({ projectId, readOnly }: { projectId: number;
 
   const built = useMemo(() => {
     if (!tasks || !deps) return null;
-    const pos = layout(tasks, deps);
+    const refs = precedenceRefs(deps);
+    const placed = layoutDag(tasks.map((t) => ({ id: String(t.id) })), refs);
     const byId = new Map(tasks.map((t) => [t.id, t]));
-    const cyc = cycleEdgeKeys(deps);
-    const flowNodes: Node[] = tasks.map((t) => ({
+    const cyc = cycleEdges(refs);
+    const flowNodes: Node[] = tasks.map((t) => {
+      const at = placed.byId.get(String(t.id));
+      return {
       id: String(t.id),
-      position: pos.get(t.id) ?? { x: 0, y: 0 },
+      position: { x: (at?.layer ?? 0) * COL_W, y: (at?.row ?? 0) * ROW_H },
       data: { label: `${t.key} · ${t.title}` },
       style: {
         borderRadius: 'var(--radius-md)',
@@ -151,9 +115,10 @@ function OneProjectDependencyGraph({ projectId, readOnly }: { projectId: number;
         width: COL_W - 40,
         padding: 8,
       },
-    }));
+      };
+    });
     const depEdges: Edge[] = deps.map((d) => {
-      const onCycle = cyc.has(`${d.predecessorTaskId}->${d.successorTaskId}`);
+      const onCycle = cyc.has(edgeKey(String(d.predecessorTaskId), String(d.successorTaskId)));
       return {
         id: `dep-${d.id}`,
         source: String(d.predecessorTaskId),

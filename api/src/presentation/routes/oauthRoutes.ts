@@ -20,6 +20,7 @@ import { signState, verifyState, exchangeCodeForTokens } from '../../infrastruct
 import { mintSessionExchangeCode, readSessionExchangeCode } from '../../application/auth/sessionExchange';
 import { ensureStarterWorkspace } from '../../application/tenant/starterWorkspace';
 import type { Db } from '../../infrastructure/database/connection';
+import { persistWebSessionToken } from '../../application/auth/webSessionStore';
 
 // ---------------------------------------------------------------------------
 // Provider configuration
@@ -283,64 +284,6 @@ async function generateUsername(db: Db, email: string): Promise<string> {
     if (!existing) return candidate;
   }
   return `user_${randomHex(4)}`;
-}
-
-// ---------------------------------------------------------------------------
-// Token persistence — mirrors the pattern in authRoutes.ts
-// ---------------------------------------------------------------------------
-
-async function persistWebToken(
-  db: Db,
-  token: string,
-  opts: {
-    userId: string;
-    userAgent?: string | null;
-    ipAddress?: string | null;
-    sessionName?: string | null;
-  },
-): Promise<void> {
-  const parts = token.split('.');
-  if (parts.length !== 3) return;
-
-  let payload: { jti?: string; sid?: string; exp?: number };
-  try {
-    const b64 = parts[1]!.replace(/-/g, '+').replace(/_/g, '/');
-    payload = JSON.parse(atob(b64)) as typeof payload;
-  } catch {
-    return;
-  }
-
-  if (!payload.jti) return;
-
-  const sessionId = payload.sid;
-  if (sessionId) {
-    const [existing] = await db
-      .select({ id: authUserSessions.id })
-      .from(authUserSessions)
-      .where(eq(authUserSessions.id, sessionId))
-      .limit(1);
-    if (!existing) {
-      await db.insert(authUserSessions).values({
-        id: sessionId,
-        userId: opts.userId,
-        sessionName: opts.sessionName ?? null,
-        userAgent: opts.userAgent ?? null,
-        ipAddress: opts.ipAddress ?? null,
-      });
-    }
-  }
-
-  await db.insert(authTokens).values({
-    jti: payload.jti,
-    userId: opts.userId,
-    sessionId: sessionId ?? null,
-    tenantId: null,
-    tokenType: 'web',
-    issuedAt: new Date(),
-    expiresAt: payload.exp ? new Date(payload.exp * 1000) : new Date(Date.now() + 86_400_000),
-    userAgent: opts.userAgent ?? null,
-    ipAddress: opts.ipAddress ?? null,
-  });
 }
 
 // ---------------------------------------------------------------------------
@@ -625,7 +568,7 @@ export function createOAuthRoutes(db: Db): Hono<HonoEnv> {
       86_400,
     );
 
-    await persistWebToken(db, jwt, {
+    await persistWebSessionToken(db, jwt, {
       userId: user.id,
       sessionName: `OAuth: ${parsed.amr}`,
       userAgent: getUserAgent(c),
@@ -747,7 +690,7 @@ export function createOAuthRoutes(db: Db): Hono<HonoEnv> {
       86_400,
     );
 
-    await persistWebToken(db, jwt, { userId: user.id, sessionName: 'Magic link' });
+    await persistWebSessionToken(db, jwt, { userId: user.id, sessionName: 'Magic link' });
 
     return c.json({
       token: jwt,

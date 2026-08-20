@@ -7,7 +7,13 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useS
 // ---------------------------------------------------------------------------
 
 export type PricingModel = 'flat_fee' | 'consumption' | 'subscription';
-export type ArtifactType = 'skill' | 'persona' | 'content' | 'agent' | 'service';
+/**
+ * What a cart line can be. `'content'` retired with migration 0982 (content
+ * blocks moved to Knowledge); `'skill' | 'persona' | 'agent'` mirror the server
+ * `artifact_type` enum, and `'service'` is cart-only (a bookable engagement with
+ * no artifact row behind it).
+ */
+export type ArtifactType = 'skill' | 'persona' | 'agent' | 'service';
 
 export interface CartItem {
   id: string;              // unique key: `${type}:${slug}`

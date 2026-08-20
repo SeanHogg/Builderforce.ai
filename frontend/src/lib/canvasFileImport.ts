@@ -18,7 +18,7 @@ import {
 } from './canvasResume';
 import {
   MAX_PARSEABLE_BYTES, PAGE_BREAK_MARKER, readDocx, readPdf, readPptx, readXlsx, rtfToText,
-  type OfficeSlide, type WorkbookSheet,
+  type DocxMediaUploader, type OfficeSlide, type WorkbookSheet,
 } from './officeFormats';
 import {
   dxfPreviewSvg, meshFormatFromHint, meshPreviewSvg, parseMeshTriangles, svgDataUrl,
@@ -140,6 +140,21 @@ export const fileToDataUrl = dataUrl;
  */
 export type AttachmentBytesReference = { sourceFileKey: string } | { sourceDataUrl: string };
 export type AttachmentBytesStrategy = (file: File) => Promise<AttachmentBytesReference | null>;
+
+/**
+ * Where a figure extracted from a dropped `.docx` goes when the caller named no
+ * strategy of its own: the tenant's own R2, through the one canvas upload.
+ *
+ * Imported lazily and only when a document actually HAS figures, so the import
+ * engine — which every one of its tests drives with no network and no session —
+ * does not pull the API client into its module graph to convert a text-only
+ * file. A guest board has no tenant to upload to, so the upload fails, the
+ * uploader returns null, and the figure is dropped rather than inlined.
+ */
+const defaultMediaUploader: DocxMediaUploader = async (file) => {
+  const { uploadCanvasFile } = await import('./canvasMediaStore');
+  return (await uploadCanvasFile(file))?.url ?? null;
+};
 
 async function bytes(file: File): Promise<Uint8Array> {
   return new Uint8Array(await file.arrayBuffer());
@@ -411,8 +426,9 @@ export async function importCanvasFile(
   file: File,
   t: ImportTranslator,
   retainAttachmentBytes?: AttachmentBytesStrategy,
+  uploadMedia?: DocxMediaUploader,
 ): Promise<CanvasFileImport> {
-  const objects = await deriveObjects(file, t, retainAttachmentBytes);
+  const objects = await deriveObjects(file, t, retainAttachmentBytes, uploadMedia);
   const resolved = objects.length ? objects : [attachmentObject(file, t)];
   return {
     objects: resolved,
@@ -421,7 +437,12 @@ export async function importCanvasFile(
   };
 }
 
-async function deriveObjects(file: File, t: ImportTranslator, retainAttachmentBytes?: AttachmentBytesStrategy): Promise<ImportedCanvasObject[]> {
+async function deriveObjects(
+  file: File,
+  t: ImportTranslator,
+  retainAttachmentBytes?: AttachmentBytesStrategy,
+  uploadMedia?: DocxMediaUploader,
+): Promise<ImportedCanvasObject[]> {
   const extension = fileExtension(file.name);
   const oversized = file.size > MAX_PARSEABLE_BYTES;
   // A file past the parse ceiling still lands, but as an attachment — and it
@@ -518,13 +539,25 @@ async function deriveObjects(file: File, t: ImportTranslator, retainAttachmentBy
 
   try {
     if (!oversized && extension === 'docx') {
-      const read = await readDocx(await bytes(file));
+      const read = await readDocx(await bytes(file), {
+        uploadMedia: uploadMedia ?? defaultMediaUploader,
+        labels: { pageFurniture: t('docxPageFurniture'), header: t('docxHeader'), footer: t('docxFooter') },
+      });
       if (read?.markdown) {
         const pages = read.markdown.split(PAGE_BREAK_MARKER).length;
+        // THE SOURCE CONTAINER, kept so an export can write the edited body back
+        // into this exact package — its theme, its numbering, its section layout
+        // — instead of regenerating a Builderforce-styled document that shares
+        // nothing with the file the person dropped. A KEY only: `sourceDataUrl`
+        // is deliberately ignored here, because a base64 copy of a whole Word
+        // file living in node data is the cost this import path exists to avoid.
+        const retained = retainAttachmentBytes ? await retainAttachmentBytes(file).catch(() => null) : null;
+        const sourceFileKey = retained && 'sourceFileKey' in retained ? retained.sourceFileKey : null;
         return [documentObject(file, read.markdown, t, {
           ...(read.title ? { documentTitle: read.title } : {}),
           sourceFormat: 'DOCX',
           outputFormat: 'DOCX',
+          ...(sourceFileKey ? { sourceFileKey } : {}),
           ...(pages > 1 ? { pageCount: pages } : {}),
           subtitle: t('documentShape', { words: read.markdown.split(/\s+/).length }),
         })];

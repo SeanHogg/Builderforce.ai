@@ -28,9 +28,11 @@ import {
 import { roleDisplayName } from './roleCatalog';
 import { resolveRoleCapableAgents } from './roleCapability';
 import { projectRoleAssignments } from '../../infrastructure/database/schema';
-import { requirementApplies, type Responsibility } from './types';
+import { requirementApplies, type RequirementTaskScope, type Responsibility } from './types';
+import { hasNonDraftPr, loadTaskPrSignal } from './taskPrSignal';
 import { ADVANCEABLE_PARTICIPANT_STATES, blocksCompletion, isParticipantSatisfied } from './participantStates';
 import { computeAccountabilityGaps, slotKey, type AccountabilityGapSeverity } from './accountabilityGaps';
+import { isAutoAttestedContribution } from './signoffContribution';
 import type { SignoffContribution } from '../audit/ticketAuditService';
 import { TaskStatus } from '../../domain/shared/types';
 import { findCanonicalBoard } from '../swimlane/canonicalBoard';
@@ -50,6 +52,18 @@ export interface ParticipantsSummaryRow {
   completed: number;
   required: number;
   percent: number;
+  /**
+   * Required slots with NO assignee at all.
+   *
+   * `TicketParticipantsService.resolveAssignee` falls back to the first role-capable
+   * agent in the tenant when no `project_role_assignments` pin exists, so a ticket
+   * acquires up to ten required reviewers no operator ever staffed — and those slots gate
+   * completion and merge. They appeared ONLY on the ticket's Sign-off & Accountability
+   * tab: the header and the board card showed nothing, so the ticket read as unassigned
+   * while the manager correctly reported ten outstanding sign-offs. Counting them here is
+   * what lets both surfaces say so.
+   */
+  unstaffed: number;
 }
 
 export type ParticipantState =
@@ -83,11 +97,23 @@ export interface AccountabilitySignoff {
   verdict: string;
   summary: string | null;
   contribution: SignoffContribution | null;
+  /**
+   * True when the platform credited this record from a finished run rather than a member
+   * recording a verdict (`contribution.autoAttested`). Denormalized onto the wire type so
+   * the Sign-off & Accountability tab can badge it without every surface re-inspecting
+   * the jsonb bag — the flag was already carried in `contribution` and no surface read it,
+   * so an auto-attested credit looked identical to a considered verdict.
+   */
+  autoAttested: boolean;
   waiveReason: string | null;
   createdAt: string;
 }
 
-export type AccountabilityGapKind = 'unsigned' | 'unstaffed' | 'no_contribution' | 'waived' | 'changes_requested';
+export type AccountabilityGapKind =
+  | 'unsigned' | 'unstaffed' | 'no_contribution' | 'waived' | 'changes_requested'
+  /** An approval the PLATFORM credited from a completed run rather than a member
+   *  judging the work — see {@link ./signoffContribution.isAutoAttestedContribution}. */
+  | 'auto_attested';
 
 /**
  * Severity of a gap — the reason the report can no longer paint every line red.
@@ -357,20 +383,28 @@ export class TicketParticipantsService {
     const version = await getCacheVersion(env, projectVersionKey(projectId));
     return getOrSetCached(env, `participants:summary:project:${projectId}:v:${version}`, async () => {
       const rows = await this.db
-        .select({ taskId: ticketParticipants.taskId, required: ticketParticipants.required, state: ticketParticipants.state })
+        .select({
+          taskId: ticketParticipants.taskId, required: ticketParticipants.required,
+          state: ticketParticipants.state, assigneeRef: ticketParticipants.assigneeRef,
+        })
         .from(ticketParticipants)
         .innerJoin(tasks, eq(tasks.id, ticketParticipants.taskId))
         .where(and(eq(ticketParticipants.tenantId, tenantId), eq(tasks.projectId, projectId)));
-      const byTask = new Map<number, { completed: number; required: number }>();
+      const byTask = new Map<number, { completed: number; required: number; unstaffed: number }>();
       for (const r of rows) {
         if (!r.required) continue;
-        const agg = byTask.get(r.taskId) ?? { completed: 0, required: 0 };
+        const agg = byTask.get(r.taskId) ?? { completed: 0, required: 0, unstaffed: 0 };
         agg.required += 1;
         if (isParticipantSatisfied(r.state)) agg.completed += 1;
+        // UNSTAFFED is classified by `assigneeRef`, not by the state column — the same
+        // rule `classifySignoffOwnership` uses. A slot can sit in `in_progress` with a
+        // null assignee (the run that put it there is long gone), and reading the state
+        // would report that slot as worked-on by nobody.
+        else if (!r.assigneeRef) agg.unstaffed += 1;
         byTask.set(r.taskId, agg);
       }
       return [...byTask.entries()].map(([taskId, a]) => ({
-        taskId, completed: a.completed, required: a.required,
+        taskId, completed: a.completed, required: a.required, unstaffed: a.unstaffed,
         percent: a.required === 0 ? 100 : Math.round((a.completed / a.required) * 100),
       }));
     });
@@ -384,7 +418,7 @@ export class TicketParticipantsService {
   /** The required role/review slots across the ticket's whole board lifecycle, scoped
    *  to the ticket's type/condition (a Security ticket includes the security role; a
    *  docs ticket excludes QA). */
-  private async templateSlots(projectId: number, task: { taskType: string | null; actionType: string | null }): Promise<SlotSeed[]> {
+  private async templateSlots(projectId: number, task: RequirementTaskScope): Promise<SlotSeed[]> {
     const board = await findCanonicalBoard(this.db, projectId);
     if (!board) return [];
     const laneRows = await this.db
@@ -435,7 +469,11 @@ export class TicketParticipantsService {
     const ctx = await this.taskContext(taskId);
     if (!ctx) return 0;
     const projectId = ctx.projectId;
-    const slots = await this.templateSlots(projectId, { taskType: ctx.taskType, actionType: ctx.actionType });
+    // `has_pr`-conditioned requirements need the ticket's PR signal at derivation time.
+    // One indexed read on a path that already fans out per slot — see
+    // {@link ./types.RequirementTaskScope} for why an unresolved signal fails closed.
+    const hasPr = hasNonDraftPr(await loadTaskPrSignal(this.db, tenantId, taskId));
+    const slots = await this.templateSlots(projectId, { taskType: ctx.taskType, actionType: ctx.actionType, hasPr });
     const now = new Date();
     for (const s of slots) {
       const assignee = await this.resolveAssignee(env, tenantId, projectId, s.roleKey);
@@ -614,7 +652,21 @@ export class TicketParticipantsService {
       // `swimlane/laneApprover.ts` — therefore saw the slot bounce back to `assigned` and
       // either re-dispatched work already in flight or never asked for the sign-off at
       // all. A sign-off / child-task status / delegation below still overrides it.
-      let state: ParticipantState = r.state === 'in_progress'
+      //
+      // …BUT ONLY WHILE SOMEBODY OWNS IT. `in_progress` was preserved unconditionally,
+      // including for a slot whose `assigneeRef` had since become null (the agent was
+      // unhired, the pin was cleared, the role was re-resolved). Such a slot was neither
+      // DISPATCHABLE (nothing to dispatch) nor reported as `unstaffed` by its state
+      // column — it read as work in flight that nobody was doing, forever.
+      // `classifySignoffOwnership` classifies by `assigneeRef` rather than by state, so
+      // no gate is wrong today, but every consumer still keyed on the state column sees
+      // the lie. Dropping to `unstaffed` here makes the two agree.
+      //
+      // THE RUN EVIDENCE IS NOT LOST: it lives in `evidence` (`executionId`, `prUrl`,
+      // `unattestedRuns`), which this function never touches. Only the claim that
+      // somebody is currently working it goes away — which is the claim that was false.
+      const ownerlessInProgress = r.state === 'in_progress' && !r.assigneeRef;
+      let state: ParticipantState = r.state === 'in_progress' && !ownerlessInProgress
         ? 'in_progress'
         : (r.assigneeRef ? 'assigned' : (r.required ? 'unstaffed' : 'pending'));
       let signoffId: string | null = r.signoffId;
@@ -771,6 +823,7 @@ export class TicketParticipantsService {
         verdict: s.verdict,
         summary: s.summary,
         contribution: (s.contribution as SignoffContribution | null) ?? null,
+        autoAttested: isAutoAttestedContribution(s.contribution as Record<string, unknown> | null),
         waiveReason: s.waiveReason,
         createdAt: s.createdAt.toISOString(),
       }));

@@ -18,7 +18,12 @@ import {
   AdsProviderError, ask, count, fromCents, list, mapObjective, rec, requireField, text, toCents, toDay, unmapObjective,
 } from '../adsNormalize';
 import {
-  type AdInsightRow, type AdObjective, type AdStatus, type AdsProvider,
+  ageWindow, mapTargetingValues, requireTargetingSupport,
+  type AdGender, type AdTargeting, type AdTargetingDimension,
+} from '../adTargeting';
+import {
+  type AdCall, type AdCreativeRemote, type AdInsightRow, type AdObjective, type AdSetRemote,
+  type AdStatus, type AdsProvider,
 } from '../adsProviders';
 
 const MICROS = 1_000_000;
@@ -89,9 +94,105 @@ async function search(call: Parameters<AdsProvider['identity']>[0], customer: st
   return list(result.data).map(rec);
 }
 
+// ---------------------------------------------------------------------------
+// Targeting
+// ---------------------------------------------------------------------------
+
+/**
+ * Google's targeting is spread across THREE resources, and this adapter is where that
+ * stops being the caller's problem:
+ *
+ *   • LOCATION is a `campaign_criterion`. There is no ad-group location criterion, so
+ *     asking an ad set for "GB" genuinely changes the parent CAMPAIGN — which is what
+ *     the Google Ads UI does too, under campaign settings. Said out loud here rather
+ *     than quietly applied, because it affects the campaign's other ad groups.
+ *   • AGE and GENDER are `ad_group_criterion` rows, and Google targets them by
+ *     EXCLUSION: you cannot say "18-24", you say "not 25-34, not 35-44, …". Getting
+ *     that inverted spends the entire budget on precisely the people you excluded.
+ *   • INTERESTS on a Search campaign are KEYWORDS, which is the honest mapping — a
+ *     search campaign reaches an interest by bidding on what that interest types.
+ *
+ * Devices and placements are refused: device is a campaign-level bid modifier rather
+ * than a filter, and Google's placement equivalent is the network settings already
+ * written at campaign creation.
+ */
+const TARGETING_DIMENSIONS: readonly AdTargetingDimension[] = ['geo', 'age', 'gender', 'interests'];
+
+/** Google's age buckets, with the real ages they cover — the window is turned into
+ *  exclusions by comparing against these, never by string matching. */
+const AGE_BUCKETS: ReadonlyArray<{ type: string; min: number; max: number }> = [
+  { type: 'AGE_RANGE_18_24', min: 18, max: 24 },
+  { type: 'AGE_RANGE_25_34', min: 25, max: 34 },
+  { type: 'AGE_RANGE_35_44', min: 35, max: 44 },
+  { type: 'AGE_RANGE_45_54', min: 45, max: 54 },
+  { type: 'AGE_RANGE_55_64', min: 55, max: 64 },
+  { type: 'AGE_RANGE_65_UP', min: 65, max: 200 },
+];
+
+const GENDER_TYPES: Readonly<Record<AdGender, string>> = {
+  male: 'MALE',
+  female: 'FEMALE',
+};
+
+/** The buckets that do NOT overlap the requested window — the ones Google must exclude. */
+function excludedAgeTypes(targeting: AdTargeting): string[] {
+  const window = ageWindow(targeting);
+  return AGE_BUCKETS
+    .filter((bucket) => bucket.max < window.min || bucket.min > window.max)
+    .map((bucket) => bucket.type);
+}
+
+/**
+ * Country codes → geo target constant resource names.
+ *
+ * Google refuses a country CODE outright; the constant id is the only thing it reads.
+ * A code that resolves to nothing is REFUSED by name rather than skipped, because a
+ * campaign silently missing one of three countries looks like weak demand there.
+ */
+async function resolveGeoTargets(call: AdCall, countries: readonly string[]): Promise<string[]> {
+  const resolved: string[] = [];
+  for (const country of countries) {
+    const suggestions = list((await ask(call, 'suggest_geo_targets', {
+      locale: 'en',
+      countryCode: country,
+      locationNames: { names: [country] },
+    })).data).map(rec);
+    // The suggest endpoint answers with places INSIDE the country as well, so the
+    // country itself is picked by target type rather than by taking the first row.
+    const match = suggestions
+      .map((entry) => rec(entry.geoTargetConstant))
+      .find((constant) => text(constant.targetType).toUpperCase() === 'COUNTRY'
+        && text(constant.countryCode).toUpperCase() === country);
+    const resourceName = match ? text(match.resourceName) : '';
+    if (!resourceName) {
+      throw new AdsProviderError(
+        `Google Ads did not recognise "${country}" as a location. Locations are ids on Google, not codes — check the country code, or drop the geo dimension.`,
+        400,
+        false,
+      );
+    }
+    resolved.push(resourceName);
+  }
+  return resolved;
+}
+
+/** Google returns `customers/123/adGroups/456`; every caller here wants the id. */
+const idOf = (resourceName: string): string => resourceName.split('/').pop() ?? '';
+
+/** Responsive search ads need at least three headlines and two descriptions, and
+ *  Google rejects the whole ad otherwise. Newlines and pipes both separate them, so a
+ *  caller can supply the set in the one field the port carries. */
+const splitParts = (value: string | null | undefined): string[] =>
+  (value ?? '').split(/[\n|]/).map((part) => part.trim()).filter(Boolean);
+
 export const googleAdsProvider: AdsProvider = {
   network: 'google', label: 'Google Ads', connectorKey: 'google-ads',
   objectives: Object.keys(OBJECTIVES) as AdObjective[],
+  targetingDimensions: TARGETING_DIMENSIONS,
+  // A Google campaign with no ad group is a legitimate paused shell that Google Ads
+  // itself will show; it simply never serves. Nothing is auto-created on its behalf.
+  requiresAdSet: false,
+  requiresCreativeRef: false,
   accountFields: [{
     key: 'adAccountId', label: 'Customer ID',
     help: 'The Google Ads customer id this connection spends on, digits only.',
@@ -221,6 +322,281 @@ export const googleAdsProvider: AdsProvider = {
         operations: [{ update: { resourceName: budgetResource, amountMicros: String(dailyMicros) }, updateMask: 'amount_micros' }],
       });
     }
+  },
+
+  // ── Ad groups ────────────────────────────────────────────────────────────
+
+  async listAdSets(call, fields, identity, externalCampaignId) {
+    const customer = customerId(requireField(fields, 'adAccountId', 'the customer ID'));
+    const scope = externalCampaignId ? ` AND campaign.id = ${gaqlString(externalCampaignId)}` : '';
+    const rows = await search(call, customer, [
+      'SELECT ad_group.id, ad_group.name, ad_group.status, ad_group.cpc_bid_micros,',
+      `campaign.id FROM ad_group WHERE ad_group.status != 'REMOVED'${scope}`,
+    ].join(' '));
+    if (rows.length === 0) return [];
+
+    // ONE query for every criterion on the account, grouped in memory. A query per ad
+    // group would be the N+1 this codebase forbids, and Google bills query cost.
+    const criteria = await search(call, customer, [
+      'SELECT ad_group_criterion.ad_group, ad_group_criterion.type, ad_group_criterion.negative,',
+      'ad_group_criterion.keyword.text, ad_group_criterion.age_range.type,',
+      "ad_group_criterion.gender.type FROM ad_group_criterion WHERE ad_group_criterion.status != 'REMOVED'",
+    ].join(' '));
+
+    const keywordsByGroup = new Map<string, string[]>();
+    const excludedAgesByGroup = new Map<string, Set<string>>();
+    const excludedGendersByGroup = new Map<string, Set<string>>();
+    for (const row of criteria) {
+      const criterion = rec(row.adGroupCriterion);
+      const group = idOf(text(criterion.adGroup));
+      if (!group) continue;
+      const keyword = text(rec(criterion.keyword).text);
+      if (keyword && criterion.negative !== true) {
+        keywordsByGroup.set(group, [...(keywordsByGroup.get(group) ?? []), keyword]);
+      }
+      if (criterion.negative === true) {
+        const age = text(rec(criterion.ageRange).type);
+        if (age) excludedAgesByGroup.set(group, (excludedAgesByGroup.get(group) ?? new Set()).add(age));
+        const gender = text(rec(criterion.gender).type);
+        if (gender) excludedGendersByGroup.set(group, (excludedGendersByGroup.get(group) ?? new Set()).add(gender));
+      }
+    }
+
+    return rows.map((row) => {
+      const group = rec(row.adGroup);
+      const id = text(group.id);
+      const targeting: {
+        ageMin?: number; ageMax?: number; genders?: AdGender[]; interests?: string[];
+      } = {};
+
+      // Exclusions back into a window: whatever was NOT excluded is what is targeted.
+      const excludedAges = excludedAgesByGroup.get(id);
+      if (excludedAges?.size) {
+        const included = AGE_BUCKETS.filter((bucket) => !excludedAges.has(bucket.type));
+        if (included.length) {
+          targeting.ageMin = Math.min(...included.map((bucket) => bucket.min));
+          targeting.ageMax = Math.min(65, Math.max(...included.map((bucket) => bucket.max)));
+        }
+      }
+      const excludedGenders = excludedGendersByGroup.get(id);
+      if (excludedGenders?.size) {
+        const included = (Object.entries(GENDER_TYPES) as Array<[AdGender, string]>)
+          .filter(([, native]) => !excludedGenders.has(native))
+          .map(([ours]) => ours);
+        if (included.length && included.length < 2) targeting.genders = included;
+      }
+      const keywords = keywordsByGroup.get(id);
+      if (keywords?.length) targeting.interests = keywords;
+
+      return {
+        externalId: id,
+        externalCampaignId: text(rec(row.campaign).id) || null,
+        name: text(group.name),
+        status: toStatus(group.status),
+        targeting,
+        nativeTargeting: { keywords: keywords ?? [], excludedAgeRanges: [...(excludedAges ?? [])], excludedGenders: [...(excludedGenders ?? [])] },
+        bidStrategy: 'cpc',
+        bidCents: toCents(group.cpcBidMicros, MICROS),
+        dailyBudgetCents: null,
+        currency: identity.currency,
+        // Google schedules at the campaign level; an ad group has no dates of its own,
+        // and inventing the campaign's would report a fact the ad group does not hold.
+        startsAtISO: null,
+        endsAtISO: null,
+      } satisfies AdSetRemote;
+    });
+  },
+
+  async createAdSet(call, fields, draft, identity) {
+    const customer = customerId(requireField(fields, 'adAccountId', 'the customer ID'));
+    requireTargetingSupport(googleAdsProvider, draft.targeting);
+    const bidMicros = fromCents(draft.bidCents, MICROS);
+
+    const results = list((await ask(call, 'mutate_ad_groups', {
+      customer_id: customer,
+      operations: [{
+        create: {
+          name: draft.name,
+          campaign: `customers/${customer}/campaigns/${draft.externalCampaignId}`,
+          status: fromStatus(draft.status) ?? 'PAUSED',
+          type: 'SEARCH_STANDARD',
+          ...(bidMicros ? { cpcBidMicros: String(bidMicros) } : {}),
+        },
+      }],
+    })).data);
+    const adGroupResource = text(rec(results[0]).resourceName);
+    const id = idOf(adGroupResource);
+    if (!id) throw new AdsProviderError('Google Ads accepted the ad group but did not return its id.', 502, true);
+
+    // Criteria are a SECOND mutate against a different resource. The ad group is
+    // created first because a criterion needs its resource name, which means a failure
+    // here leaves an untargeted ad group — PAUSED by default, so it cannot spend on
+    // the wrong audience while somebody works out what went wrong.
+    const criteria: Array<Record<string, unknown>> = [];
+    for (const ageType of excludedAgeTypes(draft.targeting)) {
+      criteria.push({ create: { adGroup: adGroupResource, negative: true, ageRange: { type: ageType } } });
+    }
+    if (draft.targeting.genders?.length) {
+      const wanted = new Set(mapTargetingValues(googleAdsProvider, 'gender', GENDER_TYPES, draft.targeting.genders));
+      for (const native of Object.values(GENDER_TYPES)) {
+        if (!wanted.has(native)) criteria.push({ create: { adGroup: adGroupResource, negative: true, gender: { type: native } } });
+      }
+      // Google counts "we could not tell" as its own gender, and leaving it targeted
+      // is how a female-only campaign reaches half its impressions on unknown users.
+      criteria.push({ create: { adGroup: adGroupResource, negative: true, gender: { type: 'UNDETERMINED' } } });
+    }
+    for (const phrase of draft.targeting.interests ?? []) {
+      criteria.push({ create: { adGroup: adGroupResource, keyword: { text: phrase, matchType: 'PHRASE' } } });
+    }
+    if (criteria.length) await ask(call, 'mutate_ad_group_criteria', { customer_id: customer, operations: criteria });
+
+    // Location is CAMPAIGN-scoped on Google — this is applied to the parent, which the
+    // port documents rather than hides, because it also moves the campaign's other
+    // ad groups.
+    if (draft.targeting.countries?.length) {
+      const geoTargets = await resolveGeoTargets(call, draft.targeting.countries);
+      await ask(call, 'mutate_campaign_criteria', {
+        customer_id: customer,
+        operations: geoTargets.map((geoTargetConstant) => ({
+          create: { campaign: `customers/${customer}/campaigns/${draft.externalCampaignId}`, location: { geoTargetConstant } },
+        })),
+      });
+    }
+
+    return {
+      externalId: id,
+      externalCampaignId: draft.externalCampaignId,
+      name: draft.name,
+      status: draft.status ?? 'paused',
+      targeting: draft.targeting,
+      nativeTargeting: { operations: criteria.length },
+      bidStrategy: 'cpc',
+      bidCents: draft.bidCents ?? null,
+      dailyBudgetCents: null,
+      currency: identity.currency,
+      startsAtISO: null,
+      endsAtISO: null,
+    };
+  },
+
+  async updateAdSet(call, fields, externalId, patch) {
+    const customer = customerId(requireField(fields, 'adAccountId', 'the customer ID'));
+    const status = fromStatus(patch.status);
+    const bidMicros = fromCents(patch.bidCents, MICROS);
+    const update: Record<string, unknown> = { resourceName: `customers/${customer}/adGroups/${externalId}` };
+    const paths: string[] = [];
+    if (patch.name) { update.name = patch.name; paths.push('name'); }
+    if (status) { update.status = status; paths.push('status'); }
+    if (bidMicros) { update.cpcBidMicros = String(bidMicros); paths.push('cpc_bid_micros'); }
+    if (paths.length) {
+      await ask(call, 'mutate_ad_groups', { customer_id: customer, operations: [{ update, updateMask: paths.join(',') }] });
+    }
+    if (patch.targeting) {
+      // Google has no "replace all criteria" call, and adding a second, contradictory
+      // set would leave the ad group targeting the UNION of both. Refusing names what
+      // to do instead rather than half-applying a retarget.
+      throw new AdsProviderError(
+        'Google Ads cannot replace an ad group’s targeting in one call — criteria are separate rows, and adding new ones widens the audience instead of narrowing it. Create a new ad group with the targeting you want and pause this one.',
+        400,
+        false,
+      );
+    }
+  },
+
+  // ── Ads ──────────────────────────────────────────────────────────────────
+
+  async listAds(call, fields, _identity, externalAdSetId) {
+    const customer = customerId(requireField(fields, 'adAccountId', 'the customer ID'));
+    const scope = externalAdSetId ? ` AND ad_group.id = ${gaqlString(externalAdSetId)}` : '';
+    const rows = await search(call, customer, [
+      'SELECT ad_group_ad.ad.id, ad_group_ad.ad.name, ad_group_ad.status,',
+      'ad_group_ad.ad.final_urls, ad_group_ad.ad.responsive_search_ad.headlines,',
+      'ad_group_ad.ad.responsive_search_ad.descriptions, ad_group.id FROM ad_group_ad',
+      `WHERE ad_group_ad.status != 'REMOVED'${scope}`,
+    ].join(' '));
+    return rows.map((row) => {
+      const adGroupAd = rec(row.adGroupAd);
+      const ad = rec(adGroupAd.ad);
+      const rsa = rec(ad.responsiveSearchAd);
+      const headlines = list(rsa.headlines).map((entry) => text(rec(entry).text)).filter(Boolean);
+      const descriptions = list(rsa.descriptions).map((entry) => text(rec(entry).text)).filter(Boolean);
+      return {
+        externalId: text(ad.id),
+        externalAdSetId: text(rec(row.adGroup).id) || null,
+        name: text(ad.name) || headlines[0] || text(ad.id),
+        status: toStatus(adGroupAd.status),
+        headline: headlines.join('\n') || null,
+        body: descriptions.join('\n') || null,
+        callToAction: null,
+        destinationUrl: list(ad.finalUrls).map(text).find(Boolean) ?? null,
+      } satisfies AdCreativeRemote;
+    });
+  },
+
+  async createAd(call, fields, draft) {
+    const customer = customerId(requireField(fields, 'adAccountId', 'the customer ID'));
+    const link = (draft.destinationUrl ?? '').trim();
+    if (!link) throw new AdsProviderError('A Google Ads search ad needs a final URL — that is what the click buys.', 400, false);
+
+    const headlines = splitParts(draft.headline);
+    const descriptions = splitParts(draft.body);
+    if (headlines.length < 3 || descriptions.length < 2) {
+      // Google's own minimum, refused here by name rather than as a vendor error code —
+      // and never padded with generated copy, which would put words nobody wrote in
+      // front of a paying audience.
+      throw new AdsProviderError(
+        'A Google responsive search ad needs at least 3 headlines (30 characters each) and 2 descriptions (90 characters each). '
+        + 'Separate them with newlines or | in the headline and body fields.',
+        400,
+        false,
+      );
+    }
+
+    const results = list((await ask(call, 'mutate_ad_group_ads', {
+      customer_id: customer,
+      operations: [{
+        create: {
+          adGroup: `customers/${customer}/adGroups/${draft.externalAdSetId}`,
+          status: fromStatus(draft.status) ?? 'PAUSED',
+          ad: {
+            ...(draft.name ? { name: draft.name } : {}),
+            finalUrls: [link],
+            responsiveSearchAd: {
+              headlines: headlines.slice(0, 15).map((headline) => ({ text: headline.slice(0, 30) })),
+              descriptions: descriptions.slice(0, 4).map((description) => ({ text: description.slice(0, 90) })),
+            },
+          },
+        },
+      }],
+    })).data);
+    const id = idOf(text(rec(results[0]).resourceName));
+    if (!id) throw new AdsProviderError('Google Ads accepted the ad but did not return its id.', 502, true);
+
+    return {
+      externalId: id,
+      externalAdSetId: draft.externalAdSetId,
+      name: draft.name,
+      status: draft.status ?? 'paused',
+      headline: headlines.join('\n'),
+      body: descriptions.join('\n'),
+      callToAction: draft.callToAction ?? null,
+      destinationUrl: link,
+    };
+  },
+
+  async updateAd(call, fields, externalId, patch) {
+    const customer = customerId(requireField(fields, 'adAccountId', 'the customer ID'));
+    const status = fromStatus(patch.status);
+    // Only STATUS is patchable. Google re-reviews changed creative text, so a copy
+    // edit is a new ad — which `AdPatch` already declines to offer.
+    if (!status) return;
+    await ask(call, 'mutate_ad_group_ads', {
+      customer_id: customer,
+      operations: [{
+        update: { resourceName: `customers/${customer}/adGroupAds/${draft_scope(externalId)}`, status },
+        updateMask: 'status',
+      }],
+    });
   },
 
   async insights(call, fields, query, identity) {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createProcessSupervisor } from "./supervisor.js";
+import { SPAWN_BUDGET_MS, spawnBudgetMs } from "../../test-utils/spawn-timing.js";
 
 describe("process supervisor", () => {
   it("spawns child runs and captures output", async () => {
@@ -9,7 +10,7 @@ describe("process supervisor", () => {
       backendId: "test",
       mode: "child",
       argv: [process.execPath, "-e", 'process.stdout.write("ok")'],
-      timeoutMs: 800,
+      timeoutMs: SPAWN_BUDGET_MS,
       stdinMode: "pipe-closed",
     });
     const exit = await run.wait();
@@ -25,7 +26,10 @@ describe("process supervisor", () => {
       backendId: "test",
       mode: "child",
       argv: [process.execPath, "-e", "setTimeout(() => {}, 1_000)"],
-      timeoutMs: 1_000,
+      // Generous OVERALL budget on purpose: the assertion is that the no-output
+      // timer is what ends this run, and a tight overall timeout would let a slow
+      // Windows spawn win the race and produce the wrong reason.
+      timeoutMs: SPAWN_BUDGET_MS,
       noOutputTimeoutMs: 20,
       stdinMode: "pipe-closed",
     });
@@ -43,7 +47,7 @@ describe("process supervisor", () => {
       scopeKey: "scope:a",
       mode: "child",
       argv: [process.execPath, "-e", "setTimeout(() => {}, 1_000)"],
-      timeoutMs: 1_000,
+      timeoutMs: spawnBudgetMs(2),
       stdinMode: "pipe-open",
     });
 
@@ -54,7 +58,7 @@ describe("process supervisor", () => {
       replaceExistingScope: true,
       mode: "child",
       argv: [process.execPath, "-e", 'process.stdout.write("new")'],
-      timeoutMs: 800,
+      timeoutMs: SPAWN_BUDGET_MS,
       stdinMode: "pipe-closed",
     });
 
@@ -88,7 +92,7 @@ describe("process supervisor", () => {
       backendId: "test",
       mode: "child",
       argv: [process.execPath, "-e", 'process.stdout.write("streamed")'],
-      timeoutMs: 800,
+      timeoutMs: SPAWN_BUDGET_MS,
       stdinMode: "pipe-closed",
       captureOutput: false,
       onStdout: (chunk) => {

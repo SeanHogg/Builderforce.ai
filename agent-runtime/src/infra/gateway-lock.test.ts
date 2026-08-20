@@ -214,10 +214,14 @@ describe("gateway lock", () => {
       },
     });
 
+    // The assertion is that a STALE lock gets broken, not that breaking it takes
+    // under 30ms. Breaking one means an unlink + create round trip, and on Windows
+    // that can outlast a budget a Linux runner never notices — which turned a
+    // behavioural check into a verdict on filesystem latency.
     const lock = await acquireGatewayLock({
       env,
       allowInTests: true,
-      timeoutMs: 30,
+      timeoutMs: 5_000,
       pollIntervalMs: 2,
       staleMs: 1,
       platform: "linux",

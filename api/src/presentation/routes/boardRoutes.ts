@@ -39,7 +39,6 @@ import { ForbiddenError } from '../../domain/shared/errors';
 import {
   boards,
   swimlanes,
-  swimlaneAgentAssignments,
   swimlaneRequirements,
   ticketRuns,
   agentDispatches,
@@ -65,6 +64,7 @@ import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { enforceCloudRunCap } from '../../application/runtime/cloudRunLedger';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
+import { forLane, laneAgentAssignments, laneAssignmentValues } from '../../application/swimlane/laneAgentAssignments';
 
 const WORKFLOW_STATUSES: WorkflowStatus[] = ['pending', 'running', 'completed', 'failed', 'cancelled'];
 
@@ -86,6 +86,15 @@ interface LaneWriteBody {
   successThreshold?: number;
   /** How strictly this lane's requirements gate entry (migration 0274): off|soft|hard. */
   requirementGate?: string;
+  /**
+   * PARKED — off the delivery path (migration 1080).
+   *
+   * Distinct from `isTerminal`: a parked lane does not END the ticket, it steps it out of
+   * the flow. `computeCompletion` excludes parked lanes from its rank denominator (a
+   * blocked ticket used to report ~87% complete because `Blocked` sits late in the lane
+   * order) and `resolveNextLaneKey` refuses to advance INTO one.
+   */
+  isParking?: boolean;
 }
 
 /**
@@ -214,6 +223,8 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
       needsAttentionLane?: string;
       standupTurnMode?: string;
       standupTurnSeconds?: number;
+      /** Default per-member WIP cap for the round table's power meter (1084). */
+      defaultMemberWipCap?: number;
       hideDoneItems?: boolean;
       requireExecutionApproval?: boolean;
     }>();
@@ -234,6 +245,11 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
         ...(body.needsAttentionLane !== undefined ? { needsAttentionLane: body.needsAttentionLane } : {}),
         ...(body.standupTurnMode !== undefined ? { standupTurnMode: body.standupTurnMode } : {}),
         ...(body.standupTurnSeconds !== undefined ? { standupTurnSeconds: body.standupTurnSeconds } : {}),
+        // Clamped rather than trusted: a cap of 0 makes every member render as infinitely
+        // overloaded, and an absurd one makes the meter useless in the other direction.
+        ...(body.defaultMemberWipCap !== undefined
+          ? { defaultMemberWipCap: Math.max(1, Math.min(100, Math.floor(body.defaultMemberWipCap))) }
+          : {}),
         ...(body.hideDoneItems !== undefined ? { hideDoneItems: body.hideDoneItems } : {}),
         ...(body.requireExecutionApproval !== undefined ? { requireExecutionApproval: body.requireExecutionApproval } : {}),
         updatedAt: new Date(),
@@ -370,6 +386,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
         ...(body.name !== undefined ? { name: body.name.trim() } : {}),
         ...(body.position !== undefined ? { position: body.position } : {}),
         ...(body.isTerminal !== undefined ? { isTerminal: body.isTerminal } : {}),
+        ...(body.isParking !== undefined ? { isParking: body.isParking } : {}),
         // The gate AND its provenance move together: an operator editing the gate is
         // the only event that can ever produce 'operator', which is what makes a
         // later default change able to leave deliberate choices alone (DISP-R2).
@@ -394,10 +411,15 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
     return c.json(row);
   });
 
+  // DELETE a lane = MERGE it into another. `?into=<laneKey>` names the target; without
+  // it the automatic policy applies (the lowest-position non-terminal survivor). Until
+  // the parameter existed, folding `Ready` into `To Do` silently sent its tickets
+  // wherever the policy pointed, which is a different board than the operator asked for.
   router.delete('/:boardId/swimlanes/:laneId', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const boardId = c.req.param('boardId');
     const laneId = c.req.param('laneId');
+    const reassignTo = c.req.query('into')?.trim() || null;
 
     // Referential integrity: tasks couple to their lane by `task.status === lane.key`
     // with no FK, so deleting a lane orphans every task sitting in it (it keeps the
@@ -415,6 +437,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
         boardId,
         deletedLaneId: laneId,
         deletedLaneKey: lane.key,
+        reassignTo,
       }).catch(() => ({ movedTo: null, movedCount: 0 }));
     }
 
@@ -446,9 +469,11 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
     if (!(await assertLane(tenantId, boardId, laneId))) return c.json({ error: 'Swimlane not found' }, 404);
     const rows = await db
       .select()
-      .from(swimlaneAgentAssignments)
-      .where(and(eq(swimlaneAgentAssignments.swimlaneId, laneId), eq(swimlaneAgentAssignments.tenantId, tenantId)))
-      .orderBy(asc(swimlaneAgentAssignments.position));
+      .from(laneAgentAssignments)
+      // Lane staffing lives in the canonical `agent_assignments` since 1085; `forLane` is
+      // the ONE place the `scope = 'swimlane'` predicate is written.
+      .where(forLane(laneId, eq(laneAgentAssignments.tenantId, tenantId)))
+      .orderBy(asc(laneAgentAssignments.position));
     return c.json({ assignments: rows });
   });
 
@@ -525,8 +550,8 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
     }
 
     const [row] = await db
-      .insert(swimlaneAgentAssignments)
-      .values({
+      .insert(laneAgentAssignments)
+      .values(laneAssignmentValues({
         tenantId,
         segmentId: c.get('segmentId') ?? null,
         swimlaneId: laneId,
@@ -541,8 +566,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
           body.requiredCapabilities != null ? JSON.stringify(body.requiredCapabilities) : null,
         model: resolved.model,
         position: body.position ?? 0,
-        createdAt: new Date(),
-      })
+      }))
       .returning();
 
     // ── THE MOMENT THE ANSWER CHANGES ───────────────────────────────────────────
@@ -603,14 +627,12 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
     const laneId = c.req.param('laneId');
     const id = c.req.param('id');
     await db
-      .delete(swimlaneAgentAssignments)
-      .where(
-        and(
-          eq(swimlaneAgentAssignments.id, id),
-          eq(swimlaneAgentAssignments.swimlaneId, laneId),
-          eq(swimlaneAgentAssignments.tenantId, tenantId),
-        ),
-      );
+      .delete(laneAgentAssignments)
+      .where(forLane(
+        laneId,
+        eq(laneAgentAssignments.id, id),
+        eq(laneAgentAssignments.tenantId, tenantId),
+      ));
     return c.body(null, 204);
   });
 
@@ -748,14 +770,14 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
         assignmentId: agentDispatches.assignmentId,
         status: agentDispatches.status,
         role: agentDispatches.role,
-        name: swimlaneAgentAssignments.name,
+        name: laneAgentAssignments.name,
         stageSeq: agentDispatches.stageSeq,
         position: agentDispatches.position,
         updatedAt: agentDispatches.updatedAt,
       })
       .from(agentDispatches)
       .innerJoin(ticketRuns, eq(agentDispatches.ticketRunId, ticketRuns.id))
-      .leftJoin(swimlaneAgentAssignments, eq(agentDispatches.assignmentId, swimlaneAgentAssignments.id))
+      .leftJoin(laneAgentAssignments, eq(agentDispatches.assignmentId, laneAgentAssignments.id))
       .where(and(eq(ticketRuns.boardId, boardId), eq(agentDispatches.tenantId, tenantId)))
       .orderBy(asc(agentDispatches.ticketRunId), asc(agentDispatches.stageSeq), asc(agentDispatches.position));
     return c.json({ dispatches: rows });

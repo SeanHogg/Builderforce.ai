@@ -45,6 +45,8 @@ import {
   type VendorId,
   type UpstreamDiagnostic,
   type VendorEgress,
+  type SchemaSupport,
+  strictSchemaSupport,
 } from './vendors';
 // Consumed by the service below AND re-exported at the bottom of this file, so
 // callers that still import them from 'LlmProxyService' keep working.
@@ -61,6 +63,7 @@ import {
 import { composeFreeCappedCascade, buildCooldownPredicate } from './cascadeComposer';
 import { sanitizeRequestToolCalls, restoreResponseToolNames, restoreStreamToolNames } from './toolNameSanitizer';
 import { instrumentStream } from './streamDiagnostics';
+import { isCacheableRequest, responseCacheKey, readCachedResponse, storeCachedResponse } from './responseCache';
 import {
   loadCooldownExpiries,
   loadCooldowns,
@@ -671,10 +674,63 @@ export class LlmProxyService {
     requestHeaders?: Record<string, string>,
     traceId?: string,
     signal?: AbortSignal,
-    opts?: { estimatedTokens?: number },
+    opts?: { estimatedTokens?: number; responseCache?: { tenantId: number } },
   ): Promise<ProxyResult> {
     const startedAt = Date.now();
     const tid = traceId ?? newTraceId();
+
+    // ── EXACT-MATCH RESPONSE CACHE ──────────────────────────────────────────
+    // Opt-in twice over: the CALLER must pass `responseCache` (so no internal path
+    // caches by accident) and the request must independently qualify — an idempotent
+    // `useCase`, low temperature, no tools, not streaming (see `isCacheableRequest`).
+    // This is the cheap tier beneath the semantic cache: an exact repeat costs a hash
+    // and an L1 hit, where a paraphrase costs an embedding.
+    //
+    // The whole classify/extract/score family re-asks identical questions across
+    // sweep ticks and retries; each one used to be a full metered dispatch.
+    const cacheTenantId = opts?.responseCache?.tenantId;
+    const cacheable = cacheTenantId != null && isCacheableRequest({
+      useCase: typeof (body as unknown as { useCase?: unknown }).useCase === 'string'
+        ? (body as unknown as { useCase: string }).useCase : null,
+      temperature: typeof (body as { temperature?: unknown }).temperature === 'number'
+        ? (body as { temperature: number }).temperature : null,
+      hasTools: Array.isArray((body as unknown as { tools?: unknown }).tools)
+        && ((body as unknown as { tools: unknown[] }).tools.length > 0),
+      streaming: (body as { stream?: unknown }).stream === true,
+    });
+    const cacheKey = cacheable
+      ? await responseCacheKey({
+          tenantId: cacheTenantId,
+          model: typeof (body as { model?: unknown }).model === 'string' ? (body as { model: string }).model : undefined,
+          messages: (body as { messages?: unknown }).messages,
+          maxTokens: (body as { max_tokens?: number }).max_tokens,
+          temperature: (body as { temperature?: number }).temperature,
+          topP: (body as { top_p?: number }).top_p,
+          responseFormat: (body as { response_format?: unknown }).response_format,
+        })
+      : null;
+    if (cacheKey) {
+      const hit = await readCachedResponse(this.env, cacheKey);
+      if (hit) {
+        // `retries: 0` and `failovers: []` are the TRUTH for a cache hit — nothing was
+        // dispatched. `outcome` names it so a trace never reads as a fresh call, and
+        // no usage row should be written for it by the caller.
+        return this.finalize({
+          response: new Response(JSON.stringify(hit.body), {
+            status: 200,
+            headers: { 'content-type': 'application/json', 'x-builderforce-cache': 'hit' },
+          }),
+          resolvedModel: hit.resolvedModel,
+          resolvedVendor: hit.resolvedVendor as VendorId,
+          retries: 0,
+          failovers: [],
+          outcome: 'response_cache_hit',
+          attempts: [],
+          byoFunded: false,
+          platformSurcharge: false,
+        }, tid, startedAt, [hit.resolvedModel], 'response_cache_hit');
+      }
+    }
     // Rewrite a superseded pin to its live successor BEFORE anything reads it. This is
     // the gateway-side seam of {@link canonicalModelId}: `body.model` is whatever the
     // caller had stored (an agent base_model, a lane default, an SDK pin), and that can
@@ -940,6 +996,11 @@ export class LlmProxyService {
       // api-key — free to us; see isTenantFunded), e.g. an owner whose connected-BYO
       // flagship (claude-*) seeded the head and served the turn on their own account.
       primary.paidOverflow = isPaidOverflowModel(primary.resolvedModel) && !this.isTenantFunded(primary);
+      // Store for the exact-match cache. The response body is consumed by CLONING —
+      // the original must still be readable by the caller, and a Response body can be
+      // read exactly once. Best-effort and non-blocking on the read: a failed store
+      // costs a future cache miss and nothing else.
+      if (cacheKey) await this.storeInResponseCache(cacheKey, primary);
       return this.finalize(primary, tid, startedAt, candidates);
     }
 
@@ -1134,7 +1195,7 @@ export class LlmProxyService {
   /** Per-model status with cooldown + key-bound info — used by /v1/models.
    *  `capabilities` lets SDK consumers discover image/PDF-reading models
    *  (`vision` / `ocr`) and tool/structured-output support without hard-coding ids. */
-  async status(): Promise<Array<{ model: string; preferred: boolean; available: boolean; cooldownUntil?: number; vendor: VendorId; vendorCooledUntil?: number; keyBound: boolean; capabilities: AiCapability[] }>> {
+  async status(): Promise<Array<{ model: string; preferred: boolean; available: boolean; cooldownUntil?: number; vendor: VendorId; vendorCooledUntil?: number; keyBound: boolean; capabilities: AiCapability[]; strictSchema: SchemaSupport }>> {
     const env = this.vendorEnv();
     const poolVendors = Array.from(new Set(this.modelPool.map((m) => vendorForModel(m))));
     const [cooledMap, vendorCooledMap] = await Promise.all([
@@ -1157,6 +1218,11 @@ export class LlmProxyService {
         keyBound,
         available: keyBound && vendorUntil === undefined && until === undefined,
         capabilities: capabilitiesForModel(model),
+        // What this model's constrained-decoding engine will actually accept for a
+        // strict `response_format: json_schema`. Advertised so a consumer can pick
+        // loose `json_object` up front instead of discovering the ceiling from a
+        // `schema_too_complex` 400 — which is what "consumer migration" meant.
+        strictSchema: strictSchemaSupport(model),
         ...(until       !== undefined && until       > 0 ? { cooldownUntil:       until       } : {}),
         ...(vendorUntil !== undefined && vendorUntil > 0 ? { vendorCooledUntil:   vendorUntil } : {}),
       };
@@ -1850,6 +1916,27 @@ export class LlmProxyService {
       }
       return (await cooled).has(model);
     };
+  }
+
+  /**
+   * Persist a successful completion into the exact-match response cache.
+   *
+   * CLONES the response before reading it: a `Response` body can be consumed once,
+   * and the original is what the caller is about to read. Reading it here without a
+   * clone would hand the caller an empty body — a cache that breaks the very request
+   * it was trying to make cheaper.
+   */
+  private async storeInResponseCache(key: string, result: ProxyResult): Promise<void> {
+    try {
+      const body = await result.response.clone().json();
+      await storeCachedResponse(this.env, key, {
+        body,
+        resolvedModel: result.resolvedModel,
+        resolvedVendor: result.resolvedVendor,
+      });
+    } catch (error) {
+      reportCaughtError(error, { source: 'application/llm/LlmProxyService.ts', operation: 'storeInResponseCache' });
+    }
   }
 
   private async clearVendorHealth(vendor: VendorId): Promise<void> {

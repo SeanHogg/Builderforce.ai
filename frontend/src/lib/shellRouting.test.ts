@@ -74,6 +74,24 @@ describe('classifyShell — app-shell deny-list model [1557]', () => {
     expect(rendersAppShell('/embedded', true)).toBe(true);
   });
 
+  it('opens the catalog DETAIL pages publicly while the index pages stay teasers', () => {
+    // The per-entity SEO split. `/skills/` and `/personas/` are listed WITH a
+    // trailing slash, which `underPrefix` reads as "under this route, not this
+    // route" — so one string expresses both halves and neither can drift from
+    // the other. The index pages keep their marketing teaser (and their single
+    // sitemap row); every entity page renders for real, which is what makes
+    // `generateMetadata` and per-entity JSON-LD reachable by a crawler.
+    expect(classifyShell('/skills')).toBe('app');
+    expect(classifyShell('/personas')).toBe('app');
+    expect(classifyShell('/skills/github')).toBe('public');
+    expect(classifyShell('/personas/code-reviewer')).toBe('public');
+    // A prefix collision must not be swept in with them.
+    expect(classifyShell('/skillsomething')).toBe('app');
+    // The other two detail routes ride prefixes that were already public.
+    expect(classifyShell('/prompts/code-review')).toBe('public');
+    expect(classifyShell('/marketplace/agent/abc123')).toBe('public');
+  });
+
   it('renders known authenticated routes in the app shell', () => {
     expect(classifyShell('/dashboard')).toBe('app');
     expect(classifyShell('/projects')).toBe('app');

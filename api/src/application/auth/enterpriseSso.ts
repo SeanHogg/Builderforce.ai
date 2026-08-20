@@ -38,7 +38,7 @@
  * one and `verifyDomain` exists.
  */
 
-import { eq, isNotNull } from 'drizzle-orm';
+import { asc, eq, isNotNull, isNull } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { ssoConnections, ssoDomains } from '../../infrastructure/database/schema';
 import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
@@ -374,6 +374,39 @@ export async function removeDomain(db: Db, tenantId: number, domainId: number): 
   if (!row) throw new SsoError('That domain is not claimed by this workspace.', 404);
 }
 
+/** One claimed row, as both the button and the sweep read it. */
+interface ClaimedDomainRow {
+  id: number;
+  tenantId: number;
+  domain: string;
+  verifyToken: string;
+}
+
+/**
+ * THE verify-and-stamp step: look for this row's token in DNS and, if it is
+ * there, record that it is verified.
+ *
+ * Written once because there are two ways in — an administrator pressing the
+ * button and the sweep that runs whether or not anybody presses it — and a second
+ * copy of "compare, then stamp" is a second answer to the only question that
+ * governs whether a domain may route sign-ins. The stamp is always scoped to the
+ * ROW'S OWN tenant, so the caller cannot widen it by supplying a different one.
+ */
+async function checkAndStampDomain(
+  db: Db,
+  row: ClaimedDomainRow,
+  deps: DnsLookupDeps,
+): Promise<{ verified: boolean; recordName: string; found: string[] }> {
+  const result = await verifyChallengeToken('sso', row.domain, row.verifyToken, deps);
+  if (result.verified) {
+    await db
+      .update(ssoDomains)
+      .set({ verifiedAt: new Date() })
+      .where(scopedToTenant(ssoDomains, row.tenantId, eq(ssoDomains.id, row.id)));
+  }
+  return result;
+}
+
 /**
  * Prove control of a domain before it is allowed to route sign-ins.
  *
@@ -390,20 +423,94 @@ export async function verifyDomain(
   deps: DnsLookupDeps = {},
 ): Promise<{ verified: boolean; recordName: string; expected: string; found: string[] }> {
   const [row] = await db
-    .select({ id: ssoDomains.id, domain: ssoDomains.domain, verifyToken: ssoDomains.verifyToken })
+    .select({
+      id: ssoDomains.id,
+      tenantId: ssoDomains.tenantId,
+      domain: ssoDomains.domain,
+      verifyToken: ssoDomains.verifyToken,
+    })
     .from(ssoDomains)
     .where(scopedToTenant(ssoDomains, tenantId, eq(ssoDomains.id, domainId)))
     .limit(1);
   if (!row) throw new SsoError('That domain is not claimed by this workspace.', 404);
 
-  const result = await verifyChallengeToken('sso', row.domain, row.verifyToken, deps);
-  if (result.verified) {
-    await db
-      .update(ssoDomains)
-      .set({ verifiedAt: new Date() })
-      .where(scopedToTenant(ssoDomains, tenantId, eq(ssoDomains.id, domainId)));
-  }
+  const result = await checkAndStampDomain(db, row, deps);
   return { verified: result.verified, recordName: result.recordName, expected: row.verifyToken, found: result.found };
+}
+
+/** How many unverified claims one tick looks at. Bounded for the reason every
+ *  sweep in here is: a scheduled job must not become an unbounded scan, and each
+ *  row costs one outbound DNS-over-HTTPS request. */
+const SSO_DOMAIN_SWEEP_BATCH = 10;
+
+export interface SsoDomainSweepResult {
+  checked: number;
+  verified: number;
+}
+
+/**
+ * The claim that nobody came back to press the button on.
+ *
+ * ── WHY THIS EXISTS ──────────────────────────────────────────────────────────
+ * `addDomain` mints a token and tells an administrator to publish a TXT record.
+ * Publishing it is somebody else's job at somebody else's DNS provider, and it
+ * lands minutes or days later — by which time the person who started the claim
+ * has closed the tab. Until this sweep, the only thing that could ever notice the
+ * record had appeared was a human pressing "verify" on a screen they had no
+ * reason to reopen, so an institution that did exactly what it was asked stayed
+ * unrouted until it complained. A proof that only counts while someone is
+ * watching is not a proof, it is a form.
+ *
+ * ── SCOPE ────────────────────────────────────────────────────────────────────
+ * Deliberately cross-tenant: there is no caller and therefore no tenant to filter
+ * by. The read declares that with `acrossTenants`, and the WRITE is still scoped
+ * to the row's own `tenant_id` inside `checkAndStampDomain` — the sweep widens
+ * what is READ, never what one row's stamp can touch.
+ *
+ * Never throws. A DNS outage or one malformed row must not abort the cron tick
+ * that also runs everything else.
+ */
+export async function runSsoDomainSweep(
+  db: Db,
+  opts: { maxDomains?: number; deps?: DnsLookupDeps } = {},
+): Promise<SsoDomainSweepResult> {
+  const deps = opts.deps ?? {};
+  let pending: ClaimedDomainRow[];
+  try {
+    pending = await db
+      .select({
+        id: ssoDomains.id,
+        tenantId: ssoDomains.tenantId,
+        domain: ssoDomains.domain,
+        verifyToken: ssoDomains.verifyToken,
+      })
+      .from(ssoDomains)
+      // Only what is still unproven. An already-verified row is not re-checked:
+      // a domain that routes must not stop routing because a resolver blipped.
+      .where(acrossTenants(ssoDomains, 'scheduled_sweep', isNull(ssoDomains.verifiedAt)))
+      .orderBy(asc(ssoDomains.createdAt))
+      .limit(Math.max(1, Math.min(opts.maxDomains ?? SSO_DOMAIN_SWEEP_BATCH, 100)));
+  } catch (error) {
+    reportCaughtError(error, { source: SOURCE, operation: 'runSsoDomainSweep' });
+    return { checked: 0, verified: 0 };
+  }
+
+  let verified = 0;
+  for (const row of pending) {
+    try {
+      const result = await checkAndStampDomain(db, row, deps);
+      if (result.verified) verified += 1;
+    } catch (error) {
+      // Per row, never per batch — one unreachable zone must not stop the other
+      // nine claims from being proved on this tick.
+      reportCaughtError(error, {
+        source: SOURCE,
+        operation: 'runSsoDomainSweep',
+        context: { domainId: row.id, tenantId: row.tenantId },
+      });
+    }
+  }
+  return { checked: pending.length, verified };
 }
 
 /** The FQDN an administrator has to create the TXT record at. Echoed by the

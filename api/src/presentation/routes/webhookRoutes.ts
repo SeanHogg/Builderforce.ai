@@ -25,6 +25,7 @@ import { completeListingCheckout } from '../../application/marketplace/listingCo
 import { settleInvoiceCheckout } from '../../application/finance/receivables';
 import { completeKnowledgeCheckout } from '../../application/knowledge/knowledgeCommerce';
 import { fireEventTriggers } from '../../application/workflow/eventTriggers';
+import { invalidateContainerRunContexts } from '../../application/runtime/cloudAgentEngine';
 
 /**
  * SETTLE A ONE-OFF PURCHASE THAT ARRIVED BY WEBHOOK.
@@ -131,6 +132,29 @@ export function createWebhookRoutes(
       }).catch(() => undefined);
     }
 
+    /**
+     * A DECLINED CHARGE INVALIDATES THE CARD CLAIM.
+     *
+     * `subscription.past_due` means the card on file was actually charged and
+     * actually declined — the strongest evidence there is that a stored "validated"
+     * is no longer true. The plan transition still happens below (this does not
+     * short-circuit it): a past-due tenant losing its plan and a past-due tenant
+     * losing its PREMIUM unlock are two separate consequences, and only the first
+     * was wired. Clearing it here rather than in the provider parser keeps the parser
+     * a translator and leaves the policy where the rest of the policy lives.
+     *
+     * Best-effort — a failure to clear must not fail the webhook, because the plan
+     * transition below matters more and the staleness window
+     * (`CARD_VALIDATION_MAX_AGE_MS`) is the backstop for anything this misses.
+     */
+    if (event.type === 'subscription.past_due' && event.externalCustomerId) {
+      await markCardValidationFailedByCustomer(c.env as Env, event.externalCustomerId, event.tenantId)
+        .catch((err) => {
+          reportCaughtError(err, { source: 'presentation/routes/webhookRoutes.ts', operation: 'pastDueCardInvalidation', level: 'warning' });
+          return false;
+        });
+    }
+
     // Card-validation events are NOT subscription state — they only stamp the
     // `card_validated_at` / `card_validation_status` columns that unlock PREMIUM
     // (any-paid-OpenRouter) model selection. Handled here rather than in
@@ -149,6 +173,16 @@ export function createWebhookRoutes(
             billingEmail: event.billingEmail ?? null,
           });
           known = outcome.known;
+
+          // The card is live NOW — but the container surface caches `premiumEntitled`
+          // inside its run context for ten minutes, so without this a tenant who has
+          // just paid still can't run premium on that surface until the window
+          // expires. A paywall that stays closed after the customer pays is the worst
+          // shape a paywall can have. Best-effort: a missed bump costs the remainder
+          // of that window, whereas failing here would retry a validation that landed.
+          if (outcome.tenantId != null) {
+            await invalidateContainerRunContexts(c.env as Env, outcome.tenantId);
+          }
 
           // A REPLACE completes here: the new card is confirmed and already on the
           // row, so the displaced one can be detached with no gap in premium access

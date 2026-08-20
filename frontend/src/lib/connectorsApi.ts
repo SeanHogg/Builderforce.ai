@@ -62,6 +62,16 @@ export interface ConnectorAction {
   bodyTemplate?: Record<string, unknown>;
   headers?: Record<string, string>;
   bodyFormat?: 'json' | 'form';
+  /** Present when the action speaks SOAP rather than JSON — a transport the runtime
+   *  supplies so a SOAP-only vendor (Microsoft Advertising) can be manifest data like
+   *  everything else. The builder shows it read-only; nothing here composes one. */
+  soap?: {
+    action: string;
+    namespace: string;
+    operation: string;
+    version?: '1.1' | '1.2';
+    header?: Record<string, string>;
+  };
   resultPath?: string;
 }
 

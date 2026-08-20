@@ -17,7 +17,14 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
+  EXPERIENCE_LEVELS,
+  JOB_DISCIPLINES,
+  JOB_SPECIALTIES,
+  JOB_SPECIALTY_INDEX,
+  PROJECT_LENGTHS,
   describeJobFilters,
+  isJobDiscipline,
+  isJobSpecialtyOf,
   jobFilterConditions,
   jobFilterIsEmpty,
   jobFilterMatches,
@@ -117,5 +124,89 @@ describe('describeJobFilters', () => {
     expect(describeJobFilters(normalizeJobFilters({ q: 'rust', discipline: 'developer' })))
       .toBe('rust · developer');
     expect(describeJobFilters(normalizeJobFilters({}))).toBe('');
+  });
+
+  it('names the 0985 criteria too, so an alert body says what it actually watches', () => {
+    expect(describeJobFilters(normalizeJobFilters({
+      discipline: 'developer', specialty: 'backend', experienceLevel: 'expert',
+      projectLength: 'ongoing', engagementType: 'hourly',
+    }))).toBe('developer · backend · expert · ongoing · hourly');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The category tree (0985)
+// ---------------------------------------------------------------------------
+
+describe('the discipline → specialty registry', () => {
+  it('indexes every specialty back to exactly one discipline', () => {
+    const declared = JOB_DISCIPLINES.flatMap((d) => JOB_SPECIALTIES[d]);
+    expect(JOB_SPECIALTY_INDEX.size).toBe(declared.length);
+    for (const discipline of JOB_DISCIPLINES) {
+      for (const specialty of JOB_SPECIALTIES[discipline]) {
+        expect(JOB_SPECIALTY_INDEX.get(specialty)).toBe(discipline);
+      }
+    }
+  });
+
+  it('a specialty is only valid UNDER its parent — the column must not hold an orphan', () => {
+    expect(isJobSpecialtyOf('dba', 'postgres')).toBe(true);
+    expect(isJobSpecialtyOf('designer', 'postgres')).toBe(false);
+    expect(isJobSpecialtyOf('developer', 'not_a_specialty')).toBe(false);
+    expect(isJobDiscipline('developer')).toBe(true);
+    expect(isJobDiscipline('astronaut')).toBe(false);
+  });
+});
+
+describe('the 0985 criteria — SQL clause ↔ predicate parity', () => {
+  const rich = (over: Record<string, unknown> = {}) => posting({
+    specialty: 'backend', experienceLevel: 'expert', projectLength: 'ongoing',
+    engagementType: 'hourly', ...over,
+  });
+
+  it('each declared criterion emits exactly one clause', () => {
+    expect(jobFilterConditions(normalizeJobFilters({ specialty: 'backend' }))).toHaveLength(1);
+    expect(jobFilterConditions(normalizeJobFilters({
+      specialty: 'backend', experienceLevel: 'expert', projectLength: 'ongoing', engagementType: 'hourly',
+    }))).toHaveLength(4);
+  });
+
+  it('an unrecognised value is DROPPED, not carried — never an unsatisfiable board', () => {
+    expect(normalizeJobFilters({ specialty: 'astrology' })).toEqual({});
+    expect(normalizeJobFilters({ experienceLevel: 'wizard' })).toEqual({});
+    expect(normalizeJobFilters({ projectLength: 'a fortnight' })).toEqual({});
+    expect(normalizeJobFilters({ engagementType: 'barter' })).toEqual({});
+    expect(jobFilterIsEmpty(normalizeJobFilters({ specialty: 'astrology' }))).toBe(true);
+  });
+
+  it('every declared vocabulary value survives normalisation', () => {
+    for (const level of EXPERIENCE_LEVELS) {
+      expect(normalizeJobFilters({ experienceLevel: level }).experienceLevel).toBe(level);
+    }
+    for (const length of PROJECT_LENGTHS) {
+      expect(normalizeJobFilters({ projectLength: length }).projectLength).toBe(length);
+    }
+  });
+
+  it('each is an exact equality on the closed vocabulary — mirrors `eq(column)`', () => {
+    expect(jobFilterMatches(normalizeJobFilters({ specialty: 'BACKEND' }), rich())).toBe(true);
+    expect(jobFilterMatches(normalizeJobFilters({ specialty: 'frontend' }), rich())).toBe(false);
+    expect(jobFilterMatches(normalizeJobFilters({ experienceLevel: 'expert' }), rich())).toBe(true);
+    expect(jobFilterMatches(normalizeJobFilters({ experienceLevel: 'entry' }), rich())).toBe(false);
+    expect(jobFilterMatches(normalizeJobFilters({ projectLength: 'ongoing' }), rich())).toBe(true);
+    expect(jobFilterMatches(normalizeJobFilters({ engagementType: 'hourly' }), rich())).toBe(true);
+    expect(jobFilterMatches(normalizeJobFilters({ engagementType: 'fixed_bid' }), rich())).toBe(false);
+  });
+
+  it('a posting that never stated one does not match a filter ON it', () => {
+    expect(jobFilterMatches(normalizeJobFilters({ experienceLevel: 'expert' }), posting())).toBe(false);
+    // …and stays matchable by the criteria it DID state.
+    expect(jobFilterMatches(normalizeJobFilters({ discipline: 'developer' }), posting())).toBe(true);
+  });
+
+  it('the new criteria AND with the old ones', () => {
+    const spec = normalizeJobFilters({ q: 'rust', discipline: 'developer', experienceLevel: 'expert' });
+    expect(jobFilterMatches(spec, rich())).toBe(true);
+    expect(jobFilterMatches(spec, rich({ experienceLevel: 'entry' }))).toBe(false);
   });
 });

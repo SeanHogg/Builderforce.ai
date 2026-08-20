@@ -104,13 +104,20 @@ function viteConfigFile(port: number): PreviewConfigFile {
 import { defineConfig, mergeConfig } from 'vite';
 
 async function projectConfig() {
+  let lastError;
   for (const candidate of ['./vite.config.js', './vite.config.mjs', './vite.config.ts']) {
     try {
       const mod = await import(candidate);
       const base = mod.default ?? mod.config ?? {};
       return typeof base === 'function' ? await base({ command: 'serve', mode: 'development' }) : base;
-    } catch { /* try the next filename */ }
+    } catch (err) {
+      // Usually just "this filename is not the one this project uses" — keep looking.
+      // But a config that EXISTS and throws looks identical here, so the last failure is
+      // kept and reported below rather than vanishing into an empty catch.
+      lastError = err;
+    }
   }
+  if (lastError) console.warn('[builderforce-preview] no usable vite config found:', lastError && lastError.message);
   return {};
 }
 
@@ -149,9 +156,20 @@ function metroConfigFile(port: number): PreviewConfigFile {
 const path = require('path');
 
 let config = {};
+let lastError;
 for (const candidate of ['./metro.config.js', './metro.config.cjs']) {
-  try { config = require(path.resolve(process.cwd(), candidate)); break; } catch { /* next */ }
+  try {
+    config = require(path.resolve(process.cwd(), candidate));
+    lastError = undefined;
+    break;
+  } catch (err) {
+    // Same reasoning as the Vite template: "wrong filename" and "this config is broken"
+    // are indistinguishable at this point, so the last failure is reported rather than
+    // swallowed.
+    lastError = err;
+  }
 }
+if (lastError) console.warn('[builderforce-preview] no usable metro config found:', lastError && lastError.message);
 
 module.exports = {
   ...config,

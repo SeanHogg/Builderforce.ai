@@ -81,6 +81,44 @@ async function ownsProject(db: Db, tenantId: number, projectId: number): Promise
 const json = (body: unknown, status = 200): Response =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 
+/**
+ * REFUSE A WRITE TO AN EVERMIND THIS PROJECT DOES NOT OWN.
+ *
+ * The defect this closes was an affordance that silently did nothing. An IDE build
+ * with no Evermind of its own INHERITS its container project's for reads — every read
+ * path resolves `resolveEffectiveEvermindProjectId` — so the console showed
+ * `seeded: true`, a version, contributions, the lot. Every WRITE, though, posted to
+ * the raw project id, matched zero rows, and returned 200. Seeding "succeeded" and
+ * nothing changed. Teaching "succeeded" and nothing was learned. The console was later
+ * made read-only for that case, which hid the buttons but left the endpoints accepting
+ * the writes — so anything that is not the console (the agent front door, the on-prem
+ * runtime, a script, a curl) still got a cheerful lie.
+ *
+ * 409 CONFLICT, not 403 or 404: the caller is authorised and the project exists. What
+ * is wrong is the TARGET — this project has no Evermind of its own, and the one it
+ * reads from belongs to another project. The response names that project so the caller
+ * can retry against it, which is the difference between a refusal and a dead end.
+ *
+ * Reads deliberately do NOT go through this: inheriting a container's Evermind for
+ * reads is the intended behaviour and is why an IDE build gets useful recall at all.
+ */
+async function refuseInheritedWrite(
+  env: Env,
+  db: Db,
+  tenantId: number,
+  projectId: number,
+): Promise<Response | null> {
+  const effectiveId = await resolveEffectiveEvermindProjectId(env, db, tenantId, projectId);
+  if (effectiveId === projectId) return null;
+  return json({
+    error: 'This build has no Evermind of its own — it reads the one belonging to its '
+      + 'container project. Write to that project instead, or seed an Evermind here first.',
+    code: 'evermind_inherited_read_only',
+    projectId,
+    inheritedFromProjectId: effectiveId,
+  }, 409);
+}
+
 // ── Shared core handlers (auth-agnostic) ──────────────────────────────────────
 
 async function headCore(env: Env, db: Db, tenantId: number, projectId: number): Promise<Response> {
@@ -210,6 +248,8 @@ async function artifactCore(env: Env, db: Db, tenantId: number, projectId: numbe
 
 async function learnCore(env: Env, db: Db, tenantId: number, projectId: number, c: Context): Promise<Response> {
   if (!(await ownsProject(db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
+  const inheritedBlock = await refuseInheritedWrite(env, db, tenantId, projectId);
+  if (inheritedBlock) return inheritedBlock;
   const body = (await c.req.json<{ diff?: unknown; baseVersion?: unknown; weight?: unknown; label?: unknown }>().catch(() => ({}))) as {
     diff?: unknown; baseVersion?: unknown; weight?: unknown; label?: unknown;
   };
@@ -234,6 +274,8 @@ async function learnCore(env: Env, db: Db, tenantId: number, projectId: number, 
  */
 async function learnTextCore(env: Env, db: Db, tenantId: number, projectId: number, c: Context, fanOut = false): Promise<Response> {
   if (!(await ownsProject(db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
+  const inheritedBlock = await refuseInheritedWrite(env, db, tenantId, projectId);
+  if (inheritedBlock) return inheritedBlock;
   const body = (await c.req.json<{ text?: unknown; weight?: unknown; prompt?: unknown }>().catch(() => ({}))) as { text?: unknown; weight?: unknown; prompt?: unknown };
   const text = typeof body.text === 'string' ? body.text : '';
   if (!text.trim()) return json({ error: 'text is required' }, 400);
@@ -257,6 +299,8 @@ async function learnTextCore(env: Env, db: Db, tenantId: number, projectId: numb
  */
 async function extractMemoriesCore(env: Env, db: Db, tenantId: number, projectId: number, c: Context): Promise<Response> {
   if (!(await ownsProject(db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
+  const inheritedBlock = await refuseInheritedWrite(env, db, tenantId, projectId);
+  if (inheritedBlock) return inheritedBlock;
   const body = (await c.req.json<{ entries?: unknown }>().catch(() => ({}))) as { entries?: unknown };
   if (!Array.isArray(body.entries)) return json({ error: 'entries[] is required' }, 400);
   const entries: MemoryExtractEntry[] = [];
@@ -308,6 +352,9 @@ export function createProjectEvermindRoutes(db: Db): Hono<HonoEnv> {
   router.post('/:projectId/evermind/extract-memories', requireRole(TenantRole.MANAGER), (c) => extractMemoriesCore(c.env as Env, db, t(c), pid(c), c));
 
   /** Seed the base model (version 1) from a published `.evermind` blob (manager). */
+  // Deliberately NOT guarded by `refuseInheritedWrite`: seeding is precisely how an
+  // inheriting build STOPS inheriting. Refusing it would make inheritance a one-way
+  // trap — the build could never get an Evermind of its own.
   router.post('/:projectId/evermind/seed', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = t(c);
     const projectId = pid(c);
@@ -352,6 +399,8 @@ export function createProjectEvermindRoutes(db: Db): Hono<HonoEnv> {
    * base, so the browser never round-trips the model blob. This is the practical
    * "Enable project Evermind" path the UI drives.
    */
+  // Same exemption as `/seed` above — this is the other way a project acquires its own
+  // Evermind, so it must remain reachable while the project is still inheriting.
   router.post('/:projectId/evermind/seed-from-model', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = t(c);
     const projectId = pid(c);
@@ -382,6 +431,8 @@ export function createProjectEvermindRoutes(db: Db): Hono<HonoEnv> {
     const tenantId = t(c);
     const projectId = pid(c);
     if (!(await ownsProject(db, tenantId, projectId))) return c.json({ error: 'project not found' }, 404);
+    const inheritedBlock = await refuseInheritedWrite(c.env as Env, db, tenantId, projectId);
+    if (inheritedBlock) return inheritedBlock;
     const body = (await c.req.json<{ mode?: unknown }>().catch(() => ({}))) as { mode?: unknown };
     const mode = body.mode === 'offline-frozen' || body.mode === 'connected' ? (body.mode as ProjectEvermindMode) : null;
     if (!mode) return c.json({ error: "mode must be 'connected' or 'offline-frozen'" }, 400);
@@ -400,6 +451,8 @@ export function createProjectEvermindRoutes(db: Db): Hono<HonoEnv> {
     const projectId = pid(c);
     const env = c.env as Env;
     if (!(await ownsProject(db, tenantId, projectId))) return c.json({ error: 'project not found' }, 404);
+    const inheritedBlock = await refuseInheritedWrite(c.env as Env, db, tenantId, projectId);
+    if (inheritedBlock) return inheritedBlock;
     const body = (await c.req.json<{ enabled?: unknown; force?: unknown }>().catch(() => ({}))) as { enabled?: unknown; force?: unknown };
     if (typeof body.enabled !== 'boolean') return c.json({ error: 'enabled (boolean) is required' }, 400);
     const head = await getProjectEvermindHead(env, db, tenantId, projectId);
@@ -431,6 +484,8 @@ export function createProjectEvermindRoutes(db: Db): Hono<HonoEnv> {
     const tenantId = t(c);
     const projectId = pid(c);
     if (!(await ownsProject(db, tenantId, projectId))) return c.json({ error: 'project not found' }, 404);
+    const inheritedBlock = await refuseInheritedWrite(c.env as Env, db, tenantId, projectId);
+    if (inheritedBlock) return inheritedBlock;
     const body = (await c.req.json<{ model?: unknown }>().catch(() => ({}))) as { model?: unknown };
     if (body.model != null && typeof body.model !== 'string') {
       return c.json({ error: 'model must be a string or null' }, 400);
@@ -469,6 +524,8 @@ export function createProjectEvermindRoutes(db: Db): Hono<HonoEnv> {
    * With no prompt it runs the standard readiness suite (the identical probe the
    * enable-inference gate uses), so "will this pass the gate?" is answerable up front.
    */
+  // POST, but a READ: it samples the head this project actually serves from and
+  // mutates nothing, so it follows the same inheritance every other read does.
   router.post('/:projectId/evermind/probe', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = t(c);
     const projectId = pid(c);
@@ -536,6 +593,8 @@ export function createProjectEvermindRoutes(db: Db): Hono<HonoEnv> {
     const projectId = pid(c);
     const env = c.env as Env;
     if (!(await ownsProject(db, tenantId, projectId))) return c.json({ error: 'project not found' }, 404);
+    const inheritedBlock = await refuseInheritedWrite(c.env as Env, db, tenantId, projectId);
+    if (inheritedBlock) return inheritedBlock;
     if (!env.UPLOADS) return c.json({ error: 'R2 artifact storage not configured' }, 503);
 
     const body = (await c.req.json<{ slug?: unknown; name?: unknown }>().catch(() => ({}))) as { slug?: unknown; name?: unknown };
@@ -568,6 +627,8 @@ export function createProjectEvermindRoutes(db: Db): Hono<HonoEnv> {
     const tenantId = t(c);
     const projectId = pid(c);
     if (!(await ownsProject(db, tenantId, projectId))) return c.json({ error: 'project not found' }, 404);
+    const inheritedBlock = await refuseInheritedWrite(c.env as Env, db, tenantId, projectId);
+    if (inheritedBlock) return inheritedBlock;
     const result = await reindexProjectEvermindRecall(c.env as Env, tenantId, projectId);
     return c.json(result.body, result.status as never);
   });
@@ -583,6 +644,8 @@ export function createProjectEvermindRoutes(db: Db): Hono<HonoEnv> {
     const projectId = pid(c);
     const env = c.env as Env;
     if (!(await ownsProject(db, tenantId, projectId))) return c.json({ error: 'project not found' }, 404);
+    const inheritedBlock = await refuseInheritedWrite(c.env as Env, db, tenantId, projectId);
+    if (inheritedBlock) return inheritedBlock;
     const body = (await c.req.json<{ pending?: unknown; qaCache?: unknown }>().catch(() => ({}))) as { pending?: unknown; qaCache?: unknown };
     const doPending = body.pending !== false;
     const doQa = body.qaCache !== false;
@@ -615,6 +678,8 @@ export function createProjectEvermindRoutes(db: Db): Hono<HonoEnv> {
     const projectId = pid(c);
     const env = c.env as Env;
     if (!(await ownsProject(db, tenantId, projectId))) return c.json({ error: 'project not found' }, 404);
+    const inheritedBlock = await refuseInheritedWrite(c.env as Env, db, tenantId, projectId);
+    if (inheritedBlock) return inheritedBlock;
     const gate = await requireFrontierAccess(c);
     if (gate) return gate;
 
@@ -649,6 +714,8 @@ export function createProjectEvermindRoutes(db: Db): Hono<HonoEnv> {
     const tenantId = t(c);
     const projectId = pid(c);
     if (!(await ownsProject(db, tenantId, projectId))) return c.json({ error: 'project not found' }, 404);
+    const inheritedBlock = await refuseInheritedWrite(c.env as Env, db, tenantId, projectId);
+    if (inheritedBlock) return inheritedBlock;
     const result = await flushProjectEvermind(c.env as Env, tenantId, projectId);
     return c.json(result.body, result.status as never);
   });

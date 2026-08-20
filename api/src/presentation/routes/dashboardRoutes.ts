@@ -17,6 +17,7 @@ import {
   llmUsageLog,
   projects,
   projectRepositories,
+  segments,
   tasks,
   teams,
   teamMembers,
@@ -47,7 +48,7 @@ function mcToUsd(millicents: unknown): number {
 async function buildUsageBreakdown(db: Db, tenantId: number, windowStart: Date) {
   const where = and(eq(llmUsageLog.tenantId, tenantId), gte(llmUsageLog.createdAt, windowStart));
 
-  const [byKind, perModel, perAgentHost, perProject, perUser, perTeam, perRepo, totalRow] = await Promise.all([
+  const [byKind, perModel, perAgentHost, perProject, perSegment, perUser, perTeam, perRepo, totalRow] = await Promise.all([
     db.select({
       kind: USAGE_KIND,
       promptTokens: sum(llmUsageLog.promptTokens),
@@ -85,6 +86,28 @@ async function buildUsageBreakdown(db: Db, tenantId: number, windowStart: Date) 
       .leftJoin(projects, eq(projects.id, llmUsageLog.projectId))
       .where(and(where, sql`${llmUsageLog.projectId} is not null`))
       .groupBy(llmUsageLog.projectId, projects.name)
+      .orderBy(desc(sum(llmUsageLog.costUsdMillicents))).limit(50),
+
+    // Per-SEGMENT (workspace) spend — the dimension above project.
+    //
+    // `llm_usage_log` carries no segment column, and deliberately shouldn't: a segment
+    // is a property of the PROJECT the work belongs to, so denormalizing it onto every
+    // usage row would be a second copy that goes stale the moment a project moves
+    // between workspaces. Joining through `projects` keeps one source of truth and
+    // costs one indexed join. Rows with no project (gateway chat outside any project)
+    // are excluded rather than bucketed as "unknown" — a workspace rollup that
+    // silently included untargeted spend would overstate every workspace.
+    db.select({
+      segmentId: projects.segmentId,
+      segmentName: segments.displayName,
+      totalTokens: sum(llmUsageLog.totalTokens),
+      costMc: sum(llmUsageLog.costUsdMillicents),
+      requests: count(),
+    }).from(llmUsageLog)
+      .innerJoin(projects, eq(projects.id, llmUsageLog.projectId))
+      .leftJoin(segments, eq(segments.id, projects.segmentId))
+      .where(and(where, sql`${projects.segmentId} is not null`))
+      .groupBy(projects.segmentId, segments.displayName)
       .orderBy(desc(sum(llmUsageLog.costUsdMillicents))).limit(50),
 
     // Per-user spend — attributed to the individual human / SDK caller that
@@ -182,6 +205,16 @@ async function buildUsageBreakdown(db: Db, tenantId: number, windowStart: Date) 
       totalTokens: Number(p.totalTokens ?? 0),
       requests: Number(p.requests ?? 0),
       estimatedCostUsd: mcToUsd(p.costMc),
+    })),
+    /** Spend rolled up to the WORKSPACE (segment) each project belongs to. The tier
+     *  above `perProject`, so a multi-workspace tenant can see where its AI spend
+     *  actually lands without summing projects by hand. */
+    perSegment: perSegment.map((sg) => ({
+      segmentId: sg.segmentId,
+      segmentName: sg.segmentName ?? 'Workspace',
+      totalTokens: Number(sg.totalTokens ?? 0),
+      requests: Number(sg.requests ?? 0),
+      estimatedCostUsd: mcToUsd(sg.costMc),
     })),
     perUser: perUser.map((u) => ({
       userId: u.userId,
@@ -329,7 +362,7 @@ export function createDashboardRoutes(db: Db): Hono<HonoEnv> {
 
     const payload = await getOrSetCached(
       c.env as Env,
-      `dashboard-usage:v3:${tenantId}:${window}:${windowStart.toISOString().slice(0, 13)}`,
+      `dashboard-usage:v4:${tenantId}:${window}:${windowStart.toISOString().slice(0, 13)}`,
       () => buildUsageBreakdown(db, tenantId, windowStart),
       { kvTtlSeconds: 60, l1TtlMs: 30_000 },
     );

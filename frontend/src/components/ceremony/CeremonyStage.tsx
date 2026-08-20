@@ -23,13 +23,22 @@ import { StandupControls } from './StandupControls';
 import { ScorecardPanel } from './ScorecardPanel';
 import { AssignedWorkPanel } from './AssignedWorkPanel';
 import { DRAG_TASK, memberAssigneePatch, memberKey, taskBelongsToMember, type CeremonyMember } from './types';
+import { CeremonyPickProvider, placeTargetProps, useCeremonyPick } from './pickToPlace';
 
 export type CeremonyMode = 'standup' | 'planning';
 
 /** Active-work statuses that count toward a member's load (power meter). */
 const ACTIVE_STATUSES = new Set(['in_progress', 'in_review', 'ready']);
-/** Default per-member WIP cap when no member profile sets one. */
-const DEFAULT_CAP = 8;
+/**
+ * Last-resort per-member WIP cap.
+ *
+ * The board owns this number now (`boards.default_member_wip_cap`, migration 1084) and
+ * ships it on the session payload; a member profile's own `maxConcurrentWip` still wins
+ * over both. This constant survives ONLY for the window before a session exists (no
+ * session ⇒ no board payload) and keeps the value it always had, so nothing changes
+ * reading. It is a fallback of last resort, not the setting.
+ */
+const FALLBACK_WIP_CAP = 8;
 /** Resolve the round-table seats: the project's attached team(s), else the whole workforce. */
 async function loadProjectMembers(projectId: number): Promise<CeremonyMember[]> {
   try {
@@ -63,20 +72,39 @@ interface PeerCursor { x: number; y: number; name: string; at: number; }
  * onto the sprint bar to schedule it. Every mutation goes through the normal task
  * REST routes and is broadcast to peers (presence + live sync via the ceremony room).
  */
-export function CeremonyStage({
-  projectId,
-  mode,
-  onModeChange,
-  onClose,
-}: {
+interface CeremonyStageProps {
   projectId: number;
   mode: CeremonyMode;
   onModeChange: (mode: CeremonyMode) => void;
   onClose?: () => void;
-}) {
+}
+
+/**
+ * The stage, wrapped in the tap-to-assign context.
+ *
+ * The provider has to sit ABOVE every drop target, and the targets are this
+ * component's own children plus the two rails — so the boundary is here rather
+ * than at each call site, and neither `CeremoniesContent` nor `TaskMgmtContent`
+ * has to remember to add it.
+ */
+export function CeremonyStage(props: CeremonyStageProps) {
+  return (
+    <CeremonyPickProvider>
+      <CeremonyStageInner {...props} />
+    </CeremonyPickProvider>
+  );
+}
+
+function CeremonyStageInner({
+  projectId,
+  mode,
+  onModeChange,
+  onClose,
+}: CeremonyStageProps) {
   const { user, tenant } = useAuth();
   const tMeet = useTranslations('meetings');
   const t = useTranslations('ceremony');
+  const pick = useCeremonyPick();
   // Narrow viewports can't fit the two 240px rails + the absolute round table side
   // by side, so on mobile the stage stacks vertically and the seats render as a
   // centered wrap-grid instead of the (overlapping) circle.
@@ -244,12 +272,14 @@ export function CeremonyStage({
     [ownedByMember, mode],
   );
 
-  // Capacity per member (real maxConcurrentWip from the member profile, else default).
+  // Capacity per member: the member's own cap, else the BOARD's default, else the
+  // last-resort constant. The meter used to compare every member against the constant.
+  const boardWipCap = session?.defaultMemberWipCap ?? FALLBACK_WIP_CAP;
   const capByKey = useMemo(() => {
     const m = new Map<string, number>();
-    for (const p of profiles) m.set(memberKey({ kind: p.memberKind, ref: p.memberRef }), p.maxConcurrentWip ?? DEFAULT_CAP);
+    for (const p of profiles) m.set(memberKey({ kind: p.memberKind, ref: p.memberRef }), p.maxConcurrentWip ?? boardWipCap);
     return m;
-  }, [profiles]);
+  }, [profiles, boardWipCap]);
 
   // The seat whose turn it is (standup): participant at session.currentTurn → memberKey.
   const currentSpeakerKey = useMemo(() => {
@@ -260,19 +290,25 @@ export function CeremonyStage({
 
   const isFacilitator = !session || session.facilitatorId === (user?.id ?? '');
 
-  // --- mutations (all broadcast `changed` so peers re-fetch) ----------------
+  // --- mutations -----------------------------------------------------------
+  //
+  // The `changed` fan-out is the SERVER's, not this component's. Sending it from here
+  // meant peers only refreshed when the mutating browser was still connected and chose to
+  // send it — so a ticket moved by the AI Manager, by a schedule, or from another tab left
+  // every other round table showing stale cards. The mutation routes now push it
+  // (`broadcastProjectChanged` / `broadcastCeremonyChanged`) and the ceremony DO DROPS a
+  // client-sent `changed`, so a stray one here would be silently discarded anyway.
   const mutate = useCallback(
     async (id: number, patch: Parameters<typeof tasksApi.update>[1]) => {
       try {
         const updated = await tasksApi.update(id, patch);
         setTasks((prev) => prev.map((t) => (t.id === id ? updated : t)));
         setDrawerTask((d) => (d?.id === id ? updated : d));
-        send({ type: 'changed' });
       } catch (e) {
         setError(e instanceof Error ? e.message : t('errorUpdate'));
       }
     },
-    [send, t],
+    [t],
   );
 
   const assignToMember = useCallback(
@@ -293,11 +329,10 @@ export function CeremonyStage({
     try {
       const epic = await tasksApi.create({ projectId, title: title.trim(), taskType: 'epic' });
       setTasks((prev) => [epic, ...prev]);
-      send({ type: 'changed' });
     } catch (e) {
       setError(e instanceof Error ? e.message : t('errorCreateEpic'));
     }
-  }, [projectId, send, t]);
+  }, [projectId, t]);
 
   const createSprint = useCallback(async () => {
     const name = window.prompt(t('newSprintPrompt'));
@@ -315,8 +350,7 @@ export function CeremonyStage({
   const applySession = useCallback((d: { session: CeremonySession | null; participants?: CeremonyParticipant[] }) => {
     setSession(d.session ?? null);
     setParticipants(d.participants ?? []);
-    send({ type: 'changed' });
-  }, [send]);
+  }, []);
 
   const startSession = useCallback(async () => {
     setSessionBusy(true);
@@ -335,6 +369,28 @@ export function CeremonyStage({
     setSessionBusy(true);
     try {
       applySession(await ceremonySessionsApi.advanceTurn(session.id, nextTurn));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('errorAdvance'));
+    } finally {
+      setSessionBusy(false);
+    }
+  }, [session, applySession, t]);
+
+  /**
+   * Stop / restart the clock on the current speaker.
+   *
+   * Turn time accrued on wall-clock unconditionally, so a standup that broke off for ten
+   * minutes charged all ten to whoever held the floor — and those per-member durations
+   * are what the ceremony rollup reports. Both calls are idempotent server-side, so a
+   * double-click cannot bank the same span twice.
+   */
+  const setTurnPaused = useCallback(async (pause: boolean) => {
+    if (!session) return;
+    setSessionBusy(true);
+    try {
+      applySession(pause
+        ? await ceremonySessionsApi.pauseTurn(session.id)
+        : await ceremonySessionsApi.resumeTurn(session.id));
     } catch (e) {
       setError(e instanceof Error ? e.message : t('errorAdvance'));
     } finally {
@@ -431,6 +487,8 @@ export function CeremonyStage({
               onStart={startSession}
               onNext={advanceTurn}
               onComplete={completeSession}
+              onPauseTurn={() => setTurnPaused(true)}
+              onResumeTurn={() => setTurnPaused(false)}
             />
           )}
           {onClose && (
@@ -507,6 +565,7 @@ export function CeremonyStage({
                   const id = Number(e.dataTransfer.getData(DRAG_TASK));
                   if (id) scheduleIntoSprint(id, activeSprintId);
                 } : undefined}
+                {...(activeSprintId ? placeTargetProps(pick, t('scheduleIntoSprint'), (taskId) => scheduleIntoSprint(taskId, activeSprintId)) : {})}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -574,6 +633,7 @@ export function CeremonyStage({
                   const id = Number(e.dataTransfer.getData(DRAG_TASK));
                   if (id) setStatus(id, 'done');
                 } : undefined}
+                {...(mode === 'standup' ? placeTargetProps(pick, t('markDone'), (taskId) => setStatus(taskId, 'done')) : {})}
                 style={isMobile ? {
                   flexBasis: '100%',
                   display: 'flex',
@@ -626,7 +686,7 @@ export function CeremonyStage({
                     stackTasks={tasksForMember(m)}
                     assignedTasks={owned}
                     activeLoad={owned.filter((t) => ACTIVE_STATUSES.has(t.status)).length}
-                    cap={capByKey.get(k) ?? DEFAULT_CAP}
+                    cap={capByKey.get(k) ?? boardWipCap}
                     present={presentKeys.has(k)}
                     isCurrentTurn={currentSpeakerKey === k}
                     showStack={mode === 'standup'}

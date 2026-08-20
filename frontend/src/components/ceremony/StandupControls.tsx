@@ -31,6 +31,8 @@ export function StandupControls({
   onStart,
   onNext,
   onComplete,
+  onPauseTurn,
+  onResumeTurn,
 }: {
   session: CeremonySession | null;
   participants: CeremonyParticipant[];
@@ -39,6 +41,9 @@ export function StandupControls({
   onStart: () => void;
   onNext: (nextTurn: number) => void;
   onComplete: () => void;
+  /** Stop the clock on the current speaker — see the `paused` note below. */
+  onPauseTurn: () => void;
+  onResumeTurn: () => void;
 }) {
   const t = useTranslations('ceremony');
   const [, setTick] = useState(0);
@@ -64,12 +69,25 @@ export function StandupControls({
   const totalMs = now - new Date(session.startedAt).getTime();
   const turn = session.currentTurn ?? 0;
   const speaker = participants.find((p) => p.turnOrder === turn) ?? participants[turn];
+  /**
+   * PAUSED = somebody holds the floor but the clock is stopped.
+   *
+   * Derived from the two columns that already exist rather than a third: the server
+   * banks the elapsed span and clears `turnStartedAt` on pause, so this needs no new
+   * state and a session concluded while paused accrues exactly what it should. Turn time
+   * used to run on wall-clock unconditionally, so a standup that broke off for ten
+   * minutes charged all ten to whoever was speaking — and those durations feed the
+   * ceremony rollup.
+   */
+  const paused = session.currentTurn != null && !session.turnStartedAt;
   const turnMs = session.turnStartedAt ? now - new Date(session.turnStartedAt).getTime() : 0;
   const isLast = turn >= participants.length - 1;
 
-  // Timebox auto-advance (facilitator only; once per turn).
-  const remainingMs = session.turnMode === 'timeboxed' ? session.turnSeconds * 1000 - turnMs : null;
-  if (isFacilitator && !busy && remainingMs != null && remainingMs <= 0) {
+  // Timebox auto-advance (facilitator only; once per turn). A PAUSED turn never expires:
+  // the countdown is against elapsed speaking time, and auto-advancing through a break
+  // is precisely the accounting error the pause exists to prevent.
+  const remainingMs = session.turnMode === 'timeboxed' && !paused ? session.turnSeconds * 1000 - turnMs : null;
+  if (isFacilitator && !busy && !paused && remainingMs != null && remainingMs <= 0) {
     const fireKey = `${session.id}:${turn}`;
     if (autoFiredFor.current !== fireKey) {
       autoFiredFor.current = fireKey;
@@ -89,10 +107,24 @@ export function StandupControls({
           <span style={{ marginLeft: 6, fontFamily: 'var(--font-mono)', color: remainingMs != null && remainingMs <= 10000 ? 'var(--error)' : 'var(--text-muted)' }}>
             {remainingMs != null ? formatDuration(Math.max(0, remainingMs)) : formatDuration(turnMs)}
           </span>
+          {paused && (
+            <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 700, color: 'var(--warning-text)' }}>
+              {t('turnPaused')}
+            </span>
+          )}
         </span>
       )}
       {isFacilitator && (
         <>
+          <button
+            type="button"
+            style={btn('tertiary')}
+            disabled={busy}
+            onClick={paused ? onResumeTurn : onPauseTurn}
+            title={paused ? t('resumeTurnHint') : t('pauseTurnHint')}
+          >
+            {paused ? t('resumeTurn') : t('pauseTurn')}
+          </button>
           {!isLast && (
             <button type="button" style={btn('tertiary')} disabled={busy} onClick={() => onNext(turn + 1)}>
               Next →

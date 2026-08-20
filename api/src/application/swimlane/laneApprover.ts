@@ -39,7 +39,8 @@
  */
 import { and, eq, inArray } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
-import { ideAgents, swimlaneAgentAssignments } from '../../infrastructure/database/schema';
+import { ideAgents } from '../../infrastructure/database/schema';
+import { forLanes, laneAgentAssignments } from './laneAgentAssignments';
 import { isParticipantSatisfied } from '../kanban/participantStates';
 import { BUILTIN_ROLES, isReviewRole, roleDisplayName } from '../kanban/roleCatalog';
 import { agentRoleKeys } from '../kanban/roleCapability';
@@ -319,17 +320,17 @@ export async function loadStaffedAgentsForLanes(
 
   const rows = await db
     .select({
-      swimlaneId: swimlaneAgentAssignments.swimlaneId,
-      agentRef: swimlaneAgentAssignments.agentRef,
-      name: swimlaneAgentAssignments.name,
-      role: swimlaneAgentAssignments.role,
-      model: swimlaneAgentAssignments.model,
-      position: swimlaneAgentAssignments.position,
+      swimlaneId: laneAgentAssignments.scopeId,
+      agentRef: laneAgentAssignments.agentRef,
+      name: laneAgentAssignments.name,
+      role: laneAgentAssignments.role,
+      model: laneAgentAssignments.model,
+      position: laneAgentAssignments.position,
     })
-    .from(swimlaneAgentAssignments)
+    .from(laneAgentAssignments)
     .where(and(
-      eq(swimlaneAgentAssignments.tenantId, tenantId),
-      inArray(swimlaneAgentAssignments.swimlaneId, [...swimlaneIds]),
+      eq(laneAgentAssignments.tenantId, tenantId),
+      forLanes([...swimlaneIds]),
     ));
 
   const refs = [...new Set(rows.flatMap((r) => (r.agentRef ? [r.agentRef] : [])))];

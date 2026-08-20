@@ -39,6 +39,40 @@ export interface CreateFeedbackCollectorResult {
   ingestKey: string;
   submitEndpoint: string;
   configEndpoint: string;
+  webhookBase: string;
+}
+
+/** A provider this deployment can actually import from — served from the server's
+ *  adapter registry, so the picker can never offer one with no adapter behind it. */
+export interface FeedbackProviderOption {
+  id: string;
+  label: string;
+  /** The header the provider signs with, so the settings copy can name it. */
+  signatureHeader: string;
+}
+
+/** A provider webhook configured on a collector. The secret is NEVER returned. */
+export interface FeedbackIntegration {
+  provider: string;
+  enabled: boolean;
+  hasSecret: boolean;
+  lastEventAt: string | null;
+  createdAt: string;
+  /** Path to paste into the provider's console (relative to the API origin). */
+  webhookUrl: string;
+}
+
+export interface FeedbackIntegrationsResult {
+  providers: FeedbackProviderOption[];
+  integrations: FeedbackIntegration[];
+}
+
+export interface ConnectFeedbackIntegrationResult {
+  provider: string;
+  signatureHeader: string;
+  webhookUrl: string;
+  /** Shown ONCE — never retrievable again, only rotatable. */
+  secret: string;
 }
 
 export interface FeedbackSubmission {
@@ -102,6 +136,29 @@ export const feedbackApi = {
       request(`/api/feedback/collectors/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
     remove: (id: string): Promise<void> =>
       request<void>(`/api/feedback/collectors/${id}`, { method: 'DELETE' }),
+  },
+
+  /**
+   * Provider webhooks on a collector — import requests already gathered in Sentry
+   * or PostHog. `connect` doubles as ROTATE, because they are the same write: a
+   * separate rotate endpoint would let a second "connect" silently no-op while the
+   * operator pasted a fresh secret into the provider's console.
+   */
+  integrations: {
+    list: (collectorId: string): Promise<FeedbackIntegrationsResult> =>
+      request<FeedbackIntegrationsResult>(`/api/feedback/collectors/${collectorId}/integrations`),
+    connect: (collectorId: string, provider: string): Promise<ConnectFeedbackIntegrationResult> =>
+      request(`/api/feedback/collectors/${collectorId}/integrations`, {
+        method: 'POST',
+        body: JSON.stringify({ provider }),
+      }),
+    setEnabled: (collectorId: string, provider: string, enabled: boolean): Promise<{ ok: true }> =>
+      request(`/api/feedback/collectors/${collectorId}/integrations/${provider}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ enabled }),
+      }),
+    disconnect: (collectorId: string, provider: string): Promise<void> =>
+      request<void>(`/api/feedback/collectors/${collectorId}/integrations/${provider}`, { method: 'DELETE' }),
   },
 
   /** The in-app panel's submit — authenticated by session, no ingest key. */

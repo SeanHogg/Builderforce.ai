@@ -44,7 +44,12 @@ describe('parseEvents / isWebhookEvent', () => {
 
 /** Minimal chainable Drizzle mock that serves canned subscription rows and
  *  captures delivery inserts/updates. */
-function makeDb(subs: Array<{ id: string; url: string; secret: string; events: string }>) {
+function makeDb(
+  subs: Array<{ id: string; url: string; secret: string; events: string; segmentId?: string | null; sessionId?: string | null }>,
+  /** Emulates `uq_webhook_delivery_event` refusing a duplicate occurrence: the
+   *  insert returns no row, exactly as ON CONFLICT DO NOTHING does. */
+  insertConflicts = false,
+) {
   const inserts: any[] = [];
   const updates: any[] = [];
   const db = {
@@ -52,7 +57,8 @@ function makeDb(subs: Array<{ id: string; url: string; secret: string; events: s
     insert: () => ({
       values: (v: any) => {
         inserts.push(v);
-        return { returning: async () => [{ id: `deliv-${inserts.length}` }] };
+        const returning = async () => (insertConflicts ? [] : [{ id: `deliv-${inserts.length}` }]);
+        return { returning, onConflictDoNothing: () => ({ returning }) };
       },
     }),
     update: () => ({

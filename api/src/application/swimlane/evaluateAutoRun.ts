@@ -13,7 +13,8 @@
  * precisely the condition the trigger evaluates.
  */
 import { and, asc, eq } from 'drizzle-orm';
-import { swimlanes, swimlaneAgentAssignments, swimlaneRequirements, tasks } from '../../infrastructure/database/schema';
+import { swimlanes, swimlaneRequirements, tasks } from '../../infrastructure/database/schema';
+import { forLane, laneAgentAssignments } from './laneAgentAssignments';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
@@ -24,6 +25,8 @@ import { isAgentRefRoleCapable } from '../kanban/roleCapability';
 import { resolveManagedProducer } from '../kanban/managedLaneRoles';
 import { decideLaneAutoRun, withOwnerAgentFallback, type LaneAgentLike, type LaneAgentRuntime, type LaneAutoRunDecision } from './laneAutoRun';
 import { findCanonicalBoard } from './canonicalBoard';
+import { enforceLaneRequirements } from './laneRequirementGate';
+import { TicketAuditService } from '../audit/ticketAuditService';
 import { isUnapprovedFeedbackTask } from '../feedback/feedbackSpec';
 import { isReviewLane } from '../task/taskLifecycle';
 import type { RuntimeService } from '../runtime/RuntimeService';
@@ -115,6 +118,14 @@ export const EVALUATED_AUTO_RUN_REASONS: ReadonlySet<AutoRunReason> = new Set<Au
   'will_run', 'no_board', 'no_lane', 'terminal_lane', 'human_gate', 'no_agent',
   'managed_no_role', 'lane_unconfigured', 'capability_mismatch', 'already_running', 'same_lane_reentry',
   'run_cap_exhausted', 'cooldown_active', 'not_executable', 'pending_approval', 'tenant_token_limit',
+  // MODELLED SINCE 2026-08-19. The requirement gate used to run only AFTER this
+  // evaluator, inside the trigger, so the shared verdict answered `will_run` for a
+  // ticket the trigger would then decline — and all four read-only consumers (board
+  // triage chip, `/autorun-diagnostics`, the lifecycle gate snapshot, MCP
+  // `runNowCandidate`) overstated what would happen. The evaluator now probes the gate
+  // read-only ({@link ./laneRequirementGate.enforceLaneRequirements} with `dryRun`), so
+  // a live verdict genuinely refutes or confirms a recorded `lane_requirement_gate`.
+  'lane_requirement_gate',
 ]);
 
 /**
@@ -461,6 +472,15 @@ export interface AutoRunEvaluation {
    * Empty on an unmanaged board, and empty when a producer DID resolve.
    */
   unfilledRoleKeys: string[];
+  /**
+   * When {@link reason} is `lane_requirement_gate`: the roles that still owe a verdict
+   * or a deliverable on this stage.
+   *
+   * The recorded skip could already name the reviewers it DISPATCHED; it could never
+   * name the outstanding verdict PER ROLE, which is the one fact an operator looking at
+   * a ticket held in review actually needs. Empty for every other reason.
+   */
+  requirementGateRoles: string[];
 }
 
 /** The workspace token verdict as a ticket-level reader needs it: blocked or not,
@@ -580,6 +600,13 @@ export async function evaluateTaskAutoRun(
      * the dispatcher re-derives the breaker verdict from them itself.
      */
     execMemo?: ExecutionReadMemo;
+    /**
+     * Skip the read-only lane-requirement probe. For the ONE caller that enforces the
+     * real gate immediately after this evaluation ({@link ./laneEntryTrigger}) — probing
+     * there would both double the reads and let a probe disagree with the authoritative
+     * enforcement inside a single tick. Every read-only caller leaves it unset.
+     */
+    skipRequirementProbe?: boolean;
   },
 ): Promise<AutoRunEvaluation> {
   const [taskRow] = await db
@@ -616,6 +643,7 @@ export async function evaluateTaskAutoRun(
     lifecycleManaged: false,
     managedRole: null,
     unfilledRoleKeys: [],
+    requirementGateRoles: [],
     ...over,
   });
 
@@ -654,16 +682,16 @@ export async function evaluateTaskAutoRun(
 
   const rows = await db
     .select({
-      agentRef: swimlaneAgentAssignments.agentRef,
-      model: swimlaneAgentAssignments.model,
-      requiredCapabilities: swimlaneAgentAssignments.requiredCapabilities,
+      agentRef: laneAgentAssignments.agentRef,
+      model: laneAgentAssignments.model,
+      requiredCapabilities: laneAgentAssignments.requiredCapabilities,
       // The BACKPLANE the operator staffed. Not reading these two columns is what made
       // every lane agent a cloud agent on the drag path, however it was configured.
-      runtime: swimlaneAgentAssignments.runtime,
-      target: swimlaneAgentAssignments.target,
+      runtime: laneAgentAssignments.runtime,
+      target: laneAgentAssignments.target,
     })
-    .from(swimlaneAgentAssignments)
-    .where(eq(swimlaneAgentAssignments.swimlaneId, lane.id));
+    .from(laneAgentAssignments)
+    .where(forLane(lane.id));
 
   const laneAgents = await Promise.all(
     rows.map(async (r): Promise<LaneAgentLike> => {
@@ -827,7 +855,10 @@ export async function evaluateTaskAutoRun(
 async function finishEvaluation(input: {
   db: Db;
   runtimeService: RuntimeService;
-  args: { tenantId: number; taskId: number; originLaneKey?: string; tenantTokens?: TenantTokenVerdict; env?: Env };
+  args: {
+    tenantId: number; projectId: number; taskId: number; originLaneKey?: string;
+    tenantTokens?: TenantTokenVerdict; env?: Env; skipRequirementProbe?: boolean;
+  };
   status: string;
   assignedAgentRef: string | null;
   gate: 'auto' | 'human';
@@ -908,11 +939,49 @@ async function finishEvaluation(input: {
   // costs nothing there either.
   let tenantTokens: TenantTokenVerdict | null = null;
   let { reason, canRunNow } = classified;
+  let requirementGateRoles: string[] = [];
   if (canRunNow) {
     tenantTokens = await resolveTenantTokenGate(db, args.tenantId, args.tenantTokens, args.env);
     if (tenantTokens && !tenantTokens.hasTokens) {
       reason = 'tenant_token_limit';
       canRunNow = false;
+    }
+  }
+
+  // ── THE LANE REQUIREMENT GATE, MODELLED ─────────────────────────────────────
+  //
+  // `enforceLaneRequirements` used to run only AFTER this evaluator, inside the trigger,
+  // so this function answered `will_run` for a ticket the trigger would then decline —
+  // and every READ-ONLY consumer of the verdict (the board triage chip,
+  // `/autorun-diagnostics`, the lifecycle gate snapshot, MCP `runNowCandidate`)
+  // overstated what would happen. Measured on task 173: held in `in_review` awaiting a
+  // `code-reviewer` sign-off for eleven days while the gate block read `canRunNow: yes`.
+  //
+  // The gate is now probed HERE, in dry-run — the same function, the same rows, the same
+  // quorum and manifest rules, with every write and dispatch suppressed — so one verdict
+  // is true for all callers instead of one true verdict and four optimistic ones.
+  //
+  // Cost: LAZY, exactly like the token gate above. Only a ticket that has cleared every
+  // other gate pays for it, and `args.env` is required (the probe reads the manifest
+  // through the read-through cache), so a caller without one degrades to today's answer.
+  //
+  // `skipRequirementProbe` is for the TRIGGER, which enforces the real gate microseconds
+  // later: probing there would double the work and, worse, let a probe and the
+  // authoritative enforcement disagree within one tick.
+  if (canRunNow && args.env && !args.skipRequirementProbe) {
+    const probe = await enforceLaneRequirements(
+      args.env, db, runtimeService, new TicketAuditService(db),
+      {
+        tenantId: args.tenantId, projectId: args.projectId, taskId: args.taskId,
+        status, submittedBy: 'auto-run-probe', dryRun: true,
+      },
+    ).catch(() => null);
+    if (probe?.blocked) {
+      reason = 'lane_requirement_gate';
+      canRunNow = false;
+      requirementGateRoles = probe.outstandingRoles ?? [
+        ...probe.dispatchedReviewers, ...probe.dispatchedProducers,
+      ];
     }
   }
 
@@ -935,6 +1004,7 @@ async function finishEvaluation(input: {
     lifecycleManaged: input.lifecycleManaged,
     managedRole: input.managedRole,
     unfilledRoleKeys: input.unfilledRoleKeys,
+    requirementGateRoles,
   };
 }
 

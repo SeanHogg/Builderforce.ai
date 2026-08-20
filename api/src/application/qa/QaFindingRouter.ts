@@ -28,7 +28,6 @@ import { TaskPriority, TaskStatus, TaskType } from '../../domain/shared/types';
 import {
   boards,
   qaFindings,
-  swimlaneAgentAssignments,
   swimlanes,
   tasks,
 } from '../../infrastructure/database/schema';
@@ -36,6 +35,7 @@ import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { QaFindingSeverity } from './qaTypes';
 import type { Env } from '../../env';
 import { onTaskLandedInLane } from '../swimlane/laneEntryTrigger';
+import { laneAgentAssignments, laneJoinOn } from '../swimlane/laneAgentAssignments';
 
 /** Severity ordering — higher is worse. The single source of truth for both the
  *  routing threshold and any severity-weighted quality scoring. */
@@ -225,13 +225,13 @@ export class QaFindingRouter {
     const [lane] = await this.db
       .select({ key: swimlanes.key })
       .from(swimlanes)
-      .innerJoin(swimlaneAgentAssignments, eq(swimlaneAgentAssignments.swimlaneId, swimlanes.id))
+      .innerJoin(laneAgentAssignments, laneJoinOn(swimlanes.id))
       .where(
         and(
           eq(swimlanes.boardId, board.id),
           eq(swimlanes.isTerminal, false),
           sql`${swimlanes.gate} <> 'human'`,
-          sql`${swimlaneAgentAssignments.agentRef} is not null`,
+          sql`${laneAgentAssignments.agentRef} is not null`,
         ),
       )
       .orderBy(asc(swimlanes.position))

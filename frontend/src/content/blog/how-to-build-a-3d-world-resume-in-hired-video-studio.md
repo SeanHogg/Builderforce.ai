@@ -8,6 +8,28 @@ author: Sean Hogg
 
 # How to Build a 3D World Resume in the Builderforce Creation Canvas
 
+```bf-figure
+{
+  "kind": "launch",
+  "title": "Open Studio on a 3D World",
+  "links": [
+    {
+      "label": "Start a 3D World résumé",
+      "hue": "build",
+      "href": "/create/new?prompt=Create+a+3D+World+r%C3%A9sum%C3%A9+scene%3A+a+small+explorable+room+with+a+desk%2C+three+project+pedestals+a+visitor+can+walk+up+to%2C+and+a+nameplate+with+my+headline.",
+      "note": "Scene-based engine — Three.js, React Three Fiber, Rapier physics."
+    },
+    {
+      "label": "Studio",
+      "hue": "muted",
+      "href": "/creation-canvas",
+      "note": "The editor itself: viewport, object palette and inspector."
+    }
+  ],
+  "caption": "A 3D World is `mediaKind: \"game\"` on the `world-3d` engine, not one of the older sprite-based mini-game templates."
+}
+```
+
 ## The Playable Resume
 
 The boldest format the Builderforce Creation Canvas supports is a 3D World — an explorable scene a recruiter can walk through. It's overkill for an accounting role and exactly right for a game developer, a 3D artist, a technical artist, or an XR engineer who needs to prove they can ship interactive 3D.

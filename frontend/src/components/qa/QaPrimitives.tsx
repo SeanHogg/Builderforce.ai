@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Shared presentation primitives for the Agentic QA surfaces.
  *
@@ -13,6 +11,11 @@
  *
  * Colours come from theme tokens only (`var(--…)`), so every surface built from
  * these reads correctly in BOTH themes without a per-component decision.
+ *
+ * No `'use client'` directive of its own: it is imported only from
+ * `QaContent.tsx`, which declares the boundary, and a module inside an existing
+ * client boundary inherits it. The directive marks WHERE server rendering stops,
+ * not every file on the client side of it.
  */
 
 import type React from 'react';

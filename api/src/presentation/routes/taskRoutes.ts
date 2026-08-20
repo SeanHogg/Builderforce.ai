@@ -26,6 +26,12 @@ import { recordActivity, resolveActorFromContext } from '../../application/activ
 import { fireEventTriggers } from '../../application/workflow/eventTriggers';
 import { buildTicketLifecycle } from '../../application/activity/ticketLifecycleLedger';
 import { buildTicketContext } from '../../application/task/ticketContext';
+import {
+  applyDecompositionCleanup,
+  findDecompositionCleanupCandidates,
+  type CleanupSelection,
+} from '../../application/task/decompositionCleanup';
+import { loadPlanVerdictsForTasks } from '../../application/planning/planVerdictStore';
 import { pmoVersionKey } from './pmoRoutes';
 import { RuntimeService } from '../../application/runtime/RuntimeService';
 import { dispatchCloudRunForTask } from './runtimeRoutes';
@@ -241,6 +247,30 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     }));
   };
 
+  /**
+   * Fire the `task-created` BOARD EVENT for workflow triggers.
+   *
+   * Split out of {@link emitTaskActivity} because the two halves answer to different
+   * owners now: the audit row is written once, by the service, for every writer that
+   * mints a ticket (see `activity/taskCreated.ts`), while the workflow trigger is a
+   * property of THIS request and has always fired from here. Keeping them fused meant
+   * the route had to re-record a row the service had already written.
+   */
+  const fireTaskCreatedEvent = (
+    c: Context<HonoEnv>,
+    o: { taskId: number; projectId: number | null; title: string | null },
+  ): void => {
+    c.executionCtx.waitUntil(fireEventTriggers(db, {
+      tenantId: c.get('tenantId'),
+      env: c.env as Env,
+      eventType: 'board-event',
+      payload: { taskId: o.taskId, projectId: o.projectId ?? null, title: o.title ?? null },
+      match: { boardEvent: 'task-created' },
+    }).catch((error) => {
+      reportCaughtError(error, { source: "presentation/routes/taskRoutes.ts", operation: "fireTaskCreatedEvent" });
+    }));
+  };
+
   // Bump the project's epic-tree cache version so the next /:id/tree read reloads.
   // Any task write (create/update/decompose/move/delete) can reshape a tree, so
   // every mutation calls this. Best-effort — a stale tree self-heals on the KV TTL.
@@ -282,9 +312,19 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     // one grouped read beside the PRD counts (`loadTicketBuildStatuses`), never a query
     // per card: this is the most-loaded read path the product has.
     const ids = plain.map(t => Number(t.id)).filter(n => Number.isFinite(n));
-    const [specCounts, buildStatuses] = await Promise.all([
+    // The PLAN VERDICT rides the same list for the same reason as the build verdict:
+    // "this Epic's plan does not fit its window" / "these children are in a
+    // dependency cycle" is a fact about the ticket a PM must be able to see WHERE
+    // THEY SCAN, not only after opening it. Only Epics carry one, so this is a small
+    // indexed read even on a large board.
+    const epicIds = plain
+      .filter((t) => t.taskType === 'epic')
+      .map((t) => Number(t.id))
+      .filter((n) => Number.isFinite(n));
+    const [specCounts, buildStatuses, planVerdicts] = await Promise.all([
       countSpecsByTask(db, ids),
       loadTicketBuildStatuses(db, c.get('tenantId'), ids),
+      loadPlanVerdictsForTasks(db, c.get('tenantId'), epicIds),
     ]);
     return c.json({
       tasks: plain.map(t => ({
@@ -293,6 +333,9 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
         // Absent for a ticket with no pull request — the client's default is `unknown`
         // and both render nothing, so there is no reason to spend a field per card.
         buildStatus: buildStatuses.get(Number(t.id)) ?? null,
+        // Absent when the plan is clean — see planVerdictStore: "no row" is the ONE
+        // encoding of "nothing to warn about".
+        planVerdict: planVerdicts.get(Number(t.id)) ?? null,
       })),
     });
   });
@@ -365,6 +408,62 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     return c.body(null, 204);
   });
 
+  // ── Decomposition cleanup: REVIEW, then apply what a human selected ─────────
+  //
+  // Two routes on purpose. The GET produces candidates with their evidence and
+  // never changes anything; the POST touches only the ids the reviewer sent back.
+  // There is deliberately no "archive everything matching" endpoint — the rule
+  // that flags these rows reads TITLES, and a title is a signal, not a proof.
+  //
+  // Mounted above `/:id` so `decomposition-cleanup` is not parsed as a task id.
+
+  // GET /api/tasks/decomposition-cleanup?project=<id>
+  router.get('/decomposition-cleanup', requirePermission(PERMISSIONS.TASK_READ), async (c) => {
+    const projectId = parseProjectId(c.req.query('project'));
+    const groups = await findDecompositionCleanupCandidates(db, c.get('tenantId'), { projectId });
+    return c.json({
+      groups,
+      candidateCount: groups.reduce((n, g) => n + g.candidates.length, 0),
+    });
+  });
+
+  // POST /api/tasks/decomposition-cleanup/apply — archive/merge SELECTED ids only.
+  router.post('/decomposition-cleanup/apply', requirePermission(PERMISSIONS.TASK_WRITE), async (c) => {
+    const tenantId = c.get('tenantId');
+    const body = await c.req.json<{ projectId?: number; selections?: CleanupSelection[] }>();
+    const selections = Array.isArray(body.selections) ? body.selections : [];
+    if (selections.length === 0) return c.json({ error: 'selections is required and must be non-empty' }, 400);
+    const projectId = typeof body.projectId === 'number' && body.projectId > 0 ? body.projectId : undefined;
+
+    const touchedProjects = new Set<number>();
+    const result = await applyDecompositionCleanup(
+      db,
+      tenantId,
+      selections,
+      // The EXISTING archive path — `TaskService.updateTask({ archived: true })`.
+      // A second archive implementation is exactly how the board and the backlog
+      // end up disagreeing about what is archived.
+      async (taskId) => {
+        const archived = await taskService.updateTask(taskId, { archived: true });
+        touchedProjects.add(archived.toPlain().projectId);
+      },
+      { projectId },
+    );
+
+    const env = c.env as Env;
+    for (const pid of touchedProjects) {
+      await bumpTreeVersion(env, pid);
+    }
+    // Archiving children changes task counts and the spine's shape.
+    await invalidateProjectsList(env, tenantId).catch((error) => {
+      reportCaughtError(error, { source: "presentation/routes/taskRoutes.ts", operation: "decompositionCleanupApply" });
+    });
+    await bumpCacheVersion(env, pmoVersionKey(tenantId)).catch((error) => {
+      reportCaughtError(error, { source: "presentation/routes/taskRoutes.ts", operation: "decompositionCleanupApply" });
+    });
+    return c.json(result);
+  });
+
   // GET /api/tasks/:id
   router.get('/:id', requirePermission(PERMISSIONS.TASK_READ), async (c) => {
     const id = Number(c.req.param('id'));
@@ -379,6 +478,12 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
       const [masked] = await new SecurityTicketAccessService(db, c.env as Env)
         .applyVisibilityForViewer(c.get('tenantId'), viewer, [plain]);
       return c.json(masked ?? plain);
+    }
+    // An Epic carries the planner's verdict on its own plan (compressed / overrunning
+    // / cyclic). Absent when the plan is clean — the drawer renders nothing then.
+    if (plain.taskType === TaskType.EPIC) {
+      const verdicts = await loadPlanVerdictsForTasks(db, c.get('tenantId'), [id]);
+      return c.json({ ...plain, planVerdict: verdicts.get(id) ?? null });
     }
     return c.json(plain);
   });
@@ -668,7 +773,16 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
       dueDate?: string | null;
       persona?: string | null;
     }>();
-    const task = await taskService.createTask(body, c.get('tenantId'));
+    // WHO opened it, resolved from the request and handed to the service — which is
+    // where the ONE creation-attribution row is now written (`activity/taskCreated.ts`).
+    // Resolving it here rather than after the create is what keeps a human-opened ticket
+    // attributed to the human: the service emits first, so a later row from this route
+    // would be the deduped one and the attribution would degrade to `system`.
+    const creator = await resolveActorFromContext(c.env as Env, db, c);
+    const task = await taskService.createTask(
+      { ...body, createdBy: creator, createdVia: 'http' },
+      c.get('tenantId'),
+    );
     const created = task.toPlain();
     await bumpTreeVersion(c.env as Env, created.projectId);
     // A new task changes the project's task counts/dates → bust the projects-list cache.
@@ -676,16 +790,18 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
       reportCaughtError(error, { source: "presentation/routes/taskRoutes.ts", operation: "createTaskRoutes" });
     });
     // Push the new card to everyone watching this project's live board.
-    c.executionCtx.waitUntil(broadcastProjectChanged(c.env?.SESSION_ROOM, c.get('tenantId'), created.projectId));
+    c.executionCtx.waitUntil(broadcastProjectChanged(c.env, c.get('tenantId'), created.projectId));
 
     // Autonomous trigger: a ticket CREATED straight into a lane with a configured
     // cloud agent (e.g. the brain drops a task into an agent-owned lane) must
     // auto-run just like one dragged in. Best-effort, off the response path.
     fireLaneAutoRun(c, { projectId: created.projectId, taskId: created.id, status: created.status });
-    emitTaskActivity(c, 'task.created', {
-      taskId: created.id, projectId: created.projectId, title: created.title,
-      summary: `Created ${created.key ?? `#${created.id}`}`,
-    });
+    // The BOARD EVENT still fires from here — `task-created` is a workflow trigger, not
+    // an audit row, and it belongs to the request. The audit row itself is no longer
+    // emitted here: `TaskService.createTask` writes it for every writer that mints a
+    // ticket, and a second call would only be deduped away (and would have lost the
+    // human attribution above). See `activity/taskCreated.ts`.
+    fireTaskCreatedEvent(c, { taskId: created.id, projectId: created.projectId, title: created.title });
     return c.json(created, 201);
   });
 
@@ -752,7 +868,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     // client viewing this project so cards/lane chips update without a reload. The
     // auto-run queued below (lane entry) lands its own execution-lifecycle push, so
     // the freshly-assigned agent appears pending the moment its run row is created.
-    c.executionCtx.waitUntil(broadcastProjectChanged(c.env?.SESSION_ROOM, c.get('tenantId'), task.toPlain().projectId));
+    c.executionCtx.waitUntil(broadcastProjectChanged(c.env, c.get('tenantId'), task.toPlain().projectId));
 
     // Any status write can change which tasks fall in the completed-by-assignee
     // window (moved into OR out of a done-class lane), so bust that rollup's
@@ -873,8 +989,8 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
       reportCaughtError(error, { source: "presentation/routes/taskRoutes.ts", operation: "createTaskRoutes" });
     });
     // The card leaves one project's board and joins another's — push both.
-    c.executionCtx.waitUntil(broadcastProjectChanged(c.env?.SESSION_ROOM, c.get('tenantId'), before?.projectId));
-    c.executionCtx.waitUntil(broadcastProjectChanged(c.env?.SESSION_ROOM, c.get('tenantId'), body.projectId));
+    c.executionCtx.waitUntil(broadcastProjectChanged(c.env, c.get('tenantId'), before?.projectId));
+    c.executionCtx.waitUntil(broadcastProjectChanged(c.env, c.get('tenantId'), body.projectId));
 
     emitTaskActivity(c, 'task.moved', {
       taskId: id, projectId: body.projectId, title: task.toPlain().title,
@@ -902,7 +1018,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
       reportCaughtError(error, { source: "presentation/routes/taskRoutes.ts", operation: "createTaskRoutes" });
     });
     // Drop the card from every client viewing this project's live board.
-    c.executionCtx.waitUntil(broadcastProjectChanged(c.env?.SESSION_ROOM, c.get('tenantId'), before?.projectId));
+    c.executionCtx.waitUntil(broadcastProjectChanged(c.env, c.get('tenantId'), before?.projectId));
     emitTaskActivity(c, 'task.deleted', {
       taskId: id, projectId: before.projectId, title: before.title,
       summary: `Deleted task #${id}`,
@@ -928,7 +1044,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
         { db, tasks: taskService, env: c.env as Env },
         { tenantId: c.get('tenantId'), segmentId: c.get('segmentId') as string, sourceKind: 'epic', sourceId: String(id), target },
       );
-      c.executionCtx.waitUntil(broadcastProjectChanged(c.env?.SESSION_ROOM, c.get('tenantId'), before.projectId));
+      c.executionCtx.waitUntil(broadcastProjectChanged(c.env, c.get('tenantId'), before.projectId));
       return c.json(result);
     } catch (e) {
       if (e instanceof ConvertError) return c.json({ error: e.message }, 400);

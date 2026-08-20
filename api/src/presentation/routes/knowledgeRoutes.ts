@@ -1085,8 +1085,9 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
   // buyer's tenant as a fresh document. Browse reads are cached behind a global
   // version token (cross-tenant) bumped on every listing write. PAID listings
   // require a recorded purchase (POST /checkout) before install; free listings
-  // install directly. One-off Stripe settlement for paid listings is not wired yet,
-  // so /checkout reports `requiresConfig` and no purchase is ever recorded.
+  // install directly. One-off Stripe settlement IS wired: /checkout mints a hosted
+  // session, /checkout/complete re-reads it from the processor and only then
+  // records the purchase and credits the seller (see knowledgeCommerce.ts).
   // =====================================================================
   const LISTING_VISIBILITIES = ['private', 'tenant', 'public'] as const;
   // Tag parsing + the market version token are shared with the PUBLIC

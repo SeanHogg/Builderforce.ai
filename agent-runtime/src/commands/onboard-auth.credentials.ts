@@ -1,3 +1,19 @@
+/**
+ * Credential setters for the onboarding wizard — one per provider.
+ *
+ * EVERY call to `upsertAuthProfile` here is awaited, and that is load-bearing.
+ * It returns a promise; until 2026-08 all nineteen setters dropped it on the
+ * floor, so `await setHuggingfaceApiKey(key)` resolved BEFORE the token reached
+ * disk. On Linux the write usually won the race against whatever came next and
+ * nothing looked wrong; on Windows it did not, which is how the wizard's own
+ * tests found it — reading back a profile the setter had already claimed to have
+ * written, and getting ENOENT, then ENOTEMPTY as the late write raced the
+ * fixture teardown. In the product the same race means an onboarding flow that
+ * exits (or a gateway that starts) before the credential exists.
+ *
+ * `setQianfanApiKey` and `setXaiApiKey` were not even declared async, so their
+ * callers had nothing to await at all.
+ */
 import type { OAuthCredentials } from "../builderforce/model/types.js";
 import { resolveBuilderForceAgentsAgentDir } from "../agents/agent-paths.js";
 import { upsertAuthProfile } from "../agents/auth-profiles.js";
@@ -13,7 +29,7 @@ export async function writeOAuthCredentials(
 ): Promise<void> {
   const email =
     typeof creds.email === "string" && creds.email.trim() ? creds.email.trim() : "default";
-  upsertAuthProfile({
+  await upsertAuthProfile({
     profileId: `${provider}:${email}`,
     credential: {
       type: "oauth",
@@ -26,7 +42,7 @@ export async function writeOAuthCredentials(
 
 export async function setAnthropicApiKey(key: string, agentDir?: string) {
   // Write to resolved agent dir so gateway finds credentials on startup.
-  upsertAuthProfile({
+  await upsertAuthProfile({
     profileId: "anthropic:default",
     credential: {
       type: "api_key",
@@ -39,7 +55,7 @@ export async function setAnthropicApiKey(key: string, agentDir?: string) {
 
 export async function setGeminiApiKey(key: string, agentDir?: string) {
   // Write to resolved agent dir so gateway finds credentials on startup.
-  upsertAuthProfile({
+  await upsertAuthProfile({
     profileId: "google:default",
     credential: {
       type: "api_key",
@@ -57,7 +73,7 @@ export async function setMinimaxApiKey(
 ) {
   const provider = profileId.split(":")[0] ?? "minimax";
   // Write to resolved agent dir so gateway finds credentials on startup.
-  upsertAuthProfile({
+  await upsertAuthProfile({
     profileId,
     credential: {
       type: "api_key",
@@ -70,7 +86,7 @@ export async function setMinimaxApiKey(
 
 export async function setMoonshotApiKey(key: string, agentDir?: string) {
   // Write to resolved agent dir so gateway finds credentials on startup.
-  upsertAuthProfile({
+  await upsertAuthProfile({
     profileId: "moonshot:default",
     credential: {
       type: "api_key",
@@ -83,7 +99,7 @@ export async function setMoonshotApiKey(key: string, agentDir?: string) {
 
 export async function setKimiCodingApiKey(key: string, agentDir?: string) {
   // Write to resolved agent dir so gateway finds credentials on startup.
-  upsertAuthProfile({
+  await upsertAuthProfile({
     profileId: "kimi-coding:default",
     credential: {
       type: "api_key",
@@ -96,7 +112,7 @@ export async function setKimiCodingApiKey(key: string, agentDir?: string) {
 
 export async function setSyntheticApiKey(key: string, agentDir?: string) {
   // Write to resolved agent dir so gateway finds credentials on startup.
-  upsertAuthProfile({
+  await upsertAuthProfile({
     profileId: "synthetic:default",
     credential: {
       type: "api_key",
@@ -109,7 +125,7 @@ export async function setSyntheticApiKey(key: string, agentDir?: string) {
 
 export async function setVeniceApiKey(key: string, agentDir?: string) {
   // Write to resolved agent dir so gateway finds credentials on startup.
-  upsertAuthProfile({
+  await upsertAuthProfile({
     profileId: "venice:default",
     credential: {
       type: "api_key",
@@ -130,7 +146,7 @@ export const VERCEL_AI_GATEWAY_DEFAULT_MODEL_REF = "vercel-ai-gateway/anthropic/
 
 export async function setZaiApiKey(key: string, agentDir?: string) {
   // Write to resolved agent dir so gateway finds credentials on startup.
-  upsertAuthProfile({
+  await upsertAuthProfile({
     profileId: "zai:default",
     credential: {
       type: "api_key",
@@ -142,7 +158,7 @@ export async function setZaiApiKey(key: string, agentDir?: string) {
 }
 
 export async function setXiaomiApiKey(key: string, agentDir?: string) {
-  upsertAuthProfile({
+  await upsertAuthProfile({
     profileId: "xiaomi:default",
     credential: {
       type: "api_key",
@@ -156,7 +172,7 @@ export async function setXiaomiApiKey(key: string, agentDir?: string) {
 export async function setOpenrouterApiKey(key: string, agentDir?: string) {
   // Never persist the literal "undefined" (e.g. when prompt returns undefined and caller used String(key)).
   const safeKey = key === "undefined" ? "" : key;
-  upsertAuthProfile({
+  await upsertAuthProfile({
     profileId: "openrouter:default",
     credential: {
       type: "api_key",
@@ -176,7 +192,7 @@ export async function setCloudflareAiGatewayConfig(
   const normalizedAccountId = accountId.trim();
   const normalizedGatewayId = gatewayId.trim();
   const normalizedKey = apiKey.trim();
-  upsertAuthProfile({
+  await upsertAuthProfile({
     profileId: "cloudflare-ai-gateway:default",
     credential: {
       type: "api_key",
@@ -192,7 +208,7 @@ export async function setCloudflareAiGatewayConfig(
 }
 
 export async function setLitellmApiKey(key: string, agentDir?: string) {
-  upsertAuthProfile({
+  await upsertAuthProfile({
     profileId: "litellm:default",
     credential: {
       type: "api_key",
@@ -204,7 +220,7 @@ export async function setLitellmApiKey(key: string, agentDir?: string) {
 }
 
 export async function setVercelAiGatewayApiKey(key: string, agentDir?: string) {
-  upsertAuthProfile({
+  await upsertAuthProfile({
     profileId: "vercel-ai-gateway:default",
     credential: {
       type: "api_key",
@@ -216,7 +232,7 @@ export async function setVercelAiGatewayApiKey(key: string, agentDir?: string) {
 }
 
 export async function setOpencodeZenApiKey(key: string, agentDir?: string) {
-  upsertAuthProfile({
+  await upsertAuthProfile({
     profileId: "opencode:default",
     credential: {
       type: "api_key",
@@ -228,7 +244,7 @@ export async function setOpencodeZenApiKey(key: string, agentDir?: string) {
 }
 
 export async function setTogetherApiKey(key: string, agentDir?: string) {
-  upsertAuthProfile({
+  await upsertAuthProfile({
     profileId: "together:default",
     credential: {
       type: "api_key",
@@ -240,7 +256,7 @@ export async function setTogetherApiKey(key: string, agentDir?: string) {
 }
 
 export async function setHuggingfaceApiKey(key: string, agentDir?: string) {
-  upsertAuthProfile({
+  await upsertAuthProfile({
     profileId: "huggingface:default",
     credential: {
       type: "api_key",
@@ -251,8 +267,8 @@ export async function setHuggingfaceApiKey(key: string, agentDir?: string) {
   });
 }
 
-export function setQianfanApiKey(key: string, agentDir?: string) {
-  upsertAuthProfile({
+export async function setQianfanApiKey(key: string, agentDir?: string) {
+  await upsertAuthProfile({
     profileId: "qianfan:default",
     credential: {
       type: "api_key",
@@ -263,8 +279,8 @@ export function setQianfanApiKey(key: string, agentDir?: string) {
   });
 }
 
-export function setXaiApiKey(key: string, agentDir?: string) {
-  upsertAuthProfile({
+export async function setXaiApiKey(key: string, agentDir?: string) {
+  await upsertAuthProfile({
     profileId: "xai:default",
     credential: {
       type: "api_key",

@@ -68,8 +68,25 @@ async function exportOffice(format: OfficeFormat, body: Record<string, unknown>)
   downloadBlob(await res.blob(), filenameFromResponse(res, `export.${format}`));
 }
 
+export interface DocxExportOptions {
+  theme?: DocxTheme;
+  /**
+   * The `.docx` this document was IMPORTED from, if it was.
+   *
+   * With it the server reopens that package and writes the edited body into its
+   * own `word/document.xml`, so "update this Word doc" hands back the same
+   * document — its theme, its numbering, its section layout — edited. Without
+   * it there is no package to edit and the file is regenerated from `theme`.
+   */
+  sourceFileKey?: string;
+}
+
 /** Render markdown as a Word document and download it. */
-export const exportDocx = (markdown: string, title: string, theme?: DocxTheme) => exportOffice('docx', { markdown, title, ...(theme ? { theme } : {}) });
+export const exportDocx = (markdown: string, title: string, options: DocxExportOptions = {}) => exportOffice('docx', {
+  markdown, title,
+  ...(options.theme ? { theme: options.theme } : {}),
+  ...(options.sourceFileKey ? { sourceFileKey: options.sourceFileKey } : {}),
+});
 
 /** Render markdown as a paginated PDF and download it. `subtitle` and `footer`
  * ride the cover band and every page foot when the caller has them. */

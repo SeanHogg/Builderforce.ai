@@ -10,6 +10,15 @@ import {
   createDefaultCreationData, creationObjectAiContext, creationObjectContentFields,
   creationObjectDefinition, creationObjectMutableFields, emptyShellProblem,
 } from '@/components/creation-canvas/creationObjectRegistry';
+import en from '@/i18n/messages/en.json';
+import zh from '@/i18n/messages/zh.json';
+import es from '@/i18n/messages/es.json';
+import fr from '@/i18n/messages/fr.json';
+import de from '@/i18n/messages/de.json';
+
+const CATALOGS = { en, zh, es, fr, de } as const;
+const at = (catalog: unknown, path: readonly string[]): unknown =>
+  path.reduce<unknown>((node, key) => (node && typeof node === 'object' ? (node as Record<string, unknown>)[key] : undefined), catalog);
 
 describe('the founder spec covers the contract', () => {
   it('specs every declared founder kind, and nothing else', () => {
@@ -249,5 +258,167 @@ describe('the counterparty resolver', () => {
     const field = founderObjectSpec('bill')!.fields.find((entry) => entry.name === 'vendorAccount')!;
     const legacyBill = { kind: 'bill', title: 'B-1', vendor: 'Some Supplier Inc' };
     expect(String(specFieldValue(field, legacyBill, makeSpecDeriveBoard([legacyBill])))).toContain('No `account` matches');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// FO-G2 — a contract's obligations, and the invoices and bills raised against
+// them. The half that turns `obligations` from prose in a table into something
+// the board can actually check.
+// ---------------------------------------------------------------------------
+
+describe('contract obligations', () => {
+  const MSA = {
+    kind: 'contract',
+    title: 'Acme MSA',
+    reference: 'MSA-ACME-2026',
+    counterparty: 'Acme Holdings Ltd',
+    currency: 'USD',
+    obligations: [
+      { reference: 'SUPPORT-Q', obligation: 'Quarterly support fee', kind: 'receivable', owner: 'Jane Lee', due: '2026-09-30', cadence: 'quarterly', amount: 12000, status: 'pending' },
+      { reference: 'HOSTING-M', obligation: 'Monthly hosting pass-through', kind: 'payable', owner: 'Sam Ortiz', due: '2026-09-15', cadence: 'monthly', amount: 800, status: 'pending' },
+      // A REPORT moves no money. It must never be counted as un-invoiced revenue,
+      // which is the whole reason `kind` is a column rather than an inference.
+      { reference: 'SLA-REPORT', obligation: 'Monthly SLA report', kind: 'report', owner: 'Sam Ortiz', due: '2026-09-05', cadence: 'monthly', status: 'pending' },
+    ],
+  };
+  const SUPPORT_INVOICE = {
+    kind: 'invoice', title: 'INV-101', invoiceNumber: 'INV-101', currency: 'USD',
+    contractRef: 'MSA-ACME-2026', obligationRef: 'SUPPORT-Q', amount: 12000, dueAt: '2026-09-30',
+  };
+  const HOSTING_BILL = {
+    kind: 'bill', title: 'Acme hosting', reference: 'ACME-77', currency: 'USD',
+    contractRef: 'MSA-ACME-2026', obligationRef: 'HOSTING-M', amount: 800, dueAt: '2026-09-15', recurring: 'monthly',
+  };
+  const STRAY_BILL = {
+    kind: 'bill', title: 'Acme onboarding', reference: 'ACME-78', currency: 'USD',
+    contractRef: 'MSA-ACME-2026', obligationRef: 'ONBOARDING', amount: 5000, dueAt: '2026-09-20', recurring: 'none',
+  };
+
+  const fieldOn = (kind: string, name: string) => founderObjectSpec(kind)!.fields.find((entry) => entry.name === name)!;
+  const coverage = (objects: readonly Record<string, unknown>[]) =>
+    String(specFieldValue(fieldOn('contract', 'obligationCoverage'), MSA, makeSpecDeriveBoard([...objects])) ?? '');
+
+  it('models an obligation as a row with an identity, a direction and a cadence', () => {
+    const obligations = fieldOn('contract', 'obligations');
+    expect(obligations.render).toBe('rows');
+    expect(obligations.columns).toEqual(['reference', 'obligation', 'kind', 'owner', 'due', 'cadence', 'amount', 'status']);
+  });
+
+  it('resolves an obligation that has an invoice against it', () => {
+    const verdict = coverage([MSA, SUPPORT_INVOICE, HOSTING_BILL]);
+    expect(verdict).toContain('2 of 2 billable obligations');
+    expect(verdict).not.toContain('Nothing raised yet');
+  });
+
+  it('says plainly which obligations have nothing raised against them', () => {
+    const verdict = coverage([MSA]);
+    expect(verdict).toContain('0 of 2 billable obligations');
+    expect(verdict).toContain('Nothing raised yet for: Quarterly support fee, Monthly hosting pass-through');
+  });
+
+  it('never counts a non-monetary obligation as un-invoiced', () => {
+    // Three obligation rows, two of them billable. A report showing up as un-invoiced
+    // revenue would be a receivable the company does not have.
+    expect(coverage([MSA])).toContain('of 2 billable');
+    expect(coverage([MSA])).not.toContain('Monthly SLA report');
+  });
+
+  it('names a document that points here and matches no obligation', () => {
+    const verdict = coverage([MSA, SUPPORT_INVOICE, HOSTING_BILL, STRAY_BILL]);
+    expect(verdict).toContain('match no obligation on it');
+    expect(verdict).toContain('ACME-78');
+  });
+
+  /**
+   * The binding is EXPLICIT. Two agreements with one company is the normal case, so a
+   * document that names the counterparty and not the contract must resolve to nothing —
+   * inferring the join from the counterparty is the string match FO-A1/FO-A2 removed.
+   */
+  it('ignores a document that names the counterparty but not the contract', () => {
+    const byNameOnly = { kind: 'invoice', title: 'INV-102', invoiceNumber: 'INV-102', customer: 'Acme Holdings Ltd', amount: 12000 };
+    expect(coverage([MSA, byNameOnly])).toContain('0 of 2 billable obligations');
+  });
+
+  it('flags a bill whose obligation does not exist on the contract it names', () => {
+    const verdict = String(specFieldValue(fieldOn('bill', 'contractObligation'), STRAY_BILL, makeSpecDeriveBoard([MSA, STRAY_BILL])));
+    expect(verdict).toContain('charge with no matching obligation');
+    expect(verdict).toContain('Acme MSA');
+  });
+
+  it('confirms a bill that matches on amount, date and cadence', () => {
+    const verdict = String(specFieldValue(fieldOn('bill', 'contractObligation'), HOSTING_BILL, makeSpecDeriveBoard([MSA, HOSTING_BILL])));
+    expect(verdict).toContain('Discharges obligation "Monthly hosting pass-through"');
+    expect(verdict).toContain('cadence');
+  });
+
+  it('names every axis a bill disagrees with the obligation on', () => {
+    const wrong = { ...HOSTING_BILL, amount: 900, dueAt: '2026-09-22', recurring: 'annual' };
+    const verdict = String(specFieldValue(fieldOn('bill', 'contractObligation'), wrong, makeSpecDeriveBoard([MSA, wrong])));
+    expect(verdict).toContain('the amount is 900 where the obligation says 800');
+    expect(verdict).toContain('7 days after');
+    expect(verdict).toContain('recurs annual where the obligation says monthly');
+  });
+
+  it('tells an invoice which obligation it discharges', () => {
+    const verdict = String(specFieldValue(fieldOn('invoice', 'contractObligation'), SUPPORT_INVOICE, makeSpecDeriveBoard([MSA, SUPPORT_INVOICE])));
+    expect(verdict).toContain('Discharges obligation "Quarterly support fee"');
+    // An invoice declares no recurrence, so the confirming sentence must not claim a
+    // cadence agreed that nothing on the card states.
+    expect(verdict).not.toContain('cadence');
+  });
+
+  it('asks for an obligationRef when a document names only the contract', () => {
+    const vague = { ...SUPPORT_INVOICE, obligationRef: '' };
+    const verdict = String(specFieldValue(fieldOn('invoice', 'contractObligation'), vague, makeSpecDeriveBoard([MSA, vague])));
+    expect(verdict).toContain('SUPPORT-Q');
+    expect(verdict).toContain('HOSTING-M');
+  });
+
+  it('gives the same honest not-found sentence the counterparty resolver gives', () => {
+    // The half `boardRefField` exists to keep identical: a reference that resolves to
+    // nothing must SAY so on every kind, never draw an empty section.
+    const orphan = { ...SUPPORT_INVOICE, contractRef: 'MSA-NOBODY' };
+    const verdict = String(specFieldValue(fieldOn('invoice', 'contractObligation'), orphan, makeSpecDeriveBoard([orphan])));
+    expect(verdict).toBe('No `contract` matches "MSA-NOBODY" yet — author one to link this.');
+  });
+
+  it('draws nothing at all on a document with no contract behind it', () => {
+    const standalone = { kind: 'invoice', title: 'INV-103', invoiceNumber: 'INV-103', amount: 50 };
+    expect(specFieldValue(fieldOn('invoice', 'contractObligation'), standalone, makeSpecDeriveBoard([standalone]))).toBeUndefined();
+  });
+
+  it('keeps every resolver read-only and every reference authorable', () => {
+    for (const kind of ['invoice', 'bill'] as const) {
+      expect(founderMutableFields(kind)).toContain('contractRef');
+      expect(founderMutableFields(kind)).toContain('obligationRef');
+      expect(founderMutableFields(kind)).not.toContain('contractObligation');
+      expect(fieldOn(kind, 'contractObligation').derived).toBe(true);
+    }
+    expect(founderMutableFields('contract')).not.toContain('obligationCoverage');
+    expect(founderMutableFields('contract')).toContain('obligations');
+  });
+
+  it('stops telling a bill to write "no matching contract" into risks by hand', () => {
+    // Log-then-fix: the hint named the case and nothing computed it. Now that
+    // `contractObligation` does, an authored chip beside it is a staler second answer.
+    expect(fieldOn('bill', 'risks').hint).toContain('contractObligation');
+    expect(fieldOn('bill', 'risks').hint).not.toContain('a charge with no matching contract,');
+  });
+});
+
+describe('founder localisation', () => {
+  it('has a real translation for every founder field and column in all five catalogs', () => {
+    for (const [locale, catalog] of Object.entries(CATALOGS)) {
+      for (const spec of FOUNDER_OBJECT_SPECS) {
+        expect(at(catalog, ['creationCanvas', 'object', spec.kind]), `${locale}.object.${spec.kind}`).toBeTruthy();
+        for (const field of spec.fields) {
+          expect(at(catalog, ['creationCanvas', 'founder', 'field', field.label]), `${locale}.field.${field.label}`).toBeTruthy();
+          for (const column of field.columns ?? []) {
+            expect(at(catalog, ['creationCanvas', 'founder', 'column', column]), `${locale}.column.${column}`).toBeTruthy();
+          }
+        }
+      }
+    }
   });
 });

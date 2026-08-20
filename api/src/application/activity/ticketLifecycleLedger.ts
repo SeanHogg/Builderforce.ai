@@ -45,7 +45,8 @@ import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import {
-  activityLog, executions, taskStatusTransitions, tasks, toolAuditEvents,
+  activityLog, executions, taskStatusTransitions, tasks, ticketParticipants,
+  ticketRoleSignoffs, toolAuditEvents,
 } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { getCacheVersion, getOrSetCached } from '../../infrastructure/cache/readThroughCache';
@@ -58,6 +59,8 @@ import {
 } from '../swimlane/evaluateAutoRun';
 import { normalizeErrorMessage } from '../quality/errorSpec';
 import { activityLogVersionKey } from './activityLog';
+import { isParticipantSatisfied } from '../kanban/participantStates';
+import { isAutoAttestedContribution } from '../kanban/signoffContribution';
 
 // ── Wire vocabulary ─────────────────────────────────────────────────────────
 
@@ -98,7 +101,13 @@ export const RUN_LIFECYCLE_TOOLS = [
 ] as const;
 
 /** Where a ledger event was READ FROM — the chain of custody for an audit. */
-export type LifecycleEventSource = 'activity_log' | 'task_status_transitions' | 'executions' | 'tool_audit_events';
+export type LifecycleEventSource =
+  | 'activity_log'
+  | 'task_status_transitions'
+  | 'executions'
+  | 'tool_audit_events'
+  /** The coordinated-role manifest + sign-off ledger — see {@link TicketLifecycle.signoffs}. */
+  | 'ticket_role_signoffs';
 
 export type LifecycleEventKind =
   | 'created'
@@ -113,6 +122,10 @@ export type LifecycleEventKind =
   /** A non-terminal RUN state that held the ticket — paused-timeout, re-queue,
    *  backplane crash, queued. See {@link RUN_LIFECYCLE_TOOLS}. */
   | 'run_lifecycle'
+  /** A recorded role VERDICT (`ticket_role_signoffs`) — approved / changes_requested /
+   *  waived / delegated. On a lifecycle-managed board this, not a run completing, is
+   *  what actually advances a review stage. */
+  | 'signoff_recorded'
   | 'role_event';
 
 /** Who drove one event. 'system' is identity-less automation only — an agent that can
@@ -165,8 +178,50 @@ export interface LifecycleEvent {
    * the queue for a day".
    */
   queuedMs?: number | null;
+  /** The role a `signoff_recorded` event belongs to. */
+  roleKey?: string | null;
+  /** The verdict a `signoff_recorded` event carries. */
+  verdict?: string | null;
   /** Which table this row came from — so the timeline reads as evidence. */
   source: LifecycleEventSource;
+}
+
+/**
+ * WHO STILL OWES SOMETHING — the fifth source.
+ *
+ * The ledger joined `activity_log`, `task_status_transitions`, `executions` and
+ * `tool_audit_events`. On a lifecycle-managed board none of those four holds the thing
+ * that is actually keeping a ticket in a review lane: an outstanding
+ * `ticket_role_signoffs` verdict, or an open `ticket_participants` slot. So the chain of
+ * custody showed a reviewer run completing and then nothing at all, with no way to see
+ * WHICH role still owed a verdict — and the `lane_requirement_gate` skip could name the
+ * reviewers it dispatched but never the outstanding verdict per role.
+ */
+export interface LifecycleSignoffState {
+  /** Latest verdict per role, newest first. Empty when nothing has been recorded. */
+  verdicts: Array<{
+    roleKey: string;
+    verdict: string;
+    laneKey: string | null;
+    memberName: string | null;
+    /** True when the platform credited this from a completed run rather than a
+     *  deliberate judgement — see `contribution.autoAttested`. */
+    autoAttested: boolean;
+    at: string;
+  }>;
+  /** Manifest slots for the ticket's CURRENT stage that are still open. */
+  openSlots: Array<{
+    roleKey: string;
+    responsibility: string;
+    state: string;
+    required: boolean;
+    assigneeName: string | null;
+    /** No assignee at all — the slot gates completion and nobody owns it. */
+    unstaffed: boolean;
+  }>;
+  /** Open REQUIRED slots on the current stage, by role — the shortest answer to
+   *  "who is holding this ticket". */
+  outstandingRoles: string[];
 }
 
 /**
@@ -479,6 +534,16 @@ export interface LifecycleGateSnapshot {
   authorizedRoleKeys: string[];
   /** The role-attributed run that WOULD go out: the role, its agent, and where it came from. */
   managedRole: { roleKey: string; agentRef: string; source: 'manifest' | 'lane_agent' | 'roster' } | null;
+  /**
+   * The roles that still owe a verdict or a deliverable on the ticket's current stage.
+   *
+   * The `lane_requirement_gate` skip could name the reviewers it DISPATCHED, never the
+   * outstanding verdict per role — so a snapshot saying "a role sign-off is still
+   * outstanding" could not say WHICH. Seeded from the evaluator's own requirement probe
+   * and replaced by the manifest's open required slots when the ledger has them (the
+   * manifest is the richer answer: it also names slots nobody was ever dispatched for).
+   */
+  outstandingRoles: string[];
 }
 
 /** Cap on the execution ids listed per failure group — an id list is a pointer,
@@ -604,6 +669,7 @@ export function toGateSnapshot(e: AutoRunEvaluation): LifecycleGateSnapshot {
     managedRole: e.managedRole
       ? { roleKey: e.managedRole.roleKey, agentRef: e.managedRole.agentRef, source: e.managedRole.source }
       : null,
+    outstandingRoles: e.requirementGateRoles,
   };
 }
 
@@ -623,10 +689,13 @@ export interface TicketLifecycle {
   dispatchers: LifecycleDispatcher[];
   /** The live gate evaluation, when the caller supplied one. */
   gate: LifecycleGateSnapshot | null;
+  /** The FIFTH source — who still owes a verdict or a deliverable. See
+   *  {@link LifecycleSignoffState}. */
+  signoffs: LifecycleSignoffState;
 }
 
 /**
- * Build one ticket's full lifecycle ledger. Five bounded reads (no N+1), merged and
+ * Build one ticket's full lifecycle ledger. Six bounded reads (no N+1), merged and
  * ordered by timestamp.
  *
  * `live` is a fresh `evaluateTaskAutoRun` result. It supplies BOTH the authoritative
@@ -666,7 +735,7 @@ export async function buildTicketLifecycle(
   if (!task) return null;
 
   const sessionKey = `task:${args.taskId}`;
-  const [activityRows, transitionRows, execRows, decisionRows] = await Promise.all([
+  const [activityRows, transitionRows, execRows, decisionRows, signoffRows, slotRows] = await Promise.all([
     db
       .select({
         id: activityLog.id,
@@ -721,7 +790,70 @@ export async function buildTicketLifecycle(
         eq(toolAuditEvents.sessionKey, sessionKey),
         inArray(toolAuditEvents.toolName, [...AUTORUN_DECISION_TOOLS]),
       )),
+    // ── SOURCE 5a: the sign-off LEDGER ──────────────────────────────────────
+    // On a lifecycle-managed board a recorded VERDICT, not a run completing, is what
+    // advances a review stage. Without this read the chain of custody showed a reviewer
+    // run finishing and then nothing at all.
+    db
+      .select({
+        roleKey: ticketRoleSignoffs.roleKey,
+        laneKey: ticketRoleSignoffs.laneKey,
+        verdict: ticketRoleSignoffs.verdict,
+        memberName: ticketRoleSignoffs.memberName,
+        memberKind: ticketRoleSignoffs.memberKind,
+        contribution: ticketRoleSignoffs.contribution,
+        createdAt: ticketRoleSignoffs.createdAt,
+      })
+      .from(ticketRoleSignoffs)
+      .where(scopedToTenant(ticketRoleSignoffs, args.tenantId, eq(ticketRoleSignoffs.taskId, args.taskId)))
+      .orderBy(ticketRoleSignoffs.createdAt),
+    // ── SOURCE 5b: the participation MANIFEST ───────────────────────────────
+    // The open slots are the other half of "who still owes something": a slot with no
+    // assignee gates completion and nobody is working it, which no run row can express.
+    db
+      .select({
+        roleKey: ticketParticipants.roleKey,
+        stageKey: ticketParticipants.stageKey,
+        responsibility: ticketParticipants.responsibility,
+        required: ticketParticipants.required,
+        state: ticketParticipants.state,
+        assigneeRef: ticketParticipants.assigneeRef,
+        assigneeName: ticketParticipants.assigneeName,
+      })
+      .from(ticketParticipants)
+      .where(scopedToTenant(ticketParticipants, args.tenantId, eq(ticketParticipants.taskId, args.taskId))),
   ]);
+
+  // Latest verdict PER ROLE (the rows arrive oldest-first, so a later row wins).
+  const latestVerdictByRole = new Map<string, (typeof signoffRows)[number]>();
+  for (const r of signoffRows) latestVerdictByRole.set(r.roleKey, r);
+
+  // Open slots for the ticket's CURRENT stage — the ones actually holding it. A
+  // lane-less slot (`stageKey === null`) applies role-wide and is included.
+  const openSlots = slotRows.filter((r) =>
+    (r.stageKey === null || r.stageKey === task.status) && !isParticipantSatisfied(r.state));
+
+  const signoffs: LifecycleSignoffState = {
+    verdicts: [...latestVerdictByRole.values()]
+      .map((r) => ({
+        roleKey: r.roleKey,
+        verdict: r.verdict,
+        laneKey: r.laneKey,
+        memberName: r.memberName,
+        autoAttested: isAutoAttestedContribution(r.contribution as Record<string, unknown> | null),
+        at: (r.createdAt as Date).toISOString(),
+      }))
+      .sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0)),
+    openSlots: openSlots.map((r) => ({
+      roleKey: r.roleKey,
+      responsibility: r.responsibility,
+      state: r.state,
+      required: r.required,
+      assigneeName: r.assigneeName,
+      unstaffed: !r.assigneeRef,
+    })),
+    outstandingRoles: [...new Set(openSlots.filter((r) => r.required).map((r) => r.roleKey))],
+  };
 
   // Run-scoped telemetry ({@link RUN_LIFECYCLE_TOOLS}) — keyed to the ticket's OWN
   // executions, so it needs their ids and cannot join the batch above. One extra
@@ -858,7 +990,26 @@ export async function buildTicketLifecycle(
     });
   }
 
-  // 5. Run-scoped lifecycle states — what a non-terminal run was DOING while the
+  // 5. Role VERDICTS — the fifth source. Every recorded sign-off, in the timeline,
+  //    so "the reviewer ran and then nothing happened" becomes either "…and approved
+  //    at 14:02" or a visible absence with a named role still owing one.
+  for (const r of signoffRows) {
+    events.push({
+      at: (r.createdAt as Date).toISOString(),
+      kind: 'signoff_recorded',
+      actorKind: normalizeActorKind(r.memberKind),
+      actorName: r.memberName,
+      toStatus: r.laneKey,
+      roleKey: r.roleKey,
+      verdict: r.verdict,
+      detail: isAutoAttestedContribution(r.contribution as Record<string, unknown> | null)
+        ? `${r.roleKey}: ${r.verdict} (credited automatically from a completed run)`
+        : `${r.roleKey}: ${r.verdict}`,
+      source: 'ticket_role_signoffs',
+    });
+  }
+
+  // 6. Run-scoped lifecycle states — what a non-terminal run was DOING while the
   //    ticket sat still. The tool name leads the detail because it is the
   //    classification (`runtime.requeue` vs `run.paused_timeout` are different
   //    findings), and the message follows as the evidence.
@@ -902,7 +1053,12 @@ export async function buildTicketLifecycle(
     verdict,
     failures: groupRunFailures(failedRows),
     dispatchers: summarizeDispatchers(dispatchedRows),
-    gate,
+    // The manifest's open required slots supersede the probe's list when there are any
+    // — it names roles that were never dispatched for, which the probe cannot see.
+    gate: gate
+      ? { ...gate, outstandingRoles: signoffs.outstandingRoles.length ? signoffs.outstandingRoles : gate.outstandingRoles }
+      : null,
+    signoffs,
   };
 }
 

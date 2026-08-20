@@ -14,10 +14,17 @@
  * duplicated here and no DB credentials live in the container. The only secret the
  * container holds is the short-lived tokened git clone URL it needs for the shell.
  *
+ * It also serves `POST /web-scan`: the two stages of the platform's web security scan
+ * that a Worker physically cannot perform (reading the peer TLS certificate, which
+ * needs a socket). Same rule as above — this process OBSERVES, the Worker decides.
+ *
  * Plain Node ESM (no build step) — node:22 ships global fetch + the APIs used here.
  */
 import { createServer, request as httpRequest } from 'node:http';
 import { connect as netConnect } from 'node:net';
+// The web-scan TLS stage exists precisely because a Cloudflare Worker has no socket:
+// `node:tls` is what lets this process read the peer certificate the Worker cannot.
+import { connect as tlsConnect } from 'node:tls';
 import { spawn } from 'node:child_process';
 import { mkdtemp, mkdir, writeFile, readFile, readdir, rm } from 'node:fs/promises';
 import { join, dirname, relative, sep } from 'node:path';
@@ -282,6 +289,16 @@ async function execTool(spec, workdir, writtenPaths, name, parsed, proc, loop) {
     if (r && r.paused) return { ok: true, paused: true, note: r.note };
     return r && typeof r === 'object' ? r : { ok: false, error: 'could not park the run on a human question' };
   }
+  // Web search. Relayed for the same reason memory and the platform tools are: the
+  // vendor credential, the shared read-through cache and the spend meter all live in
+  // the Worker. This op is what lets the container advertise `web.search` at all —
+  // before it existed the capability was withheld here, so the two cloud surfaces
+  // disagreed about what an agent could do purely because of where it happened to run.
+  if (name === 'web_search') {
+    const query = typeof parsed.query === 'string' ? parsed.query : '';
+    if (!query.trim()) return { ok: false, error: 'query is required' };
+    return op(spec, { op: 'search', args: { query } });
+  }
   // Platform (project-management) tools — the container holds no DB creds, so it
   // relays each `builtin_*` call back to the Worker, which runs the curated,
   // subset-guarded tool in-process (create task / update OKR / read remaining work).
@@ -375,6 +392,116 @@ async function gitTool(spec, workdir, proc, name, parsed) {
 }
 
 /**
+ * LIVE PREVIEW — start the project's own dev server on PREVIEW_PORT.
+ *
+ * The passthrough (`/__preview__/*` → `127.0.0.1:PREVIEW_PORT`) has existed since the
+ * ingress landed, but nothing ever STARTED a server for it to reach, so the whole
+ * preview vertical terminated in a 503. This is the missing half.
+ *
+ * The Worker owns every decision: whether preview is enabled at all, whether this
+ * tenant has capacity, which config files to write, and which command to run. This
+ * function only executes the plan it is handed — so the instance budget, the plan gate
+ * and the framework detection stay reviewable in one place on the server rather than
+ * drifting inside an image that ships separately.
+ *
+ * Entirely best-effort. A preview that cannot start must never affect the RUN: every
+ * failure path reports `failed` (so the panel can say why) and returns, and the caller
+ * ignores the result.
+ */
+async function startPreviewDevServer(spec, workdir) {
+  // Ask the Worker to acquire an instance. This is where the global budget, the
+  // per-tenant cap and the plan gate are applied, so a refusal here is final.
+  const started = await op(spec, { op: 'preview', args: { action: 'start' } }).catch(() => null);
+  if (!started || started.ok !== true) return;
+  const step = started.step && typeof started.step === 'object' ? started.step : spec.preview;
+  if (!step || !Array.isArray(step.candidates) || step.candidates.length === 0) {
+    await op(spec, { op: 'preview', args: { action: 'failed', detail: 'no preview start plan on the wire' } }).catch(() => {});
+    return;
+  }
+
+  const fail = (detail) => op(spec, { op: 'preview', args: { action: 'failed', detail } }).catch(() => {});
+
+  // 1. Write the generated config files (Vite/Metro host tuning the project cannot know
+  //    about — it has no idea it is being served through a public proxy).
+  for (const file of Array.isArray(step.files) ? step.files : []) {
+    if (!file || typeof file.path !== 'string' || typeof file.contents !== 'string') continue;
+    const abs = join(workdir, file.path);
+    if (!abs.startsWith(workdir)) continue; // never escape the workspace
+    try {
+      await mkdir(dirname(abs), { recursive: true });
+      await writeFile(abs, file.contents, 'utf8');
+    } catch (e) {
+      await fail(`could not write ${file.path}: ${e.message}`);
+      return;
+    }
+  }
+
+  // 2. Pick the first candidate whose marker file exists AND whose required
+  //    package.json script is present. Expo projects also carry a `dev` script, so the
+  //    marker alone would start the wrong server — both pieces of evidence are needed.
+  let scripts = {};
+  try {
+    scripts = JSON.parse(await readFile(join(workdir, 'package.json'), 'utf8')).scripts ?? {};
+  } catch { scripts = {}; }
+
+  let chosen = null;
+  for (const candidate of step.candidates) {
+    if (!candidate || typeof candidate.command !== 'string') continue;
+    if (candidate.when) {
+      try { await readFile(join(workdir, candidate.when)); } catch { continue; }
+    }
+    if (candidate.requiresScript && !scripts[candidate.requiresScript]) continue;
+    chosen = candidate;
+    break;
+  }
+  if (!chosen) {
+    await fail('no dev-server command matched this project (no Expo/Vite/Next marker and no runnable dev script)');
+    return;
+  }
+
+  // 3. Spawn DETACHED and unref'd: the dev server outlives this call and must not hold
+  //    the agent loop, the command timeout, or the cancel-kill handle — those belong to
+  //    the agent's own shell commands. `proc.current` is deliberately NOT set.
+  let child;
+  try {
+    child = spawn('bash', ['-lc', chosen.command], {
+      cwd: workdir,
+      env: { ...process.env, ...(step.env && typeof step.env === 'object' ? step.env : {}) },
+      detached: true,
+      stdio: 'ignore',
+    });
+    child.unref();
+  } catch (e) {
+    await fail(`could not start the dev server: ${e.message}`);
+    return;
+  }
+
+  // A command that dies immediately (missing dependency, port already bound) would
+  // otherwise sit "starting" until the health check gave up; say so straight away.
+  let exitedEarly = null;
+  child.on('exit', (code) => { exitedEarly = code; });
+  child.on('error', (e) => { exitedEarly = e.message; });
+
+  // 4. Hand the health check back to the Worker, which probes through the REAL public
+  //    path (ingress → container DO → dev server) rather than trusting localhost here —
+  //    a server bound to the wrong interface answers locally and 503s publicly.
+  const health = step.health && typeof step.health === 'object' ? step.health : { attempts: 20, intervalMs: 1500 };
+  const attempts = Number.isFinite(health.attempts) && health.attempts > 0 ? Math.min(Math.floor(health.attempts), 60) : 20;
+  const intervalMs = Number.isFinite(health.intervalMs) && health.intervalMs > 0 ? Math.min(Math.floor(health.intervalMs), 10_000) : 1_500;
+
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    if (exitedEarly !== null) {
+      await fail(`the dev server exited immediately (${exitedEarly}) — command: ${chosen.command}`);
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    const ready = await op(spec, { op: 'preview', args: { action: 'ready' } }).catch(() => null);
+    if (ready && ready.ok === true) return;
+  }
+  await fail(`the dev server did not answer on port ${step.port ?? PREVIEW_PORT} within ${Math.round((attempts * intervalMs) / 1000)}s — command: ${chosen.command}`);
+}
+
+/**
  * Drive the agent loop to completion, then finalize (PR) via the Worker.
  *
  * THREE ways out, and exactly one terminal op each:
@@ -435,6 +562,16 @@ async function runLoop(spec) {
         // it from `git status` (the gap that made execution #67 waste its budget).
         await op(spec, { op: 'event', args: { toolName: 'runtime.clone', category: 'planning', detail: { branch: checkedOut, requestedHead: headBranch ?? null, base: baseBranch ?? null }, result: `cloned ${spec.repo.cloneUrl.replace(/\/\/[^@]*@/, '//')} on branch ${checkedOut}` } }).catch(() => {});
       }
+    }
+
+    // ── LIVE PREVIEW ────────────────────────────────────────────────────────────
+    // Start the project's dev server BEFORE the agent loop, so the preview is already
+    // coming up while the first LLM turn is in flight rather than only after the run
+    // ends. Fire-and-forget on purpose: the health-check poll must not hold the loop,
+    // and a preview that never comes up must not delay or fail the RUN.
+    // Requires a shell workspace (a run whose clone failed has nothing to serve).
+    if (spec.preview && workdir) {
+      void startPreviewDevServer(spec, workdir).catch(() => { /* reported via the preview op */ });
     }
 
     // A RESUMED run continues the conversation the previous process exited with —
@@ -534,6 +671,177 @@ async function runLoop(spec) {
   }
 }
 
+// ── Web-security-scan stages ─────────────────────────────────────────────────
+//
+// The platform's web security scan runs inside a Cloudflare Worker, and two checks a
+// real external scanner performs are simply not observable from there:
+//
+//   • the PEER TLS CERTIFICATE — Worker `fetch` exposes no socket, so there is no
+//     chain, expiry, protocol version or cipher suite to read. No Worker-side code
+//     can fix that; it needs a process with `node:tls`, which is this one.
+//   • the SOFTWARE FINGERPRINT surface for a CVE lookup — one plain GET, but taken
+//     from a runtime with no Worker subrequest budget to spend.
+//
+// This container therefore OBSERVES and posts the observation back; it decides
+// nothing. Every verdict ("that cipher is weak", "that certificate expires in six
+// days", "that version matches CVE-…") is computed Worker-side by pure, unit-tested
+// functions (api/src/application/security/tlsCertificateScan.ts and
+// softwareFingerprint.ts). Judgement written here would be judgement no test could
+// reach — the image ships on its own cadence and nothing in CI executes it.
+//
+// Auth is the same shape the rest of this file uses: a per-id HMAC minted by the
+// Worker at dispatch, echoed back verbatim. The container holds no DB credentials and
+// names no tenant; the Worker resolves both from the audit id.
+
+/** Bounded body slice for fingerprinting — mirrors the Worker scan's own ceiling. */
+const WEB_SCAN_BODY_LIMIT = 200_000;
+/** One stage must not hold the container open: a hung TLS socket is the usual cause. */
+const WEB_SCAN_TIMEOUT_MS = 15_000;
+
+/** POST one stage result back to the Worker's ingest seam. Never throws. */
+async function postWebScanStage(spec, stage, payload) {
+  try {
+    const res = await fetch(`${spec.internalBaseUrl.replace(/\/$/, '')}/api/security/internal/web-scan-stage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ auditId: spec.auditId, token: spec.token, stage, ...payload }),
+    });
+    if (!res.ok) console.error(`[container] web-scan stage ${stage} ingest → ${res.status}`);
+  } catch (e) {
+    console.error(`[container] web-scan stage ${stage} ingest failed`, e);
+  }
+}
+
+/**
+ * Open a TLS connection and DESCRIBE what came back — the certificate as
+ * `getPeerCertificate()` reports it plus the negotiated protocol/cipher and Node's own
+ * chain-verification verdict.
+ *
+ * `rejectUnauthorized: false` is deliberate and is the whole point: the scanner must be
+ * able to REPORT an untrusted or expired certificate, and a socket that refuses to
+ * complete the handshake would give us nothing to report. The verdict is preserved
+ * separately in `authorized` / `authorizationError` rather than being thrown away with
+ * the connection.
+ */
+function describeTlsPeer(host, port) {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (value) => { if (!settled) { settled = true; resolve(value); } };
+    let socket;
+    try {
+      socket = tlsConnect({
+        host,
+        port,
+        servername: host,          // SNI — without it a shared host serves the wrong cert
+        rejectUnauthorized: false, // see above: we report the failure, we do not become it
+        timeout: WEB_SCAN_TIMEOUT_MS,
+      });
+    } catch (e) {
+      finish({ host, port, protocol: null, cipherName: null, cipherStandardName: null, authorized: false, authorizationError: null, certificate: null, handshakeError: e.message });
+      return;
+    }
+
+    const fail = (message) => {
+      try { socket.destroy(); } catch { /* already gone */ }
+      finish({ host, port, protocol: null, cipherName: null, cipherStandardName: null, authorized: false, authorizationError: null, certificate: null, handshakeError: message });
+    };
+    socket.once('error', (e) => fail(e.message));
+    socket.once('timeout', () => fail(`the TLS handshake timed out after ${WEB_SCAN_TIMEOUT_MS}ms`));
+
+    socket.once('secureConnect', () => {
+      let observation;
+      try {
+        const cert = socket.getPeerCertificate(false) || null;
+        const cipher = socket.getCipher?.() || null;
+        const hasCert = cert && Object.keys(cert).length > 0;
+        observation = {
+          host,
+          port,
+          protocol: socket.getProtocol?.() ?? null,
+          cipherName: cipher?.name ?? null,
+          cipherStandardName: cipher?.standardName ?? null,
+          authorized: socket.authorized === true,
+          authorizationError: socket.authorizationError ? String(socket.authorizationError) : null,
+          certificate: hasCert ? {
+            subjectCommonName: cert.subject?.CN ?? null,
+            // `subjectaltname` is one comma-joined string of `DNS:name` entries; the
+            // Worker-side matcher wants a list, and splitting it HERE keeps the one
+            // parsing quirk of Node's API at the edge that produced it.
+            subjectAltNames: String(cert.subjectaltname || '')
+              .split(',')
+              .map((s) => s.trim().replace(/^DNS:/i, '').toLowerCase())
+              .filter(Boolean),
+            issuerCommonName: cert.issuer?.CN ?? null,
+            issuerOrganization: cert.issuer?.O ?? null,
+            valid_from: cert.valid_from ?? '',
+            valid_to: cert.valid_to ?? '',
+            signatureAlgorithm: cert.sigalg ?? null,
+            // Node names the curve (`asn1Curve`/`nistCurve`) only for an EC key, so its
+            // presence is the type discriminator; anything else with a modulus size is
+            // RSA. Guessing wrong here would apply the wrong key-size floor.
+            publicKeyType: (cert.asn1Curve || cert.nistCurve) ? 'ec' : (cert.bits ? 'rsa' : null),
+            publicKeyBits: typeof cert.bits === 'number' ? cert.bits : null,
+            // A leaf whose issuer DN equals its subject DN signed itself. Compared on
+            // the rendered DN because that is all the socket gives us for both sides.
+            selfSigned: JSON.stringify(cert.subject || {}) === JSON.stringify(cert.issuer || {}),
+          } : null,
+          handshakeError: null,
+        };
+      } catch (e) {
+        observation = { host, port, protocol: null, cipherName: null, cipherStandardName: null, authorized: false, authorizationError: null, certificate: null, handshakeError: `the peer certificate could not be read: ${e.message}` };
+      }
+      try { socket.end(); } catch { /* best effort */ }
+      finish(observation);
+    });
+  });
+}
+
+/** GET the target and return the surfaces a version fingerprint is read from. */
+async function describeFingerprintSurface(origin) {
+  const res = await fetch(origin, {
+    method: 'GET',
+    redirect: 'follow',
+    headers: { 'user-agent': 'BuilderforceSecurityScanner/1.0 (+https://builderforce.ai)' },
+    signal: AbortSignal.timeout(WEB_SCAN_TIMEOUT_MS),
+  });
+  const headers = {};
+  res.headers.forEach((value, key) => { headers[key.toLowerCase()] = value; });
+  let body = '';
+  const ctype = (headers['content-type'] || '').toLowerCase();
+  if (ctype.includes('html') || ctype === '') {
+    try { body = (await res.text()).slice(0, WEB_SCAN_BODY_LIMIT); } catch { body = ''; }
+  }
+  return { headers, body };
+}
+
+/**
+ * Run both stages for one scan and report each independently.
+ *
+ * Independently is the requirement: a TLS handshake that fails must not cost the CVE
+ * stage its result, and neither may end as silence — a stage that throws is posted
+ * back as `error`, which the Worker records as `not_run` WITH the reason. The absence
+ * of a stage report is the one outcome this function must never produce, because
+ * downstream it is indistinguishable from a stage that found nothing wrong.
+ */
+async function runWebScanStages(spec) {
+  await Promise.all([
+    (async () => {
+      try {
+        await postWebScanStage(spec, 'tls', { tls: await describeTlsPeer(spec.host, spec.port) });
+      } catch (e) {
+        await postWebScanStage(spec, 'tls', { error: `the TLS stage failed inside the container: ${e.message}` });
+      }
+    })(),
+    (async () => {
+      try {
+        await postWebScanStage(spec, 'cve', { cve: await describeFingerprintSurface(spec.origin) });
+      } catch (e) {
+        await postWebScanStage(spec, 'cve', { error: `the CVE fingerprint stage failed inside the container: ${e.message}` });
+      }
+    })(),
+  ]);
+}
+
 const server = createServer((req, res) => {
   if (req.method === 'GET' && req.url === '/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -541,6 +849,24 @@ const server = createServer((req, res) => {
     return;
   }
   if (isPreviewUrl(req.url)) { proxyPreviewHttp(req, res); return; }
+  // Web-security-scan stages (TLS peer certificate + CVE fingerprint surface).
+  // Acked immediately like /run: the stages report their own results back to the
+  // Worker's ingest seam, so the Worker's dispatch never waits on a TLS handshake.
+  if (req.method === 'POST' && req.url === '/web-scan') {
+    let raw = '';
+    req.on('data', (c) => { raw += c; });
+    req.on('end', () => {
+      let spec;
+      try { spec = JSON.parse(raw); } catch { res.writeHead(400); res.end('bad request'); return; }
+      if (!spec || typeof spec.auditId !== 'number' || !spec.token || !spec.internalBaseUrl || !spec.host || !spec.origin) {
+        res.writeHead(400); res.end('missing web-scan spec fields'); return;
+      }
+      res.writeHead(202, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, accepted: spec.auditId }));
+      runWebScanStages(spec).catch((e) => console.error('[container] runWebScanStages crashed', e));
+    });
+    return;
+  }
   if (req.method === 'POST' && req.url === '/run') {
     let raw = '';
     req.on('data', (c) => { raw += c; });

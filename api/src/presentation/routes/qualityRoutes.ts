@@ -36,16 +36,11 @@ import type { TaskService } from '../../application/task/TaskService';
 import type { RuntimeService } from '../../application/runtime/RuntimeService';
 import type { HonoEnv, Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+import { isUniqueViolation } from '../../infrastructure/database/uniqueViolation';
 
 /** Encryption secret for sealing webhook/pull credentials (same resolver integrations use). */
 function integrationSecret(env: Env): string {
   return (env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET) as string;
-}
-
-/** Postgres unique-constraint violation (e.g. a second collector for one project). */
-function isUniqueViolation(e: unknown): boolean {
-  const s = e instanceof Error ? e.message : String(e);
-  return /duplicate key|unique constraint|23505/i.test(s);
 }
 
 /** Default grace window a rotated-out ingest key keeps working for (QUAL-7). */

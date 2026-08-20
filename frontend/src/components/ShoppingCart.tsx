@@ -29,7 +29,6 @@ function TypeBadge({ type }: { type: CartItem['type'] }) {
   const colors: Record<CartItem['type'], string> = {
     skill: 'var(--indigo-bright)',
     persona: 'var(--purple-bright)',
-    content: 'var(--cyan-bright)',
     agent: 'var(--emerald-bright)',
     service: 'var(--coral-bright)',
   };
@@ -111,8 +110,12 @@ export default function ShoppingCart() {
     if (checkingOut) return;
     setCheckingOut(true); setCheckoutError(null); setCheckoutSuccess(null);
     try {
-      const marketplaceItems = items.filter((item): item is CartItem & { type: 'skill' | 'persona' | 'content' } =>
-        item.type === 'skill' || item.type === 'persona' || item.type === 'content');
+      // 'skill' and 'persona' ONLY. 'content' no longer exists (migration 0982),
+      // and 'agent' is deliberately excluded: /marketplace/purchase prices only
+      // skills, so routing an agent through it would record a paid agent as a
+      // free entitlement. Agents check out through the workforce agent checkout.
+      const marketplaceItems = items.filter((item): item is CartItem & { type: 'skill' | 'persona' } =>
+        item.type === 'skill' || item.type === 'persona');
       if ((phoneItem || subscriptionItem) && items.length > 1) throw new Error(t('mixedCheckout'));
 
       if (subscriptionItem) {

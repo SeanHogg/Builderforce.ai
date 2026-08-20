@@ -36,20 +36,38 @@ function probe(url: string, kind: CanvasVideoSourceKind): Promise<{ durationSeco
   });
 }
 
+export interface UploadedCanvasFile { url: string; storageKey: string }
+
+/**
+ * Put a file in the tenant's own R2 and hand back the URL to REFERENCE it by.
+ *
+ * The one upload every canvas surface that produces media goes through — a
+ * recorded clip, a picked image, a figure lifted out of a dropped `.docx`. It
+ * returns `null` rather than throwing, and rather than falling back to a data
+ * URL, because the two callers want opposite things from a failure: media
+ * authoring keeps a guest's draft reloadable by inlining the bytes, while an
+ * imported document must NOT inline them — node data is re-serialised into the
+ * local-session snapshot on every viewport change, and a report's charts as
+ * base64 would push megabytes through that loop on every pan. Each caller
+ * decides; this function only ever means "uploaded, here is where it lives".
+ */
+export async function uploadCanvasFile(file: File): Promise<UploadedCanvasFile | null> {
+  try {
+    const uploaded = await brain.upload(file);
+    return { url: brain.uploadUrl(uploaded.key), storageKey: uploaded.key };
+  } catch {
+    return null;
+  }
+}
+
 /** The only browser-side persistence adapter used by Canvas media authoring. */
 export async function storeCanvasMedia(file: File, captureKind: CanvasVideoCaptureKind): Promise<CanvasVideoSource> {
   const kind = sourceKind(file);
-  let url: string;
-  let storageKey: string | undefined;
-  try {
-    const uploaded = await brain.upload(file);
-    storageKey = uploaded.key;
-    url = brain.uploadUrl(uploaded.key);
-  } catch {
-    // Guest canvases have no tenant R2 boundary. A data URL keeps their draft
-    // reloadable and the normal account-upgrade flow moves it server-side later.
-    url = await dataUrl(file);
-  }
+  const uploaded = await uploadCanvasFile(file);
+  const storageKey = uploaded?.storageKey;
+  // Guest canvases have no tenant R2 boundary. A data URL keeps their draft
+  // reloadable and the normal account-upgrade flow moves it server-side later.
+  const url = uploaded?.url ?? await dataUrl(file);
   const metadata = await probe(url, kind);
   return {
     id: crypto.randomUUID(),

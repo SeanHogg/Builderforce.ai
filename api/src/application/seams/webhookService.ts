@@ -1,9 +1,16 @@
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
- * Outbound webhook emitter for the cross-domain (channel-3) seams (spec 05 §4.3).
+ * THE outbound webhook emitter — one signing scheme, one backoff curve, one log.
  *
- * BuilderForce emits a small set of events the host (BurnRateOS) can subscribe
- * to. Each delivery is:
+ * It arrived for the cross-domain (channel-3) seams (spec 05 §4.3) and now also
+ * carries the PUBLIC canvas API's board and item lifecycle events. That is
+ * deliberate and it is the whole design note: a second emitter for canvas would
+ * mean a second header scheme, a second retry policy and two answers to "did that
+ * one land", and only one of the two would ever get the next fix. What canvas
+ * needed was a wider event vocabulary and a subscription that can be scoped to a
+ * BOARD — not a second delivery loop.
+ *
+ * Each delivery is:
  *   - HMAC-SHA256 signed with the subscription's secret, and
  *   - REPLAY-PROTECTED: the signature covers `${deliveryId}.${timestamp}.${body}`,
  *     and the headers carry the delivery id (a unique nonce) + timestamp so the
@@ -23,11 +30,36 @@ import type { Env } from '../../env';
 import { webhookSubscriptions, webhookDeliveries } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 
+/**
+ * Events an integrator may subscribe to.
+ *
+ * The three seam events came first. The canvas six are namespaced `canvas.*`
+ * rather than spelled `board.created` / `item.created`, because "item" and
+ * "board" are words this platform already uses for a kanban board and a work
+ * item — an unqualified `item.created` on a subscription list is genuinely
+ * ambiguous to the person choosing which boxes to tick.
+ *
+ * They are one flat list rather than two, because a subscription holds one array
+ * and the emitter reads one vocabulary. Splitting them would put the question
+ * "which list is this event from" in front of every caller.
+ */
 export const WEBHOOK_EVENTS = [
   'workitem.released',
   'sprint.completed',
   'roadmap.published',
+  // ── Canvas board + item lifecycle (`/api/v1`) ────────────────────────────
+  'canvas.board.created',
+  'canvas.board.updated',
+  'canvas.board.deleted',
+  'canvas.item.created',
+  'canvas.item.updated',
+  'canvas.item.deleted',
 ] as const;
+
+/** The canvas subset, for the surfaces that only offer those (the widget docs,
+ *  the `/api/v1/webhooks` catalogue). Derived from the list above so a new canvas
+ *  event cannot be added to one and forgotten in the other. */
+export const CANVAS_WEBHOOK_EVENTS = WEBHOOK_EVENTS.filter((e) => e.startsWith('canvas.'));
 
 export type WebhookEvent = (typeof WEBHOOK_EVENTS)[number];
 
@@ -115,9 +147,24 @@ export async function signWebhook(
 
 export interface EmitInput {
   tenantId: number;
-  segmentId: string;
+  /** Narrowing context, not the scope. NULL/absent = the event is not segment-bound
+   *  (a canvas board's segment is optional), and only segment-agnostic subscriptions
+   *  match it. */
+  segmentId?: string | null;
+  /** The board this event happened on, when it happened on one. A subscription that
+   *  named a `sessionId` receives only its own board's events. */
+  sessionId?: string | null;
   eventType: WebhookEvent;
-  /** Logical source id (e.g. the roadmap item id) — lets the receiver dedupe. */
+  /**
+   * The identity of this OCCURRENCE — not of the thing it happened to.
+   *
+   * It is half of the unique index that makes replay safety a database fact
+   * (`uq_webhook_delivery_event`, migration 1100), so it has to be unique per
+   * occurrence or a legitimate second event is silently swallowed as a duplicate.
+   * Canvas emitters therefore compose it from the board's own monotonic revision —
+   * `<sessionId>.<revision>.<objectId>` — which makes a retried API call that lands
+   * on the same revision collide, and two real edits never collide.
+   */
   eventId: string;
   /** Event payload; serialized as the POST body. */
   data: Record<string, unknown>;
@@ -131,26 +178,44 @@ export interface EmitDeps {
 }
 
 /**
- * Deliver an event to every active subscription in the segment that subscribed
- * to it. Best-effort: a failing endpoint is recorded as `failed` and never
- * throws to the caller (the emit is fire-and-forget from a mutation path).
- * Returns the number of endpoints attempted.
+ * Deliver an event to every active subscription in the TENANT that subscribed to
+ * it and whose segment/board narrowing (if any) matches. Best-effort: a failing
+ * endpoint is recorded as `failed` and never throws to the caller (the emit is
+ * fire-and-forget from a mutation path).
+ *
+ * Returns the number of MATCHED endpoints. A matched endpoint whose delivery row
+ * collided with `uq_webhook_delivery_event` is counted but not re-sent — it is the
+ * same occurrence, already enqueued.
  */
 export async function emitWebhookEvent(db: Db, input: EmitInput, deps: EmitDeps = {}): Promise<number> {
   const doFetch = deps.fetchImpl ?? fetch;
   const nowSec = deps.nowSec ?? (() => Math.floor(Date.now() / 1000));
 
+  // TENANT-scoped, which it was not before: the predicate was `segment_id = $1`
+  // alone, selective by accident (a uuid) rather than by rule. Segment and board are
+  // narrowing filters applied below, because a NULL in either column means "any",
+  // and expressing "column IS NULL OR column = $1" twice in SQL is less legible than
+  // the two lines it becomes here — the row set is one tenant's subscriptions, which
+  // is small by construction.
   const subs = await db
     .select({
       id: webhookSubscriptions.id,
       url: webhookSubscriptions.url,
       secret: webhookSubscriptions.secret,
       events: webhookSubscriptions.events,
+      segmentId: webhookSubscriptions.segmentId,
+      sessionId: webhookSubscriptions.sessionId,
     })
     .from(webhookSubscriptions)
-    .where(and(eq(webhookSubscriptions.segmentId, input.segmentId), eq(webhookSubscriptions.active, true)));
+    .where(scopedToTenant(webhookSubscriptions, input.tenantId, eq(webhookSubscriptions.active, true)));
 
-  const targets = subs.filter((s) => parseEvents(s.events).includes(input.eventType));
+  const targets = subs.filter((s) => (
+    parseEvents(s.events).includes(input.eventType)
+    // A subscription that named a segment or a board hears only that one; a
+    // subscription that named neither hears the whole workspace.
+    && (s.segmentId == null || s.segmentId === input.segmentId)
+    && (s.sessionId == null || s.sessionId === input.sessionId)
+  ));
   if (targets.length === 0) return 0;
 
   const body = JSON.stringify({
@@ -165,18 +230,25 @@ export async function emitWebhookEvent(db: Db, input: EmitInput, deps: EmitDeps 
       // Create the delivery row first so its id is the signed nonce. Persist the
       // exact body so the retry sweep can re-send identical bytes under the same
       // nonce (the receiver dedupes on the nonce, so a retry is idempotent).
+      //
+      // ON CONFLICT DO NOTHING against `uq_webhook_delivery_event` is THE replay
+      // guard, and it is the insert rather than a preceding read on purpose: two
+      // concurrent retries both read "not seen", both pass a check, and both POST.
+      // No row back therefore means "this occurrence is already enqueued or already
+      // sent" — the correct outcome is to send nothing at all, not to try again.
       const [delivery] = await db
         .insert(webhookDeliveries)
         .values({
           subscriptionId: sub.id,
           tenantId: input.tenantId,
-          segmentId: input.segmentId,
+          segmentId: input.segmentId ?? null,
           eventType: input.eventType,
           eventId: input.eventId,
           status: 'pending',
           attempts: 1,
           payload: body,
         })
+        .onConflictDoNothing()
         .returning({ id: webhookDeliveries.id });
       if (!delivery) return;
 

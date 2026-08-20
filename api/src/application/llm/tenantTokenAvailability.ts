@@ -345,7 +345,10 @@ export async function checkTenantTokenGate(
           effectivePlan: availability.effectivePlan,
         };
       }
-    } catch { /* fail open — never block a human clicking Run on a spend-scan error */ }
+    } catch (error) {
+      // Fail OPEN — never block a human clicking Run because a spend scan hiccuped.
+      reportCaughtError(error, { source: 'application/llm/tenantTokenAvailability.ts', operation: 'checkTenantTokenGate' });
+    }
   }
 
   if (availability.hasTokens || !availability.reason) return null;

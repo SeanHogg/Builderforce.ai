@@ -33,6 +33,25 @@ export interface AgentRunInput {
    * agent (the spec), so the SAME gate enforces identically on every engine/surface.
    */
   readonly policy?: { readonly gates: readonly import("./spec.js").PolicyGate[] };
+  /**
+   * SAMPLING params for every turn of this run.
+   *
+   * Distinct from the persona-derived `execParams` the engine is CONSTRUCTED with:
+   * those express the agent's personality, these express what the CALLER configured
+   * for this model — a published LLM Studio model's stored `temperature`/`top_p`, or
+   * an explicit override on a Run-now. The gateway route applied them and the cloud
+   * loop did not, so the same tenant model sampled differently depending on whether
+   * it was called over HTTP or dispatched as an agent run, with nothing saying why.
+   *
+   * On the run input rather than the construction because they belong to the TASK's
+   * chosen model, not to the surface — the same reason `policy` lives here.
+   * Explicitly-set values win over the persona defaults.
+   */
+  readonly genParams?: {
+    readonly temperature?: number;
+    readonly topP?: number;
+    readonly maxTokens?: number;
+  };
 }
 
 /** Outbound: the result of a run (or a partial run that must resume). */

@@ -48,6 +48,12 @@ export default defineConfig({
       '@builderforce/creation-canvas-contract': fileURLToPath(
         new URL('../packages/creation-canvas-contract/src/index.ts', import.meta.url),
       ),
+      // The third-party widget contract — the manifest shape, the permission
+      // vocabulary and the postMessage allowlist the API enforces at registration
+      // and the browser host enforces per message. Same source, two runtimes.
+      '@builderforce/canvas-widget-protocol': fileURLToPath(
+        new URL('../packages/canvas-widget-protocol/src/index.ts', import.meta.url),
+      ),
     },
   },
 });

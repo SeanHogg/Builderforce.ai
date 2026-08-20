@@ -57,7 +57,9 @@ export const MILESTONE_STATUSES: readonly MilestoneStatus[] =
   ['draft', 'funded', 'submitted', 'approved', 'released', 'cancelled', 'disputed'];
 
 /** What somebody is trying to do to a milestone. */
-export type MilestoneAction = 'fund' | 'submit' | 'approve' | 'reject' | 'release' | 'cancel';
+export type MilestoneAction =
+  | 'fund' | 'submit' | 'approve' | 'reject' | 'release' | 'cancel'
+  | 'dispute' | 'resolve';
 
 /**
  * Which side of the engagement is acting.
@@ -71,7 +73,12 @@ export type EscrowParty = 'client' | 'freelancer';
 interface TransitionRule {
   from: readonly MilestoneStatus[];
   to: MilestoneStatus;
-  by: EscrowParty;
+  /**
+   * Who may make this move — a LIST, because `dispute` is the one move BOTH sides
+   * own. Every pre-existing rule became a one-element list, so no transition
+   * changed meaning when the dispute flow was folded in.
+   */
+  by: readonly EscrowParty[];
   /** True when the move causes money to move, so the caller knows to write a ledger
    *  entry rather than only a status. */
   movesMoney: boolean;
@@ -86,18 +93,18 @@ interface TransitionRule {
  */
 const TRANSITIONS: Readonly<Record<MilestoneAction, TransitionRule>> = {
   // The client puts the money up. This is the ONLY thing that authorises work.
-  fund:    { from: ['draft'],                  to: 'funded',    by: 'client',     movesMoney: true },
+  fund:    { from: ['draft'],                  to: 'funded',    by: ['client'],     movesMoney: true },
   // The freelancer says it is done. Allowed from `disputed` as well: a rejection is
   // feedback, and the natural next move is to fix it and resubmit — an escrow that
   // forced a dispute to be resolved before the obvious remedy could be offered would
   // send every disagreement to a mediation flow that does not exist yet.
-  submit:  { from: ['funded', 'disputed'],     to: 'submitted', by: 'freelancer', movesMoney: false },
+  submit:  { from: ['funded', 'disputed'],     to: 'submitted', by: ['freelancer'], movesMoney: false },
   // The client accepts. Irreversible, and separate from the payout (see the header).
-  approve: { from: ['submitted'],              to: 'approved',  by: 'client',     movesMoney: false },
+  approve: { from: ['submitted'],              to: 'approved',  by: ['client'],     movesMoney: false },
   // The client does not accept. Money stays held — it is neither paid nor refunded.
-  reject:  { from: ['submitted'],              to: 'disputed',  by: 'client',     movesMoney: false },
+  reject:  { from: ['submitted'],              to: 'disputed',  by: ['client'],     movesMoney: false },
   // The money reaches the freelancer. Retryable: a failed payout leaves `approved`.
-  release: { from: ['approved'],               to: 'released',  by: 'client',     movesMoney: true },
+  release: { from: ['approved'],               to: 'released',  by: ['client'],     movesMoney: true },
   // Called off. NOT allowed once work has been submitted — a client must approve or
   // reject what they were given, and cancelling out from under a submission is how
   // escrow becomes a way to take work for free.
@@ -105,7 +112,32 @@ const TRANSITIONS: Readonly<Record<MilestoneAction, TransitionRule>> = {
   // `movesMoney` is TRUE here but is narrowed per-state by `evaluateEscrow`: cancelling
   // a `draft` refunds nothing because nothing was ever held, and writing a zero-value
   // refund row for it would put entries in the ledger that reconcile to nothing.
-  cancel:  { from: ['draft', 'funded'],        to: 'cancelled', by: 'client',     movesMoney: true },
+  cancel:  { from: ['draft', 'funded'],        to: 'cancelled', by: ['client'],     movesMoney: true },
+  // The only move BOTH sides own. A freelancer who has delivered and cannot get an
+  // answer needs it as much as a client who has been handed nothing, and an escrow
+  // where only the party holding the money may object is not escrow.
+  //
+  // `disputed` is absent from `from` ON PURPOSE: a second dispute over one pot of
+  // money is two answers to one question. `disputes.ts` refuses that case with its
+  // own `already_disputed` rather than the generic `wrong_status`, because the two
+  // send a person looking in different places.
+  dispute: {
+    from: ['funded', 'submitted', 'approved'], to: 'disputed',
+    by: ['client', 'freelancer'], movesMoney: false,
+  },
+  // The exit `disputed` never had.
+  //
+  // `to` is nominal. Where a resolved milestone LANDS depends on the ruling — released
+  // in full, cancelled as a refund, or returned to the status it held before the
+  // dispute — so the mover reads it from `statusAfterRuling(outcome, priorStatus)` in
+  // `disputes.ts`. This row declares only WHO may move and FROM WHERE; a single `to`
+  // here would be a fourth answer that is wrong three times out of four.
+  //
+  // `by: ['client']` and not a `mediator` party is deliberate. The `EscrowParty` axis
+  // is "whose money is this", and a mediator is neither side — so mediator authority
+  // is checked by `resolveMediatorAuthority` in `disputes.ts`, outside this table,
+  // rather than by widening an axis that would then mean two different things.
+  resolve: { from: ['disputed'], to: 'disputed', by: ['client'], movesMoney: true },
 };
 
 export type EscrowVerdict =
@@ -143,7 +175,7 @@ export interface EscrowRequest {
 export function evaluateEscrow(request: EscrowRequest): EscrowVerdict {
   const rule = TRANSITIONS[request.action];
   if (!rule) return { allowed: false, reason: 'unknown_action' };
-  if (rule.by !== request.party) return { allowed: false, reason: 'wrong_party' };
+  if (!rule.by.includes(request.party)) return { allowed: false, reason: 'wrong_party' };
   if (!rule.from.includes(request.status)) return { allowed: false, reason: 'wrong_status' };
   // A zero-value hold is not escrow, it is a checkbox. Refused at funding rather than
   // at release so the client learns before the freelancer has been told to start.

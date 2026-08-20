@@ -14,8 +14,11 @@ import { artifactLikes, artifactAssignments } from '../../infrastructure/databas
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
-const VALID_ARTIFACT_TYPES = new Set(['skill', 'persona', 'content'] as const);
-type ArtifactType = 'skill' | 'persona' | 'content';
+// Mirrors the `artifact_type` enum (migration 0982: 'content' retired, 'agent'
+// admitted). Stats are likes/installs on a marketplace artifact, and a marketplace
+// agent is one — the public agent listing can carry a like count like any skill.
+const VALID_ARTIFACT_TYPES = new Set(['skill', 'persona', 'agent'] as const);
+type ArtifactType = 'skill' | 'persona' | 'agent';
 
 /**
  * Soft-auth: extract userId from a bearer token if present and valid.

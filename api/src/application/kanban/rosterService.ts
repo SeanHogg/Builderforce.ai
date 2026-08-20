@@ -13,7 +13,6 @@ import {
   ideAgents,
   memberProfiles,
   projects,
-  swimlaneAgentAssignments,
   swimlanes,
 } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
@@ -26,6 +25,7 @@ import { agentMatchesRole, normalizeRoleText } from './roleMatch';
 import type { JobRoleService } from './jobRoleService';
 import type { KanbanTemplateService } from './kanbanTemplateService';
 import type { RoleAssignmentService } from './roleAssignmentService';
+import { laneAgentAssignments, laneJoinOn } from '../swimlane/laneAgentAssignments';
 
 export interface RosterFiller {
   kind: 'human' | 'agent' | 'hire';
@@ -106,9 +106,10 @@ export class RosterService {
     // Workforce signals, loaded once.
     const [laneAssignments, agents, humans] = await Promise.all([
       this.db
-        .select({ role: swimlaneAgentAssignments.role, agentRef: swimlaneAgentAssignments.agentRef, name: swimlaneAgentAssignments.name })
-        .from(swimlaneAgentAssignments)
-        .innerJoin(swimlanes, eq(swimlaneAgentAssignments.swimlaneId, swimlanes.id))
+        .select({ role: laneAgentAssignments.role, agentRef: laneAgentAssignments.agentRef, name: laneAgentAssignments.name })
+        .from(laneAgentAssignments)
+        // `laneJoinOn` carries both the uuid cast and the scope predicate — see 1085.
+        .innerJoin(swimlanes, laneJoinOn(swimlanes.id))
         .innerJoin(boards, eq(swimlanes.boardId, boards.id))
         .where(and(eq(boards.projectId, projectId), eq(boards.tenantId, tenantId))),
       this.db

@@ -24,6 +24,7 @@ import {
   syncAgendaItems,
   syncConflictResolutions,
   taskEffortEstimates,
+  taskRepoBindings,
   taskTimeEntries,
 } from '../../../infrastructure/database/schema/delivery';
 import { defineDomainEntities, entity } from '../entityDefinition';
@@ -53,4 +54,10 @@ export const DELIVERY_ENTITIES = defineDomainEntities('delivery', [
    *  a hand-edited `status` or `result` would answer "what did it actually do?"
    *  with something nothing ran. */
   entity(realizations, { readOnly: true }),
+  /** Which repositories ONE ticket spans, and what each of them received. A person
+   *  binds the set through the ticket's repo panel, and the run maintains the write
+   *  count and the PR it opened per repo — so the row is browsable but not typed over:
+   *  a hand-edited `writes_count` or `pr_number` would claim a pull request nobody
+   *  opened. */
+  entity(taskRepoBindings, { readOnly: true }),
 ]);

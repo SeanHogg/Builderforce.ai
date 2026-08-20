@@ -47,11 +47,31 @@ describe('fetchBitbucketBranchForCommit', () => {
     expect(await fetchBitbucketBranchForCommit(env, { ...base, sha: 'nope1' })).toBeNull();
   });
 
-  it('returns null (no request) for Bitbucket Server, which has no REST base', async () => {
-    const fetchSpy = vi.fn();
+  it('resolves on Bitbucket Server from its own branches API, in ONE request', async () => {
+    // Server has no hash filter at all, so there is no first "filtered" call to make:
+    // one `details=true` scan is the whole lookup. `latestCommit`/`displayId` is the
+    // Server envelope; the caller still just gets a branch name.
+    const fetchSpy = vi.fn(async (_url: string) => new Response(JSON.stringify({
+      values: [
+        { displayId: 'main', latestCommit: 'aaa' },
+        { displayId: 'builderforce/task-77', latestCommit: 'beef1234' },
+      ],
+    }), { status: 200 }));
     vi.stubGlobal('fetch', fetchSpy);
-    expect(await fetchBitbucketBranchForCommit(env, { ...base, host: 'bb.internal.acme.com', sha: 'x1' })).toBeNull();
-    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(await fetchBitbucketBranchForCommit(env, { ...base, host: 'bb.internal.acme.com', sha: 'beef1234' }))
+      .toBe('builderforce/task-77');
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const url = String(fetchSpy.mock.calls[0]?.[0]);
+    expect(url).toContain('/rest/api/1.0/projects/ws/repos/app/branches');
+    // Without details=true every entry's latestCommit is absent and the scan matches
+    // nothing — the flag is load-bearing, not decoration.
+    expect(url).toContain('details=true');
+  });
+
+  it('returns null on Server when no branch heads the commit', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(
+      JSON.stringify({ values: [{ displayId: 'main', latestCommit: 'aaa' }] }), { status: 200 })));
+    expect(await fetchBitbucketBranchForCommit(env, { ...base, host: 'bb.internal.acme.com', sha: 'zzz9' })).toBeNull();
   });
 
   it('degrades to null when the refs API errors', async () => {

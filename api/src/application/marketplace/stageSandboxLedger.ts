@@ -11,39 +11,36 @@
  * meter would be a new billing dimension nobody asked for.
  */
 
-import { and, eq, gte, ne, sql } from 'drizzle-orm';
+import { ne } from 'drizzle-orm';
 import { stageSandboxRuns } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { resolveStageSandboxRunsMonthly } from '../../domain/tenant/PlanLimits';
 import { enforceMonthlyTenantCap, type MonthlyTenantCapResult } from '../shared/monthlyTenantCap';
+import { dailyTenantCounts, sumDailyCounts, type DailyCount } from '../shared/dailyTenantCounts';
 
 /** `capped` rows never reached a container and cost nothing — excluded so a
  *  tenant already at their cap cannot be charged again for being refused. */
 const dispatchedRow = ne(stageSandboxRuns.status, 'capped');
 
+/** The rows that count as one dispatched sandbox run. */
+const STAGE_SANDBOX_ROWS = {
+  table: stageSandboxRuns,
+  tenantColumn: stageSandboxRuns.tenantId,
+  createdAtColumn: stageSandboxRuns.createdAt,
+  where: dispatchedRow,
+} as const;
+
 /** Per-day dispatched-run count since `since` (UTC day buckets, sparse). Day
  *  totals sum to {@link sumTenantStageSandboxRuns}; drives the meter sparkline. */
-export async function dailyTenantStageSandboxRuns(
-  db: Db,
-  tenantId: number,
-  since: Date,
-): Promise<Array<{ day: string; value: number }>> {
-  const dayExpr = sql<string>`to_char(${stageSandboxRuns.createdAt}, 'YYYY-MM-DD')`;
-  const rows = await db
-    .select({ day: dayExpr, used: sql<number>`COUNT(*)` })
-    .from(stageSandboxRuns)
-    .where(and(eq(stageSandboxRuns.tenantId, tenantId), gte(stageSandboxRuns.createdAt, since), dispatchedRow))
-    .groupBy(dayExpr)
-    .orderBy(dayExpr);
-  return rows.map((r) => ({ day: r.day, value: Math.max(0, Math.floor(Number(r.used ?? 0))) }));
+export async function dailyTenantStageSandboxRuns(db: Db, tenantId: number, since: Date): Promise<DailyCount[]> {
+  return dailyTenantCounts(db, tenantId, since, STAGE_SANDBOX_ROWS);
 }
 
 /** Dispatched sandbox runs by a tenant since `since` — the single window total
  *  the meter and the gate share. */
 export async function sumTenantStageSandboxRuns(db: Db, tenantId: number, since: Date): Promise<number> {
-  const daily = await dailyTenantStageSandboxRuns(db, tenantId, since);
-  return daily.reduce((total, r) => total + r.value, 0);
+  return sumDailyCounts(await dailyTenantStageSandboxRuns(db, tenantId, since));
 }
 
 export type StageSandboxCapResult = MonthlyTenantCapResult;

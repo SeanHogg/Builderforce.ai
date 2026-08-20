@@ -34,7 +34,7 @@
  * preference all read the flags.
  */
 
-export type CanvasSurfaceId = 'chat' | 'graph' | 'scene3d' | 'app' | 'page' | 'play' | 'site' | 'timeline' | 'world';
+export type CanvasSurfaceId = 'chat' | 'graph' | 'scene3d' | 'app' | 'calendar' | 'page' | 'play' | 'site' | 'timeline' | 'world';
 
 /**
  * What a surface is ABOUT.
@@ -105,24 +105,34 @@ export const CANVAS_SURFACES: readonly CanvasSurfaceDef[] = [
   // It persists because it is a place somebody chose to work in — a builder iterating on
   // a running app is not taking a temporary reading of the board, the way 3D is.
   { id: 'app', scope: 'board', order: 3, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: true },
+  // THE MONTH. The second surface that reads MANY objects as ONE artifact, and the second
+  // that could not be an object: `socialCampaign`, `emailCampaign` and `salesMeeting` have
+  // carried `scheduledAt` since they shipped and every spec kind declares which field
+  // holds its deadline — the dates existed, and nothing read them together. A
+  // `campaignCalendar` KIND would have been a second copy of those dates, disagreeing with
+  // the cards the first time somebody moved a send.
+  //
+  // It persists for the same reason `app` does: planning a month is a place somebody chose
+  // to work, not a temporary reading of the board the way 3D is.
+  { id: 'calendar', scope: 'board', order: 4, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: true },
   // The three medium runtimes. Each is a PROMOTION: the editor already existed, squeezed
   // into a node body where the medium's own axis had nowhere to go — a paged document in a
   // card, a playable build behind a bespoke `gameFocus` boolean, and a multi-track edit
   // with no room for a second track. None of them persists, because a surface bound to one
   // object cannot be restored without it.
-  { id: 'page', scope: 'object', order: 4, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
-  { id: 'play', scope: 'object', order: 5, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
+  { id: 'page', scope: 'object', order: 5, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
+  { id: 'play', scope: 'object', order: 6, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
   // A site is pages AND a width. It is not the `page` surface with more room: that one
   // draws ONE sheet at a reading measure, and a website is a set of pages you move
   // between at a width you choose. Two axes the sheet does not have, so two surfaces.
-  { id: 'site', scope: 'object', order: 6, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
-  { id: 'timeline', scope: 'object', order: 7, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
+  { id: 'site', scope: 'object', order: 7, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
+  { id: 'timeline', scope: 'object', order: 8, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
   // A `world` object is a place with its own camera and props, not a page — it does
   // not fit the sheet/build/track shapes above any more than they fit each other. It
   // does not persist as the active surface for the same reason they don't: a surface
   // bound to one object snaps back to the board on reload, not into an editor whose
   // target it has to re-find.
-  { id: 'world', scope: 'object', order: 8, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
+  { id: 'world', scope: 'object', order: 9, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
 ];
 
 /**

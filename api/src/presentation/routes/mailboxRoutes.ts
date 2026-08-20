@@ -55,6 +55,13 @@ import {
   updateMailboxAutomationRule,
   type MailboxAutomationRuleInput,
 } from '../../application/mailbox/mailboxAutomationService';
+import {
+  ensureMailboxWatch,
+  getMailboxWatch,
+  handleGmailPush,
+  handleGraphPush,
+  stopMailboxWatch,
+} from '../../application/mailbox/mailboxWatch';
 import { signalPendingWork } from '../../application/runtime/cronWorkSignal';
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 
@@ -81,9 +88,62 @@ export function createMailboxRoutes(db: Db): Hono<HonoEnv> {
   const r = new Hono<HonoEnv>();
   const manager = requireRole(TenantRole.MANAGER);
 
+  /**
+   * Two families of PUBLIC route, and both are public because they physically
+   * cannot carry a bearer:
+   *   • `/callback/:provider` — a top-level browser redirect FROM the provider,
+   *     authenticated by the HMAC-signed `state` it round-trips.
+   *   • `/push/:provider/:token` — an unattended notification from Google Pub/Sub
+   *     or Microsoft Graph, authenticated by the unguessable token in the path
+   *     (and, for Graph, by the `clientState` the notification must echo).
+   * Everything else is bearer-authed.
+   */
   r.use('*', async (c, next) => {
-    if (c.req.path.includes('/callback/')) return next();
+    if (c.req.path.includes('/callback/') || c.req.path.includes('/push/')) return next();
     return authMiddleware(c, next);
+  });
+
+  /**
+   * Microsoft Graph subscription validation + notifications.
+   *
+   * The validation handshake comes FIRST and is not optional: on
+   * `POST /subscriptions` Graph immediately calls this URL with
+   * `?validationToken=<opaque>` and refuses to create the subscription unless it
+   * gets a 200 whose body is exactly that token as `text/plain`. Answering it
+   * anywhere later — after a token lookup, after a JSON parse — is how the
+   * subscription silently fails to exist.
+   *
+   * Notifications are acknowledged FAST and drained in `waitUntil`. Graph retries
+   * a subscription that is slow to respond and eventually drops it, so the ack is
+   * not a performance nicety; it is what keeps the subscription alive.
+   */
+  r.post('/push/microsoft/:token', async (c) => {
+    const validationToken = c.req.query('validationToken');
+    if (validationToken) return c.text(validationToken, 200, { 'Content-Type': 'text/plain' });
+    const token = c.req.param('token');
+    const body = await c.req.json<unknown>().catch(() => ({}));
+    const result = await handleGraphPush(db, c.env as Env, token, body);
+    if (!result.ok) return c.json({ error: result.error }, result.status === 202 ? 202 : result.status);
+    return c.json({ ok: true });
+  });
+
+  /**
+   * Gmail push, delivered by the Pub/Sub subscription an operator points here.
+   *
+   * ONE subscription serves every connected Gmail mailbox on the deployment, so
+   * the path token is a deployment secret and the mailbox is named in the payload.
+   * A payload for a mailbox nobody has connected is answered 202: Pub/Sub retries
+   * a non-2xx for days, and there is nothing here to retry for.
+   */
+  r.post('/push/google/:token', async (c) => {
+    const body = await c.req.json<unknown>().catch(() => ({}));
+    const result = await handleGmailPush(db, c.env as Env, c.req.param('token'), body);
+    if (!result.ok) {
+      return result.status === 202
+        ? c.json({ ok: true, skipped: result.error }, 202)
+        : c.json({ error: result.error }, result.status);
+    }
+    return c.json({ ok: true });
   });
 
   const callbackUrl = (c: { req: { url: string } }, provider: string) =>
@@ -159,7 +219,7 @@ export function createMailboxRoutes(db: Db): Hono<HonoEnv> {
       const account = await provider.accountInfo(tok.access_token);
       if (!account.email) return c.redirect(`${base}${state.returnTo}?mailbox=no_account`);
 
-      await saveMailboxConnection(db, env, {
+      const saved = await saveMailboxConnection(db, env, {
         tenantId: state.tenantId,
         userId: state.userId,
         provider: provider.name,
@@ -170,6 +230,14 @@ export function createMailboxRoutes(db: Db): Hono<HonoEnv> {
         expiresInSeconds: tok.expires_in,
         scope: tok.scope ?? provider.scopes.join(' '),
       });
+      // Arm the push subscription as part of connecting, not on the next sweep —
+      // a mailbox connected at 09:00 must be able to start a workflow at 09:01.
+      // Best-effort: a provider that refuses the subscription leaves a connected,
+      // readable mailbox that the renewal sweep will keep retrying, never a
+      // failed connect.
+      c.executionCtx.waitUntil(
+        ensureMailboxWatch(db, env, state.tenantId, saved.id).then(() => undefined),
+      );
       return c.redirect(`${base}${state.returnTo}?mailbox=connected`);
     } catch (error) {
       reportCaughtError(error, { source: 'presentation/routes/mailboxRoutes.ts', operation: 'callback' });
@@ -192,8 +260,35 @@ export function createMailboxRoutes(db: Db): Hono<HonoEnv> {
   r.delete('/connections/:id', async (c) => {
     const id = Number(c.req.param('id'));
     if (!Number.isInteger(id)) return c.json({ error: 'Invalid connection id.' }, 400);
+    // Tear the provider subscription down BEFORE the grant goes away — once the
+    // tokens are deleted there is nothing left to authenticate the unsubscribe
+    // with, and Graph would keep notifying a mailbox we can no longer read.
+    await stopMailboxWatch(db, c.env as Env, c.get('tenantId') as number, id);
     await deleteMailboxConnection(db, c.get('tenantId') as number, id);
     return c.body(null, 204);
+  });
+
+  /**
+   * GET /connections/:id/watch — is this mailbox LIVE, and until when?
+   *
+   * The honest counterpart to the tile's `fetchedAt`: a surface that shows push
+   * state must be able to say "push, renewed, expires 14:03" or "polling every
+   * five minutes", never imply live and be neither.
+   */
+  r.get('/connections/:id/watch', async (c) => {
+    const id = Number(c.req.param('id'));
+    if (!Number.isInteger(id)) return c.json({ error: 'Invalid connection id.' }, 400);
+    const watch = await getMailboxWatch(db, c.get('tenantId') as number, id);
+    return c.json({ watch });
+  });
+
+  /** POST /connections/:id/watch — arm or re-arm the push subscription by hand. */
+  r.post('/connections/:id/watch', async (c) => {
+    const id = Number(c.req.param('id'));
+    if (!Number.isInteger(id)) return c.json({ error: 'Invalid connection id.' }, 400);
+    const result = await ensureMailboxWatch(db, c.env as Env, c.get('tenantId') as number, id);
+    if (!result.ok) return c.json({ error: result.error }, 502);
+    return c.json({ watch: result.watch });
   });
 
   /**

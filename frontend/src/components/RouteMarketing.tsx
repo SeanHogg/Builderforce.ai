@@ -56,9 +56,16 @@ function RouteMarketingContent({ pathname, tab }: { pathname: string; tab: strin
   // does not need the eight proof forms as well.
   const methodVariant = m?.highlights?.length ? 'loop' : 'full';
 
-  // Client-set <title>/description so each feature route has a unique, crawlable
-  // head (these routes render client-side, so there is no server metadata
-  // export). Modern crawlers execute JS and read both this and the JSON-LD below.
+  // FALLBACK head, for a route entry that is still `'use client'` and therefore
+  // cannot export `generateMetadata`. The real mechanism is now
+  // `routeTeaserMetadata()` called from the SERVER route entry — a client
+  // effect cannot put anything in the HTML a crawler, a link preview or a
+  // social card fetcher actually receives, and the root layout's `index,
+  // follow` was already in that HTML by the time this ran.
+  //
+  // Setting it twice is harmless: the values are derived from the same two
+  // registries, so the effect writes what the server already wrote. It is
+  // deleted route by route as entries convert to server components.
   //
   // The `noindex` half matters as much as the title. Every authenticated route
   // renders this teaser to a logged-out visitor, which quietly turned operator

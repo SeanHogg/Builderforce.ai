@@ -42,11 +42,46 @@ export interface CardValidatedOutcome {
    * validation, a re-validation of the same card, or a pre-0346 row.
    */
   replacedPaymentMethodId: string | null;
+  /** The tenant this validation landed on, so the caller can invalidate what caches
+   *  its entitlement (the container run context caches `premiumEntitled` for 10
+   *  minutes — without this the freshly validated card doesn't unlock container runs
+   *  until that window expires). Null when the customer matched no tenant. */
+  tenantId: number | null;
 }
 
-/** A card is "validated" iff it went through the flow (validated_at set + status). */
-export function isCardValidated(state: Pick<CardValidationState, 'status' | 'validatedAt'>): boolean {
-  return state.status === 'validated' && state.validatedAt != null;
+/**
+ * How long a successful validation is trusted before it must be re-proved.
+ *
+ * A SetupIntent proves the card was good AT THAT MOMENT. Cards expire — typically
+ * within three to four years — and expiry generates no webhook at all: nothing is
+ * charged, nothing is detached, the card simply stops working. The event-driven
+ * revocations (`payment_method.detached`, a `past_due` subscription,
+ * `setup_intent.setup_failed`) cover every case where something HAPPENS; this covers
+ * the case where nothing does.
+ *
+ * Twelve months is chosen to sit well inside a typical card's life while being long
+ * enough that no ordinary customer ever meets it: a tenant using premium at all will
+ * have had a charge succeed or fail long before, and either outcome refreshes or
+ * clears the claim. It is a backstop against a stale unlock, not a re-verification
+ * cadence.
+ */
+export const CARD_VALIDATION_MAX_AGE_MS = 365 * 24 * 60 * 60 * 1000;
+
+/**
+ * A card is "validated" iff it went through the flow (validated_at set + status)
+ * AND that validation is still recent enough to mean anything.
+ *
+ * PURE and time-injectable so the staleness boundary is testable without clock
+ * mocking. THE single predicate — the gateway route, the container run context and
+ * the premium evaluator all read premium entitlement through it, so a stale unlock
+ * cannot survive in one of them and not the others.
+ */
+export function isCardValidated(
+  state: Pick<CardValidationState, 'status' | 'validatedAt'>,
+  now: number = Date.now(),
+): boolean {
+  if (state.status !== 'validated' || state.validatedAt == null) return false;
+  return now - state.validatedAt.getTime() < CARD_VALIDATION_MAX_AGE_MS;
 }
 
 function writeDb(env: Env) {
@@ -175,7 +210,7 @@ export async function markCardValidatedByCustomer(
       .where(eq(tenants.id, setup.tenantId))
       .limit(1);
   }
-  if (!row) return { known: false, replacedPaymentMethodId: null };
+  if (!row) return { known: false, replacedPaymentMethodId: null, tenantId: null };
 
   await db.update(tenants)
     .set({
@@ -197,7 +232,7 @@ export async function markCardValidatedByCustomer(
     row.previousPaymentMethodId && row.previousPaymentMethodId !== card?.paymentMethodId
       ? row.previousPaymentMethodId
       : null;
-  return { known: true, replacedPaymentMethodId: replaced };
+  return { known: true, replacedPaymentMethodId: replaced, tenantId: row.id };
 }
 
 /** Mark a tenant's card validation as failed (provider rejected the card). */

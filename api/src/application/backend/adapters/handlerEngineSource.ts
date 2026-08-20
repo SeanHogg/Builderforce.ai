@@ -464,25 +464,30 @@ async function callConnector(env, connectorKey, actionKey, input) {
 /** One model turn through the Builderforce gateway (OpenAI-compatible). */
 async function callLlm(env, args) {
   const key = env.BUILDERFORCE_API_KEY;
-  if (!key) return '';
+  // NAMED failures, not a silent empty string. This calls the gateway with whatever
+  // key the operator stored, and the key that is easy to paste by mistake is a HOST
+  // credential rather than a workspace gateway key (bfk_...) — which the gateway
+  // refuses. Returning '' for that made a mis-provisioned backend look like a model
+  // that just had nothing to say, on every request, forever. A step error is visible
+  // in the handler outcome; an empty string is not.
+  if (!key) throw new Error('llm step: BUILDERFORCE_API_KEY is not set on this backend');
   const messages = [
     ...(args.system ? [{ role: 'system', content: args.system }] : []),
     { role: 'user', content: args.prompt },
   ];
-  try {
-    const res = await fetch('${ctx.apiOrigin}/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: \`Bearer \${key}\` },
-      body: JSON.stringify({ messages, max_tokens: args.maxTokens ?? 400, temperature: args.temperature ?? 0.4 }),
-      signal: AbortSignal.timeout(20000),
-    });
-    if (!res.ok) return '';
-    const data = await res.json();
-    const content = data?.choices?.[0]?.message?.content;
-    return typeof content === 'string' ? content : '';
-  } catch {
-    return '';
+  const res = await fetch('${ctx.apiOrigin}/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: \`Bearer \${key}\` },
+    body: JSON.stringify({ messages, max_tokens: args.maxTokens ?? 400, temperature: args.temperature ?? 0.4 }),
+    signal: AbortSignal.timeout(20000),
+  });
+  if (res.status === 401 || res.status === 403) {
+    throw new Error('llm step: BUILDERFORCE_API_KEY was refused by the gateway (' + res.status + '). It must be a workspace API key from Settings > API Keys (bfk_...), not an agent-host key.');
   }
+  if (!res.ok) throw new Error('llm step: gateway returned ' + res.status);
+  const data = await res.json();
+  const content = data?.choices?.[0]?.message?.content;
+  return typeof content === 'string' ? content : '';
 }
 
 /**
@@ -496,6 +501,10 @@ async function callLlm(env, args) {
 async function readCollection(env, args) {
   const key = env.BUILDERFORCE_API_KEY;
   const empty = { collection: args.collection, count: 0, records: [] };
+  // Same key, same trap, but a READ binds empty rather than throwing: a missing
+  // collection already binds empty by contract (so count-based branching still works
+  // and the page renders its empty state), and changing that here would turn a soft
+  // path hard. The refusal is logged instead, so it is diagnosable.
   if (!key) return empty;
   const url = new URL('${ctx.apiOrigin}/api/backend-runtime/projects/${ctx.projectId}/collections/' + encodeURIComponent(args.collection));
   if (args.limit) url.searchParams.set('limit', String(args.limit));
@@ -508,6 +517,10 @@ async function readCollection(env, args) {
       headers: { Accept: 'application/json', Authorization: \`Bearer \${key}\` },
       signal: AbortSignal.timeout(10000),
     });
+    if (res.status === 401 || res.status === 403) {
+      console.error('data step: BUILDERFORCE_API_KEY was refused by the platform (' + res.status + '). It must be a workspace API key from Settings > API Keys (bfk_...), not an agent-host key.');
+      return empty;
+    }
     if (!res.ok) return empty;
     const data = await res.json();
     return {

@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { artifactRoutePath } from "@seanhogg/builderforce-brain-embedded";
 import { BUILD_ID, BUILT_AT } from "./buildInfo";
 import { getTenantJwt, getCurrentUserId } from "./bfApi";
 import { TOOL_DEFS } from "./fileTools";
@@ -174,6 +175,14 @@ function buildLabels(): Record<string, string> {
     // Composer toolbar (Claude-style + / menus, auto mode, dictation)
     "app.add": t("Add"),
     "app.options": t("Options"),
+    // Chat | Work — the CONVERSATION's mode (migration 0409), not an editor setting.
+    // The same chat opened on the web reads the same mode, which is the whole point:
+    // one conversation means one thing on every surface.
+    "app.mode": t("Mode"),
+    "app.modeChat": t("Chat"),
+    "app.modeChatHint": t("Just answer — read and reason as much as needed, but do not open or dispatch board work"),
+    "app.modeWork": t("Work"),
+    "app.modeWorkHint": t("Turn what we agree into tracked work — open the ticket, staff it, and dispatch an agent to run it"),
     "app.uploadFile": t("Upload from computer"),
     "app.uploading": t("Uploading…"),
     "app.addContext": t("Add context"),
@@ -480,29 +489,15 @@ export class BrainWebview extends WebviewPanelBase<BrainInbound> {
   }
 
   /**
-   * Reveal a linked work item the user opened from the ChatTicketsPanel. A task/epic/gap
-   * opens its DETAIL view — the ticket's assignee/status/PRD drawer — via the web portal
-   * deep-link (`&task=<ref>`), which is the only surface that renders those details (the
-   * native BoardPanel is a Kanban board with no detail drawer, so it can't satisfy "open
-   * the ticket details"). The strategy tiers (objective/initiative/portfolio) + specs
-   * open the web page they live on. Mirrors the web app's own onOpenTicket routing so
-   * "Open" behaves the same on both surfaces.
+   * Reveal a linked work item the user opened from the ChatTicketsPanel.
+   *
+   * The routing TABLE is shared (`artifactRoutePath`, brain-embedded) — this host once
+   * carried its own copy of the same switch, and the two drifted. Here we only decide
+   * WHICH deployment the path is opened against, which is host state the shared module
+   * must not know about.
    */
   private openArtifact(kind: string, projectId?: number, ref?: string): void {
-    let path: string;
-    if (kind === "objective" || kind === "initiative" || kind === "portfolio") {
-      path = "/projects?tab=portfolio";
-    } else if (kind === "retro" || kind === "poker") {
-      // Team ceremonies live on the Ceremonies tab and are workspace-wide, so no
-      // project scope rides along; `session` opens the exact one.
-      path = `/projects?tab=ceremonies&ceremony=${kind}${ref ? `&session=${encodeURIComponent(ref)}` : ""}`;
-    } else {
-      const base = projectId != null ? `/projects?tab=tasks&project=${projectId}` : "/projects?tab=tasks";
-      // task/epic/gap → deep-link straight into the ticket's detail drawer.
-      path = (kind === "task" || kind === "epic" || kind === "gap") && ref
-        ? `${base}&task=${encodeURIComponent(ref)}`
-        : base;
-    }
+    const path = artifactRoutePath(kind, ref ?? null, projectId ?? null);
     void vscode.env.openExternal(vscode.Uri.parse(`${getWebBaseUrl()}${path}`));
   }
 

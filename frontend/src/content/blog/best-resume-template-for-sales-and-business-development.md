@@ -8,6 +8,17 @@ author: Sean Hogg
 
 # The Best Resume Template for Sales and Business Development Roles
 
+```bf-figure
+{
+  "kind": "templates",
+  "title": "Growth Emerald — the layout this article recommends",
+  "templateIds": [
+    "sales-growth-emerald"
+  ],
+  "caption": "Rendered live from the same template registry the editor reads, so this is the real Sales and business development layout — not a screenshot of one."
+}
+```
+
 ## Sales Hiring Is Numbers Hiring
 
 Of every job category, sales is the most numbers-driven. A sales recruiter is hunting for one specific data point in the first 10 seconds: did you hit your number? If yes, by how much? Across how many quarters?

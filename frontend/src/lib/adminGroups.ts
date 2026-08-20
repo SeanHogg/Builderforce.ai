@@ -40,6 +40,7 @@ export const ADMIN_GROUP_META: AdminGroupMeta[] = [
     { id: '', subKey: 'directory', icon: '👤' },
     { id: 'sessions', subKey: 'sessions', icon: '🧠' },
     { id: 'security', subKey: 'security', icon: '🔒' },
+    { id: 'suspect-accounts', subKey: 'suspectAccounts', icon: '🚩' },
     { id: 'emulation', subKey: 'emulation', icon: '🕵️' },
   ] },
   { id: 'workspaces', labelKey: 'tab.adminWorkspaces', icon: '🏢', subs: [

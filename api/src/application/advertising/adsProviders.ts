@@ -28,6 +28,7 @@
  * enums — and without a silent fallback quietly buying awareness with a leads budget.
  */
 
+import type { AdTargeting, AdTargetingDimension } from './adTargeting';
 import { googleAdsProvider } from './networks/google';
 import { metaAdsProvider } from './networks/meta';
 import { linkedinAdsProvider } from './networks/linkedin';
@@ -36,9 +37,10 @@ import { xAdsProvider } from './networks/x';
 import { redditAdsProvider } from './networks/reddit';
 import { pinterestAdsProvider } from './networks/pinterest';
 import { snapchatAdsProvider } from './networks/snapchat';
+import { microsoftAdsProvider } from './networks/microsoft';
 
 /** The networks this deployment can spend on. */
-export const AD_NETWORKS = ['google', 'meta', 'linkedin', 'tiktok', 'x', 'reddit', 'pinterest', 'snapchat'] as const;
+export const AD_NETWORKS = ['google', 'meta', 'linkedin', 'tiktok', 'x', 'reddit', 'pinterest', 'snapchat', 'microsoft'] as const;
 export type AdNetwork = typeof AD_NETWORKS[number];
 
 export function isAdNetwork(value: unknown): value is AdNetwork {
@@ -68,6 +70,9 @@ export interface AdAccountField {
   key: string;
   label: string;
   help: string;
+  /** Declared, asked for and named in errors — but it does not gate `ready`. See
+   *  {@link ../integrations/connectedAccounts}.AccountFieldSpec. */
+  optional?: boolean;
 }
 
 export interface AdAccountIdentity {
@@ -111,6 +116,118 @@ export interface AdCampaignPatch {
   name?: string;
   dailyBudgetCents?: number | null;
   totalBudgetCents?: number | null;
+  status?: AdStatus;
+}
+
+// ---------------------------------------------------------------------------
+// The two levels BENEATH a campaign
+// ---------------------------------------------------------------------------
+
+/**
+ * A campaign says what is being bought and how much may be spent. It does not say WHO
+ * it is shown to or WHAT they see — those are the ad set and the ad, and without them
+ * a funded campaign is inert on every one of these networks. A campaign this platform
+ * created but could not target or fill is a campaign that has to be finished in the
+ * network's own console, which is the same as not having created it.
+ *
+ * The vendors' names for these two levels are all different — ad set, ad group, line
+ * item, ad squad — and all mean the same two things, so they are named once here.
+ */
+
+/** One ad set as the network currently reports it. */
+export interface AdSetRemote {
+  externalId: string;
+  /** The campaign it hangs from. Null only when a network's list call omits it. */
+  externalCampaignId: string | null;
+  name: string;
+  status: AdStatus;
+  /** As much of the network's spec as this vocabulary has a name for. */
+  targeting: AdTargeting;
+  /** The network's OWN spec, verbatim — kept because a set built in its console uses
+   *  audiences and match types this port has no name for, and reporting "no targeting"
+   *  for a set that is in fact tightly targeted is worse than reporting a blob. */
+  nativeTargeting: unknown;
+  bidStrategy: string | null;
+  bidCents: number | null;
+  dailyBudgetCents: number | null;
+  currency: string;
+  startsAtISO: string | null;
+  endsAtISO: string | null;
+}
+
+/** What creating an ad set carries. Network-neutral by construction. */
+export interface AdSetDraft {
+  /** The network's own campaign id — an ad set never exists on its own. */
+  externalCampaignId: string;
+  name: string;
+  /**
+   * What the PARENT campaign is buying.
+   *
+   * Carried down rather than looked up because several networks declare the objective
+   * at this level and not above it — an X line item IS where the objective lives, and a
+   * TikTok ad group's optimization goal must agree with it. Passing it explicitly is
+   * what lets those adapters be correct without a second read of the campaign.
+   */
+  objective: AdObjective;
+  targeting: AdTargeting;
+  dailyBudgetCents?: number | null;
+  /** A bid CAP, in cents. Absent means the network's automatic bidding. */
+  bidCents?: number | null;
+  startsAtISO?: string | null;
+  endsAtISO?: string | null;
+  /** Paused unless the caller is explicit — same rule as a campaign, same reason. */
+  status?: Extract<AdStatus, 'paused' | 'active'>;
+}
+
+/** The subset of an ad set that can be changed after it exists. */
+export interface AdSetPatch {
+  name?: string;
+  status?: AdStatus;
+  dailyBudgetCents?: number | null;
+  bidCents?: number | null;
+  /** A REPLACEMENT spec, not a merge — every network replaces rather than merges here,
+   *  and pretending otherwise would drop the dimensions the caller left out. */
+  targeting?: AdTargeting;
+}
+
+/** One ad — the creative a person actually sees — as the network reports it. */
+export interface AdCreativeRemote {
+  externalId: string;
+  externalAdSetId: string | null;
+  name: string;
+  status: AdStatus;
+  headline: string | null;
+  body: string | null;
+  callToAction: string | null;
+  destinationUrl: string | null;
+}
+
+/** What creating an ad carries. */
+export interface AdDraft {
+  externalAdSetId: string;
+  name: string;
+  headline?: string | null;
+  body?: string | null;
+  callToAction?: string | null;
+  /**
+   * Where the click lands. UTM-tagged by `adSetService` BEFORE it reaches an adapter,
+   * so no adapter has to know about attribution and none of them can forget to.
+   */
+  destinationUrl?: string | null;
+  /**
+   * A network-native creative, post or pin id, when the ad promotes something that
+   * already exists rather than new copy. Networks that can only promote existing
+   * content (Pinterest, X) REQUIRE it and say so rather than inventing a creative.
+   */
+  creativeRef?: string | null;
+  status?: Extract<AdStatus, 'paused' | 'active'>;
+}
+
+/** The subset of an ad that can be changed after it exists. Deliberately small: on
+ *  every one of these networks a live ad's copy and destination are immutable — the
+ *  network re-reviews a changed creative, so it is a new ad, not an edit. */
+export interface AdPatch {
+  name?: string;
   status?: AdStatus;
 }
 
@@ -160,11 +277,36 @@ export interface AdsProvider {
   accountFields: readonly AdAccountField[];
   /** The objectives this network can actually serve. */
   objectives: readonly AdObjective[];
+  /** The targeting dimensions this adapter can actually PLACE. Anything else is
+   *  refused by {@link requireTargetingSupport} rather than dropped. */
+  targetingDimensions: readonly AdTargetingDimension[];
+  /**
+   * True when a campaign on this network CANNOT DELIVER without an ad set beneath it.
+   *
+   * Reddit keeps the daily budget on the ad group and X declares the objective on the
+   * line item, so on both a campaign with nothing under it is a funded object that can
+   * never spend and never reports a number. Both adapters used to paper over this with
+   * their own inline create inside `createCampaign`; declaring it here instead is what
+   * lets `adsService` compose ONE default ad set through the same `createAdSet` every
+   * other caller uses, rather than two hand-rolled copies drifting apart.
+   */
+  requiresAdSet: boolean;
+  /** Ads that promote EXISTING content need a `creativeRef`; adapters that cannot
+   *  author new copy say so here so a form can ask for it up front. */
+  requiresCreativeRef: boolean;
   identity(call: AdCall, fields: Record<string, string>): Promise<AdAccountIdentity>;
   listCampaigns(call: AdCall, fields: Record<string, string>, identity: AdAccountIdentity): Promise<AdCampaignRemote[]>;
   createCampaign(call: AdCall, fields: Record<string, string>, draft: AdCampaignDraft, identity: AdAccountIdentity): Promise<AdCampaignRemote>;
   updateCampaign(call: AdCall, fields: Record<string, string>, externalId: string, patch: AdCampaignPatch, identity: AdAccountIdentity): Promise<void>;
   insights(call: AdCall, fields: Record<string, string>, query: AdInsightQuery, identity: AdAccountIdentity): Promise<AdInsightRow[]>;
+
+  /** Every ad set on the account, or only those under one campaign. */
+  listAdSets(call: AdCall, fields: Record<string, string>, identity: AdAccountIdentity, externalCampaignId?: string | null): Promise<AdSetRemote[]>;
+  createAdSet(call: AdCall, fields: Record<string, string>, draft: AdSetDraft, identity: AdAccountIdentity): Promise<AdSetRemote>;
+  updateAdSet(call: AdCall, fields: Record<string, string>, externalId: string, patch: AdSetPatch, identity: AdAccountIdentity): Promise<void>;
+  listAds(call: AdCall, fields: Record<string, string>, identity: AdAccountIdentity, externalAdSetId?: string | null): Promise<AdCreativeRemote[]>;
+  createAd(call: AdCall, fields: Record<string, string>, draft: AdDraft, identity: AdAccountIdentity): Promise<AdCreativeRemote>;
+  updateAd(call: AdCall, fields: Record<string, string>, externalId: string, patch: AdPatch, identity: AdAccountIdentity): Promise<void>;
 }
 
 // ---------------------------------------------------------------------------
@@ -182,6 +324,20 @@ export {
   rec, list, text, count, toCents, fromCents, toISO, toDay, ask, requireField,
   mapObjective, unmapObjective, totalInsights,
 } from './adsNormalize';
+
+/**
+ * The targeting vocabulary lives in `./adTargeting` for the same reason the money and
+ * objective helpers live in `./adsNormalize`: adapters import VALUES from it, and this
+ * module imports the adapters. Re-exported so a caller reaching for the ads port finds
+ * the whole vocabulary in one place.
+ */
+export {
+  AD_TARGETING_DIMENSIONS, AD_PLACEMENTS, AD_DEVICES, AD_GENDERS, AD_MIN_AGE, AD_MAX_AGE,
+  EMPTY_TARGETING, isAdTargetingDimension, targetingDimensionsUsed, isUntargeted,
+  requireTargetingSupport, mapTargetingValues, ageWindow, parseTargeting, readTargeting,
+  type AdTargeting, type AdTargetingDimension, type AdPlacement, type AdDevice, type AdGender,
+  type ParseTargetingResult,
+} from './adTargeting';
 
 // ---------------------------------------------------------------------------
 // Registry
@@ -202,6 +358,7 @@ const PROVIDERS: Readonly<Record<AdNetwork, AdsProvider>> = {
   reddit: redditAdsProvider,
   pinterest: pinterestAdsProvider,
   snapchat: snapchatAdsProvider,
+  microsoft: microsoftAdsProvider,
 };
 
 export function getAdsProvider(network: string): AdsProvider | null {

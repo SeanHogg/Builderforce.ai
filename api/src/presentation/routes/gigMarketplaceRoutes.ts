@@ -22,12 +22,23 @@ import { Hono } from 'hono';
 import { and, desc, eq, getTableColumns, inArray, isNotNull, sql } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { webAuthMiddleware } from '../middleware/webAuthMiddleware';
-import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { notify } from '../../application/notifications/notify';
 import { resolveTenantPlan } from './llmRoutes';
 import { gatewayJudge } from '../../application/eval/gatewayJudge';
 import { evaluateProposal, evalPercent } from '../../application/marketplace/proposalEval';
 import { EngagementAccessService } from '../../application/marketplace/EngagementAccessService';
+import {
+  BudgetShapeError,
+  normalizeAttachments,
+  normalizeScreeningQuestions,
+  readOpenTicketPosting,
+  readTicketDefaults,
+  ticketPostingKey,
+  unpublishTicketPosting,
+  upsertJobPosting,
+} from '../../application/marketplace/jobPostings';
+import { readSavedTalent, readTalentLists, saveTalent, unsaveTalent } from '../../application/marketplace/savedTalent';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import {
   deliverableProposals,
@@ -40,18 +51,9 @@ import {
   users,
 } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
-import { hireShape } from '../../application/marketplace/engagementShape';
 import type { EvalJudge } from '../../application/eval/semanticEval';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env, HonoEnv } from '../../env';
-
-const JOBS_PUBLIC_CACHE_KEY = 'jobs:public:open';
-/** Tenant-scoped: the loader filters by tenant_id, so a key without the tenant lets
- *  tenant A's `null` result be served to tenant B (badge silently disappears) and
- *  vice-versa — cross-tenant cache poisoning on a globally-unique task id. */
-const ticketPostingKey = (tenantId: number, taskId: number | string) =>
-  `gig:ticket-posting:${tenantId}:${taskId}`;
-const POSTING_TYPES = ['project_bid', 'design', 'fte'];
 
 const mapPosting = (r: typeof jobPostings.$inferSelect) => ({
   id: r.id,
@@ -66,19 +68,31 @@ const mapPosting = (r: typeof jobPostings.$inferSelect) => ({
   projectId: r.projectId == null ? null : Number(r.projectId),
   rateMinCents: r.rateMinCents == null ? null : Number(r.rateMinCents),
   rateMaxCents: r.rateMaxCents == null ? null : Number(r.rateMaxCents),
+  // 0985 — the richer posting. A TOTAL is not a rate (see `jobPostings.ts`), so it
+  // rides beside the band rather than being folded into it.
+  budgetTotalCents: r.budgetTotalCents == null ? null : Number(r.budgetTotalCents),
+  discipline: r.discipline ?? null,
+  specialty: r.specialty ?? null,
+  experienceLevel: r.experienceLevel ?? null,
+  projectLength: r.projectLength ?? null,
+  screeningQuestions: normalizeScreeningQuestions(r.screeningQuestions),
+  attachments: normalizeAttachments(r.attachments),
   createdAt: r.createdAt ?? null,
 });
 
 // ---------------------------------------------------------------------------
-// /api/marketplace — publish a ticket as a gig
+// /api/marketplace — publish a ticket as a gig, and the client's talent shortlist
 // ---------------------------------------------------------------------------
 export function createGigMarketplaceRoutes(): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
 
-  // POST /publish — turn a work item into a hireable gig. The server derives the
-  // scope from the ticket (title/description → requirements) so the Brain can publish
-  // with just a ticketId; overrides may be supplied. Idempotent-ish: re-publishing a
-  // ticket that already has an OPEN posting returns that posting.
+  // POST /publish — turn a work item into a hireable gig.
+  //
+  // The route's job is auth, the ticket lookup and the response shape. What a POSTING IS
+  // — its identity rule, its defaults, its category, its money, its cache invalidation —
+  // belongs to `upsertJobPosting`, which `POST /api/jobs` also calls. Before that
+  // convergence the two doors disagreed about all five (see the module header there),
+  // and which one you came through decided what you got.
   router.post('/publish', authMiddleware, async (c) => {
     const tenantId = c.get('tenantId') as number;
     const actor = c.get('userId') as string;
@@ -87,105 +101,29 @@ export function createGigMarketplaceRoutes(): Hono<HonoEnv> {
     const ticketId = typeof b.ticketId === 'number' ? Math.round(b.ticketId) : Number(b.ticketId);
     if (!Number.isFinite(ticketId)) return c.json({ error: 'ticketId required' }, 400);
 
-    // Load the ticket via its project so we can tenant-guard (tasks have no tenant_id).
-    const [t] = await db
-      .select({
-        id: tasks.id,
-        title: tasks.title,
-        description: tasks.description,
-        taskType: tasks.taskType,
-        projectId: tasks.projectId,
-        jobPostingId: tasks.jobPostingId,
-        tenantId: projects.tenantId,
-      })
-      .from(tasks)
-      .innerJoin(projects, eq(projects.id, tasks.projectId))
-      .where(eq(tasks.id, ticketId));
-    if (!t || Number(t.tenantId) !== Number(tenantId)) return c.json({ error: 'Ticket not found' }, 404);
+    const ticketDefaults = await readTicketDefaults(db, tenantId, ticketId);
+    if (!ticketDefaults) return c.json({ error: 'Ticket not found' }, 404);
 
-    // Already published to an open posting? Return it (don't duplicate).
-    const [openExisting] = await db
-      .select()
-      .from(jobPostings)
-      .where(and(
-        eq(jobPostings.sourceTicketId, ticketId),
-        eq(jobPostings.tenantId, tenantId),
-        eq(jobPostings.status, 'open'),
-      ))
-      .limit(1);
+    // Already published to an OPEN posting? Return it rather than rewriting a listing
+    // freelancers may already be bidding on.
+    const openExisting = await readOpenTicketPosting(db, tenantId, ticketId);
     if (openExisting) return c.json({ jobId: openExisting.id, posting: mapPosting(openExisting), reused: true });
 
-    const postingType = POSTING_TYPES.includes(b.postingType as string)
-      ? (b.postingType as string)
-      : (t.taskType === 'design' ? 'design' : 'project_bid');
-    // Falls back to the shape the posting type implies, so a gig published from a
-    // ticket is never left shapeless — the escrow gate reads an unstated shape as
-    // not-fixed-price, which would silently opt these out of the funding check.
-    const engagementType = hireShape(b.engagementType) ?? (postingType === 'fte' ? 'fte' : 'fixed_bid');
-    const requirements = typeof b.requirements === 'string' && b.requirements.trim()
-      ? b.requirements.slice(0, 8000)
-      : (t.description ?? null);
-    const discipline = typeof b.discipline === 'string' ? (b.discipline as string) : (t.taskType === 'design' ? 'designer' : null);
-
-    // A ticket owns one posting identity. Re-publishing a closed/filled posting reopens
-    // that row instead of minting a replacement and orphaning proposals/history.
-    const [prior] = await db.select().from(jobPostings)
-      .where(and(eq(jobPostings.sourceTicketId, ticketId), eq(jobPostings.tenantId, tenantId)))
-      .orderBy(desc(jobPostings.updatedAt))
-      .limit(1);
-    if (prior) {
-      const [reopened] = await db.update(jobPostings).set({
-        projectId: t.projectId,
-        title: t.title,
-        description: t.description ?? null,
-        discipline,
-        rateMinCents: typeof b.rateMinCents === 'number' ? Math.round(b.rateMinCents) : prior.rateMinCents,
-        rateMaxCents: typeof b.rateMaxCents === 'number' ? Math.round(b.rateMaxCents) : prior.rateMaxCents,
-        currency: typeof b.currency === 'string' ? b.currency.slice(0, 3).toUpperCase() : prior.currency,
-        visibility: b.visibility === 'private' ? 'private' : 'public',
-        postingType,
-        engagementType,
-        requirements,
-        status: 'open',
-        closedAt: null,
-        updatedAt: new Date(),
-      }).where(and(eq(jobPostings.id, prior.id), eq(jobPostings.tenantId, tenantId))).returning();
-      await db.update(tasks).set({ hireable: true, jobPostingId: prior.id }).where(scopedToTenant(tasks, tenantId, eq(tasks.id, ticketId)));
-      await Promise.all([
-        invalidateCached(c.env as Env, JOBS_PUBLIC_CACHE_KEY),
-        invalidateCached(c.env as Env, ticketPostingKey(tenantId, ticketId)),
-      ]);
-      return c.json({ jobId: prior.id, posting: reopened ? mapPosting(reopened) : null, reused: true });
+    try {
+      const result = await upsertJobPosting(db, c.env as Env, {
+        tenantId,
+        actorUserId: actor,
+        draft: { ...b, sourceTicketId: ticketId },
+        ticketDefaults,
+      });
+      return c.json(
+        { jobId: result.id, posting: mapPosting(result.posting), reused: result.reused },
+        result.reused ? 200 : 201,
+      );
+    } catch (error) {
+      if (error instanceof BudgetShapeError) return c.json({ error: error.message }, 400);
+      throw error;
     }
-
-    const id = crypto.randomUUID();
-    await db.insert(jobPostings).values({
-      id,
-      tenantId,
-      projectId: t.projectId,
-      title: t.title,
-      description: t.description ?? null,
-      discipline,
-      rateMinCents: typeof b.rateMinCents === 'number' ? Math.round(b.rateMinCents) : null,
-      rateMaxCents: typeof b.rateMaxCents === 'number' ? Math.round(b.rateMaxCents) : null,
-      currency: typeof b.currency === 'string' ? (b.currency as string).slice(0, 3).toUpperCase() : 'USD',
-      visibility: b.visibility === 'private' ? 'private' : 'public',
-      postingType,
-      engagementType,
-      requirements,
-      sourceTicketId: ticketId,
-      createdByUserId: actor,
-    });
-    await db.update(tasks).set({ hireable: true, jobPostingId: id }).where(scopedToTenant(tasks, tenantId, eq(tasks.id, ticketId)));
-    await Promise.all([
-      invalidateCached(c.env as Env, JOBS_PUBLIC_CACHE_KEY),
-      invalidateCached(c.env as Env, ticketPostingKey(tenantId, ticketId)),
-    ]);
-    const [row] = await db.select().from(jobPostings).where(and(
-      eq(jobPostings.id, id),
-      eq(jobPostings.tenantId, tenantId),
-    ));
-    return c.json({ jobId: id, posting: row ? mapPosting(row) : null }, 201);
   });
 
   // POST /unpublish — pull a ticket's gig from the marketplace.
@@ -195,30 +133,7 @@ export function createGigMarketplaceRoutes(): Hono<HonoEnv> {
     const b = await c.req.json<{ ticketId?: number }>().catch((): { ticketId?: number } => ({}));
     const ticketId = typeof b.ticketId === 'number' ? Math.round(b.ticketId) : Number(b.ticketId);
     if (!Number.isFinite(ticketId)) return c.json({ error: 'ticketId required' }, 400);
-    await db
-      .update(jobPostings)
-      .set({ status: 'closed', closedAt: sql`NOW()`, updatedAt: sql`NOW()` })
-      .where(and(
-        eq(jobPostings.sourceTicketId, ticketId),
-        eq(jobPostings.tenantId, tenantId),
-        eq(jobPostings.status, 'open'),
-      ));
-    // Tenant-scoped via the project (tasks carry no tenant_id — same guard shape the
-    // publish handler uses). Without it, any authenticated tenant could clear
-    // `hireable`/`job_posting_id` on ANOTHER tenant's ticket by guessing its id.
-    await db.update(tasks)
-      .set({ hireable: false, jobPostingId: null })
-      .where(and(
-        eq(tasks.id, ticketId),
-        inArray(
-          tasks.projectId,
-          db.select({ id: projects.id }).from(projects).where(eq(projects.tenantId, tenantId)),
-        ),
-      ));
-    await Promise.all([
-      invalidateCached(c.env as Env, JOBS_PUBLIC_CACHE_KEY),
-      invalidateCached(c.env as Env, ticketPostingKey(tenantId, ticketId)),
-    ]);
+    await unpublishTicketPosting(db, c.env as Env, tenantId, ticketId);
     return c.json({ ok: true });
   });
 
@@ -230,18 +145,61 @@ export function createGigMarketplaceRoutes(): Hono<HonoEnv> {
     if (!Number.isFinite(taskId)) return c.json({ error: 'invalid taskId' }, 400);
     const posting = await getOrSetCached(c.env as Env, ticketPostingKey(tenantId, taskId), async () => {
       const db = buildDatabase(c.env);
-      const [row] = await db
-        .select()
-        .from(jobPostings)
-        .where(and(
-          eq(jobPostings.sourceTicketId, taskId),
-          eq(jobPostings.tenantId, tenantId),
-          eq(jobPostings.status, 'open'),
-        ))
-        .limit(1);
+      const row = await readOpenTicketPosting(db, tenantId, taskId);
       return row ? mapPosting(row) : null;
     });
     return c.json({ posting });
+  });
+
+  // ---- The client's talent shortlist (0985) ----------------------------------
+  //
+  // The supply-side mirror of `GET /api/jobs/saved`. Mounted here rather than on
+  // `/api/freelancers` because it is a HIRING act performed with the tenant JWT — the
+  // freelancer surfaces are the person's own, and this list is the workspace's.
+
+  // GET /saved-talent?list= — the shortlist, newest first.
+  router.get('/saved-talent', authMiddleware, async (c) => {
+    const db = buildDatabase(c.env);
+    const [items, lists] = await Promise.all([
+      readSavedTalent(db, {
+        tenantId: c.get('tenantId') as number,
+        ownerUserId: c.get('userId') as string,
+        list: c.req.query('list') ?? null,
+      }),
+      readTalentLists(db, { tenantId: c.get('tenantId') as number, ownerUserId: c.get('userId') as string }),
+    ]);
+    return c.json({ items, lists });
+  });
+
+  // POST /saved-talent — shortlist somebody (idempotent; a second save edits the note).
+  router.post('/saved-talent', authMiddleware, async (c) => {
+    const db = buildDatabase(c.env);
+    const b = await c.req.json<{ freelancerUserId?: string; list?: string; note?: string }>()
+      .catch((): { freelancerUserId?: string; list?: string; note?: string } => ({}));
+    const freelancerUserId = String(b.freelancerUserId ?? '').trim();
+    if (!freelancerUserId) return c.json({ error: 'freelancerUserId is required' }, 400);
+    const saved = await saveTalent(db, {
+      tenantId: c.get('tenantId') as number,
+      ownerUserId: c.get('userId') as string,
+      freelancerUserId,
+      list: b.list ?? null,
+      note: b.note ?? null,
+    });
+    if (!saved) return c.json({ error: 'Not found' }, 404);
+    return c.json({ id: saved.id }, 201);
+  });
+
+  // DELETE /saved-talent/:freelancerUserId?list= — un-shortlist. Without `list`, from
+  // every list: "remove this person" is what the button says.
+  router.delete('/saved-talent/:freelancerUserId', authMiddleware, async (c) => {
+    const db = buildDatabase(c.env);
+    await unsaveTalent(db, {
+      tenantId: c.get('tenantId') as number,
+      ownerUserId: c.get('userId') as string,
+      freelancerUserId: c.req.param('freelancerUserId'),
+      list: c.req.query('list') ?? null,
+    });
+    return c.json({ ok: true });
   });
 
   return router;

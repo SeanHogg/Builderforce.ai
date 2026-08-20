@@ -4,10 +4,15 @@
  *
  * The assignment picker historically fanned out FOUR client calls (listMyAgents +
  * listPurchasedAgents + listTenantMembers + listEngagements) on every open. This
- * collapses that into a single cached read so a hot picker costs one round-trip, and
- * — importantly — includes marketplace-HIRED agents (any active `ide_agents` row for
- * the tenant, which is where a hired marketplace agent materialises) so the picker no
- * longer omits them.
+ * collapses that into a single cached read so a hot picker costs one round-trip.
+ *
+ * IT INCLUDES MARKETPLACE-HIRED AGENTS, AND FOR A WHILE IT ONLY CLAIMED TO. The
+ * original comment here said a hired agent "materialises" as an active
+ * `ide_agents` row for the tenant. It does not: a hired agent's row belongs to the
+ * SELLER'S workspace and the hire lives in `agent_purchases`, so filtering on
+ * `ide_agents.tenant_id` omitted every agent the workspace had paid for. The
+ * predicate now comes from `hiredAgents.usableByTenant` — owned OR actively hired
+ * — which is the same one dispatch and the team roster ask.
  *
  * Served read-through cached (short TTL — the roster changes rarely), and explicitly
  * invalidated on agent create/update/delete via {@link assignableWorkforceCacheKey}
@@ -16,6 +21,7 @@
 import { and, eq, inArray } from 'drizzle-orm';
 import { ideAgents, tenantMembers, users, freelancerEngagements } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
+import { activeHiredAgentIds, usableByTenant } from '../workforce/hiredAgents';
 
 export interface AssigneeCandidate { ref: string; name: string }
 export interface AssignableWorkforce {
@@ -36,11 +42,14 @@ const displayName = (u: { displayName: string | null; username: string | null; e
 
 /** Build the tenant's assignable workforce (agents / humans / hires), deduped. */
 export async function loadAssignableWorkforce(db: Db, tenantId: number): Promise<AssignableWorkforce> {
+  // Resolved first because the agent predicate needs it. One extra indexed read
+  // per picker open, against a table with a unique index on (tenant, agent).
+  const hiredIds = await activeHiredAgentIds(db, tenantId);
   const [agentRows, humanRows, hireRows] = await Promise.all([
     db
       .select({ id: ideAgents.id, name: ideAgents.name })
       .from(ideAgents)
-      .where(and(eq(ideAgents.tenantId, tenantId), eq(ideAgents.status, 'active'))),
+      .where(usableByTenant(tenantId, hiredIds)),
     db
       .select({ id: users.id, displayName: users.displayName, username: users.username, email: users.email })
       .from(tenantMembers)

@@ -118,7 +118,12 @@ export function missingSecretSteps(ctx: MaterializeContext): SetupStep[] {
     .map((name) => ({
       key: `secret:${name}`,
       label: `Add the ${name} secret`,
-      detail: `This project's backend needs ${name}. Store it in the project's secret vault — it is sealed per tenant and is never returned to the browser.`,
+      // The gateway key gets its own sentence because the wrong key is the easy
+      // mistake: an agent-host credential looks like an API key, is refused by the
+      // gateway, and used to surface as model steps that silently produced nothing.
+      detail: name === 'BUILDERFORCE_API_KEY'
+        ? `This project's backend calls models through the Builderforce gateway. Create a WORKSPACE API key (Settings ▸ API Keys — it starts with \`bfk_\`) and store it as ${name} in the project's secret vault. An agent-host key will be refused. The vault is sealed per tenant and is never returned to the browser.`
+        : `This project's backend needs ${name}. Store it in the project's secret vault — it is sealed per tenant and is never returned to the browser.`,
       blocking: true,
     }));
 }

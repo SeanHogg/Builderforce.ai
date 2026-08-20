@@ -27,6 +27,7 @@ import { SecurityAuditService } from './SecurityAuditService';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { advertisedName } from '../llm/toolNaming';
+import { taskCreatedHook } from '../task/taskCreationHook';
 
 /** A distinct lane key so the audit run isn't confused with board lane-auto-run. */
 const AUDIT_LANE_KEY = '__security_audit__';
@@ -108,7 +109,7 @@ export async function dispatchSecurityAudit(
   });
 
   // Transient anchor task the cloud run hangs on, executed AS the Security agent.
-  const taskService = new TaskService(new TaskRepository(db), new ProjectRepository(db));
+  const taskService = new TaskService(new TaskRepository(db), new ProjectRepository(db), undefined, undefined, undefined, undefined, undefined, taskCreatedHook(db, env));
   const anchor = await taskService.createTask({
     projectId,
     title: 'SOC 2 Security Audit',

@@ -10,13 +10,13 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * so it is unit-testable against a mocked gateway/DB without standing up the Worker.
  */
 import { and, eq, sql } from 'drizzle-orm';
-import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
+import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import { buildMemoryCapability } from '../memory/memoryService';
 import { isMemoryScope } from '../../domain/memory/memoryScope';
 import { buildCoordinationCapability, claimWriteLease, guardRepoWrite } from '../coordination/coordinationCapability';
 import { releaseAllForExecution, type LeaseHolder } from '../coordination/leaseService';
 import { coordinationScopeKey } from '../../domain/coordination/resourceKey';
-import { buildCloudWebCapability } from './cloudWeb';
+import { buildCloudWebCapability, searchWeb } from './cloudWeb';
 import { isValidatorReviewPayload } from '../validation/validatorReviewMarker';
 import { recordActivity, SYSTEM_ACTOR } from '../activity/activityLog';
 import { isIncidentTriagePayload, incidentIdFromPayload } from '../incident/incidentTriageMarker';
@@ -981,10 +981,56 @@ interface ContainerRunContext {
   execParams: AgentExecParams;
 }
 
+/**
+ * The per-tenant version token stamped into every container-run-context cache key.
+ *
+ * The context caches `premiumEntitled` for ten minutes, which meant a tenant who had
+ * just validated a card still could not run premium on the container surface until
+ * that window expired — a paywall that stayed closed after the customer paid. The key
+ * is per EXECUTION, so a `card.validated` webhook cannot enumerate the entries to
+ * drop; bumping this token orphans all of them in one write, which is exactly the
+ * enumeration KV cannot do. Orphans age out on their own TTL.
+ */
+export function containerContextVersionKey(tenantId: number): string {
+  return `containerctx-ver:${tenantId}`;
+}
+
+/**
+ * Invalidate every cached container-run context for one tenant.
+ *
+ * Called when something changes the tenant's ENTITLEMENT rather than the run — today
+ * a card validation. Best-effort by contract: a missed bump costs at most the
+ * remainder of the ten-minute window, whereas failing the webhook would retry a
+ * validation that already landed.
+ */
+export async function invalidateContainerRunContexts(env: Env, tenantId: number): Promise<void> {
+  await bumpCacheVersion(env, containerContextVersionKey(tenantId)).catch((error) => {
+    reportCaughtError(error, { source: 'application/runtime/cloudAgentEngine.ts', operation: 'invalidateContainerRunContexts' });
+  });
+}
+
 /** Load (and briefly cache) the container-run context for an execution. No secret
- *  is in this object, so it is safe to cache in the shared read-through cache. */
+ *  is in this object, so it is safe to cache in the shared read-through cache.
+ *
+ *  The key carries a per-tenant version token so an entitlement change (a validated
+ *  card) can drop every entry at once — see {@link invalidateContainerRunContexts}.
+ *  Resolving the tenant costs one extra read, itself cached for a day because an
+ *  execution's tenant is immutable. */
 export async function loadContainerRunContext(env: Env, db: Db, executionId: number): Promise<ContainerRunContext | null> {
-  return getOrSetCached(env, `containerctx:${executionId}`, async () => {
+  const tenantId = await getOrSetCached(
+    env,
+    `exec-tenant:${executionId}`,
+    async () => {
+      const [row] = await db.select({ tenantId: executions.tenantId })
+        .from(executions).where(eq(executions.id, executionId)).limit(1);
+      return row?.tenantId ?? null;
+    },
+    { kvTtlSeconds: 86_400 },
+  ).catch(() => null);
+  if (tenantId == null) return null;
+  const version = await getCacheVersion(env, containerContextVersionKey(tenantId)).catch(() => 'v0');
+
+  return getOrSetCached(env, `containerctx:${version}:${executionId}`, async () => {
     const [exec] = await db
       .select({ taskId: executions.taskId, tenantId: executions.tenantId, payload: executions.payload, submittedBy: executions.submittedBy })
       .from(executions).where(eq(executions.id, executionId)).limit(1);
@@ -1280,6 +1326,53 @@ export async function handleContainerOp(
   // `agent_memory` twin otherwise — so a fact remembered on one cloud surface is
   // recalled on the other. `action` is 'recall' | 'remember'. Records a tool event so
   // container memory calls appear on the timeline like the Worker loop's.
+  /**
+   * WEB SEARCH from the container.
+   *
+   * The durable/Worker surface has had `web.search` since `resolveWebSearchBacking`
+   * started always resolving a backing (a tenant BYO key, the operator key, or the
+   * keyless encyclopedic floor). The container did not — its capabilities come from
+   * the image's own tool loop, and there was no op behind them, so advertising
+   * `web.search` there would have surfaced a tool that 400s mid-run. This op is that
+   * backing, and it is what lets the two cloud surfaces finally advertise the same
+   * capability.
+   *
+   * Relayed rather than called in-process for the same reason `memory` and
+   * `platform_tool` are: the container holds no credentials. Routing it through the
+   * Worker also means both surfaces share ONE resolver, ONE read-through cache and
+   * ONE meter — a container run and a durable run asking the same question hit the
+   * same cache entry, and a keyed vendor is charged once.
+   */
+  if (op === 'search') {
+    const query = typeof args.query === 'string' ? args.query : '';
+    if (!query.trim()) return { status: 200, body: { ok: false, error: 'query is required' } };
+    const tStart = Date.now();
+    // Resolved per call rather than cached on the run context: the context is cached
+    // for 10 minutes and a credential connected mid-run should take effect on the
+    // next search, not the next run. The resolver is itself cheap and cached.
+    const backing = await resolveWebSearchBacking(env, db, tenantId);
+    const result = await searchWeb(env, { ...backing, meter: { db, tenantId } }, query);
+    // The same context-contribution record the durable loop writes, so a fact the
+    // container found is auditable exactly like one the Worker found.
+    if (result.ok) {
+      await recordContextContribution(db, {
+        tenantId, executionId, sourceKind: 'web_search', sourceRef: query,
+        trustTier: 'external', content: JSON.stringify(result),
+      }).catch((error) => {
+        reportCaughtError(error, { source: 'application/runtime/cloudAgentEngine.ts', operation: 'containerSearch' });
+      });
+    }
+    await recordCloudToolEvent(db, {
+      tenantId, cloudAgentRef, executionId,
+      toolName: 'web_search', category: 'tool',
+      detail: { query }, result: result.ok ? `${result.results?.length ?? 0} results` : (result.error ?? 'failed'),
+      durationMs: Date.now() - tStart,
+    }).catch((error) => {
+      reportCaughtError(error, { source: 'application/runtime/cloudAgentEngine.ts', operation: 'containerSearch' });
+    });
+    return { status: 200, body: result };
+  }
+
   if (op === 'memory') {
     const action = typeof args.action === 'string' ? args.action : '';
     const memory = buildMemoryCapability({ db, env, tenantId, projectId, ticketId: taskId, origin: 'cloud-run', executionId });
@@ -1775,6 +1868,13 @@ export interface CloudLoopOpts {
    *  `reasoning_effort`) and attached on a strict pin. Applied to every LLM turn so
    *  personality changes how the agent reasons and samples, not just its prompt. */
   execParams?: AgentExecParams;
+  /** Caller-configured SAMPLING params for this run — a published tenant model's
+   *  stored `temperature`/`top_p`, or an explicit Run-now override. Distinct from
+   *  `execParams` (personality) and OUTRANKS it: an operator who set a temperature on
+   *  the model meant that number. The gateway route already applied these; without
+   *  them here the same tenant model sampled differently depending on whether it was
+   *  called over HTTP or dispatched as an agent run. See `AgentRunInput.genParams`. */
+  genParams?: { temperature?: number; topP?: number; maxTokens?: number };
   /**
    * REHEARSAL seam (Open/Closed + Dependency Inversion). The loop builds its surface
    * provider and then hands it here for the caller to wrap. Rehearsal supplies a shadow
@@ -2167,6 +2267,17 @@ export async function runCloudToolLoop(
   // Unknown/non-tenant refs resolve to null and pass through unchanged.
   const tenantModel = await resolveTenantModel(env, db, tenantId, model);
   let effectiveModel = tenantModel ? (tenantModel.baseModel ?? undefined) : model;
+  // ...and its SAMPLING params. The gateway route has always applied these; the cloud
+  // loop never did, so a published tenant model with `temperature: 0.2` sampled at 0.2
+  // over HTTP and at the persona default when the SAME model was dispatched as an
+  // agent run. Explicit caller `genParams` (a Run-now override) still win — this only
+  // fills what the caller did not set, exactly as the route does.
+  const tenantModelParams: { temperature?: number; topP?: number } = {
+    ...(typeof tenantModel?.params.temperature === 'number' ? { temperature: tenantModel.params.temperature } : {}),
+    ...(typeof tenantModel?.params.top_p === 'number' ? { topP: tenantModel.params.top_p as number } : {}),
+  };
+  const genParams: { temperature?: number; topP?: number; maxTokens?: number } =
+    { ...tenantModelParams, ...(opts?.genParams ?? {}) };
   // Curated platform tools give this run the SAME work-management reach the Brain
   // has (create follow-up tasks, update OKRs, read what's remaining) — advertised
   // alongside the repo/file tools and dispatched in-process below. The prompt
@@ -2449,8 +2560,14 @@ export async function runCloudToolLoop(
             tools: cloudTools,
             tool_choice: 'auto',
             ...(activeModel ? { model: activeModel, ...(strictPin ? { modelStrict: true } : {}) } : {}),
-            // Personality temperature (compiled from the agent's/personas' traits).
-            ...(opts?.execParams?.temperature != null ? { temperature: opts.execParams.temperature } : {}),
+            // Sampling. Caller-configured `genParams` OUTRANK the personality-derived
+            // temperature: an operator who set a temperature on the published model
+            // meant that number, whereas the persona value is a derived default.
+            ...(genParams.temperature ?? opts?.execParams?.temperature) != null
+              ? { temperature: genParams.temperature ?? opts?.execParams?.temperature }
+              : {},
+            ...(genParams.topP != null ? { top_p: genParams.topP } : {}),
+            ...(genParams.maxTokens != null ? { max_tokens: genParams.maxTokens } : {}),
             // Personality reasoning levers (thinkLevel/reasoningLevel) → the correct
             // vendor param via reasoningCapability (Anthropic `thinking` / OpenAI
             // `reasoning_effort`), surviving to the vendor as extraBody. Attached ONLY
@@ -2940,7 +3057,7 @@ export class CloudLimbicEngine implements AgentEngine {
       this.rc.env, this.rc.db, this.rc.executionId, this.rc.tenantId, this.rc.taskRow,
       this.rc.cloudAgentRef, this.rc.agentLabel, input.model, input.systemPrompt, input.userContent,
       this.rc.isCancelled, this.rc.projectId,
-      { routingBias: this.rc.routingBias, ...(this.rc.originatingChatId != null ? { originatingChatId: this.rc.originatingChatId } : {}), ...(directive ? { dynamicSystem: directive } : {}), ...(input.policy?.gates ? { policyGates: [...input.policy.gates] } : {}), ...(this.rc.execParams ? { execParams: this.rc.execParams } : {}) },
+      { routingBias: this.rc.routingBias, ...(this.rc.originatingChatId != null ? { originatingChatId: this.rc.originatingChatId } : {}), ...(directive ? { dynamicSystem: directive } : {}), ...(input.policy?.gates ? { policyGates: [...input.policy.gates] } : {}), ...(this.rc.execParams ? { execParams: this.rc.execParams } : {}), ...(input.genParams ? { genParams: { ...input.genParams } } : {}) },
     );
     return { ok: r.ok, output: r.output, cancelled: r.cancelled, finished: r.finished, awaitingInput: r.awaitingInput, state: r.state };
   }

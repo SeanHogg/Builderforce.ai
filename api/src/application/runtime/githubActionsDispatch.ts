@@ -15,10 +15,12 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * answers, and it is why chooseCloudExecutor takes an availability flag for this
  * surface instead of a health flag.
  */
+import { and, eq } from 'drizzle-orm';
 import { githubRequest, repoPath, resolveRepoAuth } from '../repos/githubClient';
 import { resolveDefaultRepoForTask } from '../repos/resolveDefaultRepo';
-import { AGENT_WORKFLOW_PATH, renderAgentWorkflow } from './githubActionsWorkflow';
+import { AGENT_WORKFLOW_PATH, AGENT_WORKFLOW_REVISION, renderAgentWorkflow } from './githubActionsWorkflow';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import { projectRepositories } from '../../infrastructure/database/schema';
 import { resolveAppBaseUrl } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
@@ -118,6 +120,22 @@ export async function ensureAgentWorkflow(
   });
 
   if (!put.ok) return { ok: false, code: put.code, reason: put.reason };
+
+  // Record WHICH revision this repo now carries, and take it off the refresh
+  // queue. Every writer of the workflow file goes through here — the enable
+  // button, the seeded template, and the refresh sweep — so this is the single
+  // place the fact can be stamped, and the sweep does not need its own commit
+  // path to keep the bookkeeping honest.
+  await db
+    .update(projectRepositories)
+    .set({
+      agentWorkflowRevision: AGENT_WORKFLOW_REVISION,
+      agentWorkflowRefreshDue: null,
+      agentWorkflowRefreshAttempts: 0,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(projectRepositories.id, repoId), eq(projectRepositories.tenantId, tenantId)))
+    .catch((error) => reportCaughtError(error, { source: "application/runtime/githubActionsDispatch.ts", operation: "ensureAgentWorkflow", context: { logMessage: '[github-actions-dispatch] workflow revision stamp failed', details: { tenantId, repoId, error } } }));
 
   // The presence cache would otherwise keep saying "absent" for up to 5 minutes
   // after the operator enabled the surface.

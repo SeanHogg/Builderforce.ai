@@ -26,6 +26,11 @@ import {
   getMcpToolStatus,
   fetchApiVersionVia,
   nextFallbackModel,
+  CHAT_MODES,
+  CHAT_MODE_ICON,
+  NEW_CHAT_MODE,
+  normalizeChatMode,
+  type ChatMode,
   type Effort,
   type BrainConfig,
   type BrainChat,
@@ -263,6 +268,7 @@ function promptMenuLabels(
     ...DEFAULT_PROMPT_OPTIONS_LABELS,
     ...(modelLabels ?? {}),
     options: t('app.options', 'Options'),
+    mode: t('app.mode', 'Mode'),
     effort: t('app.effort', 'Effort'),
     effortQuick: t('app.effortQuick', 'Quick'),
     effortBalanced: t('app.effortBalanced', 'Balanced'),
@@ -676,11 +682,24 @@ function Chat({ init }: { init: InitData }) {
     return () => { cancelled = true; };
   }, [chatId, persistence]);
 
+  // The mode the composer is ARMED with before a conversation exists (see the Chat|Work
+  // block below). Held here because `ensureChatId` seeds the created chat with it, and
+  // mirrored into a ref so that callback does not have to re-create on every switch.
+  const [pendingMode, setPendingMode] = useState<ChatMode>(NEW_CHAT_MODE);
+  const pendingModeRef = useRef<ChatMode>(NEW_CHAT_MODE);
+  pendingModeRef.current = pendingMode;
+
   // Scope new chats to the sidebar's active project (same as task-seeded chats),
   // so a conversation is associated with the project it's about server-side.
   const ensureChatId = useCallback(async () => {
     if (chatId != null) return chatId;
-    const chat = await persistence.createChat({ title: t('app.newChat', 'New chat'), projectId: init.project?.id ?? null });
+    const chat = await persistence.createChat({
+      title: t('app.newChat', 'New chat'),
+      projectId: init.project?.id ?? null,
+      // The composer's armed mode, not a server default — otherwise choosing Chat and
+      // then typing creates a Work chat and the very first turn runs in the wrong mode.
+      mode: pendingModeRef.current,
+    });
     setChatId(chat.id);
     reloadChats();
     return chat.id;
@@ -702,6 +721,41 @@ function Chat({ init }: { init: InitData }) {
     post('session.meta', { chatId: chatId ?? undefined, title: sessionTitle });
   }, [chatId, sessionTitle]);
   const associatedProjectId = activeChat ? activeChat.projectId : (init.project?.id ?? null);
+  // ---- Chat | Work mode -----------------------------------------------------
+  // A property of the CONVERSATION (migration 0409), not of this editor: the same chat
+  // opened on the web must mean the same thing here. The IDE used to hard-wire Work —
+  // every turn carried the ticket-linking directive — so a VS Code user could not ask a
+  // question without the model also being told to open a ticket about the answer, and a
+  // chat switched to Chat on the web still ran as Work in the editor.
+  //
+  // `pendingMode` covers the pre-chat state (no server row yet, so nothing to read a
+  // mode off): it seeds the chat `ensureChatId` creates, so picking Chat and then typing
+  // cannot silently mint a Work chat. It defaults to NEW_CHAT_MODE — Work — which is the
+  // IDE's existing behaviour, kept deliberately: an edit in an editor really should
+  // become tracked work.
+  const chatMode: ChatMode = activeChat ? normalizeChatMode(activeChat.mode) : pendingMode;
+  const selectMode = useCallback((mode: ChatMode) => {
+    setPendingMode(mode);
+    if (chatId == null) return;
+    // Optimistic: the picker IS the switch, so the menu must not lag the click. The
+    // authoritative value comes back on the next `reloadChats`.
+    setChats((prev) => prev.map((c) => (c.id === chatId ? { ...c, mode } : c)));
+    persistence.updateChat(chatId, { mode })
+      .then(() => reloadChats())
+      .catch(() => reloadChats());
+  }, [chatId, persistence, reloadChats]);
+  const modeChoices = useMemo(
+    () => CHAT_MODES.map((mode) => ({
+      value: mode,
+      label: mode === 'work' ? t('app.modeWork', 'Work') : t('app.modeChat', 'Chat'),
+      hint: mode === 'work'
+        ? t('app.modeWorkHint', 'Turn what we agree into tracked work — open the ticket, staff it, and dispatch an agent to run it')
+        : t('app.modeChatHint', 'Just answer — read and reason as much as needed, but do not open or dispatch board work'),
+      icon: CHAT_MODE_ICON[mode],
+    })),
+    [t],
+  );
+
   const associatedProject = useMemo<{ id: number; name: string } | null>(() => {
     if (associatedProjectId == null) return null;
     const name = init.projectNames?.[String(associatedProjectId)]
@@ -906,6 +960,10 @@ function Chat({ init }: { init: InitData }) {
     onActivity: reloadChats,
     onFirstUserTurn: autoTitleChat,
     evermind: gatedEvermind,
+    // The conversation's own mode decides which directive rides the turn — the shared
+    // `chatModeDirective`, identical to the web Brain. Without this the loop's absent-
+    // mode fallback made every IDE turn a Work turn regardless of the chat's row.
+    chatMode,
   });
 
   // Trace rehydrate (parity with the web app): on chat open, load the persisted
@@ -1803,6 +1861,7 @@ function Chat({ init }: { init: InitData }) {
               prose, which is exactly why users couldn't tell what they did. */}
           <PromptOptionsMenu
             labels={promptLabels}
+            mode={{ value: chatMode, onChange: (next) => selectMode(next as ChatMode), choices: modeChoices }}
             memory={{
               enabled: memoryEnabled,
               onChange: toggleMemory,

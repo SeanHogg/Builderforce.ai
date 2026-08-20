@@ -36,7 +36,6 @@ legal_documents
 llm_health_probes
 magic_link_tokens
 marketing_tool_runs
-marketplace_purchases
 marketplace_skill_likes
 marketplace_skills
 newsletter_events
@@ -70,4 +69,5 @@ tenants
 user_legal_acceptances
 user_mfa_recovery_codes
 users
+webauthn_credentials
 workflow_tasks

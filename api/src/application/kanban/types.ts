@@ -32,15 +32,41 @@ export interface JobRole {
 }
 
 /** A small enum of condition predicates that scope a requirement (start narrow, not a DSL).
- *  All are evaluable from the ticket's task_type + action_type — no external signal. */
-export type RequirementCondition = 'is_security' | 'has_ui_change' | 'is_data_change';
+ *  The first three are evaluable from the ticket's task_type + action_type alone;
+ *  `has_pr` additionally needs the ticket's pull-request signal, which every caller
+ *  supplies via {@link RequirementTaskScope.hasPr}. */
+export type RequirementCondition = 'is_security' | 'has_ui_change' | 'is_data_change' | 'has_pr';
+
+/** Every condition predicate, in the order they are offered to an operator. */
+export const REQUIREMENT_CONDITIONS: readonly RequirementCondition[] = [
+  'is_security', 'has_ui_change', 'is_data_change', 'has_pr',
+];
+
+/**
+ * The ticket facts a requirement's applicability is scoped by.
+ *
+ * `hasPr` is deliberately OPTIONAL and deliberately fails CLOSED (a `has_pr` requirement
+ * does not apply when the caller could not resolve the signal). A requirement that says
+ * "once there is a pull request, a code reviewer is required" must never materialise a
+ * required reviewer slot on a ticket whose PR state is unknown — that would gate
+ * completion on a reviewer nobody can satisfy. Resolve it with
+ * {@link ../kanban/taskPrSignal.hasNonDraftPr} so every caller agrees on what "has a PR"
+ * means (a draft does not count).
+ */
+export interface RequirementTaskScope {
+  taskType?: string | null;
+  actionType?: string | null;
+  /** Whether a non-draft pull request exists for this ticket right now. */
+  hasPr?: boolean;
+}
 
 /** Does a requirement APPLY to a given ticket? Scoped by ticket type + an optional
  *  condition predicate. The ONE place requirement applicability is decided, shared by
- *  the audit engine, the participation manifest, and the lane gate (DRY). */
+ *  the audit engine, the participation manifest, the managed-lane authority and the
+ *  lane gate (DRY). */
 export function requirementApplies(
   req: { ticketType?: string | null; condition?: string | null },
-  task: { taskType?: string | null; actionType?: string | null },
+  task: RequirementTaskScope,
 ): boolean {
   const taskType = task.taskType ?? 'task';
   if (req.ticketType && req.ticketType !== taskType) return false;
@@ -48,6 +74,7 @@ export function requirementApplies(
     case 'is_security':    return taskType === 'security';
     case 'has_ui_change':  return task.actionType === 'frontend_ui';
     case 'is_data_change': return task.actionType === 'sql' || task.actionType === 'data_migration';
+    case 'has_pr':         return task.hasPr === true;
     default:               return true; // null / unknown condition ⇒ always applies
   }
 }

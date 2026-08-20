@@ -61,6 +61,7 @@ import { buildPaymentProvider } from '../../infrastructure/payment';
 import { verifyPaidCheckout } from './verifiedCheckout';
 import { hashShareToken, mintShareToken } from '../security/shareToken';
 import { deliverShareInvitations } from '../security/shareInvitationMailer';
+import { publisherEmailLocale, shareInvitationMessage } from '../security/shareInvitationCopy';
 import { recordActivity } from '../activity/activityLog';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { accountHistoryCacheKey, documentLineTotal, setDocumentLines, type BilledLine } from './payables';
@@ -75,6 +76,9 @@ export class ReceivableError extends Error {
 
 /** Bounded, because every read here renders a list on a surface. */
 const PAGE = 100;
+
+/** This module's name, for `reportCaughtError` and the mailer's failure context. */
+const SOURCE = 'application/finance/receivables.ts';
 
 /** How many days an invoice is payable for when the issuer names no due date.
  *  Stated once rather than defaulted at three call sites, and stated at all
@@ -381,18 +385,28 @@ export async function issueInvoice(
   let deliveredTo: string | null = null;
   const recipient = input.deliverTo?.trim();
   if (recipient) {
+    // The ISSUER's language, resolved through the one platform locale chain. A
+    // customer receiving an invoice is very often not an account holder here, so
+    // the person who issued it is the only signal about what language to write in
+    // — the same argument `shareInvitationCopy` makes for a form's recipient.
+    const locale = await publisherEmailLocale(env, db, { userId: input.issuedBy });
     const delivery = await deliverShareInvitations(
       env,
       [{ email: recipient, name: invoice.customerName, token }],
-      {
-        subject: `Invoice ${invoice.reference}`,
-        body: input.message?.trim()
-          || `Invoice ${invoice.reference} for ${formatMoney(amount, invoice.currency)} is ready. Payment is due ${dueAt.toISOString().slice(0, 10)}.`,
-        actionLabel: paymentLinkUrl ? 'View and pay' : 'View the invoice',
-        footnote: `Due ${dueAt.toISOString().slice(0, 10)}.`,
-        linkFor: () => documentUrl,
-      },
-      'application/finance/receivables.ts',
+      shareInvitationMessage(
+        locale,
+        {
+          kind: 'invoiceIssued',
+          reference: invoice.reference,
+          amountCents: toCents(amount),
+          currency: invoice.currency,
+          dueAt,
+          message: input.message ?? null,
+          payable: !!paymentLinkUrl,
+        },
+        () => documentUrl,
+      ),
+      SOURCE,
     );
 
     if (delivery.sent > 0) {
@@ -824,6 +838,10 @@ export async function chaseInvoice(
 
   if (recipient) {
     const outstanding = Number(invoice.amount) - Number(invoice.paidAmount);
+    // The collector's language — the actor climbing the rung. On the automated
+    // rungs that is the sweep's own actor, which resolves to the platform default;
+    // on a hand-sent chase it is the person who pressed the button.
+    const locale = await publisherEmailLocale(env, db, { userId: input.actorRef });
     const delivery = await deliverShareInvitations(
       env,
       // No token: a chase carries the PAYMENT link, which the processor already
@@ -831,16 +849,25 @@ export async function chaseInvoice(
       // token here would invalidate the link the customer was originally sent —
       // the opposite of what a reminder is for.
       [{ email: recipient, name: invoice.customerName, token: '' }],
-      {
-        subject: (input.subject?.trim() || `Invoice ${invoice.reference} — ${input.stepLabel}`).slice(0, 120),
-        body: input.body?.trim()
-          || `${formatMoney(outstanding, invoice.currency)} is outstanding on invoice ${invoice.reference}${invoice.dueAt ? `, which was due ${invoice.dueAt.toISOString().slice(0, 10)}` : ''}.`,
-        actionLabel: invoice.paymentLinkUrl ? 'View and pay' : 'View the invoice',
+      shareInvitationMessage(
+        locale,
+        {
+          kind: 'invoiceChase',
+          reference: invoice.reference,
+          outstandingCents: toCents(outstanding),
+          currency: invoice.currency,
+          dueAt: invoice.dueAt,
+          // The operator's own subject and body win where they wrote them — a
+          // collections ladder rung is often deliberately worded.
+          subject: input.subject ?? null,
+          body: input.body ?? null,
+          payable: !!invoice.paymentLinkUrl,
+        },
         // Chasing somebody with a link they have to go and find is the failure
         // `runSignatureReminderSweep` names.
-        linkFor: () => invoice.paymentLinkUrl ?? `${resolveAppBaseUrl(env)}/invoice/${encodeURIComponent(invoice.reference)}`,
-      },
-      'application/finance/receivables.ts',
+        () => invoice.paymentLinkUrl ?? `${resolveAppBaseUrl(env)}/invoice/${encodeURIComponent(invoice.reference)}`,
+      ),
+      SOURCE,
     );
     deliveredTo = delivery.sent > 0 ? recipient : null;
     outcome = delivery.sent > 0 ? 'sent' : 'failed';

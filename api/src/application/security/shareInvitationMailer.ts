@@ -30,10 +30,25 @@
  * Per recipient, never per batch. One unreachable address must not stop the other
  * nine, and the caller is told how many of each so it can report honestly rather
  * than claim a send it did not make.
+ *
+ * ── LANGUAGE ─────────────────────────────────────────────────────────────────
+ * This module holds NO COPY. It renders the chrome — greeting and the "do not
+ * forward this" trailer — from the platform catalog in the locale it is handed,
+ * and every word the recipient reads about the THING being sent arrives already
+ * written, from `shareInvitationCopy.ts`. Keeping the transport free of copy is
+ * what stopped the template from being English-only: a hardcoded greeting is a
+ * hardcoded language no caller can override.
+ *
+ * Which locale that is, is the caller's problem and has one answer — a named
+ * recipient of a form or a contract usually has no account here, so the only
+ * signal available is the PUBLISHER's stored language. See
+ * `publisherEmailLocale`.
  */
 
 import type { Env } from '../../env';
 import { sendRawEmail } from '../../infrastructure/email/EmailService';
+import { emailCopy, fillCopy } from '../../infrastructure/email/emailMessages';
+import { DEFAULT_EMAIL_LOCALE, type EmailLocale } from '../../infrastructure/email/emailLocale';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 
 /** One person and the credential minted for them. `token` exists only in the
@@ -60,6 +75,13 @@ export interface ShareInvitationMessage {
   footnote?: string;
   /** Plaintext token → the absolute URL that resolves it. */
   linkFor: (token: string) => string;
+  /**
+   * The language the words above are written in, so the chrome around them
+   * matches. Optional only so an un-migrated caller degrades to English rather
+   * than failing to compile — a message whose body is French and whose greeting
+   * is English is the exact defect this closes.
+   */
+  locale?: EmailLocale;
 }
 
 export interface ShareInvitationDelivery {
@@ -81,7 +103,13 @@ const escapeHtml = (value: string): string =>
  * they can copy, and that is the whole point of the message.
  */
 function composeHtml(recipientName: string, url: string, message: ShareInvitationMessage): string {
-  const greeting = recipientName.trim() ? `${escapeHtml(recipientName.trim())},` : 'Hello,';
+  const copy = emailCopy(message.locale ?? DEFAULT_EMAIL_LOCALE);
+  // The name is escaped, then filled into a CATALOG template that is trusted —
+  // the reverse order would escape the translation's own punctuation.
+  const name = recipientName.trim();
+  const greeting = name
+    ? fillCopy(copy.common.greeting, { RecipientName: escapeHtml(name) })
+    : copy.common.greetingAnonymous;
   return [
     '<div style="max-width:560px;margin:0 auto;padding:24px;font:400 15px/1.6 system-ui,sans-serif;color:#111">',
     `<p>${greeting}</p>`,
@@ -89,7 +117,7 @@ function composeHtml(recipientName: string, url: string, message: ShareInvitatio
     `<p style="margin:24px 0"><a href="${escapeHtml(url)}" style="display:inline-block;padding:10px 18px;border-radius:8px;background:#1d4ed8;color:#fff;text-decoration:none;font-weight:600">${escapeHtml(message.actionLabel)}</a></p>`,
     `<p style="color:#666;font-size:13px;word-break:break-all">${escapeHtml(url)}</p>`,
     message.footnote ? `<p style="color:#666;font-size:13px">${escapeHtml(message.footnote)}</p>` : '',
-    '<p style="color:#999;font-size:12px">This link is personal to you. Do not forward it — whoever holds it can answer as you.</p>',
+    `<p style="color:#999;font-size:12px">${copy.shareInvitation.personalLink}</p>`,
     '</div>',
   ].join('');
 }

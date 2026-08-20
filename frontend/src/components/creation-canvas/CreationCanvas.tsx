@@ -38,6 +38,7 @@ import {
 import { CanvasNodePanel } from './CanvasNodePanel';
 import { CanvasObjectPicker } from './CanvasObjectPicker';
 import { CanvasSurfaceRouter } from './CanvasSurfaceRouter';
+import { CanvasCalendarSurface } from './CanvasCalendarSurface';
 import { CanvasSurfaceSwitcher } from './CanvasSurfaceSwitcher';
 import { CanvasSessionActions, type CanvasSessionActionHandler } from './CanvasSessionActions';
 import { CanvasSessionPill } from './CanvasSessionPill';
@@ -63,6 +64,7 @@ import { CanvasMiroPanel } from './CanvasMiroPanel';
 import type { MiroBoardSummary, MiroImportResult } from '@/lib/miroImport';
 import { CanvasSocialPanel } from './CanvasSocialPanel';
 import { CanvasAdsPanel } from './CanvasAdsPanel';
+import { CanvasAttributedOutcomes } from './CanvasAttributedOutcomes';
 import { CanvasEmailComposer } from './CanvasEmailComposer';
 import { CanvasHostActions } from './CanvasHostActions';
 import { canvasNavigate, canvasSurface, canvasWebOrigin, type CanvasHostCapture } from '@/lib/canvasHost';
@@ -128,14 +130,14 @@ import '@seanhogg/builderforce-brain-ui/styles.css';
 import { ProjectEvermindPanel } from '@/components/builder/ProjectEvermindPanel';
 import { EvermindValidationProvider } from '@/components/builder/EvermindValidationContext';
 import { getProjectEvermindContributions, getProjectEvermindHead, recallProjectEvermind, teachProjectEvermindFromText, type ProjectEvermindContributions, type ProjectEvermindHead } from '@/lib/projectEvermindApi';
-import { isAwaitingApprovalExecution } from '@/lib/builderforceApi';
+import { isAwaitingApprovalExecution, type WorkflowApprovalMode } from '@/lib/builderforceApi';
 import { hiringApi } from '@/lib/hiringApi';
 import { screenCandidates } from '@/lib/canvasResumeScreening';
 import { guestLimitRefusal, type GuestLimitRefusal } from '@/lib/guestLimit';
 import { GuestSignupCta, type GuestSignupPrompt } from '@/components/GuestSignupCta';
 import { ApiRequestError } from '@/lib/apiClient';
 import { captureCanvasScreenshot, resolveCanvasImage, type CanvasImageAsset, type CanvasImageResolveMode } from '@/lib/canvasImageAssets';
-import { evaluateModel, fetchProjects, publishSite } from '@/lib/api';
+import { createProject, evaluateModel, fetchProjects, publishSite } from '@/lib/api';
 import { computeProjectHealth } from '@/lib/projectHealth';
 import { createCloudAgent, updateAgent } from '@/lib/api';
 import { presentationSequence, presentationStepAt, presentationViewport, stepPresentation } from '@/lib/canvasPresentation';
@@ -207,6 +209,9 @@ import { dataSourceApi, resolveDataSource, type DataSourceSummary } from '@/lib/
 import { detectGeoColumns, mapObjectFields, mapPointsFromRows } from '@/lib/canvasGeo';
 import { analyzeCompetitorGeography, competitorSitesFrom } from '@/lib/competitorGeo';
 import { evaluateCanvasTriggers, isDateComparator, triggerUnboundHint } from '@/lib/canvasTriggers';
+// The brand a generative object composes against, and the consent state a send is
+// gated on. Adapter only — the rules live in the contract; see `canvasMarketing.ts`.
+import { brandForNode, brandViolationsIn, campaignSendReadiness } from '@/lib/canvasMarketing';
 import { useCoarsePointer } from '@/lib/useCoarsePointer';
 import { flowConnectionProps } from '@/lib/flowConnection';
 import { canvasInteractionProps, type CanvasGesture } from './canvasPointerMode';
@@ -279,7 +284,7 @@ import { CanvasExportActions, canvasExportActionsFor } from './CanvasExportActio
 import { SellInMarketplace } from './SellInMarketplace';
 import { CourseSubjectControl, PracticeAuthoring, ReadingLevelControl } from './LearningControls';
 import { listEvermindModels } from '@/lib/studioModelsApi';
-import { canvasProjectId, canvasProjectNodes, connectedCanvasProjectNode } from '@/lib/canvasProjectRef';
+import { canvasProjectId, canvasProjectNodes, canvasProjectPatch, connectedCanvasProjectNode } from '@/lib/canvasProjectRef';
 import {
   buildTestPlan, coverageReport, defectFromResult, normalizeExitCriteria, planGateVerdict,
   readTestCases, readTestResults, relowerCase, releaseEvidence, routesFromHtml, summarizeRun,
@@ -295,6 +300,7 @@ import { canvasDataRoomActions } from '@/lib/canvasDataRoomTools';
 import { canvasDocumentTemplateActions } from '@/lib/canvasDocumentTemplateTools';
 import { canvasEquityActions } from '@/lib/canvasEquityTools';
 import { canvasLegalDocumentActions } from '@/lib/canvasLegalDocumentTools';
+import { canvasLegalRecordActions } from '@/lib/canvasLegalRecordTools';
 import { canvasSellMotionActions } from '@/lib/canvasSellMotionTools';
 import { canvasSignatureActions } from '@/lib/canvasSignatureTools';
 import { chaseInvoice, draftInvoice, issueInvoice, moveDeal as moveDealOnBoard, recordInvoicePayment, listPayRuns, payRunLines, sendInvestorUpdate, syncPayRuns } from '@/lib/founderOpsApi';
@@ -4565,6 +4571,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    *  existed, so there is no second signature path (FO-D5). */
   const canvasDocumentTemplateActionList = useMemo<BrainAction[]>(() => canvasDocumentTemplateActions(canvasOpsContext), [canvasOpsContext]);
   const canvasLegalDocumentActionList = useMemo<BrainAction[]>(() => canvasLegalDocumentActions(canvasOpsContext), [canvasOpsContext]);
+  /** The legal seat's own RECORDS — the entity, the IP asset, the matter — projected
+   *  onto the board from `getEntityRows('legal', …)`. See `canvasLegalRecordTools.ts`
+   *  for why one tool covers three kinds and why none of it is gated. */
+  const canvasLegalRecordActionList = useMemo<BrainAction[]>(() => canvasLegalRecordActions(canvasOpsContext), [canvasOpsContext]);
   /** The generic e-signature request for authored (non-file) objects — closes the
    *  `contract.sign` gap; see `canvasSignatureTools.ts`. */
   const canvasSignatureActionList = useMemo<BrainAction[]>(() => canvasSignatureActions(canvasOpsContext), [canvasOpsContext]);
@@ -8851,8 +8861,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         ...(projectId == null ? { note: 'Published without a project. Add a project object to the canvas to file these under it, which is what gives them a run target and a persona.' } : {}),
       };
     },
-  }, ...canvasBuildActionList, ...canvasFounderOpsActionList, ...canvasEquityActionList, ...canvasDataRoomActionList, ...canvasDocumentTemplateActionList, ...canvasLegalDocumentActionList, ...canvasSignatureActionList, ...canvasSellMotionActionList].filter((action) => persistence === 'server' || !canvasToolRequiresAccount(action.name))),
-  [canEdit, canvasBuildActionList, canvasDataRoomActionList, canvasDocumentTemplateActionList, canvasEquityActionList, canvasFounderOpsActionList, canvasLegalDocumentActionList, canvasSellMotionActionList, canvasSignatureActionList, convertObjectToDiagram, edges, effectiveSelectedIds, localizedTourDefaults, nodes, persistence, prompt, requireAccount, resolveTabularTarget, resolvedScopeMode, scopedEdges, scopedNodeIds, scopedNodes, sessionId, socialAccountGate, tSocial]);
+  }, ...canvasBuildActionList, ...canvasFounderOpsActionList, ...canvasEquityActionList, ...canvasDataRoomActionList, ...canvasDocumentTemplateActionList, ...canvasLegalDocumentActionList, ...canvasLegalRecordActionList, ...canvasSignatureActionList, ...canvasSellMotionActionList].filter((action) => persistence === 'server' || !canvasToolRequiresAccount(action.name))),
+  [canEdit, canvasBuildActionList, canvasDataRoomActionList, canvasDocumentTemplateActionList, canvasEquityActionList, canvasFounderOpsActionList, canvasLegalDocumentActionList, canvasLegalRecordActionList, canvasSellMotionActionList, canvasSignatureActionList, convertObjectToDiagram, edges, effectiveSelectedIds, localizedTourDefaults, nodes, persistence, prompt, requireAccount, resolveTabularTarget, resolvedScopeMode, scopedEdges, scopedNodeIds, scopedNodes, sessionId, socialAccountGate, tSocial]);
 
   const addAgentKnowledge = useCallback((agentId: string, content: string) => {
     const agent = nodes.find((node) => node.id === agentId && node.data.kind === 'agent');
@@ -9476,11 +9486,18 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       // Bind the definition to the canvas's project when there is one, so the
       // compiled workflow lands in the same scope as the rest of this board's work.
       const projectId = canvasProjectNodes(nodes).map((node) => canvasProjectId(node.data))[0] ?? null;
+      // The card's two authored controls travel WITH the steps. They used to be
+      // rendered and dropped, so a canvas reading "Approval required" compiled to a
+      // definition with no gate and ran unapproved — see migration 1092.
       const definition = await workflowDefinitions.fromCanvas({
         name: target.data.title || 'Canvas workflow',
         steps: target.data.steps,
         ...(typeof target.data.content === 'string' && target.data.content ? { description: target.data.content } : {}),
         ...(projectId != null ? { projectId } : {}),
+        ...(typeof target.data.runTarget === 'string' && target.data.runTarget ? { runTarget: target.data.runTarget } : {}),
+        ...(target.data.approvalMode === 'required' || target.data.approvalMode === 'autonomous'
+          ? { approvalMode: target.data.approvalMode as WorkflowApprovalMode }
+          : {}),
       });
       patchWorkflowNode(targetId, {
         resourceId: `workflow:${definition.id}`,
@@ -9535,6 +9552,18 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           cloudAgentRef: definition.runTargetCloudAgentRef,
         });
       }).then((run) => {
+        // A definition whose card says "Approval required" answers with a real
+        // pending approval INSTEAD of a run. The card says exactly that. The
+        // regression this file's comment above describes — a 1400ms timer writing
+        // `delivered` + `validation: passed` for a workflow that never executed —
+        // is the same lie a "Running" card would tell here, so the deliverable
+        // records `not_run` and nothing polls for a run that was never started.
+        if (run.status === 'pending') {
+          const awaiting: CreationDeliverable = { ...started, resourceRef: `approval:${run.approvalId}`, validation: { status: 'not_run', detail: run.reason } };
+          setNodes((current) => current.map((node) => node.id === targetId ? { ...node, data: { ...node.data, status: 'Awaiting approval', workflowApprovalId: run.approvalId, deliverables: withCreationDeliverable(node.data, awaiting) } } : node));
+          setNotice(run.reason);
+          return;
+        }
         setNodes((current) => current.map((node) => node.id === targetId ? { ...node, data: { ...node.data, status: 'Running', workflowRunId: run.workflowId, workflowTaskCount: run.taskCount, deliverables: withCreationDeliverable(node.data, { ...started, resourceRef: `workflow-run:${run.workflowId}`, metadata: { taskCount: run.taskCount } }) } } : node));
         setNotice(t('noticeWorkflowStarted', { count: run.taskCount }));
         const pollRun = (remaining: number) => {
@@ -9644,23 +9673,18 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     };
   }, [edges, gameShipFocus, nodes]);
 
-  const publishWebsite = useCallback((websiteId?: string) => {
-    const target = nodes.find((node) => node.id === websiteId && node.data.kind === 'website')
-      ?? (selectedNode?.data.kind === 'website' ? selectedNode : nodes.find((node) => node.data.kind === 'website'));
-    if (!target) { setNotice(t('noticeNeedWebsite')); return; }
-    if (persistence !== 'server') { requireAccount('publish', 'Create an account to publish', 'Save this session to publish the Website as a live Builderforce site.'); return; }
-    const connectedProject = connectedCanvasProjectNode(nodes, edges, target.id);
-    const projectId = connectedProject ? canvasProjectId(connectedProject.data) : null;
-    if (projectId == null) { setNotice(t('noticeConnectWebsite')); return; }
+  /** The publish itself, once the target project is known. Split from
+   *  `publishWebsite` so provisioning a project on demand does not fork the
+   *  delivery/outcome bookkeeping into a second copy. */
+  const publishWebsiteTo = useCallback((target: CreationFlowNode, projectId: number) => {
     const deliveryId = crypto.randomUUID();
     const correlationId = `deliver:${deliveryId}`;
     const startedAt = performance.now();
     const started: CreationDeliverable = { id: deliveryId, action: 'publish', artifactKind: 'website', status: 'running', createdAt: new Date().toISOString(), provider: 'builderforce-sites', resourceRef: `project:${projectId}` };
     setNodes((current) => current.map((node) => node.id === target.id ? { ...node, data: { ...node.data, status: 'Publishing…', deliverables: withCreationDeliverable(node.data, started) } } : node));
-    setNotice(t('noticePublishingWebsite'));
     void creationSessionsApi.recordOutcome(sessionId, { correlationId, action: 'website.publish', phase: 'started', artifactId: target.id, projectId: Number(projectId) }).catch(() => undefined);
     const subdomain = typeof target.data.subdomain === 'string' ? target.data.subdomain : undefined;
-    void publishSite(projectId, buildWebsiteAssets(target.data), subdomain).then((site) => {
+    return publishSite(projectId, buildWebsiteAssets(target.data), subdomain).then((site) => {
       const delivered: CreationDeliverable = { ...started, status: 'delivered', completedAt: new Date().toISOString(), url: site.url, pathUrl: site.pathUrl, mimeType: 'text/html', resourceRef: `site:${site.subdomain}`, validation: { status: 'passed', detail: `${site.assetCount} assets published (${site.totalBytes} bytes)` }, metadata: { versionToken: site.versionToken, assetCount: site.assetCount, totalBytes: site.totalBytes } };
       setNodes((current) => current.map((node) => node.id === target.id ? { ...node, data: { ...node.data, status: 'Published', url: site.url, siteUrl: site.url, pathUrl: site.pathUrl, subdomain: site.subdomain, deliverables: withCreationDeliverable(node.data, delivered) } } : node));
       setNotice(t('noticeWebsitePublished', { url: site.url }));
@@ -9672,7 +9696,51 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       setNotice(message);
       void creationSessionsApi.recordOutcome(sessionId, { correlationId, action: 'website.publish', phase: 'failed', artifactId: target.id, projectId: Number(projectId), durationMs: performance.now() - startedAt }).catch(() => undefined);
     });
-  }, [edges, nodes, persistence, requireAccount, selectedNode, sessionId, setNodes]);
+  }, [sessionId, setNodes, t]);
+
+  /**
+   * The canonical project an object acts against, PROVISIONING one when the board
+   * has none yet.
+   *
+   * Brain authors a Website end to end and never creates a Project object, so
+   * Publish used to dead-end on `noticeConnectWebsite` — naming a connection the
+   * user had no way to know they needed, on the flagship Idea→Real demo. Publishing
+   * is precisely the moment a board earns a real tenant project, so one is created
+   * here and placed on the board as a canonical `project` object wired to the source,
+   * which means every LATER action (including the second publish) resolves it through
+   * `connectedCanvasProjectNode` the ordinary way and no second project is created.
+   * Callers gate on `persistence === 'server'` first: an anonymous canvas has no
+   * tenant to provision into.
+   */
+  const ensureCanvasProject = useCallback(async (sourceId: string, name: string): Promise<number> => {
+    const connected = connectedCanvasProjectNode(nodes, edges, sourceId);
+    const connectedId = connected ? canvasProjectId(connected.data) : null;
+    if (connectedId != null) return connectedId;
+    const source = nodes.find((node) => node.id === sourceId);
+    const created = await createProject({ name: name.trim().slice(0, 120) || 'Untitled project', origin: 'canvas' });
+    // Left of the object it serves, so the edge reads container → thing, and far
+    // enough out that the two cards do not overlap on a fresh board.
+    const node = newNode('project', source ? { x: source.position.x - 380, y: source.position.y } : { x: 200, y: 200 });
+    node.data = { ...node.data, ...canvasProjectPatch(created) };
+    setNodes((current) => [...current, node]);
+    setEdges((current) => addEdge({ id: crypto.randomUUID(), source: node.id, target: sourceId, type: connectionKind }, current));
+    return created.id;
+  }, [connectionKind, edges, nodes, setEdges, setNodes]);
+
+  const publishWebsite = useCallback((websiteId?: string) => {
+    const target = nodes.find((node) => node.id === websiteId && node.data.kind === 'website')
+      ?? (selectedNode?.data.kind === 'website' ? selectedNode : nodes.find((node) => node.data.kind === 'website'));
+    if (!target) { setNotice(t('noticeNeedWebsite')); return; }
+    if (persistence !== 'server') { requireAccount('publish', 'Create an account to publish', 'Save this session to publish the Website as a live Builderforce site.'); return; }
+    setNotice(t('noticePublishingWebsite'));
+    void ensureCanvasProject(target.id, target.data.title)
+      .then((projectId) => publishWebsiteTo(target, projectId))
+      .catch((error) => {
+        const message = error instanceof Error ? error.message : t('noticeWebsiteProjectFailed');
+        setNodes((current) => current.map((node) => node.id === target.id ? { ...node, data: { ...node.data, status: 'Publish failed' } } : node));
+        setNotice(message);
+      });
+  }, [ensureCanvasProject, nodes, persistence, publishWebsiteTo, requireAccount, selectedNode, setNodes, t]);
 
   /**
    * Open a Builder object's workspace on the board, creating its backing legacy
@@ -9844,6 +9912,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     const correlationId = `deliver:${deliveryId}`;
     const startedAt = performance.now();
     const kind = target.data.kind;
+    // THE BRAND THIS ARTIFACT ANSWERS TO, resolved once and given to every generator
+    // below. Undefined on a board with no `brandKit`, which composes exactly as it did
+    // before — see `marketing.ts` for the three resolution rules and why an unresolved
+    // binding composes unbranded rather than borrowing the other kit.
+    const brand = brandForNode(target, nodes);
     const started: CreationDeliverable = { id: deliveryId, action, artifactKind: kind, status: 'running', createdAt: new Date().toISOString() };
     setNodes((current) => current.map((node) => node.id === target.id ? { ...node, data: { ...node.data, status: t('creativeGenerating'), deliverables: withCreationDeliverable(node.data, started) } } : node));
     setNotice(t('creativeGenerating'));
@@ -9858,15 +9931,15 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         const model = models.find((candidate) => candidate.slug === configured || candidate.name === configured) ?? models[0];
         if (!model) throw new Error(t('creativeNoMediaModel'));
         const media = await generateEvermindMedia(model.slug, {
-          prompt: creativeBrief(target.data),
+          prompt: creativeBrief(target.data, brand),
           maxFrames: kind === 'animation' ? 24 : 1,
         });
         const rendered = evermindMediaArtifact(target.data, media, model.slug);
         if (!rendered) throw new Error(t('creativeNoFrames'));
         return rendered;
       }
-      if (persistence === 'server' && SERVER_CREATIVE_KINDS.has(kind)) return generateServerCreativeArtifact(target.data);
-      return { ...buildBrowserCreativeArtifact(target.data), provider: 'builderforce-browser' };
+      if (persistence === 'server' && SERVER_CREATIVE_KINDS.has(kind)) return generateServerCreativeArtifact(target.data, brand);
+      return { ...buildBrowserCreativeArtifact(target.data, brand), provider: 'builderforce-browser' };
     };
 
     void generate()
@@ -9874,12 +9947,21 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       // A generator that is unavailable must not leave the object empty: the
       // browser baseline is a real file, and saying which one produced it is the
       // difference between a fallback and a silent downgrade.
-      .catch(() => ({ artifact: { ...buildBrowserCreativeArtifact(target.data), provider: 'builderforce-browser' } as CreativeArtifact, fellBack: true }))
+      .catch(() => ({ artifact: { ...buildBrowserCreativeArtifact(target.data, brand), provider: 'builderforce-browser' } as CreativeArtifact, fellBack: true }))
       .then(({ artifact, fellBack }) => {
+        // ── THE CHECK HALF OF THE BRAND BINDING ────────────────────────────────
+        // The directive told the generator what it may not claim. This asks whether it
+        // listened. An instruction a model ignored and nothing verified is precisely the
+        // on-brand-BY-REVIEW failure the binding exists to replace, so a violated claim
+        // fails the deliverable's validation and NAMES the phrase — a warning nobody can
+        // act on is the same product with a paper trail.
+        const violations = brandViolationsIn([artifact.summary, artifact.fileName, target.data.prompt, target.data.content].join(' '), target, nodes);
         const delivered: CreationDeliverable = {
           ...started, artifactKind: artifact.artifactKind, status: 'delivered', completedAt: new Date().toISOString(),
           url: artifact.url, mimeType: artifact.mimeType, fileName: artifact.fileName, provider: artifact.provider,
-          validation: { status: 'passed', detail: artifact.validationDetail },
+          validation: violations.length
+            ? { status: 'failed', detail: t('brandClaimViolation', { claims: violations.join('; ') }) }
+            : { status: 'passed', detail: artifact.validationDetail },
           metadata: { outputFormat: artifact.outputFormat, capabilityId: target.data.capabilityId, ...(artifact.model ? { model: artifact.model } : {}) },
         };
         // The tile shows the preview the artifact came with, and nothing when it
@@ -9897,7 +9979,9 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           thumbnailUrl: artifact.previewImageUrl ?? '',
           deliverables: withCreationDeliverable(node.data, delivered),
         } } : node));
-        setNotice(fellBack ? t('creativeGeneratedOffline', { file: artifact.fileName }) : t('creativeGenerated', { file: artifact.fileName }));
+        setNotice(violations.length
+          ? t('brandClaimViolation', { claims: violations.join('; ') })
+          : fellBack ? t('creativeGeneratedOffline', { file: artifact.fileName }) : t('creativeGenerated', { file: artifact.fileName }));
         if (persistence === 'server') {
           void creationSessionsApi.recordOutcome(sessionId, { correlationId, action: `creative.${action}`, phase: 'succeeded', actorType: 'system', artifactId: target.id, durationMs: performance.now() - startedAt, metricKey: 'deliverables_completed', metricValue: 1, unit: 'count', metadata: { provider: artifact.provider, outputFormat: artifact.outputFormat } }).catch(() => undefined);
         }
@@ -9973,12 +10057,19 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         try {
           if (action === 'docx') {
             const renderedResume = target.data.kind === 'resume' ? renderedCanvasResume(target.data) : null;
-            await exportDocx(markdown, target.data.title, renderedResume ? {
-              accent: renderedResume.template.accent,
-              font: renderedResume.template.font,
-              density: renderedResume.template.density,
-              columns: renderedResume.template.columns,
-            } : undefined);
+            await exportDocx(markdown, target.data.title, {
+              ...(renderedResume ? { theme: {
+                accent: renderedResume.template.accent,
+                font: renderedResume.template.font,
+                density: renderedResume.template.density,
+                columns: renderedResume.template.columns,
+              } } : {}),
+              // A document that arrived as a dropped .docx is EDITED, not
+              // regenerated: its own package is reopened and the new body
+              // written into it, so the file that comes back keeps the source's
+              // theme, numbering and section layout. See exportApi.
+              ...(typeof target.data.sourceFileKey === 'string' ? { sourceFileKey: target.data.sourceFileKey } : {}),
+            });
           }
           if (action === 'pptx') await exportPptx(markdown, target.data.title);
           if (action === 'xlsx') await exportXlsx(sheet!.columns, sheet!.rows, target.data.title);
@@ -10083,6 +10174,19 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setSelectedIds([nodeId]);
     void flowRef.current?.fitView({ nodes: [{ id: nodeId }], padding: .35, maxZoom: 1.1, duration: 320 });
   }, [setSurface]);
+
+  /**
+   * Move a dated object to another day, from the calendar.
+   *
+   * Writes back into the FIELD the date was read from rather than into a calendar of its
+   * own — `scheduledAt` for a commitment, whichever deadline field the kind declared
+   * otherwise. That is what lets the calendar be a projection: there is no second store
+   * to keep in step, so a send moved on the month is moved on its card, and a trigger
+   * armed against that deadline re-evaluates against the new one for free.
+   */
+  const rescheduleObject = useCallback((nodeId: string, field: string, iso: string) => {
+    updateNodeData(nodeId, { [field]: iso } as Partial<CreationNodeData>);
+  }, [updateNodeData]);
 
   /** A file the library offers: a delivered artifact opens, an authored object
    * exports through the path above. */
@@ -12004,6 +12108,17 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
               onExit={() => setSurface('graph')}
               onOpenObject={revealObject}
             />,
+            // THE MONTH, and the second board-scoped surface for the same reason as the
+            // first: it is about every dated card at once, so there is no card to enter
+            // it from. It owns no dates — it folds the ones the board already carries and
+            // writes a drag back into the field each came from, which is why moving a
+            // send here moves it on the card too.
+            calendar: <CanvasCalendarSurface
+              nodes={nodes}
+              onExit={() => setSurface('graph')}
+              onOpenObject={revealObject}
+              {...(cardsEditable ? { onReschedule: rescheduleObject } : {})}
+            />,
             // The four medium runtimes. Each takes the object the surface is ABOUT, so
             // each is rendered only when one resolves — `surfaceNode` going null is what
             // the effect above turns back into the board.
@@ -12244,6 +12359,13 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
               </>;
             })()}
           </div> : null}
+          {/* The OTHER half. Everything above measures the PROCESS — how fast and
+              how reliably this board produced something — which on its own is a
+              productivity report. This reads the ATTRIBUTED facts beside it (the
+              `session:`/`site:` dimensioned series the growth and canvas rollups
+              already stamp), so the panel can also answer the question the founder
+              actually opened it for: did the thing I built do anything for anyone. */}
+          {persistence === 'server' && <CanvasAttributedOutcomes sessionId={sessionId} />}
           <footer><span>{t('correlationCoverage')}</span><small>{t('aggregatesScoped')}</small></footer>
         </aside>}
         {conversationOpen && <aside className={styles.historyPanel} aria-label={t('sessionConversation')}><header><div><strong>{t('sessionConversation')}</strong><small>{t('sessionConversationHint')}</small></div><span className={styles.panelHeaderActions}><CopyButton compact label={t('copyDiagnostics')} ariaLabel={t('copyChatDiagnostics')} getText={buildDiagnostics} /><button onClick={() => setConversationOpen(false)} aria-label={t('closeConversation')}>×</button></span></header><div>{timeline.length ? timeline.map((message) => <article key={message.clientMessageId} style={{ padding: '9px 10px', borderBottom: '1px solid var(--border-subtle)' }}><strong style={{ textTransform: 'capitalize' }}>{message.metadata?.authoredBy?.name || (message.messageRole === 'assistant' ? 'Brain' : message.messageRole)}</strong><p style={{ margin: '4px 0', whiteSpace: 'pre-wrap' }}>{message.body}</p><small>{fmt.dateTime(message.createdAt)}</small></article>) : <p>{t('brainEmpty')}</p>}</div></aside>}

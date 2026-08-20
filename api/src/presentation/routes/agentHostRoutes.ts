@@ -72,6 +72,7 @@ import type { AgentHostService } from '../../application/agentHost/AgentHostServ
 import { classifyContextFiles, normalizeMachineProfile, type AgentHostMachineProfileInput } from './agentHostAssignmentContext';
 import { TenantRole } from '../../domain/shared/types';
 import { buildPlanLimitsGuard } from '../middleware/planLimitsGuard';
+import { resolveScheduledAgentBinding } from '../../application/agentHost/scheduledAgentBinding';
 
 // Extend HonoEnv bindings type to include the Durable Object
 type AgentHostHonoEnv = HonoEnv & {
@@ -1087,6 +1088,20 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     if (!body.name?.trim() || !body.schedule?.trim()) {
       return c.json({ error: 'name and schedule are required' }, 400);
     }
+    // RECONCILE THE THREE "assign an agent" NOTIONS before persisting. The executing
+    // HOST, the project ATTACHMENT and the per-agent `project_agent_id` were independent
+    // columns nothing cross-checked, so a schedule could name an agent attached to a
+    // different project, or a host that cannot reach the project at all, and save
+    // cleanly — surfacing later as a schedule that ran as nobody, with nothing pointing
+    // at the configuration that caused it. See `agentHost/scheduledAgentBinding.ts`.
+    const binding = await resolveScheduledAgentBinding(db, {
+      tenantId,
+      agentHostId,
+      projectId: body.projectId ?? null,
+      projectAgentId: body.projectAgentId ?? null,
+    });
+    if (!binding.ok) return c.json({ error: binding.detail, problem: binding.problem }, 400);
+
     const insertData = {
       tenantId,
       agentHostId,
@@ -1094,7 +1109,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
       schedule: body.schedule.trim(),
       taskId: body.taskId ?? null,
       projectId: body.projectId ?? null,
-      projectAgentId: body.projectAgentId ?? null,
+      projectAgentId: binding.projectAgentId,
       enabled: body.enabled ?? true,
       ...(body.id ? { id: body.id } : {}),
     };
@@ -1125,6 +1140,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
       schedule?: string;
       taskId?: number | null;
       projectId?: number | null;
+      projectAgentId?: number | null;
       enabled?: boolean;
       lastRunAt?: string;
       nextRunAt?: string;
@@ -1137,6 +1153,28 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     if (body.taskId !== undefined)   updates.taskId = body.taskId;
     if (body.projectId !== undefined) updates.projectId = body.projectId;
     if (body.enabled !== undefined) updates.enabled = body.enabled;
+    // RE-RECONCILE whenever this patch touches either half of the pairing. Editing the
+    // project alone used to be enough to orphan an already-set `project_agent_id` — the
+    // agent stayed pinned to a project the schedule no longer belonged to. The current
+    // row supplies whichever half the body omits, so a partial patch is still judged
+    // against the whole triple. `lastRunAt`/`lastStatus` patches (the poller's own
+    // callback) touch neither and skip this entirely.
+    if (body.projectId !== undefined || body.projectAgentId !== undefined) {
+      const [current] = await db
+        .select({ projectId: cronJobs.projectId, projectAgentId: cronJobs.projectAgentId })
+        .from(cronJobs)
+        .where(and(eq(cronJobs.id, jobId), eq(cronJobs.tenantId, tenantId), eq(cronJobs.agentHostId, agentHostId)))
+        .limit(1);
+      if (!current) return c.json({ error: 'Not found' }, 404);
+      const binding = await resolveScheduledAgentBinding(db, {
+        tenantId,
+        agentHostId,
+        projectId: body.projectId !== undefined ? body.projectId ?? null : current.projectId,
+        projectAgentId: body.projectAgentId !== undefined ? body.projectAgentId ?? null : current.projectAgentId,
+      });
+      if (!binding.ok) return c.json({ error: binding.detail, problem: binding.problem }, 400);
+      updates.projectAgentId = binding.projectAgentId;
+    }
     if (body.lastRunAt != null)  updates.lastRunAt = new Date(body.lastRunAt);
     if (body.nextRunAt != null)  updates.nextRunAt = new Date(body.nextRunAt);
     if (body.lastStatus != null) updates.lastStatus = body.lastStatus;

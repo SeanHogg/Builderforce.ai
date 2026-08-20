@@ -40,7 +40,15 @@ export function gatewayIntentRefiner(
         messages: [{
           role: 'user',
           content: [
-            'Pick the ONE metric key that best answers the question below.',
+            // "key", not "metric key": the composed path offers the same call a
+            // list holding both `topic.*` keys (a whole situation — several
+            // metrics and their charts) and single metric keys. One call, one
+            // closed list, and the caller's gate separates the two halves on the
+            // way back. Prefer a topic when the question is situational, because
+            // "how are things looking" has no single number for an answer.
+            'Pick the ONE key that best answers the question below.',
+            'A `topic.` key answers a broad, situational question with several metrics at once;',
+            'a plain metric key answers a question about one specific number.',
             'Reply with the key alone — no prose, no punctuation, no explanation.',
             'If none of them fits, reply with the single word NONE.',
             '',

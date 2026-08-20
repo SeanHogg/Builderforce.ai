@@ -16,6 +16,7 @@ import {
   ChatTicketsPanel as SharedChatTicketsPanel,
   type ChatTicketsAdapter, type ChatTicketsLabels, type TicketLinkVM,
 } from '@seanhogg/builderforce-brain-ui';
+import { artifactRoutePath } from '@seanhogg/builderforce-brain-embedded';
 import {
   brain, tasksApi, approvalsApi,
   type BrainChat, type ChatTicketLink, type ChatAgentInvite,
@@ -43,31 +44,14 @@ export function ChatTicketsPanel({ chatId, projectId, chatList, onChanged }: {
   // used to be. Nothing is hidden.
   const { allowed: canDispatchRun } = usePermission('runtime.execute');
 
-  // Open a linked work item in its own view. Routes to the surface the item lives on
-  // (board for task/epic/gap + spec-in-project; Portfolio ▸ OKRs tab for the strategy
-  // tiers; Ceremonies ▸ Retro/Poker for the two team ceremonies), reusing the same
-  // project-scoped board route the Brain's navigate_to uses.
-  // For a task/epic/gap we also append `&task=<ref>` so the board opens straight into
-  // that ticket's DETAIL drawer (assignee/status/PRD) rather than just the board.
+  // Open a linked work item in its own view. WHERE each kind opens is the shared
+  // `artifactRoutePath` table (brain-embedded) — the same one the VS Code host uses
+  // for its external-URL open, so "Open" cannot mean two different destinations on
+  // two surfaces. Every kind lands on the ITEM (the ticket's detail drawer, the
+  // focused OKR card, the spec's document drawer, the roadmap row's panel), not
+  // merely on the page that contains it.
   const openTicket = useMemo(() => (tk: TicketLinkVM) => {
-    switch (tk.kind) {
-      case 'objective': case 'initiative': case 'portfolio':
-        router.push('/projects?tab=portfolio');
-        break;
-      case 'task': case 'epic': case 'gap': {
-        const base = projectId != null ? `/projects?tab=tasks&project=${projectId}` : '/projects?tab=tasks';
-        router.push(`${base}&task=${encodeURIComponent(tk.ref)}`);
-        break;
-      }
-      // Team ceremonies live on the Ceremonies tab and are workspace-wide, so no
-      // project scope rides along — `session` opens the exact retro/session rather
-      // than the list.
-      case 'retro': case 'poker':
-        router.push(`/projects?tab=ceremonies&ceremony=${tk.kind}&session=${encodeURIComponent(tk.ref)}`);
-        break;
-      default: // spec | roadmap → the project's board (no per-item drawer)
-        router.push(projectId != null ? `/projects?tab=tasks&project=${projectId}` : '/projects?tab=tasks');
-    }
+    router.push(artifactRoutePath(tk.kind, tk.ref, projectId));
   }, [router, projectId]);
 
   // Live-refresh when the Brain mutates work items via MCP tools (link/merge/

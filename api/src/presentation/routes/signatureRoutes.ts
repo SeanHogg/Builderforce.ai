@@ -27,6 +27,7 @@ import {
   signatureProgress,
 } from '../../application/signature/signatureEngine';
 import { deliverSignatureInvitations } from '../../application/signature/signatureInvitations';
+import { headerHints } from '../../application/email/emailLocaleResolver';
 import { ArtifactNotFoundError, loadAndDecryptArtifact } from '../../application/artifacts/artifactStore';
 import { isSignatureIntent } from '@builderforce/creation-canvas-contract';
 
@@ -82,7 +83,7 @@ export function createSignatureRoutes(db: Db): Hono<HonoEnv> {
           })
         : [],
     });
-    const delivery = await deliverSignatureInvitations(c.env as Env, {
+    const delivery = await deliverSignatureInvitations(c.env as Env, db, {
       subject: String(body.subject ?? ''),
       documentTitle: String(body.documentTitle ?? ''),
       intent: isSignatureIntent(body.intent) ? body.intent : 'sign',
@@ -91,7 +92,13 @@ export function createSignatureRoutes(db: Db): Hono<HonoEnv> {
       email: invitation.email,
       name: invitation.name,
       token: invitation.token,
-    })));
+    })),
+    // A counterparty has no account here, so the document goes out in the
+    // SENDER's language — stored, or the one this request is being made in.
+    {
+      userId: (c.get('userId') as string | undefined) ?? null,
+      headers: headerHints(c.req),
+    });
     return Response.json({ ...result, delivery });
   }));
 

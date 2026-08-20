@@ -10,6 +10,17 @@ import { COST_CLASS_COLORS, formatUsd } from '@/lib/pm/costClass';
 import { parseDate, startOfDay, formatShort } from '@/lib/schedule';
 import { downloadText } from '@/lib/download';
 import { PmEmpty, PmError } from './pmShared';
+import { decompositionSourceBadge, planWarnings, windowState, windowStateLabelKey } from '@/lib/pm/planning';
+import { TicketLifecyclePanel } from '@/components/task/TicketLifecyclePanel';
+
+/**
+ * A node that is its OWN single value unit: a task with nothing under it. The
+ * thing one person or one agent actually delivers, and — until its swimlane
+ * existed — the only level of the spine whose progress had no flow behind it.
+ */
+function isValueItem(node: SpineNode): boolean {
+  return node.kind === 'task' && node.childCount === 0 && Number.isFinite(Number(node.id));
+}
 
 /**
  * Unified planning Gantt (0225) — objective → initiative → epic → task as ONE
@@ -69,9 +80,14 @@ function monthSegments(start: Date, end: Date): Array<{ label: string; days: num
 
 export function PlanningSpineGantt() {
   const t = useTranslations('spine');
+  // The three planning facts are rendered from the SHARED helpers, so the spine,
+  // the board card and the ticket drawer cannot end up disagreeing about one Epic.
+  const tPlanning = useTranslations('planning');
   const { projectId } = usePmScope();
   const { data, error } = usePmData<SpineResult>(() => pmoApi.spine(projectId), [projectId]);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  /** The single value item whose own lifecycle swimlane is open, if any. */
+  const [lifecycleTaskId, setLifecycleTaskId] = useState<number | null>(null);
 
   const exportCsv = async () => {
     const csv = await pmoApi.exportSpineCsv({ projectId });
@@ -254,21 +270,69 @@ export function PlanningSpineGantt() {
                 const barColor = cls ? COST_CLASS_COLORS[cls] : 'var(--text-muted)';
                 const hasChildren = (childrenByParent.get(node.key)?.length ?? 0) > 0;
                 const isCollapsed = collapsed.has(node.key);
+                const sourceBadge = node.kind === 'epic' ? decompositionSourceBadge(node.decompositionSource) : null;
+                const rowWarnings = planWarnings(node.planVerdict);
+                // "not yet scoped" (a container nobody has dated, with nothing inside
+                // it to derive a window from) is NOT the same statement as a ticket
+                // with no dates, and rendering them identically misled the reader.
+                const emptyStateKey = windowStateLabelKey(windowState(node));
                 return (
                   <div key={node.key} style={{ display: 'flex', height: ROW_H, borderBottom: '1px solid var(--border-subtle)' }}>
                     <div style={{ width: NAME_COL, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 4, paddingRight: 8, paddingLeft: 8 + node.depth * 16, overflow: 'hidden' }}>
+                      {/* An Epic expands into its children, so its progress already
+                          reads as a flow. A task that is its OWN single value unit
+                          had nothing behind this caret — one bar, and no answer to
+                          where its time went. It now expands into its OWN swimlane:
+                          the lanes it sat in, for how long, rework included. */}
                       <button
                         type="button"
-                        onClick={() => hasChildren && toggle(node.key)}
-                        aria-label={isCollapsed ? t('expand') : t('collapse')}
-                        style={{ width: 16, flexShrink: 0, background: 'transparent', border: 'none', cursor: hasChildren ? 'pointer' : 'default', color: 'var(--text-muted)', fontSize: '0.7rem', padding: 0 }}
+                        onClick={() => {
+                          if (hasChildren) toggle(node.key);
+                          else if (isValueItem(node)) setLifecycleTaskId(Number(node.id));
+                        }}
+                        aria-label={
+                          hasChildren
+                            ? (isCollapsed ? t('expand') : t('collapse'))
+                            : isValueItem(node) ? t('openLifecycle') : undefined
+                        }
+                        title={!hasChildren && isValueItem(node) ? t('openLifecycle') : undefined}
+                        style={{ width: 16, flexShrink: 0, background: 'transparent', border: 'none', cursor: hasChildren || isValueItem(node) ? 'pointer' : 'default', color: 'var(--text-muted)', fontSize: '0.7rem', padding: 0 }}
                       >
-                        {hasChildren ? (isCollapsed ? '▸' : '▾') : ''}
+                        {hasChildren ? (isCollapsed ? '▸' : '▾') : isValueItem(node) ? '⇢' : ''}
                       </button>
                       <span style={{ flexShrink: 0, fontSize: '0.72rem' }} title={t(`kind.${node.kind}`)}>{KIND_ICON[node.kind]}</span>
                       <span title={node.title} style={{ fontSize: '0.8rem', fontWeight: node.kind === 'task' ? 400 : 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {node.title}
                       </span>
+                      {sourceBadge && (
+                        <span
+                          title={tPlanning(sourceBadge.titleKey)}
+                          aria-label={tPlanning(sourceBadge.labelKey)}
+                          style={{
+                            flexShrink: 0, fontSize: '0.62rem', fontWeight: 700, padding: '1px 4px',
+                            borderRadius: 'var(--radius-sm)',
+                            background: sourceBadge.tone === 'warn' ? 'var(--warning-bg, var(--bg-deep))' : 'var(--bg-deep)',
+                            color: sourceBadge.tone === 'warn'
+                              ? 'var(--warning-text, var(--warning))'
+                              : sourceBadge.tone === 'accent' ? 'var(--accent)' : 'var(--text-muted)',
+                          }}
+                        >
+                          {tPlanning(sourceBadge.labelKey)}
+                        </span>
+                      )}
+                      {rowWarnings.map((w) => (
+                        <span
+                          key={w.kind}
+                          title={tPlanning(w.titleKey, { count: w.count })}
+                          aria-label={tPlanning(w.labelKey, { count: w.count })}
+                          style={{
+                            flexShrink: 0, fontSize: '0.68rem',
+                            color: w.tone === 'danger' ? 'var(--danger-text)' : 'var(--warning-text, var(--warning))',
+                          }}
+                        >
+                          <Icon source={w.kind === 'cyclic' ? '🔁' : '⏱'} size="1em" />
+                        </span>
+                      ))}
                       {node.anomaly && <span title={t('anomalyTip')} style={{ color: 'var(--coral-bright)', flexShrink: 0 }}><Icon source="⚠" size="1em" /></span>}
                       {!node.anomaly && node.hasDescendantAnomaly && <span title={t('descendantAnomalyTip')} style={{ color: 'var(--warning)', flexShrink: 0, fontSize: '0.7rem' }}><Icon source="⚠" size="1em" /></span>}
                       {node.cost.totalUsd > 0 && (
@@ -304,7 +368,9 @@ export function PlanningSpineGantt() {
                           }}
                         />
                       ) : (
-                        <div style={{ position: 'absolute', top: (ROW_H - 14) / 2, left: 6, fontSize: '0.68rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>{t('undated')}</div>
+                        <div style={{ position: 'absolute', top: (ROW_H - 14) / 2, left: 6, fontSize: '0.68rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                          {emptyStateKey ? tPlanning(emptyStateKey) : tPlanning('undated')}
+                        </div>
                       )}
                     </div>
                   </div>
@@ -314,6 +380,10 @@ export function PlanningSpineGantt() {
           </div>
         </div>
       </div>
+
+      {/* The single value item's own flow. Reuses the ticket lifecycle panel
+          rather than growing a second reader of the same ledger. */}
+      <TicketLifecyclePanel taskId={lifecycleTaskId} onClose={() => setLifecycleTaskId(null)} />
     </div>
   );
 }

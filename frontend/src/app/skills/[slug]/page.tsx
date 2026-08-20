@@ -1,178 +1,149 @@
-'use client';
+import type { Metadata } from 'next';
+import Link from 'next/link';
+import { notFound } from 'next/navigation';
+import { getTranslations } from 'next-intl/server';
+import CatalogArtifactActions from '@/components/CatalogArtifactActions';
+import JsonLd from '@/components/JsonLd';
+import PublicDetailLayout, {
+  PublicDetailFact,
+  PublicDetailFacts,
+  PublicDetailSection,
+} from '@/components/PublicDetailLayout';
+import { pageMetadata } from '@/lib/seo';
+import { marketplaceSkillSchema, skillCatalogSchema } from '@/lib/structured-data';
+import { loadSkillDetail } from './skillDetail';
 
+/**
+ * ONE skill, server-rendered, indexable.
+ *
+ * This route was a Client Component that fetched its skill in a `useEffect`, so
+ * `generateMetadata` was not merely missing — it was impossible, and every skill
+ * URL therefore shared the site-wide default title. Worse, `/skills` was not in
+ * `PUBLIC_SHELL_PREFIXES`, so a logged-out crawler never reached the page at all:
+ * it got the `/skills` marketing teaser under every slug, which is one piece of
+ * duplicate content wearing hundreds of URLs. Both halves are fixed here — the
+ * data is read on the server, and `shellRouting` now renders `/skills/<slug>`
+ * (but not the `/skills` index) publicly.
+ *
+ * ── The OG image, plainly ────────────────────────────────────────────────────
+ * There is no per-skill rendered social card and there deliberately cannot be
+ * one: a `next/og` ImageResponse route returns an EMPTY 0-byte PNG on the
+ * Cloudflare edge runtime (the Satori/resvg WASM path), which makes link
+ * unfurls fall back to a stale cached preview — strictly worse than the static
+ * branded card. See `lib/seo.ts`. So the per-entity "OG card" is delivered as
+ * complete per-entity METADATA — title, description, canonical, og:type, author,
+ * tags — plus JSON-LD, over the one static branded image.
+ */
 export const runtime = 'edge';
 
-import { Icon } from '@/components/ui/Icon';
-import { useParams } from 'next/navigation';
-import Link from 'next/link';
-import { useState, useEffect } from 'react';
-import { useAuth } from '@/lib/AuthContext';
-import { artifactAssignments, marketplaceStats, agentHosts, listMarketplaceSkills } from '@/lib/builderforceApi';
-import { BUILTIN_SKILLS, type BuiltinSkill } from '@/lib/marketplaceData';
-import ArtifactAssigner from '@/components/ArtifactAssigner';
-import PageContainer from '@/components/PageContainer';
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+  const skill = await loadSkillDetail(decodeURIComponent(slug));
+  const t = await getTranslations('skillDetail');
+  if (!skill) return { title: t('notFoundTitle'), robots: { index: false, follow: false } };
 
-export default function SkillDetailPage() {
-  const params = useParams();
-  const slug = typeof params.slug === 'string' ? decodeURIComponent(params.slug) : '';
-  const { tenant } = useAuth();
-  const tenantNum = Number(tenant?.id ?? 0);
-
-  const [skill, setSkill] = useState<BuiltinSkill | { name: string; slug: string; description: string; category?: string; author?: string; version?: string } | null>(null);
-  const [stats, setStats] = useState<{ likes: number; installs: number; liked: boolean } | null>(null);
-  const [installed, setInstalled] = useState(false);
-  const [hasAgentHosts, setHasAgentHosts] = useState(false);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const builtin = BUILTIN_SKILLS.find((x) => x.slug === slug) ?? null;
-    if (builtin) {
-      setSkill(builtin);
-      (async () => {
-        try {
-          const [agentHostList, assignList, s] = await Promise.all([
-            agentHosts.list().catch(() => []),
-            tenantNum ? artifactAssignments.list('tenant', tenantNum, 'skill').catch(() => []) : [],
-            marketplaceStats.getStats('skill', [slug]).then((r) => r[slug] ?? { likes: 0, installs: 0, liked: false }),
-          ]);
-          setHasAgentHosts(agentHostList.length > 0);
-          setInstalled(assignList.some((a) => a.artifactSlug === slug));
-          setStats(s);
-        } catch {
-          setStats({ likes: 0, installs: 0, liked: false });
-        } finally {
-          setLoading(false);
-        }
-      })();
-      return;
-    }
-    (async () => {
-      try {
-        const res = await listMarketplaceSkills({ limit: 200 });
-        const apiSkill = (res.skills ?? []).find((s) => s.slug === slug);
-        if (apiSkill) {
-          setSkill({
-            name: apiSkill.name,
-            slug: apiSkill.slug,
-            description: apiSkill.description ?? '',
-            category: apiSkill.category ?? undefined,
-            author: apiSkill.author_username ?? apiSkill.author_display_name ?? undefined,
-            version: apiSkill.version ?? undefined,
-          });
-        }
-        const [agentHostList, assignList, s] = await Promise.all([
-          agentHosts.list().catch(() => []),
-          tenantNum ? artifactAssignments.list('tenant', tenantNum, 'skill').catch(() => []) : [],
-          marketplaceStats.getStats('skill', [slug]).then((r) => r[slug] ?? { likes: 0, installs: 0, liked: false }),
-        ]);
-        setHasAgentHosts(agentHostList.length > 0);
-        setInstalled(assignList.some((a) => a.artifactSlug === slug));
-        setStats(s);
-      } catch {
-        setStats({ likes: 0, installs: 0, liked: false });
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [slug, tenantNum]);
-
-  const toggleLike = async () => {
-    if (!skill || !stats) return;
-    try {
-      const liked = await marketplaceStats.toggleLike('skill', skill.slug);
-      setStats((prev) => prev ? { ...prev, liked, likes: liked ? prev.likes + 1 : Math.max(0, prev.likes - 1) } : null);
-    } catch { /* ignore */ }
+  const description = skill.description?.slice(0, 200) || t('metaFallback', { name: skill.name });
+  return {
+    ...pageMetadata({
+      title: t('metaTitle', { name: skill.name }),
+      description,
+      // A published skill canonicalises to its marketplace page; only a built-in
+      // is canonical here. See `SkillDetailView.canonicalPath`.
+      path: skill.canonicalPath,
+      ogTitle: skill.name,
+    }),
+    ...(skill.tags.length ? { keywords: skill.tags } : {}),
+    ...(skill.author ? { authors: [{ name: skill.author }] } : {}),
   };
+}
 
-  const toggleInstall = async () => {
-    if (!skill || !tenantNum) return;
-    try {
-      if (installed) {
-        await artifactAssignments.unassign('skill', skill.slug, 'tenant', tenantNum);
-        setInstalled(false);
-        setStats((prev) => prev ? { ...prev, installs: Math.max(0, prev.installs - 1) } : null);
-      } else {
-        await artifactAssignments.assign('skill', skill.slug, 'tenant', tenantNum);
-        setInstalled(true);
-        setStats((prev) => prev ? { ...prev, installs: prev.installs + 1 } : null);
-      }
-    } catch { /* ignore */ }
-  };
+export default async function SkillDetailPage({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}) {
+  const { slug } = await params;
+  const skill = await loadSkillDetail(decodeURIComponent(slug));
+  if (!skill) notFound();
+  const t = await getTranslations('skillDetail');
 
-  if (loading) {
-    return (
-      <PageContainer width="narrow" style={{ padding: 24 }}>
-        <div style={{ color: 'var(--muted)' }}>Loading…</div>
-      </PageContainer>
-    );
-  }
-
-  if (!skill) {
-    return (
-      <PageContainer width="narrow" style={{ padding: 24 }}>
-        <p style={{ color: 'var(--muted)', marginBottom: 16 }}>Skill not found.</p>
-        <Link href="/skills" className="btn btn-primary">Back to Skills</Link>
-      </PageContainer>
-    );
-  }
-
-  const builtin = BUILTIN_SKILLS.find((b) => b.slug === slug);
-  const emoji = builtin?.emoji ?? '✨';
+  const schema = skill.builtin
+    ? skillCatalogSchema({
+        name: skill.name,
+        slug: skill.slug,
+        description: skill.description,
+        category: skill.category,
+        author: skill.author,
+        tags: skill.tags,
+        version: skill.version,
+      })
+    : marketplaceSkillSchema({
+        name: skill.name,
+        slug: skill.slug,
+        description: skill.description,
+        category: skill.category,
+        author_display_name: skill.author,
+        tags: skill.tags,
+      });
 
   return (
-    <PageContainer width="narrow" style={{ padding: 24 }}>
-      <div style={{ marginBottom: 24 }}>
-        <Link href="/skills" style={{ fontSize: 13, color: 'var(--accent)', marginBottom: 8, display: 'inline-block' }}>← Back to Skills</Link>
-        <h1 style={{ fontSize: 28, fontWeight: 700, color: 'var(--text-strong)', margin: '8px 0', display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span><Icon source={emoji} size={32} /></span>
-          {skill.name}
-        </h1>
-        <p style={{ fontSize: 14, color: 'var(--muted)' }}>{skill.description}</p>
-        <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 12, flexWrap: 'wrap' }}>
-          <button type="button" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 13, color: stats?.liked ? 'var(--error)' : 'var(--muted)' }} onClick={toggleLike}>
-            {stats?.liked ? <Icon source="❤️" size="1em" /> : <Icon source="🤍" size="1em" />} {stats?.likes ?? 0} likes
-          </button>
-          <span style={{ fontSize: 13, color: 'var(--muted)' }}><Icon source="⬇️" size="1em" /> {stats?.installs ?? 0} installs</span>
-          <ArtifactAssigner artifactType="skill" artifactSlug={skill.slug} artifactName={skill.name} />
-          <button type="button" className={`btn btn-sm ${installed ? 'btn-secondary' : 'btn-primary'}`} disabled={!hasAgentHosts} onClick={toggleInstall}>
-            {!hasAgentHosts ? 'Register agentHost first' : installed ? 'Uninstall' : 'Install'}
-          </button>
-        </div>
-      </div>
+    <>
+      <JsonLd data={schema} />
+      <PublicDetailLayout
+        eyebrow={t('eyebrow')}
+        title={skill.name}
+        icon={skill.emoji}
+        lede={skill.description}
+        tags={skill.tags}
+        meta={[
+          skill.author ? t('byAuthor', { author: skill.author }) : null,
+          skill.category,
+          skill.version ? t('versionShort', { version: skill.version }) : null,
+          skill.builtin ? t('builtinBadge') : null,
+        ]}
+        actions={
+          <>
+            <CatalogArtifactActions artifactType="skill" slug={skill.slug} name={skill.name} />
+            {skill.builtin ? null : (
+              <Link className="pdl-btn pdl-btn-ghost" href={`/marketplace/${skill.slug}`}>
+                {t('viewOnMarketplace')}
+              </Link>
+            )}
+          </>
+        }
+      >
+        <PublicDetailSection heading={t('detailsHeading')}>
+          <PublicDetailFacts>
+            <PublicDetailFact label={t('slugLabel')}>
+              <code className="pdl-code">{skill.slug}</code>
+            </PublicDetailFact>
+            {skill.category ? (
+              <PublicDetailFact label={t('categoryLabel')}>{skill.category}</PublicDetailFact>
+            ) : null}
+            {skill.version ? (
+              <PublicDetailFact label={t('versionLabel')}>{skill.version}</PublicDetailFact>
+            ) : null}
+            {skill.author ? (
+              <PublicDetailFact label={t('authorLabel')}>{skill.author}</PublicDetailFact>
+            ) : null}
+            {skill.tags.length ? (
+              <PublicDetailFact label={t('tagsLabel')}>{skill.tags.join(', ')}</PublicDetailFact>
+            ) : null}
+          </PublicDetailFacts>
+        </PublicDetailSection>
 
-      <div className="card" style={{ padding: 20 }}>
-        <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>Details</h2>
-        <div style={{ display: 'grid', gap: 12 }}>
-          <div>
-            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', marginBottom: 4 }}>Slug</div>
-            <code style={{ background: 'var(--surface-2)', padding: '2px 8px', borderRadius: 'var(--radius-sm)', fontSize: 13 }}>{skill.slug}</code>
-          </div>
-          {'category' in skill && skill.category && (
-            <div>
-              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', marginBottom: 4 }}>Category</div>
-              <div style={{ fontSize: 14 }}>{skill.category}</div>
-            </div>
-          )}
-          {'version' in skill && skill.version && (
-            <div>
-              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', marginBottom: 4 }}>Version</div>
-              <div style={{ fontSize: 14 }}>{skill.version}</div>
-            </div>
-          )}
-          {'author' in skill && skill.author && (
-            <div>
-              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', marginBottom: 4 }}>Author</div>
-              <div style={{ fontSize: 14 }}>{skill.author}</div>
-            </div>
-          )}
-          {builtin && builtin.tags.length > 0 && (
-            <div>
-              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', marginBottom: 4 }}>Tags</div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{builtin.tags.map((t) => <span key={t} className="badge badge-gray">{t}</span>)}</div>
-            </div>
-          )}
-        </div>
-      </div>
-    </PageContainer>
+        {skill.readme ? (
+          <PublicDetailSection heading={t('aboutHeading')} prose>{skill.readme}</PublicDetailSection>
+        ) : null}
+
+        <p style={{ marginTop: 28 }}>
+          <Link className="pdl-back" href="/skills">{t('back')}</Link>
+        </p>
+      </PublicDetailLayout>
+    </>
   );
 }

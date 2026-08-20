@@ -33,6 +33,7 @@ import {
   primaryKey,
   real,
   serial,
+  smallint,
   text,
   timestamp,
   unique,
@@ -122,6 +123,21 @@ export const projects = pgTable('projects', {
    *  {@link template} (IDE file scaffold). Drives lane roles/requirements + the
    *  recommended roster. Null = the legacy hardcoded default board. */
   kanbanTemplateId: varchar('kanban_template_id', { length: 120 }),
+  /**
+   * The project's PRIMARY board (migration 1081) — an explicit pointer instead of a
+   * four-key re-sort on every read.
+   *
+   * `findCanonicalBoard` derives the same answer by ordering on
+   * (lifecycle_managed, updated_at, created_at, id), which is correct but invisible: a
+   * project that held 7 boards had its lane config split across all of them with no
+   * stored fact saying which one the platform actually used. 1081 merged the duplicates,
+   * installed the `UNIQUE(project_id)` guard 0111 could not, and backfilled this.
+   *
+   * Nullable (a project can exist before its board does) and ON DELETE SET NULL, so
+   * deleting a board can never block on it. The unique index — not this column — is what
+   * makes a second board impossible.
+   */
+  primaryBoardId:  uuid('primary_board_id').references((): AnyPgColumn => boards.id, { onDelete: 'set null' }),
   rootWorkingDirectory: text('root_working_directory'),
   status:          projectStatusEnum('status').notNull().default('active'),
   sourceControlIntegrationId: integer('source_control_integration_id').references(() => sourceControlIntegrations.id, { onDelete: 'set null' }),
@@ -507,6 +523,26 @@ export const projectManagerConfigs = pgTable('project_manager_configs', {
    *  auto-dispatching work, so it is a grant rather than a default. */
   allowAutoStaffLanes: boolean('allow_auto_staff_lanes'),
   lastRunAt:         timestamp('last_run_at'),
+  /**
+   * WHAT THE LAST SCHEDULED SWEEP DECIDED about this project (migration 1083):
+   * `'ran'` | `'skipped'`.
+   *
+   * `lastRunAt` alone could not answer it. A stale value meant any of four
+   * mutually-exclusive things — the KV work-gate found no work, the tenant token gate
+   * skipped the tenant, the tick's dispatch budget was already spent, or the cron never
+   * ran at all — and they are indistinguishable from the overview payload, so the
+   * diagnostics report could only name the symptom (`last_run_stale`).
+   *
+   * Written on EVERY visit, including the declining ones, so the ABSENCE of a run is
+   * itself a record rather than a silence.
+   */
+  lastSweepDecision: varchar('last_sweep_decision', { length: 16 }),
+  /** Null when it ran; otherwise the machine-readable cause — see
+   *  {@link ../../application/manager/runManagerSweep.ManagerSweepSkipReason}. */
+  lastSweepReason:   varchar('last_sweep_reason', { length: 32 }),
+  /** When {@link lastSweepDecision} was made. Distinct from `lastRunAt`, which only
+   *  moves when a pass actually ran — the gap between them IS the finding. */
+  lastSweepAt:       timestamp('last_sweep_at'),
   createdAt:         timestamp('created_at').notNull().defaultNow(),
   updatedAt:         timestamp('updated_at').notNull().defaultNow(),
 }, (t) => ({
@@ -843,6 +879,19 @@ export const boards = pgTable('boards', {
    *  gets `standupTurnSeconds` then auto-advances. Snapshotted onto a session at start. */
   standupTurnMode:      varchar('standup_turn_mode', { length: 16 }).notNull().default('facilitator'),
   standupTurnSeconds:   integer('standup_turn_seconds').notNull().default(90),
+  /**
+   * Default per-member WIP cap for the round table's POWER METER (migration 1084).
+   *
+   * The meter that tells a standup "this person is overloaded" compared a member's live
+   * load against a hardcoded `DEFAULT_CAP = 8` in the component whenever
+   * `member_profiles.max_concurrent_wip` was unset — which is almost always. A team whose
+   * normal WIP is 3 therefore saw everyone sitting comfortably at 40%.
+   *
+   * A member profile that sets its OWN cap still wins; this is the fallback that constant
+   * was playing, now a decision somebody made. Defaulted to 8 so no board's meter changes
+   * reading on the day it ships.
+   */
+  defaultMemberWipCap:  integer('default_member_wip_cap').notNull().default(8),
   /** When true, the task board hides tickets sitting in a terminal (Done) lane
    *  so only live work is shown (migration 0194). Display-only — does not affect
    *  the coordinator lifecycle or capacity. */
@@ -876,6 +925,21 @@ export const swimlanes = pgTable('swimlanes', {
   name:          varchar('name', { length: 255 }).notNull(),
   position:      integer('position').notNull().default(0),
   isTerminal:    boolean('is_terminal').notNull().default(false),
+  /**
+   * PARKED — off the delivery path (blocked / on hold / cancelled), not a stage work
+   * flows through (migration 1080).
+   *
+   * Distinct from {@link swimlanes.isTerminal}, which means "this lane ENDS the ticket".
+   * A parked lane is a detour: the ticket has not finished, it is waiting on something,
+   * which is why `autonomousExecutionSweep.RUNNABLE_STATUSES` refuses to scan `blocked`.
+   *
+   * Two readers depend on it and both were wrong without it: `computeCompletion` ranked
+   * a blocked ticket at ~87% because `Blocked` sits at position 7 of 9 on the default
+   * board, and `resolveNextLaneKey` advanced completing tickets INTO that lane for the
+   * same reason. `nextLane.PARKED_LANE_KEYS` is the fallback for a row predating the
+   * column; the column is what makes a tenant's own parking lane work.
+   */
+  isParking:     boolean('is_parking').notNull().default(false),
   gate:          varchar('gate', { length: 16 }).notNull().default('auto'),              // 'auto' | 'human'
   /**
    * Whether {@link swimlanes.gate} was SEEDED by a board template or CHOSEN by a
@@ -909,27 +973,19 @@ export const swimlanes = pgTable('swimlanes', {
 });
 
 
-/** 1..N agents assigned to a swimlane; run in parallel or sequence per stage. */
-export const swimlaneAgentAssignments = pgTable('swimlane_agent_assignments', {
-  id:                   uuid('id').primaryKey().defaultRandom(),
-  tenantId:             integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  segmentId:            uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
-  swimlaneId:           uuid('swimlane_id').notNull().references(() => swimlanes.id, { onDelete: 'cascade' }),
-  // Which registry agent was chosen (migration 0084). role/runtime/target/model
-  // below hold the values resolved from this agent at assign time.
-  agentKind:            varchar('agent_kind', { length: 16 }),  // 'workforce' | 'registered'
-  agentRef:             varchar('agent_ref', { length: 64 }),   // ide_agents.id | agents.id
-  name:                 varchar('name', { length: 255 }),       // display name of the chosen agent
-  role:                 varchar('role', { length: 120 }).notNull(),
-  runtime:              varchar('runtime', { length: 16 }).notNull().default('cloud'),   // 'local' | 'cloud' | 'remote'
-  target:               varchar('target', { length: 120 }),   // remote agentHost id when runtime='remote'
-  taskTemplate:         text('task_template'),
-  requiredCapabilities: text('required_capabilities'),         // JSON array stored as text
-  model:                varchar('model', { length: 120 }),
-  position:             integer('position').notNull().default(0),
-  createdAt:            timestamp('created_at').notNull().defaultNow(),
-});
-
+/**
+ * LANE STAFFING MOVED (migration 1085).
+ *
+ * `swimlane_agent_assignments` is gone. Its rows — ids and all, so
+ * `agent_dispatches.assignment_id` still resolves — live in the canonical
+ * `agent_assignments` (0082) under `scope = 'swimlane'`, `scope_id = <swimlane id>`, with
+ * the stage-specific columns (runtime/target/model/capabilities/template/position) folded
+ * in beside them. 0082 always declared itself the single source that supersedes the
+ * "swimlane target" notion; this is that finally being true.
+ *
+ * Read and write it through `application/swimlane/laneAgentAssignments.ts`, which is the
+ * ONE place the scope predicate and the `scope_id::uuid` join cast are written.
+ */
 
 /** Append-only audit of every swimlane transition (or refusal to advance). */
 export const swimlaneTransitions = pgTable('swimlane_transitions', {
@@ -1260,6 +1316,20 @@ export const projectRepositories = pgTable('project_repositories', {
   /** Activity-poller watermark (0212): last time runRepoActivitySweep pulled this
    *  repo's commits/PRs/reviews into activity_events. NULL = never → backfill. */
   lastActivitySyncedAt: timestamp('last_activity_synced_at'),
+  /**
+   * Agent-workflow refresh bookkeeping (migration 1093).
+   *
+   * `agentWorkflowRevision` is the revision of `.github/workflows/builderforce-agent.yml`
+   * Builderforce last COMMITTED here (NULL = never, or committed before revisions
+   * existed — i.e. possibly the pre-`run-name` workflow whose runs cannot be
+   * correlated with an execution). `agentWorkflowRefreshDue` is the queue the
+   * refresh sweep drains, and `agentWorkflowRefreshAttempts` is what stops it
+   * draining forever against a repo whose credential simply cannot write workflows.
+   * See application/runtime/agentWorkflowRefresh.ts.
+   */
+  agentWorkflowRevision:       varchar('agent_workflow_revision', { length: 32 }),
+  agentWorkflowRefreshDue:     timestamp('agent_workflow_refresh_due'),
+  agentWorkflowRefreshAttempts: smallint('agent_workflow_refresh_attempts').notNull().default(0),
   createdAt:     timestamp('created_at').notNull().defaultNow(),
   updatedAt:     timestamp('updated_at').notNull().defaultNow(),
   // UNIQUE (project_id, provider, owner, repo) enforced in migration 0067.
@@ -2037,6 +2107,39 @@ export const releaseNotes = pgTable('release_notes', {
   createdAt:   timestamp('created_at').notNull().defaultNow(),
   updatedAt:   timestamp('updated_at').notNull().defaultNow(),
 });
+
+
+/**
+ * One RUN of the weekly release digest, keyed on the exact note set it carries.
+ *
+ * The digest used to read every verified account into memory and walk it in one
+ * pass, so a Worker eviction re-sent the whole audience on retry (the notes are
+ * stamped `emailed_at` only at the end). This row is the resume point: the
+ * runner pages recipients by keyset and writes `cursorUserId` after each page,
+ * so a second invocation carrying the same notes CONTINUES rather than
+ * restarting. A partial unique index on `noteKey WHERE status = 'running'`
+ * means "the same notes" is literally the same run. (1061)
+ */
+export const releaseDigestRuns = pgTable('release_digest_runs', {
+  id:           uuid('id').primaryKey().defaultRandom(),
+  /** Stable fingerprint of the ordered note-id set — the run's identity. */
+  noteKey:      varchar('note_key', { length: 64 }).notNull(),
+  noteIds:      jsonb('note_ids').notNull().default(sql`'[]'::jsonb`).$type<string[]>(),
+  /** 'running' | 'completed'. */
+  status:       varchar('status', { length: 16 }).notNull().default('running'),
+  /** Keyset position: the last recipient id this run finished with. */
+  cursorUserId: varchar('cursor_user_id', { length: 36 }),
+  recipients:   integer('recipients').notNull().default(0),
+  sent:         integer('sent').notNull().default(0),
+  suppressed:   integer('suppressed').notNull().default(0),
+  failed:       integer('failed').notNull().default(0),
+  startedAt:    timestamp('started_at').notNull().defaultNow(),
+  updatedAt:    timestamp('updated_at').notNull().defaultNow(),
+  completedAt:  timestamp('completed_at'),
+}, (table) => ({
+  openRun:   uniqueIndex('uq_release_digest_run_open').on(table.noteKey).where(sql`status = 'running'`),
+  startedIdx: index('idx_release_digest_runs_started').on(table.startedAt),
+}));
 
 
 /**
@@ -2908,6 +3011,43 @@ export const incidentEvents = pgTable('incident_events', {
 }));
 
 
+/**
+ * One rung of an incident's 5-Why ladder (migration 1072).
+ *
+ * The RCA form already had `prod_incidents.root_cause` and a pile of free-text
+ * fields, and the fishbone rendered them by splitting a textarea on newlines.
+ * That loses the only thing a 5-Why contains: the ORDER. why₂ is an answer to
+ * why₁, and once the lines are a bag, nothing can tell a causal chain from a
+ * brainstorm — the same five sentences in the opposite order are indistinguishable.
+ * `stepNo` is that missing edge, stored rather than inferred.
+ *
+ * `isRoot` marks the terminal step, and is a flag rather than "the last row"
+ * because "as deep as we got" and "this is the cause" are different claims — a
+ * chain is often captured mid-investigation, before anyone will make the second one.
+ *
+ * `tenantId` is carried directly (like {@link incidentEvents}) so the tenant-scope
+ * guard can see a predicate on the table being queried instead of one hidden in a join.
+ */
+export const postmortemWhys = pgTable('postmortem_whys', {
+  id:         uuid('id').primaryKey().defaultRandom(),
+  tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  incidentId: uuid('incident_id').notNull().references(() => prodIncidents.id, { onDelete: 'cascade' }),
+  /** 1-based depth. why₁ answers the problem statement; why₍ₙ₎ answers why₍ₙ₋₁₎. */
+  stepNo:     integer('step_no').notNull(),
+  statement:  text('statement').notNull(),
+  isRoot:     boolean('is_root').notNull().default(false),
+  createdBy:  varchar('created_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+  updatedAt:  timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_postmortem_whys_step').on(t.incidentId, t.stepNo),
+  // At most one root per chain — two roots make "the cause" a question with two
+  // answers, and every consumer downstream would silently pick one.
+  uniqueIndex('uq_postmortem_whys_root').on(t.incidentId).where(sql`is_root`),
+  index('idx_postmortem_whys_incident').on(t.tenantId, t.incidentId, t.stepNo),
+]);
+
+
 // ---------------------------------------------------------------------------
 // Product Quality / error observability (migrations 0240, 0245, 0250)
 // ---------------------------------------------------------------------------
@@ -3433,3 +3573,75 @@ export const listItems = pgTable('list_items', {
   uniqueIndex('uq_list_items_item').on(t.tenantId, t.listRef, t.itemKind, t.itemRef),
 ]);
 
+
+
+// ---------------------------------------------------------------------------
+// Working calendar + plan verdicts (migrations 1074 / 1075).
+//
+// Both exist because the SCHEDULER was making claims it had no data to back.
+// It answered "is this a working day?" with a hardcoded Mon-Fri test, and it
+// computed "does this plan fit?" on every Epic fan-out and then discarded the
+// answer. One table gives the first question a tenant-owned answer; the other
+// stops the second answer being thrown away.
+// ---------------------------------------------------------------------------
+
+/**
+ * ONE row per tenant: which weekdays this workspace works, and the days nobody
+ * does. Read by `application/planning/workingCalendar.ts` and fed INTO the pure
+ * scheduler — the scheduler itself never reads a table.
+ *
+ * Absent row = Mon-Fri with no holidays, i.e. exactly what the hardcoded rule
+ * did. A tenant that configures nothing must schedule identically to before.
+ */
+export const tenantWorkingCalendars = pgTable('tenant_working_calendars', {
+  id:        uuid('id').primaryKey().defaultRandom(),
+  tenantId:  integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  /** Weekday numbers (0 = Sunday … 6 = Saturday) that count as working days. */
+  workingWeekdays: jsonb('working_weekdays').notNull().default([1, 2, 3, 4, 5]),
+  /** `[{ date: 'YYYY-MM-DD', name: 'Christmas Day' }]` — days nobody works. */
+  holidays:  jsonb('holidays').notNull().default([]),
+  /** IANA zone the calendar is authored in. Advisory: schedules are whole UTC days. */
+  timezone:  varchar('timezone', { length: 64 }),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_tenant_working_calendars_tenant').on(t.tenantId),
+]);
+
+/**
+ * The planner's verdict on ONE parent's plan — currently an Epic's fan-out.
+ *
+ * Stored rather than derived because COMPRESSION is a fact about the act of
+ * scheduling, not about the rows it produced: once estimates have been scaled
+ * down to fit a due date the resulting windows fit perfectly, and nothing left in
+ * `tasks` says they were ever squeezed. Overruns and cycles are recorded in the
+ * same row so a reader gets one answer from one place instead of half a verdict
+ * from here and half re-derived somewhere else.
+ *
+ * One row per parent task (`uq_task_plan_verdicts_task`) — the verdict is
+ * REPLACED on every re-plan, because an old verdict about a plan that no longer
+ * exists is worse than none.
+ */
+export const taskPlanVerdicts = pgTable('task_plan_verdicts', {
+  id:        uuid('id').primaryKey().defaultRandom(),
+  tenantId:  integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  projectId: integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  /** The PARENT whose plan this is (an Epic). */
+  taskId:    integer('task_id').notNull().references(() => tasks.id, { onDelete: 'cascade' }),
+  /** Estimates were scaled down to fit the parent's window. */
+  compressed: boolean('compressed').notNull().default(false),
+  /** Child task ids that still end after the parent's due date. */
+  overrunTaskIds: jsonb('overrun_task_ids').notNull().default([]),
+  /** Child task ids caught in a precedence cycle — their order is a guess. */
+  cyclicTaskIds:  jsonb('cyclic_task_ids').notNull().default([]),
+  /** Child task ids whose start was pushed out by their owner's capacity. */
+  capacityDeferredTaskIds: jsonb('capacity_deferred_task_ids').notNull().default([]),
+  /** Which reasoning step produced the plan this verdict judges ('llm'|'heuristic'|'manual'). */
+  source:    varchar('source', { length: 16 }),
+  plannedAt: timestamp('planned_at').notNull().defaultNow(),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_task_plan_verdicts_task').on(t.taskId),
+  index('idx_task_plan_verdicts_project').on(t.tenantId, t.projectId),
+]);

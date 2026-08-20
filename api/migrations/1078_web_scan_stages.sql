@@ -1,0 +1,49 @@
+-- Web-scan STAGE coverage — which checks a scan actually performed.
+--
+-- ── WHY THIS COLUMN EXISTS ──────────────────────────────────────────────────
+-- The web security scan runs inside a Cloudflare Worker, and two checks a real
+-- external scanner performs are not observable from there at all:
+--
+--   • the peer TLS certificate — Worker `fetch` exposes no socket, so there is
+--     no chain, no expiry, no negotiated protocol or cipher to read;
+--   • a CVE lookup — matching a disclosed version against published advisories
+--     needs an advisory feed, which is an external subscription.
+--
+-- Both now run from the Node agent container (a real process with `node:tls`)
+-- and report their findings back through the existing ingest seam. But a
+-- container is OPTIONAL infrastructure: a deployment with no container binding,
+-- or one whose image is not deployed yet, cannot run them.
+--
+-- That is the state this column exists to make visible. Before it, a scan that
+-- never ran the TLS stage produced a report with no TLS findings — which is
+-- byte-for-byte what a site with a flawless certificate produces. The absence of
+-- a finding read as a pass, and a security report that quietly implies an
+-- all-clear it never checked is worse than one that admits the gap.
+--
+-- Each row is `{stage, status, reason, findingCount, observedAt}` with status in
+-- ('ran','requested','not_run'). `reason` is mandatory in practice for anything
+-- that is not 'ran' and is rendered to the user verbatim.
+--
+-- ── WHY JSONB AND NOT A CHILD TABLE ─────────────────────────────────────────
+-- The stage list is a fixed, tiny set (two entries today) that is only ever read
+-- WITH its audit row and never joined, aggregated or filtered across runs — the
+-- questions asked of it are all "what did THIS scan cover". A child table would
+-- add a join to every read of the scan history to reconstruct a two-element
+-- array that has no independent identity. The findings themselves, which DO have
+-- independent identity and are queried across runs, remain exactly where they
+-- were: SECURITY tasks linked by tasks.security_audit_id. This column adds no
+-- second finding store.
+--
+-- ── IDEMPOTENCY ─────────────────────────────────────────────────────────────
+-- The container reports asynchronously and may be retried (restart, redelivered
+-- callback). The ingest path refuses a stage this column already records as
+-- 'ran', which is what stops a retry from filing the same findings twice. Marker
+-- dedupe alone could not: it only looks at OPEN tickets, so a finding whose
+-- ticket had been closed would come back as new on every retry.
+--
+-- Nullable with no default: 'codebase' (SOC 2) runs have no stages, and every
+-- row written before this column existed is legitimately unknown rather than
+-- "no stages ran". The reader treats null as an empty list.
+
+ALTER TABLE security_audits
+  ADD COLUMN IF NOT EXISTS stages jsonb;

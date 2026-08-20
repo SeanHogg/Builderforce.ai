@@ -8,6 +8,17 @@ author: Sean Hogg
 
 # The Best Resume Template for Executive and C-Suite Roles
 
+```bf-figure
+{
+  "kind": "templates",
+  "title": "Trusted Taupe — the layout this article recommends",
+  "templateIds": [
+    "executive-taupe"
+  ],
+  "caption": "Rendered live from the same template registry the editor reads, so this is the real Executive and C-suite layout — not a screenshot of one."
+}
+```
+
 ## Executive Resumes Are Narratives, Not Lists
 
 At the VP, SVP, and CXO level, the resume stops being a credentialing document and becomes a story. Recruiters and search firms are no longer asking "can this person do the job?" — they assume yes — they're asking "what's the through-line of this leader's career, and does it set them up to deliver what we need next?"

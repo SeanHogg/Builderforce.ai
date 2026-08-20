@@ -30,6 +30,7 @@ import type {
   ManagerDailyDigest,
   ManagerOverview,
   ManagerPolicy,
+  ManagerPassRecord,
   ManagerRunTask,
   StallCensusResponse,
   StallRegister,
@@ -156,24 +157,39 @@ export interface PassCounters {
 
 const COUNTER_NAMES = ['scored', 'ranked', 'assigned', 'prs', 'dispatched', 'audited'] as const;
 
-export function parsePassCounters(summary: string | null | undefined): PassCounters | null {
-  if (!summary) return null;
-  const out: PassCounters = {};
-  let matched = false;
-  for (const name of COUNTER_NAMES) {
-    const m = new RegExp(`\\b${name}\\s+(\\d+)`, 'i').exec(summary);
-    if (!m) continue;
-    out[name] = Number(m[1]);
-    matched = true;
-  }
-  const flagged = /\((\d+)\s+flagged\)/i.exec(summary);
-  if (flagged) { out.flagged = Number(flagged[1]); matched = true; }
-  const deferred = /·\s*deferred:\s*([^.·]+)/i.exec(summary);
-  if (deferred?.[1]) {
-    const stages = deferred[1].split(',').map((s) => s.trim()).filter(Boolean);
-    if (stages.length) { out.deferred = stages; matched = true; }
-  }
-  return matched ? out : null;
+/** Coerce an unknown jsonb field from a recorded pass summary to a number, or undefined. */
+const passNum = (v: unknown): number | undefined => (typeof v === 'number' && Number.isFinite(v) ? v : undefined);
+
+/**
+ * Project a recorded pass onto {@link PassCounters}. PURE.
+ *
+ * `prs` folds `prsConducted + prsMerged`: that is the single number the surface reports,
+ * and the two are meaningless apart at this altitude — conducting a PR that is then
+ * merged is one piece of PR work, not two.
+ */
+export function passCountersFrom(pass: ManagerPassRecord | null | undefined): PassCounters | null {
+  if (!pass) return null;
+  const s = pass.summary ?? {};
+  const conducted = passNum(s.prsConducted);
+  const merged = passNum(s.prsMerged);
+  const out: PassCounters = {
+    ...(passNum(s.scored) != null ? { scored: passNum(s.scored) } : {}),
+    ...(passNum(s.ranked) != null ? { ranked: passNum(s.ranked) } : {}),
+    ...(passNum(s.assigned) != null ? { assigned: passNum(s.assigned) } : {}),
+    ...(conducted != null || merged != null ? { prs: (conducted ?? 0) + (merged ?? 0) } : {}),
+    ...(passNum(s.dispatched) != null ? { dispatched: passNum(s.dispatched) } : {}),
+    ...(passNum(s.audited) != null ? { audited: passNum(s.audited) } : {}),
+    ...(passNum(s.flagged) != null ? { flagged: passNum(s.flagged) } : {}),
+    ...(pass.shedStages.length ? { deferred: pass.shedStages } : {}),
+  };
+  return Object.keys(out).length > 0 ? out : null;
+}
+
+/** Index a project's recorded passes by the run card each closed. */
+export function passesByRunTask(
+  passes: readonly ManagerPassRecord[] | undefined,
+): Map<number, ManagerPassRecord> {
+  return new Map((passes ?? []).map((p) => [p.runTaskId, p]));
 }
 
 /** What actually happened to one "Backlog management pass" card. */
@@ -712,6 +728,9 @@ export function repeatedActions(actions: readonly ManagerAction[]): RepeatedActi
 export function managerFindings(input: ManagerDiagnosticsInput, nowMs: number | null): ManagerFinding[] {
   const { overview, stalls } = input;
   const { policy, config, tenantPolicy, tenantConfig, stats, autonomy, runTasks, actions, directives } = overview;
+  // Pass counters come from the server's RECORDED summary (migration 1082), keyed by the
+  // run card each pass closed — never from re-parsing that card's English description.
+  const passRecords = passesByRunTask(overview.passes);
   const workspaceTier = (key: keyof ManagerPolicy): unknown =>
     workspaceTierValue(tenantConfig, tenantPolicy, key);
   const critical: ManagerFinding[] = [];
@@ -763,7 +782,11 @@ export function managerFindings(input: ManagerDiagnosticsInput, nowMs: number | 
   }
 
   // ── 3. Are the passes themselves completing? ──
-  const passes = runTasks.map((t) => ({ task: t, outcome: classifyPass(t, nowMs) }));
+  const passes = runTasks.map((t) => ({
+    task: t,
+    outcome: classifyPass(t, nowMs),
+    counters: passCountersFrom(passRecords.get(t.id)),
+  }));
   const died = passes.filter((p) => p.outcome === 'died');
   const endedEarly = passes.filter((p) => p.outcome === 'ended_early');
   if (died.length > 0) {
@@ -779,9 +802,9 @@ export function managerFindings(input: ManagerDiagnosticsInput, nowMs: number | 
   // finished honestly and said what it could not reach, which is the outcome the pass
   // budget was added to produce. Worth a warning, never a critical — the deferred work is
   // picked up on the next 5-minute pass.
-  const truncated = passes.filter((p) => (parsePassCounters(p.task.summary)?.deferred?.length ?? 0) > 0);
+  const truncated = passes.filter((p) => (p.counters?.deferred?.length ?? 0) > 0);
   if (truncated.length > 0) {
-    const stages = [...new Set(truncated.flatMap((p) => parsePassCounters(p.task.summary)?.deferred ?? []))];
+    const stages = [...new Set(truncated.flatMap((p) => p.counters?.deferred ?? []))];
     warning.push({
       severity: 'warning',
       code: 'passes_truncated',
@@ -827,7 +850,7 @@ export function managerFindings(input: ManagerDiagnosticsInput, nowMs: number | 
   const lastCompleted = passes.find((p) => p.outcome === 'completed')?.task ?? null;
   const lastCompletedAge = ageMs(lastCompleted?.completedAt ?? lastCompleted?.createdAt, nowMs);
   const countersAreStale = lastCompletedAge != null && lastCompletedAge > STALE_LAST_RUN_MS;
-  const counters = parsePassCounters(lastCompleted?.summary);
+  const counters = passCountersFrom(lastCompleted ? passRecords.get(lastCompleted.id) : null);
   for (const cap of CAPABILITIES) {
     const deficit = stats[cap.deficit];
     if (deficit <= 0) continue;
@@ -1341,7 +1364,11 @@ function formatLimits(limits: PassLimits): string[] {
 }
 
 /** The pass table: every management pass, what happened to it, and its counters. */
-function formatPasses(runTasks: readonly ManagerRunTask[], nowMs: number | null): string[] {
+function formatPasses(
+  runTasks: readonly ManagerRunTask[],
+  nowMs: number | null,
+  passRecords: ReadonlyMap<number, ManagerPassRecord>,
+): string[] {
   if (runTasks.length === 0) return ['(no management pass cards exist for this project)'];
   const out: string[] = [];
   for (const [i, t] of runTasks.entries()) {
@@ -1355,7 +1382,7 @@ function formatPasses(runTasks: readonly ManagerRunTask[], nowMs: number | null)
       + `  created=${t.createdAt}${created == null ? '' : ` (${formatAge(created)} ago)`}`
       + `  completed=${t.completedAt ?? '—'}${took ? ` (took ${took})` : ''}`,
     );
-    const counters = parsePassCounters(t.summary);
+    const counters = passCountersFrom(passRecords.get(t.id));
     if (counters) {
       out.push(`     counters: ${COUNTER_NAMES.filter((n) => counters[n] != null).map((n) => `${n}=${counters[n]}`).join(' ')}${counters.flagged != null ? ` flagged=${counters.flagged}` : ''}`);
     }
@@ -1618,6 +1645,9 @@ export function buildManagerDiagnosticsReport(
 ): string {
   const { overview, stalls } = input;
   const { policy, config, tenantPolicy, tenantConfig, stats, autonomy, runTasks, actions, directives } = overview;
+  // Pass counters come from the server's RECORDED summary (migration 1082), keyed by the
+  // run card each pass closed — never from re-parsing that card's English description.
+  const passRecords = passesByRunTask(overview.passes);
   // ONE instant for the whole report, taken from the capture stamp so the builder stays
   // pure. An unparseable stamp degrades every age to "unknown" rather than to a lie.
   const parsed = Date.parse(ctx.capturedAt);
@@ -1771,7 +1801,7 @@ export function buildManagerDiagnosticsReport(
   out.push(`outcome=died means the card is open past the ${formatAge(STALE_RUN_TASK_MS)} reap threshold: the`);
   out.push('Worker was evicted mid-pass, so that pass never finished its work. This is what the');
   out.push('overview endpoint returned, not the project\'s whole pass history.');
-  out.push(...formatPasses(runTasks, nowMs));
+  out.push(...formatPasses(runTasks, nowMs, passesByRunTask(overview.passes)));
   out.push('');
 
   out.push('-- Stall census (EVERY ticket) + platform findings --');

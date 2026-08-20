@@ -169,12 +169,23 @@ export const importTypeMappings = pgTable('import_type_mappings', {
 });
 
 
-/** Per-delivery audit row. `id` doubles as the replay nonce in the signature. */
+/**
+ * Per-delivery audit row. `id` doubles as the replay nonce in the signature.
+ *
+ * REPLAY SAFETY IS THE UNIQUE INDEX (migration 1100), not a check in the emitter.
+ * `uq_webhook_delivery_event` on (subscription, event_type, event_id) is what stops
+ * an at-least-once emitter meeting a retrying caller from POSTing the same board
+ * event twice — the emit path inserts with `onConflictDoNothing` and treats "no row
+ * came back" as "already enqueued". A read-then-write check loses the race that
+ * matters: two concurrent retries both read "not seen", both pass, and both send.
+ */
 export const webhookDeliveries = pgTable('webhook_deliveries', {
   id:             uuid('id').primaryKey().defaultRandom(),
   subscriptionId: uuid('subscription_id').notNull().references(() => webhookSubscriptions.id, { onDelete: 'cascade' }),
   tenantId:       integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  segmentId:      uuid('segment_id').notNull().references(() => segments.id, { onDelete: 'cascade' }),
+  /** Narrowing context, not the scope — nullable since 1100, for the same reason
+   *  the subscription's is: a canvas board's segment is optional. */
+  segmentId:      uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
   eventType:      varchar('event_type', { length: 64 }).notNull(),
   eventId:        varchar('event_id', { length: 255 }).notNull(),
   status:         varchar('status', { length: 16 }).notNull().default('pending'), // pending|delivered|failed
@@ -185,7 +196,12 @@ export const webhookDeliveries = pgTable('webhook_deliveries', {
   lastError:      text('last_error'),       // most recent failure reason (truncated)
   createdAt:      timestamp('created_at').notNull().defaultNow(),
   deliveredAt:    timestamp('delivered_at'),
-});
+}, (t) => ({
+  /** THE replay guard. See the header — this index is the arbiter, not a report. */
+  oneDeliveryPerEvent: uniqueIndex('uq_webhook_delivery_event').on(t.subscriptionId, t.eventType, t.eventId),
+  /** The log a tenant reads back through `/api/v1/webhooks/:id/deliveries`. */
+  byTenantCreated: index('idx_webhook_deliveries_tenant_created').on(t.tenantId, t.createdAt),
+}));
 
 
 export const studioVoiceClones = pgTable('studio_voice_clones', {

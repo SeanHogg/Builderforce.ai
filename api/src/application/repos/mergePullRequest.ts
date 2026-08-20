@@ -14,7 +14,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * implemented; other providers return a typed `unsupported` result so callers
  * degrade to "open the PR on the provider". Never throws.
  */
-import { bitbucketServerRepoPath, buildGitApiBaseUrl, resolveGitApiFlavor } from './gitProxy';
+import { resolveRepoApiTarget } from './repoApiTarget';
 
 export type MergeMethod = 'squash' | 'merge' | 'rebase';
 
@@ -57,15 +57,14 @@ export function isMergeConflictMessage(message: string): boolean {
  *  exported so the per-provider request construction is unit-testable without a
  *  live API. Endpoints per each provider's documented PR-merge API. */
 export function buildMergeRequest(input: MergePrInput): { url: string; method: 'PUT' | 'POST'; body: Record<string, unknown> } {
-  const flavor = resolveGitApiFlavor(input.provider, input.host);
-  const apiBase = buildGitApiBaseUrl(input.provider, input.host, { allowBitbucketServer: true });
+  const { flavor, ...api } = resolveRepoApiTarget(input);
   const method = normalizeMergeMethod(input.method);
   if (flavor === 'bitbucket-server') {
     // Server has no per-request strategy — the merge strategy is a repository
     // setting there — so `method` cannot be honoured and is deliberately dropped
     // rather than sent and silently ignored. `version=-1` means "current version".
     return {
-      url: `${apiBase}${bitbucketServerRepoPath(input.owner, input.repo)}/pull-requests/${input.number}/merge?version=-1`,
+      url: `${api.pullRequest(input.number)}/merge?version=-1`,
       method: 'POST',
       body: { ...(input.commitMessage ? { message: input.commitMessage } : {}) },
     };
@@ -73,9 +72,8 @@ export function buildMergeRequest(input: MergePrInput): { url: string; method: '
   if (flavor === 'gitlab') {
     // PUT /projects/:id/merge_requests/:iid/merge — `:id` is the URL-encoded
     // `owner/repo` path; GitLab squashes via a boolean (no rebase-on-merge here).
-    const projectId = encodeURIComponent(`${input.owner}/${input.repo}`);
     return {
-      url: `${apiBase}/projects/${projectId}/merge_requests/${input.number}/merge`,
+      url: `${api.pullRequest(input.number)}/merge`,
       method: 'PUT',
       body: {
         squash: method === 'squash',
@@ -88,7 +86,7 @@ export function buildMergeRequest(input: MergePrInput): { url: string; method: '
     // differ: squash→squash, merge→merge_commit, rebase→fast_forward (closest).
     const strategy = method === 'merge' ? 'merge_commit' : method === 'rebase' ? 'fast_forward' : 'squash';
     return {
-      url: `${apiBase}/repositories/${input.owner}/${input.repo}/pullrequests/${input.number}/merge`,
+      url: `${api.pullRequest(input.number)}/merge`,
       method: 'POST',
       body: {
         merge_strategy: strategy,
@@ -98,7 +96,7 @@ export function buildMergeRequest(input: MergePrInput): { url: string; method: '
   }
   // GitHub (default): PUT /repos/:owner/:repo/pulls/:n/merge.
   return {
-    url: `${apiBase}/repos/${input.owner}/${input.repo}/pulls/${input.number}/merge`,
+    url: `${api.pullRequest(input.number)}/merge`,
     method: 'PUT',
     body: {
       merge_method: method,

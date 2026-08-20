@@ -167,10 +167,16 @@ export enum ExecutionStatus {
 // Artifact assignments
 // ---------------------------------------------------------------------------
 
+/**
+ * Migration 0982: `CONTENT` retired (browser-only content blocks that no table
+ * held — they live in `knowledge_documents` now), `AGENT` admitted so a
+ * marketplace agent's sale records in `marketplace_purchases` alongside every
+ * other artifact rather than in a purchase table of its own.
+ */
 export enum ArtifactType {
   SKILL   = 'skill',
   PERSONA = 'persona',
-  CONTENT = 'content',
+  AGENT   = 'agent',
 }
 
 export enum AssignmentScope {

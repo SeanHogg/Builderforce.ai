@@ -35,6 +35,18 @@ export interface AccountFieldSpec {
   key: string;
   label: string;
   help: string;
+  /**
+   * A scope field that UNLOCKS something rather than gating everything.
+   *
+   * Meta's Page id is the case this exists for: an ad account can create, budget and
+   * pause campaigns without one, and only needs it to author an ad's creative. Listing
+   * it as required would mark every already-connected Meta account "not ready" the
+   * moment ad-level support shipped — an existing, working connection reporting itself
+   * broken because a NEW capability wants one more value. So it is declared, it is
+   * reported in `missingFields` so a form can ask for it and an error can name it, and
+   * it does not decide `ready`.
+   */
+  optional?: boolean;
 }
 
 /**
@@ -170,7 +182,10 @@ export function createConnectedAccountsPort<P extends AccountProvider>(config: {
       id: row.id,
       name: row.name,
       enabled: row.enabled,
-      ready: row.enabled && missingFields.length === 0,
+      // `ready` means "can this account be SPENT on". An absent optional field narrows
+      // what it can do; it does not make the account unusable, and reporting it as
+      // unusable would be a working connection calling itself broken.
+      ready: row.enabled && missingFields.every((f) => f.optional === true),
       missingFields,
       lastTestOk: row.lastTestOk,
       lastUsedAt: row.lastUsedAt ? row.lastUsedAt.toISOString() : null,

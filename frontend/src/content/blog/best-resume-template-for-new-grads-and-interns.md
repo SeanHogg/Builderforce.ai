@@ -8,6 +8,17 @@ author: Sean Hogg
 
 # The Best Resume Template for New Grads and Interns (2026)
 
+```bf-figure
+{
+  "kind": "templates",
+  "title": "Education First — the layout this article recommends",
+  "templateIds": [
+    "intern-education-first"
+  ],
+  "caption": "Rendered live from the same template registry the editor reads, so this is the real New graduates and interns layout — not a screenshot of one."
+}
+```
+
 ## Why New Grads Need a Different Template
 
 Most resume templates are built for people who already have a career to describe. They put work experience first, then education at the bottom. That order makes sense for someone with five jobs and a ten-year-old degree.

@@ -8,6 +8,17 @@ author: Sean Hogg
 
 # The Best Resume Template for Finance, Accounting, and Payroll Roles
 
+```bf-figure
+{
+  "kind": "templates",
+  "title": "Iron Gray — the layout this article recommends",
+  "templateIds": [
+    "payroll-iron-gray"
+  ],
+  "caption": "Rendered live from the same template registry the editor reads, so this is the real Finance, accounting and payroll layout — not a screenshot of one."
+}
+```
+
 ## Why Finance Resumes Look Different
 
 Finance hiring is conservative for a reason: the work itself rewards precision, predictability, and trust. A resume in this industry is a credentialing document, not a marketing piece. Recruiters at banks, accounting firms, payroll providers, and finance teams expect a layout that signals you understand the conventions of the field.

@@ -174,6 +174,35 @@ export type ProviderCallbackResult =
   /** The provider refused the code→token exchange. */
   | { ok: false; reason: 'exchange_failed'; returnTo: string; error: unknown };
 
+/**
+ * Verify the signed `state` WITHOUT exchanging anything.
+ *
+ * {@link completeProviderOAuthCallback} does both halves together because for three
+ * of the four surfaces they are inseparable. Plaid is the exception: Link redirects
+ * with a `public_token` rather than an authorization `code`, and the exchange is a
+ * different request entirely — but the CSRF story must not differ, because the
+ * callback is still a top-level browser redirect with no bearer token and the
+ * HMAC-signed state is still the only thing authenticating it.
+ *
+ * So the check is split out here rather than re-implemented in a route. A route
+ * that verified its own state would be reaching into `infrastructure/auth` from the
+ * presentation layer (which `check:layering` forbids for exactly this reason) and
+ * would put the one security decision in the flow somewhere no other caller reuses.
+ *
+ * `returnTo` is re-constrained by {@link safeReturnTo} on the way out, so a state
+ * signed before that rule tightened cannot become an open redirect.
+ */
+export async function verifyProviderConnectState(
+  env: OAuthEnv,
+  providerName: string,
+  rawState: string,
+  returnToFallback: string,
+): Promise<(ProviderConnectState & { ts: number }) | null> {
+  const state = await verifyState<ProviderConnectState>(env.JWT_SECRET, rawState);
+  if (!state || state.provider !== providerName) return null;
+  return { ...state, returnTo: safeReturnTo(state.returnTo, returnToFallback) };
+}
+
 export async function completeProviderOAuthCallback(
   env: OAuthEnv,
   provider: OAuthProviderConfig,

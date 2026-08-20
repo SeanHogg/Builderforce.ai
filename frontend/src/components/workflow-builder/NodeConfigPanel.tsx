@@ -7,6 +7,7 @@ import type { Node } from '@xyflow/react';
 import { NODE_KIND_MAP, isFieldVisible, nodeKindLabel, nodeKindBlurb, type ConfigField } from './nodeKinds';
 import type { BuilderNodeData } from './BuilderNode';
 import { integrationForConfig, integrationIcon } from './integrations';
+import { configFieldLabel, configFieldPlaceholder, integrationDescription, integrationOperationLabel } from './workflowBuilderI18n';
 import { ConnectorNodeFields } from './ConnectorNodeFields';
 import type { WorkflowTriggerInfo } from '@/lib/builderforceApi';
 import { Icon } from '@/components/ui/Icon';
@@ -37,6 +38,10 @@ interface Props {
 export function NodeConfigPanel({ node, onChange, onDelete, triggerInfo }: Props) {
   const fmt = useFormat();
   const t = useTranslations('evermindBuild');
+  // The catalog's own strings (config-field labels and placeholders, and the
+  // integration presets' descriptions and operation names) live under their own
+  // namespace, keyed off the English text — see `workflowBuilderI18n.ts`.
+  const wb = useTranslations('workflowBuilder');
   const meta = NODE_KIND_MAP[node.data.kind];
   const config = node.data.config ?? {};
   // When this node is backed by a catalog integration, surface its operation
@@ -62,7 +67,7 @@ export function NodeConfigPanel({ node, onChange, onDelete, triggerInfo }: Props
         <textarea
           style={{ ...inputStyle, minHeight: 64, resize: 'vertical', fontFamily: 'inherit' }}
           value={String(value ?? '')}
-          placeholder={f.placeholder}
+          placeholder={configFieldPlaceholder(wb, f.placeholder)}
           onChange={(e) => setConfig(f.key, e.target.value)}
         />
       );
@@ -73,7 +78,7 @@ export function NodeConfigPanel({ node, onChange, onDelete, triggerInfo }: Props
           type="number"
           style={inputStyle}
           value={value == null ? '' : Number(value)}
-          placeholder={f.placeholder}
+          placeholder={configFieldPlaceholder(wb, f.placeholder)}
           onChange={(e) => setConfig(f.key, e.target.value === '' ? '' : Number(e.target.value))}
         />
       );
@@ -83,7 +88,7 @@ export function NodeConfigPanel({ node, onChange, onDelete, triggerInfo }: Props
         type="text"
         style={inputStyle}
         value={String(value ?? '')}
-        placeholder={f.placeholder}
+        placeholder={configFieldPlaceholder(wb, f.placeholder)}
         onChange={(e) => setConfig(f.key, e.target.value)}
       />
     );
@@ -95,12 +100,12 @@ export function NodeConfigPanel({ node, onChange, onDelete, triggerInfo }: Props
         <span><Icon source={integ ? integrationIcon(integ) : meta?.icon} size={20} /></span>
         <div>
           <div style={{ fontSize: 'var(--font-size-small)', fontWeight: 700, color: 'var(--text-primary)' }}>{integ?.label ?? (meta ? nodeKindLabel(meta, t) : node.data.kind)}</div>
-          <div style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)' }}>{integ?.description ?? (meta ? nodeKindBlurb(meta, t) : '')}</div>
+          <div style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)' }}>{integ ? integrationDescription(wb, integ.description) : (meta ? nodeKindBlurb(meta, t) : '')}</div>
         </div>
       </div>
 
       <label style={{ fontSize: 'var(--font-size-eyebrow)', fontWeight: 600, color: 'var(--text-secondary)' }}>
-        Label
+        {wb('nodeLabel')}
         <input
           style={inputStyle}
           value={node.data.label}
@@ -111,10 +116,10 @@ export function NodeConfigPanel({ node, onChange, onDelete, triggerInfo }: Props
       {/* Integration operation picker, driven by the registry. */}
       {integ && integ.operations.length > 0 && (
         <label style={{ fontSize: 'var(--font-size-eyebrow)', fontWeight: 600, color: 'var(--text-secondary)' }}>
-          Operation
+          {wb('operationPicker')}
           <Select style={inputStyle} value={String(config.operation ?? integ.operations[0]?.id ?? '')} onChange={(e) => setConfig('operation', e.target.value)}>
             {integ.operations.map((op) => (
-              <option key={op.id} value={op.id}>{op.label}</option>
+              <option key={op.id} value={op.id}>{integrationOperationLabel(wb, op.label)}</option>
             ))}
           </Select>
         </label>
@@ -138,7 +143,7 @@ export function NodeConfigPanel({ node, onChange, onDelete, triggerInfo }: Props
         .filter((f) => isFieldVisible(f, config))
         .map((f) => (
         <label key={f.key} style={{ fontSize: 'var(--font-size-eyebrow)', fontWeight: 600, color: 'var(--text-secondary)' }}>
-          {f.label}
+          {configFieldLabel(wb, f.label)}
           {renderField(f)}
         </label>
       ))}

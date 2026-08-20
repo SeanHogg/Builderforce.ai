@@ -340,13 +340,33 @@ export class BrainService {
   // Ownership guard (DRY — used by every chat-scoped operation)
   // -----------------------------------------------------------------------
 
+  /**
+   * The OWNER gate for rename / archive.
+   *
+   * Two shapes of chat come through here and they are not owned the same way:
+   *
+   *  - `brainstorm` is somebody's conversation. It has a `user_id`, and only
+   *    that person may rename or archive it.
+   *  - `team` (0294) and `manager` (0376) are SINGLETONS of a scope — one per
+   *    (tenant, project) — created by the system with `user_id` NULL. Nobody
+   *    "owns" one, so this gate rejected every PATCH/DELETE against them with
+   *    "Chat not found": correct-by-accident while no surface offered rename,
+   *    and a silent 404 the moment one did.
+   *
+   * So a singleton is administered rather than owned: `isWorkspaceAdmin` (the
+   * caller's tenant role, resolved at the route) is what authorises it. A
+   * member without that role still gets "Chat not found" — the same answer as
+   * before, and deliberately not a 403, since the alternative leaks which chats
+   * exist.
+   */
   private async verifyChatOwnership(
     chatId: number,
     tenantId: number,
     userId: string,
     selectExtra?: Record<string, unknown>,
+    options: { isWorkspaceAdmin?: boolean } = {},
   ) {
-    const columns = { id: brainChats.id, ...(selectExtra ?? {}) };
+    const columns = { id: brainChats.id, origin: brainChats.origin, ...(selectExtra ?? {}) };
     const [chat] = await this.db
       .select(columns as typeof columns & { id: typeof brainChats.id })
       .from(brainChats)
@@ -354,12 +374,25 @@ export class BrainService {
         and(
           eq(brainChats.id, chatId),
           eq(brainChats.tenantId, tenantId),
-          eq(brainChats.userId, userId),
-          eq(brainChats.origin, BRAIN_ORIGIN),
+          options.isWorkspaceAdmin
+            ? inArray(brainChats.origin, [...ACCESSIBLE_ORIGINS])
+            : eq(brainChats.origin, BRAIN_ORIGIN),
         ),
       )
       .limit(1);
-    return chat ?? null;
+    if (!chat) return null;
+    // A personal chat is still personal to an admin: administering the workspace
+    // does not mean reading, renaming or archiving a colleague's conversation.
+    const origin = (chat as { origin?: string | null }).origin ?? BRAIN_ORIGIN;
+    if (origin === BRAIN_ORIGIN) {
+      const [owned] = await this.db
+        .select({ id: brainChats.id })
+        .from(brainChats)
+        .where(and(eq(brainChats.id, chatId), eq(brainChats.tenantId, tenantId), eq(brainChats.userId, userId)))
+        .limit(1);
+      if (!owned) return null;
+    }
+    return chat;
   }
 
   /**
@@ -846,14 +879,14 @@ export class BrainService {
     tenantId: number,
     userId: string,
     dto: UpdateChatDto,
+    options: { isWorkspaceAdmin?: boolean } = {},
   ) {
     // `mode` is read alongside the ownership check so the caller can tell an actual
     // mode SWITCH from a PATCH that merely restated the current one — the audit row is
     // about the moment authority changed hands, and a no-op must not manufacture one.
     const existing = await this.verifyChatOwnership(chatId, tenantId, userId, {
       mode: brainChats.mode,
-      origin: brainChats.origin,
-    });
+    }, options);
     if (!existing) return { error: 'Chat not found' as const };
 
     if (dto.projectId != null) {
@@ -886,8 +919,8 @@ export class BrainService {
     return { ...updated, modeChangedTo };
   }
 
-  async archiveChat(chatId: number, tenantId: number, userId: string) {
-    const existing = await this.verifyChatOwnership(chatId, tenantId, userId);
+  async archiveChat(chatId: number, tenantId: number, userId: string, options: { isWorkspaceAdmin?: boolean } = {}) {
+    const existing = await this.verifyChatOwnership(chatId, tenantId, userId, undefined, options);
     if (!existing) return { error: 'Chat not found' as const };
 
     await this.db

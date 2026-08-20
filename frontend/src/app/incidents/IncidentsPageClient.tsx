@@ -21,6 +21,8 @@ import { useConfirm } from '@/components/ConfirmProvider';
 import { useRole, hasMinRole } from '@/lib/rbac';
 import { MonitorsSection, MonitoringReporting } from '@/components/reliability/MonitoringSections';
 import { FishboneChart, type FishboneCategory } from '@/components/charts/FishboneChart';
+import { WhyLadderSection } from './WhyLadderSection';
+import { IncidentTopologySection } from './IncidentTopologySection';
 import type { ImplicatedTicket } from '@/lib/kanban';
 import {
   incidentsApi,
@@ -362,7 +364,22 @@ function IncidentDetailPanel({ t, tc, canManage, incidentId, onClose, onChanged 
               <DetailRow label={t('rootCause')} value={incident.rootCause || '—'} />
             </div>
 
-            {/* Why did this occur? — fishbone RCA (renders once a root cause is known) */}
+            {/* Why did this occur? — the 5-Why ladder leads, because where a chain
+                exists it says strictly more than the fishbone below it: the fishbone
+                groups causes, the chain says which one caused which. */}
+            <WhyLadderSection
+              t={t}
+              tc={tc}
+              canManage={canManage}
+              incidentId={incident.id}
+              incidentTitle={incident.title}
+              onSaved={() => { load(); onChanged(); }}
+            />
+
+            {/* What the platform already knew: the blast radius around this incident. */}
+            <IncidentTopologySection t={t} incidentId={incident.id} incidentTitle={incident.title} />
+
+            {/* Cause CATEGORIES — the unordered view, kept alongside the chain. */}
             {incident.rootCause && (() => {
               const categories: FishboneCategory[] = [
                 { label: t('rca.rootCause'), causes: splitCauses(incident.rootCause) },

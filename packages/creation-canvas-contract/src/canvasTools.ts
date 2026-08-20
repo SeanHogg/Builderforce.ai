@@ -314,6 +314,12 @@ export const ACCOUNT_REQUIRED_CANVAS_TOOLS = [
   'canvas_sync_account',
   'canvas_sync_sales_pipeline',
   'canvas_move_deal',
+  // The legal seat's own records, for the same reason one line up: `legal_entities`,
+  // `intellectual_property` and `legal_matters` are tenant rows, and a guest board has
+  // no entity to be incorporated, no mark to renew and nobody to argue with. Every field
+  // on the three kinds it authors is a projection, so advertising it to a guest would
+  // offer a card that can only ever come back empty.
+  'canvas_sync_legal',
   // The RAISE is the same board through a different family (FO-E1): `deals.kind =
   // 'investment'`, `party_roles role='investor'`, and `pipeline_touchpoints` as the
   // thread. `canvas_open_deal` is the one that makes a firm an OBJECT rather than a

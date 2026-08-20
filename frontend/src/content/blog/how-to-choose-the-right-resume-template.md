@@ -8,6 +8,28 @@ author: Sean Hogg
 
 # How to Choose the Right Resume Template for Your Industry (2026)
 
+```bf-figure
+{
+  "kind": "templates",
+  "title": "The twelve stock templates, at a glance",
+  "templateIds": [
+    "standard",
+    "payroll-iron-gray",
+    "risk-asphalt",
+    "executive-taupe",
+    "intern-education-first",
+    "hospitality-amber",
+    "creative-minimal",
+    "software-engineer-graphite",
+    "healthcare-clinical-blue",
+    "sales-growth-emerald",
+    "actor-headshot-hero",
+    "director-filmography-serif"
+  ],
+  "caption": "Rendered live from the same template registry the editor reads, so this is the real every industry below layout — not a screenshot of one."
+}
+```
+
 ## Why Template Choice Actually Matters
 
 A resume template is the first message a recruiter receives — before they read a single bullet. The font, the spacing, the column count, and the heading style all signal what kind of professional you are. A finance candidate using a colorful single-column layout reads as unfamiliar with the industry. A creative director using a stiff, dense, two-column form reads as out of touch.

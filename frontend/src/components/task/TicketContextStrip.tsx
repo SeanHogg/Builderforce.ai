@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
-import { tasksApi, kanbanApi, type TicketContext, type TicketObjective } from '@/lib/builderforceApi';
+import { tasksApi, kanbanApi, pmoApi, type Objective, type TicketContext, type TicketObjective } from '@/lib/builderforceApi';
+import { usePermission } from '@/lib/rbac';
+import { Select } from '@/components/Select';
 
 /**
  * The ticket drawer's CONTEXT header — the answer to "why does this matter and
@@ -72,14 +74,102 @@ function Meter({ percent, height = 8 }: { percent: number; height?: number }) {
   );
 }
 
-function Stat({ children, value, percent }: { children: ReactNode; value: string; percent: number }) {
+/**
+ * One headline meter. `percent` may be null — a PARKED ticket has no honest
+ * percentage (see `swimlanes.is_parking`), so the meter is omitted rather than drawn
+ * at zero, which would read as "no work done" on a ticket that may be nearly finished.
+ */
+function Stat({ children, value, percent }: { children: ReactNode; value: string; percent: number | null }) {
   return (
     <div style={card}>
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
         <span style={label}>{children}</span>
         <span style={{ fontSize: 18, fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1 }}>{value}</span>
       </div>
-      <Meter percent={percent} />
+      {percent != null && <Meter percent={percent} />}
+    </div>
+  );
+}
+
+/**
+ * LINK THIS TICKET TO AN OBJECTIVE, from the ticket.
+ *
+ * The strip reported "not linked to an objective" and pointed at the Planning board,
+ * because an objective link was writable ONLY through
+ * `POST /api/pmo/objectives/:id/links` — which the Planning board is the only surface
+ * that calls. So the gap was noticed here and could only be closed somewhere else: leave
+ * the board, find the objective, link from the other end, come back.
+ *
+ * MANAGER-gated to match the route (which is `requireRole(MANAGER)`), and the control is
+ * DISABLED rather than hidden for everyone else — a viewer should be able to see that
+ * linking is possible and who can do it, per the RoleGate convention.
+ */
+function LinkObjective({ taskId, onLinked }: { taskId: number; onLinked: () => void }) {
+  const t = useTranslations('ticketContext');
+  const canLink = usePermission('pmo.objectives.link');
+  const [options, setOptions] = useState<Objective[] | null>(null);
+  const [choice, setChoice] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Loaded on first render of the empty state only — a ticket that already serves an
+  // objective never renders this, so the objective list is not fetched for it.
+  useEffect(() => {
+    let alive = true;
+    pmoApi.objectives.list()
+      .then((rows) => { if (alive) setOptions(rows); })
+      .catch(() => { if (alive) setOptions([]); });
+    return () => { alive = false; };
+  }, []);
+
+  const link = useCallback(() => {
+    if (!choice) return;
+    setBusy(true);
+    setError(null);
+    pmoApi.objectives.addLink(choice, { linkKind: 'task', taskId })
+      .then(() => { setChoice(''); onLinked(); })
+      .catch((e) => setError((e as Error).message))
+      .finally(() => setBusy(false));
+  }, [choice, taskId, onLinked]);
+
+  return (
+    <div style={{ ...card, gap: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <span style={label}>{t('objective')}</span>
+        <span style={{ fontSize: 12, color: 'var(--text-muted)', flex: '1 1 200px', minWidth: 0 }}>{t('noObjective')}</span>
+      </div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+        <Select
+          value={choice}
+          onChange={(e) => setChoice(e.target.value)}
+          disabled={!canLink || busy || options == null}
+          aria-label={t('linkObjectiveLabel')}
+          style={{ flex: '1 1 200px', minWidth: 0, fontSize: 12 }}
+        >
+          <option value="">{options == null ? t('loadingObjectives') : t('chooseObjective')}</option>
+          {(options ?? []).map((o) => (
+            <option key={o.id} value={o.id}>{o.title}</option>
+          ))}
+        </Select>
+        <button
+          type="button"
+          onClick={link}
+          disabled={!canLink || busy || !choice}
+          title={canLink ? undefined : t('linkObjectiveDenied')}
+          style={{
+            padding: '6px 12px', borderRadius: 'var(--radius-md)', border: 'none', fontSize: 12, fontWeight: 700,
+            background: 'var(--coral-bright)', color: 'var(--text-on-accent)',
+            cursor: !canLink || busy || !choice ? 'default' : 'pointer',
+            opacity: !canLink || busy || !choice ? 0.6 : 1,
+          }}
+        >
+          {busy ? t('linking') : t('linkObjective')}
+        </button>
+      </div>
+      {options != null && options.length === 0 && (
+        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('noObjectivesYet')}</span>
+      )}
+      {error && <span style={{ fontSize: 11, color: 'var(--danger-text)' }}>{error}</span>}
     </div>
   );
 }
@@ -186,7 +276,13 @@ export function TicketContextStrip({ taskId, onOpenEpic, onOpenTab, onChanged }:
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 18 }}>
       {/* Headline meters — this ticket, its Epic, its sign-offs. */}
       <div style={{ display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
-        <Stat value={`${completion.percent}%`} percent={completion.percent}>
+        {/* PARKED beats a percentage. A blocked ticket used to read ~87% complete
+            purely because `Blocked` sits late in the board's lane order — the most
+            stuck ticket reporting as the most finished one. */}
+        <Stat
+          value={completion.isParked ? t('parked') : `${completion.percent ?? 0}%`}
+          percent={completion.isParked ? null : completion.percent}
+        >
           {t('thisTicket')}
         </Stat>
         {rollup && (
@@ -284,10 +380,7 @@ export function TicketContextStrip({ taskId, onOpenEpic, onOpenTab, onChanged }:
           <ObjectiveCard key={o.id} objective={o} onOpen={() => { window.location.href = `/pmo?objective=${o.id}`; }} />
         ))
       ) : (
-        <div style={{ ...card, flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <span style={label}>{t('objective')}</span>
-          <span style={{ fontSize: 12, color: 'var(--text-muted)', flex: '1 1 200px' }}>{t('noObjective')}</span>
-        </div>
+        <LinkObjective taskId={taskId} onLinked={() => { load(); onChanged?.(); }} />
       )}
     </div>
   );

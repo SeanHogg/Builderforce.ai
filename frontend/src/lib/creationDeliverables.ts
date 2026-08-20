@@ -1,3 +1,4 @@
+import { brandDirective, type BrandBinding } from '@builderforce/creation-canvas-contract';
 import { apiRequest } from './apiClient';
 import { dxfPreviewSvg, meshFormatFromHint, stlPreviewSvg, svgDataUrl, type MeshFormat } from './creativeGeometry';
 import { gamePosterDataUrl } from './gamePoster';
@@ -171,16 +172,28 @@ function dxfPlate([width, height]: [number, number], radius: number): string {
 
 /** Produce a real, portable baseline artifact without claiming an unavailable
  * binary encoder. Provider renderers can replace these outputs later. */
-export function buildBrowserCreativeArtifact(data: CreationNodeData): BrowserCreativeArtifact {
+export function buildBrowserCreativeArtifact(data: CreationNodeData, brand?: BrandBinding): BrowserCreativeArtifact {
   const kind = data.kind;
   const title = String(data.title || kind);
   const brief = String(data.prompt || data.content || data.subtitle || title);
   const stem = fileSafe(title);
   const escapedTitle = escapeHtml(title);
   const escapedBrief = escapeHtml(brief);
-  const svg = (body: string) => `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="675" viewBox="0 0 1200 675"><defs><linearGradient id="g" x2="1" y2="1"><stop stop-color="#202b5f"/><stop offset="1" stop-color="#7c4dff"/></linearGradient></defs><rect width="1200" height="675" rx="32" fill="url(#g)"/>${body}<text x="70" y="555" fill="white" font-family="system-ui,sans-serif" font-size="58" font-weight="750">${escapedTitle}</text><text x="70" y="610" fill="#ddd7ff" font-family="system-ui,sans-serif" font-size="24">${escapedBrief.slice(0, 86)}</text></svg>`;
+  // The baseline's own palette, OVERRIDDEN by the bound brand when there is one.
+  //
+  // The browser fallback is not a mock-up: it is the artifact a guest session, an
+  // unavailable model or a failed call actually ends up with, and it ships to whoever
+  // the person sends it to. An offline fallback that ignored the brand would be the one
+  // path on the canvas that reliably produced off-brand output, which is the opposite of
+  // what a fallback is for. Two stops and an accent, because that is all this poster
+  // draws — a palette with fewer entries falls back per slot rather than all-or-nothing.
+  const palette = brand?.palette ?? [];
+  const ink = (index: number, fallback: string) => escapeHtml(palette[index] ?? fallback);
+  const [stopA, stopB, accent] = [ink(0, '#202b5f'), ink(1, '#7c4dff'), ink(2, '#ffb35c')];
+  const face = brand?.typography?.[0] ? `${escapeHtml(brand.typography[0])},system-ui,sans-serif` : 'system-ui,sans-serif';
+  const svg = (body: string) => `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="675" viewBox="0 0 1200 675"><defs><linearGradient id="g" x2="1" y2="1"><stop stop-color="${stopA}"/><stop offset="1" stop-color="${stopB}"/></linearGradient></defs><rect width="1200" height="675" rx="32" fill="url(#g)"/>${body}<text x="70" y="555" fill="white" font-family="${face}" font-size="58" font-weight="750">${escapedTitle}</text><text x="70" y="610" fill="#ddd7ff" font-family="${face}" font-size="24">${escapedBrief.slice(0, 86)}</text></svg>`;
   if (kind === 'image' || kind === 'comic') {
-    const content = svg(kind === 'comic' ? '<g fill="#fff" opacity=".92"><rect x="70" y="70" width="310" height="390" rx="18"/><rect x="445" y="70" width="310" height="390" rx="18"/><rect x="820" y="70" width="310" height="390" rx="18"/></g>' : '<circle cx="600" cy="290" r="180" fill="#fff" opacity=".88"/><circle cx="650" cy="250" r="110" fill="#ffb35c"/>');
+    const content = svg(kind === 'comic' ? '<g fill="#fff" opacity=".92"><rect x="70" y="70" width="310" height="390" rx="18"/><rect x="445" y="70" width="310" height="390" rx="18"/><rect x="820" y="70" width="310" height="390" rx="18"/></g>' : `<circle cx="600" cy="290" r="180" fill="#fff" opacity=".88"/><circle cx="650" cy="250" r="110" fill="${accent}"/>`);
     const url = textDataUrl('image/svg+xml', content);
     return { artifactKind: kind, fileName: `${stem}.svg`, mimeType: 'image/svg+xml', url, outputFormat: 'SVG', validationDetail: 'Valid standalone SVG generated in the browser', previewImageUrl: url };
   }
@@ -298,12 +311,32 @@ interface GeneratedCreativeResponse {
   summary: string | null;
 }
 
-/** The brief a creative object was given, wherever the author typed it. */
-export function creativeBrief(data: CreationNodeData): string {
+/**
+ * The brief a creative object was given, wherever the author typed it — plus the brand
+ * it must be composed for.
+ *
+ * ── WHY THE BRAND RIDES THE BRIEF ────────────────────────────────────────────────
+ * Every generative path on the canvas converges here: the Evermind media call, the
+ * server generator, the game targets and the browser baseline all ask this function what
+ * to make. That makes it the ONE place a brand binding can be applied without seventeen
+ * call sites each remembering to. Before this, `image`, `video`, `animation`, `comic`,
+ * `podcast`, `website`, `prototype`, `emailTemplate` and `socialCampaign` all reached a
+ * generator with no palette, no logo, no typography, no voice and no claim list, so the
+ * output was per-object plausible and cross-object inconsistent — the failure that makes
+ * a generative marketing tool unusable at brand scale.
+ *
+ * The binding is OPTIONAL and absent means unbranded, exactly as before: a board with no
+ * `brandKit` on it composes the way it always did.
+ */
+export function creativeBrief(data: CreationNodeData, brand?: BrandBinding): string {
+  let brief = String(data.title ?? '').trim();
   for (const candidate of [data.prompt, data.content, data.subtitle]) {
-    if (typeof candidate === 'string' && candidate.trim()) return candidate.trim();
+    if (typeof candidate === 'string' && candidate.trim()) { brief = candidate.trim(); break; }
   }
-  return String(data.title ?? '').trim();
+  const directive = brandDirective(brand);
+  return directive ? `${brief}
+
+${directive}` : brief;
 }
 
 /**
@@ -313,14 +346,14 @@ export function creativeBrief(data: CreationNodeData): string {
  * generator means "try the browser baseline" (it does) — that choice belongs with
  * the canvas, which is the thing that has to end up with a file either way.
  */
-export async function generateServerCreativeArtifact(data: CreationNodeData): Promise<CreativeArtifact> {
+export async function generateServerCreativeArtifact(data: CreationNodeData, brand?: BrandBinding): Promise<CreativeArtifact> {
   const generated = await apiRequest<GeneratedCreativeResponse>('/api/creative/generate', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       kind: data.kind,
       title: String(data.title ?? data.kind),
-      brief: creativeBrief(data),
+      brief: creativeBrief(data, brand),
       ...(typeof data.templateId === 'string' && data.templateId ? { templateId: data.templateId } : {}),
       // A game's PLATFORM changes the machine it is authored for, not just the
       // file extension — Roblox is Luau on a server-authoritative engine, not a
@@ -341,7 +374,7 @@ export async function generateServerCreativeArtifact(data: CreationNodeData): Pr
   const poster = generated.artifactKind === 'game' || generated.artifactKind === 'roblox-place'
     ? gamePosterDataUrl({
       title: String(data.title ?? 'Game'),
-      brief: creativeBrief(data),
+      brief: creativeBrief(data, brand),
       // A place file has no input handlers to read, so the poster omits the
       // control badges rather than guessing at them.
       ...(generated.artifactKind === 'game' ? { html: generated.content } : {}),

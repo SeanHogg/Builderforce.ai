@@ -26,6 +26,7 @@ import { TenantRole } from '../../domain/shared/types';
 import { scope } from './segmentTrackerRoutes';
 import { getAutonomySummary } from '../../application/activity/ticketLifecycleLedger';
 import { getAutonomyWiringAudit } from '../../application/activity/autonomyWiringAudit';
+import { getVerdictCompliance } from '../../application/activity/verdictCompliance';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
@@ -62,6 +63,18 @@ export function createAutonomyRoutes(db: Db): Hono<HonoEnv> {
   router.get('/autonomy/wiring', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId } = scope(c);
     return c.json(await getAutonomyWiringAudit(c.env as Env, db, { tenantId }));
+  });
+
+  // VERDICT COMPLIANCE — the per-tenant / per-agent MISS RATE on role-attributed runs.
+  //
+  // `/autonomy` says how many tickets moved and `/autonomy/wiring` says whether the
+  // machinery CAN work. Neither answers the question a reviewer model is chosen on:
+  // of the runs that were asked for a verdict, how many actually recorded one, and
+  // WHICH agent is the non-reporter. See `verdictCompliance.ts`.
+  router.get('/autonomy/verdict-compliance', requireRole(TenantRole.MANAGER), async (c) => {
+    const { tenantId } = scope(c);
+    const windowDays = parseDays(c.req.query('days'));
+    return c.json(await getVerdictCompliance(c.env as Env, db, { tenantId, windowDays }));
   });
 
   return router;

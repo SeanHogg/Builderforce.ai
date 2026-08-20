@@ -4,7 +4,7 @@ import { memo } from 'react';
 import { useTranslations } from 'next-intl';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import type { WorkflowNodeKind } from '@/lib/builderforceApi';
-import { NODE_KIND_MAP, nodeKindLabel } from './nodeKinds';
+import { NODE_GROUP_KEYS, NODE_KIND_MAP, nodeKindLabel } from './nodeKinds';
 import { integrationAccent, integrationForConfig, integrationIcon } from './integrations';
 import { Icon } from '@/components/ui/Icon';
 
@@ -143,7 +143,7 @@ function BuilderNodeImpl({ data, selected }: NodeProps) {
             color: accent,
           }}
         >
-          {meta?.group ?? d.kind}
+          {meta ? t(`nodeGroup.${NODE_GROUP_KEYS[meta.group]}` as 'nodeGroup.trigger') : d.kind}
         </div>
         {summary && (
           <div style={{ marginTop: 4, fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 180 }}>

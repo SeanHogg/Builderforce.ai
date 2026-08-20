@@ -24,7 +24,10 @@ import {
   rosterFromMembers, toolPublicJwks, verifyLaunch,
 } from '../../application/lti/LtiService';
 import { bridgeLaunch } from '../../application/lti/ltiLaunchBridge';
-import { canReturnGrades } from '../../domain/lti/ltiClaims';
+import {
+  beginDeepLink, buildDeepLinkResponse, listLinkableObjects, readDeepLinkToken,
+} from '../../application/lti/deepLinking';
+import { LTI_MESSAGE_DEEP_LINK, canReturnGrades } from '../../domain/lti/ltiClaims';
 import { mintSessionExchangeCode } from '../../application/auth/sessionExchange';
 import type { Db } from '../../infrastructure/database/connection';
 
@@ -74,7 +77,17 @@ export function createLtiRoutes(db: Db) {
       extensions: [{
         platform: 'canvas.instructure.com',
         privacy_level: 'public',
-        settings: { placements: [{ placement: 'course_navigation', message_type: 'LtiResourceLinkRequest' }] },
+        settings: {
+          placements: [
+            { placement: 'course_navigation', message_type: 'LtiResourceLinkRequest' },
+            // The two placements deep linking is REACHED from. Without them the
+            // picker exists and no instructor can ever open it: a platform only
+            // sends `LtiDeepLinkingRequest` for a placement declared to accept
+            // one, so the endpoint would be dead wiring.
+            { placement: 'assignment_selection', message_type: 'LtiDeepLinkingRequest', selection_width: 800, selection_height: 640 },
+            { placement: 'link_selection', message_type: 'LtiDeepLinkingRequest', selection_width: 800, selection_height: 640 },
+          ],
+        },
       }],
     });
   });
@@ -136,6 +149,35 @@ export function createLtiRoutes(db: Db) {
     if (!result.ok) return c.json({ error: result.error }, 401);
 
     const { context } = result;
+    const wantsJson = (c.req.header('accept') ?? '').includes('application/json');
+
+    // ── DEEP LINKING ────────────────────────────────────────────────────────
+    // A different MESSAGE, not a different launch. `LtiDeepLinkingRequest` is
+    // the LMS asking "what would you like to add to this course?", sent from
+    // inside its content-picker dialog — so the answer is a PICKER, and landing
+    // an instructor on a board there would be answering a question nobody asked.
+    // The claim parser has always accepted both message types; until now nothing
+    // read which one arrived, so every deep-linking launch opened a board.
+    if (context.messageType === LTI_MESSAGE_DEEP_LINK) {
+      const picker = await beginDeepLink(c.env, db, registration, context, result.deepLinking);
+      if (!wantsJson) {
+        const frontend = resolveAppBaseUrl(c.env);
+        return picker.ok
+          ? c.redirect(`${frontend}/lti/deep-link?token=${encodeURIComponent(picker.token)}`, 302)
+          : c.redirect(`${frontend}/lti/launch?error=${encodeURIComponent(picker.error)}`, 302);
+      }
+      if (!picker.ok) return c.json({ error: picker.error }, picker.status as 400 | 403 | 409);
+      return c.json({
+        ok: true,
+        messageType: context.messageType,
+        deepLink: {
+          token: picker.token,
+          returnUrl: picker.session.settings.returnUrl,
+          acceptMultiple: picker.session.settings.acceptMultiple,
+          title: picker.session.settings.title,
+        },
+      });
+    }
 
     // ── THE BRIDGE ──────────────────────────────────────────────────────────
     // This is what turns a verified launch into somewhere a person lands. It
@@ -150,7 +192,6 @@ export function createLtiRoutes(db: Db) {
     // JSON, which is how the contract stays testable and how a non-browser
     // integration can still read the service URLs.
     const bridged = await bridgeLaunch(db, registration, context);
-    const wantsJson = (c.req.header('accept') ?? '').includes('application/json');
 
     if (!wantsJson) {
       const frontend = resolveAppBaseUrl(c.env);
@@ -170,7 +211,7 @@ export function createLtiRoutes(db: Db) {
       return c.redirect(`${frontend}/auth/callback?code=${encodeURIComponent(code)}`, 302);
     }
 
-    if (!bridged.ok) return c.json({ error: bridged.error }, bridged.status as 403 | 409);
+    if (!bridged.ok) return c.json({ error: bridged.error }, bridged.status as 403 | 404 | 409);
 
     return c.json({
       ok: true,
@@ -200,6 +241,59 @@ export function createLtiRoutes(db: Db) {
       // JSON and redirect answers cannot describe two different destinations.
       board: { sessionId: bridged.sessionId, redirect: bridged.redirect },
     });
+  });
+
+  /**
+   * What the instructor may add, for a picker opened by a deep-linking launch.
+   *
+   * Authenticated by the PICKER TOKEN and nothing else. There is deliberately no
+   * session here: the page runs inside the LMS's content dialog, where a
+   * third-party cookie is blocked and our own session may not exist yet. The
+   * token is the short-lived, HMAC-signed envelope minted from a launch that had
+   * already passed every check — it names the tenant, and every query behind
+   * this route is scoped to it.
+   */
+  app.get('/deep-link/options', async (c) => {
+    const session = await readDeepLinkToken(c.env.JWT_SECRET, c.req.query('token') ?? '');
+    if (!session) {
+      return c.json({ error: 'This content picker has expired. Close it and add the tool again from your LMS.' }, 401);
+    }
+    const objects = session.bindingId == null
+      ? []
+      : await listLinkableObjects(c.env, db, session.tenantId, session.bindingId);
+    return c.json({
+      objects,
+      settings: {
+        acceptMultiple: session.settings.acceptMultiple,
+        title: session.settings.title,
+        text: session.settings.text,
+      },
+    });
+  });
+
+  /**
+   * Sign the instructor's selection into the response the LMS expects.
+   *
+   * Returns `{ returnUrl, jwt }` rather than posting anything: LTI deep linking
+   * ends with the BROWSER form-POSTing the JWT to the platform's return URL,
+   * because that endpoint authenticates the instructor's own LMS session. A
+   * server-to-server POST from here would arrive with nobody signed in and be
+   * rejected — which is why the picker page renders a self-submitting form.
+   */
+  app.post('/deep-link/response', async (c) => {
+    const body = await c.req.json().catch(() => ({})) as { token?: string; objectIds?: unknown };
+    const session = await readDeepLinkToken(c.env.JWT_SECRET, body.token ?? '');
+    if (!session) {
+      return c.json({ error: 'This content picker has expired. Close it and add the tool again from your LMS.' }, 401);
+    }
+    const objectIds = Array.isArray(body.objectIds)
+      ? body.objectIds.filter((id): id is string => typeof id === 'string').slice(0, 50)
+      : [];
+
+    const origin = new URL(c.req.url).origin;
+    const result = await buildDeepLinkResponse(c.env, db, session, objectIds, `${origin}/api/lti/launch`);
+    if (!result.ok) return c.json({ error: result.error }, result.status as 400 | 404 | 409 | 502);
+    return c.json({ returnUrl: result.returnUrl, jwt: result.jwt });
   });
 
   /** Pull a roster, projected onto the canvas cohort shape. */

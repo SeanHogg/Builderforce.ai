@@ -10,7 +10,7 @@
  * implemented; other providers return a typed `unsupported` result so callers
  * degrade to "branch pushed, open PR manually" rather than crashing.
  */
-import { bitbucketServerRepoPath, buildGitApiBaseUrl, resolveGitApiFlavor } from './gitProxy';
+import { resolveRepoApiTarget } from './repoApiTarget';
 
 export interface OpenPrInput {
   provider: string;
@@ -31,12 +31,10 @@ export type OpenPrResult =
 /** Build the provider-specific create-PR request (URL + body). Pure + exported
  *  so each provider's documented create endpoint/body is unit-testable. */
 export function buildCreatePrRequest(input: OpenPrInput): { url: string; body: Record<string, unknown> } {
-  const flavor = resolveGitApiFlavor(input.provider, input.host);
-  const apiBase = buildGitApiBaseUrl(input.provider, input.host, { allowBitbucketServer: true });
+  const { flavor, ...api } = resolveRepoApiTarget(input);
   if (flavor === 'gitlab') {
-    const projectId = encodeURIComponent(`${input.owner}/${input.repo}`);
     return {
-      url: `${apiBase}/projects/${projectId}/merge_requests`,
+      url: api.pullRequests(),
       body: { source_branch: input.head, target_branch: input.base, title: input.title, description: input.body },
     };
   }
@@ -45,7 +43,7 @@ export function buildCreatePrRequest(input: OpenPrInput): { url: string; body: R
     // inside each ref (a PR may cross forks), so the body is nothing like Cloud's.
     const repository = { slug: input.repo, project: { key: input.owner } };
     return {
-      url: `${apiBase}${bitbucketServerRepoPath(input.owner, input.repo)}/pull-requests`,
+      url: api.pullRequests(),
       body: {
         title: input.title,
         description: input.body,
@@ -56,7 +54,7 @@ export function buildCreatePrRequest(input: OpenPrInput): { url: string; body: R
   }
   if (flavor === 'bitbucket-cloud') {
     return {
-      url: `${apiBase}/repositories/${input.owner}/${input.repo}/pullrequests`,
+      url: api.pullRequests(),
       body: {
         title: input.title,
         source: { branch: { name: input.head } },
@@ -66,7 +64,7 @@ export function buildCreatePrRequest(input: OpenPrInput): { url: string; body: R
     };
   }
   return {
-    url: `${apiBase}/repos/${input.owner}/${input.repo}/pulls`,
+    url: api.pullRequests(),
     body: { title: input.title, head: input.head, base: input.base, body: input.body },
   };
 }
@@ -131,7 +129,7 @@ export async function createPullRequest(input: OpenPrInput): Promise<OpenPrResul
   // retried create returns the existing PR instead of erroring. All three
   // providers now do this (was GitHub-only). A null lookup → fall to the error.
   if (res.status === 422 || res.status === 409 || res.status === 400) {
-    const existing = await findOpenPr(input.provider, buildGitApiBaseUrl(input.provider, input.host, { allowBitbucketServer: true }), headers, input);
+    const existing = await findOpenPr(headers, input);
     if (existing) return { ok: true, number: existing.number, url: existing.url };
   }
 
@@ -139,36 +137,40 @@ export async function createPullRequest(input: OpenPrInput): Promise<OpenPrResul
   return { ok: false, code: 'provider_error', reason: `${input.provider} ${res.status}: ${text.slice(0, 300)}` };
 }
 
-/** Build the provider-specific "find the already-open PR for this head" request. */
-export function buildFindOpenPrUrl(provider: string, apiBase: string, input: OpenPrInput): string {
-  if (provider === 'bitbucket' && apiBase.includes('/rest/api/1.0')) {
+/** Build the provider-specific "find the already-open PR for this head" request.
+ *  The dialect comes from the SHAPED TARGET (not from sniffing `/rest/api/1.0`
+ *  out of a base URL, which was the old way this function told the two Bitbucket
+ *  editions apart). */
+export function buildFindOpenPrUrl(input: OpenPrInput): string {
+  const { flavor, ...api } = resolveRepoApiTarget(input);
+  if (flavor === 'bitbucket-server') {
     // Server filters by the OUTGOING ref rather than a query language.
-    return `${apiBase}${bitbucketServerRepoPath(input.owner, input.repo)}/pull-requests`
-      + `?state=OPEN&direction=OUTGOING&at=${encodeURIComponent(`refs/heads/${input.head}`)}`;
+    return `${api.pullRequests()}?state=OPEN&direction=OUTGOING`
+      + `&at=${encodeURIComponent(`refs/heads/${input.head}`)}`;
   }
-  if (provider === 'gitlab') {
-    const projectId = encodeURIComponent(`${input.owner}/${input.repo}`);
-    return `${apiBase}/projects/${projectId}/merge_requests?state=opened&source_branch=${encodeURIComponent(input.head)}&target_branch=${encodeURIComponent(input.base)}`;
+  if (flavor === 'gitlab') {
+    return `${api.pullRequests()}?state=opened&source_branch=${encodeURIComponent(input.head)}`
+      + `&target_branch=${encodeURIComponent(input.base)}`;
   }
-  if (provider === 'bitbucket') {
+  if (flavor === 'bitbucket-cloud') {
     const q = encodeURIComponent(`source.branch.name="${input.head}" AND state="OPEN"`);
-    return `${apiBase}/repositories/${input.owner}/${input.repo}/pullrequests?q=${q}`;
+    return `${api.pullRequests()}?q=${q}`;
   }
-  return `${apiBase}/repos/${input.owner}/${input.repo}/pulls?state=open&head=${encodeURIComponent(`${input.owner}:${input.head}`)}`;
+  return `${api.pullRequests()}?state=open&head=${encodeURIComponent(`${input.owner}:${input.head}`)}`;
 }
 
 /** Resolve an already-open PR so retried creates are idempotent (all providers). */
 async function findOpenPr(
-  provider: string,
-  apiBase: string,
   headers: Record<string, string>,
   input: OpenPrInput,
 ): Promise<{ number: number; url: string } | null> {
-  const res = await fetch(buildFindOpenPrUrl(provider, apiBase, input), { headers }).catch(() => null);
+  let url: string;
+  try { url = buildFindOpenPrUrl(input); } catch { return null; }
+  const res = await fetch(url, { headers }).catch(() => null);
   if (!res || !res.ok) return null;
   const body = await res.json().catch(() => null);
   // GitHub → array of pulls; GitLab → array of MRs; Bitbucket → { values: [...] }.
   const list = Array.isArray(body) ? body : ((body as { values?: unknown[] } | null)?.values ?? []);
   const first = (list as unknown[])[0];
-  return first ? parseCreatePrSuccess(provider, first) : null;
+  return first ? parseCreatePrSuccess(input.provider, first) : null;
 }

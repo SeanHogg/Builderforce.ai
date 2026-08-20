@@ -310,7 +310,7 @@ export async function applyNonInteractiveAuthChoice(params: {
       return null;
     }
     if (resolved.source !== "profile") {
-      setXaiApiKey(resolved.key);
+      await setXaiApiKey(resolved.key);
     }
     nextConfig = applyAuthProfileConfig(nextConfig, {
       profileId: "xai:default",
@@ -333,7 +333,7 @@ export async function applyNonInteractiveAuthChoice(params: {
       return null;
     }
     if (resolved.source !== "profile") {
-      setQianfanApiKey(resolved.key);
+      await setQianfanApiKey(resolved.key);
     }
     nextConfig = applyAuthProfileConfig(nextConfig, {
       profileId: "qianfan:default",

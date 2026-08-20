@@ -33,7 +33,7 @@ import {
   pullRequests,
   repoBranches,
 } from '../../infrastructure/database/schema';
-import { buildGitApiBaseUrl } from '../repos/gitProxy';
+import { resolveRepoApiTarget } from '../repos/repoApiTarget';
 import { renderDeployWorkflow, DEPLOY_WORKFLOW_PATH } from './deployWorkflow';
 
 /** Same precedence the cloud agent path uses for the integration-encryption secret. */
@@ -215,6 +215,11 @@ export async function commitWorkspaceToRepo(
   return { ok: true, branch, committed, deleted, prNumber, prUrl };
 }
 
+/** The cloud host for a provider, used when a create call reported none. */
+function defaultProviderHost(provider: string): string {
+  return provider === 'bitbucket' ? 'bitbucket.org' : provider === 'gitlab' ? 'gitlab.com' : 'github.com';
+}
+
 /** Decrypt the git token for a tenant integration credential by id. */
 async function tokenForCredential(env: Env, tenantId: number, credentialId: string): Promise<string | null> {
   const db = buildDatabase(env);
@@ -233,8 +238,20 @@ async function tokenForCredential(env: Env, tenantId: number, credentialId: stri
 
 interface CreatedRemoteRepo { owner: string; repo: string; defaultBranch: string; cloneUrl: string | null; host: string | null }
 
-/** Create a clean remote repo via the provider API (GitHub today). `auto_init`
- *  gives it a default branch so the initial workspace push can commit onto it. */
+/**
+ * Create a clean remote repo via the provider API. Every edition gets a repo with a
+ * default branch already on it, because the initial workspace push commits ONTO that
+ * branch — a repo with no branch has nothing to commit against.
+ *
+ * GitHub gets it from `auto_init`. Bitbucket (both editions) creates the repo EMPTY
+ * with no equivalent flag, which is fine here for a different reason: the first
+ * commit on each edition can create its own starting branch — Cloud's `/src` POST
+ * and Server's `PUT /browse` with `sourceBranch` both do — so the reported default
+ * branch is what that first commit lands on.
+ *
+ * GitLab is still refused: that is a provider-level gap (no create path written for
+ * it), not the Bitbucket Cloud/Server split this function now handles.
+ */
 async function createProviderRepo(
   provider: string,
   host: string | null,
@@ -242,10 +259,11 @@ async function createProviderRepo(
   name: string,
   isPrivate: boolean,
 ): Promise<{ ok: true; repo: CreatedRemoteRepo } | { ok: false; error: string }> {
+  if (provider === 'bitbucket') return createBitbucketRepo(host, token, name, isPrivate);
   if (provider !== 'github') {
     return { ok: false, error: `Creating a repo is not yet implemented for provider '${provider}'` };
   }
-  const apiBase = buildGitApiBaseUrl(provider, host);
+  const apiBase = resolveRepoApiTarget({ provider, host, owner: '', repo: '' }).apiBase;
   const res = await fetch(`${apiBase}/user/repos`, {
     method: 'POST',
     headers: {
@@ -271,6 +289,90 @@ async function createProviderRepo(
 }
 
 /**
+ * Bitbucket repo creation, both editions.
+ *
+ * The two disagree on everything except the intent: Cloud names the repo in the URL
+ * (`POST /repositories/{workspace}/{slug}`) and takes `is_private`; Server posts to
+ * the PROJECT (`POST /rest/api/1.0/projects/{key}/repos`) and takes `scmId` +
+ * `public` (the inverse of private). Cloud answers with `full_name` and an https
+ * clone link in `links.clone[]`; Server answers with `slug`/`project.key` and its
+ * clone links in `links.clone[]` too, but tagged `http` rather than `https`.
+ *
+ * `owner` here is the WORKSPACE on Cloud and the PROJECT KEY on Server — the same
+ * ambiguity `bitbucketServerRepoPath` documents — so the caller's chosen owner is
+ * echoed back rather than re-derived.
+ */
+async function createBitbucketRepo(
+  host: string | null,
+  token: string,
+  name: string,
+  isPrivate: boolean,
+): Promise<{ ok: true; repo: CreatedRemoteRepo } | { ok: false; error: string }> {
+  const owner = bitbucketOwnerFromName(name);
+  if (!owner) {
+    return {
+      ok: false,
+      error: 'Bitbucket needs a workspace (Cloud) or project key (Server) — name the repository as "<workspace>/<repo>"',
+    };
+  }
+  let api: ReturnType<typeof resolveRepoApiTarget>;
+  try {
+    api = resolveRepoApiTarget({ provider: 'bitbucket', host, owner: owner.owner, repo: owner.repo });
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'unsupported Bitbucket host' };
+  }
+  const isServer = api.flavor === 'bitbucket-server';
+  const url = isServer ? `${api.apiBase}/projects/${encodeURIComponent(owner.owner)}/repos` : api.repoBase;
+  const body = isServer
+    ? { name: owner.repo, scmId: 'git', public: !isPrivate }
+    : { scm: 'git', is_private: isPrivate };
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: 'application/json',
+      'User-Agent': 'BuilderForce-IDE/1.0',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  }).catch(() => null);
+  if (!res) return { ok: false, error: 'Repo-create request failed (network)' };
+  if (!res.ok) {
+    const t = await res.text().catch(() => '');
+    return { ok: false, error: `Bitbucket ${res.status}: ${t.slice(0, 200)}` };
+  }
+  const created = (await res.json().catch(() => null)) as {
+    slug?: string; name?: string;
+    mainbranch?: { name?: string } | null;
+    links?: { clone?: Array<{ name?: string; href?: string }> };
+  } | null;
+  if (!created) return { ok: false, error: 'Bitbucket returned an unexpected repo payload' };
+  const clone = (created.links?.clone ?? []).find((c) => c.name === 'https' || c.name === 'http')?.href ?? null;
+  return {
+    ok: true,
+    repo: {
+      owner: owner.owner,
+      repo: created.slug ?? created.name ?? owner.repo,
+      // A freshly created Bitbucket repo has NO branches on either edition, so there
+      // is no default branch to read — 'main' is what the initial commit will create.
+      defaultBranch: created.mainbranch?.name ?? 'main',
+      cloneUrl: clone,
+      host,
+    },
+  };
+}
+
+/** Split a Bitbucket repo name into `<workspace-or-project-key>/<repo>`. Bitbucket
+ *  has no "create under the authenticated user" endpoint the way GitHub does, so the
+ *  owner cannot be inferred and must be given. */
+function bitbucketOwnerFromName(name: string): { owner: string; repo: string } | null {
+  const slash = name.indexOf('/');
+  if (slash <= 0 || slash === name.length - 1) return null;
+  return { owner: name.slice(0, slash), repo: name.slice(slash + 1) };
+}
+
+/**
  * Create a clean remote repo for a project that has none, bind it (default if
  * first), and push the current R2 workspace as the initial commit on its default
  * branch. The "go live with a real codebase" on-ramp.
@@ -279,7 +381,7 @@ export async function createRemoteRepo(
   env: Env,
   tenantId: number,
   projectId: number,
-  input: { provider?: string; name: string; private?: boolean; credentialId: string },
+  input: { provider?: string; host?: string | null; name: string; private?: boolean; credentialId: string },
 ): Promise<RepoBridgeResult<{ repoId: string; owner: string; repo: string; committed: number }>> {
   const provider = input.provider?.trim() || 'github';
   const name = input.name.trim();
@@ -288,7 +390,10 @@ export async function createRemoteRepo(
   const token = await tokenForCredential(env, tenantId, input.credentialId);
   if (!token) return { ok: false, status: 400, error: 'Credential not found or has no usable token' };
 
-  const created = await createProviderRepo(provider, null, token, name, input.private ?? true);
+  // The host decides the Bitbucket EDITION (and the GitHub Enterprise base), so it
+  // must reach the create call — defaulting it away silently aimed every Bitbucket
+  // create at Cloud.
+  const created = await createProviderRepo(provider, input.host ?? null, token, name, input.private ?? true);
   if (!created.ok) return { ok: false, status: 502, error: created.error };
 
   const db = buildDatabase(env);
@@ -303,7 +408,9 @@ export async function createRemoteRepo(
       tenantId,
       projectId,
       provider,
-      host: created.repo.host ?? 'github.com',
+      // Fall back to the PROVIDER'''s cloud host, not GitHub'''s — a Bitbucket repo
+      // recorded against 'github.com' would resolve to the wrong dialect forever after.
+      host: created.repo.host ?? defaultProviderHost(provider),
       owner: created.repo.owner,
       repo: created.repo.repo,
       defaultBranch: created.repo.defaultBranch,

@@ -8,6 +8,17 @@ author: Sean Hogg
 
 # The Best Resume Template for Consulting, Risk, and Audit Roles
 
+```bf-figure
+{
+  "kind": "templates",
+  "title": "Grey Asphalt — the layout this article recommends",
+  "templateIds": [
+    "risk-asphalt"
+  ],
+  "caption": "Rendered live from the same template registry the editor reads, so this is the real Consulting, risk and audit layout — not a screenshot of one."
+}
+```
+
 ## What Consulting Recruiters Read For
 
 A consulting or risk recruiter is hunting for three things in the first 10 seconds: pedigree (firm, university, certifications), engagement scale (clients, deal sizes, regulatory frameworks), and executive presence (how the candidate frames their work).

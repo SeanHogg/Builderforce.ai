@@ -59,7 +59,6 @@ application/seams/webhookService.ts:6
 application/seams/workItemWebhook.ts:1
 application/security/findingMarkers.ts:1
 application/security/sessionCounts.ts:1
-application/security/webSecurityScan.ts:1
 application/studio/voiceCloneService.ts:3
 application/swimlane/DrizzleCoordinatorStore.ts:4
 application/swimlane/evaluateAutoRun.ts:3
@@ -95,7 +94,7 @@ presentation/routes/freelancerRoutes.ts:1
 presentation/routes/githubActionsRoutes.ts:1
 presentation/routes/githubWebhookRoutes.ts:1
 presentation/routes/ideProjectRoutes.ts:1
-presentation/routes/jobRoutes.ts:6
+presentation/routes/jobRoutes.ts:5
 presentation/routes/knowledgeRoutes.ts:3
 presentation/routes/personaRoutes.ts:4
 presentation/routes/projectRoutes.ts:2
@@ -106,4 +105,4 @@ presentation/routes/studioVoiceCloneRoutes.ts:1
 presentation/routes/taskRoutes.ts:1
 presentation/routes/workflowRoutes.ts:4
 presentation/routes/workflowTriggerRoutes.ts:1
-presentation/routes/workforceRoutes.ts:4
+presentation/routes/workforceRoutes.ts:2

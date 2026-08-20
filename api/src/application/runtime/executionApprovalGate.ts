@@ -12,8 +12,10 @@
  * Application layer on purpose: it depends only on `Db` + drizzle, never on Hono,
  * so a system caller can use it without fabricating a request context.
  */
-import { and, desc, eq } from 'drizzle-orm';
-import { approvals, boards } from '../../infrastructure/database/schema';
+import { and, eq } from 'drizzle-orm';
+import { coordinatorVoice, resolveTicketCoordinator } from '../kanban/ticketCoordinator';
+import { approvalSubjectRef, resolveApprovalGate } from '../approval/approvalGate';
+import { boards } from '../../infrastructure/database/schema';
 import { parseActAsRole } from './cloudDispatch';
 import type { Db } from '../../infrastructure/database/connection';
 
@@ -50,19 +52,12 @@ export interface ApprovalReplay {
 
 /** The `taskId` a `task.execution` approval was opened for, or null. */
 export function parseApprovalTaskId(metadata: string | null): number | null {
-  if (!metadata) return null;
-  try {
-    const parsed = JSON.parse(metadata) as { taskId?: unknown };
-    const value = parsed.taskId;
-    if (typeof value === 'number' && Number.isFinite(value)) return value;
-    if (typeof value === 'string') {
-      const n = Number(value);
-      if (Number.isFinite(n)) return n;
-    }
-    return null;
-  } catch {
-    return null;
-  }
+  // The subject a `task.execution` approval names IS the taskId, so this reads it
+  // through the gate primitive rather than re-parsing the same JSON a second way.
+  const ref = approvalSubjectRef(metadata, 'taskId');
+  if (ref == null) return null;
+  const n = Number(ref);
+  return Number.isFinite(n) ? n : null;
 }
 
 /**
@@ -142,67 +137,41 @@ export async function evaluateExecutionApprovalGate(
     return { allowed: true };
   }
 
-  const now = new Date();
-  const recentApprovals = await db
-    .select({
-      id: approvals.id,
-      status: approvals.status,
-      metadata: approvals.metadata,
-      expiresAt: approvals.expiresAt,
-      createdAt: approvals.createdAt,
-    })
-    .from(approvals)
-    .where(
-      and(
-        eq(approvals.tenantId, tenantId),
-        eq(approvals.actionType, 'task.execution'),
-      ),
-    )
-    .orderBy(desc(approvals.createdAt))
-    .limit(100);
-
-  const latestForTask = recentApprovals.find((row) => parseApprovalTaskId(row.metadata) === task.id);
-  if (latestForTask) {
-    if (latestForTask.status === 'approved' && (!latestForTask.expiresAt || latestForTask.expiresAt > now)) {
-      return { allowed: true };
-    }
-    if (latestForTask.status === 'pending' && (!latestForTask.expiresAt || latestForTask.expiresAt > now)) {
-      return {
-        allowed: false,
-        approvalId: latestForTask.id,
-        status: 'pending',
-        reason: 'Task execution is waiting for manager approval.',
-      };
-    }
-  }
-
-  const approvalId = crypto.randomUUID();
-  await db.insert(approvals).values({
-    id: approvalId,
+  // Scan / honour-approved / reuse-pending / open-one is the SAME sequence a
+  // workflow-run gate needs, so it lives in `approval/approvalGate.ts` and this
+  // function contributes only what is task-specific: the subject, the voice, and
+  // the replay context.
+  const verdict = await resolveApprovalGate(db, {
     tenantId,
-    agentHostId: task.assignedAgentHostId ?? requestedAgentHostId,
-    requestedBy,
     actionType: 'task.execution',
-    description: `Approve execution of task #${task.id}: ${task.title}`,
-    metadata: JSON.stringify({
-      taskId: task.id,
-      priority: task.priority,
-      // Persist the run context so approving the request replays the exact run
-      // (as the same cloud agent + model + repo pin) — see parseApprovalReplay.
-      payload: submitContext?.payload ?? null,
-      agentHostId: task.assignedAgentHostId ?? requestedAgentHostId,
-      // When this run is role-attributed (a reviewer/producer dispatch), record the
-      // role so a human APPROVAL of the gate records that role's sign-off (§5.8 bridge).
-      roleKey: parseActAsRole(submitContext?.payload ?? null) ?? null,
-    }),
-    createdAt: now,
-    updatedAt: now,
+    subjectKey: 'taskId',
+    subjectId: task.id,
+    pendingReason: 'Task execution is waiting for manager approval.',
+    openedReason: 'Task priority requires manager approval before execution.',
+    draft: async () => {
+      // SINGLE VOICE PER TICKET (PRD §5.5). A human approval at a gated lane is exterior
+      // communication the ticket's Coordinator owns, so the approval queue names the
+      // Coordinator on behalf of whatever asked (the lane trigger, a cron sweep, a user).
+      // Provenance is preserved inside the composed label — see `ticketCoordinator.ts`.
+      const coordinator = await resolveTicketCoordinator(db, tenantId, task.id).catch(() => null);
+      return {
+        agentHostId: task.assignedAgentHostId ?? requestedAgentHostId,
+        requestedBy: coordinatorVoice(coordinator, requestedBy),
+        description: `Approve execution of task #${task.id}: ${task.title}`,
+        metadata: {
+          priority: task.priority,
+          // Persist the run context so approving the request replays the exact run
+          // (as the same cloud agent + model + repo pin) — see parseApprovalReplay.
+          payload: submitContext?.payload ?? null,
+          agentHostId: task.assignedAgentHostId ?? requestedAgentHostId,
+          // When this run is role-attributed (a reviewer/producer dispatch), record the
+          // role so a human APPROVAL of the gate records that role's sign-off (§5.8 bridge).
+          roleKey: parseActAsRole(submitContext?.payload ?? null) ?? null,
+        },
+      };
+    },
   });
 
-  return {
-    allowed: false,
-    approvalId,
-    status: 'pending',
-    reason: 'Task priority requires manager approval before execution.',
-  };
+  if (verdict.allowed) return { allowed: true };
+  return { allowed: false, approvalId: verdict.approvalId, status: 'pending', reason: verdict.reason };
 }

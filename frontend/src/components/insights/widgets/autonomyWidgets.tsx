@@ -29,8 +29,9 @@ import { Icon } from '@/components/ui/Icon';
 import { useTranslations } from 'next-intl';
 import {
   autonomousHopShare, shareOfCreated,
-  AUTONOMY_STAGES, ORIGIN_ORDER, STAGE_FIELD,
+  AUTONOMY_STAGES, ORIGIN_ORDER, STAGE_FIELD, MIN_RUNS_FOR_AGENT_RANKING,
   type AutonomyOriginStats, type AutonomyStage, type AutonomySummary, type TicketOrigin,
+  type VerdictComplianceStats,
 } from '@/lib/autonomyApi';
 import { WidgetStat as Stat, WidgetMuted as Muted, useSourceState } from '@/components/widgets/widgetBody';
 import type { WidgetCardProps, WidgetDef, WidgetDrill } from '@/lib/widgets/types';
@@ -43,7 +44,7 @@ import {
 } from '@/components/dataTableStyles';
 import { pct } from '../format';
 import { useInsightFormat } from '../format';
-import { useAutonomy } from '../insightsSources';
+import { useAutonomy, useVerdictCompliance } from '../insightsSources';
 
 /**
  * Localized labels for the lens's two enumerations. Kept as one hook so the
@@ -456,6 +457,83 @@ function NeverStartedCard({ days }: WidgetCardProps) {
   );
 }
 
+/**
+ * VERDICT COMPLIANCE — the miss rate on role-attributed runs, and the ranking that
+ * names the non-reporter.
+ *
+ * The headline is deliberately the MISS rate rather than a compliance rate: a
+ * reviewer that completes without recording a verdict is the failure this exists to
+ * expose, so the number that should be alarming is the one that goes up.
+ *
+ * ONE series (severity), so the bar takes the single stall hue rather than a
+ * categorical palette entry — the same rule the stall ranking follows.
+ */
+function useCompliance(days: number) {
+  const labels = useAutonomyLabels();
+  const source = useVerdictCompliance(days);
+  return { data: source.data, state: useSourceState(source), ...labels };
+}
+
+function VerdictMissRateCard({ days }: WidgetCardProps) {
+  const { int } = useInsightFormat();
+  const { data, state, t } = useCompliance(days);
+  if (!data) return state;
+  const s = data.totals;
+  if (s.reviewerRuns === 0) return <Muted>{t('autonomy.verdict.noRuns')}</Muted>;
+  return (
+    <Stat
+      value={pct(s.missRatePercent ?? 0)}
+      sub={t('autonomy.verdict.missSub', { missed: int(s.reviewerMissed), total: int(s.reviewerRuns) })}
+    />
+  );
+}
+
+function VerdictByAgentCard({ days }: WidgetCardProps) {
+  const { int } = useInsightFormat();
+  const { data, state, t } = useCompliance(days);
+  if (!data) return state;
+  const ranked = data.byAgent.filter((a) => a.reviewerRuns >= MIN_RUNS_FOR_AGENT_RANKING);
+  if (ranked.length === 0) return <Muted>{t('autonomy.verdict.noAgents', { min: MIN_RUNS_FOR_AGENT_RANKING })}</Muted>;
+  const label = (a: VerdictComplianceStats) => a.agentRef ?? t('autonomy.verdict.unattributed');
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <BarChart
+        data={ranked.map((a) => ({
+          key: a.agentRef ?? '(unattributed)',
+          label: label(a),
+          value: a.missRatePercent ?? 0,
+          color: STALL_COLOR,
+        }))}
+        ariaLabel={t('autonomy.verdict.byAgentAria')}
+        formatValue={(v) => pct(v)}
+        maxRows={10}
+      />
+      <div style={tableWrapStyle}>
+        <table style={tableStyle}>
+          <thead>
+            <tr style={theadRowStyle}>
+              <th style={thStyle}>{t('autonomy.verdict.colAgent')}</th>
+              <th style={thStyle}>{t('autonomy.verdict.colRuns')}</th>
+              <th style={thStyle}>{t('autonomy.verdict.colMissed')}</th>
+              <th style={thStyle}>{t('autonomy.verdict.colAutoAttested')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {ranked.map((a) => (
+              <tr key={a.agentRef ?? '(unattributed)'} style={trStyle}>
+                <td style={tdStyle}>{label(a)}</td>
+                <td style={tdMutedStyle}>{int(a.reviewerRuns)}</td>
+                <td style={tdStyle}>{int(a.reviewerMissed)} ({pct(a.missRatePercent ?? 0)})</td>
+                <td style={tdMutedStyle}>{int(a.reviewerAutoAttestedOnly)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function CoverageCard({ days }: WidgetCardProps) {
   const { data, state } = useAuto(days);
   if (!data) return state;
@@ -475,6 +553,8 @@ export const AUTONOMY_WIDGETS: WidgetDef[] = [
   { id: 'autonomy.stall-gates', group: 'autonomy', titleKey: 'autoStallGates', capability: CAP, size: 'md', Card: StallGatesCard, drill: DRILL },
   { id: 'autonomy.origin-mix', group: 'autonomy', titleKey: 'autoOriginMix', capability: CAP, size: 'md', Card: OriginMixCard, drill: DRILL },
   { id: 'autonomy.funnel-table', group: 'autonomy', titleKey: 'autoFunnelTable', capability: CAP, size: 'lg', Card: FunnelTableCard, drill: DRILL },
+  { id: 'autonomy.verdict-miss-rate', group: 'autonomy', titleKey: 'autoVerdictMissRate', capability: CAP, size: 'sm', Card: VerdictMissRateCard, drill: DRILL },
+  { id: 'autonomy.verdict-by-agent', group: 'autonomy', titleKey: 'autoVerdictByAgent', capability: CAP, size: 'lg', Card: VerdictByAgentCard, drill: DRILL },
   { id: 'autonomy.coverage', group: 'autonomy', titleKey: 'autoCoverage', capability: CAP, size: 'md', Card: CoverageCard, drill: DRILL },
 ];
 

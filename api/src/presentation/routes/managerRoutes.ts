@@ -22,8 +22,9 @@ import { Hono } from 'hono';
 import { and, eq, sql, asc, desc, inArray } from 'drizzle-orm';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { TenantRole, TaskStatus, NON_TERMINAL_TASK_STATUSES } from '../../domain/shared/types';
-import { projects, tasks, pullRequests } from '../../infrastructure/database/schema';
+import { managerRuns, projects, tasks, pullRequests } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
+import { computeDecompositionCensus } from '../../application/manager/decompositionCensus';
 import type { HonoEnv, Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import type { RuntimeService } from '../../application/runtime/RuntimeService';
@@ -251,6 +252,10 @@ export function createManagerRoutes(
       .from(tasks)
       .where(scopedToTenant(tasks, tenantId, eq(tasks.projectId, projectId), eq(tasks.archived, false), inArray(tasks.status, NON_TERMINAL_TASK_STATUSES), notSystemTask));
 
+    // Which planner produced this project's Epics — an application-layer aggregate,
+    // so the surface renders a number instead of inferring one from a loaded list.
+    const decomposition = await computeDecompositionCensus(db, tenantId, projectId);
+
     const [prCount] = await db
       .select({ open: sql<number>`count(*)::int` })
       .from(pullRequests)
@@ -406,9 +411,56 @@ export function createManagerRoutes(
       .orderBy(desc(tasks.createdAt))
       .limit(20);
 
+    // PASS HISTORY, structurally (migration 1082). The run card's English sentence used
+    // to be the only copy of a pass's counters, so the frontend regexed it back apart to
+    // detect the manager's load-bearing failure — a pass that COMPLETES and changes
+    // nothing. `changed` is that answer as a column; `summary` is the whole
+    // `ManagerRunSummary` for the pass-history chart.
+    const passes = await db
+      .select({
+        runTaskId: managerRuns.runTaskId,
+        ok: managerRuns.ok,
+        changed: managerRuns.changed,
+        shedStages: managerRuns.shedStages,
+        summary: managerRuns.summary,
+        createdAt: managerRuns.createdAt,
+      })
+      .from(managerRuns)
+      .where(scopedToTenant(managerRuns, tenantId, eq(managerRuns.projectId, projectId)))
+      .orderBy(desc(managerRuns.createdAt))
+      .limit(20)
+      .catch(() => []);
+
     return c.json({
       config: config ?? null,
       policy,
+      /**
+       * The manager's own pass history, newest first (migration 1082).
+       *
+       * `changed: false` on an `ok: true` pass is the finding: the manager ran, reported
+       * success, and moved nothing. It used to be detectable only by regexing the run
+       * card's prose, which meant the detection silently degraded on any rewording.
+       */
+      passes: passes.map((p) => ({
+        runTaskId: p.runTaskId,
+        ok: p.ok,
+        changed: p.changed,
+        shedStages: p.shedStages ? p.shedStages.split(',') : [],
+        summary: p.summary,
+        at: p.createdAt,
+      })),
+      /**
+       * WHAT THE LAST SCHEDULED SWEEP DECIDED about this project (migration 1083).
+       *
+       * `stats.lastRunAt` alone could not distinguish "the work-gate found nothing to
+       * do" from "the tenant is out of tokens" from "the cron never reached this
+       * project" — so the diagnostics report could only name the symptom. `decision`
+       * plus `reason` plus `at` is the answer; the GAP between `at` and `lastRunAt` is
+       * how long the project has been declined.
+       */
+      lastSweep: config?.lastSweepDecision
+        ? { decision: config.lastSweepDecision, reason: config.lastSweepReason ?? null, at: config.lastSweepAt ?? null }
+        : null,
       /**
        * Whether the scheduled sweep will actually run this project — from the SAME
        * predicate the sweep and the pass use, never re-derived here.
@@ -437,6 +489,16 @@ export function createManagerRoutes(
          *  need a person, not another pass. */
         blockedPullRequests: blockedPrCount?.n ?? 0,
         flagged: counts?.flagged ?? 0,
+        /**
+         * WHO planned this project's Epics. `tasks.decomposition_source` has been
+         * recorded on every decomposition and displayed nowhere, which hid a real
+         * failure: when no model answers, the decomposer degrades to the markdown
+         * fallback and produces flat, thin children. A RUN of those is a
+         * model-availability incident, not the AI being bad at planning — and the
+         * only way to tell them apart is the count. Computed in the application
+         * layer (decompositionCensus), never folded out of a list in a component.
+         */
+        decomposition,
         lastRunAt: config?.lastRunAt ?? null,
       },
       /** The blocked pile, RANKED by the business value of the ticket each PR would
@@ -595,6 +657,9 @@ export function createManagerRoutes(
         await finalizeManagerRunTask(db, {
           taskId: runTaskId,
           ok,
+          // Supplied so the structured `manager_runs` row (1082) is written without a
+          // second tenant lookup on the finalize path.
+          tenantId,
           // An all-zero summary for a pass that threw before producing one. Every field
           // of ManagerRunSummary must appear: the compiler is the only thing that
           // catches a new counter being added without a zero here, and a missing one

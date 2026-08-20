@@ -100,6 +100,7 @@ export default function InsightsHomePage() {
   const [error, setError] = useState<string | null>(null);
 
   const [newName, setNewName] = useState('');
+  const [seeding, setSeeding] = useState(false);
   const [pickMetric, setPickMetric] = useState('');
   const [pickViz, setPickViz] = useState<WidgetViz>('stat');
   const [pickWidget, setPickWidget] = useState('');
@@ -144,6 +145,25 @@ export default function InsightsHomePage() {
       await reload();
       setView(d.id);
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+  };
+  /**
+   * Materialise the curated Executive dashboard.
+   *
+   * The alternative this replaces was: create a dashboard, then pick eight cards
+   * out of a registry of well over a hundred, one at a time, already knowing which
+   * eight. Idempotent on the server, so a double-click costs nothing and a manager
+   * who runs it again next month gets their tiles back rather than a duplicate set
+   * — which is why the button needs no disabled-after-success state, only a
+   * disabled-while-in-flight one.
+   */
+  const seedExecutive = async () => {
+    setSeeding(true);
+    try {
+      const { dashboardId } = await dashboardsApi.applyPreset('executive');
+      await reload();
+      setView(dashboardId);
+    } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    finally { setSeeding(false); }
   };
   const deleteDashboard = async (id: number) => {
     try { await dashboardsApi.remove(id); setView('me'); await reload(); }
@@ -208,6 +228,12 @@ export default function InsightsHomePage() {
                 onChange={(e) => setNewName(e.target.value)}
               />
               <button type="button" style={btnStyle} onClick={() => void createDashboard()}>{td('create.button')}</button>
+              {/* The curated starting point, beside the blank one. Shown whether or
+                  not it already exists: re-applying repairs a dashboard somebody
+                  pruned, and the server refuses to duplicate it. */}
+              <button type="button" style={btnStyle} onClick={() => void seedExecutive()} disabled={seeding} title={td('presets.executiveHint')}>
+                {seeding ? td('presets.creating') : td('presets.executive')}
+              </button>
             </span>
           </RoleGate>
         </div>
@@ -227,9 +253,19 @@ export default function InsightsHomePage() {
                 <>
                   <h3 style={{ margin: '0 0 8px', fontSize: 'var(--font-size-card-title)', fontWeight: 700 }}>{t('home.emptyTitle')}</h3>
                   <p style={{ margin: '0 0 16px', color: 'var(--text-secondary)', fontSize: 'var(--font-size-body)' }}>{t('home.emptyBody')}</p>
-                  <button type="button" style={primaryBtn} onClick={() => setPicker(true)}>
-                    <Icon source="＋" size="1em" /> {t('home.addWidgets')}
-                  </button>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
+                    <button type="button" style={primaryBtn} onClick={() => setPicker(true)}>
+                      <Icon source="＋" size="1em" /> {t('home.addWidgets')}
+                    </button>
+                    {/* An empty page that only offers "go pick some widgets" asks the
+                        newcomer the one question they cannot yet answer. The curated
+                        dashboard is the answer, one click away. */}
+                    <RoleGate capability="dashboards.manage">
+                      <button type="button" style={btnStyle} onClick={() => void seedExecutive()} disabled={seeding}>
+                        {seeding ? td('presets.creating') : td('presets.executive')}
+                      </button>
+                    </RoleGate>
+                  </div>
                 </>
               )}
             </div>

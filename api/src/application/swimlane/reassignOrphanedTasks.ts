@@ -34,7 +34,13 @@ export interface SurvivingLane {
  * Returns null only when there is no surviving lane at all (the caller then
  * leaves the task's status untouched — there is nowhere valid to send it).
  */
-export function pickFallbackLane(survivors: SurvivingLane[]): string | null {
+export function pickFallbackLane(survivors: SurvivingLane[], requestedKey?: string | null): string | null {
+  // AN OPERATOR'S CHOICE WINS. Deleting a lane is a MERGE — "fold this stage into that
+  // one" — and until the caller could name the target, the automatic policy below was
+  // the only answer available, so merging `Ready` into `To Do` silently sent its tickets
+  // to whichever lane happened to sort first. A requested key that no longer survives is
+  // ignored rather than honoured, so a stale choice cannot strand the tickets.
+  if (requestedKey && survivors.some((l) => l.key === requestedKey)) return requestedKey;
   if (survivors.length === 0) return null;
   const byPosition = [...survivors].sort((a, b) => a.position - b.position);
   const firstActive = byPosition.find((l) => !l.isTerminal);
@@ -63,9 +69,12 @@ export async function reassignTasksFromLane(
     boardId: string;
     deletedLaneKey: string;
     survivors: SurvivingLane[];
+    /** The lane the operator chose to merge INTO. Falls back to the policy when absent
+     *  or when the named lane is not among the survivors. */
+    reassignTo?: string | null;
   },
 ): Promise<ReassignResult> {
-  const target = pickFallbackLane(args.survivors);
+  const target = pickFallbackLane(args.survivors, args.reassignTo ?? null);
   // Nowhere valid to send the tasks, or the deleted lane is also the chosen
   // fallback (single-lane board edge) — leave statuses untouched.
   if (!target || target === args.deletedLaneKey) return { movedTo: null, movedCount: 0 };
@@ -94,7 +103,11 @@ export async function reassignTasksFromLane(
  */
 export async function reassignOrphanedTasksOnLaneDelete(
   db: Db,
-  args: { tenantId: number; boardId: string; deletedLaneId: string; deletedLaneKey: string },
+  args: {
+    tenantId: number; boardId: string; deletedLaneId: string; deletedLaneKey: string;
+    /** The operator's chosen merge target — see {@link pickFallbackLane}. */
+    reassignTo?: string | null;
+  },
 ): Promise<ReassignResult> {
   const lanes = await db
     .select({ id: swimlanes.id, key: swimlanes.key, position: swimlanes.position, isTerminal: swimlanes.isTerminal })
@@ -110,5 +123,6 @@ export async function reassignOrphanedTasksOnLaneDelete(
     boardId: args.boardId,
     deletedLaneKey: args.deletedLaneKey,
     survivors,
+    reassignTo: args.reassignTo ?? null,
   });
 }

@@ -12,7 +12,7 @@ describe('projectPublicResumeFamily', () => {
   it('publishes only the master snapshot and strips private source storage metadata', () => {
     const projected = projectPublicResumeFamily({
       version: 1, privacy: 'public', originalRevisionId: 'original', activeRevisionId: 'draft', masterRevisionId: 'master',
-      defaultTemplateId: 'hired-default', viewZoom: 80, watched: true,
+      defaultTemplateId: 'standard', viewZoom: 80, watched: true,
       revisions: [
         { id: 'original', kind: 'original', title: 'Resume', markdown: 'private original', sourceFile: { key: 'tenant/private.pdf' } },
         { id: 'draft', kind: 'derived', title: 'Resume', markdown: 'unpublished draft' },

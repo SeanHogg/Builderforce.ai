@@ -35,11 +35,28 @@ export const LTI_CLAIM = {
   tool: `${BASE}/tool_platform`,
   ags: 'https://purl.imsglobal.org/spec/lti-ags/claim/endpoint',
   nrps: 'https://purl.imsglobal.org/spec/lti-nrps/claim/namesroleservice',
+  /** Deep Linking: what the platform will accept back, and where to send it. */
+  deepLinkingSettings: 'https://purl.imsglobal.org/spec/lti-dl/claim/deep_linking_settings',
+  /** Deep Linking: the selection, on the RESPONSE. */
+  contentItems: 'https://purl.imsglobal.org/spec/lti-dl/claim/content_items',
+  /** Deep Linking: the platform's opaque round-trip token. Returned VERBATIM or
+   *  the platform cannot match the response to the request it made. */
+  deepLinkingData: 'https://purl.imsglobal.org/spec/lti-dl/claim/data',
 } as const;
 
 export const LTI_VERSION = '1.3.0';
 export const LTI_MESSAGE_RESOURCE_LINK = 'LtiResourceLinkRequest';
 export const LTI_MESSAGE_DEEP_LINK = 'LtiDeepLinkingRequest';
+/** What we send BACK when an instructor has finished picking. Not a launch — it
+ *  is a JWT the browser form-posts to `deep_link_return_url`. */
+export const LTI_MESSAGE_DEEP_LINK_RESPONSE = 'LtiDeepLinkingResponse';
+
+/** The two launch messages this tool accepts. Carried on the context so the
+ *  route can branch on it: a resource-link launch OPENS a board, and a deep-link
+ *  launch opens a PICKER whose answer goes back to the LMS. Both are signed the
+ *  same way and both were read by the same parser, which is exactly why the
+ *  distinction had to stop being dropped on the floor. */
+export type LtiMessageType = typeof LTI_MESSAGE_RESOURCE_LINK | typeof LTI_MESSAGE_DEEP_LINK;
 
 /**
  * The role URIs that decide what a launched user may do.
@@ -85,6 +102,11 @@ export function capabilityFromRoles(roles: readonly string[]): LtiCapability {
 }
 
 export interface LtiLaunchContext {
+  /** Which message this is. `readLaunchClaims` has always ACCEPTED both and
+   *  never carried the answer, so every consumer treated a deep-linking request
+   *  as a resource-link launch and opened a board — inside the LMS's "add
+   *  content" dialog, where a board is not what was asked for. */
+  messageType: LtiMessageType;
   /** Platform issuer — with `clientId` and `deploymentId`, the identity of a
    *  registration. All three are needed: one platform can host many deployments. */
   issuer: string;
@@ -172,6 +194,7 @@ export function readLaunchClaims(payload: Readonly<Record<string, unknown>>): Lt
   return {
     ok: true,
     context: {
+      messageType: messageType as LtiMessageType,
       issuer: str(payload.iss, 300),
       clientId: audience,
       deploymentId,
@@ -192,6 +215,138 @@ export function readLaunchClaims(payload: Readonly<Record<string, unknown>>): Lt
       membershipsUrl: str(nrps.context_memberships_url, 800) || null,
       custom,
     },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Deep Linking — the LMS asking us what to link to
+// ---------------------------------------------------------------------------
+
+/**
+ * ── WHAT DEEP LINKING IS FOR ─────────────────────────────────────────────────
+ * A resource-link launch answers "open this". Deep linking answers the question
+ * BEFORE it: an instructor building a module clicks "add external tool content",
+ * the LMS launches us with `LtiDeepLinkingRequest`, we show them what is on their
+ * course board, and we hand back a `ContentItem` the LMS then stores as its own
+ * assignment. Without it, every link has to be pasted by hand as a URL — and a
+ * hand-pasted `target_link_uri` carries no resource link, which is exactly the
+ * launch that cannot bind to an assignment or push a grade.
+ *
+ * ── WHY EVERY FIELD IS READ AND NONE ARE ASSUMED ─────────────────────────────
+ * The settings claim is the platform stating its terms: what it will accept,
+ * whether it will take more than one, and where the answer goes. A tool that
+ * ignores `accept_types` offers a selection the platform will reject with a
+ * message the instructor cannot act on, and one that ignores `accept_multiple`
+ * shows checkboxes to somebody who may only pick one.
+ */
+export interface LtiDeepLinkingSettings {
+  /** Where the response JWT is form-POSTed. Without it there is no way to
+   *  answer at all, which is why `readDeepLinkingSettings` returns null. */
+  returnUrl: string;
+  /** `link` | `ltiResourceLink` | `file` | `html` | `image`. */
+  acceptTypes: readonly string[];
+  /** `iframe` | `window` | `embed`. */
+  acceptPresentationDocumentTargets: readonly string[];
+  /** May the instructor return more than one item in one response? */
+  acceptMultiple: boolean;
+  /** Should the platform create the items without a further confirmation step? */
+  autoCreate: boolean;
+  /** What the platform suggests the item be called, when it suggests anything. */
+  title: string;
+  text: string;
+  /** Opaque. MUST be echoed on the response — it is how the platform matches
+   *  our answer to the request, and dropping it fails the round trip with no
+   *  diagnostic beyond "invalid response". */
+  data: string;
+}
+
+const strList = (value: unknown, limit = 20): string[] =>
+  (Array.isArray(value) ? value as unknown[] : []).map((entry) => str(entry, 80)).filter(Boolean).slice(0, limit);
+
+/** Platforms send booleans as booleans, and two of them send `"true"`. */
+const flag = (value: unknown): boolean => value === true || value === 'true';
+
+/**
+ * Read the deep-linking settings off a VERIFIED payload.
+ *
+ * Returns null when the claim is absent or carries no return URL — a
+ * deep-linking request with nowhere to answer is not a request this tool can
+ * honour, and pretending otherwise would present a picker whose Done button
+ * could do nothing.
+ */
+export function readDeepLinkingSettings(
+  payload: Readonly<Record<string, unknown>>,
+): LtiDeepLinkingSettings | null {
+  const settings = obj(payload[LTI_CLAIM.deepLinkingSettings]);
+  const returnUrl = str(settings.deep_link_return_url, 1_000);
+  if (!returnUrl) return null;
+  return {
+    returnUrl,
+    acceptTypes: strList(settings.accept_types),
+    acceptPresentationDocumentTargets: strList(settings.accept_presentation_document_targets),
+    acceptMultiple: flag(settings.accept_multiple),
+    autoCreate: flag(settings.auto_create),
+    title: str(settings.title, 300),
+    text: str(settings.text, 1_000),
+    data: str(settings.data, 2_000),
+  };
+}
+
+/**
+ * One item handed back to the platform.
+ *
+ * `ltiResourceLink` and not `link`: a plain link is a bookmark the LMS opens in
+ * a new tab with no signed launch behind it, so the thing it opens knows neither
+ * who is looking nor which course they are in. A resource link is what makes the
+ * next launch carry a `resource_link.id` — the identifier `lti_resource_bindings`
+ * keys an assignment on, and the reason a grade can go back at all.
+ */
+export interface LtiContentItem {
+  type: 'ltiResourceLink';
+  url: string;
+  title?: string;
+  text?: string;
+  /** Custom parameters the platform replays on every launch of this link. */
+  custom?: Record<string, string>;
+}
+
+export interface DeepLinkingResponseInput {
+  /** Ours. On the response we are the ISSUER and the platform is the audience —
+   *  the mirror of a launch, and the single most common thing to get backwards. */
+  clientId: string;
+  issuer: string;
+  deploymentId: string;
+  nonce: string;
+  /** The platform's opaque token from the request, echoed verbatim. */
+  data: string;
+  contentItems: readonly LtiContentItem[];
+  /** Seconds since the epoch. Injected so this stays pure and testable. */
+  nowSeconds: number;
+  lifetimeSeconds?: number;
+}
+
+/**
+ * The BODY of the deep-linking response JWT.
+ *
+ * Pure on purpose: the claims are a protocol decision and the signature is a key
+ * operation, so the claims are built here and signed in
+ * `application/lti/LtiService.ts`. That split is what lets the exact shape a
+ * platform will accept be asserted in a test with no key material anywhere near
+ * it.
+ */
+export function deepLinkingResponseClaims(input: DeepLinkingResponseInput): Record<string, unknown> {
+  const now = input.nowSeconds;
+  return {
+    iss: input.clientId,
+    aud: input.issuer,
+    iat: now,
+    exp: now + (input.lifetimeSeconds ?? 600),
+    nonce: input.nonce,
+    [LTI_CLAIM.deploymentId]: input.deploymentId,
+    [LTI_CLAIM.messageType]: LTI_MESSAGE_DEEP_LINK_RESPONSE,
+    [LTI_CLAIM.version]: LTI_VERSION,
+    [LTI_CLAIM.contentItems]: input.contentItems,
+    ...(input.data ? { [LTI_CLAIM.deepLinkingData]: input.data } : {}),
   };
 }
 

@@ -195,8 +195,10 @@ export const kanbanApi = {
     request<{ template: KanbanTemplate }>(`/api/kanban/templates/${encodeURIComponent(id)}/install`, { method: 'POST' }).then((r) => r.template),
 
   // Apply + roster + audit (per project / ticket)
-  applyTemplate: (projectId: number, templateId: string): Promise<{ lanesApplied: number; requirementsApplied: number }> =>
-    request<{ lanesApplied: number; requirementsApplied: number }>(`/api/kanban/projects/${projectId}/apply`, { method: 'POST', body: JSON.stringify({ templateId }) }),
+  /** `lanesStaffed` — lanes an already-available agent was bound to for their declared
+   *  producer role (never a hire); see `seedLaneStaffing.ts`. */
+  applyTemplate: (projectId: number, templateId: string): Promise<{ lanesApplied: number; requirementsApplied: number; lanesStaffed: number }> =>
+    request<{ lanesApplied: number; requirementsApplied: number; lanesStaffed: number }>(`/api/kanban/projects/${projectId}/apply`, { method: 'POST', body: JSON.stringify({ templateId }) }),
   roster: (projectId: number): Promise<RecommendedRoster> =>
     request<{ roster: RecommendedRoster }>(`/api/kanban/projects/${projectId}/roster`).then((r) => r.roster),
   flaggedForProject: (projectId: number): Promise<FlaggedTicket[]> =>
@@ -314,8 +316,22 @@ export const decksApi = {
   deleteTemplate: (id: string): Promise<void> =>
     request<void>(`/api/decks/templates/${encodeURIComponent(id)}`, { method: 'DELETE' }).then(() => undefined),
 
-  /** Generate & download a deck synchronously (the PMO button path). */
-  async download(args: { templateId?: string; quarter?: string; mode?: 'generative' | 'fill' }): Promise<void> {
+  /** The data notes recorded when a deck was generated (bindings that fell back to
+   *  a placeholder, charts whose shape did not match their data). */
+  warnings: (deckId: string): Promise<{ deckId: string; warnings: string[] }> =>
+    request<{ deckId: string; warnings: string[] }>(`/api/decks/${encodeURIComponent(deckId)}/warnings`),
+
+  /**
+   * Generate & download a deck synchronously (the PMO button path).
+   *
+   * Returns the notes the generation produced. They used to be discarded: the
+   * response carried only a COUNT in `x-deck-warnings`, so a caller could learn
+   * there were four notes and never which four — and "the chart in your uploaded
+   * template draws five series and your data has two" is exactly the note that
+   * needs reading. The deck id now rides the response and the notes are fetched
+   * beside the file.
+   */
+  async download(args: { templateId?: string; quarter?: string; mode?: 'generative' | 'fill' }): Promise<string[]> {
     const q = new URLSearchParams();
     if (args.templateId) q.set('template', args.templateId);
     if (args.quarter) q.set('quarter', args.quarter);
@@ -324,6 +340,12 @@ export const decksApi = {
     if (!res.ok) throw new Error(`Deck download failed (${res.status})`);
     const blob = await res.blob();
     downloadBlob(blob, filenameFromResponse(res, `deck-${args.quarter ?? 'latest'}.pptx`));
+
+    // The file is already in the reader's hands, so a failure to fetch the notes
+    // must never surface as a failed download.
+    const deckId = res.headers.get('x-deck-id');
+    if (!deckId || Number(res.headers.get('x-deck-warnings') ?? 0) <= 0) return [];
+    return decksApi.warnings(deckId).then((r) => r.warnings).catch(() => []);
   },
 
   /** Download a previously generated deck by id. */
@@ -1025,6 +1047,18 @@ export interface WorkflowRunTargets {
   cloudAgents: Array<{ ref: string; name: string }>;
 }
 
+/** Whether a run of a definition must be approved by a human first. */
+export type WorkflowApprovalMode = 'autonomous' | 'required';
+
+/**
+ * What `POST /:id/run` came back with. A gated definition answers 202 with a real
+ * pending approval INSTEAD of a run — the caller must report that, never a run it
+ * did not start.
+ */
+export type WorkflowRunResult =
+  | { workflowId: string; taskCount: number; status?: undefined }
+  | { status: 'pending'; approvalId: string; reason: string };
+
 /** Persisted run-target columns, surfaced on definition records. */
 export interface WorkflowRunTargetFields {
   runTargetRuntime: WorkflowRuntime;
@@ -1063,6 +1097,9 @@ export interface WorkflowDefinitionSummary {
   runTargetAgentHostId?: number | null;
   runTargetCloudAgentRef?: string | null;
   agentName?: string | null;
+  /** Whether a run must be approved by a human first (migration 1092). The canvas
+   *  Workflow card's "Approval required" setting, as CONFIGURATION. */
+  approvalMode?: WorkflowApprovalMode;
   /** Execution history rollup (live, not cached): total runs + most recent. */
   runCount?: number;
   lastRunStatus?: string | null;
@@ -1120,7 +1157,16 @@ export const workflowDefinitions = {
    * runnable definition. All-or-nothing: on 400 the thrown `ApiRequestError`
    * carries `details.issues` naming each step that is not runnable and why.
    */
-  fromCanvas: (body: { name: string; description?: string; steps: unknown; triggerType?: string } & WorkflowProjectBinding & Partial<WorkflowRunTargetFields>) =>
+  fromCanvas: (body: {
+    name: string;
+    description?: string;
+    steps: unknown;
+    triggerType?: string;
+    /** The canvas Workflow card's own run-target select, resolved server-side. */
+    runTarget?: string;
+    /** The canvas Workflow card's own gate. Stored on the definition and enforced at run. */
+    approvalMode?: WorkflowApprovalMode;
+  } & WorkflowProjectBinding & Partial<WorkflowRunTargetFields>) =>
     request<WorkflowDefinitionDetail & { compiledCount: number }>('/api/workflow-definitions/from-canvas', {
       method: 'POST',
       body: JSON.stringify(body),
@@ -1133,7 +1179,7 @@ export const workflowDefinitions = {
   remove: (id: string) =>
     request<{ ok: boolean }>(`/api/workflow-definitions/${id}`, { method: 'DELETE' }),
   run: (id: string, target: WorkflowRunTarget) =>
-    request<{ workflowId: string; taskCount: number }>(`/api/workflow-definitions/${id}/run`, {
+    request<WorkflowRunResult>(`/api/workflow-definitions/${id}/run`, {
       method: 'POST',
       body: JSON.stringify(target),
     }),
@@ -1216,10 +1262,17 @@ export async function listMarketplaceSkills(params?: {
 }
 
 // ---------------------------------------------------------------------------
-// Artifact assignments (skills, personas, content → tenant/agentHost/project/task/agent)
+// Artifact assignments (skills, personas → tenant/agentHost/project/task/agent)
 // ---------------------------------------------------------------------------
 
-export type ArtifactType = 'skill' | 'persona' | 'content';
+/**
+ * Mirrors the server `artifact_type` enum (migration 0982): `'content'` retired
+ * — content blocks only ever lived in localStorage and now live in
+ * `knowledge_documents` — and `'agent'` admitted, so a marketplace agent's sale
+ * is recorded in the same purchase ledger as every other artifact. Only 'skill'
+ * and 'persona' are ever ASSIGNED to a scope; 'agent' is a purchase type.
+ */
+export type ArtifactType = 'skill' | 'persona' | 'agent';
 export type AssignmentScope = 'tenant' | 'host' | 'project' | 'task' | 'agent';
 
 export interface ArtifactAssignment {
@@ -1462,6 +1515,19 @@ export interface Task {
   businessValueSource?: string | null;
   /** The AI Manager's backlog rank (ascending; null = unranked, sorts last). */
   managerRank?: number | null;
+  /**
+   * For an EPIC: which reasoning step produced its children — 'llm' (a real BA-style
+   * assessment), 'heuristic' (the degraded markdown fallback that runs when no model
+   * answers) or 'manual'. Null when the ticket was never decomposed. Surfaced as a
+   * badge so "why does this Epic look like shredded markdown?" has an answer.
+   */
+  decompositionSource?: string | null;
+  /**
+   * For an EPIC: the planner's verdict on its own plan. Present only when the plan
+   * did NOT come out clean — it does not fit the Epic's window, or its children sit
+   * in a dependency cycle. Null/absent means there is nothing to warn about.
+   */
+  planVerdict?: PlanVerdict | null;
   archived: boolean;
   /** Count of linked PRDs (task_specs) — drives the board card's PRD indicator
    *  [1266]. Best-effort from GET /api/tasks; 0/absent where unknown. */
@@ -1747,12 +1813,17 @@ export interface CompletionBasis {
 }
 
 export interface TicketCompletion {
-  percent: number;
+  /** 0..100, or `null` when {@link isParked} — a parked ticket has no honest percentage. */
+  percent: number | null;
   laneKey: string;
-  /** 0-based index of this ticket's lane among the board's ordered lanes (-1 = unplaceable). */
+  /** 0-based index of this ticket's lane among the board's ordered DELIVERY lanes
+   *  (-1 = unplaceable or parked). */
   laneIndex: number;
   laneCount: number;
   isTerminal: boolean;
+  /** The ticket sits in a PARKED lane — blocked / on hold / cancelled
+   *  (`swimlanes.is_parking`). Render "Parked", never a number. */
+  isParked: boolean;
   basis: CompletionBasis[];
 }
 
@@ -1818,7 +1889,62 @@ export interface WorkItemConversion {
   warnings: string[];
 }
 
+/** WHY a decomposed child was offered for cleanup. Shown verbatim to the reviewer. */
+export type CleanupReason = 'not-a-work-item' | 'duplicate-sibling';
+
+/** One row the reviewer may select, with the proof that nothing real is attached. */
+export interface CleanupCandidate {
+  taskId: number;
+  taskKey: string | null;
+  title: string;
+  status: string;
+  reason: CleanupReason;
+  /** All three are zero — carried so the reviewer sees the evidence, not a verdict. */
+  evidence: { runs: number; pullRequests: number; comments: number };
+  /** For `duplicate-sibling`: the sibling that is KEPT. */
+  duplicateOfTaskId: number | null;
+}
+
+export interface CleanupGroup {
+  epic: {
+    id: number; key: string | null; title: string; projectId: number;
+    /** Which planner produced this mess ('llm' | 'heuristic' | 'manual'). */
+    decompositionSource: string | null;
+  };
+  candidates: CleanupCandidate[];
+}
+
+export interface CleanupSelection {
+  taskId: number;
+  action: 'archive' | 'merge';
+  /** Required for `merge` — the sibling the empty duplicate is retired in favour of. */
+  mergeIntoTaskId?: number | null;
+}
+
+export interface CleanupApplyResult {
+  archived: number[];
+  merged: Array<{ taskId: number; intoTaskId: number }>;
+  /** Ids the server refused (stale list, evidence appeared since) — never silent. */
+  rejected: Array<{ taskId: number; reason: string }>;
+}
+
 export const tasksApi = {
+  /**
+   * The decomposition-cleanup REVIEW: children of an Epic whose title fails the
+   * work-item guard, or that duplicate a sibling, and that carry no runs, no PRs and
+   * no comments. Read-only — nothing is changed until `applyDecompositionCleanup`
+   * is called with ids a human selected.
+   */
+  decompositionCleanup: (projectId?: number | null): Promise<{ groups: CleanupGroup[]; candidateCount: number }> =>
+    request(`/api/tasks/decomposition-cleanup${projectId != null ? `?project=${projectId}` : ''}`),
+
+  /** Archive/merge ONLY the ids the reviewer selected. There is no "apply all". */
+  applyDecompositionCleanup: (selections: CleanupSelection[], projectId?: number | null): Promise<CleanupApplyResult> =>
+    request('/api/tasks/decomposition-cleanup/apply', {
+      method: 'POST',
+      body: JSON.stringify({ selections, ...(projectId != null ? { projectId } : {}) }),
+    }),
+
   list: (projectId?: number, opts?: { includeArchived?: boolean }): Promise<Task[]> => {
     const params = new URLSearchParams();
     if (projectId != null) params.set('project_id', String(projectId));
@@ -2174,7 +2300,30 @@ export interface ManagerStats {
   blockedPullRequests?: number;
   /** Tickets whose required role/reviewer coverage is unmet (the manager staffs these). */
   flagged: number;
+  /**
+   * WHICH planner produced this project's Epics. When no model answers, Epic
+   * decomposition degrades to a markdown-checklist fallback that infers no estimates
+   * and no sequence — so a RUN of `heuristic` plans is a model-availability
+   * incident, not the AI being bad at planning. Computed server-side; optional
+   * because an older API omits it.
+   */
+  decomposition?: DecompositionCensus;
   lastRunAt: string | null;
+}
+
+/** Per-source Epic-decomposition counts for one project. */
+export interface DecompositionCensus {
+  /** Epics with a recorded source — the denominator for `heuristicPct`. */
+  decomposed: number;
+  llm: number;
+  /** The DEGRADED path: the fallback that runs when no model answers. */
+  heuristic: number;
+  manual: number;
+  /** Epics with no recorded source (never decomposed, or decomposed pre-column). */
+  unrecorded: number;
+  heuristicPct: number;
+  /** True when the fallback has produced enough plans to read as an incident. */
+  degraded: boolean;
 }
 
 /** One backlog row as ranked/scored by the manager (sorted managerRank asc, nulls last). */
@@ -2219,6 +2368,42 @@ export interface ManagerRunTask {
   assignedAgentHostId: number | null;
   createdAt: string;
   completedAt: string | null;
+}
+
+/**
+ * The counters a manager pass produced, exactly as the server recorded them
+ * (`ManagerRunSummary`). Open-ended: the server adds a counter per new stage, and the
+ * client must not break when it sees one it does not know.
+ */
+export type ManagerPassSummary = Record<string, unknown> & {
+  scored?: number; ranked?: number; scheduled?: number; assigned?: number;
+  prsConducted?: number; prsMerged?: number; dispatched?: number;
+  audited?: number; flagged?: number; remediated?: number;
+  stalled?: number; unstuck?: number; escalated?: number;
+  truncated?: string[];
+};
+
+/** One completed manager pass (migration 1082). */
+export interface ManagerPassRecord {
+  /** The "Backlog management pass" card this row closed. */
+  runTaskId: number;
+  /** The pass finished, as opposed to ending early. */
+  ok: boolean;
+  /** The pass CHANGED something. `ok && !changed` is the finding. */
+  changed: boolean;
+  /** Stages shed for wall-clock budget; empty on a complete pass. */
+  shedStages: string[];
+  summary: ManagerPassSummary;
+  at: string;
+}
+
+/** What the last scheduled sweep decided about this project (migration 1083). */
+export interface ManagerSweepRecord {
+  decision: 'ran' | 'skipped';
+  /** Null when it ran. Otherwise `tenant_token_limit` | `tick_budget_exhausted` |
+   *  `project_unmanaged` | `pass_error`. */
+  reason: string | null;
+  at: string | null;
 }
 
 /** Why the autonomous machinery (cron manager sweep + executor) may be paused for
@@ -2321,6 +2506,24 @@ export interface ManagerOverview {
   managerTypes: ManagerTypeOption[];
   /** Standing coaching directives that steer this project's passes (incl. tenant-wide). */
   directives: ManagerDirective[];
+  /**
+   * The manager's PASS HISTORY as data (migration 1082), newest first.
+   *
+   * The run card's English summary used to be the only copy of a pass's counters, so the
+   * client had to regex it apart to detect the manager's load-bearing failure — a pass
+   * that COMPLETES and changes nothing. `changed` is that answer as a stored fact.
+   * Optional: an older API omits it, and the callers fall back to nothing rather than to
+   * the regex, which has been deleted.
+   */
+  passes?: ManagerPassRecord[];
+  /**
+   * WHAT THE LAST SCHEDULED SWEEP DECIDED about this project (migration 1083).
+   *
+   * `stats.lastRunAt` alone could not tell "the work-gate found nothing to do" from
+   * "the tenant is out of tokens" from "the cron never reached this project". Null when
+   * no sweep has visited since the column existed.
+   */
+  lastSweep?: ManagerSweepRecord | null;
   /** What this project INHERITS when its own row says nothing — the workspace tier already
    *  resolved by the server. Distinct from `policy`, which includes this project's row.
    *  Shipped so the form can say "inherited: on/off" without re-folding the tiers. */
@@ -3072,8 +3275,8 @@ export const dashboardApi = {
 // Mirrors `api/src/application/consumption/meters.ts` exactly. A key the server
 // emits and this union omits used to reach the UI as `undefined` everywhere the
 // meter was looked up by key — see `UsageMeter.tsx`, which no longer trusts it.
-export type MeterKey = 'ai_tokens' | 'cloud_runs' | 'stage_sandbox_runs' | 'ingestion' | 'error_events' | 'outbound_fetches';
-export type MeterUnit = 'tokens' | 'runs' | 'sandbox_runs' | 'bytes' | 'events' | 'fetches';
+export type MeterKey = 'ai_tokens' | 'cloud_runs' | 'stage_sandbox_runs' | 'ingestion' | 'error_events' | 'outbound_fetches' | 'feedback_submissions';
+export type MeterUnit = 'tokens' | 'runs' | 'sandbox_runs' | 'bytes' | 'events' | 'fetches' | 'submissions';
 
 export interface MeterSnapshot {
   key: MeterKey;
@@ -4197,6 +4400,8 @@ export interface WebScanRun {
   summary: string | null;
   findingsCount: number;
   countsBySeverity: Record<string, number> | null;
+  /** Stage coverage for this run; null on rows written before stages existed. */
+  stages: WebScanStage[] | null;
   startedAt: string;
   finishedAt: string | null;
 }
@@ -4220,6 +4425,21 @@ export interface WebScanBaseline {
   resolvedFindings: number;
 }
 
+/**
+ * Coverage of the two checks a Cloudflare Worker cannot make on its own — the peer
+ * TLS certificate (needs a socket) and the CVE lookup (needs an advisory feed). Both
+ * run from the Node container and report back. Rendered explicitly, including
+ * `not_run` with its reason: a report that omitted a check it never made would read
+ * exactly like a report of a check that passed.
+ */
+export interface WebScanStage {
+  stage: 'tls' | 'cve';
+  status: 'ran' | 'requested' | 'not_run';
+  reason?: string;
+  findingCount: number;
+  observedAt?: string;
+}
+
 export interface WebScanRunResult {
   ok: true;
   auditId: number;
@@ -4232,6 +4452,7 @@ export interface WebScanRunResult {
   taskIds: number[];
   findings: WebScanFinding[];
   baseline: WebScanBaseline;
+  stages: WebScanStage[];
 }
 
 export const securityAgentApi = {
@@ -4889,6 +5110,62 @@ export const marketplacePublisherApi = {
 };
 
 // ---------------------------------------------------------------------------
+// Passkeys — ENROLMENT and management only (uses web JWT).
+//
+// The SIGN-IN half deliberately lives in `lib/passkeys.ts`, not here: it runs
+// before there is a session, and every call in this module attaches one.
+// ---------------------------------------------------------------------------
+
+export interface Passkey {
+  id: number;
+  name: string;
+  credentialId: string;
+  aaguid: string | null;
+  transports: string[];
+  backedUp: boolean;
+  /** The authenticator's counter went backwards at least once — evidence for an
+   *  administrator, never a refusal. See PasskeyService for why. */
+  signCountRegressed: boolean;
+  lastUsedAt: string | null;
+  createdAt: string;
+}
+
+export interface PasskeyRegistrationOptions {
+  challenge: string;
+  rp: { id: string; name: string };
+  user: { id: string; name: string; displayName: string };
+  pubKeyCredParams: { type: 'public-key'; alg: number }[];
+  timeout: number;
+  attestation: 'none';
+  excludeCredentials: { type: 'public-key'; id: string }[];
+  authenticatorSelection: { residentKey: 'preferred'; userVerification: 'preferred' };
+}
+
+export const passkeysApi = {
+  list: (): Promise<Passkey[]> =>
+    webRequest<{ passkeys: Passkey[] }>('/api/auth/passkeys').then((r) => r.passkeys ?? []),
+
+  registerOptions: (): Promise<PasskeyRegistrationOptions> =>
+    webRequest<{ options: PasskeyRegistrationOptions }>('/api/auth/passkeys/register/options', { method: 'POST' })
+      .then((r) => r.options),
+
+  register: (body: unknown): Promise<Passkey> =>
+    webRequest<{ passkey: Passkey }>('/api/auth/passkeys/register', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }).then((r) => r.passkey),
+
+  rename: (id: number, name: string): Promise<Passkey> =>
+    webRequest<{ passkey: Passkey }>(`/api/auth/passkeys/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ name }),
+    }).then((r) => r.passkey),
+
+  remove: (id: number): Promise<void> =>
+    webRequest(`/api/auth/passkeys/${id}`, { method: 'DELETE' }).then(() => undefined),
+};
+
+// ---------------------------------------------------------------------------
 // Self-service session management (uses web JWT)
 // ---------------------------------------------------------------------------
 
@@ -5058,16 +5335,26 @@ export interface CustomerEmbedFeatureConfig {
 export interface MarketplacePurchase {
   id: number;
   userId: string;
-  artifactType: 'skill' | 'persona' | 'content';
+  /** The buying WORKSPACE. Null on the user-scoped skill/persona rows. */
+  tenantId: number | null;
+  artifactType: ArtifactType;
   artifactSlug: string;
   priceCents: number;
   pricingModel: 'flat_fee' | 'consumption';
   stripePaymentIntentId: string | null;
+  provider: string | null;
+  externalRef: string | null;
   createdAt: string;
 }
 
 export const marketplacePurchaseApi = {
-  purchase: (item: { artifactType: 'skill' | 'persona' | 'content'; artifactSlug: string; stripePaymentIntentId?: string }) =>
+  /**
+   * Records a skill/persona acquisition. NOT a door for `'agent'`: this route
+   * prices only skills and records everything else at zero, so an agent bought
+   * here would be a free entitlement for a priced agent. Agents go through
+   * {@link agentCheckoutApi}, which settles with the processor first.
+   */
+  purchase: (item: { artifactType: 'skill' | 'persona'; artifactSlug: string; stripePaymentIntentId?: string }) =>
     mpRequest<{ ok: true; priceCents: number; pricingModel: 'flat_fee' | 'consumption' }>('/marketplace/purchase', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -5313,11 +5600,43 @@ export type SpineNodeKind = 'portfolio' | 'objective' | 'initiative' | 'epic' | 
 
 export interface CostClassSuggestion { costClass: CostClass; confidence: number; rationale: string }
 export interface SpineCost { llmUsd: number; humanUsd: number; totalUsd: number; capexUsd: number; opexUsd: number }
+/**
+ * The planner's verdict on ONE parent's plan (API: `task_plan_verdicts`, 1075).
+ *
+ * Present only when there is something to act on. `compressed` is the fact that
+ * cannot be re-derived from the rows: once estimates are squeezed to fit a due
+ * date the resulting windows fit perfectly and nothing else says they were squeezed.
+ */
+export interface PlanVerdict {
+  /** Estimates were scaled DOWN to make the plan fit its parent's window. */
+  compressed: boolean;
+  /** Child ids that still end after the parent's due date. */
+  overruns: string[];
+  /** Child ids caught in a dependency cycle — their order is a guess, not a plan. */
+  cyclic: string[];
+  /** Child ids whose start was pushed out because their owner was already busy. */
+  capacityDeferred: string[];
+  /** Which planner produced the plan being judged. */
+  source?: string | null;
+  plannedAt?: string;
+}
+
 export interface SpineNode {
   key: string; id: string; kind: SpineNodeKind; parentKey: string | null;
   title: string; status: string; startDate: string | null; endDate: string | null; depth: number;
   /** Dates inferred from the span of descendants rather than set on the row itself. */
   datesDerived: boolean;
+  /**
+   * A CONTAINER (portfolio/objective/initiative/epic) with no window of its own AND
+   * nothing inside it to derive one from — "not yet scoped", which is a different
+   * statement from a ticket somebody forgot to date. Decided server-side so every
+   * surface says the same thing about an empty container.
+   */
+  notYetScoped: boolean;
+  /** For an EPIC: which planner produced its children ('llm' | 'heuristic' | 'manual'). */
+  decompositionSource: string | null;
+  /** Set only when this node's plan did NOT come out clean; null means it did. */
+  planVerdict: PlanVerdict | null;
   /** Keys of the nodes that must finish before this one starts (drawn as arrows). */
   dependsOn: string[];
   declaredCostClass: CostClass | null; costClassSource: string;
@@ -5409,6 +5728,20 @@ const initiativeTracker = segmentTrackerClient('/api/pmo/initiatives');
 const objectiveTracker = segmentTrackerClient('/api/pmo/objectives');
 const keyResultTracker = segmentTrackerClient('/api/pmo/key-results');
 
+/** One named non-working day. `name` is shown so a gap in the plan reads as a reason. */
+export interface Holiday { date: string; name: string }
+
+/** The tenant's working week + holidays, as the settings surface edits them. */
+export interface WorkingCalendarSettings {
+  /** Weekday numbers (0 = Sunday … 6 = Saturday) that count as working days. */
+  workingWeekdays: number[];
+  holidays: Holiday[];
+  /** IANA zone the calendar was authored in; advisory (plans are whole UTC days). */
+  timezone: string | null;
+  /** False when nothing is configured and the built-in Mon-Fri default applies. */
+  configured: boolean;
+}
+
 export const pmoApi = {
   /** Flat structure lists (portfolios, initiatives, projects-with-link). */
   tree: (): Promise<PmoTree> => request<PmoTree>('/api/pmo/tree'),
@@ -5441,6 +5774,16 @@ export const pmoApi = {
     if (params.projectId != null) q.set('project', String(params.projectId));
     return apiRequestText(`/api/pmo/spine/export.csv${q.toString() ? `?${q}` : ''}`);
   },
+  /**
+   * The tenant's WORKING CALENDAR — which weekdays this workspace works and the
+   * days nobody does. Read by the scheduler on every plan; an unconfigured tenant
+   * gets Mon-Fri with no holidays, i.e. exactly the old hardcoded behaviour.
+   */
+  workingCalendar: (): Promise<WorkingCalendarSettings> =>
+    request<WorkingCalendarSettings>('/api/pmo/working-calendar'),
+  saveWorkingCalendar: (body: Omit<WorkingCalendarSettings, 'configured'>): Promise<WorkingCalendarSettings> =>
+    request('/api/pmo/working-calendar', { method: 'PUT', body: JSON.stringify(body) }),
+
   /** Set (or clear, with null) the CAPEX/OPEX class on any level. A PM 'manual'
    *  set also verifies the row; pass source:'agent' for an applied suggestion. */
   setCostClass: (kind: SpineNodeKind, id: string, costClass: CostClass | null, source?: 'manual' | 'agent'): Promise<{ ok: true }> =>
@@ -5548,7 +5891,20 @@ export interface CeremonySession {
   turnSeconds: number;
   /** Index into participants.turnOrder of the current speaker (null = not started/ended). */
   currentTurn: number | null;
+  /**
+   * When the current speaker's clock started, or `null` while the turn is PAUSED.
+   *
+   * `currentTurn != null && turnStartedAt == null` IS the paused state — derived from
+   * columns that already exist rather than a third one, and the state `concludeCeremony`
+   * already reads correctly (it skips accrual when this is null).
+   */
   turnStartedAt: string | null;
+  /**
+   * The board's default per-member WIP cap for the power meter (migration 1084),
+   * resolved server-side. Null when the ceremony's board could not be resolved; a
+   * member profile's own `maxConcurrentWip` still wins over it.
+   */
+  defaultMemberWipCap?: number | null;
   startedAt: string;
   endedAt: string | null;
   /** Set when the cron sweep auto-opened this session from a schedule. */
@@ -5645,6 +6001,17 @@ export const ceremonySessionsApi = {
     request(`${CEREMONY_BASE}/sessions`, { method: 'POST', body: JSON.stringify({ projectId, kind, participants }) }),
   advanceTurn: (id: string, currentTurn: number): Promise<CeremonySessionDetail> =>
     request(`${CEREMONY_BASE}/sessions/${id}/turn`, { method: 'PATCH', body: JSON.stringify({ currentTurn }) }),
+  /**
+   * Stop / restart the clock on the current speaker.
+   *
+   * Turn time used to accrue on wall-clock unconditionally, so a standup that broke off
+   * for ten minutes charged all ten to whoever held the floor — and those durations feed
+   * the ceremony rollup. Both calls are idempotent server-side.
+   */
+  pauseTurn: (id: string): Promise<CeremonySessionDetail> =>
+    request(`${CEREMONY_BASE}/sessions/${id}/turn/pause`, { method: 'POST' }),
+  resumeTurn: (id: string): Promise<CeremonySessionDetail> =>
+    request(`${CEREMONY_BASE}/sessions/${id}/turn/resume`, { method: 'POST' }),
   /** End the session. The server resolves attendance, applies the ceremony autonomy
    *  rules and dispatches the project's agent-owned work through the canonical
    *  lane-entry gate (bounded) — the client does NOT submit executions itself. */
@@ -6704,6 +7071,46 @@ export interface CreateIncidentBody {
   page?: boolean;
 }
 
+/**
+ * One rung of an incident's 5-Why ladder (`postmortem_whys`, migration 1072).
+ *
+ * `stepNo` is 1-based and contiguous: why₁ answers the incident title, why₍ₙ₎ answers
+ * why₍ₙ₋₁₎. The server owns that invariant — a client never renumbers, it submits the
+ * ladder it is showing and gets the normalised one back.
+ */
+export interface PostmortemWhy {
+  id: string;
+  stepNo: number;
+  statement: string;
+  isRoot: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** What the capture UI submits: order is position in the array, root only on the last. */
+export interface PostmortemWhyInput {
+  statement: string;
+  isRoot?: boolean;
+}
+
+/** A node in the derived RCA topology (see api `incidentDependencyGraph`). */
+export interface IncidentGraphNode {
+  id: string;
+  label: string;
+  kind: 'incident' | 'system' | 'monitor' | 'ticket';
+  status?: string;
+  focus?: boolean;
+}
+export interface IncidentGraphEdge {
+  from: string;
+  to: string;
+  label?: string;
+}
+export interface IncidentDependencyGraph {
+  nodes: IncidentGraphNode[];
+  edges: IncidentGraphEdge[];
+}
+
 /** A workflow run spawned by an incident — via an event trigger or a manual runbook. */
 export interface IncidentWorkflowRun {
   id: string;
@@ -6808,6 +7215,18 @@ export const incidentsApi = {
 
   publishPostmortem: (id: string, body: PublishPostmortemBody): Promise<PublishPostmortemResult> =>
     request(`/api/incidents/${id}/postmortem`, { method: 'POST', body: JSON.stringify(body) }),
+
+  // 5-Why ladder. The chain is replaced as a UNIT (PUT), because removing why₃ makes
+  // why₄ an answer to a question nobody asked — see the API's PostmortemWhyService.
+  whys: (id: string): Promise<PostmortemWhy[]> =>
+    request<{ whys: PostmortemWhy[] }>(`/api/incidents/${id}/whys`).then((r) => r.whys ?? []),
+  replaceWhys: (id: string, whys: PostmortemWhyInput[]): Promise<PostmortemWhy[]> =>
+    request<{ whys: PostmortemWhy[] }>(`/api/incidents/${id}/whys`, { method: 'PUT', body: JSON.stringify({ whys }) })
+      .then((r) => r.whys ?? []),
+
+  /** The derived RCA topology: implicated change → system → monitor → incident. */
+  dependencyGraph: (id: string): Promise<IncidentDependencyGraph> =>
+    request(`/api/incidents/${id}/dependency-graph`),
 
   // Custom workflows (runbooks) attached to an incident
   listWorkflowRuns: (id: string): Promise<IncidentWorkflowRun[]> =>
@@ -7622,6 +8041,15 @@ export interface Board {
   /** Standup turn-timer behaviour for this board's ceremonies (migration 0119). */
   standupTurnMode: 'facilitator' | 'timeboxed';
   standupTurnSeconds: number;
+  /**
+   * Default per-member WIP cap for the round table's power meter (migration 1084).
+   *
+   * Replaces the component's hardcoded `DEFAULT_CAP = 8`, which meant the meter that
+   * says "this person is overloaded" measured against a number nobody chose. A member
+   * profile's own `maxConcurrentWip` still wins; this is the board's fallback. Optional
+   * for compatibility with an older API — fall back to 8, the constant's value.
+   */
+  defaultMemberWipCap?: number;
   /** Hide tickets sitting in a terminal (Done) lane from the board (migration 0194). */
   hideDoneItems: boolean;
   /** When true (default), high/urgent tickets need manager approval before an agent
@@ -7654,6 +8082,15 @@ export interface Swimlane {
   successThreshold: number | null;
   /** How strictly this lane's requirements gate entry: off (audit only) | soft | hard. */
   requirementGate?: 'off' | 'soft' | 'hard';
+  /**
+   * PARKED — off the delivery path (`swimlanes.is_parking`, migration 1080).
+   *
+   * Distinct from `isTerminal`: a parked lane does not END a ticket, it steps it out of
+   * the flow. Excluded from the %-complete rank denominator (a blocked ticket used to
+   * report ~87% complete purely because `Blocked` sits late in the lane order) and never
+   * auto-advanced into.
+   */
+  isParking?: boolean;
   createdAt: string;
   updatedAt?: string;
 }
@@ -7741,7 +8178,7 @@ export const boardsApi = {
   create: (body: { projectId: number; name: string; maxConcurrentTickets?: number; needsAttentionLane?: string | null }): Promise<Board> =>
     request('/api/boards', { method: 'POST', body: JSON.stringify(body) }),
 
-  update: (boardId: string, body: Partial<{ name: string; maxConcurrentTickets: number; needsAttentionLane: string | null; standupTurnMode: 'facilitator' | 'timeboxed'; standupTurnSeconds: number; hideDoneItems: boolean; requireExecutionApproval: boolean }>): Promise<Board> =>
+  update: (boardId: string, body: Partial<{ name: string; maxConcurrentTickets: number; needsAttentionLane: string | null; standupTurnMode: 'facilitator' | 'timeboxed'; standupTurnSeconds: number; defaultMemberWipCap: number; hideDoneItems: boolean; requireExecutionApproval: boolean }>): Promise<Board> =>
     request(`/api/boards/${boardId}`, { method: 'PATCH', body: JSON.stringify(body) }),
 
   remove: (boardId: string): Promise<void> =>
@@ -7761,8 +8198,14 @@ export const boardsApi = {
       request(`/api/boards/${boardId}/swimlanes`, { method: 'POST', body: JSON.stringify(body) }),
     patch: (boardId: string, laneId: string, body: Partial<LaneWriteBody>): Promise<Swimlane> =>
       request(`/api/boards/${boardId}/swimlanes/${laneId}`, { method: 'PATCH', body: JSON.stringify(body) }),
-    remove: (boardId: string, laneId: string): Promise<void> =>
-      request<void>(`/api/boards/${boardId}/swimlanes/${laneId}`, { method: 'DELETE' }),
+    /**
+     * Delete a lane — which is a MERGE. `into` names the lane its tickets move to;
+     * without it the server applies its policy (the lowest-position non-terminal
+     * survivor), which is what silently sent a merged lane's tickets to the wrong board
+     * column before the parameter existed.
+     */
+    remove: (boardId: string, laneId: string, into?: string | null): Promise<{ ok: boolean; reassignedTasks: number; reassignedTo: string | null }> =>
+      request(`/api/boards/${boardId}/swimlanes/${laneId}${into ? `?into=${encodeURIComponent(into)}` : ''}`, { method: 'DELETE' }),
   },
 
   agents: {
@@ -7806,6 +8249,8 @@ interface LaneWriteBody {
   name: string;
   position: number;
   isTerminal: boolean;
+  /** PARKED — off the delivery path (migration 1080). See {@link Swimlane.isParking}. */
+  isParking: boolean;
   gate: string;
   executionMode: string;
   failurePolicy: string;
@@ -8671,6 +9116,46 @@ export interface CreationOutcomeMetrics {
   metrics: CreationOutcomeMetric[];
 }
 
+/**
+ * The ATTRIBUTED half of Idea→delivery — mirror of
+ * `api/src/application/outcomes/attributedOutcomes.ts`.
+ *
+ * {@link CreationOutcomeMetrics} above measures the PROCESS (this board produced
+ * an artifact, this fast, this reliably). On its own that is a productivity
+ * report: it can say a board shipped faster than its peers and cannot say whether
+ * anybody outside the building ever touched what it shipped. These are the facts
+ * the growth/canvas rollups stamp against this session and against the sites it
+ * published, which is the half that answers "did it do something for somebody".
+ */
+export interface AttributedOutcomePoint {
+  day: string;
+  value: number;
+}
+
+export interface AttributedOutcomeSeries {
+  /** `metric_facts.metric` — `canvas.shipped`, `growth.leads`, `growth.conversions`. */
+  metric: string;
+  unit: string | null;
+  /** What the series is attributed TO — this session, or a site it published. */
+  subject: { kind: 'session' | 'site'; id: string; label: string | null };
+  total: number;
+  points: AttributedOutcomePoint[];
+}
+
+export interface AttributedOutcomes {
+  sessionId: string;
+  windowDays: number;
+  sites: Array<{ id: number; subdomain: string | null }>;
+  series: AttributedOutcomeSeries[];
+  /**
+   * The session has published nothing, so there is no outcome to attribute yet.
+   * The panel must SAY this rather than draw a flat zero line — "nobody has seen
+   * it" and "people saw it and did nothing" are different news, and a zero series
+   * renders them identically.
+   */
+  unpublished: boolean;
+}
+
 export interface CreationCommandResult {
   accepted: Array<{ index: number; type: string; id?: string; clientId?: string }>;
   rejected: Array<{ index: number; error: string }>;
@@ -8702,6 +9187,7 @@ export const creationSessionsApi = {
     request<{ session: { id: string; title?: string; revision?: number; claimed: true; replayed?: boolean } }>('/api/creation-sessions/claim', { method: 'POST', body: JSON.stringify(body) }),
   get: (id: string): Promise<CreationSessionDetail> => request(`/api/creation-sessions/${encodeURIComponent(id)}`),
   outcomeMetrics: (id: string): Promise<CreationOutcomeMetrics> => request(`/api/creation-sessions/${encodeURIComponent(id)}/outcome-metrics`),
+  attributedOutcomes: (id: string): Promise<AttributedOutcomes> => request(`/api/creation-sessions/${encodeURIComponent(id)}/attributed-outcomes`),
   recordOutcome: (id: string, body: { correlationId: string; action: string; phase: 'started' | 'succeeded' | 'failed' | 'validated' | 'reused'; actorType?: 'user' | 'agent' | 'brain' | 'system'; actorRef?: string; projectId?: number; metricKey?: string; metricValue?: number; unit?: string; artifactId?: string; durationMs?: number; costUsdMillicents?: number; metadata?: unknown }) =>
     request<{ recorded: boolean; duplicate: boolean }>(`/api/creation-sessions/${encodeURIComponent(id)}/outcomes`, { method: 'POST', body: JSON.stringify(body) }),
   update: (id: string, body: { title?: string; description?: string | null; folder?: string | null; status?: 'active' | 'archived'; preview?: unknown; mode?: string }) =>
@@ -9520,6 +10006,50 @@ export const ltiRegistrationsApi = {
     request(`/api/lti-registrations/${id}/enable`, { method: 'POST' }),
 };
 
+/** One thing on a course board an LMS may be handed a link to. The server's
+ *  allow-list decides which kinds appear — a roster, a submission and a
+ *  gradebook never do. */
+export interface LtiLinkableObject {
+  id: string;
+  kind: string;
+  title: string;
+  status: string;
+}
+
+export interface LtiDeepLinkOptions {
+  objects: LtiLinkableObject[];
+  /** The PLATFORM's terms for this exchange, not our preferences: whether it
+   *  will take more than one item, and what it suggests the picker say. */
+  settings: { acceptMultiple: boolean; title: string; text: string };
+}
+
+/**
+ * The LTI deep-linking picker — the LMS asking what to add to a course.
+ *
+ * `auth: 'none'` on both calls, deliberately. The picker renders inside the
+ * LMS's content dialog, where our session cookie is a blocked third-party cookie
+ * and the instructor may have no Builderforce session at all. The `token` IS the
+ * credential: a short-lived, HMAC-signed envelope the verified launch minted,
+ * naming the workspace and the course board it was minted for. Sending a tenant
+ * JWT here would authorise the wrong thing — the person in the iframe, not the
+ * launch that put them there.
+ */
+export const ltiDeepLinkApi = {
+  options: (token: string): Promise<LtiDeepLinkOptions> =>
+    request(`/api/lti/deep-link/options?token=${encodeURIComponent(token)}`, { auth: 'none' }),
+
+  /** Sign the selection. Returns the platform's return URL and the response JWT
+   *  for the page to form-POST — the browser has to make that request, because
+   *  the platform's return endpoint authenticates the instructor's LMS session. */
+  respond: (token: string, objectIds: string[]): Promise<{ returnUrl: string; jwt: string }> =>
+    request('/api/lti/deep-link/response', {
+      method: 'POST',
+      auth: 'none',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, objectIds }),
+    }),
+};
+
 /** Whether an email address signs in through an institution. Unauthenticated —
  *  it is called from the login page before there is a session. */
 export const ssoDiscoveryApi = {
@@ -9550,6 +10080,15 @@ export interface GigPosting {
   projectId: number | null;
   rateMinCents: number | null;
   rateMaxCents: number | null;
+  /** The WHOLE-JOB total for fixed-price work (0985). Never a rate: `rateMin`/`rateMax`
+   *  are a per-hour band, and `engagementType` says which of the two to read. */
+  budgetTotalCents?: number | null;
+  experienceLevel?: string | null;
+  projectLength?: string | null;
+  discipline?: string | null;
+  specialty?: string | null;
+  screeningQuestions?: Array<{ id: string; prompt: string; type: string; required: boolean }>;
+  attachments?: Array<{ id: string; key: string; name: string; mime: string | null; size: number }>;
   createdAt: string | null;
 }
 
@@ -9558,8 +10097,19 @@ export const gigMarketplaceApi = {
     ticketId: number;
     rateMinCents?: number | null;
     rateMaxCents?: number | null;
+    /** Fixed-price TOTAL. The API refuses it on hourly work rather than storing a number
+     *  whose unit contradicts the posting's shape. */
+    budgetTotalCents?: number | null;
     currency?: string;
     visibility?: 'public' | 'private';
+    postingType?: string;
+    engagementType?: string;
+    discipline?: string;
+    specialty?: string;
+    experienceLevel?: string;
+    projectLength?: string;
+    requirements?: string;
+    screeningQuestions?: Array<{ id?: string; prompt: string; type: string; required: boolean }>;
   }): Promise<{ jobId: string; posting: GigPosting | null; reused?: boolean }> =>
     request('/api/marketplace/publish', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
@@ -9569,4 +10119,81 @@ export const gigMarketplaceApi = {
     request('/api/marketplace/unpublish', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ticketId }),
     }).then(() => undefined),
+};
+
+// ---------------------------------------------------------------------------
+// Marketplace agent checkout — paying for a priced workforce agent
+// ---------------------------------------------------------------------------
+
+/**
+ * `ide_agents.price_cents` was decoration until now: hire recorded a row and
+ * bumped a counter without ever reading the price. These three calls are the
+ * paid path that replaced that, and they mirror the knowledge-listing checkout
+ * exactly — start, come back, then acquire.
+ *
+ * `startCheckout` returns ONE of three shapes and the caller must branch on all
+ * three: `{ free: true }` (nothing to pay — go straight to hire),
+ * `{ purchased: true }` (this workspace already bought it — likewise), or
+ * `{ checkoutUrl }` (send the browser to the processor).
+ */
+export interface AgentCheckoutStart {
+  free?: boolean;
+  purchased?: boolean;
+  checkoutUrl?: string;
+}
+
+export interface AgentPurchaseRecord {
+  purchaseId: number;
+  agentId: string;
+  priceCents: number;
+  /** Zero while the seller is under the platform's lifetime take-rate threshold. */
+  commissionCents: number;
+  sellerCents: number;
+}
+
+/** What `POST /hire` answers with when the agent is priced and unpaid (402). */
+export interface AgentPurchaseRequired {
+  error: string;
+  checkoutRequired: true;
+  priceCents: number;
+}
+
+export const agentCheckoutApi = {
+  /**
+   * Ask for a hosted payment page. `returnUrl` is where the processor sends the
+   * buyer back; only its origin and path survive — the server re-attaches the
+   * agent id and the session placeholder itself, so a return url cannot smuggle
+   * a query string through the processor.
+   */
+  startCheckout: (agentId: string, returnUrl: string, buyerEmail?: string): Promise<AgentCheckoutStart> =>
+    request<AgentCheckoutStart>(`/api/workforce/agents/${encodeURIComponent(agentId)}/checkout`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ returnUrl, ...(buyerEmail ? { buyerEmail } : {}) }),
+    }),
+
+  /**
+   * Settle the session the processor redirected back with. Grants nothing on its
+   * own authority: the server re-reads the session FROM the processor first.
+   */
+  completeCheckout: (agentId: string, checkoutSessionId: string): Promise<{ purchased: true; purchase: AgentPurchaseRecord }> =>
+    request(`/api/workforce/agents/${encodeURIComponent(agentId)}/checkout/complete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ checkoutSessionId }),
+    }),
+
+  /**
+   * Acquire the agent into this workspace. 402s with {@link AgentPurchaseRequired}
+   * when the agent is priced and this workspace has not paid, which is the signal
+   * to call {@link agentCheckoutApi.startCheckout}. On success the response carries
+   * `project_agent_id`: the canonical identity the hire PROVISIONED, which is what
+   * makes the agent assignable and dispatchable here rather than merely counted.
+   */
+  hire: (agentId: string): Promise<{ id: string; name: string; project_agent_id: number | null }> =>
+    request(`/api/workforce/agents/${encodeURIComponent(agentId)}/hire`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    }),
 };

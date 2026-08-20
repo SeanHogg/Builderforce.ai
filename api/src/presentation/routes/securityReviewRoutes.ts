@@ -10,9 +10,13 @@ import { reportCaughtError } from '../../application/observability/caughtErrorRe
  *   GET  /api/security/audits              → recent SOC 2 audit runs (results)
  *   GET  /api/security/audits/:id          → one audit run + its finding tickets
  *   POST /api/security/audits/run          { projectId? } dispatch an audit now (manager+)
+ *   POST /api/security/internal/web-scan-stage   container → API stage ingest (HMAC)
  *
  * Access config + audit results are manager-gated: they name what the Security agent
- * found, which is exactly the need-to-know surface the config restricts.
+ * found, which is exactly the need-to-know surface the config restricts. The one
+ * exception is `/internal/web-scan-stage`, which sits ABOVE authMiddleware because
+ * its caller is the Node container running the TLS/CVE stages — it carries no tenant
+ * JWT and authenticates with a per-scan HMAC token instead.
  */
 import { Hono } from 'hono';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
@@ -28,11 +32,31 @@ import {
   setProjectScanTarget,
 } from '../../application/security/webSecurityScan';
 import { ScanTargetError } from '../../application/security/WebSecurityScanner';
+import { ingestWebScanStage, type WebScanStageIngestPayload } from '../../application/security/webScanContainerStages';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
 export function createSecurityReviewRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
+
+  // POST /internal/web-scan-stage — the container reports one web-scan stage
+  // (dispatched by application/security/webScanContainerStages.dispatchWebScanStages;
+  // posted by the `/web-scan` handler in api/container/server.mjs).
+  //
+  // Mounted ABOVE authMiddleware on purpose, exactly like runtimeRoutes'
+  // `/internal/container-op`: the Node container that runs the TLS handshake and the
+  // CVE fingerprint holds no tenant JWT. It authenticates with the per-scan HMAC
+  // token minted at dispatch, and the TENANT is read off the audit row rather than
+  // from the request body — a container is never asked which workspace it is in, so
+  // it can never claim the wrong one.
+  router.post('/internal/web-scan-stage', async (c) => {
+    const body = await c.req.json<WebScanStageIngestPayload>().catch(() => null);
+    if (!body) return c.json({ error: 'invalid payload' }, 400);
+    const result = await ingestWebScanStage(db, c.env as Env, body);
+    if (!result.ok) return c.json({ error: result.reason }, result.status);
+    return c.json(result);
+  });
+
   router.use('*', authMiddleware);
 
   // POST /review — not cached: each call reviews caller-supplied code (unbounded,
@@ -162,6 +186,8 @@ export function createSecurityReviewRoutes(db: Db): Hono<HonoEnv> {
       projectId,
       trigger: 'manual',
       agentRef: userId ? `user:${userId}` : 'web-scanner',
+      // Carries the container binding + JWT_SECRET the TLS/CVE stage dispatch needs.
+      env: c.env as Env,
     });
     if (!result.ok) {
       const status = result.code === 'no_project' ? 409 : 400;

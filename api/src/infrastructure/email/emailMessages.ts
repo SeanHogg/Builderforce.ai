@@ -196,6 +196,60 @@ export interface EmailCopy {
       fix: string;
     };
   };
+  /**
+   * The "here is your personal link" family — a named-recipient form and a
+   * signature/acknowledgement request, at invitation and at reminder.
+   *
+   * NO MARKUP in any of these: `shareInvitationMailer` escapes the composed
+   * sentence wholesale so a recipient-supplied title cannot inject HTML, which
+   * means a `<strong>` written here would print as text.
+   *
+   * The act is a SEPARATE KEY rather than a `{{Verb}}` placeholder. "sign" and
+   * "acknowledge" do not inflect alike in any of the four non-English locales —
+   * and the English reminder used a `${verb}d` past tense, which is not a thing
+   * a translator can be handed at all.
+   */
+  shareInvitation: {
+    /** The trailer under every one of these. */
+    personalLink: string;
+    openForm: string;
+    reviewAndSign: string;
+    reviewAndAcknowledge: string;
+    /** `{{Title}}` is substituted by the composer. */
+    reminderSubject: string;
+    formInvitationBody: string;
+    signInvitationBody: string;
+    acknowledgeInvitationBody: string;
+    formReminderBody: string;
+    signReminderBody: string;
+    acknowledgeReminderBody: string;
+    /** `{{Date}}` is substituted by the composer (ISO yyyy-mm-dd). */
+    formClosesNote: string;
+    requestExpiresNote: string;
+    /**
+     * The receivables family. An invoice and a collections chase ride the same
+     * transport as a form or a signature request — one named recipient, one
+     * personal link, one act — so they belong to this copy family rather than to
+     * a second one that would drift from it.
+     *
+     * `{{Amount}}` arrives ALREADY FORMATTED, by `Intl.NumberFormat` in the
+     * recipient's locale. Where a currency symbol sits relative to its number is
+     * a locale decision the number formatter already makes correctly; re-deriving
+     * it from a catalog string would be a second, worse answer to it.
+     */
+    payInvoice: string;
+    viewInvoice: string;
+    /** `{{Reference}}`. */
+    invoiceSubject: string;
+    /** `{{Reference}}`, `{{Amount}}`, `{{Date}}`. */
+    invoiceIssuedBody: string;
+    /** `{{Amount}}`, `{{Reference}}`. */
+    invoiceChaseBody: string;
+    /** `{{Amount}}`, `{{Reference}}`, `{{Date}}` — the chase for one already due. */
+    invoiceOverdueChaseBody: string;
+    /** `{{Date}}`. */
+    invoiceDueNote: string;
+  };
 }
 
 const en: EmailCopy = {
@@ -367,6 +421,28 @@ const en: EmailCopy = {
       fix: 'Fixed',
     },
   },
+  shareInvitation: {
+    personalLink: 'This link is personal to you. Do not forward it — whoever holds it can answer as you.',
+    openForm: 'Open the form',
+    reviewAndSign: 'Review and sign',
+    reviewAndAcknowledge: 'Review and acknowledge',
+    reminderSubject: 'Reminder: {{Title}}',
+    formInvitationBody: 'You have been asked to answer "{{Title}}".',
+    signInvitationBody: 'You have been asked to sign "{{Title}}".',
+    acknowledgeInvitationBody: 'You have been asked to acknowledge "{{Title}}".',
+    formReminderBody: 'You have not yet answered "{{Title}}". Your link is below — it replaces the one you were sent.',
+    signReminderBody: 'You have not yet signed "{{Title}}". Your link is below — it replaces the one you were sent.',
+    acknowledgeReminderBody: 'You have not yet acknowledged "{{Title}}". Your link is below — it replaces the one you were sent.',
+    formClosesNote: 'This form closes on {{Date}}.',
+    requestExpiresNote: 'This request expires on {{Date}}.',
+    payInvoice: 'View and pay',
+    viewInvoice: 'View the invoice',
+    invoiceSubject: 'Invoice {{Reference}}',
+    invoiceIssuedBody: 'Invoice {{Reference}} for {{Amount}} is ready. Payment is due {{Date}}.',
+    invoiceChaseBody: '{{Amount}} is outstanding on invoice {{Reference}}.',
+    invoiceOverdueChaseBody: '{{Amount}} is outstanding on invoice {{Reference}}, which was due {{Date}}.',
+    invoiceDueNote: 'Due {{Date}}.',
+  },
 };
 
 const zh: EmailCopy = {
@@ -526,6 +602,28 @@ const zh: EmailCopy = {
       improvement: '改进',
       fix: '修复',
     },
+  },
+  shareInvitation: {
+    personalLink: '此链接仅供您本人使用，请勿转发——持有链接的人可以代替您作答。',
+    openForm: '打开表单',
+    reviewAndSign: '查看并签署',
+    reviewAndAcknowledge: '查看并确认',
+    reminderSubject: '提醒：{{Title}}',
+    formInvitationBody: '有人邀请您填写《{{Title}}》。',
+    signInvitationBody: '有人邀请您签署《{{Title}}》。',
+    acknowledgeInvitationBody: '有人邀请您确认《{{Title}}》。',
+    formReminderBody: '您尚未填写《{{Title}}》。新的链接如下，它将取代此前发送给您的链接。',
+    signReminderBody: '您尚未签署《{{Title}}》。新的链接如下，它将取代此前发送给您的链接。',
+    acknowledgeReminderBody: '您尚未确认《{{Title}}》。新的链接如下，它将取代此前发送给您的链接。',
+    formClosesNote: '此表单将于 {{Date}} 关闭。',
+    requestExpiresNote: '此请求将于 {{Date}} 到期。',
+    payInvoice: '查看并付款',
+    viewInvoice: '查看发票',
+    invoiceSubject: '发票 {{Reference}}',
+    invoiceIssuedBody: '发票 {{Reference}}（金额 {{Amount}}）已开具，付款截止日为 {{Date}}。',
+    invoiceChaseBody: '发票 {{Reference}} 尚有 {{Amount}} 未结清。',
+    invoiceOverdueChaseBody: '发票 {{Reference}} 尚有 {{Amount}} 未结清，该款项已于 {{Date}} 到期。',
+    invoiceDueNote: '到期日：{{Date}}。',
   },
 };
 
@@ -699,6 +797,28 @@ const es: EmailCopy = {
       improvement: 'Mejorado',
       fix: 'Corregido',
     },
+  },
+  shareInvitation: {
+    personalLink: 'Este enlace es personal. No lo reenvíes: quien lo tenga puede responder en tu nombre.',
+    openForm: 'Abrir el formulario',
+    reviewAndSign: 'Revisar y firmar',
+    reviewAndAcknowledge: 'Revisar y confirmar',
+    reminderSubject: 'Recordatorio: {{Title}}',
+    formInvitationBody: 'Te han pedido que respondas «{{Title}}».',
+    signInvitationBody: 'Te han pedido que firmes «{{Title}}».',
+    acknowledgeInvitationBody: 'Te han pedido que confirmes «{{Title}}».',
+    formReminderBody: 'Todavía no has respondido «{{Title}}». Tu enlace está más abajo: sustituye al que te enviamos.',
+    signReminderBody: 'Todavía no has firmado «{{Title}}». Tu enlace está más abajo: sustituye al que te enviamos.',
+    acknowledgeReminderBody: 'Todavía no has confirmado «{{Title}}». Tu enlace está más abajo: sustituye al que te enviamos.',
+    formClosesNote: 'Este formulario se cierra el {{Date}}.',
+    requestExpiresNote: 'Esta solicitud caduca el {{Date}}.',
+    payInvoice: 'Ver y pagar',
+    viewInvoice: 'Ver la factura',
+    invoiceSubject: 'Factura {{Reference}}',
+    invoiceIssuedBody: 'La factura {{Reference}} por {{Amount}} está lista. El pago vence el {{Date}}.',
+    invoiceChaseBody: 'Quedan {{Amount}} pendientes en la factura {{Reference}}.',
+    invoiceOverdueChaseBody: 'Quedan {{Amount}} pendientes en la factura {{Reference}}, que vencía el {{Date}}.',
+    invoiceDueNote: 'Vence el {{Date}}.',
   },
 };
 
@@ -874,6 +994,28 @@ const fr: EmailCopy = {
       improvement: 'Amélioré',
       fix: 'Corrigé',
     },
+  },
+  shareInvitation: {
+    personalLink: 'Ce lien vous est personnel. Ne le transférez pas : quiconque le détient peut répondre à votre place.',
+    openForm: 'Ouvrir le formulaire',
+    reviewAndSign: 'Consulter et signer',
+    reviewAndAcknowledge: 'Consulter et accuser réception',
+    reminderSubject: 'Rappel : {{Title}}',
+    formInvitationBody: 'Vous êtes invité à répondre au formulaire « {{Title}} ».',
+    signInvitationBody: 'Vous êtes invité à signer « {{Title}} ».',
+    acknowledgeInvitationBody: 'Vous êtes invité à accuser réception de « {{Title}} ».',
+    formReminderBody: 'Vous n’avez pas encore répondu à « {{Title}} ». Votre lien se trouve ci-dessous : il remplace celui qui vous a été envoyé.',
+    signReminderBody: 'Vous n’avez pas encore signé « {{Title}} ». Votre lien se trouve ci-dessous : il remplace celui qui vous a été envoyé.',
+    acknowledgeReminderBody: 'Vous n’avez pas encore accusé réception de « {{Title}} ». Votre lien se trouve ci-dessous : il remplace celui qui vous a été envoyé.',
+    formClosesNote: 'Ce formulaire ferme le {{Date}}.',
+    requestExpiresNote: 'Cette demande expire le {{Date}}.',
+    payInvoice: 'Consulter et payer',
+    viewInvoice: 'Consulter la facture',
+    invoiceSubject: 'Facture {{Reference}}',
+    invoiceIssuedBody: 'La facture {{Reference}} d’un montant de {{Amount}} est prête. Le paiement est dû le {{Date}}.',
+    invoiceChaseBody: 'Il reste {{Amount}} à régler sur la facture {{Reference}}.',
+    invoiceOverdueChaseBody: 'Il reste {{Amount}} à régler sur la facture {{Reference}}, échue le {{Date}}.',
+    invoiceDueNote: 'Échéance : {{Date}}.',
   },
 };
 
@@ -1052,6 +1194,28 @@ const de: EmailCopy = {
       fix: 'Behoben',
     },
   },
+  shareInvitation: {
+    personalLink: 'Dieser Link ist persönlich für Sie. Leiten Sie ihn nicht weiter — wer ihn besitzt, kann in Ihrem Namen antworten.',
+    openForm: 'Formular öffnen',
+    reviewAndSign: 'Prüfen und unterschreiben',
+    reviewAndAcknowledge: 'Prüfen und bestätigen',
+    reminderSubject: 'Erinnerung: {{Title}}',
+    formInvitationBody: 'Sie wurden gebeten, das Formular „{{Title}}“ auszufüllen.',
+    signInvitationBody: 'Sie wurden gebeten, „{{Title}}“ zu unterschreiben.',
+    acknowledgeInvitationBody: 'Sie wurden gebeten, „{{Title}}“ zu bestätigen.',
+    formReminderBody: 'Sie haben „{{Title}}“ noch nicht ausgefüllt. Ihr Link steht unten — er ersetzt den zuvor gesendeten.',
+    signReminderBody: 'Sie haben „{{Title}}“ noch nicht unterschrieben. Ihr Link steht unten — er ersetzt den zuvor gesendeten.',
+    acknowledgeReminderBody: 'Sie haben „{{Title}}“ noch nicht bestätigt. Ihr Link steht unten — er ersetzt den zuvor gesendeten.',
+    formClosesNote: 'Dieses Formular schließt am {{Date}}.',
+    requestExpiresNote: 'Diese Anfrage läuft am {{Date}} ab.',
+    payInvoice: 'Ansehen und bezahlen',
+    viewInvoice: 'Rechnung ansehen',
+    invoiceSubject: 'Rechnung {{Reference}}',
+    invoiceIssuedBody: 'Rechnung {{Reference}} über {{Amount}} ist fertig. Die Zahlung ist am {{Date}} fällig.',
+    invoiceChaseBody: 'Auf Rechnung {{Reference}} sind noch {{Amount}} offen.',
+    invoiceOverdueChaseBody: 'Auf Rechnung {{Reference}} sind noch {{Amount}} offen; sie war am {{Date}} fällig.',
+    invoiceDueNote: 'Fällig am {{Date}}.',
+  },
 };
 
 /**
@@ -1067,4 +1231,22 @@ export const EMAIL_MESSAGES: Record<EmailLocale, EmailCopy> = { en, zh, es, fr, 
  */
 export function emailCopy(locale: EmailLocale): EmailCopy {
   return EMAIL_MESSAGES[locale] ?? EMAIL_MESSAGES[DEFAULT_EMAIL_LOCALE];
+}
+
+/**
+ * THE `{{Placeholder}}` substitution. One implementation, because every template
+ * in the codebase interpolates the same marker and three copies of
+ * `replaceAll('{{K}}', v)` is three chances to differ on the marker syntax.
+ *
+ * Substitutes VERBATIM and escapes nothing — catalog copy legitimately contains
+ * markup, so escaping here would print the tags. Callers decide: `EmailService`'s
+ * `render()` escapes each value first, and `shareInvitationMailer` escapes the
+ * whole composed sentence afterwards. Never interpolate an unescaped
+ * recipient-supplied value into a string that is then emitted as HTML.
+ */
+export function fillCopy(template: string, vars: Record<string, string | number> = {}): string {
+  return Object.entries(vars).reduce(
+    (acc, [key, value]) => acc.replaceAll(`{{${key}}}`, String(value)),
+    template,
+  );
 }

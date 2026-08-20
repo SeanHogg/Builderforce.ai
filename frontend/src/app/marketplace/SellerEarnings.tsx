@@ -157,6 +157,16 @@ export function SellerEarnings() {
         </p>
       )}
 
+      {/* The rate, the threshold and the balance are this panel's summary; the
+          per-transaction history — what the fee WAS on each past sale, and every
+          movement behind the three numbers above — is the statement. Linked rather
+          than inlined: a shop panel that grows a ledger stops being a shop panel, and
+          the statement already exists as its own destination for the for-hire accounts
+          that have no marketplace listings at all. */}
+      <Link href="/freelancer/earnings" style={{
+        color: 'var(--cyan-bright)', fontSize: 'var(--font-size-small)',
+      }}>{t('viewStatement')}</Link>
+
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
         <button
           type="button"

@@ -23,6 +23,28 @@
 export const AGENT_WORKFLOW_PATH = '.github/workflows/builderforce-agent.yml';
 
 /**
+ * The revision of the committed workflow SURFACE — bumped only when a change to
+ * this file matters to a repo that already has an older copy.
+ *
+ * The committed file is frozen at commit time: the agent LOOP ships centrally
+ * (the runner is downloaded, see the `run:` step below), so almost every change
+ * we make reaches every repo on its next run and needs no bump. What does NOT
+ * ship centrally is the YAML itself — `run-name`, the inputs, the permissions —
+ * and a repo running an older copy of THAT is invisible to us until something
+ * downstream misbehaves. `run-name` is the case that already bit us: without it
+ * a run carries no execution id, so `githubActionsReconcile` cannot attribute it
+ * and every stranded dispatch on that repo falls through to the generic reaper.
+ *
+ * Recorded per repo in `project_repositories.agent_workflow_revision`, which is
+ * what lets `agentWorkflowRefresh` re-commit exactly the repos that are behind —
+ * and lets a future bump be a one-line migration rather than another backfill.
+ *
+ * `r1` is the first revision that carries `run-name`. NULL in the database means
+ * "committed before revisions existed", i.e. possibly older than r1.
+ */
+export const AGENT_WORKFLOW_REVISION = 'r1';
+
+/**
  * The audience an agent workflow must request — DELIBERATELY DISTINCT from the
  * deploy audience (`builderforce.ai/deploy`).
  *
@@ -62,8 +84,10 @@ export function agentRunName(executionId: number | string): string {
  *
  * Null is a REAL case, not just a parse failure: a repo whose workflow was
  * committed before `run-name` existed reports the bare workflow name for every
- * run. The reconcile sweep treats those as unattributable and waits rather than
- * guessing — see its `runsSinceDispatch` handling.
+ * run. Those runs are unattributable, and the reconcile sweep only lets them
+ * block a verdict while they are RECENT enough to plausibly be the dispatch it
+ * is judging — see its `unattributedRuns` handling. `agentWorkflowRefresh`
+ * drains the population that produces them.
  */
 export function parseExecutionIdFromRunName(displayTitle: string | null | undefined): number | null {
   if (!displayTitle) return null;

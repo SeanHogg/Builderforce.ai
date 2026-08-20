@@ -166,7 +166,7 @@ export function createToolRoutes(
     const days = Math.min(Math.max(Number(c.req.query('days') ?? 90), 7), 365);
     const projectId = c.req.query('projectId') ? Number(c.req.query('projectId')) : null;
     const framework = frameworkParam(c.req.query('framework'));
-    const result = await toolService.getDataDriven(c.env as Env, tenantId, c.req.param('id'), days, projectId, framework);
+    const result = await toolService.getDataDriven(c.env as Env, tenantId, c.req.param('id'), days, projectId, framework, toolLocale(c.req));
     return result ? c.json({ result, days, framework }) : c.json({ error: 'No data-driven mode for this tool' }, 404);
   });
 
@@ -186,10 +186,14 @@ export function createToolRoutes(
     return saved ? c.json({ run: saved }, 201) : c.json({ error: 'Unknown tool or no data available' }, 404);
   });
 
+  // Saved history, re-rendered in the READER's language rather than the saver's.
+  // The locale comes off the request, exactly as it does for the public
+  // definitions — a workspace is not monolingual, and the run belongs to the
+  // workspace while the language belongs to whoever is looking at it.
   router.get('/:id/runs', authMiddleware, requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const projectId = c.req.query('projectId') ? Number(c.req.query('projectId')) : null;
-    const runs = await toolService.listRuns(c.env as Env, tenantId, c.req.param('id'), projectId);
+    const runs = await toolService.listRuns(c.env as Env, tenantId, c.req.param('id'), projectId, toolLocale(c.req));
     return c.json({ runs });
   });
 

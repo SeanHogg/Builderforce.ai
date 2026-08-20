@@ -39,6 +39,8 @@
  *   tool.<id>.level.<n>.name | .summary | .advance
  *   tool.<id>.quiz.<questionId>.dimension | .text | .option.<level>
  *   tool.<id>.field.<fieldId>.label | .placeholder | .help | .option.<value>
+ *   tool.<id>.result.<slug>      — the findings an ANALYZER composes itself
+ *   tool.shared.analyzer.<slug>  — analyzer copy more than one of them emits
  *   result.*   — the chrome the SHARED scorers emit around a tool's own copy
  *
  * A key with no translation falls back to the English in the definition. That
@@ -47,6 +49,14 @@
  * reaches it in practice.
  */
 
+import {
+  SHARED_ANALYZER_COPY,
+  analyzerResultKey,
+  interpolate,
+  sharedAnalyzerKey,
+  type CopyVars,
+  type ToolCopy,
+} from './analyzerCopy';
 import { localeFromHeaders } from '../../infrastructure/email/emailLocale';
 import { DEFAULT_TOOL_LOCALE, type ToolLocale } from './resultCopy';
 import { TOOL_MESSAGES_ZH } from './toolMessages.zh';
@@ -161,6 +171,10 @@ export const toolKey = {
   fieldPlaceholder: (id: string, field: string) => `tool.${id}.field.${field}.placeholder`,
   fieldHelp: (id: string, field: string) => `tool.${id}.field.${field}.help`,
   fieldOption: (id: string, field: string, value: string) => `tool.${id}.field.${field}.option.${value}`,
+  /** One analyzer's own result copy. Re-exported from `analyzerCopy.ts` so the
+   *  key has ONE definition even though two modules build it. */
+  result: analyzerResultKey,
+  sharedAnalyzer: sharedAnalyzerKey,
 } as const;
 
 // ── Localizers ───────────────────────────────────────────────────────────────
@@ -312,7 +326,63 @@ export function toolMessageEntries(tool: Tool): Array<[key: string, english: str
       for (const o of f.options ?? []) entries.push([toolKey.fieldOption(tool.id, f.id, o.value), o.label]);
     }
   }
+  // Result prose the tool's OWN CODE composes — an analyzer's findings, or a
+  // data provider's telemetry narration. This is the half a definition-only
+  // translation could never reach, and it is walked for every kind because both
+  // of those live behind the same declaration.
+  for (const [slug, english] of Object.entries(tool.copy ?? {})) {
+    entries.push([toolKey.result(tool.id, slug), english]);
+  }
   return entries;
+}
+
+
+// ── Analyzer result copy ─────────────────────────────────────────────────────
+
+/**
+ * The copy lookup an analyzer's `analyze()` is handed.
+ *
+ * Resolution is deliberate and only two steps deep: a slug the analyzer DECLARES
+ * resolves under its own key, anything else falls back to the shared analyzer
+ * namespace, and each step ends at the English the declaration carries. That
+ * ordering is what lets one analyzer override a shared sentence without a flag,
+ * and it means an undeclared slug still renders its own name rather than
+ * `undefined` — a visible `nothingToRead` in a result is a bug report, an empty
+ * headline is a product that looks broken.
+ */
+export function toolCopy(tool: Tool, locale: ToolLocale): ToolCopy {
+  const t = toolTranslator(locale);
+  const declared = tool.copy ?? {};
+  const copy = ((slug: string, vars?: CopyVars): string => {
+    const own = declared[slug];
+    const template = own !== undefined
+      ? t(toolKey.result(tool.id, slug), own)
+      : t(toolKey.sharedAnalyzer(slug), SHARED_ANALYZER_COPY[slug] ?? slug);
+    return interpolate(template, vars);
+  }) as ToolCopy;
+  copy.option = (fieldId: string, value: string): string => {
+    // Only an analyzer has string-valued select fields; every other kind answers
+    // with the value it was handed rather than pretending to a label it has none
+    // of, so one lookup type serves all four kinds.
+    const field = tool.kind === 'analyzer' ? tool.fields.find((f) => f.id === fieldId) : undefined;
+    const english = field?.options?.find((o) => o.value === value)?.label ?? value;
+    return t(toolKey.fieldOption(tool.id, fieldId, value), english);
+  };
+  copy.locale = locale;
+  return copy;
+}
+
+/**
+ * The shared analyzer namespace as catalog entries.
+ *
+ * Exported for the completeness test, which asserts key PRESENCE over a set
+ * derived from the live registry. These keys belong to no tool, so they cannot
+ * come out of `toolMessageEntries` — without this they would be the one corner of
+ * the catalog nothing checked, which is exactly where an untranslated string
+ * survives to production.
+ */
+export function sharedAnalyzerEntries(): Array<[key: string, english: string]> {
+  return Object.entries(SHARED_ANALYZER_COPY).map(([slug, english]) => [toolKey.sharedAnalyzer(slug), english]);
 }
 
 // The chrome the shared scorers emit lives in `resultCopy.ts`, imported by

@@ -10,7 +10,7 @@ author: Sean Hogg
 
 ## Recruiters Scan Profiles in 7 Seconds — Here's What They Read
 
-Recruiter behavior on profile pages mirrors recruiter behavior on resumes: a 5–10 second skim that decides whether to keep reading or move on. The cards above are real-shaped sample profiles, and they all pass that skim test for the same reasons.
+Recruiter behavior on profile pages mirrors recruiter behavior on resumes: a 5–10 second skim that decides whether to keep reading or move on. The profiles that survive that skim all pass it for the same reasons.
 
 In the first scan, a recruiter is looking for four things: the **headline** (does this person describe themselves the way the role would describe the candidate?), the **specialty** (do they have a clear lane?), the **metrics** (is there at least one quantified outcome to anchor on?), and the **signal of activity** (open to work, recent profile updates, follower / connection counts).
 
@@ -18,7 +18,7 @@ Most candidate profiles fail the skim because they're generic — "experienced p
 
 ## The Headline Is the Whole Battle
 
-Look at the headline on each card above. Notice the structure:
+Look at the headline on any profile that gets replies. Notice the structure:
 
 - "Senior Product Designer • Shipped onboarding from 38% → 61%"
 - "Staff Software Engineer • Distributed systems, payments, Go/Rust"
@@ -44,7 +44,7 @@ If you can't think of a specific number, look at your last role and find one —
 
 ## The Activity Signals That Push You Up the List
 
-Beyond the headline, the cards above carry quieter signals that affect search ranking and recruiter trust:
+Beyond the headline, a strong profile carries quieter signals that affect search ranking and recruiter trust:
 
 **Open to work badge.** Profiles flagged as open to work surface higher in recruiter searches. If you're actively job-seeking, turn this on. If you're passively open, turn it on with the "only recruiters" visibility setting.
 
@@ -52,7 +52,7 @@ Beyond the headline, the cards above carry quieter signals that affect search ra
 
 **Connection / follower counts.** Not the most important signal, but they do communicate "this is a real, established professional" rather than a half-finished profile. Don't game this — but don't neglect it either.
 
-**Avatar.** A real photo (or a tasteful illustrated avatar like the cards above) outperforms an empty silhouette by a wide margin in click-through rates from recruiter search.
+**Avatar.** A real photo — or a tasteful illustrated avatar — outperforms an empty silhouette by a wide margin in click-through rates from recruiter search.
 
 ## How to Audit Your Own Profile in 5 Minutes
 
@@ -68,13 +68,13 @@ Pull up your profile and run these five checks — or skip the manual pass and l
 
 5. **Avatar test.** Real photo or thoughtful illustrated avatar? If you're using a default silhouette, fix it now. The single highest-leverage 30-second change you can make.
 
-Most candidate profiles can move from "forgettable" to "high-skim" with 15 minutes of focused editing. The cards above are the target.
+Most candidate profiles can move from "forgettable" to "high-skim" with 15 minutes of focused editing. The checklist above is the target.
 
 ## Frequently Asked Questions
 
 ### Should I use a real photo or an illustrated avatar?
 
-A real, professional photo wins for most use cases — it humanizes the profile and increases click-through. Illustrated avatars work fine when used consistently and intentionally (like the sample cards above, which use DiceBear avatars), but a default silhouette is always worse than a thoughtful illustrated avatar, and a thoughtful illustrated avatar is always worse than a real photo.
+A real, professional photo wins for most use cases — it humanizes the profile and increases click-through. Illustrated avatars work fine when used consistently and intentionally, but a default silhouette is always worse than a thoughtful illustrated avatar, and a thoughtful illustrated avatar is always worse than a real photo.
 
 ### How long should my profile headline be?
 

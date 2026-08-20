@@ -14,7 +14,9 @@
  * bare state pill. Unmapped providers (e.g. Bitbucket Server) return `supported: false`.
  */
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
-import { buildGitApiBaseUrl } from './gitProxy';
+import {
+  collapseBitbucketBuildStates, normalizeBitbucketPrState, resolveRepoApiTarget,
+} from './repoApiTarget';
 import type { Env } from '../../env';
 
 export interface PullRequestDetail {
@@ -96,12 +98,10 @@ const NO_STAT: DiffStat = { additions: null, deletions: null, changedFiles: null
  * classic way a hand-rolled diffstat over-reports by two per file).
  */
 async function gitlabDiffStat(
-  apiBase: string,
-  projectId: string,
-  number: number,
+  mrBase: string,
   headers: Record<string, string>,
 ): Promise<DiffStat> {
-  const res = await fetch(`${apiBase}/projects/${projectId}/merge_requests/${number}/changes`, { headers }).catch(() => null);
+  const res = await fetch(`${mrBase}/changes`, { headers }).catch(() => null);
   if (!res || !res.ok) return NO_STAT;
   const body = (await res.json().catch(() => null)) as { changes?: Array<{ diff?: string }> } | null;
   const changes = body?.changes;
@@ -150,24 +150,18 @@ async function bitbucketChecks(
   const res = await fetch(`${prBase}/statuses?pagelen=100`, { headers }).catch(() => null);
   if (!res || !res.ok) return { checks: null, checksTotal: 0 };
   const body = (await res.json().catch(() => null)) as { values?: Array<{ state?: string }> } | null;
-  const states = (body?.values ?? []).map((v) => (v.state ?? '').toUpperCase());
+  const states = (body?.values ?? []).map((v) => v.state ?? '');
   if (states.length === 0) return { checks: null, checksTotal: 0 };
-  const checks: PullRequestDetail['checks'] =
-    states.some((st) => st === 'FAILED' || st === 'ERROR') ? 'failure'
-      : states.some((st) => st === 'INPROGRESS' || st === 'PENDING') ? 'pending'
-        : states.some((st) => st === 'SUCCESSFUL') ? 'success'
-          : null;
-  return { checks, checksTotal: states.length };
+  return { checks: collapseBitbucketBuildStates(states), checksTotal: states.length };
 }
 
 /** GitLab MR detail — state/merged/mergeable + CI from the head pipeline, plus the
  *  per-file size derived from `/changes`. Never throws. */
 async function fetchGitlabDetail(coords: PrCoords): Promise<PullRequestDetail> {
-  let apiBase: string;
-  try { apiBase = buildGitApiBaseUrl(coords.provider, coords.host); } catch (e) { return UNSUPPORTED(e instanceof Error ? e.message : 'unsupported host'); }
-  const projectId = encodeURIComponent(`${coords.owner}/${coords.repo}`);
+  let api: ReturnType<typeof resolveRepoApiTarget>;
+  try { api = resolveRepoApiTarget(coords); } catch (e) { return UNSUPPORTED(e instanceof Error ? e.message : 'unsupported host'); }
   const headers = { Authorization: `Bearer ${coords.token}`, Accept: 'application/json', 'User-Agent': 'BuilderForce-PR-Detail/1.0' };
-  const res = await fetch(`${apiBase}/projects/${projectId}/merge_requests/${coords.number}`, { headers }).catch(() => null);
+  const res = await fetch(api.pullRequest(coords.number), { headers }).catch(() => null);
   if (!res || !res.ok) return UNSUPPORTED(res ? `GitLab ${res.status}` : 'network error');
   const mr = (await res.json().catch(() => null)) as {
     state?: string; merged_at?: string | null; merge_status?: string; changes_count?: string;
@@ -184,7 +178,7 @@ async function fetchGitlabDetail(coords: PrCoords): Promise<PullRequestDetail> {
   // "12 files" with no size — the reviewer could not tell a rename from a rewrite.
   // The per-file unified diffs are one call away and carry the line counts; summing
   // them here is what gives GitLab the same +/- the GitHub path already has.
-  const stat = await gitlabDiffStat(apiBase, projectId, coords.number, headers);
+  const stat = await gitlabDiffStat(api.pullRequest(coords.number), headers);
   return {
     supported: true,
     state: mr.state === 'opened' ? 'open' : mr.state ?? null,
@@ -209,10 +203,11 @@ async function fetchGitlabDetail(coords: PrCoords): Promise<PullRequestDetail> {
 /** Bitbucket Cloud PR detail — state/merged, plus the diffstat and combined build
  *  state from their own endpoints (best-effort; absence degrades to nulls). Never throws. */
 async function fetchBitbucketDetail(coords: PrCoords): Promise<PullRequestDetail> {
-  let apiBase: string;
-  try { apiBase = buildGitApiBaseUrl(coords.provider, coords.host); } catch (e) { return UNSUPPORTED(e instanceof Error ? e.message : 'unsupported host'); }
+  let api: ReturnType<typeof resolveRepoApiTarget>;
+  try { api = resolveRepoApiTarget(coords); } catch (e) { return UNSUPPORTED(e instanceof Error ? e.message : 'unsupported host'); }
+  if (api.flavor === 'bitbucket-server') return fetchBitbucketServerDetail(coords, api);
   const headers = { Authorization: `Bearer ${coords.token}`, Accept: 'application/json', 'User-Agent': 'BuilderForce-PR-Detail/1.0' };
-  const prBase = `${apiBase}/repositories/${coords.owner}/${coords.repo}/pullrequests/${coords.number}`;
+  const prBase = api.pullRequest(coords.number);
   const res = await fetch(prBase, { headers }).catch(() => null);
   if (!res || !res.ok) return UNSUPPORTED(res ? `Bitbucket ${res.status}` : 'network error');
   const pr = (await res.json().catch(() => null)) as { state?: string; merge_commit?: { hash?: string } | null } | null;
@@ -229,7 +224,7 @@ async function fetchBitbucketDetail(coords: PrCoords): Promise<PullRequestDetail
   ]);
   return {
     supported: true,
-    state: pr.state === 'OPEN' ? 'open' : pr.state === 'MERGED' ? 'merged' : pr.state === 'DECLINED' ? 'closed' : pr.state ?? null,
+    state: normalizeBitbucketPrState(pr.state),
     merged: pr.state === 'MERGED',
     draft: false,
     mergeable: null,
@@ -245,17 +240,116 @@ async function fetchBitbucketDetail(coords: PrCoords): Promise<PullRequestDetail
   };
 }
 
+/**
+ * Bitbucket SERVER (Data Center) PR detail.
+ *
+ * Server's `/rest/api/1.0` is a different API, not a different base for the same
+ * paths — which is why this could not be a branch inside the Cloud function:
+ *   • the PR object reports `OPEN|MERGED|DECLINED` and hangs the merge commit off
+ *     `properties.mergeCommit.id` (Cloud: `merge_commit.hash`);
+ *   • mergeability is a SEPARATE `/merge` resource (`canMerge`/`conflicted`/`vetoes`) —
+ *     genuinely richer than Cloud, which reports no mergeability at all;
+ *   • `/changes` lists changed FILES with no line counts anywhere in the API, so
+ *     additions/deletions stay null rather than being fabricated from a file count;
+ *   • CI lives on the `/rest/build-status/1.0` plugin keyed by COMMIT, not on the PR.
+ * The three follow-up reads are best-effort and run together: a Server without the
+ * build-status plugin, or a token lacking it, degrades to nulls, never to an error.
+ */
+async function fetchBitbucketServerDetail(
+  coords: PrCoords,
+  api: ReturnType<typeof resolveRepoApiTarget>,
+): Promise<PullRequestDetail> {
+  const headers = { Authorization: `Bearer ${coords.token}`, Accept: 'application/json', 'User-Agent': 'BuilderForce-PR-Detail/1.0' };
+  const prBase = api.pullRequest(coords.number);
+  const res = await fetch(prBase, { headers }).catch(() => null);
+  if (!res || !res.ok) return UNSUPPORTED(res ? `Bitbucket Server ${res.status}` : 'network error');
+  const pr = (await res.json().catch(() => null)) as {
+    state?: string;
+    fromRef?: { latestCommit?: string } | null;
+    properties?: { mergeCommit?: { id?: string } } | null;
+  } | null;
+  if (!pr) return UNSUPPORTED('malformed PR response');
+
+  const headSha = pr.fromRef?.latestCommit ?? null;
+  const [merge, changed, ci] = await Promise.all([
+    bitbucketServerMergeability(prBase, headers),
+    bitbucketServerChangedFiles(prBase, headers),
+    headSha ? bitbucketServerChecks(api.buildStatus(headSha), headers) : Promise.resolve({ checks: null, checksTotal: 0 }),
+  ]);
+
+  return {
+    supported: true,
+    state: normalizeBitbucketPrState(pr.state),
+    merged: (pr.state ?? '').toUpperCase() === 'MERGED',
+    draft: false,
+    mergeable: merge.mergeable,
+    mergeableState: merge.mergeableState,
+    // Server's merge strategies are a repository setting, not a per-PR choice, and
+    // are not exposed on the PR — see `buildMergeRequest`, which drops `method` for
+    // the same reason. Reporting a strategy list here would let the UI offer a
+    // choice the merge call cannot honour.
+    allowedMergeMethods: null,
+    additions: null,
+    deletions: null,
+    changedFiles: changed,
+    checks: ci.checks,
+    checksTotal: ci.checksTotal,
+    headSha,
+    mergeSha: pr.properties?.mergeCommit?.id ?? null,
+  };
+}
+
+/** Server `/merge` — `conflicted` and the veto list are the actionable half. */
+async function bitbucketServerMergeability(
+  prBase: string,
+  headers: Record<string, string>,
+): Promise<{ mergeable: boolean | null; mergeableState: string | null }> {
+  const res = await fetch(`${prBase}/merge`, { headers }).catch(() => null);
+  if (!res || !res.ok) return { mergeable: null, mergeableState: null };
+  const body = (await res.json().catch(() => null)) as {
+    canMerge?: boolean; conflicted?: boolean; outcome?: string;
+    vetoes?: Array<{ summaryMessage?: string }>;
+  } | null;
+  if (!body) return { mergeable: null, mergeableState: null };
+  const veto = body.vetoes?.[0]?.summaryMessage;
+  const state = body.conflicted ? 'conflicted' : veto ?? body.outcome ?? (body.canMerge ? 'clean' : null);
+  return { mergeable: typeof body.canMerge === 'boolean' ? body.canMerge : null, mergeableState: state ?? null };
+}
+
+/** Server `/changes` — `size` is this PAGE's count, so the total comes from the
+ *  `size`/`isLastPage` envelope with a generous single page rather than a walk. */
+async function bitbucketServerChangedFiles(prBase: string, headers: Record<string, string>): Promise<number | null> {
+  const res = await fetch(`${prBase}/changes?limit=1000`, { headers }).catch(() => null);
+  if (!res || !res.ok) return null;
+  const body = (await res.json().catch(() => null)) as { values?: unknown[]; size?: number } | null;
+  if (!body || !Array.isArray(body.values)) return null;
+  return typeof body.size === 'number' ? body.size : body.values.length;
+}
+
+/** Server build-status plugin — the analogue of Cloud's `/statuses`, keyed by commit. */
+async function bitbucketServerChecks(
+  statusUrl: string,
+  headers: Record<string, string>,
+): Promise<{ checks: PullRequestDetail['checks']; checksTotal: number }> {
+  const res = await fetch(`${statusUrl}?limit=100`, { headers }).catch(() => null);
+  if (!res || !res.ok) return { checks: null, checksTotal: 0 };
+  const body = (await res.json().catch(() => null)) as { values?: Array<{ state?: string }> } | null;
+  const states = (body?.values ?? []).map((v) => v.state ?? '');
+  if (states.length === 0) return { checks: null, checksTotal: 0 };
+  return { checks: collapseBitbucketBuildStates(states), checksTotal: states.length };
+}
+
 /** Live fetch (uncached). Never throws — returns a typed `error` detail instead. */
 async function fetchDetail(coords: PrCoords): Promise<PullRequestDetail> {
   if (coords.provider === 'gitlab') return fetchGitlabDetail(coords);
   if (coords.provider === 'bitbucket') return fetchBitbucketDetail(coords);
   if (coords.provider !== 'github') return UNSUPPORTED(`detail not implemented for provider '${coords.provider}'`);
 
-  const apiBase = buildGitApiBaseUrl(coords.provider, coords.host);
-  const repoBase = `${apiBase}/repos/${coords.owner}/${coords.repo}`;
+  const api = resolveRepoApiTarget(coords);
+  const { repoBase } = api;
   const headers = ghHeaders(coords.token);
 
-  const prRes = await fetch(`${repoBase}/pulls/${coords.number}`, { headers }).catch(() => null);
+  const prRes = await fetch(api.pullRequest(coords.number), { headers }).catch(() => null);
   if (!prRes || !prRes.ok) {
     return UNSUPPORTED(prRes ? `GitHub ${prRes.status}` : 'network error');
   }

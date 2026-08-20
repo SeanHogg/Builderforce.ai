@@ -10,8 +10,20 @@ import {
   listMyEngagements, respondEngagement,
   listJobs, getJob, bidJob, listMyProposals, withdrawProposal,
   listSavedJobs, saveJob, unsaveJob,
+  listMyInvites, respondToInvite, markInviteViewed,
+  listRecommendedJobs,
+  openJobAttachment, openMyProposalAttachment,
+  uploadProposalAttachment, deleteProposalAttachment,
   type Engagement, type JobPosting, type JobProposal,
+  type JobInvite, type PostingMatch, type ScreeningQuestion,
 } from '@/lib/freelancerApi';
+import {
+  ENGAGEMENT_TYPES, EXPERIENCE_LEVELS, JOB_DISCIPLINES, JOB_SPECIALTIES, PROJECT_LENGTHS,
+  experienceKey, inviteStatusKey, projectLengthKey, specialtyKey,
+} from '@/components/talent/jobVocabulary';
+import { ScreeningAnswersForm, unansweredRequired } from '@/components/talent/ScreeningQuestionsEditor';
+import { AttachmentsPanel } from '@/components/talent/AttachmentsPanel';
+import { MatchScore, MatchSkills } from '@/components/talent/MatchScore';
 import { JobAlertsPanel } from '@/components/freelance/JobAlertsPanel';
 import { MilestoneLinesEditor, MilestoneLinesPreview } from '@/components/freelance/MilestoneSchedulePanel';
 import type { MilestoneDraft, MilestoneRow } from '@/lib/milestonesApi';
@@ -39,6 +51,12 @@ const input: React.CSSProperties = {
   background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)',
   borderRadius: 'var(--radius-md)', padding: '7px 10px', fontSize: 13, outline: 'none',
 };
+/** One pill style for every skill / shape tag on this surface. */
+const chip: React.CSSProperties = {
+  fontSize: 'var(--font-size-eyebrow)', padding: '2px 8px', borderRadius: 'var(--radius-full)',
+  background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', color: 'var(--text-secondary)',
+};
+
 const STATUS_COLORS: Record<string, { bg: string; fg: string }> = {
   invited: { bg: 'rgba(59,130,246,0.12)', fg: 'rgba(59,130,246,0.95)' },
   interviewing: { bg: 'rgba(245,158,11,0.14)', fg: 'var(--warning-text, var(--warning))' },
@@ -48,19 +66,44 @@ const STATUS_COLORS: Record<string, { bg: string; fg: string }> = {
   declined: { bg: 'var(--bg-elevated)', fg: 'var(--text-muted)' },
 };
 
-type Tab = 'work' | 'saved' | 'proposals' | 'engagements' | 'alerts';
+type Tab = 'work' | 'foryou' | 'invites' | 'saved' | 'proposals' | 'engagements' | 'alerts';
+
+/** The server-side criteria this surface can narrow on. Kept as one object so the whole
+ *  set travels to `listJobs` in a single call rather than as six independent states that
+ *  can fire six overlapping requests. */
+interface BrowseFilters {
+  discipline: string;
+  specialty: string;
+  experienceLevel: string;
+  projectLength: string;
+  engagementType: string;
+}
+
+const NO_FILTERS: BrowseFilters = {
+  discipline: '', specialty: '', experienceLevel: '', projectLength: '', engagementType: '',
+};
+
+const optionStyle: React.CSSProperties = { background: 'var(--bg-elevated)', color: 'var(--text-primary)' };
 
 export default function MarketplaceGigsSection({ search }: { search: string }) {
   const { formatCents } = useMoneyFormat();
   const fmt = useFormat();
   const t = useTranslations('freelancer');
   const tm = useTranslations('milestones');
+  // The category tree and the invitation vocabulary already have labels in `talent`, and
+  // the engagement shapes in `gigs`. Reused rather than restated: a second translation of
+  // "Fixed bid" is a second thing to keep in step across five catalogues.
+  const tt = useTranslations('talent');
+  const tg = useTranslations('gigs');
   const { isAuthenticated } = useAuth();
   const [tab, setTab] = useState<Tab>('work');
   const [jobs, setJobs] = useState<JobPosting[]>([]);
   const [proposals, setProposals] = useState<JobProposal[]>([]);
   const [saved, setSaved] = useState<JobProposal[]>([]);
   const [engagements, setEngagements] = useState<Engagement[]>([]);
+  const [invites, setInvites] = useState<JobInvite[]>([]);
+  const [recommended, setRecommended] = useState<PostingMatch[]>([]);
+  const [filters, setFilters] = useState<BrowseFilters>(NO_FILTERS);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -72,6 +115,13 @@ export default function MarketplaceGigsSection({ search }: { search: string }) {
   const [bidLines, setBidLines] = useState<MilestoneDraft[]>([]);
   // The posting's own published schedule, for the one job whose bid form is open.
   const [published, setPublished] = useState<MilestoneRow[] | null>(null);
+  // The screening questions of the ONE posting being bid on, and this bidder's answers.
+  // Read with the detail rather than carried on the cached browse projection: widening
+  // that projection would mean invalidating the public cache on every question edit.
+  const [screening, setScreening] = useState<ScreeningQuestion[]>([]);
+  const [answers, setAnswers] = useState<Record<string, string>>({});
+  // The posting's own brief, for the job whose bid form is open.
+  const [jobAttachments, setJobAttachments] = useState<JobPosting['attachments']>([]);
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
@@ -79,19 +129,25 @@ export default function MarketplaceGigsSection({ search }: { search: string }) {
       // Open jobs for everyone; the two "mine" reads only when there is a token to
       // send. Asking for them signed-out is not a read that comes back empty — it is
       // a 401 that files a support ticket about somebody who is only browsing.
-      const [j, p, e, sv] = await Promise.all([
-        listJobs().catch(() => []),
+      const [j, p, e, sv, inv, rec] = await Promise.all([
+        listJobs(filters).catch(() => []),
         isAuthenticated ? listMyProposals().catch(() => []) : Promise.resolve([]),
         isAuthenticated ? listMyEngagements().catch(() => []) : Promise.resolve([]),
         isAuthenticated ? listSavedJobs().catch(() => []) : Promise.resolve([]),
+        // Two more reads that are ABOUT THE VIEWER, so they follow the same rule as
+        // proposals and engagements: never fired without a token. A logged-out visitor
+        // picking the Gigs chip must not trip a 401 that files a support ticket.
+        isAuthenticated ? listMyInvites().catch(() => []) : Promise.resolve([]),
+        isAuthenticated ? listRecommendedJobs().catch(() => []) : Promise.resolve([]),
       ]);
       setJobs(j); setProposals(p); setEngagements(e); setSaved(sv);
+      setInvites(inv); setRecommended(rec);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load');
     } finally {
       setLoading(false);
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, filters]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -114,9 +170,21 @@ export default function MarketplaceGigsSection({ search }: { search: string }) {
    */
   const openBid = async (job: JobPosting) => {
     setBidFor(job.id); setBid({ note: '', rate: '' }); setBidLines([]); setPublished(null);
-    if (job.engagementType !== 'fixed_bid') return;
+    setScreening([]); setAnswers({}); setJobAttachments([]);
     try {
       const detail = await getJob(job.id);
+      // The screening questions and the brief come from the DETAIL read for the one job
+      // being bid on. Both are part of the offer and neither is on the cached browse
+      // projection, so they are fetched when they are about to be used.
+      const questions = detail.screeningQuestions ?? [];
+      setScreening(questions);
+      setJobAttachments(detail.attachments ?? []);
+      // Seeded from what this bidder already answered, so revising a bid is an edit and
+      // not a re-application.
+      setAnswers(Object.fromEntries((detail.myProposal?.id ? proposals : [])
+        .filter((row) => row.jobId === job.id)
+        .flatMap((row) => (row.screeningAnswers ?? []).map((a) => [a.questionId, a.answer]))));
+      if (job.engagementType !== 'fixed_bid') return;
       const posting = detail.milestones ?? [];
       setPublished(posting);
       // A revision starts from what THIS bidder already proposed; a first bid starts from
@@ -137,17 +205,59 @@ export default function MarketplaceGigsSection({ search }: { search: string }) {
         // Blank lines are dropped rather than refused: a half-typed extra row must not
         // lose somebody the proposal they wrote.
         milestones: bidLines.filter((line) => line.title.trim() && line.amountCents > 0),
+        screeningAnswers: Object.entries(answers)
+          .filter(([, answer]) => answer.trim())
+          .map(([questionId, answer]) => ({ questionId, answer })),
       });
       setBidFor(null); setBid({ note: '', rate: '' }); setBidLines([]); setPublished(null);
+      setScreening([]); setAnswers({});
       await load();
     } catch (e) { setError(e instanceof Error ? e.message : 'Failed'); }
     finally { setBusy(null); }
   };
 
-  const rate = (min: number | null, max: number | null, cur: string) => {
-    if (min == null && max == null) return '';
+  /**
+   * What a posting costs, in the unit its SHAPE implies.
+   *
+   * Hourly work shows the per-hour band; fixed-price work shows the whole-job total. The
+   * same integer means opposite things in the two, so the label is never omitted and the
+   * two are never merged into one number (see migration 0985).
+   */
+  const priceLabel = (job: Pick<JobPosting, 'rateMinCents' | 'rateMaxCents' | 'budgetTotalCents' | 'currency' | 'engagementType'>) => {
     const f = (c: number) => (c / 100).toFixed(0);
-    return min != null && max != null ? `${cur} ${f(min)}–${f(max)}` : `${cur} ${f((min ?? max)!)}`;
+    const cur = job.currency;
+    if (job.engagementType !== 'hourly' && job.budgetTotalCents != null) {
+      return t('jobs.budgetTotal', { amount: `${cur} ${f(job.budgetTotalCents)}` });
+    }
+    const min = job.rateMinCents;
+    const max = job.rateMaxCents;
+    if (min == null && max == null) return '';
+    const band = min != null && max != null ? `${cur} ${f(min)}–${f(max)}` : `${cur} ${f((min ?? max)!)}`;
+    return job.engagementType === 'hourly' ? t('jobs.rateBand', { amount: band }) : band;
+  };
+
+  /** Invitations still awaiting an answer. `expired` is projected by the server from the
+   *  deadline and the clock, so this list can never offer an action the API would refuse. */
+  const liveInvites = invites.filter((invite) => invite.status === 'sent' || invite.status === 'viewed');
+
+  /** Accept or decline. Accepting returns the proposal it OPENED, so the next thing the
+   *  bidder sees is the bid form on that posting — an invite that lands inside the flow
+   *  rather than at a dead end. */
+  const answerInvite = async (invite: JobInvite, accept: boolean) => {
+    setBusy(`invite:${invite.id}`); setError(null);
+    try {
+      await respondToInvite(invite.id, accept);
+      await load();
+      if (accept) {
+        const job = jobs.find((entry) => entry.id === invite.jobId);
+        setTab('work');
+        if (job) await openBid(job);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed');
+    } finally {
+      setBusy(null);
+    }
   };
 
   // The marketplace's shared search box filters this section too, so the one input
@@ -171,6 +281,10 @@ export default function MarketplaceGigsSection({ search }: { search: string }) {
 
   const TABS: { id: Tab; label: string }[] = [
     { id: 'work', label: t('gigs.tabWork') },
+    { id: 'foryou', label: t('gigs.tabForYou') },
+    // The count is on the tab because an invitation that expires unseen is the failure
+    // this whole feature exists to prevent.
+    { id: 'invites', label: liveInvites.length > 0 ? `${t('gigs.tabInvites')} (${liveInvites.length})` : t('gigs.tabInvites') },
     { id: 'saved', label: t('gigs.tabSaved') },
     { id: 'proposals', label: t('gigs.tabProposals') },
     { id: 'engagements', label: t('gigs.tabEngagements') },
@@ -222,6 +336,51 @@ export default function MarketplaceGigsSection({ search }: { search: string }) {
           visitor who has none, and "no proposals" would be a lie rather than a state. */}
       {guestWall}
 
+      {/* The criteria the SERVER narrows on. Distinct from the marketplace's shared search
+          box, which filters the loaded page in memory: these five go into the query, so a
+          board of two hundred postings can be cut down before it is sent. They are the
+          same criteria a job ALERT saves, evaluated by the same spec (`jobFilters.ts`),
+          which is what stops an alert disagreeing with the board it was set from. */}
+      {tab === 'work' && (
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
+          <select style={input} aria-label={t('jobs.filterDiscipline')} value={filters.discipline}
+            onChange={(e) => setFilters((f) => ({ ...f, discipline: e.target.value, specialty: '' }))}>
+            <option value="" style={optionStyle}>{t('jobs.filterDiscipline')}</option>
+            {JOB_DISCIPLINES.map((value) => <option key={value} value={value} style={optionStyle}>{t(`discipline.${value}`)}</option>)}
+          </select>
+          {filters.discipline && (JOB_SPECIALTIES[filters.discipline] ?? []).length > 0 && (
+            <select style={input} aria-label={t('jobs.filterSpecialty')} value={filters.specialty}
+              onChange={(e) => setFilters((f) => ({ ...f, specialty: e.target.value }))}>
+              <option value="" style={optionStyle}>{t('jobs.filterSpecialty')}</option>
+              {(JOB_SPECIALTIES[filters.discipline] ?? []).map((value) => (
+                <option key={value} value={value} style={optionStyle}>{tt(specialtyKey(value))}</option>
+              ))}
+            </select>
+          )}
+          <select style={input} aria-label={t('jobs.filterExperience')} value={filters.experienceLevel}
+            onChange={(e) => setFilters((f) => ({ ...f, experienceLevel: e.target.value }))}>
+            <option value="" style={optionStyle}>{t('jobs.filterExperience')}</option>
+            {EXPERIENCE_LEVELS.map((value) => <option key={value} value={value} style={optionStyle}>{t(experienceKey(value))}</option>)}
+          </select>
+          <select style={input} aria-label={t('jobs.filterLength')} value={filters.projectLength}
+            onChange={(e) => setFilters((f) => ({ ...f, projectLength: e.target.value }))}>
+            <option value="" style={optionStyle}>{t('jobs.filterLength')}</option>
+            {PROJECT_LENGTHS.map((value) => <option key={value} value={value} style={optionStyle}>{t(projectLengthKey(value))}</option>)}
+          </select>
+          <select style={input} aria-label={t('jobs.filterEngagement')} value={filters.engagementType}
+            onChange={(e) => setFilters((f) => ({ ...f, engagementType: e.target.value }))}>
+            <option value="" style={optionStyle}>{t('jobs.filterEngagement')}</option>
+            {ENGAGEMENT_TYPES.map((value) => <option key={value} value={value} style={optionStyle}>{tg(`engagementType.${value}`)}</option>)}
+          </select>
+          {(filters.discipline || filters.specialty || filters.experienceLevel || filters.projectLength || filters.engagementType) && (
+            <button type="button" onClick={() => setFilters(NO_FILTERS)}
+              style={{ padding: '7px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-muted)', fontSize: 'var(--font-size-small)', fontWeight: 600, cursor: 'pointer' }}>
+              {t('jobs.filterClear')}
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Open jobs to bid on */}
       {!loading && tab === 'work' && (
         filteredJobs.length === 0 ? <div style={{ ...card, textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>{t('jobs.emptyOpen')}</div> : (
@@ -233,16 +392,26 @@ export default function MarketplaceGigsSection({ search }: { search: string }) {
                   {j.myProposal && pill(j.myProposal.status)}
                 </div>
                 <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', marginTop: 4, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                  <span>{j.tenantName} · {rate(j.rateMinCents, j.rateMaxCents, j.currency)}</span>
+                  <span>{j.tenantName} · {priceLabel(j)}</span>
                   {j.clientRating != null && (j.clientRatingCount ?? 0) > 0 && (
                     <span title={t('gigs.clientRatingTip')} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, color: 'var(--warning-text, var(--warning))', fontWeight: 600 }}><Icon source="★" size="1em" /> {j.clientRating.toFixed(1)} <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>({j.clientRatingCount})</span></span>
                   )}
                 </div>
                 {j.description && <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)', marginTop: 8, maxHeight: 60, overflow: 'hidden' }}>{j.description}</p>}
 
+                {/* The SHAPE of the work, which is what a bidder screens on before they
+                    read a word of the description. */}
+                {(j.experienceLevel || j.projectLength || j.specialty) && (
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+                    {j.specialty && <span style={chip}>{tt(specialtyKey(j.specialty))}</span>}
+                    {j.experienceLevel && <span style={chip}>{t(experienceKey(j.experienceLevel))}</span>}
+                    {j.projectLength && <span style={chip}>{t(projectLengthKey(j.projectLength))}</span>}
+                  </div>
+                )}
+
                 {j.skills.length > 0 && (
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
-                    {j.skills.slice(0, 5).map((s) => <span key={s} style={{ fontSize: 'var(--font-size-eyebrow)', padding: '2px 8px', borderRadius: 'var(--radius-full)', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', color: 'var(--text-secondary)' }}>{s}</span>)}
+                    {j.skills.slice(0, 5).map((s) => <span key={s} style={chip}>{s}</span>)}
                   </div>
                 )}
                 <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -276,8 +445,19 @@ export default function MarketplaceGigsSection({ search }: { search: string }) {
                     </>
                   ) : bidFor === j.id ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {/* The client's brief, read-only. A bid priced without the spec is a
+                          bid on a different job, so these are as available to a bidder as
+                          the description is. */}
+                      {(jobAttachments ?? []).length > 0 && (
+                        <AttachmentsPanel
+                          attachments={jobAttachments ?? []}
+                          readOnly
+                          onOpen={(attachmentId) => openJobAttachment(j.id, attachmentId)}
+                        />
+                      )}
                       <input style={input} placeholder={t('jobs.yourRate')} type="number" min={0} value={bid.rate} onChange={(e) => setBid((b) => ({ ...b, rate: e.target.value }))} />
                       <textarea style={{ ...input, minHeight: 60, resize: 'vertical' }} placeholder={t('jobs.coverNote')} value={bid.note} onChange={(e) => setBid((b) => ({ ...b, note: e.target.value }))} />
+                      <ScreeningAnswersForm questions={screening} answers={answers} onChange={setAnswers} />
                       {/* Counter-propose the deliverables. Only offered on fixed-price
                           work: an hourly engagement is transacted through timecards and
                           has no schedule to disagree with. */}
@@ -294,8 +474,24 @@ export default function MarketplaceGigsSection({ search }: { search: string }) {
                           <MilestoneLinesEditor lines={bidLines} onChange={setBidLines} currency={j.currency} />
                         </div>
                       )}
+                      {/* Work samples hang off the PROPOSAL, so they can only be attached
+                          once the row exists — i.e. after a first submit. Offered here on a
+                          revision rather than hidden away on another screen. */}
+                      {j.myProposal?.id && (
+                        <AttachmentsPanel
+                          attachments={proposals.find((row) => row.id === j.myProposal?.id)?.attachments ?? []}
+                          onOpen={(attachmentId) => openMyProposalAttachment(j.myProposal!.id, attachmentId)}
+                          onUpload={async (file) => { await uploadProposalAttachment(j.myProposal!.id, file); await load(); }}
+                          onRemove={async (attachmentId) => { await deleteProposalAttachment(j.myProposal!.id, attachmentId); await load(); }}
+                        />
+                      )}
+                      {unansweredRequired(screening, answers).length > 0 && (
+                        <p style={{ margin: 0, fontSize: 'var(--font-size-small)', color: 'var(--coral-bright)' }}>
+                          {t('jobs.screeningMissing', { count: unansweredRequired(screening, answers).length })}
+                        </p>
+                      )}
                       <div style={{ display: 'flex', gap: 8 }}>
-                        <button type="button" onClick={() => submitBid(j.id)} disabled={busy === `bid:${j.id}`}
+                        <button type="button" onClick={() => submitBid(j.id)} disabled={busy === `bid:${j.id}` || unansweredRequired(screening, answers).length > 0}
                           style={{ padding: '7px 14px', borderRadius: 'var(--radius-md)', border: 'none', background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))', color: 'var(--text-on-accent)', fontSize: 'var(--font-size-small)', fontWeight: 700, cursor: 'pointer' }}>{t('jobs.submitBid')}</button>
                         <button type="button" onClick={() => setBidFor(null)} style={{ padding: '7px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 'var(--font-size-small)', fontWeight: 600, cursor: 'pointer' }}>{t('cancel')}</button>
                       </div>
@@ -309,6 +505,81 @@ export default function MarketplaceGigsSection({ search }: { search: string }) {
             ))}
           </div>
         )
+      )}
+
+      {/* Invitations addressed to me. The reason `job_invites` is a row and not a
+          notification: accepting one opens the proposal and drops the bidder straight into
+          the bid form on that posting. */}
+      {!loading && !guestWall && tab === 'invites' && (
+        invites.length === 0
+          ? <div style={{ ...card, textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>{t('gigs.invitesEmpty')}</div>
+          : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {invites.map((invite) => (
+                <div key={invite.id} style={{ ...card, display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 'var(--font-size-body)', fontWeight: 700, color: 'var(--text-primary)', overflowWrap: 'anywhere' }}>{invite.jobTitle ?? '—'}</div>
+                    <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', marginTop: 4 }}>
+                      {invite.tenantName} · {tt(inviteStatusKey(invite.status))}
+                      {invite.expiresAt && (invite.status === 'sent' || invite.status === 'viewed') && ` · ${tt('invite.expires', { date: fmt.date(invite.expiresAt) })}`}
+                    </div>
+                    {invite.message && (
+                      <p style={{ margin: '8px 0 0', fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)', fontStyle: 'italic' }}>{invite.message}</p>
+                    )}
+                  </div>
+                  {(invite.status === 'sent' || invite.status === 'viewed') ? (
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      <button type="button" disabled={busy === `invite:${invite.id}`}
+                        onClick={() => { void markInviteViewed(invite.id); void answerInvite(invite, true); }}
+                        style={{ padding: '7px 14px', borderRadius: 'var(--radius-md)', border: 'none', background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))', color: 'var(--text-on-accent)', fontSize: 'var(--font-size-small)', fontWeight: 700, cursor: 'pointer' }}>
+                        {t('gigs.inviteAccept')}
+                      </button>
+                      <button type="button" disabled={busy === `invite:${invite.id}`}
+                        onClick={() => void answerInvite(invite, false)}
+                        style={{ padding: '7px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-muted)', fontSize: 'var(--font-size-small)', fontWeight: 600, cursor: 'pointer' }}>
+                        {t('gigs.inviteDecline')}
+                      </button>
+                    </div>
+                  ) : (
+                    <span style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{tt(inviteStatusKey(invite.status))}</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )
+      )}
+
+      {/* The cached match query, seeker direction. Ranked against this person's own
+          for-hire profile, with the evidence shown — a score nobody can check is worth
+          less than no score. */}
+      {!loading && !guestWall && tab === 'foryou' && (
+        recommended.length === 0
+          ? <div style={{ ...card, textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>{t('gigs.forYouEmpty')}</div>
+          : (
+            <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 340px), 1fr))' }}>
+              {recommended.map((match) => (
+                <div key={match.id} style={card}>
+                  <div style={{ fontSize: 'var(--font-size-body)', fontWeight: 700, color: 'var(--text-primary)', overflowWrap: 'anywhere' }}>{match.title}</div>
+                  <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', margin: '4px 0 8px' }}>
+                    {match.tenantName} · {priceLabel(match)}
+                  </div>
+                  <MatchScore score={match.score} reasons={match.reasons} />
+                  <MatchSkills matched={match.matchedSkills} missing={match.missingSkills} />
+                  <button type="button"
+                    onClick={() => {
+                      // The board is the surface that can actually take a bid, so the
+                      // recommendation hands off to it rather than growing a second bid form.
+                      const job = jobs.find((entry) => entry.id === match.id);
+                      setTab('work');
+                      if (job) void openBid(job);
+                    }}
+                    style={{ marginTop: 12, padding: '7px 16px', borderRadius: 'var(--radius-md)', border: '1px solid var(--coral-bright)', background: 'var(--surface-coral-soft)', color: 'var(--coral-bright)', fontSize: 'var(--font-size-small)', fontWeight: 700, cursor: 'pointer' }}>
+                    {t('jobs.bid')}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )
       )}
 
       {/* Shortlisted jobs */}

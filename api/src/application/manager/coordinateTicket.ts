@@ -40,7 +40,7 @@ export interface CoordinateCompletionResult {
 
 export function decideCoordinatedAdvance(
   manifest: Array<{ required: boolean; stageKey: string | null; state: string; roleName: string }>,
-  lanes: Array<{ key: string; isTerminal: boolean }>,
+  lanes: Array<{ key: string; isTerminal: boolean; isParking?: boolean }>,
   fromStatus: string,
 ): { nextStatus: string | null; outstanding: string[] } {
   const stageOutstanding = manifest
@@ -51,11 +51,11 @@ export function decideCoordinatedAdvance(
   // Skip PARKED lanes (blocked / on-hold / cancelled) exactly as `resolveNextLaneKey`
   // does — they sit mid-order on the default board, and advancing a satisfied stage into
   // one is the trap described in {@link ../swimlane/nextLane.PARKED_LANE_KEYS}.
-  let next: { key: string; isTerminal: boolean } | null = null;
+  let next: { key: string; isTerminal: boolean; isParking?: boolean } | null = null;
   if (current >= 0) {
     for (let i = current + 1; i < lanes.length; i += 1) {
       const cand = lanes[i];
-      if (!cand || isParkedLane(cand.key)) continue;
+      if (!cand || isParkedLane(cand.key, cand.isParking)) continue;
       next = cand;
       break;
     }
@@ -93,7 +93,7 @@ export async function coordinateCompletedStage(
   const participants = new TicketParticipantsService(db);
   await participants.syncStates(env, args.tenantId, args.taskId);
   const manifest = await participants.listParticipants(env, args.tenantId, args.taskId);
-  const lanes = await db.select({ key: swimlanes.key, isTerminal: swimlanes.isTerminal })
+  const lanes = await db.select({ key: swimlanes.key, isTerminal: swimlanes.isTerminal, isParking: swimlanes.isParking })
     .from(swimlanes).where(eq(swimlanes.boardId, board.id)).orderBy(asc(swimlanes.position));
   const decision = decideCoordinatedAdvance(manifest, lanes, args.fromStatus);
   if (!decision.nextStatus) return unchanged(true, decision.outstanding);

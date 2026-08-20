@@ -77,6 +77,22 @@ describe('postFeedback', () => {
     expect(await postFeedback('e', 'k', payload, fetchFn as never)).toEqual({ ok: false, rateLimited: true });
   });
 
+  it('separates the workspace MONTHLY quota from a visitor burst ceiling', async () => {
+    // Both arrive as 429. Telling someone to "try again tomorrow" when the month's
+    // allowance is spent sends them back to a door that is still shut.
+    const fetchFn = vi.fn().mockResolvedValue({
+      ok: false, status: 429, json: async () => ({ quotaExceeded: true, limit: 200, used: 200 }),
+    });
+    expect(await postFeedback('e', 'k', payload, fetchFn as never)).toEqual({ ok: false, quotaExceeded: true });
+  });
+
+  it('falls back to the burst reading when a 429 carries no readable body', async () => {
+    // A CDN or proxy throttle in front of the collector answers 429 with nothing
+    // we can parse; the widget still has to say something true.
+    const fetchFn = vi.fn().mockResolvedValue({ ok: false, status: 429, json: async () => { throw new Error('nope'); } });
+    expect(await postFeedback('e', 'k', payload, fetchFn as never)).toEqual({ ok: false, rateLimited: true });
+  });
+
   it('reports a plain failure for other error statuses', async () => {
     const fetchFn = vi.fn().mockResolvedValue({ ok: false, status: 401 });
     expect(await postFeedback('e', 'k', payload, fetchFn as never)).toEqual({ ok: false });

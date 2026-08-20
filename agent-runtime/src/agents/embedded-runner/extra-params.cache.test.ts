@@ -147,4 +147,44 @@ describe("applyExtraParamsToAgent — openrouter/anthropic system caching", () =
       { type: "text", text: "sys", cache_control: EPHEMERAL_1H },
     ]);
   });
+
+  it("honours the gateway's `_builderforce.cacheTtl:'1h'` envelope", () => {
+    // The gap this closes: the gateway ADVERTISES this key and honours it on its own
+    // side, but agent-runtime read only its own hint names — so the same request got
+    // 1-hour retention through the gateway and silently fell back to 5 minutes on the
+    // direct path, which is the surface where a warm prefix matters most (an agent
+    // loop's idle gaps between turns routinely exceed five minutes).
+    const payload = drive("openrouter", "anthropic/claude-sonnet-4.6", {
+      _builderforce: { cacheTtl: "1h" },
+    });
+    expect((payload.messages as Array<{ content: unknown }>)[0]!.content).toEqual([
+      { type: "text", text: "sys", cache_control: EPHEMERAL_1H },
+    ]);
+  });
+
+  it("keeps the 5m default for `_builderforce.cacheTtl:'5m'` and for a malformed envelope", () => {
+    for (const extra of [
+      { _builderforce: { cacheTtl: "5m" } },
+      { _builderforce: { cacheTtl: "nonsense" } },
+      { _builderforce: "not-an-object" },
+      { _builderforce: null },
+    ]) {
+      const payload = drive("openrouter", "anthropic/claude-sonnet-4.6", extra);
+      expect((payload.messages as Array<{ content: unknown }>)[0]!.content).toEqual([
+        { type: "text", text: "sys", cache_control: EPHEMERAL },
+      ]);
+    }
+  });
+
+  it("an explicit runtime hint outranks the envelope", () => {
+    // `cacheRetention` names the behaviour directly; the envelope is a transport-level
+    // default. The more specific instruction wins.
+    const payload = drive("openrouter", "anthropic/claude-sonnet-4.6", {
+      cacheRetention: "short",
+      _builderforce: { cacheTtl: "1h" },
+    });
+    expect((payload.messages as Array<{ content: unknown }>)[0]!.content).toEqual([
+      { type: "text", text: "sys", cache_control: EPHEMERAL },
+    ]);
+  });
 });

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { captureEnv } from "../test-utils/env.js";
 import { runCommandWithTimeout, shouldSpawnWithShell } from "./exec.js";
+import { SPAWN_BUDGET_MS } from "../test-utils/spawn-timing.js";
 
 describe("runCommandWithTimeout", () => {
   it("never enables shell execution (Windows cmd.exe injection hardening)", () => {
@@ -58,8 +59,11 @@ describe("runCommandWithTimeout", () => {
         'let i=0; const t=setInterval(() => { process.stdout.write("."); i += 1; if (i >= 2) { clearInterval(t); process.exit(0); } }, 5);',
       ],
       {
-        timeoutMs: 1_000,
-        noOutputTimeoutMs: 500,
+        // Both budgets must outlast the interpreter cold start: the child only
+        // starts resetting the timer once it is actually running, and on Windows
+        // reaching that point costs far more than the 500ms this used to allow.
+        timeoutMs: SPAWN_BUDGET_MS * 2,
+        noOutputTimeoutMs: SPAWN_BUDGET_MS,
       },
     );
 

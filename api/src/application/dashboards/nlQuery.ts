@@ -161,7 +161,7 @@ function clampDays(n: number): number {
 }
 
 /** The metric a question falls back to when nothing recognises it. */
-const DEFAULT_METRIC_KEY = 'finance.spend';
+export const DEFAULT_METRIC_KEY = 'finance.spend';
 
 /**
  * Deterministic intent: map the question to a whitelisted metric key + window.
@@ -216,8 +216,15 @@ export async function refineIntent(intent: Intent, question: string, refiner?: I
   return intent;
 }
 
-/** Format a resolved value for the explanation sentence. */
-function formatValue(value: number | null, unit: string): string {
+/**
+ * Format a resolved value for the explanation sentence.
+ *
+ * Exported because the COMPOSED answer ({@link ../dashboards/answerComposer})
+ * writes sentences out of the same figures. A second formatter would drift — the
+ * composed narrative would say "4.1 hours" while the metric reading beside it in
+ * the same card said "4 hours", and the reader would rightly stop trusting both.
+ */
+export function formatMetricValue(value: number | null, unit: string): string {
   if (value == null) return 'no data yet';
   const rounded = Math.abs(value) >= 100 ? Math.round(value) : Math.round(value * 100) / 100;
   if (unit === 'USD') return `$${rounded.toLocaleString('en-US')}`;
@@ -226,6 +233,62 @@ function formatValue(value: number | null, unit: string): string {
   if (unit === 'hours') return `${rounded} hours`;
   if (unit === 'score') return `${rounded}`;
   return `${rounded}`;
+}
+
+/**
+ * A read-through cache hook for the registry's compute paths.
+ *
+ * The metric computes are the expensive part of an answer — each one runs a
+ * windowed insight collector — and a COMPOSED answer resolves four or five of
+ * them for one question. The caller (the route) supplies the canonical
+ * `getOrSetCached` bound to its `env`; this layer never reaches for infrastructure
+ * itself, and never grows a private Map+TTL of its own, so one cache and one
+ * invalidation story covers both `/dashboards/:id/data` and the Ask box.
+ *
+ * Absent (tests, non-Worker callers) → the loader runs directly.
+ */
+export type MetricCache = <T>(key: string, loader: () => Promise<T>) => Promise<T>;
+
+/** The cache key the dashboard data route already uses — same shape, same entries. */
+export function metricCacheKey(tenantId: number, metricKey: string, days: number): string {
+  return `dashboards:metric:t:${tenantId}:k:${metricKey}:d:${days}`;
+}
+
+/**
+ * Resolve ONE whitelisted key into the structured reading, cache included.
+ *
+ * Shared by the single-metric answer and by every metric inside a composed one, so
+ * a figure reads identically whichever path produced it — the drift this exists to
+ * prevent is a composed answer whose numbers disagree with the same question asked
+ * on its own.
+ */
+export async function readMetric(
+  db: Db,
+  tenantId: number,
+  metricKey: string,
+  days: number,
+  source: IntentSource,
+  cache?: MetricCache,
+): Promise<QueryAnswer> {
+  const def = METRIC_REGISTRY[metricKey];
+  if (!def) {
+    return { matchedMetric: metricKey, label: metricKey, value: null, unit: '', days, explanation: `No metric is registered for "${metricKey}".`, source };
+  }
+  const compute = () => def.compute(db, tenantId, days);
+  const value = cache ? await cache(metricCacheKey(tenantId, metricKey, days), compute) : await compute();
+
+  const reading = value == null
+    ? `${def.label}: no data for the last ${days} days. ${def.description}`
+    : `${def.label} over the last ${days} days is ${formatMetricValue(value, def.unit)}. ${def.description}`;
+
+  // A defaulted match SAYS it defaulted. The old sentence read identically whether
+  // the question had been understood or silently replaced with "spend", which made
+  // an unanswered question look like an answered one.
+  const explanation = source === 'default'
+    ? `I could not tell which metric that question is about, so this is ${def.label}, the default. ${reading}`
+    : reading;
+
+  return { matchedMetric: metricKey, label: def.label, value, unit: def.unit, days, explanation, source };
 }
 
 /**
@@ -238,24 +301,8 @@ export async function answerQuery(
   tenantId: number,
   question: string,
   refiner?: IntentRefiner,
+  cache?: MetricCache,
 ): Promise<QueryAnswer> {
   const { metricKey, days, source } = await refineIntent(parseIntent(question), question, refiner);
-  const def = METRIC_REGISTRY[metricKey];
-  if (!def) {
-    return { matchedMetric: metricKey, label: metricKey, value: null, unit: '', days, explanation: `No metric is registered for "${metricKey}".`, source };
-  }
-  const value = await def.compute(db, tenantId, days);
-
-  const reading = value == null
-    ? `${def.label}: no data for the last ${days} days. ${def.description}`
-    : `${def.label} over the last ${days} days is ${formatValue(value, def.unit)}. ${def.description}`;
-
-  // A defaulted match SAYS it defaulted. The old sentence read identically whether
-  // the question had been understood or silently replaced with "spend", which made
-  // an unanswered question look like an answered one.
-  const explanation = source === 'default'
-    ? `I could not tell which metric that question is about, so this is ${def.label}, the default. ${reading}`
-    : reading;
-
-  return { matchedMetric: metricKey, label: def.label, value, unit: def.unit, days, explanation, source };
+  return readMetric(db, tenantId, metricKey, days, source, cache);
 }

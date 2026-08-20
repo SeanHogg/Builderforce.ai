@@ -501,6 +501,10 @@ export interface ReminderDue {
   subject: string;
   documentTitle: string;
   intent: SignatureIntent;
+  /** Who sent it. The sweep has no request to read a language from, and a
+   *  counterparty has no account here, so the sender's stored locale is the only
+   *  signal about what language the chase should be written in. */
+  createdBy: string | null;
   /** Only the parties who still owe an answer — the reminder job's own question,
    *  answered with `isTerminalPartyStatus` rather than a `=== 'pending'` test
    *  that would chase somebody who has already declined. */
@@ -526,6 +530,7 @@ export async function signatureRemindersDue(db: Db, now = new Date()): Promise<R
       subject: signatureRequests.subject,
       documentTitle: signatureRequests.documentTitle,
       intent: signatureRequests.intent,
+      createdBy: signatureRequests.createdBy,
       remindAfterDays: signatureRequests.remindAfterDays,
       sentAt: signatureRequests.sentAt,
       lastRemindedAt: signatureRequests.lastRemindedAt,
@@ -569,6 +574,7 @@ export async function signatureRemindersDue(db: Db, now = new Date()): Promise<R
       subject: row.subject,
       documentTitle: row.documentTitle,
       intent: isSignatureIntent(row.intent) ? row.intent : 'sign',
+      createdBy: row.createdBy,
       pending,
     });
   }

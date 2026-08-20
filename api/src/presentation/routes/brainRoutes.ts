@@ -1,4 +1,5 @@
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
+import { TenantRole } from '../../domain/shared/types';
 /**
  * Brain chat routes — thin presentation layer.
  *
@@ -50,6 +51,16 @@ const traceVersionKey = (chatId: number): string => `brain-trace-version:chat:${
 // ---------------------------------------------------------------------------
 // Route factory
 // ---------------------------------------------------------------------------
+
+/**
+ * Who may administer a WORKSPACE SINGLETON chat (the team chat, the manager
+ * chat) — rename it, archive it. Owner and manager, matching every other
+ * workspace-configuration act; a developer or viewer gets the same "Chat not
+ * found" a non-member gets, rather than a 403 that would confirm it exists.
+ */
+function isWorkspaceAdminRole(role: unknown): boolean {
+  return role === TenantRole.OWNER || role === TenantRole.MANAGER;
+}
 
 export function createBrainRoutes(brainService: BrainService, db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -144,6 +155,10 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
       tenantId,
       c.get('userId') as string,
       body,
+      // The team and manager chats are workspace singletons with no owner, so
+      // renaming one is an ADMIN act, not an owner's. Resolved here because the
+      // role lives on the request, not in the service.
+      { isWorkspaceAdmin: isWorkspaceAdminRole(c.get('role')) },
     );
     if (result && 'error' in result) {
       const status = result.error === 'Chat not found' ? 404 : 404;
@@ -181,7 +196,12 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
     const id = parseId(c.req.param('id'));
     if (!id) return c.json({ error: 'Invalid chat id' }, 400);
 
-    const result = await brainService.archiveChat(id, c.get('tenantId') as number, c.get('userId') as string);
+    const result = await brainService.archiveChat(
+      id,
+      c.get('tenantId') as number,
+      c.get('userId') as string,
+      { isWorkspaceAdmin: isWorkspaceAdminRole(c.get('role')) },
+    );
     if ('error' in result) return c.json({ error: result.error }, 404);
     return c.json(result);
   });

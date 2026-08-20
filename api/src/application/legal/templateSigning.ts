@@ -81,8 +81,12 @@ export async function sendTemplatedDocument(
 
   const delivery = await deliverSignatureInvitations(
     env,
+    db,
     { subject, documentTitle: document.title, intent: document.intent, expiresAt: input.expiresAt ?? null },
     created.invitations.map((invitation) => ({ email: invitation.email, name: invitation.name, token: invitation.token })),
+    // The sender's language. `createdBy` is the same value written to the request
+    // row, so the invitation and any later chase read the same locale.
+    { userId: input.createdBy ?? null },
   );
 
   return { requestId: created.requestId, status: created.status, document, delivery };

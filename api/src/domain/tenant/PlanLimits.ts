@@ -56,6 +56,18 @@ export interface PlanLimits {
    */
   errorEventsMonthly: number;
   /**
+   * Monthly product-feedback allowance (COUNT of accepted feedback submissions),
+   * surfaced by the consumption meter as "Feedback"; -1 = unlimited. Meters the
+   * Feedback pillar's inbound volume across EVERY channel — the embeddable
+   * snippet, the in-app panel and the Sentry/PostHog provider webhooks — because
+   * each accepted request can open a backlog ticket, which costs storage, board
+   * space and a human's triage attention. The per-collector rolling-24h
+   * `daily_limit` is an ABUSE ceiling on one key; this is the plan-scoped,
+   * month-to-date quota. Filled against feedback_submissions
+   * (application/feedback/feedbackLedger.ts).
+   */
+  feedbackSubmissionsMonthly: number;
+  /**
    * Monthly outbound-fetch allowance (COUNT of Brain `/fetch-url` requests that
    * hit the wire), surfaced by the consumption meter as "Outbound fetches"; -1 =
    * unlimited. Meters the arbitrary-URL GET proxy so free-vs-paid caps sustained
@@ -163,6 +175,7 @@ export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
     tokenMonthlyLimit: 50_000,
     ingestionMonthlyBytes: 50_000_000, // 50 MB/mo — a handful of repo imports
     errorEventsMonthly: 10_000, // 10K error events/mo
+    feedbackSubmissionsMonthly: 200, // 200 requests/mo — a real pilot, not a firehose
     outboundFetchesMonthly: 500, // 500 Brain URL fetches/mo
     cloudRunsMonthly: 25, // 25 cloud-agent runs/mo — enough to try it, then upgrade
     stageSandboxRunsMonthly: 15, // 15 sandbox runs/mo
@@ -195,6 +208,7 @@ export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
     tokenMonthlyLimit: 5_000_000,
     ingestionMonthlyBytes: 5_000_000_000, // 5 GB/mo
     errorEventsMonthly: 1_000_000, // 1M error events/mo
+    feedbackSubmissionsMonthly: 20_000, // 20K requests/mo
     outboundFetchesMonthly: 50_000, // 50K Brain URL fetches/mo
     cloudRunsMonthly: 2_000, // 2K cloud-agent runs/mo
     stageSandboxRunsMonthly: 500, // 500 sandbox runs/mo
@@ -227,6 +241,7 @@ export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
     tokenMonthlyLimit: -1,
     ingestionMonthlyBytes: -1, // unlimited
     errorEventsMonthly: -1, // unlimited
+    feedbackSubmissionsMonthly: -1, // unlimited
     outboundFetchesMonthly: -1, // unlimited
     cloudRunsMonthly: -1, // unlimited
     stageSandboxRunsMonthly: -1, // unlimited
@@ -444,6 +459,22 @@ export function resolveErrorEventsMonthly(input: {
 }): number {
   if (input.tokenDailyLimitOverride === -1 || input.isSuperadmin) return -1;
   return getLimits(input.effectivePlan).errorEventsMonthly;
+}
+
+/**
+ * Resolve a tenant's effective monthly feedback-submission allowance (count); -1 =
+ * unlimited. Mirrors {@link resolveErrorEventsMonthly} so the "Feedback" meter
+ * display and the feedback ingest gate agree — the number a member SEES is the
+ * number that gets ENFORCED. A superadmin-unlimited tenant is unlimited; a
+ * positive *token* override does not lift this (different axis).
+ */
+export function resolveFeedbackSubmissionsMonthly(input: {
+  effectivePlan: TenantPlan;
+  tokenDailyLimitOverride: number | null;
+  isSuperadmin?: boolean;
+}): number {
+  if (input.tokenDailyLimitOverride === -1 || input.isSuperadmin) return -1;
+  return getLimits(input.effectivePlan).feedbackSubmissionsMonthly;
 }
 
 /**

@@ -12,7 +12,7 @@
  * infer it from the ticket's silence.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Select } from '@/components/Select';
 import { useConfirm } from '@/components/ConfirmProvider';
@@ -67,16 +67,54 @@ export function FeedbackTriage({ load, review, showTenant = false, refreshKey = 
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
-  const refresh = useCallback(() => {
+  /**
+   * Reload plumbing, in three parts, so no dependency list has to lie.
+   *
+   * The suppression this replaced (`eslint-disable exhaustive-deps` on a `load`
+   * the effect called but did not depend on) was hiding a real design problem:
+   * `refresh` was recreated whenever the fetch was, so anything that depended on
+   * it inherited the churn, and a caller passing an inline loader would have spun.
+   * Moving the loader OUT of the dependency graph is what fixes it structurally:
+   *
+   *   loadRef  — always holds the CURRENT loader, so the fetch effect can call the
+   *              latest one without taking its identity as a dependency.
+   *   nonce    — the explicit "go again" signal. Because it is a number, `refresh`
+   *              closes over nothing and is stable FOREVER, which is what lets
+   *              `decide` (and any future caller) hold onto it safely.
+   *   the effect— depends on exactly what changes WHAT it fetches: the status
+   *              filter, the caller's refreshKey, and explicit reload requests.
+   */
+  const loadRef = useRef(load);
+  const seenInputs = useRef<{ load: FeedbackTriageProps['load']; refreshKey: FeedbackTriageProps['refreshKey'] }>({ load, refreshKey });
+  const [reloadNonce, setReloadNonce] = useState(0);
+  const refresh = useCallback(() => setReloadNonce((n) => n + 1), []);
+
+  // Keep the ref pointing at the CURRENT loader, and ask for exactly ONE reload
+  // when either caller input actually changed. Comparing against what we last
+  // fetched with — rather than making `load` a dependency of the fetch — is what
+  // keeps an unstable loader safe: this effect can only re-run when the PARENT
+  // re-renders, which our own state updates never cause, so there is no cycle.
+  // Collapsing both inputs into one signal also stops the common case (a project
+  // switch changes `refreshKey` AND rebuilds `load`) from firing two requests.
+  useEffect(() => {
+    loadRef.current = load;
+    const seen = seenInputs.current;
+    if (seen.load === load && seen.refreshKey === refreshKey) return;
+    seenInputs.current = { load, refreshKey };
+    refresh();
+  }, [load, refreshKey, refresh]);
+
+  useEffect(() => {
+    // Guard against an out-of-order resolve: switching the filter twice quickly
+    // could otherwise let the FIRST response overwrite the second's results.
+    let active = true;
     setLoading(true);
-    load(status)
-      .then((q) => { setQueue(q); setError(null); })
-      .catch((e) => setError(e instanceof Error ? e.message : t('triage.loadFailed')))
-      .finally(() => setLoading(false));
-    // `load` is recreated per render by most callers; depending on it would loop.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, refreshKey]);
-  useEffect(() => { refresh(); }, [refresh]);
+    loadRef.current(status)
+      .then((q) => { if (active) { setQueue(q); setError(null); } })
+      .catch((e) => { if (active) setError(e instanceof Error ? e.message : t('triage.loadFailed')); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [status, reloadNonce, t]);
 
   const decide = async (s: FeedbackSubmission, decision: 'approved' | 'declined') => {
     if (decision === 'declined' && !(await confirm(t('triage.confirmDecline')))) return;

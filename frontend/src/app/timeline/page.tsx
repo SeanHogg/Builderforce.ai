@@ -1,16 +1,16 @@
-'use client';
+import { redirect } from 'next/navigation';
 
-import { ObservabilityContent } from '@/components/ObservabilityContent';
-import PageContainer from '@/components/PageContainer';
-
+/**
+ * The execution timeline is a view of the consolidated Settings log surface.
+ *
+ * `middleware.ts` redirects `/timeline` and `/timeline/*` to `/settings?sub=logs`,
+ * so the page that used to render `<ObservabilityContent initialView="timeline"/>`
+ * here had been unreachable — and, being `'use client'`, was still counted
+ * against the client-bundle ratchet for a route nobody could open.
+ *
+ * Restated in the route for the same reason as `/logs`: the deep link should
+ * survive an edit to the middleware matcher.
+ */
 export default function TimelinePage() {
-  return (
-    <PageContainer style={{ padding: 40 }}>
-      <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: 24 }}>Execution Timeline</h1>
-      <p style={{ color: 'var(--text-secondary)', marginBottom: 24 }}>
-        View tool audit events and workflow timelines across your agentHosts.
-      </p>
-      <ObservabilityContent initialView="timeline" />
-    </PageContainer>
-  );
+  redirect('/settings?sub=logs');
 }

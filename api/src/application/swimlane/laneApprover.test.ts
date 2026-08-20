@@ -4,7 +4,7 @@ import {
   laneApprovalOwed, loadLaneStaffedAgents, resolveLaneApprovers,
   type LaneStaffedAgent, type StaffedLaneApprover,
 } from './laneApprover';
-import { swimlaneAgentAssignments } from '../../infrastructure/database/schema';
+import { laneAgentAssignments } from './laneAgentAssignments';
 
 /**
  * These tests guard the fix for a TOTAL, SILENT failure of the accountability loop.
@@ -312,7 +312,7 @@ function makeDb(assignments: Row[], agents: Row[]) {
       return {
         from: (table: unknown) => ({
           where: async () => {
-            if (table === swimlaneAgentAssignments) { calls.assignments += 1; return assignments; }
+            if (table === laneAgentAssignments) { calls.assignments += 1; return assignments; }
             calls.agents += 1;
             return agents;
           },

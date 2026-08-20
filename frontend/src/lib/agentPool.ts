@@ -6,6 +6,7 @@
 import { registeredAgents, type RegisteredAgent } from './builderforceApi';
 import { listMyAgents, listPurchasedAgents } from './api';
 import type { PublishedAgent } from './types';
+import { getProjectWorkforce } from './teams';
 
 /** A selectable agent from one of the tenant's two source pools. */
 export interface PoolAgent {
@@ -73,4 +74,42 @@ export function loadAgentPoolCached(): Promise<PoolAgent[]> {
 /** Invalidate the cached pool so the next {@link loadAgentPoolCached} refetches. */
 export function refreshAgentPool(): void {
   poolPromise = null;
+}
+
+/**
+ * The lane-agent pool, SCOPED TO THE PROJECT'S TEAMS.
+ *
+ * `loadAgentPool` is deliberately tenant-wide — an agent is registered once and may be
+ * assigned to any surface — but a BOARD is a team's board. Offering every agent in the
+ * workspace on a lane picker meant an operator could staff a lane with an agent from a
+ * team that has nothing to do with that project, and the picker's id-space did not even
+ * match the one `team_members` uses, so nothing downstream could tell.
+ *
+ * When the project has teams attached, the pool is narrowed to agents in those teams'
+ * membership. When it has none, `scopedToTeams` is false and the full tenant pool is the
+ * correct answer — that is the documented contract of `getProjectWorkforce`, and
+ * narrowing to an empty set would leave the picker unusable on every un-teamed project.
+ *
+ * Membership is matched on `(kind, ref)`: a `cloud_agent` team member and a `workforce`
+ * pool agent are the same entity under two vocabularies, which is precisely the
+ * id-space mismatch that made this scoping impossible to express before.
+ */
+export async function loadProjectAgentPool(projectId: number): Promise<PoolAgent[]> {
+  const [pool, scope] = await Promise.all([
+    loadAgentPoolCached(),
+    getProjectWorkforce(projectId).catch(() => null),
+  ]);
+  if (!scope?.scopedToTeams || scope.workforce.length === 0) return pool;
+
+  // `cloud_agent` (team vocabulary) ≡ `workforce` (pool vocabulary); `host_agent` ≡
+  // `registered`. Humans in the team are not assignable to a lane at all.
+  const allowed = new Set(
+    scope.workforce
+      .filter((m) => m.kind === 'cloud_agent' || m.kind === 'host_agent')
+      .map((m) => `${m.kind === 'cloud_agent' ? 'workforce' : 'registered'}:${m.ref}`),
+  );
+  const scoped = pool.filter((a) => allowed.has(`${a.kind}:${a.ref}`));
+  // A team whose members are all human leaves nothing to staff a lane with; the full
+  // pool is a better answer than an empty picker with no explanation.
+  return scoped.length > 0 ? scoped : pool;
 }

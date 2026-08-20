@@ -24,7 +24,15 @@
  * ── LAYER ────────────────────────────────────────────────────────────────────
  * Application. It composes and delegates: the store rules are in
  * `formPublishing.ts`, the transport and the template are in
- * `shareInvitationMailer.ts`, and neither knows about the other.
+ * `shareInvitationMailer.ts`, the words are in `shareInvitationCopy.ts`, and none
+ * of them knows about the others.
+ *
+ * ── LANGUAGE ─────────────────────────────────────────────────────────────────
+ * A named recipient is usually not a user, so the message is written in the
+ * PUBLISHER's language — `question_sets.created_by` resolved through the one
+ * locale chain. That is why both halves take a `Db`: the sweep already had one,
+ * and the publish route now hands over the one it is already holding rather than
+ * building a second.
  */
 
 import type { Env } from '../../env';
@@ -32,6 +40,11 @@ import { resolveAppBaseUrl } from '../../env';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import type { Db } from '../../infrastructure/database/connection';
 import { deliverShareInvitations, type ShareInvitation } from '../security/shareInvitationMailer';
+import {
+  publisherEmailLocale,
+  shareInvitationMessage,
+  type InvitationPublisher,
+} from '../security/shareInvitationCopy';
 import { formRemindersDue, markFormReminded, reissueRecipientToken } from './formPublishing';
 
 const SOURCE = 'application/collection/formInvitations.ts';
@@ -41,14 +54,6 @@ const SOURCE = 'application/collection/formInvitations.ts';
  *  spelling, asserted by construction rather than by two modules agreeing. */
 export function formRecipientUrl(baseUrl: string, slug: string, token: string): string {
   return `${baseUrl}/f/${encodeURIComponent(slug)}?t=${encodeURIComponent(token)}`;
-}
-
-/** A deadline stated in the words a recipient can act on, or nothing. */
-function closesNote(closesAt: Date | string | null | undefined): string | undefined {
-  if (!closesAt) return undefined;
-  const date = closesAt instanceof Date ? closesAt : new Date(closesAt);
-  if (Number.isNaN(date.getTime())) return undefined;
-  return `This form closes on ${date.toISOString().slice(0, 10)}.`;
 }
 
 export interface FormForInvitation {
@@ -65,18 +70,19 @@ export interface FormForInvitation {
  */
 export async function deliverFormInvitations(
   env: Env,
+  db: Db,
   form: FormForInvitation,
   invitations: readonly ShareInvitation[],
+  publisher: InvitationPublisher = {},
 ): Promise<{ sent: number; failed: number }> {
   if (!invitations.length) return { sent: 0, failed: 0 };
   const base = resolveAppBaseUrl(env);
-  return deliverShareInvitations(env, invitations, {
-    subject: form.title,
-    body: `You have been asked to answer "${form.title}".`,
-    actionLabel: 'Open the form',
-    ...(closesNote(form.closesAt) ? { footnote: closesNote(form.closesAt)! } : {}),
-    linkFor: (token) => formRecipientUrl(base, form.slug, token),
-  }, SOURCE);
+  const locale = await publisherEmailLocale(env, db, publisher);
+  return deliverShareInvitations(env, invitations, shareInvitationMessage(
+    locale,
+    { kind: 'formInvitation', title: form.title, closesAt: form.closesAt ?? null },
+    (token) => formRecipientUrl(base, form.slug, token),
+  ), SOURCE);
 }
 
 export interface FormSweepResult {
@@ -114,13 +120,14 @@ export async function runFormReminderSweep(env: Env, now = new Date()): Promise<
     }
     if (!invitations.length) continue;
 
-    const delivery = await deliverShareInvitations(env, invitations, {
-      subject: `Reminder: ${form.title}`,
-      body: `You have not yet answered "${form.title}". Your link is below — it replaces the one you were sent.`,
-      actionLabel: 'Open the form',
-      ...(closesNote(form.closesAt) ? { footnote: closesNote(form.closesAt)! } : {}),
-      linkFor: (token) => formRecipientUrl(base, form.slug, token),
-    }, SOURCE);
+    // The chase is written in the same language the invitation was, because it is
+    // the same publisher writing to the same person about the same form.
+    const locale = await publisherEmailLocale(env, db, { userId: form.createdBy });
+    const delivery = await deliverShareInvitations(env, invitations, shareInvitationMessage(
+      locale,
+      { kind: 'formReminder', title: form.title, closesAt: form.closesAt },
+      (token) => formRecipientUrl(base, form.slug, token),
+    ), SOURCE);
 
     reminded += delivery.sent;
     failed += delivery.failed;

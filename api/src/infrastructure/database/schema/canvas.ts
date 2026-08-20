@@ -40,6 +40,7 @@ import {
   chatSessions,
   pokerSessions,
   segments,
+  tenantApiKeys,
   tenants,
   users,
 } from './identity';
@@ -1367,6 +1368,89 @@ export const feedbackSubmissions = pgTable('feedback_submissions', {
 }));
 
 
+/**
+ * A provider webhook wired into a project's feedback collector (migration 1076).
+ *
+ * A team that already gathers requests in Sentry (User Feedback) or PostHog
+ * (surveys / `$feedback` events) should not have to re-instrument their app to get
+ * them onto this board. This row is the per-tenant configuration behind
+ * `/api/feedback-webhooks/:collectorId/:provider`: which provider, and the shared
+ * secret its signature is verified against.
+ *
+ * ── WHY THE SECRET IS ENCRYPTED, NOT HASHED ─────────────────────────────────
+ * An ingest key is hashed (`feedback_collectors.key_hash`) because verification
+ * only needs to compare a presented key. A webhook secret is different: HMAC
+ * verification has to RECOMPUTE the digest over the raw body, which needs the
+ * secret itself. So it is encrypted at rest with the same tenant-salted AES-GCM
+ * envelope every other stored credential uses (`credentialCrypto`), and the
+ * ciphertext/IV pair is split across two columns exactly like
+ * `error_collector_integrations`.
+ *
+ * ── TENANCY ─────────────────────────────────────────────────────────────────
+ * `tenant_id` is carried directly rather than reached through `collector_id`. The
+ * tenant-scope guard can only check a predicate it can SEE on the table being
+ * queried, and this row decrypts a secret — a child that reaches its tenant
+ * through a join is unscoped by construction, and one forgotten join condition
+ * would decrypt another workspace's secret under this tenant's salt.
+ */
+export const feedbackCollectorIntegrations = pgTable('feedback_collector_integrations', {
+  id:          uuid('id').primaryKey().defaultRandom(),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  collectorId: uuid('collector_id').notNull().references(() => feedbackCollectors.id, { onDelete: 'cascade' }),
+  /** 'sentry' | 'posthog' — must match a feedbackProviders.ts adapter id. */
+  provider:    varchar('provider', { length: 32 }).notNull(),
+  /** AES-GCM ciphertext of `{ secret }`, tenant-salted. Never returned to a client. */
+  secretEnc:   text('secret_enc'),
+  secretIv:    varchar('secret_iv', { length: 32 }),
+  /** Pausing an integration stops imports without discarding the secret, so a
+   *  noisy provider can be silenced and resumed without re-configuring it there. */
+  enabled:     boolean('enabled').notNull().default(true),
+  lastEventAt: timestamp('last_event_at'),
+  createdBy:   varchar('created_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  // One integration per (collector, provider) — a second row would make "the
+  // secret for Sentry on this collector" a question with two answers, and
+  // verification would then depend on which one the query happened to return.
+  uqProvider: uniqueIndex('uq_feedback_collector_integration').on(t.collectorId, t.provider),
+  byTenant:   index('idx_feedback_collector_integrations_tenant').on(t.tenantId),
+}));
+
+
+/**
+ * One accepted provider webhook delivery, keyed by the PROVIDER's event id
+ * (migration 1077) — the replay guard.
+ *
+ * Webhook senders retry: on a timeout, on a 5xx, and sometimes just because. Every
+ * accepted delivery here can open a backlog ticket, so an at-least-once sender
+ * meeting a non-idempotent receiver puts duplicate cards in front of a human. The
+ * submission fingerprint cannot close this on its own — it collapses identical
+ * PROSE, whereas a retry is the same EVENT and must collapse even when the
+ * provider edited the payload between attempts (a resolved issue, a re-sent
+ * survey answer).
+ *
+ * The unique index IS the guard: the route inserts first and treats a unique
+ * violation as "already handled", so two concurrent retries cannot both pass a
+ * read-then-write check.
+ */
+export const feedbackWebhookDeliveries = pgTable('feedback_webhook_deliveries', {
+  id:           uuid('id').primaryKey().defaultRandom(),
+  tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  collectorId:  uuid('collector_id').notNull().references(() => feedbackCollectors.id, { onDelete: 'cascade' }),
+  provider:     varchar('provider', { length: 32 }).notNull(),
+  /** The provider's own delivery id, or a SHA-256 of the raw body when it sends none. */
+  eventId:      varchar('event_id', { length: 200 }).notNull(),
+  /** The submission this delivery produced; null when it normalized to nothing
+   *  (an event we do not import), which still gets recorded so retries stay cheap. */
+  submissionId: uuid('submission_id').references(() => feedbackSubmissions.id, { onDelete: 'set null' }),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({
+  uqDelivery: uniqueIndex('uq_feedback_webhook_delivery').on(t.collectorId, t.provider, t.eventId),
+  byTenant:   index('idx_feedback_webhook_deliveries_tenant').on(t.tenantId, t.createdAt),
+}));
+
+
 // ---------------------------------------------------------------------------
 // Rehearsal (migration 0372)
 //
@@ -1685,6 +1769,54 @@ export const creationSessionClaims = pgTable('creation_session_claims', {
   serverSessionId: uuid('server_session_id').notNull().unique().references(() => creationSessions.id, { onDelete: 'cascade' }),
   claimedAt:       timestamp('claimed_at').notNull().defaultNow(),
 }, (t) => ({ pk: primaryKey({ columns: [t.userId, t.clientSessionId] }) }));
+
+/**
+ * A registered third-party canvas widget (migration 1101).
+ *
+ * Somebody else's page, which a board may embed in a sandboxed frame and speak to
+ * over the fixed vocabulary in `@builderforce/canvas-widget-protocol`. This is the
+ * SERVER half of the widget runtime: what was registered, what it is allowed to
+ * do, and the single origin its messages may arrive from.
+ *
+ * `entryOrigin` is DERIVED from `entryUrl` at registration and never accepted from
+ * the caller — a manifest that declares its own trusted origin is a manifest that
+ * trusts itself. It is stored rather than recomputed because it is a security
+ * predicate compared in more than one runtime, and a predicate recomputed in three
+ * places will one day be computed differently in one of them.
+ *
+ * There is no placement table. A widget ON a board is a `creation_session_objects`
+ * row whose `resource_type` is 'canvas_widget' and whose `resource_id` is this
+ * row's id — geometry, z-order, locking and the revision protocol already belong
+ * to the canvas graph, and a second placement table would fork all four.
+ */
+export const canvasWidgets = pgTable('canvas_widgets', {
+  id:              uuid('id').primaryKey().defaultRandom(),
+  tenantId:        integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  /** Caller-chosen stable id, unique per workspace, so an integrator can upsert
+   *  from CI without storing our uuid. */
+  widgetKey:       varchar('widget_key', { length: 64 }).notNull(),
+  name:            varchar('name', { length: 120 }).notNull(),
+  description:     text('description'),
+  entryUrl:        text('entry_url').notNull(),
+  entryOrigin:     varchar('entry_origin', { length: 255 }).notNull(),
+  iconUrl:         text('icon_url'),
+  /** The APPROVED permission set, from CANVAS_WIDGET_PERMISSIONS. The host reads
+   *  this — never what the frame claims about itself at runtime. */
+  permissions:     jsonb('permissions').$type<string[]>().notNull().default([]),
+  version:         varchar('version', { length: 32 }).notNull().default('1.0.0'),
+  defaultWidth:    integer('default_width').notNull().default(480),
+  defaultHeight:   integer('default_height').notNull().default(360),
+  /** 'active' | 'disabled'. Disabling stops the host mounting the frame without
+   *  deleting the registration, so a board that already placed it shows a disabled
+   *  card rather than an empty rectangle. */
+  status:          varchar('status', { length: 16 }).notNull().default('active'),
+  createdByKeyId:  uuid('created_by_key_id').references(() => tenantApiKeys.id, { onDelete: 'set null' }),
+  createdAt:       timestamp('created_at').notNull().defaultNow(),
+  updatedAt:       timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  byKey:    uniqueIndex('uq_canvas_widgets_key').on(t.tenantId, t.widgetKey),
+  byTenant: index('idx_canvas_widgets_tenant_status').on(t.tenantId, t.status),
+}));
 
 // ═══ PRD 20 §5 step 2 — target-schema tables ═══
 //

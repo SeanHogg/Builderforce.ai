@@ -30,6 +30,7 @@ import {
   llmActionRatings,
   modelLocks,
   workflowActions,
+  previewSessions,
 } from '../../../infrastructure/database/schema/agents';
 import {
   webSearchDocuments,
@@ -82,4 +83,9 @@ export const AGENTS_ENTITIES = defineDomainEntities('agents', [
   entity(webSearchTerms, { readOnly: true, order: 'term' }),
   entity(webSearchRequests, { readOnly: true }),
   entity(webSearchRequestUrls, { readOnly: true, order: 'frontier_id' }),
+  /** A live-preview capacity LEASE: which run currently holds a container instance for
+   *  a preview, and why it stopped holding it. Read-only — the lease is opened and
+   *  closed by the preview op and the eviction sweep, and hand-editing one is how two
+   *  tenants end up believing they hold the same instance. */
+  entity(previewSessions, { readOnly: true }),
 ]);

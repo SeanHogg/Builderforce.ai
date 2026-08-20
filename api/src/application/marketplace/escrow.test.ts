@@ -105,11 +105,44 @@ describe('evaluateEscrow — the money cannot be taken back', () => {
 describe('availableEscrowActions', () => {
   it('offers each party exactly what the machine would allow', () => {
     expect(availableEscrowActions('draft', 'client').sort()).toEqual(['cancel', 'fund']);
+    // Nothing is at stake on a draft, so there is nothing for a freelancer to do to
+    // it — including dispute it: `dispute` starts at `funded` for the same reason.
     expect(availableEscrowActions('draft', 'freelancer')).toEqual([]);
-    expect(availableEscrowActions('funded', 'freelancer')).toEqual(['submit']);
-    expect(availableEscrowActions('funded', 'client')).toEqual(['cancel']);
-    expect(availableEscrowActions('submitted', 'client').sort()).toEqual(['approve', 'reject']);
-    expect(availableEscrowActions('approved', 'client')).toEqual(['release']);
+    expect(availableEscrowActions('funded', 'freelancer').sort()).toEqual(['dispute', 'submit']);
+    expect(availableEscrowActions('funded', 'client').sort()).toEqual(['cancel', 'dispute']);
+    expect(availableEscrowActions('submitted', 'client').sort()).toEqual(['approve', 'dispute', 'reject']);
+    expect(availableEscrowActions('approved', 'client').sort()).toEqual(['dispute', 'release']);
+  });
+
+  /**
+   * `dispute` is the only move both sides own, and the asymmetry it removes is the
+   * point: before it, a freelancer who had delivered and could not get an answer had
+   * no move at all on a funded milestone, while the party holding the money had two.
+   */
+  it('lets EITHER side raise a dispute while money is held, and neither once it is not', () => {
+    for (const status of ['funded', 'submitted', 'approved'] as const) {
+      expect(availableEscrowActions(status, 'client')).toContain('dispute');
+      expect(availableEscrowActions(status, 'freelancer')).toContain('dispute');
+    }
+    for (const status of ['draft', 'released', 'cancelled'] as const) {
+      expect(availableEscrowActions(status, 'client')).not.toContain('dispute');
+      expect(availableEscrowActions(status, 'freelancer')).not.toContain('dispute');
+    }
+  });
+
+  /** A second dispute over one pot of money would be two answers to one question. */
+  it('refuses a dispute on an already-disputed milestone', () => {
+    expect(availableEscrowActions('disputed', 'client')).not.toContain('dispute');
+    expect(availableEscrowActions('disputed', 'freelancer')).not.toContain('dispute');
+  });
+
+  /**
+   * `disputed` used to be a state the machine could enter and never leave — `reject`
+   * put a milestone there and only `submit` led out. `resolve` is that exit.
+   */
+  it('gives `disputed` an exit', () => {
+    expect(availableEscrowActions('disputed', 'client')).toContain('resolve');
+    expect(availableEscrowActions('disputed', 'freelancer')).not.toContain('resolve');
   });
 
   it('never offers an action the machine would then refuse — for every state and party', () => {

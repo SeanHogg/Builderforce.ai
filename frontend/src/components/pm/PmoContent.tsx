@@ -1,6 +1,8 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { parsePmoFocus, PMO_FOCUS_PARAM } from '@seanhogg/builderforce-brain-embedded';
 import { Select } from '@/components/Select';
 import { useTranslations } from 'next-intl';
 import { pmoApi, type PmoTree, type PmoScopeKind } from '@/lib/builderforceApi';
@@ -36,6 +38,16 @@ export function PmoContent() {
   const t = useTranslations('pmo');
   const { data: tree, error, reload } = usePmData<PmoTree>(() => pmoApi.tree(), []);
   const [tab, setTab] = useState<Tab>('rollup');
+  // Deep-link from a Brain chat's "Open" on a strategy tier: `?focus=<kind>:<id>`
+  // names ONE objective/initiative/portfolio card. Structure is the only tab that
+  // renders those as individual cards (Rollup is an aggregate), so the link selects
+  // the tab as well as the card. Re-armed whenever the param changes so a second
+  // "Open" on a different card still moves; a manual tab click is never overridden
+  // afterwards because the effect only fires on a param change.
+  const searchParams = useSearchParams();
+  const focusParam = searchParams.get(PMO_FOCUS_PARAM);
+  const focus = useMemo(() => parsePmoFocus(focusParam), [focusParam]);
+  useEffect(() => { if (focus) setTab('structure'); }, [focus]);
   // '' = default to first portfolio, WORKSPACE = org-level, else a portfolio id.
   const [portfolioSel, setPortfolioSel] = useState<string>('');
   const [initiativeId, setInitiativeId] = useState<string>(''); // '' = whole portfolio
@@ -116,7 +128,7 @@ export function PmoContent() {
         )}
       </div>
 
-      {tab === 'structure' && <PmoStructure tree={tree} onChange={reload} />}
+      {tab === 'structure' && <PmoStructure tree={tree} onChange={reload} focus={focus} />}
       {tab === 'rollup' && (scope ? <PmoRollup scope={scope} /> : <PmEmpty message={t('emptyRollup')} />)}
       {tab === 'cost' && <PmoCostReconciliation />}
 

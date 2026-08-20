@@ -46,13 +46,12 @@ import {
 import { EMPTY_ROLE_ROSTER, loadRoleRoster, type RoleRoster } from './roleCapability';
 import { isParticipantOpen } from './participantStates';
 import { isReviewRole } from './roleCatalog';
-import { requirementApplies } from './types';
+import { requirementApplies, type RequirementTaskScope } from './types';
 
-/** The ticket facts a requirement's applicability is scoped by. */
-export interface ManagedTaskScope {
-  taskType?: string | null;
-  actionType?: string | null;
-}
+/** The ticket facts a requirement's applicability is scoped by.
+ *  Alias of the shared {@link RequirementTaskScope} so the managed-lane authority and the
+ *  lane gate can never drift on what a condition predicate is allowed to read. */
+export type ManagedTaskScope = RequirementTaskScope;
 
 /** What a managed stage authorizes for ONE ticket. */
 export interface ManagedLaneAuthority {

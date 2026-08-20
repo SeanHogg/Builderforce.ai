@@ -29,7 +29,7 @@ import {
 import { aiImpactApi, type AiImpactInsights, type AiOverview } from '@/lib/aiImpactApi';
 import { recommendationsApi, type SpaceMetrics, type RecommendationsResult } from '@/lib/recommendationsApi';
 import { benchmarkingApi, type BenchmarkingResult } from '@/lib/benchmarkingApi';
-import { autonomyApi, type AutonomySummary } from '@/lib/autonomyApi';
+import { autonomyApi, type AutonomySummary, type VerdictComplianceReport } from '@/lib/autonomyApi';
 import { useSharedSource, type SharedAsync } from '@/lib/widgets/sharedSource';
 import { useProjectScope } from '@/lib/ProjectScopeContext';
 
@@ -117,6 +117,20 @@ export function useAutonomy(days: number): SharedAsync<AutonomySummary> {
   return useSharedSource<AutonomySummary>(
     `autonomy:${days}:p:${scopeKey(currentProjectId)}`,
     () => autonomyApi.get(days, currentProjectId),
+  );
+}
+
+/**
+ * VERDICT COMPLIANCE — of the runs asked for a role verdict, how many recorded one.
+ *
+ * Tenant-wide by design: the question is "which AGENT is the non-reporter", and an
+ * agent reviews across projects, so narrowing by the project scope would split the very
+ * signal the ranking exists to find.
+ */
+export function useVerdictCompliance(days: number): SharedAsync<VerdictComplianceReport> {
+  return useSharedSource<VerdictComplianceReport>(
+    `verdict-compliance:${days}`,
+    () => autonomyApi.verdictCompliance(days),
   );
 }
 

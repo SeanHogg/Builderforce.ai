@@ -58,8 +58,13 @@ import {
   type CostClass,
 } from '../../application/pmo/planningSpine';
 import { pmoVersionKey } from '../../application/pmo/pmoCacheKeys';
+import {
+  loadWorkingCalendarSettings,
+  saveWorkingCalendarSettings,
+} from '../../application/planning/workingCalendar';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+import { taskCreatedHook } from '../../application/task/taskCreationHook';
 
 /** Re-exported for the routes/tests that already import it from here. The ONE
  *  definition lives in `application/pmo/pmoCacheKeys` so application services can use
@@ -351,7 +356,7 @@ export function createPmoRoutes(db: Db): Hono<HonoEnv> {
     if (target !== 'task' && target !== 'epic') return c.json({ error: 'target must be task|epic' }, 400);
     try {
       const result = await convertWorkItemType(
-        { db, tasks: new TaskService(new TaskRepository(db), new ProjectRepository(db)), env: c.env as Env },
+        { db, tasks: new TaskService(new TaskRepository(db), new ProjectRepository(db), undefined, undefined, undefined, undefined, undefined, taskCreatedHook(db, c.env as Env)), env: c.env as Env },
         { tenantId, segmentId, sourceKind: 'objective', sourceId: c.req.param('id'), target, projectId: body.projectId ?? undefined },
       );
       return c.json(result);
@@ -377,6 +382,27 @@ export function createPmoRoutes(db: Db): Hono<HonoEnv> {
     return c.json(result);
   });
 
+  // ── The tenant's WORKING CALENDAR (migration 1074) ──────────────────────────
+  //
+  // Lives on the PMO router because it is a PLANNING setting, not an account one:
+  // it is read by `scheduleItems` on every Epic fan-out and every manager SCHEDULE
+  // pass, and it is what replaced the hardcoded Mon-Fri test. Reading it is open to
+  // any member (everyone's dates depend on it); editing it is manager-gated, like
+  // every other PMO mutation.
+
+  router.get('/working-calendar', async (c) => {
+    const { tenantId } = scope(c);
+    return c.json(await loadWorkingCalendarSettings(c.env as Env, db, tenantId));
+  });
+
+  router.put('/working-calendar', requireRole(TenantRole.MANAGER), async (c) => {
+    const { tenantId } = scope(c);
+    const saved = await saveWorkingCalendarSettings(c.env as Env, db, tenantId, await c.req.json());
+    // Every dated surface derives from this, so the plan caches must not outlive it.
+    await bumpCacheVersion(c.env as Env, pmoVersionKey(tenantId));
+    return c.json(saved);
+  });
+
   // ── CRUD for the four PMO entities (generic tracker factory) ────────────────
   const bumpVersionKeys = (tenantId: number) => [pmoVersionKey(tenantId)];
   // Objectives additionally carry a PROJECT scope (0268) that feeds the projects-list
@@ -399,7 +425,12 @@ export function createPmoRoutes(db: Db): Hono<HonoEnv> {
       table: initiatives,
       opts: {
         fields: ['name', 'description', 'status', 'portfolioId', 'ownerUserId', 'startDate', 'targetDate', 'costClass', 'costClassSource'],
-        required: ['name'],
+        // DATES ARE REQUIRED AT CREATION (SCHED-R2). Deriving a container's window
+        // from its descendants covers the populated case, but a brand-new initiative
+        // has no descendants — so it landed on the spine permanently undated and
+        // nobody was ever asked when it was supposed to happen. Enforced HERE, not
+        // only in the form: the MCP tool and any raw API caller create these too.
+        required: ['name', 'startDate', 'targetDate'],
         cacheNs: 'pmo-initiatives',
         bumpVersionKeys,
       },
@@ -409,7 +440,9 @@ export function createPmoRoutes(db: Db): Hono<HonoEnv> {
       table: objectives,
       opts: {
         fields: ['title', 'description', 'period', 'status', 'projectId', 'portfolioId', 'initiativeId', 'ownerUserId', 'startDate', 'endDate', 'costClass', 'costClassSource'],
-        required: ['title'],
+        // See the initiative tracker above — an objective with no window is the same
+        // failure, and an OKR nobody dated is an OKR nobody is accountable for.
+        required: ['title', 'startDate', 'endDate'],
         cacheNs: 'pmo-objectives',
         bumpVersionKeys: objectiveBumpKeys,
       },

@@ -12,11 +12,15 @@
  * sentence twenty-eight different ways.
  */
 
-import { DEFAULT_EMAIL_LOCALE, type EmailLocale } from '../../infrastructure/email/emailLocale';
+import { DEFAULT_EMAIL_LOCALE, EMAIL_LOCALES, type EmailLocale } from '../../infrastructure/email/emailLocale';
 
 /** Same five locales the frontend and email serve — one supported set, imported. */
 export type ToolLocale = EmailLocale;
 export const DEFAULT_TOOL_LOCALE: ToolLocale = DEFAULT_EMAIL_LOCALE;
+/** Every locale a tool can be rendered in, INCLUDING English — distinct from
+ *  `TRANSLATED_TOOL_LOCALES`, which is the four that need a catalog. A writer
+ *  invalidating a locale-keyed cache has to sweep all five, English included. */
+export const TOOL_LOCALES: readonly ToolLocale[] = EMAIL_LOCALES;
 
 /** The chrome one scored result is wrapped in. */
 export interface ResultCopy {

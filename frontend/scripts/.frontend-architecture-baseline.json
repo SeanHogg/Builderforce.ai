@@ -1,5 +1,5 @@
 {
-  "useClientFiles": 807,
+  "useClientFiles": 808,
   "useClientPages": 66,
   "presentationInfrastructureImports": [],
   "directEngineConstruction": [
@@ -32,7 +32,8 @@
     "lib/founderObjects.ts",
     "lib/founderOpsApi.ts",
     "lib/managerDiagnostics.ts",
-    "lib/model-provider.ts"
+    "lib/model-provider.ts",
+    "lib/structured-data.ts"
   ],
   "importCycles": []
 }

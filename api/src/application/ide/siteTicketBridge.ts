@@ -45,6 +45,7 @@ import { TaskType } from '../../domain/shared/types';
 import { onTaskLandedInLane } from '../swimlane/laneEntryTrigger';
 import { sendRawEmail } from '../../infrastructure/email/EmailService';
 import { HOSTING_APEX } from './siteHosting';
+import { taskCreatedHook } from '../task/taskCreationHook';
 
 /** Payload fields checked, in order, for a human-readable summary line. Covers
  *  the field names a "bug report" / "contact us" / "feedback" form is likely to
@@ -103,7 +104,7 @@ export interface RaiseTicketInput {
  */
 export async function raiseTicketForSiteRecord(env: Env, db: Db, input: RaiseTicketInput): Promise<number> {
   const draft = buildSiteRecordTaskDraft(input.collectionName, input.payload, input.email);
-  const taskService = new TaskService(new TaskRepository(db), new ProjectRepository(db));
+  const taskService = new TaskService(new TaskRepository(db), new ProjectRepository(db), undefined, undefined, undefined, undefined, undefined, taskCreatedHook(db, env));
   const task = await taskService.createTask(
     { projectId: input.projectId, title: draft.title, description: draft.description, taskType: TaskType.TASK },
     input.tenantId,

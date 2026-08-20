@@ -69,7 +69,7 @@ const applications = (data: Record<string, unknown>): Record<string, unknown>[] 
  * pipeline.
  *
  * BOTH, because the two arrive by different routes and a pipeline that counted only one
- * would be wrong for whichever route the person happened to use: `proposals.mine`
+ * would be wrong for whichever route the person happened to use: `builtin_proposals_mine`
  * hydrates the `applications` rows in one call, while a person working card-by-card
  * makes a `jobApplication` per posting and never fills the table. Deduplicated on the
  * posting reference so a board with both does not double-count — first row wins, matching
@@ -107,11 +107,11 @@ export const CAREER_OBJECT_SPECS: readonly SpecObjectSpec[] = [
       { name: 'postingUrl', render: 'reference', label: 'postingUrl', hint: 'Where the posting lives. Postings are taken down mid-search, so this is also the field that says whether the role still exists.' },
       { name: 'postedAt', render: 'stat', label: 'postedAt', hint: `When it was advertised. ${ISO_DATE} A posting over about six weeks old is usually either filled or stalled, which changes whether it is worth an afternoon.` },
       { name: 'closesAt', render: 'stat', label: 'closesAt', hint: `The stated closing date, if there is one. ${ISO_DATE}`, deadline: true },
-      { name: 'requirements', render: 'list', label: 'requirements', hint: 'What the posting actually asks for, one entry per requirement, in ITS words rather than a paraphrase. `recruiter.extract_skills` with source="job" produces this, and the wording matters: the phrase the posting repeats is the phrase a screen searches for.' },
-      { name: 'matchScore', render: 'meter', label: 'matchScore', hint: '0-100 from `recruiter.match_job` — how much of what this posting names the résumé already evidences. A measurement over two documents, not an opinion, so it is stable across calls and the person can check it.' },
-      { name: 'matchedSkills', render: 'chips', label: 'matchedSkills', hint: 'Skills the posting names that the résumé evidences. From `recruiter.match_job`.' },
+      { name: 'requirements', render: 'list', label: 'requirements', hint: 'What the posting actually asks for, one entry per requirement, in ITS words rather than a paraphrase. `builtin_recruiter_extract_skills` with source="job" produces this, and the wording matters: the phrase the posting repeats is the phrase a screen searches for.' },
+      { name: 'matchScore', render: 'meter', label: 'matchScore', hint: '0-100 from `builtin_recruiter_match_job` — how much of what this posting names the résumé already evidences. A measurement over two documents, not an opinion, so it is stable across calls and the person can check it.' },
+      { name: 'matchedSkills', render: 'chips', label: 'matchedSkills', hint: 'Skills the posting names that the résumé evidences. From `builtin_recruiter_match_job`.' },
       { name: 'missingSkills', render: 'chips', label: 'missingSkills', hint: 'Skills the posting names that the résumé does NOT evidence. Report these honestly: a gap somebody genuinely has is information they need before spending an afternoon, not something to talk them out of.' },
-      { name: 'verdict', render: 'verdict', label: 'verdict', hint: 'strong | worth applying | stretch | poor fit, with the one sentence that justifies it. From `recruiter.match_job`. One verdict — a list of three is a report, and this field is a decision about how to spend an evening.' },
+      { name: 'verdict', render: 'verdict', label: 'verdict', hint: 'strong | worth applying | stretch | poor fit, with the one sentence that justifies it. From `builtin_recruiter_match_job`. One verdict — a list of three is a report, and this field is a decision about how to spend an evening.' },
       SOURCES_FIELD,
       SUMMARY_FIELD,
     ],
@@ -127,7 +127,7 @@ export const CAREER_OBJECT_SPECS: readonly SpecObjectSpec[] = [
     fields: [
       { name: 'jobRef', render: 'stat', label: 'jobRef', hint: 'The `job` card this application answers, by its title. Everything about the ROLE lives there and is never copied here — one fact in one place, so correcting the salary on the posting does not leave nine applications quoting the old one.' },
       {
-        name: 'proposalRef', render: 'stat', label: 'proposalRef', hint: 'The `job_proposals` row this projects, by id. THE LIFECYCLE LIVES THERE: `stage`, `submittedAt` and `lastResponseAt` below are hydrated from it by `proposals.mine` and are not the seeker\'s to assert. Empty for an application made off-platform, which is most of them.',
+        name: 'proposalRef', render: 'stat', label: 'proposalRef', hint: 'The `job_proposals` row this projects, by id. THE LIFECYCLE LIVES THERE: `stage`, `submittedAt` and `lastResponseAt` below are hydrated from it by `builtin_proposals_mine` and are not the seeker\'s to assert. Empty for an application made off-platform, which is most of them.',
         bookkeeping: true,
       },
       { name: 'stage', render: 'stat', label: 'stage', hint: STAGE_HINT },
@@ -166,7 +166,7 @@ export const CAREER_OBJECT_SPECS: readonly SpecObjectSpec[] = [
       {
         name: 'applications', render: 'rows', label: 'applications',
         columns: ['role', 'employer', 'stage', 'submittedAt', 'lastResponseAt', 'jobRef'],
-        hint: 'One row per application: {role, employer, stage, submittedAt, lastResponseAt, jobRef}. `proposals.mine` returns exactly this. A row here and a `jobApplication` card naming the same `jobRef` are ONE application — the counts below deduplicate, so working either way is safe.',
+        hint: 'One row per application: {role, employer, stage, submittedAt, lastResponseAt, jobRef}. `builtin_proposals_mine` returns exactly this. A row here and a `jobApplication` card naming the same `jobRef` are ONE application — the counts below deduplicate, so working either way is safe.',
       },
       {
         name: 'total', render: 'stat', label: 'total',
@@ -254,16 +254,16 @@ export const CAREER_OBJECT_SPECS: readonly SpecObjectSpec[] = [
     actions: ['generate', 'rehearse', 'export'],
     fields: [
       { name: 'jobRef', render: 'stat', label: 'jobRef', hint: 'The `job` this rehearses for, by title. A generic question set is a podcast; the value here is that the questions come from what THIS posting emphasises.' },
-      { name: 'interviewType', render: 'stat', label: 'interviewType', hint: 'behavioral | technical | situational | leadership | screening. Decides which question set `recruiter.interview_questions` builds — a screening call and a system-design round need nothing in common.' },
+      { name: 'interviewType', render: 'stat', label: 'interviewType', hint: 'behavioral | technical | situational | leadership | screening. Decides which question set `builtin_recruiter_interview_questions` builds — a screening call and a system-design round need nothing in common.' },
       { name: 'scheduledAt', render: 'stat', label: 'scheduledAt', hint: `When the interview is. ${ISO_DATE} A deadline: the rehearsal is worth nothing the day after.`, deadline: true },
       { name: 'panel', render: 'rows', label: 'panel', columns: ['name', 'role', 'focus'], hint: 'Who is in the room: {name, role, focus}. Knowing that one of the three is the person you would report to changes which answer you lead with.' },
       {
         name: 'questions', render: 'rows', label: 'questions',
         columns: ['question', 'category', 'difficulty', 'lookFor', 'answer'],
-        hint: 'The set, from `recruiter.interview_questions`: {question, category, difficulty, lookFor, answer}. `lookFor` is the rubric a strong answer must satisfy and is the tool\'s, not yours. `answer` is the person\'s OWN drafted answer and starts empty — writing it for them produces something they cannot deliver.',
+        hint: 'The set, from `builtin_recruiter_interview_questions`: {question, category, difficulty, lookFor, answer}. `lookFor` is the rubric a strong answer must satisfy and is the tool\'s, not yours. `answer` is the person\'s OWN drafted answer and starts empty — writing it for them produces something they cannot deliver.',
       },
       { name: 'riskAreas', render: 'chips', label: 'riskAreas', hint: 'Skills the posting names that the résumé does not evidence — the exposed flank, and where the hard questions will land. From the same call that builds the questions.' },
-      { name: 'questionsToAsk', render: 'list', label: 'questionsToAsk', hint: 'What to ask THEM: {title, detail}. Six questions that change whether you would accept, not six that perform interest. `hr.employer_research` returns the ones worth answering first.' },
+      { name: 'questionsToAsk', render: 'list', label: 'questionsToAsk', hint: 'What to ask THEM: {title, detail}. Six questions that change whether you would accept, not six that perform interest. `builtin_hr_employer_research` returns the ones worth answering first.' },
       { name: 'stories', render: 'rows', label: 'stories', columns: ['label', 'situation', 'action', 'result'], hint: 'The rehearsed set: {label, situation, action, result}. Four or five stories cover most behavioural rounds, which is why they are prepared once here rather than re-invented per interview.' },
       {
         name: 'rehearsed', render: 'meter', label: 'rehearsed',
@@ -292,7 +292,7 @@ export const CAREER_OBJECT_SPECS: readonly SpecObjectSpec[] = [
       { name: 'monthlyIncome', render: 'stat', label: 'monthlyIncome', hint: 'Money still arriving monthly — benefits, a partner\'s contribution, residual income, a retainer. Empty means none, which is different from zero being unknown.' },
       { name: 'expectedInflows', render: 'rows', label: 'expectedInflows', columns: ['label', 'amount', 'inMonths'], hint: 'One-off amounts landing on a known month: {label, amount, inMonths}. A final invoice or a tax refund moves the cliff, and moving the cliff is the whole point of recording it.' },
       { name: 'expectedOutflows', render: 'rows', label: 'expectedOutflows', columns: ['label', 'amount', 'inMonths'], hint: 'Known one-off costs: {label, amount, inMonths} — an insurance renewal, a tax bill. The ones people forget are the ones that arrive in month four.' },
-      { name: 'projection', render: 'rows', label: 'projection', columns: ['month', 'balance', 'note'], hint: 'Month-by-month balance from `hr.runway`: {month, balance, note}. Held so the cliff is VISIBLE rather than implied by a single number — the shape is what makes the decision obvious.', derived: true },
+      { name: 'projection', render: 'rows', label: 'projection', columns: ['month', 'balance', 'note'], hint: 'Month-by-month balance from `builtin_hr_runway`: {month, balance, note}. Held so the cliff is VISIBLE rather than implied by a single number — the shape is what makes the decision obvious.', derived: true },
       {
         name: 'netMonthlyBurn', render: 'stat', label: 'netMonthlyBurn',
         hint: 'Expenses minus income. Computed from the two fields above, never typed — a stored burn that disagrees with the two numbers printed beside it is the drift this card exists to avoid.',

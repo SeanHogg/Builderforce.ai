@@ -139,7 +139,6 @@ export async function resolveArtifacts(
   // De-dup by slug per type
   const skills   = new Set<string>();
   const personas = new Set<string>();
-  const content  = new Set<string>();
   // Most-specific scope wins per slug — the same precedence the merge documents.
   const sources: Record<string, AssignmentScope> = {};
 
@@ -147,7 +146,9 @@ export async function resolveArtifacts(
     switch (row.artifactType) {
       case ArtifactType.SKILL:   skills.add(row.artifactSlug);   break;
       case ArtifactType.PERSONA: personas.add(row.artifactSlug); break;
-      case ArtifactType.CONTENT: content.add(row.artifactSlug);  break;
+      // ArtifactType.AGENT is a MARKETPLACE artifact (what a workspace bought),
+      // never a capability assigned to a scope, so it contributes to neither
+      // bucket and is deliberately not a case here.
     }
     const scope = normalizeScope(row.scope);
     if (scope == null) continue;
@@ -160,7 +161,12 @@ export async function resolveArtifacts(
   return {
     skills:   [...skills],
     personas: [...personas],
-    content:  [...content],
+    // ALWAYS EMPTY since migration 0982 retired `artifact_type = 'content'`. The
+    // field is kept because the runtime payload, the capability timeline event and
+    // the workforce manifest panel all read it; dropping it would be a contract
+    // break for an array that is now simply never populated. Content lives in
+    // `knowledge_documents` and is resolved by the knowledge subsystem instead.
+    content:  [],
     sources,
   };
 }

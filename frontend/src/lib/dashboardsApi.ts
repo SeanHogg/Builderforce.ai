@@ -89,6 +89,62 @@ export interface QueryAnswer {
   source: 'keyword' | 'llm' | 'default';
 }
 
+/** The closed set of situations a question can resolve to; 'metric' = one number. */
+export type AnswerTopic =
+  | 'overview' | 'delivery' | 'cost' | 'reliability' | 'people' | 'workforce.health' | 'ai' | 'metric';
+
+/**
+ * A COMPOSED answer — the shape `POST /query` returns.
+ *
+ * It extends {@link QueryAnswer} rather than replacing it: the flat fields are
+ * populated from `metrics[0]`, so everything that reads `.value` / `.explanation`
+ * / `.matchedMetric` keeps working, and the new fields are additive. A question
+ * with no single-number answer ("how are things looking?") now comes back as a
+ * small dashboard — a headline assembled from the figures, the readings behind it,
+ * and the registry widget ids that draw them.
+ */
+export interface ComposedAnswer extends QueryAnswer {
+  topic: AnswerTopic;
+  /** One sentence naming the figures it used. Assembled on the server, never generated. */
+  headline: string;
+  /** The supporting readings, joined into a paragraph. */
+  narrative: string;
+  /** Every resolved reading, in the topic's declared order. */
+  metrics: QueryAnswer[];
+  /** Registry widget ids to render — resolve each through `getWidget()`. */
+  widgetIds: string[];
+}
+
+/** One member in a workforce-health cohort. */
+export interface WorkforceHealthMember {
+  memberKind: 'human' | 'cloud_agent' | 'host_agent';
+  memberRef: string;
+  name: string;
+  observedWip: number;
+  maxWip: number;
+  utilizationPct: number;
+  activeInWindow: number;
+}
+
+/** The three cohorts behind "who is not working, and who is drowning?". */
+export interface WorkforceHealthResult {
+  overAllocated: WorkforceHealthMember[];
+  underUtilised: WorkforceHealthMember[];
+  idle: WorkforceHealthMember[];
+  membersWithWork: number;
+  totalMembers: number;
+  days: number;
+}
+
+/** A curated dashboard the server declares; materialising one is idempotent. */
+export type DashboardPresetKey = 'executive';
+
+export interface ApplyPresetResult {
+  dashboardId: number;
+  createdDashboard: boolean;
+  addedWidgets: number;
+}
+
 export const dashboardsApi = {
   // ── Metric catalogue ───────────────────────────────────────────────────────
   metrics: (): Promise<{ metrics: MetricCatalogEntry[] }> =>
@@ -114,6 +170,14 @@ export const dashboardsApi = {
 
   remove: (id: number): Promise<{ deleted: number }> =>
     apiRequest(`/api/dashboards/dashboards/${id}`, { method: 'DELETE' }),
+
+  /**
+   * Materialise a declared preset (manager-gated). Idempotent on the server, so
+   * the caller does not have to guard the button against a second click — a
+   * re-apply returns the same `dashboardId` with `addedWidgets: 0`.
+   */
+  applyPreset: (preset: DashboardPresetKey): Promise<ApplyPresetResult> =>
+    apiRequest(`/api/dashboards/dashboards/presets/${preset}`, { method: 'POST' }),
 
   // ── Widget CRUD ──────────────────────────────────────────────────────────────
   addWidget: (
@@ -144,8 +208,12 @@ export const dashboardsApi = {
   data: (dashboardId: number): Promise<DashboardData> =>
     apiRequest(`/api/dashboards/dashboards/${dashboardId}/data`),
 
+  // ── Workforce health (the three cohorts, one read) ───────────────────────────
+  workforceHealth: (days = 30): Promise<WorkforceHealthResult> =>
+    apiRequest(`/api/dashboards/workforce-health?days=${days}`),
+
   // ── AI-Powered Query ─────────────────────────────────────────────────────────
-  query: (question: string): Promise<QueryAnswer> =>
+  query: (question: string): Promise<ComposedAnswer> =>
     apiRequest('/api/dashboards/query', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

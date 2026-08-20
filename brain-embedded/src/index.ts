@@ -238,6 +238,7 @@ export {
   CHAT_MODES,
   NEW_CHAT_MODE,
   RESTING_CHAT_MODE,
+  CHAT_MODE_ICON,
   isChatMode,
   normalizeChatMode,
   chatModeDirective,
@@ -354,3 +355,14 @@ export {
 } from './toolRouter';
 export type { ChatDiagnosticsData, ChatDiagnosticsEvermind, ChatDiagnosticsAccount, ChatDiagnosticsMeter, AllowanceState } from './chatDiagnostics';
 export type { ChatDiagnosticsSources, ChatDiagnosticsPlanSnapshot, ChatDiagnosticsModelSurface, ChatDiagnosticsEvermindHead, ChatDiagnosticsMessageLike } from './gatherChatDiagnostics';
+// WHERE a linked work item opens — the ONE routing table shared by the web host's
+// `router.push` and the VS Code host's external-URL open, so "Open" cannot mean two
+// different destinations on two surfaces.
+export {
+  artifactRoutePath,
+  pmoFocusValue,
+  parsePmoFocus,
+  pmoFocusDomId,
+  PMO_FOCUS_PARAM,
+  type ArtifactKind,
+} from './artifactRoute';

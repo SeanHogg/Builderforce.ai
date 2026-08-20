@@ -330,6 +330,20 @@ async function execTool(writtenPaths, name, parsed, proc, headBranch, loop) {
   if (name === 'workspace_read') {
     return op('coordinate', { action: 'read', query: parsed.query, limit: parsed.limit });
   }
+  // Web search. The vendor credential, the shared read-through cache and the spend
+  // meter all live in the Worker, so this relays like memory and the platform tools.
+  // \`CONTAINER_SURFACE_CAPS\` (shared with the Cloudflare Container image) now
+  // advertises the web-search CAPABILITY to this runner too — so without this handler
+  // it would be exactly the tool-that-400s-mid-run the capability set exists to prevent.
+  // (The capability id is deliberately not spelled out: this whole function is a
+  // template for a prompt-adjacent script, and check:prompt-tools reads a bare catalog
+  // id as a claim that the MODEL was given that name. The model sees the advertised
+  // tool name, which is what this branch matches on.)
+  if (name === 'web_search') {
+    const query = typeof parsed.query === 'string' ? parsed.query : '';
+    if (!query.trim()) return { ok: false, error: 'query is required' };
+    return op('search', { query });
+  }
   // Platform (project-management) tools — relayed to the Worker, which runs the
   // curated, subset-guarded tool in-process (create task / update OKR / read
   // remaining work).

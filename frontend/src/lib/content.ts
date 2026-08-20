@@ -119,11 +119,52 @@ export const EVERMIND = {
 
 /* ════════════════════ FEATURES ════════════════════ */
 
+/**
+ * THE FEATURE SHAPE — one description of "a thing this product does".
+ *
+ * Three lists on the public site describe capabilities, and each had invented
+ * its own field names for the same four facts: `FEATURES` said
+ * `shortDesc`/`longDesc`, `AGENT_CAPABILITIES` said `description`, and
+ * `ProductSurface` said `desc`. Nothing was shared, so every renderer, every
+ * JSON-LD builder and every future translation pass had to learn three
+ * vocabularies for one idea — and a capability could be (and was) described
+ * twice under two names without anything noticing.
+ *
+ * The CONTENT stays three lists, because they genuinely answer three questions
+ * — what the platform does, what the agent runtime does, and which screens
+ * exist. What is unified is the SHAPE: `asFeature()` projects any of them, and
+ * `content.featureShape.test.ts` asserts the projection is total and that no
+ * title appears in two lists.
+ */
 export interface Feature {
   icon: string;
   title: string;
+  /** One line. The card, the list row, the meta description. */
   shortDesc: string;
-  longDesc: string;
+  /** The full paragraph. Optional — a surface row has no long form. */
+  longDesc?: string;
+  /** Where it lives, when it has an address. */
+  href?: string;
+}
+
+/** Anything the public site describes as a capability, in the one shape. */
+export type FeatureLike =
+  | Feature
+  | { iconKey: string; title: string; description: string; href: string }
+  | { icon: string; title: string; desc: string; href: string };
+
+/**
+ * Project any of the three lists onto {@link Feature}.
+ *
+ * `iconKey` stays a KEY rather than being resolved here: `content.ts` is
+ * JSX-free on purpose, and the glyph is the rendering surface's business.
+ */
+export function asFeature(item: FeatureLike): Feature {
+  if ('shortDesc' in item) return item;
+  if ('description' in item) {
+    return { icon: item.iconKey, title: item.title, shortDesc: item.description, href: item.href };
+  }
+  return { icon: item.icon, title: item.title, shortDesc: item.desc, href: item.href };
 }
 
 export const FEATURES: Feature[] = [
@@ -387,6 +428,7 @@ export const FEATURES: Feature[] = [
  * inline-code spans in a description are written as `backtick` text and styled
  * by the renderer.
  */
+/** An agent-runtime capability. Projected by `asFeature()` like the others. */
 export interface AgentCapability {
   /** Where the card links to (FeatureCard derives external/docs/internal from this). */
   href: string;
@@ -1437,6 +1479,7 @@ export const DEFINED_TERMS: DefinedTermEntry[] = [
 
 /* ════════════════════ PRODUCT SURFACES (public capability tour) ════════════════════ */
 
+/** A screen. `asFeature()` projects it onto the shared {@link Feature} shape. */
 export interface ProductSurface {
   icon: string;
   title: string;

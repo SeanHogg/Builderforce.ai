@@ -237,3 +237,38 @@
   color: var(--text-secondary);
   line-height: 1.55;
 }
+
+/* ── launch — deep links into a Studio project the post teaches ──────────── */
+.launch {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(auto-fit, minmax(min(230px, 100%), 1fr));
+}
+
+.launchItem {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--hue, var(--coral-bright));
+  border-radius: var(--radius-lg);
+  background: var(--bg-elevated);
+}
+
+.launchLink {
+  font-family: var(--font-display);
+  font-size: var(--font-size-card-title);
+  color: var(--hue, var(--coral-bright));
+  text-decoration: none;
+}
+
+.launchLink:hover { text-decoration: underline; }
+
+.launchNote {
+  font-size: var(--font-size-small);
+  color: var(--text-secondary);
+  line-height: 1.55;
+}

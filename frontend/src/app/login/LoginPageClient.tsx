@@ -8,6 +8,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import { getStoredWebToken, resolveAndSelectTenant, requestMagicLink } from '@/lib/auth';
 import { safeRedirectPath } from '@/lib/safeRedirect';
+import { isPasskeyCancellation, isPasskeySupported } from '@/lib/passkeys';
 import { Icon } from '@/components/ui/Icon';
 import { ThemeToggleButton } from '@/app/ThemeProvider';
 import JsonLd from '@/components/JsonLd';
@@ -24,7 +25,7 @@ export default function LoginPageClient() {
   const router = useRouter();
   const t = useTranslations('login');
   const searchParams = useSearchParams();
-  const { login, isAuthenticated, hasTenant } = useAuth();
+  const { login, loginWithPasskey, isAuthenticated, hasTenant } = useAuth();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -32,6 +33,11 @@ export default function LoginPageClient() {
   const [error, setError] = useState<string | null>(null);
   const [magicLinkSent, setMagicLinkSent] = useState(false);
   const [magicLinkLoading, setMagicLinkLoading] = useState(false);
+  const [passkeyLoading, setPasskeyLoading] = useState(false);
+  // Resolved on the client only: `isPasskeySupported()` reads `window`, and a
+  // button rendered on the server that then disappears is a layout shift on the
+  // one screen where a shift reads as something going wrong.
+  const [passkeyAvailable, setPasskeyAvailable] = useState(false);
   // Set when an unverified account tries to sign in — swaps the form for the
   // email-OTP step (a fresh code is emailed by the login endpoint).
   const [pendingEmail, setPendingEmail] = useState<string | null>(null);
@@ -84,6 +90,11 @@ export default function LoginPageClient() {
     }
   };
 
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPasskeyAvailable(isPasskeySupported());
+  }, []);
+
   // Redirect when already authenticated (e.g. landed on /login with valid session).
   // Do NOT redirect during form submission — handleSubmit does tenant resolution and redirect.
   useEffect(() => {
@@ -117,6 +128,28 @@ export default function LoginPageClient() {
       setError(err instanceof Error ? err.message : t('loginFailed'));
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  /**
+   * Sign in with a passkey. Deliberately offered with NO email: a discoverable
+   * credential names the account itself, so asking for an email first would add a
+   * step the credential makes unnecessary. When the field happens to be filled we
+   * pass it, which narrows the browser's prompt to that account's keys.
+   */
+  const handlePasskey = async () => {
+    setError(null);
+    setPasskeyLoading(true);
+    try {
+      await loginWithPasskey(email || undefined);
+      await finishAndRedirect();
+    } catch (err) {
+      // Dismissing the system prompt is a choice, not a failure to report.
+      if (!isPasskeyCancellation(err)) {
+        setError(err instanceof Error ? err.message : t('passkeyFailed'));
+      }
+    } finally {
+      setPasskeyLoading(false);
     }
   };
 
@@ -338,6 +371,35 @@ export default function LoginPageClient() {
                 {isLoading ? t('signingIn') : t('submit')}
               </button>
             </form>
+
+            {passkeyAvailable && (
+              <button
+                type="button"
+                onClick={handlePasskey}
+                disabled={passkeyLoading}
+                style={{
+                  width: '100%',
+                  marginTop: 14,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                  background: 'var(--bg-elevated)',
+                  color: 'var(--text-primary)',
+                  border: '1px solid var(--border-subtle)',
+                  borderRadius: 'var(--radius-lg)',
+                  padding: '12px',
+                  fontFamily: 'var(--font-display)',
+                  fontWeight: 700,
+                  fontSize: '0.9rem',
+                  cursor: passkeyLoading ? 'wait' : 'pointer',
+                  opacity: passkeyLoading ? 0.6 : 1,
+                }}
+              >
+                <Icon name="key" size={16} />
+                {passkeyLoading ? t('passkeySigningIn') : t('passkeySubmit')}
+              </button>
+            )}
 
             <OAuthButtons />
 

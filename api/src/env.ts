@@ -377,6 +377,17 @@ export interface Env {
    *  API origin; override for local/dev. e.g. "https://api.builderforce.ai". */
   INTERNAL_API_BASE_URL?: string;
 
+  /** CVE advisory feed for the web scan's CVE stage — an OSV-shaped query endpoint.
+   *  Optional by design: with no feed configured the stage still fingerprints the
+   *  software versions the site discloses and reports that the advisory lookup was
+   *  NOT performed, rather than claiming "no known vulnerabilities" it never checked
+   *  (see application/security/advisoryFeed.ts). Both this and the key must be set
+   *  for the real adapter to be selected. */
+  CVE_ADVISORY_FEED_URL?: string;
+  /** Bearer key for {@link CVE_ADVISORY_FEED_URL}. Set with
+   *  `wrangler secret put CVE_ADVISORY_FEED_API_KEY`; never committed. */
+  CVE_ADVISORY_FEED_API_KEY?: string;
+
   /**
    * Optional KV namespace caching API-key → tenant resolutions for ~60s.
    * Without it, every chat-completion call hits the DB to validate `bfk_*` /
@@ -475,6 +486,36 @@ export interface Env {
   PAYPAL_CLIENT_SECRET?: string;
 
   // ---------------------------------------------------------------------------
+  // Connected BOOKS (optional — the `ledger` port, one key pair per OAuth
+  // provider). NetSuite needs nothing here: it connects with a token pair the
+  // operator's own administrator provisions, so it is connectable on every
+  // install. Stripe reuses STRIPE_CONNECT_CLIENT_ID + STRIPE_SECRET_KEY above,
+  // with a `read_only` scope — reading revenue never needs the right to move
+  // money, and the payout port's `read_write` grant is a different credential.
+  //
+  // Every one of these is a READ scope. A deployment with none of them bound
+  // advertises no ledger provider at all rather than sending somebody to a
+  // consent screen that cannot complete.
+  // ---------------------------------------------------------------------------
+  /** Intuit app client id. Scope requested: `com.intuit.quickbooks.accounting`. */
+  QUICKBOOKS_CLIENT_ID?: string;
+  QUICKBOOKS_CLIENT_SECRET?: string;
+  /** Xero app client id. `offline_access` is requested with it — without a refresh
+   *  token the connection dies in 30 minutes and presents as "synced once, then
+   *  stopped". */
+  XERO_CLIENT_ID?: string;
+  XERO_CLIENT_SECRET?: string;
+  /** Plaid client id + secret. Sent in the BODY of every Plaid call rather than as
+   *  a header, and read from here at the moment of use rather than sealed into each
+   *  tenant's credential — so rotating the secret rotates it everywhere at once. */
+  PLAID_CLIENT_ID?: string;
+  PLAID_SECRET?: string;
+  /** `sandbox` | `development` | `production`. Unset = production, because a
+   *  deployment that forgot to say must not silently read a sandbox's fake money
+   *  into a real company's runway. */
+  PLAID_ENV?: string;
+
+  // ---------------------------------------------------------------------------
   // OAuth providers (optional — only required for the providers you enable)
   // Set via: wrangler secret put GOOGLE_CLIENT_ID  (etc.)
   // ---------------------------------------------------------------------------
@@ -534,6 +575,32 @@ export interface Env {
 
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
+
+  /**
+   * Google Cloud Pub/Sub topic backing Gmail push (`projects/<p>/topics/<t>`).
+   *
+   * Gmail does not take a callback URL: `users.watch` publishes to a TOPIC, and a
+   * push subscription on that topic is what reaches this Worker. Both are operator
+   * actions in the Cloud Console (create the topic, grant Publish to
+   * gmail-api-push@system.gserviceaccount.com, point a push subscription at
+   * `/api/mailbox/push/google/<GMAIL_PUSH_TOKEN>`).
+   *
+   * ABSENT IS A SUPPORTED STATE, not a broken one. Without it a connected Gmail
+   * mailbox is armed in `poll` mode: the same cursor, the same delta call, drained
+   * by the renewal sweep instead of by a notification. Push makes it instant; the
+   * absence makes it five minutes late, never wrong.
+   * Set via: wrangler secret put GMAIL_PUBSUB_TOPIC */
+  GMAIL_PUBSUB_TOPIC?: string;
+
+  /**
+   * The unguessable path segment on the Gmail push endpoint.
+   *
+   * Unlike Graph, ONE Pub/Sub subscription serves every connected Gmail mailbox on
+   * the deployment, so the URL cannot carry a per-connection token — the payload
+   * names the mailbox (`emailAddress`) and this secret is what proves the caller is
+   * our own subscription rather than anyone who guessed the route.
+   * Set via: wrangler secret put GMAIL_PUSH_TOKEN */
+  GMAIL_PUSH_TOKEN?: string;
 
   LINKEDIN_CLIENT_ID?: string;
   LINKEDIN_CLIENT_SECRET?: string;

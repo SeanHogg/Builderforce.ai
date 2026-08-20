@@ -34,7 +34,7 @@ interface OnboardingStepperProps {
   onDismiss: () => void;
 }
 
-type BuilderStepId = 'ticketing' | 'repos' | 'audit' | 'roster' | 'install' | 'invite';
+type BuilderStepId = 'intent' | 'ticketing' | 'repos' | 'audit' | 'roster' | 'install' | 'invite';
 type HiredStepId = 'talentProfile' | 'resume' | 'publish' | 'findWork';
 type StepId = BuilderStepId | HiredStepId;
 
@@ -43,7 +43,20 @@ type StepId = BuilderStepId | HiredStepId;
 // provisioned (human-named workspace + "My first project", renameable) so those two steps no longer exist. A hired
 // ('freelancer') account has none of those; its first five minutes are about
 // becoming hireable. Labels resolve through the `onboarding.steps.*` i18n namespace.
-const BUILDER_STEP_IDS: StepId[] = ['ticketing', 'repos', 'audit', 'roster', 'install', 'invite'];
+const BUILDER_STEP_IDS: StepId[] = ['intent', 'ticketing', 'repos', 'audit', 'roster', 'install', 'invite'];
+
+/**
+ * What a builder says they came here to do.
+ *
+ * Intent used to be a multi-select inside the manual "create your first
+ * project" step. Zero-setup onboarding auto-provisions the workspace and the
+ * project, that step went away, and `users.userIntent` stopped being recorded
+ * for every new builder — so intent-based personalization and the signup
+ * analytics that reads it went quietly blank. It is back as its own step, and
+ * deliberately the LIGHTEST one: nothing is required, "Next" works with zero
+ * selections, and it is one tap on a phone.
+ */
+const INTENT_OPTIONS = ['build', 'custom-agent', 'monetize', 'automate', 'learn'] as const;
 const HIRED_STEP_IDS: StepId[] = ['talentProfile', 'resume', 'publish', 'findWork'];
 
 /** The ONE place the onboarding track is chosen, so no caller re-derives it. */
@@ -87,6 +100,7 @@ export function OnboardingStepper({
   const initialActiveStep = resumedIndex >= 0 ? resumedIndex : 0;
 
   const [activeStep, setActiveStep] = useState<number>(initialActiveStep);
+  const [intent, setIntent] = useState<string[]>([]);
   const [completedSteps, setCompletedSteps] = useState<Set<StepId>>(initialCompleted);
   const currentStepId = stepIds[activeStep];
 
@@ -129,7 +143,9 @@ export function OnboardingStepper({
   const handleFinish = async () => {
     markComplete(currentStepId);
     try {
-      await completeOnboarding(webToken);
+      // The whole reason the intent step exists: this call had been losing the
+      // one thing it carries.
+      await completeOnboarding(webToken, intent.length ? intent : undefined);
     } catch {
       // Non-fatal — user has completed onboarding visually regardless
     }
@@ -138,7 +154,9 @@ export function OnboardingStepper({
 
   const handleDismiss = async () => {
     try {
-      await completeOnboarding(webToken);
+      // Dismissing still records what was chosen — someone who answered the
+      // first question and then closed the wizard has told us something.
+      await completeOnboarding(webToken, intent.length ? intent : undefined);
     } catch {
       // Non-fatal
     }
@@ -306,6 +324,49 @@ export function OnboardingStepper({
 
         {/* Step content */}
         <div style={{ padding: '24px', flex: 1 }}>
+          {/* ── Step: What are you here to build? ── */}
+          {currentStepId === 'intent' && (
+            <div>
+              <h3 style={{ margin: '0 0 6px', fontSize: 'var(--font-size-card-title)', color: 'var(--text-strong)' }}>
+                {t('intentQuestion')}
+              </h3>
+              <p style={{ margin: '0 0 16px', fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)' }}>
+                {t('intentHint')}
+              </p>
+              <div
+                role="group"
+                aria-label={t('intentQuestion')}
+                style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-2)' }}
+              >
+                {INTENT_OPTIONS.map((option) => {
+                  const selected = intent.includes(option);
+                  return (
+                    <button
+                      key={option}
+                      type="button"
+                      aria-pressed={selected}
+                      onClick={() => setIntent((current) => (
+                        current.includes(option) ? current.filter((value) => value !== option) : [...current, option]
+                      ))}
+                      style={{
+                        padding: '10px 14px',
+                        borderRadius: 'var(--radius-lg)',
+                        border: `1px solid ${selected ? 'var(--accent)' : 'var(--border-subtle)'}`,
+                        background: selected ? 'var(--accent-soft, var(--bg-elevated))' : 'var(--bg-elevated)',
+                        color: selected ? 'var(--text-strong)' : 'var(--text-secondary)',
+                        fontSize: 'var(--font-size-small)',
+                        fontWeight: selected ? 700 : 500,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {t(`intent.${option}`)}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* ── Step: Connect ticketing ── */}
           {currentStepId === 'ticketing' && (
             activeProjectId != null ? (

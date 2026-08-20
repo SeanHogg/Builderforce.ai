@@ -13,13 +13,25 @@
  * a NEW version, reviewed again, and installs move to it explicitly.
  */
 
-import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
-import { extensionPackages, extensionVersions, tenants } from '../../infrastructure/database/schema';
-import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import { extensionPackages, extensionVersions, extensionReviewStages, tenants } from '../../infrastructure/database/schema';
+import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { PublisherError, requirePublisher } from './publishers';
+import {
+  CATALOG_CACHE_KEY,
+  invalidatePublicCatalog,
+  loadPackage,
+  loadVersion,
+  type PackageRow,
+  type VersionRow,
+} from './extensionRepository';
+import { reportCaughtError } from '../observability/caughtErrorReporter';
+import { runReviewPipeline, type PipelineOutcome } from './reviewPipeline';
+import { installReviewStages } from './reviewStages';
+import { buildSearchText } from './catalogSearch';
 import {
   isExtensionKind,
   SUBMITTABLE_KINDS,
@@ -61,8 +73,6 @@ export interface VersionView {
   createdAt: string | null;
 }
 
-type PackageRow = typeof extensionPackages.$inferSelect;
-type VersionRow = typeof extensionVersions.$inferSelect;
 type PublisherRow = typeof tenants.$inferSelect;
 
 function toPackageView(row: PackageRow, publisher?: PublisherRow | null): PackageView {
@@ -118,13 +128,6 @@ export function slugify(input: string): string {
     .slice(0, 100);
 }
 
-const CATALOG_CACHE_KEY = 'developer:catalog:listed';
-
-/** The public catalog goes stale on any publish, delist or suspension. */
-export async function invalidatePublicCatalog(env: Env): Promise<void> {
-  await invalidateCached(env, CATALOG_CACHE_KEY);
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Publisher-side
 // ─────────────────────────────────────────────────────────────────────────────
@@ -163,6 +166,10 @@ export async function createPackage(
     .limit(1);
   if (taken) throw new PublisherError(`the slug "${slug}" is taken`, 409);
 
+  const tagline = (input.tagline ?? '').trim().slice(0, 240);
+  const description = input.description?.trim() || null;
+  const categories = input.categories ?? [];
+
   const [row] = await db
     .insert(extensionPackages)
     .values({
@@ -170,10 +177,16 @@ export async function createPackage(
       slug,
       kind: input.kind,
       name,
-      tagline: (input.tagline ?? '').trim().slice(0, 240),
-      description: input.description?.trim() || null,
-      categories: input.categories ?? [],
+      tagline,
+      description,
+      categories,
       docsUrl: input.docsUrl?.trim() || null,
+      // The directory's search projection. Written here as well as on publish
+      // because a draft is findable to nobody but its owner and a package with a
+      // NULL projection would stay unfindable through its first publish if that
+      // publish ever failed to reach the update below. Capability names arrive
+      // with the head version; the metadata is knowable now.
+      searchText: buildSearchText({ name, tagline, description, categories, kind: input.kind, spec: null }),
     })
     .returning();
   if (!row) throw new PublisherError('failed to create package', 409);
@@ -204,12 +217,25 @@ export async function listVersions(db: Db, packageId: string, actorUserId: strin
 }
 
 /**
- * Submit a version. Static review runs here, synchronously, and a failure is a
- * 400 with the findings attached — the publisher fixes it while looking at it.
+ * Submit a version, and run the WHOLE review pipeline on it — synchronously.
  *
- * A rejected submission is still STORED, with its findings. Throwing the row away
- * would mean the publisher's third attempt has no record of the first two, and
- * the review pipeline would have no data about what publishers get wrong.
+ * A publisher who has to poll for a verdict is a publisher who does not come
+ * back, so all three stages run while they are still looking at the form. What
+ * makes that affordable is that the stages are budgeted rather than shortened:
+ * `dynamicReview` caps its real requests and their wall clock, and the agentic
+ * stage is one small structured call.
+ *
+ * ── WHY THE ROW IS WRITTEN BEFORE THE PIPELINE FINISHES ─────────────────────
+ * The dynamic stage installs the CANDIDATE version into a sandbox workspace, and
+ * `tenant_extension_installs.version_id` is a foreign key — so the version must
+ * exist before it can be exercised. The row therefore lands as `pending` and is
+ * settled afterwards, which is also the honest sequence: `pending` is exactly
+ * what a submission whose review is still running IS.
+ *
+ * A rejected submission is still STORED, with its findings and its per-stage
+ * evidence. Throwing the row away would mean the publisher's third attempt has no
+ * record of the first two, and the pipeline would have no data about what
+ * publishers get wrong.
  */
 export async function submitVersion(
   db: Db,
@@ -239,7 +265,13 @@ export async function submitVersion(
 
   const previous = pkg.currentVersionId ? await loadVersion(db, pkg.currentVersionId) : null;
 
-  const outcome = reviewVersion({
+  // The static stage runs here first and alone, because it is the only one that
+  // can NORMALIZE the spec — and an unparseable spec must not be stored at all,
+  // let alone installed into a sandbox. Its verdict is recomposed by the pipeline
+  // below, which re-runs it as stage one; running it twice costs nothing (it is
+  // pure) and buys the property that the pipeline owns the whole composition
+  // rather than this function owning the first third of it.
+  const provisional = reviewVersion({
     kind: pkg.kind as ExtensionKind,
     spec: input.spec,
     requestedScopes: input.requestedScopes,
@@ -253,17 +285,135 @@ export async function submitVersion(
     .values({
       packageId: input.packageId,
       semver,
-      spec: outcome.normalizedSpec,
-      requestedScopes: outcome.scopes,
+      spec: provisional.normalizedSpec,
+      requestedScopes: provisional.scopes,
       changelog: input.changelog?.trim() || null,
-      reviewState: outcome.approved ? 'approved' : 'rejected',
-      reviewFindings: outcome.findings as unknown as Array<Record<string, unknown>>,
-      reviewedAt: new Date(),
+      reviewState: 'pending',
+      reviewFindings: provisional.findings as unknown as Array<Record<string, unknown>>,
     })
     .returning();
   if (!row) throw new PublisherError('failed to record version', 409);
 
-  return { version: toVersionView(row), approved: outcome.approved };
+  installReviewStages();
+  const outcome = await runReviewPipeline({
+    db,
+    env,
+    packageId: pkg.id,
+    packageSlug: pkg.slug,
+    versionId: row.id,
+    semver,
+    kind: pkg.kind as ExtensionKind,
+    spec: input.spec,
+    normalizedSpec: {},
+    scopes: [],
+    requestedScopes: input.requestedScopes,
+    verificationState: tenant.publisherState,
+    paid: pkg.catalogItemId !== null,
+    previousScopes: previous?.requestedScopes ?? null,
+    priorStages: new Map(),
+  });
+
+  await recordReviewStages(db, row.id, outcome);
+
+  const [settled] = await db
+    .update(extensionVersions)
+    .set({
+      spec: outcome.normalizedSpec,
+      requestedScopes: outcome.scopes,
+      reviewState: outcome.approved ? 'approved' : 'rejected',
+      reviewFindings: outcome.findings as unknown as Array<Record<string, unknown>>,
+      reviewedAt: new Date(),
+    })
+    .where(eq(extensionVersions.id, row.id))
+    .returning();
+
+  return { version: toVersionView(settled ?? row), approved: outcome.approved };
+}
+
+/**
+ * Persist what each stage did, one row per stage.
+ *
+ * An upsert on (version, stage) rather than an insert: a re-review REPLACES its
+ * stage record, so "what did the dynamic stage say about 1.2.0" has exactly one
+ * answer rather than a history a reader has to date-sort to interpret.
+ *
+ * Best-effort, and deliberately so. The stage record is the audit trail; the
+ * VERDICT is on the version row. Losing the trail to a write error must not lose
+ * the verdict, and it must not turn an approved submission into a 500.
+ */
+async function recordReviewStages(db: Db, versionId: string, outcome: PipelineOutcome): Promise<void> {
+  for (const stage of outcome.stages) {
+    try {
+      await db
+        .insert(extensionReviewStages)
+        .values({
+          versionId,
+          stage: stage.stage,
+          verdict: stage.verdict,
+          findings: stage.findings as unknown as Array<Record<string, unknown>>,
+          evidence: stage.evidence as unknown as Array<Record<string, unknown>>,
+          sandboxTenantId: stage.sandboxTenantId ?? null,
+          durationMs: stage.durationMs,
+        })
+        .onConflictDoUpdate({
+          target: [extensionReviewStages.versionId, extensionReviewStages.stage],
+          set: {
+            verdict: stage.verdict,
+            findings: stage.findings as unknown as Array<Record<string, unknown>>,
+            evidence: stage.evidence as unknown as Array<Record<string, unknown>>,
+            sandboxTenantId: stage.sandboxTenantId ?? null,
+            durationMs: stage.durationMs,
+            createdAt: new Date(),
+          },
+        });
+    } catch (error) {
+      reportCaughtError(error, {
+        source: 'application/developer/extensionPackages.ts',
+        operation: `recordReviewStages:${stage.stage}`,
+      });
+    }
+  }
+}
+
+/**
+ * Every stage record for a version.
+ *
+ * The publisher's own view of why a submission was refused, and the operator's
+ * view of what the pipeline actually exercised. `evidence` is returned in full
+ * because a truncated audit trail answers the wrong question.
+ */
+export async function listReviewStages(
+  db: Db,
+  versionId: string,
+  actorUserId: string,
+): Promise<Array<{
+  stage: string;
+  verdict: string;
+  findings: ReviewFinding[];
+  evidence: Array<Record<string, unknown>>;
+  sandboxTenantId: number | null;
+  durationMs: number | null;
+  createdAt: string | null;
+}>> {
+  const version = await loadVersion(db, versionId);
+  const pkg = await loadPackage(db, version.packageId);
+  await requirePublisher(db, pkg.tenantId, actorUserId, 'developer');
+
+  const rows = await db
+    .select()
+    .from(extensionReviewStages)
+    .where(eq(extensionReviewStages.versionId, versionId))
+    .orderBy(asc(extensionReviewStages.stage));
+
+  return rows.map((r) => ({
+    stage: r.stage,
+    verdict: r.verdict,
+    findings: (r.findings ?? []) as unknown as ReviewFinding[],
+    evidence: (r.evidence ?? []) as Array<Record<string, unknown>>,
+    sandboxTenantId: r.sandboxTenantId,
+    durationMs: r.durationMs,
+    createdAt: r.createdAt ? new Date(r.createdAt).toISOString() : null,
+  }));
 }
 
 /**
@@ -293,7 +443,24 @@ export async function publishVersion(
 
   const [row] = await db
     .update(extensionPackages)
-    .set({ currentVersionId: version.id, listingState: 'listed', updatedAt: new Date() })
+    .set({
+      currentVersionId: version.id,
+      listingState: 'listed',
+      // Publish is the ONE moment the platform holds both the listing metadata
+      // and a parsed spec, so it is the only place the capability half of the
+      // search projection can be built. A listing whose actions are not in
+      // `search_text` is invisible to everybody searching for what it DOES,
+      // which is what most people search for.
+      searchText: buildSearchText({
+        name: pkg.name,
+        tagline: pkg.tagline,
+        description: pkg.description,
+        categories: pkg.categories,
+        kind: pkg.kind,
+        spec: version.spec,
+      }),
+      updatedAt: new Date(),
+    })
     .where(scopedToTenant(extensionPackages, pkg.tenantId, eq(extensionPackages.id, pkg.id)))
     .returning();
   if (!row) throw new PublisherError('package not found', 404);
@@ -370,39 +537,13 @@ export async function getPublicPackage(db: Db, env: Env, slug: string): Promise<
   return { pkg, version };
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Loaders shared by every path above
-//
-// A package is addressed by its PRIMARY KEY and is not filtered by the caller's
-// tenant, because the two callers who load one are the publisher (who owns it)
-// and an installing tenant (who does not) — the whole point of a catalogue. So
-// the read declares itself cross-tenant and the AUTHORITY check follows it:
-// `requirePublisher(db, pkg.tenantId, …)` for a write, `listingState = 'listed'`
-// for an install. Filtering here instead would break installing altogether.
-// ─────────────────────────────────────────────────────────────────────────────
-
-export async function loadPackage(db: Db, packageId: string): Promise<PackageRow> {
-  const [row] = await db
-    .select()
-    .from(extensionPackages)
-    .where(acrossTenants(extensionPackages, 'public_catalogue', eq(extensionPackages.id, packageId)))
-    .limit(1);
-  if (!row) throw new PublisherError('package not found', 404);
-  return row;
-}
-
-export async function loadVersion(db: Db, versionId: string): Promise<VersionRow> {
-  const [row] = await db.select().from(extensionVersions).where(eq(extensionVersions.id, versionId)).limit(1);
-  if (!row) throw new PublisherError('version not found', 404);
-  return row;
-}
-
-/** Load many packages by id in one round-trip. Used by the install list. */
-export async function loadPackagesByIds(db: Db, ids: string[]): Promise<Map<string, PackageRow>> {
-  if (ids.length === 0) return new Map();
-  const rows = await db
-    .select()
-    .from(extensionPackages)
-    .where(acrossTenants(extensionPackages, 'public_catalogue', inArray(extensionPackages.id, ids)));
-  return new Map(rows.map((r) => [r.id, r]));
-}
+/**
+ * The loaders and the cache keys this module used to own now live in
+ * `extensionRepository.ts`, and they moved for a structural reason rather than a
+ * tidying one: `extensionInstalls` needed the same two reads, which made the
+ * installs module import this one — and once the review pipeline resolved a
+ * manifest through `connectorRegistry` (which reads installs), a packages module
+ * that reached the stages closed a cycle through three bounded contexts. The
+ * shared bottom of this context was never the packages SERVICE's to own.
+ */
+export { loadPackage, loadVersion, loadPackagesByIds, invalidatePublicCatalog } from './extensionRepository';

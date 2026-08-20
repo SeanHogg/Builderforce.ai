@@ -8,20 +8,12 @@ import {
 } from '../../domain/shared/types';
 import { NotFoundError, ForbiddenError, ConflictError } from '../../domain/shared/errors';
 import {
-  EpicDecomposer, ChildTaskPlan, heuristicEpicDecomposer, DecompositionSource,
+  EpicDecomposer, ChildTaskPlan, heuristicEpicDecomposer, DecompositionSource, normalizeChildTitle,
 } from './EpicDecomposer';
 import { scheduleItems } from '../planning/scheduleWork';
-
-/** Title key for reconciling a re-decomposition against existing children. */
-function normalizeChildTitle(title: string): string {
-  return title.trim().toLowerCase().replace(/\s+/g, ' ');
-}
-
-/** Postgres unique-constraint violation (e.g. a task-key insert race). */
-function isUniqueViolation(e: unknown): boolean {
-  const s = e instanceof Error ? e.message : String(e);
-  return /duplicate key|unique constraint|23505/i.test(s);
-}
+import { summarizePlanVerdict, type PlanVerdict } from '../planning/planVerdict';
+import { assigneeKeyOf, type SchedulingContext } from '../planning/schedulingContext';
+import { isUniqueViolation } from '../../infrastructure/database/uniqueViolation';
 
 /** How many times to re-derive a key and retry a persist that lost a key race. */
 const MAX_KEY_ATTEMPTS = 5;
@@ -46,6 +38,28 @@ export interface CreateTaskDto {
   startDate?: string | null;
   dueDate?: string | null;
   persona?: string | null;
+  /**
+   * WHO is opening this ticket, for the creation-attribution row (see
+   * `activity/taskCreated.ts`). Absent ⇒ the system identity, which is the honest
+   * answer for a writer with no identity of its own and still far better than the
+   * no-row-at-all that left 88% of tickets auditing as `origin: 'unknown'`.
+   */
+  createdBy?: CreationActor;
+  /** WHICH writer minted it — `qa_finding` | `validation_gap` | `incident` |
+   *  `security_audit` | `board_sync` | `epic_child` | `http` | `mcp`. */
+  createdVia?: string;
+}
+
+/**
+ * The actor shape the creation emitter takes. Structurally identical to
+ * `activity/activityLog.ActorIdentity`, restated here so the application service does
+ * not import the activity module it is injected a hook for (the hook is what keeps this
+ * layer free of the infrastructure that writes the row).
+ */
+export interface CreationActor {
+  type: string;
+  ref: string | null;
+  name: string;
 }
 
 export interface UpdateTaskDto {
@@ -122,6 +136,48 @@ export class TaskService {
       predecessorTaskId: number,
       successorTaskId: number,
     ) => Promise<void>,
+    /**
+     * Optional planner hook: the real-world constraints the pure scheduler cannot
+     * fetch for itself — the tenant's working calendar, each owner's capacity, and
+     * the sprint cadence. Injected from the composition root (it needs env + db);
+     * absent in unit tests, where fan-out falls back to the constraint-free
+     * Mon-Fri behaviour. A failure here degrades the plan, it never blocks fan-out.
+     */
+    private readonly loadSchedulingContext?: (projectId: number) => Promise<SchedulingContext | null>,
+    /**
+     * Optional planner hook: where the plan VERDICT goes.
+     *
+     * `scheduleItems` has always reported whether a plan had to be compressed to fit
+     * the Epic's window, which children still overrun it, and which sit in a
+     * dependency cycle — and this path threw all of it away, so a squeezed plan and
+     * a clean one were indistinguishable to the PM who had to deliver them.
+     * Injected because persisting it needs db + tenant scope; rejections are
+     * swallowed (a fan-out that succeeded must not be undone by a failed journal).
+     */
+    private readonly persistPlanVerdict?: (
+      projectId: number,
+      epicTaskId: number,
+      verdict: PlanVerdict,
+      source: DecompositionSource | null,
+    ) => Promise<void>,
+    /**
+     * THE ONE creation-attribution emitter (see `activity/taskCreated.ts`).
+     *
+     * Measured: 722 of 821 tickets (88%) had no `task.created` activity row, because
+     * only the HTTP create route emitted one and six other writers mint tickets —
+     * `QaFindingRouter`, `ValidationService`, `IncidentService`, `SecurityAuditService`,
+     * board-sync inbound and this class's own Epic fan-out. All but board-sync pass
+     * through THIS service, so hanging the emission off the act of creating covers them
+     * all at once, and a seventh writer inherits it for free.
+     *
+     * Injected (it needs env + db); absent in unit tests, where creation simply records
+     * nothing. Rejections are swallowed by the callers — a ticket that was created must
+     * never be undone by a failed audit row.
+     */
+    private readonly onTaskCreated?: (info: {
+      taskId: number; projectId: number; title: string; key: string | null;
+      taskType: string; via: string; actor?: CreationActor;
+    }) => Promise<void>,
   ) {}
 
   /**
@@ -199,6 +255,21 @@ export class TaskService {
         lastKeySeq,
       })),
     );
+    // WHO OPENED THIS — recorded here so every writer that mints a ticket through this
+    // service gets attribution, rather than each remembering to emit its own row.
+    // `dto.createdBy` lets a caller name itself (a request's human actor, an agent);
+    // absent, the emitter falls back to the system identity, which is still an answer.
+    if (this.onTaskCreated) {
+      await this.onTaskCreated({
+        taskId: saved.id as number,
+        projectId: dto.projectId,
+        title: saved.title,
+        key: saved.key ?? null,
+        taskType: saved.taskType,
+        via: dto.createdVia ?? 'service',
+        ...(dto.createdBy ? { actor: dto.createdBy } : {}),
+      }).catch(() => undefined);
+    }
     // A task created already assigned to an agent goes through the same on-assign
     // assessment as one reassigned later (assess scope → maybe Epic → decompose).
     if (saved.isAssignedToAgent && saved.taskType === TaskType.TASK) {
@@ -302,6 +373,16 @@ export class TaskService {
     // known before its row exists (task ids aren't available yet — dependency edges
     // are written afterwards, once every child has an id).
     const planned = children.filter((c) => c.title.trim());
+    // The real-world constraints (working calendar, owner capacity, sprint cadence)
+    // are fetched HERE and passed IN, so `scheduleItems` stays pure. A failure to
+    // load them degrades the plan to the constraint-free default — never blocks a
+    // fan-out that would otherwise succeed.
+    const context = this.loadSchedulingContext
+      ? await this.loadSchedulingContext(task.projectId as number).catch((error) => {
+        reportCaughtError(error, { source: "application/task/TaskService.ts", operation: "loadSchedulingContext" });
+        return null;
+      })
+      : null;
     const schedule = scheduleItems(
       planned.map((child, index) => ({
         key: String(index),
@@ -309,8 +390,23 @@ export class TaskService {
         afterKeys: child.dependsOnIndex != null && child.dependsOnIndex >= 0 && child.dependsOnIndex < index
           ? [String(child.dependsOnIndex)]
           : [],
+        // A child fanned out onto a person who is already busy must QUEUE behind
+        // that person's other work, not overlap it. The plan's own assignment wins;
+        // where the plan left it unassigned the recommender picks below, after the
+        // windows are drawn, so an inferred owner never re-orders a stated plan.
+        assigneeKey: assigneeKeyOf({
+          assignedUserId: child.assignedUserId ?? null,
+          assignedAgentHostId: child.assignedAgentHostId ?? null,
+          assignedAgentRef: child.assignedAgentRef ?? null,
+        }),
       })),
-      { anchor: epic.startDate ?? new Date(), deadline: epic.dueDate },
+      {
+        anchor: epic.startDate ?? new Date(),
+        deadline: epic.dueDate,
+        calendar: context?.calendar,
+        capacity: context?.capacity,
+        sprints: context?.sprints,
+      },
     );
     /** plan index → created/reconciled task id, for the dependency pass below. */
     const idByIndex = new Map<number, number>();
@@ -370,6 +466,20 @@ export class TaskService {
         })),
       );
       idByIndex.set(index, saved.id as number);
+      // An Epic's CHILD is a ticket like any other, and this fan-out was one of the six
+      // writers that minted tickets with no creation row — the largest of them on a
+      // decomposed board. Attributed to the decomposition rather than to a person,
+      // because that is what actually opened it.
+      if (this.onTaskCreated) {
+        await this.onTaskCreated({
+          taskId: saved.id as number,
+          projectId: task.projectId as number,
+          title: saved.title,
+          key: saved.key ?? null,
+          taskType: saved.taskType,
+          via: 'epic_child',
+        }).catch(() => undefined);
+      }
     }
 
     // ── materialise sequence as real precedence edges ────────────────────────
@@ -388,6 +498,26 @@ export class TaskService {
           reportCaughtError(error, { source: "application/task/TaskService.ts", operation: "decomposeEpic" });
         });
       }
+    }
+
+    // ── carry the plan VERDICT out of the fan-out ────────────────────────────
+    // The planner already knew whether this plan fits the Epic's window and whether
+    // its children sit in a dependency cycle; this path used to discard both, so a
+    // squeezed plan and a clean one were indistinguishable on every surface a PM
+    // reads. Re-keyed from plan index to real task id — a warning naming "child 2"
+    // is not something anyone can act on.
+    if (this.persistPlanVerdict) {
+      const verdict = summarizePlanVerdict(
+        schedule,
+        (key) => {
+          const id = idByIndex.get(Number(key));
+          return id == null ? null : String(id);
+        },
+      );
+      await this.persistPlanVerdict(task.projectId as number, epic.id as number, verdict, opts.source ?? 'manual')
+        .catch((error) => {
+          reportCaughtError(error, { source: "application/task/TaskService.ts", operation: "persistPlanVerdict" });
+        });
     }
 
     // ── back-fill the Epic's own window from what it now contains ────────────

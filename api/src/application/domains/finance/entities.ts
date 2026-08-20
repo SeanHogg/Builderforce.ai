@@ -22,6 +22,7 @@ import {
   invoiceLineItems,
   invoices,
   kpiFormulas,
+  ledgerAccounts,
   monteCarloSimulations,
   paybackPeriod,
   paymentMethods,
@@ -92,6 +93,21 @@ export const FINANCE_ENTITIES = defineDomainEntities('finance', [
    * is a fact about what was sent chasing it.
    */
   collectionActions,
+  /**
+   * One account inside a connected book, with the balance it last reported
+   * (migration 1091). READ-ONLY through the generic path and NOT registered as an
+   * object, and both halves are deliberate.
+   *
+   * Read-only because the row is not an assertion anybody makes — it is what
+   * QuickBooks, Xero, NetSuite or Plaid SAID, and a generic PATCH over it would let
+   * a person move the company's runway by editing the bank balance the runway is
+   * divided by. The way to change this number is to fix it in the book and re-sync.
+   *
+   * Unregistered because it is not a thing anyone opens. The CONNECTION is what a
+   * person navigates to and manages; this is a fact hanging off it, the same
+   * argument `collection_actions` makes one entry up.
+   */
+  entity(ledgerAccounts, { readOnly: true }),
   /**
    * A grant, a convertible and an event are READ-ONLY here, and the reason is not
    * symmetry with `bills` — it is that a generic PATCH over any of the three

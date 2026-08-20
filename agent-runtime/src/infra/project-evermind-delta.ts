@@ -218,6 +218,10 @@ interface PushOutcome {
   staleHeadVersion?: number;
   reason?: string;
   version?: number;
+  /** The refusal is about THIS PROJECT, not this attempt — retrying, rebasing, or
+   *  falling back to the text door will produce the same answer. Set for the
+   *  inherited-Evermind 409. */
+  terminal?: boolean;
 }
 
 async function pushDelta(cfg: ProjectEvermindSyncConfig, payload: DeltaLearnPayload): Promise<PushOutcome> {
@@ -234,6 +238,21 @@ async function pushDelta(cfg: ProjectEvermindSyncConfig, payload: DeltaLearnPayl
     // unauthorized) is not fixed by trying again with a different number.
     if (res.status === 409 && typeof body["headVersion"] === "number") {
       return { ok: false, staleHeadVersion: body["headVersion"] as number, reason: "stale base" };
+    }
+    // The OTHER 409: this project has no Evermind of its own and reads its container
+    // project's, so a write here targets something it does not own. The server used to
+    // ACCEPT these — updating zero rows and returning OK — which is why nothing ever
+    // surfaced. It now refuses honestly, and the refusal is TERMINAL for this project:
+    // the text door is the same Evermind, so falling back to it would only produce a
+    // second identical 409. Reported with the owner named so the operator can act.
+    if (res.status === 409 && body["code"] === "evermind_inherited_read_only") {
+      return {
+        ok: false,
+        terminal: true,
+        reason: typeof body["error"] === "string"
+          ? (body["error"] as string)
+          : `this build inherits project ${String(body["inheritedFromProjectId"] ?? "?")}'s Evermind`,
+      };
     }
     return { ok: false, reason: typeof body["error"] === "string" ? (body["error"] as string) : `learn ${res.status}` };
   } catch (err) {
@@ -316,6 +335,11 @@ export async function contributeProjectEvermindFromDelta(
       baseVersion = outcome.staleHeadVersion;
       continue;
     }
+    // A TERMINAL refusal is about the project, not the attempt: this build inherits
+    // another project's Evermind, so the text door targets the identical head and
+    // would answer with the identical 409. Falling back would turn one honest refusal
+    // into two and log a "fell back to text" that never had a chance.
+    if (outcome.terminal) return { ok: false, reason: outcome.reason ?? "delta rejected" };
     return toText(outcome.reason ?? "delta rejected");
   }
   return toText("lost the rebase race twice");

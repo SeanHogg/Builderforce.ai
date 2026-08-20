@@ -17,6 +17,7 @@ import { useConfirm } from '@/components/ConfirmProvider';
 import { AUTH_API_URL } from '@/lib/auth';
 import { useProjectScope } from '@/lib/ProjectScopeContext';
 import { feedbackApi, type FeedbackCollector, type CreateFeedbackCollectorResult } from '@/lib/feedbackApi';
+import { FeedbackWebhookSettings } from './FeedbackWebhookSettings';
 import { useCopyToClipboard } from '@/lib/useCopyToClipboard';
 import { useFormat } from "@/i18n/useFormat";
 
@@ -176,6 +177,10 @@ function CollectorPanel({ collector, createdKey, projName, onChanged, setError }
         <CopyBlock label={t('setup.snippet')} value={snippet} />
         <CopyBlock label={t('setup.endpoint')} value={`${ingestBase}/submit`} />
       </div>
+
+      {/* The snippet is not the only door: a team already collecting requests in
+          Sentry or PostHog can point those at this same collector. */}
+      <FeedbackWebhookSettings collectorId={collector.id} />
 
       <RoleGate capability="quality.manageSources">
         <div style={card}>

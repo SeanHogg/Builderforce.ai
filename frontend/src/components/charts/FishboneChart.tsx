@@ -13,6 +13,9 @@
  */
 
 import { colorAt } from './chartColors';
+// Wrapping and clipping moved to `svgText` when the graph primitive needed the same
+// two functions — one copy, so two diagrams on one screen clip alike.
+import { truncate, wrapSvgText as wrap } from './svgText';
 
 export interface FishboneCategory {
   /** The bone label — a cause category (e.g. "Root cause", "People", "Process"). */
@@ -39,11 +42,6 @@ const SPINE_X1 = VBW - HEAD_W - 8;
 const BONE_RISE = 128;
 const MAX_CATS = 6;
 const MAX_CAUSES = 4;
-
-function truncate(s: string, n: number): string {
-  const t = s.trim();
-  return t.length > n ? `${t.slice(0, n - 1)}…` : t;
-}
 
 export function FishboneChart({ problem, categories, ariaLabel }: FishboneChartProps) {
   const cats = categories.filter((c) => c.label.trim()).slice(0, MAX_CATS);
@@ -137,25 +135,4 @@ export function FishboneChart({ problem, categories, ariaLabel }: FishboneChartP
       </svg>
     </div>
   );
-}
-
-/** Naive greedy word-wrap for SVG text (no measurement) — caps at `maxLines`. */
-function wrap(text: string, perLine: number, maxLines: number): string[] {
-  const words = text.trim().split(/\s+/);
-  const lines: string[] = [];
-  let cur = '';
-  for (const w of words) {
-    if ((cur + ' ' + w).trim().length > perLine) {
-      if (cur) lines.push(cur);
-      cur = w;
-      if (lines.length >= maxLines) break;
-    } else {
-      cur = (cur + ' ' + w).trim();
-    }
-  }
-  if (cur && lines.length < maxLines) lines.push(cur);
-  if (lines.length === maxLines && words.join(' ').length > lines.join(' ').length) {
-    lines[maxLines - 1] = truncate(lines[maxLines - 1] + '…', perLine);
-  }
-  return lines.length ? lines : [text];
 }

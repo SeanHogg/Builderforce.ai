@@ -254,6 +254,10 @@ export interface FormReminderDue {
   slug: string;
   title: string;
   closesAt: Date | null;
+  /** Who published it. The sweep has no request to read a language from, and a
+   *  named recipient usually has no account, so the publisher's stored locale is
+   *  the only signal about what language the chase should be written in. */
+  createdBy: string | null;
   /** Only the invited people with no `responded_at` — the sweep's own question,
    *  answered by the column that already records it. */
   pending: Array<{ recipientId: number; name: string | null; email: string }>;
@@ -275,6 +279,7 @@ export async function formRemindersDue(db: Db, now = new Date()): Promise<FormRe
       slug: questionSets.slug,
       name: questionSets.name,
       closesAt: questionSets.closesAt,
+      createdBy: questionSets.createdBy,
       remindAfterDays: questionSets.remindAfterDays,
       lastRemindedAt: questionSets.lastRemindedAt,
       createdAt: questionSets.createdAt,
@@ -320,6 +325,7 @@ export async function formRemindersDue(db: Db, now = new Date()): Promise<FormRe
       slug: row.slug ?? '',
       title: row.name,
       closesAt: row.closesAt,
+      createdBy: row.createdBy,
       pending: pending.map((p) => ({ recipientId: p.id, name: p.name, email: p.email })),
     });
   }

@@ -59,6 +59,17 @@ export const NEW_CHAT_MODE: ChatMode = 'work';
  */
 export const RESTING_CHAT_MODE: ChatMode = 'chat';
 
+/**
+ * The glyph for a mode. Decorative — the label always carries the meaning — but it
+ * lives HERE, beside the mode vocabulary, because both composers render it: the web
+ * `/` menu and the VS Code webview's `/` menu. A second copy in one host is how the
+ * two surfaces end up showing a different icon for the same conversation state.
+ */
+export const CHAT_MODE_ICON: Readonly<Record<ChatMode, string>> = {
+  chat: '💬',
+  work: '⚡',
+};
+
 /** True for a value that is one of the known modes. */
 export function isChatMode(value: unknown): value is ChatMode {
   return typeof value === 'string' && (CHAT_MODES as readonly string[]).includes(value);

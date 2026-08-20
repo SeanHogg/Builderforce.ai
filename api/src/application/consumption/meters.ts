@@ -16,11 +16,12 @@ import { buildTransactionalDatabase, type Db } from '../../infrastructure/databa
 import type { Env } from '../../env';
 import { resolveEffectivePlan } from '../../domain/tenant/effectivePlan';
 import { resolveAllFeatureEntitlements, type FeatureEntitlementSet } from '../tenant/featureEntitlements';
-import { resolveTokenLimits, resolveIngestionMonthlyBytes, resolveErrorEventsMonthly, resolveOutboundFetchesMonthly, resolveCloudRunsMonthly, resolveStageSandboxRunsMonthly } from '../../domain/tenant/PlanLimits';
+import { resolveTokenLimits, resolveIngestionMonthlyBytes, resolveErrorEventsMonthly, resolveOutboundFetchesMonthly, resolveCloudRunsMonthly, resolveStageSandboxRunsMonthly, resolveFeedbackSubmissionsMonthly } from '../../domain/tenant/PlanLimits';
 import { TenantPlan, TenantBillingStatus } from '../../domain/shared/types';
 import { dailyTenantTextTokens, utcDayStart } from '../llm/tokenUsage';
 import { dailyTenantIngestionBytes, tenantIngestionBytesByProvider } from '../ingestion/ingestionLedger';
 import { dailyTenantErrorEvents } from '../quality/errorEventsLedger';
+import { dailyTenantFeedbackSubmissions } from '../feedback/feedbackLedger';
 import { dailyTenantOutboundFetches } from '../web/outboundFetchLedger';
 import { dailyTenantCloudRuns } from '../runtime/cloudRunLedger';
 import { dailyTenantStageSandboxRuns } from '../marketplace/stageSandboxLedger';
@@ -28,8 +29,8 @@ import { resolveSuperadminUnlimited } from '../llm/tenantTokenAvailability';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { utcMonthStart, utcNextMonthStart } from '../llm/tokenUsage';
 
-export type MeterKey = 'ai_tokens' | 'ingestion' | 'error_events' | 'outbound_fetches' | 'cloud_runs' | 'stage_sandbox_runs';
-export type MeterUnit = 'tokens' | 'bytes' | 'events' | 'fetches' | 'runs' | 'sandbox_runs';
+export type MeterKey = 'ai_tokens' | 'ingestion' | 'error_events' | 'outbound_fetches' | 'cloud_runs' | 'stage_sandbox_runs' | 'feedback_submissions';
+export type MeterUnit = 'tokens' | 'bytes' | 'events' | 'fetches' | 'runs' | 'sandbox_runs' | 'submissions';
 
 export interface MeterSnapshot {
   key: MeterKey;
@@ -109,10 +110,11 @@ export interface MeterLimits {
   outboundFetches: number;
   cloudRuns: number;
   stageSandboxRuns: number;
+  feedbackSubmissions: number;
 }
 
 /**
- * Resolve all six allowances from the SAME inputs the enforcement gates use.
+ * Resolve all seven allowances from the SAME inputs the enforcement gates use.
  * Pure, so the "what does this tenant actually get?" rule is testable without a
  * database — and `isSuperadmin` cannot be dropped again without a test failing.
  */
@@ -128,6 +130,7 @@ export function resolveMeterLimits(input: {
     outboundFetches: resolveOutboundFetchesMonthly(input),
     cloudRuns: resolveCloudRunsMonthly(input),
     stageSandboxRuns: resolveStageSandboxRunsMonthly(input),
+    feedbackSubmissions: resolveFeedbackSubmissionsMonthly(input),
   };
 }
 
@@ -158,7 +161,7 @@ export async function getConsumptionSnapshot(
   const isSuperadmin = await resolveSuperadminUnlimited(db, tenantId, { actingUserId }, env);
   return getOrSetCached(
     env,
-    `consumption-meter:v5:${tenantId}:${monthKey}:${isSuperadmin ? 'sa' : 'plan'}`,
+    `consumption-meter:v6:${tenantId}:${monthKey}:${isSuperadmin ? 'sa' : 'plan'}`,
     () => buildConsumptionSnapshot(db, tenantId, monthStart, monthEnd, env, { actingIsSuperadmin: isSuperadmin }),
     { kvTtlSeconds: 60, l1TtlMs: 30_000 },
   );
@@ -179,7 +182,7 @@ export async function buildConsumptionSnapshot(
   acting?: { actingUserId?: string | null; actingIsSuperadmin?: boolean },
 ): Promise<ConsumptionSnapshot> {
   const ingestionDb = env?.NEON_TRANSACTIONAL_DATABASE_URL ? buildTransactionalDatabase(env) : db;
-  const [tokensDaily, ingestionDaily, ingestionByProvider, errorEventsDaily, outboundFetchesDaily, cloudRunsDaily, stageSandboxRunsDaily, tenantRows] = await Promise.all([
+  const [tokensDaily, ingestionDaily, ingestionByProvider, errorEventsDaily, outboundFetchesDaily, cloudRunsDaily, stageSandboxRunsDaily, feedbackSubmissionsDaily, tenantRows] = await Promise.all([
     dailyTenantTextTokens(db, tenantId, monthStart),
     dailyTenantIngestionBytes(ingestionDb, tenantId, monthStart),
     tenantIngestionBytesByProvider(ingestionDb, tenantId, monthStart),
@@ -187,6 +190,7 @@ export async function buildConsumptionSnapshot(
     dailyTenantOutboundFetches(db, tenantId, monthStart),
     dailyTenantCloudRuns(db, tenantId, monthStart),
     dailyTenantStageSandboxRuns(db, tenantId, monthStart),
+    dailyTenantFeedbackSubmissions(db, tenantId, monthStart),
     db
       .select({
         plan: tenants.plan,
@@ -223,6 +227,7 @@ export async function buildConsumptionSnapshot(
     outboundFetches: outboundFetchesLimit,
     cloudRuns: cloudRunsLimit,
     stageSandboxRuns: stageSandboxRunsLimit,
+    feedbackSubmissions: feedbackSubmissionsLimit,
   } = resolveMeterLimits({ effectivePlan, tokenDailyLimitOverride: override, isSuperadmin });
 
   // Every meter comes back per-day; the month-to-date total is the day sum (one
@@ -234,6 +239,7 @@ export async function buildConsumptionSnapshot(
   const [outboundFetchesUsed, outboundFetchesTrend] = densifyDaily(outboundFetchesDaily, monthStart);
   const [cloudRunsUsed, cloudRunsTrend] = densifyDaily(cloudRunsDaily, monthStart);
   const [stageSandboxRunsUsed, stageSandboxRunsTrend] = densifyDaily(stageSandboxRunsDaily, monthStart);
+  const [feedbackSubmissionsUsed, feedbackSubmissionsTrend] = densifyDaily(feedbackSubmissionsDaily, monthStart);
 
   return {
     period: { start: monthStart.toISOString(), resetsAt: monthEnd.toISOString() },
@@ -252,6 +258,7 @@ export async function buildConsumptionSnapshot(
       { ...makeMeter('ingestion', 'bytes', ingestionUsed, ingestionLimit, ingestionTrend), breakdown: ingestionByProvider },
       makeMeter('error_events', 'events', errorEventsUsed, errorEventsLimit, errorEventsTrend),
       makeMeter('outbound_fetches', 'fetches', outboundFetchesUsed, outboundFetchesLimit, outboundFetchesTrend),
+      makeMeter('feedback_submissions', 'submissions', feedbackSubmissionsUsed, feedbackSubmissionsLimit, feedbackSubmissionsTrend),
     ],
   };
 }
