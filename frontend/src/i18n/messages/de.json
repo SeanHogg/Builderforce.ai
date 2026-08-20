@@ -150,11 +150,11 @@
     "evermindLabel": "Projekt-Evermind",
     "evermindDetail": "Das von deinem Projekt selbst gelernte Evermind-Modell.",
     "modelLocked": "Die Modellwahl erfordert einen kostenpflichtigen Tarif oder ein verbundenes Anbieterkonto.",
-    "effortDesc_quick": "Am schnellsten und günstigsten — kurze, direkte Antworten. Bis zu {answer} Antwort-Tokens.",
-    "effortDesc_balanced": "Die Voreinstellung — normale Tiefe. Bis zu {answer} Antwort-Tokens.",
-    "effortDesc_thorough": "Am gründlichsten und langsamsten — vollständig, prüft die eigene Arbeit. Bis zu {answer} Antwort-Tokens.",
-    "effortDescThinking": "+ {thinking} Denk-Tokens.",
-    "thinkingOnDesc": "Das Modell denkt vor der Antwort nach, mit einem Budget von {budget} Denk-Tokens auf dieser Stufe. Langsamer, besser bei schweren Problemen.",
+    "effortDesc_quick": "Am schnellsten und günstigsten — kurze, direkte Antworten. Bis zu {answer, number} Antwort-Tokens.",
+    "effortDesc_balanced": "Die Voreinstellung — normale Tiefe. Bis zu {answer, number} Antwort-Tokens.",
+    "effortDesc_thorough": "Am gründlichsten und langsamsten — vollständig, prüft die eigene Arbeit. Bis zu {answer, number} Antwort-Tokens.",
+    "effortDescThinking": "+ {thinking, number} Denk-Tokens.",
+    "thinkingOnDesc": "Das Modell denkt vor der Antwort nach, mit einem Budget von {budget, number} Denk-Tokens auf dieser Stufe. Langsamer, besser bei schweren Problemen.",
     "thinkingOffDesc": "Aus — das Modell antwortet direkt. Einschalten für einen Denkdurchgang vor der Antwort.",
     "paidCostDetail": "{input} Eingabe / {output} Ausgabe pro 1 Mio. Tokens + $0,01 pro Anfrage",
     "memory": "Gedächtnis",
@@ -1280,7 +1280,12 @@
     "welcomeBackTool": "Hier ist das Ergebnis Ihres letzten Durchlaufs — registrieren Sie sich, um es zu speichern und Ihren Fortschritt zu verfolgen.",
     "welcomeBackHub": "Sie haben {count} kostenlose Diagnosen durchgeführt — registrieren Sie sich, um Ihre Ergebnisse zu speichern.",
     "saveMyResult": "Mein Ergebnis speichern",
-    "saveMyResults": "Meine Ergebnisse speichern"
+    "saveMyResults": "Meine Ergebnisse speichern",
+    "windowLabel": "Bewertungszeitraum",
+    "windowDays": "Letzte {n} Tage",
+    "loadFailed": "Diese Diagnose konnte nicht geladen werden.",
+    "frameworkLabel": "Berichtsrahmenwerk",
+    "frameworkHint": "Bewertung und Plan sind in jedem Rahmenwerk gleich — nur die Gruppierung der Scorecard ändert sich."
   },
   "toolReference": {
     "lede": "Eine kostenlose Diagnose, die Sie direkt hier ausführen können — ohne Anmeldung.",
@@ -19337,6 +19342,42 @@
         "evalScore": "Punktzahl"
       }
     },
+    "models": {
+      "empty": "Dieses {label} hat noch keinen Inhalt.",
+      "emptyHint": "Bitte Brain, es zu recherchieren und zu füllen, oder öffne den Inspektor und schreibe es selbst.",
+      "meterLabel": "{label}: {score} von 100",
+      "freshJustNow": "gerade eben",
+      "freshMinutes": "vor {count} Min.",
+      "freshHours": "vor {count} Std.",
+      "freshDays": "vor {count} T.",
+      "label": {
+        "llm": "LLM"
+      },
+      "field": {
+        "model": "Modell",
+        "instructions": "Anweisungen",
+        "parameters": "Parameter",
+        "promptObjectId": "Verknüpfter Prompt",
+        "costPerMillionInput": "Eingabe · pro 1 Mio. Tokens",
+        "costPerMillionOutput": "Ausgabe · pro 1 Mio. Tokens",
+        "tokensPerRequestIn": "Eingabe-Tokens pro Anfrage",
+        "tokensPerRequestOut": "Ausgabe-Tokens pro Anfrage",
+        "monthlyRequests": "Anfragen pro Monat",
+        "cacheHitRate": "Cache-Trefferquote",
+        "latencyP50Ms": "Latenz p50 (ms)",
+        "latencyP95Ms": "Latenz p95 (ms)",
+        "costPerRequest": "Kosten pro Anfrage",
+        "projectedMonthlyCost": "Prognostizierte Monatskosten",
+        "monthlyTokens": "Tokens pro Monat",
+        "outputShare": "Ausgabeanteil an den Kosten",
+        "summary": "Zusammenfassung",
+        "sources": "Quellen"
+      },
+      "column": {
+        "name": "Name",
+        "value": "Wert"
+      }
+    },
     "basis": {
       "truncated": "Berechnet aus {basisRows} von {sourceRows} Zeilen",
       "stale": "Die Quelle hat sich seit dieser Berechnung geändert"
@@ -20556,7 +20597,20 @@
     "checkpointMeta": "{count} Objekte · {at}",
     "noCheckpoints": "Noch keine Prüfpunkte. Legen Sie vor einer großen Änderung einen an, dann können Sie dorthin zurück.",
     "noticeCheckpointRestored": "„{label}“ wiederhergestellt",
-    "noticeCheckpointStorageFull": "In diesem Browser ist kein Platz mehr für einen Prüfpunkt dieses Boards. Speichern Sie es in einem Konto, um den Verlauf zu behalten."
+    "noticeCheckpointStorageFull": "In diesem Browser ist kein Platz mehr für einen Prüfpunkt dieses Boards. Speichern Sie es in einem Konto, um den Verlauf zu behalten.",
+    "materializeRowsFrom": "{rows, number} Zeilen aus {source}.",
+    "materializeReadFrom": "Gelesen aus {source}.",
+    "materializeRows": "{rows, number} Zeilen",
+    "socialPublished": "Veröffentlicht",
+    "model": "Modell",
+    "llmCostPerMillionInput": "Eingabe · pro 1 Mio. Tokens",
+    "llmCostPerMillionOutput": "Ausgabe · pro 1 Mio. Tokens",
+    "llmTokensPerRequestIn": "Eingabe-Tokens pro Anfrage",
+    "llmTokensPerRequestOut": "Ausgabe-Tokens pro Anfrage",
+    "llmMonthlyRequests": "Anfragen pro Monat",
+    "llmCacheHitRate": "Cache-Trefferquote",
+    "llmLatencyP50Ms": "Latenz p50 (ms)",
+    "llmLatencyP95Ms": "Latenz p95 (ms)"
   },
   "canvasCommands": {
     "cleanLayout": "Leinwand-Layout aufräumen",

@@ -150,11 +150,11 @@
     "evermindLabel": "Evermind du projet",
     "evermindDetail": "Le modèle Evermind appris par votre propre projet.",
     "modelLocked": "Le choix du modèle nécessite un forfait payant ou un compte fournisseur connecté.",
-    "effortDesc_quick": "Le plus rapide et le moins cher — réponses courtes et directes. Jusqu’à {answer} tokens de réponse.",
-    "effortDesc_balanced": "Le réglage par défaut — profondeur normale. Jusqu’à {answer} tokens de réponse.",
-    "effortDesc_thorough": "Le plus poussé et le plus lent — exhaustif, vérifie son travail. Jusqu’à {answer} tokens de réponse.",
-    "effortDescThinking": "+ {thinking} tokens de réflexion.",
-    "thinkingOnDesc": "Le modèle raisonne avant de répondre, avec un budget de {budget} tokens de réflexion à ce niveau. Plus lent, meilleur sur les problèmes difficiles.",
+    "effortDesc_quick": "Le plus rapide et le moins cher — réponses courtes et directes. Jusqu’à {answer, number} tokens de réponse.",
+    "effortDesc_balanced": "Le réglage par défaut — profondeur normale. Jusqu’à {answer, number} tokens de réponse.",
+    "effortDesc_thorough": "Le plus poussé et le plus lent — exhaustif, vérifie son travail. Jusqu’à {answer, number} tokens de réponse.",
+    "effortDescThinking": "+ {thinking, number} tokens de réflexion.",
+    "thinkingOnDesc": "Le modèle raisonne avant de répondre, avec un budget de {budget, number} tokens de réflexion à ce niveau. Plus lent, meilleur sur les problèmes difficiles.",
     "thinkingOffDesc": "Désactivé — le modèle répond directement. Activez-le pour une passe de raisonnement avant la réponse.",
     "paidCostDetail": "{input} en entrée / {output} en sortie par million de tokens + $0,01 par requête",
     "memory": "Mémoire",
@@ -1280,7 +1280,12 @@
     "welcomeBackTool": "Voici le résultat de votre dernière exécution — inscrivez-vous pour l’enregistrer et suivre votre progression.",
     "welcomeBackHub": "Vous avez réalisé {count} diagnostics gratuits — inscrivez-vous pour enregistrer vos résultats.",
     "saveMyResult": "Enregistrer mon résultat",
-    "saveMyResults": "Enregistrer mes résultats"
+    "saveMyResults": "Enregistrer mes résultats",
+    "windowLabel": "Fenêtre d’évaluation",
+    "windowDays": "{n} derniers jours",
+    "loadFailed": "Impossible de charger ce diagnostic.",
+    "frameworkLabel": "Référentiel de restitution",
+    "frameworkHint": "Le score et le plan sont identiques quel que soit le référentiel — seul le regroupement du tableau de bord change."
   },
   "toolReference": {
     "lede": "Un diagnostic gratuit, exécutable ici même — sans connexion.",
@@ -19337,6 +19342,42 @@
         "evalScore": "Score"
       }
     },
+    "models": {
+      "empty": "Ce {label} n'a encore aucun contenu.",
+      "emptyHint": "Demandez à Brain de le rechercher et de le remplir, ou ouvrez l’inspecteur pour l’écrire vous-même.",
+      "meterLabel": "{label} : {score} sur 100",
+      "freshJustNow": "à l'instant",
+      "freshMinutes": "il y a {count} min",
+      "freshHours": "il y a {count} h",
+      "freshDays": "il y a {count} j",
+      "label": {
+        "llm": "LLM"
+      },
+      "field": {
+        "model": "Modèle",
+        "instructions": "Instructions",
+        "parameters": "Paramètres",
+        "promptObjectId": "Prompt lié",
+        "costPerMillionInput": "Entrée · par million de tokens",
+        "costPerMillionOutput": "Sortie · par million de tokens",
+        "tokensPerRequestIn": "Tokens d'entrée par requête",
+        "tokensPerRequestOut": "Tokens de sortie par requête",
+        "monthlyRequests": "Requêtes par mois",
+        "cacheHitRate": "Taux de succès du cache",
+        "latencyP50Ms": "Latence p50 (ms)",
+        "latencyP95Ms": "Latence p95 (ms)",
+        "costPerRequest": "Coût par requête",
+        "projectedMonthlyCost": "Coût mensuel projeté",
+        "monthlyTokens": "Tokens par mois",
+        "outputShare": "Part de la sortie dans le coût",
+        "summary": "Synthèse",
+        "sources": "Sources"
+      },
+      "column": {
+        "name": "Nom",
+        "value": "Valeur"
+      }
+    },
     "basis": {
       "truncated": "Calculé sur {basisRows} lignes sur {sourceRows}",
       "stale": "La source a changé depuis ce calcul"
@@ -20556,7 +20597,20 @@
     "checkpointMeta": "{count} objets · {at}",
     "noCheckpoints": "Aucun point de restauration. Créez-en un avant une grosse modification pour pouvoir y revenir.",
     "noticeCheckpointRestored": "« {label} » restauré",
-    "noticeCheckpointStorageFull": "Ce navigateur n’a plus de place pour enregistrer un point de restauration de ce tableau. Enregistrez-le sur un compte pour conserver son historique."
+    "noticeCheckpointStorageFull": "Ce navigateur n’a plus de place pour enregistrer un point de restauration de ce tableau. Enregistrez-le sur un compte pour conserver son historique.",
+    "materializeRowsFrom": "{rows, number} lignes de {source}.",
+    "materializeReadFrom": "Lu depuis {source}.",
+    "materializeRows": "{rows, number} lignes",
+    "socialPublished": "Publié",
+    "model": "Modèle",
+    "llmCostPerMillionInput": "Entrée · par million de tokens",
+    "llmCostPerMillionOutput": "Sortie · par million de tokens",
+    "llmTokensPerRequestIn": "Tokens d'entrée par requête",
+    "llmTokensPerRequestOut": "Tokens de sortie par requête",
+    "llmMonthlyRequests": "Requêtes par mois",
+    "llmCacheHitRate": "Taux de succès du cache",
+    "llmLatencyP50Ms": "Latence p50 (ms)",
+    "llmLatencyP95Ms": "Latence p95 (ms)"
   },
   "canvasCommands": {
     "cleanLayout": "Réorganiser la toile",

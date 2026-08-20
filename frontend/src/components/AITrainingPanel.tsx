@@ -3,7 +3,7 @@
 import { Icon } from '@/components/ui/Icon';
 import { Select } from '@/components/Select';
 
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 import {
   SUPPORTED_MODELS,
@@ -19,6 +19,7 @@ import {
   listDatasets,
   listTrainingJobs,
 } from '@/lib/api';
+import { evaluateDatasetUse, normalizeClassifications, normalizeUsePolicy } from '@builderforce/creation-canvas-contract';
 import { getApiBaseUrl } from '@/lib/apiClient';
 import { downloadBlob } from '@/lib/download';
 import { hasWebGPUSupport } from '@seanhogg/builderforce-studio/capabilities';
@@ -103,6 +104,25 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted, initialDataM
   const logsEndRef = useRef<HTMLDivElement>(null);
 
   const selectedModel = SUPPORTED_MODELS.find(m => m.id === config.baseModel);
+  /**
+   * Whether the SELECTED corpus may lawfully be trained on.
+   *
+   * The server refuses this too (`POST /api/ide/training` → 403), and that is what makes
+   * the rule true. This asks the same question with the same evaluator so the answer is
+   * visible BEFORE the button rather than after it: a governance refusal discovered by
+   * pressing Start reads as a bug, and the thing a person has to go and fix — the policy
+   * on the canvas card the corpus came from — is not named anywhere in an HTTP error.
+   */
+  const corpusGate = useMemo(() => {
+    const dataset = datasets.find(d => d.id === selectedDatasetId);
+    if (!dataset) return null;
+    return evaluateDatasetUse(
+      'training',
+      normalizeClassifications(dataset.classifications),
+      normalizeUsePolicy(dataset.use_policy),
+    );
+  }, [datasets, selectedDatasetId]);
+  const corpusRefused = dataMode === 'workspace' && !!corpusGate && !corpusGate.allowed;
   const canUseBrowserTraining = selectedModel ? canTrainInBrowser(selectedModel.maxParams) : false;
 
   const appendLog = useCallback((msg: string) => {
@@ -689,6 +709,23 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted, initialDataM
                     </option>
                   ))}
                 </Select>
+                {/* The governance verdict, where the corpus is chosen rather than after
+                    the run is refused. Theme tokens rather than the panel's legacy
+                    dark-only greys, so it is legible in both themes. */}
+                {corpusGate && !corpusGate.allowed && (
+                  <p
+                    role="status"
+                    className="mt-1 text-xs rounded px-2 py-1.5"
+                    style={{
+                      background: 'var(--surface-raised, #2a2118)',
+                      color: 'var(--text-primary, #f5f5f5)',
+                      border: '1px solid var(--border-warning, var(--border, #7c5a1e))',
+                    }}
+                  >
+                    <strong>{t('corpusRefused')}</strong>{' '}
+                    <span style={{ color: 'var(--text-secondary, #c9c9c9)' }}>{corpusGate.reason}</span>
+                  </p>
+                )}
                 <input
                   type="text"
                   value={genModel}
@@ -782,7 +819,7 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted, initialDataM
               ) : (
                 <button
                   onClick={handleStartTraining}
-                  disabled={isTraining || isGenerating || (dataMode === 'local-only' && !localTrainingText.trim()) || (!!baseCheckpoint !== !!tokenizerSpec)}
+                  disabled={isTraining || isGenerating || corpusRefused || (dataMode === 'local-only' && !localTrainingText.trim()) || (!!baseCheckpoint !== !!tokenizerSpec)}
                   className="flex-1 bg-green-700 hover:bg-green-600 disabled:opacity-50 text-white px-3 py-2 rounded text-xs font-semibold"
                 >
                   {isTraining ? `${t('training')}` : `${t('startTraining')}`}

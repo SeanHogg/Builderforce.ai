@@ -172,7 +172,7 @@ import { trainingRunFields } from '@/lib/canvasTrainingRun';
 import { compareRuns } from '@/lib/canvasRunComparison';
 import { sampleRows } from '@/lib/canvasLabelSet';
 import { forecastSeries, seriesFromDataset } from '@/lib/canvasForecast';
-import { fetchTrainingJob, fetchTrainingLogs, listTrainingJobs } from '@/lib/api';
+import { fetchTrainingJob, fetchTrainingLogs, importCanvasDataset, listTrainingJobs } from '@/lib/api';
 import {
   DATA_MODEL_CARDINALITIES,
   DATA_MODEL_TYPES,
@@ -6975,6 +6975,96 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       return { ok: true, proposed: true, objectId: target.id, dataUse };
     },
   }, {
+    /**
+     * THE CANVAS → FINE-TUNE DOOR, and the half the governance gate had been missing.
+     *
+     * A classification that cannot travel is a classification that cannot refuse. Until
+     * this existed, the only way to make a training corpus was `POST /datasets/generate`,
+     * which synthesises instruction pairs from a prompt — nothing personal, nothing to
+     * classify — so every corpus the platform could build was, correctly, ungoverned. The
+     * corpora that NEED a policy are made of real rows somebody uploaded and then
+     * classified on this board, and there was no path that carried the classification
+     * across. This is that path: the rows, the tags and the policy in ONE call, because a
+     * corpus created in one request and classified in a second is a corpus somebody can
+     * train on in between.
+     *
+     * The column mapping is required rather than guessed. A fine-tune corpus is
+     * {instruction, input, output} and a canvas dataset is an arbitrary table; picking the
+     * columns by name would quietly train a model on the wrong two, which is the class of
+     * mistake that only surfaces after the weights exist.
+     */
+    name: 'canvas_promote_dataset_to_corpus',
+    description: 'Turn a dataset on this canvas into a fine-tune training corpus in a project, carrying its column classifications and its declared data-use policy with it. Use this when asked to train, fine-tune or build an adapter on data that is already on the board. The rows are mapped to instruction/output pairs by the columns you name. If the dataset declares a policy that does not permit training, or holds personal data with no lawful basis, the training run is refused later by the server — so set the policy with canvas_set_data_use first rather than after.',
+    parameters: {
+      type: 'object', additionalProperties: false, required: ['datasetId', 'instructionColumn', 'outputColumn'],
+      properties: {
+        datasetId: { type: 'string', description: 'Canvas id of the dataset object to promote.' },
+        instructionColumn: { type: 'string', description: 'Column holding the prompt/instruction for each example.' },
+        outputColumn: { type: 'string', description: 'Column holding the ideal answer for each example.' },
+        inputColumn: { type: 'string', description: 'Optional column holding extra context for each example.' },
+        projectId: { type: 'number', description: 'Project to file the corpus under. Omit when exactly one project object is on the canvas.' },
+        name: { type: 'string', description: 'Name for the corpus. Defaults to the dataset title.' },
+      },
+    },
+    run: async (raw: unknown) => {
+      const args = raw as { datasetId?: string; instructionColumn?: string; outputColumn?: string; inputColumn?: string; projectId?: number; name?: string };
+      if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
+      const target = nodes.find((node) => node.id === args.datasetId);
+      if (!target) return { error: `No object with id ${args.datasetId} is on this canvas.` };
+      const source = tabularFromObject(target.data as Record<string, unknown>);
+      if (!source.rows.length) return { error: `${String(target.data.title)} has no imported rows. Import the data before promoting it — a corpus of nothing cannot train anything.` };
+
+      const missing = [args.instructionColumn, args.outputColumn, args.inputColumn]
+        .filter((column): column is string => !!column)
+        .filter((column) => !source.columns.includes(column));
+      if (missing.length) return { error: `That dataset has no column named ${missing.join(' or ')}. Its columns are: ${source.columns.join(', ')}.` };
+
+      // Refuse HERE as well as at the server, and for a different reason: the server gate
+      // is what makes the rule true, and this one is what makes it legible — a refusal at
+      // the moment of promotion names the card to fix, where a 403 on a later training
+      // press names a dataset id.
+      const gate = evaluateDatasetUse(
+        'training',
+        normalizeClassifications((target.data as { classifications?: unknown }).classifications),
+        normalizeUsePolicy((target.data as { dataUse?: DataUsePolicy }).dataUse),
+      );
+      if (!gate.allowed) return { error: gate.reason };
+
+      const projectNode = nodes.find((node) => node.data.kind === 'project' && canvasProjectId(node.data) != null);
+      const projectId = args.projectId ?? (projectNode ? canvasProjectId(projectNode.data) : null);
+      if (projectId == null) return { error: 'No project to file this corpus under. Put the project on the canvas, or name its id.' };
+
+      const cell = (row: Record<string, unknown>, column: string | undefined): string =>
+        column ? String((row as Record<string, unknown>)[column] ?? '').trim() : '';
+      const examples = source.rows
+        .map((row) => ({
+          instruction: cell(row as Record<string, unknown>, args.instructionColumn),
+          input: cell(row as Record<string, unknown>, args.inputColumn),
+          output: cell(row as Record<string, unknown>, args.outputColumn),
+        }))
+        .filter((example) => example.instruction && example.output);
+      if (!examples.length) return { error: 'Every row was empty in the instruction or the output column, so there is nothing to train on.' };
+
+      try {
+        const dataset = await importCanvasDataset({
+          projectId,
+          name: args.name?.trim() || String(target.data.title || 'Canvas corpus'),
+          examples,
+          classifications: normalizeClassifications((target.data as { classifications?: unknown }).classifications),
+          usePolicy: normalizeUsePolicy((target.data as { dataUse?: DataUsePolicy }).dataUse),
+          sourceSessionId: sessionId ?? undefined,
+          sourceObjectId: target.id,
+        });
+        return {
+          ok: true,
+          corpus: { id: dataset.id, exampleCount: dataset.example_count, projectId },
+          skipped: source.rows.length - examples.length,
+        };
+      } catch (error) {
+        return { error: error instanceof Error ? error.message : 'That dataset could not be promoted to a training corpus.' };
+      }
+    },
+  }, {
     name: 'canvas_list_data_sources',
     description: 'List the live databases and warehouses this workspace has connected — Postgres/Neon, ClickHouse, BigQuery and others — and what each can do here. Call this before canvas_add_data_source or canvas_query_data_source when the user has not named one.',
     parameters: { type: 'object', additionalProperties: false, properties: {} },
@@ -7120,18 +7210,18 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           xAxisLabel: result.columns[0] ?? '', yAxisLabel: numeric ?? '',
           chartLabels: result.rows.map((row) => String(row[result.columns[0] ?? ''] ?? '')),
           chartValues: result.rows.map((row) => Number(row[numeric ?? ''] ?? 0)),
-          summary: `${result.rowCount.toLocaleString()} rows from ${result.source.name}.`,
+          summary: t('materializeRowsFrom', { rows: result.rowCount, source: result.source.name }),
         }
         : materializeAs === 'kpi'
           ? {
             title, value: String(Object.values(result.rows[0] ?? {})[0] ?? ''), status: 'Live',
-            summary: `Read from ${result.source.name}.`,
+            summary: t('materializeReadFrom', { source: result.source.name }),
           }
           : {
             title, columns: result.columns, rows: result.rows, rowCount: result.rowCount,
             sampleRows: result.rows.slice(0, 8),
-            status: `${result.rowCount.toLocaleString()} rows`,
-            summary: `${result.rowCount.toLocaleString()} rows from ${result.source.name}.`,
+            status: t('materializeRows', { rows: result.rowCount }),
+            summary: t('materializeRowsFrom', { rows: result.rowCount, source: result.source.name }),
             ...(materializeAs === 'dataset' ? { profile: profileTabular({ columns: result.columns, rows: result.rows }) } : {}),
           };
 

@@ -150,11 +150,11 @@
     "evermindLabel": "项目 Evermind",
     "evermindDetail": "你项目自己学习得到的 Evermind 模型。",
     "modelLocked": "选择模型需要付费套餐或已连接的服务商账号。",
-    "effortDesc_quick": "最快也最省——简短直接的回答。最多 {answer} 个回答 token。",
-    "effortDesc_balanced": "默认——常规深度。最多 {answer} 个回答 token。",
-    "effortDesc_thorough": "最深入也最慢——详尽作答并复核结果。最多 {answer} 个回答 token。",
-    "effortDescThinking": "外加 {thinking} 个思考 token。",
-    "thinkingOnDesc": "模型会先推理再作答，在此强度下有 {budget} 个思考 token 的预算。更慢，但更擅长难题。",
+    "effortDesc_quick": "最快也最省——简短直接的回答。最多 {answer, number} 个回答 token。",
+    "effortDesc_balanced": "默认——常规深度。最多 {answer, number} 个回答 token。",
+    "effortDesc_thorough": "最深入也最慢——详尽作答并复核结果。最多 {answer, number} 个回答 token。",
+    "effortDescThinking": "外加 {thinking, number} 个思考 token。",
+    "thinkingOnDesc": "模型会先推理再作答，在此强度下有 {budget, number} 个思考 token 的预算。更慢，但更擅长难题。",
     "thinkingOffDesc": "关闭——模型直接作答。开启后会在作答前先推理一轮。",
     "paidCostDetail": "每 100 万 token {input} 输入 / {output} 输出，另加每次请求 $0.01",
     "memory": "记忆",
@@ -1280,7 +1280,12 @@
     "welcomeBackTool": "这是您上次运行的结果——注册即可保存并跟踪您的进度。",
     "welcomeBackHub": "您已运行 {count} 项免费诊断——注册即可保存您的结果。",
     "saveMyResult": "保存我的结果",
-    "saveMyResults": "保存我的结果"
+    "saveMyResults": "保存我的结果",
+    "windowLabel": "评分窗口",
+    "windowDays": "最近 {n} 天",
+    "loadFailed": "无法加载此诊断。",
+    "frameworkLabel": "报告框架",
+    "frameworkHint": "在任何框架下评分与改进计划都相同，改变的只是记分卡的分组方式。"
   },
   "toolReference": {
     "lede": "可在此直接运行的免费诊断——无需登录。",
@@ -19337,6 +19342,42 @@
         "evalScore": "分数"
       }
     },
+    "models": {
+      "empty": "此{label}尚未填写任何内容。",
+      "emptyHint": "让 Brain 研究并填充，或打开检查器自行编写。",
+      "meterLabel": "{label}：100 分中的 {score} 分",
+      "freshJustNow": "刚刚",
+      "freshMinutes": "{count} 分钟前",
+      "freshHours": "{count} 小时前",
+      "freshDays": "{count} 天前",
+      "label": {
+        "llm": "大语言模型"
+      },
+      "field": {
+        "model": "模型",
+        "instructions": "指令",
+        "parameters": "参数",
+        "promptObjectId": "关联提示词",
+        "costPerMillionInput": "输入 · 每百万 token",
+        "costPerMillionOutput": "输出 · 每百万 token",
+        "tokensPerRequestIn": "每次请求输入 token",
+        "tokensPerRequestOut": "每次请求输出 token",
+        "monthlyRequests": "每月请求数",
+        "cacheHitRate": "缓存命中率",
+        "latencyP50Ms": "延迟 p50（毫秒）",
+        "latencyP95Ms": "延迟 p95（毫秒）",
+        "costPerRequest": "单次请求成本",
+        "projectedMonthlyCost": "预计月度成本",
+        "monthlyTokens": "每月 token 总量",
+        "outputShare": "输出占成本比例",
+        "summary": "摘要",
+        "sources": "来源"
+      },
+      "column": {
+        "name": "名称",
+        "value": "值"
+      }
+    },
     "basis": {
       "truncated": "基于 {sourceRows} 行中的 {basisRows} 行计算",
       "stale": "数据源在计算之后已发生变化"
@@ -20556,7 +20597,20 @@
     "checkpointMeta": "{count} 个对象 · {at}",
     "noCheckpoints": "还没有检查点。在做重大改动前先命名一个，之后就能回到这里。",
     "noticeCheckpointRestored": "已恢复“{label}”",
-    "noticeCheckpointStorageFull": "此浏览器已无空间保存该画板的检查点。请保存到账户以保留历史记录。"
+    "noticeCheckpointStorageFull": "此浏览器已无空间保存该画板的检查点。请保存到账户以保留历史记录。",
+    "materializeRowsFrom": "来自 {source} 的 {rows, number} 行。",
+    "materializeReadFrom": "读取自 {source}。",
+    "materializeRows": "{rows, number} 行",
+    "socialPublished": "已发布",
+    "model": "模型",
+    "llmCostPerMillionInput": "输入 · 每百万 token",
+    "llmCostPerMillionOutput": "输出 · 每百万 token",
+    "llmTokensPerRequestIn": "每次请求输入 token",
+    "llmTokensPerRequestOut": "每次请求输出 token",
+    "llmMonthlyRequests": "每月请求数",
+    "llmCacheHitRate": "缓存命中率",
+    "llmLatencyP50Ms": "延迟 p50（毫秒）",
+    "llmLatencyP95Ms": "延迟 p95（毫秒）"
   },
   "canvasCommands": {
     "cleanLayout": "整理画布布局",

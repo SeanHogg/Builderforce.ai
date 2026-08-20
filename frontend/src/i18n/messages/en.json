@@ -150,11 +150,11 @@
     "evermindLabel": "Project Evermind",
     "evermindDetail": "Your project's own learned Evermind model.",
     "modelLocked": "Model choice needs a paid plan or a connected provider account.",
-    "effortDesc_quick": "Fastest and cheapest — short, direct answers. Up to {answer} answer tokens.",
-    "effortDesc_balanced": "The default — normal depth. Up to {answer} answer tokens.",
-    "effortDesc_thorough": "Deepest and slowest — exhaustive, verifies its work. Up to {answer} answer tokens.",
-    "effortDescThinking": "+ {thinking} thinking tokens.",
-    "thinkingOnDesc": "The model reasons before answering, with a {budget}-token thinking budget at this effort. Slower, better on hard problems.",
+    "effortDesc_quick": "Fastest and cheapest — short, direct answers. Up to {answer, number} answer tokens.",
+    "effortDesc_balanced": "The default — normal depth. Up to {answer, number} answer tokens.",
+    "effortDesc_thorough": "Deepest and slowest — exhaustive, verifies its work. Up to {answer, number} answer tokens.",
+    "effortDescThinking": "+ {thinking, number} thinking tokens.",
+    "thinkingOnDesc": "The model reasons before answering, with a {budget, number}-token thinking budget at this effort. Slower, better on hard problems.",
     "thinkingOffDesc": "Off — the model answers directly. Turn on for a reasoning pass before the answer.",
     "paidCostDetail": "{input} input / {output} output per 1M tokens + $0.01 per request",
     "memory": "Memory",
@@ -1280,7 +1280,12 @@
     "welcomeBackTool": "Here’s the result from your last run — sign up to save it and track your progress.",
     "welcomeBackHub": "You’ve run {count} free diagnostics — sign up to save your results.",
     "saveMyResult": "Save my result",
-    "saveMyResults": "Save my results"
+    "saveMyResults": "Save my results",
+    "windowLabel": "Scoring window",
+    "windowDays": "Last {n} days",
+    "loadFailed": "Could not load this diagnostic.",
+    "frameworkLabel": "Reporting framework",
+    "frameworkHint": "The score and the plan are the same under every framework — only how the scorecard is grouped changes."
   },
   "toolReference": {
     "lede": "A free diagnostic you can run right here — no login required.",
@@ -19337,6 +19342,42 @@
         "evalScore": "Score"
       }
     },
+    "models": {
+      "empty": "This {label} has nothing authored yet.",
+      "emptyHint": "Ask Brain to research and fill it, or open the inspector to write it yourself.",
+      "meterLabel": "{label}: {score} out of 100",
+      "freshJustNow": "just now",
+      "freshMinutes": "{count}m ago",
+      "freshHours": "{count}h ago",
+      "freshDays": "{count}d ago",
+      "label": {
+        "llm": "LLM"
+      },
+      "field": {
+        "model": "Model",
+        "instructions": "Instructions",
+        "parameters": "Parameters",
+        "promptObjectId": "Linked prompt",
+        "costPerMillionInput": "Input · per 1M tokens",
+        "costPerMillionOutput": "Output · per 1M tokens",
+        "tokensPerRequestIn": "Input tokens per request",
+        "tokensPerRequestOut": "Output tokens per request",
+        "monthlyRequests": "Requests per month",
+        "cacheHitRate": "Cache hit rate",
+        "latencyP50Ms": "Latency p50 (ms)",
+        "latencyP95Ms": "Latency p95 (ms)",
+        "costPerRequest": "Cost per request",
+        "projectedMonthlyCost": "Projected monthly cost",
+        "monthlyTokens": "Tokens per month",
+        "outputShare": "Output share of spend",
+        "summary": "Summary",
+        "sources": "Sources"
+      },
+      "column": {
+        "name": "Name",
+        "value": "Value"
+      }
+    },
     "basis": {
       "truncated": "Computed from {basisRows} of {sourceRows} rows",
       "stale": "Source has changed since this was computed"
@@ -20556,7 +20597,20 @@
     "checkpointMeta": "{count} objects · {at}",
     "noCheckpoints": "No checkpoints yet. Name one before a big change and you can come back to it.",
     "noticeCheckpointRestored": "Restored “{label}”",
-    "noticeCheckpointStorageFull": "This browser has no room left to store a checkpoint of this board. Save it to an account to keep its history."
+    "noticeCheckpointStorageFull": "This browser has no room left to store a checkpoint of this board. Save it to an account to keep its history.",
+    "materializeRowsFrom": "{rows, number} rows from {source}.",
+    "materializeReadFrom": "Read from {source}.",
+    "materializeRows": "{rows, number} rows",
+    "socialPublished": "Published",
+    "model": "Model",
+    "llmCostPerMillionInput": "Input · per 1M tokens",
+    "llmCostPerMillionOutput": "Output · per 1M tokens",
+    "llmTokensPerRequestIn": "Input tokens per request",
+    "llmTokensPerRequestOut": "Output tokens per request",
+    "llmMonthlyRequests": "Requests per month",
+    "llmCacheHitRate": "Cache hit rate",
+    "llmLatencyP50Ms": "Latency p50 (ms)",
+    "llmLatencyP95Ms": "Latency p95 (ms)"
   },
   "canvasCommands": {
     "cleanLayout": "Clean up canvas layout",
