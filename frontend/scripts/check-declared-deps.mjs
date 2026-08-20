@@ -2,9 +2,9 @@
 /**
  * Declared-dependency guard.
  *
- * Every bare module specifier imported from `src/**` must be a package this
- * app DECLARES in its own package.json — not one it merely inherits through
- * somebody else's dependency tree.
+ * Every bare module specifier imported from `src/**` OR `scripts/**` must be a
+ * package this app DECLARES in its own package.json — not one it merely inherits
+ * through somebody else's dependency tree.
  *
  * This is not hypothetical. `lib/markdownPipeline.ts` imported the type
  * `PluggableList` from `unified`. `unified` is a transitive dependency of
@@ -17,6 +17,15 @@
  * A phantom dependency is a build that works on one machine and not another,
  * and a type-only one is worse: it costs nothing at runtime, so it survives
  * every test and dies only at the deploy.
+ *
+ * `scripts/**` is in scope because those files RUN IN THE BUILD, and the same
+ * failure arrived through them: `gen-blog-og.mjs` landed with `import sharp from
+ * 'sharp'` while the frontend declared sharp only as a pnpm OVERRIDE — a version
+ * pin for whoever else depends on it, never an instruction to install it here. It
+ * resolved locally off a hoisted copy and died in `prebuild` on the deploy, which
+ * is precisely the class of failure this guard already existed to prevent. A guard
+ * that watches one of the two directories the build reads is a guard with a blind
+ * spot the build can fall into.
  *
  * Specifiers come from TypeScript's own preprocessor rather than a regex: this
  * codebase is full of source code INSIDE strings (scaffold templates, generated
@@ -33,6 +42,7 @@ import ts from 'typescript';
 
 const here = resolve(fileURLToPath(new URL('.', import.meta.url)));
 const srcDir = resolve(here, '../src');
+const scriptsDir = resolve(here, '../scripts');
 const pkgPath = resolve(here, '../package.json');
 const tsconfigPath = resolve(here, '../tsconfig.json');
 
@@ -81,8 +91,13 @@ function collect(dir, out = []) {
 
 const violations = [];
 
-for (const file of collect(srcDir)) {
-  const rel = relative(srcDir, file).split('\\').join('/');
+const roots = [
+  { dir: srcDir, label: 'src' },
+  { dir: scriptsDir, label: 'scripts' },
+];
+
+for (const { dir: root, label } of roots) for (const file of collect(root)) {
+  const rel = `${label}/${relative(root, file).split('\\').join('/')}`;
   const text = readFileSync(file, 'utf8');
   // (text, readImportFiles, detectJavaScriptImports) — the third argument picks
   // up `require(…)` and bare dynamic `import(…)` alongside static imports.
@@ -103,7 +118,7 @@ for (const file of collect(srcDir)) {
 
 if (violations.length > 0) {
   const missing = [...new Set(violations.map((v) => packageRoot(v.specifier)))];
-  console.error(`❌  Undeclared (phantom) dependencies imported from src (${violations.length} site(s)):\n`);
+  console.error(`❌  Undeclared (phantom) dependencies imported from src/ or scripts/ (${violations.length} site(s)):\n`);
   for (const v of violations) console.error(`  - ${v.rel}:${v.line}  '${v.specifier}'`);
   console.error(
     `\n   Missing from frontend/package.json: ${missing.join(', ')}` +
@@ -118,4 +133,4 @@ if (violations.length > 0) {
   process.exit(1);
 }
 
-console.log('✅  Declared-dependency check passed — every bare import in src resolves to a declared package.');
+console.log('✅  Declared-dependency check passed — every bare import in src/ and scripts/ resolves to a declared package.');

@@ -1,3 +1,124 @@
+## ✅ RESOLVED 2026-08-20 — The red deploy: 55 API type errors, and the half-landed feature under them
+
+`46512f992` ("Latest features added") turned both deploy jobs red. `Deploy API` failed on **55 type errors**
+across tsgo and tsc; `Deploy frontend` failed after it in `prebuild`. The errors were not 55 independent
+mistakes — they were the compiler reporting one habit from several angles: a port, a type or a table was
+EXTENDED, and the things that implement or read it were not brought along in the same pass.
+
+**All 55 are fixed and both `type-check` jobs are green.** The api suite went from **16 failing tests to 1**,
+and one guard (`check:migrations`) went from red to green. What follows is grouped by root cause, because the
+count is misleading — six clusters produced all 55.
+
+### The ads port grew three levels; six of nine adapters were left on the old one
+
+`AdsProvider` gained `targetingDimensions`, `requiresAdSet`, `requiresCreativeRef` and the six ad-set/ad
+methods, plus the `adTargeting` vocabulary. **Google and Meta were migrated; LinkedIn, TikTok, X, Reddit,
+Pinterest and Snapchat were not**, and `adsProviders.ts` imported a `./networks/microsoft` that had never
+been written — while `AD_NETWORKS` and the connector manifest both already listed a ninth network.
+
+- **All six adapters implement the full port**, each against actions its manifest already declared. Every one
+  places only the dimensions it can actually WRITE — the declared set and the code that builds the spec were
+  checked against each other for all nine, because a dimension that is accepted and silently dropped spends
+  the whole budget on the wrong people and looks healthy doing it.
+- **`networks/microsoft.ts` written** — Campaign Management over the existing SOAP transport, plus the
+  asynchronous Reporting service (submit → poll → download → unzip → parse). Three capabilities the connector
+  runtime was missing were added generically rather than as Microsoft special cases: a per-action `baseUrl`
+  (Microsoft answers campaign management and reporting on different subdomains), `in: 'url'` for an action
+  whose URL the vendor supplies at runtime, and `responseFormat: 'binary'` for a body that is a file. The
+  report download walks its redirects by hand so every hop keeps the SSRF guard, rather than weakening
+  `redirect: 'manual'` for everyone.
+- **`google.ts` had a paste error that could not compile** — `draft_scope(externalId)`, an undefined
+  identifier, inside `updateAd`. Fixing it exposed a real defect beside it: `listAds` returned the bare ad id
+  while `createAd` returned the composite `adGroupId~adId`, so ids written by one path 404'd on the other.
+  Both now return the composite, which is what `adGroupAds` is addressed by.
+- **The two inline default-ad-set creates are gone.** Reddit and X each hand-rolled one inside
+  `createCampaign` — the exact duplication `requiresAdSet` was introduced to remove. `adsService`
+  now composes it once through the same `createAdSet` every other caller uses, and returns the campaign with
+  an `adSetError` if composition fails, because the campaign genuinely exists by then.
+- **LinkedIn was re-levelled** (operator decision): our campaign → `sponsoredCampaignGroup`, our ad set →
+  `sponsoredCampaign`, our ad → `creative`. LinkedIn keeps objective, targeting, budget and bid on its
+  *campaign*, which is an ad set everywhere else — the old mapping left the middle level with nowhere to go
+  and made LinkedIn the one network whose campaigns could not be targeted. Migration **1102** retires the ids
+  written under the old reading; the residual is in [ROADMAP.md](./ROADMAP.md).
+
+### The same age arithmetic, written four times, one copy quietly different
+
+Migrating the adapters produced four near-identical bucket-alignment functions and four hand-built inverted
+lookup tables. Extracted to `adTargeting` as `bucketedAgeKeys`, `ageFromBuckets`, `invertNativeTable` and
+`readNativeValues`, and **every** copy migrated — including `google.ts`, whose own version turned out to be
+the one that had drifted: it excluded only the buckets that did not OVERLAP the requested window, so a
+request for 20-30 excluded nothing and bought 18-34. A silent widening, in the adapter that had its own copy
+of the arithmetic, in the module whose entire purpose is preventing exactly that.
+
+### Three routers reached into Hono's overload list for a type
+
+`Parameters<Parameters<typeof router.get>[1]>[0]`, copied into all three `/api/v1` services, resolves against
+the LAST overload — so which type it meant was decided by declaration order inside Hono, and a routine bump
+changed it to one with no handler parameter. Every helper's `c` degraded to `never`: **23 of the 55 errors**.
+Replaced with one `PublicApiContext` in `publicApiAuth.ts`, which is Hono's own public name for it.
+
+### A column that exists, a projection that does not read it
+
+`managerRoutes` reads `lastSweepDecision` / `lastSweepReason` / `lastSweepAt` — migration 1083, and
+`runManagerSweep` writes all three on every visit including the ones that decline. `getManagerConfigRow`
+never selected them, so the decline was recorded and invisible. Four errors, one projection.
+
+### Nullability drift after migration 1085 folded lane staffing into `agent_assignments`
+
+- `AssignmentLite.runtime` was `string` against a nullable column. `normalizeLaneAgentRuntime` — which
+  already existed, privately, in `evaluateAutoRun` — is now exported and used at all three sites, and the
+  duplicate `AssignmentRuntime` / `LaneAgentRuntime` unions (two names, one column, free to drift) are one.
+- `laneApprover` indexed a map with a nullable `scope_id`.
+- **`boardRoutes` had a branch that could only ever fail.** Its "legacy" lane-assignment path wrote
+  `agentKind`/`agentRef` as null into columns 1085 made NOT NULL — and 1085 DELETED the pre-existing rows of
+  that shape on the reasoning that "a lane assignment naming no agent could never be dispatched". No client
+  sent it; the typed API client has required both since. Removed, with a 400 that says so.
+
+### `CreationActor` was a restatement of `ActorIdentity` that had drifted
+
+Declared `type: string` where the original has a closed `ActorType`, so every actor `TaskService` built
+type-checked at the point of construction and was rejected at the emitter. Now a type-only alias — the
+layering argument holds (a type import creates no runtime edge) and the second definition is gone.
+
+### Fifteen failing tests, none of them a real regression
+
+The same commit left tests asserting contracts the code had deliberately moved past:
+
+- `findCanonicalBoard` gained a `projects.primary_board_id` lookup (migration 1081), shifting every
+  positionally-stubbed query result by one across two suites; `findOrCreateBoard` also began stamping the
+  pointer, which its fake db had no `update` for. Fixtures corrected, and **a test added for the stamp** —
+  the behaviour 1081 exists for had none.
+- `EVALUATED_AUTO_RUN_REASONS` gained `lane_requirement_gate` on 2026-08-19 (the evaluator now probes it
+  read-only). Two suites still asserted the evaluator was blind to it; both updated, and the ledger case
+  re-pointed at `cloud_run_limit`, which genuinely still is un-modelled.
+- `EntityService` asserted a numeric refusal on `job_posting_id`, a column migration 0983 deliberately
+  WIDENED to varchar. Re-pointed — and **it exposed a real hole**: Drizzle surfaces `numeric` as a string, so
+  a decimal column never reached the number branch and `'abc'` travelled to the driver, returning a 500 from
+  the one layer whose whole promise is to refuse before it touches the database. Fixed, with a test.
+- `publicResumeProjection` gained `templateId` (how a published page renders); the private storage pointer is
+  still stripped, which is what that case actually guards.
+- `workItemWebhook`'s fake db predated the delivery insert becoming idempotent.
+
+The last failure, `entityCatalog`, is **not** fixed: it needs eleven per-table decisions about generic API
+exposure, two of them credential-bearing. Logged in [ROADMAP.md](./ROADMAP.md) rather than bumped.
+
+### Migration 1085 could not run on a fresh database
+
+`check:migrations` was red — 1085 selects `s.updated_at` from `swimlane_agent_assignments`, which never had
+that column (0064 created it without one; 0084 added only the agent columns). Any database that had not
+already applied 1085 would fail at `db:migrate`. Uses `s.created_at`, and the guard is green.
+
+### The frontend deploy: a script that imported a package the app never declared
+
+`gen-blog-og.mjs` landed in the same commit importing `sharp`, which the frontend declared only as a pnpm
+**override** — a version pin for whoever else depends on it, never an instruction to install it here. It
+resolved locally off a hoisted copy and died in `prebuild` on the deploy. Declared as a devDependency and the
+lockfile updated. **`check:declared-deps` now scans `scripts/` as well as `src/`** — its own header describes
+this failure mode, and it was watching one of the two directories the build reads. Verified by removing the
+dependency and confirming the guard names the file and the line.
+
+---
+
 ## ✅ RESOLVED 2026-08-20 — A register audit against the code, not against its own last edition
 
 **Roadmap items closed:** 74, across every group but 2, 11 and 12. The commit that landed that morning

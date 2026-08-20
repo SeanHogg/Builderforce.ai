@@ -210,6 +210,9 @@ importers:
       postcss:
         specifier: ^8
         version: 8.5.14
+      sharp:
+        specifier: 0.35.3
+        version: 0.35.3(@types/node@20.19.39)
       tailwindcss:
         specifier: ^3.4.1
         version: 3.4.19
@@ -6471,7 +6474,7 @@ snapshots:
       https-proxy-agent: 7.0.6
       node-fetch: 2.7.0
       nopt: 8.1.0
-      semver: 7.7.4
+      semver: 7.8.5
       tar: 7.5.13
     transitivePeerDependencies:
       - encoding
@@ -6502,7 +6505,7 @@ snapshots:
   '@napi-rs/wasm-runtime@0.2.12':
     dependencies:
       '@emnapi/core': 1.10.0
-      '@emnapi/runtime': 1.10.0
+      '@emnapi/runtime': 1.11.2
       '@tybys/wasm-util': 0.10.2
     optional: true
 
@@ -7205,7 +7208,7 @@ snapshots:
       '@typescript-eslint/visitor-keys': 8.59.2
       debug: 4.4.3
       minimatch: 10.2.5
-      semver: 7.7.4
+      semver: 7.8.5
       tinyglobby: 0.2.16
       ts-api-utils: 2.5.0(typescript@6.0.3)
       typescript: 6.0.3
@@ -9062,7 +9065,7 @@ snapshots:
       es6-error: 4.1.1
       matcher: 3.0.0
       roarr: 2.15.4
-      semver: 7.7.4
+      semver: 7.8.5
       serialize-error: 7.0.1
 
   globals@14.0.0: {}
@@ -9320,7 +9323,7 @@ snapshots:
 
   is-bun-module@2.0.0:
     dependencies:
-      semver: 7.7.4
+      semver: 7.8.5
 
   is-callable@1.2.7: {}
 
