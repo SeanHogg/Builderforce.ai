@@ -199,3 +199,13 @@ whitelabel_tenants
 work_estimates
 workflow_actions
 workspace_grants
+
+# youtube_uploads — the wait is RECORDED, not silent (see ROADMAP.md, group 9).
+#   Migration 1095 argues at length for a chunked, resumable, Worker-eviction-surviving
+#   upload; what shipped alongside it was the SINGLE-SHOT path
+#   (`youtubePublishing.publishCanvasVideoToYouTube`), which streams an R2 object straight
+#   into Google’s resumable session and works only while the whole object fits one
+#   request’s budget. The table is the durable half and its writer is the chunk sweep,
+#   which is not written yet. Listed here so the gap is one line in a register rather than
+#   an unexplained row in the schema; it leaves the baseline when the sweep lands.
+youtube_uploads

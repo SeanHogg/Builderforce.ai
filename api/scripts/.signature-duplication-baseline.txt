@@ -16,6 +16,25 @@ drive_connections = mailbox_connections
 #   is NOT duplicated — the verification and normalisation live in one adapter
 #   registry per pillar and share `infrastructure/crypto/webhookHmac`.
 error_collector_integrations = feedback_collector_integrations
+# extension_categories = stage_lookup (0.60)
+#   ACCEPTED, with an argument — not an omission.
+#   Both are global vocabularies, so both are (key, label, description, position) —
+#   which is the SHAPE every lookup table has, and all the overlap is measuring.
+#   Neither can hold the other. `stage_lookup` is documented as "the platform-wide
+#   company-stage vocabulary a tenant selects FROM ... the shared axis that makes
+#   two tenants' Series A the same thing"; its `category` column subdivides KINDS
+#   OF STAGE and is not a free slot for unrelated vocabularies. Filling it with
+#   extension-directory chips would falsify that table's stated purpose and leave
+#   its name lying about half its rows.
+#   They differ where it counts — in IDENTITY. `extension_categories.key` is the
+#   PRIMARY KEY, so a category is referenceable by name; `stage_lookup` is a serial
+#   id unique on (category, key), so its rows are identified only inside a
+#   namespace. `extension_categories.active` also lets a chip be RETIRED without
+#   deleting a row, a lifecycle `stage_lookup` has no column for.
+#   The real consolidation, if one is wanted, is a properly named shared-vocabulary
+#   primitive both become rows of — not moving one into a table named after the
+#   other. Logged in ROADMAP.md rather than done by widening `stage_lookup`.
+extension_categories = stage_lookup
 initiatives = portfolios
 kanban_template_lane_requirements = swimlane_requirements
 marketing_tool_runs = tool_runs

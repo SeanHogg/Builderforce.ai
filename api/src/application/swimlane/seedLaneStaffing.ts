@@ -85,7 +85,10 @@ export async function seedLaneStaffingFromWorkforce(
           kind: swimlaneRequirements.kind,
         })
         .from(swimlaneRequirements)
-        .where(inArray(swimlaneRequirements.swimlaneId, laneIds))
+        // The lane ids came from a tenant-scoped read above, but the predicate is what
+        // the guard (and a reviewer) can see — so it is written here rather than inferred
+        // from where the ids happened to come from.
+        .where(scopedToTenant(swimlaneRequirements, args.tenantId, inArray(swimlaneRequirements.swimlaneId, laneIds)))
         .orderBy(asc(swimlaneRequirements.position)),
       db
         .select({ swimlaneId: laneAgentAssignments.scopeId })

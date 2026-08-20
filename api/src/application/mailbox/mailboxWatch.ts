@@ -46,7 +46,7 @@ import {
   mailboxPushReceipts,
   mailboxWatches,
 } from '../../infrastructure/database/schema';
-import { scopedToTenant } from '../../infrastructure/database/tenantScope';
+import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { broadcastRoom, creationSessionRoomName } from '../../infrastructure/relay/broadcastRoom';
 import { fireEventTriggers } from '../workflow/eventTriggers';
 import { generateTriggerToken } from '../../domain/workflowTriggers';
@@ -542,11 +542,19 @@ export async function handleGmailPush(
   const emailAddress = decodeGmailNotification(message?.data);
   if (!emailAddress) return { ok: false, status: 202, error: 'Notification named no mailbox.' };
 
+  /*
+   * DECLARED cross-tenant: Google's notification carries an email ADDRESS and nothing
+   * else. Which tenant owns that mailbox is the question this query answers, so there is
+   * no tenant to filter by before asking it — the connection's own address is what
+   * governs the read, and it is unique per connected mailbox.
+   */
   const rows = await db
     .select({ watch: mailboxWatches })
     .from(mailboxWatches)
     .innerJoin(mailboxConnections, eq(mailboxConnections.id, mailboxWatches.connectionId))
-    .where(and(
+    .where(acrossTenants(
+      mailboxWatches,
+      'global_uniqueness',
       eq(mailboxWatches.provider, 'google'),
       eq(mailboxConnections.accountEmail, emailAddress),
     ));
@@ -653,10 +661,14 @@ export async function runMailboxWatchSweep(env: Env, db: Db): Promise<MailboxWat
   const result: MailboxWatchSweepResult = { renewed: 0, rearmed: 0, polled: 0, fresh: 0, failed: 0, pruned: 0 };
   const renewBefore = new Date(Date.now() + RENEW_LEAD_MS);
 
+  // DECLARED cross-tenant: this IS the scheduled sweep. It renews every tenant's watches
+  // on one tick, so a tenant filter would be a tenant it had no way to choose.
   const due = await db
     .select()
     .from(mailboxWatches)
-    .where(and(
+    .where(acrossTenants(
+      mailboxWatches,
+      'scheduled_sweep',
       eq(mailboxWatches.status, 'active'),
       or(
         eq(mailboxWatches.mode, 'poll'),
@@ -729,14 +741,17 @@ async function renewOne(db: Db, env: Env, row: WatchRow): Promise<'renewed' | 'r
  */
 async function pruneReceipts(db: Db): Promise<number> {
   const horizon = new Date(Date.now() - RECEIPT_RETENTION_MS);
+  // DECLARED cross-tenant: retention. The horizon is the whole predicate — a receipt is
+  // dropped because it is OLD, and age does not vary by tenant.
   const stale = await db
     .select({ id: mailboxPushReceipts.id })
     .from(mailboxPushReceipts)
-    .where(lt(mailboxPushReceipts.createdAt, horizon))
+    .where(acrossTenants(mailboxPushReceipts, 'scheduled_sweep', lt(mailboxPushReceipts.createdAt, horizon)))
     .orderBy(asc(mailboxPushReceipts.id))
     .limit(500);
   if (stale.length === 0) return 0;
-  await db.delete(mailboxPushReceipts).where(inArray(mailboxPushReceipts.id, stale.map((r) => r.id)));
+  await db.delete(mailboxPushReceipts)
+    .where(acrossTenants(mailboxPushReceipts, 'scheduled_sweep', inArray(mailboxPushReceipts.id, stale.map((r) => r.id))));
   return stale.length;
 }
 

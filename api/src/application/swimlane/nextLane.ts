@@ -13,6 +13,7 @@ import { asc, eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { boards, swimlanes } from '../../infrastructure/database/schema';
 import { findCanonicalBoard } from './canonicalBoard';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 
 /** Minimal lane shape the ordering needs. */
 export interface LanePosition {
@@ -110,7 +111,9 @@ export async function resolveNextTaskStatus(db: Db, projectId: number, fromStatu
   const lanes = await db
     .select({ key: swimlanes.key, position: swimlanes.position, isTerminal: swimlanes.isTerminal, isParking: swimlanes.isParking })
     .from(swimlanes)
-    .where(eq(swimlanes.boardId, board.id))
+    // The board was resolved from the project and carries its own tenant, so the scope is
+    // stated explicitly here rather than left to ride on `boardId` being unguessable.
+    .where(scopedToTenant(swimlanes, board.tenantId, eq(swimlanes.boardId, board.id)))
     .orderBy(asc(swimlanes.position));
 
   return resolveNextLaneKey(lanes, fromStatus);
@@ -179,7 +182,9 @@ export async function resolveRunningTaskStatus(
   const lanes = await db
     .select({ key: swimlanes.key, position: swimlanes.position, isTerminal: swimlanes.isTerminal, isParking: swimlanes.isParking })
     .from(swimlanes)
-    .where(eq(swimlanes.boardId, board.id))
+    // The board was resolved from the project and carries its own tenant, so the scope is
+    // stated explicitly here rather than left to ride on `boardId` being unguessable.
+    .where(scopedToTenant(swimlanes, board.tenantId, eq(swimlanes.boardId, board.id)))
     .orderBy(asc(swimlanes.position));
 
   return resolveRunningLaneKey(lanes, fromStatus, dispatchedLaneKey);

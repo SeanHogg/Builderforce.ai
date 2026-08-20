@@ -105,7 +105,7 @@ async function applyReassignments(
         // Re-assert the previous owner in the predicate: if the person came back and
         // grabbed their ticket between the plan and this write, the update matches
         // nothing rather than taking it off them a second time.
-        .where(and(eq(tasks.id, r.taskId), eq(tasks.assignedUserId, r.fromUserId)));
+        .where(scopedToTenant(tasks, args.tenantId, eq(tasks.id, r.taskId), eq(tasks.assignedUserId, r.fromUserId)));
       applied += 1;
 
       await recordActivity(env, db, {
@@ -155,13 +155,13 @@ async function applyReassignments(
  * Never throws — attendance resolution must survive a meetings-table problem, and the
  * pre-existing behaviour (no decline signal at all) is the safe degrade.
  */
-async function loadDeclinedRsvps(db: Db, meetingId: string | null): Promise<Set<string>> {
+async function loadDeclinedRsvps(db: Db, tenantId: number, meetingId: string | null): Promise<Set<string>> {
   if (!meetingId) return new Set();
   try {
     const rows = await db
       .select({ memberRef: meetingAttendees.memberRef })
       .from(meetingAttendees)
-      .where(and(eq(meetingAttendees.meetingId, meetingId), eq(meetingAttendees.response, 'declined')));
+      .where(scopedToTenant(meetingAttendees, tenantId, eq(meetingAttendees.meetingId, meetingId), eq(meetingAttendees.response, 'declined')));
     return new Set(rows.map((r) => r.memberRef));
   } catch (err) {
     reportCaughtError(err, { source: "application/ceremony/concludeCeremony.ts", operation: "loadDeclinedRsvps", context: { details: { meetingId } } });
@@ -192,7 +192,7 @@ async function loadPtoAt(
 }
 
 /** Human-owned, non-terminal tickets on this project — the reassignment candidate pool. */
-async function loadReassignableTasks(db: Db, projectId: number, ownerIds: string[]) {
+async function loadReassignableTasks(db: Db, tenantId: number, projectId: number, ownerIds: string[]) {
   if (ownerIds.length === 0) return [];
   return db
     .select({
@@ -205,7 +205,7 @@ async function loadReassignableTasks(db: Db, projectId: number, ownerIds: string
       updatedAt: tasks.updatedAt,
     })
     .from(tasks)
-    .where(and(eq(tasks.projectId, projectId), inArray(tasks.status, REASSIGNABLE_STATUSES), inArray(tasks.assignedUserId, ownerIds)))
+    .where(scopedToTenant(tasks, tenantId, eq(tasks.projectId, projectId), inArray(tasks.status, REASSIGNABLE_STATUSES), inArray(tasks.assignedUserId, ownerIds)))
     .limit(500);
 }
 
@@ -264,7 +264,7 @@ export async function concludeCeremonySession(
   // decline excuses the seat for the same reason approved leave does — see
   // `resolveAttendanceVerdict` step 5. One indexed read, skipped entirely for a ceremony
   // with no companion meeting.
-  const declinedRefs = await loadDeclinedRsvps(db, session.meetingId ?? null);
+  const declinedRefs = await loadDeclinedRsvps(db, session.tenantId, session.meetingId ?? null);
 
   const attendance = resolveAttendance(roster.map((p) => ({
     memberKind: p.memberKind,
@@ -313,7 +313,7 @@ export async function concludeCeremonySession(
   if (mayConduct) {
     const absentIds = attendance.absentHumans.map((p) => p.memberRef);
     const candidates = policy.allowAgentReassignment && absentIds.length > 0
-      ? await loadReassignableTasks(db, session.projectId, absentIds)
+      ? await loadReassignableTasks(db, session.tenantId, session.projectId, absentIds)
       : [];
     reassignment = selectReassignments({
       policy,
@@ -445,14 +445,14 @@ export async function recordCeremonyPresence(
   const [existing] = await db
     .select({ id: ceremonyParticipants.id, joinedAt: ceremonyParticipants.joinedAt })
     .from(ceremonyParticipants)
-    .where(and(eq(ceremonyParticipants.sessionId, args.sessionId), eq(ceremonyParticipants.memberKind, args.memberKind), eq(ceremonyParticipants.memberRef, args.memberRef)))
+    .where(scopedToTenant(ceremonyParticipants, args.tenantId, eq(ceremonyParticipants.sessionId, args.sessionId), eq(ceremonyParticipants.memberKind, args.memberKind), eq(ceremonyParticipants.memberRef, args.memberRef)))
     .limit(1);
 
   if (existing) {
     await db
       .update(ceremonyParticipants)
       .set({ joinedAt: existing.joinedAt ?? now, leftAt: now, updatedAt: now })
-      .where(eq(ceremonyParticipants.id, existing.id));
+      .where(scopedToTenant(ceremonyParticipants, args.tenantId, eq(ceremonyParticipants.id, existing.id)));
     return;
   }
 
@@ -460,7 +460,7 @@ export async function recordCeremonyPresence(
   const seated = await db
     .select({ turnOrder: ceremonyParticipants.turnOrder })
     .from(ceremonyParticipants)
-    .where(eq(ceremonyParticipants.sessionId, args.sessionId));
+    .where(scopedToTenant(ceremonyParticipants, args.tenantId, eq(ceremonyParticipants.sessionId, args.sessionId)));
   const nextTurn = seated.reduce((max, s) => Math.max(max, s.turnOrder + 1), 0);
 
   await db.insert(ceremonyParticipants).values({

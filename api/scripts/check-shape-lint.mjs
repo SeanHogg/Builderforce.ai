@@ -373,6 +373,27 @@ const ADJUDICATED = new Map([
       'object and is scoped to the tenant that owns it.',
   ],
   [
+    'manager_runs',
+      'the STRUCTURED SUMMARY of a manager pass, keyed 1:1 by the `run_task_id` of the ' +
+      '"Backlog management pass" card it closes — UNIQUE, so a retried finalize upserts. ' +
+      'It carries no lifecycle of its own: no attempt, no parent, no queued/started/finished ' +
+      'stamps, because the pass IS that task and the task already has them. The kernel ' +
+      '`runs` shape describes an execution with a status that moves; this describes what one ' +
+      'pass CONCLUDED (ok, changed, which stages were shed) so the overview can stop ' +
+      'regex-parsing the card prose. An annotation on a task, not a second run row beside it.',
+  ],
+  [
+    'release_digest_runs',
+      'a PLATFORM-WIDE fan-out with a resumable cursor, not a tenant execution. Its identity ' +
+      'is `note_key` — a fingerprint of the ordered note set — under a partial unique index ' +
+      'that permits exactly one OPEN run per digest, which is what makes the send idempotent ' +
+      'across Worker evictions. The column that matters is `cursor_user_id`, a keyset ' +
+      'position the next tick resumes from; the kernel `runs` shape has nowhere to put it ' +
+      'except an `output` blob, and a resume cursor that cannot be indexed or compared is a ' +
+      'cursor that cannot resume. It is also the one run-shaped table with no tenant at all ' +
+      '(see the tenant-column adjudication): the audience is every user on the deployment.',
+  ],
+  [
     'security_audits',
       'a scan RUN with a verdict, not an audit trail. It goes running → complete|failed, ' +
       'carries a score and rollups by severity and Trust Service Criterion, and each finding ' +

@@ -183,7 +183,59 @@ describe('the entity catalog', () => {
     // recalled fragment of it. Its two SIBLINGS from the same pass are registered rather
     // than exempted (`preview_sessions` as a capacity lease, `task_repo_bindings` as the
     // ticket's repo set), so this ceiling moved by exactly one table, not by three.
-    expect(missing.length, `uncovered: ${missing.join(', ')}`).toBeLessThan(15);
+    //
+    // Ceiling moved 15 → 25 (2026-08-20). Ten tables, adjudicated one at a time rather
+    // than counted — every one of them lands on a structural reason ALREADY written
+    // above, which is why the batch moves the number without softening the rule:
+    //
+    //  CREDENTIAL-BEARING — the generic reader redacts on column-name PATTERNS, and
+    //  betting a secret on a regex is the bet `lti_registrations` / `sso_connections` /
+    //  `agent_host_channels` are exempt to avoid:
+    //   - `webauthn_credentials` holds an authenticator's public key and signature
+    //     counter. It is the second factor itself; a browsable copy of the credential
+    //     set is a map of how each account is protected.
+    //   - `feedback_collector_integrations` holds a per-collector provider secret, the
+    //     direct analogue of `error_collector_integrations` beside it.
+    //
+    //  NO IDENTITY A PERSON OPENS — join rows and append-only facts, read through the
+    //  parent that does have identity (as `lti_context_bindings` and
+    //  `collection_actions` are):
+    //   - `lti_learner_boards` joins an LMS (assignment, learner) coordinate to a board.
+    //   - `postmortem_whys` is the ordered why-chain under one incident: a step number
+    //     and a statement, no title and no status, meaningless outside its parent.
+    //   - `feedback_webhook_deliveries` is the append-only delivery log for a collector.
+    //
+    //  1:1 DERIVED STATE — keyed by the row it describes, replaced rather than edited,
+    //  with no identity of its own (the `hosted_listing_lifecycle` / `repo_delivery_status`
+    //  reason):
+    //   - `task_plan_verdicts` is one row per planned Epic, REPLACED on every re-plan
+    //     because a verdict about a plan that no longer exists is worse than none.
+    //   - `manager_runs` is keyed 1:1 by the `run_task_id` of the pass card it closes.
+    //     It is an annotation on that task, not a second object beside it.
+    //
+    //  NOT A TITLED OBJECT — the `workflow_variables` reason:
+    //   - `tenant_working_calendars` is SETTINGS: one row per tenant (unique on
+    //     `tenant_id`) holding working weekdays, holidays and a timezone. Nobody opens
+    //     one from a list; an absent row is the default, which is the shape of config.
+    //
+    //  NO TENANT TO REGISTER UNDER — the `professional_references` reason, in its
+    //  strongest form:
+    //   - `release_digest_runs` has no `tenant_id` AT ALL (see its adjudication in
+    //     check-tenant-column.mjs — it announces platform release notes to every user on
+    //     the deployment). The catalog registers into the tenant-scoped `objects` table,
+    //     so this one cannot be registered even if it were wanted.
+    //
+    //  A CHILD OF AN UNREGISTERED FAMILY:
+    //   - `job_invites` and `saved_talent` are freelance-marketplace rows. `job_invites`
+    //     genuinely IS object-shaped — identity, a sent→viewed→accepted lifecycle, an
+    //     expiry, and it becomes a `job_proposals` row — and on its own merits it should
+    //     be an entity. It is exempt for a different reason: its PARENT, `job_postings`,
+    //     is not in the catalog either (it predates the 0418 series, so it is not even in
+    //     `created` to be counted). Registering the child of an unregistered parent puts
+    //     one member of a family on the generic reader and leaves the rest invisible,
+    //     which reads as coverage the seat does not have. These two leave the baseline
+    //     WITH their family, not before it.
+    expect(missing.length, `uncovered: ${missing.join(', ')}`).toBeLessThan(26);
   });
 
   it('declares nothing that no migration creates', () => {
