@@ -14,7 +14,12 @@ import {
   AdsProviderError, ask, count, fromCents, list, mapObjective, rec, requireField, text, toCents, toDay, toISO, unmapObjective,
 } from '../adsNormalize';
 import {
-  type AdInsightRow, type AdObjective, type AdStatus, type AdsProvider,
+  ageWindow, mapTargetingValues, requireTargetingSupport,
+  type AdDevice, type AdGender, type AdPlacement, type AdTargeting, type AdTargetingDimension,
+} from '../adTargeting';
+import {
+  type AdCreativeRemote, type AdInsightRow, type AdObjective, type AdSetRemote,
+  type AdStatus, type AdsProvider,
 } from '../adsProviders';
 
 const MICROS = 1_000_000;
@@ -45,9 +50,130 @@ function fromStatus(status: AdStatus | undefined): string | undefined {
   return undefined;
 }
 
+/** Pinterest's gender values are lower case words, and `unknown` is a third bucket this
+ *  vocabulary has no name for — so it is never sent, only read. */
+const GENDERS: Readonly<Record<AdGender, string>> = { male: 'male', female: 'female' };
+
+/**
+ * Placements → Pinterest's `placement_traffic_type`.
+ *
+ * Pinterest sells the browse feed and search results. It has no stories, video-feed or
+ * audience-network placement to buy, so those three are REFUSED by name rather than
+ * folded into "all placements".
+ */
+const PLACEMENTS: Readonly<Record<AdPlacement, string | undefined>> = {
+  feed: 'BROWSE',
+  search: 'SEARCH',
+  stories: undefined,
+  video: undefined,
+  audience_network: undefined,
+};
+
+/**
+ * What Pinterest can place through this adapter.
+ *
+ * `interests` and `devices` are absent: Pinterest's interest targeting is id-valued and
+ * the ads manifest carries no interest lookup, and its `targeting_spec` has no device
+ * key at all. Both are refused by name rather than sent and ignored.
+ */
+const TARGETING_DIMENSIONS: readonly AdTargetingDimension[] = ['geo', 'age', 'gender', 'placements'];
+
+/** Pinterest's contiguous age BUCKETS, as [inclusive min, inclusive max] in our terms.
+ *  The top bucket is "65 and over", which is `AD_MAX_AGE` here. */
+const AGE_BUCKETS: ReadonlyArray<{ readonly key: string; readonly min: number; readonly max: number }> = [
+  { key: '18-24', min: 18, max: 24 },
+  { key: '25-34', min: 25, max: 34 },
+  { key: '35-44', min: 35, max: 44 },
+  { key: '45-49', min: 45, max: 49 },
+  { key: '50-54', min: 50, max: 54 },
+  { key: '55-64', min: 55, max: 64 },
+  { key: '65+', min: 65, max: 65 },
+];
+
+/** An age window → the Pinterest buckets that are exactly it, or a refusal naming the
+ *  boundaries. Never rounded outwards — see the note in `adTargeting`. */
+function ageBuckets(targeting: AdTargeting): string[] {
+  const { min, max } = ageWindow(targeting);
+  const first = AGE_BUCKETS.findIndex((bucket) => bucket.min === min);
+  const last = AGE_BUCKETS.findIndex((bucket) => bucket.max === max);
+  if (first === -1 || last === -1 || first > last) {
+    throw new AdsProviderError(
+      `Pinterest sells age in fixed buckets, so it cannot target exactly ${min}-${max}. `
+      + `Use a window starting on one of ${AGE_BUCKETS.map((b) => b.min).join(', ')} and `
+      + `ending on one of ${AGE_BUCKETS.map((b) => b.max).join(', ')} — it will not be rounded outwards.`,
+      400,
+      false,
+    );
+  }
+  return AGE_BUCKETS.slice(first, last + 1).map((bucket) => bucket.key);
+}
+
+/** Our spec → Pinterest's `targeting_spec`. Every key is a LIST on Pinterest, including
+ *  the ones that hold a single value. */
+function targetingSpec(targeting: AdTargeting): Record<string, unknown> {
+  requireTargetingSupport(pinterestAdsProvider, targeting);
+  const spec: Record<string, unknown> = {};
+  // Pinterest takes ISO country codes directly in `LOCATION`, with no id lookup.
+  if (targeting.countries?.length) spec.LOCATION = [...targeting.countries];
+  if (targeting.ageMin != null || targeting.ageMax != null) spec.AGE_BUCKET = ageBuckets(targeting);
+  if (targeting.genders?.length) {
+    spec.GENDER = mapTargetingValues(pinterestAdsProvider, 'gender', GENDERS, targeting.genders);
+  }
+  if (targeting.placements?.length) {
+    spec.PLACEMENT_TRAFFIC_TYPE = mapTargetingValues(pinterestAdsProvider, 'placements', PLACEMENTS, targeting.placements);
+  }
+  return spec;
+}
+
+/** Pinterest's spec → as much of our vocabulary as it holds. Never throws. */
+function readPinterestTargeting(raw: unknown): AdTargeting {
+  const spec = rec(raw);
+  const targeting: {
+    countries?: string[]; ageMin?: number; ageMax?: number;
+    genders?: AdGender[]; interests?: string[]; placements?: AdPlacement[]; devices?: AdDevice[];
+  } = {};
+
+  const countries = list(spec.LOCATION).map(text).filter((value) => /^[A-Za-z]{2}$/.test(value));
+  if (countries.length) targeting.countries = countries.map((value) => value.toUpperCase());
+
+  const ages = list(spec.AGE_BUCKET).map(text);
+  const known = AGE_BUCKETS.filter((bucket) => ages.includes(bucket.key));
+  if (known.length) {
+    targeting.ageMin = Math.min(...known.map((b) => b.min));
+    targeting.ageMax = Math.max(...known.map((b) => b.max));
+  }
+
+  const genders = list(spec.GENDER)
+    .map((value) => text(value).toLowerCase())
+    .filter((value): value is AdGender => value === 'male' || value === 'female');
+  if (genders.length) targeting.genders = genders;
+
+  const byNative = new Map(
+    Object.entries(PLACEMENTS)
+      .filter((entry): entry is [AdPlacement, string] => entry[1] != null)
+      .map(([ours, theirs]) => [theirs, ours]),
+  );
+  const placements = list(spec.PLACEMENT_TRAFFIC_TYPE)
+    .map((value) => byNative.get(text(value).toUpperCase()))
+    .filter((value): value is AdPlacement => value != null);
+  if (placements.length) targeting.placements = placements;
+
+  return targeting;
+}
+
 export const pinterestAdsProvider: AdsProvider = {
   network: 'pinterest', label: 'Pinterest Ads', connectorKey: 'pinterest-ads',
   objectives: Object.keys(OBJECTIVES) as AdObjective[],
+  targetingDimensions: TARGETING_DIMENSIONS,
+  // A Pinterest campaign with no ad group is a valid paused shell the console shows; it
+  // simply never delivers. Nothing is auto-created on its behalf.
+  requiresAdSet: false,
+  /**
+   * Pinterest ads ALWAYS reference an existing pin — `create_ads` takes a `pin_id` and
+   * there is no ad-authoring endpoint. So a `creativeRef` is required, and a form can
+   * ask for it up front rather than discovering it as a vendor error.
+   */
+  requiresCreativeRef: true,
   accountFields: [{
     key: 'adAccountId', label: 'Ad account ID',
     help: 'The Pinterest ad account this connection spends on.',
@@ -135,6 +261,186 @@ export const pinterestAdsProvider: AdsProvider = {
         ...(status ? { status } : {}),
         ...(patch.dailyBudgetCents != null ? { daily_spend_cap: fromCents(patch.dailyBudgetCents, MICROS) } : {}),
         ...(patch.totalBudgetCents != null ? { lifetime_spend_cap: fromCents(patch.totalBudgetCents, MICROS) } : {}),
+      }],
+    });
+  },
+
+  // ── Ad groups (this port's ad set) ───────────────────────────────────────
+
+  async listAdSets(call, fields, identity, externalCampaignId) {
+    const accountId = requireField(fields, 'adAccountId', 'the ad account ID');
+    const rows = list((await ask(call, 'list_ad_groups', {
+      ad_account_id: accountId,
+      page_size: 250,
+      ...(externalCampaignId ? { campaign_ids: externalCampaignId } : {}),
+    })).data).map(rec);
+    return rows.map((row) => ({
+      externalId: text(row.id),
+      externalCampaignId: text(row.campaign_id) || null,
+      name: text(row.name),
+      status: toStatus(row.status),
+      targeting: readPinterestTargeting(row.targeting_spec),
+      nativeTargeting: row.targeting_spec ?? null,
+      bidStrategy: text(row.bid_strategy_type) || text(row.billable_event) || null,
+      bidCents: toCents(row.bid_in_micro_currency, MICROS),
+      dailyBudgetCents: toCents(row.budget_in_micro_currency, MICROS),
+      currency: identity.currency,
+      startsAtISO: toISO(row.start_time),
+      endsAtISO: toISO(row.end_time),
+    } satisfies AdSetRemote));
+  },
+
+  async createAdSet(call, fields, draft, identity) {
+    const accountId = requireField(fields, 'adAccountId', 'the ad account ID');
+    const spec = targetingSpec(draft.targeting);
+    const daily = fromCents(draft.dailyBudgetCents, MICROS);
+    const bid = fromCents(draft.bidCents, MICROS);
+
+    const created = rec(list((await ask(call, 'create_ad_groups', {
+      ad_account_id: accountId,
+      // One element: `createAdSet` makes ONE ad group, which is the contract every other
+      // network here honours — see this file's header on Pinterest's array bodies.
+      ad_groups: [{
+        campaign_id: draft.externalCampaignId,
+        name: draft.name,
+        status: fromStatus(draft.status) ?? 'PAUSED',
+        // Pinterest bills the objective's own event; `billable_event` disagreeing with
+        // the campaign is rejected rather than degraded.
+        billable_event: draft.objective === 'awareness' ? 'IMPRESSION' : 'CLICKTHROUGH',
+        ...(daily ? { budget_in_micro_currency: daily, budget_type: 'DAILY' } : {}),
+        ...(bid ? { bid_in_micro_currency: bid } : {}),
+        ...(draft.startsAtISO ? { start_time: draft.startsAtISO } : {}),
+        ...(draft.endsAtISO ? { end_time: draft.endsAtISO } : {}),
+        ...(Object.keys(spec).length ? { targeting_spec: spec } : {}),
+      }],
+    })).data)[0]);
+    // Pinterest answers a batch write with per-item outcomes, so a 200 is not a success:
+    // the element carries its own `data`/`exceptions` pair.
+    const id = text(rec(created.data ?? created).id);
+    if (!id) {
+      const reason = text(rec(list(created.exceptions)[0]).message);
+      throw new AdsProviderError(
+        reason || 'Pinterest accepted the ad group request but did not return its id.',
+        reason ? 400 : 502,
+        !reason,
+      );
+    }
+
+    return {
+      externalId: id,
+      externalCampaignId: draft.externalCampaignId,
+      name: draft.name,
+      status: draft.status ?? 'paused',
+      targeting: draft.targeting,
+      nativeTargeting: spec,
+      bidStrategy: draft.objective === 'awareness' ? 'IMPRESSION' : 'CLICKTHROUGH',
+      bidCents: draft.bidCents ?? null,
+      dailyBudgetCents: draft.dailyBudgetCents ?? null,
+      currency: identity.currency,
+      startsAtISO: draft.startsAtISO ?? null,
+      endsAtISO: draft.endsAtISO ?? null,
+    };
+  },
+
+  async updateAdSet(call, fields, externalId, patch) {
+    const accountId = requireField(fields, 'adAccountId', 'the ad account ID');
+    const status = fromStatus(patch.status);
+    const daily = fromCents(patch.dailyBudgetCents, MICROS);
+    const bid = fromCents(patch.bidCents, MICROS);
+    // A REPLACEMENT spec, not a merge — Pinterest overwrites the whole `targeting_spec`,
+    // and pretending otherwise would drop every dimension the caller left out.
+    const spec = patch.targeting ? targetingSpec(patch.targeting) : undefined;
+
+    await ask(call, 'update_ad_groups', {
+      ad_account_id: accountId,
+      ad_groups: [{
+        id: externalId,
+        ...(patch.name ? { name: patch.name } : {}),
+        ...(status ? { status } : {}),
+        ...(daily ? { budget_in_micro_currency: daily, budget_type: 'DAILY' } : {}),
+        ...(bid ? { bid_in_micro_currency: bid } : {}),
+        ...(spec ? { targeting_spec: spec } : {}),
+      }],
+    });
+  },
+
+  // ── Promoted pins (this port's ad) ───────────────────────────────────────
+
+  async listAds(call, fields, _identity, externalAdSetId) {
+    const accountId = requireField(fields, 'adAccountId', 'the ad account ID');
+    const rows = list((await ask(call, 'list_ads', {
+      ad_account_id: accountId,
+      page_size: 250,
+      ...(externalAdSetId ? { ad_group_ids: externalAdSetId } : {}),
+    })).data).map(rec);
+    return rows.map((row) => ({
+      externalId: text(row.id),
+      externalAdSetId: text(row.ad_group_id) || null,
+      name: text(row.name),
+      status: toStatus(row.status),
+      // The copy belongs to the PIN, which is a different resource and a different
+      // scope; reporting it absent beats reporting a guess.
+      headline: null,
+      body: null,
+      destinationUrl: text(row.destination_url) || null,
+      callToAction: null,
+    } satisfies AdCreativeRemote));
+  },
+
+  async createAd(call, fields, draft) {
+    const accountId = requireField(fields, 'adAccountId', 'the ad account ID');
+    const pinId = (draft.creativeRef ?? '').trim();
+    if (!pinId) {
+      throw new AdsProviderError(
+        'Pinterest promotes an existing pin — pass its id as creativeRef. There is no Pinterest endpoint that authors new ad copy, so one cannot be written for you.',
+        400,
+        false,
+      );
+    }
+
+    const created = rec(list((await ask(call, 'create_ads', {
+      ad_account_id: accountId,
+      ads: [{
+        ad_group_id: draft.externalAdSetId,
+        pin_id: pinId,
+        creative_type: 'REGULAR',
+        name: draft.name,
+        status: fromStatus(draft.status) ?? 'PAUSED',
+        ...(draft.destinationUrl ? { destination_url: draft.destinationUrl } : {}),
+      }],
+    })).data)[0]);
+    const id = text(rec(created.data ?? created).id);
+    if (!id) {
+      const reason = text(rec(list(created.exceptions)[0]).message);
+      throw new AdsProviderError(
+        reason || 'Pinterest accepted the ad request but did not return its id.',
+        reason ? 400 : 502,
+        !reason,
+      );
+    }
+
+    return {
+      externalId: id,
+      externalAdSetId: draft.externalAdSetId,
+      name: draft.name,
+      status: draft.status ?? 'paused',
+      headline: draft.headline ?? null,
+      body: draft.body ?? null,
+      callToAction: draft.callToAction ?? null,
+      destinationUrl: draft.destinationUrl ?? null,
+    };
+  },
+
+  async updateAd(call, fields, externalId, patch) {
+    const accountId = requireField(fields, 'adAccountId', 'the ad account ID');
+    const status = fromStatus(patch.status);
+    if (!patch.name && !status) return;
+    await ask(call, 'update_ads', {
+      ad_account_id: accountId,
+      ads: [{
+        id: externalId,
+        ...(patch.name ? { name: patch.name } : {}),
+        ...(status ? { status } : {}),
       }],
     });
   },

@@ -3397,7 +3397,8 @@
     "errLoadPerformance": "Leistung konnte nicht geladen werden",
     "errNameRequired": "Name ist erforderlich",
     "errSaveFailed": "Speichern fehlgeschlagen",
-    "errDeleteFailed": "Löschen fehlgeschlagen"
+    "errDeleteFailed": "Löschen fehlgeschlagen",
+    "surfaceUnavailableOption": "{surface} – für dieses Projekt nicht verfügbar"
   },
   "personalitySummary": {
     "title": "Persönlichkeit",
@@ -14869,7 +14870,8 @@
         "label": "Audio transkribieren",
         "blurb": "Transkribiert eine Audiodatei oder übersetzt sie direkt ins Englische — echter Whisper-API-Aufruf (vom Betreiber konfiguriert, noch kein mandantenspezifischer eigener Schlüssel)."
       }
-    }
+    },
+    "statusRunPendingApproval": "Dieser Workflow muss vor der Ausführung genehmigt werden. Eine Genehmigungsanfrage wurde gesendet."
   },
   "chunkError": {
     "recovering": "Aktualisierung auf die neueste Version…",
@@ -15142,7 +15144,8 @@
     "noticeNoAgent": "„{name}“ hat keinen zugewiesenen Agenten – öffnen Sie es und wählen Sie zuerst ein Ausführungsziel.",
     "noticeRunStarted": "Eine Ausführung von „{name}“ wurde gestartet.",
     "failedStartRun": "Ausführung konnte nicht gestartet werden",
-    "failedDelete": "Workflow konnte nicht gelöscht werden"
+    "failedDelete": "Workflow konnte nicht gelöscht werden",
+    "noticeRunPendingApproval": "„{name}“ muss vor der Ausführung genehmigt werden. Eine Genehmigungsanfrage wurde gesendet."
   },
   "personalityUsage": {
     "title": "Persönlichkeitsnutzung",
@@ -15962,8 +15965,8 @@
   },
   "githubActionsSurface": {
     "notReadyTitle": "GitHub Actions ist für dieses Projekt noch nicht eingerichtet",
-    "notReadyBody": "Im Standard-Repository dieses Projekts fehlt der Builderforce-Agenten-Workflow, daher weichen Läufe auf den dauerhaften Cloud-Executor aus. Öffnen Sie die Einstellungen unter Quellcodeverwaltung und wählen Sie beim Repository „Agentenläufe aktivieren“.",
-    "noGithubRepoBody": "Diesem Projekt ist kein GitHub-Repository zugeordnet, es gibt also keinen Ort für GitHub Actions. Läufe weichen auf den dauerhaften Cloud-Executor aus. Verknüpfen Sie unter Quellcodeverwaltung ein GitHub-Repository."
+    "notReadyBody": "Im Standard-Repository dieses Projekts fehlt der Builderforce-Agent-Workflow, daher kann GitHub Actions nicht ausgewählt werden. Öffnen Sie die Quellcodeverwaltungs-Einstellungen und wählen Sie am Repository „Agentenläufe aktivieren“.",
+    "noGithubRepoBody": "Für dieses Projekt ist kein GitHub-Repository verknüpft, daher gibt es keinen Ort für GitHub Actions und die Option ist nicht verfügbar. Verknüpfen Sie in den Quellcodeverwaltungs-Einstellungen ein GitHub-Repository."
   },
   "feedback": {
     "page": {
@@ -18671,7 +18674,9 @@
       "timecard": "Zeitnachweis",
       "legalEntity": "Rechtsträger",
       "ipAsset": "IP-Vermögenswert",
-      "legalMatter": "Rechtsangelegenheit"
+      "legalMatter": "Rechtsangelegenheit",
+      "brandKit": "Marken-Kit",
+      "audience": "Zielgruppe"
     },
     "twilioSetup": {
       "title": "Twilio-Integration",

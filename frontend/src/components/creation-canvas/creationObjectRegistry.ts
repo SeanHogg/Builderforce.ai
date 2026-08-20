@@ -1,5 +1,5 @@
 import type { CreationNodeData, CreationObjectKind } from './types';
-import { BRAND_BINDING_FIELD, CREATION_CONNECTION_KINDS, defaultConfidentialityForKind, isBrandBoundKind, emptyCanvasVideoTimeline, emptyCanvasWorldScene, FOUNDER_OBJECT_KINDS, type AcademicObjectKind, type CareerObjectKind, type CreationConnectionKind, type DataScienceObjectKind, type FounderObjectKind, type HiringObjectKind, type LegalObjectKind, type OperationsObjectKind, type PeopleObjectKind, type SellMotionObjectKind, type SharedObjectKind } from '@builderforce/creation-canvas-contract';
+import { BRAND_BINDING_FIELD, CREATION_CONNECTION_KINDS, defaultConfidentialityForKind, isBrandBoundKind, emptyCanvasVideoTimeline, emptyCanvasWorldScene, FOUNDER_OBJECT_KINDS, type AcademicObjectKind, type CareerObjectKind, type CreationConnectionKind, type DataScienceObjectKind, type FounderObjectKind, type HiringObjectKind, type LegalObjectKind, type MarketingObjectKind, type OperationsObjectKind, type PeopleObjectKind, type SellMotionObjectKind, type SharedObjectKind } from '@builderforce/creation-canvas-contract';
 import { FOUNDER_BOOKKEEPING_FIELDS, FOUNDER_FIELD_NAMES, FOUNDER_OBJECT_SPECS, founderMutableFields } from '@/lib/founderObjects';
 // Importing the vocabulary registers it (see `specObjects.ts`), which is what makes the
 // academic kinds resolvable everywhere else without a second list of them here.
@@ -565,7 +565,7 @@ const BASE_MUTABLE_FIELDS = {
     // Their omission made this annotation demand six entries the object above is not
     // supposed to carry, so the exhaustiveness check it exists to perform could not
     // compile at all — a guard that fails for every kind protects none of them.
-    FounderObjectKind | AcademicObjectKind | HiringObjectKind | PeopleObjectKind | SharedObjectKind | DataArchitectureKind | DataScienceObjectKind | OperationsObjectKind | LegalObjectKind | SellMotionObjectKind | CareerObjectKind | 'llm'
+    FounderObjectKind | AcademicObjectKind | HiringObjectKind | PeopleObjectKind | SharedObjectKind | DataArchitectureKind | DataScienceObjectKind | OperationsObjectKind | LegalObjectKind | SellMotionObjectKind | CareerObjectKind | MarketingObjectKind | 'llm'
   >,
   readonly string[]
 >;

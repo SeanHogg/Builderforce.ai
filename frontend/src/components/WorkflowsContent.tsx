@@ -217,10 +217,18 @@ export function WorkflowsContent({ projectId }: WorkflowsContentProps) {
     setRunningId(d.id);
     setNotice(null);
     try {
-      const { workflowId } = await workflowDefinitions.run(d.id, savedRunTarget(d));
+      const result = await workflowDefinitions.run(d.id, savedRunTarget(d));
+      // A definition whose `approvalMode` is `required` answers 202 with a pending
+      // approval INSTEAD of a run (migration 1092). Reporting "started a run" there
+      // would be the exact failure the gate exists to prevent — the UI claiming work
+      // began that a human has not yet allowed.
+      if (result.status === 'pending') {
+        setNotice(t('noticeRunPendingApproval', { name: d.name }));
+        return;
+      }
       setNotice(t('noticeRunStarted', { name: d.name }));
       load(); // refresh run counts
-      setInitialRunId(workflowId);
+      setInitialRunId(result.workflowId);
       setRunsForDef(d);
     } catch (e) {
       setNotice(e instanceof Error ? e.message : t('failedStartRun'));

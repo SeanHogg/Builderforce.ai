@@ -3397,7 +3397,8 @@
     "errLoadPerformance": "加载表现数据失败",
     "errNameRequired": "名称为必填项",
     "errSaveFailed": "保存失败",
-    "errDeleteFailed": "删除失败"
+    "errDeleteFailed": "删除失败",
+    "surfaceUnavailableOption": "{surface} — 此项目不可用"
   },
   "personalitySummary": {
     "title": "性格",
@@ -14869,7 +14870,8 @@
         "label": "转录音频",
         "blurb": "转录一个音频文件，或将其直接翻译为英语——真实的 Whisper API 调用（由运营方配置，目前尚无租户自带密钥选项）。"
       }
-    }
+    },
+    "statusRunPendingApproval": "此工作流需要获得批准才能运行。审批请求已发送。"
   },
   "chunkError": {
     "recovering": "正在更新到最新版本…",
@@ -15142,7 +15144,8 @@
     "noticeNoAgent": "“{name}”尚未分配代理——请先打开它并选择运行目标。",
     "noticeRunStarted": "已开始运行“{name}”。",
     "failedStartRun": "无法启动运行",
-    "failedDelete": "无法删除工作流"
+    "failedDelete": "无法删除工作流",
+    "noticeRunPendingApproval": "“{name}”需要获得批准才能运行。审批请求已发送。"
   },
   "personalityUsage": {
     "title": "人格使用情况",
@@ -15962,8 +15965,8 @@
   },
   "githubActionsSurface": {
     "notReadyTitle": "此项目尚未配置 GitHub Actions",
-    "notReadyBody": "此项目的默认仓库中缺少 Builderforce 代理工作流，因此运行将回退到持久化云执行器。请打开“源代码管理”设置，并对该仓库选择“启用代理运行”。",
-    "noGithubRepoBody": "此项目未关联 GitHub 仓库，因此无处运行 GitHub Actions。运行将回退到持久化云执行器。请在“源代码管理”设置中关联一个 GitHub 仓库。"
+    "notReadyBody": "此项目的默认仓库中缺少 Builderforce 代理工作流，因此无法选择 GitHub Actions。请打开源代码管理设置，并在该仓库上选择“启用代理运行”。",
+    "noGithubRepoBody": "此项目未关联 GitHub 仓库，因此无处运行 GitHub Actions，该选项不可用。请在源代码管理设置中关联一个 GitHub 仓库。"
   },
   "feedback": {
     "page": {
@@ -18671,7 +18674,9 @@
       "timecard": "工时表",
       "legalEntity": "法律实体",
       "ipAsset": "知识产权资产",
-      "legalMatter": "法律事务"
+      "legalMatter": "法律事务",
+      "brandKit": "品牌套件",
+      "audience": "受众"
     },
     "twilioSetup": {
       "title": "Twilio 集成",

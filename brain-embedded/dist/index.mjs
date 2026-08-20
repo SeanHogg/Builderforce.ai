@@ -1072,6 +1072,10 @@ function chatWorkLinkingDirective(chatId) {
 var CHAT_MODES = ["chat", "work"];
 var NEW_CHAT_MODE = "work";
 var RESTING_CHAT_MODE = "chat";
+var CHAT_MODE_ICON = {
+  chat: "\u{1F4AC}",
+  work: "\u26A1"
+};
 function isChatMode(value) {
   return typeof value === "string" && CHAT_MODES.includes(value);
 }
@@ -4249,6 +4253,48 @@ async function gatherChatDiagnostics(src) {
     }
   };
 }
+
+// src/artifactRoute.ts
+var PMO_FOCUS_PARAM = "focus";
+function pmoFocusValue(kind, ref) {
+  return `${kind}:${ref}`;
+}
+function parsePmoFocus(value) {
+  if (!value) return null;
+  const at = value.indexOf(":");
+  if (at <= 0) return null;
+  const kind = value.slice(0, at);
+  const id = value.slice(at + 1);
+  if (!id) return null;
+  return kind === "objective" || kind === "initiative" || kind === "portfolio" ? { kind, id } : null;
+}
+function pmoFocusDomId(kind, id) {
+  return `pmo-${kind}-${id}`;
+}
+function artifactRoutePath(kind, ref, projectId) {
+  const id = ref ? encodeURIComponent(ref) : "";
+  const project = projectId != null ? `&project=${projectId}` : "";
+  switch (kind) {
+    case "objective":
+    case "initiative":
+    case "portfolio":
+      return id ? `/projects?tab=portfolio&${PMO_FOCUS_PARAM}=${encodeURIComponent(pmoFocusValue(kind, ref))}` : "/projects?tab=portfolio";
+    case "retro":
+    case "poker":
+      return `/projects?tab=ceremonies&ceremony=${kind}${id ? `&session=${id}` : ""}`;
+    case "spec":
+      return projectId != null && id ? `/projects?project=${projectId}&panel=prds&spec=${id}` : projectId != null ? `/projects?project=${projectId}&panel=prds` : "/projects";
+    case "roadmap":
+      return `/projects?tab=pm&section=roadmap${id ? `&roadmap=${id}` : ""}`;
+    case "task":
+    case "epic":
+    case "gap":
+    default: {
+      const base = `/projects?tab=tasks${project}`;
+      return id ? `${base}&task=${id}` : base;
+    }
+  }
+}
 export {
   ADDRESSED_TO_META_KEY,
   API_VERSION_PROBE_TIMEOUT_MS,
@@ -4260,6 +4306,7 @@ export {
   BrainProvider,
   BrainRequestError,
   CHAT_MODES,
+  CHAT_MODE_ICON,
   CODE_CHANGE_TOOLS,
   CONSOLIDATION_MARKER_PREFIX,
   CONSOLIDATION_META,
@@ -4272,6 +4319,7 @@ export {
   MODEL_CATEGORIES,
   NEW_CHAT_MODE,
   NOT_STARTED_TASK_STATUSES,
+  PMO_FOCUS_PARAM,
   PROJECT_EVERMIND_MODEL_PREFIX,
   PROVENANCE_META_KEY,
   RESTING_CHAT_MODE,
@@ -4289,6 +4337,7 @@ export {
   activityTone,
   allowanceState,
   announcesUntakenAction,
+  artifactRoutePath,
   attachEvermindLearn,
   brainRequestError,
   buildBrainTriageReport,
@@ -4371,8 +4420,11 @@ export {
   parseDirectedRecipient,
   parseMessageAuthor,
   parseMessageProvenance,
+  parsePmoFocus,
   parseStepMessage,
   perMillionUsd,
+  pmoFocusDomId,
+  pmoFocusValue,
   premiumCostLabel,
   prepareImageDataUrl,
   productForPlan,

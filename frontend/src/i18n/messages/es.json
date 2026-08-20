@@ -3397,7 +3397,8 @@
     "errLoadPerformance": "No se pudo cargar el rendimiento",
     "errNameRequired": "El nombre es obligatorio",
     "errSaveFailed": "Error al guardar",
-    "errDeleteFailed": "Error al eliminar"
+    "errDeleteFailed": "Error al eliminar",
+    "surfaceUnavailableOption": "{surface}: no disponible para este proyecto"
   },
   "personalitySummary": {
     "title": "Personalidad",
@@ -14869,7 +14870,8 @@
         "label": "Transcribir audio",
         "blurb": "Transcribe un archivo de audio, o tradúcelo directamente al inglés — llamada real a la API de Whisper (configurada por el operador, sin clave propia por inquilino todavía)."
       }
-    }
+    },
+    "statusRunPendingApproval": "Este flujo de trabajo necesita aprobación antes de ejecutarse. Se envió una solicitud de aprobación."
   },
   "chunkError": {
     "recovering": "Actualizando a la última versión…",
@@ -15142,7 +15144,8 @@
     "noticeNoAgent": "«{name}» no tiene ningún agente asignado: ábrelo y elige primero un destino de ejecución.",
     "noticeRunStarted": "Se inició una ejecución de «{name}».",
     "failedStartRun": "No se pudo iniciar la ejecución",
-    "failedDelete": "No se pudo eliminar el flujo de trabajo"
+    "failedDelete": "No se pudo eliminar el flujo de trabajo",
+    "noticeRunPendingApproval": "«{name}» necesita aprobación antes de ejecutarse. Se envió una solicitud de aprobación."
   },
   "personalityUsage": {
     "title": "Uso de personalidad",
@@ -15962,8 +15965,8 @@
   },
   "githubActionsSurface": {
     "notReadyTitle": "GitHub Actions aún no está configurado en este proyecto",
-    "notReadyBody": "Falta el flujo de trabajo del agente de Builderforce en el repositorio predeterminado de este proyecto, por lo que las ejecuciones recurrirán al ejecutor duradero en la nube. Abre la configuración de Control de código fuente y elige «Activar ejecuciones de agentes» en el repositorio.",
-    "noGithubRepoBody": "Este proyecto no tiene ningún repositorio de GitHub vinculado, así que no hay dónde ejecutar GitHub Actions. Las ejecuciones recurrirán al ejecutor duradero en la nube. Vincula un repositorio de GitHub en la configuración de Control de código fuente."
+    "notReadyBody": "Falta el flujo de trabajo del agente de Builderforce en el repositorio predeterminado de este proyecto, por lo que no se puede seleccionar GitHub Actions. Abre la configuración de control de código fuente y elige «Habilitar ejecuciones de agentes» en el repositorio.",
+    "noGithubRepoBody": "Este proyecto no tiene ningún repositorio de GitHub vinculado, así que no hay dónde ejecutar GitHub Actions y la opción no está disponible. Vincula un repositorio de GitHub en la configuración de control de código fuente."
   },
   "feedback": {
     "page": {
@@ -18671,7 +18674,9 @@
       "timecard": "Parte de horas",
       "legalEntity": "Entidad jurídica",
       "ipAsset": "Activo de PI",
-      "legalMatter": "Asunto jurídico"
+      "legalMatter": "Asunto jurídico",
+      "brandKit": "Kit de marca",
+      "audience": "Audiencia"
     },
     "twilioSetup": {
       "title": "Integración de Twilio",

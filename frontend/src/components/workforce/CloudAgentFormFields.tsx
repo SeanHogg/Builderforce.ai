@@ -8,7 +8,7 @@ import type { AgentRuntimeSupport, AgentRuntimeSurface } from '@/lib/api';
 import { ModelSelect } from '@/components/llm/ModelSelect';
 import { PremiumModelUnlock } from '@/components/llm/PremiumModelUnlock';
 import PsychometricEditor from '@/components/PsychometricEditor';
-import { GithubActionsSurfaceNotice } from '@/components/repos/githubActionsSurface';
+import { RuntimeSurfaceSelect } from '@/components/workforce/RuntimeSurfaceSelect';
 import type { PsychometricProfile } from '@/lib/psychometric';
 
 /**
@@ -60,7 +60,6 @@ export const RUNTIME_LABELS: Record<AgentRuntimeSupport, string> = {
 };
 
 const RUNTIME_SUPPORT_KEYS: AgentRuntimeSupport[] = ['cloud', 'host', 'both'];
-const RUNTIME_SURFACE_KEYS: AgentRuntimeSurface[] = ['durable', 'container', 'github_actions'];
 
 export const btnPrimary: React.CSSProperties = { padding: '8px 16px', fontSize: 13, fontWeight: 600, background: 'var(--accent)', color: 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' };
 export const btnSubtle: React.CSSProperties = { padding: '6px 12px', fontSize: 12, fontWeight: 600, background: 'var(--bg-elevated)', color: 'var(--text-strong)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', cursor: 'pointer' };
@@ -133,20 +132,16 @@ export function CloudAgentRuntimeFields({ form, onChange }: FieldGroupProps) {
           </Select>
         </div>
       )}
-      <div>
-        <label style={labelStyle}>{t('surface')}</label>
-        <Select style={inputStyle} value={form.runtimeSurface} onChange={(e) => onChange({ runtimeSurface: e.target.value as AgentRuntimeSurface })}>
-          {RUNTIME_SURFACE_KEYS.map((rs) => (
-            <option key={rs} value={rs}>{t(`surfaceLabel.${rs}`)}</option>
-          ))}
-        </Select>
-        <p style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--muted)', margin: '6px 0 0' }}>{t('surfaceHelp')}</p>
-        {/* Warns when "GitHub Actions" is picked for a project whose repo has no
-            agent workflow — otherwise dispatch silently degrades to the durable
-            executor and only says so in the run timeline afterwards. Resolves its
-            own readiness (no canX prop to compute or get stale). */}
-        <GithubActionsSurfaceNotice surface={form.runtimeSurface} />
-      </div>
+      {/* The surface picker is a component, not a <Select> here: `github_actions`
+          is only runnable on a project whose repo carries the agent workflow, and
+          the option DISABLES itself when it is not. It resolves its own readiness,
+          so there is no canX boolean for this form to compute or get stale. */}
+      <RuntimeSurfaceSelect
+        value={form.runtimeSurface}
+        onChange={(runtimeSurface) => onChange({ runtimeSurface })}
+        style={inputStyle}
+        labelStyle={labelStyle}
+      />
       <div>
         <label style={labelStyle}>{t('baseModel')}</label>
         <ModelSelect

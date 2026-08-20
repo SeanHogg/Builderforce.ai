@@ -30,6 +30,7 @@ __export(src_exports, {
   BrainProvider: () => BrainProvider,
   BrainRequestError: () => BrainRequestError,
   CHAT_MODES: () => CHAT_MODES,
+  CHAT_MODE_ICON: () => CHAT_MODE_ICON,
   CODE_CHANGE_TOOLS: () => CODE_CHANGE_TOOLS,
   CONSOLIDATION_MARKER_PREFIX: () => CONSOLIDATION_MARKER_PREFIX,
   CONSOLIDATION_META: () => CONSOLIDATION_META,
@@ -42,6 +43,7 @@ __export(src_exports, {
   MODEL_CATEGORIES: () => MODEL_CATEGORIES,
   NEW_CHAT_MODE: () => NEW_CHAT_MODE,
   NOT_STARTED_TASK_STATUSES: () => NOT_STARTED_TASK_STATUSES,
+  PMO_FOCUS_PARAM: () => PMO_FOCUS_PARAM,
   PROJECT_EVERMIND_MODEL_PREFIX: () => PROJECT_EVERMIND_MODEL_PREFIX,
   PROVENANCE_META_KEY: () => PROVENANCE_META_KEY,
   RESTING_CHAT_MODE: () => RESTING_CHAT_MODE,
@@ -59,6 +61,7 @@ __export(src_exports, {
   activityTone: () => activityTone,
   allowanceState: () => allowanceState,
   announcesUntakenAction: () => announcesUntakenAction,
+  artifactRoutePath: () => artifactRoutePath,
   attachEvermindLearn: () => attachEvermindLearn,
   brainRequestError: () => brainRequestError,
   buildBrainTriageReport: () => buildBrainTriageReport,
@@ -141,8 +144,11 @@ __export(src_exports, {
   parseDirectedRecipient: () => parseDirectedRecipient,
   parseMessageAuthor: () => parseMessageAuthor,
   parseMessageProvenance: () => parseMessageProvenance,
+  parsePmoFocus: () => parsePmoFocus,
   parseStepMessage: () => parseStepMessage,
   perMillionUsd: () => perMillionUsd,
+  pmoFocusDomId: () => pmoFocusDomId,
+  pmoFocusValue: () => pmoFocusValue,
   premiumCostLabel: () => premiumCostLabel,
   prepareImageDataUrl: () => prepareImageDataUrl,
   productForPlan: () => productForPlan,
@@ -1321,6 +1327,10 @@ function chatWorkLinkingDirective(chatId) {
 var CHAT_MODES = ["chat", "work"];
 var NEW_CHAT_MODE = "work";
 var RESTING_CHAT_MODE = "chat";
+var CHAT_MODE_ICON = {
+  chat: "\u{1F4AC}",
+  work: "\u26A1"
+};
 function isChatMode(value) {
   return typeof value === "string" && CHAT_MODES.includes(value);
 }
@@ -4498,6 +4508,48 @@ async function gatherChatDiagnostics(src) {
     }
   };
 }
+
+// src/artifactRoute.ts
+var PMO_FOCUS_PARAM = "focus";
+function pmoFocusValue(kind, ref) {
+  return `${kind}:${ref}`;
+}
+function parsePmoFocus(value) {
+  if (!value) return null;
+  const at = value.indexOf(":");
+  if (at <= 0) return null;
+  const kind = value.slice(0, at);
+  const id = value.slice(at + 1);
+  if (!id) return null;
+  return kind === "objective" || kind === "initiative" || kind === "portfolio" ? { kind, id } : null;
+}
+function pmoFocusDomId(kind, id) {
+  return `pmo-${kind}-${id}`;
+}
+function artifactRoutePath(kind, ref, projectId) {
+  const id = ref ? encodeURIComponent(ref) : "";
+  const project = projectId != null ? `&project=${projectId}` : "";
+  switch (kind) {
+    case "objective":
+    case "initiative":
+    case "portfolio":
+      return id ? `/projects?tab=portfolio&${PMO_FOCUS_PARAM}=${encodeURIComponent(pmoFocusValue(kind, ref))}` : "/projects?tab=portfolio";
+    case "retro":
+    case "poker":
+      return `/projects?tab=ceremonies&ceremony=${kind}${id ? `&session=${id}` : ""}`;
+    case "spec":
+      return projectId != null && id ? `/projects?project=${projectId}&panel=prds&spec=${id}` : projectId != null ? `/projects?project=${projectId}&panel=prds` : "/projects";
+    case "roadmap":
+      return `/projects?tab=pm&section=roadmap${id ? `&roadmap=${id}` : ""}`;
+    case "task":
+    case "epic":
+    case "gap":
+    default: {
+      const base = `/projects?tab=tasks${project}`;
+      return id ? `${base}&task=${id}` : base;
+    }
+  }
+}
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   ADDRESSED_TO_META_KEY,
@@ -4510,6 +4562,7 @@ async function gatherChatDiagnostics(src) {
   BrainProvider,
   BrainRequestError,
   CHAT_MODES,
+  CHAT_MODE_ICON,
   CODE_CHANGE_TOOLS,
   CONSOLIDATION_MARKER_PREFIX,
   CONSOLIDATION_META,
@@ -4522,6 +4575,7 @@ async function gatherChatDiagnostics(src) {
   MODEL_CATEGORIES,
   NEW_CHAT_MODE,
   NOT_STARTED_TASK_STATUSES,
+  PMO_FOCUS_PARAM,
   PROJECT_EVERMIND_MODEL_PREFIX,
   PROVENANCE_META_KEY,
   RESTING_CHAT_MODE,
@@ -4539,6 +4593,7 @@ async function gatherChatDiagnostics(src) {
   activityTone,
   allowanceState,
   announcesUntakenAction,
+  artifactRoutePath,
   attachEvermindLearn,
   brainRequestError,
   buildBrainTriageReport,
@@ -4621,8 +4676,11 @@ async function gatherChatDiagnostics(src) {
   parseDirectedRecipient,
   parseMessageAuthor,
   parseMessageProvenance,
+  parsePmoFocus,
   parseStepMessage,
   perMillionUsd,
+  pmoFocusDomId,
+  pmoFocusValue,
   premiumCostLabel,
   prepareImageDataUrl,
   productForPlan,

@@ -3397,7 +3397,8 @@
     "errLoadPerformance": "Failed to load performance",
     "errNameRequired": "Name is required",
     "errSaveFailed": "Save failed",
-    "errDeleteFailed": "Delete failed"
+    "errDeleteFailed": "Delete failed",
+    "surfaceUnavailableOption": "{surface} — not available for this project"
   },
   "personalitySummary": {
     "title": "Personality",
@@ -14869,7 +14870,8 @@
         "label": "Transcribe Audio",
         "blurb": "Transcribe an audio file, or translate it directly to English — real Whisper API call (operator-configured, no per-tenant BYO key yet)."
       }
-    }
+    },
+    "statusRunPendingApproval": "This workflow needs approval before it can run. An approval request has been sent."
   },
   "chunkError": {
     "recovering": "Updating to the latest version…",
@@ -15142,7 +15144,8 @@
     "noticeNoAgent": "\"{name}\" has no agent assigned — open it and pick a run target first.",
     "noticeRunStarted": "Started a run of \"{name}\".",
     "failedStartRun": "Failed to start run",
-    "failedDelete": "Failed to delete workflow"
+    "failedDelete": "Failed to delete workflow",
+    "noticeRunPendingApproval": "\"{name}\" needs approval before it can run. An approval request has been sent."
   },
   "personalityUsage": {
     "title": "Personality usage",
@@ -15962,8 +15965,8 @@
   },
   "githubActionsSurface": {
     "notReadyTitle": "GitHub Actions is not set up for this project yet",
-    "notReadyBody": "The Builderforce agent workflow is missing from this project’s default repository, so runs will fall back to the durable cloud executor. Open Source control settings and choose “Enable agent runs” on the repository.",
-    "noGithubRepoBody": "This project has no GitHub repository linked, so there is nowhere to run GitHub Actions. Runs will fall back to the durable cloud executor. Link a GitHub repository under Source control settings."
+    "notReadyBody": "The Builderforce agent workflow is missing from this project’s default repository, so GitHub Actions cannot be selected. Open Source control settings and choose “Enable agent runs” on the repository.",
+    "noGithubRepoBody": "This project has no GitHub repository linked, so there is nowhere to run GitHub Actions and the option is unavailable. Link a GitHub repository under Source control settings."
   },
   "feedback": {
     "page": {
@@ -18671,7 +18674,9 @@
       "timecard": "Timecard",
       "legalEntity": "Legal entity",
       "ipAsset": "IP asset",
-      "legalMatter": "Legal matter"
+      "legalMatter": "Legal matter",
+      "brandKit": "Brand kit",
+      "audience": "Audience"
     },
     "twilioSetup": {
       "title": "Twilio integration",

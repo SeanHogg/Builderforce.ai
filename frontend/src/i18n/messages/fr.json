@@ -3397,7 +3397,8 @@
     "errLoadPerformance": "Échec du chargement des performances",
     "errNameRequired": "Le nom est obligatoire",
     "errSaveFailed": "Échec de l'enregistrement",
-    "errDeleteFailed": "Échec de la suppression"
+    "errDeleteFailed": "Échec de la suppression",
+    "surfaceUnavailableOption": "{surface} — indisponible pour ce projet"
   },
   "personalitySummary": {
     "title": "Personnalité",
@@ -14869,7 +14870,8 @@
         "label": "Transcrire l'audio",
         "blurb": "Transcrit un fichier audio, ou le traduit directement en anglais — véritable appel à l'API Whisper (configuré par l'opérateur, pas encore de clé propre par locataire)."
       }
-    }
+    },
+    "statusRunPendingApproval": "Ce workflow doit être approuvé avant de pouvoir s'exécuter. Une demande d'approbation a été envoyée."
   },
   "chunkError": {
     "recovering": "Mise à jour vers la dernière version…",
@@ -15142,7 +15144,8 @@
     "noticeNoAgent": "« {name} » n’a aucun agent assigné — ouvrez-le et choisissez d’abord une cible d’exécution.",
     "noticeRunStarted": "Une exécution de « {name} » a démarré.",
     "failedStartRun": "Échec du démarrage de l’exécution",
-    "failedDelete": "Échec de la suppression du flux de travail"
+    "failedDelete": "Échec de la suppression du flux de travail",
+    "noticeRunPendingApproval": "« {name} » doit être approuvé avant de pouvoir s'exécuter. Une demande d'approbation a été envoyée."
   },
   "personalityUsage": {
     "title": "Utilisation de la personnalité",
@@ -15962,8 +15965,8 @@
   },
   "githubActionsSurface": {
     "notReadyTitle": "GitHub Actions n’est pas encore configuré pour ce projet",
-    "notReadyBody": "Le workflow d’agent Builderforce est absent du dépôt par défaut de ce projet : les exécutions basculeront donc vers l’exécuteur cloud durable. Ouvrez les paramètres Gestion de code source et choisissez « Activer les exécutions d’agents » sur le dépôt.",
-    "noGithubRepoBody": "Aucun dépôt GitHub n’est lié à ce projet, il n’y a donc nulle part où exécuter GitHub Actions. Les exécutions basculeront vers l’exécuteur cloud durable. Liez un dépôt GitHub dans les paramètres Gestion de code source."
+    "notReadyBody": "Le workflow d’agent Builderforce est absent du dépôt par défaut de ce projet, donc GitHub Actions ne peut pas être sélectionné. Ouvrez les paramètres de gestion de code source et choisissez « Activer les exécutions d’agents » sur le dépôt.",
+    "noGithubRepoBody": "Ce projet n’a aucun dépôt GitHub lié : il n’y a donc nulle part où exécuter GitHub Actions et l’option est indisponible. Liez un dépôt GitHub dans les paramètres de gestion de code source."
   },
   "feedback": {
     "page": {
@@ -18671,7 +18674,9 @@
       "timecard": "Feuille de temps",
       "legalEntity": "Entité juridique",
       "ipAsset": "Actif de PI",
-      "legalMatter": "Affaire juridique"
+      "legalMatter": "Affaire juridique",
+      "brandKit": "Kit de marque",
+      "audience": "Audience cible"
     },
     "twilioSetup": {
       "title": "Intégration Twilio",

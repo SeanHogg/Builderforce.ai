@@ -5,7 +5,7 @@ import { useTranslations } from 'next-intl';
 import { DestinationIndex, type IndexItem } from '@/components/shell/DestinationIndex';
 import { ActiveRunsPanel } from '@/components/ActiveRunsPanel';
 import { ObservabilityContent } from '@/components/ObservabilityContent';
-import AuditLogsContent from '@/app/logs/page';
+import { AuditTrailPanel } from '@/components/contributors/AuditTrailPanel';
 
 type LogView = 'runtime' | 'audit';
 
@@ -26,8 +26,14 @@ export default function SettingsLogs() {
     <div>
       <DestinationIndex items={logTabs} activeId={view} ariaLabel={t('logSectionsLabel')} />
 
+      {/* ONE audit surface, mounted twice. `/app/logs/page.tsx` became a redirect
+          when logging was consolidated here, and this tab kept importing it — so
+          choosing "Audit" rendered a component that redirects to this very URL.
+          `AuditTrailPanel` is the tenant-wide activity/audit trail the Performance
+          tab already shows; rebuilding a second one here is what the DRY rule
+          forbids, and it is the reason the first copy could rot unnoticed. */}
       {view === 'audit' ? (
-        <AuditLogsContent />
+        <AuditTrailPanel />
       ) : (
         <>
           <div style={{ marginBottom: 24 }}>

@@ -332,14 +332,21 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null, embedde
     try {
       const id = await save();             // ensure the latest graph + target is persisted
       if (!id) return;
-      const { workflowId } = await workflowDefinitions.run(id, runTarget);
-      onRunStarted?.(workflowId);
+      const result = await workflowDefinitions.run(id, runTarget);
+      // `approvalMode: 'required'` answers 202 with a pending approval and NO run
+      // (migration 1092). There is nothing to open the History panel on, and saying
+      // a run started would defeat the gate the author switched on.
+      if (result.status === 'pending') {
+        setStatus(t('statusRunPendingApproval'));
+        return;
+      }
+      onRunStarted?.(result.workflowId);
       // Stay on the canvas and show the result in the History panel (matches
       // Make: running surfaces status in the editor's own sidebar) rather than
       // navigating away — `/workflows?run=` never had a consumer for the param.
-      setHistoryInitialRunId(workflowId);
+      setHistoryInitialRunId(result.workflowId);
       setHistoryOpen(true);
-      setStatus(t('statusRunStarted', { id: workflowId }));
+      setStatus(t('statusRunStarted', { id: result.workflowId }));
     } catch (e) {
       setStatus(e instanceof Error ? e.message : t('statusRunFailed'));
     } finally {

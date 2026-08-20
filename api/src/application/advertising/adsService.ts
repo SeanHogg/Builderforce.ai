@@ -35,6 +35,7 @@ import {
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import {
   ADS_CONNECTOR_KEYS, adsProviderForConnector, allAdsProviders, isAdNetwork, AdsProviderError,
+  EMPTY_TARGETING,
   type AdAccountField, type AdAccountIdentity, type AdCampaignDraft, type AdCampaignPatch,
   type AdCampaignRemote, type AdInsightQuery, type AdInsightRow, type AdNetwork,
   type AdObjective, type AdsProvider,
@@ -296,14 +297,60 @@ async function write<T>(
   }
 }
 
-/** Create one campaign on one account. Returns an outcome rather than throwing, because
- *  a multi-network launch must record what happened per network. */
+/**
+ * Create one campaign on one account. Returns an outcome rather than throwing, because
+ * a multi-network launch must record what happened per network.
+ *
+ * ── THE DEFAULT AD SET ───────────────────────────────────────────────────────
+ * On a network that declares {@link AdsProvider.requiresAdSet}, a campaign alone CANNOT
+ * DELIVER: Reddit keeps the daily budget on the ad group and X declares the objective on
+ * the line item, so what was created is a funded object that can never spend and never
+ * reports a number. One ad set is composed here, immediately, through the same
+ * `createAdSet` every other caller uses.
+ *
+ * It is here rather than inside those two adapters because that is where it used to be —
+ * two hand-rolled inline creates, which is how the default ad group came to be built
+ * differently from every ad group made afterwards.
+ *
+ * The campaign is still returned on a failure to compose it, and the reason travels in
+ * `adSetError`: the campaign genuinely EXISTS by then, and reporting the whole create as
+ * failed would leave a real object on the network that nothing here admits to owning.
+ */
 export async function createAdCampaign(
   db: Db, env: Env, tenantId: number, account: ResolvedAdAccount,
   draft: AdCampaignDraft, actorKind: 'agent' | 'user' = 'user',
-): Promise<AdWriteOutcome<AdCampaignRemote>> {
-  return write(db, env, tenantId, account, 'createCampaign', (identity) =>
-    account.provider.createCampaign(callerFor(db, env, tenantId, account, actorKind), account.fields, draft, identity));
+): Promise<AdWriteOutcome<AdCampaignRemote & { adSetError?: string }>> {
+  return write(db, env, tenantId, account, 'createCampaign', async (identity) => {
+    const call = callerFor(db, env, tenantId, account, actorKind);
+    const campaign = await account.provider.createCampaign(call, account.fields, draft, identity);
+    if (!account.provider.requiresAdSet) return campaign;
+
+    try {
+      await account.provider.createAdSet(call, account.fields, {
+        externalCampaignId: campaign.externalId,
+        name: `${draft.name} ad set`,
+        // Carried DOWN rather than looked up: on X the line item is where the objective
+        // lives, so re-reading the campaign would not answer it.
+        objective: draft.objective,
+        // An `AdCampaignDraft` carries no targeting — the campaign level has nowhere to
+        // put it. Everyone is an honest default here and a real choice on every network;
+        // narrowing it is `updateAdSet`'s job, with the audience the caller actually named.
+        targeting: EMPTY_TARGETING,
+        dailyBudgetCents: draft.dailyBudgetCents ?? null,
+        startsAtISO: draft.startsAtISO ?? null,
+        endsAtISO: draft.endsAtISO ?? null,
+        ...(draft.status ? { status: draft.status } : {}),
+      }, identity);
+      return campaign;
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : 'The default ad set could not be created.';
+      reportCaughtError(error, {
+        source: 'application/advertising/adsService.ts',
+        operation: `createCampaign:defaultAdSet:${account.provider.network}`,
+      });
+      return { ...campaign, adSetError: reason };
+    }
+  });
 }
 
 /** Change one campaign — rename, re-budget, pause or resume. */
