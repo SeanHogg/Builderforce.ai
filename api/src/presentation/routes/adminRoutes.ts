@@ -90,6 +90,7 @@ import {
   resolveRolePermissions,
   resolveEffectivePermissions,
   ENFORCED_PERMISSIONS,
+  UNENFORCEABLE_PERMISSIONS,
 } from '../../domain/permissions/permissionRegistry';
 import {
   invalidateMemberPermissions,
@@ -3225,6 +3226,14 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       // screen implied every override took effect; most are still advisory
       // because the route is gated by the role ladder alone.
       enforced: [...ENFORCED_PERMISSIONS],
+      // Rows that can never become enforced by the permission gate, and are not
+      // merely waiting for someone to add one. The `system:*` four are Super Admin
+      // actions on routes authenticated by superAdminMiddleware, which establishes a
+      // userId and no tenant or member role — `requirePermission` resolves a
+      // permission for a MEMBER OF A TENANT, so there it would reject everyone,
+      // superadmin included. Sending them separately lets the screen say "not
+      // applicable" instead of "not yet", which are different promises.
+      unenforceable: [...UNENFORCEABLE_PERMISSIONS],
       overrides: overrides.map((o) => ({ tenantId: null, role: o.role, permission: o.permission, granted: o.granted })),
     });
   });

@@ -24,6 +24,8 @@ import type { Context } from 'hono';
 import { resolveAppBaseUrl, type HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { authMiddleware } from '../middleware/authMiddleware';
+import { requirePermission } from '../middleware/requirePermission';
+import { PERMISSIONS } from '../../domain/permissions/permissionRegistry';
 import {
   ListingError,
   browseCreationListings,
@@ -66,7 +68,7 @@ export function createCreationListingRoutes(db: Db): Hono<HonoEnv> {
   router.use('*', authMiddleware);
 
   /** What on this board could be sold, and as what. */
-  router.get('/candidates/:sessionId', async (c) => {
+  router.get('/candidates/:sessionId', requirePermission(PERMISSIONS.MARKETPLACE_READ), async (c) => {
     try {
       const candidates = await publishCandidates(db, c.get('tenantId') as number, c.req.param('sessionId'));
       return c.json({ ...candidates, takeRateBps: platformTakeRateBps(c.env) });
@@ -76,7 +78,7 @@ export function createCreationListingRoutes(db: Db): Hono<HonoEnv> {
   });
 
   /** Publish, or re-publish in place when `listingId` is supplied. */
-  router.post('/', async (c) => {
+  router.post('/', requirePermission(PERMISSIONS.MARKETPLACE_PUBLISH), async (c) => {
     try {
       const body = await c.req.json<Record<string, unknown>>();
       const listing = await publishCreationListing(db, c.env, {
@@ -111,7 +113,7 @@ export function createCreationListingRoutes(db: Db): Hono<HonoEnv> {
    * the WHOLE BOARD is addressed by its absence, and `/releases/:sessionId/` with a
    * trailing empty segment is not a route anybody should have to reason about.
    */
-  router.get('/releases/:sessionId', async (c) => {
+  router.get('/releases/:sessionId', requirePermission(PERMISSIONS.MARKETPLACE_READ), async (c) => {
     try {
       const rail = await listReleases(db, {
         tenantId: c.get('tenantId') as number,
@@ -131,7 +133,7 @@ export function createCreationListingRoutes(db: Db): Hono<HonoEnv> {
    * Same body as publish, because the same validation decides both — the kind has to
    * accept the source before either can write a snapshot.
    */
-  router.post('/releases/stage', async (c) => {
+  router.post('/releases/stage', requirePermission(PERMISSIONS.MARKETPLACE_PUBLISH), async (c) => {
     try {
       const body = await c.req.json<Record<string, unknown>>();
       const staged = await stageRelease(db, c.env, {
@@ -160,7 +162,7 @@ export function createCreationListingRoutes(db: Db): Hono<HonoEnv> {
    * seller who staged yesterday silently gets a new build off today's board under
    * the version number they thought they were about to publish.
    */
-  router.get('/releases/:sessionId/staged/:snapshotId', async (c) => {
+  router.get('/releases/:sessionId/staged/:snapshotId', requirePermission(PERMISSIONS.MARKETPLACE_READ), async (c) => {
     try {
       const staged = await checksForStagedRelease(db, c.env, {
         tenantId: c.get('tenantId') as number,
@@ -176,7 +178,7 @@ export function createCreationListingRoutes(db: Db): Hono<HonoEnv> {
   });
 
   /** Put an earlier version back on sale. Existing buyers are not moved. */
-  router.post('/releases/revert', async (c) => {
+  router.post('/releases/revert', requirePermission(PERMISSIONS.MARKETPLACE_PUBLISH), async (c) => {
     try {
       const body = await c.req.json<Record<string, unknown>>();
       const result = await revertListing(db, c.env, {
@@ -192,13 +194,13 @@ export function createCreationListingRoutes(db: Db): Hono<HonoEnv> {
   });
 
   /** Everything I have published. */
-  router.get('/mine', async (c) => {
+  router.get('/mine', requirePermission(PERMISSIONS.MARKETPLACE_READ), async (c) => {
     const listings = await sellerListings(db, c.get('tenantId') as number, c.get('userId') as string);
     return c.json({ listings });
   });
 
   /** Withdraw from the public catalogue. Buyers keep their licences. */
-  router.delete('/:listingId', async (c) => {
+  router.delete('/:listingId', requirePermission(PERMISSIONS.MARKETPLACE_PUBLISH), async (c) => {
     try {
       await unpublishCreationListing(
         db, c.env, c.get('tenantId') as number, c.get('userId') as string, c.req.param('listingId'),
@@ -216,7 +218,7 @@ export function createCreationListingRoutes(db: Db): Hono<HonoEnv> {
    * which meant a paid product was one plausible string away from free; the paid
    * path is now checkout, below, and this route cannot grant anything priced.
    */
-  router.post('/:slug/acquire', async (c) => {
+  router.post('/:slug/acquire', requirePermission(PERMISSIONS.MARKETPLACE_PURCHASE), async (c) => {
     try {
       const result = await acquireListing(db, c.env, {
         tenantId: c.get('tenantId') as number,
@@ -230,7 +232,7 @@ export function createCreationListingRoutes(db: Db): Hono<HonoEnv> {
   });
 
   /** Start a paid purchase; answers with the processor's hosted checkout URL. */
-  router.post('/:slug/checkout', async (c) => {
+  router.post('/:slug/checkout', requirePermission(PERMISSIONS.MARKETPLACE_PURCHASE), async (c) => {
     try {
       const body: Record<string, unknown> = await c.req.json<Record<string, unknown>>().catch(() => ({}));
       const result = await startListingCheckout(db, c.env, {
@@ -253,7 +255,7 @@ export function createCreationListingRoutes(db: Db): Hono<HonoEnv> {
    * All of it is read back from the processor inside the application layer, which
    * is the only reading of "was this paid" that a buyer cannot author.
    */
-  router.post('/checkout/:checkoutSessionId/complete', async (c) => {
+  router.post('/checkout/:checkoutSessionId/complete', requirePermission(PERMISSIONS.MARKETPLACE_PURCHASE), async (c) => {
     try {
       const result = await completeListingCheckout(db, c.env, {
         tenantId: c.get('tenantId') as number,
@@ -274,7 +276,7 @@ export function createCreationListingRoutes(db: Db): Hono<HonoEnv> {
    * rather than a price check that would let a paid item through the moment
    * somebody changed its price to zero and back.
    */
-  router.post('/:slug/install', async (c) => {
+  router.post('/:slug/install', requirePermission(PERMISSIONS.MARKETPLACE_PURCHASE), async (c) => {
     try {
       const tenantId = c.get('tenantId') as number;
       const userId = c.get('userId') as string;
@@ -299,13 +301,13 @@ export function createCreationListingRoutes(db: Db): Hono<HonoEnv> {
   });
 
   /** What I own. */
-  router.get('/acquired', async (c) => {
+  router.get('/acquired', requirePermission(PERMISSIONS.MARKETPLACE_READ), async (c) => {
     const rows = await acquiredListings(db, c.get('tenantId') as number, c.get('userId') as string);
     return c.json({ acquired: rows });
   });
 
   /** Reverse a sale: licence revoked first, then the ledger. */
-  router.post('/orders/:orderId/refund', async (c) => {
+  router.post('/orders/:orderId/refund', requirePermission(PERMISSIONS.MARKETPLACE_PURCHASE), async (c) => {
     try {
       const result = await refundListingOrder(db, c.env, {
         tenantId: c.get('tenantId') as number,
@@ -330,13 +332,13 @@ export function createCreationListingRoutes(db: Db): Hono<HonoEnv> {
    * so a seller who owed nothing was told they were being charged the platform
    * default, which is the exact inverse of the 0%-under-threshold promise.
    */
-  router.get('/earnings', async (c) => {
+  router.get('/earnings', requirePermission(PERMISSIONS.MARKETPLACE_READ), async (c) => {
     const earnings = await sellerEarnings(db, c.env, c.get('tenantId') as number, c.get('userId') as string);
     return c.json({ earnings, configuredTakeRateBps: platformTakeRateBps(c.env) });
   });
 
   /** Send the available balance to the seller's default payout destination. */
-  router.post('/payout', async (c) => {
+  router.post('/payout', requirePermission(PERMISSIONS.MARKETPLACE_PUBLISH), async (c) => {
     const result = await payoutSellerBalance(
       db, c.env, c.get('tenantId') as number, c.get('userId') as string,
     );
@@ -358,7 +360,7 @@ export function createCreationListingRoutes(db: Db): Hono<HonoEnv> {
 export function createPublicListingRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
 
-  router.get('/', async (c) => {
+  router.get('/', requirePermission(PERMISSIONS.MARKETPLACE_READ), async (c) => {
     const result = await browseCreationListings(db, c.env, {
       q: c.req.query('q') ?? '',
       kind: c.req.query('kind') ?? '',
@@ -368,12 +370,12 @@ export function createPublicListingRoutes(db: Db): Hono<HonoEnv> {
     return c.json(result);
   });
 
-  router.get('/:slug', async (c) => {
+  router.get('/:slug', requirePermission(PERMISSIONS.MARKETPLACE_READ), async (c) => {
     const listing = await getPublicListing(db, c.env, c.req.param('slug'));
     return listing ? c.json({ listing }) : c.json({ error: 'Listing not found' }, 404);
   });
 
-  router.get('/:slug/launch', async (c) => {
+  router.get('/:slug/launch', requirePermission(PERMISSIONS.MARKETPLACE_READ), async (c) => {
     const slug = c.req.param('slug');
     // Resolved WITHOUT the visibility filter so entitlement can be established
     // first: `launchListing` then decides that a withdrawn listing still runs for

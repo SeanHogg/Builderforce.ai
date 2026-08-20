@@ -11073,6 +11073,8 @@
       "denied": "Verweigert",
       "enforcedHint": "Diese Berechtigung wird bei jeder Anfrage geprüft. Ausnahmen wirken sofort.",
       "advisoryHint": "Diese Berechtigung wird noch nicht zur Laufzeit geprüft — die Route ist nur durch die Rollenstufe geschützt, daher ändert das Bearbeiten dieser Zeile lediglich die Anzeige dieser Tabelle.",
+      "unenforceable": "Nicht anwendbar",
+      "unenforceableHint": "Diese Berechtigung kann nie zur Laufzeit geprüft werden: Sie ist eine Super-Admin-Aktion, und Super-Admin-Routen authentifizieren sich ohne Workspace-Rolle, die die Berechtigungsprüfung auflösen könnte. Sie ist bereits auf Superadmins beschränkt, was strenger ist.",
       "enforcementNote": "Zeilen mit „Durchgesetzt“ werden bei jeder Anfrage geprüft, eine Ausnahme wirkt daher sofort. Zeilen mit „Hinweisend“ sind nur durch die Rollenstufe geschützt: Sie zu bearbeiten ändert nur diese Tabelle, nicht das, was ein Mitglied tatsächlich tun kann."
     },
     "modules": {

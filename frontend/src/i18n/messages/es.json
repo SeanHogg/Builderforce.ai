@@ -11073,6 +11073,8 @@
       "denied": "Denegado",
       "enforcedHint": "Este permiso se comprueba en cada solicitud. Las excepciones surten efecto de inmediato.",
       "advisoryHint": "Este permiso aún no se comprueba en tiempo de solicitud: la ruta se controla solo por el nivel de rol, así que editar esta fila solo cambia lo que muestra la tabla.",
+      "unenforceable": "No aplicable",
+      "unenforceableHint": "Este permiso nunca podrá comprobarse en tiempo de solicitud: es una acción de superadministrador, y esas rutas se autentican sin un rol de espacio de trabajo que el control de permisos pueda resolver. Ya está restringido a superadministradores, lo cual es más estricto.",
       "enforcementNote": "Las filas marcadas como Aplicado se comprueban en cada solicitud, por lo que una excepción surte efecto de inmediato. Las filas marcadas como Informativo se controlan solo por el nivel de rol: editarlas cambia únicamente esta tabla, no lo que un miembro puede hacer realmente."
     },
     "modules": {

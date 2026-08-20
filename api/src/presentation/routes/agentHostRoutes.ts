@@ -12,6 +12,8 @@ import { Hono, type Context } from 'hono';
 import { eq, and, isNull, desc, inArray, gte } from 'drizzle-orm';
 import { synthesizeRunFailedEvent } from '../../application/runtime/toolAuditReadRepair';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
+import { requirePermission } from '../middleware/requirePermission';
+import { PERMISSIONS } from '../../domain/permissions/permissionRegistry';
 import {
   agentHosts,
   agentHostProjects,
@@ -291,7 +293,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
   // P2-3: Capability routing — returns the best-matching online agentHost for the
   // given required capabilities (tenant JWT auth).
   // NOTE: registered before /:id routes so "/fleet/route" is not captured.
-  router.get('/fleet/route', authMiddleware as never, async (c) => {
+  router.get('/fleet/route', authMiddleware as never, requirePermission(PERMISSIONS.AGENT_HOST_READ) as never, async (c) => {
     const requires = (c.req.query('requires') ?? '').split(',').map((s) => s.trim()).filter(Boolean);
     const tenantId = (c as unknown as { get: (k: string) => unknown }).get('tenantId') as number;
 
@@ -325,7 +327,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
   // Optional query params:
   //  - status=online  (only agentHosts with connectedAt NOT NULL)
   //  - status=offline (only agentHosts with connectedAt NULL)
-  router.get('/', authMiddleware as never, async (c) => {
+  router.get('/', authMiddleware as never, requirePermission(PERMISSIONS.AGENT_HOST_READ) as never, async (c) => {
     const tenantId = c.get('tenantId') as number;
     const status = (c.req.query('status') ?? '').toString().trim().toLowerCase();
 
@@ -349,7 +351,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
 
   // POST /api/agent-hosts – register a new BuilderForce Agents instance
   // Returns the plaintext API key once – it is never stored in plaintext.
-  router.post('/', authMiddleware as never, async (c) => {
+  router.post('/', authMiddleware as never, requirePermission(PERMISSIONS.AGENT_HOST_REGISTER) as never, async (c) => {
     const tenantId = c.get('tenantId') as number;
     const userId   = c.get('userId') as string;
     const body     = await c.req.json<{ name: string; machineProfile?: AgentHostMachineProfileInput }>();
@@ -420,7 +422,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
   });
 
   // DELETE /api/agent-hosts/:id – deactivate / remove a agentHost
-  router.delete('/:id', authMiddleware as never, async (c) => {
+  router.delete('/:id', authMiddleware as never, requirePermission(PERMISSIONS.AGENT_HOST_DELETE) as never, async (c) => {
     const tenantId = c.get('tenantId') as number;
     const id       = Number(c.req.param('id'));
     const [deleted] = await db
@@ -434,7 +436,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
   });
 
   // PATCH /api/agent-hosts/:id/status – lifecycle status transition (manager+)
-  router.patch('/:id/status', authMiddleware as never, requireRole(TenantRole.MANAGER) as never, async (c) => {
+  router.patch('/:id/status', authMiddleware as never, requirePermission(PERMISSIONS.AGENT_HOST_CONFIGURE) as never, requireRole(TenantRole.MANAGER) as never, async (c) => {
     const tenantId = c.get('tenantId') as number;
     const agentHostId = Number(c.req.param('id'));
     const body = await c.req.json<{ status?: 'active' | 'inactive' | 'suspended' }>();
@@ -473,7 +475,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
   // PATCH /api/agent-hosts/:id/limits – set per-agentHost token budget (manager+)
   // Allows managers to cap individual AgentHost token spend per day.
   // Set tokenDailyLimit to null to remove the per-agentHost cap (plan-level limit applies).
-  router.patch('/:id/limits', authMiddleware as never, requireRole(TenantRole.MANAGER) as never, async (c) => {
+  router.patch('/:id/limits', authMiddleware as never, requirePermission(PERMISSIONS.AGENT_HOST_CONFIGURE) as never, requireRole(TenantRole.MANAGER) as never, async (c) => {
     const tenantId = c.get('tenantId') as number;
     const agentHostId = Number(c.req.param('id'));
     const body = await c.req.json<{ tokenDailyLimit?: number | null }>();
@@ -507,7 +509,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
   });
 
   // GET /api/agent-hosts/:id/projects – list projects associated with this agentHost
-  router.get('/:id/projects', authMiddleware as never, async (c) => {
+  router.get('/:id/projects', authMiddleware as never, requirePermission(PERMISSIONS.AGENT_HOST_READ) as never, async (c) => {
     const tenantId = c.get('tenantId') as number;
     const id = Number(c.req.param('id'));
 
@@ -534,7 +536,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
 
   // GET /api/agent-hosts/:id/nodes – list paired nodes for a agentHost
   // Current implementation models one primary node (the agentHost instance itself).
-  router.get('/:id/nodes', authMiddleware as never, async (c) => {
+  router.get('/:id/nodes', authMiddleware as never, requirePermission(PERMISSIONS.AGENT_HOST_READ) as never, async (c) => {
     const tenantId = c.get('tenantId') as number;
     const agentHostId = Number(c.req.param('id'));
 
@@ -569,7 +571,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
 
   // DELETE /api/agent-hosts/:id/nodes/:nodeId – unpair a node
   // For now, unpairing primary node marks agentHost as inactive/disconnected.
-  router.delete('/:id/nodes/:nodeId', authMiddleware as never, async (c) => {
+  router.delete('/:id/nodes/:nodeId', authMiddleware as never, requirePermission(PERMISSIONS.AGENT_HOST_DELETE) as never, async (c) => {
     const tenantId = c.get('tenantId') as number;
     const agentHostId = Number(c.req.param('id'));
     const nodeId = Number(c.req.param('nodeId'));
@@ -596,7 +598,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
   });
 
   // PUT /api/agent-hosts/:id/projects/:projectId – associate project with agentHost
-  router.put('/:id/projects/:projectId', authMiddleware as never, async (c) => {
+  router.put('/:id/projects/:projectId', authMiddleware as never, requirePermission(PERMISSIONS.AGENT_HOST_CONFIGURE) as never, async (c) => {
     const tenantId = c.get('tenantId') as number;
     const agentHostId = Number(c.req.param('id'));
     const projectId = Number(c.req.param('projectId'));
@@ -635,7 +637,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
   });
 
   // DELETE /api/agent-hosts/:id/projects/:projectId – unassociate project from agentHost
-  router.delete('/:id/projects/:projectId', authMiddleware as never, async (c) => {
+  router.delete('/:id/projects/:projectId', authMiddleware as never, requirePermission(PERMISSIONS.AGENT_HOST_DELETE) as never, async (c) => {
     const tenantId = c.get('tenantId') as number;
     const agentHostId = Number(c.req.param('id'));
     const projectId = Number(c.req.param('projectId'));
@@ -654,7 +656,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
   });
 
   // GET /api/agent-hosts/:id/directories – list synced directory manifest entries
-  router.get('/:id/directories', authMiddleware as never, async (c) => {
+  router.get('/:id/directories', authMiddleware as never, requirePermission(PERMISSIONS.AGENT_HOST_READ) as never, async (c) => {
     const tenantId = c.get('tenantId') as number;
     const agentHostId = Number(c.req.param('id'));
 
@@ -682,7 +684,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
   });
 
   // GET /api/agent-hosts/:id/directories/:directoryId/files – list synced files
-  router.get('/:id/directories/:directoryId/files', authMiddleware as never, async (c) => {
+  router.get('/:id/directories/:directoryId/files', authMiddleware as never, requirePermission(PERMISSIONS.AGENT_HOST_READ) as never, async (c) => {
     const tenantId = c.get('tenantId') as number;
     const agentHostId = Number(c.req.param('id'));
     const directoryId = Number(c.req.param('directoryId'));
@@ -707,7 +709,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
   });
 
   // GET /api/agent-hosts/:id/directories/:directoryId/files/content?path=...
-  router.get('/:id/directories/:directoryId/files/content', authMiddleware as never, async (c) => {
+  router.get('/:id/directories/:directoryId/files/content', authMiddleware as never, requirePermission(PERMISSIONS.AGENT_HOST_READ) as never, async (c) => {
     const tenantId = c.get('tenantId') as number;
     const agentHostId = Number(c.req.param('id'));
     const directoryId = Number(c.req.param('directoryId'));
@@ -880,7 +882,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
   });
 
   // GET /api/agent-hosts/:id/sync-history – recent sync history (JWT auth)
-  router.get('/:id/sync-history', authMiddleware as never, async (c) => {
+  router.get('/:id/sync-history', authMiddleware as never, requirePermission(PERMISSIONS.AGENT_HOST_READ) as never, async (c) => {
     const agentHostId = Number(c.req.param('id'));
     const tenantId = (c as unknown as { get: (k: string) => unknown }).get('tenantId') as number;
 
@@ -906,7 +908,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
   });
 
   // GET /api/agent-hosts/:id/executions – history of executions run by this agentHost
-  router.get('/:id/executions', authMiddleware as never, async (c) => {
+  router.get('/:id/executions', authMiddleware as never, requirePermission(PERMISSIONS.AGENT_HOST_READ) as never, async (c) => {
     const agentHostId = Number(c.req.param('id'));
     const tenantId = c.get('tenantId') as number;
     const limit = Math.min(Number(c.req.query('limit') ?? 50), 200);
@@ -1008,7 +1010,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
   });
 
   // GET /api/agent-hosts/:id/sessions – list chat sessions for this agentHost
-  router.get('/:id/sessions', authMiddleware as never, async (c) => {
+  router.get('/:id/sessions', authMiddleware as never, requirePermission(PERMISSIONS.AGENT_HOST_READ) as never, async (c) => {
     const agentHostId  = Number(c.req.param('id'));
     const tenantId = c.get('tenantId') as number;
     const limit = Math.min(Number(c.req.query('limit') ?? 50), 100);
@@ -1068,7 +1070,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
   });
 
   // POST /api/agent-hosts/:id/cron – create a cron job
-  router.post('/:id/cron', authMiddleware as never, async (c) => {
+  router.post('/:id/cron', authMiddleware as never, requirePermission(PERMISSIONS.AGENT_HOST_CONFIGURE) as never, async (c) => {
     const tenantId = c.get('tenantId') as number;
     const agentHostId   = Number(c.req.param('id'));
     const body = await c.req.json<{
@@ -1147,7 +1149,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
   });
 
   // DELETE /api/agent-hosts/:id/cron/:jobId – delete a cron job
-  router.delete('/:id/cron/:jobId', authMiddleware as never, async (c) => {
+  router.delete('/:id/cron/:jobId', authMiddleware as never, requirePermission(PERMISSIONS.AGENT_HOST_DELETE) as never, async (c) => {
     const tenantId = c.get('tenantId') as number;
     const agentHostId   = Number(c.req.param('id'));
     const jobId    = c.req.param('jobId');
@@ -1163,14 +1165,14 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
   // A channel's config is a SECRET (a bot token, a webhook URL). It is sealed by
   // the application port and never projected back — the read model says only
   // whether one is present.
-  router.get('/:id/channels', authMiddleware as never, async (c) => {
+  router.get('/:id/channels', authMiddleware as never, requirePermission(PERMISSIONS.AGENT_HOST_READ) as never, async (c) => {
     const channels = await listChannels(
       db, c.env as Env, c.get('tenantId') as number, Number(c.req.param('id')),
     );
     return c.json({ channels });
   });
 
-  router.post('/:id/channels', authMiddleware as never, async (c) => {
+  router.post('/:id/channels', authMiddleware as never, requirePermission(PERMISSIONS.AGENT_HOST_CONFIGURE) as never, async (c) => {
     const body = await c.req.json<CreateChannelInput>().catch(() => null);
     if (!body) return c.json({ error: 'A JSON body is required' }, 400);
     try {
@@ -1185,7 +1187,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     }
   });
 
-  router.patch('/:id/channels/:channelId', authMiddleware as never, async (c) => {
+  router.patch('/:id/channels/:channelId', authMiddleware as never, requirePermission(PERMISSIONS.AGENT_HOST_CONFIGURE) as never, async (c) => {
     const body = await c.req.json<UpdateChannelInput>().catch(() => null);
     if (!body) return c.json({ error: 'A JSON body is required' }, 400);
     try {
@@ -1200,7 +1202,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     }
   });
 
-  router.delete('/:id/channels/:channelId', authMiddleware as never, async (c) => {
+  router.delete('/:id/channels/:channelId', authMiddleware as never, requirePermission(PERMISSIONS.AGENT_HOST_DELETE) as never, async (c) => {
     await deleteChannel(
       db, c.env as Env, c.get('tenantId') as number,
       Number(c.req.param('id')), c.req.param('channelId'),
@@ -1212,7 +1214,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
   // PATCH /api/agent-hosts/:id/capabilities – update declared capabilities (SPA)
   // P2-3: Allows portal users to configure desired capabilities per agentHost.
   // -------------------------------------------------------------------------
-  router.patch('/:id/capabilities', authMiddleware as never, async (c) => {
+  router.patch('/:id/capabilities', authMiddleware as never, requirePermission(PERMISSIONS.AGENT_HOST_CONFIGURE) as never, async (c) => {
     const tenantId = (c as unknown as { get: (k: string) => unknown }).get('tenantId') as number;
     const agentHostId = Number(c.req.param('id'));
 
@@ -1773,7 +1775,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
   // Tenant JWT auth: returns recent usage snapshots for this agentHost (newest first).
   // Consumed by the portal usageApi.list() to render the usage tab.
   // -------------------------------------------------------------------------
-  router.get('/:id/usage', authMiddleware as never, async (c) => {
+  router.get('/:id/usage', authMiddleware as never, requirePermission(PERMISSIONS.AGENT_HOST_READ) as never, async (c) => {
     const agentHostId = Number(c.req.param('id'));
     const tenantId = c.get('tenantId') as number;
     const limit = Math.min(Number(c.req.query('limit') ?? 50), 200);
@@ -1806,7 +1808,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
   // GET /api/agent-hosts/:id/tool-audit?runId=&sessionKey=&limit=
   // Returns tool audit events for a agentHost, filterable by runId or sessionKey.
   // -------------------------------------------------------------------------
-  router.get('/:id/tool-audit', authMiddleware as never, async (c) => {
+  router.get('/:id/tool-audit', authMiddleware as never, requirePermission(PERMISSIONS.AGENT_HOST_READ) as never, async (c) => {
     const agentHostId   = Number(c.req.param('id'));
     const tenantId = (c as unknown as { get: (k: string) => unknown }).get('tenantId') as number;
     const runId    = c.req.query('runId');

@@ -11073,6 +11073,8 @@
       "denied": "Denied",
       "enforcedHint": "This permission is checked on every request. Overrides take effect immediately.",
       "advisoryHint": "This permission is not yet checked at request time — the route is gated by the role tier alone, so editing this row changes only what this table shows.",
+      "unenforceable": "Not applicable",
+      "unenforceableHint": "This permission can never be checked at request time: it is a Super Admin action, and Super Admin routes authenticate without a workspace role for the permission gate to resolve. It is already restricted to superadmins, which is stricter.",
       "enforcementNote": "Rows marked Enforced are checked on every request, so an override takes effect immediately. Rows marked Advisory are gated by the role tier alone: editing them changes this table only, not what a member can actually do."
     },
     "modules": {

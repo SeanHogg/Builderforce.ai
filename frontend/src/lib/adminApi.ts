@@ -904,6 +904,19 @@ export interface PermissionMatrix {
    * instead of rendering every row as advisory.
    */
   enforced?: string[];
+  /**
+   * Permissions that can NEVER become enforced by the permission gate — not ones
+   * merely waiting for someone to add it. The `system:*` four are Super Admin actions
+   * on routes authenticated by `superAdminMiddleware`, which establishes a userId and
+   * no tenant or member role; `requirePermission` resolves a permission for a MEMBER OF
+   * A TENANT, so there it would reject everyone, superadmin included. They are already
+   * gated by something stricter — being a superadmin at all.
+   *
+   * Kept separate from `enforced` because "not applicable" and "not yet" are different
+   * promises, and an operator reading this table deserves to know which one they are
+   * looking at. Optional so an older API degrades to the two-state label.
+   */
+  unenforceable?: string[];
   overrides: Array<{
     tenantId: number | null;
     role: string;

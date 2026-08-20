@@ -6,6 +6,51 @@ import { adminApi } from '@/lib/adminApi';
 import { downloadText } from '@/lib/download';
 import { errText, useAdminData, AdminError, AdminLoading } from '@/components/admin/adminShared';
 
+/**
+ * How much force a permission row actually carries. Three states, not two:
+ *
+ *  • `enforced`      — a real `requirePermission` gate runs on the routes it names.
+ *  • `unenforceable` — it can NEVER get one (see {@link PermissionMatrix.unenforceable}).
+ *  • `advisory`      — gated by the role ladder alone; an override on it changes this
+ *                      table and nothing else, until someone adds the gate.
+ *
+ * Split out so the decision lives in ONE place: the badge copy, the tooltip and the
+ * colours all derive from this single verdict instead of three parallel ternaries that
+ * could disagree about the same row.
+ */
+type PermissionGate = 'enforced' | 'unenforceable' | 'advisory';
+
+function permissionGate(
+  permission: string,
+  enforced: ReadonlySet<string>,
+  unenforceable: ReadonlySet<string>,
+): PermissionGate {
+  if (enforced.has(permission)) return 'enforced';
+  if (unenforceable.has(permission)) return 'unenforceable';
+  return 'advisory';
+}
+
+/** Token-driven so both themes read correctly; every value has a CSS variable. */
+const GATE_BADGE_STYLE: Record<PermissionGate, { color: string; background: string; border: string }> = {
+  enforced: {
+    color: 'var(--success-text)',
+    background: 'var(--success-bg, rgba(34,197,94,0.15))',
+    border: '1px solid var(--success-border, rgba(34,197,94,0.35))',
+  },
+  // Amber, not green and not grey: it is not a gap someone should file work against,
+  // but it is also not a row an override will ever affect.
+  unenforceable: {
+    color: 'var(--warning-text)',
+    background: 'var(--warning-bg, rgba(245,158,11,0.15))',
+    border: '1px solid var(--warning-border, rgba(245,158,11,0.35))',
+  },
+  advisory: {
+    color: 'var(--text-secondary)',
+    background: 'var(--surface-2, rgba(127,127,127,0.12))',
+    border: '1px solid var(--border, rgba(127,127,127,0.3))',
+  },
+};
+
 export default function PermissionsPanel() {
   const t = useTranslations('admin');
   const { data: permMatrix, loading, error, reload, setData, setError } = useAdminData(() => adminApi.permissionsMatrix(), []);
@@ -23,6 +68,8 @@ export default function PermissionsPanel() {
    * control the platform does not have.
    */
   const enforced = new Set(permMatrix?.enforced ?? []);
+  /** See {@link PermissionMatrix.unenforceable} — "not applicable", not "not yet". */
+  const unenforceable = new Set(permMatrix?.unenforceable ?? []);
 
   return (
     <div>
@@ -110,14 +157,14 @@ export default function PermissionsPanel() {
               </thead>
               <tbody>
                 {permMatrix.permissions.map((perm) => {
-                  const isEnforced = enforced.has(perm);
+                  const gate = permissionGate(perm, enforced, unenforceable);
                   return (
                   <tr key={perm}>
                     <td style={{ fontSize: 12 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                         <span style={{ fontFamily: 'var(--font-mono,monospace)' }}>{perm}</span>
                         <span
-                          title={isEnforced ? t('permissions.enforcedHint') : t('permissions.advisoryHint')}
+                          title={t(`permissions.${gate}Hint`)}
                           style={{
                             fontSize: 10,
                             fontWeight: 600,
@@ -126,12 +173,10 @@ export default function PermissionsPanel() {
                             padding: '2px 6px',
                             borderRadius: 'var(--radius-sm)',
                             whiteSpace: 'nowrap',
-                            color: isEnforced ? 'var(--success-text)' : 'var(--text-secondary)',
-                            background: isEnforced ? 'var(--success-bg, rgba(34,197,94,0.15))' : 'var(--surface-2, rgba(127,127,127,0.12))',
-                            border: `1px solid ${isEnforced ? 'var(--success-border, rgba(34,197,94,0.35))' : 'var(--border, rgba(127,127,127,0.3))'}`,
+                            ...GATE_BADGE_STYLE[gate],
                           }}
                         >
-                          {isEnforced ? t('permissions.enforced') : t('permissions.advisory')}
+                          {t(`permissions.${gate}`)}
                         </span>
                       </div>
                     </td>

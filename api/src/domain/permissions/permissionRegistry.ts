@@ -123,6 +123,11 @@ export const ENFORCED_PERMISSIONS: ReadonlySet<Permission> = new Set<Permission>
   'member:remove',
   'member:promote',
   // 2026-08-19: the work/delivery surfaces operators most want overrides on.
+  // ── Migrated 2026-08-19 ────────────────────────────────────────────────────
+  // Gated on the SESSION-authenticated handlers of each route group. Machine
+  // callers were deliberately left alone: `requirePermission` reads tenantId +
+  // userId + role off the context, and an agent-host key sets none of them, so
+  // gating those handlers would 403 the entire fleet rather than authorise it.
   'project:read',
   'project:write',
   'project:delete',
@@ -135,6 +140,36 @@ export const ENFORCED_PERMISSIONS: ReadonlySet<Permission> = new Set<Permission>
   'member:read',
   'report:read',
   'report:export',
+  'workflow:execute',
+  'agentHost:read',
+  'agentHost:register',
+  'agentHost:configure',
+  'agentHost:delete',
+  'marketplace:read',
+  'marketplace:purchase',
+  'marketplace:publish',
+]);
+
+/**
+ * Permissions that CANNOT be enforced by `requirePermission` as the platform is built,
+ * and why — so the gap is a stated design fact rather than a silent omission.
+ *
+ * The `system:*` four are Super Admin actions, and Super Admin routes authenticate with
+ * `superAdminMiddleware`, which establishes a `userId` and nothing else: no tenantId, no
+ * member role. `requirePermission` resolves a permission for a MEMBER OF A TENANT, so on
+ * those routes it would reject every caller, superadmin included. They are already gated
+ * by something strictly stronger than a permission — being a superadmin at all — and the
+ * admin matrix marks them advisory.
+ *
+ * `project:archive` and `workflow:delete` have no route that performs the action yet;
+ * `member:read` and `approval:read` are covered by their route groups' role gate and have
+ * no separate read endpoint to attach to.
+ */
+export const UNENFORCEABLE_PERMISSIONS: ReadonlySet<Permission> = new Set<Permission>([
+  'system:impersonate',
+  'system:debug_permissions',
+  'system:manage_roles',
+  'system:manage_modules',
 ]);
 
 /**

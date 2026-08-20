@@ -101,7 +101,33 @@ function allSchemaSources() {
   return files.map((f) => readFileSync(f, 'utf8')).join('\n');
 }
 
+/**
+ * Tables that ARE tenant-owned but carry no `tenant_id` column of their own —
+ * tenancy is inherited through a foreign key.
+ *
+ * `tasks` is the busiest table on the platform and, until this registry existed, it
+ * was completely INVISIBLE to this guard: step 1 only finds tables whose column block
+ * declares `tenantId`, and `tasks` inherits its tenancy through `projects.tenantId`
+ * (which is why `taskProjectIfInTenant` exists at all). So the one table most worth
+ * checking was the one table never checked.
+ *
+ * Declaring the inheritance here — rather than denormalising `tenant_id` onto `tasks`
+ * with a migration, a backfill and a trigger — keeps the schema in 3NF and needs no
+ * data change. The trade the roadmap named is real and is accepted deliberately: the
+ * invariant stays IMPLICIT in the FK rather than being a column the database itself
+ * enforces. What this buys is that every future query against these tables is
+ * checkable, which is the property that was missing.
+ *
+ * A statement against one of these still passes on any tenant evidence (see {@link
+ * SCOPED}) — including reaching the parent (`projects.tenantId`) or going through the
+ * parent-verifying helpers, which is the correct pattern and must not be flagged.
+ */
+const INHERITED_TENANCY = new Map([
+  ['tasks', 'projectId → projects.tenantId'],
+]);
+
 const TENANT_TABLES = tenantOwnedTables(allSchemaSources());
+for (const table of INHERITED_TENANCY.keys()) TENANT_TABLES.add(table);
 
 if (TENANT_TABLES.size === 0) {
   console.error(
@@ -219,7 +245,16 @@ function targetTables(statement) {
  * shrink, and filing a deliberate decision there would make the number go up when
  * nothing is owed, then dare the next person to pay it down by breaking a feature.
  */
-const SCOPED = /scopedToTenant|scopedToNullableTenant|scopedToSegment|acrossTenants|tenantId|tenant_id/;
+/**
+ * Evidence that a statement is tenant-scoped.
+ *
+ * `taskProjectIfInTenant` / `taskInTenant` are here for the {@link INHERITED_TENANCY}
+ * tables: they verify the PARENT row belongs to the caller's tenant and then filter the
+ * child by it. That is the correct way to scope a `tasks` query, and the call site
+ * often never spells `tenantId` itself — without these names the guard would report the
+ * very pattern it wants people to use.
+ */
+const SCOPED = /scopedToTenant|scopedToNullableTenant|scopedToSegment|acrossTenants|taskProjectIfInTenant|taskInTenant|tenantId|tenant_id/;
 
 /** The text inside every `.where( … )` in `statement`, paren-balanced. */
 function whereArguments(statement) {

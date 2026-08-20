@@ -16,6 +16,8 @@
 import { Hono } from 'hono';
 import { eq, and, asc } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
+import { requirePermission } from '../middleware/requirePermission';
+import { PERMISSIONS } from '../../domain/permissions/permissionRegistry';
 import { workflows, workflowTasks, telemetrySpans, projects, agentHosts } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { MILLICENTS_PER_USD } from '../../domain/shared/money';

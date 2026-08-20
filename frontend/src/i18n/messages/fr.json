@@ -11073,6 +11073,8 @@
       "denied": "Refusée",
       "enforcedHint": "Cette autorisation est vérifiée à chaque requête. Les dérogations prennent effet immédiatement.",
       "advisoryHint": "Cette autorisation n'est pas encore vérifiée au moment de la requête : la route est protégée uniquement par le niveau de rôle, donc modifier cette ligne ne change que l'affichage de ce tableau.",
+      "unenforceable": "Non applicable",
+      "unenforceableHint": "Cette autorisation ne pourra jamais être vérifiée au moment de la requête : c'est une action de super-administrateur, et ces routes s'authentifient sans rôle d'espace de travail que le contrôle d'autorisation puisse résoudre. Elle est déjà réservée aux super-administrateurs, ce qui est plus strict.",
       "enforcementNote": "Les lignes marquées Appliquée sont vérifiées à chaque requête ; une dérogation prend donc effet immédiatement. Les lignes marquées Indicative sont protégées uniquement par le niveau de rôle : les modifier ne change que ce tableau, pas ce qu'un membre peut réellement faire."
     },
     "modules": {
