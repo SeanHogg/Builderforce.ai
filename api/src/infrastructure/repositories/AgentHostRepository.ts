@@ -44,6 +44,11 @@ export class AgentHostRepository implements IAgentHostRepository {
       .where(eq(agentHosts.id, id))
       .limit(1);
     if (!row) return null;
+    // A deactivated/suspended host must not authenticate — the same gate the
+    // JWT-exchange door and `agentHostAuth.verifyAgentHostApiKey` apply. Without
+    // it `updateStatus`'s cache invalidation only bought a fresh lookup of a key
+    // that then still passed.
+    if (row.status !== 'active') return null;
     const valid = await verifySecret(apiKey, row.apiKeyHash ?? '');
     return valid ? this.toDomain(row) : null;
   }

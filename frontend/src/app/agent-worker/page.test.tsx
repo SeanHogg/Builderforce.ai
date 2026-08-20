@@ -3,6 +3,12 @@ import { render, fireEvent, waitFor } from '@testing-library/react';
 import { AgentWorker } from './AgentWorker';
 import type { BrowserRuntimeTransport, ClaimedDispatch } from '@/lib/browserRuntime/runner';
 
+// Assert against the REAL catalog copy: these tests query the run control by its
+// accessible name, so a key-passthrough stub would make them pass while the button
+// showed a raw message key.
+vi.mock('next-intl', async () => (await import('@/test/realCatalogTranslations'))
+  .realCatalogIntlMock((await import('@/i18n/messages/en.json')).default as Record<string, unknown>));
+
 const dispatch: ClaimedDispatch = {
   dispatchId: 'd1',
   model: 'anthropic/claude-3-haiku',
@@ -14,7 +20,7 @@ const dispatch: ClaimedDispatch = {
 describe('AgentWorker tab', () => {
   it('renders the worker surface with a run control', () => {
     const { getByLabelText, getByText } = render(<AgentWorker />);
-    expect(getByText('Browser Agent Worker')).toBeInTheDocument();
+    expect(getByText('Browser agent worker')).toBeInTheDocument();
     expect(getByLabelText('Run pending agents')).toBeInTheDocument();
   });
 

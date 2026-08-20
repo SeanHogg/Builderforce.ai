@@ -82,7 +82,7 @@ const SPEC = {
 describe('prdRoutes', () => {
   it('404 when spec not in tenant', async () => {
     const { db } = makeDb({ selects: [[]] });
-    const res = await createPrdRoutes(db).request('/specs/spec-uuid/versions', post({}));
+    const res = await createPrdRoutes(db).request('/spec-uuid/versions', post({}));
     expect(res.status).toBe(404);
   });
 
@@ -92,7 +92,7 @@ describe('prdRoutes', () => {
       selects: [[SPEC], [{ version: 1 }, { version: 2 }]],
       inserts: [[{ id: 'v-uuid', version: 3, frozen: false }]],
     });
-    const res = await createPrdRoutes(db).request('/specs/spec-uuid/versions', post({}));
+    const res = await createPrdRoutes(db).request('/spec-uuid/versions', post({}));
     expect(res.status).toBe(201);
     const v = captured.insertValues[0];
     expect(v.version).toBe(3);
@@ -107,7 +107,7 @@ describe('prdRoutes', () => {
       selects: [[SPEC], [{ id: 'v1', version: 1, frozen: false }]],
       updates: [[{ id: 'v1', version: 1, frozen: true }]],
     });
-    const res = await createPrdRoutes(db).request('/specs/spec-uuid/freeze', post({}));
+    const res = await createPrdRoutes(db).request('/spec-uuid/freeze', post({}));
     expect(res.status).toBe(200);
     expect((await res.json() as any).frozen).toBe(true);
   });
@@ -116,7 +116,7 @@ describe('prdRoutes', () => {
     const { db } = makeDb({
       selects: [[SPEC], [{ id: 'v1', version: 1, frozen: true }]],
     });
-    const res = await createPrdRoutes(db).request('/specs/spec-uuid/freeze', post({}));
+    const res = await createPrdRoutes(db).request('/spec-uuid/freeze', post({}));
     expect(res.status).toBe(409);
   });
 
@@ -130,7 +130,7 @@ describe('prdRoutes', () => {
       ],
     });
     const res = await createPrdRoutes(db).request(
-      '/specs/spec-uuid/generate',
+      '/spec-uuid/generate',
       post({ ticketDescription: 'Add billing' }),
     );
     expect(res.status).toBe(201);
@@ -148,7 +148,7 @@ describe('prdRoutes', () => {
       inserts: [[{ id: 'a-uuid', action: 'edited' }]],
     });
     const res = await createPrdRoutes(db).request(
-      '/specs/spec-uuid/audit',
+      '/spec-uuid/audit',
       post({ action: 'edited', sectionId: 'goals', agentRole: 'prd-author', detail: { x: 1 } }),
     );
     expect(res.status).toBe(201);
@@ -162,7 +162,7 @@ describe('prdRoutes', () => {
   it('rejects an audit record with no action', async () => {
     const { db } = makeDb({ selects: [[SPEC]] });
     const res = await createPrdRoutes(db).request(
-      '/specs/spec-uuid/audit',
+      '/spec-uuid/audit',
       post({ action: '   ' }),
     );
     expect(res.status).toBe(400);
@@ -173,7 +173,7 @@ describe('prdRoutes', () => {
       selects: [[SPEC], [{ id: 'a1', agentRole: 'prd-author', swimlane: 'plan' }]],
     });
     const res = await createPrdRoutes(db).request(
-      '/specs/spec-uuid/audit?agentRole=prd-author&swimlane=plan',
+      '/spec-uuid/audit?agentRole=prd-author&swimlane=plan',
     );
     expect(res.status).toBe(200);
     expect((await res.json() as any).records).toHaveLength(1);

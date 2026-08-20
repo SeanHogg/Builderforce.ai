@@ -41,7 +41,7 @@ import { mergeRecordedPullRequest } from '../../application/repos/mergeRecordedP
 import { getPullRequestDetail } from '../../application/repos/getPullRequestDetail';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { invalidateProjectConnections } from '../../application/repos/projectConnectionStatus';
-import { resolveHostAuth } from '../../infrastructure/auth/agentHostAuth';
+import { hostOrTenantAuth } from '../middleware/hostOrTenantAuth';
 import type { CreatePrMessage } from '../../application/repos/prDispatch';
 import { ensureAgentWorkflow, githubActionsAvailable } from '../../application/runtime/githubActionsDispatch';
 import { AGENT_WORKFLOW_PATH } from '../../application/runtime/githubActionsWorkflow';
@@ -149,23 +149,12 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
   const router = new Hono<RepoHonoEnv>();
 
   // POST /api/repos/pull-requests/:id/result — record the resulting PR number/url/status.
-  // DUAL-AUTH, registered BEFORE authMiddleware (mirrors specRoutes): the agentHost
-  // runtime that opened the PR calls back with its API key (Bearer + X-AgentHost-Id,
-  // or ?agentHostId=&key=); the portal can also record a result with a tenant JWT.
-  // Without the host-key branch a headless agent could not report its PR result.
-  router.post('/pull-requests/:id/result', async (c) => {
-    let tenantId: number;
-    const host = await resolveHostAuth(db, c);
-    if (host) {
-      tenantId = host.tenantId;
-    } else {
-      // Fall back to tenant JWT (portal). A bare Bearer JWT has no X-AgentHost-Id so
-      // resolveHostAuth returns null and we land here.
-      await authMiddleware(c, async () => {});
-      const tid = c.get('tenantId') as number | undefined;
-      if (!tid) return c.text('Unauthorized', 401);
-      tenantId = tid;
-    }
+  // DUAL-AUTH via the shared `hostOrTenantAuth`, registered BEFORE the router-wide
+  // authMiddleware: the agentHost runtime that opened the PR calls back with its API
+  // key; the portal can record a result with a tenant JWT. Without the host-key door
+  // a headless agent could not report its PR result.
+  router.post('/pull-requests/:id/result', hostOrTenantAuth(db), async (c) => {
+    const tenantId = c.get('tenantId') as number;
 
     const id = c.req.param('id');
     const body = await c.req.json<{

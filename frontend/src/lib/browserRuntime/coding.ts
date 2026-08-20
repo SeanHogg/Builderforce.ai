@@ -41,6 +41,12 @@ export interface CodingDeps {
   }) => Promise<{ url: string; number: number } | null>;
 }
 
+/** One file the run touched, in the shape every executor's result reports. */
+export interface CodingResultFile {
+  path: string;
+  status: 'created' | 'modified' | 'deleted';
+}
+
 export interface CodingResult {
   pushed: boolean;
   branch: string;
@@ -50,6 +56,44 @@ export interface CodingResult {
   prUrl?: string;
   prNumber?: number;
   summary: string;
+  /**
+   * The files this run changed, STRUCTURED.
+   *
+   * The summary names them too, but only in prose — which is why a cloud-coded
+   * ticket had nothing the Changes tab could list and nothing the diff viewer
+   * could open. Reported alongside the summary and projected server-side by
+   * `application/task/taskFileChangeFeed`.
+   */
+  files: CodingResultFile[];
+}
+
+/**
+ * The dispatch `output` payload a browser run reports. Serialized as JSON so the
+ * server can project the changed files; `summary` keeps the human-readable text
+ * for surfaces that render the result as prose.
+ */
+export interface CodingResultPayload {
+  summary: string;
+  branch: string;
+  commitSha?: string;
+  prUrl?: string;
+  prNumber?: number;
+  files: CodingResultFile[];
+}
+
+/** Serialize a coding result into the dispatch `output` wire payload. */
+export function toResultPayload(result: CodingResult): string {
+  const payload: CodingResultPayload = {
+    summary: result.summary,
+    branch: result.branch,
+    ...(result.commitSha ? { commitSha: result.commitSha } : {}),
+    ...(result.prUrl ? { prUrl: result.prUrl } : {}),
+    ...(result.prNumber != null ? { prNumber: result.prNumber } : {}),
+    // Only a PUSHED run has changes anyone can diff: the branch is where the
+    // viewer reads content from, so an unpushed proposal must not claim files.
+    files: result.pushed ? result.files : [],
+  };
+  return JSON.stringify(payload);
 }
 
 /**
@@ -96,7 +140,7 @@ export async function runCodingDispatch(
   const changes = await deps.propose({ role: dispatch.role, input: dispatch.input ?? '' });
 
   if (changes.files.length === 0) {
-    return { pushed: false, branch: changes.branch, summary: changes.summary ?? 'No file changes proposed.' };
+    return { pushed: false, branch: changes.branch, files: [], summary: changes.summary ?? 'No file changes proposed.' };
   }
 
   await deps.git.clone(repo.defaultBranch ?? undefined);
@@ -113,6 +157,7 @@ export async function runCodingDispatch(
         pushed: false,
         branch: changes.branch,
         buildOk: false,
+        files: [],
         summary: `Build/test failed; not pushed.\n${result.output}`.trim(),
       };
     }
@@ -142,6 +187,10 @@ export async function runCodingDispatch(
     buildOk,
     prUrl: pr?.url,
     prNumber: pr?.number,
+    // The proposer writes whole files, so every entry is a write; 'modified' is
+    // the honest label without a base-tree read to tell new from changed (the
+    // diff viewer resolves that against the branch anyway).
+    files: changes.files.map((f) => ({ path: f.path, status: 'modified' as const })),
     summary: pr ? `${base}\n\nOpened PR #${pr.number}: ${pr.url}` : base,
   };
 }

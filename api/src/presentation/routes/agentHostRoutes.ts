@@ -42,11 +42,11 @@ import { SwimlaneCoordinator } from '../../application/swimlane/SwimlaneCoordina
 import { DrizzleCoordinatorStore } from '../../application/swimlane/DrizzleCoordinatorStore';
 import { DrizzlePrdEnsurer } from '../../application/swimlane/DrizzlePrdEnsurer';
 import { AgentHostStageDispatcher } from '../../application/swimlane/agentHostStageDispatcher';
-import { resolveRepoCredential, isResolveError } from '../../application/repos/resolveRepoCredential';
 import { resolveDefaultRepoForTask } from '../../application/repos/resolveDefaultRepo';
 import { openDispatchPullRequest } from '../../application/repos/openDispatchPullRequest';
 import { openTaskPullRequest } from '../../application/repos/openTaskPullRequest';
-import { executeGitProxy } from '../../application/repos/gitProxy';
+import { GIT_PROXY_SUBPATHS, handleGitProxyRequest } from './gitProxyHandler';
+import { hostOrTenantAuth } from '../middleware/hostOrTenantAuth';
 import { agentDispatches } from '../../infrastructure/database/schema';
 import { taskInTenant } from '../../infrastructure/database/tenantScope';
 import { isAgentHostOnline } from '../../domain/agentHost/onlineStatus';
@@ -1524,7 +1524,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
   // The headless analogue of /api/git-proxy: a deployed agentHost runs git
   // smart-HTTP against these, and the credential is injected SERVER-SIDE. The
   // token never reaches the agentHost — identical boundary to the browser proxy,
-  // reusing the same upstream-streaming executor (executeGitProxy).
+  // and literally the same handler (handleGitProxyRequest); only the door differs.
   // -------------------------------------------------------------------------
   const hostGitProxy = async (
     c: Context<AgentHostHonoEnv>,
@@ -1533,31 +1533,25 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     method: 'GET' | 'POST',
   ): Promise<Response> => {
     const agentHostId = Number(c.req.param('id'));
-    const key = extractAgentHostKey(c);
-    const agentHost = await verifyAgentHostApiKey(agentHostId, key);
+    const agentHost = await verifyAgentHostApiKey(agentHostId, extractAgentHostKey(c));
     if (!agentHost) return c.text('Unauthorized', 401);
-
-    const env = c.env as { INTEGRATION_ENCRYPTION_SECRET?: string; JWT_SECRET?: string };
-    const secret = env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET ?? '';
-    const resolved = await resolveRepoCredential(db, secret, agentHost.tenantId, repoId);
-    if (isResolveError(resolved)) return c.json({ error: resolved.error }, resolved.status);
-
-    const result = await executeGitProxy({
-      repo: resolved.repo,
-      token: resolved.token,
+    return handleGitProxyRequest(
+      c as unknown as Context<HonoEnv>,
+      db,
+      Number(agentHost.tenantId),
+      repoId,
       subPath,
       method,
-      query: method === 'GET' ? new URL(c.req.url).searchParams.toString() : undefined,
-      contentType: c.req.header('Content-Type'),
-      body: method === 'POST' ? await c.req.arrayBuffer() : undefined,
-    });
-    if (!result.ok) return c.json({ error: result.error }, 400);
-    return result.response;
+    );
   };
 
-  router.get('/:id/git-proxy/:repoId/info/refs', (c) => hostGitProxy(c, c.req.param('repoId'), 'info/refs', 'GET'));
-  router.post('/:id/git-proxy/:repoId/git-upload-pack', (c) => hostGitProxy(c, c.req.param('repoId'), 'git-upload-pack', 'POST'));
-  router.post('/:id/git-proxy/:repoId/git-receive-pack', (c) => hostGitProxy(c, c.req.param('repoId'), 'git-receive-pack', 'POST'));
+  for (const { subPath, method } of GIT_PROXY_SUBPATHS) {
+    const path = `/:id/git-proxy/:repoId/${subPath}`;
+    const handler = (c: Context<AgentHostHonoEnv>) =>
+      hostGitProxy(c, c.req.param('repoId')!, subPath, method);
+    if (method === 'GET') router.get(path, handler);
+    else router.post(path, handler);
+  }
 
   // -------------------------------------------------------------------------
   // POST /api/agent-hosts/:id/dispatch/:dispatchId/pull-request   (host key auth)
@@ -2137,23 +2131,14 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
   // GET /api/agent-hosts/:id/context-bundle (P4-2)
   // Returns the last-synced .builderforce/ files for the specified agentHost so peer
   // agentHosts can hydrate remote context before dispatching tasks.
-  // Auth: agentHost API key (Authorization: Bearer <key>) or tenant JWT.
+  // Auth: agentHost API key (Authorization: Bearer <key>) or tenant JWT, via the
+  // shared dual-auth middleware. It previously read `tenantId` off a context no
+  // middleware had populated on this router, so the advertised tenant-JWT door
+  // 401'd every portal caller — only the host key ever worked.
   // -------------------------------------------------------------------------
-  router.get('/:id/context-bundle', async (c) => {
+  router.get('/:id/context-bundle', hostOrTenantAuth(db, 'id'), async (c) => {
     const agentHostId = Number(c.req.param('id'));
-
-    // Allow agentHost-auth or tenant JWT
-    let tenantId: number | null = null;
-    const key = extractAgentHostKey(c);
-    const agentHostAuth = await verifyAgentHostApiKey(agentHostId, key);
-    if (agentHostAuth) {
-      tenantId = Number(agentHostAuth.tenantId);
-    } else {
-      // Fall through to tenant JWT check
-      const tid = (c as unknown as { get: (k: string) => unknown }).get('tenantId');
-      if (typeof tid === 'number') tenantId = tid;
-    }
-    if (!tenantId) return c.text('Unauthorized', 401);
+    const tenantId = c.get('tenantId') as number;
 
     // Look up the agentHost and verify tenant ownership
     const [agentHost] = await db

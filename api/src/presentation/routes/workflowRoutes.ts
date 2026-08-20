@@ -18,11 +18,8 @@ import { eq, and, asc } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { workflows, workflowTasks, telemetrySpans, projects, agentHosts } from '../../infrastructure/database/schema';
 import { MILLICENTS_PER_USD } from '../../domain/shared/money';
-import {
-  resolveHostAuth,
-  verifyAgentHostApiKey,
-  verifyBearerAgentHost,
-} from '../../infrastructure/auth/agentHostAuth';
+import { resolveHostAuth } from '../../infrastructure/auth/agentHostAuth';
+import { hostOrTenantAuth, requestAgentHostId } from '../middleware/hostOrTenantAuth';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
@@ -33,30 +30,11 @@ export function createWorkflowRoutes(db: Db): Hono<WorkflowHonoEnv> {
 
   // POST /api/workflows – register a workflow
   // Accepts Bearer token + X-AgentHost-Id header (preferred, used by workflow-telemetry),
-  // agentHost API key (?agentHostId=&key=), or tenant JWT.
-  router.post('/', async (c) => {
-    let tenantId: number;
-    let resolvedAgentHostId: number | null = null;
-
-    const bearerAgentHost = await verifyBearerAgentHost(db, c.req.header('Authorization'), c.req.header('X-AgentHost-Id'));
-    if (bearerAgentHost) {
-      tenantId = bearerAgentHost.tenantId;
-      resolvedAgentHostId = bearerAgentHost.id;
-    } else {
-      const agentHostIdParam = Number(c.req.query('agentHostId') ?? '');
-      const apiKey = c.req.query('key');
-      if (!Number.isNaN(agentHostIdParam) && agentHostIdParam > 0 && apiKey) {
-        const agentHost = await verifyAgentHostApiKey(db, agentHostIdParam, apiKey);
-        if (!agentHost) return c.text('Unauthorized', 401);
-        tenantId = agentHost.tenantId;
-        resolvedAgentHostId = agentHost.id;
-      } else {
-        await authMiddleware(c, async () => {});
-        const tid = (c as unknown as { get: (k: string) => unknown }).get('tenantId');
-        if (!tid) return c.text('Unauthorized', 401);
-        tenantId = tid as number;
-      }
-    }
+  // agentHost API key (?agentHostId=&key=), or tenant JWT — all three via the shared
+  // dual-auth middleware.
+  router.post('/', hostOrTenantAuth(db), async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const resolvedAgentHostId = requestAgentHostId(c);
 
     const body = await c.req.json<{
       id?:           string;

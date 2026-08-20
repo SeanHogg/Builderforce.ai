@@ -46,6 +46,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import { agentHosts, executions, projectInsightEvents, projectRepositories, projects, specs, tasks, tenants, toolAuditEvents, usageSnapshots } from '../../infrastructure/database/schema';
 import { approvals, chatTicketLinks, projectManagerConfigs } from '../../infrastructure/database/schema';
 import { agentPurchases, ideAgents, llmUsageLog, taskFileChanges } from '../../infrastructure/database/schema';
+import { readDispatchFileChanges } from '../../application/task/taskFileChangeFeed';
 import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelayDO';
 import { resolveProjectInferenceModel } from '../../application/llm/projectEvermind';
 import { executionTokenGate } from './executionTokenGate';
@@ -2355,7 +2356,16 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
       .where(and(eq(taskFileChanges.taskId, taskId), eq(taskFileChanges.tenantId, c.get('tenantId'))))
       .orderBy(desc(taskFileChanges.createdAt))
       .limit(500);
-    return c.json({ changes: rows });
+
+    // A browser/cloud dispatch has no `executions` row, so its edits ride its
+    // dispatch result rather than this table. Compose both halves here so the
+    // Changes tab (and its diff viewer) is executor-agnostic — see
+    // application/task/taskFileChangeFeed.
+    const fromDispatches = await readDispatchFileChanges(db, c.get('tenantId'), taskId);
+    const seen = new Set(rows.map((r) => r.path));
+    const changes = [...rows, ...fromDispatches.filter((d) => !seen.has(d.path))]
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return c.json({ changes });
   });
 
   // GET /api/runtime/tasks/:taskId/file-content?path=<repo-relative path>

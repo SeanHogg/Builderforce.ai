@@ -18,7 +18,7 @@ import { Hono } from 'hono';
 import { eq, and } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { specs, workflows, projects, tasks } from '../../infrastructure/database/schema';
-import { verifyAgentHostApiKey } from '../../infrastructure/auth/agentHostAuth';
+import { hostOrTenantAuth, requestAgentHostId } from '../middleware/hostOrTenantAuth';
 import { linkSpecToTask } from '../../application/prd/taskPrd';
 import { bumpTicketSearchVersion } from '../../infrastructure/cache/readThroughCache';
 import type { Env, HonoEnv } from '../../env';
@@ -30,26 +30,11 @@ export function createSpecRoutes(db: Db): Hono<SpecsHonoEnv> {
   const router = new Hono<SpecsHonoEnv>();
 
   // POST /api/specs – create/upsert a spec
-  // Accepts either tenant JWT (from portal) or agentHost API key (?agentHostId=&key=).
-  router.post('/', async (c) => {
-    let tenantId: number;
-    let agentHostId: number | null = null;
-
-    // Try agentHost API key auth first (for automated pushes from the agentHost runtime)
-    const agentHostIdParam = Number(c.req.query('agentHostId') ?? '');
-    const apiKey = c.req.query('key');
-    if (!Number.isNaN(agentHostIdParam) && agentHostIdParam > 0 && apiKey) {
-      const agentHost = await verifyAgentHostApiKey(db, agentHostIdParam, apiKey);
-      if (!agentHost) return c.text('Unauthorized', 401);
-      tenantId = agentHost.tenantId;
-      agentHostId = agentHost.id;
-    } else {
-      // Fall back to tenant JWT
-      await authMiddleware(c, async () => {});
-      const tid = (c as unknown as { get: (k: string) => unknown }).get('tenantId');
-      if (!tid) return c.text('Unauthorized', 401);
-      tenantId = tid as number;
-    }
+  // Accepts either tenant JWT (from portal) or agentHost API key, via the shared
+  // dual-auth middleware (Bearer + X-AgentHost-Id, or ?agentHostId=&key=).
+  router.post('/', hostOrTenantAuth(db), async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const agentHostId = requestAgentHostId(c);
 
     const body = await c.req.json<{
       id?:        string;

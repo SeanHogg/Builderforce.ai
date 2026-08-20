@@ -13,6 +13,7 @@
  * `transport` prop lets tests drive it with a fake.
  */
 import { useCallback, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import {
   runLoop,
   type BrowserRuntimeTransport,
@@ -23,7 +24,7 @@ import {
 } from '@/lib/browserRuntime/runner';
 import PageContainer from '@/components/PageContainer';
 import { createBrowserAgentTransport } from '@/lib/browserRuntime/transport';
-import { runCodingDispatch } from '@/lib/browserRuntime/coding';
+import { runCodingDispatch, toResultPayload } from '@/lib/browserRuntime/coding';
 import { createCodingDeps } from '@/lib/browserRuntime/factory';
 import { getApiBaseUrl, getAuthHeaders } from '@/lib/apiClient';
 
@@ -50,7 +51,9 @@ function defaultCodeHandler(transport: BrowserRuntimeTransport) {
     );
     return {
       status: result.buildOk === false ? 'failed' : 'completed',
-      output: result.summary,
+      // Structured, not prose: the server projects `files` into the task's change
+      // feed so the Changes tab can list them and the diff viewer can open them.
+      output: toResultPayload(result),
       error: result.buildOk === false ? result.summary : undefined,
     };
   };
@@ -63,6 +66,7 @@ export function AgentWorker({
   transport?: BrowserRuntimeTransport;
   handlers?: RunHandlers;
 }) {
+  const t = useTranslations('agentWorker');
   const [running, setRunning] = useState(false);
   const [outcomes, setOutcomes] = useState<RunOutcome[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -87,29 +91,26 @@ export function AgentWorker({
 
   return (
     <PageContainer width="readable" style={{ margin: '2rem 0', padding: '0 1rem' }}>
-      <h1>Browser Agent Worker</h1>
-      <p>
-        Runs the agents assigned to your boards&apos; swimlanes directly in this tab, each on its own
-        model. As agents finish, the kanban advances autonomously.
-      </p>
+      <h1>{t('title')}</h1>
+      <p>{t('intro')}</p>
 
-      <button onClick={run} disabled={running} aria-label="Run pending agents">
-        {running ? 'Running…' : 'Run pending agents'}
+      <button onClick={run} disabled={running} aria-label={t('runAria')}>
+        {running ? t('running') : t('run')}
       </button>
 
       {error && (
-        <p role="alert" style={{ color: 'crimson' }}>
+        <p role="alert" style={{ color: 'var(--danger)' }}>
           {error}
         </p>
       )}
 
       <div data-testid="worker-summary" style={{ marginTop: '1rem' }}>
-        Ran {ran} · Completed {completed} · Failed {failed}
+        {t('tally', { ran, completed, failed })}
       </div>
 
-      <ul aria-label="run outcomes">
+      <ul aria-label={t('outcomesAria')}>
         {outcomes.map((o, i) => (
-          <li key={i}>{o}</li>
+          <li key={i}>{t(`outcome.${o}`)}</li>
         ))}
       </ul>
     </PageContainer>

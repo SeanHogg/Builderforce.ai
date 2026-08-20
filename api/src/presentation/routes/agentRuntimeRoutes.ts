@@ -13,11 +13,19 @@
  *                                                 it to needs_attention).
  *
  * A browser PWA/WebContainer runs the agent loop in src/application/browserRuntime
- * and drives these endpoints. AgentHosts use the same /result callback.
+ * and drives these endpoints. A non-browser executor (an on-prem agent host, a
+ * container run) drives the SAME endpoints with its agent-host API key — see
+ * {@link hostOrTenantAuth} — so both executors close the loop through one surface
+ * rather than the host needing a parallel set of routes.
+ *
+ * `/claim` is the exception and stays browser-only: `browser` is the one PULL
+ * lane (SwimlaneCoordinator.dispatchOne leaves those `pending` to be claimed and
+ * PUSHES every other runtime through the relay), so a host claiming here would be
+ * stealing the browser worker's queue rather than finding its own.
  */
 import { Hono } from 'hono';
 import { and, asc, eq } from 'drizzle-orm';
-import { authMiddleware } from '../middleware/authMiddleware';
+import { hostOrTenantAuth, requestAgentHostId } from '../middleware/hostOrTenantAuth';
 import { agentDispatches } from '../../infrastructure/database/schema';
 import { SwimlaneCoordinator } from '../../application/swimlane/SwimlaneCoordinator';
 import { DrizzleCoordinatorStore } from '../../application/swimlane/DrizzleCoordinatorStore';
@@ -39,7 +47,7 @@ type RuntimeEnv = {
 
 export function createAgentRuntimeRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
-  router.use('*', authMiddleware);
+  router.use('*', hostOrTenantAuth(db));
 
   const mkCoordinator = (env: unknown): SwimlaneCoordinator =>
     new SwimlaneCoordinator(
@@ -49,9 +57,15 @@ export function createAgentRuntimeRoutes(db: Db): Hono<HonoEnv> {
       new DrizzlePrdEnsurer(db, env as Env),
     );
 
-  // Claim the next pending browser dispatch for this tenant.
+  // Claim the next pending browser dispatch for this tenant. Host work is pushed
+  // to the host over the relay, never queued for pull, so a host key here is a
+  // caller mistake rather than an empty queue — say so instead of handing it the
+  // browser worker's next dispatch.
   router.post('/claim', async (c) => {
     const tenantId = c.get('tenantId') as number;
+    if (requestAgentHostId(c) != null) {
+      return c.json({ error: 'Host dispatches are pushed over the relay, not claimed' }, 409);
+    }
 
     const [candidate] = await db
       .select()

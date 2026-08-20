@@ -1,16 +1,16 @@
 /**
- * PRD versioning, generation & audit routes. Canonical mount: /api/specs/:id/*;
- * legacy compatibility mount: /api/prd/specs/:id/*.
+ * PRD versioning, generation & audit routes. Mounted at /api/specs/:id/* — the
+ * one spec namespace, alongside specRoutes' CRUD on the same prefix.
  *
  * Sibling to specRoutes.ts (the spec CRUD). Adds the auditable-contract
  * capabilities on top of an existing spec:
  *
- * POST /api/prd/specs/:id/versions   Snapshot current spec → spec_versions (monotonic, unfrozen)
- * POST /api/prd/specs/:id/freeze     Freeze the latest version (freeze-on-execute immutability)
- * GET  /api/prd/specs/:id/versions   List versions for a spec
- * POST /api/prd/specs/:id/generate   Create a generate-PRD planning workflow + mark spec origin
- * GET  /api/prd/specs/:id/audit      List audit records (+ ?agentRole= & ?swimlane= filters)
- * POST /api/prd/specs/:id/audit      Append an audit record
+ * POST /api/specs/:id/versions   Snapshot current spec → spec_versions (monotonic, unfrozen)
+ * POST /api/specs/:id/freeze     Freeze the latest version (freeze-on-execute immutability)
+ * GET  /api/specs/:id/versions   List versions for a spec
+ * POST /api/specs/:id/generate   Create a generate-PRD planning workflow + mark spec origin
+ * GET  /api/specs/:id/audit      List audit records (+ ?agentRole= & ?swimlane= filters)
+ * POST /api/specs/:id/audit      Append an audit record
  *
  * All routes are tenant-scoped via authMiddleware. JSON payload columns are
  * stored as text → JSON.stringify on write.
@@ -36,9 +36,9 @@ import {
 import { buildPrdWorkflowSpec } from '../../application/prd/generatePrd';
 import { buildSpecAuditRecord } from '../../application/prd/audit';
 
-export function createPrdRoutes(db: Db, specPrefix = '/specs'): Hono<HonoEnv> {
+export function createPrdRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
-  const specRoute = (suffix: string) => `${specPrefix}/:id/${suffix}`;
+  const specRoute = (suffix: string) => `/:id/${suffix}`;
 
   router.use('*', authMiddleware);
 
@@ -51,7 +51,7 @@ export function createPrdRoutes(db: Db, specPrefix = '/specs'): Hono<HonoEnv> {
     return row ?? null;
   }
 
-  // POST /api/prd/specs/:id/versions — snapshot current spec into spec_versions
+  // POST /api/specs/:id/versions — snapshot current spec into spec_versions
   router.post(specRoute('versions'), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const segmentId = (c.get('segmentId') as string | undefined) ?? null;
@@ -87,7 +87,7 @@ export function createPrdRoutes(db: Db, specPrefix = '/specs'): Hono<HonoEnv> {
     return c.json(row, 201);
   });
 
-  // POST /api/prd/specs/:id/freeze — freeze the latest version
+  // POST /api/specs/:id/freeze — freeze the latest version
   router.post(specRoute('freeze'), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const specId = c.req.param('id')!;
@@ -124,7 +124,7 @@ export function createPrdRoutes(db: Db, specPrefix = '/specs'): Hono<HonoEnv> {
     return c.json(row);
   });
 
-  // GET /api/prd/specs/:id/versions — list versions (newest first)
+  // GET /api/specs/:id/versions — list versions (newest first)
   router.get(specRoute('versions'), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const specId = c.req.param('id')!;
@@ -141,7 +141,7 @@ export function createPrdRoutes(db: Db, specPrefix = '/specs'): Hono<HonoEnv> {
     return c.json({ versions: rows });
   });
 
-  // POST /api/prd/specs/:id/generate — create a generate-PRD planning workflow
+  // POST /api/specs/:id/generate — create a generate-PRD planning workflow
   router.post(specRoute('generate'), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const segmentId = (c.get('segmentId') as string | undefined) ?? null;
@@ -210,7 +210,7 @@ export function createPrdRoutes(db: Db, specPrefix = '/specs'): Hono<HonoEnv> {
     return c.json({ workflow, workflowSpec, specVersion }, 201);
   });
 
-  // GET /api/prd/specs/:id/audit — list audit records (+ filters)
+  // GET /api/specs/:id/audit — list audit records (+ filters)
   router.get(specRoute('audit'), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const specId = c.req.param('id')!;
@@ -233,7 +233,7 @@ export function createPrdRoutes(db: Db, specPrefix = '/specs'): Hono<HonoEnv> {
     return c.json({ records: rows });
   });
 
-  // POST /api/prd/specs/:id/audit — append an audit record
+  // POST /api/specs/:id/audit — append an audit record
   router.post(specRoute('audit'), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const segmentId = (c.get('segmentId') as string | undefined) ?? null;

@@ -99,6 +99,7 @@ import { GuestPromptService } from './application/marketing/GuestPromptService';
 import { PlatformBroadcastService } from './application/marketing/PlatformBroadcastService';
 import { MarketingService } from './application/marketing/MarketingService';
 import { createAgentHostRoutes }        from './presentation/routes/agentHostRoutes';
+import { AGENT_HOST_BASE_PATH, LEGACY_AGENT_HOST_PATHS, legacyAliasNotice } from './presentation/middleware/legacyAlias';
 import { AgentHostRepository }          from './infrastructure/repositories/AgentHostRepository';
 import { IAgentHostRepository }         from './domain/agentHost/IAgentHostRepository';
 import { createSkillAssignmentRoutes } from './presentation/routes/skillAssignmentRoutes';
@@ -252,7 +253,7 @@ import {
   OPENAPI_TITLE,
   OPENAPI_DESCRIPTION,
 } from './openapi/schema';
-import { evaluateCronGate, openCronTick } from './application/runtime/cronWorkSignal';
+import { evaluateCronGate, openCronTick, publishNextDue } from './application/runtime/cronWorkSignal';
 import { createTickDispatchBudget } from './application/runtime/tickDispatchBudget';
 import { applyCronControls, readCronControls } from './application/runtime/cronControls';
 // Every scheduled sweep is declared ONCE in cronSweeps.ts and invoked through the
@@ -703,17 +704,16 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/sso-connections', createSsoAdminRoutes(db));
 
   // BuilderForce Agents instances + skill assignments (tenant JWT inside each router)
-  app.route('/api/agent-hosts',            createAgentHostRoutes(db, agentHostService));
-  // @deprecated back-compat aliases for the old CoderClaw "claw" routes. Field agents
-  // built before the BuilderForce Agents rebrand still call /api/claws. Remove once the
-  // deployed agent fleet has upgraded to the /api/agent-hosts paths (see Gap Register).
-  app.route('/api/claws',                  createAgentHostRoutes(db, agentHostService));
-  // @deprecated back-compat alias for the agent-runtime's relay client, which still
-  // targets /api/agentNodes/:id/{upstream,heartbeat,assignment-context}. Without this
-  // the periodic heartbeat 404s and lastSeenAt never refreshes — which the online-status
-  // rule (domain/agentHost/onlineStatus.ts) reads as "offline after 15 min". Remove once
-  // the runtime is repointed to /api/agent-hosts (see Gap Register).
-  app.route('/api/agentNodes',             createAgentHostRoutes(db, agentHostService));
+  app.route(AGENT_HOST_BASE_PATH, createAgentHostRoutes(db, agentHostService));
+  // The pre-rebrand aliases, mounted from ONE list rather than as three hand-copied
+  // `app.route` lines that could drift apart. Every alias serves the SAME router and
+  // stamps `Deprecation` + `Link: rel="successor-version"`, so a fleet still calling an
+  // old path says so in its own response headers and the aliases can be retired on
+  // evidence rather than on a guess. See {@link legacyAliasNotice}.
+  for (const alias of LEGACY_AGENT_HOST_PATHS) {
+    app.use(`${alias}/*`, legacyAliasNotice(AGENT_HOST_BASE_PATH));
+    app.route(alias, createAgentHostRoutes(db, agentHostService));
+  }
   app.route('/api/skill-assignments', createSkillAssignmentRoutes(db));
   app.route('/api/artifact-assignments', createArtifactAssignmentRoutes(db));
   app.route('/api/project-agents', createProjectAgentRoutes(db));
@@ -807,9 +807,11 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/audit',    createAuditRoutes(auditService));
   app.route('/api/admin',    createAdminRoutes());
   app.route('/api/specs',    createSpecRoutes(db));
-  // Canonical spec subresources. The legacy /api/prd/specs/* mount below stays as
-  // a compatibility entry point while canvas and extension clients migrate.
-  app.route('/api/specs',    createPrdRoutes(db, ''));
+  // Spec subresources (versions / freeze / generate / audit). `/api/specs` is the
+  // ONE namespace: the parallel `/api/prd/specs/*` mount is gone — no client in
+  // the repo ever called it, and two paths for one resource is what made the
+  // intended namespace a question in the first place.
+  app.route('/api/specs',    createPrdRoutes(db));
   app.route('/api/workflows', createWorkflowRoutes(db));
   app.route('/api/workflow-definitions', createWorkflowDefinitionRoutes(db));
   app.route('/api/creation-sessions', createCreationSessionRoutes(db));
@@ -972,7 +974,6 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // Product Quality / error observability (tenant JWT) — error groups + fix dispatch.
   app.route('/api/quality',           createQualityRoutes(db, taskService, runtimeService));
   app.route('/api/feedback',          createFeedbackRoutes(db));
-  app.route('/api/prd',               createPrdRoutes(db));
   app.route('/api/repos',             createRepoRoutes(db));
   app.route('/api/agent-runtime',     createAgentRuntimeRoutes(db));
   app.route('/api/git-proxy',         createGitProxyRoutes(db));
@@ -1096,6 +1097,13 @@ export default {
       const controls = await readCronControls(env);
       const sweeps = sweepsForCadence(applyCronControls(CRON_SWEEPS, controls), cadence);
       if (sweeps.length === 0) return;
+
+      // This tick is already talking to Postgres, so re-publishing the earliest armed
+      // `next_run_at` to KV costs one extra statement and buys the NEXT idle tick the
+      // ability to wake exactly when a schedule comes due instead of waiting out the
+      // floor. Deliberately after the sweeps have been selected but scheduled via
+      // waitUntil so it never delays dispatch, and best-effort so it cannot fail a tick.
+      ctx.waitUntil(publishNextDue(env, Date.now()).then(() => undefined));
 
       // ONE per-tenant dispatch ceiling for this whole tick, shared by every sweep
       // that can start a billable run. Each sweep used to enforce its own private
