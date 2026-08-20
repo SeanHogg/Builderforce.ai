@@ -221,30 +221,67 @@ function targetTables(statement) {
  */
 const SCOPED = /scopedToTenant|scopedToNullableTenant|scopedToSegment|acrossTenants|tenantId|tenant_id/;
 
-/**
- * Conditions are very often accumulated into a local array and spread into the
- * `where` (`.where(and(...conds))`), which puts the tenant predicate OUTSIDE the
- * statement text. Collect those spread identifiers so the caller can widen the
- * search to where the array is built.
- */
-function spreadIdentifiers(statement) {
-  const ids = new Set();
-  const re = /\.\s*where\s*\([^)]*?\.\.\.\s*(\w+)/gs;
+/** The text inside every `.where( … )` in `statement`, paren-balanced. */
+function whereArguments(statement) {
+  const out = [];
+  const head = /\.\s*where\s*\(/g;
   let m;
-  while ((m = re.exec(statement)) !== null) ids.add(m[1]);
-  // Also catch `and(...conds)` nested a level deeper than the naive [^)]* above.
-  const re2 = /\.\.\.\s*(\w+)\s*\)/g;
-  while ((m = re2.exec(statement)) !== null) ids.add(m[1]);
+  while ((m = head.exec(statement)) !== null) {
+    let depth = 1;
+    let i = head.lastIndex;
+    for (; i < statement.length && depth > 0; i++) {
+      const ch = statement[i];
+      if (ch === '(') depth++;
+      else if (ch === ')') depth--;
+    }
+    out.push(statement.slice(head.lastIndex, i - 1));
+  }
+  return out;
+}
+
+/**
+ * Identifiers the `where` predicate is BUILT FROM but which are declared outside
+ * the statement, so the tenant predicate is not in the statement text.
+ *
+ * Two shapes, and they are the same fact written differently:
+ *
+ *   const conds = [eq(t.tenantId, x)];  … .where(and(...conds))     // spread array
+ *   const scope = scopedToTenant(t, x); … .where(and(scope, more))  // hoisted SQL
+ *
+ * Only the first used to be recognised, so hoisting a predicate — which is what
+ * the DRY rule asks for when three statements share one scope — read as unscoped
+ * and could only be silenced by re-typing the predicate at all three call sites.
+ * Both are admitted on the same terms: the declaration has to carry a tenant
+ * predicate of its own (see {@link identCarriesTenant}).
+ *
+ * Scope is deliberately the `where` arguments and not the whole statement, so a
+ * `.set({ … })` payload or a `.from()` alias can never stand in for a predicate.
+ */
+function predicateIdentifiers(statement) {
+  const ids = new Set();
+  for (const arg of whereArguments(statement)) {
+    const re = /(?:\.\.\.\s*)?\b([A-Za-z_$][\w$]*)\b/g;
+    let m;
+    while ((m = re.exec(arg)) !== null) ids.add(m[1]);
+  }
+  // `and(...conds)` can also be assembled outside the `where` and passed in whole.
+  const spread = /\.\.\.\s*(\w+)\s*\)/g;
+  let m;
+  while ((m = spread.exec(statement)) !== null) ids.add(m[1]);
   return ids;
 }
 
 /**
- * Does `ident` ever receive a tenant predicate in this file? Matches the two ways
- * a conditions array gets built: an initialiser (`const conds = [eq(t.tenantId, …)]`)
- * and a push (`conds.push(eq(t.tenantId, …))`).
+ * Does `ident` ever receive a tenant predicate in this file? Matches the ways a
+ * predicate gets built before the query: an initialiser (`const conds =
+ * [eq(t.tenantId, …)]`, `const scope = scopedToTenant(t, …)`) and a push
+ * (`conds.push(eq(t.tenantId, …))`).
+ *
+ * The initialiser must MENTION tenancy, which is the whole strictness of this
+ * check — an identifier that merely exists proves nothing.
  */
-function arrayCarriesTenant(text, ident) {
-  const init = new RegExp(`(?:const|let|var)\\s+${ident}\\b[^;]*tenantId`, 's');
+function identCarriesTenant(text, ident) {
+  const init = new RegExp(`(?:const|let|var)\\s+${ident}\\b[^;]*(?:${SCOPED.source})`, 's');
   const push = new RegExp(`\\b${ident}\\s*\\.\\s*push\\s*\\([^;]*tenantId`, 's');
   return init.test(text) || push.test(text);
 }
@@ -259,9 +296,10 @@ function violationsIn(source) {
     const targets = [...targetTables(statement)].filter((t) => TENANT_TABLES.has(t));
     if (targets.length === 0) continue;
     if (SCOPED.test(statement)) continue;
-    // The predicate may live in a conditions array built just above the query.
-    const spreads = [...spreadIdentifiers(statement)];
-    if (spreads.some((id) => arrayCarriesTenant(text, id))) continue;
+    // The predicate may be hoisted just above the query — an array that gets
+    // spread in, or a single `SQL` const shared by several statements.
+    const hoisted = [...predicateIdentifiers(statement)];
+    if (hoisted.some((id) => identCarriesTenant(text, id))) continue;
     const line = text.slice(0, m.index).split('\n').length;
     found.push({ line, tables: targets });
   }
