@@ -1,4 +1,44 @@
-## ✅ RESOLVED 2026-08-19 — One door for both executors: the agent-runtime and git-proxy seams stop being browser-only
+## ✅ RESOLVED 2026-08-19 — The publish blocker was stale: every package the residual named is already on the registry
+
+The "Deferred residuals" bullet claimed two studio packages needed (re)publishing and that
+builderforce-memory's `/install` required a local checkout because `@builderforce/memory-mcp` and
+`@builderforce/memory` were unpublished. Checked against the registry rather than against the
+roadmap, and none of it holds:
+
+| package | registry | local checkout |
+| --- | --- | --- |
+| `@seanhogg/builderforce-studio` | 2026.7.21 | 2026.7.21 |
+| `@seanhogg/builderforce-studio-embedded` | 2026.6.29 | 2026.6.29 |
+| `@seanhogg/builderforce-memory` | 2026.7.14 | 2026.7.14 |
+| `@seanhogg/builderforce-memory-mcp` | 2026.7.14 | 2026.7.14 |
+| `@seanhogg/builderforce-memory-engine` | 2026.7.14 | 2026.7.14 |
+
+Every one is published at **exactly** the version in the working tree, so there is nothing to
+(re)publish and no version drift to close. The `@builderforce/*` names in the entry were never the
+package names — the scope is `@seanhogg`, which is what the `/install` skill actually invokes
+(`npx -y -p @seanhogg/builderforce-memory-mcp builderforce-memory-install`). `npx` has worked
+anywhere since 2026-07-14; the "requires a local checkout" claim described a state that had already
+been fixed and never got re-measured.
+
+The dependent claim went with it: `/install`'s self-driving combo was said to be blocked on those
+publishes. It is not. On this machine the hooks half is already wired — `~/.claude/settings.json`
+carries `SessionStart`, `PreCompact`, `UserPromptSubmit` and `Stop` entries referencing
+builderforce-memory, and the `builderforce-memory` + `install` skills are both present. The only
+piece not active is the MCP server registration: `~/.claude.json` registers `neon` for
+`C:/code/agentic` and no memory server anywhere. That is one `claude mcp add` (or a `/install` run)
+against an ALREADY-PUBLISHED package — a local harness config change on the operator's machine, not
+a repo change and not a blocker.
+
+**What this leaves:** credential rotation is the only residual still open, and it is blocked on the
+live provider consoles.
+
+**The lesson worth keeping:** three of the nine residuals in that bullet were already fixed and two
+more were never true. A register entry that is never re-measured stops being a record of work and
+becomes a record of an old belief.
+
+---
+
+## ✅ RESOLVED 2026-08-19 — One creative-output table, and a capability marking that finally refuses
 
 ## ✅ RESOLVED 2026-08-19 — A campaign can be an SMS, and a scheduled one actually sends
 
@@ -68,6 +108,76 @@ Members with no number, or who replied STOP, are reported as `unreachable` at st
 rather than folded into `suppressed`: "we have no number for them" and "they asked us to
 stop" are different facts and a list owner can act on the first.
 
+
+Three Consolidated Gap Register entries: "`media-kinds.ts` and `CREATIVE_CAPABILITIES` are
+two answers to one question", "The creative capability list advertises output formats the
+generators do not emit", and "The canvas capability gate is declared and enforces nothing".
+
+### One table for what a kind produces and where it can go
+
+`CREATIVE_CAPABILITIES` carried a flat `outputs: string[]`; hired.video's
+`shared/media-kinds.ts` carried `OUTPUT_PROFILES` (container/mime/pro-gate) and
+`PUBLISH_DESTINATIONS`; and `creativeRoutes.ts` carried a THIRD table, `KINDS`, declaring
+the extension and mime each generator writes. Three answers to one question, two of which
+nothing validated.
+
+They are now one. Each capability declares `outputProfiles` — format label, extension, mime
+type, `pro` flag and, new, a **`producer`**: which machine actually emits it
+(`creativeRoutes`, `gameTarget`, `canvasExports`, `exportsApi`, `studioModel`). A format
+cannot be added without naming the machine that produces it, and `creativeCapabilities.test.ts`
+asserts that every `creativeRoutes` profile matches that route's own table, kind for kind.
+`publishDestinations` is merged in the same shape, so a publish picker cannot offer a
+destination with no adapter behind it. `outputs` is gone as a stored field and returns as
+`creativeOutputFormats(kind)`, derived — a label list beside the profiles is the second
+answer this merge exists to remove.
+
+### The list no longer advertises what nothing emits
+
+Verified against the generators and narrowed:
+
+* **`model3d`** loses OBJ, STEP and GLB. `creativeRoutes` emits ASCII STL; the
+  OBJ/GLTF/GLB/STEP code beside it is an IMPORT reader.
+* **`podcast`** loses MP3, M4A, OGG, WAV and MP4. Its generator emits a Markdown script and
+  says so in its own comment. Restoring one is an audio-render job, not a list edit.
+* **`cad`** loses SVG and PDF (the route emits DXF); **`resume`** loses HTML; **`comic`**
+  loses CBZ; **`animation`** loses APNG and animated WebP.
+
+The entry recorded two blockers and the `producer` field resolves both. The
+`image`/`comic`/`animation` sets could not be pinned without a live studio provider — so
+they are now labelled `studioModel`, which says exactly that: these are the containers the
+canvas can receive and store, and the connected model decides. And "is this list a promise
+or a roadmap" stops being a product call once a format must name its producer: a roadmap
+item has none, so it cannot be listed. `game` was already honest and is unchanged.
+
+### The capability marking now refuses
+
+`creationObjectRegistry` stamped a `capability` onto six kinds and
+`availableCreationObjects` filtered by it — and its only caller, across `frontend/`, `api/`
+and `packages/`, was its own unit test. The palette rendered from `CREATION_PALETTE_GROUPS`,
+so a card marked as needing an entitlement was placeable by anybody.
+
+* **Five of the six markings were deleted rather than wired.** `integrations`, `agents`,
+  `models`, `voice` and `video` named a product AREA — which is what the palette `group`
+  already says — and no plan feature had ever been decided for any of them. Assigning one
+  would have been inventing a paywall; leaving them would have left five inert labels.
+* **`evermind` is now a real entitlement.** `evermindTraining` joins `PlanLimits` (any paid
+  plan), `CANVAS_CAPABILITY_FEATURES` maps the capability id to it, and
+  `resolveCanvasCapabilities` resolves the whole set in ONE plan read rather than one per
+  capability.
+* **`GET /api/tenants/:id/canvas-capabilities`** serves the resolved ids — the answer, never
+  the inputs, so no plan or superadmin bit crosses the wire and no second evaluator exists
+  in the browser. Cached 60s, keyed by user as well as tenant because a superadmin bypasses
+  every gate and their set must never be served to a member.
+* **`creationPaletteGroupsFor(signedIn, capabilities)`** now derives from
+  `availableCreationObjects`, so the guest rule and the entitlement rule are asked by ONE
+  predicate instead of two functions that had already diverged. Both palette call sites —
+  the object picker and the canvas rail — read it through `useCanvasCapabilities`, which
+  defaults to the empty set while loading, when signed out, and on a failed fetch: the worst
+  a network problem can do is hide a card, never unlock one.
+* Covered by tests that fail if the palette stops asking, rather than going quietly inert
+  the way the original did.
+
+## ✅ RESOLVED 2026-08-19 — One door for both executors: the agent-runtime and git-proxy seams stop being browser-only
 
 Six of the nine "Deferred residuals" (§ Drizzle single-access-layer residuals) closed together,
 because four of them were the same root cause: **the same question was being answered in four
