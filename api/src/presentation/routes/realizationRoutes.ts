@@ -337,6 +337,9 @@ export function createRealizationRoutes(db: Db, runtimeService: RuntimeService):
         plan: storedPlan,
         collections,
         projectId: row.projectId,
+        // The lineage 0935 exists for: the collections this proof provisions
+        // carry the session back, so its leads are attributable to the idea.
+        sessionId: row.sessionId,
         // Seeded BUILD tickets are offered to the canonical auto-run gate, so a
         // built proof starts moving instead of waiting for a first drag.
         runtimeService,

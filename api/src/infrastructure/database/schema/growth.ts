@@ -129,6 +129,19 @@ export const siteCollections = pgTable('site_collections', {
    * would make it ours.
    */
   raisesTickets:        boolean('raises_tickets').notNull().default(false),
+  /**
+   * The Creation Session whose idea this collection was provisioned for (0935).
+   *
+   * The join that "idea → delivered outcome" never had: the process half lives in
+   * `creation_outcome_events` keyed by session, the outcome half in `metric_facts`
+   * keyed by tenant, and before this they shared nothing — so "this artifact
+   * produced those leads" was not a query anybody could write.
+   *
+   * NULL for a collection somebody created by hand, which is the honest reading:
+   * nobody knows which idea it belongs to, and guessing the site's most recent
+   * session would attribute a stranger's submissions to whichever board was open.
+   */
+  originSessionId:      uuid('origin_session_id'),
   recordCount:          integer('record_count').notNull().default(0),
   createdAt:            timestamp('created_at').notNull().defaultNow(),
   updatedAt:            timestamp('updated_at').notNull().defaultNow(),
@@ -342,6 +355,21 @@ export const marketingAudienceMembers = pgTable('marketing_audience_members', {
   email:      varchar('email', { length: 320 }).notNull(),
   name:       varchar('name', { length: 255 }).notNull().default(''),
   status:     varchar('status', { length: 16 }).notNull().default('subscribed'),
+  /**
+   * E.164 mobile number, for `channel='sms'` campaigns (0940).
+   *
+   * An ATTRIBUTE of the member, not a second identity: the person is still keyed
+   * by email, so the same human cannot appear twice in one audience and
+   * `uq_marketing_sends_campaign_email` keeps meaning "one message per person".
+   */
+  phone:      varchar('phone', { length: 32 }),
+  /**
+   * SMS consent, tracked separately from `status` because consent is PER
+   * CHANNEL. A carrier STOP withdraws permission to text somebody and says
+   * nothing about the newsletter they subscribed to; one column for both would
+   * silently unsubscribe them from the other.
+   */
+  phoneStatus: varchar('phone_status', { length: 16 }).notNull().default('subscribed'),
   source:     varchar('source', { length: 32 }).notNull().default('manual'),
   attributes: jsonb('attributes').notNull().default({}),
   createdAt:  timestamp('created_at').notNull().defaultNow(),
@@ -349,6 +377,9 @@ export const marketingAudienceMembers = pgTable('marketing_audience_members', {
 }, (t) => [
   uniqueIndex('uq_marketing_audience_member').on(t.audienceId, t.email),
   index('idx_marketing_audience_members_tenant').on(t.tenantId),
+  // Serves the SMS materialisation — "every member of this audience with a
+  // usable number" — which the email path's index cannot answer.
+  index('idx_marketing_audience_members_phone').on(t.audienceId, t.phoneStatus),
 ]);
 
 /** Tenant-wide do-not-contact, checked at send time regardless of audience. */
@@ -439,6 +470,19 @@ export const marketingCampaigns = pgTable('marketing_campaigns', {
    * precondition, so "is this campaign sendable?" would otherwise be unwriteable.
    */
   transport:        varchar('transport', { length: 16 }).notNull().default('platform'),
+  /**
+   * WHAT KIND of message this is — `email` or `sms` (0940). Two columns rather
+   * than one, because `transport` answers "which pipe" and this answers a
+   * different set of facts: which recipient field is addressed, which body
+   * column is sent, whether the open pixel and click rewrite mean anything, and
+   * who reports "delivered". Folding them together would make "is this campaign
+   * sendable?" a cross-product instead of two checks.
+   */
+  channel:          varchar('channel', { length: 16 }).notNull().default('email'),
+  /** The E.164 number an SMS campaign sends FROM. Denormalized for the same
+   *  reason `from_name` is — it is a HISTORICAL fact about what recipients saw,
+   *  and releasing the Twilio number later must not rewrite it. */
+  fromNumber:       varchar('from_number', { length: 32 }),
   /** transport='mailbox' — the tenant's own connected Microsoft 365 / Gmail account. */
   mailboxConnectionId: integer('mailbox_connection_id').references(() => mailboxConnections.id, { onDelete: 'set null' }),
   /** transport='sendgrid' — the tenant's Twilio SendGrid connector connection. */
@@ -451,7 +495,14 @@ export const marketingCampaigns = pgTable('marketing_campaigns', {
   name:             varchar('name', { length: 255 }).notNull(),
   subject:          varchar('subject', { length: 500 }).notNull().default(''),
   bodyHtml:         text('body_html').notNull().default(''),
+  /** The SMS body. Its own column rather than a strip of `body_html`, because an
+   *  author composing 160 delivered characters is not writing a fallback for
+   *  something else — deriving it would be lossy in the direction that matters. */
+  bodyText:         text('body_text').notNull().default(''),
   status:           varchar('status', { length: 16 }).notNull().default('draft'),
+  /** When a DRAFT should start sending itself. Read by `startDueCampaigns` on the
+   *  cron sweep, which re-checks every send precondition at the moment it starts
+   *  rather than trusting the ones that held when it was scheduled. */
   scheduledAt:      timestamp('scheduled_at'),
   startedAt:        timestamp('started_at'),
   completedAt:      timestamp('completed_at'),
@@ -468,6 +519,9 @@ export const marketingCampaigns = pgTable('marketing_campaigns', {
   updatedAt:        timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
   index('idx_marketing_campaigns_tenant_status').on(t.tenantId, t.status, t.updatedAt),
+  // The scheduled sweep asks exactly one question — "which drafts are due?" —
+  // and asked it of an index that did not exist, because nothing asked it at all.
+  index('idx_marketing_campaigns_due').on(t.scheduledAt),
 ]);
 
 /** One row per (campaign, recipient). The unique index is what makes a resumed
@@ -477,8 +531,23 @@ export const marketingCampaignSends = pgTable('marketing_campaign_sends', {
   campaignId: integer('campaign_id').notNull().references(() => marketingCampaigns.id, { onDelete: 'cascade' }),
   tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   email:      varchar('email', { length: 320 }).notNull(),
+  /** The number actually messaged, for `channel='sms'`. Recorded per send rather
+   *  than read back off the member: someone who changes their number later must
+   *  not make this ledger describe a message that went somewhere else. */
+  phone:      varchar('phone', { length: 32 }),
   status:     varchar('status', { length: 16 }).notNull().default('queued'),
   error:      text('error'),
+  /** The carrier's own id for the message — what a support conversation with
+   *  Twilio is actually conducted in. */
+  externalMessageId: varchar('external_message_id', { length: 64 }),
+  /**
+   * The last state the CARRIER reported: queued | sent | delivered | undelivered
+   * | failed. Distinct from `status`, which is our send-loop state. "We handed it
+   * over" and "it arrived" are different claims and only the first is ours to
+   * make — for email the second is unknowable, which is why this stays null there.
+   */
+  deliveryStatus:    varchar('delivery_status', { length: 24 }),
+  deliveredAt:       timestamp('delivered_at'),
   /** Opaque per-recipient token behind the open pixel, click links and the
    *  one-click unsubscribe. Unique so a token resolves to exactly one send. */
   trackToken: varchar('track_token', { length: 64 }).notNull(),

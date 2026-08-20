@@ -66,7 +66,7 @@ export type DomainManifest = {
 };
 
 export const DOMAIN_MANIFEST: Readonly<Record<Domain, DomainManifest>> = {
-  growth:       { domain: 'growth',       seat: 'CMO',        rootKind: 'campaign',         kinds: ['campaign', 'landing_page', 'blog_post', 'lead', 'experiment'], metrics: ['growth.leads', 'growth.conversions', 'growth.spend'], rung: 1 },
+  growth:       { domain: 'growth',       seat: 'CMO',        rootKind: 'campaign',         kinds: ['campaign', 'landing_page', 'blog_post', 'lead', 'experiment', 'site'], metrics: ['growth.leads', 'growth.conversions', 'growth.spend'], rung: 1 },
   delivery:     { domain: 'delivery',     seat: 'Manager',    rootKind: 'work_item',        kinds: ['work_item', 'project', 'release', 'sprint'],                  metrics: ['delivery.throughput', 'delivery.cycle_time_hours', 'delivery.wip'], rung: 0 },
   agents:       { domain: 'agents',       seat: 'Platform',   rootKind: 'agent',            kinds: ['agent', 'run', 'workflow'],                                   metrics: ['agents.runs', 'agents.tokens', 'agents.cost_cents'], rung: 0 },
   hiring:       { domain: 'hiring',       seat: 'Recruiter',  rootKind: 'job_posting',      kinds: ['job_posting', 'application', 'interview', 'placement'],       metrics: ['hiring.applications', 'hiring.time_to_hire_days', 'hiring.offer_rate'], rung: 2 },

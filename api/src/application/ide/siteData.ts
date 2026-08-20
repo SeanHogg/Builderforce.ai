@@ -307,6 +307,14 @@ export async function createCollection(
   siteId: number,
   projectId: number,
   rawName: string,
+  /**
+   * The Creation Session whose idea this collection is being provisioned for
+   * (0935). Supplied by the realization layer, which is the one path that
+   * genuinely knows; omitted everywhere else, because guessing the site's most
+   * recent session would attribute a stranger's submissions to whichever board
+   * happened to be open.
+   */
+  originSessionId?: string | null,
 ): Promise<CreateCollectionResult> {
   const name = normalizeCollectionName(rawName);
   if (!name) {
@@ -321,7 +329,7 @@ export async function createCollection(
 
   const [row] = await db
     .insert(siteCollections)
-    .values({ siteId, tenantId, projectId, name })
+    .values({ siteId, tenantId, projectId, name, originSessionId: originSessionId ?? null })
     .returning({
       id: siteCollections.id,
       name: siteCollections.name,

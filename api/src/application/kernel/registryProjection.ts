@@ -58,6 +58,18 @@ type Projection = {
 
 const PLATFORM_PROJECTIONS: readonly Projection[] = [
   { table: 'projects', kind: 'project', domain: 'delivery', idColumn: 'id', titleColumn: 'name' },
+  /**
+   * A PUBLISHED SITE, and the reason it is here rather than left to the entity
+   * catalog: it is the ARTIFACT a founder's own customers arrive on, and
+   * `growthRollup` attributes every lead and conversion to this object so
+   * "what did the thing I built actually do for anyone" is a query rather than
+   * two numbers that never meet.
+   *
+   * Its own kind and not `landing_page`: `(tenant_id, kind, ref_id)` is the
+   * registry's uniqueness, both tables key on a serial int, and sharing a kind
+   * would make `landing_pages` row 7 and `project_sites` row 7 the same object.
+   */
+  { table: 'project_sites', kind: 'site', domain: 'growth', idColumn: 'id', titleColumn: 'subdomain' },
   { table: 'tasks', kind: 'work_item', domain: 'delivery', idColumn: 'id', titleColumn: 'title' },
   { table: 'work_items', kind: 'work_item', domain: 'delivery', idColumn: 'id', titleColumn: 'title' },
   { table: 'creation_sessions', kind: 'creation_session', domain: 'canvas', idColumn: 'id', titleColumn: 'title' },

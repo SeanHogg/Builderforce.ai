@@ -182,11 +182,17 @@ export const supportTickets = pgTable('support_tickets', {
   status:      varchar('status', { length: 16 }).notNull().default('open'),
   customerRef: varchar('customer_ref', { length: 255 }),
   openedAt:    timestamp('opened_at').notNull().defaultNow(),
+  /** When the help desk recorded the FIRST agent reply (0941) — the provider's own
+   *  clock, never our poll time, because it is what the customer experienced.
+   *  NULL = never answered, or the provider does not report one; excluded from
+   *  `support.first_response_min` rather than counted as an instant answer. */
+  firstRespondedAt: timestamp('first_responded_at'),
   resolvedAt:  timestamp('resolved_at'),
   createdAt:   timestamp('created_at').notNull().defaultNow(),
   updatedAt:   timestamp('updated_at').notNull().defaultNow(),
 }, (t) => ({
   byOpened: index('idx_support_tickets_opened').on(t.tenantId, t.openedAt),
+  byFirstResponse: index('idx_support_tickets_first_response').on(t.tenantId, t.firstRespondedAt),
   byBug:    index('idx_support_tickets_bug').on(t.tenantId, t.isBug),
   uqExternal: uniqueIndex('uq_support_tickets_external').on(t.tenantId, t.source, t.externalRef),
 }));

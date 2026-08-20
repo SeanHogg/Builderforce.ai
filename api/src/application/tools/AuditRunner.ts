@@ -31,6 +31,7 @@ import type { ToolService, SavedToolRun } from './ToolService';
 import type { TaskService } from '../task/TaskService';
 import { getSystemAudit } from './systemAudits';
 import type { AuditScanContext, ScannedRepo } from './auditScanners';
+import { isControlImplemented } from '../governance/controlStatus';
 
 export interface RunAuditArgs {
   tenantId: number;
@@ -134,7 +135,7 @@ export function signalsFromPaths(paths: string[]): Omit<ScannedRepo, 'provider' 
 }
 
 /** Statuses in the governance SOC 2 tracker that count as "implemented". */
-const IMPLEMENTED_STATUSES = ['implemented', 'complete', 'completed', 'operating', 'done', 'passed', 'pass'];
+
 
 export class AuditRunner {
   constructor(
@@ -191,7 +192,7 @@ export class AuditRunner {
     const rows = await this.db.select({ status: socControls.status }).from(socControls)
       .where(eq(socControls.tenantId, tenantId));
     if (rows.length === 0) return undefined;
-    const implemented = rows.filter((r) => IMPLEMENTED_STATUSES.includes((r.status ?? '').toLowerCase())).length;
+    const implemented = rows.filter((r) => isControlImplemented(r.status)).length;
     return { total: rows.length, implemented };
   }
 

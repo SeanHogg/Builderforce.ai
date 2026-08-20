@@ -93,10 +93,21 @@ export interface ItsmSupportRow {
   priority: string;
   status: string;
   customerRef: string | null;
+  /** The help desk's own first-reply stamp. NULL when it does not report one. */
+  firstRespondedAt: Date | null;
   resolvedAt: Date | null;
 }
 
 const str = (v: unknown): string | null => (typeof v === 'string' && v ? v : null);
+
+/** A provider timestamp, or null. An unparseable value is null rather than an
+ *  Invalid Date, which Postgres would reject and take the whole page down with. */
+const parseDate = (v: unknown): Date | null => {
+  const raw = str(v);
+  if (!raw) return null;
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
 
 /**
  * Pure: map a normalized ITSM ticket onto a support_tickets row. `now` stamps the
@@ -118,6 +129,10 @@ export function mapTicketToSupportRow(conn: ItsmConnection, ticket: NormalizedTi
     priority: str(f.priority) ?? 'normal',
     status: state.slice(0, 16),
     customerRef: str(f.requester),
+    // The help desk's OWN first-reply timestamp, not our poll time — see 0941.
+    // A provider that does not report one leaves NULL, which the metric excludes
+    // rather than counting as an instant answer.
+    firstRespondedAt: parseDate(f.firstRespondedAt),
     resolvedAt: CLOSED_STATES.has(state) ? now : null,
   };
 }
@@ -149,7 +164,11 @@ export async function syncItsmConnection(
           target: [supportTickets.tenantId, supportTickets.source, supportTickets.externalRef],
           set: {
             subject: row.subject, category: row.category, isBug: row.isBug, priority: row.priority,
-            status: row.status, customerRef: row.customerRef, resolvedAt: row.resolvedAt, updatedAt: now,
+            status: row.status, customerRef: row.customerRef,
+            // COALESCE in effect: the first answer happened once, and a later poll
+            // that arrives without stats must not erase the time we already know.
+            ...(row.firstRespondedAt ? { firstRespondedAt: row.firstRespondedAt } : {}),
+            resolvedAt: row.resolvedAt, updatedAt: now,
           },
         });
     });

@@ -6,7 +6,7 @@ import { webAuthMiddleware } from '../middleware/webAuthMiddleware';
 import { sendMagicLinkEmail, sendWelcomeEmail } from '../../infrastructure/email/EmailService';
 import { sendTransactionalEmail } from '../../application/email/sendEmail';
 import { headerHints } from '../../application/email/emailLocaleResolver';
-import { localeFromHeaders } from '../../infrastructure/email/emailLocale';
+import { localeFromHeaders, normalizeLocale, type EmailLocale } from '../../infrastructure/email/emailLocale';
 import {
   users,
   oauthAccounts,
@@ -132,19 +132,53 @@ function getProviderCfg(name: string, env: Env): ProviderCfg | null {
 // HMAC-signed OAuth state — CSRF protection without DB storage
 // ---------------------------------------------------------------------------
 
-async function createOAuthState(jwtSecret: string, redirect: string, linkUserId?: string): Promise<string> {
+/**
+ * What survives the round trip to the provider and back.
+ *
+ * `locale` is carried here for a reason the callback cannot work around: that
+ * callback is a cross-site redirect FROM the provider, so neither the app's
+ * `X-Builderforce-Locale` header nor the `NEXT_LOCALE` cookie (set without a
+ * domain attribute, and this is a different origin) reaches it — only
+ * `Accept-Language`, which is the OS default rather than the language the user
+ * actually chose. The INITIATE request is a navigation the app itself builds, so
+ * it can name the chosen locale as a query parameter; signing it into the state
+ * envelope is what carries it across the provider hop without letting anyone
+ * tamper with it.
+ */
+interface OAuthStateData {
+  redirect: string;
+  linkUserId?: string;
+  locale?: EmailLocale;
+  /** `verifyState<T>` is constrained to `Record<string, unknown>` because it
+   *  hands back a decoded JWT payload, which is exactly that. Without this the
+   *  generic does not accept the interface and the whole API typecheck goes red
+   *  — which under [[build-guard-ratchets]] hides every guard behind it. */
+  [key: string]: unknown;
+}
+
+async function createOAuthState(
+  jwtSecret: string,
+  redirect: string,
+  linkUserId?: string,
+  locale?: EmailLocale | null,
+): Promise<string> {
   return signState(jwtSecret, {
     redirect: redirect || '/dashboard',
     ...(linkUserId ? { linkUserId } : {}),
+    ...(locale ? { locale } : {}),
   });
 }
 
-async function verifyOAuthState(
-  jwtSecret: string,
-  state: string,
-): Promise<{ redirect: string; linkUserId?: string } | null> {
-  const parsed = await verifyState<{ redirect: string; linkUserId?: string }>(jwtSecret, state);
-  return parsed ? { redirect: parsed.redirect, linkUserId: parsed.linkUserId } : null;
+async function verifyOAuthState(jwtSecret: string, state: string): Promise<OAuthStateData | null> {
+  const parsed = await verifyState<OAuthStateData>(jwtSecret, state);
+  if (!parsed) return null;
+  return {
+    redirect: parsed.redirect,
+    linkUserId: parsed.linkUserId,
+    // Re-narrow rather than trusting the envelope: the signature proves WE minted
+    // it, not that the value is still a locale we can render.
+    locale: normalizeLocale(parsed.locale) ?? undefined,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -342,7 +376,12 @@ export function createOAuthRoutes(db: Db): Hono<HonoEnv> {
       }
     }
 
-    const state = await createOAuthState(c.env.JWT_SECRET, redirect, linkUserId);
+    // The language the user picked, as the app knows it. `getOAuthUrl` puts it on
+    // this navigation because no header or cookie can cross to the provider and
+    // back; falling through to the request headers keeps a direct hit working.
+    const chosenLocale = normalizeLocale(c.req.query('locale')) ?? localeFromHeaders(headerHints(c.req));
+
+    const state = await createOAuthState(c.env.JWT_SECRET, redirect, linkUserId, chosenLocale);
 
     // Build callback URL from the incoming request's origin so it works in
     // both local dev and production without an extra env var.
@@ -478,12 +517,12 @@ export function createOAuthRoutes(db: Db): Hono<HonoEnv> {
           // OAuth vouches for the address — the account is verified on creation, so it
           // never hits the password-signup OTP gate.
           emailVerifiedAt: sql`now()`,
-          // Best-effort locale capture. This callback is a cross-site redirect FROM
-          // the provider, so the NEXT_LOCALE cookie is not sent and only
-          // Accept-Language is usually available — a weaker signal than the password
-          // signup gets, but better than pinning the account to English. The user's
-          // first authenticated app request refines it via rememberUserLocale().
-          locale: localeFromHeaders(headerHints(c.req)),
+          // The locale the user actually chose, round-tripped through the signed
+          // state envelope (see OAuthStateData) so this signup is as strong as the
+          // password one. `localeFromHeaders` remains the fallback for a flow that
+          // started somewhere the app did not build the URL — a provider-hosted
+          // "sign in with" button, or a bookmarked initiate link.
+          locale: stateData.locale ?? localeFromHeaders(headerHints(c.req)),
         });
         userId = newId;
         // Zero-setup onboarding: an OAuth signup gets its workspace + starter

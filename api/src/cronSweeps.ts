@@ -27,6 +27,8 @@ import { buildDatabase } from './infrastructure/database/connection';
 import type { CronSweepDef } from './application/runtime/cronSweepRunner';
 
 import { projectRegistry } from './application/kernel/registryProjection';
+import { METRIC_ROLLUPS } from './application/kernel/rollupRegistry';
+import { runRollups } from './application/kernel/metricRollup';
 import { runVendorHealthCron } from './application/llm/vendorHealthCron';
 import { runByoCredentialHealthCron } from './application/llm/byoCredentialHealthCron';
 import { runRetentionPurge } from './application/maintenance/retentionPurge';
@@ -68,13 +70,10 @@ import { buildScheduledReport } from './presentation/routes/reportRoutes';
 import { runPrReconciliationSweep } from './application/reconciliation/runPrReconciliationSweep';
 import { cronSweepEnabled } from './application/runtime/cronControls';
 import { runStakeholderDigestSweep, runStakeholderReminderSweep } from './application/stakeholderAlignment/StakeholderMapService';
-import { runFinanceRollup } from './application/finance/financeRollup';
 import { runTriggerSweep } from './application/canvas/runTriggerSweep';
-import { runOperationsRollup } from './application/operations/operationsRollup';
 import { runSignatureReminderSweep } from './application/signature/runSignatureReminderSweep';
 import { runFormReminderSweep } from './application/collection/formInvitations';
 import { runCollectionsSweep } from './application/finance/collectionsLadder';
-import { runLegalRollup } from './application/legal/legalRollup';
 import { runSequenceSweep } from './application/sales/sequenceRunner';
 
 /**
@@ -107,44 +106,41 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     },
   },
   {
-    key: 'finance-rollup',
+    key: 'metric-rollups',
     cadence: 'daily',
-    // Runs AFTER `object-registry` for a reason: runway is computed from the burn,
-    // revenue and cash facts written earlier in the same pass, so an ordering swap would
-    // leave runway one day behind its own inputs.
+    // Runs AFTER `object-registry` and that ordering is load-bearing twice over:
+    // every seat's surface reads `<domain>.items` beside these keys, and every
+    // ATTRIBUTED fact resolves its `object_id` against the registry that sweep
+    // just refreshed. An ordering swap would leave the two halves of one panel a
+    // day apart and every attribution pointing at yesterday's registry.
     description:
-      'Compute burn, revenue, MRR, cash and runway into metric_facts — the WRITER for the '
-      + '`finance.*` keys that burnRateService, DOMAIN_MANIFEST and the canvas `liveMetric` '
-      + 'binding all read and that nothing populated.',
+      'Compute the domain-specific series every seat charts — growth leads and conversions, '
+      + 'delivery throughput, agent runs and spend, hiring, finance burn/MRR/runway, revenue, '
+      + 'commerce, identity, people, platform, governance, investor, support, canvas and '
+      + 'integrations — into metric_facts. The WRITER for the 45 keys DOMAIN_MANIFEST declares '
+      + 'and that, for fourteen of the seventeen domains, nothing populated.',
     run: async ({ env }) => {
-      const r = await runFinanceRollup(buildDatabase(env));
-      return r.facts > 0 ? `facts=${r.facts}${r.skipped.length ? ` skipped=${r.skipped.length}` : ''}` : null;
-    },
-  },
-  {
-    key: 'operations-rollup',
-    cadence: 'daily',
-    // Runs AFTER `object-registry` for the same reason `finance-rollup` does: the seat's
-    // surface reads `<domain>.items` beside these keys, and an ordering swap would leave
-    // the two halves of one panel a day apart.
-    description:
-      'Compute the operations backlog, first-time-fix rate and SLA breaches into '
-      + 'metric_facts — the WRITER for the `operations.*` keys DOMAIN_MANIFEST declares — '
-      + 'and recompute each work order’s first-time-fix evidence from its visits.',
-    run: async ({ env }) => {
-      const r = await runOperationsRollup(buildDatabase(env));
-      return r.facts > 0 || r.fixesResolved > 0
-        ? `facts=${r.facts} fixes=${r.fixesResolved}${r.skipped.length ? ` skipped=${r.skipped.length}` : ''}`
-        : null;
+      const results = await runRollups(buildDatabase(env), METRIC_ROLLUPS);
+      const facts = results.reduce((sum, r) => sum + r.facts, 0);
+      const skipped = results.reduce((sum, r) => sum + r.skipped.length, 0);
+      const extra = results.flatMap((r) => Object.entries(r.extra)).filter(([, n]) => n > 0);
+      if (facts === 0 && !extra.length) return null;
+      return [
+        `facts=${facts}`,
+        `domains=${results.filter((r) => r.facts > 0).length}/${results.length}`,
+        ...extra.map(([name, n]) => `${name}=${n}`),
+        skipped ? `skipped=${skipped}` : '',
+      ].filter(Boolean).join(' ');
     },
   },
   {
     key: 'canvas-triggers',
     cadence: 'daily',
-    // Runs AFTER `finance-rollup` deliberately: a `liveMetric` bound to `finance.runway_
-    // months` is refreshed from the facts that pass writes, so evaluating first would
-    // compare today's threshold against yesterday's number and report a stale all-clear
-    // — the same ordering argument the rollup makes against `object-registry`.
+    // Runs AFTER `metric-rollups` deliberately: a `liveMetric` bound to `growth.leads`
+    // or `finance.runway_months` is refreshed from the facts that pass writes, so
+    // evaluating first would compare today's threshold against yesterday's number and
+    // report a stale all-clear — the same ordering argument the rollups make against
+    // `object-registry`.
     description:
       'Evaluate every saved canvas `trigger` — numeric thresholds against a liveMetric, and '
       + 'deadlines (contract renewals, invoice/bill due dates, statutory obligations, policy '
@@ -160,21 +156,6 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
         r.unbound ? `unbound=${r.unbound}` : '',
         r.skipped ? `skipped=${r.skipped}` : '',
       ].filter(Boolean).join(' ');
-    },
-  },
-  {
-    key: 'legal-rollup',
-    cadence: 'daily',
-    // The seventeenth seat arrives with its numbers REAL rather than declared.
-    // `financeRollup` records what happens otherwise: a manifest naming metrics
-    // that three surfaces read by name and nothing ever wrote.
-    description:
-      'Compute open matters and the renewals falling due inside ninety days — across '
-      + 'entity standings, jurisdiction registrations and IP rights — into metric_facts. '
-      + 'The WRITER for the `legal.*` keys DOMAIN_MANIFEST declares.',
-    run: async ({ env }) => {
-      const r = await runLegalRollup(buildDatabase(env));
-      return r.facts > 0 ? `facts=${r.facts}${r.skipped.length ? ` skipped=${r.skipped.length}` : ''}` : null;
     },
   },
   {

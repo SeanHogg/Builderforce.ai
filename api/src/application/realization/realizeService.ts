@@ -145,13 +145,16 @@ async function ensureCollections(args: {
   projectId: number;
   siteId: number;
   names: readonly string[];
+  /** The session this proof came from, stamped onto every collection it creates
+   *  so a lead arriving through the form can be traced back to the idea. */
+  originSessionId: string | null;
 }): Promise<{ created: string[]; warnings: string[] }> {
   const created: string[] = [];
   const warnings: string[] = [];
 
   for (const name of args.names) {
     try {
-      const result = await createCollection(args.db, args.tenantId, args.siteId, args.projectId, name);
+      const result = await createCollection(args.db, args.tenantId, args.siteId, args.projectId, name, args.originSessionId);
       if (!result.ok) {
         // 409 is the normal path on a rebuild: it already exists, and its write
         // setting is its owner's to decide.
@@ -197,6 +200,10 @@ export async function realize(args: {
   plan: ChallengePlan;
   collections: readonly string[];
   projectId?: number | null;
+  /** The Creation Session this proof is of, when it came from a board. Carried
+   *  onto every collection so the outcome ledger and the business facts finally
+   *  share a key — see migration 0935. */
+  sessionId?: string | null;
   runtimeService?: RuntimeService | null;
 }): Promise<RealizeResult> {
   const built = await materializeChallenge({
@@ -237,6 +244,7 @@ export async function realize(args: {
         projectId: built.projectId,
         siteId: site.siteId,
         names: args.collections,
+        originSessionId: args.sessionId ?? null,
       });
       collections = ensured.created;
       warnings.push(...ensured.warnings);

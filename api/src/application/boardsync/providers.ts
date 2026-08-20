@@ -51,6 +51,13 @@ export interface ChangeSet {
   title?:  string;
   body?:   string;
   state?:  string;
+  /**
+   * Incident severity, in OUR vocabulary (`sev1`…`sev4`). Each provider maps it
+   * onto its own priority scale — the mapping belongs to the adapter, because
+   * "urgent" is a different integer on every help desk and a caller that had to
+   * know which would be an adapter in the wrong layer.
+   */
+  severity?: string;
   [k: string]: unknown;
 }
 
@@ -806,6 +813,34 @@ export class PagerDutyBoardProvider implements BoardProvider {
 const FRESHSERVICE_STATUS: Record<number, string> = { 2: 'open', 3: 'pending', 4: 'resolved', 5: 'closed' };
 const FRESHSERVICE_PRIORITY: Record<number, string> = { 1: 'low', 2: 'normal', 3: 'high', 4: 'urgent' };
 
+/** Our incident severity → the Freshworks priority integer. `sev1` is what pages
+ *  somebody at 3am, and `4` (Urgent) is the value that does that on their side. */
+const FRESHWORKS_PRIORITY_BY_SEVERITY: Record<string, number> = { sev1: 4, sev2: 3, sev3: 2, sev4: 1 };
+
+/** Our incident/ticket state → the Freshworks status integer. Deliberately does
+ *  NOT map `closed`: closing somebody's help-desk ticket is their call, and a
+ *  resolved incident on our side means the fire is out, not that the customer
+ *  conversation is over. */
+const FRESHWORKS_STATUS_BY_STATE: Record<string, number> = {
+  open: 2, investigating: 2, acknowledged: 2, mitigated: 3, pending: 3, resolved: 4,
+};
+
+/** The subset of a Freshworks `stats` block we read. */
+interface FreshworksStats { first_responded_at?: string | null }
+
+/** The push-back body shared by both Freshworks adapters, so an incident's status
+ *  and severity cannot reach one product and silently not the other. */
+function freshworksUpdateFields(changeSet: ChangeSet): Record<string, unknown> {
+  const fields: Record<string, unknown> = {};
+  if (changeSet.title !== undefined) fields.subject = changeSet.title;
+  if (changeSet.body !== undefined) fields.description = changeSet.body;
+  const status = changeSet.state !== undefined ? FRESHWORKS_STATUS_BY_STATE[String(changeSet.state).toLowerCase()] : undefined;
+  if (status !== undefined) fields.status = status;
+  const priority = changeSet.severity !== undefined ? FRESHWORKS_PRIORITY_BY_SEVERITY[String(changeSet.severity).toLowerCase()] : undefined;
+  if (priority !== undefined) fields.priority = priority;
+  return fields;
+}
+
 interface FreshserviceTicketRaw {
   id: number;
   subject: string;
@@ -817,6 +852,8 @@ interface FreshserviceTicketRaw {
   type?: string | null;
   /** Requester (distinct-customer key for support-tix-per-customer). */
   requester_id?: number | null;
+  /** Present only when the fetch asks for `include=stats`. */
+  stats?: FreshworksStats | null;
   updated_at: string;
 }
 
@@ -829,7 +866,10 @@ export class FreshserviceBoardProvider implements BoardProvider {
     if (!base) throw new Error('freshservice provider requires baseUrl');
     const apiKey = String(this.cfg.credentials.apiKey ?? '');
 
-    const params = new URLSearchParams({ order_by: 'updated_at', order_type: 'asc', per_page: '100' });
+    // `include=stats` is what carries `first_responded_at` — the help desk's own
+    // clock on when the customer saw a reply, and the only source
+    // `support.first_response_min` can honestly be computed from.
+    const params = new URLSearchParams({ order_by: 'updated_at', order_type: 'asc', per_page: '100', include: 'stats' });
     if (cursor) params.set('updated_since', cursor);
 
     const res = await this.fetchFn(`${base}/api/v2/tickets?${params.toString()}`, {
@@ -853,6 +893,7 @@ export class FreshserviceBoardProvider implements BoardProvider {
             priority: FRESHSERVICE_PRIORITY[t.priority ?? 2] ?? 'normal',
             ticketType: t.type ?? null,
             requester: t.requester_id != null ? String(t.requester_id) : null,
+            firstRespondedAt: t.stats?.first_responded_at ?? null,
           },
         }),
       );
@@ -864,9 +905,7 @@ export class FreshserviceBoardProvider implements BoardProvider {
   async pushUpdate(externalId: string, changeSet: ChangeSet): Promise<void> {
     const base = trimSlash(this.cfg.baseUrl);
     const apiKey = String(this.cfg.credentials.apiKey ?? '');
-    const fields: Record<string, unknown> = {};
-    if (changeSet.title !== undefined) fields.subject = changeSet.title;
-    if (changeSet.body !== undefined) fields.description = changeSet.body;
+    const fields = freshworksUpdateFields(changeSet);
     if (Object.keys(fields).length === 0) return;
 
     const res = await this.fetchFn(`${base}/api/v2/tickets/${externalId}`, {
@@ -898,6 +937,8 @@ interface FreshdeskTicketRaw {
   /** Freshdesk ticket type ('Incident' | 'Problem' | 'Question' | 'Feature Request' | …). */
   type?: string | null;
   requester_id?: number | null;
+  /** Present only when the fetch asks for `include=stats`. */
+  stats?: FreshworksStats | null;
   updated_at: string;
 }
 
@@ -910,7 +951,9 @@ export class FreshdeskBoardProvider implements BoardProvider {
     if (!base) throw new Error('freshdesk provider requires baseUrl');
     const apiKey = String(this.cfg.credentials.apiKey ?? '');
 
-    const params = new URLSearchParams({ order_by: 'updated_at', order_type: 'asc', per_page: '100' });
+    // Same `include=stats` as Freshservice, for the same reason: it is where
+    // `first_responded_at` lives, and it is the customer's clock rather than ours.
+    const params = new URLSearchParams({ order_by: 'updated_at', order_type: 'asc', per_page: '100', include: 'stats' });
     if (cursor) params.set('updated_since', cursor);
 
     const res = await this.fetchFn(`${base}/api/v2/tickets?${params.toString()}`, {
@@ -934,6 +977,7 @@ export class FreshdeskBoardProvider implements BoardProvider {
             priority: FRESHDESK_PRIORITY[t.priority ?? 2] ?? 'normal',
             ticketType: t.type ?? null,
             requester: t.requester_id != null ? String(t.requester_id) : null,
+            firstRespondedAt: t.stats?.first_responded_at ?? null,
           },
         }),
       );
@@ -945,9 +989,9 @@ export class FreshdeskBoardProvider implements BoardProvider {
   async pushUpdate(externalId: string, changeSet: ChangeSet): Promise<void> {
     const base = trimSlash(this.cfg.baseUrl);
     const apiKey = String(this.cfg.credentials.apiKey ?? '');
-    const fields: Record<string, unknown> = {};
-    if (changeSet.title !== undefined) fields.subject = changeSet.title;
-    if (changeSet.body !== undefined) fields.description = changeSet.body;
+    // Shared with Freshservice: an incident whose severity reached one Freshworks
+    // product and not the other would be the drift this helper exists to prevent.
+    const fields = freshworksUpdateFields(changeSet);
     if (Object.keys(fields).length === 0) return;
 
     const res = await this.fetchFn(`${base}/api/v2/tickets/${externalId}`, {
