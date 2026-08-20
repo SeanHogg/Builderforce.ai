@@ -1,40 +1,67 @@
-## ✅ RESOLVED 2026-08-20 — The Worker size ceiling is now measured, and the first theory about it was wrong
+## ✅ RESOLVED 2026-08-20 — The Worker was 12.9% over its ceiling, and it was mermaid
 
-`Deploy frontend` could not upload: `error 10027 — Your Worker exceeded the size limit of 10 MiB`.
-It surfaced only once the `sharp` fix let the build reach upload for the first time.
+`Deploy frontend` could not upload: `error 10027 — Your Worker exceeded the size limit of
+10 MiB`. It surfaced only once the `sharp` fix let the build reach upload for the first time.
 
-`scripts/check-worker-size.mjs` measures the bundle the moment it exists, prints the largest
-modules, fails at Cloudflare's actual limit and warns at 90%. Before it, the ceiling was
-measured by nothing but Cloudflare, at upload, eleven minutes into a deploy, in an error that
-names no file. It reported: **11.29 MiB compressed, 44.80 MiB raw across 217 modules**, with one
-outlier — a single shared webpack chunk at **6.71 MiB** against a tail of ~200 route functions
-at ~0.3 MiB each.
+**Result: 11.29 MiB → 6.27 MiB compressed (44.80 → 27.99 MiB raw). 112.9% of the limit → 62.7%.
+Both deploys green.**
 
-**The threshold was corrected by what it measured.** It first failed at 90%, reasoning that the
-build which adds the weight should be the one that breaks. The real number retired that: this
-app sits legitimately near the ceiling, and a gate that rejects deploys Cloudflare would accept
-is a gate somebody switches off — after which it guards nothing.
+### The guard came first, and it is why this took two attempts instead of ten
 
-### The first theory was wrong, and the guard is what proved it
+Nothing measured the ceiling except Cloudflare, at upload, eleven minutes into a deploy, in an
+error that names no file. `scripts/check-worker-size.mjs` now measures the bundle the moment it
+exists, prints the largest modules, fails at Cloudflare's real limit and warns at 90%.
 
-The obvious suspect was `simple-icons`: the integrations page imported 31 icons from a package
-that ships ONE 4.98 MiB module with no per-icon entry points, and since the page is a server
-component Next resolves its CommonJS build, which cannot be tree-shaken. A tidy story, and the
-arithmetic fit.
+It reported 11.29 MiB across 217 modules with one outlier: a shared webpack chunk at **6.71 MiB**
+against a tail of ~200 route functions at ~0.3 MiB each.
 
-It was wrong. The build after the change reported **the identical 11.29 MiB / 44.80 MiB / 217
-modules, and the same chunk hash** — byte for byte. Whatever is in that 6.71 MiB chunk,
-`simple-icons` was not it; it was already being shaken out.
+**The first theory was wrong, and the guard is what proved it.** `simple-icons` looked certain —
+one 4.98 MiB module, no per-icon entry points, imported by a server component whose CommonJS
+build cannot be tree-shaken. The next build returned the identical 11.29 MiB / 44.80 MiB / 217
+modules **and the same chunk hash, byte for byte**: it was already being shaken out. That change
+was kept on its own merits (`scripts/gen-brand-paths.mjs` generates the 35.2 KB subset actually
+rendered, verified byte-identical upstream; `simple-icons` moved to `devDependencies`) but it is
+recorded as what it was — a dependency-surface tidy-up, not the size fix it was committed as.
 
-The change was kept because it stands on its own — `scripts/gen-brand-paths.mjs` generates the
-35.2 KB subset actually rendered (spot-verified byte-identical upstream), and `simple-icons`
-moved to `devDependencies` since only the generator needs it — but it is recorded here as what
-it turned out to be: a dependency-surface tidy-up, not the size fix it was committed as.
+So the guard grew a second half: when the bundle is over, report what is INSIDE the largest
+chunk. Largest embedded string literals (what data-shaped weight looks like) and most repeated
+long identifiers (what code-shaped weight looks like), the identifier scan bounded to 40
+characters so base64 cannot pose as an identifier and sampled over the first 4 MiB because
+counting every match across megabytes builds one Map entry per unique base64 run and dies
+before printing anything.
 
-So the guard grew a second half: when the bundle is over, it now reports what is INSIDE the
-largest chunk — the biggest embedded string literals (what data-shaped weight looks like) and
-the most repeated long identifiers (what code-shaped weight looks like). Guessing from the
-dependency list cost a build cycle; the next investigation starts from evidence.
+### What it found
+
+  * `primaryTextColor` / `primaryColor` / `secondaryColor` / `primaryBorderColor`, 300+ each —
+    mermaid's theme variables.
+  * `"specified for breadthfirst layout"` — **cytoscape**, which mermaid carries for its
+    architecture and mindmap diagrams.
+  * `rAarr:"\u21DB", rArr:"\u21D2"` — the HTML-entity table mermaid pulls in.
+
+### Why correct-looking lazy loading was not enough
+
+`MermaidDiagramView` already did `await import('mermaid')` inside an effect, so mermaid never
+RAN on the server. That is not the same as never being BUILT for it: `ChatMessageContent` and
+`CreationNode` imported the view statically, the server build followed them, webpack emitted
+mermaid's chunk into the server graph, and `next-on-pages` bundled that into the Worker. The
+lazy import was real and the 6.71 MiB was there anyway.
+
+`ssr: false` severs the server edge — the treatment the 3D canvas, the voice panel and every
+other heavy view in this codebase already get.
+
+The `dynamic()` lives in ONE wrapper (`components/MermaidDiagram.tsx`) rather than at each call
+site. Two components render diagrams and more will; a copy per consumer is a decision each can
+get wrong independently, and one static import anywhere puts the whole 6.71 MiB back. Neither
+call site changed — they still import `MermaidDiagram` from the same path.
+
+The viewer sees the same thing: the view's pre-render state was a centred "rendering diagram"
+line and `loading` reproduces it, so the server HTML is unchanged. The key was already in all
+five catalogs.
+
+**Cost, stated rather than hidden:** one more `'use client'` file, so `check:architecture` moves
+829 → 830 against its 808 baseline. That ratchet is already red for unrelated reasons (PRD 22,
+group 14) and is not in the deploy job. Five megabytes of Worker for one wrapper is the right
+side of that trade.
 
 ---
 
