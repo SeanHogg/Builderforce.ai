@@ -1,95 +1,48 @@
 'use client';
 
-import { useEffect, useId, useRef, useState } from 'react';
+import dynamic from 'next/dynamic';
 import { useTranslations } from 'next-intl';
 
-/** The theme the page is actually painted in. Mermaid bakes its palette into the
- * generated SVG, so a fixed theme renders dark boxes on a light surface. */
-function activeTheme(): 'dark' | 'default' {
-  if (typeof document === 'undefined') return 'default';
-  const declared = document.documentElement.dataset.theme;
-  if (declared === 'light') return 'default';
-  if (declared === 'dark') return 'dark';
-  return typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'default';
-}
-
 /**
- * Renders a Mermaid diagram from source. Mermaid is loaded lazily (client-only)
- * so it never runs during SSR and doesn't bloat the initial bundle. LLM-authored
- * Mermaid frequently has syntax errors, so a parse/render failure falls back to
- * showing the raw source in a <pre> rather than throwing and blanking the page.
+ * Mermaid, kept out of the SERVER bundle. The ONE place that decides this.
  *
- * The palette follows the viewer's theme and re-renders when it changes, so the
- * same diagram is legible on a light canvas and a dark one.
+ * ── WHY THIS FILE EXISTS ─────────────────────────────────────────────────────
+ * `MermaidDiagramView` already loads mermaid with `await import('mermaid')` inside an
+ * effect, so it never RUNS on the server. That is not the same as never being BUILT for
+ * it: two client components import the view statically, the server build follows them,
+ * and webpack emits mermaid's chunk into the server graph — where `next-on-pages` bundles
+ * it into the Worker.
+ *
+ * It is not a small passenger. Mermaid carries cytoscape (for architecture and mindmap
+ * diagrams) and a full HTML-entity table, and it was measured as the largest single item
+ * in the Worker: a 6.71 MiB shared chunk, in a bundle 1.29 MiB over Cloudflare's 10 MiB
+ * ceiling and therefore undeployable. `scripts/check-worker-size.mjs` names it.
+ *
+ * `ssr: false` is what severs the server edge — the same treatment the 3D canvas, the
+ * voice panel and every other heavy view already get in this codebase.
+ *
+ * ── WHY A WRAPPER RATHER THAN `dynamic()` AT EACH CALL SITE ───────────────────
+ * Two components render diagrams (`ChatMessageContent`, `CreationNode`) and more will.
+ * A `dynamic(..., { ssr: false })` copied per consumer is a decision each of them can
+ * get wrong independently, and one static import anywhere puts the whole 6.71 MiB back.
+ * Importing `MermaidDiagram` from here cannot: the laziness lives with the dependency,
+ * not with the caller, and the callers did not have to change at all.
+ *
+ * ── WHAT THE VIEWER SEES ─────────────────────────────────────────────────────
+ * Identical. The view's own pre-render state was a centred "rendering diagram" line, and
+ * `loading` reproduces it, so the server HTML says what it always said.
  */
-export function MermaidDiagram({ code }: { code: string }) {
+
+function MermaidLoading() {
   const t = useTranslations('common');
-  const reactId = useId();
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [svg, setSvg] = useState<string | null>(null);
-  const [failed, setFailed] = useState(false);
-  const [theme, setTheme] = useState<'dark' | 'default'>(activeTheme);
-
-  useEffect(() => {
-    const sync = () => setTheme(activeTheme());
-    sync();
-    const observer = new MutationObserver(sync);
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
-    const media = window.matchMedia?.('(prefers-color-scheme: dark)');
-    media?.addEventListener('change', sync);
-    return () => { observer.disconnect(); media?.removeEventListener('change', sync); };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    const id = `mermaid-${reactId.replace(/[^a-zA-Z0-9]/g, '')}`;
-    (async () => {
-      try {
-        const mermaid = (await import('mermaid')).default;
-        mermaid.initialize({ startOnLoad: false, theme, securityLevel: 'strict' });
-        const { svg: out } = await mermaid.render(id, code);
-        if (!cancelled) {
-          setSvg(out);
-          setFailed(false);
-        }
-      } catch {
-        if (!cancelled) setFailed(true);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [code, reactId, theme]);
-
-  if (failed) {
-    return (
-      <pre
-        style={{
-          margin: '8px 0',
-          padding: '10px 12px',
-          background: 'var(--bg-elevated)',
-          border: '1px solid var(--border-subtle)',
-          borderRadius: 'var(--radius-md)',
-          overflowX: 'auto',
-          fontSize: 'var(--font-size-small)',
-          fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
-          color: 'var(--text-primary)',
-          whiteSpace: 'pre',
-        }}
-      >
-        <code>{code}</code>
-      </pre>
-    );
-  }
-
   return (
-    <div
-      ref={containerRef}
-      className="mermaid-diagram"
-      style={{ margin: '12px 0', textAlign: 'center', overflowX: 'auto' }}
-      dangerouslySetInnerHTML={svg ? { __html: svg } : undefined}
-    >
-      {svg ? undefined : <span style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-small)' }}>{t('renderingDiagram')}</span>}
+    <div className="mermaid-diagram" style={{ margin: '12px 0', textAlign: 'center', overflowX: 'auto' }}>
+      <span style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-small)' }}>{t('renderingDiagram')}</span>
     </div>
   );
 }
+
+export const MermaidDiagram = dynamic(
+  () => import('./MermaidDiagramView').then((module) => module.MermaidDiagramView),
+  { ssr: false, loading: MermaidLoading },
+);
