@@ -11151,12 +11151,10 @@
       },
       "premiumOverride": {
         "title": "Premium routing",
-        "current": "Current: {value}",
         "currentPremium": "PREMIUM pool + 60s vendor timeout",
         "currentDefault": "Plan default",
         "planDefault": "Plan default",
-        "premiumOption": "Premium (top PREMIUM-tier models, extended timeout)",
-        "updateFailed": "Update failed"
+        "premiumOption": "Premium (top PREMIUM-tier models, extended timeout)"
       }
     },
     "apikeys": {

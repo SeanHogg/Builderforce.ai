@@ -11151,12 +11151,10 @@
       },
       "premiumOverride": {
         "title": "高级路由",
-        "current": "当前：{value}",
         "currentPremium": "PREMIUM 资源池 + 60 秒供应商超时",
         "currentDefault": "套餐默认值",
         "planDefault": "套餐默认值",
-        "premiumOption": "高级（顶级 PREMIUM 层模型，延长超时）",
-        "updateFailed": "更新失败"
+        "premiumOption": "高级（顶级 PREMIUM 层模型，延长超时）"
       }
     },
     "apikeys": {

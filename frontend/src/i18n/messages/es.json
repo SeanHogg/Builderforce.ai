@@ -11151,12 +11151,10 @@
       },
       "premiumOverride": {
         "title": "Enrutamiento premium",
-        "current": "Actual: {value}",
         "currentPremium": "Grupo PREMIUM + tiempo de espera de proveedor de 60 s",
         "currentDefault": "Predeterminado del plan",
         "planDefault": "Predeterminado del plan",
-        "premiumOption": "Premium (mejores modelos de nivel PREMIUM, tiempo de espera extendido)",
-        "updateFailed": "Error en la actualización"
+        "premiumOption": "Premium (mejores modelos de nivel PREMIUM, tiempo de espera extendido)"
       }
     },
     "apikeys": {

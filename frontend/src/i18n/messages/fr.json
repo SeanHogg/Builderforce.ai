@@ -11151,12 +11151,10 @@
       },
       "premiumOverride": {
         "title": "Routage premium",
-        "current": "Actuel : {value}",
         "currentPremium": "Pool PREMIUM + délai d'expiration fournisseur de 60 s",
         "currentDefault": "Valeur par défaut du forfait",
         "planDefault": "Valeur par défaut du forfait",
-        "premiumOption": "Premium (meilleurs modèles de niveau PREMIUM, délai d'expiration étendu)",
-        "updateFailed": "Échec de la mise à jour"
+        "premiumOption": "Premium (meilleurs modèles de niveau PREMIUM, délai d'expiration étendu)"
       }
     },
     "apikeys": {

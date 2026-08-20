@@ -1,3 +1,56 @@
+## ✅ RESOLVED 2026-08-19 — One override editor instead of two, a README that describes the API that exists, and frontend lint back to zero errors
+
+**Roadmap items closed** (all from *Lint / test debt*, §15): the `TenantTokenLimitOverrideEditor` /
+`TenantPremiumOverrideEditor` scaffold duplication, the stale pre-rename README artifacts, and the
+`eslint-config-next@16` vs `next@15` major gap.
+
+### 1 · The `modes[]`-driven primitive, with BOTH duplicates migrated
+
+Every per-tenant superadmin override is the same interaction — a titled card, the current effective value, a row of
+mutually-exclusive modes, one Save, one error line — and only the MODES differ. That difference had been expressed by
+copying the card.
+
+`TenantOverrideEditor<T>` now owns the chrome and takes the modes as DATA:
+
+- **`TenantIntegerOverrideEditor`** is a three-mode configuration (plan default `null` / unlimited `-1` / custom `>= 0`),
+  with the number input supplied as that mode's inline `control`. Its public `IntegerOverrideConfig` is unchanged, so
+  its three consumers — the daily token cap, the funded paid-overflow cap and the image-credit cap — needed no edits.
+- **`TenantPremiumOverrideEditor`** is a two-mode configuration and dropped from 100 lines to 57.
+
+Generic in the stored value, so a `boolean` override and a `number | null` override share it without either widening to
+`unknown`. The `control` render prop receives `selectMode`, so typing in the custom input selects its own mode — every
+copy of the card previously wired that by hand.
+
+**The drift this had already caused**, and the reason a shared shell is worth more than the line count: the premium
+editor tracked `dirty` and greyed Save out unless the value changed; the integer editor did not. Two override screens
+in the same admin panel behaved differently for no reason a user could see. One shell, one behaviour.
+
+Removing the duplication orphaned two catalog keys (`tenants.premiumOverride.current` and `.updateFailed`, superseded
+by the shared `tenants.intOverride.*`); both were **deleted from all five catalogs**, verified zero references first.
+`messages.test.ts` stays 74/74.
+
+### 2 · README described an API that no longer exists
+
+The fleet section still documented `POST /api/claws`, `ClawRelayDO`, `.coderClaw/context.yaml` and
+`X-Claw-Signature`. Every one of those has a current name, verified in the tree rather than assumed:
+`/api/agent-hosts` (`AGENT_HOST_BASE_PATH`), `AgentHostRelayDO` (the live `class_name` in `wrangler.toml`),
+`.builderforce/` and `X-AgentHost-Signature` (the header `cors.ts` actually allows). The architecture diagram and the
+two comparison tables carried the same stale names and were corrected too.
+
+`/api/claws` and `/api/agentNodes` are still LIVE deprecated aliases, so they are now documented as aliases — with the
+`Deprecation` / `Link: rel="successor-version"` headers they stamp — rather than deleted outright, which would have
+left an operator seeing 200s from a path the docs deny exists.
+
+### 3 · `npx eslint .` was RED
+
+One error, not a warning: `WorkspaceAllowanceBanner` navigated to `/pricing` with a raw `<a href>`, which drops
+client-side routing and reloads the whole app (`@next/next/no-html-link-for-pages`). Now `next/link`. Lint is **0
+errors, 12 warnings**.
+
+**`eslint-config-next@16` against `next@15` is resolved as benign, not as debt.** It runs correctly and produced valid
+results — including the error above, which is a legitimate `next@15` rule. Pinning back to 15.x would be the riskier
+change, so the major-version gap is recorded as verified rather than left as a task nobody should do.
+
 ## ✅ RESOLVED 2026-08-19 — Permission overrides now bite on the surfaces operators actually use, and the busiest table is finally inside the tenant guard
 
 **Roadmap items closed:** *11 of 38 permissions are enforced; the other 27 are advisory* and *`tasks` carries no

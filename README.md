@@ -63,10 +63,11 @@ Builderforce.ai is a **human-in-the-loop, fully agentic cloud** where ideas beco
 ### BuilderForce Agents Orchestration Portal
 Builderforce.ai is the cloud-side control plane for [BuilderForce Agents](https://builderforce.ai/agents) self-hosted agents:
 
-- **Fleet registration** — Claws register at `POST /api/claws` with machine profile (IP, workspace dirs, ports, tunnel metadata)
-- **Heartbeat + capability sync** — `PATCH /api/claws/:id/heartbeat` keeps capability maps and machine profiles current
-- **Assignment context** — `GET /api/claws/:id/assignment-context` delivers assigned project metadata and context hints; CoderClaw syncs to `.coderClaw/context.yaml`
-- **Claw-to-claw mesh relay** — `ClawRelayDO` Durable Object proxies WebSocket connections between Claws; `POST /api/runtime/forward` dispatches tasks to remote agents with HMAC-SHA256 payload verification (`X-Claw-Signature`)
+- **Fleet registration** — agent hosts register at `POST /api/agent-hosts` with machine profile (IP, workspace dirs, ports, tunnel metadata)
+- **Heartbeat + capability sync** — `PATCH /api/agent-hosts/:id/heartbeat` keeps capability maps and machine profiles current
+- **Assignment context** — `GET /api/agent-hosts/:id/assignment-context` delivers assigned project metadata and context hints; the runtime syncs to `.builderforce/context.yaml`
+- **Host-to-host mesh relay** — the `AgentHostRelayDO` Durable Object proxies WebSocket connections between hosts; `POST /api/runtime/forward` dispatches tasks to remote agents with HMAC-SHA256 payload verification (`X-AgentHost-Signature`)
+- **Legacy path aliases** — `/api/claws` and `/api/agentNodes` still serve the same router for agents built before the rename. Both stamp `Deprecation` and `Link: rel="successor-version"` response headers, so a fleet still calling an old path announces itself and the aliases can be retired on evidence rather than on a guess
 - **Approval gates** — human-in-the-loop control for high-impact agent actions; agents request approval before executing; outcomes are audited
 - **Task management** — `tasks` and `executions` tables track work assigned to specific Claws; `POST /api/tasks/next` feeds the next task to a waiting agent
 
@@ -531,8 +532,8 @@ See the write-up: [The AI Agent Tech Stack, Built](https://builderforce.ai/blog/
 │                                                                   │
 │  API (api.builderforce.ai — Hono)    Durable Objects             │
 │  ┌────────────────────────────┐      ┌──────────────────────┐   │
-│  │ /api/auth  /api/tenants    │      │  ClawRelayDO         │   │
-│  │ /api/claws /api/tasks      │      │  - claw mesh relay   │   │
+│  │ /api/auth  /api/tenants    │      │  AgentHostRelayDO    │   │
+│  │ /api/agent-hosts /api/tasks│      │  - host mesh relay   │   │
 │  │ /api/brain /api/projects   │      │  - heartbeat proxy   │   │
 │  │ /api/runtime/executions    │      └──────────────────────┘   │
 │  └────────────────────────────┘      ┌──────────────────────┐   │
@@ -562,10 +563,10 @@ See the write-up: [The AI Agent Tech Stack, Built](https://builderforce.ai/blog/
 
 | | `api` (api.builderforce.ai) | `worker` (worker.builderforce.ai) |
 |---|---|---|
-| **Purpose** | Auth, tenants, claws, tasks, brain, marketplace, dev analytics | IDE projects, files, datasets, training, collaboration |
+| **Purpose** | Auth, tenants, agent hosts, tasks, brain, marketplace, dev analytics | IDE projects, files, datasets, training, collaboration |
 | **Auth** | JWT + tenant isolation | CORS (no auth currently) |
-| **Durable Objects** | ClawRelayDO (claw mesh relay) | CollaborationRoom (Yjs sync) |
-| **Storage** | R2 `UPLOADS` (brain files, claw assets) | R2 `STORAGE` (project files, artifacts, datasets) |
+| **Durable Objects** | AgentHostRelayDO (host mesh relay) | CollaborationRoom (Yjs sync) |
+| **Storage** | R2 `UPLOADS` (brain files, agent-host assets) | R2 `STORAGE` (project files, artifacts, datasets) |
 
 ---
 
@@ -841,7 +842,7 @@ app.post("/api/agents/:id/chat", async (c) => {
 #### `GET/PUT /api/agents/:id/mamba-state` — Mamba State Sync
 
 - `GET` — returns the stored Mamba state snapshot (if any)
-- `PUT` — accepts an updated state from a CLI session; keeps server-side state in sync with `.coderClaw/memory/mamba-state.json`
+- `PUT` — accepts an updated state from a CLI session; keeps server-side state in sync with `.builderforce/memory/mamba-state.json`
 
 #### `POST /api/auth/cli-key` — Issue CLI API Key
 

@@ -11151,12 +11151,10 @@
       },
       "premiumOverride": {
         "title": "Premium-Routing",
-        "current": "Aktuell: {value}",
         "currentPremium": "PREMIUM-Pool + 60s Anbieter-Timeout",
         "currentDefault": "Tarifstandard",
         "planDefault": "Tarifstandard",
-        "premiumOption": "Premium (beste Modelle der PREMIUM-Stufe, verlängertes Timeout)",
-        "updateFailed": "Aktualisierung fehlgeschlagen"
+        "premiumOption": "Premium (beste Modelle der PREMIUM-Stufe, verlängertes Timeout)"
       }
     },
     "apikeys": {
