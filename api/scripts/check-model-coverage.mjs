@@ -38,7 +38,7 @@ const mapPath = resolve(here, '..', '..', 'specs', 'builderforce', 'data-model',
 
 /** The roster totals PRD 20 §3 enumerates. If the map stops agreeing with these,
  *  one of the two is wrong and the build should say so rather than pick a winner. */
-const EXPECTED = { rows: 1130, keeps: 362, kernel: 25, total: 387 };
+const EXPECTED = { rows: 1130, keeps: 363, kernel: 25, total: 388 };
 const MOVES = new Set(['keep', 'merged', 'primitive', 'flatten', 'session']);
 
 if (!existsSync(mapPath)) {

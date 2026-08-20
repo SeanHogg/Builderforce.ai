@@ -703,12 +703,11 @@ describe('CreationCanvas', () => {
     fireEvent.click(screen.getAllByText('Campaign Strategist')[0]!);
     fireEvent.click(screen.getByRole('button', { name: 'Show everything about this object' }));
 
-    // Scoped to the `select`, exactly as the "Research" note below is scoped to the
-    // agent card: the data-science vocabulary registered a `model` OBJECT KIND, so
-    // the palette now carries a drag handle whose aria-label is also "Model" and a
-    // bare `getByLabelText` matches two elements. The inspector control is the one
-    // this test means, and naming the element type says so.
-    fireEvent.change(screen.getByLabelText('Model', { selector: 'select' }), { target: { value: 'Evermind' } });
+    // "Agent model", not "Model": the data-science vocabulary registered a `model` OBJECT
+    // KIND, so the palette carries a card whose accessible name is also "Model" and the
+    // inspector's own label was renamed to disambiguate. The `select` scope stays for the
+    // same reason it was added — naming the element type says which control is meant.
+    fireEvent.change(screen.getByLabelText('Agent model', { selector: 'select' }), { target: { value: 'Evermind' } });
     fireEvent.change(screen.getByLabelText('Instructions'), { target: { value: 'Investigate customer friction.' } });
     fireEvent.change(screen.getByLabelText('Autonomy'), { target: { value: 'high' } });
     fireEvent.click(screen.getByRole('button', { name: '+ Add tool' }));

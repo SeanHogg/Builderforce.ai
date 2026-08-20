@@ -35,13 +35,12 @@ import {
   varchar,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
-import { budgets } from './finance';
 import { brainChats } from './canvas';
-import { contributors, devTeams, meetings, teamVelocity, teams } from './canvas';
+import { contributors, devTeams, meetings, teams } from './canvas';
 import { authTokenTypeEnum, legalDocumentTypeEnum, memberAvailabilityStatusEnum, memberExperienceLevelEnum, memberProfileSyncSourceEnum, objects, segmentStatusEnum, teamMemberKindEnum, tenantIsolationModeEnum, tenantKindEnum, tenantRoleEnum, tenantStatusEnum } from './kernel';
 import { errorGroups, onCallRotations } from './delivery';
 import { marketplacePersonas } from './agents';
-import { agentHosts, agents, importRuns, skills, toolRuns } from './agents';
+import { agentHosts, importRuns, skills, toolRuns } from './agents';
 import { projects } from './delivery';
 
 

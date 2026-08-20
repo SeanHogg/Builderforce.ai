@@ -230,6 +230,18 @@ export const GUEST_GATED_CANVAS_TOOLS = [
   // only tool a guest-visible description may name — `canvas_create_test_plan`'s
   // description does not, precisely so this classification stays free to change.
   'canvas_publish_tests',
+  // Files a board dataset as a fine-tune training corpus under a project. Classified
+  // here for the same reason as `canvas_publish_tests`, and by the same test: what does
+  // its ABSENCE make the model say? Every step before it is guest-safe — a visitor can
+  // import a CSV, profile it, chart it and classify its columns entirely in their own
+  // browser — so "now train a model on this" is the natural next sentence on a guest
+  // board. With the tool absent the model has no way to know the product fine-tunes at
+  // all, and the improvisation it reaches for ("I can't train models") is false about a
+  // product that ships adapters. The corpus itself is a tenant row, so the WORK needs an
+  // account; the gate is on credentials, not on a saved board, exactly like the social
+  // tools. Its description names only `canvas_set_data_use`, which is guest-safe — rule 2
+  // holds.
+  'canvas_promote_dataset_to_corpus',
   // ── Connected social accounts (`/api/social/*`) ──────────────────────────────
   // Gated rather than absent, for the reason this whole set exists, and on the
   // strongest evidence yet that the reason is real.
@@ -673,6 +685,16 @@ export const CANVAS_QA_ACCOUNT_GATE = `canvas_publish_tests needs a free Builder
  * media management platform while looking at one.
  */
 export const CANVAS_SOCIAL_ACCOUNT_GATE = `Connected social accounts need a free Builderforce account: X, LinkedIn, Facebook Pages, Instagram and TikTok are connected as workspace connections, and this board has no workspace behind it. The account prompt is now open and the canvas is unchanged. Do ALL THREE of these in your reply: say in ONE sentence that connecting the accounts and publishing needs a free account; author the campaign itself on the board right now with canvas_add_object — the copy, the per-network variants, the link and the media brief — so the moment an account is connected there is something to publish; and if the user asked you to REGISTER new accounts on those networks, say plainly that signing up on a social network is something only they can do, and that Builderforce connects the accounts they already have. Do NOT say that you cannot connect social accounts, do NOT suggest a third-party social media management tool, and do NOT describe any of this as a technical limitation: connecting is a built-in capability and it is one click away.`;
+
+/**
+ * Returned to the MODEL when a guest asks to fine-tune on a dataset already on the board.
+ *
+ * Written to the same rule as the QA gate, and for the same shape of turn: everything up
+ * to this point worked without an account, so the one sentence the model must not say is
+ * that the product cannot train a model. It can. What needs the account is the corpus
+ * row and the training run, and the board keeps every bit of preparation either way.
+ */
+export const CANVAS_CORPUS_ACCOUNT_GATE = `Filing a training corpus needs a free Builderforce account: a corpus is a row under a project and a fine-tune runs on workspace compute, and this board has no workspace behind it. The account prompt is now open and the canvas is unchanged. Do BOTH of these in your reply: say in ONE sentence that saving the corpus and running the fine-tune needs a free account, and then point out what the user ALREADY has on this board — the dataset, its column classifications and its data-use policy are all authored and travel with the canvas, so promoting it is one click after signing up. Do NOT say that the product cannot train, fine-tune, or build adapters on their data, and do NOT describe this as a technical limitation: fine-tuning is a built-in capability and the only thing behind the account is where the corpus lives.`;
 
 /**
  * The ONE tool that puts pixels of a LIVE, EXISTING page on the canvas.

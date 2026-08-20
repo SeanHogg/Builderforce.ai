@@ -1,3 +1,265 @@
+## ✅ RESOLVED 2026-08-19 — The data-driven surfaces stop being read-only, English-only and quarterly · migration 0942
+
+The second tranche of the "Data-driven surfaces (residual)" bullet, closed end to end: the
+Calendar and the Gantt became editable and span-aware, the capitalization report grew a workbook
+and started booking spend in the month it was spent, the deploy guard learned the failure that
+took down `db:migrate`, the tools registry became translatable in all five locales, the
+data-driven window became a control instead of a constant, and a maturity scorecard can now be
+read in COBIT or ITIL vocabulary.
+
+---
+
+### 1 · A timeline you can move — and a Calendar that answers "what is in flight"
+
+**Drag-to-reschedule.** `ScheduleGantt` bars now drag: the body slides the whole window, and two
+edge grips move one end each. `ScheduleCalendar` spans drag onto another day. Both surfaces are
+still exactly as read-only as before for any caller that supplies no `onReschedule` — a shared
+read-only board gets no grips rather than grips that silently fail.
+
+The gesture is **pointer events, not HTML5 drag-and-drop** (`lib/useScheduleDrag.ts`). `draggable`
++ `dataTransfer` is the shorter route to the same feature and it is the wrong one: HTML5 DnD does
+not fire for touch at all, so the schedule would have been editable on a laptop and frozen on the
+tablet a PM actually reviews a plan on.
+
+The two views convert a drag to days DIFFERENTLY and must: the Gantt divides horizontal travel by
+its column width, while the Calendar asks which day CELL is under the pointer — a month grid
+wraps, so dragging from Saturday to the Sunday below moves one day forward while travelling six
+columns backwards. That is why `deltaFor` is a callback and not a pixels-per-day constant.
+
+**What a drag MEANS is one pure function.** `shiftSchedule(item, mode, deltaDays)` in
+`lib/schedule.ts`, shared by both views and unit-tested without a DOM, because the interesting
+cases are all edge cases and they have to agree:
+
+* an item with only a due date — a roadmap item — keeps its start `null`. Materialising a start
+  out of a drag would put a schedule on the board that nobody entered;
+* resizing past the other edge **collapses** to a single day rather than inverting the window. An
+  end before its start is not a shorter task, it is a corrupt row, and a Gantt renders it as a
+  negative-width bar;
+* a no-op drag returns `null` so no write is issued at all. Round-trips that change nothing still
+  bust caches and re-render boards.
+
+**Multi-day spans.** The Calendar plotted only the deadline pill, so it could answer "what lands
+on the 14th" and could not answer "what is in flight on the 14th" — which is the question a month
+grid exists for. A three-week project appeared as one dot, indistinguishable from a same-day task.
+Items are now laid out as spans with greedy first-fit lane packing, split at week boundaries,
+square-ended where they continue, and capped at three lanes with a per-day "+N more" count (a cell
+that grows without limit stops being a month view). An item carrying only a deadline still renders
+as a one-day span, so nothing that used to appear has stopped appearing.
+
+**The project-level date column (migration 0942).** 0255 gave `projects` an explicit `due_date`
+and stopped there, and that asymmetry is what made the Gantt read-only: a bar has two ends and
+only one of them was writable. `projects.start_date` mirrors it exactly — explicit when set, else
+the derived earliest-task start — and is deliberately **not backfilled**, because copying today's
+aggregate into the column would freeze it and silently convert every project on the platform from
+"tracks its tasks" to "does not".
+
+Both project dates now read through one `nullableDateParam` (`routes/queryParams.ts`): three
+states, not two — absent leaves it, `null` clears it, a parseable value sets it. Two copies of a
+tri-state parse is how one of them ends up unable to clear its column.
+
+**Wired, not just built:** projects (`updateProject`), tickets (`tasksApi.update`) and roadmap
+items (`roadmapClient.update`) all persist a drag, each through the same write path its typed
+editors already use.
+
+**The derived date aggregate was already cached** — `/api/projects` has served through
+`getOrSetCached` on a per-tenant version token since the list endpoint was written. That half of
+the bullet was stale.
+
+**Localization, which this subsystem had none of.** `ScheduleCalendar`, `ScheduleGantt`,
+`ScheduleLegend` and `RoadmapGantt` were shipping hardcoded English — weekday headers, "Today",
+"Overdue", "No deadline set:", month names via a locale-less `Intl` formatter. A new `schedule.*`
+namespace covers all of it in en/zh/es/fr/de, weekday and month names come from the ACTIVE locale,
+and the module-level `DEADLINE_LABELS` constant is deleted: a status name is user-facing text and
+a `Record` at module scope cannot be translated.
+
+The Gantt's `noun` prop went with it. It was capitalized and pluralized with `+ 's'`, which is
+only ever correct in English — the empty state read "No scheduled tâches yet" the moment the page
+around it was translated. Callers now pass a localized `columnLabel` and a localized
+`emptyMessage`: grammar belongs in the catalog next to the sentence it inflects, not in a shared
+component's string maths.
+
+---
+
+### 2 · The capitalization report: a workbook, and spend booked in the month it happened
+
+**"As-of" vs real spend month — a misstatement, not an approximation.** `summarizeAllocationHistory`
+attributed a task's whole LLM spend to the month the ticket last moved. A ticket opened in March,
+worked through April and closed in June reported ALL of its March-to-June API spend as June spend.
+A finance team reconciling against the vendor invoice would find the year agrees and every month
+in it disagrees, which is exactly the failure that makes a report useless for accrual.
+
+Cost is now keyed by `(task, real spend month)` — aggregated in SQL by
+`to_char(created_at, 'YYYY-MM')`, which reads the same month `monthKey()` does because the column
+is `timestamp` WITHOUT time zone and Drizzle parses it by appending `+0000`. EFFORT stays an
+"as-of" reading and is labelled as one: a task's hours are derived from its lifecycle, so there is
+no per-day record to distribute, and pretending otherwise would be worse than saying so.
+
+The same fetch also stopped shipping every raw `llm_usage_log` row into the isolate to sum by
+hand — twelve months of a busy workspace is tens of thousands of rows for a sum Postgres does in
+the index.
+
+**The history stopped disagreeing with the donut above it.** `summarizeAllocationHistory` called
+`taskEffortHours(r, now)` with no logged minutes, so the monthly FTE-months were a pure cycle-time
+estimate even on a workspace that had logged every hour — while the chart directly above the table
+used the real figure. Two numbers on one screen, from the same tasks, disagreeing. It now takes
+`loggedByTask` and reports `measuredEffortPct` **per month**, because the month a team started
+logging time is the month its numbers changed meaning, and a single workspace-level percentage
+hides exactly that.
+
+**XLSX.** `rowsToXlsx` was generalized to `sheetsToXlsx` (fflate, no new package, runs in the
+Worker) and the report exports as a two-sheet workbook: the monthly claim and the epic evidence on
+their own sheets instead of stacked behind a `section` column. Numbers arrive as numbers rather
+than as text a reviewer has to re-parse before summing — a capitalization schedule is read, sorted
+and totalled by hand, and CSV made every one of those a re-import. The styles part's relationship
+id is computed rather than hardcoded to `rId2`: with two sheets it must be `rId3`, and getting it
+wrong opens as "unreadable content" with no further explanation.
+
+Both formats render ONE definition (`capitalizationTables` in the new
+`metrics/capitalizationReport.ts`). Two formats of the same report defined in two places is how
+the workbook and the CSV come to describe different reports and a reviewer cannot tell which is
+authoritative. CSV keeps its flat union shape — it is what imports into everything — and gains the
+same new columns.
+
+**`measuredEffortPct` is on screen.** The collector had reported the measured/estimated split for
+a while and nothing displayed it, so a capitalization figure built from timesheets and one built
+from ticket open/close guesses printed identically. It is now a KPI tile and a column on the
+history table, and the frontend's `AllocationInsights` type — which had been missing `laborUsd`,
+`ratedHours`, `loggedHours` and `measuredEffortPct` entirely — matches what the API actually
+sends.
+
+---
+
+### 3 · The deploy guard that would have caught 0243
+
+`check-migrations.mjs` gained a **sixth guard**: a literal `0` (or negative) INSERTed into a column
+whose foreign key points at a SERIAL/IDENTITY key can never resolve, on any database, ever.
+
+That is precisely what shipped. `0242` declared `tenant_id INTEGER NOT NULL DEFAULT 0 REFERENCES
+tenants(id)`; `0243` seeded the two built-in board decks at the sentinel `tenant_id = 0`;
+`tenants.id` is a SERIAL and a serial never issues 0. Postgres answered `Key (tenant_id)=(0) is not
+present in table "tenants"`, aborted `db:migrate` mid-file, and blocked EVERY API deploy until
+somebody read the failure and dropped the constraint by hand. Nothing static caught it: the FK is
+type-correct, the column exists, the INSERT is valid SQL, and no test executes a migration.
+
+The 0-tenant sentinel is not a mistake — a global row owned by no tenant is a real pattern here —
+which is exactly why it has to be caught statically: the fix is to NOT put an FK on that column,
+and that decision belongs when the table is written, not when the deploy is red.
+
+Conservative by construction, because it blocks deploys: only numeric literals are judged, a
+positive literal is never judged (whether row 42 exists is a question about data), an INSERT
+without an explicit column list is skipped, and a `DROP CONSTRAINT` earlier in the run clears the
+finding — which is what makes 0243 itself pass today, since dropping the constraint in the same
+transaction is the documented fix and a guard that still failed on it would be telling people to
+undo it. A `DEFAULT 0` on an FK column is deliberately NOT flagged on its own: a default is not a
+write, nothing fails until an insert omits the column, and flagging it would fail the build on a
+file whose hazard was already removed.
+
+Verified both ways — the guard is silent on all 451 migrations, and removing 0243's `DROP
+CONSTRAINT` line makes it fail with the exact deploy-killing row.
+
+Two bugs surfaced while building it and were fixed in the same pass: an `ALTER TABLE … ADD COLUMN
+a …, ADD COLUMN b …` read as one clause attributed the second column's `DEFAULT 0` to the first
+(a false positive on 0075), and splitting `deck_templates_tenant_id_fkey` with a greedy regex gave
+`(deck_templates_tenant, id)` — a column that does not exist, so the drop cleared nothing.
+
+**pptxgenjs under wrangler: verified.** `wrangler deploy --dry-run` bundles the Worker at
+15,748 KiB raw / **3,563 KiB gzipped** — inside the 10 MB gzipped Worker limit — with `PptxGenJS`
+and `addChart` present in the emitted bundle. (The dry run's only failure is the container image
+step needing a local Docker daemon, which is unrelated to the JS bundle.)
+
+---
+
+### 4 · Tool content stops being English-only server data
+
+Every other user-facing surface is translated — next-intl over five catalogs on the frontend,
+`emailMessages.ts` for mail. The tools were the hole. Their content is not frontend copy and not
+email copy: it is DATA the API serves, and it was served in English to everyone. A French
+workspace could switch the whole product to French and still be asked, in English, whether "the
+team limits work-in-progress" — on the free logged-out diagnostics, which are the platform's front
+door.
+
+`toolMessages.ts` + four locale modules cover **511 keys across all 28 tools** in zh/es/fr/de.
+English is deliberately absent: `toolDefinitions.ts` already IS the English copy, and a second copy
+here would be a second thing to keep in step. Localization is a projection — walk a definition and
+swap each string for its structural key's translation.
+
+Completeness is a **build failure**, not a convention. `toolMessages.test.ts` derives the key set
+from the live registry and fails when a locale is missing one, which is the guarantee
+`emailMessages.ts` gets from an exhaustive interface, arrived at differently because these keys are
+generated from data. It asserts on key PRESENCE and deliberately not on "differs from the English":
+`%`, `$`, `Initial`, `Remote` and a company name are correct unchanged in several of these
+languages, and a difference test would demand a translator make them worse to keep the build green.
+
+**The RESULT is translated too, with no second catalog.** `localizeTool` returns a `Tool`, not a
+`ToolDefinition`, so the shared scorers can run against the LOCALIZED tool — a questionnaire's
+result is built from its own section names and advancement actions, so translating the tool
+translates the result. Only the engine's chrome needed its own copy (`resultCopy.ts`): "Level 3 —
+Defined" is emitted identically by every questionnaire, and a per-tool copy of it would be
+twenty-eight chances to translate one sentence twenty-eight different ways. The telemetry mode got
+its own empty state in the same pass — "Not enough answers yet" in front of a scorecard nobody was
+asked to answer sends the reader somewhere that cannot help them.
+
+Locale comes from the REQUEST, through the same `localeFromHeaders` chain email uses, and
+deliberately not from the account: these endpoints are public and a visitor with no account still
+has a language.
+
+---
+
+### 5 · The 90-day window, and COBIT / ITIL as a lens
+
+**The window.** The API has always accepted 7–365 days; `DataDrivenPanel` asked for 90 and only
+90, so every telemetry-derived score on the platform described one quarter with no way to ask a
+different question. That is the wrong fixed answer at both ends — a team deploying twice a day has
+its last sprint drowned in three months of history, and a quarterly board review cannot see the
+year. It is now a control (30 / 90 / 180 / 365), and a saved snapshot records and displays the
+window it was scored over, because saving a 90-day figure while the reader is looking at a 30-day
+one is how a history stops meaning anything.
+
+**COBIT and ITIL are a LENS, never a second questionnaire.** A CIO reporting to an audit committee
+does not present six practices; they present COBIT's five domains or ITIL's service value chain,
+because that is the taxonomy their auditors and their board pack already use. Handing them a sixth
+means they re-map it by hand every quarter, and the mapping they invent is the one nobody can
+reproduce.
+
+So `maturityFrameworks.ts` is a registry (data — a new framework is an entry, not a branch) plus
+one pure projection over a finished `ToolResult`:
+
+* the SIGNALS do not change. Three questionnaires would produce three numbers for one organization,
+  and the first person to notice they disagree would be right to stop trusting all three;
+* the PLAN does not change. Remediation stays per practice, because that is the grain at which
+  somebody actually does something;
+* a domain with no assessed practice reports **unassessed, not zero** — a governance domain scored
+  0 because nothing fed it is a far worse answer than one that says it was not measured.
+
+It works identically for the self-assessment and the telemetry provider because both now stamp each
+metric with the practice `key` it came from — matching on the human label would have meant a lens
+that broke the moment a section was renamed, or translated. The toggle is self-gating and reads
+`supportsMaturityFrameworks`, derived from the registry rather than from a hardcoded tool id.
+
+---
+
+### Fixed along the way
+
+* **`packages/brain-ui/dist` was stale** — `EvermindConsoleLabels` had `analyzeCoverage` in the
+  source and not in the built types, so `ProjectEvermindPanel.tsx` failed `tsgo` on a label the
+  console does render. Rebuilt.
+* **`hrms.test.ts` read `manifest.auth.fields` raw** — an optional property, so it failed to
+  typecheck AND would have reported a manifest relying on `defaultAuthFields` as declaring nothing.
+  Now goes through the canonical `authFieldsFor()`.
+* **`ProjectDetailsPanel.tsx` crossed the 800-line ratchet.** Fixed by extraction rather than by
+  bumping the baseline: `ScheduleDateField` is now `components/ui/ScheduleDateField.tsx` (769
+  lines). Both project dates share it, so one field cannot treat empty as "leave it" while its
+  neighbour treats it as "clear it".
+* **Two new client-boundary files avoided.** `useScheduleDrag` and `MaturityFrameworkToggle` are
+  only ever reachable from a component that already declared `'use client'`, so the directive would
+  have added to the boundary count without moving the boundary.
+* **Off-scale font sizes** in every file touched replaced with the role tokens.
+
+**Verification:** api `tsgo --noEmit` clean, **7,030 tests passing**; frontend `tsgo --noEmit`
+clean, `check:i18n-keys` green, the migration guards green on all 451 files.
+
+---
+
 ## ✅ RESOLVED 2026-08-19 — 253 unscoped tenant queries converted, and the reason the other 271 cannot be
 
 The tenant-scope baseline is **524 → 271 statements, 168 → 107 files.** More useful than the

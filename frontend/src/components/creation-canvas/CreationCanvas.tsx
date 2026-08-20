@@ -1743,6 +1743,28 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     requireAccount('connected_account', t('connectedGateTitle', { source }), t('connectedGateBody', { source }));
     return false;
   }, [requireAccount, t]);
+  /**
+   * ONE door for a guest-GATED canvas TOOL — the model half of `connectedAccountGate`.
+   *
+   * `accountGateResult` builds the shape the model reads, and every gate string in the
+   * contract ends with "The account prompt is now open" — but the builder is a plain
+   * function and CANNOT open anything. `canvas_read_attachment` returned it directly, so
+   * that sentence was false there: the model told the user a prompt was waiting and no
+   * prompt had been raised. The two halves are one call here precisely so the claim and
+   * the prompt cannot drift apart again.
+   *
+   * Reads the token per call rather than closing over `hasAccount`, so signing in
+   * mid-session is reflected on the very next tool call — same rule as the social gate.
+   *
+   * Returns the gate result to hand straight back to the model, or null to proceed.
+   */
+  const accountRequiredGate = useCallback((
+    tool: string, action: string, title: string, description: string, reason: string,
+  ): { requiresAccount: true; tool: string; error: string } | null => {
+    if (getStoredTenantToken()) return null;
+    requireAccount(action, title, description);
+    return accountGateResult(tool, reason);
+  }, [requireAccount]);
   useEffect(() => {
     if (!palettePreferencesReady) return;
     try {

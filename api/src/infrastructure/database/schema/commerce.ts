@@ -35,10 +35,9 @@ import {
   varchar,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
-import { creationSessionObjects, creationSessions, freelancerEngagements, timecards } from './canvas';
+import { creationSessionObjects, creationSessions, freelancerEngagements } from './canvas';
 import { artifactTypeEnum, objects, pricingModelEnum } from './kernel';
 import { segments, tenants, users } from './identity';
-import { proposalEvaluations } from './agents';
 import { jobPostings, skills } from './agents';
 import { projects, tasks } from './delivery';
 

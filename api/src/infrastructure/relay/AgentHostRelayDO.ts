@@ -43,6 +43,10 @@ interface BufferedLog {
   ts: string;
   level: string;
   message: string;
+  /** The execution this line belongs to, when the host was running one. Lets the
+   *  portal scope a live log tail to a single run — without it the relay stream is
+   *  host-wide even though the tool-audit read is already execution-scoped. */
+  executionId?: number;
 }
 
 /**
@@ -275,7 +279,7 @@ export class AgentHostRelayDO implements DurableObject {
     }
     if (this.logBuffer.length > 0) {
       for (const entry of this.logBuffer) {
-        ws.send(JSON.stringify({ type: "log", level: entry.level, message: entry.message, ts: entry.ts }));
+        ws.send(JSON.stringify({ type: "log", level: entry.level, message: entry.message, ts: entry.ts, ...(entry.executionId != null ? { executionId: entry.executionId } : {}) }));
       }
     }
 
@@ -488,11 +492,12 @@ export class AgentHostRelayDO implements DurableObject {
     void this.persistMessage(buffered);
   }
 
-  private emitLog(level: string, message: string) {
+  private emitLog(level: string, message: string, executionId?: number) {
     const entry: BufferedLog = {
       ts: new Date().toISOString(),
       level,
       message,
+      ...(executionId != null ? { executionId } : {}),
     };
 
     this.logBuffer.push(entry);
@@ -500,7 +505,7 @@ export class AgentHostRelayDO implements DurableObject {
       this.logBuffer.shift();
     }
 
-    this.broadcast(JSON.stringify({ type: "log", level: entry.level, message: entry.message, ts: entry.ts }));
+    this.broadcast(JSON.stringify({ type: "log", level: entry.level, message: entry.message, ts: entry.ts, ...(entry.executionId != null ? { executionId: entry.executionId } : {}) }));
   }
 
   /**

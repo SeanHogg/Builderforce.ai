@@ -216,7 +216,7 @@ BF	import_staged_users	Integrations	primitive	sync_state
 BF	device_authorizations	Governance & security	keep	device_authorizations
 BF	vscode_connections	Platform & observability	primitive	connection
 BF	tenant_models	Identity & tenancy	merged	(folded into a sibling)
-BF	marketing_sessions	Growth & marketing	primitive	metric_fact
+BF	marketing_sessions	Growth & marketing	keep	marketing_sessions
 BF	on_call_members	Platform & observability	primitive	membership
 BF	error_group_users	Platform & observability	merged	(folded into a sibling)
 BF	tenant_benchmark_profiles	Identity & tenancy	primitive	party_role

@@ -82,6 +82,10 @@ export class RelayLogPoller {
   constructor(
     private readonly getClient: () => GatewayClient | null,
     private readonly send: (msg: unknown) => void,
+    /** The execution the host is currently running, if any. Every log frame is
+     *  stamped with it so the portal can scope a live tail to ONE run instead of
+     *  showing the whole daemon tail — the same scoping the tool-audit read has. */
+    private readonly getExecutionId: () => number | null = () => null,
   ) {}
 
   /** Start polling. Pass `resetCursor=true` to replay from the beginning. */
@@ -153,6 +157,7 @@ export class RelayLogPoller {
       const lines = Array.isArray(res.lines)
         ? res.lines.filter((line): line is string => typeof line === "string")
         : [];
+      const executionId = this.getExecutionId();
       for (const line of lines) {
         const mapped = this.mapLine(line);
         this.send({
@@ -160,6 +165,7 @@ export class RelayLogPoller {
           level: mapped.level,
           message: mapped.message,
           ts: mapped.ts,
+          ...(executionId != null ? { executionId } : {}),
         });
       }
     } catch (err) {

@@ -147,7 +147,6 @@ follows is what closing them surfaced.*
 | 5 | [🧠 Brain & Chat](#5--brain--chat) | 16 |
 | 6 | [👥 Workforce, Boards, Kanban & Ceremonies](#6--workforce-boards-kanban--ceremonies) | 30 |
 | 7 | [📊 Insights, Analytics & Audits](#7--insights-analytics--audits) | 17 |
-| 8 | [🚨 Reliability — Incidents & Monitoring](#8--reliability--incidents--monitoring) | 0 |
 | 9 | [🔌 Integrations, Connectors & Workflows](#9--integrations-connectors--workflows) | 30 |
 | 10 | [🛍️ Marketplace, Talent, Freelance, Knowledge & Canvas](#10--marketplace-talent-freelance-knowledge--canvas) | 49 |
 | 11 | [🎬 Studio (Video/Voice), QA & Mobile](#11--studio-videovoice-qa--mobile) | 8 |
@@ -490,7 +489,6 @@ sequenced into waves because nothing in them gates the sell motion.
 - **A tenant with NO connected runtime still cannot use Kimi Code from hosted cloud agents. ⚠️ BLOCKER: an approval decision from Kimi.** Kimi's edge refuses the Cloudflare Workers egress with an HTML 403 before the API reads the key (reproduced 2026-08-02: the byte-identical request returns a clean JSON `401 invalid_authentication` from an ordinary IP). Local egress solves this for anyone running a runtime; a tenant who wants purely hosted agents has no route, because the only remaining options are a static-egress relay — still a hosted reverse proxy serving a subscription key, with real ToS risk — or Kimi granting an approved delegated-auth path. Spoofing a first-party client identity stays ruled out (`openaiCompatibleVendors.ts:98`). Unblocks: Kimi Code on hosted cloud agents with no machine online.
 ### 💳 Stripe card processing — Stripe-only, awaiting secrets
 
-- ~~**Stripe test-mode products/prices not created.**~~ **Resolved 2026-08-10.** Reusable Stripe Price IDs remain optional; when absent, hosted checkout builds recurring `price_data` from the server-validated published pricing contract. A real checkout no longer depends on pre-created products/prices.
 - **Webhook endpoint not registered in Stripe.** Needs `https://api.builderforce.ai/api/webhooks/payment` subscribed to `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.payment_failed`, `setup_intent.setup_failed` → yields `STRIPE_WEBHOOK_SECRET`. Unblocks: activation-on-payment.
 - **Worker secrets not set.** `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` need `wrangler secret put` against the account owning the `api.builderforce.ai` Worker. The four Price IDs are optional. **Until the two required secrets exist no tenant can upgrade** — the previous free-activation path is intentionally gone. Unblocks: the end-to-end test-card run.
 - **No end-to-end card verification yet.** The webhook parsing/mapping is unit-tested, but no test card has been driven through `POST /api/tenants/:id/subscription/checkout` → webhook → tenant activation. Unblocks: confidence before live mode.
@@ -535,7 +533,6 @@ sequenced into waves because nothing in them gates the sell motion.
 
 - **P2 — 115 of the 121 Evermind sidebar strings are in NO VS Code l10n bundle, so a non-English editor renders the whole panel in English.** `clients/vscode/src/evermindView.ts` routes every string through `vscode.l10n.t()` correctly, but `l10n/bundle.l10n.json` holds 165 keys of which only **6** are Evermind's — the bundle has not been regenerated since the console grew its targets list, test bench, maintenance, analyzer, tabs and diagnostics sections, so `bundle.l10n.{de,es,fr,zh-cn}.json` (169 keys each) cannot translate them. Pre-existing and extended by 13 strings this pass. Fix: run `vscode-l10n-dev` to re-extract, then translate the ~115 new entries across the four catalogs. Unblocks: parity with the web console, which IS fully localized across all five next-intl catalogs. *(Note the asymmetry — the same panel is translated on the web and English-only in the editor.)*
 - **P3 — the diagnostics report body is deliberately English-only.** `packages/brain-ui/src/evermind/diagnosticsReport.ts` emits an unlocalized markdown document (the buttons around it ARE localized). That is the right call for a technical artifact read by whoever debugs the model — the same category as a stack trace — but it means a non-English operator pastes an English report. Revisit only if diagnostics start being read by the operator rather than sent onward. Unblocks: nothing today; recorded so the choice is not mistaken for an oversight.
-
 
 ### Evermind tool calling — follow-ups *(constrained decoding shipped 2026-07-26, see DONE.md)*
 
@@ -652,7 +649,9 @@ sequenced into waves because nothing in them gates the sell motion.
 
 ### Insights, analytics & metrics
 
-- **Data-driven surfaces (residual):** Project Calendar/Gantt are read-only (no drag-to-reschedule / project-level date column) + the derived date aggregate isn't cached (cache keyed by a task-version token); Calendar plots only the deadline pill (no multi-day spans); single-value-item lifecycle swimlane not drawn. Capitalization report: CSV ships (see DONE.md 2026-08-19) but no XLSX; history cost is bucketed by "as-of" month rather than real spend month; FTE-months now prefer REAL logged time (`metrics/effortHours.ts`) and fall back to the cycle-time estimate only where none is recorded — `totals.measuredEffortPct` reports the split, so what remains is surfacing it on the report rather than fixing the number. Board Deck: deploy drift guard doesn't catch seed-data FK failures; native-chart re-data in uploaded templates deferred; verify pptxgenjs bundles under wrangler. Tool CONTENT is English-only server data (needs server-side i18n of `toolDefinitions.ts`); data-driven window fixed at 90 days; COBIT/ITIL as maturity-framework toggles not built.
+- **Data-driven surfaces (residual, after the 2026-08-19 tranche — see DONE.md):** Two sub-items of the original bullet remain, both deliberately: (a) the **single-value-item lifecycle swimlane is not drawn** — the planning surfaces render Epics and their children, but a work item that is its own single value unit (no children) has no swimlane of its own, so its lifecycle reads as a row rather than as a flow; (b) **native-chart re-data in UPLOADED deck templates** — `GenerativeRenderer` builds native pptxgenjs charts from live data, but the in-place `fflate` fill path only substitutes `{{token}}` TEXT, so a chart inside a customer-supplied .pptx keeps the numbers it was uploaded with. Fixing (b) means parsing and rewriting the embedded `chart1.xml` part rather than the slide text. Neither is blocked; both are unstarted.
+- **Career-analyzer RESULT prose is still authored in English** (`careerTools.ts` `analyze()` bodies, ~400 strings). The i18n SEAM is complete and wired — `toolMessages.ts` localizes every tool DEFINITION in all five locales, and the shared questionnaire/quiz scorers emit localized results — but an analyzer composes its findings inside its own pure function, which takes no copy object. So a French visitor sees a translated résumé-scorer form and English findings under it. Fix = thread a `ToolCopy` lookup into `AnalyzerTool.analyze` and add the strings to the four locale catalogs; the completeness test will then cover them automatically. *Unblocks: the career suite reading as one language end to end.*
+- **A SAVED tool run stores its result in whatever language it was computed in.** `toolRuns.result` is persisted JSON, so a run saved by a German manager reads as German to an English teammate looking at the same workspace history. The stored `input` is sufficient to re-score on read for kind='self', so the fix is to recompute-and-localize in `listRuns` rather than to store five copies; kind='data' snapshots cannot be re-scored (their telemetry window has passed) and need their chrome stored separately from their figures. *Unblocks: shared run history reading in the reader’s language.*
 
 ### Scheduling layer — residual gaps after SCHED-1..8 (see DONE.md 2026-07-25)
 
@@ -690,16 +689,6 @@ sequenced into waves because nothing in them gates the sell motion.
 
 ---
 
-## 8 · 🚨 Reliability — Incidents & Monitoring
-
-### Incident Management — residual polish
-
-> The war room became a live room, the outbox got its first writer and a
-> project-less incident finally teaches something, all 2026-08-19 (see
-> [DONE.md](./DONE.md)). Nothing is currently outstanding here.
-
----
-
 ## 9 · 🔌 Integrations, Connectors & Workflows
 
 ### ⌗ Canvas publish — residuals
@@ -734,7 +723,6 @@ sequenced into waves because nothing in them gates the sell motion.
 > The connect → read → compose → send slice shipped 2026-08-07 (migration 0414, see [DONE.md](./DONE.md)). These are the parts deliberately left out of that pass.
 
 - **A canvas inbox tile is pull-only — no push, no auto-refresh.** `canvas_refresh_inbox` re-reads on demand and the tile stamps `fetchedAt` so it never *claims* to be live, but nothing updates it on its own. Neither push mechanism is wired: Gmail needs `users.watch` + a Pub/Sub push endpoint, Graph needs a subscription with a renewal sweep, and both need a per-connection cursor plus a way to reach the open board (the creation-session WS relay). Deferred rather than polled because a background poll per open tile per tenant is a recurring cost against a Neon-Free budget for a feature nobody asked to be real-time. Unblocks: an inbox tile that updates while you watch it.
-
 
 ### 💸 Paid advertising & measurement — residuals
 
@@ -794,13 +782,6 @@ sequenced into waves because nothing in them gates the sell motion.
 ---
 
 ## 10 · 🛍️ Marketplace, Talent, Freelance, Knowledge & Canvas
-
-
-
-
-
-
-
 
 - **A learner's LTI launch is refused rather than routed to their own copy of the work.** *(new 2026-08-18, the residual of the launch bridge)* `bridgeLaunch` opens the bound course board for `teach` and `assist` and REFUSES `learn` with a sentence explaining why — correctly, because the cohort board carries the whole roster and every submission's mark, so opening it for a student would disclose their classmates' grades. But the honest destination for a learner does exist: `assignment.distribute` mints a per-learner board, and a learner launch should resume THAT instead of landing on `/lti/launch` with an explanation. Fix = look up the distributed board for `(assignment, learnerRef)` in the launch bridge and redirect to it, creating one when the assignment has been distributed and the learner has no copy yet. **Not blocked** — it needs the distributed-board lookup that `submission` objects already imply. Unblocks: a student clicking their assignment in Moodle and landing on their own work.
 - **LTI Deep Linking is in the claim vocabulary and has no route.** *(identified 2026-08-18 while bridging the launch)* `domain/lti/ltiClaims.ts` declares `LTI_MESSAGE_DEEP_LINK` (`LtiDeepLinkingRequest`), which is how an instructor picks WHICH canvas object an LMS link points at from inside the LMS's own content picker, and nothing handles that message type: a deep-link launch is verified and then treated as a resource-link launch, so the instructor gets the course board rather than a picker and the LMS never receives the `ContentItem` response it is waiting for. Fix = branch on `messageType` in `/api/lti/launch`, render a picker over the bound board's objects, and POST back a signed `LtiDeepLinkingResponse`. **Not blocked.** Unblocks: an instructor placing a specific assignment into a Canvas module without leaving Canvas.
@@ -872,14 +853,6 @@ are not file-disjoint and must be serialized and rebased before merge:
   a vendor adapter with no internal engine has nothing to map onto, and would become the second answer
   to "is it signed". Slots into the connector platform as manifest DATA per migration 0410, the same
   argument the HRMS entry in §9 makes. Unblocks: customers whose legal team requires a named provider.
-
-#### FO-E · Raising — **CLOSED**
-
-> Every item under this heading has landed. The raise is the sales board read through a different
-> pipeline FAMILY (`deals.kind='investment'`), the data room's three safety columns are enforced at the
-> one place a token resolves, the round HEADER is a record with its stored total dropped, a room holds
-> encrypted legal FILES as well as diligence obligations, and a watermarked PDF is stamped on every page
-> rather than served view-only. 2026-08-19, migrations 0925 and 0937 — see [DONE.md](./DONE.md).
 
 #### FO-G · Legal — a company's first ninety days are canvas cards
 
@@ -981,10 +954,9 @@ are not file-disjoint and must be serialized and rebased before merge:
 
 ### Data-scientist canvas review — Idea → Real still has no compute and no monitor *(2026-08-13; re-validated 2026-08-18 — the model / runComparison / labelSet / prompt kinds have since shipped and were removed)*
 
-> The canvas is strong at IDEA and DATA (`dataset`/`datasource` snapshot-vs-live, `dataContract` → `checksFromContract()`, `erd`, `metric`, `lineage` + `staleDerivatives`, and a genuinely relational client-side query engine: filter → derive → timeGrain → groupBy → aggregate → having → sort → window → limit). It is thin at ANALYSIS and **absent** for MODEL, SHIP and MONITOR. Three of the missing halves are already BUILT server-side and simply unreachable from the board — `ide_training_jobs`/`ide_training_logs` (`/api/ide/training/*`), `/api/insights/forecast`, and `prompt_library_entries`/`prompt_library_versions` — the same "capability lives behind its own tab, the front door has no tool for it" pattern the QA-tester and CMO reviews found.
+- **Three data-science capabilities are BUILT server-side and unreachable from the board.** The canvas is strong at IDEA and DATA (`dataset`/`datasource` snapshot-vs-live, `dataContract` → `checksFromContract()`, `erd`, `metric`, `lineage` + `staleDerivatives`, and a genuinely relational client-side query engine: filter → derive → timeGrain → groupBy → aggregate → having → sort → window → limit). It is thin at ANALYSIS and **absent** for MODEL, SHIP and MONITOR — not because the capability is missing but because the front door has no tool for it: `ide_training_jobs`/`ide_training_logs` (`/api/ide/training/*`), `/api/insights/forecast`, and `prompt_library_entries`/`prompt_library_versions` all exist and no canvas tool reaches any of them. The same "capability lives behind its own tab" pattern the QA-tester and CMO reviews found. Fix = a canvas tool per capability, over the surfaces that already exist. **Not blocked.** Unblocks: training, forecasting and prompt iteration happening on the board rather than beside it.
 
 ### Career layer — what the 2026-08-13 tool pass did NOT close
-
 
 > Everything this section was opened for has shipped; see [DONE.md](./DONE.md). The tools, the pure
 > `application/career/*` domain, the career intent on the hire-me listing and the guest surface landed first,
@@ -1101,7 +1073,6 @@ are not file-disjoint and must be serialized and rebased before merge:
   hub; our scope is project-level (`ProjectScopeContext`) and board-centric, so "everything about this launch"
   has no home. Fix = a Space entity over the PRD-20 kernel, not a new per-feature table.
 
-
 ---
 
 ## 11 · 🎬 Studio (Video/Voice), QA & Mobile
@@ -1170,7 +1141,6 @@ are not file-disjoint and must be serialized and rebased before merge:
 - **Sales-deck slide-19 footnote is not yet seat-specific + the deck generator is missing.** The pricing-credibility decision landed (Teams = org-wide volume pricing, **5-seat minimum**, enforced live — see DONE.md 2026-07-24); the deck's slide-19 already carries a provisional "org-wide volume pricing" footnote (framing now *confirmed* correct), but it doesn't state the specific 5-seat minimum. Updating the rendered PNG/PDF/PPTX is blocked because the generator (`scratchpad/deck.py`, Pillow + Edge-headless SVG rasterization) referenced by `marketing/pitch-deck/README.md` no longer exists in the repo — it lived in an ephemeral scratchpad. Fix = reconstruct `deck.py` (or a committed replacement generator) under `marketing/pitch-deck/`, then re-render slide 19 to say "5-seat minimum" and rebuild the PDF/PPTX. Unblocks: a self-consistent deck + repeatable deck regeneration.
 - **Sales deck has zero customer proof** (CEO-review finding, 2026-07-23): no logos, quotes, case studies, or measured outcome numbers anywhere in marketing — the deck's ROI slide is explicitly *illustrative*. Needs GTM work, not code: land ≥1 design partner, capture one measured result (e.g. PR cycle-time delta, token-spend delta from the consumption meters we already ship), and swap it into the deck's Unit-Economics slide + /customers surface. Unblocks moving buyers from "pilot" to "org-wide."
 - **SOC 2 Type I is the governance-pitch gate** (CEO-review finding): the deck sells approval gates + immutable audit hard, but compliance posture is one "in progress" line. Already a Revenue-register item (Q4 2026) — flagging the dependency: enterprise deals sourced by the deck will stall at security review until it lands.
-
 
 - **Client read-through caching is re-implemented THIRTEEN times because no shared primitive exists** *(PRD 22 re-audit 2026-08-08)*. `frontend/src/lib/apiClient.ts` (274 lines) is the single sanctioned transport and contains zero request dedup, cache or in-flight map, and there is no `@tanstack/react-query`/`swr` in `frontend/package.json`. In its place sit 13 independent module-level caches, each re-deriving TTL + single-flight + optional invalidation: `useConsumption.ts:23-26` (60s TTL + `invalidateConsumption()`), `pendingWork.ts:53,163-166` (30s, tenant-keyed + `invalidateRecentCanvases()`), `widgets/sharedSource.ts:25-26` (30s Map), `useLlmModels.ts:78-79,141`, `team/useTeamRoster.ts:25-27`, `useLensPersona.ts:38-39`, `usePsychometricCatalog.ts:19`, `modelCatalog.ts:139`, `usePersonalityBlock.ts:29`, `semantic-cache.ts:27`, `api.ts:53`, `builderforceApi.ts:596` (`brainTraceCache`), `components/freelance/useMyTalentProfile.ts:16`. **These are deliberate and documented, not careless** — `useConsumption.ts:15-20` records that without it "one page load fired N identical requests". The defect is the missing primitive: 13 TTL policies with no stated rationale for differing, only 3 hand-written `invalidate*()` functions so a write that should dirty two caches has nowhere to say so, no shared key namespace, and every *new* read path uncached by default (270 modules import `@/lib/builderforceApi`; 740 `useEffect` call sites across 401 files). Fix = one `getOrSetClientCached`/`invalidateClientCache` primitive in `infrastructure/http/` and migrate **all 13** in the same slice preserving each one's current TTL/invalidation semantics (per the DRY rule — extracting without migrating leaves 14 caches), plus a `check-api-transport.mjs` guard against a new hand-rolled Map+TTL. Specified as PRD 22 §3.13 / §6.7 / H-17. **Not a proven speedup** — the hot paths those 13 authors cared about are already cached; PRD 22 §5 Phase 0's request census gates whether this is a performance slice or purely a DRY/correctness one.
 - **The frontend is a client-side SPA wearing an App Router — 66 of 166 pages are (re-measured 2026-08-18) `'use client'`** *(PRD 22 re-audit 2026-08-08)*. 764 of 1,228 files under `frontend/src` open with `'use client'` (counted by first-line directive; strict and loose counts are identical, so no comment inflates it — the ratchet moved 755 → 764 on 2026-08-09, six of those the product-update/beta surfaces, which are genuinely interactive), including 68 of 137 `app/**/page.tsx` route entries, and `app/layout.tsx:170-197` wraps every route in nine nested client context providers (`Auth`, `Cart`, `Emulation`, `RolePreview`, `PermissionDebugger`, `Confirm`, `Toast`, `DemoMode`, `Locale`). A client-rooted page forces its whole import subtree into the **client bundle** regardless of interactivity — this is the *mechanism* behind PRD 22 §3.1's eager `CanvasStage` import, not an isolated mistake, and dynamic-importing `CanvasStage` moves no bytes for the other 67 client pages. **Precisely: this does NOT delay first paint** — Next server-renders client components and `<Suspense>` still streams inside a client tree; the costs are transferred/parsed JS, hydration (TTI/INP), re-render breadth from nine root providers, and the inability to `await` data during render (which is what couples this to the caching entry above). Fix = classify the 68 client pages (genuinely interactive at root vs client-by-accident), push `'use client'` to leaves, split route-specific providers out of the root layout, and ratchet both counts downward; must be validated per-route against the post-hydration `LocaleProvider` locale swap. Specified as PRD 22 §3.14 / §6.1 / H-18. Unblocks: real bundle reduction rather than symptom-level splitting.
@@ -1252,6 +1222,19 @@ are not file-disjoint and must be serialized and rebased before merge:
   clear it: that session commits or stops. Unblocks: one owner per vocabulary, and every wave after this
   one running its lanes without a hand-merged JSON. **(W0)**
 ## 15 · 🛠️ Platform — DB, CI/CD, Migrations, Cost & Tech-debt
+
+### 🔀 Found while closing the data-driven residual (2026-08-19) — owned by a CONCURRENT session
+
+> These three are real, red RIGHT NOW, and every one of them lives in a file another agent session
+> was actively editing during this pass (mtimes 21:20–23:00 while this work ran elsewhere in the
+> tree). Touching them would be a collision, and two of them require a judgement only the author of
+> the in-flight feature can make. That is the single concrete blocker on all three. See also the
+> concurrent-writer LEAD on the vitest flake below — same root condition, different symptom.
+
+- **`check:canvas-tools` is RED: `canvas_promote_dataset_to_corpus` is advertised by the canvas and classified nowhere.** `CreationCanvas.tsx:6996` declares the tool; `packages/creation-canvas-contract/src/canvasTools.ts` lists it in none of `GUEST_SAFE_CANVAS_TOOLS` / `GUEST_GATED_CANVAS_TOOLS` / `ACCOUNT_REQUIRED_CANVAS_TOOLS`, so the gateway strips it and the model plans around a tool that silently returns prose. It almost certainly belongs in `ACCOUNT_REQUIRED_CANVAS_TOOLS` (it reads and writes a tenant dataset), but classifying somebody else's in-flight tool as guest-reachable or not is a security decision, not a lint fix. **BLOCKED: the canvas dataset-governance feature is mid-flight in another session — whoever lands `canvas_promote_dataset_to_corpus` classifies it in the same commit.** *Unblocks: `api npm test`, which chains this guard.*
+- **`check:design-scale` is RED on two files: a literal hex in `components/AITrainingPanel.tsx` and two off-scale radii in `components/creation-canvas/CreationCanvas.module.css` (`22px`, `2px`).** A literal renders identically in both themes, which is the whole reason the ratchet exists. Fix = a token, or an entry in `COLOUR_EXEMPT` / the radius scale with its reason. **BLOCKED: both files belong to the concurrent canvas/AI-training work.**
+- **`check:architecture` is RED: 812 `'use client'` files against a baseline of 807.** The five over are all from the concurrent session (`LtiLaunchClient`, `PublishGigClient`, `ReferencesClient`, `MilestoneSchedulePanel`, `DataRoomShareViewer`, `PublicInvoice`, `LegalDocumentShareViewer`, `ManagerBlockedPrs`, `CompareArenaTabs`, `ProspectDealView`, `TemplateGallery`, `AnchoredPopover` and friends, net of removals). This pass added **zero** — `useScheduleDrag` and `MaturityFrameworkToggle` are reachable only from a component that already declared the directive, so it was left off deliberately rather than bumping the ratchet. **BLOCKED: bumping the baseline would silently bless twelve files this session did not write, which is exactly the drift the ratchet exists to see; the session that added them raises it with its own changelog entry.**
+
 
 ### 🛡️ Cloudflare serves a managed challenge to every datacenter caller of the whole `builderforce.ai` zone *(found 2026-08-08)*
 

@@ -32,11 +32,9 @@ import {
   varchar,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
-import { brainChats, facts, knowledgeDocuments } from './canvas';
-import { contributorMerges, rehearsals, teams } from './canvas';
+import { brainChats, knowledgeDocuments } from './canvas';
 import { agentHostDirectoryStatusEnum, agentHostStatusEnum, agentTypeEnum, artifactTypeEnum, assignmentScopeEnum, executionStatusEnum, managedAgentHostRequestStatusEnum, objects, pricingModelEnum, tsvector, workflowStatusEnum, workflowTypeEnum } from './kernel';
-import { monitors, pullRequests, qaCredentials, qaTargets, qaTests } from './delivery';
-import { approvals } from './governance';
+import { pullRequests, qaCredentials, qaTargets, qaTests } from './delivery';
 import { segments, tenants, users } from './identity';
 import { connectorConnections, integrationCredentials } from './platform';
 import {

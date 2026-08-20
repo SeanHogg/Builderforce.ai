@@ -607,6 +607,7 @@ export class BuilderforceRelayService implements IRelayService {
     this.logPoller = new RelayLogPoller(
       () => this.gatewayClient,
       (msg) => this.sendToRelay(msg),
+      () => this.pendingExecutionId,
     );
     this.presencePoller = new RelayPresencePoller(
       () => this.gatewayClient,

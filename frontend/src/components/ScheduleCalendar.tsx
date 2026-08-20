@@ -103,7 +103,10 @@ export function ScheduleCalendar<T extends Schedulable & { id: string | number }
   const fmt = useFormat();
   const locale = useLocale();
   const t = useTranslations('schedule');
-  const today = startOfDay(new Date());
+  // Memoized, not recomputed per render: it is a `useMemo` dependency below, and a
+  // fresh Date object every render would make the span layout — the most expensive
+  // thing this component does — run on every keystroke anywhere above it.
+  const today = useMemo(() => startOfDay(new Date()), []);
   const [viewMonth, setViewMonth] = useState<Date>(new Date(today.getFullYear(), today.getMonth(), 1));
   const gridRef = useRef<HTMLDivElement | null>(null);
 

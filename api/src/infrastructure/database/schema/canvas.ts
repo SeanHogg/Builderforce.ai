@@ -35,7 +35,6 @@ import {
 } from 'drizzle-orm/pg-core';
 import { desc, sql } from 'drizzle-orm';
 import { activityEventTypeEnum, integrationProviderEnum, newsletterEventTypeEnum, newsletterSubscriptionStatusEnum, objects, teamMemberKindEnum } from './kernel';
-import { errorCollectors, prodIncidents, qaSchedules } from './delivery';
 import {
   ceremonySessions,
   chatSessions,
@@ -44,7 +43,6 @@ import {
   tenants,
   users,
 } from './identity';
-import { marketplacePersonas } from './agents';
 import { integrationCredentials } from './platform';
 import {
   agentDefinitionVersions,

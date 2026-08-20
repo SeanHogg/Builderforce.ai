@@ -90,6 +90,10 @@ interface LogLine {
   msg: string;
   agentKey: string;
   agentName: string;
+  /** Set when the relay stamped the line with the run the host was executing.
+   *  Lets an execution-scoped panel show ONE run's tail instead of the host-wide
+   *  daemon log — parity with the execution-scoped tool-audit read. */
+  executionId?: number;
 }
 
 interface TimelineTrack {
@@ -333,7 +337,7 @@ export function ObservabilityContent({
             return;
           }
           if (ev.type !== 'message') return;
-          const msg = ev.data as { type?: string; level?: string; message?: string; ts?: string };
+          const msg = ev.data as { type?: string; level?: string; message?: string; ts?: string; executionId?: number };
           if (msg.type === 'log') {
             setLogLines((prev) => [
               ...prev.slice(-2000),
@@ -343,6 +347,7 @@ export function ObservabilityContent({
                 msg: msg.message ?? '',
                 agentKey: `host:${hostId}`,
                 agentName: name,
+                ...(typeof msg.executionId === 'number' ? { executionId: msg.executionId } : {}),
               },
             ]);
           }
@@ -435,7 +440,15 @@ export function ObservabilityContent({
       });
     }
   }
-  const mergedLogs = [...logLines, ...cloudLogLines].sort((a, b) => a.ts.localeCompare(b.ts));
+  // Cloud lines are already execution-scoped by the API call; host lines arrive
+  // over the relay for the whole host, so scope them here off the frame's stamp.
+  // Un-stamped lines (an older host build) are kept — dropping them would make a
+  // downlevel host look silent rather than unscoped.
+  const scopedHostLogs =
+    propExecutionId == null
+      ? logLines
+      : logLines.filter((l) => l.executionId == null || l.executionId === propExecutionId);
+  const mergedLogs = [...scopedHostLogs, ...cloudLogLines].sort((a, b) => a.ts.localeCompare(b.ts));
   const filteredLogs = logLevel === 'all' ? mergedLogs : mergedLogs.filter((l) => l.level === logLevel);
 
   const tracks: TimelineTrack[] = [];
