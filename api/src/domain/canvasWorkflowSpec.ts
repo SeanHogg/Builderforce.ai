@@ -207,6 +207,25 @@ function configIssue(
  * The graph is a linear chain — trigger → step → step → … — because that is what
  * an authored list means. Fan-out stays the hand-built builder's job; inventing
  * parallelism the author did not express would change the semantics of their list.
+ *
+ * ── EXCEPT AFTER A BRANCH ────────────────────────────────────────────────────
+ * The edge leaving a `branch` step is labeled `'true'`, and that is not a
+ * decoration — the executor prunes an arm whose labeled edge was not taken. A
+ * list that reads
+ *
+ *     Branch: order.paid
+ *     Charge the card
+ *     Email the receipt
+ *
+ * previously charged and emailed whatever the condition said, because both sides
+ * of a branch ran and only a hand-authored `filter` could stop them. It now means
+ * what it reads: the rest of the list is the TAKEN path.
+ *
+ * There is deliberately no else-arm. A list has one continuation and cannot
+ * express two, and synthesising a second branch from adjacency would invent a
+ * structure the author did not write — which is the same argument this file
+ * already makes against inventing fan-out. An else-arm needs a graph, which is
+ * what the builder is for.
  */
 export function compileCanvasWorkflowSteps(
   rawSteps: unknown,
@@ -245,6 +264,8 @@ export function compileCanvasWorkflowSteps(
   }
 
   let previousId = authoredTrigger ? '' : 'trigger';
+  /** The kind of the node the next edge will LEAVE from — a branch labels it. */
+  let previousKind: WorkflowNodeKind | null = authoredTrigger ? null : 'trigger';
   steps.forEach((step, i) => {
     const title = stepTitle(step, i);
     const kind = inferKind(step);
@@ -264,8 +285,18 @@ export function compileCanvasWorkflowSteps(
     }
     const id = `s${i + 1}`;
     nodes.push({ id, kind, label: title, position: { x: index * NODE_SPACING_X, y: 0 }, config });
-    if (previousId) edges.push({ id: `e${index}`, source: previousId, target: id });
+    if (previousId) {
+      edges.push({
+        id: `e${index}`,
+        source: previousId,
+        target: id,
+        // Only after a branch. Labelling an unconditional edge would hand the
+        // executor an outlet to prune on for a node that publishes none.
+        ...(previousKind === 'branch' ? { label: 'true' } : {}),
+      });
+    }
     previousId = id;
+    previousKind = kind;
     index += 1;
   });
 

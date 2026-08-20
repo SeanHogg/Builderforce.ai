@@ -48,6 +48,7 @@ import { partyRef as toPartyRef } from '@builderforce/creation-canvas-contract';
 import type { Db } from '../../infrastructure/database/connection';
 import { deals, partyRoles, pipelineStages, pipelineTouchpoints } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
+import { fundingRoundByName, type FundingRoundRecord } from '../finance/fundingRounds';
 import {
   PIPELINE_FAMILIES,
   familyForDealKind,
@@ -124,6 +125,20 @@ export interface ProjectedPipeline {
   /** Totals computed HERE, from the same rows the cards came from, so the header
    *  cannot disagree with what is under it. */
   totals: { open: number; openValueCents: number; won: number; wonValueCents: number };
+  /**
+   * The round's PLAN, when this is a raise and somebody has planned one.
+   *
+   * The plan and the result are different kinds of fact and are kept apart on
+   * purpose: `round` says what is being raised, at what valuation, by when — all
+   * negotiated, all typed — and `totals` says what has actually closed, derived
+   * from the allocations. `funding_rounds.amount_raised` used to try to be both
+   * and was dropped in 0937, because a stored total the rows can contradict is the
+   * defect this whole projection exists to remove.
+   *
+   * Null on a sales board, and null on a raise whose header nobody has filled in —
+   * which is a normal state, not an error: the allocations still draw.
+   */
+  round: FundingRoundRecord | null;
 }
 
 const cents = (amount: string | null): number | null => {
@@ -264,6 +279,13 @@ async function projectFamily(
   const won = dealRows.filter((row) => row.outcome === 'won');
   const sum = (rows: typeof dealRows) => rows.reduce((total, row) => total + (cents(row.amount) ?? 0), 0);
 
+  // The header, read only for the board that has one and only when a round is
+  // named — a sales pipeline has no plan to fetch, and an unnamed raise is every
+  // allocation at once, which no single round header describes.
+  const round = family.key === 'raise' && pipelineRef
+    ? await fundingRoundByName(db, tenantId, pipelineRef)
+    : null;
+
   return {
     family: family.key,
     pipelineRef,
@@ -272,6 +294,7 @@ async function projectFamily(
     cards,
     syncedAt: new Date().toISOString(),
     totals: { open: open.length, openValueCents: sum(open), won: won.length, wonValueCents: sum(won) },
+    round,
   };
 }
 

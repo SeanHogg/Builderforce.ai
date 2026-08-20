@@ -1,3 +1,217 @@
+## ✅ RESOLVED 2026-08-19 — Evermind knowledge is auditable for its whole life, generation has a clock, and the tool-choice bar can finally be calibrated
+
+Six Evermind residuals from the ROADMAP closed in one pass. They shared a root: the coordinator kept what the model had learned in ONE Durable Object storage value, and everything downstream inherited that value's 128 KiB ceiling.
+
+### P2 — the 24-memory audit horizon is gone
+
+`RECENT_MAX = 24` was never a product decision; it was the largest ring that fit in a single DO storage value. Anything older was still in the weights and still recallable — just invisible to review, correction and `/forget`.
+
+Memories now live **one per storage key** (`mem:<zero-padded id>`, so lexicographic order is chronological order). Consequences:
+
+- **One accessor layer owns the storage shape.** `readMemoryPage` / `writeMemories` / `deleteMemories` / `countMemories` — previously five handlers each did their own `storage.get(RECENT_KEY)` and `slice(0, RECENT_MAX)`, which is why lifting the cap would have meant five call sites agreeing.
+- **Lazy migration, no live storage migration to schedule.** `migrateLegacyRing` folds the old single-value ring into per-memory keys on first touch and deletes it; whichever handler runs first pays it, once, idempotently.
+- **Exact cursors.** `readMemoryPage` reads `limit + 1` and discards the extra, so a final page that happens to be exactly `limit` long is not reported as "there is more" — a paging consumer builds a loop around that answer.
+- **Recall stays bounded, the audit does not.** Recall pays one cosine per memory on every turn, so it scans `RECALL_SCAN_MAX = 256`; the analyzer walks the real history. The bound is on the hot path alone, and nothing is deleted.
+- **Reindex is batched with a cursor** (`REINDEX_BATCH_MAX = 64`) and reports `done`/`nextBefore`, because re-embedding a long history in one request is a forward pass per memory and would die mid-way while reporting success.
+- **The analyzer's budget is a per-pass budget, not a horizon** (`ANALYZE_MAX_MEMORIES` 24 → 120), and the frontier review is **batched** (`REVIEW_BATCH_SIZE = 24`). One oversized prompt would be truncated upstream, which silently drops memories from an audit — the exact failure the work exists to remove. A partial review now names how much was actually graded instead of reading as a clean bill of health, and `truncated`/`total` ride the result so a surface can say "120 of 812" rather than implying 120 is all there is.
+
+### P3 — the coordinator DO has a test harness at all
+
+The class needs a `DurableObjectState` + R2 + DB, so it had **zero** tests; `/reindex`, `/discard-pending` and `/forget` were covered only through mocked dispatchers. A ~40-line in-memory `DurableObjectState` fake (sorted map; `list` honouring prefix/reverse/limit and an EXCLUSIVE `end`) makes the whole layer pinnable — 13 tests.
+
+**It immediately earned itself, catching three defects in the new code:**
+1. a full final page reported a non-null cursor, so a paging caller always made one guaranteed-empty extra round trip;
+2. `migrateLegacyRing` derived an id for a legacy id-less entry into the KEY but not into the entry — a memory whose id lives only in its key cannot be targeted by `/forget` or highlighted on a recall;
+3. the reindex empty-batch early return had a different response shape from its main return.
+
+### P3 — the repair claim is honest now
+
+`/forget` removes a memory from the recall index; it does not unlearn it. The residual weight influence is superseded the normal write-through way, by teaching the correction — and for an `unusable`/`redundant` finding there IS no correction. "Fixed: N corrected, N forgotten" overstated that. Now: "N corrected and re-taught, N removed from recall (already-learned influence is superseded by the correction, not erased)". Localized across all five next-intl catalogs, with a new `analyzeCoverage` line for a partial audit.
+
+### P3 — generation has a wall clock
+
+Evermind generation is synchronous CPU on the request path. `maxTokens` bounded how much work was ASKED for, never how long it took, so a large head on a slow isolate ran until the Worker CPU limit killed it — a 5xx with no message and no output.
+
+`evermindGenerate` now takes `deadlineMs` (probe: 8s) and returns `truncated` + `elapsedMs`. The deadline is enforced between slices of 16 tokens because the engine's `generate()` is one synchronous loop with no per-token hook — and **slicing is free**: `forward()` already recomputes the whole sequence for every token, so re-entering with `prompt + producedSoFar` is exactly the work the next token was going to do. Determinism is preserved (each slice derives its seed from the base seed and its index), which is the property the test bench actually promises.
+
+### P2 — the tool-choice bar is calibratable
+
+`TOOL_CHOICE_MIN_MARGIN = 0.02` was an analytic placeholder no real head's margin distribution had ever been measured against. Calibration needs two things that did not exist:
+
+- **the data** — every tool decision now logs a structured `evermind.tool_choice` line with its margin, the bar, the tool and whether it was refused. Logging only refusals would show exactly the half of the distribution that cannot tell you whether the bar is too high;
+- **a way to try a number** — `EVERMIND_TOOL_CHOICE_MIN_MARGIN` overrides it without a deploy, through ONE resolver shared by the serve-time gate and the Studio bench, so the bench can never advertise a bar the gateway is not applying.
+
+A test caught the trap in the obvious implementation: `Number('')` is `0`, not `NaN`, so a **declared-but-unset** variable — the normal shape of a secret nobody filled in — would have set the bar to zero and silently turned the confidence gate off. Empty is now treated as absent before the numeric parse.
+
+The number itself still needs real heads to be measured against; that is a live-data question, not a code one.
+
+### P3 — streaming reaches Evermind
+
+Streaming dispatch skips any vendor without `callStream`, so a streaming surface silently served a **different model** than the one pinned to the project — the pin quietly not applying, which is worse than it failing. The completed call is now replayed through the shared `vendors/pseudoStream` adapter (the same one the Responses vendors use), so `usage` and `model` survive rather than being dropped by a hand-rolled replay.
+
+---
+
+## ✅ RESOLVED 2026-08-19 — The residuals bullet is closed and gone; the architecture-residual counts were re-measured
+
+### The credential item is closed as no-compromise
+
+The last thing standing in the "Deferred residuals" bullet was secret rotation (Cloudflare API
+token reg #9, NVIDIA API key reg #37, and the `api/.dev.vars` Neon credential). **Operator
+determination 2026-08-19: no compromise.** The bullet is deleted from ROADMAP.md rather than
+carried as a permanent blocked entry, and the gitignored `SECURITY-FINDINGS.local.md` now records
+the closure in place of its "rotation required (ops)" section — the in-repo remediation it
+describes (gitignore, `git rm --cached`, history purge via `filter-branch` + gc + force-push,
+values verified absent from every tracked file) still stands on its own and is kept as the record.
+
+With that gone, **nothing remains of the nine-item residuals bullet** — six closed by code earlier
+today, two were never true, and this one is closed by determination.
+
+### Four residual entries carried numbers that had drifted
+
+The neighbouring "Architecture pass — residuals" bullets state measured counts, and measured counts
+rot silently — they keep looking authoritative long after they stop being true. Re-derived every
+one of them:
+
+| claim | roadmap said | actually (2026-08-19) |
+| --- | --- | --- |
+| presentation modules querying the DB directly | 144 | **110** |
+| inline selects / inserts / updates in the route layer | 843 / 210 / 251 | **286 / 108 / 84** |
+| files importing the Drizzle schema | 390 | **541** |
+| files importing a domain entity class | 24 | **44** |
+| unscoped tenant queries (baseline) | 505 across 149 files | **410 across 135 files** |
+| permissions in the registry | 40 | **38** (11 enforced, 27 advisory) |
+
+Every direction-of-travel claim survived — the ratchets ARE ratcheting — but the layering figures
+were overstated by roughly 3× on statement counts, and the domain layer had been adopted almost
+twice as widely as the entry admitted (44 files, not 24, against a "46-file island" framing that no
+longer describes it). The schema-import count went UP, which is the honest number: the codebase
+grew faster than the migration.
+
+### A tenant-scope regression on `main`, found by re-running the guard
+
+`npm run check:tenant-scope` was **RED on main** — `application/boardsync/outbound.ts:92` updated
+`board_sync_outbox` by primary key with no tenant predicate. Safe in fact (the `existing` row came
+from a select that WAS tenant-filtered) but invisible to the guard, and one refactor of where that
+row is read from away from being a real cross-tenant write. Now `scopedToTenant(boardSyncOutbox,
+args.tenantId, eq(boardSyncOutbox.id, existing.id))`, with a comment saying why it is scoped
+despite the provenance. Guard green: 628 tenant-owned tables, 410 known unscoped statements across
+135 files, 0 new.
+
+This is the argument for re-running a guard rather than trusting the last line someone wrote about
+it: the regression had already been committed, and nothing would have surfaced it until the next
+person happened to run the check.
+
+---
+
+## ✅ RESOLVED 2026-08-19 — The locale a user picked reaches the places next-intl never went
+
+**Roadmap items closed (§14 · i18n / localization, §15 · Platform):** *OAuth signups get a weaker locale
+capture than password signups*, *`taskStatusLabel` is an English-only label map outside next-intl*,
+*The isolation manifest still carves five files out of T2 for a wave that closed*, and *The founder EQUITY
+vocabulary is half-landed in the working tree* (verified already landed — see §5). *Date/number formatting
+bypasses next-intl at 180 call sites* is **narrowed, not closed** — the primitive shipped and 245 of 333 call
+sites migrated; the 88 that remain are module-scope helpers and stay in the register with per-file counts.
+
+### 1 · A locale that survives the trip to the OAuth provider and back
+
+The OAuth callback is a cross-site redirect **from** the provider, so the two signals that carry a chosen
+language are both structurally unavailable there: `X-Builderforce-Locale` is a header `apiClient` stamps on
+XHRs and a navigation has no such header, and `NEXT_LOCALE` is set without a domain attribute so it is never
+sent to `api.builderforce.ai`. Only `Accept-Language` arrived — the OS default, not the choice — and the
+account was filed under it. The onboarding gate re-captured later, but a user who never reached that gate
+kept the guess until they happened to open Settings.
+
+The initiate request is the one hop the app itself builds, so that is where the locale can be named:
+`getOAuthUrl` ([frontend/src/lib/auth.ts](./frontend/src/lib/auth.ts)) reads the cookie and appends
+`?locale=`, and `GET /api/auth/oauth/:provider` signs it into the HMAC state envelope alongside `redirect`
+and `linkUserId` (`OAuthStateData` in
+[api/src/presentation/routes/oauthRoutes.ts](./api/src/presentation/routes/oauthRoutes.ts)). The callback
+prefers it over the header guess. `verifyOAuthState` re-narrows through `normalizeLocale` rather than
+trusting the envelope: the signature proves *we* minted the value, not that it is still a locale we can
+render.
+
+`requestMagicLink` had the same defect by a different route — it is a hand-written `fetch`, so it sits
+outside `apiClient` and never carried the header it easily could. Both now go through one `localeHeader()`
+builder in the same file instead of each re-deriving the cookie.
+
+### 2 · Status labels are catalog entries, not constants
+
+`TASK_STATUS_LABELS` was a `Record<TaskStatus, string>` of English strings consumed by the board, the lane
+editor, the briefcase badge, the member profile and the sign-off gap lines — so the largest surface in the
+product rendered "Backlog"/"In Review" in every locale. A *second*, already-translated copy of the same eight
+labels sat in `pm.epicStatus`, which is how `TicketLifecyclePanel` ended up half-migrated: reading the
+catalog for canonical keys and the English constant for everything else.
+
+One vocabulary, one owner. The labels moved to a top-level `taskStatus.*` namespace (`pm.epicStatus` is
+deleted, its three consumers migrated), and the resolution rule — canonical key from the catalog, custom
+operator-authored swimlane key through `humanizeStatus` — is stated once in `resolveTaskStatusLabel`
+([frontend/src/lib/taskStatusLabel.ts](./frontend/src/lib/taskStatusLabel.ts)) with two thin binders over it:
+`useTaskStatusLabel()` for client components and `getTaskStatusLabel()`
+([getTaskStatusLabel.ts](./frontend/src/lib/getTaskStatusLabel.ts)) for server callers. `taskStatus.ts` keeps
+only what is genuinely domain data: the ordered key list, the enum guard, the badge class.
+
+`AssignedWorkPanel` was picked up in the same pass — its lane groups sorted **alphabetically**, so a panel
+read "Backlog, Blocked, Done, In progress"; they now sort by kanban position, with custom lanes trailing.
+Its own hardcoded English (`"{n} assigned"`, `"Nothing assigned."`) and `BriefcaseBadge`'s tooltip are in all
+five catalogs.
+
+### 3 · `useFormat()` — the formatter next-intl does not reach
+
+next-intl localizes the *words* on a screen. It has never reached `Date.prototype.toLocaleDateString()` or
+`Number.prototype.toLocaleString()`, and those, called with no locale argument, format in the **runtime's**
+locale — the browser/OS language. A `zh` user on an `en-US` machine read Chinese labels beside `8/19/2026`.
+A smaller set was worse still: a hardcoded `'en-US'` is English for *everyone*, including the user who
+explicitly picked German.
+
+`frontend/src/i18n/format.ts` is the one place a value becomes a human string: `date`, `dateTime`, `time`,
+`dateLong`, `dateWith`, `number`, `currency`, `percent` and `relative`, all bound to one locale.
+`useFormat()` (client) and `getFormat()` (server) resolve the active locale so **no call site names one** —
+naming one is exactly how `'en-US'` got hardcoded. Absent or unparseable values render an em dash instead of
+`Invalid Date`, which retires the hand-rolled `Number.isNaN(d.getTime()) ? '—' : …` guard that had been
+copied file by file.
+
+A ts-morph codemod moved **245 of the 333 call sites across 125 files**, choosing `date` / `dateTime` /
+`time` / `number` from the RECEIVER'S TYPE via the checker rather than from a regex, and inserting
+`const fmt = useFormat()` only at the top of a component or hook body — never inside a branch, loop or
+callback, so there is no conditional-hook hazard. `eslint react-hooks/rules-of-hooks` passes across all 125.
+The 88 that remain are module-scope helpers where a hook cannot run; they are narrowed in ROADMAP.md with
+the per-file counts and the one shape that closes them (take the `Formatter` as a parameter, as
+`BrainPanel.formatTime` now does).
+
+Three classes the codemod could not decide were finished by hand: a default PARAMETER is evaluated outside
+the function body and so cannot see a hook result (`BarChart`/`DonutChart`/`StackedBar` — the default moved
+into the body), two files already had a local binding named `fmt` (`AlertsClient`, `QualityDashboard` — both
+were redundant aliases of what the formatter already does, so they went), and `LegalDocumentPage` is an
+`async` SERVER component, where the hook is a genuine break and `await getFormat()` is the answer. Ten more
+called `toLocaleTimeString([], …)` — an empty locales array, which is the same "use the runtime default"
+defect wearing a disguise the codemod's argument check was right to refuse.
+
+Performance is the reason the formatters are cached rather than constructed per call: building an
+`Intl.DateTimeFormat` loads and resolves CLDR data, and a 200-row table that called `toLocaleDateString()`
+per cell built 200 of them. `formatterFor` keeps one set per locale in a table bounded by `LOCALES` — five
+entries, fixed size, not a leak.
+
+### 4 · The isolation manifest matches the waves that actually exist
+
+Wave 1's five lanes merged on 2026-08-16, but [.github/isolation-tracks.json](./.github/isolation-tracks.json)
+still declared `W1A`–`W1E`, still carved six paths out of T2's `owns` set for them, and still narrowed T9's
+migration band to `[190, 899]` to protect reserved bands 0900–0929 that nothing will draw from again — so the
+track meant to own `components/{apps,commerce,site-editor}/**`, `CanvasReleasesPanel`,
+`marketplace/listing/**` and `marketplaceListings.ts` was fenced out of them by its own guard.
+
+The blocker named in the entry was `track/W1D` still being open. It is not: `git merge-base --is-ancestor
+origin/track/W1D origin/main` passes and the branch is 0 commits ahead. The five `W1*` entries are gone, the
+carve-outs are back in T2, T9 is `[190, null]` again, and `check-track-manifest.mjs` regenerated
+`isolation-tracks.generated.md` and validates the result.
+
+### 5 · The equity entry was describing work that had already landed
+
+Registered 2026-08-19 as 25 typecheck errors blocked on an in-flight change. That change landed:
+`shareClasses`, `equityGrants`, `convertibleInstruments` and `equityEvents` are all declared in
+`api/src/infrastructure/database/schema/finance.ts`, and both `pnpm --filter api typecheck` and
+`pnpm --filter frontend typecheck` are clean. Closed as verified rather than fixed.
+
+
 ## ✅ RESOLVED 2026-08-19 — Roadmap hygiene: the delivered founder-ops tracks and the shipped waves are out of ROADMAP.md
 
 ROADMAP.md had accumulated a large body of finished work presented as if it were still a plan. Every

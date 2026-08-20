@@ -11,7 +11,7 @@
  * fix one seat across, reproduced for the seat with the most visitors and the least
  * company behind them.
  *
- * `career.ts` in the contract argues why these six are their own vocabulary and not
+ * `career.ts` in the contract argues why these seven are their own vocabulary and not
  * additions to `HIRING_OBJECT_KINDS`; that argument is not repeated here. What this file
  * owns is the SHAPE of each card and, more importantly, which numbers are DERIVED.
  *
@@ -34,7 +34,7 @@
  */
 
 import {
-  CAREER_APPLICATION_STAGES, careerRunwayBand, isOpenApplicationStage,
+  CAREER_APPLICATION_STAGES, TIMECARD_STATUSES, careerRunwayBand, isOpenApplicationStage,
   type CareerObjectKind,
 } from '@builderforce/creation-canvas-contract';
 import {
@@ -327,6 +327,64 @@ export const CAREER_OBJECT_SPECS: readonly SpecObjectSpec[] = [
       SUMMARY_FIELD,
     ],
   },
+
+  // ── The hours, and what they are worth ────────────────────────────────────────
+  {
+    kind: 'timecard',
+    icon: '◵',
+    group: 'Career',
+    defaultStatus: 'notLogged',
+    actions: ['log', 'submit', 'export'],
+    fields: [
+      { name: 'timecardRef', render: 'stat', label: 'timecardRef', hint: 'The `timecards` row this projects, by id. THE LIFECYCLE LIVES THERE: `state`, `submittedAt` and `approvedAt` are hydrated from it and are not the card\'s to assert — submitting is an act against the row, and a card that could set its own status to approved would be a person approving their own invoice.', bookkeeping: true },
+      { name: 'engagement', render: 'stat', label: 'engagement', hint: 'Who the work was for, and under which engagement. The card is per PERIOD per engagement, because that is the grain the client approves at.' },
+      { name: 'periodStart', render: 'stat', label: 'periodStart', hint: `The first day of the period. ${ISO_DATE}` },
+      { name: 'periodEnd', render: 'stat', label: 'periodEnd', hint: `The last day of the period. ${ISO_DATE} A period that has not closed cannot be submitted, which is why both dates are on the card rather than a single "week of".` },
+      { name: 'state', render: 'stat', label: 'state', hint: `Where this timecard is: ${TIMECARD_STATUSES.join(' | ')}. Read from the row; never written here.`, derived: true },
+      {
+        name: 'entries', render: 'rows', label: 'entries',
+        columns: ['date', 'description', 'minutes', 'billable'],
+        hint: 'The work, line by line: {date, description, minutes, billable}. `billable` is true/false — non-billable time is still RECORDED, because the hours somebody spent and the hours somebody pays for are two different facts and only tracking the second is how a rate quietly becomes a fiction.',
+      },
+      { name: 'rate', render: 'stat', label: 'rate', hint: 'The agreed rate for this engagement, with its currency and its unit — "£65/hour", "$800/day". Taken from the engagement, never guessed: an invented rate is the one error on this card that ends in an argument about money.' },
+      { name: 'currency', render: 'stat', label: 'currency', hint: 'ISO code for every amount on this card.', bookkeeping: true },
+      { name: 'submittedAt', render: 'stat', label: 'submittedAt', hint: `When it went for approval. ${ISO_DATE}`, derived: true },
+      { name: 'approvedAt', render: 'stat', label: 'approvedAt', hint: `When it was approved. ${ISO_DATE}`, derived: true },
+      { name: 'dueAt', render: 'stat', label: 'dueAt', hint: `When payment is due under the engagement's terms. ${ISO_DATE} Bind a \`trigger\` to it and the board warns before an invoice ages rather than after.`, deadline: true },
+      { name: 'rejectReason', render: 'verdict', label: 'rejectReason', hint: 'Why it was sent back, in the approver\'s words. Kept on the card because the correction is made against it, and a rejection whose reason lives only in an email is one that gets re-made.', derived: true },
+      {
+        name: 'totalHours', render: 'stat', label: 'totalHours',
+        hint: 'Every hour recorded in the period, billable or not. Counted from the entries, never typed.',
+        derive: (data) => {
+          const minutes = deriveRows(data.entries).reduce((sum, row) => sum + (deriveNumber(row.minutes) ?? 0), 0);
+          return minutes > 0 ? Math.round((minutes / 60) * 100) / 100 : undefined;
+        },
+      },
+      {
+        name: 'billableHours', render: 'stat', label: 'billableHours',
+        hint: 'The hours that will be invoiced. Counted from the entries marked billable — the number the client is agreeing to when they approve.',
+        derive: (data) => {
+          const minutes = deriveRows(data.entries)
+            .filter((row) => row.billable === true || String(row.billable ?? '').trim().toLowerCase() === 'true')
+            .reduce((sum, row) => sum + (deriveNumber(row.minutes) ?? 0), 0);
+          return minutes > 0 ? Math.round((minutes / 60) * 100) / 100 : undefined;
+        },
+      },
+      {
+        name: 'billableShare', render: 'meter', label: 'billableShare',
+        hint: 'Billable hours as a share of hours worked, 0-100. The number that separates a rate that is too low from a week with too much unpaid work in it — two problems that feel identical and need opposite fixes.',
+        derive: (data) => {
+          const rows = deriveRows(data.entries);
+          const total = rows.reduce((sum, row) => sum + (deriveNumber(row.minutes) ?? 0), 0);
+          const billable = rows
+            .filter((row) => row.billable === true || String(row.billable ?? '').trim().toLowerCase() === 'true')
+            .reduce((sum, row) => sum + (deriveNumber(row.minutes) ?? 0), 0);
+          return derivePercent(billable, total || undefined);
+        },
+      },
+      SUMMARY_FIELD,
+    ],
+  },
 ];
 
 /**
@@ -351,6 +409,7 @@ export const CAREER_LABELS: Record<CareerObjectKind, string> = {
   coverLetter: 'Cover letter',
   interviewPrep: 'Interview prep',
   runway: 'Runway',
+  timecard: 'Timecard',
 };
 
 /**
@@ -368,6 +427,10 @@ export const CAREER_STATUSES: Record<string, string> = {
   notTracked: 'Not tracked',
   notPrepared: 'Not prepared',
   notCalculated: 'Not calculated',
+  // A blank timecard is `notLogged`, never `draft`: `draft` is a real state of a real
+  // `timecards` row and claiming it on a card with no hours on it would put a
+  // submittable-looking timecard in front of somebody who has recorded nothing.
+  notLogged: 'No hours logged',
 };
 
 /** Fields that carry the seeker's own money or their own drafted answers, for the test

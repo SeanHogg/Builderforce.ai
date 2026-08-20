@@ -8,7 +8,8 @@
  * one posting, `recruiter.interview_questions` returns a rubric per question,
  * `proposals.mine` returns the whole application pipeline. Measured 2026-08-19, the
  * canvas had nowhere to put a single one of them: no `job`, no `jobApplication`, no
- * `applicationPipeline`, no `runway`, no `coverLetter`, no `interviewPrep`.
+ * `applicationPipeline`, no `runway`, no `coverLetter`, no `interviewPrep` — and no
+ * `timecard`, so the one seat where REAL means money arriving could not bill for work.
  *
  * So every one of those answers landed as prose inside a `document` and stopped being
  * an object the next turn could reason over. That is precisely the defect the founder
@@ -69,8 +70,8 @@
 /**
  * The seeker's objects, in the order a job search actually runs.
  *
- * Six kinds, each bound to the tool that fills it. A seventh was considered and
- * refused: a `reference` kind for the people who will vouch. `references.ts` returns a
+ * Seven kinds. The first six are bound to the tool that fills them; `timecard`
+ * projects a row the platform already keeps. One more was considered and refused: a `reference` kind for the people who will vouch. `references.ts` returns a
  * brief rather than a record, the platform stores nothing about a referee, and a card
  * holding a private individual's name and phone number on a guest board with no access
  * control is the argument `creationPaletteGroupsFor` already makes about restricted
@@ -101,6 +102,18 @@ export const CAREER_OBJECT_KINDS = [
   // THE CLOCK EVERY OTHER DECISION IS PACED AGAINST. Bound to `hr.runway` and
   // `hr.compare_work_options`.
   'runway',
+  // THE HOURS, AND WHAT THEY ARE WORTH. A projection of a `timecards` row, which has had
+  // routes, a lifecycle (draft → submitted → approved → rejected → paid) and a
+  // freelancer dashboard the whole time and no canvas surface at all — so the one seat
+  // where "idea → REAL" ends in money arriving could draft the agreement on the board
+  // and had to leave it to bill for the work.
+  //
+  // IN THIS VOCABULARY AND NOT THE FOUNDER ONE, though it is unambiguously money: an
+  // `invoice` is what a COMPANY sends and it already exists over `freelancer_invoices`.
+  // A timecard is the hours ONE PERSON worked, submitted for somebody else's approval —
+  // the same side of the transaction as `jobApplication`, and the same relationship to
+  // its row: the lifecycle lives in the table, and the card projects it.
+  'timecard',
 ] as const;
 
 export type CareerObjectKind = typeof CAREER_OBJECT_KINDS[number];
@@ -127,6 +140,31 @@ export const CAREER_APPLICATION_STAGES = [
 ] as const;
 
 export type CareerApplicationStage = typeof CAREER_APPLICATION_STAGES[number];
+
+/**
+ * The timecard lifecycle, exactly as `timecards.status` stores it.
+ *
+ * Restated here rather than imported because the canvas must be able to READ a card
+ * authored offline, and duplicated deliberately in the one direction that is safe: this
+ * list may lag the table by a value and still work (an unknown status renders as itself),
+ * whereas a canvas that could not name the statuses at all would have to treat the field
+ * as free text and lose the ordering that makes "what is still waiting on approval"
+ * answerable.
+ */
+export const TIMECARD_STATUSES = ['draft', 'submitted', 'approved', 'rejected', 'paid'] as const;
+
+export type TimecardStatus = typeof TIMECARD_STATUSES[number];
+
+/** Statuses where the money has NOT yet arrived. Exported so the card's own derivation
+ *  and any consumer counting "outstanding" cannot disagree about the word. */
+const UNPAID_TIMECARD_STATUSES: ReadonlySet<string> = new Set<string>(['draft', 'submitted', 'approved']);
+
+/** True while this timecard is still owed. `rejected` is NOT outstanding — nothing is
+ *  owed on work that was refused, and counting it would inflate the one number a
+ *  freelancer checks. */
+export function isTimecardOutstanding(status: unknown): boolean {
+  return UNPAID_TIMECARD_STATUSES.has(String(status ?? '').trim());
+}
 
 /** Stages after which nothing more will happen. Read by the pipeline's derivations, so
  *  "still waiting on" means the same thing everywhere it is counted. */

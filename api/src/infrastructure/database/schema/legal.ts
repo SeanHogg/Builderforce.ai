@@ -252,6 +252,11 @@ export const legalDocumentFiles = pgTable('legal_document_files', {
   entityId:      integer('entity_id').references(() => legalEntities.id, { onDelete: 'set null' }),
   matterId:      integer('matter_id').references(() => legalMatters.id, { onDelete: 'set null' }),
   ipId:          integer('ip_id').references(() => intellectualProperty.id, { onDelete: 'set null' }),
+  /** The `data_rooms` row this file is IN, when it has been put in one (0937).
+   *  A file belongs to at most one room at a time — moving it is an act, not a
+   *  fan-out — so this is a column rather than a link table, and `set null` on
+   *  delete because closing a room must not delete the executed contract. */
+  dataRoomId:    integer('data_room_id'),
   title:         varchar('title', { length: 255 }).notNull(),
   /** 'nda' | 'msa' | 'sow' | 'offer_letter' | 'ip_assignment' | 'formation' |
    *  'registration' | 'other'. */
@@ -269,6 +274,7 @@ export const legalDocumentFiles = pgTable('legal_document_files', {
   index('idx_legal_document_files_tenant').on(t.tenantId, t.updatedAt),
   index('idx_legal_document_files_entity').on(t.entityId),
   index('idx_legal_document_files_matter').on(t.matterId),
+  index('idx_legal_document_files_data_room').on(t.dataRoomId),
 ]);
 
 /**

@@ -34,19 +34,24 @@
  * the rung as DUE and tells the workspace; `auto` is the tenant explicitly
  * delegating the send, per invoice.
  *
- * ── AND THE AGEING RECOMPUTE ─────────────────────────────────────────────────
- * The second half of this sweep writes `ageingDays` onto canvas `invoice` cards.
- * That field is documented as "computed from `dueAt` — never authored, because a
- * stale ageing is worse than none" and it was computed by NOTHING: the number on
- * the card was whatever the model last typed. It is written here rather than in a
- * second sweep because it is the same read of the same boards for the same reason,
- * and two sweeps over one question is how two answers appear.
+ * ── AND THE TWO BOOKKEEPING FIELDS ───────────────────────────────────────────
+ * The second half of this sweep writes `ageingDays` and `collection` onto canvas
+ * `invoice` cards. Both were documented as derived and both were produced by
+ * NOTHING: `ageingDays` is "computed from `dueAt` — never authored, because a
+ * stale ageing is worse than none", and it was whatever the model last typed;
+ * `collection` says the ladder writes every rung it climbs there, and the ladder
+ * did not. A field whose hint names a producer that does not exist is worse than
+ * an absent field, because a reader trusts it.
+ *
+ * They are written here rather than in a second sweep because it is the same read
+ * of the same boards for the same reason, and two sweeps over one question is how
+ * two answers appear.
  */
 
 import { and, eq, inArray, isNotNull, lte, ne, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { buildDatabase } from '../../infrastructure/database/connection';
-import { collectionActions, creationSessionObjects, invoices } from '../../infrastructure/database/schema';
+import { collectionActions, creationSessionObjects, creationSessions, invoices } from '../../infrastructure/database/schema';
 import type { Env } from '../../env';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { ageingDays, chaseInvoice } from './receivables';
@@ -137,7 +142,7 @@ export interface CollectionsSweepResult {
   queued: number;
   /** Rungs whose delivery failed. */
   failed: number;
-  /** Canvas `invoice` cards whose stored `ageingDays` moved. */
+  /** Canvas `invoice` cards whose stored bookkeeping fields moved. */
   aged: number;
   /** Invoices left for the next tick because of the per-pass ceiling. */
   skipped: number;
@@ -291,7 +296,7 @@ export async function runCollectionsSweep(env: Env, db: Db = buildDatabase(env),
     }
   }
 
-  result.aged = await recomputeCanvasAgeing(db, now);
+  result.aged = await refreshInvoiceCards(db, now);
   return result;
 }
 
@@ -316,44 +321,106 @@ export async function runCollectionsSweep(env: Env, db: Db = buildDatabase(env),
  * produces no rows — which is what lets this be force-run from the operator
  * control without polluting anything.
  */
-async function recomputeCanvasAgeing(db: Db, now: Date): Promise<number> {
+async function refreshInvoiceCards(db: Db, now: Date): Promise<number> {
+  // The session join is what supplies the TENANT: `creation_session_objects`
+  // carries none, and a collections history read without one would put another
+  // workspace's chases on this board.
   const rows = await db
     .select({
       id: creationSessionObjects.id,
       content: creationSessionObjects.content,
+      tenantId: creationSessions.tenantId,
     })
     .from(creationSessionObjects)
-    .where(eq(creationSessionObjects.kind, 'invoice'))
+    .innerJoin(creationSessions, eq(creationSessions.id, creationSessionObjects.sessionId))
+    .where(and(eq(creationSessionObjects.kind, 'invoice'), eq(creationSessions.status, 'active')))
     .limit(MAX_OBJECTS_PER_SESSION);
+  if (!rows.length) return 0;
 
-  const writes: Array<{ id: string; days: number }> = [];
-  for (const row of rows) {
-    const content = row.content && typeof row.content === 'object' && !Array.isArray(row.content)
+  const cards = rows.map((row) => ({
+    id: row.id,
+    tenantId: row.tenantId,
+    content: row.content && typeof row.content === 'object' && !Array.isArray(row.content)
       ? row.content as Record<string, unknown>
-      : {};
-    const dueAt = typeof content.dueAt === 'string' ? new Date(content.dueAt) : null;
-    if (!dueAt || Number.isNaN(dueAt.getTime())) continue;
-    // Clamped at zero: "minus four days overdue" is not a sentence, and the card
-    // renders this as a stat with the word "days past due" beside it.
-    const days = Math.max(0, ageingDays(dueAt, now.getTime()));
-    const stored = Number(content.ageingDays);
-    if (Number.isFinite(stored) && stored === days) continue;
-    writes.push({ id: row.id, days });
+      : {},
+  }));
+
+  // Every rung for every referenced invoice, in ONE statement. A per-card read
+  // here would be one query per invoice on every board in the platform.
+  const references = [...new Set(cards
+    .map((card) => (typeof card.content.invoiceNumber === 'string' ? card.content.invoiceNumber.trim() : ''))
+    .filter(Boolean))];
+
+  const rungsByKey = new Map<string, Array<{ title: string; detail: string }>>();
+  if (references.length) {
+    const actions = await db
+      .select({
+        tenantId: collectionActions.tenantId,
+        invoiceRef: collectionActions.invoiceRef,
+        step: collectionActions.step,
+        stepLabel: collectionActions.stepLabel,
+        outcome: collectionActions.outcome,
+        actorRef: collectionActions.actorRef,
+        actedAt: collectionActions.actedAt,
+      })
+      .from(collectionActions)
+      .where(inArray(collectionActions.invoiceRef, references))
+      .orderBy(collectionActions.step)
+      .limit(references.length * COLLECTION_LADDER.length);
+
+    for (const action of actions) {
+      const key = `${action.tenantId}:${action.invoiceRef}`;
+      const list = rungsByKey.get(key) ?? [];
+      // The shape `invoice.collection` declares: {title, detail} with a date in
+      // the detail. `outcome` is stated rather than implied — a rung recorded and
+      // not yet sent is a worklist item, and rendering it as though it had been
+      // sent is the lie the whole `notify`/`auto` split exists to avoid.
+      list.push({
+        title: action.stepLabel || `Step ${action.step}`,
+        detail: `${action.outcome} — ${action.actedAt.toISOString().slice(0, 10)}`
+          + (action.actorRef === 'system' ? ' (automatic)' : ` (${action.actorRef})`),
+      });
+      rungsByKey.set(key, list);
+    }
   }
 
-  for (const write of writes) {
-    // `jsonb_set` rather than a read-modify-write of the whole document: the
-    // canvas is edited concurrently, and rewriting `content` from a row read
+  let written = 0;
+  for (const card of cards) {
+    const patch: Record<string, unknown> = {};
+
+    const dueAt = typeof card.content.dueAt === 'string' ? new Date(card.content.dueAt) : null;
+    if (dueAt && !Number.isNaN(dueAt.getTime())) {
+      // Clamped at zero: "minus four days overdue" is not a sentence, and the card
+      // renders this as a stat with the word "days past due" beside it.
+      const days = Math.max(0, ageingDays(dueAt, now.getTime()));
+      const stored = Number(card.content.ageingDays);
+      if (!(Number.isFinite(stored) && stored === days)) patch.ageingDays = days;
+    }
+
+    const reference = typeof card.content.invoiceNumber === 'string' ? card.content.invoiceNumber.trim() : '';
+    const rungs = reference ? rungsByKey.get(`${card.tenantId}:${reference}`) : undefined;
+    // Written only when there is something to say. An invoice nobody has chased
+    // must not have its authored `collection` replaced by an empty array — the
+    // sweep owns the field, but owning it does not mean erasing it before there
+    // is a record to put there.
+    if (rungs?.length && JSON.stringify(card.content.collection) !== JSON.stringify(rungs)) {
+      patch.collection = rungs;
+    }
+
+    if (!Object.keys(patch).length) continue;
+    // `content || patch` rather than a read-modify-write of the whole document:
+    // the canvas is edited concurrently, and rewriting `content` from a row read
     // moments ago would silently discard whatever a person typed in between.
     await db
       .update(creationSessionObjects)
       .set({
-        content: sql`jsonb_set(coalesce(${creationSessionObjects.content}, '{}'::jsonb), '{ageingDays}', ${String(write.days)}::jsonb, true)`,
+        content: sql`coalesce(${creationSessionObjects.content}, '{}'::jsonb) || ${JSON.stringify(patch)}::jsonb`,
         updatedAt: now,
       })
-      .where(eq(creationSessionObjects.id, write.id));
+      .where(eq(creationSessionObjects.id, card.id));
+    written += 1;
   }
-  return writes.length;
+  return written;
 }
 
 /** Re-exported so the routes layer can offer the ladder without importing the

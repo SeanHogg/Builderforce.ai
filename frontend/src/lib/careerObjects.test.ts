@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
-  CAREER_APPLICATION_STAGES, CAREER_OBJECT_KINDS, careerRunwayBand, CREATION_OBJECT_KINDS,
-  HIRING_OBJECT_KINDS, isCareerObjectKind, isOpenApplicationStage,
+  CAREER_APPLICATION_STAGES, CAREER_OBJECT_KINDS, TIMECARD_STATUSES, careerRunwayBand,
+  CREATION_OBJECT_KINDS, HIRING_OBJECT_KINDS, isCareerObjectKind, isOpenApplicationStage,
+  isTimecardOutstanding,
 } from '@builderforce/creation-canvas-contract';
 import { CAREER_LABELS, CAREER_OBJECT_SPECS, CAREER_STATUSES } from './careerObjects';
 import './specObjectSets';
 import {
-  makeSpecDeriveBoard, specFieldValue, specMutableFields, specObjectNamespace,
+  makeSpecDeriveBoard, specFieldValue, specMutableFields, specObjectNamespace, specReadableFields,
 } from './specObjects';
 
 /** The one spec lookup every case below needs. Throws rather than returning undefined so
@@ -283,5 +284,64 @@ describe('one application, one lifecycle', () => {
 
   it('says nothing about an application that has not gone', () => {
     expect(value('jobApplication', 'daysSinceResponse', { stage: 'drafting' })).toBeUndefined();
+  });
+});
+
+describe('the timecard', () => {
+  const ENTRIES = [
+    { date: '2026-08-17', description: 'Auth migration', minutes: 240, billable: true },
+    { date: '2026-08-17', description: 'Standup + planning', minutes: 60, billable: false },
+    { date: '2026-08-18', description: 'Auth migration', minutes: 300, billable: 'true' },
+  ];
+
+  it('counts every hour worked, billable or not', () => {
+    // The hours somebody spent and the hours somebody pays for are two different facts;
+    // tracking only the second is how a rate quietly becomes a fiction.
+    expect(value('timecard', 'totalHours', { entries: ENTRIES })).toBe(10);
+  });
+
+  it('counts only what the client is agreeing to when they approve', () => {
+    expect(value('timecard', 'billableHours', { entries: ENTRIES })).toBe(9);
+  });
+
+  it('separates a rate that is too low from a week with too much unpaid work in it', () => {
+    expect(value('timecard', 'billableShare', { entries: ENTRIES })).toBe(90);
+  });
+
+  it('says nothing at all about a period with no hours in it', () => {
+    expect(value('timecard', 'totalHours', {})).toBeUndefined();
+    expect(value('timecard', 'billableHours', { entries: [] })).toBeUndefined();
+    expect(value('timecard', 'billableShare', { entries: [] })).toBeUndefined();
+  });
+
+  it('never lets the card assert its own approval', () => {
+    // Submitting is an act against the `timecards` row. A card that could set its own
+    // status to approved would be a person approving their own invoice.
+    for (const name of ['state', 'submittedAt', 'approvedAt', 'rejectReason']) {
+      expect(specMutableFields('timecard')).not.toContain(name);
+      expect(specReadableFields('timecard')).toContain(name);
+    }
+  });
+
+  it('leaves the hours themselves the worker\'s to log', () => {
+    expect(specMutableFields('timecard')).toContain('entries');
+    expect(specMutableFields('timecard')).toContain('rate');
+  });
+
+  it('watches the date an invoice ages past', () => {
+    const dueAt = spec('timecard').fields.find((field) => field.name === 'dueAt');
+    expect(dueAt?.deadline).toBe(true);
+  });
+});
+
+describe('the timecard lifecycle vocabulary', () => {
+  it('matches what `timecards.status` actually stores', () => {
+    expect([...TIMECARD_STATUSES]).toEqual(['draft', 'submitted', 'approved', 'rejected', 'paid']);
+  });
+
+  it('counts nothing as owed on work that was refused', () => {
+    // `rejected` inflating "outstanding" would corrupt the one number a freelancer checks.
+    for (const status of ['draft', 'submitted', 'approved']) expect(isTimecardOutstanding(status)).toBe(true);
+    for (const status of ['paid', 'rejected', '', undefined]) expect(isTimecardOutstanding(status)).toBe(false);
   });
 });

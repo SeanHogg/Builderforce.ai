@@ -900,16 +900,8 @@
       "high": "Hoch",
       "urgent": "Dringend"
     },
-    "epicStatus": {
-      "backlog": "Backlog",
-      "todo": "Zu erledigen",
-      "ready": "Bereit",
-      "in_progress": "In Arbeit",
-      "in_review": "In Prüfung",
-      "done": "Erledigt",
-      "blocked": "Blockiert",
-      "shipped": "Ausgeliefert"
-    }
+    "loadingRoadmap": "Roadmap wird geladen…",
+    "untitledItem": "(ohne Titel)"
   },
   "ide": {
     "modalityProject": "{label}-Projekt",
@@ -16875,7 +16867,8 @@
       "applicationPipeline": "Bewerbungs-Pipeline",
       "coverLetter": "Anschreiben",
       "interviewPrep": "Interviewvorbereitung",
-      "runway": "Finanzieller Puffer"
+      "runway": "Finanzieller Puffer",
+      "timecard": "Zeitnachweis"
     },
     "twilioSetup": {
       "title": "Twilio-Integration",
@@ -20391,7 +20384,8 @@
         "applicationPipeline": "Bewerbungs-Pipeline",
         "coverLetter": "Anschreiben",
         "interviewPrep": "Interviewvorbereitung",
-        "runway": "Finanzieller Puffer"
+        "runway": "Finanzieller Puffer",
+        "timecard": "Zeitnachweis"
       },
       "status": {
         "researching": "Recherche läuft",
@@ -20399,7 +20393,8 @@
         "draft": "Entwurf",
         "notTracked": "Nicht erfasst",
         "notPrepared": "Nicht vorbereitet",
-        "notCalculated": "Nicht berechnet"
+        "notCalculated": "Nicht berechnet",
+        "notLogged": "Keine Stunden erfasst"
       },
       "field": {
         "employer": "Arbeitgeber",
@@ -20460,7 +20455,20 @@
         "pressure": "Dringlichkeit",
         "assumptions": "Annahmen",
         "sources": "Quellen",
-        "summary": "Zusammenfassung"
+        "summary": "Zusammenfassung",
+        "timecardRef": "Zeitnachweis-Datensatz",
+        "engagement": "Auftrag",
+        "periodStart": "Periodenbeginn",
+        "periodEnd": "Periodenende",
+        "state": "Status",
+        "entries": "Einträge",
+        "rate": "Satz",
+        "approvedAt": "Genehmigt",
+        "dueAt": "Zahlung fällig",
+        "rejectReason": "Zurückgewiesen",
+        "totalHours": "Geleistete Stunden",
+        "billableHours": "Abrechenbare Stunden",
+        "billableShare": "Abrechenbarer Anteil"
       },
       "column": {
         "component": "Bestandteil",
@@ -20489,7 +20497,11 @@
         "inMonths": "In Monaten",
         "month": "Monat",
         "balance": "Kontostand",
-        "note": "Hinweis"
+        "note": "Hinweis",
+        "date": "Datum",
+        "description": "Arbeit",
+        "minutes": "Minuten",
+        "billable": "Abrechenbar"
       }
     },
     "agentModel": "Agentenmodell",
@@ -23537,11 +23549,16 @@
     "noDeadline": "Keine Frist gesetzt:",
     "unscheduled": "Nicht geplant:",
     "moreItems": "+{n} weitere",
-    "ganttEmpty": "Noch keine geplanten {noun}s. Füge Start- oder Fälligkeitsdaten hinzu, um sie auf der Zeitachse zu sehen.",
     "dragHintGantt": "Ziehe einen Balken, um ihn zu verschieben; ziehe die Ränder, um Start oder Frist zu ändern.",
     "dragHintCalendar": "Ziehe einen Eintrag auf einen anderen Tag, um ihn neu zu planen.",
     "barAriaEditable": "{label} — zum Neuplanen ziehen oder mit Enter öffnen",
     "spanAriaEditable": "{label} — auf einen anderen Tag ziehen zum Neuplanen oder mit Enter öffnen",
-    "rescheduleFailed": "Die neuen Daten konnten nicht gespeichert werden."
+    "rescheduleFailed": "Die neuen Daten konnten nicht gespeichert werden.",
+    "columnProject": "Projekt",
+    "columnTask": "Aufgabe",
+    "columnRoadmapItem": "Roadmap-Eintrag",
+    "emptyProjects": "Noch keine geplanten Projekte. Füge Start- oder Fälligkeitsdaten hinzu, um sie auf der Zeitachse zu sehen.",
+    "emptyTasks": "Noch keine geplanten Aufgaben. Füge Start- oder Fälligkeitsdaten hinzu, um sie auf der Zeitachse zu sehen.",
+    "emptyRoadmapItems": "Noch keine geplanten Roadmap-Einträge. Füge Zieldaten hinzu, um sie auf der Zeitachse zu sehen."
   }
 }

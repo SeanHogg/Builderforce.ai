@@ -900,16 +900,8 @@
       "high": "High",
       "urgent": "Urgent"
     },
-    "epicStatus": {
-      "backlog": "Backlog",
-      "todo": "To do",
-      "ready": "Ready",
-      "in_progress": "In progress",
-      "in_review": "In review",
-      "done": "Done",
-      "blocked": "Blocked",
-      "shipped": "Shipped"
-    }
+    "loadingRoadmap": "Loading roadmap…",
+    "untitledItem": "(untitled)"
   },
   "ide": {
     "modalityProject": "{label} project",
@@ -16875,7 +16867,8 @@
       "applicationPipeline": "Application pipeline",
       "coverLetter": "Cover letter",
       "interviewPrep": "Interview prep",
-      "runway": "Runway"
+      "runway": "Runway",
+      "timecard": "Timecard"
     },
     "twilioSetup": {
       "title": "Twilio integration",
@@ -20391,7 +20384,8 @@
         "applicationPipeline": "Application pipeline",
         "coverLetter": "Cover letter",
         "interviewPrep": "Interview prep",
-        "runway": "Runway"
+        "runway": "Runway",
+        "timecard": "Timecard"
       },
       "status": {
         "researching": "Researching",
@@ -20399,7 +20393,8 @@
         "draft": "Draft",
         "notTracked": "Not tracked",
         "notPrepared": "Not prepared",
-        "notCalculated": "Not calculated"
+        "notCalculated": "Not calculated",
+        "notLogged": "No hours logged"
       },
       "field": {
         "employer": "Employer",
@@ -20460,7 +20455,20 @@
         "pressure": "Pressure",
         "assumptions": "Assumptions",
         "sources": "Sources",
-        "summary": "Summary"
+        "summary": "Summary",
+        "timecardRef": "Timecard record",
+        "engagement": "Engagement",
+        "periodStart": "Period start",
+        "periodEnd": "Period end",
+        "state": "State",
+        "entries": "Entries",
+        "rate": "Rate",
+        "approvedAt": "Approved",
+        "dueAt": "Payment due",
+        "rejectReason": "Sent back",
+        "totalHours": "Hours worked",
+        "billableHours": "Billable hours",
+        "billableShare": "Billable share"
       },
       "column": {
         "component": "Component",
@@ -20489,7 +20497,11 @@
         "inMonths": "In months",
         "month": "Month",
         "balance": "Balance",
-        "note": "Note"
+        "note": "Note",
+        "date": "Date",
+        "description": "Work",
+        "minutes": "Minutes",
+        "billable": "Billable"
       }
     },
     "agentModel": "Agent model",
@@ -23537,11 +23549,16 @@
     "noDeadline": "No deadline set:",
     "unscheduled": "Unscheduled:",
     "moreItems": "+{n} more",
-    "ganttEmpty": "No scheduled {noun}s yet. Add start or due dates to see them on the timeline.",
     "dragHintGantt": "Drag a bar to move it; drag its edges to change the start or the deadline.",
     "dragHintCalendar": "Drag an item onto another day to reschedule it.",
     "barAriaEditable": "{label} — drag to reschedule, or press Enter to open",
     "spanAriaEditable": "{label} — drag to another day to reschedule, or press Enter to open",
-    "rescheduleFailed": "Could not save the new dates."
+    "rescheduleFailed": "Could not save the new dates.",
+    "columnProject": "Project",
+    "columnTask": "Task",
+    "columnRoadmapItem": "Roadmap item",
+    "emptyProjects": "No scheduled projects yet. Add start or due dates to see them on the timeline.",
+    "emptyTasks": "No scheduled tasks yet. Add start or due dates to see them on the timeline.",
+    "emptyRoadmapItems": "No scheduled roadmap items yet. Add target dates to see them on the timeline."
   }
 }

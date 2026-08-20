@@ -196,11 +196,11 @@ function OneProjectDependencyGraph({ projectId, readOnly }: { projectId: number;
   const taskById = useMemo(() => new Map((tasks ?? []).map((task) => [String(task.id), task])), [tasks]);
   const describeThreeD = useCallback((node: Node): Canvas3DDescriptor => {
     const task = taskById.get(node.id);
-    if (!task) return { label: node.id, group: t('epicStatus.backlog') };
+    if (!task) return { label: node.id, group: statusLabel('backlog') };
     return {
       label: task.title,
       sublabel: task.key,
-      group: t(`epicStatus.${task.status}` as 'epicStatus.backlog'),
+      group: statusLabel(task.status),
       accent: STATUS_COLOR[task.status] ?? STATUS_COLOR.backlog!,
       depthOffset: canvas3dDepthOffset(node),
     };

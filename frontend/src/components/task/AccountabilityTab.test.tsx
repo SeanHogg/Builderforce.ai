@@ -88,8 +88,11 @@ describe('AccountabilityTab gap banner', () => {
 
     await screen.findByText(/accountability\.gaps\.outstandingTitle 2/);
     // Lane rendered through the shared status label, not the raw `in_review` key.
-    expect(screen.getByText(/accountability\.responsibility\.owner · In Progress/)).toBeInTheDocument();
-    expect(screen.getByText(/accountability\.responsibility\.reviewer · In Review/)).toBeInTheDocument();
+    // `useTaskStatusLabel()` resolves against the `taskStatus.*` catalog, which the
+    // global next-intl mock echoes back as its key — so assert on the key, not on
+    // the English copy the catalog happens to hold today.
+    expect(screen.getByText(/accountability\.responsibility\.owner · taskStatus\.in_progress/)).toBeInTheDocument();
+    expect(screen.getByText(/accountability\.responsibility\.reviewer · taskStatus\.in_review/)).toBeInTheDocument();
   });
 
   it('renders no banner at all when there is nothing to report', async () => {

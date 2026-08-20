@@ -900,16 +900,8 @@
       "high": "高",
       "urgent": "紧急"
     },
-    "epicStatus": {
-      "backlog": "待办池",
-      "todo": "待办",
-      "ready": "就绪",
-      "in_progress": "进行中",
-      "in_review": "审核中",
-      "done": "已完成",
-      "blocked": "受阻",
-      "shipped": "已发布"
-    }
+    "loadingRoadmap": "正在加载路线图…",
+    "untitledItem": "（未命名）"
   },
   "ide": {
     "modalityProject": "{label} 项目",
@@ -16875,7 +16867,8 @@
       "applicationPipeline": "申请管道",
       "coverLetter": "求职信",
       "interviewPrep": "面试准备",
-      "runway": "资金续航"
+      "runway": "资金续航",
+      "timecard": "工时表"
     },
     "twilioSetup": {
       "title": "Twilio 集成",
@@ -20391,7 +20384,8 @@
         "applicationPipeline": "申请管道",
         "coverLetter": "求职信",
         "interviewPrep": "面试准备",
-        "runway": "资金续航"
+        "runway": "资金续航",
+        "timecard": "工时表"
       },
       "status": {
         "researching": "调研中",
@@ -20399,7 +20393,8 @@
         "draft": "草稿",
         "notTracked": "未跟踪",
         "notPrepared": "未准备",
-        "notCalculated": "未计算"
+        "notCalculated": "未计算",
+        "notLogged": "尚未记录工时"
       },
       "field": {
         "employer": "雇主",
@@ -20460,7 +20455,20 @@
         "pressure": "紧迫程度",
         "assumptions": "假设条件",
         "sources": "来源",
-        "summary": "摘要"
+        "summary": "摘要",
+        "timecardRef": "工时记录",
+        "engagement": "合作项目",
+        "periodStart": "周期开始",
+        "periodEnd": "周期结束",
+        "state": "状态",
+        "entries": "工时明细",
+        "rate": "费率",
+        "approvedAt": "批准时间",
+        "dueAt": "付款到期",
+        "rejectReason": "退回原因",
+        "totalHours": "工作小时",
+        "billableHours": "可计费小时",
+        "billableShare": "可计费占比"
       },
       "column": {
         "component": "构成项",
@@ -20489,7 +20497,11 @@
         "inMonths": "第几个月",
         "month": "月份",
         "balance": "余额",
-        "note": "说明"
+        "note": "说明",
+        "date": "日期",
+        "description": "工作内容",
+        "minutes": "分钟",
+        "billable": "可计费"
       }
     },
     "agentModel": "智能体模型",
@@ -23537,11 +23549,16 @@
     "noDeadline": "未设置截止日期：",
     "unscheduled": "未排期：",
     "moreItems": "还有 {n} 项",
-    "ganttEmpty": "尚无已排期的{noun}。添加开始日期或截止日期后即可在时间线上显示。",
     "dragHintGantt": "拖动条形可整体移动；拖动两端可调整开始日期或截止日期。",
     "dragHintCalendar": "将条目拖到其他日期即可重新排期。",
     "barAriaEditable": "{label} — 拖动可重新排期，按 Enter 键可打开",
     "spanAriaEditable": "{label} — 拖到其他日期可重新排期，按 Enter 键可打开",
-    "rescheduleFailed": "无法保存新的日期。"
+    "rescheduleFailed": "无法保存新的日期。",
+    "columnProject": "项目",
+    "columnTask": "任务",
+    "columnRoadmapItem": "路线图条目",
+    "emptyProjects": "尚无已排期的项目。添加开始日期或截止日期后即可在时间线上显示。",
+    "emptyTasks": "尚无已排期的任务。添加开始日期或截止日期后即可在时间线上显示。",
+    "emptyRoadmapItems": "尚无已排期的路线图条目。添加目标日期后即可在时间线上显示。"
   }
 }

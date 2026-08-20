@@ -352,10 +352,12 @@ export async function executeCloudNode(
       return evaluateBool(predicate, ctx) ? { output: inputText } : { output: '', drop: true };
     }
     case 'branch': {
-      // Evaluate the condition and tag the payload with the taken branch so a
-      // downstream node can read `$branch`. Selective edge pruning (running only
-      // the taken side) needs labeled edges (tracked in the Gap Register); until
-      // then both sides run, but each can read `$branch` to self-gate.
+      // Evaluate the condition and tag the payload with the taken branch. The
+      // tag is read TWICE: by any downstream node that wants `$branch` in its
+      // expressions, and by the drain loop, which prunes an arm whose labeled
+      // edge does not match it (see `prunedByEdgeLabel`). An unlabeled graph
+      // still runs both sides, exactly as before — a workflow authored without
+      // labels cannot change behaviour under it.
       const ctx = contextFromInput(inputText);
       const condition = typeof node.config.condition === 'string' ? node.config.condition : '';
       const taken = condition ? evaluateBool(condition, ctx) : true;
@@ -374,9 +376,10 @@ export async function executeCloudNode(
     case 'router': {
       // Same JSON-tag mechanism as `branch`, generalized to N named routes:
       // the first route (in declared order) whose condition holds (or which
-      // has no condition) wins; an unmatched payload takes `fallback`. Reading
-      // `$route` back downstream (via a `filter` node) is how a routed path
-      // self-gates — see the module docstring's note on router/branch.
+      // has no condition) wins; an unmatched payload takes `fallback`. An edge
+      // labeled with a route name is pruned by the drain loop when a different
+      // route won; a `filter` on `$route` remains available for graphs that
+      // were authored before labels existed.
       const ctx = contextFromInput(inputText);
       // `routes` is authored as a JSON string in the config panel (same
       // convention as the `mcp` kind's `params` field) — parse defensively so a
@@ -1112,6 +1115,27 @@ async function advanceCloudWorkflow(env: CloudExecutorEnv, db: Db, workflowId: s
       }
 
       const node = parseInput(task.input);
+
+      // A LABELED edge that was not taken prunes this arm. `branch` and `router`
+      // already tagged their payload with the outlet; until this read it, BOTH
+      // sides of a branch ran and each downstream node had to self-gate on the
+      // tag with a hand-authored `filter` — so a workflow that plainly read
+      // "if paid → charge, else → email" charged AND emailed.
+      //
+      // Pruned as `cancelled`, not `failed`: an untaken arm is a path the author
+      // asked not to run, and it cascades to that arm's own dependents through
+      // `dispositionFromDeps` exactly as a filter drop does. The run can still
+      // end `completed`, which is the whole point.
+      if (prunedByEdgeLabel(node.depLabels, depTasks.map((d) => ({ id: d.id, status: d.status, output: d.output ?? '' })))) {
+        task.status = 'cancelled';
+        task.error = 'skipped — this branch was not taken';
+        await db
+          .update(workflowTasks)
+          .set({ status: 'cancelled', output: '', error: task.error, completedAt: new Date(), updatedAt: new Date() })
+          .where(eq(workflowTasks.id, task.id));
+        madeProgress = true;
+        continue;
+      }
 
       // `sleep` gate: deps are satisfied, but the node itself holds this task
       // pending until its delay elapses. First visit (no `notBefore` armed yet)

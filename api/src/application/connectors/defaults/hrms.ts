@@ -32,6 +32,13 @@
  * same consent. The connection is per-manifest, so a recruiter can be given the
  * funnel without being given the roster.
  *
+ * ── WHY RIPPLING IS NOT HERE ─────────────────────────────────────────────────
+ * It already is. `defaults/payroll.ts` carries `rippling` against the same base
+ * URL with `list_employees` on it, so a second card would be a second connection,
+ * a second credential and two answers to "who works here". Its org-chart and
+ * leave reads were ADDED to that manifest instead — the DRY rule applied to data,
+ * which is what these manifests are.
+ *
  * ── WHY THESE ARE DATA ───────────────────────────────────────────────────────
  * Migration 0410 made a connector DATA. Adding Personio, Hibob or a
  * country-specific HRIS is an entry in this file — reviewed like data, validated
@@ -306,51 +313,6 @@ const personio: ConnectorManifest = {
 };
 
 /**
- * Rippling — the roster read behind a per-app bearer.
- *
- * Included because it is the HRIS a startup that already uses this product is most
- * likely to be on, and because its roster endpoint answers the org-chart question
- * (`manager`, `department`, `workLocation`) in one call rather than three.
- */
-const rippling: ConnectorManifest = {
-  key: 'rippling',
-  name: 'Rippling',
-  description: 'Read employees, departments and work locations from Rippling.',
-  category: 'hiring',
-  icon: '🌊',
-  baseUrl: 'https://api.rippling.com/platform/api',
-  docsUrl: 'https://developer.rippling.com/documentation/rest-api',
-  auth: {
-    kind: 'bearer',
-    fields: [
-      { key: 'token', label: 'API key', secret: true, required: true, help: 'Rippling → Settings → API access → generate an API key for your app. Scope it to read-only; nothing here writes.' },
-    ],
-  },
-  actions: [
-    {
-      key: 'list_employees', label: 'List employees', description: 'Read the employee roster with manager, department and location.',
-      method: 'GET', path: '/employees', mutates: false,
-      params: { limit: qn('Page size'), offset: qn('0-based offset') },
-    },
-    {
-      key: 'get_employee', label: 'Get one employee', description: 'Read one employee in full.',
-      method: 'GET', path: '/employees/{employee_id}', mutates: false,
-      params: { employee_id: p('Rippling employee id') },
-    },
-    {
-      key: 'list_departments', label: 'List departments', description: 'Read the department list the org chart groups by.',
-      method: 'GET', path: '/departments', mutates: false,
-      params: { limit: qn('Page size') },
-    },
-    {
-      key: 'list_leave_requests', label: 'List leave requests', description: 'Read time-off requests and their approval state.',
-      method: 'GET', path: '/leave_requests', mutates: false,
-      params: { from: q('ISO date'), to: q('ISO date'), status: q('APPROVED | PENDING | DECLINED') },
-    },
-  ],
-};
-
-/**
  * Greenhouse — the ATS half, read-only.
  *
  * Same Harvest API as `greenhouse-job-board`, deliberately a separate card: see
@@ -519,7 +481,6 @@ export const HRMS_CONNECTORS: readonly ConnectorManifest[] = [
   bamboohr,
   hibob,
   personio,
-  rippling,
   greenhouseAts,
   successfactors,
   scimDirectory,

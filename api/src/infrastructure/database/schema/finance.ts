@@ -822,7 +822,14 @@ export const fundingRounds = pgTable('funding_rounds', {
   companyRef:   varchar('company_ref', { length: 64 }),
   name:         varchar('name', { length: 120 }).notNull(),
   instrument:   varchar('instrument', { length: 32 }).notNull().default('equity'),
-  amountRaised: numeric('amount_raised', { precision: 18, scale: 2 }),
+  /** 'pre-seed' | 'seed' | 'series-a' | 'bridge' | 'safe'. */
+  roundType:    varchar('round_type', { length: 24 }),
+  /** What the round is RAISING. There is deliberately NO `amount_raised` beside
+   *  it: money closed is derived from the `deals` allocations on this round
+   *  (`pipelineFamilies` family `raise`), and a stored total the rows can
+   *  contradict is what migration 0464 forbids. Dropped in 0937. */
+  targetAmount: numeric('target_amount', { precision: 18, scale: 2 }),
+  closeTargetAt: timestamp('close_target_at'),
   preMoney:     numeric('pre_money', { precision: 18, scale: 2 }),
   postMoney:    numeric('post_money', { precision: 18, scale: 2 }),
   currency:     varchar('currency', { length: 8 }).notNull().default('USD'),

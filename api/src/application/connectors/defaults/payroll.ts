@@ -130,6 +130,13 @@ const rippling: ConnectorManifest = {
     { key: 'list_pay_runs', label: 'List pay runs', description: 'Read payroll runs and their totals.', method: 'GET', path: '/payroll_runs', mutates: false, params: PAY_RUN_QUERY },
     { key: 'list_employees', label: 'List employees', description: 'Read the employment roster.', method: 'GET', path: '/employees', mutates: false, params: { limit: qn('Page size'), offset: qn('Offset') } },
     { key: 'list_compensation', label: 'List compensation', description: 'Read per-employee compensation, for pay-equity and loaded-cost checks.', method: 'GET', path: '/employees/include_terminated', mutates: false, params: { limit: qn('Page size') } },
+    // The two HRIS reads, on THIS card rather than a second `rippling` in
+    // `defaults/hrms.ts`. Rippling is one API and one credential: a separate HRMS
+    // card would mean a second connection and two answers to "who works here".
+    // The category stays `finance` because that is where a company goes looking
+    // for Rippling; a connector is connected once, not once per question.
+    { key: 'list_departments', label: 'List departments', description: 'Read the department list an org chart groups by.', method: 'GET', path: '/departments', mutates: false, params: { limit: qn('Page size') } },
+    { key: 'list_leave_requests', label: 'List leave requests', description: 'Read time-off requests and their approval state, so capacity accounts for who is away.', method: 'GET', path: '/leave_requests', mutates: false, params: { from: q('ISO date'), to: q('ISO date'), status: q('APPROVED | PENDING | DECLINED') } },
   ],
 };
 

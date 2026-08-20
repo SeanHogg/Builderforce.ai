@@ -900,16 +900,8 @@
       "high": "Alta",
       "urgent": "Urgente"
     },
-    "epicStatus": {
-      "backlog": "Pendientes",
-      "todo": "Por hacer",
-      "ready": "Lista",
-      "in_progress": "En curso",
-      "in_review": "En revisión",
-      "done": "Hecha",
-      "blocked": "Bloqueada",
-      "shipped": "Entregado"
-    }
+    "loadingRoadmap": "Cargando roadmap…",
+    "untitledItem": "(sin título)"
   },
   "ide": {
     "modalityProject": "Proyecto {label}",
@@ -16875,7 +16867,8 @@
       "applicationPipeline": "Embudo de candidaturas",
       "coverLetter": "Carta de presentación",
       "interviewPrep": "Preparación de entrevista",
-      "runway": "Autonomía financiera"
+      "runway": "Autonomía financiera",
+      "timecard": "Parte de horas"
     },
     "twilioSetup": {
       "title": "Integración de Twilio",
@@ -20391,7 +20384,8 @@
         "applicationPipeline": "Embudo de candidaturas",
         "coverLetter": "Carta de presentación",
         "interviewPrep": "Preparación de entrevista",
-        "runway": "Autonomía financiera"
+        "runway": "Autonomía financiera",
+        "timecard": "Parte de horas"
       },
       "status": {
         "researching": "Investigando",
@@ -20399,7 +20393,8 @@
         "draft": "Borrador",
         "notTracked": "Sin seguimiento",
         "notPrepared": "Sin preparar",
-        "notCalculated": "Sin calcular"
+        "notCalculated": "Sin calcular",
+        "notLogged": "Sin horas registradas"
       },
       "field": {
         "employer": "Empleador",
@@ -20460,7 +20455,20 @@
         "pressure": "Presión",
         "assumptions": "Supuestos",
         "sources": "Fuentes",
-        "summary": "Resumen"
+        "summary": "Resumen",
+        "timecardRef": "Registro de horas",
+        "engagement": "Contrato",
+        "periodStart": "Inicio del periodo",
+        "periodEnd": "Fin del periodo",
+        "state": "Estado",
+        "entries": "Entradas",
+        "rate": "Tarifa",
+        "approvedAt": "Aprobada",
+        "dueAt": "Pago vence",
+        "rejectReason": "Devuelta",
+        "totalHours": "Horas trabajadas",
+        "billableHours": "Horas facturables",
+        "billableShare": "Proporción facturable"
       },
       "column": {
         "component": "Componente",
@@ -20489,7 +20497,11 @@
         "inMonths": "En meses",
         "month": "Mes",
         "balance": "Saldo",
-        "note": "Nota"
+        "note": "Nota",
+        "date": "Fecha",
+        "description": "Trabajo",
+        "minutes": "Minutos",
+        "billable": "Facturable"
       }
     },
     "agentModel": "Modelo del agente",
@@ -23537,11 +23549,16 @@
     "noDeadline": "Sin fecha límite:",
     "unscheduled": "Sin planificar:",
     "moreItems": "+{n} más",
-    "ganttEmpty": "Todavía no hay {noun}s planificados. Añade fechas de inicio o de vencimiento para verlos en la línea de tiempo.",
     "dragHintGantt": "Arrastra una barra para moverla; arrastra sus bordes para cambiar el inicio o la fecha límite.",
     "dragHintCalendar": "Arrastra un elemento a otro día para replanificarlo.",
     "barAriaEditable": "{label} — arrastra para replanificar, o pulsa Intro para abrir",
     "spanAriaEditable": "{label} — arrastra a otro día para replanificar, o pulsa Intro para abrir",
-    "rescheduleFailed": "No se pudieron guardar las nuevas fechas."
+    "rescheduleFailed": "No se pudieron guardar las nuevas fechas.",
+    "columnProject": "Proyecto",
+    "columnTask": "Tarea",
+    "columnRoadmapItem": "Elemento del roadmap",
+    "emptyProjects": "Todavía no hay proyectos planificados. Añade fechas de inicio o de vencimiento para verlos en la línea de tiempo.",
+    "emptyTasks": "Todavía no hay tareas planificadas. Añade fechas de inicio o de vencimiento para verlas en la línea de tiempo.",
+    "emptyRoadmapItems": "Todavía no hay elementos del roadmap planificados. Añade fechas objetivo para verlos en la línea de tiempo."
   }
 }

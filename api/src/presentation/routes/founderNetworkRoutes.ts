@@ -24,6 +24,11 @@ import {
   upsertCofounderProfile,
 } from '../../application/legal/cofounderMatching';
 import { PipelineError, dealThread, logDealTouch, moveDeal, openDeal, project } from '../../application/revenue/pipelineProjection';
+import {
+  FundingRoundError,
+  listFundingRounds,
+  upsertFundingRound,
+} from '../../application/finance/fundingRounds';
 import { InvestorUpdateError, sendInvestorUpdate } from '../../application/investor/investorUpdateDelivery';
 
 /** One translation for all three, keyed on the error type each service throws —
@@ -32,7 +37,7 @@ const handle = async (run: () => Promise<Response>): Promise<Response> => {
   try {
     return await run();
   } catch (error) {
-    if (error instanceof CofounderError || error instanceof PipelineError || error instanceof InvestorUpdateError) {
+    if (error instanceof CofounderError || error instanceof PipelineError || error instanceof InvestorUpdateError || error instanceof FundingRoundError) {
       return Response.json({ error: error.message }, { status: error.status });
     }
     throw error;
@@ -171,6 +176,43 @@ export function createPipelineRoutes(db: Db): Hono<HonoEnv> {
    *  could never hold. Newest first. */
   router.get('/deals/:id/touchpoints', (c) => handle(async () =>
     Response.json({ thread: await dealThread(db, tenant(c), Number(c.req.param('id'))) })));
+
+  /**
+   * The rounds a founder has PLANNED — the header half of the raise.
+   *
+   * Distinct from `GET /?family=raise`, which returns what has actually happened.
+   * A round's plan is negotiated and typed; its result is arithmetic over the
+   * allocations, and `funding_rounds.amount_raised` was dropped in 0937 precisely
+   * so the two can never be the same column.
+   */
+  router.get('/rounds', (c) => handle(async () =>
+    Response.json({ rounds: await listFundingRounds(db, tenant(c)) })));
+
+  /** Plan a round, or change the plan. Idempotent on the NAME, because the name is
+   *  what every allocation joins to through `deals.pipeline_ref`. */
+  router.post('/rounds', (c) => handle(async () => {
+    const body = await c.req.json<Record<string, unknown>>();
+    const num = (value: unknown): number | null | undefined =>
+      value === undefined ? undefined : value === null || value === '' ? null : Number(value);
+    const round = await upsertFundingRound(db, tenant(c), {
+      name: String(body.name ?? ''),
+      ...(body.roundType !== undefined ? { roundType: typeof body.roundType === 'string' ? body.roundType : null } : {}),
+      ...(body.instrument !== undefined ? { instrument: typeof body.instrument === 'string' ? body.instrument : null } : {}),
+      ...(body.targetAmount !== undefined ? { targetAmount: num(body.targetAmount) ?? null } : {}),
+      ...(body.preMoney !== undefined ? { preMoney: num(body.preMoney) ?? null } : {}),
+      ...(body.postMoney !== undefined ? { postMoney: num(body.postMoney) ?? null } : {}),
+      ...(typeof body.currency === 'string' ? { currency: body.currency } : {}),
+      ...(body.leadInvestor !== undefined ? { leadInvestor: typeof body.leadInvestor === 'string' ? body.leadInvestor : null } : {}),
+      ...(body.closeTargetAt !== undefined ? { closeTargetAt: typeof body.closeTargetAt === 'string' ? body.closeTargetAt : null } : {}),
+      ...(typeof body.status === 'string' ? { status: body.status } : {}),
+      ...(typeof body.objectId === 'string' ? { objectId: body.objectId } : {}),
+    });
+    // The board comes back with it, so a caller that just planned a round renders
+    // the plan and the allocations from ONE response — the same reason a move
+    // returns the board.
+    const pipeline = await project(db, tenant(c), { family: 'raise', pipelineRef: round.name });
+    return Response.json({ round, pipeline });
+  }));
 
   /** Log a touch, and get the thread back. Same one-call shape as the move, so a
    *  surface renders what it just wrote rather than what it wrote a moment ago. */

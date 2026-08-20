@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import type { TrackerRow } from '@/lib/builderforceApi';
 import { ScheduleGantt } from '@/components/ScheduleGantt';
 import type { ReschedulePatch, Schedulable } from '@/lib/schedule';
@@ -22,6 +23,8 @@ interface RoadmapBar extends Schedulable {
 }
 
 export function RoadmapGantt() {
+  const t = useTranslations('schedule');
+  const tPm = useTranslations('pm');
   const { projectId } = usePmScope();
   const { data, error, reload } = usePmData<TrackerRow[]>(
     () => roadmapClient.list(projectId ?? undefined),
@@ -33,11 +36,11 @@ export function RoadmapGantt() {
     () =>
       (data ?? []).map((r) => ({
         id: String(r.id),
-        title: typeof r.title === 'string' ? r.title : '(untitled)',
+        title: typeof r.title === 'string' && r.title ? r.title : tPm('untitledItem'),
         startDate: null,
         dueDate: typeof r.targetDate === 'string' ? r.targetDate : null,
       })),
-    [data],
+    [data, tPm],
   );
 
   /**
@@ -55,8 +58,8 @@ export function RoadmapGantt() {
   };
 
   if (error) return <PmError message={error} />;
-  if (!data) return <PmEmpty message="Loading roadmap…" />;
-  if (!data.length) return <PmEmpty message="No roadmap items yet." />;
+  if (!data) return <PmEmpty message={tPm('loadingRoadmap')} />;
+  if (!data.length) return <PmEmpty message={t('emptyRoadmapItems')} />;
 
   return (
     <>

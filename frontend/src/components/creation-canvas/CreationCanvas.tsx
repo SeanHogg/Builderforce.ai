@@ -556,7 +556,12 @@ const WEBSITE_THEME_SCHEMA = {
   type: 'object', required: ['style'], additionalProperties: false,
   properties: { style: { type: 'string', enum: ['editorial', 'bold', 'minimal', 'soft', 'technical'] }, background: { type: 'string' }, foreground: { type: 'string' }, accent: { type: 'string' } },
 };
-const CREATIVE_OUTPUTS = Object.fromEntries(CREATIVE_CAPABILITIES.map((capability) => [capability.kind, capability.outputs])) as Partial<Record<CreationObjectKind, readonly string[]>>;
+// The FORMAT NAMES, out of the profiles that now carry the extension, the mime type and
+// the adapter that actually produces each one. This read `capability.outputs`, which the
+// contract replaced with `outputProfiles` precisely so a format could not be advertised
+// with no producer behind it — the list here is still just the names, because that is all
+// this map is asked for.
+const CREATIVE_OUTPUTS = Object.fromEntries(CREATIVE_CAPABILITIES.map((capability) => [capability.kind, capability.outputProfiles.map((profile) => profile.format)])) as Partial<Record<CreationObjectKind, readonly string[]>>;
 
 /** Serialize one trace arg/result for the diagnostics report. A trace payload can
  *  hold a cyclic React value or a very large tool result, and the report that

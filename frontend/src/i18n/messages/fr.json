@@ -900,16 +900,8 @@
       "high": "Haute",
       "urgent": "Urgente"
     },
-    "epicStatus": {
-      "backlog": "Backlog",
-      "todo": "À faire",
-      "ready": "Prêt",
-      "in_progress": "En cours",
-      "in_review": "En revue",
-      "done": "Terminé",
-      "blocked": "Bloqué",
-      "shipped": "Livré"
-    }
+    "loadingRoadmap": "Chargement de la roadmap…",
+    "untitledItem": "(sans titre)"
   },
   "ide": {
     "modalityProject": "Projet {label}",
@@ -16875,7 +16867,8 @@
       "applicationPipeline": "Pipeline de candidatures",
       "coverLetter": "Lettre de motivation",
       "interviewPrep": "Préparation d’entretien",
-      "runway": "Autonomie financière"
+      "runway": "Autonomie financière",
+      "timecard": "Feuille de temps"
     },
     "twilioSetup": {
       "title": "Intégration Twilio",
@@ -20391,7 +20384,8 @@
         "applicationPipeline": "Pipeline de candidatures",
         "coverLetter": "Lettre de motivation",
         "interviewPrep": "Préparation d’entretien",
-        "runway": "Autonomie financière"
+        "runway": "Autonomie financière",
+        "timecard": "Feuille de temps"
       },
       "status": {
         "researching": "En recherche",
@@ -20399,7 +20393,8 @@
         "draft": "Brouillon",
         "notTracked": "Non suivi",
         "notPrepared": "Non préparé",
-        "notCalculated": "Non calculé"
+        "notCalculated": "Non calculé",
+        "notLogged": "Aucune heure saisie"
       },
       "field": {
         "employer": "Employeur",
@@ -20460,7 +20455,20 @@
         "pressure": "Pression",
         "assumptions": "Hypothèses",
         "sources": "Sources",
-        "summary": "Résumé"
+        "summary": "Résumé",
+        "timecardRef": "Enregistrement",
+        "engagement": "Mission",
+        "periodStart": "Début de période",
+        "periodEnd": "Fin de période",
+        "state": "État",
+        "entries": "Saisies",
+        "rate": "Tarif",
+        "approvedAt": "Approuvée le",
+        "dueAt": "Paiement dû",
+        "rejectReason": "Renvoyée",
+        "totalHours": "Heures travaillées",
+        "billableHours": "Heures facturables",
+        "billableShare": "Part facturable"
       },
       "column": {
         "component": "Composant",
@@ -20489,7 +20497,11 @@
         "inMonths": "Dans (mois)",
         "month": "Mois",
         "balance": "Solde",
-        "note": "Note"
+        "note": "Note",
+        "date": "Date",
+        "description": "Travail",
+        "minutes": "Minutes",
+        "billable": "Facturable"
       }
     },
     "agentModel": "Modèle de l’agent",
@@ -23537,11 +23549,16 @@
     "noDeadline": "Aucune échéance définie :",
     "unscheduled": "Non planifié :",
     "moreItems": "+{n} de plus",
-    "ganttEmpty": "Aucun {noun} planifié pour le moment. Ajoutez une date de début ou d’échéance pour l’afficher sur la chronologie.",
     "dragHintGantt": "Faites glisser une barre pour la déplacer ; faites glisser ses bords pour changer le début ou l’échéance.",
     "dragHintCalendar": "Faites glisser un élément sur un autre jour pour le replanifier.",
     "barAriaEditable": "{label} — faites glisser pour replanifier, ou appuyez sur Entrée pour ouvrir",
     "spanAriaEditable": "{label} — faites glisser sur un autre jour pour replanifier, ou appuyez sur Entrée pour ouvrir",
-    "rescheduleFailed": "Impossible d’enregistrer les nouvelles dates."
+    "rescheduleFailed": "Impossible d’enregistrer les nouvelles dates.",
+    "columnProject": "Projet",
+    "columnTask": "Tâche",
+    "columnRoadmapItem": "Élément de roadmap",
+    "emptyProjects": "Aucun projet planifié pour le moment. Ajoutez une date de début ou d’échéance pour l’afficher sur la chronologie.",
+    "emptyTasks": "Aucune tâche planifiée pour le moment. Ajoutez une date de début ou d’échéance pour l’afficher sur la chronologie.",
+    "emptyRoadmapItems": "Aucun élément de roadmap planifié pour le moment. Ajoutez une date cible pour l’afficher sur la chronologie."
   }
 }
