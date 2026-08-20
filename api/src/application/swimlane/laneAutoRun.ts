@@ -24,6 +24,19 @@ export interface LaneAgentLike {
   agentRef: string | null;
   model: string | null;
   /**
+   * The BACKPLANE the lane staffed this agent on — `swimlane_agent_assignments.runtime`
+   * ('local' | 'cloud' | 'remote' | 'browser'). The autonomous trigger used not to read
+   * this column at all, so a lane deliberately staffed to an on-prem machine was handed
+   * to the cloud dispatcher anyway: the operator's runtime choice was silently discarded
+   * on every drag. Carried through the decision so the dispatcher can honour it.
+   */
+  runtime?: LaneAgentRuntime | null;
+  /**
+   * The agent-host id this assignment pins, when `runtime` is 'remote' (or 'browser',
+   * where it names the browser worker). Null for 'cloud'/'local'.
+   */
+  target?: string | null;
+  /**
    * Capability slugs (skill + persona) the LANE requires the agent to have for
    * this lane's work — the `required_capabilities` configured on the swimlane
    * agent assignment. Empty/absent → no requirement (the agent always qualifies).
@@ -37,6 +50,9 @@ export interface LaneAgentLike {
    */
   capabilities?: string[] | null;
 }
+
+/** The backplanes a lane agent assignment can name. Mirrors `swimlane_agent_assignments.runtime`. */
+export type LaneAgentRuntime = 'local' | 'cloud' | 'remote' | 'browser';
 
 /** One lane agent that was skipped because it lacked the lane's required capabilities. */
 export interface CapabilityMismatch {
@@ -52,6 +68,10 @@ export interface LaneAutoRunDecision {
   agentRef?: string;
   /** The lane agent's pinned model, if it configured one. */
   model?: string;
+  /** The backplane the chosen lane agent is staffed on — see {@link LaneAgentLike.runtime}. */
+  runtime?: LaneAgentRuntime;
+  /** The agent-host the chosen lane agent pins, when `runtime` is 'remote'/'browser'. */
+  target?: string;
   /**
    * Lane agents that were skipped because they did not satisfy the lane's
    * required capabilities. Present whenever the guardrail rejected at least one
@@ -108,6 +128,8 @@ export function decideLaneAutoRun(
         autoRun: true,
         agentRef: agent.agentRef,
         model: agent.model ?? undefined,
+        ...(agent.runtime ? { runtime: agent.runtime } : {}),
+        ...(agent.target ? { target: agent.target } : {}),
         ...(capabilityMismatches.length > 0 ? { capabilityMismatches } : {}),
       };
     }
@@ -139,7 +161,10 @@ export function withOwnerAgentFallback(
   const list: LaneAgentLike[] = [...(laneAgents ?? [])];
   const ref = owner?.agentRef?.trim();
   if (ref && !list.some((a) => a.agentRef?.trim() === ref)) {
-    list.push({ agentRef: ref, model: owner?.model ?? null, requiredCapabilities: null, capabilities: null });
+    // The OWNER fallback names no backplane: assigning an agent as a ticket's owner
+    // says who works it, not where. Leaving runtime unset lets the dispatcher apply its
+    // normal host-pin/cloud resolution, which is what the fallback always did.
+    list.push({ agentRef: ref, model: owner?.model ?? null, requiredCapabilities: null, capabilities: null, runtime: null, target: null });
   }
   return list;
 }
