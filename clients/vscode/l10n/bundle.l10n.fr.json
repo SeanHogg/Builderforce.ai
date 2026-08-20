@@ -69,6 +69,7 @@
   "Copied": "Copié",
   "Copy": "Copier",
   "Copy chat diagnostics (plan + usage + identity + Evermind state + transcript)": "Copier le diagnostic de la conversation (forfait + consommation + identité + état Evermind + transcription)",
+  "Could not build the chat diagnostics report.": "Impossible de générer le rapport de diagnostic de la conversation.",
   "Couldn't load Project 360": "Impossible de charger Projet 360",
   "Create file": "Créer un fichier",
   "Create — {0}": "Create — {0}",

@@ -8249,6 +8249,8 @@
       "preview": "预览",
       "askSubmit": "发送",
       "askAnswered": "已回答",
+      "askPending": "需要回答",
+      "askJumpTo": "在对话中查看",
       "accountOwn": "您的账户",
       "accountShared": "共享池",
       "accountByoUnused": "未使用您连接的账户",

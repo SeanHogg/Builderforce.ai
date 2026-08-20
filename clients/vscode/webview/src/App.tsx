@@ -19,7 +19,7 @@ import {
   effortProfile,
   isEffort,
   reasoningForRun,
-  classifyModelFunding,
+  gatherChatDiagnostics,
   getMcpToolStatus,
   fetchApiVersionVia,
   nextFallbackModel,
@@ -32,7 +32,6 @@ import {
   type EvermindRecallResult,
   type BrainTraceEvent,
   type BrainMessage,
-  type ChatDiagnosticsData,
 } from '@seanhogg/builderforce-brain-embedded';
 import { authedFetch } from './authedFetch';
 import {
@@ -533,7 +532,11 @@ function Chat({ init }: { init: InitData }) {
   // whole transcript (and every message's markdown) re-parses on every character typed.
   const tlLabels = useMemo(() => timelineLabels(init.labels), [init.labels]);
   const [dragOver, setDragOver] = useState(false);
-  const [copied, setCopied] = useState(false);
+  // idle → copied → idle, or → error. A copy that FAILS must look different from one
+  // that never ran: the ⧉ used to be wired as `void copyTranscript()`, so any rejection
+  // inside it vanished with no toast, no error and nothing on the clipboard — a click
+  // indistinguishable from an unwired button.
+  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'error'>('idle');
   // Consolidate (summarize into a compact base context) / Fork (branch into a new
   // chat from that summary) are async, so guard against double-clicks while in flight.
   const [consolidating, setConsolidating] = useState(false);
@@ -1290,99 +1293,76 @@ function Chat({ init }: { init: InitData }) {
   // best-effort (degrades to null/[]) so the copy never fails on a single bad fetch.
   const copyTranscript = useCallback(async () => {
     const pid = associatedProjectId;
-    const claims = decodeTokenClaims(getToken());
-    const [agents, tickets, evermind, consumption, apiVersion] = await Promise.all([
-      chatId != null ? ticketAdapter.listAgents(chatId).catch(() => []) : Promise.resolve([]),
-      chatId != null ? ticketAdapter.listTickets(chatId).catch(() => []) : Promise.resolve([]),
-      pid != null
-        ? apiReq<{ version: number; mode: string; inferenceEnabled: boolean; teacherModel: string | null; contributions: number; pending: number; lastLearnedAt: string | null }>(
-            `/api/projects/${pid}/evermind/contributions`,
-          ).catch(() => null)
-        : Promise.resolve(null),
-      // Plan + month-to-date quota. Open to any tenant-scoped JWT (no role gate), so a
-      // brand-new free member can produce a report that states their own tier and
-      // allowance instead of one that looks like an unexplained capability failure.
-      // Shared read-through cache — the same snapshot the footer's PlanBadge shows,
-      // so the report and the chip can't disagree (and it's usually already loaded).
-      fetchPlanSnapshot(apiReq),
-      // Which BUILD produced this capture. `/health` is public; it rides the gateway
-      // base so the version reported is the one THIS webview is actually talking to.
-      // Session-cached + coalesced in the shared helper.
-      fetchApiVersionVia(() => apiReq<{ version?: string }>('/health').catch(() => null)),
-    ]);
-    // The learn-gate outcome for the most recent assistant turn (the persistence adapter
-    // attaches it from the server's send-messages response).
-    const lastLearn = [...conv.messages].reverse().find((m) => m.role === 'assistant' && m.evermindLearn)?.evermindLearn ?? null;
-    const diagnostics: ChatDiagnosticsData = {
-      surface: 'VS Code (VSIX)',
-      chatId,
-      chatTitle: activeChat?.title ?? null,
-      chatVisibility,
-      projectId: pid,
-      projectName: associatedProject?.name ?? null,
-      selectedProjectId: init.project?.id ?? null,
-      tenantId: claims.tid ?? null,
-      userId: claims.sub ?? null,
-      evermind: evermind
-        ? {
-            version: evermind.version,
-            mode: evermind.mode,
-            inferenceEnabled: evermind.inferenceEnabled,
-            teacherModel: evermind.teacherModel,
-            contributions: evermind.contributions,
-            pending: evermind.pending,
-            lastLearnedAt: evermind.lastLearnedAt,
-          }
-        : null,
-      lastLearn,
-      agents: agents.map((a) => ({ agentRef: a.agentRef, role: a.role })),
-      tickets: tickets.map((tk) => ({ kind: tk.kind, ref: tk.ref, label: tk.label, linkType: tk.linkType, status: tk.status })),
-      // WHO the user is to the platform: tier, whether a card is on file, what is left
-      // of each allowance, and what the plan actually entitles them to model-wise. The
-      // model surface is already loaded for the picker — reused, not refetched.
-      account: {
-        plan: consumption?.plan.effective ?? null,
-        billingStatus: consumption?.plan.billingStatus ?? null,
-        periodStart: consumption?.period.start ?? null,
-        resetsAt: consumption?.period.resetsAt ?? null,
-        meters: consumption?.meters ?? [],
-        model: init.model ?? null,
-        modelFunding: modelSurface ? classifyModelFunding(init.model, modelSurface) : null,
-        canUsePremiumModels: modelSurface?.canUsePremiumModels,
-        planModelCount: modelSurface?.data?.length,
-        byoProviders: modelSurface?.byo?.providers ?? [],
-        extensionVersion: init.extensionVersion ?? null,
-        baseUrl: init.baseUrl ?? null,
-      },
-      // What the model could actually CALL. Without this a tool-less Brain — one that
-      // announces "I'll call the tool…" and then stops, with 0 tool calls in the trace
-      // — is indistinguishable from a model that simply chose not to act. The COUNT is
-      // the live registry the conversation runs on (`toolSpecs`, navigation + the MCP
-      // catalog together); the catalog status explains a zero.
-      tools: (() => {
-        const mcp = getMcpToolStatus();
-        return { count: toolSpecs.length, error: mcp.error, loading: mcp.loading };
-      })(),
-      // Which build produced this capture — without it a dump taken just before a
-      // deploy is indistinguishable from one taken after, so a fixed bug reads unfixed.
-      versions: { ui: init.extensionVersion ?? null, api: apiVersion },
-    };
-    post('copy', {
-      text: buildTranscript({
-        messages: conv.messages,
-        trace: conv.trace,
-        assistantName: 'BuilderForce',
-        model: init.model,
-        error: conv.error,
-        project: associatedProject,
-        chatTitle: activeChat?.title,
+    try {
+      const claims = decodeTokenClaims(getToken());
+      const mcp = getMcpToolStatus();
+      // ONE assembler, shared with the web panel and the headless probe, so the three
+      // reports cannot drift field-by-field the way three inline copies did. Every read
+      // inside it is best-effort, so one dead endpoint costs a line, not the capture.
+      const diagnostics = await gatherChatDiagnostics({
+        surface: 'VS Code (VSIX)',
         chatId,
-        diagnostics,
-      }),
-    });
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1500);
-  }, [conv.messages, conv.trace, conv.error, init.model, init.extensionVersion, init.baseUrl, modelSurface, toolSpecs, associatedProject, associatedProjectId, activeChat?.title, chatVisibility, chatId, ticketAdapter, apiReq, init.project?.id]);
+        chatTitle: activeChat?.title ?? null,
+        chatVisibility,
+        projectId: pid,
+        projectName: associatedProject?.name ?? null,
+        selectedProjectId: init.project?.id ?? null,
+        tenantId: claims.tid ?? null,
+        userId: claims.sub ?? null,
+        messages: conv.messages,
+        // The live registry the conversation runs on (`toolSpecs` — navigation + the
+        // MCP catalog together); the catalog status explains a zero. The trace supplies
+        // what was ACTUALLY advertised per turn.
+        tools: { count: toolSpecs.length, error: mcp.error, loading: mcp.loading },
+        trace: conv.trace,
+        model: init.model ?? null,
+        modelSurface,
+        uiVersion: init.extensionVersion ?? null,
+        baseUrl: init.baseUrl ?? null,
+        readAgents: () => (chatId != null ? ticketAdapter.listAgents(chatId) : Promise.resolve([])),
+        readTickets: () => (chatId != null ? ticketAdapter.listTickets(chatId) : Promise.resolve([])),
+        readEvermind: () =>
+          pid != null
+            ? apiReq<{ version: number; mode: string; inferenceEnabled: boolean; teacherModel: string | null; contributions: number; pending: number; lastLearnedAt: string | null }>(
+                `/api/projects/${pid}/evermind/contributions`,
+              )
+            : Promise.resolve(null),
+        // Plan + month-to-date quota. Open to any tenant-scoped JWT (no role gate), so a
+        // brand-new free member can produce a report that states their own tier and
+        // allowance instead of one that looks like an unexplained capability failure.
+        // Shared read-through cache — the same snapshot the footer's PlanBadge shows.
+        readPlan: () => fetchPlanSnapshot(apiReq),
+        // Which BUILD produced this capture. `/health` is public; it rides the gateway
+        // base so the version reported is the one THIS webview is talking to. The
+        // shared helper session-caches it, coalesces callers AND bounds the wait, so a
+        // stalled probe can no longer leave the copy pending forever.
+        readApiVersion: () => fetchApiVersionVia(() => apiReq<{ version?: string }>('/health').catch(() => null)),
+      });
+      post('copy', {
+        text: buildTranscript({
+          messages: conv.messages,
+          trace: conv.trace,
+          assistantName: 'BuilderForce',
+          model: init.model,
+          error: conv.error,
+          project: associatedProject,
+          chatTitle: activeChat?.title,
+          chatId,
+          diagnostics,
+        }),
+      });
+      setCopyState('copied');
+      window.setTimeout(() => setCopyState('idle'), 1500);
+    } catch (e) {
+      // FAIL LOUDLY. The whole point of this button is to make an opaque chat
+      // explainable; a silent failure makes the button itself the next opaque thing.
+      setCopyState('error');
+      conv.setError(
+        `${t('app.copyFailed', 'Could not build the chat diagnostics report.')} ${e instanceof Error ? e.message : String(e)}`,
+      );
+      window.setTimeout(() => setCopyState('idle'), 3000);
+    }
+  }, [conv, init.model, init.extensionVersion, init.baseUrl, modelSurface, toolSpecs, associatedProject, associatedProjectId, activeChat?.title, chatVisibility, chatId, ticketAdapter, apiReq, init.project?.id, t]);
 
   // Consolidate: summarize the whole chat into ONE compact assistant message tagged
   // as a consolidation marker. It's shown back to the user (the "flag"), and the
@@ -1518,12 +1498,16 @@ function Chat({ init }: { init: InitData }) {
         <button className="bf-btn" title={t('app.newChat', 'New chat')} onClick={() => setChatId(null)}>＋</button>
         <button
           className="bf-btn bf-btn--icon"
-          title={t('app.copyChat', 'Copy chat diagnostics (identity + Evermind state + transcript)')}
-          aria-label={t('app.copyChat', 'Copy chat diagnostics (identity + Evermind state + transcript)')}
+          title={copyState === 'error'
+            ? t('app.copyFailed', 'Could not build the chat diagnostics report.')
+            : t('app.copyChat', 'Copy chat diagnostics (identity + Evermind state + transcript)')}
+          aria-label={copyState === 'error'
+            ? t('app.copyFailed', 'Could not build the chat diagnostics report.')
+            : t('app.copyChat', 'Copy chat diagnostics (identity + Evermind state + transcript)')}
           disabled={!canCopy}
           onClick={() => void copyTranscript()}
         >
-          {copied ? '✓' : '⧉'}
+          {copyState === 'copied' ? '✓' : copyState === 'error' ? '⚠' : '⧉'}
         </button>
         <button
           className="bf-btn bf-btn--icon"

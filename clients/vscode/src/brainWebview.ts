@@ -130,6 +130,9 @@ function buildLabels(): Record<string, string> {
     "app.upgradeToPlan": t("Upgrade to {plan}"),
     "app.addCard": t("Add a card"),
     "app.copyChat": t("Copy chat diagnostics (plan + usage + identity + Evermind state + transcript)"),
+    // A copy that FAILED must read differently from one that never ran — the button
+    // used to swallow every rejection, so a broken export looked like a dead control.
+    "app.copyFailed": t("Could not build the chat diagnostics report."),
     // Pending ask_user question, restated at the composer so a blocked chat is
     // answerable without hunting back through the transcript for its card.
     "app.askPending": t("Answer needed"),

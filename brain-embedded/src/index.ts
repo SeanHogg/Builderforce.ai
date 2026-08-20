@@ -163,7 +163,7 @@ export type { PersistedStep } from './persistedSteps';
 
 // Deployed API version (session-cached) — the "which build produced this capture?"
 // half of the diagnostics version stamp. Each surface supplies its own /health read.
-export { fetchApiVersionVia, resetApiVersionCache, API_VERSION_TTL_MS } from './apiVersion';
+export { fetchApiVersionVia, resetApiVersionCache, API_VERSION_TTL_MS, API_VERSION_PROBE_TIMEOUT_MS } from './apiVersion';
 
 // The untaken-tool-call contract, re-exported from `@builderforce/agent-stall` so a
 // React host reaches it through the package it already depends on.
@@ -282,6 +282,7 @@ export { STEP_MESSAGE_ROLE, isStepMessage, attachEvermindLearn, formatEvermindLe
 
 // "Copy diagnostics" — pure serializer for the chat's identity + Evermind wiring state
 export { formatChatDiagnostics, classifyModelFunding, allowanceState } from './chatDiagnostics';
+export { gatherChatDiagnostics } from './gatherChatDiagnostics';
 
 // Model choice — WHICH models a surface offers, in what order, and who pays. Shared
 // by the composer `/` menu (web + webview) AND the VS Code host's QuickPick, which
@@ -322,3 +323,4 @@ export {
   type ToolCatalogMatch,
 } from './toolRouter';
 export type { ChatDiagnosticsData, ChatDiagnosticsEvermind, ChatDiagnosticsAccount, ChatDiagnosticsMeter, AllowanceState } from './chatDiagnostics';
+export type { ChatDiagnosticsSources, ChatDiagnosticsPlanSnapshot, ChatDiagnosticsModelSurface, ChatDiagnosticsEvermindHead, ChatDiagnosticsMessageLike } from './gatherChatDiagnostics';

@@ -1,0 +1,16 @@
+{
+  "//": "The extension-host suite is the only code in this package that spans BOTH the editor API (`vscode`, inside the running host) and plain Node (`@vscode/test-electron`, outside it). The root project excludes it (it only includes `src/**`), so without its own project `pnpm type-check` would skip the tests that guard activation and the webview bridge.",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "ignoreDeprecations": "6.0",
+    "types": ["node", "vscode", "mocha"]
+  },
+  "include": ["**/*.ts"]
+}

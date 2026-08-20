@@ -218,11 +218,15 @@ export interface ToolExposure {
 /**
  * How many tools the model was actually OFFERED, per turn, versus how many exist.
  *
- * The chat-diagnostics header can only report the registry-wide total and the per-turn
- * CEILING (`up to 64 advertised`). That is not the same question: a turn that was handed
- * ZERO tools and a turn that was handed sixty-four and ignored them produce byte-identical
- * reports, and only one of them is the model's fault. The loop now records the real
- * per-turn number, and this reads it back. Nulls when the run predates the field.
+ * The registry-wide total is not the same question: a turn that was handed ZERO tools
+ * and a turn that was handed sixty-four and ignored them produce byte-identical reports,
+ * and only one of them is the model's fault. The loop records the real per-turn number
+ * and this reads it back. Nulls when the run predates the field.
+ *
+ * This is now the SINGLE source of the per-turn figure: the chat-diagnostics header used
+ * to render a ceiling derived from the registry size while the Diagnostics block below it
+ * rendered this measurement, so one report answered one question two ways. Both lines
+ * read this function now (via `gatherChatDiagnostics`).
  */
 export function toolExposureInTrace(events: BrainTraceEvent[]): ToolExposure {
   let lastTurn: number | null = null;

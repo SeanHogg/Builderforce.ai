@@ -139,8 +139,23 @@ export interface ChatDiagnosticsData {
    * a tool-less Brain ("I don't have that data", zero tool calls) is
    * indistinguishable from a model that simply chose not to call anything — the
    * exact ambiguity that made a silent MCP-catalog failure impossible to diagnose.
+   *
+   * `advertisedMin`/`advertisedLastTurn` are the OBSERVED per-turn numbers, read off
+   * the run's trace (`toolExposureInTrace`). They exist because this line used to
+   * render the per-turn CEILING (`up to 64 advertised`) while the Diagnostics block
+   * directly below it rendered the real measured range off the same run — two lines
+   * in one report answering the same question differently, and the ceiling was the
+   * one that was always wrong for the turn that actually failed.
    */
-  tools?: { count: number; error?: string | null; loading?: boolean } | null;
+  tools?: {
+    count: number;
+    error?: string | null;
+    loading?: boolean;
+    /** Fewest tools advertised on any measured turn; null when no turn was measured. */
+    advertisedMin?: number | null;
+    /** Tools advertised on the LAST measured turn; null when no turn was measured. */
+    advertisedLastTurn?: number | null;
+  } | null;
   /**
    * Which BUILD produced this capture. Without it a dump taken minutes before a
    * deploy is indistinguishable from one taken after, so a fixed bug reads as
@@ -261,6 +276,13 @@ function diagnosticsSignals(d: ChatDiagnosticsData): string[] {
       out.push(
         '⚠️ The model has ZERO tools registered, so it cannot read tasks, projects, or any platform data — every data question can only be answered from the prompt. Expect "I don\'t have that data" and 0 tool calls. Check that McpExtensionsBridge is mounted and `/llm/v1/mcp/tools` returns a catalog.',
       );
+    } else if (tools.advertisedMin === 0) {
+      // A full registry and a turn that was handed NOTHING is the failure a ceiling
+      // could never show: the catalog reads healthy, the model reads uncooperative,
+      // and the relevance selection is the thing that actually broke.
+      out.push(
+        `⚠️ A turn in this run was advertised ZERO tools even though ${tools.count} are registered — the per-turn relevance selection, not the catalog, is what left the model empty-handed. Any "I don't have that data" answer on that turn is a selection fault, not a model fault.`,
+      );
     }
   }
 
@@ -302,6 +324,29 @@ function diagnosticsSignals(d: ChatDiagnosticsData): string[] {
     }
   }
   return out;
+}
+
+/**
+ * The per-turn half of the tool line: what the model was ACTUALLY handed, never a
+ * ceiling derived from the registry size.
+ *
+ * Three states, deliberately distinct:
+ *  - measured (a run has advertised tools)      → "40–64 advertised per turn (measured)"
+ *  - unmeasured but the registry exceeds the cap → says the selection is capped and NOT
+ *    yet measured, so nobody reads a bound as an observation
+ *  - registry already under the cap              → nothing; every tool goes every turn
+ */
+function fmtAdvertised(tools: NonNullable<ChatDiagnosticsData['tools']>): string {
+  const last = tools.advertisedLastTurn;
+  const min = tools.advertisedMin;
+  if (last != null) {
+    const range = min != null && min !== last ? `${min}–${last}` : `${last}`;
+    return ` · ${range} advertised per turn (measured)${min === 0 ? ' · ⚠ a turn was offered NONE' : ''}`;
+  }
+  if (tools.count > DEFAULT_TOOL_LIMIT) {
+    return ` · per-turn selection capped at ${DEFAULT_TOOL_LIMIT}, not yet measured (no turn in this run advertised tools)`;
+  }
+  return '';
 }
 
 /**
@@ -365,12 +410,17 @@ export function formatChatDiagnostics(d: ChatDiagnosticsData): string[] {
     // REGISTERED vs ADVERTISED are different numbers and conflating them misreads
     // the fix: the whole catalog stays registered, but only a relevance-selected
     // subset is sent per turn (~300 definitions is past the point where most
-    // providers reliably emit any tool call). The per-turn figure also appears as
-    // a `tools.selected` step in the execution trace.
-    const advertised = Math.min(tools.count, DEFAULT_TOOL_LIMIT);
+    // providers reliably emit any tool call).
+    //
+    // This used to report the CEILING (`up to 64 advertised`) computed from the
+    // registry size alone, while the Diagnostics block directly below reported the
+    // MEASURED range off the same run's trace — one report, two answers to one
+    // question, and the ceiling was the answer that could never be wrong-looking
+    // enough to investigate. It now states what was actually sent, and says so
+    // plainly when nothing has been measured yet rather than inventing a bound.
     lines.push(
       `- Tools available to the model: ${tools.count} registered`
-        + (tools.count > advertised ? ` · up to ${advertised} advertised per turn (relevance-selected)` : '')
+        + fmtAdvertised(tools)
         + `${tools.loading ? ' (catalog still loading)' : ''}`
         + `${tools.error ? ` · catalog error: ${tools.error}` : ''}`,
     );

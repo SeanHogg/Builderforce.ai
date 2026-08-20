@@ -24,6 +24,7 @@ import {
   computeBrainDiagnostics,
   fetchApiVersionVia,
   fetchMcpToolEntries,
+  gatherChatDiagnostics,
   getRunSnapshot,
   getRunTrace,
   mcpActionsFrom,
@@ -35,7 +36,6 @@ import {
   traceWithPersistedSteps,
   type BrainAction,
   type BrainTransport,
-  type ChatDiagnosticsData,
 } from '@seanhogg/builderforce-brain-embedded';
 import { TOOL_DEFS } from '../src/fileTools';
 import { authedFetch } from '../webview/src/authedFetch';
@@ -227,53 +227,50 @@ export async function probe(opts: ProbeOptions): Promise<ProbeResult> {
   const events = traceWithPersistedSteps(messages, live);
   const snapshot = getRunSnapshot(chatId);
 
-  // The same identity/plan/Evermind block the Copy button gathers. Every read is
-  // best-effort, so one unavailable endpoint degrades a line instead of the report.
+  // The same identity/plan/Evermind block the Copy button gathers — through the SAME
+  // assembler, not a second one that resembles it. This block used to be assembled
+  // here by hand and silently omitted `projectName`, `chatVisibility`, `modelFunding`
+  // and `extensionVersion`, so a probe report was "equivalent" to a Copy click rather
+  // than reproducing it. Every read is best-effort inside the assembler, so one
+  // unavailable endpoint degrades a line instead of the report.
   const claims = tokenClaims(token);
-  const [plan, apiVersion, evermind, agents, tickets] = await Promise.all([
-    fetchPlanSnapshot(apiReq).catch(() => null),
-    fetchApiVersionVia(() => apiReq<{ version?: string }>('/health').catch(() => null)),
-    projectId != null
-      ? apiReq<{ version: number; mode: string; inferenceEnabled: boolean; teacherModel: string | null; contributions: number; pending: number; lastLearnedAt: string | null }>(
-          `/api/projects/${projectId}/evermind/contributions`,
-        ).catch(() => null)
-      : Promise.resolve(null),
-    apiReq<{ agents?: Array<{ agentRef: string; role: string }> }>(`/api/brain/chats/${chatId}/agents`)
-      .then((r) => r.agents ?? [])
-      .catch(() => []),
-    apiReq<{ tickets?: Array<{ kind: string; ref: string; label?: string; linkType?: string; status?: string }> }>(`/api/brain/chats/${chatId}/tickets`)
-      .then((r) => r.tickets ?? [])
-      .catch(() => []),
-  ]);
-
-  const diagnosticsData: ChatDiagnosticsData = {
+  const diagnosticsData = await gatherChatDiagnostics({
     surface: 'VS Code (headless probe)',
     chatId,
     chatTitle: chat.title,
+    // `visibility` rides the chat row on the wire but is not on `BrainChat`; the
+    // webview reads it exactly this way, so both reports name the same field.
+    chatVisibility: (chat as unknown as { visibility?: 'shared' | 'locked' }).visibility ?? null,
     projectId,
-    projectName: null,
     selectedProjectId: opts.projectId ?? null,
     tenantId: claims.tid ?? null,
     userId: claims.sub ?? null,
-    evermind,
-    lastLearn: [...messages].reverse().find((m) => m.role === 'assistant' && m.evermindLearn)?.evermindLearn ?? null,
-    agents,
-    tickets,
-    account: {
-      plan: plan?.plan.effective ?? null,
-      billingStatus: plan?.plan.billingStatus ?? null,
-      periodStart: plan?.period.start ?? null,
-      resetsAt: plan?.period.resetsAt ?? null,
-      meters: plan?.meters ?? [],
-      model: opts.model ?? null,
-      canUsePremiumModels: modelSurface?.canUsePremiumModels,
-      planModelCount: modelSurface?.data?.length,
-      byoProviders: modelSurface?.byo?.providers ?? [],
-      baseUrl,
-    },
+    messages,
     tools: { count: actions.length, error: mcpError, loading: false },
-    versions: { ui: 'headless-probe', api: apiVersion },
-  };
+    trace: live,
+    model: opts.model ?? null,
+    modelSurface,
+    uiVersion: 'headless-probe',
+    baseUrl,
+    // The two UI surfaces hold the project name in loaded state; a CLI has none, so
+    // it reads it — the field is part of the report either way.
+    readProjectName: () =>
+      projectId != null
+        ? apiReq<{ name?: string }>(`/api/projects/${projectId}`).then((p) => p?.name ?? null)
+        : Promise.resolve(null),
+    readPlan: () => fetchPlanSnapshot(apiReq),
+    readApiVersion: () => fetchApiVersionVia(() => apiReq<{ version?: string }>('/health').catch(() => null)),
+    readEvermind: () =>
+      projectId != null
+        ? apiReq<{ version: number; mode: string; inferenceEnabled: boolean; teacherModel: string | null; contributions: number; pending: number; lastLearnedAt: string | null }>(
+            `/api/projects/${projectId}/evermind/contributions`,
+          )
+        : Promise.resolve(null),
+    readAgents: () =>
+      apiReq<{ agents?: Array<{ agentRef: string; role: string }> }>(`/api/brain/chats/${chatId}/agents`).then((r) => r.agents ?? []),
+    readTickets: () =>
+      apiReq<{ tickets?: Array<{ kind: string; ref: string; label?: string; linkType?: string; status?: string }> }>(`/api/brain/chats/${chatId}/tickets`).then((r) => r.tickets ?? []),
+  });
 
   return {
     chatId,

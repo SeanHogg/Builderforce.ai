@@ -69,6 +69,7 @@
   "Copied": "已复制",
   "Copy": "复制",
   "Copy chat diagnostics (plan + usage + identity + Evermind state + transcript)": "复制对话诊断信息（套餐 + 用量 + 身份 + Evermind 状态 + 对话记录）",
+  "Could not build the chat diagnostics report.": "无法生成对话诊断报告。",
   "Couldn't load Project 360": "无法加载项目 360",
   "Create file": "创建文件",
   "Create — {0}": "Create — {0}",

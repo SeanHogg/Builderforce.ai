@@ -178,6 +178,23 @@ to all five next-intl catalogs with real translations; the banner styles read `-
 `--bf-warning-bg`, which `globals.css` maps to the app's theme tokens, so it is correct in
 light and dark and wraps at narrow widths.
 
+### …and on its first run it found the extension had not been ACTIVATING since 2026.7.126
+
+esbuild has to shim `import.meta` when it emits CommonJS, and its shim is an empty object.
+Bundled ESM dependencies (the Agent/MCP SDKs) call `createRequire(import.meta.url)` at MODULE
+scope, so the bundle threw
+`The argument 'filename' must be a file URL object, file URL string, or absolute path string.
+Received undefined` before one line of our code ran. That is not a degraded feature — the
+extension fails to ACTIVATE, so every command, view and webview is dead, with one dismissible
+notification as the only evidence.
+
+Confirmed against the packaged artefacts: `2026.7.100` and `2026.7.120` have no such call;
+`2026.7.126`, `2026.8.127` and `2026.8.128` all ship `createRequire(MD.url)` with `MD={}`.
+Three releases, entirely non-functional, and no offline test could see it because the bundle is
+only ever LOADED by a real extension host. `esbuild.mjs` now defines `import.meta.url` as
+`pathToFileURL(__filename).href` — a real file URL, so `createRequire` and `fileURLToPath`
+consumers both get what they expect — on the extension AND harness builds.
+
 ### Extension-host integration tests
 
 `clients/vscode/test-integration/` runs a REAL VS Code via `@vscode/test-electron` and asserts
@@ -193,9 +210,16 @@ build, so the unit suite stays offline and instant while this is the pre-package
 (`pnpm test:integration`).
 
 **Verified:** brain-embedded 309/309 (30 files) including 7 new `gatherChatDiagnostics` tests,
-5 rewritten tool-line tests and 3 new deadline tests; `clients/vscode` 37/37; `tsgo` clean on
-the extension, webview, harness and the new `test-integration` project; frontend `tsgo` clean
-on every file this pass touched.
+5 rewritten tool-line tests and 3 new deadline tests; `clients/vscode` 37/37; the new
+extension-host suite 7/7 in a real VS Code 1.134; `tsgo` clean on the extension, webview,
+harness and the new `test-integration` project; frontend `tsgo` clean on every file this pass
+touched.
+
+One environment footgun handled in the launcher itself: a VS Code integrated terminal exports
+`ELECTRON_RUN_AS_NODE=1`, which the downloaded `Code.exe` inherits — it then starts as plain
+Node and rejects every flag (`bad option: --extensionTestsPath`, exit 9), which reads like a
+broken launcher rather than a leaked variable. `runTests.ts` strips it and the `VSCODE_*`
+handles before spawning, so the suite runs the same from an editor terminal as from CI.
 
 ## ✅ RESOLVED 2026-08-19 — The Models vocabulary, and ONE data-use gate that a training run has to pass
 

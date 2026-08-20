@@ -13,5 +13,7 @@ node_modules/**
 .github/**
 **/.DS_Store
 harness/**
+test-integration/**
+out-integration/**
 vitest.config.ts
 out/harness.cjs

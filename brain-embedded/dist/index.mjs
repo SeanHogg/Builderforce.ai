@@ -3556,6 +3556,7 @@ function subscribeToChatMessages(baseUrl, getToken, chatId, onChanged) {
 
 // src/apiVersion.ts
 var API_VERSION_TTL_MS = 6e4;
+var API_VERSION_PROBE_TIMEOUT_MS = 2500;
 var cached = null;
 var cachedAt = 0;
 var inflight = null;
@@ -3564,10 +3565,27 @@ function resetApiVersionCache() {
   cachedAt = 0;
   inflight = null;
 }
-function fetchApiVersionVia(read, now = Date.now) {
+function withDeadline(p, ms) {
+  if (!(ms > 0)) return p;
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(null), ms);
+    timer.unref?.();
+    void p.then(
+      (v) => {
+        clearTimeout(timer);
+        resolve(v);
+      },
+      () => {
+        clearTimeout(timer);
+        resolve(null);
+      }
+    );
+  });
+}
+function fetchApiVersionVia(read, now = Date.now, timeoutMs = API_VERSION_PROBE_TIMEOUT_MS) {
   if (cached && now() - cachedAt < API_VERSION_TTL_MS) return Promise.resolve(cached);
   if (inflight) return inflight;
-  inflight = read().then((data) => {
+  inflight = withDeadline(read(), timeoutMs).then((data) => {
     const next = data?.version ?? null;
     if (next) {
       cached = next;
@@ -3827,6 +3845,10 @@ function diagnosticsSignals(d) {
       out.push(
         '\u26A0\uFE0F The model has ZERO tools registered, so it cannot read tasks, projects, or any platform data \u2014 every data question can only be answered from the prompt. Expect "I don\'t have that data" and 0 tool calls. Check that McpExtensionsBridge is mounted and `/llm/v1/mcp/tools` returns a catalog.'
       );
+    } else if (tools.advertisedMin === 0) {
+      out.push(
+        `\u26A0\uFE0F A turn in this run was advertised ZERO tools even though ${tools.count} are registered \u2014 the per-turn relevance selection, not the catalog, is what left the model empty-handed. Any "I don't have that data" answer on that turn is a selection fault, not a model fault.`
+      );
     }
   }
   const acct = d.account;
@@ -3865,6 +3887,18 @@ function diagnosticsSignals(d) {
   }
   return out;
 }
+function fmtAdvertised(tools) {
+  const last = tools.advertisedLastTurn;
+  const min = tools.advertisedMin;
+  if (last != null) {
+    const range = min != null && min !== last ? `${min}\u2013${last}` : `${last}`;
+    return ` \xB7 ${range} advertised per turn (measured)${min === 0 ? " \xB7 \u26A0 a turn was offered NONE" : ""}`;
+  }
+  if (tools.count > DEFAULT_TOOL_LIMIT) {
+    return ` \xB7 per-turn selection capped at ${DEFAULT_TOOL_LIMIT}, not yet measured (no turn in this run advertised tools)`;
+  }
+  return "";
+}
 function formatChatDiagnostics(d) {
   const lines = ["## Chat diagnostics"];
   if (d.surface) lines.push(`- Surface: ${d.surface}`);
@@ -3902,9 +3936,8 @@ function formatChatDiagnostics(d) {
   }
   const tools = d.tools;
   if (tools) {
-    const advertised = Math.min(tools.count, DEFAULT_TOOL_LIMIT);
     lines.push(
-      `- Tools available to the model: ${tools.count} registered` + (tools.count > advertised ? ` \xB7 up to ${advertised} advertised per turn (relevance-selected)` : "") + `${tools.loading ? " (catalog still loading)" : ""}${tools.error ? ` \xB7 catalog error: ${tools.error}` : ""}`
+      `- Tools available to the model: ${tools.count} registered` + fmtAdvertised(tools) + `${tools.loading ? " (catalog still loading)" : ""}${tools.error ? ` \xB7 catalog error: ${tools.error}` : ""}`
     );
   } else {
     lines.push('- Tools available to the model: not gathered (this surface did not report its tool registry \u2014 a zero here is invisible, so treat any "announced a tool call and stopped" turn as unexplained)');
@@ -3942,8 +3975,91 @@ function formatChatDiagnostics(d) {
   }
   return lines;
 }
+
+// src/gatherChatDiagnostics.ts
+function safely(read, fallback) {
+  if (!read) return Promise.resolve(fallback);
+  try {
+    return read().then((v) => v ?? fallback, () => fallback);
+  } catch {
+    return Promise.resolve(fallback);
+  }
+}
+function toEvermind(head) {
+  if (!head) return null;
+  return {
+    version: head.version,
+    mode: head.mode,
+    ...head.inferenceEnabled != null ? { inferenceEnabled: head.inferenceEnabled } : {},
+    teacherModel: head.teacherModel ?? null,
+    ...head.contributions != null ? { contributions: head.contributions } : {},
+    ...head.pending != null ? { pending: head.pending } : {},
+    lastLearnedAt: head.lastLearnedAt ?? null
+  };
+}
+async function gatherChatDiagnostics(src) {
+  const [projectName, agents, tickets, head, plan, apiVersion] = await Promise.all([
+    safely(src.readProjectName, null),
+    safely(src.readAgents, []),
+    safely(src.readTickets, []),
+    safely(src.readEvermind, null),
+    safely(src.readPlan, null),
+    safely(src.readApiVersion, null)
+  ]);
+  let lastLearn = null;
+  const msgs = src.messages ?? [];
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    const m = msgs[i];
+    if (m.role === "assistant" && m.evermindLearn) {
+      lastLearn = m.evermindLearn;
+      break;
+    }
+  }
+  const exposure = src.trace ? toolExposureInTrace([...src.trace]) : null;
+  const account = {
+    plan: plan?.plan.effective ?? null,
+    billingStatus: plan?.plan.billingStatus ?? null,
+    periodStart: plan?.period.start ?? null,
+    resetsAt: plan?.period.resetsAt ?? null,
+    meters: plan?.meters ?? [],
+    model: src.model ?? null,
+    // Funding was one of the four fields the probe silently dropped, which is how a
+    // probe report could look clean about a chat whose model the plan cannot fund.
+    modelFunding: src.modelSurface ? classifyModelFunding(src.model, src.modelSurface) : null,
+    ...src.modelSurface?.canUsePremiumModels != null ? { canUsePremiumModels: src.modelSurface.canUsePremiumModels } : {},
+    ...src.modelSurface?.data ? { planModelCount: src.modelSurface.data.length } : {},
+    byoProviders: src.modelSurface?.byo?.providers ?? [],
+    extensionVersion: src.uiVersion ?? null,
+    baseUrl: src.baseUrl ?? null
+  };
+  return {
+    surface: src.surface,
+    chatId: src.chatId ?? null,
+    chatTitle: src.chatTitle ?? null,
+    chatVisibility: src.chatVisibility ?? null,
+    projectId: src.projectId ?? null,
+    projectName: projectName ?? src.projectName ?? null,
+    selectedProjectId: src.selectedProjectId ?? null,
+    tenantId: src.tenantId ?? null,
+    userId: src.userId ?? null,
+    evermind: toEvermind(head),
+    lastLearn,
+    agents: agents.map((a) => ({ agentRef: a.agentRef, role: a.role })),
+    tickets: tickets.map((tk) => ({ kind: tk.kind, ref: tk.ref, label: tk.label, linkType: tk.linkType, status: tk.status })),
+    account,
+    tools: src.tools ? {
+      count: src.tools.count,
+      error: src.tools.error ?? null,
+      loading: src.tools.loading ?? false,
+      advertisedMin: exposure?.min ?? null,
+      advertisedLastTurn: exposure?.lastTurn ?? null
+    } : null,
+    versions: { ui: src.uiVersion ?? null, api: apiVersion }
+  };
+}
 export {
   ADDRESSED_TO_META_KEY,
+  API_VERSION_PROBE_TIMEOUT_MS,
   API_VERSION_TTL_MS,
   AUTHORED_BY_META_KEY,
   BUILDERFORCE_PRODUCT_NAME,
@@ -4017,6 +4133,7 @@ export {
   formatChatDiagnostics,
   formatEvermindLearnStep,
   formatEvermindMemoryBlock,
+  gatherChatDiagnostics,
   getGlobalRunState,
   getLastResolvedModel,
   getMcpToolStatus,

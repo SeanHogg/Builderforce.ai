@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { API_VERSION_TTL_MS, fetchApiVersionVia, resetApiVersionCache } from './apiVersion';
+import { API_VERSION_PROBE_TIMEOUT_MS, API_VERSION_TTL_MS, fetchApiVersionVia, resetApiVersionCache } from './apiVersion';
 
 /**
  * A BUILD STAMP THAT LIES IS WORSE THAN NO BUILD STAMP.
@@ -40,5 +40,27 @@ describe('fetchApiVersionVia', () => {
 
   it('resolves null rather than throwing — a capture must never fail on a version lookup', async () => {
     expect(await fetchApiVersionVia(async () => { throw new Error('offline'); }, () => 0)).toBeNull();
+  });
+
+  /**
+   * UNREACHABLE and SLOW are different failures. A read that never settles used to
+   * leave every awaiting caller hanging forever, which is exactly how "Copy
+   * diagnostics" became a button that does nothing: the click lands, the report is
+   * never built, and nothing is shown to say so. The bound lives HERE so both
+   * surfaces inherit it instead of each host racing its own timer.
+   */
+  it('abandons a read that never settles, so a stalled /health cannot hang the caller', async () => {
+    const never = new Promise<{ version?: string }>(() => {});
+    expect(await fetchApiVersionVia(() => never, () => 0, 5)).toBeNull();
+  });
+
+  it('a timed-out probe does not poison the cache — the next call re-reads', async () => {
+    expect(await fetchApiVersionVia(() => new Promise<{ version?: string }>(() => {}), () => 0, 5)).toBeNull();
+    expect(await fetchApiVersionVia(async () => ({ version: '2026.8.1' }), () => 1, 5)).toBe('2026.8.1');
+  });
+
+  it('ships a bound by default — an omitted timeout is the shared deadline, not infinity', () => {
+    expect(API_VERSION_PROBE_TIMEOUT_MS).toBeGreaterThan(0);
+    expect(API_VERSION_PROBE_TIMEOUT_MS).toBeLessThan(API_VERSION_TTL_MS);
   });
 });

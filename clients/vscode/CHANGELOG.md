@@ -2,6 +2,14 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.8.129] — The extension starts again, and Copy diagnostics tells you when it didn't work
+
+- **The extension had stopped activating at all.** Since 2026.7.126 the bundle threw before a single line of our code ran, which kills every command, view and panel and leaves nothing behind but one notification you may already have dismissed. Fixed at the bundler, and now caught before packaging: a new test suite launches a real VS Code, activates the extension in it, checks that every command in the manifest is genuinely registered, that every view resolves, and that the chat webview actually boots and talks back to the editor.
+- **"Copy chat diagnostics" now says when it fails.** It used to swallow the error completely — no message, nothing on the clipboard, a click indistinguishable from a dead button. It now shows a warning on the button and puts the reason in the chat.
+- **A stalled connection can no longer leave that copy hanging forever.** The version probe it makes is bounded; if the check is slow, the report is built without it instead of waiting.
+- **The report stops answering the same question two different ways.** It used to print the *maximum* number of tools the model could have been offered per turn, right above the number it was *actually* offered. It now prints only what really happened — and says so plainly when nothing has been measured yet.
+- **The headless probe (`pnpm probe`) now produces the same report as the Copy button**, not one missing four fields.
+
 ## [2026.7.126] — You run on Builderforce, and you can now say whether it was any good
 
 - **Your chat says what you're actually on: "Builderforce Free" or "Builderforce PRO".** It used to print whichever upstream model the router happened to reach for that turn — a name that changes between turns, that you have no way to choose on a routed plan, and that sat right beside a model list the plan would not let you open. The plan you bought is the answer to "what am I running on", so that is what it says. Connect your own provider account, or move to a paid plan, and every real model name comes back — because then the choice is genuinely yours.

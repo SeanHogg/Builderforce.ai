@@ -1411,11 +1411,15 @@ interface ToolExposure {
 /**
  * How many tools the model was actually OFFERED, per turn, versus how many exist.
  *
- * The chat-diagnostics header can only report the registry-wide total and the per-turn
- * CEILING (`up to 64 advertised`). That is not the same question: a turn that was handed
- * ZERO tools and a turn that was handed sixty-four and ignored them produce byte-identical
- * reports, and only one of them is the model's fault. The loop now records the real
- * per-turn number, and this reads it back. Nulls when the run predates the field.
+ * The registry-wide total is not the same question: a turn that was handed ZERO tools
+ * and a turn that was handed sixty-four and ignored them produce byte-identical reports,
+ * and only one of them is the model's fault. The loop records the real per-turn number
+ * and this reads it back. Nulls when the run predates the field.
+ *
+ * This is now the SINGLE source of the per-turn figure: the chat-diagnostics header used
+ * to render a ceiling derived from the registry size while the Diagnostics block below it
+ * rendered this measurement, so one report answered one question two ways. Both lines
+ * read this function now (via `gatherChatDiagnostics`).
  */
 declare function toolExposureInTrace(events: BrainTraceEvent[]): ToolExposure;
 /**
@@ -2176,19 +2180,43 @@ declare function traceWithPersistedSteps(messages: BrainMessage[], trace: BrainT
  * capture can name a build that is no longer running.
  */
 declare const API_VERSION_TTL_MS = 60000;
+/**
+ * How long the `/health` read may take before the caller stops waiting for it.
+ *
+ * UNREACHABLE and SLOW are different failures, and only the first one was ever handled.
+ * A rejected read resolves null and a report honestly says the API version is unknown;
+ * a read that never SETTLES (offline behind a live socket, a captive portal, a stalled
+ * connection) left every awaiting caller hanging forever. That is precisely what turns
+ * "Copy diagnostics" into a button that does nothing at all: the click is received, the
+ * report is never built, and nothing is ever shown to say so.
+ *
+ * The stamp is the least important line in a diagnostics report and must never be able
+ * to hold the rest of it hostage — so the wait is bounded HERE, in the one module both
+ * surfaces already go through, rather than each host racing its own timer (the web app
+ * had one, the VS Code webview did not, and only one of the two copy buttons worked).
+ * An over-run is just a null.
+ *
+ * A caller that can cancel the underlying request should ALSO pass its own
+ * `AbortSignal.timeout(API_VERSION_PROBE_TIMEOUT_MS)` — the race below guarantees the
+ * bound, the signal is the courtesy that also frees the socket.
+ */
+declare const API_VERSION_PROBE_TIMEOUT_MS = 2500;
 /** Drop the memoized version — for tests, and for a surface that knows it just
  *  reconnected to a different deployment. */
 declare function resetApiVersionCache(): void;
 /**
  * Resolve the API version through `read`, memoizing a success for
- * {@link API_VERSION_TTL_MS}. Resolves null when `/health` is unreachable — a
- * diagnostics capture must never fail because a version lookup did.
+ * {@link API_VERSION_TTL_MS} and abandoning a read that outruns
+ * {@link API_VERSION_PROBE_TIMEOUT_MS}. Resolves null when `/health` is unreachable OR
+ * too slow — a diagnostics capture must never fail, and must never STALL, because a
+ * version lookup did.
  *
- * `now` is injectable so the expiry is unit-testable without a clock.
+ * `now` and `timeoutMs` are injectable so the expiry and the deadline are unit-testable
+ * without a clock; pass `timeoutMs: 0` to wait indefinitely.
  */
 declare function fetchApiVersionVia(read: () => Promise<{
     version?: string;
-} | null>, now?: () => number): Promise<string | null>;
+} | null>, now?: () => number, timeoutMs?: number): Promise<string | null>;
 
 /**
  * Chat ⇄ work linking — the single source for (a) the system-prompt directive that
@@ -2723,11 +2751,22 @@ interface ChatDiagnosticsData {
      * a tool-less Brain ("I don't have that data", zero tool calls) is
      * indistinguishable from a model that simply chose not to call anything — the
      * exact ambiguity that made a silent MCP-catalog failure impossible to diagnose.
+     *
+     * `advertisedMin`/`advertisedLastTurn` are the OBSERVED per-turn numbers, read off
+     * the run's trace (`toolExposureInTrace`). They exist because this line used to
+     * render the per-turn CEILING (`up to 64 advertised`) while the Diagnostics block
+     * directly below it rendered the real measured range off the same run — two lines
+     * in one report answering the same question differently, and the ceiling was the
+     * one that was always wrong for the turn that actually failed.
      */
     tools?: {
         count: number;
         error?: string | null;
         loading?: boolean;
+        /** Fewest tools advertised on any measured turn; null when no turn was measured. */
+        advertisedMin?: number | null;
+        /** Tools advertised on the LAST measured turn; null when no turn was measured. */
+        advertisedLastTurn?: number | null;
     } | null;
     /**
      * Which BUILD produced this capture. Without it a dump taken minutes before a
@@ -2763,6 +2802,147 @@ declare function allowanceState(meter: {
  * the reader can tell "not gathered" from "genuinely empty".
  */
 declare function formatChatDiagnostics(d: ChatDiagnosticsData): string[];
+
+/**
+ * gatherChatDiagnostics — the one ASSEMBLER behind every "Copy diagnostics" report.
+ *
+ * {@link formatChatDiagnostics} has always been shared, so the two surfaces RENDER
+ * identically. What was not shared was the step before it: each host built its own
+ * {@link ChatDiagnosticsData} inline — the VS Code webview inside `App.tsx`'s
+ * `copyTranscript` callback, the web app inside `BrainPanel.tsx`'s `captureExecution`,
+ * the headless probe inside `probe.ts`. Three assemblies of one object, and they
+ * drifted exactly as three copies do: the probe's report silently omitted
+ * `projectName`, `chatVisibility`, `modelFunding` and `extensionVersion`, because those
+ * four were assembled from React state the probe has no access to. A report that is
+ * "equivalent" to a Copy click is not the same thing as one that is byte-identical to
+ * it, and only the second can be used to reproduce a user's capture.
+ *
+ * So the assembly lives here, host-agnostic: the caller supplies the facts it already
+ * holds and READERS for the facts it has to fetch, and this owns the parts that must
+ * not be re-derived — running every read concurrently, degrading each one
+ * independently to null/[], reading the observed per-turn tool exposure off the trace,
+ * and classifying which purse funds the model.
+ *
+ * Pure of fetch, DOM and React: the readers are injected, so the same function serves
+ * a webview, a Next.js client component and a Node CLI.
+ */
+
+/** The `/api/consumption` snapshot, structurally — each host has its own named type
+ *  for it, and they agree on exactly these fields. */
+interface ChatDiagnosticsPlanSnapshot {
+    period: {
+        start: string;
+        resetsAt: string;
+    };
+    plan: {
+        effective: string;
+        billingStatus: string;
+    };
+    meters: ChatDiagnosticsMeter[];
+}
+/** The `/llm/v1/models` surface, structurally — enough to classify funding and to
+ *  count what the plan pool offers. */
+interface ChatDiagnosticsModelSurface {
+    data?: Array<{
+        id?: string;
+    }>;
+    byo?: {
+        providers?: string[];
+        models?: Array<{
+            id?: string;
+            vendor?: string;
+        }>;
+    };
+    canUsePremiumModels?: boolean;
+}
+/** The `/api/projects/:id/evermind/contributions` head, structurally. */
+interface ChatDiagnosticsEvermindHead {
+    version: number;
+    mode: string;
+    inferenceEnabled?: boolean;
+    teacherModel?: string | null;
+    contributions?: number;
+    pending?: number;
+    lastLearnedAt?: string | null;
+}
+/** The minimum of a message this needs: the last assistant turn's learn outcome.
+ *  Structural on purpose so a host can pass its own message array unchanged. */
+interface ChatDiagnosticsMessageLike {
+    role: string;
+    evermindLearn?: {
+        learned: boolean;
+        version: number;
+        reason?: string | null;
+    } | null;
+}
+/**
+ * Everything the report needs, split into what the host KNOWS and what it must READ.
+ *
+ * Every reader is optional and best-effort: an omitted one is simply "not gathered"
+ * and a rejecting one degrades to null/[]. That is deliberate — a diagnostics capture
+ * whose whole point is to explain a broken chat must never itself fail because one of
+ * the endpoints it asks about is the broken one.
+ */
+interface ChatDiagnosticsSources {
+    /** Which surface produced the capture ('Web' | 'VS Code (VSIX)' | …). */
+    surface: string;
+    chatId?: number | null;
+    chatTitle?: string | null;
+    /** 'shared' | 'locked'. */
+    chatVisibility?: string | null;
+    /** The CHAT's own project — what the learn gate keys on. */
+    projectId?: number | null;
+    projectName?: string | null;
+    /** The project the surrounding UI is showing, when it differs. */
+    selectedProjectId?: number | null;
+    tenantId?: number | string | null;
+    userId?: string | null;
+    /** The transcript — read only for the newest assistant turn's learn outcome. */
+    messages?: readonly ChatDiagnosticsMessageLike[];
+    /** The live tool registry the conversation runs on, and why it might be short. */
+    tools?: {
+        count: number;
+        error?: string | null;
+        loading?: boolean;
+    };
+    /** The run's trace, so the report states the tools the model was ACTUALLY handed
+     *  per turn rather than a ceiling derived from the registry size. */
+    trace?: readonly BrainTraceEvent[];
+    /** The model pinned for this chat, or null when the gateway routes per turn. */
+    model?: string | null;
+    /** The model surface the pickers already loaded — reused, never re-fetched. */
+    modelSurface?: ChatDiagnosticsModelSurface | null;
+    /** The build that produced the capture (extension version / web app version). */
+    uiVersion?: string | null;
+    /** The gateway this surface is talking to. */
+    baseUrl?: string | null;
+    /** Resolve the chat project's NAME when the host does not already hold it (the two
+     *  UI surfaces read it from a loaded project list; the headless probe has none).
+     *  Wins over the static `projectName` above when it answers. */
+    readProjectName?: () => Promise<string | null>;
+    readAgents?: () => Promise<Array<{
+        agentRef: string;
+        role: string;
+    }>>;
+    readTickets?: () => Promise<Array<{
+        kind: string;
+        ref: string;
+        label?: string;
+        linkType?: string;
+        status?: string;
+    }>>;
+    readEvermind?: () => Promise<ChatDiagnosticsEvermindHead | null>;
+    readPlan?: () => Promise<ChatDiagnosticsPlanSnapshot | null>;
+    /** Resolve the deployed API version — bounded + session-cached by
+     *  `fetchApiVersionVia`, which every host reaches it through. */
+    readApiVersion?: () => Promise<string | null>;
+}
+/**
+ * Assemble the diagnostics payload. Resolves — never rejects — so a caller can hand
+ * the result straight to {@link formatChatDiagnostics} without a try/catch that would
+ * only ever produce a worse report.
+ */
+declare function gatherChatDiagnostics(src: ChatDiagnosticsSources): Promise<ChatDiagnosticsData>;
 
 /**
  * WHICH MODELS a chat surface may offer, in WHAT ORDER, and WHO PAYS for each —
@@ -3067,4 +3247,4 @@ declare function handleRouterCall(catalog: BrainToolSpec[], name: string, args: 
     };
 };
 
-export { ADDRESSED_TO_META_KEY, API_VERSION_TTL_MS, AUTHORED_BY_META_KEY, type AllowanceState, type AssembledToolCall, BUILDERFORCE_PRODUCT_NAME, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRunRequest, type BrainRunSnapshot, type BrainRuntime, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, type ByoUnresolvedEntry, CHAT_MODES, CODE_CHANGE_TOOLS, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type ChatCompletionMessage, type ChatDiagnosticsAccount, type ChatDiagnosticsData, type ChatDiagnosticsEvermind, type ChatDiagnosticsMeter, ChatErrorAction, type ChatInputAttachment, type ChatMode, type ChatModelOptions, type ChatModelSelection, type CompletionMetadata, type ContentPart, type CreatedWorkItemLink, DEFAULT_CHAT_TITLE, DEFAULT_MODEL_CHOICE_LABELS, DEFAULT_MODEL_IDENTITY, DEFAULT_TOOL_LIMIT, type DirectedRecipient, EVERMIND_LEARN_MIN_CHARS, type Effort, type EffortProfile, type EvermindLearnOutcome, type EvermindLearnTarget, type EvermindRecallItem, type EvermindRecallResult, type EvermindRunHooks, type GlobalRunState, type ImageUrlContentPart, type LinkedTicketToAdvance, MODEL_CATEGORIES, type McpToolEntry, type McpToolResultInfo, type McpToolStatus, type MentionToken, type MessageProvenance, type ModelCategory, type ModelChoiceLabels, type ModelIdentityContext, type ModelItem, NEW_CHAT_MODE, NOT_STARTED_TASK_STATUSES, PROJECT_EVERMIND_MODEL_PREFIX, PROVENANCE_META_KEY, type ParsedXmlToolCall, type PersistedStep, type PreparedImage, type ProvenanceAccount, RESTING_CHAT_MODE, type RatableMessage, type RatedTurnContext, type ReasoningIntent, type ReasoningLevel, type RecipientChoice, type RoutedProduct, STEP_MESSAGE_ROLE, type StreamChatOptions, type StreamChatResult, type StreamHandlers, TICKET_RECORDING_TOOLS, TOOL_ROUTER_DESCRIBE, TOOL_ROUTER_FIND, TOOL_ROUTER_INVOKE, type TextContentPart, type ToolCatalogMatch, type ToolExposure, type ToolSelection, type TurnInterruption, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, XmlToolCallFilter, accountUsedInTrace, activeMentionToken, activeModelKey, allowanceState, attachEvermindLearn, buildBrainTriageReport, buildModelItems, byoReasonHint, byoUnresolvedInTrace, byoUnresolvedSummary, byoVendorLabel, chatConversationDirective, chatModeDirective, chatWorkDirective, chatWorkLinkingDirective, classifyModelFunding, clearRunError, codeChangeFile, computeBrainDiagnostics, consolidationMarkerContent, consolidationMetadata, countReconciledMemories, deriveChatTitle, describeTool, detectAnnouncedButUnmadeToolCall, detectUnbackedTicketClaim, detectUnbackedWriteClaim, displayModelName, effortProfile, extractXmlToolCalls, fetchApiVersionVia, fetchMcpToolEntries, filterMentionCandidates, filterModelItems, findTools, formatBrainDiagnostics, formatBrainProvenance, formatChatDiagnostics, formatEvermindLearnStep, formatEvermindMemoryBlock, getGlobalRunState, getLastResolvedModel, getMcpToolStatus, getRunSnapshot, getRunTrace, handleRouterCall, isChatMode, isCodeChangeTool, isConnectedAccountUnused, isConsolidationMarker, isDirectedToParticipant, isEffort, isEvermindModel, isFailedToolResult, isMalformedToolCall, isRouterTool, isRunning, isStepMessage, isTicketRecordingTool, isTruncatedTurn, isUserConfiguredModelRef, lastConsolidationIndex, linkedTicketsToAdvance, mcpActionsFrom, mentionRecipient, modelCategoryLabel, modelFailoversInTrace, modelInUse, modelsUsedInTrace, narratedUnadvertisedInTrace, normalizeChatMode, parseByoUnresolved, parseDirectedRecipient, parseMessageAuthor, parseMessageProvenance, parseStepMessage, perMillionUsd, premiumCostLabel, prepareImageDataUrl, productForPlan, productModelName, ratedTurnContext, ratedTurnTool, reasoningForRun, resetApiVersionCache, resetBrainRunStore, resolveRecipient, resolveRunConfirm, revealsModelId, routerToolSpecs, routingQueryForTurn, startRun as runBrainLoop, savePendingPrompt, scopeToConsolidation, selectToolsForTurn, setLastResolvedModel, setMcpToolStatus, stallRecoveriesInTrace, stallUnrecoveredInTrace, startRun, stepSig, stopRun, streamChatCompletion, subscribeRun, subscribeRunStore, subscribeToChatMessages, takePendingPrompt, toolExposureInTrace, toolSpecsFor, traceWithPersistedSteps, turnInterruption, turnOptimizationDirective, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions, withDirectedMetadata, withProvenanceMetadata, workItemLinkFromCreate };
+export { ADDRESSED_TO_META_KEY, API_VERSION_PROBE_TIMEOUT_MS, API_VERSION_TTL_MS, AUTHORED_BY_META_KEY, type AllowanceState, type AssembledToolCall, BUILDERFORCE_PRODUCT_NAME, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRunRequest, type BrainRunSnapshot, type BrainRuntime, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, type ByoUnresolvedEntry, CHAT_MODES, CODE_CHANGE_TOOLS, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type ChatCompletionMessage, type ChatDiagnosticsAccount, type ChatDiagnosticsData, type ChatDiagnosticsEvermind, type ChatDiagnosticsEvermindHead, type ChatDiagnosticsMessageLike, type ChatDiagnosticsMeter, type ChatDiagnosticsModelSurface, type ChatDiagnosticsPlanSnapshot, type ChatDiagnosticsSources, ChatErrorAction, type ChatInputAttachment, type ChatMode, type ChatModelOptions, type ChatModelSelection, type CompletionMetadata, type ContentPart, type CreatedWorkItemLink, DEFAULT_CHAT_TITLE, DEFAULT_MODEL_CHOICE_LABELS, DEFAULT_MODEL_IDENTITY, DEFAULT_TOOL_LIMIT, type DirectedRecipient, EVERMIND_LEARN_MIN_CHARS, type Effort, type EffortProfile, type EvermindLearnOutcome, type EvermindLearnTarget, type EvermindRecallItem, type EvermindRecallResult, type EvermindRunHooks, type GlobalRunState, type ImageUrlContentPart, type LinkedTicketToAdvance, MODEL_CATEGORIES, type McpToolEntry, type McpToolResultInfo, type McpToolStatus, type MentionToken, type MessageProvenance, type ModelCategory, type ModelChoiceLabels, type ModelIdentityContext, type ModelItem, NEW_CHAT_MODE, NOT_STARTED_TASK_STATUSES, PROJECT_EVERMIND_MODEL_PREFIX, PROVENANCE_META_KEY, type ParsedXmlToolCall, type PersistedStep, type PreparedImage, type ProvenanceAccount, RESTING_CHAT_MODE, type RatableMessage, type RatedTurnContext, type ReasoningIntent, type ReasoningLevel, type RecipientChoice, type RoutedProduct, STEP_MESSAGE_ROLE, type StreamChatOptions, type StreamChatResult, type StreamHandlers, TICKET_RECORDING_TOOLS, TOOL_ROUTER_DESCRIBE, TOOL_ROUTER_FIND, TOOL_ROUTER_INVOKE, type TextContentPart, type ToolCatalogMatch, type ToolExposure, type ToolSelection, type TurnInterruption, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, XmlToolCallFilter, accountUsedInTrace, activeMentionToken, activeModelKey, allowanceState, attachEvermindLearn, buildBrainTriageReport, buildModelItems, byoReasonHint, byoUnresolvedInTrace, byoUnresolvedSummary, byoVendorLabel, chatConversationDirective, chatModeDirective, chatWorkDirective, chatWorkLinkingDirective, classifyModelFunding, clearRunError, codeChangeFile, computeBrainDiagnostics, consolidationMarkerContent, consolidationMetadata, countReconciledMemories, deriveChatTitle, describeTool, detectAnnouncedButUnmadeToolCall, detectUnbackedTicketClaim, detectUnbackedWriteClaim, displayModelName, effortProfile, extractXmlToolCalls, fetchApiVersionVia, fetchMcpToolEntries, filterMentionCandidates, filterModelItems, findTools, formatBrainDiagnostics, formatBrainProvenance, formatChatDiagnostics, formatEvermindLearnStep, formatEvermindMemoryBlock, gatherChatDiagnostics, getGlobalRunState, getLastResolvedModel, getMcpToolStatus, getRunSnapshot, getRunTrace, handleRouterCall, isChatMode, isCodeChangeTool, isConnectedAccountUnused, isConsolidationMarker, isDirectedToParticipant, isEffort, isEvermindModel, isFailedToolResult, isMalformedToolCall, isRouterTool, isRunning, isStepMessage, isTicketRecordingTool, isTruncatedTurn, isUserConfiguredModelRef, lastConsolidationIndex, linkedTicketsToAdvance, mcpActionsFrom, mentionRecipient, modelCategoryLabel, modelFailoversInTrace, modelInUse, modelsUsedInTrace, narratedUnadvertisedInTrace, normalizeChatMode, parseByoUnresolved, parseDirectedRecipient, parseMessageAuthor, parseMessageProvenance, parseStepMessage, perMillionUsd, premiumCostLabel, prepareImageDataUrl, productForPlan, productModelName, ratedTurnContext, ratedTurnTool, reasoningForRun, resetApiVersionCache, resetBrainRunStore, resolveRecipient, resolveRunConfirm, revealsModelId, routerToolSpecs, routingQueryForTurn, startRun as runBrainLoop, savePendingPrompt, scopeToConsolidation, selectToolsForTurn, setLastResolvedModel, setMcpToolStatus, stallRecoveriesInTrace, stallUnrecoveredInTrace, startRun, stepSig, stopRun, streamChatCompletion, subscribeRun, subscribeRunStore, subscribeToChatMessages, takePendingPrompt, toolExposureInTrace, toolSpecsFor, traceWithPersistedSteps, turnInterruption, turnOptimizationDirective, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions, withDirectedMetadata, withProvenanceMetadata, workItemLinkFromCreate };

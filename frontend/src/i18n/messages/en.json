@@ -8249,6 +8249,8 @@
       "preview": "Preview",
       "askSubmit": "Send",
       "askAnswered": "Answered",
+      "askPending": "Answer needed",
+      "askJumpTo": "Show in conversation",
       "accountOwn": "Your account",
       "accountShared": "Shared pool",
       "accountByoUnused": "Your connected account wasn't used",

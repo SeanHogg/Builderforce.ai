@@ -15,10 +15,15 @@ const production = process.argv.includes("--production");
 // so the extension's chat can be exercised without packaging or installing a VSIX.
 // Built to a SEPARATE entry point (never shipped in the .vsix — see .vscodeignore).
 const harness = process.argv.includes("--harness");
+// The extension-host integration suite: the Mocha entry VS Code loads inside the
+// running host, plus the launcher that downloads/boots that host. Bundled (not tsc'd)
+// so it resolves dependencies exactly as the shipped extension does, and written to a
+// SEPARATE directory that is never packaged (see .vscodeignore).
+const integration = process.argv.includes("--integration");
 
 // Clean stale per-file output from the old tsc build so out/ holds only the bundle.
 // Skipped for the harness build, which must not wipe an existing extension bundle.
-if (!harness) fs.rmSync("out", { recursive: true, force: true });
+if (!harness && !integration) fs.rmSync("out", { recursive: true, force: true });
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -65,8 +70,50 @@ const agentToolsTsResolve = {
   },
 };
 
+/**
+ * A REAL `import.meta.url` inside the CommonJS bundle.
+ *
+ * esbuild has to shim `import.meta` when it emits CJS, and its shim is an empty object
+ * — so every bundled ESM dependency that does `createRequire(import.meta.url)` (the
+ * Agent/MCP SDKs do, at MODULE scope) receives `undefined` and throws
+ * `The argument 'filename' must be a file URL object, file URL string, or absolute path
+ * string` before a single line of our code runs. That is not a degraded feature: the
+ * extension fails to ACTIVATE, so every command, view and webview is dead, and the only
+ * evidence is one notification in a window the user may already have dismissed.
+ *
+ * It shipped that way in 2026.7.126 → 2026.8.128 and no offline test could see it,
+ * because the bundle is only ever LOADED by a real extension host — which is exactly the
+ * gap `test-integration/` now covers.
+ *
+ * `pathToFileURL(__filename).href` is the honest value: a file URL, so both
+ * `createRequire(...)` and `fileURLToPath(...)` consumers get what they expect (a bare
+ * `__filename` would satisfy the first and break the second).
+ */
+const importMetaUrlShim = {
+  banner: { js: `var __bfImportMetaUrl = require("node:url").pathToFileURL(__filename).href;` },
+  define: { "import.meta.url": "__bfImportMetaUrl" },
+};
+
 /** @type {import('esbuild').BuildOptions} */
-const options = harness
+const options = integration
+  ? {
+      // `suite.cjs` runs INSIDE the extension host (so `vscode` is provided);
+      // `runTests.cjs` runs outside it, in plain Node.
+      entryPoints: { suite: "test-integration/index.ts", runTests: "test-integration/runTests.ts" },
+      bundle: true,
+      outdir: "out-integration",
+      outExtension: { ".js": ".cjs" },
+      platform: "node",
+      format: "cjs",
+      target: "node20",
+      // `vscode` is the host's. Mocha and the launcher stay external and resolve from
+      // this package's `node_modules` at runtime: bundling Mocha inlines its
+      // `require.resolve` worker paths, which only resolve as real files on disk.
+      external: ["vscode", "mocha", "@vscode/test-electron"],
+      sourcemap: true,
+      logLevel: "warning",
+    }
+  : harness
   ? {
       entryPoints: ["harness/cli.ts"],
       bundle: true,
@@ -79,6 +126,7 @@ const options = harness
       external: ["vscode", "react", "react-dom"],
       alias: { "@builderforce/agent-tools": path.join(agentToolsRoot, "index.ts"), "@builderforce/creation-canvas-contract": creationCanvasContract },
       plugins: [agentToolsTsResolve],
+      ...importMetaUrlShim,
       sourcemap: true,
       logLevel: "warning",
     }
@@ -92,17 +140,18 @@ const options = harness
       external: ["vscode"],
       alias: { "@builderforce/agent-tools": path.join(agentToolsRoot, "index.ts"), "@builderforce/creation-canvas-contract": creationCanvasContract },
       plugins: [agentToolsTsResolve],
+      ...importMetaUrlShim,
       sourcemap: !production,
       minify: production,
       logLevel: "info",
     };
 
 if (watch) {
-  if (!harness) copyClaudeAgentSdkRuntime();
+  if (!harness && !integration) copyClaudeAgentSdkRuntime();
   const ctx = await esbuild.context(options);
   await ctx.watch();
   console.log("[esbuild] watching…");
 } else {
   await esbuild.build(options);
-  if (!harness) copyClaudeAgentSdkRuntime();
+  if (!harness && !integration) copyClaudeAgentSdkRuntime();
 }

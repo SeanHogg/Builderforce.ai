@@ -12,7 +12,7 @@ import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import Link from 'next/link';
-import { BrainTimeline, Avatar } from '@seanhogg/builderforce-brain-ui';
+import { BrainTimeline, Avatar, PendingQuestionBanner, selectPendingAskUser, askUserAnchorId } from '@seanhogg/builderforce-brain-ui';
 import '@seanhogg/builderforce-brain-ui/styles.css';
 import {
   consolidationMarkerContent,
@@ -21,13 +21,12 @@ import {
   getRunSnapshot,
   getRunTrace,
   formatChatDiagnostics,
-  classifyModelFunding,
+  gatherChatDiagnostics,
   getMcpToolStatus,
   nextFallbackModel,
   effortProfile,
   reasoningForRun,
   type BrainTraceEvent,
-  type ChatDiagnosticsData,
 } from '@seanhogg/builderforce-brain-embedded';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { ChatInput, type ChatModelSelection } from '@/components/ChatInput';
@@ -968,6 +967,27 @@ export function BrainPanel({
     const { conv: c, recipient: r } = timelineCtxRef.current;
     void c.send(msg.content, { addressedTo: r });
   }, []);
+  // The question this chat is BLOCKED on, if any. A long transcript buries the agent's
+  // ask_user card, so the chat reads as merely idle when it is actually waiting on the
+  // user — the VSIX has pinned it at the composer since the session-tabs pass, and this
+  // is the same shared predicate + banner, so the two surfaces can never disagree about
+  // whether a chat is blocked.
+  const pendingQuestion = useMemo(() => selectPendingAskUser(conv.messages), [conv.messages]);
+  // The banner renders the SAME <QuestionCard> the timeline does, so its card copy is
+  // taken from the timeline bundle rather than re-translated — only the two
+  // banner-specific strings are new.
+  const askLabels = useMemo(() => ({
+    askSubmit: timelineLabels.askSubmit,
+    askAnswered: timelineLabels.askAnswered,
+    askPending: tTimeline('askPending'),
+    askJumpTo: tTimeline('askJumpTo'),
+  }), [timelineLabels, tTimeline]);
+  const revealPendingQuestion = useCallback(() => {
+    if (!pendingQuestion) return;
+    document.getElementById(askUserAnchorId(pendingQuestion.messageId))
+      ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [pendingQuestion]);
+
   const renderTimelineMessage = useCallback(
     (msg: BrainMessage, ctx: { role: 'user' | 'assistant'; text: string }) => (
       <ChatMessageContent
@@ -1067,29 +1087,16 @@ export function BrainPanel({
     // lands on `error` exactly as the old try/catch around it did.
     await capture.copy(async () => {
       // Prepend a Chat diagnostics block (identity + Evermind wiring state + Signals) so a
-      // pasted report answers "what STATE was this chat in?" — the CHAT's own project (what
-      // the learn gate keys on) vs the page's project, tenant/user, the Evermind head
-      // (version/mode/learned/queued/last-learned), the last turn's learn-gate outcome, the
-      // invited agents, and the linked tickets. Shared serializer with the VSIX. Best-effort
-      // per source: a failed fetch degrades to null/[] so the copy never breaks.
+      // pasted report answers "what STATE was this chat in?". Assembled by the SHARED
+      // `gatherChatDiagnostics` — the same one the VS Code webview and the headless probe
+      // call — so the three reports cannot drift field-by-field the way three inline
+      // copies did. Best-effort per source inside the assembler: a failed fetch degrades
+      // to null/[] so the copy never breaks.
       const chatId = chats.activeChatId;
       const chatProjectId = chats.activeChat?.projectId ?? null;
-      const [agents, tickets, contrib, consumption, apiVersion] = await Promise.all([
-        chatId != null ? brain.listChatAgents(chatId).catch(() => []) : Promise.resolve([]),
-        chatId != null ? brain.listChatTickets(chatId).catch(() => []) : Promise.resolve([]),
-        chatProjectId != null ? getProjectEvermindContributions(chatProjectId).catch(() => null) : Promise.resolve(null),
-        // Plan + month-to-date allowance. Best-effort: a free/card-less tenant's report
-        // must SAY so rather than read as an unexplained capability failure, but the
-        // fetch may not block the copy. Shared cached snapshot — the same one the
-        // header's <PlanBadge/> shows, so the report and the chip can't disagree.
-        fetchConsumptionSnapshot(),
-        // Session-cached; shares the footer's /health read rather than adding one.
-        fetchApiVersion(),
-      ]);
-      const lastLearn = [...conv.messages].reverse().find((m) => m.role === 'assistant' && m.evermindLearn)?.evermindLearn ?? null;
       const tenant = getStoredTenant();
       const user = getStoredUser();
-      const diagnostics: ChatDiagnosticsData = {
+      const diagnostics = await gatherChatDiagnostics({
         surface: 'Web',
         chatId,
         chatTitle: chats.activeChat?.title ?? null,
@@ -1098,53 +1105,45 @@ export function BrainPanel({
         selectedProjectId: pinnedProjectId ?? viewingProjectId ?? null,
         tenantId: tenant?.id ?? null,
         userId: user?.id ?? null,
-        evermind: contrib
-          ? {
-              version: contrib.version,
-              mode: contrib.mode,
-              inferenceEnabled: contrib.inferenceEnabled,
-              teacherModel: contrib.teacherModel,
-              contributions: contrib.contributions,
-              pending: contrib.pending,
-              lastLearnedAt: contrib.lastLearnedAt,
-            }
-          : null,
-        lastLearn,
-        agents: agents.map((a) => ({ agentRef: a.agentRef, role: a.role })),
-        tickets: tickets.map((tk) => ({ kind: tk.kind, ref: tk.ref, label: tk.label, linkType: tk.linkType, status: tk.status })),
-        // WHO the user is to the platform: tier, whether a card is on file, what is left
-        // of each allowance, and what the plan entitles them to model-wise.
-        account: {
-          plan: consumption?.plan.effective ?? null,
-          billingStatus: consumption?.plan.billingStatus ?? null,
-          periodStart: consumption?.period.start ?? null,
-          resetsAt: consumption?.period.resetsAt ?? null,
-          meters: consumption?.meters ?? [],
-          model: personaModel ?? null,
-          // Shared cached model surface — `fundingSurface` keeps the vendor tagging the
-          // classifier needs, so this reads the list the pickers already loaded instead
-          // of re-fetching /llm/v1/models on every capture.
-          modelFunding: classifyModelFunding(personaModel, llmModels.fundingSurface),
-          canUsePremiumModels: llmModels.canUsePremiumModels,
-          planModelCount: llmModels.models.length,
-          byoProviders: llmModels.byoProviders,
-        },
+        messages: conv.messages,
         // What the model could actually CALL. The COUNT is the live registry the
-        // conversation runs on (`toolSpecs` — navigation + MCP catalog together),
-        // not just the MCP subset; the catalog status explains a zero (a failed
-        // MCP fetch used to collapse silently to no tools at all).
+        // conversation runs on (`toolSpecs` — navigation + MCP catalog together), not
+        // just the MCP subset; the catalog status explains a zero. The trace supplies
+        // what was ACTUALLY advertised per turn, so this line and the Diagnostics block
+        // below it can no longer answer one question two ways.
         tools: (() => {
           const mcp = getMcpToolStatus();
           return { count: toolSpecs.length, error: mcp.error, loading: mcp.loading };
         })(),
-        // Which build produced this capture — without it, a dump taken just before
-        // a deploy is indistinguishable from one taken after.
-        versions: { ui: APP_VERSION, api: apiVersion },
-      };
+        trace: timelineTrace,
+        model: personaModel ?? null,
+        // Shared cached model surface — `fundingSurface` keeps the vendor tagging the
+        // classifier needs, so this reads the list the pickers already loaded instead
+        // of re-fetching /llm/v1/models on every capture.
+        modelSurface: {
+          data: llmModels.fundingSurface.data,
+          byo: { models: llmModels.fundingSurface.byo.models, providers: llmModels.byoProviders },
+          canUsePremiumModels: llmModels.canUsePremiumModels,
+        },
+        // Which build produced this capture — without it, a dump taken just before a
+        // deploy is indistinguishable from one taken after.
+        uiVersion: APP_VERSION,
+        readAgents: () => (chatId != null ? brain.listChatAgents(chatId) : Promise.resolve([])),
+        readTickets: () => (chatId != null ? brain.listChatTickets(chatId) : Promise.resolve([])),
+        readEvermind: () => (chatProjectId != null ? getProjectEvermindContributions(chatProjectId) : Promise.resolve(null)),
+        // Plan + month-to-date allowance. A free/card-less tenant's report must SAY so
+        // rather than read as an unexplained capability failure. Shared cached snapshot
+        // — the same one the header's <PlanBadge/> shows, so the report and the chip
+        // can't disagree.
+        readPlan: () => fetchConsumptionSnapshot(),
+        // Session-cached AND time-bounded in the shared helper; shares the footer's
+        // /health read rather than adding one.
+        readApiVersion: () => fetchApiVersion(),
+      });
       const diagBlock = formatChatDiagnostics(diagnostics).join('\n');
       return `${diagBlock}\n\n${conv.buildTriageReport(personaLabel)}`;
     });
-  }, [capture, conv, personaLabel, personaModel, llmModels, toolSpecs, chats.activeChatId, chats.activeChat, projects, pinnedProjectId, viewingProjectId]);
+  }, [capture, conv, personaLabel, personaModel, llmModels, toolSpecs, timelineTrace, chats.activeChatId, chats.activeChat, projects, pinnedProjectId, viewingProjectId]);
 
   // Shared chrome for the "capture execution" icon button (page + docked headers).
   const captureButton = (
@@ -1603,6 +1602,14 @@ export function BrainPanel({
               8px stack gaps ate most of the width. */}
           <div className="bs-input-area" style={{ flexShrink: 0, padding: isPage ? undefined : 'var(--chat-ctl-pad-y, 6px) var(--chat-ctl-pad-x, 8px)', borderTop: isPage ? undefined : '1px solid var(--border-subtle)' }}>
             {pendingConfirm && <ToolConfirmBar req={pendingConfirm} onDecide={resolveConfirm} onApproveAll={approveAll} />}
+            {pendingQuestion && (
+              <PendingQuestionBanner
+                payload={pendingQuestion.payload}
+                labels={askLabels}
+                onAnswer={onAnswerTimelineQuestion}
+                onReveal={revealPendingQuestion}
+              />
+            )}
             {promptComposer}
             {conv.uploading && <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', marginTop: 4 }}>{tBrain('uploading')}</div>}
           </div>

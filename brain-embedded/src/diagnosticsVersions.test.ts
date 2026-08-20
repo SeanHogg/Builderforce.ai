@@ -36,15 +36,45 @@ describe('version stamp in chat diagnostics', () => {
 });
 
 describe('tool counts distinguish registered from advertised', () => {
-  it('separates the full registry from the per-turn selection', () => {
+  /**
+   * ONE REPORT MUST NOT ANSWER ONE QUESTION TWICE.
+   *
+   * This line used to render a CEILING derived from the registry size ("up to 64
+   * advertised per turn") while the Diagnostics block directly below it rendered the
+   * MEASURED range off the very same run's trace. Two numbers, one question, and the
+   * ceiling was the one that could never look wrong enough to investigate — so it now
+   * reports what was actually sent, or says plainly that nothing was measured.
+   */
+  it('reports the OBSERVED per-turn range, not a ceiling', () => {
+    const out = render({ ...base, tools: { count: 317, loading: false, advertisedMin: 40, advertisedLastTurn: 64 } });
+    expect(out).toContain('317 registered');
+    expect(out).toContain('40–64 advertised per turn (measured)');
+    expect(out).not.toContain('up to');
+  });
+
+  it('collapses the range when every measured turn saw the same count', () => {
+    const out = render({ ...base, tools: { count: 317, loading: false, advertisedMin: 64, advertisedLastTurn: 64 } });
+    expect(out).toContain('64 advertised per turn (measured)');
+    expect(out).not.toContain('64–64');
+  });
+
+  it('says the selection is UNMEASURED rather than inventing a bound', () => {
     const out = render({ ...base, tools: { count: 308, loading: false } });
     expect(out).toContain('308 registered');
-    expect(out).toContain('advertised per turn (relevance-selected)');
+    expect(out).toContain('not yet measured');
+    expect(out).not.toContain('advertised per turn (measured)');
   });
 
   it('does not claim selection when the catalog is already under the limit', () => {
     const out = render({ ...base, tools: { count: 12, loading: false } });
     expect(out).toContain('12 registered');
     expect(out).not.toContain('advertised per turn');
+    expect(out).not.toContain('not yet measured');
+  });
+
+  it('names a turn that was handed NOTHING despite a healthy catalog', () => {
+    const out = render({ ...base, tools: { count: 317, loading: false, advertisedMin: 0, advertisedLastTurn: 64 } });
+    expect(out).toContain('⚠ a turn was offered NONE');
+    expect(out).toContain('the per-turn relevance selection, not the catalog');
   });
 });
