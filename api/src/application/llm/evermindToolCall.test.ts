@@ -246,3 +246,81 @@ describe('renderToolsPreamble', () => {
     expect(preamble).toContain('set_status(status?: "open"|"closed")');
   });
 });
+
+describe('planEvermindToolCall — parallel calls', () => {
+  it('emits ONE call when the head does not want another', () => {
+    // The default shape: a model with nothing more to do must still emit exactly one
+    // call, or every single-call turn would grow a spurious second one.
+    const plan = planEvermindToolCall(
+      fakeDecoder({ prefer: { read_file: 1, no: 1 } }),
+      'user: show me the entrypoint',
+      [READ_FILE, OPEN_PR],
+      { mode: 'auto' },
+    );
+    expect(plan.calls).toHaveLength(1);
+    expect(plan.call).toEqual(plan.calls[0]);
+  });
+
+  it('emits several calls when the head keeps saying yes', () => {
+    // `yes` outscores `no` on the continue-vote, and the two tools alternate as the
+    // preferred next call, so the planner walks up to its ceiling.
+    let turn = 0;
+    const decoder: EvermindToolDecoder = {
+      score(_prompt, continuation) {
+        if (continuation === 'yes') return 1;
+        if (continuation === 'no') return 0;
+        // Alternate which tool wins so successive calls are not duplicates (an exact
+        // repeat is treated as looping and stops the walk).
+        if (continuation.includes('read_file')) return turn % 2 === 0 ? 1 : 0.5;
+        if (continuation.includes('open_pr')) return turn % 2 === 0 ? 0.5 : 1;
+        return 0;
+      },
+      generate() { turn++; return `value-${turn}`; },
+    };
+    const plan = planEvermindToolCall(decoder, 'user: fix and ship it', [READ_FILE, OPEN_PR], { mode: 'auto' });
+
+    // The OpenAI shape has always been an array; before this the planner emitted one
+    // call and a caller relying on parallel calls silently got serialized behaviour.
+    expect(plan.calls.length).toBeGreaterThan(1);
+    expect(plan.calls.length).toBeLessThanOrEqual(4);
+  });
+
+  it('stops rather than repeat an identical call', () => {
+    // A head that keeps choosing the same tool with the same arguments is LOOPING,
+    // not planning parallel work — and an agent loop would faithfully execute the
+    // duplicate twice.
+    const decoder: EvermindToolDecoder = {
+      score(_prompt, continuation) {
+        if (continuation === 'yes') return 1;
+        if (continuation === 'no') return 0;
+        return continuation.includes('read_file') ? 1 : 0;
+      },
+      generate: () => 'same-value',
+    };
+    const plan = planEvermindToolCall(decoder, 'user: read it', [READ_FILE, OPEN_PR], { mode: 'auto' });
+    expect(plan.calls).toHaveLength(1);
+  });
+
+  it('never emits more than one call for a FORCED choice', () => {
+    // `forced` names exactly one tool. Asking for more would emit calls the caller
+    // never requested.
+    const decoder: EvermindToolDecoder = {
+      score: (_p, continuation) => (continuation === 'yes' ? 1 : 0),
+      generate: () => 'v',
+    };
+    const plan = planEvermindToolCall(decoder, 'user: go', [READ_FILE, OPEN_PR], { mode: 'forced', name: 'read_file' });
+    expect(plan.calls).toHaveLength(1);
+    expect(plan.calls[0]!.name).toBe('read_file');
+  });
+
+  it('returns no calls at all when the head answers in prose', () => {
+    const plan = planEvermindToolCall(
+      fakeDecoder({ prefer: { 'answer the user directly': 1 } }),
+      'user: hello',
+      [READ_FILE, OPEN_PR],
+      { mode: 'auto' },
+    );
+    expect(plan.call).toBeNull();
+    expect(plan.calls).toEqual([]);
+  });
+});

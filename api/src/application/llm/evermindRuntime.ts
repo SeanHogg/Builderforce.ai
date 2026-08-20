@@ -36,6 +36,7 @@ import {
   planEvermindToolCall,
   toOpenAIToolCall,
   type EvermindToolDecoder,
+  type EvermindPlannedCall,
   type NormalizedTool,
   type ToolChoicePlan,
 } from './evermindToolCall';
@@ -402,7 +403,12 @@ function clampPromptText(prompt: string): string {
 /** A tool-aware generation: either a planned call, or prose when the head chose to
  *  answer directly (`tool_choice: 'auto'`). */
 export interface EvermindToolGeneration {
-  call: { name: string; arguments: Record<string, unknown> } | null;
+  /** The first planned call, or null for prose. See {@link EvermindToolGeneration.calls}. */
+  call: EvermindPlannedCall | null;
+  /** EVERY call this turn emits. The OpenAI shape is an array and frontier models
+   *  emit parallel calls; carrying only the first here is what made the completion
+   *  serialize them. Empty when `call` is null. */
+  calls: EvermindPlannedCall[];
   /** Prose answer — populated only when `call` is null. */
   content: string;
   usage: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
@@ -434,7 +440,7 @@ export async function evermindGenerateWithTools(
   const conversation = messagesToPrompt(messages).replace(/\nassistant:$/, '');
   const plan = planEvermindToolCall(decoder, conversation, tools, choice);
   if (plan.call) {
-    return { call: plan.call, content: '', usage: decoder.usage(), margin: plan.margin };
+    return { call: plan.call, calls: plan.calls, content: '', usage: decoder.usage(), margin: plan.margin };
   }
   // No tool: answer as usual. Generated through the same loaded head (and the same
   // per-isolate memo), so the prose path costs nothing extra to reach.
@@ -442,6 +448,7 @@ export async function evermindGenerateWithTools(
   const usage = decoder.usage();
   return {
     call: null,
+    calls: [],
     content: gen.content,
     usage: {
       prompt_tokens: usage.prompt_tokens + gen.usage.prompt_tokens,
@@ -551,9 +558,15 @@ export function buildEvermindCompletion(
   gen: Pick<EvermindGeneration, 'content' | 'usage'>,
   model: string,
   now: number = Date.now(),
-  call?: { name: string; arguments: Record<string, unknown> } | null,
+  // An ARRAY, because the OpenAI contract is an array and Evermind can now plan
+  // parallel calls. A single call is still accepted so existing callers read the
+  // same; both funnel to the same list rather than two code paths that could drift.
+  call?: EvermindPlannedCall | EvermindPlannedCall[] | null,
 ): Record<string, unknown> {
-  const toolCalls = call ? [toOpenAIToolCall(call, `call_evermind_${now}`)] : [];
+  const planned = call == null ? [] : Array.isArray(call) ? call : [call];
+  // Ids must be distinct per call — an agent loop keys its tool RESULTS by id, and
+  // two calls sharing one id would have their results collapse into each other.
+  const toolCalls = planned.map((c, i) => toOpenAIToolCall(c, `call_evermind_${now}_${i}`));
   return {
     id: `evermind-${now}`,
     object: 'chat.completion',

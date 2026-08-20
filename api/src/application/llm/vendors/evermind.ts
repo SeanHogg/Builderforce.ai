@@ -145,7 +145,7 @@ export const evermindModule: VendorModule = {
         // vendor returns it — there is no separate tool-call channel on
         // `VendorCallResult`, and inventing one here would break the shared readers.
         return {
-          raw: buildEvermindCompletion({ content: '', usage: planned.usage }, `evermind/${ref}`, Date.now(), planned.call),
+          raw: buildEvermindCompletion({ content: '', usage: planned.usage }, `evermind/${ref}`, Date.now(), planned.calls),
           content: '',
           usage: planned.usage,
         };

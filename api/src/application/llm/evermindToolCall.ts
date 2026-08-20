@@ -148,6 +148,12 @@ export function logToolChoiceMargin(fields: {
   }));
 }
 
+/** Ceiling on calls emitted in ONE turn. Each additional call costs a full tool vote
+ *  plus an argument fill, so this bounds the CPU an agent loop can spend on a single
+ *  planning turn — and a head that wants more than this is not planning, it is
+ *  looping. */
+const MAX_PARALLEL_TOOL_CALLS = 4;
+
 /** Hard caps so a hostile or recursive schema cannot spin the decoder. */
 const MAX_SCHEMA_DEPTH = 4;
 const MAX_ARRAY_ITEMS = 4;
@@ -411,10 +417,29 @@ function fillObject(
 
 // ── The planner ──────────────────────────────────────────────────────────────
 
+/** One planned call. */
+export interface EvermindPlannedCall {
+  name: string;
+  arguments: Record<string, unknown>;
+}
+
 /** A planned call plus the evidence for how confidently it was chosen. */
 export interface EvermindToolPlan {
-  /** The chosen call, or null when the head elected to answer in prose (`auto` only). */
-  call: { name: string; arguments: Record<string, unknown> } | null;
+  /** The FIRST chosen call, or null when the head elected to answer in prose
+   *  (`auto` only). Kept as the single-call view every existing reader uses;
+   *  {@link EvermindToolPlan.calls} is the full list. */
+  call: EvermindPlannedCall | null;
+  /**
+   * Every call this turn emits, in order.
+   *
+   * The OpenAI shape has always been an ARRAY and frontier models emit parallel
+   * calls; Evermind used to plan exactly one, so a caller that relies on parallel
+   * calls silently got serialized behaviour. After the first call the head is asked
+   * "another call?" — the same continue-vote the array filler already uses for list
+   * length — so a model with nothing more to do still emits exactly one.
+   * Empty when `call` is null.
+   */
+  calls: EvermindPlannedCall[];
   /**
    * Separation between the winning tool and the runner-up. The vendor gates on this:
    * a head with no preference is guessing, and a guessed tool call is exactly the
@@ -437,7 +462,7 @@ export function planEvermindToolCall(
   tools: NormalizedTool[],
   choice: ToolChoicePlan,
 ): EvermindToolPlan {
-  if (choice.mode === 'none' || tools.length === 0) return { call: null, margin: Infinity };
+  if (choice.mode === 'none' || tools.length === 0) return { call: null, calls: [], margin: Infinity };
 
   const base = `${basePrompt}\n\n${renderToolsPreamble(tools)}`;
   const margins: number[] = [];
@@ -457,20 +482,66 @@ export function planEvermindToolCall(
     if (choice.mode === 'auto') candidates.push({ value: null, text: ANSWER_DIRECTLY });
     const decision = decide(decoder, `${base}\nThe best next action is: `, candidates);
     choiceMargin = decision.margin;
-    if (!decision.value) return { call: null, margin: choiceMargin };
+    if (!decision.value) return { call: null, calls: [], margin: choiceMargin };
     tool = decision.value;
   }
   // A `forced` name is validated by `resolveEvermindToolChoice`, so this is a
   // belt-and-braces fallback rather than a reachable branch.
-  if (!tool) return { call: null, margin: choiceMargin };
+  if (!tool) return { call: null, calls: [], margin: choiceMargin };
 
   // 2) Fill the arguments object against the tool's own schema.
-  const args = fillObject(decoder, base, tool, '', tool.parameters, 0, margins);
+  const calls: EvermindPlannedCall[] = [
+    { name: tool.name, arguments: fillObject(decoder, base, tool, '', tool.parameters, 0, margins) },
+  ];
+
+  // 3) Additional PARALLEL calls. `forced` names exactly one tool, so it stops here —
+  // asking for more would emit calls the caller never requested. Otherwise the head is
+  // asked whether it wants another, exactly as the array filler asks whether a list has
+  // another item, so a model with nothing more to do still emits exactly one call.
+  if (choice.mode !== 'forced') {
+    while (calls.length < MAX_PARALLEL_TOOL_CALLS) {
+      const rendered = calls.map((c) => `${c.name}(${JSON.stringify(c.arguments)})`).join('\n');
+      const more = decide(decoder, `${base}\nAlready calling:\n${rendered}\nIs there another tool call to make?`, [
+        { value: true, text: 'yes' },
+        { value: false, text: 'no' },
+      ]);
+      // A TIE means no. `decide` breaks ties by candidate order, so requiring a
+      // positive margin is what keeps "one call" the default: an indifferent head
+      // must not have a second call read into its silence.
+      if (!more.value || !(more.margin > 0)) break;
+      // Counted ONLY when the vote said yes. A head that is indifferent about making
+      // a SECOND call has guessed nothing — folding that indifference into the plan
+      // margin would let an optional extra drag a confidently-chosen first call below
+      // the confidence gate and get the whole turn refused. A coin-flip "yes",
+      // though, does put a guessed call in the plan, and counts.
+      margins.push(more.margin);
+
+      const next = decide(
+        decoder,
+        `${base}\nAlready calling:\n${rendered}\nThe next tool to call is: `,
+        tools.map((t) => ({ value: t, text: `${t.name} — ${t.description || t.name}` })),
+      );
+      margins.push(next.margin);
+      if (!next.value) break;
+      const nextCall: EvermindPlannedCall = {
+        name: next.value.name,
+        arguments: fillObject(decoder, base, next.value, '', next.value.parameters, 0, margins),
+      };
+      // An identical repeat is the head LOOPING, not planning parallel work. Stop
+      // rather than emit a duplicate an agent loop would faithfully execute twice.
+      const duplicate = calls.some(
+        (c) => c.name === nextCall.name && JSON.stringify(c.arguments) === JSON.stringify(nextCall.arguments),
+      );
+      if (duplicate) break;
+      calls.push(nextCall);
+    }
+  }
+
 
   // The reported margin is the WEAKEST link in the whole plan: a confident tool
   // choice whose enum argument was a coin flip is still a coin flip overall.
   const weakest = Math.min(choiceMargin, ...margins);
-  return { call: { name: tool.name, arguments: args }, margin: Number.isFinite(weakest) ? weakest : Infinity };
+  return { call: calls[0]!, calls, margin: Number.isFinite(weakest) ? weakest : Infinity };
 }
 
 /** Wrap a planned call in the OpenAI `tool_calls` wire shape. `id` is supplied by the

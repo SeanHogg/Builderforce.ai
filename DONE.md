@@ -1,3 +1,27 @@
+## ✅ RESOLVED 2026-08-19 — Evermind emits parallel tool calls, and a new table can no longer slip past the entity ratchet
+
+### P3 — parallel tool calls (roadmap: "Evermind emits at most ONE tool call per turn")
+
+The OpenAI shape has always been an array and frontier models emit parallel calls; Evermind planned exactly one, so a caller relying on parallel calls silently got serialized behaviour.
+
+After the first call the head is asked "is there another tool call to make?" — the same continue-vote the array filler already uses for list length — then which tool, then its arguments, up to `MAX_PARALLEL_TOOL_CALLS = 4`. `EvermindToolPlan` grew `calls[]` (with `call` kept as the first-call view every existing reader uses), `buildEvermindCompletion` takes a call OR an array through one code path, and the vendor and the Studio bench both emit the full list.
+
+Three things the tests forced, each of which would have been a defect:
+
+- **A tie means NO.** `decide` breaks ties by candidate order, so an indifferent head would have had a second call read into its silence — every single-call turn would have grown a spurious extra. Continuing now requires a positive margin.
+- **An indifferent "no" must not lower the plan's margin.** Folding the continue-vote into `margins` unconditionally let a head that simply had nothing more to do drag a confidently-chosen FIRST call below the confidence gate, getting the whole turn refused. The vote counts toward the margin only when it actually put another call in the plan. (Caught by an existing test going red — the regression was mine.)
+- **Distinct tool-call ids per call.** An agent loop keys tool RESULTS by id; two calls sharing one id collapse their results into each other.
+
+An exact repeat of an already-planned call stops the walk: a head choosing the same tool with the same arguments is looping, not planning parallel work, and an agent loop would faithfully execute the duplicate twice. `forced` still emits exactly one — the caller named one tool, and asking for more would emit calls nobody requested.
+
+### Entity-catalog ratchet — `agent_host_channels` adjudicated
+
+`entityCatalog.test.ts` went red at exactly its ceiling (12 uncovered, bar `< 12`): migration 0943 added `agent_host_channels` with neither an entity entry nor a written adjudication, which is precisely what that ratchet exists to catch.
+
+Adjudicated rather than counted, and exempted: the table carries `config_enc`, a sealed per-tenant credential its own DDL states is "never returned to a client", and it is read through its own bespoke path (`agentHost/agentHostChannels.ts`). That is the SAME structural reason already recorded for `lti_registrations` / `sso_connections` — the generic reader redacts on column-name PATTERNS, and betting a sealed credential on a regex is the bet those exemptions exist to avoid. Ceiling 12 → 13 with the reasoning written into the test beside the others.
+
+---
+
 ## ✅ RESOLVED 2026-08-19 — FO-C, the four things it still owed
 
 ## ✅ RESOLVED 2026-08-19 — The revert escalation has a test, and the test double grew a `.catch`
@@ -2167,6 +2191,34 @@ extension of `project_repositories`, so both take documented exemptions.
 project scope), 0932 (benchmark cohorts), 0933 (swimlane gate provenance).
 **Verification:** 24/24 API guards, 6,716 API tests, 59 worker tests, API + frontend
 typechecks all green.
+
+### Follow-up — three red frontend suites, one of them this change's own blind spot
+
+A full frontend run afterwards was red in eight tests. Three suites were traced to a
+cause and fixed; the remaining five are logged in the Gap Register with their blocker.
+
+1. **`TaskMgmtContent.test.tsx` (2)** — a sibling change extracted `taskStatusLabel.ts`
+   and localized every status label, so tests asserting the English constants
+   (`'Backlog'`, `'To Do'`) now saw catalog keys under the global next-intl mock.
+   Assertions moved to what the shared resolver renders. **The same file also exposed a
+   gap this change introduced:** its `vi.mock` factory REPLACES the whole
+   `builderforceApi` module, and `useBoardConfig` had been switched from
+   `boardsApi.list()` to `boardsApi.listWithAllowance()` for the DISP-R3 allowance
+   without the mock learning the new name. It was masked — the call sits inside the
+   `try`, so it degraded to the same empty-board state instead of throwing — which is
+   exactly the "omitted export reads as `undefined`" trap that file's own comment warns
+   about. Mock added.
+2. **`AccountabilityTab.test.tsx` (2)** — same localization cause, same fix.
+3. **`EmbeddedCapabilities.test.tsx` (4)** — a LOCAL `vi.mock('next-intl')` restating
+   what `src/test/setup.ts` already mocks globally. The global mock is a strict superset
+   (it also provides `useLocale`, `useMessages`, `t.has`/`t.rich`, and a cached `t`); the
+   local copy had drifted, so when the component started calling `useLocale` every test
+   in the file died on *"No useLocale export is defined on the next-intl mock"*. The
+   duplicate is deleted rather than patched — the assertions now carry the namespace the
+   global mock echoes (`embedded.selectWorkspace`, `embedded.sell.label`), which also
+   fixes a false green: `queryByLabelText('label')` asserting `toBeNull()` had been
+   passing for the wrong reason.
+
 
 ---
 

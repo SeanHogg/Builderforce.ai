@@ -148,3 +148,48 @@ describe('buildEvermindCompletion', () => {
     expect(out.model).toBe('evermind/evermind-models/1/x');
   });
 });
+
+describe('buildEvermindCompletion — parallel tool calls', () => {
+  const CALL_A = { name: 'read_file', arguments: { path: 'a.ts' } };
+  const CALL_B = { name: 'read_file', arguments: { path: 'b.ts' } };
+
+  it('emits every planned call, with DISTINCT ids', () => {
+    const out = buildEvermindCompletion(
+      { content: '', usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 } },
+      'evermind/x',
+      1_700_000_000_000,
+      [CALL_A, CALL_B],
+    );
+    const message = (out.choices as Array<{ message: { tool_calls: Array<{ id: string }> } }>)[0]!.message;
+    expect(message.tool_calls).toHaveLength(2);
+    // An agent loop keys tool RESULTS by id; two calls sharing one id would have
+    // their results collapse into each other.
+    expect(new Set(message.tool_calls.map((t) => t.id)).size).toBe(2);
+  });
+
+  it('still accepts a single call, so existing callers read identically', () => {
+    const out = buildEvermindCompletion(
+      { content: '', usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 } },
+      'evermind/x',
+      1_700_000_000_000,
+      CALL_A,
+    );
+    const choice = (out.choices as Array<{ message: { tool_calls: unknown[]; content: unknown }; finish_reason: string }>)[0]!;
+    expect(choice.message.tool_calls).toHaveLength(1);
+    // `content` is null (not '') for a call — the OpenAI contract client SDKs
+    // deserialize against.
+    expect(choice.message.content).toBeNull();
+    expect(choice.finish_reason).toBe('tool_calls');
+  });
+
+  it('emits no tool_calls at all for prose', () => {
+    const out = buildEvermindCompletion(
+      { content: 'hello', usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 } },
+      'evermind/x',
+      1_700_000_000_000,
+    );
+    const choice = (out.choices as Array<{ message: { content: string }; finish_reason: string }>)[0]!;
+    expect(choice.message.content).toBe('hello');
+    expect(choice.finish_reason).toBe('stop');
+  });
+});

@@ -149,7 +149,17 @@ describe('the entity catalog', () => {
     //    `project_repositories`, keyed by the repo it describes, with no identity
     //    of its own — the same structural reason as `hosted_listing_lifecycle`
     //    directly above, and it takes the same exemption.
-    expect(missing.length, `uncovered: ${missing.join(', ')}`).toBeLessThan(12);
+    //
+    // Ceiling moved 12 → 13 (2026-08-19) with `agent_host_channels` (migration
+    // 0943), adjudicated rather than counted: it carries `config_enc`, a sealed
+    // per-tenant credential the table's own DDL states is "never returned to a
+    // client", and it is read through its own bespoke path
+    // (`agentHost/agentHostChannels.ts`). That is the SAME structural reason
+    // already written above for `lti_registrations` / `sso_connections`: the
+    // generic reader redacts on column-name PATTERNS, and betting a sealed
+    // channel credential on a regex is the bet those exemptions exist to avoid.
+    // Registering it would put the hazard back.
+    expect(missing.length, `uncovered: ${missing.join(', ')}`).toBeLessThan(13);
   });
 
   it('declares nothing that no migration creates', () => {
