@@ -135,7 +135,7 @@ follows is what closing them surfaced.*
 
 ## Consolidated Gap Register — grouped index
 
-*Counts re-derived from the body on 2026-08-19. One entry = one top-level `- ` bullet, which is the grain the register is written in; a bullet can be compound, so this is a guide rather than a ticket count. 334 open entries.*
+*Counts re-derived from the body on 2026-08-19. One entry = one top-level `- ` bullet, which is the grain the register is written in; a bullet can be compound, so this is a guide rather than a ticket count. 316 open entries.*
 
 | # | Group | Open items |
 |---|-------|-----------|
@@ -143,15 +143,15 @@ follows is what closing them surfaced.*
 | 1 | [☁️ Cloud Agent Runtime & PR Loop](#1--cloud-agent-runtime--pr-loop) | 22 |
 | 2 | [⚙️ On-Prem Runtime, Engine & Tooling](#2--on-prem-runtime-engine--tooling) | 8 |
 | 3 | [🔀 LLM Gateway, Routing & Cost](#3--llm-gateway-routing--cost) | 33 |
-| 4 | [🧠 Evermind / SSM](#4--evermind--ssm) | 22 |
+| 4 | [🧠 Evermind / SSM](#4--evermind--ssm) | 21 |
 | 5 | [🧠 Brain & Chat](#5--brain--chat) | 16 |
 | 6 | [👥 Workforce, Boards, Kanban & Ceremonies](#6--workforce-boards-kanban--ceremonies) | 30 |
-| 7 | [📊 Insights, Analytics & Audits](#7--insights-analytics--audits) | 21 |
-| 8 | [🚨 Reliability — Incidents & Monitoring](#8--reliability--incidents--monitoring) | 3 |
-| 9 | [🔌 Integrations, Connectors & Workflows](#9--integrations-connectors--workflows) | 34 |
-| 10 | [🛍️ Marketplace, Talent, Freelance, Knowledge & Canvas](#10--marketplace-talent-freelance-knowledge--canvas) | 54 |
+| 7 | [📊 Insights, Analytics & Audits](#7--insights-analytics--audits) | 17 |
+| 8 | [🚨 Reliability — Incidents & Monitoring](#8--reliability--incidents--monitoring) | 0 |
+| 9 | [🔌 Integrations, Connectors & Workflows](#9--integrations-connectors--workflows) | 30 |
+| 10 | [🛍️ Marketplace, Talent, Freelance, Knowledge & Canvas](#10--marketplace-talent-freelance-knowledge--canvas) | 49 |
 | 11 | [🎬 Studio (Video/Voice), QA & Mobile](#11--studio-videovoice-qa--mobile) | 8 |
-| 12 | [🖥️ VS Code Extension](#12--vs-code-extension) | 6 |
+| 12 | [🖥️ VS Code Extension](#12--vs-code-extension) | 5 |
 | 13 | [🏢 Segments, Multi-tenant, Embed & Governance](#13--segments-multi-tenant-embed--governance) | 10 |
 | 14 | [🖥️ Frontend, i18n, Theme & Marketing/SEO](#14--frontend-i18n-theme--marketingseo) | 39 |
 | 15 | [🛠️ Platform — DB, CI/CD, Migrations, Cost & Tech-debt](#15--platform--db-cicd-migrations-cost--tech-debt) | 17 |
@@ -698,9 +698,6 @@ sequenced into waves because nothing in them gates the sell motion.
 > project-less incident finally teaches something, all 2026-08-19 (see
 > [DONE.md](./DONE.md)). Nothing is currently outstanding here.
 
-### Active Monitoring — residual polish
-
-
 ---
 
 ## 9 · 🔌 Integrations, Connectors & Workflows
@@ -1114,8 +1111,6 @@ are not file-disjoint and must be serialized and rebased before merge:
 - **Voice.** Consent/provenance gate gates GA; no in-IDE marketplace browse UI / buy-checkout backend; on-device embeddings persist localStorage-only (per-device); trained weights + marketplace-checkout remain; broader IDE shell still English (FileExplorer/AITrainingPanel/AgentPublishPanel/top-bar/terminal/`lib/modality.ts`); Voice has no quality-gate equivalent; Studio video binaries are IndexedDB-only (no cross-device MP4 sync — mirror to R2).
 - **Video engine.** `mamba-coherence.ts advanceState()` is a CPU placeholder, not the WGSL selective-scan kernel; no learned RIFE/FILM interpolation backend; no real motion module; img2img recursion drifts on long clips; anchor-walk gives scene drift rather than per-object motion; ControlNet conditioning and inpainting remain absent; the two-pass Refined chroma path still needs a real GPU-browser verification; ORT-web exposes no per-input dtype metadata; Safari without WebCodecs needs a WebM/VP9 fallback; WebGPU exposes no VRAM. Brain-created dataset files still bypass dataset/training registration. Model-count growth and a tenant-configurable Refined default are not outcome gaps unless they block a named deliverable. `mp4-muxer`, the Advanced refinement override, and IDE modality-render tests are shipped; see DONE.md.
 
-### Supply-chain / deps
-
 ### QA / Agentic Tester
 
 - **Agentic Tester (schedulable):** QA runner container deploy pending a green build (image slimmed to chromium-only — verify <2000MB + a first live browser run under the CF sandbox); one-shot-container-vs-persistent-server lifecycle unproven; not a first-class `ide_agents` entry / not in the `workflow_triggers` builder; migs 0206/0209 + the pipeline verified by typecheck+drift only.
@@ -1205,8 +1200,6 @@ are not file-disjoint and must be serialized and rebased before merge:
 - **P2 — Mesh WebRTC caps at ~4-5 simultaneous cameras.** Meeting/ceremony video ([useMediaRoom.ts](./frontend/src/lib/useMediaRoom.ts)) is full-mesh P2P (bandwidth ~N²). Fine for a standup, degrades for a "whole team on camera" broadcast. The hook + signaling relay are provider-shaped so an SFU can be swapped in behind the same interface. **Blocked on infra:** needs a real Cloudflare Calls (Realtime) app — an SFU implementation behind the `UseMediaRoom` interface + server-side track push/pull.
 - **P2 — TURN relay not provisioned (managed code path now wired).** `GET /api/meetings/ice` mints Cloudflare-managed short-lived TURN credentials when `CLOUDFLARE_TURN_KEY_ID` + `CLOUDFLARE_TURN_API_TOKEN` are set, in addition to the static `TURN_URL`/`TURN_USERNAME`/`TURN_CREDENTIAL` path. **Remaining = an ops step (credentials):** create a TURN key in the Cloudflare Realtime dashboard and `wrangler secret put` the two values. Until then ~10-15% of symmetric-NAT peer pairs can't connect.
 - **P3 — Meeting agent voice is browser `speechSynthesis`, not a cloned voice track.** Agent attendees speak via a caption/transcript bridge voiced client-side by the Web Speech API. This uses the OS default TTS voice, not the tenant's cloned voice, and is silent on browsers lacking `speechSynthesis`. Fix = optionally synthesize server audio via the existing `ttsProvider` + an enrolled voice clone, store in R2, carry an `audioUrl` on the `agent-say` frame. **Blocked on product:** a decision on which enrolled voice each agent uses.
-
-### 📧 Transactional email — residual
 
 ### 🔐 Login "CORS error for everyone" — investigate the Cloudflare-level trigger
 
