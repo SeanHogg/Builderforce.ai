@@ -42,6 +42,8 @@ ALTER TABLE agent_assignments
   ADD COLUMN IF NOT EXISTS position              INTEGER NOT NULL DEFAULT 0;
 
 DO $$
+DECLARE
+  dep RECORD;
 BEGIN
   IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'swimlane_agent_assignments') THEN
     -- `id` IS CARRIED OVER, deliberately. `agent_dispatches.assignment_id` is a real FK
@@ -88,7 +90,29 @@ BEGIN
       (SELECT count(*) FROM agent_assignments WHERE scope = 'swimlane');
 
     -- Re-point the dispatch FK BEFORE the drop, so no dispatch loses its staffing link.
-    ALTER TABLE agent_dispatches DROP CONSTRAINT IF EXISTS agent_dispatches_assignment_id_swimlane_agent_assignments_id_fk;
+    --
+    -- The old constraint is dropped BY DISCOVERY rather than by name. It was created
+    -- inline in 0068 (`assignment_id UUID REFERENCES swimlane_agent_assignments(id)`),
+    -- so Postgres named it `agent_dispatches_assignment_id_fkey` — not the Drizzle-style
+    -- `agent_dispatches_assignment_id_swimlane_agent_assignments_id_fk` this migration
+    -- originally guessed at. `DROP CONSTRAINT IF EXISTS <wrong name>` matched nothing and
+    -- said nothing, the real FK survived, and `DROP TABLE` then failed with "cannot drop
+    -- table swimlane_agent_assignments because other objects depend on it" — which is
+    -- where this migration stopped on every database that had not already run it.
+    --
+    -- Asking the catalogue removes the guess: every FK pointing at the table is dropped,
+    -- whatever it is called and whichever table it hangs off, so the DROP below cannot be
+    -- blocked by a name nobody predicted.
+    FOR dep IN
+      SELECT c.conname, c.conrelid::regclass AS child
+        FROM pg_constraint c
+       WHERE c.contype = 'f'
+         AND c.confrelid = 'swimlane_agent_assignments'::regclass
+    LOOP
+      EXECUTE format('ALTER TABLE %s DROP CONSTRAINT %I', dep.child, dep.conname);
+      RAISE NOTICE 'agent_assignments: dropped % on %', dep.conname, dep.child;
+    END LOOP;
+
     ALTER TABLE agent_dispatches
       ADD CONSTRAINT agent_dispatches_assignment_id_agent_assignments_id_fk
       FOREIGN KEY (assignment_id) REFERENCES agent_assignments(id) ON DELETE SET NULL;
