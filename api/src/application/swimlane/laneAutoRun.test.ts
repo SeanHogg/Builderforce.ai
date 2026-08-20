@@ -79,7 +79,9 @@ describe('decideLaneAutoRun', () => {
 describe('withOwnerAgentFallback', () => {
   it('appends the owner agent as a fallback when the lane has no staffing', () => {
     const list = withOwnerAgentFallback([], { agentRef: 'agent_ada' });
-    expect(list).toEqual([{ agentRef: 'agent_ada', model: null, requiredCapabilities: null, capabilities: null }]);
+    // `runtime`/`target` are explicitly null: the owner fallback names WHO works the
+    // ticket, not WHERE, so the dispatcher keeps its ordinary host-pin/cloud resolution.
+    expect(list).toEqual([{ agentRef: 'agent_ada', model: null, requiredCapabilities: null, capabilities: null, runtime: null, target: null }]);
     // …and the decision then auto-runs AS the owner (the bug fix: an agent-owned
     // ticket in an auto lane with no lane staffing now runs).
     expect(decideLaneAutoRun(list, 'auto')).toEqual({ autoRun: true, agentRef: 'agent_ada', model: undefined });
@@ -87,7 +89,7 @@ describe('withOwnerAgentFallback', () => {
 
   it('also covers an undefined lane-agent list', () => {
     expect(withOwnerAgentFallback(undefined, { agentRef: 'agent_ada' })).toEqual([
-      { agentRef: 'agent_ada', model: null, requiredCapabilities: null, capabilities: null },
+      { agentRef: 'agent_ada', model: null, requiredCapabilities: null, capabilities: null, runtime: null, target: null },
     ]);
   });
 
