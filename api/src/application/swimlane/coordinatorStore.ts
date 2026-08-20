@@ -8,6 +8,8 @@
  * reads, decoupling it from the full Drizzle row types.
  */
 
+import type { LaneAgentRuntime } from './laneAutoRun';
+
 export interface BoardLite {
   id: string;
   tenantId: number;
@@ -41,7 +43,9 @@ export interface LaneLite {
 export interface AssignmentLite {
   id: string;
   role: string;
-  runtime: string;       // 'local' | 'cloud' | 'remote' | 'browser'
+  /** Null when the operator staffed no backplane, or stored one this build has no name
+   *  for. Callers that must dispatch decide the fallback themselves. */
+  runtime: LaneAgentRuntime | null;
   target: string | null;
   taskTemplate: string | null;
   model: string | null;

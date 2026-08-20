@@ -19,12 +19,32 @@
  * routers switch on.
  */
 
+import type { Context } from 'hono';
+
 import type { Db } from '../../infrastructure/database/connection';
+import type { HonoEnv } from '../../env';
 import {
   originAllowed,
   resolveTenantApiKey,
   type TenantApiScope,
 } from '../llm/tenantApiKeyService';
+
+/**
+ * The request context an `/api/v1` router's own helpers receive.
+ *
+ * Named here because all three routers on this mount need to say it, and the thing
+ * they used to say instead — `Parameters<Parameters<typeof router.get>[1]>[0]`,
+ * copied three times — reaches into Hono's OVERLOAD LIST for a handler signature.
+ * TypeScript resolves `Parameters<>` against the LAST overload, so which type that
+ * expression means is decided by the order of declarations inside Hono, and a
+ * routine version bump silently changed it to one with no handler parameter at all:
+ * every helper's `c` degraded to `never` and every call site failed to compile.
+ *
+ * `Context<HonoEnv>` is the type those expressions were reaching for. It is Hono's
+ * own public name for it, so it survives the next bump — and it is path-generic,
+ * which is what lets one helper serve handlers mounted on different routes.
+ */
+export type PublicApiContext = Context<HonoEnv>;
 
 export interface PublicApiCaller {
   keyId: string;

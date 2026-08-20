@@ -491,62 +491,59 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
       // display `name` for this lane's slot and a `role` (e.g. QA, Reviewer) the
       // SwimlaneCoordinator dispatches under. Blank = keep the agent's defaults.
       name?: string;
-      // Legacy model: explicit free-text role + runtime/target (back-compat).
       role?: string;
-      runtime?: string;
-      target?: string;
       taskTemplate?: string;
       requiredCapabilities?: unknown;
       model?: string;
       position?: number;
     }>();
 
-    // Resolve the chosen registry agent (runtime/host/model defaults) at assign
-    // time so the dispatch pipeline keeps reading plain columns. Falls back to
-    // the legacy free-text role path when no registry agent is supplied.
+    /**
+     * Resolve the chosen registry agent (runtime/host/model defaults) at assign time so
+     * the dispatch pipeline keeps reading plain columns.
+     *
+     * A lane assignment MUST name an agent. There used to be a second, "legacy" branch
+     * here that accepted a free-text `role` alone and wrote `agentKind`/`agentRef` as
+     * null — which migration 1085 made impossible: lane staffing now lives in the
+     * canonical `agent_assignments`, where both columns are NOT NULL, and 1085 DELETED
+     * the pre-existing role-only rows on the same reasoning ("a lane assignment naming
+     * no agent could never be dispatched — it was a half-written row"). That branch
+     * could therefore only ever produce a constraint violation, and no client sent it:
+     * the typed API client has required `agentKind` + `agentRef` since. A `role` is
+     * still accepted, as the OVERRIDE it always was on top of a named agent.
+     */
+    if (!body.agentKind || !body.agentRef) {
+      return c.json({ error: 'agentKind and agentRef are required — a lane assignment must name an agent' }, 400);
+    }
     let resolved: {
-      agentKind: AgentKind | null;
-      agentRef: string | null;
+      agentKind: AgentKind;
+      agentRef: string;
       name: string | null;
       role: string;
       runtime: string;
       target: string | null;
       model: string | null;
     };
-    if (body.agentKind && body.agentRef) {
-      try {
-        const r = await resolveAssignedAgent(db, tenantId, {
-          agentKind: body.agentKind,
-          agentRef: body.agentRef,
-          modelOverride: body.model ?? null,
-        });
-        resolved = {
-          agentKind: body.agentKind,
-          agentRef: body.agentRef,
-          // Per-lane overrides win over the registry defaults so the same agent
-          // can be pinned to a lane under a custom name/role (e.g. "QA").
-          name: body.name?.trim() || r.name,
-          role: body.role?.trim() || r.role,
-          runtime: r.runtime,
-          target: r.target,
-          model: r.model,
-        };
-      } catch (err) {
-        if (err instanceof AssignedAgentNotFoundError) return c.json({ error: err.message }, 404);
-        throw err;
-      }
-    } else if (body.role?.trim()) {
+    try {
+      const r = await resolveAssignedAgent(db, tenantId, {
+        agentKind: body.agentKind,
+        agentRef: body.agentRef,
+        modelOverride: body.model ?? null,
+      });
       resolved = {
-        agentKind: null,
-        agentRef: null,
-        name: null,
-        role: body.role.trim(),
-        runtime: body.runtime ?? 'cloud',
-        target: body.target ?? null,
-        model: body.model ?? null,
+        agentKind: body.agentKind,
+        agentRef: body.agentRef,
+        // Per-lane overrides win over the registry defaults so the same agent
+        // can be pinned to a lane under a custom name/role (e.g. "QA").
+        name: body.name?.trim() || r.name,
+        role: body.role?.trim() || r.role,
+        runtime: r.runtime,
+        target: r.target,
+        model: r.model,
       };
-    } else {
-      return c.json({ error: 'agentKind+agentRef (or a legacy role) is required' }, 400);
+    } catch (err) {
+      if (err instanceof AssignedAgentNotFoundError) return c.json({ error: err.message }, 404);
+      throw err;
     }
 
     const [row] = await db

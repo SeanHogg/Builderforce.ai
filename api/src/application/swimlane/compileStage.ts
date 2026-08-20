@@ -7,8 +7,7 @@
  * inserted as workflow_tasks rows.
  */
 
-/** Runtime tiers an assignment can target. */
-export type AssignmentRuntime = 'local' | 'cloud' | 'remote' | 'browser';
+import type { LaneAgentRuntime } from './laneAutoRun';
 
 /** A single agent assignment within a swimlane (subset of the DB row we need). */
 export interface StageAssignment {
@@ -17,7 +16,7 @@ export interface StageAssignment {
   /** Agent role/persona, e.g. 'implementer', 'reviewer'. */
   role: string;
   /** Where this agent runs. */
-  runtime: AssignmentRuntime;
+  runtime: LaneAgentRuntime;
   /** Remote agentHost id / routing target — required when runtime is 'remote'. */
   target?: string | null;
   /** Optional human task template; falls back to a generated description. */
@@ -52,7 +51,7 @@ export type ExecutionMode = 'parallel' | 'sequential';
  * stays a bare role. For 'cloud' with no explicit target we use 'cloud' as the
  * routing target placeholder.
  */
-export function encodeAgentRole(role: string, runtime: AssignmentRuntime, target?: string | null): string {
+export function encodeAgentRole(role: string, runtime: LaneAgentRuntime, target?: string | null): string {
   const trimmedRole = role.trim();
   if (runtime === 'local') return trimmedRole;
   // The browser tier is a PULL runtime: a browser worker claims the dispatch and

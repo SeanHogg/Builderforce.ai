@@ -346,7 +346,12 @@ export async function loadStaffedAgentsForLanes(
   const byId = new Map(agentRows.map((a) => [a.id, a]));
 
   for (const r of rows) {
-    if (!r.agentRef) continue;
+    // `scope_id` is nullable on the shared `agent_assignments` (it is NULL for the
+    // brain and global scopes), so the column type is wider than this query — which
+    // `forLanes` has already narrowed to `scope = 'swimlane'` AND a named lane. Skip
+    // rather than assert: a cast here would be a claim about a predicate written in
+    // another module.
+    if (!r.agentRef || !r.swimlaneId) continue;
     const agent = byId.get(r.agentRef);
     out.get(r.swimlaneId)?.push({
       agentRef: r.agentRef,

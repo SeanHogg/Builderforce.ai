@@ -23,7 +23,10 @@ import { classifyRunFailure, isPlatformFailure } from '../runtime/runFailureReas
 import { resolveArtifacts } from '../artifact/resolveArtifacts';
 import { isAgentRefRoleCapable } from '../kanban/roleCapability';
 import { resolveManagedProducer } from '../kanban/managedLaneRoles';
-import { decideLaneAutoRun, withOwnerAgentFallback, type LaneAgentLike, type LaneAgentRuntime, type LaneAutoRunDecision } from './laneAutoRun';
+import {
+  decideLaneAutoRun, normalizeLaneAgentRuntime, withOwnerAgentFallback,
+  type LaneAgentLike, type LaneAgentRuntime, type LaneAutoRunDecision,
+} from './laneAutoRun';
 import { findCanonicalBoard } from './canonicalBoard';
 import { enforceLaneRequirements } from './laneRequirementGate';
 import { TicketAuditService } from '../audit/ticketAuditService';
@@ -493,15 +496,6 @@ export interface TenantTokenVerdict {
   usageMonth: number;
   monthlyLimit: number;
   effectivePlan: 'free' | 'pro' | 'teams';
-}
-
-/**
- * Coerce the raw `swimlane_agent_assignments.runtime` varchar to the closed union the
- * decision carries. An unknown value is treated as unset (not as 'cloud'): the dispatcher
- * then applies its ordinary host-pin/cloud resolution rather than acting on a typo.
- */
-function normalizeLaneAgentRuntime(raw: string | null | undefined): LaneAgentRuntime | null {
-  return raw === 'local' || raw === 'cloud' || raw === 'remote' || raw === 'browser' ? raw : null;
 }
 
 /**

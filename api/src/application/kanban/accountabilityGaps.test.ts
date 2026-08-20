@@ -25,6 +25,8 @@ function signoff(over: Partial<AccountabilitySignoff> = {}): AccountabilitySigno
     laneKey: 'in_review', roleKey: 'architect', roleName: 'Architect',
     memberKind: 'agent', memberRef: 'cto', memberName: 'CTO',
     verdict: 'approved', summary: null, contribution: null, waiveReason: null,
+    // A member-recorded verdict by default; the auto-attested cases override it.
+    autoAttested: false,
     createdAt: '2026-07-25T00:00:00.000Z',
     ...over,
   };

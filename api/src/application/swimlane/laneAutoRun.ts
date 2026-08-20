@@ -57,8 +57,28 @@ export interface LaneAgentLike {
   capabilities?: string[] | null;
 }
 
-/** The backplanes a lane agent assignment can name. Mirrors `swimlane_agent_assignments.runtime`. */
+/**
+ * The backplanes a lane agent assignment can name. Mirrors `agent_assignments.runtime`,
+ * which is nullable — migration 1085 folded lane staffing into a table shared with
+ * scopes that have no backplane at all, so every read has to narrow the raw varchar.
+ *
+ * THE ONE name for this union. `compileStage` declared a second, identical
+ * `AssignmentRuntime`, which is how a column with four legal values came to have two
+ * type-level definitions that could drift apart while both compiled.
+ */
 export type LaneAgentRuntime = 'local' | 'cloud' | 'remote' | 'browser';
+
+/**
+ * Narrow the raw `agent_assignments.runtime` varchar to the union, or to null.
+ *
+ * An unrecognised value is treated as UNSET rather than as 'cloud': the dispatcher then
+ * applies its ordinary host-pin/cloud resolution instead of acting on a typo. Callers
+ * that must have a backplane apply their own `?? 'cloud'` — which is a different
+ * decision, made where its consequence is visible.
+ */
+export function normalizeLaneAgentRuntime(raw: string | null | undefined): LaneAgentRuntime | null {
+  return raw === 'local' || raw === 'cloud' || raw === 'remote' || raw === 'browser' ? raw : null;
+}
 
 /** One lane agent that was skipped because it lacked the lane's required capabilities. */
 export interface CapabilityMismatch {

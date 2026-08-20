@@ -20608,3 +20608,26 @@ The pending delivery tranche closes the following previously-open roadmap items:
 
 The items still requiring external accounts, production credentials, provider approval, or an operator decision remain in ROADMAP.md.
 
+## RESOLVED 2026-08-20 — saved tool-run localization
+
+Saved tool history now renders in the reader's locale rather than the locale of the person who saved it.
+Self-assessment rows are re-scored from their persisted input in `ToolService.listRuns`; data rows retain
+a versioned, locale-neutral figures payload and re-render their chrome from that snapshot. The stored
+default-language result remains a safe fallback for legacy, malformed, retired-tool, or incompatible
+rows. The history cache is locale-keyed and save invalidation clears every supported locale.
+
+Coverage in `toolRuns.test.ts` exercises self and data rows across locales, verifies that measurements
+remain unchanged, and confirms legacy/malformed rows still render safely.
+
+## RESOLVED 2026-08-20 — data-driven surfaces and career analyzer localization
+
+Single-value work items now render a dedicated lifecycle swimlane in `TicketLifecyclePanel`: each
+lane visit is timed, rework is visible, and the view remains responsive at narrow widths. Uploaded deck
+templates can now opt a native chart into `{{chart:<token>}}` binding; the fill path rewrites the chart
+cache and its embedded workbook, so both the rendered chart and PowerPoint's **Edit Data** agree with
+the live values.
+
+Career analyzers receive `ToolCopy` as a pure `analyze()` argument. Their composed headings, metrics,
+recommendations and empty states are consequently localized with the form in every supported locale,
+while measurements remain locale-independent. Focused lifecycle, chart-rewriter, and career-copy tests
+cover the rendering and localization contracts.

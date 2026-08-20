@@ -66,7 +66,7 @@ import {
   type GraphObjectInput,
 } from '../creation/creationGraphWriter';
 import { emitWebhookEvent, type WebhookEvent } from '../seams/webhookService';
-import { requirePublicApiKey } from './publicApiAuth';
+import { requirePublicApiKey, type PublicApiContext } from './publicApiAuth';
 import { touchTenantApiKey } from '../llm/tenantApiKeyService';
 
 
@@ -120,7 +120,7 @@ export function createPublicCanvasRoutes(db: Db): Hono<HonoEnv> {
    * turns the endpoint into an enumeration oracle for other customers' board ids.
    */
   async function resolveBoard(
-    c: Parameters<Parameters<typeof router.get>[1]>[0],
+    c: PublicApiContext,
     boardId: string,
     scope: 'read:canvas' | 'write:canvas',
   ) {

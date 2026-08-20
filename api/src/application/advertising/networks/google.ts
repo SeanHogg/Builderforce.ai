@@ -509,8 +509,9 @@ export const googleAdsProvider: AdsProvider = {
     const customer = customerId(requireField(fields, 'adAccountId', 'the customer ID'));
     const scope = externalAdSetId ? ` AND ad_group.id = ${gaqlString(externalAdSetId)}` : '';
     const rows = await search(call, customer, [
-      'SELECT ad_group_ad.ad.id, ad_group_ad.ad.name, ad_group_ad.status,',
-      'ad_group_ad.ad.final_urls, ad_group_ad.ad.responsive_search_ad.headlines,',
+      'SELECT ad_group_ad.resource_name, ad_group_ad.ad.id, ad_group_ad.ad.name,',
+      'ad_group_ad.status, ad_group_ad.ad.final_urls,',
+      'ad_group_ad.ad.responsive_search_ad.headlines,',
       'ad_group_ad.ad.responsive_search_ad.descriptions, ad_group.id FROM ad_group_ad',
       `WHERE ad_group_ad.status != 'REMOVED'${scope}`,
     ].join(' '));
@@ -521,7 +522,11 @@ export const googleAdsProvider: AdsProvider = {
       const headlines = list(rsa.headlines).map((entry) => text(rec(entry).text)).filter(Boolean);
       const descriptions = list(rsa.descriptions).map((entry) => text(rec(entry).text)).filter(Boolean);
       return {
-        externalId: text(ad.id),
+        // The COMPOSITE `adGroupId~adId`, which is what `adGroupAds` is addressed by and
+        // what `createAd` below already returns. The bare `ad.id` cannot be updated:
+        // Google has no `adGroupAds/{adId}` resource, so storing it would produce ids
+        // that read back fine and 404 on the first pause.
+        externalId: idOf(text(adGroupAd.resourceName)) || text(ad.id),
         externalAdSetId: text(rec(row.adGroup).id) || null,
         name: text(ad.name) || headlines[0] || text(ad.id),
         status: toStatus(adGroupAd.status),
@@ -593,7 +598,7 @@ export const googleAdsProvider: AdsProvider = {
     await ask(call, 'mutate_ad_group_ads', {
       customer_id: customer,
       operations: [{
-        update: { resourceName: `customers/${customer}/adGroupAds/${draft_scope(externalId)}`, status },
+        update: { resourceName: `customers/${customer}/adGroupAds/${externalId}`, status },
         updateMask: 'status',
       }],
     });

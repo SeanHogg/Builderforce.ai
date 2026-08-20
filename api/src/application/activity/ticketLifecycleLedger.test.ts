@@ -352,6 +352,9 @@ describe('toGateSnapshot', () => {
     lifecycleManaged: false,
     managedRole: null,
     unfilledRoleKeys: [],
+    // Empty for every reason but `lane_requirement_gate`, and this fixture is a
+    // `human_gate` hold.
+    requirementGateRoles: [],
   };
 
   it('carries the EVIDENCE behind the reason, not just the reason', () => {

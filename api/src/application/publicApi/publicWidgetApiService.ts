@@ -42,7 +42,7 @@ import {
   updateCanvasWidget,
 } from '../canvas/canvasWidgetService';
 import { CANVAS_WEBHOOK_EVENTS } from '../seams/webhookService';
-import { requirePublicApiKey } from './publicApiAuth';
+import { requirePublicApiKey, type PublicApiContext } from './publicApiAuth';
 import { touchTenantApiKey } from '../llm/tenantApiKeyService';
 import { CREATION_UUID_RE as UUID_RE } from '../creation/creationGraphWriter';
 
@@ -85,7 +85,7 @@ export function createPublicWidgetRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
 
   async function auth(
-    c: Parameters<Parameters<typeof router.get>[1]>[0],
+    c: PublicApiContext,
     scope: 'read:canvas' | 'manage:widgets',
   ) {
     const resolved = await requirePublicApiKey(

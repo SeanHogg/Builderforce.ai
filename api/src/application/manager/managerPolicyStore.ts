@@ -26,8 +26,22 @@ import {
 } from './managerPolicy';
 
 
-/** A stored config row plus its last-run stamp (the surface shows both). */
-export type ManagerConfigRowWithMeta = ManagerConfigRow & { lastRunAt: Date | null };
+/**
+ * A stored config row plus the run METADATA the surface shows beside the policy.
+ *
+ * `lastRunAt` answers "when did a pass last finish"; the three sweep columns (migration
+ * 1083) answer the question it cannot — whether the scheduled sweep REACHED this project
+ * at all, and why not. `runManagerSweep` writes them on every visit including the ones
+ * that decline, so they have to be READ here or the decline is recorded and invisible.
+ */
+export type ManagerConfigRowWithMeta = ManagerConfigRow & {
+  lastRunAt: Date | null;
+  /** 'ran' | 'skipped' — null on a project the sweep has never visited. */
+  lastSweepDecision: string | null;
+  /** Null when it ran; otherwise the machine-readable cause. */
+  lastSweepReason: string | null;
+  lastSweepAt: Date | null;
+};
 
 /** Load a project's manager config row (null when it has none → tenant default). */
 export async function getManagerConfigRow(
@@ -51,6 +65,9 @@ export async function getManagerConfigRow(
       agentReassignMaxPerSession: projectManagerConfigs.agentReassignMaxPerSession,
       allowAutoStaffLanes: projectManagerConfigs.allowAutoStaffLanes,
       lastRunAt: projectManagerConfigs.lastRunAt,
+      lastSweepDecision: projectManagerConfigs.lastSweepDecision,
+      lastSweepReason: projectManagerConfigs.lastSweepReason,
+      lastSweepAt: projectManagerConfigs.lastSweepAt,
     })
     .from(projectManagerConfigs)
     .where(and(eq(projectManagerConfigs.tenantId, tenantId), eq(projectManagerConfigs.projectId, projectId)))

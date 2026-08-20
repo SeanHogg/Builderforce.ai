@@ -57,14 +57,16 @@ export async function resolveTicketCoordinator(
 
   if (row.assignedUserId != null) {
     const [u] = await db
-      .select({ name: users.name, email: users.email })
+      // `users` has no `name` column — a person's label is `display_name`, falling back
+      // to the handle and then the address, which is the order every other reader uses.
+      .select({ displayName: users.displayName, username: users.username, email: users.email })
       .from(users)
       .where(eq(users.id, row.assignedUserId))
       .limit(1);
     return {
       kind: 'human',
       ref: `u:${row.assignedUserId}`,
-      label: u?.name?.trim() || u?.email || `User ${row.assignedUserId}`,
+      label: u?.displayName?.trim() || u?.username?.trim() || u?.email || `User ${row.assignedUserId}`,
     };
   }
 

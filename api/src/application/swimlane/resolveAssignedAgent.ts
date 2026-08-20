@@ -25,7 +25,7 @@
 import { and, eq, sql } from 'drizzle-orm';
 import { agents } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
-import type { AssignmentRuntime } from './compileStage';
+import type { LaneAgentRuntime } from './laneAutoRun';
 
 export type AgentKind = 'workforce' | 'registered';
 
@@ -35,7 +35,7 @@ export interface ResolvedAgent {
   /** Display name of the chosen agent. */
   name: string;
   /** Runtime tier the agent runs on. */
-  runtime: AssignmentRuntime;
+  runtime: LaneAgentRuntime;
   /** Routing target (agentHost id) — null falls back to the tenant default. */
   target: string | null;
   /** LLM model — modelOverride wins, else the agent's default, else null. */
@@ -57,7 +57,7 @@ const DEFAULT_MODEL_SENTINEL = 'builderforce-default';
  * runtime tier. 'host' runs on a agentHost (a `remote` dispatch); 'cloud' stays
  * cloud; 'both' honours preferred_runtime (defaulting to cloud).
  */
-function workforceRuntime(runtimeSupport: string | null, preferred: string | null): AssignmentRuntime {
+function workforceRuntime(runtimeSupport: string | null, preferred: string | null): LaneAgentRuntime {
   const pick = runtimeSupport === 'both' ? (preferred ?? 'cloud') : (runtimeSupport ?? 'cloud');
   return pick === 'host' ? 'remote' : 'cloud';
 }

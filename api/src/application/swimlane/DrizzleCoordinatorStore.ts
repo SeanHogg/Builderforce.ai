@@ -29,6 +29,7 @@ import type {
   TransitionRecord,
 } from './coordinatorStore';
 import { forLane, laneAgentAssignments } from './laneAgentAssignments';
+import { normalizeLaneAgentRuntime } from './laneAutoRun';
 
 export class DrizzleCoordinatorStore implements CoordinatorStore {
   constructor(private readonly db: Db) {}
@@ -93,7 +94,7 @@ export class DrizzleCoordinatorStore implements CoordinatorStore {
     return rows.map((a) => ({
       id: a.id,
       role: a.role,
-      runtime: a.runtime,
+      runtime: normalizeLaneAgentRuntime(a.runtime),
       target: a.target,
       taskTemplate: a.taskTemplate,
       model: a.model,

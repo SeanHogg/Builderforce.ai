@@ -54,7 +54,7 @@ import {
   WEBHOOK_TIMESTAMP_HEADER,
   webhookRetryDelaySec,
 } from '../seams/webhookService';
-import { requirePublicApiKey } from './publicApiAuth';
+import { requirePublicApiKey, type PublicApiContext } from './publicApiAuth';
 import { touchTenantApiKey } from '../llm/tenantApiKeyService';
 import { CREATION_UUID_RE as UUID_RE } from '../creation/creationGraphWriter';
 
@@ -119,7 +119,7 @@ function subscriptionView(row: {
 export function createPublicWebhookRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
 
-  async function auth(c: Parameters<Parameters<typeof router.get>[1]>[0]) {
+  async function auth(c: PublicApiContext) {
     const resolved = await requirePublicApiKey(
       db, c.req.header('Authorization'), c.req.header('Origin') ?? null, 'webhooks:manage',
     );

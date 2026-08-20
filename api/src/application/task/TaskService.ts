@@ -10,6 +10,7 @@ import { NotFoundError, ForbiddenError, ConflictError } from '../../domain/share
 import {
   EpicDecomposer, ChildTaskPlan, heuristicEpicDecomposer, DecompositionSource, normalizeChildTitle,
 } from './EpicDecomposer';
+import type { ActorIdentity } from '../activity/activityLog';
 import { scheduleItems } from '../planning/scheduleWork';
 import { summarizePlanVerdict, type PlanVerdict } from '../planning/planVerdict';
 import { assigneeKeyOf, type SchedulingContext } from '../planning/schedulingContext';
@@ -51,16 +52,20 @@ export interface CreateTaskDto {
 }
 
 /**
- * The actor shape the creation emitter takes. Structurally identical to
- * `activity/activityLog.ActorIdentity`, restated here so the application service does
- * not import the activity module it is injected a hook for (the hook is what keeps this
- * layer free of the infrastructure that writes the row).
+ * The actor shape the creation emitter takes — `activity/activityLog.ActorIdentity`
+ * itself, under the name this service uses for it.
+ *
+ * It USED to be a restatement, to keep this service from importing the activity module
+ * it is injected a hook for. The restatement is what broke: it declared `type: string`
+ * where the original has a closed `ActorType` union, so every actor this service built
+ * type-checked here and was rejected at the emitter — the two shapes were only ever
+ * "structurally identical" by assertion, and nothing enforced it.
+ *
+ * A TYPE-ONLY import erases at compile time, so the layering argument still holds: no
+ * runtime edge is created from the application service to the module that writes rows,
+ * and the hook remains the seam. What is gone is the second definition that could drift.
  */
-export interface CreationActor {
-  type: string;
-  ref: string | null;
-  name: string;
-}
+export type CreationActor = ActorIdentity;
 
 export interface UpdateTaskDto {
   title?: string;
