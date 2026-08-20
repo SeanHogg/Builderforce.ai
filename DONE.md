@@ -1,5 +1,74 @@
 ## ✅ RESOLVED 2026-08-19 — One door for both executors: the agent-runtime and git-proxy seams stop being browser-only
 
+## ✅ RESOLVED 2026-08-19 — A campaign can be an SMS, and a scheduled one actually sends
+
+*Closes two ROADMAP entries under "Connected mailboxes & campaign studio — residuals".
+Migration **0940**; `campaignTransports.ts`, `campaignEngine.ts`, `campaignRoutes.ts`,
+`builtinMcpService.ts`.*
+
+### `marketing_campaigns.scheduled_at` is now read
+
+The column shipped in 0412 and nothing ever consulted it: `runCampaignSendSweep` only
+advanced campaigns already in `sending`, so a draft with a future `scheduled_at` sat
+there forever. `startDueCampaigns` is the missing step, and it runs FIRST on each tick
+so a campaign scheduled for now begins on the same tick it became due.
+
+It calls `startCampaign` rather than writing `status = 'sending'` itself, which is the
+whole design. Every precondition — a resolvable sender, a body, a non-empty audience,
+suppression — is re-checked **at the moment it starts**, not when it was scheduled. A
+mailbox grant revoked between Friday and Tuesday, an audience emptied, a sender identity
+that lapsed: each of those now stops the send instead of being discovered one batch into
+a real audience. A refusal leaves the campaign a `draft` with its `scheduled_at` intact,
+so fixing the precondition sends it on the next tick with no re-scheduling, and the
+reason is reported rather than swallowed.
+
+Exposed as `campaign.schedule` (and `scheduledAt` on `campaign.create` / the PATCH
+route). It is deliberately NOT gated like `campaign.send`: scheduling decides nothing,
+because the gate is re-run at start time.
+
+### An SMS campaign channel exists
+
+`marketing_audience_members` was email-only by construction — `email` NOT NULL and the
+uniqueness key, no phone column — so the Twilio connector's `send_sms` action, live and
+callable by agents since it shipped, had no path from an *audience*. Now:
+
+- **`phone` + `phone_status` on the member.** The person is still keyed by EMAIL; a phone
+  is an attribute. Keying SMS by number would let the same human appear twice in one
+  audience and break the `(campaign, email)` uniqueness that makes a resumed send
+  idempotent. A number that is not E.164 is dropped rather than stored, and re-importing
+  a list `COALESCE`s rather than overwrites, so an import cannot delete numbers.
+- **`channel` beside `transport`.** Two columns because they answer different questions:
+  `transport` is which pipe, `channel` is which recipient field, which body, and who
+  reports delivery. The legal pairings are DATA (`TRANSPORTS_BY_CHANNEL`), read by the
+  route, the service and the resolver, so "it let me pick SendGrid for a text message"
+  cannot happen in one surface and not another. `updateCampaign` validates the MERGED
+  pair, so a patch that moves only one of them cannot leave an unsendable row.
+- **A `twilio` transport**, through the same `connector_connections` row and the same
+  runtime the workflow builder and agent tools already call — not a second,
+  differently-credentialled door to Twilio.
+- **Delivery is reported, not inferred.** An open pixel and a click rewrite are
+  meaningless in a text message, so Twilio's status callback lands on
+  `/api/campaign-track/sms-status/:token` — addressed by the send's existing track
+  token, minting no second identifier — and writes `external_message_id`,
+  `delivery_status`, `delivered_at`. When the carrier says a message never arrived, the
+  campaign's counters are CORRECTED (`sent` down, `failed` up), guarded on the row still
+  being `sent` so Twilio's retries cannot double-count. The signature is verified when
+  the connection's credentials are an Account SID + Auth Token, which is the only pair
+  Twilio signs with.
+- **Consent is per channel.** A carrier STOP (`21610`) sets `phone_status` and nothing
+  else — it is not an email opt-out. The tenant-wide suppression list is the reverse: a
+  do-not-contact list, so it blocks both channels.
+- **Every text carries a way out.** `renderCampaignSms` appends "Reply STOP to opt out."
+  unless the author already said it, for the same reason the email footer is appended by
+  the renderer rather than the author. Merge-field substitution is now ONE function
+  shared by both renderers, differing only in whether it escapes — HTML must, a phone
+  has no markup to inject into.
+
+Members with no number, or who replied STOP, are reported as `unreachable` at start
+rather than folded into `suppressed`: "we have no number for them" and "they asked us to
+stop" are different facts and a list owner can act on the first.
+
+
 Six of the nine "Deferred residuals" (§ Drizzle single-access-layer residuals) closed together,
 because four of them were the same root cause: **the same question was being answered in four
 places, each with its own idea of what counts as an answer.**

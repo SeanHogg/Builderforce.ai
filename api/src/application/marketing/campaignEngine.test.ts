@@ -469,3 +469,230 @@ describe('recordClick', () => {
       .resolves.toBe('https://shop.example.com/x');
   });
 });
+
+describe('renderCampaignSms', () => {
+  const recipient = { email: 'ada@x.com', name: 'Ada', attributes: { city: 'Melbourne' } };
+
+  it('substitutes the same merge fields the email renderer does', () => {
+    expect(renderCampaignSms('Hi {{name}}, see you in {{city}}.', recipient))
+      .toBe('Hi Ada, see you in Melbourne. Reply STOP to opt out.');
+  });
+
+  it('does NOT HTML-escape — a phone has no markup to inject into', () => {
+    // The email renderer escapes because a signup form is attacker-controlled and
+    // the preview is HTML. A text message is not, and escaping would deliver a
+    // literal `&amp;` to somebody's phone.
+    expect(renderCampaignSms('{{name}} & co', { email: 'a@x.com', name: 'Ada & Bob' }))
+      .toContain('Ada & Bob & co');
+  });
+
+  it('resolves an unmatched field to a gap, not a literal placeholder', () => {
+    expect(renderCampaignSms('Hi {{company}}.', { email: 'a@x.com' }))
+      .toBe('Hi . Reply STOP to opt out.');
+  });
+
+  it('APPENDS the opt-out notice, so an author cannot forget it', () => {
+    // The same reasoning as the email unsubscribe footer: carriers require a
+    // visible opt-out on campaign traffic, and a body without one is a
+    // registration problem, not a style choice.
+    expect(renderCampaignSms('Sale ends today.', { email: 'a@x.com' }))
+      .toBe(`Sale ends today. ${SMS_OPT_OUT_NOTICE}`);
+  });
+
+  it('does not add a SECOND notice when the author already wrote one', () => {
+    const body = 'Sale ends today. Reply stop to unsubscribe.';
+    expect(renderCampaignSms(body, { email: 'a@x.com' })).toBe(body);
+  });
+
+  it('resolves {{unsubscribe}} to the keyword, not a URL — an SMS has no link to click', () => {
+    expect(renderCampaignSms('Out? {{unsubscribe}}', { email: 'a@x.com' }))
+      .toBe('Out? Reply STOP to opt out.');
+  });
+
+  it('caps the body so one campaign cannot bill for ten segments per recipient', () => {
+    expect(renderCampaignSms('x'.repeat(5_000), { email: 'a@x.com' })).toHaveLength(1_600);
+  });
+});
+
+describe('smsStatusUrl', () => {
+  it('addresses the callback by the send token, minting no second identifier', () => {
+    expect(smsStatusUrl(ctx)).toBe(`${ORIGIN}/api/campaign-track/sms-status/tok123`);
+  });
+});
+
+describe('startCampaign — SMS', () => {
+  const env = {} as Env;
+
+  it('refuses an empty text body, and does NOT ask for a subject', async () => {
+    // The SMS twin carries no subject at all; demanding one would be the email
+    // precondition leaking into a channel that has no such field.
+    const db = fakeDb([[{ ...smsDraftRow, bodyText: '  ' }]]);
+    const result = await startCampaign(env, db as unknown as Db, 7, 1);
+    expect(result).toMatchObject({ ok: false, status: 400 });
+    expect((result as { error: string }).error).toContain('text message');
+  });
+
+  it('queues only members with a usable number, and reports the rest as unreachable', async () => {
+    const db = fakeDb([
+      [smsDraftRow],
+      twilioConnectionRow,
+      [
+        { email: 'a@x.com', phone: '+14155550001', phoneStatus: 'subscribed' },
+        { email: 'b@x.com', phone: null,           phoneStatus: 'subscribed' },   // no number
+        { email: 'c@x.com', phone: '+14155550003', phoneStatus: 'unsubscribed' }, // texted STOP
+        { email: 'd@x.com', phone: '415-555-0004', phoneStatus: 'subscribed' },   // not E.164
+      ],
+      [],   // nobody suppressed
+      [],   // the insert
+      [{ ...smsDraftRow, status: 'sending', recipients: 1 }],
+    ]);
+    const result = await startCampaign(env, db as unknown as Db, 7, 1);
+    // It also proves the SMS path starts with NO sender identity on the row —
+    // DNS ownership is an email concept and requiring one here would be a bug.
+    expect(result).toMatchObject({ ok: true, queued: 1, unreachable: 3 });
+
+    const insert = db.calls.find((c) => c.kind === 'insert')!;
+    const rows = insert.payload as Array<{ email: string; phone: string | null }>;
+    // The number is STAMPED on the send, not re-read later: the ledger has to
+    // describe the number this campaign actually messaged.
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ email: 'a@x.com', phone: '+14155550001' });
+  });
+
+  it('refuses when nobody in the audience has a number we can text', async () => {
+    const db = fakeDb([
+      [smsDraftRow],
+      twilioConnectionRow,
+      [{ email: 'a@x.com', phone: null, phoneStatus: 'subscribed' }],
+    ]);
+    const result = await startCampaign(env, db as unknown as Db, 7, 1);
+    expect(result).toMatchObject({ ok: false, status: 400 });
+    expect((result as { error: string }).error).toContain('mobile number');
+  });
+
+  it('still honours the tenant-wide suppression list — a do-not-contact list is not an email-only one', async () => {
+    const db = fakeDb([
+      [smsDraftRow],
+      twilioConnectionRow,
+      [{ email: 'a@x.com', phone: '+14155550001', phoneStatus: 'subscribed' }],
+      [{ email: 'a@x.com' }],   // …and they are suppressed
+    ]);
+    const result = await startCampaign(env, db as unknown as Db, 7, 1);
+    expect(result).toMatchObject({ ok: false, status: 400 });
+    expect((result as { error: string }).error).toContain('unsubscribed');
+  });
+
+  it('reports 0 unreachable for an EMAIL campaign — the address IS the audience key', async () => {
+    const db = fakeDb([
+      [draftRow],
+      [{ email: 'a@x.com', phone: null, phoneStatus: 'subscribed' }],
+      [],
+      [],
+      [{ ...draftRow, status: 'sending', recipients: 1 }],
+    ]);
+    await expect(startCampaign(env, db as unknown as Db, 7, 1))
+      .resolves.toMatchObject({ ok: true, queued: 1, unreachable: 0 });
+  });
+});
+
+describe('startDueCampaigns — the step `scheduled_at` never had', () => {
+  const env = {} as Env;
+
+  it('does nothing when no campaign is due', async () => {
+    const db = fakeDb([[]]);
+    await expect(startDueCampaigns(env, db as unknown as Db)).resolves.toMatchObject({ started: 0, refused: [] });
+  });
+
+  it('starts a due draft by calling startCampaign — so every precondition is re-checked NOW', async () => {
+    const db = fakeDb([
+      [{ id: 1, tenantId: 7 }],   // due
+      [draftRow],                 // …and startCampaign re-loads it
+      [{ email: 'a@x.com', phone: null, phoneStatus: 'subscribed' }],
+      [],
+      [],
+      [{ ...draftRow, status: 'sending', recipients: 1 }],
+    ]);
+    await expect(startDueCampaigns(env, db as unknown as Db)).resolves.toMatchObject({ started: 1 });
+  });
+
+  it('REFUSES rather than starting when a precondition lapsed since it was scheduled', async () => {
+    // The whole reason this calls startCampaign instead of writing status='sending':
+    // a sender identity that stopped being verified between Friday and Tuesday must
+    // stop the send, not be discovered one batch into a real audience.
+    const db = fakeDb([
+      [{ id: 1, tenantId: 7 }],
+      [{ ...draftRow, senderStatus: 'pending' }],
+    ]);
+    const result = await startDueCampaigns(env, db as unknown as Db);
+    expect(result.started).toBe(0);
+    expect(result.refused[0]).toMatchObject({ campaignId: 1, tenantId: 7 });
+    expect(result.refused[0]!.error).toContain('not verified');
+  });
+
+  it('leaves a refused campaign as a draft, so a fixed precondition sends it next tick', async () => {
+    const db = fakeDb([
+      [{ id: 1, tenantId: 7 }],
+      [{ ...draftRow, senderStatus: 'pending' }],
+    ]);
+    await startDueCampaigns(env, db as unknown as Db);
+    // No UPDATE at all — the schedule is untouched, so nothing has to re-schedule it.
+    expect(db.calls.filter((c) => c.kind === 'update')).toHaveLength(0);
+  });
+});
+
+describe('recordSmsDeliveryStatus', () => {
+  const sentRow = [{ id: 9, campaignId: 1, tenantId: 7, email: 'a@x.com', status: 'sent' }];
+
+  it('stamps a progress state without touching the campaign counters', async () => {
+    const db = fakeDb([sentRow]);
+    await expect(recordSmsDeliveryStatus(db as unknown as Db, 'tok', 'sent')).resolves.toBe(true);
+    expect(db.calls.filter((c) => c.kind === 'update')).toHaveLength(1);
+  });
+
+  it('CORRECTS the counters when the carrier says it never arrived', async () => {
+    // runCampaignBatch counted this as sent at hand-over, which was all it could
+    // know at the time. A report that still claims it was sent is simply wrong.
+    const db = fakeDb([sentRow, [{ id: 9 }], []]);
+    await expect(recordSmsDeliveryStatus(db as unknown as Db, 'tok', 'undelivered', { errorCode: '30003' }))
+      .resolves.toBe(true);
+    const updates = db.calls.filter((c) => c.kind === 'update');
+    // Three writes: stamp the carrier status, move the send to `failed`, swap the
+    // campaign's counters. The third is the one that makes the report honest.
+    expect(updates).toHaveLength(3);
+    expect(Object.keys(updates[2]!.payload as Record<string, unknown>))
+      .toEqual(expect.arrayContaining(['sent', 'failed']));
+    expect((updates[1]!.payload as Record<string, unknown>).status).toBe('failed');
+  });
+
+  it('does NOT double-correct when Twilio retries the same callback', async () => {
+    // The correction is guarded on the row still being `sent`; a second delivery
+    // of the same callback matches nothing and the counters are left alone.
+    const db = fakeDb([
+      [{ id: 9, campaignId: 1, tenantId: 7, email: 'a@x.com', status: 'failed' }],
+      [],   // the guarded UPDATE matched no row
+    ]);
+    await recordSmsDeliveryStatus(db as unknown as Db, 'tok', 'failed');
+    expect(db.calls.filter((c) => c.kind === 'update')).toHaveLength(2);
+  });
+
+  it('withdraws SMS consent when the failure is a carrier STOP', async () => {
+    const db = fakeDb([sentRow, [{ id: 9 }], [], []]);
+    await recordSmsDeliveryStatus(db as unknown as Db, 'tok', 'undelivered', { errorCode: '21610' });
+    const updates = db.calls.filter((c) => c.kind === 'update');
+    // The LAST write is the member's consent, not the campaign's counters — a
+    // person who texted STOP must not be messaged by the next campaign either.
+    expect((updates.at(-1)!.payload as Record<string, unknown>).phoneStatus).toBe('unsubscribed');
+  });
+
+  it('returns false for an unknown token rather than throwing', async () => {
+    // The route answers 204 on this, because Twilio retries anything that is not
+    // 2xx and a deleted campaign would otherwise become a permanent retry loop.
+    await expect(recordSmsDeliveryStatus(fakeDb([[]]) as unknown as Db, 'nope', 'delivered')).resolves.toBe(false);
+  });
+
+  it('ignores a blank status instead of writing one', async () => {
+    const db = fakeDb([]);
+    await expect(recordSmsDeliveryStatus(db as unknown as Db, 'tok', '   ')).resolves.toBe(false);
+    expect(db.calls).toHaveLength(0);
+  });
+});
