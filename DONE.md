@@ -1,3 +1,248 @@
+## ✅ RESOLVED 2026-08-19 — FO-C, the four things it still owed
+
+The money track shipped and left four ends loose. Each was the same shape of defect the track
+itself exists to close: something DECLARED with nothing behind it.
+
+### 1 · The invoice was a web page and not a document
+
+FO-C2's own text said *"there is no PDF render, no delivery"*. Delivery shipped; the render did
+not, so the only artifact a customer could keep was a URL. `application/finance/invoicePdf.ts`
+writes the bytes through `pdfWriter.renderPdf` — no dependency added, the same block model the
+.docx and .pptx writers read — and `pdfWriter`'s own argument applies here more sharply than
+anywhere: *"the platform emitted PDF by opening the browser's print dialog… it needs a human at a
+keyboard, it cannot be attached to an email an agent sends, and it prints whatever the visitor's
+browser thinks the page looks like."* An invoice is the document a customer's accounts department
+files for seven years.
+
+Served at `GET /api/public/invoices/pdf?t=…` (the token resolves the row, so a guessed reference
+renders nothing) and `GET /api/payables/invoices/:reference/pdf` for the founder's own copy —
+**one `pdfResponse` helper for both**, because two hand-written responses is how one of them loses
+its filename or gets served `attachment` while the other is `inline`.
+
+The figures come from a new shared `receivables.invoiceDocument`, which is now also what the web
+page renders: **one projection, three doors**. An invoice whose PDF and web page disagree about the
+outstanding amount is worse than one with no PDF.
+
+The FILE is deliberately not localised — `en-US` money formatting whatever the reader's locale.
+Two people opening one invoice in two countries quote the figures to each other, and a copy reading
+`1.234,56` beside one reading `1,234.56` is, to them, a different invoice. The page localises.
+
+### 2 · `payRun.sync` was advertised as connected and showed a notice
+
+The canvas listed `payRun: ['sync']` in `CONNECTED_CANVAS_ACTIONS` — the registry whose whole
+purpose is to distinguish a real adapter from the honest "no delivery adapter is connected" answer
+— and the handler told the user to go and ask Brain instead. That is the defect the registry exists
+to prevent, introduced by the change that added the kind.
+
+`syncPayRunCard` now re-reads the card's run from the provider that ran it, matched on the
+provider's own `externalRef` (a hand-authored card has none, and it says so rather than guessing a
+match on the date or the amount, which would overwrite one month's payroll with another's). It
+calls the SAME `payRunFieldsFrom` the Brain tool calls, so the card a person refreshes and the card
+Brain authors cannot project `totalCost` two different ways.
+
+### 3 · `invoice.collection` named a producer that did not exist
+
+The field's hint says the collections ladder writes every rung it climbs there. Nothing did. A
+field whose hint names a producer that does not exist is worse than an absent field, because a
+reader trusts it.
+
+The nightly sweep's canvas pass — already reading every `invoice` card to recompute `ageingDays` —
+now projects the rungs too, joined through `creation_sessions` for the tenant the objects table
+does not carry, one batched read for every referenced invoice. It writes only when there is
+something to say: an invoice nobody has chased keeps whatever was authored, because owning a field
+does not mean emptying it before there is a record to put there.
+
+### 4 · `notify` produced a queue nobody could see, and burn still excluded payroll
+
+`CollectionsWorklist` renders the rungs that have come due and not been sent, with the ladder
+itself beside them — the rungs are DATA, so the surface is that one list rendered rather than a
+second description of the cadence. The send button calls the same `chase` act the sweep calls with
+the same step, so the unique `(tenant, invoice, step)` index makes a double-click one chase.
+
+And `finance.burn` read `expenses` only. `expenses` holds reimbursement CLAIMS, so a workspace
+running payroll through Gusto had a burn figure missing its largest component — and a runway
+computed off it. The rollup now UNIONS approved/paid expenses with processed pay runs inside one
+statement. The union is load-bearing rather than stylistic: `metric_facts` is keyed on
+`(tenant, metric, bucket, bucket_at, dimension_key)`, so a second undimensioned writer for
+`finance.burn` would not add to the total, it would REPLACE it.
+
+Payroll buckets on `paid_at` and not the pay period, because a period straddling a month boundary
+would land its whole cost in the wrong month. Six tests on the document, plus the ladder,
+denomination and provider-shape assertions already there.
+
+---
+
+## ✅ RESOLVED 2026-08-19 — Every seat's numbers are real, the deep pass reports back, and a branch finally branches
+
+**Roadmap items closed:** *`DOMAIN_MANIFEST` declares 45 charted metric keys and only three have a writer*,
+*`metric_facts.objectId` is the attribution column and nothing ever populates it*, *P2 — Agent audit deep-pass
+does not re-score/enrich the report*, *P3 — Privacy audit signals are path-based only*, *P4 — demoSeedService
+fails `tsc`*, *War-room is a persisted feed, not yet a live room*, *Freshdesk push-back is title/description
+only*, *Tenant-wide incidents don't feed Evermind*, *A compiled canvas workflow is always a linear chain*,
+*`connectedCount` on a gallery card is a snapshot*, and *No TAX vendor exists in any of the seven ports*.
+
+### 1 · Seventeen seats, seventeen writers — one engine, not seventeen copies
+
+`DOMAIN_MANIFEST` declared 45 charted metric keys across seventeen domains and exactly three had a writer.
+`founderCanvasPrompt.ts` teaches the model BY NAME to bind a canvas `liveMetric` to `growth.leads`, and nothing
+on the platform had ever inserted one — so the flagship demo read a key with no producer and a founder whose
+published site was genuinely collecting signups saw an empty panel. The signal was already sitting in
+`site_records`; it was simply never rolled up.
+
+`application/kernel/metricRollup.ts` is the engine. `fact()` writes the `INSERT … ON CONFLICT
+(uq_metric_facts_point) DO UPDATE` envelope once; `presentTables()` replaces the per-metric `to_regclass` probe
+with one `information_schema` read for the whole pass; a domain's numbers become a list of `MetricSpec`s naming
+a key, the tables it needs and the SELECT that produces it. The three writers that existed had already copied
+`tableExists`, `rowCount`, the `{written, facts, skipped}` shape and the absent-table skip between them — three
+times — so fourteen more copies was the duplication the DRY rule forbids, and all three were MIGRATED onto the
+engine in the same pass rather than left as a fourth pattern.
+
+Fourteen new writers landed under `application/kernel/rollups/`: growth, delivery, agents, hiring, revenue,
+commerce, identity, people, platform, governance, investor, support, canvas, integrations. Every one inherits
+the honesty rule from `financeRollup` verbatim — a fact is written only where the rows behind it exist, there is
+no zero-fill anywhere, and `trigger` objects fire on these keys with `below` comparators, so a fabricated 0
+reads as a catastrophe and pages somebody.
+
+Three decisions worth recording:
+
+- **What counts as a conversion** — the one product decision the register said this was blocked on. A conversion
+  is a lead who completed the site's own commercial goal, and the platform observes exactly two first-hand: they
+  created an account (`site_users`) or started paying (`site_subscriptions`, `active`/`trialing`). Deliberately
+  NOT counted: a `site_record` in a collection somebody named "signup". A collection name is a label the creator
+  typed, and letting it decide a conversion would make the metric mean something different on every site — the
+  exact ambiguity that kept the key unwritten. An account or a payment means the same thing everywhere.
+- **`support.first_response_min` was not merely unwritten, it was UNCOMPUTABLE.** `support_tickets` recorded
+  `opened_at` and `resolved_at` and nothing between them. Substituting resolution time would have been worse
+  than an empty panel — a team that replies in four minutes and ships the fix four days later reported as taking
+  four days to answer. Migration 0941 adds `first_responded_at`, Freshdesk and Freshservice now fetch
+  `include=stats`, and the ITSM ingest stamps the help desk's OWN clock. Tickets ingested before the column
+  existed keep NULL and are excluded, not back-filled: a first-response time nobody measured is not zero.
+- **`agents.tokens` / `agents.cost_cents` read `ai_usage_records`, not `llm_usage_log`.** The richer ledger lives
+  on the OPERATIONAL database and `metric_facts` lives on the main one; a rollup is one `INSERT … SELECT`, and
+  there is no such statement across two Neon databases. Pulling every row into the Worker to write it back is
+  the fan-out anti-pattern this platform rejects outright, so it reads the ledger on the correct side of the seam.
+
+`rollupRegistry.test.ts` makes the whole thing structural: every domain has a writer, every declared key is
+written, every written key is declared, no key has two writers, and no rollup touches the universal
+`<domain>.items` / `<domain>.events` pair the registry sweep owns. The per-domain regex source-scan that shipped
+with the sixteenth seat caught this for one seat at a time; the fourteen empty domains cannot recur.
+
+Seventeen sweep entries collapsed to one `metric-rollups`, ordered after `object-registry` (attribution resolves
+against the registry it refreshes) and before `canvas-triggers` (a `liveMetric` threshold must not be evaluated
+against yesterday's number).
+
+One latent bug fell out of the migration: `legal.renewals_due`'s dimensioned insert put the bare text
+`'register'` into a JSONB column and could never have executed.
+
+### 2 · An outcome finally has an owner
+
+`metric_facts.object_id` had its own index, an FK to `objects`, and no writer at all — so no outcome could be
+traced back to the artifact that caused it. `creation_outcome_events` measured the PROCESS ("this session made
+an artifact in 1.1 minutes") and `metric_facts` measured the OUTCOME ("the tenant got some leads") and the two
+shared no join key, which is the entire difference between measuring output and measuring impact.
+
+Growth, delivery and canvas now stamp it. Each attributed row carries its OWN `dimension_key` (`site:<id>`,
+`project:<id>`, `session:<id>`) and that is load-bearing rather than cosmetic: `uq_metric_facts_point` does not
+include `object_id`, so an attributed row reusing the tenant total's empty key would COLLIDE with the total and
+overwrite it. `fact()` throws rather than let a caller do it.
+
+`project_sites` is registered into the kernel as a growth `site` object so a lead has an artifact to attribute
+to — its own kind and not `landing_page`, because both tables key on a serial int and sharing a kind would make
+`landing_pages` row 7 and `project_sites` row 7 the same object. Migration 0935 adds
+`site_collections.origin_session_id`, stamped by the realization layer, which is the one path that genuinely
+knows which idea a collection belongs to; a hand-created collection keeps NULL, because guessing the site's most
+recent session would attribute a stranger's submissions to whichever board happened to be open.
+
+### 3 · The audit deep pass reports back, and the privacy scan opens the file
+
+`AuditRunner.runAudit` always produced the authoritative report from the deterministic path-signal `scan()` and
+filed a ticket for an agent to do the real work. The Architecture diagnostic re-scores itself on completion;
+SOC 2 / Quality / PM Vision / Privacy had no equivalent, so the agent read the code, opened a PR, and the
+diagnostic showed the first-pass estimate forever.
+
+`auditDeepPass.ts` closes it: `mergeAuditFindings` (pure) plus `applyAuditFindings` (the hook, going through the
+same `recordExternalRun` every diagnostic uses, so the project rating and tenant rollup refresh with it), reached
+by the agent through `audits.report_findings`. Every remediation ticket now carries the instruction to call it,
+naming the audit id and project id so neither has to be guessed.
+
+Findings can only LOWER a score. The first pass is evidence something EXISTS; an agent can prove it is broken
+and cannot prove nothing else is wrong. A clean pass is still recorded — "somebody looked and found nothing" is
+not "nobody has looked" — and `info` moves the number not at all, so an agent never has to withhold an
+observation to protect a score.
+
+The privacy scan established GDPR/CCPA/CAN-SPAM controls from FILE PATHS, so a consent banner that renders after
+the analytics tag loads, a `/delete-account` route that flips a boolean and an unsubscribe handler that answers
+200 and writes nothing all scored identically to working implementations. Five probes now read the files, and
+`verifiedFrac` grades on four levels instead of two: no path 0, path-but-unopened 0.6 (the old reading,
+discounted — a filename is weak evidence and used to score as certainty), opened-and-disproved 0.3, proved 1.0.
+An unreadable repo lands on 0.6 and not 0.3, because being unable to look is not evidence of a failure and
+penalising it would score a private repo as non-compliant for being private.
+
+### 4 · A war room you can be IN, and an outbox that had no writer
+
+`ensureWarRoom` created a `brain_chats` row and the timeline was its feed — a place to post after the fact. It
+now has a live channel over `CEREMONY_ROOM`, keyed `incident:<id>` from ONE exported `incidentRoomKey`, and the
+room is tenant-checked before the upgrade: an incident id is a UUID, which is not an authorisation model.
+
+The bigger find: `SyncEngine.drainOutbox` reads pending rows, retries with backoff and dead-letters;
+`drizzleStore` implements all four outbox methods; a cron sweep runs the drain — and **nothing in `api/src` had
+ever INSERTED a row**. The entire outbound direction was a fully-built, permanently empty queue, so every
+"bidirectional sync" claim on the platform was one-directional in fact. `enqueueBoardPush` fills it, and an
+incident's status and severity now reach the help desk that raised the ticket instead of stopping at the board
+task. Pending pushes for one ticket MERGE rather than pile up: an incident walks open → acknowledged → mitigated
+→ resolved in minutes, and four PUTs is rate-limit bait showing three states nobody needed to see. Freshdesk and
+Freshservice share one mapper so a severity cannot reach one product and silently not the other, and nothing
+maps to their Closed status — a resolved incident means the fire is out, not that the customer conversation is
+over.
+
+`recordIncidentLearning` was project-scoped, so an incident opened without a project contributed nothing —
+exactly backwards, since an unattributable incident is usually an infrastructure one, the kind a workforce most
+needs not to repeat. It now falls back to the workspace's anchor project and says out loud in the lesson text
+that it was workspace-wide, so a lesson recalled inside a project it did not happen in does not read as if it did.
+
+### 5 · A branch that branches
+
+`branch` tagged its payload `$branch: true|false` and `router` tagged `$route`, and nothing read either: both
+sides of every branch ran, and the only way to stop one was a hand-authored `filter` on each arm. A workflow
+that plainly read "if paid → charge, else → email" charged AND emailed.
+
+`WorkflowDefEdge.label` now survives compile, YAML and instantiation, and the drain loop prunes an arm whose
+label does not match the outlet the upstream node actually published — as `cancelled`, so it cascades exactly
+like a filter drop and the run can still finish `completed`. The invariant that makes it safe to ship: an
+UNLABELED edge is never pruned, and neither is a labeled edge out of a node that published no outlet. Every
+graph authored before labels existed is unlabeled, so nothing that runs today changes.
+
+On the canvas, the edge leaving an explicit `branch` step is labeled `true`, so a list that reads "Branch:
+order.paid / Charge the card" means what it reads. There is deliberately no else-arm — a list has one
+continuation, and synthesising a second from adjacency would invent a structure nobody wrote.
+
+### 6 · Three ports a founder could not reach, and one duplicate count
+
+Banking (Mercury, Brex, Plaid as a live feed) and cap table (Carta, Pulley) shipped as manifests — READS ONLY,
+and checkably so: `mutates: true` appears nowhere in `defaults/banking.ts`. A payment-initiation API exists at
+Mercury and Brex and is not something to point a credentialled agent at, and writing to Carta would make two
+systems both believe they are authoritative about who owns the company.
+
+E-signature (DocuSign, Dropbox Sign) landed because its stated blocker — "needs the unimplemented signature
+engine" — was stale: the engine shipped. They are for documents NOT authored here, and each vendor `send` action
+says out loud that it is not covered by the built-in reminder sweep rather than presenting the two doors as
+interchangeable.
+
+`connectedCount` — the number that decides whether somebody starts a template — was computed from an uncached
+per-request table scan, because there were TWO functions called `connectedConnectorKeys`: the cached one every
+connector write already invalidates, and an uncached duplicate the templates gallery happened to use. One
+function now, cached and invalidated.
+
+### 7 · Two errors that were failing the whole API typecheck
+
+`evaluateDatasetUse('train')` was not a member of `DATASET_USES` — at runtime it would have fallen straight
+through `PROCESSING_USES`, classifying a training use as one needing no consent — and `OAuthStateData` did not
+satisfy `verifyState`'s `Record<string, unknown>` constraint. Under [[build-guard-ratchets]] one red typecheck
+hides every guard behind it, which is how both survived. A stale `bindScheduleToEngagement` assertion and an
+`auth.fields`-possibly-undefined read in the HRMS connector test were fixed alongside.
+
+---
+
 ## ✅ RESOLVED 2026-08-19 — The presentation walks, the guest board remembers, the career answer is measured, and there is ONE cadence
 
 ## ✅ RESOLVED 2026-08-19 — You can open the invoice

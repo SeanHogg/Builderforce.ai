@@ -267,18 +267,12 @@ export const chaseInvoice = (
     body: JSON.stringify(body),
   });
 
-export interface CollectionEntry {
-  step: number;
-  stepLabel: string;
-  channel: string;
-  outcome: string;
-  detail: string | null;
-  actorRef: string;
-  actedAt: string;
-}
-
-export const invoiceCollectionLog = (reference: string) =>
-  apiRequest<{ log: CollectionEntry[] }>(`/api/payables/invoices/${encodeURIComponent(reference)}/collection`).then((r) => r.log);
+// No client for `GET /api/payables/invoices/:reference/collection`. The rungs
+// climbed against one invoice reach the browser on the canvas `invoice` card
+// itself — the collections sweep projects them onto its `collection` field — so a
+// second fetch of the same list would be a second answer to "what have we
+// actually done about this", which is the duplication the field's own hint warns
+// about. The route stays for API and MCP callers, which have no board.
 
 export interface OpenReceivable {
   reference: string;
@@ -643,6 +637,32 @@ export interface ProjectedPipelineCard {
   touchCount: number;
 }
 
+export const ROUND_TYPES = ['pre-seed', 'seed', 'series-a', 'series-b', 'bridge', 'safe'] as const;
+export const ROUND_INSTRUMENTS = ['equity', 'safe', 'convertible-note', 'grant', 'debt'] as const;
+export const ROUND_STATUSES = ['open', 'closed', 'abandoned'] as const;
+
+/**
+ * The round's PLAN — negotiated and typed, never derived.
+ *
+ * There is deliberately no `amountRaised` here: money closed comes from the
+ * allocations (`totals.wonValueCents`), and the column that used to try to be both
+ * was dropped in migration 0937.
+ */
+export interface FundingRoundRecord {
+  id: number;
+  name: string;
+  roundType: string | null;
+  instrument: string;
+  targetAmount: number | null;
+  preMoney: number | null;
+  postMoney: number | null;
+  currency: string;
+  leadInvestor: string | null;
+  closeTargetAt: string | null;
+  closedAt: string | null;
+  status: string;
+}
+
 export interface ProjectedPipeline {
   family: PipelineFamily;
   pipelineRef: string | null;
@@ -651,6 +671,9 @@ export interface ProjectedPipeline {
   cards: ProjectedPipelineCard[];
   syncedAt: string;
   totals: { open: number; openValueCents: number; won: number; wonValueCents: number };
+  /** The plan, when this is a named raise and somebody has planned one. Null on a
+   *  sales board and on a raise whose header nobody has filled in. */
+  round: FundingRoundRecord | null;
 }
 
 type PipelineQuery = { family?: PipelineFamily; pipelineRef?: string; laneBy?: 'source' | 'owner' | 'none' };
@@ -695,6 +718,32 @@ export interface OpenDealBody {
 export const openDeal = (body: OpenDealBody) =>
   apiRequest<{ dealId: number; partyRef: string; created: boolean; pipeline: ProjectedPipeline }>(
     '/api/pipeline/deals',
+    { method: 'POST', body: JSON.stringify(body) },
+  );
+
+export const fundingRounds = () =>
+  apiRequest<{ rounds: FundingRoundRecord[] }>('/api/pipeline/rounds').then((r) => r.rounds);
+
+export interface PlanFundingRoundBody {
+  name: string;
+  roundType?: string | null;
+  instrument?: string | null;
+  targetAmount?: number | null;
+  preMoney?: number | null;
+  postMoney?: number | null;
+  currency?: string;
+  leadInvestor?: string | null;
+  closeTargetAt?: string | null;
+  status?: string;
+  objectId?: string | null;
+}
+
+/** Plan a round, or change the plan — idempotent on the NAME, because the name is
+ *  what every allocation joins to. The board comes back with it, so a caller renders
+ *  the plan and the allocations from one response. */
+export const planFundingRound = (body: PlanFundingRoundBody) =>
+  apiRequest<{ round: FundingRoundRecord; pipeline: ProjectedPipeline }>(
+    '/api/pipeline/rounds',
     { method: 'POST', body: JSON.stringify(body) },
   );
 
@@ -914,7 +963,10 @@ export interface DataRoomAnalytics {
 }
 
 export interface DataRoomDocumentRow {
-  documentId: number;
+  /** Prefixed — `dd:12` for a diligence obligation, `legal:<uuid>` for a legal
+   *  file. A room holds both shapes and a recipient does not care which. */
+  documentId: string;
+  source: 'diligence' | 'legal';
   label: string;
   category: string;
   status: string;
@@ -922,6 +974,8 @@ export interface DataRoomDocumentRow {
   available: boolean;
   mime: string | null;
   sizeBytes: number | null;
+  /** False when this format cannot carry the room's watermark at all. */
+  watermarkable: boolean;
 }
 
 export interface DataRoomSummary {
@@ -937,6 +991,9 @@ export interface DataRoomSummary {
   /** Share of REQUIRED documents actually provided, 0-100 — computed, never
    *  authored. A room with nothing required reads 0, not 100. */
   readiness: number;
+  /** Provided documents this room's watermark cannot reach. Zero when the room
+   *  does not watermark. */
+  unstampable: number;
   activeShares: number;
   opens: number;
   documentViews: number;
@@ -966,7 +1023,8 @@ export const dataRoomAnalytics = (dataRoomId: number) =>
   apiRequest<{ analytics: DataRoomAnalytics }>(`/api/data-rooms/${dataRoomId}/analytics`).then((r) => r.analytics);
 
 export interface PublicDataRoomDocument {
-  documentId: number;
+  documentId: string;
+  source: 'diligence' | 'legal';
   label: string;
   category: string;
   status: string;
@@ -974,6 +1032,7 @@ export interface PublicDataRoomDocument {
   available: boolean;
   mime: string | null;
   sizeBytes: number | null;
+  watermarkable: boolean;
 }
 
 export interface PublicDataRoomShare {
@@ -1002,6 +1061,15 @@ export const publicDataRoom = (token: string) =>
  *  share: the server's own `Content-Disposition` is what enforces inline-vs-save
  *  (a watermarked room is always inline), and re-fetching the bytes into a blob
  *  here would buy nothing. */
-export function dataRoomDocumentUrl(token: string, documentId: number): string {
-  return `${getApiBaseUrl()}/api/public/data-rooms/${encodeURIComponent(token)}/documents/${documentId}`;
+export function dataRoomDocumentUrl(token: string, documentId: string): string {
+  return `${getApiBaseUrl()}/api/public/data-rooms/${encodeURIComponent(token)}/documents/${encodeURIComponent(documentId)}`;
 }
+
+/** Put a legal file in a data room, or take it out (`null`). An act rather than an
+ *  upload-time-only choice: the same executed contract goes into whichever room a
+ *  given fund is given, and stops resolving through links into a room it leaves. */
+export const setLegalDocumentDataRoom = (documentId: string, dataRoomId: number | null) =>
+  apiRequest<{ ok: true }>(`/api/legal-documents/${encodeURIComponent(documentId)}/data-room`, {
+    method: 'POST',
+    body: JSON.stringify({ dataRoomId }),
+  });

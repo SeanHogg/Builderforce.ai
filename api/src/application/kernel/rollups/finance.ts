@@ -7,11 +7,32 @@
  * a `liveMetric` to `finance.runway_months`, and nothing anywhere inserting one.
  *
  * ── WHAT IT COMPUTES, AND FROM WHAT ─────────────────────────────────────────
- *   • `expenses`         — approved/paid spend, by month → `finance.burn`
+ *   • `expenses` + `pay_runs` — approved/paid spend AND processed payroll, by
+ *                          month → `finance.burn`
  *   • `ledger_entries`   — money in → `finance.revenue`; the cash position →
  *                          `finance.cash`
  *   • `invoice_line_items` × `ledger_entries` — the recurring part → `finance.mrr`
  *   • cash ÷ net burn    → `finance.runway_months`
+ *
+ * ── WHY PAYROLL IS IN THE SAME METRIC AND NOT BESIDE IT ─────────────────────
+ * Because the largest line in almost every company's burn is people, and until
+ * migration 0926 there was nowhere for it: `expenses` holds reimbursement CLAIMS,
+ * not what a payroll provider actually paid, so a workspace running payroll
+ * through Gusto had a burn figure missing its biggest component and a runway
+ * computed off it. `pay_runs` is money that left, read back from the provider that
+ * moved it — see `application/finance/payRuns.ts` for why this platform never
+ * calculates it.
+ *
+ * The two sources are UNIONED inside one statement rather than written as two
+ * facts, and that is load-bearing: `metric_facts` is keyed on
+ * `(tenant, metric, bucket, bucket_at, dimension_key)`, so a second undimensioned
+ * writer for `finance.burn` would not add to the total — it would REPLACE it,
+ * which is the exact failure `fact()` throws to prevent for attributed rows.
+ *
+ * The category slice unions them too, with pay runs contributing a fixed
+ * `Payroll`. A tenant who has ALSO categorised an expense `Payroll` sums into the
+ * same bar, which is right rather than a collision: both are money spent paying
+ * people, and two bars with one label would be the confusing outcome.
  *
  * ── THE ONE ARITHMETIC ERROR THAT WOULD MATTER MOST ─────────────────────────
  * Runway is cash ÷ NET burn. A company with $100k of monthly costs and $80k of
@@ -48,31 +69,59 @@ const BURN_AVERAGE_MONTHS = 3;
 
 const sinceMonth = sql`DATE_TRUNC('month', NOW()) - (${WINDOW_MONTHS} * INTERVAL '1 month')`;
 
-/** `status IN ('approved','paid')` and not every row: a draft expense is a claim
- *  somebody typed, and counting it as burn would let anyone move the company's
- *  runway by filing an expense nobody approved. */
-const burnTail = sql`
-    FROM expenses e
-   WHERE e.tenant_id IS NOT NULL
-     AND e.status IN ('approved', 'paid')
-     AND e.incurred_at >= ${sinceMonth}
+/**
+ * Every row of real spend, from both sources, as (tenant, month, amount).
+ *
+ * `status IN ('approved','paid')` on the expense side and not every row: a draft
+ * expense is a claim somebody typed, and counting it as burn would let anyone move
+ * the company's runway by filing an expense nobody approved. `status = 'processed'`
+ * on the payroll side is the same rule — an OPEN pay run is money that has not
+ * left yet.
+ *
+ * Payroll buckets on `paid_at` and not on the pay PERIOD, because a period
+ * straddling a month boundary would otherwise land its whole cost in the wrong
+ * month — the reasoning the `pay_runs` schema states for the column.
+ */
+const spendRows = sql`
+    SELECT e.tenant_id                                AS tenant_id,
+           DATE_TRUNC('month', e.incurred_at)         AS at,
+           e.amount                                   AS amount,
+           COALESCE(e.category, 'Uncategorised')      AS category
+      FROM expenses e
+     WHERE e.tenant_id IS NOT NULL
+       AND e.status IN ('approved', 'paid')
+       AND e.incurred_at >= ${sinceMonth}
+     UNION ALL
+    SELECT p.tenant_id                                AS tenant_id,
+           DATE_TRUNC('month', p.paid_at)             AS at,
+           p.total_cost                               AS amount,
+           'Payroll'                                  AS category
+      FROM pay_runs p
+     WHERE p.status = 'processed'
+       AND p.paid_at IS NOT NULL
+       AND p.paid_at >= ${sinceMonth}
 `;
+
+const burnTail = sql`FROM (${spendRows}) b`;
 
 export const FINANCE_ROLLUP: DomainRollup = {
   domain: 'finance',
   metrics: [
     {
       key: 'finance.burn',
-      requires: ['expenses'],
+      // Both, because the union names both. Neither is optional on a migrated
+      // database — `pay_runs` ships in 0926 — and requiring only one would let the
+      // metric publish a total that silently omits the larger half.
+      requires: ['expenses', 'pay_runs'],
       build: () => [
         fact({
           metric: 'finance.burn',
           bucket: 'month',
           unit: 'USD',
-          tenant: sql`e.tenant_id`,
-          bucketAt: sql`DATE_TRUNC('month', e.incurred_at)`,
-          value: sql`SUM(e.amount)`,
-          tail: sql`${burnTail} GROUP BY e.tenant_id, DATE_TRUNC('month', e.incurred_at)`,
+          tenant: sql`b.tenant_id`,
+          bucketAt: sql`b.at`,
+          value: sql`SUM(b.amount)`,
+          tail: sql`${burnTail} GROUP BY b.tenant_id, b.at`,
         }),
         // Burn by category, as a dimensioned slice of the same metric — what lets
         // "why did burn move?" be answerable from the series the tile already reads.
@@ -80,12 +129,12 @@ export const FINANCE_ROLLUP: DomainRollup = {
           metric: 'finance.burn',
           bucket: 'month',
           unit: 'USD',
-          tenant: sql`e.tenant_id`,
-          bucketAt: sql`DATE_TRUNC('month', e.incurred_at)`,
-          value: sql`SUM(e.amount)`,
-          dimension: sql`JSONB_BUILD_OBJECT('category', e.category)`,
-          dimensionKey: sql`'category:' || e.category`,
-          tail: sql`${burnTail} GROUP BY e.tenant_id, e.category, DATE_TRUNC('month', e.incurred_at)`,
+          tenant: sql`b.tenant_id`,
+          bucketAt: sql`b.at`,
+          value: sql`SUM(b.amount)`,
+          dimension: sql`JSONB_BUILD_OBJECT('category', b.category)`,
+          dimensionKey: sql`'category:' || b.category`,
+          tail: sql`${burnTail} GROUP BY b.tenant_id, b.category, b.at`,
         }),
       ],
     },

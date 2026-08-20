@@ -37,6 +37,7 @@ import { Button } from '@/components/ui';
 import { RoleGate } from '@/components/RoleGate';
 import { PayoutConnections } from '@/components/payouts/PayoutConnections';
 import { MerchantAccount } from '@/components/billing/MerchantAccount';
+import { CollectionsWorklist } from '@/components/billing/CollectionsWorklist';
 import { openReceivables, type OpenReceivable } from '@/lib/founderOpsApi';
 import { getStoredTenant } from '@/lib/auth';
 import { billingApi, type BillingSubscription } from '@/lib/billingApi';
@@ -217,6 +218,12 @@ export default function BillingClient({ view = 'account' }: { view?: BillingView
         <div style={sectionTitle}>{t('merchantTitle')}</div>
         <p style={{ fontSize: 'var(--font-size-body)', color: 'var(--text-muted)', margin: '0 0 14px', lineHeight: 1.55 }}>{t('merchantIntro')}</p>
         <MerchantAccount returnTo="/billing/get-paid" onChanged={() => void loadReceivables()} />
+      </div>
+
+      <div style={cardStyle}>
+        <div style={sectionTitle}>{t('collectionsTitle')}</div>
+        <p style={{ fontSize: 'var(--font-size-body)', color: 'var(--text-muted)', margin: '0 0 14px', lineHeight: 1.55 }}>{t('collectionsIntro')}</p>
+        <CollectionsWorklist onChased={() => void loadReceivables()} />
       </div>
 
       <div style={cardStyle}>
