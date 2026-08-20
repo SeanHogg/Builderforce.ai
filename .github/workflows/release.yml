@@ -112,6 +112,20 @@ jobs:
           npm test
           npx --yes @vscode/vsce package --no-dependencies --out builderforce.vsix
 
+      # The gate that the offline suites structurally CANNOT be: it launches a real
+      # VS Code, activates the packaged extension in it, and checks that every declared
+      # command is registered, every view resolves and the webview bundle boots and
+      # talks back. An activation failure is invisible to `npm test` — the bundle is
+      # only ever LOADED by an extension host — and shipped in three releases
+      # (2026.7.126 → 2026.8.128) before this existed. It runs AFTER packaging and
+      # BEFORE either publish, so a broken build is caught while it is still local.
+      #
+      # `xvfb-run` because a headless runner has no display; the download is ~320 MB,
+      # which is why this is a release-time gate rather than part of `npm test`.
+      - name: Verify the extension activates in a real VS Code
+        working-directory: clients/vscode
+        run: xvfb-run -a npm run test:integration
+
       # Publishing is version-gated: re-running the workflow on an unbumped
       # version must be a no-op, not a hard failure, because this job shares a
       # trigger with the deploys below.
