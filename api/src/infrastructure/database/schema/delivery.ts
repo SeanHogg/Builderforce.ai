@@ -214,6 +214,20 @@ export const projectSites = pgTable('project_sites', {
 export const tasks = pgTable('tasks', {
   id:                serial('id').primaryKey(),
   projectId:         integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  /**
+   * Denormalised from `projects.tenant_id` (migration 0944). DB NOT NULL, derived
+   * by `trg_tasks_tenant` on INSERT and on any UPDATE OF project_id, so it can
+   * never disagree with the owning project — including when a task is MOVED
+   * between projects. Optional in TS for the same reason `segmentId` is: a writer
+   * must not have to know the invariant, the database owns it.
+   *
+   * This exists so the busiest table on the platform is VISIBLE to
+   * `check:tenant-scope`. Before it, tenancy was reachable only through a join, so
+   * a query that touched `tasks` without reaching `projects` could not be checked
+   * at all — which is why `taskProjectIfInTenant` had to re-prove the invariant by
+   * hand at every call site.
+   */
+  tenantId:          integer('tenant_id').references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
   key:               varchar('key', { length: 100 }).notNull().unique(),
   title:             varchar('title', { length: 500 }).notNull(),

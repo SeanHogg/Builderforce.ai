@@ -16,6 +16,7 @@
  */
 import { and, desc, eq } from 'drizzle-orm';
 import { tasks, projectRepositories } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { Db } from '../../infrastructure/database/connection';
 import { resolveRepoForTask } from './resolveRepo';
 
@@ -33,10 +34,13 @@ export async function resolveDefaultRepoForTask(
   taskId: number | null,
 ): Promise<DefaultRepoRef | null> {
   if (taskId == null) return null;
+  // Scoped on tasks.tenant_id (0944). The repo lookup below was already tenant-
+  // filtered, so a foreign taskId could never resolve a REPO — but it did read the
+  // foreign task's title and description, which then fed the hint matcher.
   const [task] = await db
     .select({ projectId: tasks.projectId, title: tasks.title, description: tasks.description, explicitRepoId: tasks.explicitRepoId })
     .from(tasks)
-    .where(eq(tasks.id, taskId))
+    .where(scopedToTenant(tasks, tenantId, eq(tasks.id, taskId)))
     .limit(1);
   if (!task) return null;
 

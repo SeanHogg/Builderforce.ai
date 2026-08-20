@@ -18,6 +18,10 @@ import { describe, expect, it } from 'vitest';
 import { claimTaskPrOpen, releaseTaskPrClaim } from './openTaskPullRequest';
 import type { Db } from '../../infrastructure/database/connection';
 
+/** The claim is tenant-scoped (0944); the fake db ignores predicates, so this is
+ *  only here to satisfy the signature the real statement now carries. */
+const TENANT = 42;
+
 interface TaskRow {
   id: number;
   prOpeningAt: Date | null;
@@ -66,18 +70,18 @@ describe('claimTaskPrOpen', () => {
   it('grants the claim once, then denies a second concurrent caller', async () => {
     const { db, row } = makeFakeDb({ id: 7, prOpeningAt: null, githubPrUrl: null });
 
-    const first = await claimTaskPrOpen(db, 7);
+    const first = await claimTaskPrOpen(db, TENANT, 7);
     expect(first).toBe(true);
     expect(row.prOpeningAt).toBeInstanceOf(Date); // claim stamped
 
     // A racing finalize path now finds the claim taken → must NOT open a PR.
-    const second = await claimTaskPrOpen(db, 7);
+    const second = await claimTaskPrOpen(db, TENANT, 7);
     expect(second).toBe(false);
   });
 
   it('denies the claim when a PR URL already exists (PR already opened)', async () => {
     const { db } = makeFakeDb({ id: 9, prOpeningAt: null, githubPrUrl: 'https://x/pr/1' });
-    expect(await claimTaskPrOpen(db, 9)).toBe(false);
+    expect(await claimTaskPrOpen(db, TENANT, 9)).toBe(false);
   });
 });
 
@@ -85,17 +89,17 @@ describe('releaseTaskPrClaim', () => {
   it('clears the claim after a failed create so a retry can re-claim', async () => {
     const { db, row } = makeFakeDb({ id: 7, prOpeningAt: null, githubPrUrl: null });
 
-    expect(await claimTaskPrOpen(db, 7)).toBe(true);
-    await releaseTaskPrClaim(db, 7);
+    expect(await claimTaskPrOpen(db, TENANT, 7)).toBe(true);
+    await releaseTaskPrClaim(db, TENANT, 7);
     expect(row.prOpeningAt).toBeNull();
 
     // After release a fresh attempt can win the claim again.
-    expect(await claimTaskPrOpen(db, 7)).toBe(true);
+    expect(await claimTaskPrOpen(db, TENANT, 7)).toBe(true);
   });
 
   it('does not clear the claim once the PR is permanent (github_pr_url set)', async () => {
     const { db, row } = makeFakeDb({ id: 7, prOpeningAt: new Date(), githubPrUrl: 'https://x/pr/1' });
-    await releaseTaskPrClaim(db, 7);
+    await releaseTaskPrClaim(db, TENANT, 7);
     expect(row.prOpeningAt).not.toBeNull(); // success is permanent — claim untouched
   });
 });
