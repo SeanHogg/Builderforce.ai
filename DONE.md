@@ -166,8 +166,17 @@ The same commit left tests asserting contracts the code had deliberately moved p
   still stripped, which is what that case actually guards.
 - `workItemWebhook`'s fake db predated the delivery insert becoming idempotent.
 
-The last failure, `entityCatalog`, is **not** fixed: it needs eleven per-table decisions about generic API
-exposure, two of them credential-bearing. Logged in [ROADMAP.md](./ROADMAP.md) rather than bumped.
+The last failure, `entityCatalog`, needed eleven per-table decisions about generic API exposure
+rather than a bumped number, so each was adjudicated in writing where the guard is read and the
+ceiling moved 15 -> 25. Two are credential-bearing (`webauthn_credentials` holds an
+authenticator's public key and signature counter; `feedback_collector_integrations` holds a
+per-collector provider secret) and take the exemption already written for `lti_registrations` /
+`sso_connections` / `agent_host_channels` — the generic reader redacts on column-name PATTERNS,
+and betting a secret on a regex is the bet those exemptions exist to avoid. The rest are join
+rows, append-only logs, 1:1 derived state, or settings. `job_invites` is the one that genuinely
+IS object-shaped, and it is exempt for a different reason: its parent `job_postings` predates
+the 0418 series and is not in the catalog either, so registering the child alone would show
+coverage the seat does not have.
 
 ### Migration 1085 could not run on a fresh database
 
