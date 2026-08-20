@@ -18,6 +18,8 @@ import { reportCaughtError } from '../../application/observability/caughtErrorRe
 import { Hono } from 'hono';
 import { and, eq } from 'drizzle-orm';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
+import { requirePermission } from '../middleware/requirePermission';
+import { PERMISSIONS } from '../../domain/permissions/permissionRegistry';
 import { TenantRole } from '../../domain/shared/types';
 import { deploymentEvents, integrationCredentials, memberMetricsPeriod, memberProfiles, users } from '../../infrastructure/database/schema';
 import { decryptCredentials } from '../../application/integrations/credentialCrypto';
@@ -75,13 +77,13 @@ export function createMemberRoutes(db: Db): Hono<HonoEnv> {
   // ── GET /api/members/profiles — every member profile for the tenant ────────
   // Planner consumption. Cached (profiles change rarely); invalidated on any
   // profile PUT below.
-  router.get('/profiles', async (c) => {
+  router.get('/profiles', requirePermission(PERMISSIONS.MEMBER_READ), async (c) => {
     const tenantId = c.get('tenantId') as number;
     return c.json({ profiles: await readMemberProfiles(c.env as Env, db, tenantId) });
   });
 
   // ── GET /api/members/:kind/:ref/profile — one profile (null if unset) ──────
-  router.get('/:kind/:ref/profile', async (c) => {
+  router.get('/:kind/:ref/profile', requirePermission(PERMISSIONS.MEMBER_READ), async (c) => {
     const kind = c.req.param('kind');
     const ref = c.req.param('ref');
     if (!MEMBER_KINDS.has(kind)) return c.json({ error: 'invalid member kind' }, 400);
@@ -166,7 +168,7 @@ export function createMemberRoutes(db: Db): Hono<HonoEnv> {
   // availability / spare WIP / skill match so the assignee picker (and fan-out)
   // can pick an owner. Cached via the same version token (bumped on task status +
   // profile writes). Authed — it's an assignment aid, not a privileged report.
-  router.get('/recommend', async (c) => {
+  router.get('/recommend', requirePermission(PERMISSIONS.MEMBER_READ), async (c) => {
     const projectId = Number(c.req.query('projectId'));
     if (!Number.isFinite(projectId)) return c.json({ error: 'projectId is required' }, 400);
     const skills = (c.req.query('skills') ?? '').split(',').map((s) => s.trim()).filter(Boolean);
@@ -219,7 +221,7 @@ export function createMemberRoutes(db: Db): Hono<HonoEnv> {
   // has always taken the argument; this route simply never passed it, which is what
   // made the Workforce page's project scope a no-op — the selector moved and the
   // numbers did not.
-  router.get('/metrics', requireRole(TenantRole.MANAGER), async (c) => {
+  router.get('/metrics', requirePermission(PERMISSIONS.MEMBER_READ), requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const days = clampDays(parseInt(c.req.query('days') ?? '7', 10), 7, 180);
     const discipline = (c.req.query('discipline') ?? '').trim() || null;
@@ -248,7 +250,7 @@ export function createMemberRoutes(db: Db): Hono<HonoEnv> {
   });
 
   // ── GET /api/members/:kind/:ref/metrics?days=7 — one member ────────────────
-  router.get('/:kind/:ref/metrics', requireRole(TenantRole.MANAGER), async (c) => {
+  router.get('/:kind/:ref/metrics', requirePermission(PERMISSIONS.MEMBER_READ), requireRole(TenantRole.MANAGER), async (c) => {
     const kind = c.req.param('kind');
     const ref = c.req.param('ref');
     if (!MEMBER_KINDS.has(kind)) return c.json({ error: 'invalid member kind' }, 400);
@@ -265,7 +267,7 @@ export function createMemberRoutes(db: Db): Hono<HonoEnv> {
   });
 
   // ── GET /api/members/dora?days=30[&projectId=] — DORA rollup (MANAGER+) ────
-  router.get('/dora', requireRole(TenantRole.MANAGER), async (c) => {
+  router.get('/dora', requirePermission(PERMISSIONS.MEMBER_READ), requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const days = clampDays(parseInt(c.req.query('days') ?? '30', 10), 30, 365);
     const projectId = positiveIntParam(c.req.query('projectId'));
@@ -280,7 +282,7 @@ export function createMemberRoutes(db: Db): Hono<HonoEnv> {
   // ── GET /api/members/engagement?days=30 — unified engagement (MANAGER+) ────
   // Folds external dev activity + platform usage + VS Code presence + delivery
   // into one engagement score per human member (incl. the task-less). Cached.
-  router.get('/engagement', requireRole(TenantRole.MANAGER), async (c) => {
+  router.get('/engagement', requirePermission(PERMISSIONS.MEMBER_READ), requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const days = clampDays(parseInt(c.req.query('days') ?? '30', 10), 30, 365);
     const members = await getTenantEngagement(c.env as Env, db, tenantId, days);

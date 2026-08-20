@@ -6,6 +6,8 @@ import { TaskPriority, AgentType, TaskStatus, TaskType } from '../../domain/shar
 import { ConflictError } from '../../domain/shared/errors';
 import type { Env, HonoEnv } from '../../env';
 import { authMiddleware, requestActor, requireRole } from '../middleware/authMiddleware';
+import { requirePermission } from '../middleware/requirePermission';
+import { PERMISSIONS } from '../../domain/permissions/permissionRegistry';
 import { TenantRole } from '../../domain/shared/types';
 import { projects, specs, taskSpecs, tasks, tenantMembers, users } from '../../infrastructure/database/schema';
 import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
@@ -257,7 +259,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
   };
 
   // GET /api/tasks?project_id=1&include_archived=true
-  router.get('/', async (c) => {
+  router.get('/', requirePermission(PERMISSIONS.TASK_READ), async (c) => {
     const projectIdParam = c.req.query('project_id');
     const projectId = projectIdParam ? Number(projectIdParam) : undefined;
     // Archived tasks are hidden by default (board/backlog/brain); opt in only
@@ -286,7 +288,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
   // Cached read-through (tenant membership changes rarely). Invalidated on member
   // add/remove via invalidateTaskAssignees() in tenantRoutes.ts so a new teammate
   // appears immediately; the KV TTL (5 min) is just the backstop.
-  router.get('/assignees', async (c) => {
+  router.get('/assignees', requirePermission(PERMISSIONS.TASK_READ), async (c) => {
     const tenantId = c.get('tenantId');
     const members = await getOrSetCached(
       c.env as Env,
@@ -318,7 +320,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
   // GET /api/tasks/dependencies?project=<id> — all precedence edges in a project.
   // Cached via a per-project version token (the edge keyspace is unbounded), bumped
   // on every add/delete below.
-  router.get('/dependencies', async (c) => {
+  router.get('/dependencies', requirePermission(PERMISSIONS.TASK_READ), async (c) => {
     const tenantId = c.get('tenantId');
     const projectId = parseProjectId(c.req.query('project'));
     if (projectId === undefined) return c.json({ error: 'project is required' }, 400);
@@ -336,7 +338,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
   });
 
   // DELETE /api/tasks/dependencies/:edgeId — remove one precedence edge.
-  router.delete('/dependencies/:edgeId', async (c) => {
+  router.delete('/dependencies/:edgeId', requirePermission(PERMISSIONS.TASK_DELETE), async (c) => {
     const edgeId = Number(c.req.param('edgeId'));
     const row = await deleteDependency(db, c.get('tenantId'), edgeId);
     if (!row) return c.json({ error: 'not found' }, 404);
@@ -347,7 +349,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
   });
 
   // GET /api/tasks/:id
-  router.get('/:id', async (c) => {
+  router.get('/:id', requirePermission(PERMISSIONS.TASK_READ), async (c) => {
     const id = Number(c.req.param('id'));
     if (!(await loadTenantTask(id, c.get('tenantId')))) return c.json({ error: 'Task not found' }, 404);
     const task = await taskService.getTask(id);
@@ -369,7 +371,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
   // (no agent, human gate, capability mismatch, already running, terminal/backlog
   // lane). Same evaluator the trigger uses, so the answer is authoritative. Not
   // cached — it reflects live execution status, which changes on every tick.
-  router.get('/:id/autorun-diagnostics', async (c) => {
+  router.get('/:id/autorun-diagnostics', requirePermission(PERMISSIONS.TASK_READ), async (c) => {
     const id = Number(c.req.param('id'));
     const row = await loadTenantTask(id, c.get('tenantId'));
     if (!row) return c.json({ error: 'Task not found' }, 404);
@@ -398,7 +400,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
   // Uncached for the same reason as autorun-diagnostics: it folds in a LIVE re-evaluation
   // of the gate (`evaluateTaskAutoRun`) so "why is it stuck right now" reflects current
   // staffing rather than a recorded skip that may since have been fixed.
-  router.get('/:id/lifecycle', async (c) => {
+  router.get('/:id/lifecycle', requirePermission(PERMISSIONS.TASK_READ), async (c) => {
     const id = Number(c.req.param('id'));
     const tenantId = c.get('tenantId');
     const row = await loadTenantTask(id, tenantId);
@@ -425,7 +427,11 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
   // every route in runtimeRoutes. It used to carry no role gate at all, which made
   // the UI's `runtime.execute` gate a UI-only lock a viewer could walk past by
   // calling the API directly.
-  router.post('/:id/run-now', requireRole(TenantRole.DEVELOPER), async (c) => {
+  // `task:assign` rather than `task:write`: this hands the ticket to an agent to
+  // work, which is the assignment act — the same permission an operator would
+  // expect to revoke to stop someone dispatching runs while still letting them
+  // edit tickets.
+  router.post('/:id/run-now', requireRole(TenantRole.DEVELOPER), requirePermission(PERMISSIONS.TASK_ASSIGN), async (c) => {
     const id = Number(c.req.param('id'));
     const body: { chatId?: unknown } = await c.req.json<{ chatId?: unknown }>().catch(() => ({}));
     const chatId = typeof body.chatId === 'number' && Number.isSafeInteger(body.chatId) && body.chatId > 0
@@ -497,7 +503,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
   // GET /api/tasks/:id/tree — an Epic and its direct child tasks (parent/child
   // tree for the board). Children carry their own assignees (the Epic is just the
   // planning container), so the board can render the breakdown under the Epic.
-  router.get('/:id/tree', async (c) => {
+  router.get('/:id/tree', requirePermission(PERMISSIONS.TASK_READ), async (c) => {
     const id = Number(c.req.param('id'));
     const env = c.env as Env;
     // Tenant-scoped PK read of the project so the cache key/version resolve without
@@ -527,7 +533,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
   // surfaces that invalidate independently: the task tree (create/move/decompose),
   // the participant manifest (a sign-off), and PMO (an objective/KR edit). Any one
   // of them bumping orphans the entry.
-  router.get('/:id/context', async (c) => {
+  router.get('/:id/context', requirePermission(PERMISSIONS.TASK_READ), async (c) => {
     const id = Number(c.req.param('id'));
     const tenantId = c.get('tenantId');
     const env = c.env as Env;
@@ -553,7 +559,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
   // POST /api/tasks/:id/dependencies — add a precedence edge where `:id` is the
   // SUCCESSOR (it depends on / is blocked by `predecessorTaskId`). Rejects cycles
   // and cross-project edges at write time (see taskDependencies.addDependency).
-  router.post('/:id/dependencies', async (c) => {
+  router.post('/:id/dependencies', requirePermission(PERMISSIONS.TASK_WRITE), async (c) => {
     const successorTaskId = Number(c.req.param('id'));
     const body = await c.req.json<{ predecessorTaskId?: number; depType?: string }>();
     const predecessorTaskId = Number(body.predecessorTaskId);
@@ -574,7 +580,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
   // POST /api/tasks/:id/decompose — explicitly turn a task into an Epic and fan
   // its children out (the "Break into subtasks" board action). The on-assign hook
   // does this automatically when an agent is assigned; this is the manual trigger.
-  router.post('/:id/decompose', async (c) => {
+  router.post('/:id/decompose', requirePermission(PERMISSIONS.TASK_WRITE), async (c) => {
     const id = Number(c.req.param('id'));
     if (!(await loadTenantTask(id, c.get('tenantId')))) return c.json({ error: 'Task not found' }, 404);
     const body = await c.req.json<{
@@ -621,7 +627,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
   });
 
   // POST /api/tasks
-  router.post('/', async (c) => {
+  router.post('/', requirePermission(PERMISSIONS.TASK_WRITE), async (c) => {
     const body = await c.req.json<{
       projectId: number;
       title: string;
@@ -659,7 +665,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
   });
 
   // PATCH /api/tasks/:id
-  router.patch('/:id', async (c) => {
+  router.patch('/:id', requirePermission(PERMISSIONS.TASK_WRITE), async (c) => {
     const id = Number(c.req.param('id'));
     if (!(await loadTenantTask(id, c.get('tenantId')))) return c.json({ error: 'Task not found' }, 404);
     const body = await c.req.json<{
@@ -829,7 +835,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
   });
 
   // POST /api/tasks/:id/move — reassign a task to another project ("board").
-  router.post('/:id/move', async (c) => {
+  router.post('/:id/move', requirePermission(PERMISSIONS.TASK_WRITE), async (c) => {
     const id = Number(c.req.param('id'));
     const body = await c.req.json<{ projectId: number }>();
     // The task leaves one project's tree and joins another's — bump both.
@@ -855,7 +861,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
   });
 
   // DELETE /api/tasks/:id
-  router.delete('/:id', async (c) => {
+  router.delete('/:id', requirePermission(PERMISSIONS.TASK_DELETE), async (c) => {
     const id = Number(c.req.param('id'));
     const before = await loadTenantTask(id, c.get('tenantId'));
     if (!before) return c.json({ error: 'Task not found' }, 404);
@@ -878,7 +884,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
   // promote it to an OKR Objective (target='objective'). The reverse (objective →
   // board) lives on the pmo route since its id space is different. Shared logic in
   // convertWorkItemType so both callers + the MCP tool stay in lockstep.
-  router.post('/:id/convert-type', async (c) => {
+  router.post('/:id/convert-type', requirePermission(PERMISSIONS.TASK_WRITE), async (c) => {
     const id = Number(c.req.param('id'));
     const before = await loadTenantTask(id, c.get('tenantId'));
     if (!before) return c.json({ error: 'Task not found' }, 404);
@@ -917,7 +923,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
   }
 
   // GET /api/tasks/:id/specs — list the PRDs linked to this task.
-  router.get('/:id/specs', async (c) => {
+  router.get('/:id/specs', requirePermission(PERMISSIONS.TASK_READ), async (c) => {
     const taskId = Number(c.req.param('id'));
     const tenantId = c.get('tenantId');
     if (!(await loadTenantTask(taskId, tenantId))) return c.json({ error: 'Task not found' }, 404);
@@ -935,7 +941,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
   });
 
   // POST /api/tasks/:id/specs — attach an existing project PRD ({ specId, isPrimary? }).
-  router.post('/:id/specs', async (c) => {
+  router.post('/:id/specs', requirePermission(PERMISSIONS.TASK_WRITE), async (c) => {
     const taskId = Number(c.req.param('id'));
     const tenantId = c.get('tenantId');
     const body = await c.req.json<{ specId: string; isPrimary?: boolean }>();
@@ -947,7 +953,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
   });
 
   // POST /api/tasks/:id/specs/generate — draft + attach a PRD for a PRD-less task.
-  router.post('/:id/specs/generate', async (c) => {
+  router.post('/:id/specs/generate', requirePermission(PERMISSIONS.TASK_WRITE), async (c) => {
     const taskId = Number(c.req.param('id'));
     const tenantId = c.get('tenantId');
     const task = await loadTenantTask(taskId, tenantId);
@@ -962,7 +968,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
   });
 
   // POST /api/tasks/:id/specs/:specId/primary — mark a linked PRD as the primary.
-  router.post('/:id/specs/:specId/primary', async (c) => {
+  router.post('/:id/specs/:specId/primary', requirePermission(PERMISSIONS.TASK_WRITE), async (c) => {
     const taskId = Number(c.req.param('id'));
     const specId = c.req.param('specId');
     const tenantId = c.get('tenantId');
@@ -972,7 +978,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
   });
 
   // DELETE /api/tasks/:id/specs/:specId — detach a PRD from the task.
-  router.delete('/:id/specs/:specId', async (c) => {
+  router.delete('/:id/specs/:specId', requirePermission(PERMISSIONS.TASK_DELETE), async (c) => {
     const taskId = Number(c.req.param('id'));
     const specId = c.req.param('specId');
     const tenantId = c.get('tenantId');
@@ -984,7 +990,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
   // POST /api/tasks/next
   // Atomically claim the next ready task in this tenant's workspace and
   // transition it to in_progress. Returns the task or null if none available.
-  router.post('/next', async (c) => {
+  router.post('/next', requirePermission(PERMISSIONS.TASK_WRITE), async (c) => {
     const task = await taskService.dequeueNextReady(c.get('tenantId'));
     if (task) {
       const plain = task.toPlain();

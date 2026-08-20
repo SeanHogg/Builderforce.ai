@@ -122,7 +122,47 @@ export const ENFORCED_PERMISSIONS: ReadonlySet<Permission> = new Set<Permission>
   'member:invite',
   'member:remove',
   'member:promote',
+  // 2026-08-19: the work/delivery surfaces operators most want overrides on.
+  'project:read',
+  'project:write',
+  'project:delete',
+  'task:read',
+  'task:write',
+  'task:delete',
+  'task:assign',
+  'workflow:read',
+  'workflow:write',
+  'member:read',
+  'report:read',
+  'report:export',
 ]);
+
+/**
+ * The permissions that remain ADVISORY, and why — so the next person does not
+ * re-derive the analysis or, worse, add a gate that breaks a live surface.
+ *
+ * Three distinct reasons, none of them "nobody got round to it":
+ *
+ *   - **No surface exists.** `project:archive` has no archive route, and there is
+ *     no ad-hoc report export endpoint beyond the scheduled deliveries already
+ *     gated by `report:export`. A gate cannot be added to a route that is not there.
+ *
+ *   - **The caller is not a tenant member.** `marketplace:read` / `:purchase` /
+ *     `:publish` live behind `requireMarketplaceAuth`, a SEPARATE identity system
+ *     (marketplace accounts) with no `tenantId`/`role` on the request.
+ *     `requirePermission` reads exactly those, so gating the marketplace router
+ *     would 403 every marketplace user. Making these real means unifying the two
+ *     identities first, which is a design change, not a middleware line.
+ *
+ *   - **The caller is a machine.** `agentHost:*` is spread across a router where
+ *     roughly half the endpoints authenticate with a host API key and never
+ *     establish a member session, and `workflow:execute` is the claim/host-result
+ *     pair on that same seam. `approval:read` sits on a router with the same mix.
+ *     A blanket gate there takes the agent fleet offline. The tenant-JWT half of
+ *     `workflowRoutes` IS gated — the split is the point.
+ *
+ * `permissionEnforcement.test.ts` keeps this honest in both directions.
+ */
 
 /** Is this permission backed by a real request-time gate? */
 export function isPermissionEnforced(permission: string): boolean {

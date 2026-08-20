@@ -20,6 +20,8 @@
 import { Hono } from 'hono';
 import { and, count, desc, eq, gte, lte, lt, isNull, notExists, inArray, sql } from 'drizzle-orm';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
+import { requirePermission } from '../middleware/requirePermission';
+import { PERMISSIONS } from '../../domain/permissions/permissionRegistry';
 import {
   activityEvents,
   contributors,
@@ -618,7 +620,7 @@ export function createReportRoutes(db: Db): Hono<HonoEnv> {
   router.use('*', authMiddleware);
 
   // ── GET /api/reports/standup ──────────────────────────────────────────────
-  router.get('/standup', requireRole(TenantRole.MANAGER), async (c) => {
+  router.get('/standup', requirePermission(PERMISSIONS.REPORT_READ), requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const dateParam = c.req.query('date');
     const date = dateParam ? new Date(dateParam) : new Date();
@@ -633,7 +635,7 @@ export function createReportRoutes(db: Db): Hono<HonoEnv> {
   });
 
   // ── GET /api/reports/code-review ─────────────────────────────────────────
-  router.get('/code-review', requireRole(TenantRole.MANAGER), async (c) => {
+  router.get('/code-review', requirePermission(PERMISSIONS.REPORT_READ), requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const to   = new Date();
     const from = new Date(to.getTime() - 14 * 24 * 60 * 60 * 1000);
@@ -648,7 +650,7 @@ export function createReportRoutes(db: Db): Hono<HonoEnv> {
   });
 
   // ── GET /api/reports/executive ────────────────────────────────────────────
-  router.get('/executive', requireRole(TenantRole.MANAGER), async (c) => {
+  router.get('/executive', requirePermission(PERMISSIONS.REPORT_READ), requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const toParam   = c.req.query('to');
     const fromParam = c.req.query('from');
@@ -667,7 +669,7 @@ export function createReportRoutes(db: Db): Hono<HonoEnv> {
 
   // ── GET /api/reports/portfolio ────────────────────────────────────────────
   // PMO portfolio rollup exec summary (schedulable as report_type 'portfolio_rollup').
-  router.get('/portfolio', requireRole(TenantRole.MANAGER), async (c) => {
+  router.get('/portfolio', requirePermission(PERMISSIONS.REPORT_READ), requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const segmentId = c.get('segmentId') as string;
     return c.json(await generatePortfolioReport(db, tenantId, segmentId));
@@ -675,7 +677,7 @@ export function createReportRoutes(db: Db): Hono<HonoEnv> {
 
   // ── GET /api/reports/project-status ───────────────────────────────────────
   // Per-project delivery digest (schedulable as report_type 'project_status').
-  router.get('/project-status', requireRole(TenantRole.MANAGER), async (c) => {
+  router.get('/project-status', requirePermission(PERMISSIONS.REPORT_READ), requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const segmentId = c.get('segmentId') as string;
     return c.json(await generateProjectStatusReport(db, tenantId, segmentId));
@@ -686,7 +688,7 @@ export function createReportRoutes(db: Db): Hono<HonoEnv> {
   // days, grouped by assignee (human OR agent). Cached read-through keyed on
   // (tenant, window) — invalidated on any task status write via
   // invalidateCompletedByAssignee() in taskRoutes.ts; the KV TTL is the backstop.
-  router.get('/completed-by-assignee', requireRole(TenantRole.MANAGER), async (c) => {
+  router.get('/completed-by-assignee', requirePermission(PERMISSIONS.REPORT_READ), requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const raw = c.req.query('days') ? parseInt(c.req.query('days')!, 10) : 7;
     const days = Math.min(
@@ -704,7 +706,7 @@ export function createReportRoutes(db: Db): Hono<HonoEnv> {
   });
 
   // ── GET /api/reports/team-comparison ─────────────────────────────────────
-  router.get('/team-comparison', requireRole(TenantRole.MANAGER), async (c) => {
+  router.get('/team-comparison', requirePermission(PERMISSIONS.REPORT_READ), requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const to   = c.req.query('to')   ? new Date(c.req.query('to')!)   : new Date();
     const from = c.req.query('from') ? new Date(c.req.query('from')!) : new Date(to.getTime() - 30 * 24 * 60 * 60 * 1000);
@@ -712,14 +714,14 @@ export function createReportRoutes(db: Db): Hono<HonoEnv> {
   });
 
   // ── GET /api/reports/inactive-contributors ────────────────────────────────
-  router.get('/inactive-contributors', requireRole(TenantRole.MANAGER), async (c) => {
+  router.get('/inactive-contributors', requirePermission(PERMISSIONS.REPORT_READ), requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const days = c.req.query('days') ? Math.max(1, parseInt(c.req.query('days')!, 10)) : 14;
     return c.json(await generateInactiveContributorsReport(db, tenantId, days));
   });
 
   // ── GET /api/reports/schedules ────────────────────────────────────────────
-  router.get('/schedules', requireRole(TenantRole.MANAGER), async (c) => {
+  router.get('/schedules', requirePermission(PERMISSIONS.REPORT_READ), requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const rows = await db.select().from(reportSchedules)
       .where(eq(reportSchedules.tenantId, tenantId));
@@ -727,7 +729,7 @@ export function createReportRoutes(db: Db): Hono<HonoEnv> {
   });
 
   // ── POST /api/reports/schedules ───────────────────────────────────────────
-  router.post('/schedules', requireRole(TenantRole.MANAGER), async (c) => {
+  router.post('/schedules', requirePermission(PERMISSIONS.REPORT_EXPORT), requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const body = await c.req.json<{
       reportType: string;
@@ -754,7 +756,7 @@ export function createReportRoutes(db: Db): Hono<HonoEnv> {
   });
 
   // ── PATCH /api/reports/schedules/:id ─────────────────────────────────────
-  router.patch('/schedules/:id', requireRole(TenantRole.MANAGER), async (c) => {
+  router.patch('/schedules/:id', requirePermission(PERMISSIONS.REPORT_EXPORT), requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
 
@@ -779,7 +781,7 @@ export function createReportRoutes(db: Db): Hono<HonoEnv> {
   });
 
   // ── DELETE /api/reports/schedules/:id ────────────────────────────────────
-  router.delete('/schedules/:id', requireRole(TenantRole.MANAGER), async (c) => {
+  router.delete('/schedules/:id', requirePermission(PERMISSIONS.REPORT_EXPORT), requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
 
@@ -789,7 +791,7 @@ export function createReportRoutes(db: Db): Hono<HonoEnv> {
   });
 
   // ── GET /api/reports/subscriptions ───────────────────────────────────────
-  router.get('/subscriptions', async (c) => {
+  router.get('/subscriptions', requirePermission(PERMISSIONS.REPORT_READ), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const userId   = c.get('userId') as string;
 
@@ -804,7 +806,7 @@ export function createReportRoutes(db: Db): Hono<HonoEnv> {
   });
 
   // ── POST /api/reports/subscriptions ──────────────────────────────────────
-  router.post('/subscriptions', async (c) => {
+  router.post('/subscriptions', requirePermission(PERMISSIONS.REPORT_READ), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const userId   = c.get('userId') as string;
     const body = await c.req.json<Array<{ reportType: string; isSubscribed: boolean }>>();

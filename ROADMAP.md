@@ -830,19 +830,16 @@ sequenced into waves because nothing in them gates the sell motion.
 
 #### What is left, and what still gates it
 
-Seven items across the three headings below. **Nothing is sequenced behind anything else any more** —
-the two foundations everything downstream waited on have both landed, so the build-order argument that
-used to sit here is finished work and lives in [DONE.md](./DONE.md).
+Four items across two headings. **Nothing is sequenced behind anything else any more** — the two
+foundations everything downstream waited on have both landed, so the build-order argument that used to
+sit here is finished work and lives in [DONE.md](./DONE.md). FO-E is CLOSED entirely.
 
 | Item | Heading | State |
 |---|---|---|
 | **FO-B3** — `jobPosting` applications | FO-B | **Blocked on a decision** — see its entry |
 | **FO-B4** — e-signature vendor adapter | FO-B | Open, unblocked |
-| A watermarked BINARY is not actually stamped | FO-E | Open, unblocked |
 | `legalEntity` / `ipAsset` / `matter` have no canvas kind | FO-G | Open, unblocked |
-| `policy.acknowledge`'s return leg is never written back | FO-G | Open, unblocked |
 | **FO-G2** — contract obligations bound to invoices | FO-G | Open, unblocked |
-| **FO-G3** — the commercial half of the template library | FO-G | Open, unblocked |
 
 **The remaining constraint is file collision, not logical dependency.** These items still edit the same
 coordination files, so dispatching them together produces conflicts even where none depends on
@@ -879,21 +876,13 @@ are not file-disjoint and must be serialized and rebased before merge:
   to "is it signed". Slots into the connector platform as manifest DATA per migration 0410, the same
   argument the HRMS entry in §9 makes. Unblocks: customers whose legal team requires a named provider.
 
-#### FO-E · Raising — the residuals of the raise and the data room
+#### FO-E · Raising — **CLOSED**
 
-> The raise is the sales board read through a different pipeline FAMILY (`deals.kind='investment'`),
-> and the data room's three safety columns are enforced at the one place a token resolves — both landed
-> 2026-08-19 (0925); see [DONE.md](./DONE.md). The round HEADER and the data room holding a legal
-> FILE both landed the same day (0937, also in DONE.md), so the one item below is what is left.
-
-- **A watermarked BINARY is served inline and is not actually stamped.** *(new 2026-08-19, the residual
-  of FO-E2.)* `readDataRoomDocument` stamps text-shaped documents with the recipient and the instant, and
-  a PDF or spreadsheet cannot be stamped in a Worker — so for those the column is enforced as "no
-  download, view only", the viewer says so in as many words, and the response carries
-  `x-data-room-watermark: view-only`. That is an honest bound, not the promise the column makes. Fix = a
-  WASM PDF stamper at the read seam (the bytes are already decrypted there), applied on the way out so no
-  stamped copy is ever stored. **Not blocked.** Unblocks: `watermark` meaning the same thing for the file
-  format a data room is mostly made of.
+> Every item under this heading has landed. The raise is the sales board read through a different
+> pipeline FAMILY (`deals.kind='investment'`), the data room's three safety columns are enforced at the
+> one place a token resolves, the round HEADER is a record with its stored total dropped, a room holds
+> encrypted legal FILES as well as diligence obligations, and a watermarked PDF is stamped on every page
+> rather than served view-only. 2026-08-19, migrations 0925 and 0937 — see [DONE.md](./DONE.md).
 
 #### FO-G · Legal — a company's first ninety days are canvas cards
 
@@ -909,16 +898,6 @@ are not file-disjoint and must be serialized and rebased before merge:
   vocabulary is where they belong, and the spec-object primitive makes each one a declaration rather
   than a render branch. **Not blocked.** Unblocks: a formation checklist that is objects rather than a
   document.
-- **`policy.acknowledge` can now be SENT and its roster is still never written back.** *(new 2026-08-19,
-  found while closing the `canvas_invoke_object_action` redirect.)* `policy` declared
-  `signatureRequestId` and not `signatureState`, so the generic `canvas_request_signature` — which
-  discovers the kinds it serves from THAT pair — refused it, and `policy.acknowledge` was an advertised
-  act with nothing behind it. The field is now declared, so an acknowledgement round is really sent. What
-  is still unwritten is the return leg: `policy.roster` and `acknowledgementRate` are declared as
-  "written by the signature subsystem" and nothing projects `signatureProgress()` back onto the card, so
-  a policy shows who was ASKED and never who answered. Fix = the same shape the pipeline projection uses
-  — read the progress, write the card from that response. **Not blocked.** Unblocks: "who has not signed
-  the handbook" being answerable from the object that asks.
 - **FO-G2 — A contract repository with live obligations.** `contract.obligations` is
   `{obligation, owner, due}` prose, and nothing binds a contract to the invoices it should generate or a
   `bill` to the contract it should be checked against. *(Unblocked 2026-08-16 — FO-A2 gave
@@ -926,16 +905,6 @@ are not file-disjoint and must be serialized and rebased before merge:
   invoices now resolve to the same account instead of matching by name.)* FO-C1 landed 2026-08-15. The
   renewal-warning half is already done: `contract.renewsAt` is a declared deadline and the `due-within`
   comparator shipped 2026-08-15.
-- **FO-G3 — A template library, half written.** *(narrowed 2026-08-19 — the registry and its first four
-  entries landed with FO-D5; see DONE.md.)* `application/legal/documentTemplates.ts` is the ONE registry,
-  each entry declaring its own variables and its own renderer, and it holds the founders' agreement, the
-  founder IP assignment, the founder vesting schedule and the mutual NDA the data room sends. What it
-  does not hold is the COMMERCIAL half — MSA, SOW, offer letter — and those are content, not
-  engineering: adding one is a single entry, and `canvas_draft_legal_document` picks it up with no
-  change. The offer letter is the one with a dependency: `offer` already declares the signature
-  bookkeeping pair, so its template should render FROM the offer card's own fields rather than asking
-  for them again. **Not blocked.** Unblocks: the paperwork a company signs with somebody who is not a
-  founder.
 
 ### Marketplace, talent, freelance
 
@@ -1323,9 +1292,8 @@ are not file-disjoint and must be serialized and rebased before merge:
 > The eight DDD/SOLID/DRY items shipped in full — see [DONE.md](./DONE.md). These are what that pass FOUND and deliberately did not fix.
 
 - **The layering ratchet is at 126 files and IS falling** *(guard re-run 2026-08-19)*. `npm run check:layering` stops NEW `presentation → infrastructure` imports; **110** non-test presentation modules still import the schema directly and hold **286 selects / 108 inserts / 84 updates** inline in the route layer *(re-measured 2026-08-19 — the previous figures of 144 modules and 843/210/251 were stale by a wide margin; the direction is down)*. The baseline only shrinks when someone touching a route moves its queries into an application service. Worst offenders by count: `adminRoutes`, `agentHostRoutes`, `qaRoutes`, `knowledgeRoutes`. Unblocks: a domain layer that is load-bearing rather than an island — **541** files import the Drizzle schema directly while **44** import a domain entity class (up from 24, so the layer is being adopted rather than abandoned).
-- **410 unscoped tenant queries remain baselined, across 135 files** *(re-measured 2026-08-19; was 505 across 149 on 08-18 and 522 across 152 before that — the ratchet is working).* `npm run check:tenant-scope` freezes them; each is a statement against a tenant-owned table with no tenant predicate in the statement. MOST are safe (a parent row was verified first, e.g. timecard entries filtered by an already-owner-checked `timecardId`) but they have not been audited one by one, and the guard cannot tell "verified via parent" from "forgot". Fix: walk the baseline file by file, convert the genuinely-scoped ones to `scopedToTenant`, and confirm the parent check on the rest. Unblocks: retiring the baseline entirely, at which point the guard becomes a wall instead of a ratchet.
-- **11 of 38 permissions are enforced; the other 27 are advisory** *(counted from `PERMISSIONS` + `ENFORCED_PERMISSIONS`, 2026-08-19).* `ENFORCED_PERMISSIONS` covers apikey/audit/billing/approval/member. `project:*`, `task:*`, `workflow:*`, `agentHost:*`, `report:*`, `marketplace:*` and the `system:*` triple are still gated by the role ladder alone, so an override on them changes the admin table and nothing else (the UI now says so). Fix: add `requirePermission` to each route group and extend the set — `permissionEnforcement.test.ts` enforces that the two move together. Unblocks: per-user permission overrides that mean something on the surfaces operators most want them for.
-- **`tasks` carries no `tenant_id`, so the tenant-scope guard cannot cover the busiest table.** Tenancy is inherited through `projects.tenantId`, which is why `taskProjectIfInTenant` exists — but a query that joins `tasks` without reaching `projects` is invisible to the guard. Options: denormalise `tenant_id` onto `tasks` (a migration + backfill + trigger, matching what `segment_id` already does), or teach the guard to follow the `projectId` FK. The first is mechanical and makes every future query checkable; the second leaves the invariant implicit.
+- **524 unscoped tenant queries remain baselined, across 168 files** *(2026-08-19, POST-0944).* The count ROSE from 410/135 because `tasks` gained a `tenant_id` and 118 statements across 35 files became visible for the first time — they were always there, nothing could see them. Read the trend on the pre-0944 series instead: 522/152 → 505/149 → 410/135. `npm run check:tenant-scope` freezes them; each is a statement against a tenant-owned table with no tenant predicate in the statement. MOST are safe (a parent row was verified first, e.g. timecard entries filtered by an already-owner-checked `timecardId`) but they have not been audited one by one, and the guard cannot tell "verified via parent" from "forgot". Fix: walk the baseline file by file, convert the genuinely-scoped ones to `scopedToTenant`, and confirm the parent check on the rest. Unblocks: retiring the baseline entirely, at which point the guard becomes a wall instead of a ratchet.
+- **23 of 38 permissions are enforced; the remaining 15 are advisory for STRUCTURAL reasons, not for want of a middleware line** *(2026-08-19).* The delivery surfaces operators actually want overrides on are now real gates: `project:read/write/delete`, `task:read/write/delete/assign`, `workflow:read/write`, `member:read`, `report:read/export`. What is left divides into three kinds, and only the first is ordinary work. **(a) No surface exists** — `project:archive` has no archive route; there is no ad-hoc report-export endpoint beyond the scheduled deliveries now gated by `report:export`. Either build the route or drop the permission (dropping it must consider existing `user_permission_overrides` rows). **(b) The caller is not a tenant member** — `marketplace:read/purchase/publish` sit behind `requireMarketplaceAuth`, a separate identity with no `tenantId`/`role` on the request, and `requirePermission` reads exactly those; gating that router would 403 every marketplace user. Making these real means unifying the two identities first — a design change, not a gate. **(c) The caller is a machine** — `agentHost:*` spans a router where about half the endpoints authenticate with a host API key and establish no member session, `workflow:execute` is the claim/host-result pair on that seam, and `approval:read` shares the mix. A blanket gate takes the agent fleet offline; the tenant-JWT half of `workflowRoutes` is gated and the machine half deliberately is not. `system:*` needs the superadmin path audited the same way. The reasoning is recorded beside `ENFORCED_PERMISSIONS` so it is not re-derived, and `permissionEnforcement.test.ts` keeps the set and the gates in lockstep both ways.
 - **5 frontend suites are red on `main`, all in the creation-canvas / Evermind / sell-motion surface** *(measured 2026-08-19 from a full `vitest run`: 292 of 298 suites pass, 3,167 tests, 5 failing after the three fixed below)*. `lib/canvasTriggers.test.ts` — `paidAt` is a flagged spec field the server cannot resolve, so the deadline-trigger vocabulary and the server resolver have drifted apart. `lib/sellMotionObjects.test.ts` — the sell-motion vocabulary declares one kind more than the contract does. `components/PromptUseCasePicker.test.tsx` — 56 legacy C-suite contracts map into the Creation Canvas menu where the test pins 48, so either eight were added without updating the contract or the menu double-maps. `components/builder/EvermindConsole.operate.test.tsx` — the knowledge analyzer no longer renders its "N corrected, N forgotten" summary for the selected findings. `components/creation-canvas/CreationCanvas.test.tsx` — four assertions, one of which is a genuine React defect rather than assertion drift: **"Rendered more hooks than during the previous render"** in the staff/task inspector, i.e. a hook called behind a condition. Each of the first four encodes a PRODUCT decision (which kinds belong in a vocabulary, whether 48 or 56 use cases is correct) that cannot be settled by reading the test — matching the assertion to the code would paper over a real regression as readily as it would fix a stale expectation. **BLOCKER: these files are under active concurrent modification by another agent session in this same checkout** (`git status` showed 20+ files dirty across `evermindRuntime`, `evermindToolCall`, `documentTemplates` and `xlsxWriter` while this was being measured, and the suite inventory changed from 310 files/3,242 tests to 298/3,167 between two runs an hour apart) — an edit here races their commits, and the owner of the feature intent is the one who can say which side of each assertion is right. Unblocks: a green frontend suite, and trusting a red frontend run to mean a regression. See the concurrent-writer LEAD above — this is the same root condition observed from the frontend side.
 
 ---

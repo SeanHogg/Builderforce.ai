@@ -12,6 +12,8 @@ import { buildProjectConnections, projectConnectionsKey } from '../../applicatio
 import { computeProject360, type Project360Aggregate } from '../../application/project/computeProject360';
 import { computeProjectDeliverySignals } from '../../application/insights/projectDeliverySignals';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
+import { requirePermission } from '../middleware/requirePermission';
+import { PERMISSIONS } from '../../domain/permissions/permissionRegistry';
 import { ProjectStatus, TenantRole } from '../../domain/shared/types';
 import { isAgentHostOnline } from '../../domain/agentHost/onlineStatus';
 import type { Db } from '../../infrastructure/database/connection';
@@ -71,7 +73,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
   // tenant A's change-events. We key the room off the resolved integer id so it
   // matches the publish side (broadcastProjectChanged always uses the integer id)
   // even when the caller addressed the project by its public UUID.
-  router.get('/:id/stream', async (c) => {
+  router.get('/:id/stream', requirePermission(PERMISSIONS.PROJECT_READ), async (c) => {
     const tenantId = c.get('tenantId');
     const project = await projectService.getProject(c.req.param('id'), tenantId);
     return relayToRoom(c, c.env?.SESSION_ROOM, projectRoomName(tenantId, project.id));
@@ -274,7 +276,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
   // much to recompute on every dashboard/projects load. Writes bump the token via
   // invalidateProjectsList() so the next read recomputes; the KV TTL backstops the
   // rarer aggregates we don't bump explicitly.
-  router.get('/', async (c) => {
+  router.get('/', requirePermission(PERMISSIONS.PROJECT_READ), async (c) => {
     const tenantId = c.get('tenantId');
     const version = await getCacheVersion(c.env as Env, projectsListVersionKey(tenantId));
     const projects = await getOrSetCached(
@@ -294,7 +296,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
   // which are themselves cached: a dashboard load costs zero GitHub subrequests
   // in the steady state. Repo/board writes invalidate it, so attaching a repo
   // shows up immediately rather than after the TTL.
-  router.get('/connections', async (c) => {
+  router.get('/connections', requirePermission(PERMISSIONS.PROJECT_READ), async (c) => {
     const tenantId = c.get('tenantId');
     const connections = await getOrSetCached(
       c.env as Env,
@@ -538,7 +540,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
   }
 
   // GET /api/projects/check-key?key=SOMEKEY[&excludeId=123] — returns { available: boolean }
-  router.get('/check-key', async (c) => {
+  router.get('/check-key', requirePermission(PERMISSIONS.PROJECT_READ), async (c) => {
     const key = (c.req.query('key') ?? '').trim().toUpperCase();
     const excludeId = c.req.query('excludeId') ? Number(c.req.query('excludeId')) : null;
     if (!key) return c.json({ available: false, error: 'key is required' }, 400);
@@ -548,7 +550,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
   });
 
   // GET /api/projects/:id (accepts integer id or public UUID)
-  router.get('/:id', async (c) => {
+  router.get('/:id', requirePermission(PERMISSIONS.PROJECT_READ), async (c) => {
     const project = await projectService.getProject(c.req.param('id'), c.get('tenantId'));
     return c.json(project.toPlain());
   });
@@ -566,7 +568,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
    * task write busts it) — enough to absorb open/refresh storms without serving stale
    * "who's working": an explicit refresh sends `?fresh=1` to bypass it entirely.
    */
-  router.get('/:id/360', async (c) => {
+  router.get('/:id/360', requirePermission(PERMISSIONS.PROJECT_READ), async (c) => {
     const tenantId = c.get('tenantId');
     const project = await projectService.getProject(c.req.param('id'), tenantId);
     const version = await getCacheVersion(c.env as Env, projectsListVersionKey(tenantId));
@@ -610,7 +612,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
 
   // POST /api/projects/:id/insights/code-changes
   // Record code-change deltas for project interactions (Insights is available on all plans)
-  router.post('/:id/insights/code-changes', async (c) => {
+  router.post('/:id/insights/code-changes', requirePermission(PERMISSIONS.PROJECT_WRITE), async (c) => {
     const tenantId = c.get('tenantId');
     const userId = c.get('userId') as string;
     const body = await c.req.json<{ codeChanges?: number; executionId?: number | null }>();
@@ -635,7 +637,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
   });
 
   // POST /api/projects
-  router.post('/', async (c) => {
+  router.post('/', requirePermission(PERMISSIONS.PROJECT_WRITE), async (c) => {
     const body = await c.req.json<{
       key?: string;
       name: string;
@@ -692,7 +694,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
   });
 
   // POST /api/projects/upsert
-  router.post('/upsert', async (c) => {
+  router.post('/upsert', requirePermission(PERMISSIONS.PROJECT_WRITE), async (c) => {
     const tenantId = c.get('tenantId');
     const body = await c.req.json<{
       name: string;
@@ -768,7 +770,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
   });
 
   // PATCH /api/projects/:id
-  router.patch('/:id', async (c) => {
+  router.patch('/:id', requirePermission(PERMISSIONS.PROJECT_WRITE), async (c) => {
     const rawId = c.req.param('id');
     const tenantId = c.get('tenantId');
     const body = await c.req.json<{
@@ -840,7 +842,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
   });
 
   // POST /api/projects/scaffold
-  router.post('/scaffold', async (c) => {
+  router.post('/scaffold', requirePermission(PERMISSIONS.PROJECT_WRITE), async (c) => {
     const tenantId = c.get('tenantId');
     const body = await c.req.json<{
       prompt: string;
@@ -941,7 +943,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
   });
 
   // DELETE /api/projects/:id
-  router.delete('/:id', async (c) => {
+  router.delete('/:id', requirePermission(PERMISSIONS.PROJECT_DELETE), async (c) => {
     const tenantId = c.get('tenantId');
     const project = await projectService.getProject(c.req.param('id'), tenantId);
     await projectService.deleteProject(project.id, tenantId);
@@ -952,7 +954,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
   });
 
   // GET /api/projects/:id/agentHosts — list agentHosts associated with a project
-  router.get('/:id/agentHosts', async (c) => {
+  router.get('/:id/agentHosts', requirePermission(PERMISSIONS.PROJECT_READ), async (c) => {
     const tenantId = c.get('tenantId');
     const proj = await projectService.getProject(c.req.param('id'), tenantId);
     const projectId = proj.id;

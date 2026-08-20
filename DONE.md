@@ -1,3 +1,193 @@
+## ✅ RESOLVED 2026-08-19 — `tasks` gets a tenant column, and the permission registry stops being mostly decorative
+
+Two of the four "Architecture pass — residuals" entries are closed. The other two are burn-down
+programs whose numbers were re-measured rather than resolved — see the roadmap.
+
+### `tasks.tenant_id` — the busiest table is now checkable (migration 0944)
+
+Tenancy on `tasks` was reachable only by joining `projects`, so `check:tenant-scope` could not
+evaluate a single query against it: there was no column to filter on. `taskProjectIfInTenant` exists
+because the invariant had to be re-proved by hand at every call site, and any query that touched
+`tasks` without reaching `projects` was simply unchecked.
+
+0944 denormalises `tenant_id` in the shape `segment_id` already has (0056) — a column the
+application may omit, filled by a trigger. **One difference matters:** 0056 fires `BEFORE INSERT`
+only, which is right for a segment because a task does not change segment. A task CAN change
+project, and a moved task carrying its old tenant would be a *wrong answer that every new
+tenant-scoped query trusts*. So `trg_tasks_tenant` fires `BEFORE INSERT OR UPDATE OF project_id`
+and re-derives from the project every time — the column cannot disagree with `projects.tenant_id`
+no matter who writes it.
+
+Turning it on made **118 previously invisible statements across 35 files** visible at once. The
+baseline goes 410/135 → 524/168. That number going UP is the honest outcome: the debt was always
+there and nothing could see it. What changed is that the guard now covers the table — any NEW
+unscoped task query fails CI.
+
+Four were converted immediately, because they were the ones the old comment excused.
+`claimTaskPrOpen` said *"tasks is tenant-scoped via project/segment, not a tenant_id column; the
+caller has already resolved this taskId for the tenant"* — true, and it made a consequential write's
+safety a property of its caller. It and `releaseTaskPrClaim` now take `tenantId` and scope
+themselves. `resolveDefaultRepoForTask` read a task row by id alone; the repo lookup was
+tenant-filtered so a foreign id could never resolve a REPO, but it did read that task's title and
+description into the hint matcher.
+
+### Permissions: 11 → 23 enforced, and a written reason for every one that is not
+
+`ENFORCED_PERMISSIONS` is a promise to operators — a listed permission is backed by a real
+request-time gate. Twenty-seven were advisory, which meant an override on them changed the admin
+table and nothing else. Now gated: `project:read/write/delete`, `task:read/write/delete/assign`,
+`workflow:read/write`, `member:read`, `report:read/export` — the delivery surfaces operators most
+want to control. The role matrix already grants each of these at the tier the routes' existing
+`requireRole` gates assume, so the gate bites exactly where it should: on an explicit per-user or
+per-role revocation. `permissionEnforcement.test.ts` (which checks BOTH directions) passes, as do
+all 361 presentation tests.
+
+The other 15 are not "not yet done" — they are advisory for structural reasons, now recorded
+beside the set so nobody re-derives the analysis or, worse, adds a gate that breaks a live surface:
+
+- **No surface exists.** `project:archive` has no archive route. There is no ad-hoc report-export
+  endpoint beyond the scheduled deliveries, which `report:export` now gates.
+- **The caller is not a tenant member.** `marketplace:read/purchase/publish` live behind
+  `requireMarketplaceAuth` — a separate identity system with no `tenantId`/`role` on the request,
+  which is precisely what `requirePermission` reads. Gating that router would 403 every marketplace
+  user. Making these real means unifying the two identities first.
+- **The caller is a machine.** `agentHost:*` spans a router where about half the endpoints
+  authenticate with a host API key and establish no member session; `workflow:execute` is the
+  claim/host-result pair on that seam; `approval:read` shares the mix. A blanket gate takes the
+  agent fleet offline. The tenant-JWT half of `workflowRoutes` IS gated and the machine half
+  deliberately is not — the split is the point.
+
+**Still open (roadmap):** the layering ratchet (110 presentation modules with inline queries) and
+the tenant-scope baseline (524 statements). Both are burn-down programs measured in hundreds of
+judged edits, not items that close in a pass; their counts were re-measured this session so the
+entries state facts rather than recollections.
+
+---
+
+## ✅ RESOLVED 2026-08-19 — FO-E is CLOSED, and so is the template library · migration 0937
+
+The five residuals the FO-D5/FO-E/FO-F pass logged rather than fixed. Every one of them is now
+built; none was blocked, and the register is not a place to park things somebody walked past.
+
+### 1 · `funding_rounds` had no writer, and one of its columns was a stored total
+
+`grep` returned exactly two references to that table — the Drizzle declaration and its entity
+registration. So the `fundingRound` card's `roundType`, `targetAmount`, `valuation` and
+`closeTarget` were board JSON sitting beside an empty table, and three of the four had no column
+to live in even if somebody had tried.
+
+**The decision the register recorded as a question is made, and it is the one the codebase's own
+rules already implied.** `amount_raised` is DROPPED, not filled. It was a stored total the
+`deals` rows can contradict — the exact shape migration 0464 forbids for `work_estimates.lines`,
+and the same defect `fundingRound.investors` had one layer up. A round now holds only what is
+NEGOTIATED and typed: the instrument, what is being raised, the valuation being asked for, the
+lead, the date the founder intends to close on. What has actually closed is arithmetic over the
+allocations, and `ProjectedPipeline.round` hands a caller both from one read so neither can drift.
+
+- `application/finance/fundingRounds.ts` — the record, keyed on the NAME every allocation already
+  joins to through `deals.pipeline_ref`. Idempotent upsert: a second call with the same name edits
+  the round rather than creating a rival one half the deals point at. Only supplied fields move, so
+  a surface that knows the close date and not the valuation cannot blank the valuation by omission.
+- `closedAt` is derived from `status`, for the same reason `deals.closedAt` is derived from the
+  stage: a round marked closed with no date is a record that disagrees with itself.
+- `GET`/`POST /api/pipeline/rounds`, and the POST returns the reprojected board — the same one-call
+  shape as a move, so a caller renders the plan and the allocations from one response.
+- `canvas_plan_funding_round`, whose description says outright that it never records how much has
+  been raised. The card's summary now reads "$400,000 closed — 20% of the $2,000,000 target", and
+  says plainly when no target has been planned rather than implying one.
+- `fundingRounds.test.ts` asserts the rule against the SCHEMA and the MIGRATION themselves: any
+  future `amount_raised`, `total_raised`, `committed_amount` or `closed_amount` column fails the
+  build. A rule that lives only in a comment is a rule with a shelf life.
+
+### 2 · A data room could hold an obligation and not a FILE
+
+`resolveDataRoomShare` read a room's contents from `due_diligence_documents` only, so an encrypted
+`legal_document_files` row — the formation certificate, the executed IP assignment, the first thing
+a fund asks for — could not be put in a room at all.
+
+- `legal_document_files.data_room_id` (0937). A column, not a link table: a file belongs to at most
+  one room at a time, moving it is an act rather than a fan-out, and `ON DELETE SET NULL` because
+  closing a room must not delete the executed contract that was in it.
+- A room's documents are now ONE namespace over two shapes, addressed by a prefixed id (`dd:12`,
+  `legal:<uuid>`) — a recipient does not care which table a document came from, and one id column is
+  what lets the view analytics group over both.
+- `POST /api/legal-documents/:id/data-room` and `canvas_file_document_in_data_room` move a file in
+  or out. Membership is an ACCESS PREDICATE, not just a display filter: a file taken out of a room
+  stops resolving through every link into it immediately.
+- `roomDocumentsByRoom` is one batched reader for the room list and the single-room read — three
+  queries whatever the room count, and no second mapping for a card and a share link to disagree
+  through.
+
+### 3 · A watermarked PDF was not actually stamped
+
+The first pass could stamp text and not a PDF, so `data_rooms.watermark` was downgraded to "no
+download, view only" for the format a data room is mostly made of. That is a real control and it is
+not the control the column names.
+
+- `application/security/documentWatermark.ts` stamps every page diagonally and in the footer with
+  the reader's address and the instant, via `pdf-lib` — pure JS, no Node built-ins, runs in a Worker
+  unchanged. Hand-rolling an incremental update would have meant a PDF parser that works on the
+  files you tested and fails on the one a fund sends.
+- The stamp is applied ON THE WAY OUT and never stored. It names one recipient at one instant, so a
+  stamped copy in R2 would be wrong for every other reader and would attribute a leak to the wrong
+  firm. A test asserts the sealed original is not mutated.
+- A PDF that cannot be parsed is REFUSED with a 422, not served unstamped — the whole point of the
+  column is that a document which cannot carry the stamp must not be handed over as though it had.
+  The guard wraps the whole operation, because a malformed PDF often loads and then fails on the
+  page tree or the save.
+- A STAMPED copy is now downloadable, which it was not before: it carries the reader's name on every
+  page. Only a format the stamp cannot reach at all is still inline-only, and both the room list
+  (`unstampable`) and the recipient's own row say so rather than letting a download button return an
+  inline response.
+
+### 4 · `policy.acknowledge` could be sent and never answered
+
+`policy.roster` and `acknowledgementRate` were declared as "written by the signature subsystem,
+never by hand", and the signature subsystem had no writer for either — so the one question a policy
+object exists to answer, "who has not signed the handbook", was unanswerable from the object that
+asks it. `contract` and `offer` had the same hole, one field narrower.
+
+- `canvasSignatureProjection.ts` + `canvas_sync_signature`: ONE projection for every kind that sends
+  a request. Which FIELDS the shape lands on is data (`SIGNATURE_TARGET_FIELDS`), not three
+  functions — a fourth kind is one entry.
+- `signedAt` is set only on completion and cleared otherwise, and it is the LAST decision rather
+  than the first: one person agreeing is not the document being agreed.
+- The rate is agreed-over-total and NOT settled-over-total. Somebody who declined has answered and
+  has not acknowledged, and counting them as progress is the one arithmetic error this meter must
+  not make.
+- The tool reports who is OUTSTANDING by name, because that is the list somebody acts on.
+
+### 5 · FO-G3's commercial half
+
+The registry held the four FOUNDING documents and none of the ones a company signs with anybody who
+is not a founder. Three entries, no new machinery — which was the claim the registry was built on:
+
+- **MSA** — standing terms, with payment days, the liability cap and notice as real variables.
+- **SOW** — one engagement, with scope as a REQUIRED variable: it is the clause a dispute turns on,
+  and a statement of work rendered with an empty scope is the document in this registry that would
+  look most finished and mean least.
+- **Offer letter** — renders from the `offer` card's own fields, and OMITS the equity section
+  entirely when no grant was agreed, renumbering around it. An empty "Equity" heading implies a
+  grant nobody made, and it is the section a candidate reads hardest.
+
+### Found and fixed while doing it
+
+- **`num()` returned 0 for a variable nobody supplied.** `Number('')` is 0, not NaN, so every
+  template default was being silently overridden by zero — a Master Services Agreement payable
+  "within 0 days", a vesting schedule with a 0-month cliff. Caught by the test that renders every
+  template from one value set. An explicit 0 is still honoured, because "no probationary period" is
+  a real answer.
+
+### Tests
+
+`documentWatermark.test.ts` (6) proves a stamped PDF is still a readable PDF with its page count
+intact, that the original is not mutated, that an unstampable format is reported rather than
+pretended, and that a corrupt PDF is refused. `fundingRounds.test.ts` (6) holds the no-stored-total
+rule against the schema and the migration. `documentTemplates.test.ts` grew to 19. Full API suite
+and full frontend suite green; all 24 API guards pass.
+
+---
+
 ## ✅ RESOLVED 2026-08-19 — A retro and an estimation session are team work, so they can be finished, linked and read
 
 The Gap Register carried "Retro & Poker sessions are not linkable ticket kinds" as

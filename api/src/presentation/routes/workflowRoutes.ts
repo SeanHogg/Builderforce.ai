@@ -20,6 +20,8 @@ import { workflows, workflowTasks, telemetrySpans, projects, agentHosts } from '
 import { MILLICENTS_PER_USD } from '../../domain/shared/money';
 import { resolveHostAuth } from '../../infrastructure/auth/agentHostAuth';
 import { hostOrTenantAuth, requestAgentHostId } from '../middleware/hostOrTenantAuth';
+import { requirePermission } from '../middleware/requirePermission';
+import { PERMISSIONS } from '../../domain/permissions/permissionRegistry';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
@@ -171,7 +173,7 @@ export function createWorkflowRoutes(db: Db): Hono<WorkflowHonoEnv> {
   // GET /api/workflows?status=&workflowType=&agentHostId=&projectId=
   // Rows are enriched with projectName + agentHostName so the Workflows cards can
   // show the associated project/agent without an N+1 follow-up per workflow.
-  router.get('/', async (c) => {
+  router.get('/', requirePermission(PERMISSIONS.WORKFLOW_READ), async (c) => {
     const tenantId      = c.get('tenantId') as number;
     const statusFilter  = c.req.query('status');
     const typeFilter    = c.req.query('workflowType');
@@ -207,7 +209,7 @@ export function createWorkflowRoutes(db: Db): Hono<WorkflowHonoEnv> {
   });
 
   // GET /api/workflows/:id
-  router.get('/:id', async (c) => {
+  router.get('/:id', requirePermission(PERMISSIONS.WORKFLOW_READ), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
 
@@ -219,7 +221,7 @@ export function createWorkflowRoutes(db: Db): Hono<WorkflowHonoEnv> {
   });
 
   // PATCH /api/workflows/:id
-  router.patch('/:id', async (c) => {
+  router.patch('/:id', requirePermission(PERMISSIONS.WORKFLOW_WRITE), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
 
@@ -249,7 +251,7 @@ export function createWorkflowRoutes(db: Db): Hono<WorkflowHonoEnv> {
   });
 
   // GET /api/workflows/:id/tasks
-  router.get('/:id/tasks', async (c) => {
+  router.get('/:id/tasks', requirePermission(PERMISSIONS.WORKFLOW_READ), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
 
@@ -261,7 +263,7 @@ export function createWorkflowRoutes(db: Db): Hono<WorkflowHonoEnv> {
   });
 
   // POST /api/workflows/:id/tasks – add a task to a workflow
-  router.post('/:id/tasks', async (c) => {
+  router.post('/:id/tasks', requirePermission(PERMISSIONS.WORKFLOW_WRITE), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const workflowId = c.req.param('id');
 
@@ -304,7 +306,7 @@ export function createWorkflowRoutes(db: Db): Hono<WorkflowHonoEnv> {
 
   // GET /api/workflows/:id/graph – task dependency graph (P4-1)
   // Builds a DAG from telemetry spans stored by BuilderForce Agents workflow-telemetry module.
-  router.get('/:id/graph', async (c) => {
+  router.get('/:id/graph', requirePermission(PERMISSIONS.WORKFLOW_READ), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const workflowId = c.req.param('id');
 
@@ -446,7 +448,7 @@ export function createWorkflowRoutes(db: Db): Hono<WorkflowHonoEnv> {
   });
 
   // PATCH /api/workflows/:id/tasks/:tid – update individual task state
-  router.patch('/:id/tasks/:tid', async (c) => {
+  router.patch('/:id/tasks/:tid', requirePermission(PERMISSIONS.WORKFLOW_WRITE), async (c) => {
     const tenantId   = c.get('tenantId') as number;
     const workflowId = c.req.param('id');
     const taskId     = c.req.param('tid');
