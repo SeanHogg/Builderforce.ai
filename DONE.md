@@ -1,5 +1,55 @@
 ## ✅ RESOLVED 2026-08-19 — The presentation walks, the guest board remembers, the career answer is measured, and there is ONE cadence
 
+## ✅ RESOLVED 2026-08-19 — You can open the invoice
+
+*Closes "Attachments are reported but not reachable" under "Connected mailboxes &
+campaign studio — residuals". `mailbox/mailboxProviders.ts`,
+`mailbox/mailboxService.ts`, `routes/mailboxRoutes.ts`, `llm/builtinMcpService.ts`.*
+
+`MailboxMessage.hasAttachments` was populated from both providers and the filter
+honoured it, and there was no download path at all. So a person could find the message
+with the invoice on it and could not open the invoice.
+
+Two calls on the provider port, not one, because the metadata and the bytes have
+opposite costs and opposite audiences. `listAttachments` is cheap, safe on a tile and
+safe to hand a model; `readAttachment` is megabytes that must never enter a transcript
+and are only ever wanted for the one file somebody picked. Gmail resolves attachments by
+walking the same part tree `gmailBody` already walks; Graph reads
+`/attachments?$select=…` — the `$select` is load-bearing, because without it Graph
+inlines every attachment's base64 into the LISTING and "what is attached" downloads all
+of it.
+
+**The size ceiling is enforced before the body is read.** A Worker holds the whole thing
+in memory to re-serve it, so `MAX_ATTACHMENT_BYTES` (20 MB) is a hard limit rather than a
+policy. Both adapters check the DECLARED size first — which is the entire reason Gmail's
+read fetches metadata before bytes rather than treating that as an inconvenience — and
+then the decoded length too, because a provider's reported size and the real one can
+disagree on a re-encoded part. Over the limit is a 413 that names the file and both
+sizes and says to open it in the mail client, not a failure that reads like a bug.
+
+**A reference attachment is refused by name.** A Graph "attachment" can be a OneDrive
+LINK with no bytes behind it; that comes back 415 saying so, rather than sending somebody
+hunting for a network problem that does not exist.
+
+**The bytes come from us, never from a provider URL.** A provider URL needs the mailbox's
+own access token, and handing one to a browser or a model would leak a credential that
+can read the whole mailbox and send as its owner. So the route streams them, with
+`Content-Disposition: attachment`, a `sandbox` CSP and `nosniff` — the bytes came from
+outside the tenant, and an inline-rendered `text/html` attachment would execute in this
+origin. The filename is attacker-supplied text going into a response header, so
+`safeAttachmentFilename` strips path separators, control characters (CR/LF included),
+both quote forms and a leading dot; its tests assert the traversal, the header split and
+the hidden-file cases rather than the happy path.
+
+`mailbox.list_attachments` gives an agent the metadata and a `downloadUrl` and
+deliberately has no byte-returning counterpart: one PDF in a tool result evicts the
+conversation it was meant to help with. The model's job is to find the right file; opening
+it is the person's.
+
+`inline` is surfaced rather than filtered, because the caller decides — a tile hides the
+signature logo, "save every attachment" does not.
+
+
 **Roadmap items closed:** *Presentation mode has no ORDERED SEQUENCE*, *There is no board-level version history
 or restore* (the half that was genuinely missing), *The use-case picker's Career intents are prompts, not a
 bound tool call*, *Nothing can be signed, invoiced or paid from the board*, and *Outreach still requires a

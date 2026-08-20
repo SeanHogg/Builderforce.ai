@@ -82,6 +82,35 @@ export interface MailboxQuery {
   limit?: number;
 }
 
+/**
+ * One attachment, normalized. METADATA ONLY — the bytes are a separate call.
+ *
+ * Deliberately separate because the two have opposite costs and opposite
+ * audiences: a listing is cheap, safe to show in a tile and safe to hand a model,
+ * whereas the bytes are megabytes that must never enter a transcript and are only
+ * ever wanted for exactly one file a person picked.
+ */
+export interface MailboxAttachment {
+  /** The provider's handle for this attachment ON THIS MESSAGE. Gmail's
+   *  `attachmentId` is not stable across messages and Graph's id is scoped to
+   *  one message too, which is why every read takes both ids. */
+  id: string;
+  filename: string;
+  mimeType: string;
+  byteSize: number;
+  /**
+   * True when the body references this by `cid:` — a signature logo or a tracking
+   * pixel, not the invoice somebody is looking for. Surfaced rather than filtered
+   * because the caller decides: a tile hides them, "save every attachment" does not.
+   */
+  inline: boolean;
+}
+
+/** An attachment's bytes, with the metadata needed to serve them. */
+export interface MailboxAttachmentContent extends MailboxAttachment {
+  bytes: ArrayBuffer;
+}
+
 export interface OutgoingMessage {
   to: string;
   subject: string;
@@ -116,6 +145,61 @@ export interface MailboxProvider {
   getMessage(accessToken: string, messageId: string): Promise<MailboxMessage | null>;
   setRead(accessToken: string, messageId: string, read: boolean): Promise<void>;
   sendMessage(accessToken: string, message: OutgoingMessage): Promise<{ id: string }>;
+  /** What is attached to this message. Metadata only — see {@link MailboxAttachment}. */
+  listAttachments(accessToken: string, messageId: string): Promise<MailboxAttachment[]>;
+  /**
+   * The bytes of ONE attachment, or null when the id names nothing on that
+   * message. `maxBytes` is enforced by the ADAPTER, before the body is read into
+   * memory where the provider makes that possible — a Worker has a hard memory
+   * ceiling and "download it then check the size" is how that ceiling is hit.
+   */
+  readAttachment(
+    accessToken: string,
+    messageId: string,
+    attachmentId: string,
+    maxBytes: number,
+  ): Promise<MailboxAttachmentContent | null>;
+}
+
+/**
+ * The ceiling on one attachment, in bytes.
+ *
+ * Not a policy choice — a Worker holds the whole body in memory to re-serve it,
+ * and both providers hand it over base64-encoded, so the peak is roughly 1.4× the
+ * file. 20 MB is comfortably inside the isolate's budget and above every invoice,
+ * contract and deck anybody actually needs to open. Larger is refused BY NAME so
+ * the person is told to open it in Gmail or Outlook rather than getting a failure
+ * that looks like a bug.
+ */
+export const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
+
+/** The refusal for an attachment past {@link MAX_ATTACHMENT_BYTES}. */
+export function attachmentTooLargeMessage(filename: string, byteSize: number): string {
+  const mb = (n: number) => `${(n / (1024 * 1024)).toFixed(1)} MB`;
+  return `"${filename}" is ${mb(byteSize)}, over the ${mb(MAX_ATTACHMENT_BYTES)} limit. Open it in your mail client instead.`;
+}
+
+/**
+ * The one place a downloaded filename is made safe.
+ *
+ * The name comes from a sender — someone outside the tenant — and lands in a
+ * `Content-Disposition` header and, on the far side, on a disk. Three things are
+ * stripped for three different reasons: path separators (so `../../etc/passwd`
+ * cannot escape a download directory), control characters and quotes (so the
+ * header cannot be split or terminated early), and a leading dot (so a download
+ * cannot be silently hidden).
+ */
+export function safeAttachmentFilename(raw: string): string {
+  const cleaned = String(raw ?? '')
+    .replace(/[\\/]+/g, '_')
+    // Control characters (CR/LF included, so the header cannot be split), plus
+    // the two quote forms that could terminate the filename parameter early.
+    // eslint-disable-next-line no-control-regex -- header injection is the point
+    .replace(/[\x00-\x1f\x7f"']/g, '')
+    .replace(/^\.+/, '')
+    .trim()
+    .slice(0, 200);
+  return cleaned || 'attachment';
 }
 
 // ---------------------------------------------------------------------------
@@ -181,16 +265,28 @@ function base64Url(input: string): string {
 }
 
 /** Decode Gmail's base64url message parts back to UTF-8. */
+/**
+ * base64url → raw bytes. The decode step both text and binary parts share.
+ *
+ * Split out from `decodeBase64Url` because an ATTACHMENT must never go through a
+ * `TextDecoder`: a PDF or a PNG run through UTF-8 decoding comes back with every
+ * invalid sequence replaced by U+FFFD, and the file is silently corrupted rather
+ * than failing. Text still decodes; bytes stay bytes.
+ */
+function base64UrlToBytes(input: string): ArrayBuffer {
+  const padded = input.replace(/-/g, '+').replace(/_/g, '/');
+  const binary = atob(padded + '='.repeat((4 - (padded.length % 4)) % 4));
+  return Uint8Array.from(binary, (ch) => ch.charCodeAt(0)).buffer;
+}
+
 function decodeBase64Url(input: string): string {
   try {
-    const padded = input.replace(/-/g, '+').replace(/_/g, '/');
-    const binary = atob(padded + '='.repeat((4 - (padded.length % 4)) % 4));
-    const bytes = Uint8Array.from(binary, (ch) => ch.charCodeAt(0));
-    return new TextDecoder().decode(bytes);
+    return new TextDecoder().decode(base64UrlToBytes(input));
   } catch {
     return '';
   }
 }
+
 
 /**
  * Encode a header value that may contain non-ASCII (RFC 2047 encoded-word).
@@ -378,6 +474,38 @@ function gmailBody(part: GmailPart | undefined): { text: string; hasAttachments:
   return { text: plain.trim() || htmlToPreviewText(html), hasAttachments };
 }
 
+/**
+ * Every attachment on a Gmail message, from the same part tree `gmailBody` walks.
+ *
+ * The `filename && attachmentId` pair is what distinguishes an attachment from a
+ * body part — a `text/html` part has data and no filename, and an inline image
+ * has both plus a `Content-ID`. That last case is why `inline` is derived from
+ * the headers rather than assumed: a signature logo is an attachment by every
+ * structural test and is not what anybody means by one.
+ */
+function gmailAttachments(part: GmailPart | undefined): MailboxAttachment[] {
+  const found: MailboxAttachment[] = [];
+  const walk = (p: GmailPart | undefined): void => {
+    if (!p) return;
+    if (p.filename && p.body?.attachmentId) {
+      const headers = new Map(
+        (p.headers ?? []).map((h) => [String(h.name ?? '').toLowerCase(), String(h.value ?? '')]),
+      );
+      found.push({
+        id: p.body.attachmentId,
+        filename: p.filename,
+        mimeType: p.mimeType || 'application/octet-stream',
+        byteSize: Number(p.body.size ?? 0) || 0,
+        inline: headers.has('content-id')
+          || (headers.get('content-disposition') ?? '').toLowerCase().startsWith('inline'),
+      });
+    }
+    for (const child of p.parts ?? []) walk(child);
+  };
+  walk(part);
+  return found;
+}
+
 function gmailToMessage(raw: Record<string, unknown>): MailboxMessage {
   const payload = raw.payload as GmailPart | undefined;
   const headers = new Map(
@@ -480,6 +608,50 @@ const googleMailbox: MailboxProvider = {
     return gmailToMessage(await res.json() as Record<string, unknown>);
   },
 
+  async listAttachments(accessToken, messageId) {
+    const res = await fetch(`${GMAIL_BASE}/messages/${encodeURIComponent(messageId)}?format=full`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (res.status === 404) return [];
+    if (!res.ok) return providerError('Gmail get', res);
+    const raw = await res.json() as { payload?: GmailPart };
+    return gmailAttachments(raw.payload);
+  },
+
+  /**
+   * Gmail hands back the BYTES and nothing else — no filename, no content type —
+   * so the message has to be walked first to learn what this attachment is. Two
+   * round trips, and the alternative (trusting a filename the caller supplied) is
+   * how a download ends up named after a different file than it contains.
+   */
+  async readAttachment(accessToken, messageId, attachmentId, maxBytes) {
+    const meta = (await this.listAttachments(accessToken, messageId))
+      .find((a) => a.id === attachmentId);
+    if (!meta) return null;
+    // Refused on the DECLARED size, before the body is fetched — that is the whole
+    // reason the metadata call happens first rather than being an inconvenience.
+    if (meta.byteSize > maxBytes) {
+      throw new MailboxProviderError(attachmentTooLargeMessage(meta.filename, meta.byteSize), 413);
+    }
+
+    const res = await fetch(
+      `${GMAIL_BASE}/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(attachmentId)}`,
+      { headers: { Authorization: `Bearer ${accessToken}` } },
+    );
+    if (res.status === 404) return null;
+    if (!res.ok) return providerError('Gmail attachment', res);
+    const body = await res.json() as { data?: string; size?: number };
+    if (!body.data) return null;
+    const bytes = base64UrlToBytes(body.data);
+    // Gmail's declared `size` and the decoded length can disagree on a re-encoded
+    // part, so the REAL length is checked too — the ceiling protects memory, and
+    // memory is spent on actual bytes, not on the number the provider reported.
+    if (bytes.byteLength > maxBytes) {
+      throw new MailboxProviderError(attachmentTooLargeMessage(meta.filename, bytes.byteLength), 413);
+    }
+    return { ...meta, byteSize: bytes.byteLength, bytes };
+  },
+
   async setRead(accessToken, messageId, read) {
     const res = await fetch(`${GMAIL_BASE}/messages/${encodeURIComponent(messageId)}/modify`, {
       method: 'POST',
@@ -577,6 +749,28 @@ const GRAPH_SELECT = [
   'hasAttachments', 'webLink', 'parentFolderId', 'from', 'toRecipients', 'body',
 ].join(',');
 
+/** Graph's attachment resource, in the `$select` shape both calls above ask for. */
+interface GraphAttachment {
+  id?: string;
+  name?: string;
+  contentType?: string;
+  size?: number;
+  isInline?: boolean;
+}
+
+function graphToAttachment(raw: GraphAttachment): MailboxAttachment {
+  return {
+    id: String(raw.id ?? ''),
+    filename: String(raw.name ?? 'attachment'),
+    // Graph omits `contentType` on some item attachments; the octet-stream
+    // fallback is what makes the download offer to SAVE rather than render
+    // something the browser guessed at.
+    mimeType: String(raw.contentType ?? '') || 'application/octet-stream',
+    byteSize: Number(raw.size ?? 0) || 0,
+    inline: raw.isInline === true,
+  };
+}
+
 const microsoftMailbox: MailboxProvider = {
   name: 'microsoft',
   label: 'Microsoft 365',
@@ -646,6 +840,58 @@ const microsoftMailbox: MailboxProvider = {
       body: JSON.stringify({ isRead: read }),
     });
     if (!res.ok) return providerError('Graph update message', res);
+  },
+
+  async listAttachments(accessToken, messageId) {
+    // `$select` excludes `contentBytes`, which is the whole point: without it
+    // Graph inlines every attachment's base64 into the LISTING, so asking "what is
+    // attached" would download all of it.
+    const res = await fetch(
+      `${GRAPH_BASE}/messages/${encodeURIComponent(messageId)}/attachments?$select=id,name,contentType,size,isInline`,
+      { headers: { Authorization: `Bearer ${accessToken}` } },
+    );
+    if (res.status === 404) return [];
+    if (!res.ok) return providerError('Graph attachments', res);
+    const body = await res.json() as { value?: GraphAttachment[] };
+    return (body.value ?? []).map(graphToAttachment);
+  },
+
+  async readAttachment(accessToken, messageId, attachmentId, maxBytes) {
+    const base = `${GRAPH_BASE}/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(attachmentId)}`;
+    // Metadata first, for the same reason Gmail needs it: the size is refused
+    // BEFORE the bytes are pulled into the isolate.
+    const metaRes = await fetch(`${base}?$select=id,name,contentType,size,isInline`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (metaRes.status === 404) return null;
+    if (!metaRes.ok) return providerError('Graph attachment', metaRes);
+    const meta = graphToAttachment(await metaRes.json() as GraphAttachment);
+    if (meta.byteSize > maxBytes) {
+      throw new MailboxProviderError(attachmentTooLargeMessage(meta.filename, meta.byteSize), 413);
+    }
+
+    // `/$value` streams the raw bytes. The alternative — re-reading the resource
+    // for its base64 `contentBytes` — costs 33% more transfer and only works for
+    // `fileAttachment`; `$value` also serves an `itemAttachment` as its MIME.
+    const res = await fetch(`${base}/$value`, { headers: { Authorization: `Bearer ${accessToken}` } });
+    if (res.status === 404) return null;
+    if (!res.ok) {
+      // A reference attachment (a OneDrive link, not a file) has no bytes to
+      // serve. Named, because "download failed" would send somebody hunting for a
+      // network problem that is not there.
+      if (res.status === 400) {
+        throw new MailboxProviderError(
+          `"${meta.filename}" is a link to a cloud file, not an attached file. Open it from the message instead.`,
+          415,
+        );
+      }
+      return providerError('Graph attachment content', res);
+    }
+    const bytes = await res.arrayBuffer();
+    if (bytes.byteLength > maxBytes) {
+      throw new MailboxProviderError(attachmentTooLargeMessage(meta.filename, bytes.byteLength), 413);
+    }
+    return { ...meta, byteSize: bytes.byteLength, bytes };
   },
 
   async sendMessage(accessToken, message) {

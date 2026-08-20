@@ -744,7 +744,6 @@ sequenced into waves because nothing in them gates the sell motion.
 > The connect → read → compose → send slice shipped 2026-08-07 (migration 0414, see [DONE.md](./DONE.md)). These are the parts deliberately left out of that pass.
 
 - **A canvas inbox tile is pull-only — no push, no auto-refresh.** `canvas_refresh_inbox` re-reads on demand and the tile stamps `fetchedAt` so it never *claims* to be live, but nothing updates it on its own. Neither push mechanism is wired: Gmail needs `users.watch` + a Pub/Sub push endpoint, Graph needs a subscription with a renewal sweep, and both need a per-connection cursor plus a way to reach the open board (the creation-session WS relay). Deferred rather than polled because a background poll per open tile per tenant is a recurring cost against a Neon-Free budget for a feature nobody asked to be real-time. Unblocks: an inbox tile that updates while you watch it.
-- **Attachments are reported but not reachable.** `MailboxMessage.hasAttachments` is populated from both providers and the filter honours it, but there is no download path: Gmail needs `messages.attachments.get` by `attachmentId` and Graph needs `/messages/{id}/attachments`, and a pinned `email` object has nowhere to put the bytes without an R2 write and a size ceiling. So a user can find the message with the invoice on it and cannot open the invoice. Unblocks: pinning an email to the canvas and actually reading what came with it.
 
 
 ### 💸 Paid advertising & measurement — residuals

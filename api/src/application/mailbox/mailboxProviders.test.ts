@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
   applyClientSideFilters,
+  attachmentTooLargeMessage,
   availableMailboxProviders,
   buildMimeMessage,
   clampMailboxLimit,
   getMailboxProvider,
   htmlToPreviewText,
   isMailboxProviderName,
+  safeAttachmentFilename,
+  MAX_ATTACHMENT_BYTES,
   type MailboxMessage,
 } from './mailboxProviders';
 
@@ -175,5 +178,68 @@ describe('the provider registry', () => {
     // A half-bound provider would offer a redirect that fails at token exchange.
     const half = availableMailboxProviders({ MICROSOFT_CLIENT_ID: 'a' });
     expect(half.find((p) => p.name === 'microsoft')?.configured).toBe(false);
+  });
+});
+
+/**
+ * Attachments — the three things that are load-bearing rather than plumbing.
+ *
+ * `hasAttachments` was populated from both providers and the filter honoured it,
+ * and there was no way to open the file. Closing that put ATTACKER-SUPPLIED bytes
+ * and an ATTACKER-SUPPLIED filename on a path into this origin, which is why the
+ * sanitiser and the size ceiling are tested harder than the happy path is.
+ */
+describe('safeAttachmentFilename', () => {
+  it('keeps an ordinary filename intact', () => {
+    expect(safeAttachmentFilename('Invoice 2026-08.pdf')).toBe('Invoice 2026-08.pdf');
+  });
+
+  it('cannot escape a download directory', () => {
+    // The name comes from a sender — someone outside the tenant — and lands on a
+    // disk on the far side.
+    // Separators collapse to underscores FIRST, then the leading dots go — so a
+    // traversal loses both the separators that make it one and the dot-prefix
+    // that would have hidden the result.
+    expect(safeAttachmentFilename('../../etc/passwd')).toBe('_.._etc_passwd');
+    expect(safeAttachmentFilename('C:\\Windows\\system32\\cmd.exe')).toBe('C:_Windows_system32_cmd.exe');
+  });
+
+  it('cannot split or terminate the Content-Disposition header', () => {
+    // A CR/LF would inject a header; a quote would close the filename parameter
+    // early and let everything after it be read as more parameters.
+    expect(safeAttachmentFilename('a\r\nSet-Cookie: x=1')).toBe('aSet-Cookie: x=1');
+    expect(safeAttachmentFilename('re"port.pdf')).toBe('report.pdf');
+    expect(safeAttachmentFilename("re'port.pdf")).toBe('report.pdf');
+  });
+
+  it('cannot produce a hidden file, or an empty one', () => {
+    expect(safeAttachmentFilename('.bashrc')).toBe('bashrc');
+    expect(safeAttachmentFilename('///')).toBe('_');
+    expect(safeAttachmentFilename('')).toBe('attachment');
+    expect(safeAttachmentFilename('"')).toBe('attachment');
+  });
+
+  it('bounds the length', () => {
+    expect(safeAttachmentFilename('x'.repeat(500))).toHaveLength(200);
+  });
+});
+
+describe('attachmentTooLargeMessage', () => {
+  it('names the file and both sizes, so the person knows what to do instead', () => {
+    // A bare "download failed" sends somebody hunting for a network problem that
+    // is not there. This is a hard memory ceiling, not a transient failure.
+    const message = attachmentTooLargeMessage('deck.key', 41 * 1024 * 1024);
+    expect(message).toContain('deck.key');
+    expect(message).toContain('41.0 MB');
+    expect(message).toContain('20.0 MB');
+    expect(message).toContain('mail client');
+  });
+});
+
+describe('MAX_ATTACHMENT_BYTES', () => {
+  it('is a ceiling a Worker can actually hold', () => {
+    // Both providers hand the bytes over base64-encoded, so the peak is ~1.4x the
+    // file. This is the number the adapters enforce BEFORE reading a body.
+    expect(MAX_ATTACHMENT_BYTES).toBe(20 * 1024 * 1024);
   });
 });

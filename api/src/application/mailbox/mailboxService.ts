@@ -36,6 +36,9 @@ import {
   clampMailboxLimit,
   getMailboxProvider,
   MailboxProviderError,
+  MAX_ATTACHMENT_BYTES,
+  type MailboxAttachment,
+  type MailboxAttachmentContent,
   type MailboxMessage,
   type MailboxProvider,
   type MailboxProviderName,
@@ -358,6 +361,87 @@ export async function readMailboxMessage(
   } catch (error) {
     const failed = await failedRead(db, tenantId, connectionId, error);
     return failed as { ok: false; status: 404 | 409 | 502; error: string };
+  }
+}
+
+export type MailboxAttachmentsResult =
+  | { ok: true; attachments: MailboxAttachment[] }
+  | { ok: false; status: 404 | 409 | 502; error: string };
+
+/**
+ * What is attached to one message. Metadata only.
+ *
+ * Deliberately NOT cached, for the same reason `readAdInsights` is not: a listing
+ * is one upstream call, and the thing a cache would protect against here — a
+ * person opening the same message twice — is not a load problem. What it WOULD
+ * introduce is a stale attachment id, and a stale id is a download that 404s on a
+ * file the person can see in the list.
+ */
+export async function listMailboxAttachments(
+  db: Db,
+  env: Env,
+  tenantId: number,
+  connectionId: number,
+  messageId: string,
+): Promise<MailboxAttachmentsResult> {
+  const token = await freshMailboxToken(db, env, tenantId, connectionId);
+  if (!token.ok) {
+    return { ok: false, status: token.status === 'unavailable' ? 404 : 409, error: token.error };
+  }
+  try {
+    return { ok: true, attachments: await token.provider.listAttachments(token.accessToken, messageId) };
+  } catch (error) {
+    return await failedRead(db, tenantId, connectionId, error) as MailboxAttachmentsResult;
+  }
+}
+
+export type MailboxAttachmentResult =
+  | { ok: true; attachment: MailboxAttachmentContent }
+  | { ok: false; status: 404 | 409 | 413 | 415 | 502; error: string };
+
+/**
+ * One attachment's bytes.
+ *
+ * The two REFUSALS this can return are the interesting part, and they are
+ * deliberately distinct from a generic failure:
+ *
+ *   413 — the file is over {@link MAX_ATTACHMENT_BYTES}. A Worker holds the whole
+ *         body in memory to re-serve it, so this is a hard limit rather than a
+ *         policy, and the message names the size and tells the person to open it
+ *         in their mail client instead.
+ *   415 — a Graph "reference attachment", which is a LINK to a cloud file and has
+ *         no bytes at all. Named, because "download failed" would send somebody
+ *         looking for a network problem that does not exist.
+ *
+ * Both come up through `MailboxProviderError`'s status rather than being
+ * re-derived here, so the adapter that knows why stays the thing that says so.
+ */
+export async function readMailboxAttachment(
+  db: Db,
+  env: Env,
+  tenantId: number,
+  connectionId: number,
+  messageId: string,
+  attachmentId: string,
+): Promise<MailboxAttachmentResult> {
+  const token = await freshMailboxToken(db, env, tenantId, connectionId);
+  if (!token.ok) {
+    return { ok: false, status: token.status === 'unavailable' ? 404 : 409, error: token.error };
+  }
+  try {
+    const attachment = await token.provider.readAttachment(
+      token.accessToken, messageId, attachmentId, MAX_ATTACHMENT_BYTES,
+    );
+    if (!attachment) return { ok: false, status: 404, error: 'That attachment is not on this message.' };
+    return { ok: true, attachment };
+  } catch (error) {
+    // A refusal the ADAPTER made is passed through as itself. Routing it via
+    // `failedRead` would rewrite "this file is 40 MB" into a 502 and, worse,
+    // stamp `last_error` on a mailbox that is working perfectly.
+    if (error instanceof MailboxProviderError && (error.status === 413 || error.status === 415)) {
+      return { ok: false, status: error.status, error: error.message };
+    }
+    return await failedRead(db, tenantId, connectionId, error) as MailboxAttachmentResult;
   }
 }
 

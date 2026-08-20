@@ -2585,6 +2585,45 @@ const CATALOG: BuiltinTool[] = [
     },
   },
   {
+    /**
+     * METADATA only, and there is deliberately no tool that returns the bytes.
+     *
+     * An attachment is megabytes of base64 and the Brain re-sends its whole
+     * transcript every turn, so one PDF in a tool result evicts the conversation
+     * it was supposed to help with. A model's job here is to FIND the right file
+     * and hand back its `downloadUrl`; opening it is the person's, in a browser
+     * that can stream it.
+     */
+    tool: 'mailbox.list_attachments', mutates: false,
+    description: 'List what is attached to ONE message — filename, MIME type, size in bytes, and whether it is `inline` (a signature logo or tracking pixel embedded in the body, rather than a real attachment somebody meant to send). Returns a `downloadUrl` per attachment for the person to open; the BYTES are never returned to you, because one PDF would evict this conversation from your context. Use `mailbox.list_messages` with `hasAttachments: true` to find candidate messages first.',
+    parameters: obj({ messageId: S, connectionId: N, accountEmail: S }, ['messageId']),
+    run: async (ctx, a) => {
+      if (!ctx.env) throw new Error('reading a mailbox needs the platform environment');
+      const { resolveMailbox, listMailboxAttachments } = await import('../mailbox/mailboxService');
+      const resolved = await resolveMailbox(ctx.db, ctx.tenantId, {
+        connectionId: a.connectionId != null ? num(a.connectionId) : null,
+        accountEmail: a.accountEmail != null ? str(a.accountEmail) : null,
+      });
+      if (!resolved.ok) throw new Error(resolved.error);
+      const messageId = str(a.messageId);
+      const result = await listMailboxAttachments(
+        ctx.db, ctx.env, ctx.tenantId, resolved.connection.id, messageId,
+      );
+      if (!result.ok) throw new Error(result.error);
+      return {
+        accountEmail: resolved.connection.accountEmail,
+        attachments: result.attachments.map((attachment) => ({
+          ...attachment,
+          // The route, not a provider URL: a provider URL needs the mailbox's own
+          // access token, and handing one to a model or a browser would leak a
+          // credential that can read the whole mailbox and send as its owner.
+          downloadUrl: `/api/mailbox/connections/${resolved.connection.id}/messages/`
+            + `${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(attachment.id)}`,
+        })),
+      };
+    },
+  },
+  {
     tool: 'mailbox.send', mutates: true,
     description: 'Send ONE email from a connected mailbox — a reply, an introduction, a single follow-up. This is for individual correspondence; to email a LIST, build a campaign (campaign.create then campaign.send) so that suppression, one-click unsubscribe and the per-recipient delivery ledger all apply. The From address is always the connected mailbox and cannot be forged.',
     parameters: obj({ to: S, subject: S, html: S, connectionId: N, accountEmail: S, replyTo: S }, ['to', 'subject', 'html']),

@@ -28,12 +28,15 @@ import {
   availableMailboxProviders,
   clampMailboxLimit,
   getMailboxProvider,
+  safeAttachmentFilename,
   type MailboxQuery,
 } from '../../application/mailbox/mailboxProviders';
 import {
   deleteMailboxConnection,
+  listMailboxAttachments,
   listMailboxConnections,
   readMailbox,
+  readMailboxAttachment,
   readMailboxMessage,
   saveMailboxConnection,
   setMailboxSending,
@@ -225,6 +228,58 @@ export function createMailboxRoutes(db: Db): Hono<HonoEnv> {
     );
     if (!result.ok) return c.json({ error: result.error }, result.status);
     return c.json(result.message);
+  });
+
+  /**
+   * What is attached to one message. Metadata only — see the download below for
+   * the bytes, and `MailboxAttachment` for why the two are separate calls.
+   */
+  r.get('/connections/:id/messages/:messageId/attachments', async (c) => {
+    const id = Number(c.req.param('id'));
+    if (!Number.isInteger(id)) return c.json({ error: 'Invalid connection id.' }, 400);
+    const result = await listMailboxAttachments(
+      db, c.env as Env, c.get('tenantId') as number, id, c.req.param('messageId'),
+    );
+    if (!result.ok) return c.json({ error: result.error }, result.status);
+    return c.json({ attachments: result.attachments });
+  });
+
+  /**
+   * ONE attachment's bytes.
+   *
+   * Answers the bytes rather than a redirect to the provider, because a provider
+   * URL needs the mailbox's own access token — handing one to a browser would
+   * leak a credential that can read the whole mailbox and send as its owner.
+   *
+   * `Content-Disposition: attachment` is not decoration. The bytes came from
+   * outside the tenant, so an inline-rendered `text/html` attachment would
+   * execute in this origin; forcing a download, plus the CSP and `nosniff` below,
+   * is what stops a hostile attachment being a stored XSS. The filename is
+   * sanitised by `safeAttachmentFilename` for the matching reason — it is
+   * attacker-supplied text going into a response header.
+   */
+  r.get('/connections/:id/messages/:messageId/attachments/:attachmentId', async (c) => {
+    const id = Number(c.req.param('id'));
+    if (!Number.isInteger(id)) return c.json({ error: 'Invalid connection id.' }, 400);
+    const result = await readMailboxAttachment(
+      db, c.env as Env, c.get('tenantId') as number, id,
+      c.req.param('messageId'), c.req.param('attachmentId'),
+    );
+    if (!result.ok) return c.json({ error: result.error }, result.status);
+
+    const { attachment } = result;
+    const filename = safeAttachmentFilename(attachment.filename);
+    return new Response(attachment.bytes, {
+      headers: {
+        'content-type': attachment.mimeType,
+        'content-length': String(attachment.byteSize),
+        'content-disposition': `attachment; filename="${filename}"`,
+        // Someone's mail is not cacheable by anything in front of us.
+        'cache-control': 'private, no-store',
+        'content-security-policy': "default-src 'none'; sandbox",
+        'x-content-type-options': 'nosniff',
+      },
+    });
   });
 
   r.patch('/connections/:id/messages/:messageId', async (c) => {
