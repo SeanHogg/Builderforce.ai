@@ -14,21 +14,28 @@ import {
   resolveCloudSurface, chooseCloudExecutor, probeContainerHealth, cloudAgentTypeLabel,
   isTerminalExecutionStatus, parseCloudAgentRef, parseRepoId, buildFollowUpPayload, withDefaultModel, withExecutor,
 } from '../../application/runtime/cloudDispatch';
-import { containerGitCloneUrl, mintContainerRunToken, verifyContainerRunToken } from '../../application/runtime/containerRunToken';
+import { verifyContainerRunToken } from '../../application/runtime/containerRunToken';
+import { launchContainerRun, type ContainerRunTarget } from '../../application/runtime/containerRunLauncher';
+import { resumePausedExecution } from '../../application/runtime/executionResume';
+import { answerOpenExecutionQuestions, DEFAULT_RESUME_ANSWER } from '../../application/runtime/executionPause';
 import { synthesizeRunFailedEvent } from '../../application/runtime/toolAuditReadRepair';
-import { mintPreviewToken, PREVIEW_TOKEN_TTL_SECONDS } from '../../application/runtime/previewToken';
-import { PREVIEW_HOST } from '../../application/runtime/previewIngress';
+import {
+  capacityMessage, handlePreviewOp, mintPreviewForExecution, mintPreviewForProject, previewEnabled,
+} from '../../application/runtime/previewDevServer';
+import { checkPreviewCapacity } from '../../application/runtime/previewSessions';
 import { agentHostOnlineCondition } from '../../infrastructure/database/agentHostOnline';
 import { resolveArtifacts } from '../../application/artifact/resolveArtifacts';
 import { enqueueExecutionMessage, listExecutionMessages, releasePendingSteers } from '../../application/runtime/executionSteering';
-import { subscribeExecution, unsubscribeExecution, notifyExecutionSubscribers } from '../../application/runtime/executionEvents';
+import { listExecutionLlmTurns } from '../../application/llm/executionTraces';
+import { notifyExecutionSubscribers } from '../../application/runtime/executionEvents';
+import { broadcastExecutionEvent, executionRoomName } from '../../infrastructure/relay/broadcastRoom';
+import { relayToRoom } from './realtimeRelay';
 import {
-  markCloudExecutionRunning, prepareCloudRun, gitSecret, recordCloudToolEvent, recordPrdDirective,
+  markCloudExecutionRunning, gitSecret, recordCloudToolEvent, recordPrdDirective,
   handleContainerOp, loadContainerRunContext, resolveCloudAgent, agentAllowsHostExecution, DEFAULT_CLOUD_REF,
-  stampExecutionSourceRef,
 } from '../../application/runtime/cloudAgentEngine';
+import { resolveDefaultCloudAgentRef, UNATTRIBUTED_RUN_MESSAGE } from '../../application/runtime/defaultCloudAgent';
 import { recordAutoRunSkip, clearAutoRunSkip } from '../../application/runtime/autoRunSkipLedger';
-import { CONTAINER_MAX_STEPS } from '../../application/runtime/cloudAgentTools';
 import { enforceCloudRunCap, type CloudRunCapResult } from '../../application/runtime/cloudRunLedger';
 import { assessRerunBackoff, type AutoRunReason } from '../../application/swimlane/evaluateAutoRun';
 import { evaluateExecutionApprovalGate } from '../../application/runtime/executionApprovalGate';
@@ -42,6 +49,7 @@ import { parseJsonArray } from '../../domain/shared/json';
 import type { Execution } from '../../domain/execution/Execution';
 import type { Env, HonoEnv } from '../../env';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
+import { requireFeature } from '../middleware/featureGate';
 import type { Db } from '../../infrastructure/database/connection';
 import { agentHosts, executions, projectInsightEvents, projectRepositories, projects, specs, tasks, tenants, toolAuditEvents, usageSnapshots } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
@@ -65,6 +73,7 @@ import type { ExecutionReadMemo } from '../../application/runtime/executionReadM
  * GET    /api/runtime/sessions/:sessionId/executions – full execution timeline for a session
  * GET    /api/runtime/executions/:id         – get execution state
  * POST   /api/runtime/executions/:id/cancel  – cancel an execution
+ * POST   /api/runtime/executions/:id/resume  – resume a run parked on `ask_human`
  * POST   /api/runtime/executions/cancel-all  – stop every live tenant execution
  * PATCH  /api/runtime/executions/:id/state   – agent callback: update state
  * GET    /api/runtime/tasks/:taskId/executions – history for a task
@@ -514,7 +523,19 @@ async function startDispatchedExecution(
   // agent silently executed + was attributed as the gateway default, not the
   // assigned agent. Used for BOTH per-agent capability resolution (scope='agent')
   // and run attribution (engine/label/ref).
-  const cloudAgentRef = parseCloudAgentRef(payload) ?? taskRow.assignedAgentRef ?? undefined;
+  //
+  // An AUTO/DEFAULT run has neither — no payload pin, no assignee — and used to resolve
+  // to `undefined`, which skipped every identity effect below: the ticket was never
+  // claimed, `executions.cloud_agent_ref` stayed NULL, and the board could not say who
+  // worked it. `resolveDefaultCloudAgentRef` gives that run the agent the workspace
+  // would have assigned (the manager's own picker, then the role-capability oracle);
+  // when nothing resolves it returns a TYPED reason, recorded below, so an anonymous
+  // run says WHY it is anonymous instead of merely being anonymous.
+  const pinnedAgentRef = parseCloudAgentRef(payload) ?? taskRow.assignedAgentRef ?? undefined;
+  const defaultAgent = pinnedAgentRef
+    ? null
+    : await resolveDefaultCloudAgentRef(env, db, { tenantId, projectId: taskRow.projectId, taskId: taskRow.id });
+  const cloudAgentRef = pinnedAgentRef ?? defaultAgent?.ref ?? undefined;
 
   // Run-time repo selection: a caller can pin which of the project's repos this run
   // (and its sticky finalize/CI/PRD) targets. Persist it on the task BEFORE we
@@ -585,6 +606,19 @@ async function startDispatchedExecution(
       db.update(executions).set({ cloudAgentRef: agent.ref })
         .where(eq(executions.id, execution.id)).catch((error) => reportCaughtError(error, { source: "presentation/routes/runtimeRoutes.ts", operation: "startDispatchedExecution", context: { logMessage: '[runtime-dispatch] execution attribution update failed', details: { tenantId, executionId: execution.id, agentRef: agent.ref, error } } })),
     ]);
+  } else if (defaultAgent && defaultAgent.ref == null) {
+    // NOBODY could be resolved. The run still executes — refusing it would strand a
+    // ticket over a roster gap — but it must not do so silently: an unattributed run is
+    // indistinguishable from a lost one on the board, which is the failure mode this
+    // whole resolution exists to end. Record the typed reason on the run's own timeline
+    // so "who worked this ticket?" has an answer even when the answer is "nobody could
+    // be named, and here is why".
+    await recordCloudToolEvent(db, {
+      tenantId, cloudAgentRef: undefined, executionId: execution.id,
+      toolName: 'runtime.identity', category: 'governance',
+      detail: { reason: defaultAgent.reason, roleKey: defaultAgent.roleKey, taskId: taskRow.id },
+      result: UNATTRIBUTED_RUN_MESSAGE[defaultAgent.reason],
+    }).catch((error) => reportCaughtError(error, { source: "presentation/routes/runtimeRoutes.ts", operation: "startDispatchedExecution", context: { logMessage: '[runtime-dispatch] unattributed-run reason telemetry failed', details: { tenantId, executionId: execution.id, reason: defaultAgent.reason, error } } }));
   }
 
   // Fold the agent's own model into the payload up front so EVERY surface — the
@@ -797,62 +831,37 @@ async function startDispatchedExecution(
     // Container executor — the caller (orchestrate) has already proved the container
     // is live via chooseCloudExecutor's health gate, so this just starts the run.
     // Any kickoff failure still degrades to the durable executor.
-    const startContainer = async (stub: { fetch: (input: string, init?: RequestInit) => Promise<Response> }) => {
-      try {
-        const { systemPrompt, userContent } = await prepareCloudRun(
-          env, db, execution.id, taskRow, tenantId, taskRow.projectId,
-          agent.label ?? 'BuilderForce Agent', agent.baseModel, artifacts, agent.ref, dispatchPayload,
-          { shell: true },
-        );
-        const token = await mintContainerRunToken(env.JWT_SECRET, execution.id);
-        const repo = await resolveTicketRepoContext(db, gitSecret(env), tenantId, taskRow.id);
-        if (repo.ok) await stampExecutionSourceRef(db, tenantId, execution.id, repo.ctx);
-        // Clone the ticket's HEAD branch (ctx.branch — where prior runs commit their
-        // WIP), not just the base. A container that clones only the base branch starts
-        // every run from a stale default and cannot see earlier passes' work; carrying
-        // headBranch lets the container check it out and fall back to base on run #1
-        // when the branch doesn't exist yet.
-        const internalBaseUrl = env.INTERNAL_API_BASE_URL ?? 'https://api.builderforce.ai';
-        const cloneSpec = repo.ok && repo.ctx.provider.startsWith('github')
-          ? { cloneUrl: containerGitCloneUrl(internalBaseUrl, execution.id, token), baseBranch: repo.ctx.base, headBranch: repo.ctx.branch }
-          : null;
-        const res = await stub.fetch('https://agent-container/run', {
-          method: 'POST',
-          body: JSON.stringify({
-            executionId: execution.id,
-            internalBaseUrl,
-            token,
-            systemPrompt,
-            userContent,
-            maxSteps: CONTAINER_MAX_STEPS,
-            repo: cloneSpec,
-          }),
-        });
-        if (!res.ok) {
-          await recordCloudToolEvent(db, {
-            tenantId, cloudAgentRef: agent.ref, executionId: execution.id,
-            toolName: 'runtime.fallback', category: 'planning',
-            detail: { reason: `AgentContainerDO /run ${res.status}`, ranOn: 'durable' },
-            result: `Cloudflare Container kickoff returned ${res.status} — running on the durable executor instead.`,
-          });
-          await startDurable();
-        } else {
-          // The container accepted the run and now drives the loop via callbacks to
-          // /internal/container-op, which only flips the row at finalize. Without this
-          // the execution would read PENDING for the whole live run. Mark it RUNNING
-          // now — parity with the durable (CloudRunnerDO.start) and Worker
-          // (runCloudExecution) executors, which both transition at kickoff.
-          await markCloudExecutionRunning(runtimeService, execution.id);
-        }
-      } catch (e) {
+    const startContainer = async (stub: ContainerRunTarget) => {
+      // The kickoff itself (prompts, run token, clone URL, step budget) lives in the
+      // shared launcher, so the RESUME path relaunches a paused container with a
+      // byte-identical world. This route keeps only what is dispatch-specific: the
+      // degrade-to-durable fallback and the "it started" transition.
+      const launched = await launchContainerRun(env, db, stub, {
+        tenantId,
+        executionId: execution.id,
+        taskRow: { id: taskRow.id, title: taskRow.title, description: taskRow.description, projectId: taskRow.projectId },
+        agentLabel: agent.label ?? 'BuilderForce Agent',
+        model: agent.baseModel,
+        cloudAgentRef: agent.ref,
+        artifacts,
+        payload: dispatchPayload,
+      });
+      if (!launched.ok) {
         await recordCloudToolEvent(db, {
           tenantId, cloudAgentRef: agent.ref, executionId: execution.id,
           toolName: 'runtime.fallback', category: 'planning',
-          detail: { reason: e instanceof Error ? e.message : String(e), ranOn: 'durable' },
-          result: 'Cloudflare Container kickoff threw — running on the durable executor instead.',
+          detail: { reason: launched.reason, ranOn: 'durable' },
+          result: `Cloudflare Container kickoff failed (${launched.reason}) — running on the durable executor instead.`,
         });
         await startDurable();
+        return;
       }
+      // The container accepted the run and now drives the loop via callbacks to
+      // /internal/container-op, which only flips the row at finalize. Without this
+      // the execution would read PENDING for the whole live run. Mark it RUNNING
+      // now — parity with the durable (CloudRunnerDO.start) and Worker
+      // (runCloudExecution) executors, which both transition at kickoff.
+      await markCloudExecutionRunning(runtimeService, execution.id);
     };
 
     // Decide the executor INSIDE waitUntil: the container health probe is async and
@@ -1091,6 +1100,15 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     const ctx = await loadContainerRunContext(c.env as Env, db, body.executionId);
     if (!ctx) return c.json({ error: 'execution not found' }, 404);
     if (!(await authorizeExecutionPrincipal(db, ctx.tenantId, body.executionId))) return c.json({ error: 'run credential expired or revoked' }, 403);
+    // The dev-server step reports through its own op. Handled before the shared engine
+    // because the preview vertical owns its lease/budget decisions end-to-end
+    // (application/runtime/previewDevServer) — the route only delegates.
+    if (body.op === 'preview') {
+      const preview = await handlePreviewOp(
+        c.env as Env, db, { tenantId: ctx.tenantId, executionId: body.executionId }, body.args ?? {},
+      );
+      return c.json(preview.body as Record<string, unknown>, preview.status as 200);
+    }
     const res = await handleContainerOp(c.env as Env, db, runtimeService, ctx, body.executionId, body.op, body.args ?? {});
     return c.json(res.body as Record<string, unknown>, res.status as 200);
   });
@@ -1853,6 +1871,12 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     // the Output tab can render the real conversation, not just optimistic echoes.
     const messages = await listExecutionMessages(db, id);
 
+    // The run's LLM turns as STRUCTURED rows (0949): resolved model, vendor, token
+    // counts, duration, and the trace id each turn can be looked up by. Previously
+    // the only per-turn model evidence was a JSON `args` blob on the tool-audit
+    // event, and the trace id it carried resolved to nothing.
+    const llmTurns = await listExecutionLlmTurns(c.env as Env, plain.tenantId, id);
+
     return c.json({
       execution: plain,
       trace: {
@@ -1860,6 +1884,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
         usageSnapshots: usage,
         toolEvents,
         messages,
+        llmTurns,
       },
     });
   });
@@ -1971,64 +1996,108 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
   });
 
   // Live container-preview URL for a run (Replit-parity phase 2, flag-gated). Mints a
-  // signed, time-limited URL that proxies to a dev server the run started inside its
-  // container (see application/runtime/previewIngress). 404 unless PREVIEW_INGRESS_ENABLED
-  // is set, so the endpoint is inert until an operator turns the feature on. Tenant-
-  // scoped via loadOwnedExecution so a guessed id can't mint another tenant's preview.
+  // signed, time-limited URL that proxies to the dev server the run started inside its
+  // container (see application/runtime/previewDevServer). 404 unless
+  // PREVIEW_INGRESS_ENABLED is set, so the endpoint is inert until an operator turns the
+  // feature on. Tenant-scoped via loadOwnedExecution so a guessed id can't mint another
+  // tenant's preview, and PAID-PLAN gated through the one shared evaluator (402 on a
+  // miss) because a preview pins a container instance open for as long as it is watched.
   router.get('/executions/:id/preview-url', async (c) => {
-    if (c.env.PREVIEW_INGRESS_ENABLED !== 'true') {
-      return c.json({ error: 'Live preview is not enabled.' }, 404);
-    }
+    if (!previewEnabled(c.env)) return c.json({ error: 'Live preview is not enabled.' }, 404);
+    // The runtime router widens Bindings with AGENT_HOST_RELAY; the shared gate is typed
+    // against the base HonoEnv, so the context is narrowed at the call (same shape, one
+    // extra binding the gate never reads).
+    const gate = await requireFeature(c as unknown as Context<HonoEnv>, 'livePreview');
+    if (gate) return gate;
     const id = Number(c.req.param('id'));
     const owned = await loadOwnedExecution(c, runtimeService, id);
     if (!owned) return c.json({ error: 'Execution not found' }, 404);
 
-    const token = await mintPreviewToken(c.env.JWT_SECRET, id, Date.now() / 1000);
+    const tenantId = c.get('tenantId') as number;
+    const capacity = await checkPreviewCapacity(db, tenantId, id);
+    if (!capacity.ok) return c.json({ error: capacityMessage(capacity), reason: capacity.reason }, 429);
+
+    const mint = await mintPreviewForExecution(c.env as Env, db, tenantId, id);
+    if (!mint.available) {
+      return c.json({ available: false, ...(mint.detail ? { detail: mint.detail } : {}) });
+    }
     return c.json({
-      url: `https://${PREVIEW_HOST}/${token}/`,
-      expiresInSeconds: PREVIEW_TOKEN_TTL_SECONDS,
+      available: true, url: mint.url, expiresInSeconds: mint.expiresInSeconds, status: mint.status,
     });
   });
 
-  // P0-2: WebSocket streaming endpoint for a single execution.
-  // GET /api/runtime/executions/:id/stream?token=<jwt>
-  // Upgrades to a WebSocket and streams status_change/done events as execution
-  // transitions are written by submit/cancel/update handlers in this worker.
-  // Falls back to a 426 if the client does not send an Upgrade header, so the
-  // existing REST endpoints remain a canonical fallback.
+  // The SAME mint, addressed by project — what "Preview on your phone" has to work with
+  // (the panel knows the project it is editing, never an execution id). Resolves the
+  // project's live preview lease and delegates to the identical minting path, so the two
+  // entry points can never hand out differently-scoped URLs.
+  router.get('/projects/:projectId/preview-url', async (c) => {
+    if (!previewEnabled(c.env)) return c.json({ error: 'Live preview is not enabled.' }, 404);
+    // The runtime router widens Bindings with AGENT_HOST_RELAY; the shared gate is typed
+    // against the base HonoEnv, so the context is narrowed at the call (same shape, one
+    // extra binding the gate never reads).
+    const gate = await requireFeature(c as unknown as Context<HonoEnv>, 'livePreview');
+    if (gate) return gate;
+    const projectId = Number(c.req.param('projectId'));
+    if (!Number.isFinite(projectId)) return c.json({ error: 'Invalid project id' }, 400);
+    const mint = await mintPreviewForProject(c.env as Env, db, c.get('tenantId') as number, projectId);
+    if (!mint.available) {
+      return c.json({ available: false, ...(mint.detail ? { detail: mint.detail } : {}) });
+    }
+    return c.json({
+      available: true, url: mint.url, expiresInSeconds: mint.expiresInSeconds, status: mint.status,
+    });
+  });
+
+  /**
+   * Live stream for ONE execution — status_change / done / message / file_change /
+   * tool_event frames, as they happen.
+   *
+   * TRANSPORT: WebSocket, not SSE. Not a preference — the client already speaks this
+   * protocol (`useExecutionStream`), the steering/relay surfaces around it are WS, and
+   * a Worker cannot hold an SSE response open across isolates without exactly the
+   * Durable Object this route now uses. Given the DO is required either way, WS reuses
+   * the room primitive (`SessionRoomDO`) that already fans frames out to poker, retro,
+   * brain-chat, canvas and project-board sockets, instead of adding a second, weaker
+   * one-way transport.
+   *
+   * The socket is held by the run's DO room, NOT by this isolate. That is the whole
+   * fix: the subscriber registry used to be a per-isolate `Map`, so a cloud run
+   * emitting from another isolate (a tool loop, the durable runner's alarm, the crash
+   * reaper) reached nobody and the UI had to poll tool-audit behind a Refresh button.
+   * Any isolate can publish into the room; any isolate can attach a socket to it.
+   *
+   * AUTHORISATION IS HERE, and it is why the room id needs no tenant prefix: the
+   * upgrade is relayed ONLY after `loadOwnedExecution` proves this tenant owns the
+   * run, so a guessed execution id cannot reach another tenant's stream.
+   */
   router.get('/executions/:id/stream', async (c) => {
-    const upgrade = c.req.header('Upgrade');
-    if (upgrade !== 'websocket') {
+    if (c.req.header('Upgrade') !== 'websocket') {
       return c.text('This endpoint requires a WebSocket upgrade.', 426);
     }
 
     const id = Number(c.req.param('id'));
-    const { 0: client, 1: server } = new WebSocketPair();
-    server.accept();
-
-    // Tenant-scope BEFORE streaming so a guessed execution id can't tap another
-    // tenant's run status/result over the socket.
     const owned = await loadOwnedExecution(c, runtimeService, id);
-    if (!owned) {
-      server.send(JSON.stringify({ type: 'error', message: 'execution_not_found' }));
-      server.close(1011, 'server_error');
-      return new Response(null, { status: 101, webSocket: client });
+    if (!owned) return c.json({ error: 'Execution not found' }, 404);
+
+    // The runtime router widens Bindings with AGENT_HOST_RELAY; the shared relay is
+    // typed against the base HonoEnv, so the context is narrowed at the call (same
+    // shape, one extra binding the relay never reads) — as `requireFeature` does above.
+    const response = await relayToRoom(c as unknown as Context<HonoEnv>, c.env?.SESSION_ROOM, executionRoomName(id));
+
+    // Hand the newly attached client the run's CURRENT state, so a socket opened
+    // mid-run doesn't sit blank until the next transition. It goes through the room
+    // (this isolate no longer holds the socket); other watchers get a redundant but
+    // idempotent snapshot of the row they are already showing.
+    if (response.status === 101) {
+      c.executionCtx.waitUntil(broadcastExecutionEvent(c.env?.SESSION_ROOM, id, JSON.stringify({
+        type: 'status_change',
+        executionId: id,
+        status: owned.toPlain().status,
+        execution: owned.toPlain(),
+        ts: new Date().toISOString(),
+      })));
     }
-    server.send(JSON.stringify({
-      type: 'status_change',
-      executionId: id,
-      status: owned.toPlain().status,
-      execution: owned.toPlain(),
-      ts: new Date().toISOString(),
-    }));
-
-    subscribeExecution(id, server);
-
-    server.addEventListener('close', () => {
-      unsubscribeExecution(id, server);
-    });
-
-    return new Response(null, { status: 101, webSocket: client });
+    return response;
   });
 
   // Cancel an execution. Beyond flipping the DB row to CANCELLED, this actually
@@ -2065,6 +2134,49 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     });
 
     return c.json(execution.toPlain());
+  });
+
+  /**
+   * RESUME a run parked on `ask_human` — directly, without answering the approval.
+   *
+   * The approvals queue is the primary door (a human answers the question and the
+   * answer resumes the run). This is the second one, and it exists because the
+   * execution chip has always RENDERED a resume glyph for a paused run while the
+   * only action wired behind it was `submitExecution` — i.e. a brand-new billable
+   * run that threw away the paused conversation, the ticket branch context and the
+   * open question. The affordance said resume and did retry.
+   *
+   * `answer` is optional: with one, this is exactly the approvals path (the answer
+   * is delivered as a pending user turn and any outstanding question is closed);
+   * without one, it is "carry on, you have what you need", which is a legitimate
+   * response to an agent that asked something the user considers already settled.
+   *
+   * Refuses anything that is not paused — a live run does not need resuming and a
+   * terminal one cannot be, and silently re-running either is the bug this fixes.
+   */
+  router.post('/executions/:id/resume', requireRole(TenantRole.DEVELOPER) as never, async (c) => {
+    const id = Number(c.req.param('id'));
+    const owned = await loadOwnedExecution(c, runtimeService, id);
+    if (!owned) return c.json({ error: 'Execution not found' }, 404);
+    if (owned.status !== ExecutionStatus.PAUSED) {
+      return c.json({
+        error: isTerminalExecutionStatus(owned.status)
+          ? 'This run has already finished — start a new run instead of resuming it.'
+          : 'This run is still working; there is nothing to resume.',
+        refusal: 'run_not_paused',
+      }, 409);
+    }
+    const body = await c.req.json<{ answer?: string }>().catch(() => ({} as { answer?: string }));
+    const answer = body.answer?.trim() || DEFAULT_RESUME_ANSWER;
+    const tenantId = c.get('tenantId');
+
+    // Close the outstanding question the same way answering it would, so the
+    // human-requests queue does not keep asking for something already handled.
+    await answerOpenExecutionQuestions(db, { tenantId, executionId: id, answer, userId: c.get('userId') });
+
+    await resumePausedExecution(c.env as Env, db, { executionId: id, tenantId, answer, runtimeService });
+    const updated = await runtimeService.getExecution(id).catch(() => null);
+    return c.json({ ok: true, resumed: true, execution: updated?.toPlain() ?? null });
   });
 
   // Revert a completed run: close the pull request it opened and delete the ticket
@@ -2107,18 +2219,21 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
   // subscribers immediately. For self-hosted runs it is also relayed to the
   // assigned agentHost (which feeds it into the live agent session as the next
   // turn). Cloud completions are one-shot today — see gap register for resume.
-  // "Send" on an execution's Output tab. Behaviour depends on whether the run is
-  // live or settled:
+  // "Send" on an execution's Output tab. Three behaviours, one per run state:
   //   • RUNNING / queued → STEER it: persist the directive as a pending user turn
-  //     (the cloud agent loop — V1 / V2-durable / V2-container — drains it on its
+  //     (the cloud agent loop — durable / container / Actions — drains it on its
   //     next step; a self-hosted host also gets it relayed) and record it as a PRD
   //     revision so the spec evolves with the run.
+  //   • PAUSED (waiting on a human) → the message IS the answer: close the open
+  //     question and RESUME the parked run. Queuing alone was a silent dead end —
+  //     nothing was running to drain the steer.
   //   • TERMINAL (completed/failed/cancelled) → there is no live session to steer,
   //     so START A NEW run seeded with the directive as the headline instruction
   //     (built on the prior run's committed work + the evolved PRD), and return the
   //     new execution id so the UI can follow it. This replaces the old silent
   //     no-op, which only ever forwarded to a live host and dropped everything else.
-  // STEERS a live run and, on a terminal run, STARTS a brand-new billable one.
+  // STEERS a live run, RESUMES a paused one, and on a terminal run STARTS a
+  // brand-new billable one.
   router.post('/executions/:id/messages', requireRole(TenantRole.DEVELOPER) as never, async (c) => {
     const id = Number(c.req.param('id'));
     const body = await c.req.json<{ text?: string }>().catch(() => ({} as { text?: string }));
@@ -2144,6 +2259,25 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     // Label the PRD revision / attribution with the agent that ran THIS execution.
     const directiveAgentRef = plain.cloudAgentRef ?? parseCloudAgentRef(plain.payload ?? undefined) ?? taskRow?.assignedAgentRef ?? undefined;
     const agentLabel = (await resolveCloudAgent(c.env as Env, tenantId, directiveAgentRef)).label ?? 'BuilderForce Agent';
+
+    if (plain.status === ExecutionStatus.PAUSED) {
+      // ── Answer the question AND wake the run ────────────────────────────────
+      // A paused run is not terminal, so this used to take the steer branch below:
+      // the directive was queued and then nothing ever ran to drain it. Waiting on a
+      // human is precisely the state where "Send" must do more than enqueue — the
+      // message IS the answer, so it closes the open question and resumes the run on
+      // whichever surface parked it. `resumePausedExecution` owns the enqueue, the
+      // stream echo, the lane restore and the wake, so nothing here duplicates it.
+      await answerOpenExecutionQuestions(db, { tenantId, executionId: id, answer: text, userId: c.get('userId') });
+      await resumePausedExecution(c.env as Env, db, { executionId: id, tenantId, answer: text, runtimeService });
+
+      if (taskRow) {
+        c.executionCtx.waitUntil(recordPrdDirective(c.env as Env, db, {
+          executionId: id, tenantId, projectId: taskRow.projectId, taskId: taskRow.id, taskTitle: taskRow.title, agentLabel, directive: text,
+        }));
+      }
+      return c.json({ ok: true, steered: true, resumed: true });
+    }
 
     if (!isTerminalExecutionStatus(plain.status)) {
       // ── Steer the live run ──────────────────────────────────────────────────

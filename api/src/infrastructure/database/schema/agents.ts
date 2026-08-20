@@ -528,6 +528,43 @@ export const executions = pgTable('executions', {
   updatedAt:    timestamp('updated_at').notNull().defaultNow(),
 });
 
+/**
+ * A cloud run parked on `ask_human`, and everything resume needs to put it back
+ * (migration 0945).
+ *
+ * The durable surface could always resume from its own DO cursor. The container
+ * and GitHub Actions surfaces cannot: each drives the whole loop inside one
+ * process whose conversation lives only in that process's memory, so their pause
+ * is exit-and-redispatch and the loop state has to outlive the process HERE.
+ *
+ * It also records where the ticket was before the pause routed it to the board's
+ * needs-attention lane, so resume restores the origin lane rather than guessing.
+ *
+ * One row per execution (UNIQUE) — a run has at most one outstanding question.
+ * Written by `pauseExecutionForQuestion`, read and deleted by
+ * `resumePausedExecution`; never touched directly by a route.
+ */
+export const executionPauseState = pgTable('execution_pause_state', {
+  id:          uuid('id').primaryKey().defaultRandom(),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:   uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  executionId: integer('execution_id').notNull().references(() => executions.id, { onDelete: 'cascade' }),
+  taskId:      integer('task_id').notNull().references(() => tasks.id, { onDelete: 'cascade' }),
+  /** 'durable' | 'container' | 'github_actions' — the surface resume dispatches to. */
+  surface:     varchar('surface', { length: 16 }).notNull(),
+  /** The `approvals` row (kind='question') whose answer resumes this run. */
+  approvalId:  uuid('approval_id'),
+  /** The lane the ticket sat in before the pause routed it away. */
+  originLane:  varchar('origin_lane', { length: 120 }),
+  /** The lane the pause actually moved it to; null when no move happened. */
+  routedLane:  varchar('routed_lane', { length: 120 }),
+  /** JSON `{ messages, writtenPaths, step }` — the exit-and-redispatch payload.
+   *  Null on the durable surface, which resumes from its DO cursor. */
+  loopState:   text('loop_state'),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+});
+
 /** Machine principal minted for exactly one execution. No secret material is stored
  * here; narrow grants and expiring delegations describe what it may request. */
 export const agentRunPrincipals = pgTable('agent_run_principals', {
@@ -1786,6 +1823,13 @@ export const llmUsageLog = pgTable('llm_usage_log', {
    *  `paid_overflow_daily_cap` so a Free tenant can't run up arbitrary spend on
    *  our keys via a tight retry loop. */
   paidOverflow:     boolean('paid_overflow').notNull().default(false),
+  /** Did this row run on a PREMIUM model — an any-paid-OpenRouter id the tenant
+   *  pinned explicitly, billed at vendor cost plus the flat request surcharge (0952)?
+   *  A real column rather than the `metadata.premiumSurchargeMillicents` key it
+   *  replaces: the daily premium cap has to SUM this on every premium request, and a
+   *  jsonb key means a scan. Mirrors `paidOverflow` above, which caps a different
+   *  budget (what WE fund) from the same shape. */
+  premium:          boolean('premium').notNull().default(false),
   /** True when this call was served by the tenant's OWN provider credential — a
    *  BYO API key or a connected subscription (migration 0284). The platform pays
    *  nothing for these tokens, so `cost_usd_millicents` is forced to 0, and a BYO
@@ -1795,6 +1839,19 @@ export const llmUsageLog = pgTable('llm_usage_log', {
   /** Connected LLM provider credential that funded a BYO call (for example
    *  'anthropic' or 'google'). Null for platform-funded calls. */
   byoProvider:      varchar('byo_provider', { length: 32 }),
+  /**
+   * WHICH INSTANCE of the tenant's credential paid for this row (0953) — the
+   * surrogate `tenant_llm_provider_keys.id`, which is re-minted on every key
+   * rotation. `byoProvider` above says which connected ACCOUNT; this says which
+   * key. Both are needed: the account survives rotation, the instance does not,
+   * and per-key spend is only answerable with the latter.
+   *
+   * A bare uuid with no `.references()` — this table is written through
+   * `resolveUsageDatabase`, which may target a different Neon account, and a
+   * cross-account foreign key is not enforceable. Also deliberately non-cascading:
+   * deleting a credential must not rewrite the spend it already incurred.
+   */
+  byoCredentialId:  uuid('byo_credential_id'),
   /** Which agent modality produced this row (migration 0284): 'web' | 'vsix' |
    *  'on_prem' | 'cloud' | 'sdk'. Drives the BYO metering exemption above so
    *  own-machine (on-prem/VSIX) BYO usage is free while cloud BYO is charged. */
@@ -1807,6 +1864,21 @@ export const llmFailoverLog = pgTable('llm_failover_log', {
   id:        serial('id').primaryKey(),
   model:     varchar('model', { length: 200 }).notNull(),
   errorCode: integer('error_code').notNull().default(0),
+  /** WHOSE cascade this was (0946). Nullable — guest/unauthenticated gateway traffic
+   *  has no tenant. A BARE INTEGER with no `.references()`: this table is written
+   *  through `buildTransactionalDatabase`, which targets a separate Neon account when
+   *  NEON_TRANSACTIONAL_DATABASE_URL is bound, and PostgreSQL cannot enforce a foreign
+   *  key across accounts. Same rule the rest of the operational ledger follows. */
+  tenantId:  integer('tenant_id'),
+  /** The coarse failure CLASS the dispatcher already computed — `auth`, `rate_limit`,
+   *  `timeout`, `server_error`, `embedded`, … (0946). Without it an expired credential
+   *  and a saturated free tier are the same row, which is why provider auth alerts had
+   *  to live in KV instead of being derived from (and recovered from) this history. */
+  kind:      varchar('kind', { length: 24 }),
+  /** Per-REQUEST correlation id (0946). Every attempt in one cascade shares it, so
+   *  "this request failed over four times" is a GROUP BY rather than an inference from
+   *  adjacent timestamps. */
+  requestId: varchar('request_id', { length: 64 }),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 
@@ -1850,9 +1922,13 @@ export const llmTraces = pgTable('llm_traces', {
   tenantId:          integer('tenant_id').references(() => tenants.id, { onDelete: 'set null' }),
   userId:            varchar('user_id', { length: 36 }),
   agentHostId:            integer('agent_host_id'),
+  /** The cloud execution this call served (0949) — scalar id, no FK (this table
+   *  lives in the operational database). Null for every non-run surface. It is the
+   *  join key behind a run's structured model+token turns and their trace deep-link. */
+  executionId:       integer('execution_id'),
   tenantApiKeyId:    uuid('tenant_api_key_id'),
   llmProduct:        varchar('llm_product', { length: 32 }),
-  /** chat | image | ide-chat | brain | dataset-gen | agent */
+  /** chat | image | ide-chat | brain | dataset-gen | agent | cloud | knowledge-ai | legal-ai */
   surface:           varchar('surface', { length: 16 }).notNull().default('chat'),
   effectivePlan:     varchar('effective_plan', { length: 8 }),
   premiumOverride:   boolean('premium_override').notNull().default(false),
@@ -2494,4 +2570,73 @@ export const workflowActions = pgTable('workflow_actions', {
   updatedAt:    timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
   uniqueIndex('uq_workflow_actions_node').on(t.tenantId, t.workflowRef, t.nodeId),
+]);
+
+
+/**
+ * The run-context CONTINUITY store (0952) — what a run has already been TOLD.
+ *
+ * One row per (scope, subject): the current belief a run holds about one context block
+ * (its PRD, its governance, its strategy…). `application/runtime/runContextService.ts`
+ * wraps it as an Evermind `CognitionFactStore`, so `EvermindCognition.commit()` decides
+ * augment / confirm / supersede / reject against it and every surface — cloud, on-prem,
+ * VS Code — is handed the DELTA rather than the whole blob on every turn.
+ *
+ * `scope` is the continuity key (`task:<id>` for a cloud re-run, `session:<key>` on-prem,
+ * `chat:<id>` in VS Code); `subject_key` is the canonical Evermind key. Uniqueness on
+ * (tenant_id, scope, subject_key) is what makes a write REPLACE rather than accumulate —
+ * the single-incumbent guarantee, enforced by the database rather than by convention.
+ */
+export const runContextState = pgTable('run_context_state', {
+  id:         bigserial('id', { mode: 'number' }).primaryKey(),
+  tenantId:   integer('tenant_id').notNull(),
+  scope:      varchar('scope', { length: 160 }).notNull(),
+  subjectKey: varchar('subject_key', { length: 512 }).notNull(),
+  /** The belief itself — the block body, with the reconciler's provenance header. */
+  content:    text('content').notNull(),
+  importance: real('importance').notNull().default(0.6),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+  updatedAt:  timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_run_context_state_subject').on(t.tenantId, t.scope, t.subjectKey),
+  index('idx_run_context_state_scope').on(t.tenantId, t.scope, t.updatedAt),
+]);
+
+/**
+ * preview_sessions (0949) — the LEASE behind one live container preview.
+ *
+ * The preview transport (signed token → `preview.builderforce.ai/<tok>/*` → the run's
+ * AgentContainerDO → its dev server) has no concept of cost. This row is that concept:
+ * a container instance held open for an editor tab, countable per tenant and globally,
+ * with a MEASURED `lastSeenAt` so "nobody is watching this any more" is a fact rather
+ * than a timeout guess.
+ *
+ * Read by `application/runtime/previewSessions.ts` — the ONE place the instance budget,
+ * the per-tenant concurrency cap and the idle-eviction policy are decided.
+ */
+export const previewSessions = pgTable('preview_sessions', {
+  id:          uuid('id').primaryKey().defaultRandom(),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:   uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  executionId: integer('execution_id').notNull().references(() => executions.id, { onDelete: 'cascade' }),
+  /** Denormalised so "the live preview for THIS project" is one indexed read — the
+   *  Mobile panel mints by project and has no execution id to offer. */
+  projectId:   integer('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+  /** The port the dev server was told to bind inside the container. */
+  port:        integer('port').notNull(),
+  /** starting | live | failed | idle_evicted | stopped — see PreviewSessionStatus. */
+  status:      varchar('status', { length: 16 }).notNull().default('starting'),
+  /** Health-check / failure detail, so "no preview" can say WHY. */
+  detail:      text('detail'),
+  startedAt:   timestamp('started_at').notNull().defaultNow(),
+  /** Last real preview request served through the ingress; idle eviction reads this. */
+  lastSeenAt:  timestamp('last_seen_at').notNull().defaultNow(),
+  stoppedAt:   timestamp('stopped_at'),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_preview_sessions_execution').on(t.executionId),
+  index('idx_preview_sessions_tenant_status').on(t.tenantId, t.status, t.lastSeenAt),
+  index('idx_preview_sessions_status_seen').on(t.status, t.lastSeenAt),
+  index('idx_preview_sessions_project').on(t.tenantId, t.projectId, t.status),
 ]);

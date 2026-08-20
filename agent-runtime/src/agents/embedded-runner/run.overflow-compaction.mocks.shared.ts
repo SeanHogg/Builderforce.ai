@@ -65,6 +65,17 @@ vi.mock("./compact.js", () => ({
 }));
 
 vi.mock("./model.js", () => ({
+  // Learned Model Routing seam: the runner asks which configured model should lead
+  // before it resolves one. Mocked to the identity (no reorder, `other` label) so the
+  // compaction tests exercise the model they configured, not a learned reorder.
+  resolveLearnedModelSeed: vi.fn(
+    async (params: { provider: string; modelId: string }) => ({
+      provider: params.provider,
+      modelId: params.modelId,
+      actionType: "other",
+      reordered: false,
+    }),
+  ),
   resolveModel: vi.fn(() => ({
     model: {
       id: "test-model",
@@ -130,6 +141,9 @@ vi.mock("../defaults.js", () => ({
 vi.mock("../failover-error.js", () => ({
   FailoverError: class extends Error {},
   resolveFailoverStatus: vi.fn(),
+  // Read by the learned-routing write-back to tell a rate-limited failure (an
+  // availability signal) from a quality one. Never true in these fixtures.
+  isFailoverError: vi.fn(() => false),
 }));
 
 vi.mock("./lanes.js", () => ({

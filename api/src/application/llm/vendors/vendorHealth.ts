@@ -135,9 +135,35 @@ export async function recordVendorUpstreamFault(
   vendorId: string,
   status: number,
 ): Promise<void> {
-  if (!isUpstreamFaultStatus(status)) return;
-  const prior = await readRecord(env, vendorId);
-  await writeRecord(env, vendorId, { streak: (prior?.streak ?? 0) + 1, at: Date.now() });
+  return recordVendorUpstreamFaults(env, [{ vendorId, status }]);
+}
+
+/**
+ * Record a WHOLE cascade's upstream faults in one grouped pass.
+ *
+ * One read + one write per DISTINCT VENDOR instead of per attempt. A cascade that
+ * tried four models on one saturated vendor previously issued four read-modify-write
+ * pairs against the same key, which is both four times the subrequests and a lost-
+ * update race with itself — the last writer wins, so a 4-fault cascade could record
+ * a streak of 1. Counting the faults per vendor first fixes both.
+ */
+export async function recordVendorUpstreamFaults(
+  env: VendorHealthEnv,
+  faults: ReadonlyArray<{ vendorId: string; status: number }>,
+): Promise<void> {
+  const counts = new Map<string, number>();
+  for (const { vendorId, status } of faults) {
+    // Non-5xx never demotes a vendor: a 429 or an auth failure is the cooldown store's
+    // business, and conflating them would bench a vendor for a tenant's own bad key.
+    if (!isUpstreamFaultStatus(status)) continue;
+    counts.set(vendorId, (counts.get(vendorId) ?? 0) + 1);
+  }
+  if (counts.size === 0) return;
+  const now = Date.now();
+  await Promise.all([...counts].map(async ([vendorId, n]) => {
+    const prior = await readRecord(env, vendorId);
+    await writeRecord(env, vendorId, { streak: (prior?.streak ?? 0) + n, at: now });
+  }));
 }
 
 /**

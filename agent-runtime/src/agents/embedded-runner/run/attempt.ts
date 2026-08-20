@@ -16,6 +16,7 @@ import { getLimbicSystemService } from "../../../infra/limbic-system-service.js"
 import { emitAgentEvent } from "../../../infra/agent-events.js";
 import { resolveHiredAgentRef } from "../../../infra/hired-agents-sync.js";
 import { reportPersonalityEvent } from "../../../infra/personality-event-reporter.js";
+import { fetchRunContextSection } from "../../../infra/run-context-client.js";
 import { globalPersonaRegistry } from "../../../builderforce/personas.js";
 import { MAX_IMAGE_BYTES } from "../../../media/constants.js";
 import { getGlobalHookRunner } from "../../../plugins/hook-runner-global.js";
@@ -404,6 +405,18 @@ export async function runEmbeddedAttempt(
       /* durable personality-usage report is best-effort */
     }
 
+    // The BuilderForce PLATFORM context — strategy / PRD / governance / project memory /
+    // prior lessons — from the ONE api-side `ContextSource` every surface now consumes.
+    // Before this, a self-hosted run got NONE of it: the cloud engine had assembled PRD +
+    // governance + memory + lessons since day one and the embedded runner had only the
+    // workspace. Fetched in parallel with the bootstrap files, best-effort: an unlinked
+    // host or an unreachable api yields '' and the run proceeds on local context alone.
+    const runContextPromise = fetchRunContextSection({
+      workspaceDir: resolvedWorkspace,
+      sessionKey: params.sessionKey,
+      query: params.prompt,
+    });
+
     const sessionLabel = params.sessionKey ?? params.sessionId;
     const { bootstrapFiles: hookAdjustedBootstrapFiles, contextFiles } =
       await resolveBootstrapContextForRun({
@@ -581,6 +594,7 @@ export async function runEmbeddedAttempt(
         : undefined,
       skillsPrompt,
       personaPrompt,
+      runContextPrompt: await runContextPromise,
       docsPath: docsPath ?? undefined,
       ttsHint,
       workspaceNotes,

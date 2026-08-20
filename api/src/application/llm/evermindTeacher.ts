@@ -23,8 +23,8 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { llmProxyForPlan, readProxyChoice } from './LlmProxyService';
-import { getTenantTokenAvailability } from './tenantTokenAvailability';
-import { resolveTenantLlmCredentials, listTenantProviderKeys } from './tenantProviderKeyService';
+import { tenantMayRunAutonomously } from './tenantTokenAvailability';
+import { resolveTenantLlmCredentials } from './tenantProviderKeyService';
 import { isRoutableModel } from './vendors/registry';
 
 /** Max chars of task/run text handed to the teacher (bounds prompt/token cost). */
@@ -149,6 +149,20 @@ export async function generateTeacherExemplar(
  * never collapse into one reason. The rest are {@link TeacherFailureReason} verbatim.
  */
 export type TeacherSkipReason = 'not_pinned' | 'budget_exhausted' | 'cooling' | 'unroutable' | TeacherFailureReason;
+
+/**
+ * What a STORED learned-memory row may carry as its skip reason: every reason a live
+ * distillation can produce, plus the two buckets the legacy-provenance backfill writes
+ * for rows merged before provenance was recorded at all.
+ *
+ * They are deliberately separate from {@link TeacherSkipReason}: a live merge can never
+ * emit them, and a backfill must never claim one of the real reasons (writing
+ * `not_pinned` onto a row whose teacher state is genuinely unknown would assert a fact
+ * nobody measured). `legacy` = "recorded before provenance existed, no teacher evidence
+ * either way" — which the reader grades exactly as it graded a bare legacy row: self.
+ * `unknown` = "provably a fault, cause not nameable" (the text/prompt echo).
+ */
+export type RecordedSkipReason = TeacherSkipReason | 'legacy' | 'unknown';
 
 // ---------------------------------------------------------------------------
 // Fault breaker
@@ -287,11 +301,12 @@ export async function resolveEvermindTeacherModel(
   // spend another paid frontier request on a teacher that just failed.
   if (await isTeacherCooling(env, tenantId, model)) return { model: null, reason: 'cooling' };
   try {
-    // A connected BYO frontier account funds the teacher itself → never budget-gate it.
-    const byoConnected = (await listTenantProviderKeys(env, tenantId).catch(() => [])).length > 0;
-    if (byoConnected) return { model };
-    const availability = await getTenantTokenAvailability(db, tenantId, undefined, env);
-    if (!availability.hasTokens) return { model: null, reason: 'budget_exhausted' };
+    // A connected BYO frontier account funds the teacher itself → never budget-gate
+    // it. ONE predicate, shared with both cron sweeps (`tenantMayRunAutonomously`):
+    // this used to be the only place the bypass existed, which is why a BYO tenant's
+    // SCHEDULED work stopped on a pool they were not spending.
+    const { allowed } = await tenantMayRunAutonomously(db, tenantId, env);
+    if (!allowed) return { model: null, reason: 'budget_exhausted' };
   } catch (error) {
     /* fail open — keep the teacher */
   

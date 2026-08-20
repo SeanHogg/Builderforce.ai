@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import type { Project } from '@/lib/types';
-import type { ProjectDiagnosticSummary } from '@/lib/tools';
+import { ARCHITECTURE_DIAGNOSTIC_ID, type ProjectDiagnosticSummary } from '@/lib/tools';
 import { ProjectOriginBadge } from './ProjectOriginBadge';
 import { ProjectHealthBadge } from './ProjectHealth';
 import { ProjectConfigBadge } from './ProjectConfigProgress';
@@ -27,9 +27,10 @@ export interface ProjectTableProps {
    *  verdict and open-PR count, keyed by project id. Empty hides the column cell. */
   connectionsByProject?: Map<number, ProjectConnection[]>;
   /** Open the project Information panel. The Details button opens the default tab;
-   *  the Architecture button opens 'prds' / 'integrations'. A row that can open
-   *  details gets the Architecture button — same rule as {@link ProjectCard}. */
-  onDetailsClick?: (project: Project, tab?: ProjectPanelTab) => void;
+   *  the diagnostics strip opens 'diagnostics' and connections open 'integrations'.
+   *  `specKind` names a document the tab should open — same contract, and the same
+   *  architecture-chip behaviour, as {@link ProjectCard}. */
+  onDetailsClick?: (project: Project, tab?: ProjectPanelTab, specKind?: string) => void;
   /** Override the Builder action. Defaults to opening the project on Canvas. */
   onOpenBuilder?: (project: Project) => void;
   /** Click the assigned agent name → parent opens the agent panel. */
@@ -111,7 +112,11 @@ export function ProjectTable({
                   return diags.length > 0 ? (
                     <ProjectDiagnosticsStrip
                       diagnostics={diags}
-                      onOpen={onDetailsClick ? () => onDetailsClick(project, 'diagnostics') : undefined}
+                      onOpen={onDetailsClick ? (toolId) => (
+                        toolId === ARCHITECTURE_DIAGNOSTIC_ID && project.hasArchitecturePrd
+                          ? onDetailsClick(project, 'prds', 'architecture')
+                          : onDetailsClick(project, 'diagnostics')
+                      ) : undefined}
                     />
                   ) : (
                     <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>—</span>

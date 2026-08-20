@@ -433,10 +433,22 @@ export class TaskService {
 
     // Re-key into the target board off its highest existing sequence (gap-safe;
     // a row count would collide on the globally-unique key — the move-500 bug).
-    return this.withKeyAllocation(asProjectId(targetProjectId), (lastKeySeq) => {
+    const moved = await this.withKeyAllocation(asProjectId(targetProjectId), (lastKeySeq) => {
       const key = Task.buildKey(target.key, lastKeySeq + 1);
       return this.tasks.update(task.moveToProject(asProjectId(targetProjectId), key));
     });
+
+    // ── DATA ISOLATION FOLLOWS THE TICKET ───────────────────────────────────────
+    // `tasks.segment_id` is stamped by an INSERT trigger (migration 0056) and is not a
+    // domain field, so a move left the ticket carrying the SOURCE project's segment.
+    // On a segmented tenant that means the moved ticket stayed visible to the segment
+    // it left and invisible to the one it joined — silent isolation drift, no error.
+    // `tenant_id` already re-derives on a project change (trg_tasks_tenant); this is
+    // the same guarantee for the segment.
+    const targetSegmentId = await this.projects.segmentIdOf(asProjectId(targetProjectId));
+    await this.tasks.repointSegment(asTaskId(id), targetSegmentId);
+
+    return moved;
   }
 
   async deleteTask(id: number): Promise<void> {

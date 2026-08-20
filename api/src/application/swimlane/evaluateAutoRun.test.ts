@@ -290,8 +290,16 @@ describe('DEFAULT_SWIMLANES — the seeded gates', () => {
     expect(DEFAULT_SWIMLANES.find((l) => l.key === TaskStatus.IN_REVIEW)?.gate).toBe('auto');
   });
 
-  it('seeds no human gate at all — a human gate is now an explicit operator choice', () => {
-    expect(DEFAULT_SWIMLANES.filter((l) => l.gate === 'human')).toEqual([]);
+  it('human-gates ONLY backlog — the staging lane, where nobody has agreed the ticket is work yet', () => {
+    // Backlog is where a raw idea, an imported issue and a feedback item all land.
+    // Auto-running it spent tokens on tickets nobody had refined; moving one OUT of
+    // backlog is the cheapest "yes, do this" a person can give.
+    expect(DEFAULT_SWIMLANES.filter((l) => l.gate === 'human').map((l) => l.key)).toEqual([TaskStatus.BACKLOG]);
+  });
+
+  it('leaves every lane AFTER backlog auto — autonomy is on from To Do to Done', () => {
+    const after = DEFAULT_SWIMLANES.filter((l) => l.key !== TaskStatus.BACKLOG);
+    expect(after.every((l) => l.gate === 'auto')).toBe(true);
   });
 
   it('keeps Done terminal so an auto gate never re-runs a finished ticket', () => {

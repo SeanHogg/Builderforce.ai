@@ -129,6 +129,15 @@ function redactInput(el: HTMLInputElement | HTMLTextAreaElement): string | null 
 class QaCapture {
   private queue: QaCaptureEvent[] = [];
   private seq = 0;
+  /**
+   * The project these interactions belong to, or null for "the app shell", which
+   * belongs to no customer project. Sent with every batch so QA heat can be
+   * ranked per project (0955) instead of pooled across the whole workspace —
+   * without it, the tester planned one product's exploration from another
+   * product's traffic. Null is the honest default and the meaning every
+   * pre-0955 row carries.
+   */
+  private projectId: number | null = null;
   private timer: ReturnType<typeof setInterval> | null = null;
   private started = false;
   private onClick = (e: Event) => this.handleClick(e);
@@ -157,6 +166,17 @@ class QaCapture {
     window.removeEventListener('pagehide', this.onUnload);
     if (this.timer) clearInterval(this.timer);
     this.flush(true);
+  }
+
+  /**
+   * Attribute subsequent events to a project (or null for the app shell).
+   * Flushes first, so a batch is never split across two attributions.
+   */
+  setProject(projectId: number | null): void {
+    const next = projectId != null && Number.isInteger(projectId) && projectId > 0 ? projectId : null;
+    if (next === this.projectId) return;
+    this.flush();
+    this.projectId = next;
   }
 
   /** Emit a pageview — call on every route change. */
@@ -220,7 +240,11 @@ class QaCapture {
     if (this.queue.length === 0) return;
     const batch = this.queue.splice(0, this.queue.length);
     const path = '/api/qa/events';
-    const payload = JSON.stringify({ sessionId: getSessionId(), events: batch });
+    const payload = JSON.stringify({
+      sessionId: getSessionId(),
+      ...(this.projectId !== null ? { projectId: this.projectId } : {}),
+      events: batch,
+    });
     try {
       if (beacon && navigator.sendBeacon) {
         // sendBeacon can't set Authorization, so it cannot go through the shared

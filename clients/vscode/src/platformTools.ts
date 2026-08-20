@@ -1,4 +1,4 @@
-import * as vscode from "vscode";
+import type * as vscode from "vscode";
 import { getApiKey, getBaseUrl } from "./gateway";
 import type { ToolDef } from "./fileTools";
 import { ttlCache } from "./ttlCache";
@@ -120,13 +120,7 @@ export async function callPlatformTool(
   }
 }
 
-/** A human-readable one-liner for a platform tool call (approval prompt / activity row). */
-export function describePlatformTool(name: string, args: Record<string, unknown>): string {
-  const verb = name.replace(/^builtin_/, "").replace(/_/g, " ");
-  const subject =
-    (typeof args.title === "string" && args.title) ||
-    (typeof args.name === "string" && args.name) ||
-    (typeof args.id !== "undefined" && `#${String(args.id)}`) ||
-    "";
-  return subject ? `${verb}: ${subject}` : verb;
-}
+// The human one-liner for a platform tool call (approval prompt / activity row) lives
+// with the rest of the run's labelling in `nativeBrainRun.toolLabel` — it needs the
+// local/remote split to choose between the two phrasings, and having half of that
+// decision here is what let a second copy grow inside the old SDK adapter.

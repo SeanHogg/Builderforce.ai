@@ -34,6 +34,17 @@ export default defineConfig({
       '@builderforce/agent-stall': fileURLToPath(
         new URL('../packages/agent-stall/src/index.ts', import.meta.url),
       ),
+      // Was in `tsconfig.json` `paths` but NOT here, so `classifyTask.test.ts` and
+      // everything downstream of it resolved this package only by luck of the
+      // worker's module graph — `vitest run src/application/llm` failed the whole
+      // directory with "Cannot find package '@builderforce/learned-routing'" while
+      // the full-suite run passed. Every tsconfig path needs its alias twin.
+      '@builderforce/learned-routing': fileURLToPath(
+        new URL('../packages/learned-routing/src/index.ts', import.meta.url),
+      ),
+      '@builderforce/run-context': fileURLToPath(
+        new URL('../packages/run-context/src/index.ts', import.meta.url),
+      ),
       '@builderforce/creation-canvas-contract': fileURLToPath(
         new URL('../packages/creation-canvas-contract/src/index.ts', import.meta.url),
       ),

@@ -37,19 +37,22 @@ describe('manager sweep fans out across projects', () => {
    * that returns instantly makes serial and concurrent behave identically.
    */
   it('runs projects through a bounded pool, never a serial await-in-loop', () => {
-    expect(source, 'the fan-out must be a pool of workers over a shared cursor')
-      .toMatch(/Promise\.all\(\s*Array\.from\(\{ length: Math\.min\(MAX_CONCURRENT_PROJECT_PASSES, managed\.length\) \}, worker\)/);
-    expect(source).toMatch(/const next = managed\[cursor\+\+\]/);
+    // The pool itself is now the shared `runtime/boundedPool.ts` primitive — its
+    // concurrency, its deadline and its before-claim ordering are proved behaviourally in
+    // boundedPool.test.ts. What this file still owns is that the sweep USES it, with the
+    // sweep's own limit, rather than growing a fifth private copy.
+    expect(source, 'the fan-out must go through the shared bounded pool')
+      .toMatch(/await runBoundedPool\(\s*managed,\s*\{ limit: MAX_CONCURRENT_PROJECT_PASSES/);
     // The regression itself: the pass may never again be awaited directly from a loop
     // over the project list.
     expect(source).not.toMatch(/for \(const p of managed\) \{/);
   });
 
-  it('stops starting projects at the deadline, and checks BEFORE claiming one', () => {
-    // Order matters: claiming then checking would leave a project marked as reached
-    // that never ran, and it would sort to the BACK of the next tick's rotation.
-    const worker = source.slice(source.indexOf('const worker = async ()'), source.indexOf('await Promise.all('));
-    expect(worker.indexOf('MANAGER_SWEEP_BUDGET_MS')).toBeLessThan(worker.indexOf('managed[cursor++]'));
+  it('stops starting projects at the deadline', () => {
+    // Claiming then checking would leave a project marked as reached that never ran, and
+    // it would sort to the BACK of the next tick's rotation. The pool checks before it
+    // claims (boundedPool.test.ts); this pins that the sweep actually GIVES it a deadline.
+    expect(source).toMatch(/deadlineAt: Date\.now\(\) \+ MANAGER_SWEEP_BUDGET_MS/);
   });
 
   /**
@@ -76,7 +79,7 @@ describe('manager sweep fans out across projects', () => {
   });
 
   it('reports what it did not reach', () => {
-    expect(source).toMatch(/result\.notReached = Math\.max\(0, managed\.length - cursor\)/);
+    expect(source).toMatch(/result\.notReached = pool\.notReached/);
   });
 
   /**

@@ -12,7 +12,7 @@
  */
 
 import { useTranslations } from 'next-intl';
-import { getModality, MODALITIES, type ModalityDef, type ProjectModality } from './modality';
+import { getModality, MODALITIES, RIGHT_TAB_ICONS, type ModalityDef, type ProjectModality, type RightTab } from './modality';
 
 /** Returns a resolver that maps a modality id (incl. legacy `llm`) to its definition
  *  with `label` / `tagline` / `runLabel` replaced by their localized catalog values. */
@@ -27,6 +27,16 @@ export function useModalityCopy(): (id: ProjectModality | string | null | undefi
       runLabel: t(`modality.${m.id}.runLabel`),
     };
   };
+}
+
+/**
+ * Localized right-panel tab labels — the glyph from the registry plus the word
+ * from the catalogs (`ide.rightTab.<id>`). Same rule as the modality copy above:
+ * the registry holds what is locale-independent, this hook holds what is shown.
+ */
+export function useRightTabLabels(): (tab: RightTab) => string {
+  const t = useTranslations('ide');
+  return (tab) => `${RIGHT_TAB_ICONS[tab]} ${t(`rightTab.${tab}`)}`;
 }
 
 /** The full modality list (registry order) with localized copy — for choosers/filters. */

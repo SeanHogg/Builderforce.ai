@@ -11,6 +11,8 @@ import { reportCaughtError } from '../../application/observability/caughtErrorRe
  * POST   /api/repos/repositories/:id/default           Mark a repo as the project default
  * POST   /api/repos/tasks/:taskId/pull-request         Dispatch PR creation to the task's agentHost
  * GET    /api/repos/tasks/:taskId/pull-request         Latest recorded PR for a task + live provider detail
+ * GET    /api/repos/tasks/:taskId/repositories         The task's bound repo SET (multi-repo spanning, 0956)
+ * PUT    /api/repos/tasks/:taskId/repositories         Replace the task's bound repo SET
  * POST   /api/repos/pull-requests/:id/result           AgentHost callback: record PR number/url/status
  * POST   /api/repos/pull-requests/:id/merge            Approve & merge a recorded PR (in-product)
  * GET    /api/repos/projects/:projectId/pull-requests  List a project's pull requests
@@ -39,6 +41,8 @@ import { enforceIngestionCap, recordIngestion } from '../../application/ingestio
 import { githubStatusMessage } from '../../application/integrations/githubTestError';
 import { mergeRecordedPullRequest } from '../../application/repos/mergeRecordedPr';
 import { getPullRequestDetail } from '../../application/repos/getPullRequestDetail';
+import { listTaskRepoBindings, listTaskRepoPullRequests, setTaskRepoBindings } from '../../application/repos/taskRepoSet';
+import { resolveDefaultRepoForTask } from '../../application/repos/resolveDefaultRepo';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { invalidateProjectConnections } from '../../application/repos/projectConnectionStatus';
 import { hostOrTenantAuth } from '../middleware/hostOrTenantAuth';
@@ -489,6 +493,69 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
     return c.json({ pullRequests: rows });
   });
 
+  // -------------------------------------------------------------------------
+  // MULTI-REPO SPANNING (0956) — the task's repo SET
+  //
+  // A run has always targeted exactly one repo. A ticket that legitimately
+  // crosses repos ("add the endpoint in api, call it from frontend") binds more
+  // than one here: each gets its own branch, each write is routed to it by
+  // pathGlobs, and finalize opens a PR per repo that actually received code.
+  // Binding NOTHING (or only the repo the task already resolves to) leaves the
+  // single-repo behaviour exactly as it was.
+  // -------------------------------------------------------------------------
+  router.get('/tasks/:taskId/repositories', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const taskId = Number(c.req.param('taskId'));
+    if (!Number.isFinite(taskId)) return c.json({ error: 'Invalid taskId' }, 400);
+    const [bindings, primary] = await Promise.all([
+      listTaskRepoBindings(db, tenantId, taskId),
+      resolveDefaultRepoForTask(db, tenantId, taskId),
+    ]);
+    return c.json({
+      primaryRepoId: primary?.repoId ?? null,
+      bindings: bindings.map((b) => ({
+        repoId: b.repoId,
+        slug: `${b.owner}/${b.repo}`,
+        provider: b.provider,
+        isDefault: b.isDefault,
+        matchHints: b.matchHints,
+        branch: b.branch,
+        writesCount: b.writesCount,
+        prUrl: b.prUrl,
+        prNumber: b.prNumber,
+        prStatus: b.prStatus,
+      })),
+    });
+  });
+
+  // DEVELOPER+ — binding a repo decides where an agent's code lands, so it sits at
+  // the same tier as dispatching a run (mirrors the merge gate below).
+  router.put('/tasks/:taskId/repositories', requireRole(TenantRole.DEVELOPER), async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const taskId = Number(c.req.param('taskId'));
+    if (!Number.isFinite(taskId)) return c.json({ error: 'Invalid taskId' }, 400);
+    const body = await c.req.json<{ repoIds?: string[] }>().catch(() => ({} as { repoIds?: string[] }));
+    const result = await setTaskRepoBindings(db, tenantId, taskId, Array.isArray(body.repoIds) ? body.repoIds : []);
+    if (!result.ok) return c.json({ error: result.reason }, 404);
+    const bindings = await listTaskRepoBindings(db, tenantId, taskId);
+    return c.json({
+      ok: true,
+      bound: result.bound,
+      bindings: bindings.map((b) => ({
+        repoId: b.repoId,
+        slug: `${b.owner}/${b.repo}`,
+        provider: b.provider,
+        isDefault: b.isDefault,
+        matchHints: b.matchHints,
+        branch: b.branch,
+        writesCount: b.writesCount,
+        prUrl: b.prUrl,
+        prNumber: b.prNumber,
+        prStatus: b.prStatus,
+      })),
+    });
+  });
+
   // GET /api/repos/tasks/:taskId/pull-request — the latest recorded PR for a task
   // plus its LIVE provider detail (status, mergeability, CI checks, diff stat) so
   // the in-product Pull Request tab can render review info + gate Approve & Merge.
@@ -533,7 +600,13 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
       }
     }
 
-    return c.json({ pullRequest: row, detail });
+    // MULTI-REPO SPANNING (0956): a spanning task has a PR per repo. `pullRequest`
+    // + `detail` stay exactly as they were (the primary, with live provider state);
+    // `pullRequests` is the SET, empty for a single-repo task so no client that
+    // ignores it changes behaviour.
+    const repoSet = await listTaskRepoPullRequests(db, tenantId, taskId).catch(() => []);
+    const pullRequestSet = repoSet.length > 1 ? repoSet : [];
+    return c.json({ pullRequest: row, detail, pullRequests: pullRequestSet });
   });
 
   // POST /api/repos/pull-requests/:id/merge — Approve & merge a recorded PR from

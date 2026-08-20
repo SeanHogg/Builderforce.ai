@@ -41,3 +41,29 @@ export function analysisPlanConfig(plan: string): AnalysisPlanConfig {
 export function planAllowsArtifact(plan: string, kind: ArtifactKind): boolean {
   return analysisPlanConfig(plan).artifactKinds.includes(kind);
 }
+
+/**
+ * Which of a run's artifacts a retry would redo, given the tenant's plan NOW.
+ *
+ * `failed` is always retryable — it is a generation error, not an entitlement
+ * decision. `skipped` is retryable only when the current plan covers the kind,
+ * which is what makes "upgrade, then retry" fill in the artifacts a Free run
+ * withheld; the ones it still does not cover come back as `locked` so a surface
+ * can say "upgrade" rather than silently offering a retry that would refuse.
+ * Anything `complete` is left alone: a repair must never spend tokens redoing
+ * work that already landed. PURE.
+ */
+export function partitionRetryableArtifacts(
+  rows: { kind: string; status: string }[],
+  plan: string,
+): { retryable: ArtifactKind[]; locked: ArtifactKind[] } {
+  const retryable: ArtifactKind[] = [];
+  const locked: ArtifactKind[] = [];
+  for (const kind of ARTIFACT_KINDS) {
+    const row = rows.find((r) => r.kind === kind);
+    if (!row) continue;
+    if (row.status === 'failed') retryable.push(kind);
+    else if (row.status === 'skipped') (planAllowsArtifact(plan, kind) ? retryable : locked).push(kind);
+  }
+  return { retryable, locked };
+}

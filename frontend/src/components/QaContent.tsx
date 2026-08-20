@@ -14,8 +14,11 @@ import { Select } from '@/components/Select';
  */
 
 import { useCallback, useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { fetchProjects } from '@/lib/api';
 import type { Project } from '@/lib/types';
+import { Empty, STATUS_COLOR, SEVERITY_COLOR, Section, Table, Td, btnStyle, inputStyle } from './qa/QaPrimitives';
+import { QualityTrendSection, RoutingSection } from './qa/QaQualitySections';
 import {
   aggregateFlows,
   createCredential,
@@ -29,6 +32,7 @@ import {
   fetchExploration,
   fetchExplorations,
   fetchFlows,
+  fetchFindingScreenshot,
   fetchHeatmap,
   fetchQualityTrend,
   fetchRouting,
@@ -64,41 +68,8 @@ const SELF_TEST_ROUTES = [
   '/workforce?tab=chats', '/workforce?tab=approvals',
 ];
 
-const STATUS_COLOR: Record<string, string> = {
-  passed: 'var(--success)', failed: 'var(--error)', error: 'var(--error)', skipped: 'var(--text-muted)',
-  running: 'var(--amber-bright)', queued: 'var(--text-muted)',
-};
-
-const SEVERITY_COLOR: Record<string, string> = {
-  critical: 'var(--error)', high: 'var(--error)', medium: 'var(--amber-bright)', low: 'var(--text-muted)',
-};
-
-function Section({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) {
-  return (
-    <div style={{ marginBottom: 28 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-        <h2 style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{title}</h2>
-        {action}
-      </div>
-      {children}
-    </div>
-  );
-}
-
-function btnStyle(disabled = false): React.CSSProperties {
-  return {
-    padding: '6px 12px', fontSize: 12, fontWeight: 600, borderRadius: 'var(--radius-sm)',
-    border: '1px solid var(--border-subtle)', background: 'var(--surface-raised)',
-    color: 'var(--text-secondary)', cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.5 : 1,
-  };
-}
-
-const inputStyle: React.CSSProperties = {
-  padding: '6px 8px', fontSize: 12, borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)',
-  background: 'var(--bg-deep)', color: 'var(--text-primary)', minWidth: 120,
-};
-
 export function QaContent() {
+  const t = useTranslations('qa');
   const fmt = useFormat();
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectId, setProjectId] = useState<number | null>(null);
@@ -121,14 +92,17 @@ export function QaContent() {
 
   const reload = useCallback(async () => {
     try {
-      const [f, t, r, hm, ex, q] = await Promise.all([
+      const [f, ts, r, hm, ex, q] = await Promise.all([
         fetchFlows(projectId), fetchTests(projectId), fetchRuns(projectId),
-        fetchHeatmap({ limit: 40 }).catch(() => ({ zones: [] })),
+        // The heat table follows the same project scope as everything else on
+        // this tab — a workspace-wide ranking was showing one product's traffic
+        // as the reason to test another's.
+        fetchHeatmap({ limit: 40, projectId }).catch(() => ({ zones: [] })),
         fetchExplorations(projectId).catch(() => ({ explorations: [] })),
         fetchQualityTrend(projectId).catch(() => ({ trend: null })),
       ]);
       setFlows(f.flows ?? []);
-      setTests(t.tests ?? []);
+      setTests(ts.tests ?? []);
       setRuns(r.runs ?? []);
       setHeatZones(hm.zones ?? []);
       setExplorations(ex.explorations ?? []);
@@ -150,7 +124,7 @@ export function QaContent() {
         setRouting(null);
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load QA data');
+      setError(e instanceof Error ? e.message : t('loadFailed'));
     }
   }, [projectId]);
 
@@ -159,7 +133,7 @@ export function QaContent() {
   const run = useCallback(async (key: string, fn: () => Promise<unknown>) => {
     setBusy(key); setError(null);
     try { await fn(); await reload(); }
-    catch (e) { setError(e instanceof Error ? e.message : 'Action failed'); }
+    catch (e) { setError(e instanceof Error ? e.message : t('actionFailed')); }
     finally { setBusy(null); }
   }, [reload]);
 
@@ -171,13 +145,13 @@ export function QaContent() {
     <div>
       {/* Project selector */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
-        <label style={{ fontSize: 12, color: 'var(--text-muted)' }}>Project</label>
+        <label style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('projectLabel')}</label>
         <Select
           value={projectId ?? ''}
           onChange={(e) => setProjectId(e.target.value ? Number(e.target.value) : null)}
           style={{ ...inputStyle, minWidth: 240 }}
         >
-          <option value="">Builderforce app (self-test)</option>
+          <option value="">{t('selfTestOption')}</option>
           {projects.map((p) => (
             <option key={p.id} value={p.id}>{p.name}</option>
           ))}
@@ -211,26 +185,26 @@ export function QaContent() {
       />
 
       <Section
-        title={`Flows (${flows.length})`}
+        title={t('flowsTitle', { count: flows.length })}
         action={
           <div style={{ display: 'flex', gap: 8 }}>
             {projectId == null && (
               <button type="button" style={btnStyle(busy != null)} disabled={busy != null}
                 onClick={() => run('agg', () => aggregateFlows(projectId))}>
-                {busy === 'agg' ? 'Aggregating…' : 'Aggregate from usage'}
+                {busy === 'agg' ? t('aggregating') : t('aggregateFromUsage')}
               </button>
             )}
             <button type="button" style={btnStyle(busy != null || crawlRoutes.length === 0)} disabled={busy != null || crawlRoutes.length === 0}
               onClick={() => run('crawl', () => seedCrawl(crawlRoutes, projectId, projectId != null ? 'Site smoke crawl' : 'Authenticated route smoke crawl'))}>
-              {busy === 'crawl' ? 'Seeding…' : 'Seed AI crawl'}
+              {busy === 'crawl' ? t('seeding') : t('seedAiCrawl')}
             </button>
           </div>
         }
       >
         {flows.length === 0 ? (
-          <Empty>No flows yet. {projectId != null ? 'Add a target then seed a crawl.' : 'Capture usage in the app or seed an AI crawl.'}</Empty>
+          <Empty>{projectId != null ? t('flowsEmptyProject') : t('flowsEmptySelfTest')}</Empty>
         ) : (
-          <Table head={['Flow', 'Source', 'Persona', 'Seen', '']}>
+          <Table head={[t('colFlow'), t('colSource'), t('colPersona'), t('colSeen'), '']}>
             {flows.map((f) => (
               <tr key={f.id}>
                 <Td><strong style={{ color: 'var(--text-primary)' }}>{f.name}</strong></Td>
@@ -240,7 +214,7 @@ export function QaContent() {
                 <Td>
                   <button type="button" style={btnStyle(busy != null)} disabled={busy != null}
                     onClick={() => run(`gen-${f.id}`, () => generateTest(f.id))}>
-                    {busy === `gen-${f.id}` ? 'Generating…' : 'Generate test'}
+                    {busy === `gen-${f.id}` ? t('generating') : t('generateTest')}
                   </button>
                 </Td>
               </tr>
@@ -249,36 +223,36 @@ export function QaContent() {
         )}
       </Section>
 
-      <Section title={`Generated tests (${tests.length})`}>
+      <Section title={t('testsTitle', { count: tests.length })}>
         {tests.length === 0 ? (
-          <Empty>No tests generated yet. Generate one from a flow above.</Empty>
+          <Empty>{t('testsEmpty')}</Empty>
         ) : (
-          <Table head={['Test', 'Persona', 'Model', 'Ver', 'Status']}>
-            {tests.map((t) => (
-              <tr key={t.id}>
-                <Td><strong style={{ color: 'var(--text-primary)' }}>{t.name}</strong><br /><code style={{ fontSize: 10, color: 'var(--text-muted)' }}>{t.slug}</code></Td>
-                <Td>{(t.credentialId ? credentials.find((c) => c.id === t.credentialId)?.label : null) ?? t.personaRole ?? '—'}</Td>
-                <Td>{t.model ?? 'fallback'}</Td>
-                <Td>v{t.version}</Td>
-                <Td>{t.status}</Td>
+          <Table head={[t('colTest'), t('colPersona'), t('colModel'), t('colVer'), t('colStatus')]}>
+            {tests.map((test) => (
+              <tr key={test.id}>
+                <Td><strong style={{ color: 'var(--text-primary)' }}>{test.name}</strong><br /><code style={{ fontSize: 10, color: 'var(--text-muted)' }}>{test.slug}</code></Td>
+                <Td>{(test.credentialId ? credentials.find((c) => c.id === test.credentialId)?.label : null) ?? test.personaRole ?? '—'}</Td>
+                <Td>{test.model ?? t('modelFallback')}</Td>
+                <Td>v{test.version}</Td>
+                <Td>{test.status}</Td>
               </tr>
             ))}
           </Table>
         )}
       </Section>
 
-      <Section title={`Recent runs (${runs.length})`}>
+      <Section title={t('runsTitle', { count: runs.length })}>
         {runs.length === 0 ? (
-          <Empty>No runs yet. The CI harness posts results here after each suite.</Empty>
+          <Empty>{t('runsEmpty')}</Empty>
         ) : (
-          <Table head={['Test', 'Persona', 'Status', 'Steps', 'Duration', 'When']}>
+          <Table head={[t('colTest'), t('colPersona'), t('colStatus'), t('colSteps'), t('colDuration'), t('colWhen')]}>
             {runs.map((r) => (
               <tr key={r.id}>
                 <Td>{r.testName ?? r.testSlug ?? '—'}</Td>
                 <Td>{r.credentialLabel ?? r.credentialRole ?? '—'}</Td>
                 <Td><span style={{ color: STATUS_COLOR[r.status] ?? 'var(--text-secondary)', fontWeight: 700 }}>{r.status}</span></Td>
                 <Td>{r.passedSteps != null && r.totalSteps != null ? `${r.passedSteps}/${r.totalSteps}` : '—'}</Td>
-                <Td>{r.durationMs != null ? `${(r.durationMs / 1000).toFixed(1)}s` : '—'}</Td>
+                <Td>{r.durationMs != null ? t('durationSeconds', { seconds: (r.durationMs / 1000).toFixed(1) }) : '—'}</Td>
                 <Td>{fmt.dateTime(r.createdAt)}</Td>
               </tr>
             ))}
@@ -298,16 +272,17 @@ function AgenticTesterSection({ projectId, heatZones, explorations, busy, onRun 
   busy: string | null;
   onRun: (key: string, fn: () => Promise<unknown>) => Promise<void>;
 }) {
+  const t = useTranslations('qa');
   const fmt = useFormat();
   const [budget, setBudget] = useState(20);
   const [openId, setOpenId] = useState<string | null>(null);
 
   return (
     <Section
-      title="Agentic Tester"
+      title={t('agenticTesterTitle')}
       action={
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <label style={{ fontSize: 11, color: 'var(--text-muted)' }}>Zones</label>
+          <label style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('zonesLabel')}</label>
           <input
             type="number" min={1} max={100} value={budget}
             onChange={(e) => setBudget(Math.max(1, Math.min(100, Number(e.target.value) || 1)))}
@@ -319,28 +294,26 @@ function AgenticTesterSection({ projectId, heatZones, explorations, busy, onRun 
             disabled={busy != null || heatZones.length === 0}
             onClick={() => onRun('explore-start', () => startExploration({ projectId, heatBudget: budget }))}
           >
-            {busy === 'explore-start' ? 'Queuing…' : 'Run agentic tester'}
+            {busy === 'explore-start' ? t('queuing') : t('runAgenticTester')}
           </button>
         </div>
       }
     >
       <p style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 12 }}>
-        Decides what to exercise from interaction <strong>heat</strong> (the busiest routes &amp; controls),
-        drives a real browser through them in a container, and feeds captured runtime errors back as findings —
-        each can spawn a board task to fix it.
+        {t.rich('agenticTesterBlurb', { strong: (c) => <strong>{c}</strong> })}
       </p>
 
       {/* Heatmap — the hottest zones the next run will prioritise. */}
       {heatZones.length === 0 ? (
-        <Empty>No heatmap data yet. Capture usage in the app (interactions) before running the tester.</Empty>
+        <Empty>{t('heatmapEmpty')}</Empty>
       ) : (
         <>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>Hottest zones ({heatZones.length})</div>
-          <Table head={['Route', 'Element', 'Kind', 'Heat']}>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>{t('hottestZones', { count: heatZones.length })}</div>
+          <Table head={[t('colRoute'), t('colElement'), t('colKind'), t('colHeat')]}>
             {heatZones.slice(0, 8).map((z, i) => (
               <tr key={`${z.route}-${z.selector ?? i}`}>
                 <Td><code style={{ fontSize: 11 }}>{z.route}</code></Td>
-                <Td>{z.label ?? (z.selector ? <code style={{ fontSize: 10 }}>{z.selector.slice(0, 48)}</code> : '— (page)')}</Td>
+                <Td>{z.label ?? (z.selector ? <code style={{ fontSize: 10 }}>{z.selector.slice(0, 48)}</code> : t('zonePageFallback'))}</Td>
                 <Td>{z.kind}</Td>
                 <Td><HeatBar heat={z.heat} max={heatZones[0]?.heat ?? 1} /></Td>
               </tr>
@@ -350,11 +323,11 @@ function AgenticTesterSection({ projectId, heatZones, explorations, busy, onRun 
       )}
 
       {/* Explorations — the runs and their findings. */}
-      <div style={{ fontSize: 11, color: 'var(--text-muted)', margin: '18px 0 6px' }}>Explorations ({explorations.length})</div>
+      <div style={{ fontSize: 11, color: 'var(--text-muted)', margin: '18px 0 6px' }}>{t('explorationsCount', { count: explorations.length })}</div>
       {explorations.length === 0 ? (
-        <Empty>No explorations yet. Queue one above; a container harness drains the queue and reports findings here.</Empty>
+        <Empty>{t('explorationsEmpty')}</Empty>
       ) : (
-        <Table head={['When', 'Status', 'Zones', 'Findings', 'Summary', '']}>
+        <Table head={[t('colWhen'), t('colStatus'), t('colZones'), t('colFindings'), t('colSummary'), '']}>
           {explorations.map((ex) => (
             <tr key={ex.id}>
               <Td>{fmt.dateTime(ex.createdAt)}</Td>
@@ -365,7 +338,7 @@ function AgenticTesterSection({ projectId, heatZones, explorations, busy, onRun 
               <Td>
                 <button type="button" style={btnStyle(busy != null)} disabled={busy != null}
                   onClick={() => setOpenId(openId === ex.id ? null : ex.id)}>
-                  {openId === ex.id ? 'Hide' : 'Findings'}
+                  {openId === ex.id ? t('hide') : t('colFindings')}
                 </button>
               </Td>
             </tr>
@@ -390,11 +363,63 @@ function HeatBar({ heat, max }: { heat: number; max: number }) {
   );
 }
 
+/**
+ * The page image captured when a finding was recorded.
+ *
+ * Loaded ON DEMAND rather than with the table: a run can carry a dozen
+ * screenshots and a findings list is scanned far more often than any one image
+ * is looked at. The read is authenticated, so it goes through the shared
+ * transport and yields a blob URL — revoked on unmount so a long QA session does
+ * not leak object URLs.
+ */
+function FindingScreenshot({ screenshotKey }: { screenshotKey: string }) {
+  const t = useTranslations('qa');
+  const [url, setUrl] = useState<string | null>(null);
+  const [state, setState] = useState<'idle' | 'loading' | 'error'>('idle');
+
+  useEffect(() => () => { if (url) URL.revokeObjectURL(url); }, [url]);
+
+  if (url) {
+    return (
+      <a href={url} target="_blank" rel="noopener noreferrer" title={t('screenshotOpenFull')}>
+        <img
+          src={url}
+          alt={t('screenshotAlt')}
+          style={{
+            display: 'block', width: 160, maxWidth: '100%', height: 'auto',
+            borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)',
+          }}
+        />
+      </a>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      style={btnStyle(state === 'loading')}
+      disabled={state === 'loading'}
+      onClick={async () => {
+        setState('loading');
+        try {
+          setUrl(await fetchFindingScreenshot(screenshotKey));
+          setState('idle');
+        } catch {
+          setState('error');
+        }
+      }}
+    >
+      {state === 'loading' ? t('screenshotLoading') : state === 'error' ? t('screenshotUnavailable') : t('screenshotView')}
+    </button>
+  );
+}
+
 function FindingsPanel({ explorationId, busy, onRun }: {
   explorationId: string;
   busy: string | null;
   onRun: (key: string, fn: () => Promise<unknown>) => Promise<void>;
 }) {
+  const t = useTranslations('qa');
   const [findings, setFindings] = useState<QaFinding[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -403,19 +428,19 @@ function FindingsPanel({ explorationId, busy, onRun }: {
       const res = await fetchExploration(explorationId);
       setFindings(res.findings ?? []);
     } catch (e) {
-      setLoadError(e instanceof Error ? e.message : 'Failed to load findings');
+      setLoadError(e instanceof Error ? e.message : t('findingsLoadFailed'));
     }
   }, [explorationId]);
 
   useEffect(() => { void load(); }, [load]);
 
   if (loadError) return <Empty>{loadError}</Empty>;
-  if (findings == null) return <Empty>Loading findings…</Empty>;
-  if (findings.length === 0) return <Empty>No runtime errors captured in this exploration. <Icon source="🎉" size="1em" /></Empty>;
+  if (findings == null) return <Empty>{t('findingsLoading')}</Empty>;
+  if (findings.length === 0) return <Empty>{t('findingsNone')} <Icon source="🎉" size="1em" /></Empty>;
 
   return (
     <div style={{ marginTop: 12, padding: 12, borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--bg-deep)' }}>
-      <Table head={['Severity', 'Type', 'Route', 'Heat', 'Message', '']}>
+      <Table head={[t('colSeverity'), t('colType'), t('colRoute'), t('colHeat'), t('colMessage'), t('colEvidence'), '']}>
         {findings.map((f) => (
           <tr key={f.id}>
             <Td><span style={{ color: SEVERITY_COLOR[f.severity] ?? 'var(--text-secondary)', fontWeight: 700 }}>{f.severity}</span></Td>
@@ -424,14 +449,19 @@ function FindingsPanel({ explorationId, busy, onRun }: {
             <Td>{f.heat}</Td>
             <Td style={{ maxWidth: 360 }}><code style={{ fontSize: 11 }}>{f.message.slice(0, 200)}</code></Td>
             <Td>
+              {f.screenshotKey
+                ? <FindingScreenshot screenshotKey={f.screenshotKey} />
+                : <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>—</span>}
+            </Td>
+            <Td>
               {f.taskId ? (
-                <span style={{ fontSize: 11, color: 'var(--success)' }}>Task #{f.taskId}</span>
+                <span style={{ fontSize: 11, color: 'var(--success)' }}>{t('taskRef', { id: f.taskId })}</span>
               ) : f.projectId == null ? (
-                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>self-test</span>
+                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('selfTest')}</span>
               ) : (
                 <button type="button" style={btnStyle(busy != null)} disabled={busy != null}
                   onClick={() => onRun(`finding-task-${f.id}`, async () => { await createTaskFromFinding(f.id); await load(); })}>
-                  {busy === `finding-task-${f.id}` ? 'Creating…' : 'Create task'}
+                  {busy === `finding-task-${f.id}` ? t('creating') : t('createTask')}
                 </button>
               )}
             </Td>
@@ -448,29 +478,30 @@ function TargetsSection({ projectId, targets, busy, onRun }: {
   projectId: number; targets: QaTarget[]; busy: string | null;
   onRun: (key: string, fn: () => Promise<unknown>) => Promise<void>;
 }) {
+  const t = useTranslations('qa');
   const [name, setName] = useState('Production');
   const [baseUrl, setBaseUrl] = useState('');
 
   return (
-    <Section title={`Targets (${targets.length})`}>
+    <Section title={t('targetsTitle', { count: targets.length })}>
       <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
-        <input style={inputStyle} placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} />
+        <input style={inputStyle} placeholder={t('placeholderName')} value={name} onChange={(e) => setName(e.target.value)} />
         <input style={{ ...inputStyle, minWidth: 280 }} placeholder="https://app.example.com" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} />
         <button type="button" style={btnStyle(busy != null || !baseUrl)} disabled={busy != null || !baseUrl}
           onClick={() => onRun('target-add', () => createTarget(projectId, { name, baseUrl, isDefault: targets.length === 0 }))}>
-          Add target
+          {t('addTarget')}
         </button>
       </div>
       {targets.length === 0 ? (
-        <Empty>No site-under-test yet. Add the project&apos;s root URL.</Empty>
+        <Empty>{t('targetsEmpty')}</Empty>
       ) : (
-        <Table head={['Name', 'Base URL', 'Default', '']}>
-          {targets.map((t) => (
-            <tr key={t.id}>
-              <Td>{t.name}</Td>
-              <Td><code style={{ fontSize: 11 }}>{t.baseUrl}</code></Td>
-              <Td>{t.isDefault ? <Icon source="★" size="1em" /> : ''}</Td>
-              <Td><button type="button" style={btnStyle(busy != null)} disabled={busy != null} onClick={() => onRun(`target-del-${t.id}`, () => deleteTarget(t.id))}>Delete</button></Td>
+        <Table head={[t('colName'), t('colBaseUrl'), t('colDefault'), '']}>
+          {targets.map((target) => (
+            <tr key={target.id}>
+              <Td>{target.name}</Td>
+              <Td><code style={{ fontSize: 11 }}>{target.baseUrl}</code></Td>
+              <Td>{target.isDefault ? <Icon source="★" size="1em" /> : ''}</Td>
+              <Td><button type="button" style={btnStyle(busy != null)} disabled={busy != null} onClick={() => onRun(`target-del-${target.id}`, () => deleteTarget(target.id))}>{t('deleteLabel')}</button></Td>
             </tr>
           ))}
         </Table>
@@ -485,6 +516,7 @@ function CredentialsSection({ projectId, credentials, busy, onRun }: {
   projectId: number; credentials: QaCredential[]; busy: string | null;
   onRun: (key: string, fn: () => Promise<unknown>) => Promise<void>;
 }) {
+  const t = useTranslations('qa');
   const [label, setLabel] = useState('');
   const [role, setRole] = useState('member');
   const [username, setUsername] = useState('');
@@ -497,36 +529,36 @@ function CredentialsSection({ projectId, credentials, busy, onRun }: {
   });
 
   return (
-    <Section title={`Credentials / personas (${credentials.length})`}>
+    <Section title={t('credentialsTitle', { count: credentials.length })}>
       <p style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 10 }}>
-        Logins the AI-generated scenarios run as. Passwords are encrypted at rest and never shown again.
+        {t('credentialsBlurb')}
       </p>
       <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
-        <input style={inputStyle} placeholder="Label (Admin user)" value={label} onChange={(e) => setLabel(e.target.value)} />
+        <input style={inputStyle} placeholder={t('placeholderLabel')} value={label} onChange={(e) => setLabel(e.target.value)} />
         <Select style={inputStyle} value={role} onChange={(e) => setRole(e.target.value)}>
           <option value="admin">admin</option>
           <option value="manager">manager</option>
           <option value="member">member</option>
           <option value="viewer">viewer</option>
         </Select>
-        <input style={inputStyle} placeholder="Username / email" value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="off" />
-        <input style={inputStyle} type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" />
+        <input style={inputStyle} placeholder={t('placeholderUsername')} value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="off" />
+        <input style={inputStyle} type="password" placeholder={t('placeholderPassword')} value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" />
         <input style={inputStyle} placeholder="/login" value={loginUrl} onChange={(e) => setLoginUrl(e.target.value)} />
         <button type="button" style={btnStyle(busy != null || !label || !username || !password)} disabled={busy != null || !label || !username || !password} onClick={add}>
-          Add persona
+          {t('addPersona')}
         </button>
       </div>
       {credentials.length === 0 ? (
-        <Empty>No personas yet. Add at least one login the tests can use.</Empty>
+        <Empty>{t('credentialsEmpty')}</Empty>
       ) : (
-        <Table head={['Label', 'Role', 'Username', 'Login URL', '']}>
+        <Table head={[t('colLabel'), t('colRole'), t('colUsername'), t('colLoginUrl'), '']}>
           {credentials.map((c) => (
             <tr key={c.id}>
               <Td><strong style={{ color: 'var(--text-primary)' }}>{c.label}</strong></Td>
               <Td>{c.role ?? '—'}</Td>
               <Td><code style={{ fontSize: 11 }}>{c.username}</code></Td>
               <Td><code style={{ fontSize: 11 }}>{c.loginUrl ?? '/login'}</code></Td>
-              <Td><button type="button" style={btnStyle(busy != null)} disabled={busy != null} onClick={() => onRun(`cred-del-${c.id}`, () => deleteCredential(c.id))}>Delete</button></Td>
+              <Td><button type="button" style={btnStyle(busy != null)} disabled={busy != null} onClick={() => onRun(`cred-del-${c.id}`, () => deleteCredential(c.id))}>{t('deleteLabel')}</button></Td>
             </tr>
           ))}
         </Table>
@@ -537,231 +569,62 @@ function CredentialsSection({ projectId, credentials, busy, onRun }: {
 
 // ── Schedule (run the Agentic Tester on a cadence) ───────────────────────────
 
-const CRON_PRESETS: { label: string; cron: string }[] = [
-  { label: 'Every hour', cron: '0 * * * *' },
-  { label: 'Daily 08:00', cron: '0 8 * * *' },
-  { label: 'Weekdays 08:00', cron: '0 8 * * 1-5' },
-  { label: 'Weekly (Mon 08:00)', cron: '0 8 * * 1' },
+// Labels are message keys in the `qa` namespace — resolved at render, where the
+// translator is available (a module-level const cannot call hooks).
+const CRON_PRESETS: { labelKey: string; cron: string }[] = [
+  { labelKey: 'cronEveryHour', cron: '0 * * * *' },
+  { labelKey: 'cronDaily8', cron: '0 8 * * *' },
+  { labelKey: 'cronWeekdays8', cron: '0 8 * * 1-5' },
+  { labelKey: 'cronWeeklyMon8', cron: '0 8 * * 1' },
 ];
 
 function SchedulesSection({ projectId, schedules, credentials, busy, onRun }: {
   projectId: number; schedules: QaSchedule[]; credentials: QaCredential[]; busy: string | null;
   onRun: (key: string, fn: () => Promise<unknown>) => Promise<void>;
 }) {
+  const t = useTranslations('qa');
   const fmt = useFormat();
   const [cron, setCron] = useState('0 8 * * *');
   const [credentialId, setCredentialId] = useState('');
 
   return (
-    <Section title={`Schedule (${schedules.length})`}>
+    <Section title={t('scheduleTitle', { count: schedules.length })}>
       <p style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 10 }}>
-        Run the Agentic Tester automatically — the platform enqueues a heatmap-driven exploration on this cadence (no CI needed).
+        {t('scheduleBlurb')}
       </p>
       <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
         <Select style={inputStyle} value={cron} onChange={(e) => setCron(e.target.value)}>
-          {CRON_PRESETS.map((p) => <option key={p.cron} value={p.cron}>{p.label}</option>)}
+          {CRON_PRESETS.map((p) => <option key={p.cron} value={p.cron}>{t(p.labelKey)}</option>)}
         </Select>
         <Select style={inputStyle} value={credentialId} onChange={(e) => setCredentialId(e.target.value)}>
-          <option value="">Default persona</option>
+          <option value="">{t('defaultPersona')}</option>
           {credentials.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
         </Select>
         <button type="button" style={btnStyle(busy != null)} disabled={busy != null}
           onClick={() => onRun('sched-add', () => createSchedule(projectId, { cron, credentialId: credentialId || undefined }))}>
-          Schedule
+          {t('scheduleButton')}
         </button>
       </div>
       {schedules.length === 0 ? (
-        <Empty>Not scheduled. Add a cadence to run QA automatically.</Empty>
+        <Empty>{t('scheduleEmpty')}</Empty>
       ) : (
-        <Table head={['Cadence', 'Enabled', 'Next run', 'Last', '']}>
+        <Table head={[t('colCadence'), t('enabled'), t('colNextRun'), t('colLast'), '']}>
           {schedules.map((s) => (
             <tr key={s.id}>
               <Td><code style={{ fontSize: 11 }}>{s.cron}</code> <span style={{ color: 'var(--text-muted)' }}>{s.timezone}</span></Td>
               <Td>
                 <button type="button" style={btnStyle(busy != null)} disabled={busy != null}
                   onClick={() => onRun(`sched-tog-${s.id}`, () => updateSchedule(s.id, { enabled: !s.enabled }))}>
-                  {s.enabled ? 'On' : 'Off'}
+                  {s.enabled ? t('on') : t('off')}
                 </button>
               </Td>
               <Td>{s.nextRunAt ? fmt.dateTime(s.nextRunAt) : '—'}</Td>
               <Td>{s.lastStatus ?? '—'}</Td>
-              <Td><button type="button" style={btnStyle(busy != null)} disabled={busy != null} onClick={() => onRun(`sched-del-${s.id}`, () => deleteSchedule(s.id))}>Delete</button></Td>
+              <Td><button type="button" style={btnStyle(busy != null)} disabled={busy != null} onClick={() => onRun(`sched-del-${s.id}`, () => deleteSchedule(s.id))}>{t('deleteLabel')}</button></Td>
             </tr>
           ))}
         </Table>
       )}
     </Section>
   );
-}
-
-// ── Quality trend (escaped defects + producing model/agent) ──────────────────
-
-const SEVERITY_ORDER = ['critical', 'high', 'medium', 'low'];
-
-function pct(n: number): string {
-  return `${Math.round(n * 100)}%`;
-}
-
-function QualityTrendSection({ trend }: { trend: QaQualityTrend | null }) {
-  if (!trend) {
-    return (
-      <Section title="Quality trend">
-        <Empty>No quality data yet. It builds from Agentic Tester findings, CI build outcomes, and cloud-agent run scores.</Empty>
-      </Section>
-    );
-  }
-  const peakFindings = Math.max(1, ...trend.daily.map((d) => d.findings + d.ciFailures));
-  return (
-    <Section title={`Quality trend · last ${trend.windowDays}d`}>
-      {/* Headline metrics */}
-      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
-        <Metric label="Quality score" value={trend.qualityScore != null ? pct(trend.qualityScore) : '—'}
-          hint="mean cloud-agent run outcome" color={trend.qualityScore != null && trend.qualityScore < 0.5 ? 'var(--error)' : 'var(--success)'} />
-        <Metric label="Escaped defects" value={String(trend.findings.total)} hint={`${trend.findings.open} open`}
-          color={trend.findings.open > 0 ? 'var(--amber-bright)' : 'var(--text-primary)'} />
-        <Metric label="CI failure rate" value={trend.ci.builds > 0 ? pct(trend.ci.failureRate) : '—'}
-          hint={`${trend.ci.failures}/${trend.ci.builds} builds`} color={trend.ci.failureRate > 0.2 ? 'var(--error)' : 'var(--text-primary)'} />
-        <Metric label="Auto-routed" value={String(trend.findings.autoRouted)} hint="findings → fix agent" />
-      </div>
-
-      {/* Severity breakdown */}
-      {trend.findings.total > 0 && (
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
-          {SEVERITY_ORDER.filter((s) => trend.findings.bySeverity[s]).map((s) => (
-            <span key={s} style={{ fontSize: 11, padding: '3px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', color: SEVERITY_COLOR[s] ?? 'var(--text-secondary)', fontWeight: 700 }}>
-              {s}: {trend.findings.bySeverity[s]}
-            </span>
-          ))}
-        </div>
-      )}
-
-      {/* Daily defect series (findings + CI failures, stacked bars) */}
-      {trend.daily.length > 0 && (
-        <div style={{ marginBottom: 18 }}>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>Defects per day (findings ▮ + CI failures ▮)</div>
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 64 }}>
-            {trend.daily.map((d) => (
-              <div key={d.date} title={`${d.date}: ${d.findings} findings, ${d.ciFailures} CI failures`}
-                style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', minWidth: 4 }}>
-                <span style={{ display: 'block', height: `${(d.ciFailures / peakFindings) * 100}%`, background: 'var(--error)', borderRadius: 'var(--radius-sm) var(--radius-sm) 0 0'}} />
-                <span style={{ display: 'block', height: `${(d.findings / peakFindings) * 100}%`, background: 'var(--amber-bright)' }} />
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Which model / agent produced the defects */}
-      <ProducerTable title="By model" rows={trend.byModel} />
-      <ProducerTable title="By agent" rows={trend.byAgent} />
-      {(trend.byModel.length > 0 || trend.byAgent.length > 0) && (
-        <p style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 8 }}>
-          Caught = build-time defects (CI-failing runs). Escaped = runtime findings attributed to the most recent
-          deploy before each finding{trend.findings.escapedUnattributed > 0 ? ` (${trend.findings.escapedUnattributed} unattributed)` : ''}.
-        </p>
-      )}
-    </Section>
-  );
-}
-
-function Metric({ label, value, hint, color }: { label: string; value: string; hint?: string; color?: string }) {
-  return (
-    <div style={{ padding: '10px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--bg-deep)', minWidth: 130 }}>
-      <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.4 }}>{label}</div>
-      <div style={{ fontSize: 22, fontWeight: 700, color: color ?? 'var(--text-primary)', lineHeight: 1.3 }}>{value}</div>
-      {hint && <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>{hint}</div>}
-    </div>
-  );
-}
-
-function ProducerTable({ title, rows }: { title: string; rows: QaModelQuality[] }) {
-  if (rows.length === 0) return null;
-  return (
-    <div style={{ marginTop: 8 }}>
-      <div style={{ fontSize: 11, color: 'var(--text-muted)', margin: '10px 0 4px' }}>{title} — worst quality first</div>
-      <Table head={['Producer', 'Runs', 'Avg score', 'Merged', 'CI green', 'Caught', 'Escaped']}>
-        {rows.map((r) => (
-          <tr key={r.key}>
-            <Td><code style={{ fontSize: 11 }}>{r.key}</code></Td>
-            <Td>{r.runs}</Td>
-            <Td><span style={{ color: r.avgScore < 0.5 ? 'var(--error)' : 'var(--text-secondary)', fontWeight: 700 }}>{pct(r.avgScore)}</span></Td>
-            <Td>{pct(r.mergedRate)}</Td>
-            <Td><span style={{ color: r.ciGreenRate < 0.6 ? 'var(--amber-bright)' : 'var(--text-secondary)' }}>{pct(r.ciGreenRate)}</span></Td>
-            <Td><span style={{ color: r.defects > 0 ? 'var(--amber-bright)' : 'var(--text-secondary)', fontWeight: 700 }}>{r.defects}</span></Td>
-            <Td><span style={{ color: r.escapedDefects > 0 ? 'var(--error)' : 'var(--text-secondary)', fontWeight: 700 }}>{r.escapedDefects}</span></Td>
-          </tr>
-        ))}
-      </Table>
-    </div>
-  );
-}
-
-// ── Auto-routing policy (findings → fix agent) ───────────────────────────────
-
-function RoutingSection({ projectId, settings, busy, onRun }: {
-  projectId: number; settings: QaRoutingSettings | null; busy: string | null;
-  onRun: (key: string, fn: () => Promise<unknown>) => Promise<void>;
-}) {
-  const current: QaRoutingSettings = settings ?? { enabled: false, minSeverity: 'high', targetLaneKey: null, maxPerBatch: 5 };
-  const [draft, setDraft] = useState<QaRoutingSettings>(current);
-
-  // Keep the editor in sync when the loaded settings change (project switch / reload).
-  useEffect(() => { setDraft(current); }, [settings, projectId]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const dirty = JSON.stringify(draft) !== JSON.stringify(current);
-
-  return (
-    <Section title="Auto-route findings to a fix agent">
-      <p style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 10 }}>
-        When enabled, a captured finding at/above the chosen severity automatically opens a board task and routes it
-        into the project&apos;s staffed fix lane — firing the agent without waiting for manual triage. Off by default
-        (auto-routing dispatches paid agent runs).
-      </p>
-      <div style={{ display: 'flex', gap: 10, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-secondary)' }}>
-          <input type="checkbox" checked={draft.enabled} onChange={(e) => setDraft({ ...draft, enabled: e.target.checked })} />
-          Enabled
-        </label>
-        <label style={{ fontSize: 11, color: 'var(--text-muted)' }}>Min severity</label>
-        <Select style={inputStyle} value={draft.minSeverity} onChange={(e) => setDraft({ ...draft, minSeverity: e.target.value })}>
-          {SEVERITY_ORDER.map((s) => <option key={s} value={s}>{s}</option>)}
-        </Select>
-        <label style={{ fontSize: 11, color: 'var(--text-muted)' }}>Lane</label>
-        <input style={inputStyle} placeholder="auto-detect" value={draft.targetLaneKey ?? ''}
-          onChange={(e) => setDraft({ ...draft, targetLaneKey: e.target.value || null })} />
-        <label style={{ fontSize: 11, color: 'var(--text-muted)' }}>Max / run</label>
-        <input type="number" min={1} max={50} value={draft.maxPerBatch} style={{ ...inputStyle, minWidth: 64, width: 64 }}
-          onChange={(e) => setDraft({ ...draft, maxPerBatch: Math.max(1, Math.min(50, Number(e.target.value) || 1)) })} />
-        <button type="button" style={btnStyle(busy != null || !dirty)} disabled={busy != null || !dirty}
-          onClick={() => onRun('routing-save', () => updateRouting(projectId, draft))}>
-          {busy === 'routing-save' ? 'Saving…' : 'Save'}
-        </button>
-      </div>
-    </Section>
-  );
-}
-
-// ── Shared bits ──────────────────────────────────────────────────────────────
-
-function Empty({ children }: { children: React.ReactNode }) {
-  return <p style={{ fontSize: 13, color: 'var(--text-muted)', padding: '12px 0' }}>{children}</p>;
-}
-
-function Table({ head, children }: { head: string[]; children: React.ReactNode }) {
-  return (
-    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-      <thead>
-        <tr>
-          {head.map((h) => (
-            <th key={h} style={{ textAlign: 'left', padding: '6px 8px', color: 'var(--text-muted)', fontWeight: 600, borderBottom: '1px solid var(--border-subtle)' }}>{h}</th>
-          ))}
-        </tr>
-      </thead>
-      <tbody>{children}</tbody>
-    </table>
-  );
-}
-
-function Td({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
-  return <td style={{ padding: '8px', color: 'var(--text-secondary)', borderBottom: '1px solid var(--border-subtle)', verticalAlign: 'top', ...style }}>{children}</td>;
 }

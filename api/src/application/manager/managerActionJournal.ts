@@ -40,7 +40,7 @@
  * nothing — a regression, not a consolidation. This one exists because the board-staffing
  * verdict is stored nowhere else: the feed is its only record.
  */
-import { and, desc, eq, isNull } from 'drizzle-orm';
+import { and, desc, eq, gte, isNull, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { managerActions } from '../../infrastructure/database/schema';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
@@ -292,4 +292,100 @@ function serializeDetail(
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * THE PR ACTION VOCABULARY.
+ *
+ * These moved out of ManagerService when the PR merge loop became its own registry
+ * sweep (`application/repos/prMergeSweep.ts`). They belong here for the same reason
+ * `recordManagerAction` does: they are the journal's own vocabulary, and both the
+ * merge sweep that WRITES them and the manager pass that READS the result now need
+ * them — a shared constant in the leaf store, rather than either importing the
+ * other.
+ * ───────────────────────────────────────────────────────────────────────────── */
+
+/** `manager_actions.action_type` for "PR is ready but merge authority is withheld"
+ *  (0363). Its own type — not 'flag' — so the surface can say "waiting on a human to
+ *  merge" and the dedupe query can find prior reports for a PR in one indexed lookup.
+ *  Must fit `action_type varchar(24)`. */
+export const MERGE_BLOCKED_ACTION = 'merge_blocked';
+
+/**
+ * `manager_actions.action_type` for "the provider REFUSED this merge" (0381).
+ *
+ * Its own type for the same reason `merge_blocked` is: it must be COUNTABLE. The refusal
+ * used to be journalled as a generic 'flag', which meant nothing could tell one PR's
+ * third failed merge from any of the 1,770 other flags that project files in a day — so
+ * the attempt was never counted and the merge was retried every five minutes forever.
+ * Measured on project 11, 2026-07-28: "Could not merge PR #29 … Pull Request is not
+ * mergeable" four times in the last thirty decisions, one per pass, indefinitely.
+ */
+export const MERGE_FAILED_ACTION = 'merge_failed';
+
+/**
+ * `manager_actions.action_type` for "this PR's branch conflicts with its base" (0381).
+ *
+ * Also promoted out of 'flag', and for a second reason beyond counting: it is the only
+ * record that the manager TOUCHED a conflicting PR at all. The sync path writes
+ * `sync_pr`, but a PR that conflicts never reaches the sync — so with the conflict
+ * hidden inside 'flag' the fair-rotation ordering below would read every conflicting PR
+ * as "never acted on" and pin it to the front of the queue on every pass, which is
+ * precisely the starvation it exists to end.
+ */
+export const PR_CONFLICT_ACTION = 'pr_conflict';
+
+/**
+ * The action types that count as "the manager did PR work on this ticket".
+ *
+ * The rotation orders by the newest of these, so the set has to be exactly the actions a
+ * PR pass can take and nothing else — including a general type like 'flag' would make
+ * every ticket look recently touched and collapse the ordering to arbitrary again.
+ */
+export const PR_ACTION_TYPES = [
+  'sync_pr', 'merge_pr', MERGE_BLOCKED_ACTION, MERGE_FAILED_ACTION, PR_CONFLICT_ACTION,
+] as const;
+
+
+/**
+ * How many pull requests LANDED for this project since `since` — the manager pass's
+ * READ of work it no longer does itself.
+ *
+ * ── WHY THE PASS READS THIS INSTEAD OF MERGING ───────────────────────────────────
+ * The merge loop used to be stage 4b of the pass, and it was 93% of the pass's measured
+ * wall-clock (project 11, 2026-07-30: `pr: 28839ms` of a 30888ms pass) — mechanical,
+ * provider-bound, high-volume work whose cadence has nothing to do with ranking or
+ * triage, starving every stage behind it. It is now its own registry sweep
+ * (`application/repos/prMergeSweep.ts`) with its own budget, so the pass cannot be
+ * starved by PR volume BY CONSTRUCTION rather than by a tuned window.
+ *
+ * The pass still reports `prsMerged` on its closing row, because "what landed" is part
+ * of what a manager accounts for. It gets that number from the journal the sweep writes
+ * — one indexed COUNT on `(tenant_id, project_id, action_type)` — instead of doing the
+ * work to be able to say it.
+ */
+export async function countPrMergesSince(
+  db: Db,
+  args: { tenantId: number; projectId: number; since: Date | null },
+): Promise<number> {
+  // No previous pass to measure from → nothing to attribute to this window. Reporting a
+  // project's all-time merge count on its first pass would read as "this pass merged 40".
+  if (!args.since) return 0;
+  try {
+    const [row] = await db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(managerActions)
+      .where(and(
+        eq(managerActions.tenantId, args.tenantId),
+        eq(managerActions.projectId, args.projectId),
+        eq(managerActions.actionType, 'merge_pr'),
+        gte(managerActions.createdAt, args.since),
+      ));
+    return Number(row?.n ?? 0);
+  } catch (error) {
+    reportCaughtError(error, {
+      source: 'application/manager/managerActionJournal.ts', operation: 'countPrMergesSince',
+    });
+    return 0;
+  }
 }

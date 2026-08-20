@@ -213,3 +213,24 @@ const styles = StyleSheet.create({
 export function defaultsForModality(modality: string): Record<string, string> {
   return modality === 'mobile' || modality === 'webmobile' ? MOBILE_DEFAULTS : VANILLA_DEFAULTS;
 }
+
+/** Every path owned by ANY starter scaffold, across modalities. */
+const ALL_SCAFFOLD_PATHS = new Set([
+  ...Object.keys(VANILLA_DEFAULTS),
+  ...Object.keys(MOBILE_DEFAULTS),
+]);
+
+/**
+ * Is this path a file a starter scaffold owns?
+ *
+ * A scaffold file may be edited or deleted, but never *emptied*: a 0-byte
+ * `package.json` / `index.html` / `vite.config.js` is never a state anyone means
+ * to reach and only ever breaks Run. The API refuses such a write at its
+ * chokepoint (`workspaceStore.validateScaffoldNotEmptied`); this twin lets the
+ * client avoid making the doomed request at all — most usefully in file-create,
+ * which posts an empty body by construction. Pinned to the server copy by
+ * `api/src/application/project/templateParity.test.ts`.
+ */
+export function isScaffoldPath(path: string): boolean {
+  return ALL_SCAFFOLD_PATHS.has(path);
+}

@@ -2,6 +2,7 @@
 
 import { Icon } from '@/components/ui/Icon';
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { buildTree, getFileName } from '@/lib/utils';
 import type { TreeNode } from '@/lib/utils';
 import type { FileEntry } from '@/lib/types';
@@ -33,6 +34,7 @@ function TreeNodeComponent({
   onFileDelete: (path: string) => void;
   depth?: number;
 }) {
+  const t = useTranslations('ide');
   const [expanded, setExpanded] = useState(true);
   const [hovered, setHovered] = useState(false);
   const indent = depth * 14 + 10;
@@ -87,13 +89,14 @@ function TreeNodeComponent({
     >
       <span style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
         <span style={{ fontSize: '0.72rem' }}>{fileIcon(node.name || node.path)}</span>
-        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: "'JetBrains Mono', monospace", fontSize: '0.75rem' }}>{node.name || getFileName(node.path) || '(untitled)'}</span>
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: "'JetBrains Mono', monospace", fontSize: '0.75rem' }}>{node.name || getFileName(node.path) || t('explorer.untitled')}</span>
       </span>
       {hovered && (
         <button
           style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--error-text)', fontSize: '0.7rem', padding: '0 2px', flexShrink: 0 }}
           onClick={(e) => { e.stopPropagation(); onFileDelete(node.path); }}
-          title="Delete"
+          title={t('explorer.deleteFile')}
+          aria-label={t('explorer.deleteFile')}
         >✕</button>
       )}
     </div>
@@ -101,6 +104,7 @@ function TreeNodeComponent({
 }
 
 export function FileExplorer({ files, activeFile, onFileSelect, onFileCreate, onFileDelete, showHeader = true }: FileExplorerProps) {
+  const t = useTranslations('ide');
   const [newFileName, setNewFileName] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const tree = buildTree(files);
@@ -118,11 +122,12 @@ export function FileExplorer({ files, activeFile, onFileSelect, onFileCreate, on
       {showHeader && (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 10px', borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
           <span style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: 'var(--font-display)' }}>
-            Explorer
+            {t('explorer.title')}
           </span>
           <button
             onClick={() => setIsCreating(true)}
-            title="New file"
+            title={t('explorer.newFile')}
+            aria-label={t('explorer.newFile')}
             style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '1.1rem', lineHeight: 1, padding: '2px 4px', borderRadius: 'var(--radius-sm)' }}
           >+</button>
         </div>
@@ -132,7 +137,8 @@ export function FileExplorer({ files, activeFile, onFileSelect, onFileCreate, on
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', padding: '6px 8px', borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
           <button
             onClick={() => setIsCreating(true)}
-            title="New file"
+            title={t('explorer.newFile')}
+            aria-label={t('explorer.newFile')}
             style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '1.1rem', lineHeight: 1, padding: '2px 4px', borderRadius: 'var(--radius-sm)' }}
           >+</button>
         </div>
@@ -148,7 +154,8 @@ export function FileExplorer({ files, activeFile, onFileSelect, onFileCreate, on
               if (e.key === 'Enter') handleCreate();
               if (e.key === 'Escape') { setIsCreating(false); setNewFileName(''); }
             }}
-            placeholder="src/newfile.ts"
+            placeholder={t('explorer.newFilePlaceholder')}
+            aria-label={t('explorer.newFile')}
             style={{
               width: '100%', background: 'var(--bg-elevated)', color: 'var(--text-primary)',
               fontSize: '0.78rem', padding: '4px 8px', borderRadius: 'var(--radius-sm)',
@@ -163,7 +170,7 @@ export function FileExplorer({ files, activeFile, onFileSelect, onFileCreate, on
         {tree.length === 0 ? (
           <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '16px 10px', fontSize: '0.78rem' }}>
             <div style={{ fontSize: '1.5rem', marginBottom: 6 }}><Icon source="📂" size="1em" /></div>
-            No files yet.<br />Click + to create one.
+            {t('explorer.emptyTitle')}<br />{t('explorer.emptyHint')}
           </div>
         ) : tree.map(node => (
           <TreeNodeComponent

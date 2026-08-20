@@ -89,6 +89,8 @@ export const FIELD_HELP: Record<string, string> = {
     "Allow stdin-only safe binaries to run without explicit allowlist entries.",
   "tools.fs.workspaceOnly":
     "Restrict filesystem tools (read/write/edit/apply_patch) to the workspace directory (default: false).",
+  "tools.fs.convergedFileTools":
+    "Back write/edit with the SHARED cross-surface tool definitions (and add delete_file/list_files) instead of the native on-prem copies. Same model-facing names, same workspace confinement as tools.fs.workspaceOnly; non-sandboxed sessions only (default: true).",
   "tools.sessions.visibility":
     'Controls which sessions can be targeted by sessions_list/sessions_history/sessions_send. ("tree" default = current session + spawned subagent sessions; "self" = only current; "agent" = any session in the current agent id; "all" = any session; cross-agent still requires tools.agentToAgent).',
   "tools.message.allowCrossContextSend":

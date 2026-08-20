@@ -49,6 +49,7 @@ import { runCustomDomainSweep } from './application/ide/customDomain';
 import { runHostedListingSweep } from './application/marketplace/creationListings.hostedSweep';
 import { runJobAlertSweep } from './application/marketplace/jobAlerts';
 import { reapStaleExecutions } from './application/runtime/staleExecutionReaper';
+import { sweepIdlePreviews } from './application/runtime/previewSessions';
 import { reconcileGithubActionsRuns } from './application/runtime/githubActionsReconcile';
 import { runExecutionLifecycleOutboxSweep } from './application/runtime/executionLifecycleOutbox';
 import { runApprovalExpirySweep } from './application/approvals/runApprovalExpirySweep';
@@ -58,6 +59,7 @@ import { runAutonomousExecutionSweep } from './application/runtime/autonomousExe
 import { runManagerSweep } from './application/manager/runManagerSweep';
 import { runWebhookRetrySweep } from './application/seams/webhookService';
 import { runBoardSyncSweep } from './application/boardsync/runBoardSyncSweep';
+import { runPrMergeSweep } from './application/repos/prMergeSweep';
 import { runParkedWorkflowSweep } from './application/swimlane/resumeParkedWorkflows';
 import { runQaExplorationSweep } from './application/qa/runQaExplorationSweep';
 import { runRepoActivitySweep } from './application/contributors/runRepoActivitySweep';
@@ -472,6 +474,15 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     },
   },
   {
+    key: 'preview-eviction',
+    cadence: 'frequent',
+    description: 'Stop container instances held open by a live preview nobody is watching (tighter than the DO sleepAfter, which is sized for runs).',
+    run: async ({ env }) => {
+      const r = await sweepIdlePreviews(env);
+      return r.evicted > 0 ? `evicted=${r.evicted}` : null;
+    },
+  },
+  {
     key: 'exec-reaper',
     cadence: 'frequent',
     description: 'Fail executions stranded in running/pending by a crashed host or dropped dispatch.',
@@ -580,6 +591,32 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     run: async ({ env }) => {
       const redelivered = await runWebhookRetrySweep(env);
       return redelivered > 0 ? `redelivered=${redelivered}` : null;
+    },
+  },
+  {
+    key: 'pr-merge',
+    cadence: 'frequent',
+    description: "Work each opted-in project's PR merge queue: update the head from its base, poll CI, merge, or retire it to a human.",
+    // Conflict recovery hands a branch back to its ticket's agent, which starts a
+    // billable cloud run — so this sweep draws from the shared per-tick tenant ceiling
+    // and the operator control confirms before firing it.
+    dispatches: true,
+    // ── WHY THIS IS NOT PART OF THE MANAGER PASS ────────────────────────────────
+    // It was, and it was 93% of the pass's measured wall-clock (project 11,
+    // 2026-07-30: `pr: 28839ms` of a 30888ms pass), starving every stage behind it —
+    // including the triage stage that owns every remedy. Merging is mechanical,
+    // high-volume, provider-bound work whose cadence is set by PR volume, not by how
+    // often a backlog is worth re-ranking. With its own key and its own budget the
+    // manager pass cannot be starved by PR volume BY CONSTRUCTION rather than by a
+    // tuned queue depth. See `application/repos/prMergeSweep.ts`.
+    run: async ({ env, budget, controls }) => {
+      // The SAME switch that pauses the manager's PR work and the reconciler owns this
+      // sweep too — one control for "PR management is paused", not a third.
+      if (!cronSweepEnabled(controls ?? {}, 'pr-ticket-reconciler')) return null;
+      const r = await runPrMergeSweep(env, budget);
+      return r.worked > 0
+        ? `projects=${r.projects} worked=${r.worked} merged=${r.merged} dispatched=${r.dispatched} queued=${r.queued} retired=${r.retired} notReached=${r.notReached}`
+        : null;
     },
   },
   {

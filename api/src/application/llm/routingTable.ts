@@ -24,13 +24,28 @@ import type { Env } from '../../env';
 import { getOrSetCached, peekCached, setCached } from '../../infrastructure/cache/readThroughCache';
 import { llmActionRatings, runModelOutcomes } from '../../infrastructure/database/schema';
 import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
-import { normalizeActionType, type ActionType } from './actionTypes';
-import { blendedQualityScore, isChronicallyRateLimited } from './modelQualityScore';
+import {
+  blendedQualityScore,
+  DEFAULT_MIN_SAMPLES,
+  isChronicallyRateLimited,
+  normalizeActionType,
+  parseScopeToken,
+  scopeToken,
+  type ActionType,
+  type RoutingScope,
+} from '@builderforce/learned-routing';
+
+// The scope type + its token are the shared contract (an on-prem host reads the same
+// `?scope=` token), so they live in `@builderforce/learned-routing`. Re-exported here
+// because this module is where the api's routing-table callers already look for them.
+export { parseScopeToken, scopeToken, type RoutingScope };
 
 /** Minimum samples in a (scope, action_type, model) bucket before learned routing
- *  will prefer it. Below this, the curated static order stands. Single source of
- *  truth — the router and the scope-precedence reader both gate on it. */
-export const MIN_SAMPLES = 8;
+ *  will prefer it. Below this, the curated static order stands. The floor itself is
+ *  the ranker's (`DEFAULT_MIN_SAMPLES`, shared with the on-prem host) — aliased here
+ *  under the name the api's readers already use, so there is ONE number, not two
+ *  eights that can drift apart. */
+export const MIN_SAMPLES = DEFAULT_MIN_SAMPLES;
 
 /** How far back the reconcile aggregates outcomes — keeps the fact scan bounded as
  *  the table grows and lets stale model preferences age out. */
@@ -73,29 +88,6 @@ export interface RoutingTable {
   updatedAt: string;
   /** action_type → models ranked best-first. */
   byAction: Partial<Record<ActionType, ActionModelStat[]>>;
-}
-
-/** A routing scope, finest-first in precedence. */
-export type RoutingScope =
-  | { kind: 'project'; id: number }
-  | { kind: 'tenant'; id: number }
-  | { kind: 'global' };
-
-/** Stable string form used as the cache key suffix and the analytics query param. */
-export function scopeToken(scope: RoutingScope): string {
-  return scope.kind === 'global' ? 'global' : `${scope.kind}:${scope.id}`;
-}
-
-/** Parse a `scope` query param (`project:<id>` | `tenant:<id>` | `global`). Returns
- *  null for anything malformed so the caller can 400. */
-export function parseScopeToken(raw: string | undefined | null): RoutingScope | null {
-  if (!raw || raw === 'global') return raw === 'global' ? { kind: 'global' } : null;
-  const [kind, idStr] = raw.split(':');
-  const id = Number(idStr);
-  if ((kind === 'project' || kind === 'tenant') && Number.isInteger(id) && id > 0) {
-    return { kind, id };
-  }
-  return null;
 }
 
 function cacheKey(scope: RoutingScope): string {

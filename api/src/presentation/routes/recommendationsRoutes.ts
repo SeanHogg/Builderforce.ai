@@ -18,14 +18,10 @@ import { Hono } from 'hono';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
 import { scope } from './segmentTrackerRoutes';
-import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
-import { computeRecommendations, dismissRecommendation } from '../../application/insights/recommendationsEngine';
-import { computeSpaceMetrics } from '../../application/insights/spaceMetrics';
+import { getRecommendations, dismissRecommendationCached, getSpaceMetrics } from '../../application/insights/aiInsightsReads';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { positiveIntParam } from './queryParams';
-
-const SHORT_TTL = { kvTtlSeconds: 60, l1TtlMs: 15_000 };
 
 /** Clamp a `?days=` window to a sane range (default 30). */
 function parseDays(raw: string | undefined, def = 30): number {
@@ -34,17 +30,9 @@ function parseDays(raw: string | undefined, def = 30): number {
 }
 
 
-/** Per-tenant version token bumped on every dismissal so the cached list ages out.
- *  Exported so the bundled /ai-overview read shares the exact same cache key (and
- *  thus honours dismissals) rather than re-deriving the recommendations. */
-export function recsVersionKey(tenantId: number): string {
-  return `insights-recs-version:tenant:${tenantId}`;
-}
-
-/** The recommendations read-through cache key for a tenant+window+dismissal token. */
-export function recommendationsCacheKey(tenantId: number, days: number, ver: string): string {
-  return `insights:recs:t:${tenantId}:d:${days}:v:${ver}`;
-}
+// The cache keys these reads use live in `application/insights/versionKeys.ts`
+// beside every other insights token — a route is not the place two route modules
+// go to agree on a key.
 
 export function createRecommendationsRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -55,10 +43,7 @@ export function createRecommendationsRoutes(db: Db): Hono<HonoEnv> {
   router.get('/recommendations', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId } = scope(c);
     const days = parseDays(c.req.query('days'));
-    const env = c.env as Env;
-    const ver = await getCacheVersion(env, recsVersionKey(tenantId));
-    const key = recommendationsCacheKey(tenantId, days, ver);
-    return c.json(await getOrSetCached(env, key, () => computeRecommendations(db, tenantId, days), SHORT_TTL));
+    return c.json(await getRecommendations(db, c.env as Env, tenantId, days));
   });
 
   // Dismiss (acknowledge) a recommendation by its stable rec_key (manager). Upserts
@@ -69,8 +54,7 @@ export function createRecommendationsRoutes(db: Db): Hono<HonoEnv> {
     const recKey = typeof body.recKey === 'string' ? body.recKey.trim() : '';
     if (!recKey || recKey.length > 120) return c.json({ error: 'recKey is required' }, 400);
     const userId = (c.get('userId') as string | undefined) ?? null;
-    await dismissRecommendation(db, tenantId, recKey, userId);
-    await bumpCacheVersion(c.env as Env, recsVersionKey(tenantId));
+    await dismissRecommendationCached(db, c.env as Env, tenantId, recKey, userId);
     return c.json({ dismissed: recKey });
   });
 
@@ -79,9 +63,7 @@ export function createRecommendationsRoutes(db: Db): Hono<HonoEnv> {
     const { tenantId } = scope(c);
     const days = parseDays(c.req.query('days'));
     const projectId = positiveIntParam(c.req.query('projectId'));
-    const env = c.env as Env;
-    const key = `insights:space:t:${tenantId}:d:${days}:p:${projectId ?? 0}`;
-    return c.json(await getOrSetCached(env, key, () => computeSpaceMetrics(db, tenantId, days, projectId), SHORT_TTL));
+    return c.json(await getSpaceMetrics(db, c.env as Env, tenantId, days, projectId));
   });
 
   return router;

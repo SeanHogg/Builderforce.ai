@@ -66,6 +66,7 @@ export const NODE_KINDS: NodeKindMeta[] = [
         // a workflow can start from a captured signal (form, signup, purchase…).
         options: [
           'manual', 'webhook', 'schedule', 'board-event',
+          'qa-finding', 'qa-exploration-complete',
           'monitor-breach', 'incident-created', 'incident-resolved', 'incident-status-change',
           'form-submit', 'page-view', 'signup', 'purchase',
           'email-open', 'email-click', 'rss', 'inbound-email', 'integration',
@@ -83,6 +84,12 @@ export const NODE_KINDS: NodeKindMeta[] = [
       { key: 'verify', label: 'Verify caller as', type: 'select', options: ['hmac', 'twilio'], visibleWhen: { field: 'triggerType', equals: 'webhook' } },
       { key: 'secret', label: 'Signing secret / Twilio auth token', type: 'text', placeholder: 'Shared secret, or your Twilio auth token', visibleWhen: { field: 'triggerType', equals: 'webhook' } },
       { key: 'boardEvent', label: 'Board event', type: 'select', options: ['task-created', 'task-moved', 'task-completed', 'comment-added'], visibleWhen: { field: 'triggerType', equals: 'board-event' } },
+
+      // Quality filters (blank = fire on any). The Agentic Tester's severity
+      // taxonomy is its own — deliberately not the incident sev1..sev4 scale.
+      { key: 'findingSeverity', label: 'Finding severity (blank = any)', type: 'select', options: ['', 'low', 'medium', 'high', 'critical'], visibleWhen: { field: 'triggerType', equals: 'qa-finding' } },
+      { key: 'findingType', label: 'Finding type (blank = any)', type: 'select', options: ['', 'console', 'pageerror', 'network', 'navigation', 'assertion', 'crash'], visibleWhen: { field: 'triggerType', equals: 'qa-finding' } },
+      { key: 'explorationOutcome', label: 'Run outcome (blank = any)', type: 'select', options: ['', 'passed', 'failed', 'error'], visibleWhen: { field: 'triggerType', equals: 'qa-exploration-complete' } },
 
       // Reliability event filters (blank = fire on any). severity/affectedSystem apply
       // to every Reliability event; the rest are event-specific. Keys are matched

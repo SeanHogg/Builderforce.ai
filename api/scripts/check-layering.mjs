@@ -3,8 +3,9 @@
  * Layering ratchet — the presentation layer must not reach into infrastructure.
  *
  * The api declares a DDD layering (presentation → application → domain, with
- * infrastructure behind the domain's repository interfaces). In practice 104 of
- * 147 route modules import `infrastructure/database/schema` and run SQL inline,
+ * infrastructure behind the domain's repository interfaces). In practice 110 of
+ * 203 presentation modules import `infrastructure/…` and run SQL or cache calls
+ * inline (down from 104 of 147 when this guard landed, and from 126 on 2026-08-19),
  * so an HTTP handler reaches past application AND domain straight into the
  * database. That is why tenant scoping, caching and validation all have to be
  * re-remembered per route instead of living in one place.

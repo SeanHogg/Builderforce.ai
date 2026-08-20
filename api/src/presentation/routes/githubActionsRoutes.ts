@@ -39,11 +39,15 @@ import { reportCaughtError } from '../../application/observability/caughtErrorRe
  *
  * ── Why the op protocol is shared verbatim ───────────────────────────────────
  * Once authenticated, this delegates to the SAME `handleContainerOp` the
- * container surface uses. The ops (llm / write / event / memory / platform_tool
- * / heartbeat / finalize / fail) are the surface-agnostic contract; only the
- * transport and the auth differ. Forking that handler per surface would
- * guarantee the two drift — steering, compaction, metering and PR-finalize
- * semantics all live inside it.
+ * container surface uses. The ops (status / heartbeat / event / platform_tool /
+ * memory / prd / coordinate / llm / ask_human / write / finalize / fail) are the
+ * surface-agnostic contract; only the transport and the auth differ. Forking that
+ * handler per surface would guarantee the two drift — steering, compaction,
+ * metering, pause/resume and PR-finalize semantics all live inside it.
+ *
+ * The ONE op that is not surface-agnostic in its EFFECT is `ask_human`: parking a
+ * run records which transport must be re-dispatched to resume it, so this route
+ * tells the handler it is the Actions surface. Everything else is identical.
  */
 import { Hono } from 'hono';
 import { and, asc, desc, eq, sql } from 'drizzle-orm';
@@ -58,6 +62,8 @@ import {
 import { resolveTicketRepoContext } from '../../application/repos/commitFileAsPendingChange';
 import { resolveArtifacts } from '../../application/artifact/resolveArtifacts';
 import { CONTAINER_MAX_STEPS } from '../../application/runtime/cloudAgentTools';
+import { MIN_RESUMED_CONTAINER_STEPS } from '../../application/runtime/containerRunLauncher';
+import { clearPauseState, loadPauseState } from '../../application/runtime/executionPause';
 import { executions, projectRepositories } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { BUILDERFORCE_AGENT_OIDC_AUDIENCE } from '../../application/runtime/githubActionsWorkflow';
@@ -208,11 +214,23 @@ export function createGitHubActionsRoutes(db: Db, runtimeService: RuntimeService
         reportCaughtError(error, { source: "presentation/routes/githubActionsRoutes.ts", operation: "createGitHubActionsRoutes" });
       });
 
+      // RESUMING a run parked on `ask_human`. Unlike the container — which is handed
+      // its resume state in the /run body it is pushed — a pull-driven runner can only
+      // receive it here, on the first call it makes. Consume-and-clear: the record has
+      // now been delivered, and leaving it would make a LATER re-dispatch of the same
+      // execution replay a stale conversation.
+      const paused = await loadPauseState(db, { tenantId: ctx.tenantId, executionId: body.executionId });
+      const resume = paused?.loopState ?? null;
+      if (paused) await clearPauseState(db, { tenantId: ctx.tenantId, executionId: body.executionId });
+
       return c.json({
         systemPrompt,
         userContent,
-        maxSteps: CONTAINER_MAX_STEPS,
+        // A resumed job gets the REMAINING budget (with a floor), never a fresh
+        // allowance — the same rule the container relaunch applies.
+        maxSteps: resume ? Math.max(MIN_RESUMED_CONTAINER_STEPS, CONTAINER_MAX_STEPS - resume.step) : CONTAINER_MAX_STEPS,
         repo: repo.ok ? { baseBranch: repo.ctx.base, headBranch: repo.ctx.branch } : null,
+        ...(resume ? { resume: { messages: resume.messages, writtenPaths: resume.writtenPaths } } : {}),
       });
     }
 
@@ -224,6 +242,7 @@ export function createGitHubActionsRoutes(db: Db, runtimeService: RuntimeService
       body.executionId,
       body.op,
       body.args ?? {},
+      { surface: 'github_actions' },
     );
     return c.json(result.body as Record<string, unknown>, result.status as 200);
   });

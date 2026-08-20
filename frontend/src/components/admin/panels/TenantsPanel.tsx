@@ -10,6 +10,7 @@ import { AdminError, AdminLoading, errText } from '@/components/admin/adminShare
 import { useAdminFormat } from '@/components/admin/adminShared';
 import { TenantTokenLimitOverrideEditor } from '@/components/admin/TenantTokenLimitOverrideEditor';
 import { TenantPaidOverflowCapEditor } from '@/components/admin/TenantPaidOverflowCapEditor';
+import { TenantPremiumCapEditor } from '@/components/admin/TenantPremiumCapEditor';
 import { TenantImageCreditsEditor } from '@/components/admin/TenantImageCreditsEditor';
 import { TenantPremiumOverrideEditor } from '@/components/admin/TenantPremiumOverrideEditor';
 
@@ -149,7 +150,17 @@ export default function TenantsPanel() {
                           value={tenant.paidOverflowDailyCap ?? null}
                           onChange={(next) => setTenants((prev) => prev.map((x) => x.id === tenant.id ? { ...x, paidOverflowDailyCap: next } : x))}
                         />
-                        <TenantImageCreditsEditor
+                        <TenantPremiumCapEditor
+                          tenantId={tenant.id}
+                          value={tenant.premiumDailyCap ?? null}
+                          onChange={(next) => setTenants((prev) => prev.map((x) => x.id === tenant.id ? { ...x, premiumDailyCap: next } : x))}
+                        />
+                        <TenantPremiumCapEditor
+                      tenantId={tenant.id}
+                      value={tenant.premiumDailyCap ?? null}
+                      onChange={(next) => setTenants((prev) => prev.map((x) => x.id === tenant.id ? { ...x, premiumDailyCap: next } : x))}
+                    />
+                    <TenantImageCreditsEditor
                           tenantId={tenant.id}
                           value={tenant.imageCreditsDailyLimit ?? null}
                           onChange={(next) => setTenants((prev) => prev.map((x) => x.id === tenant.id ? { ...x, imageCreditsDailyLimit: next } : x))}

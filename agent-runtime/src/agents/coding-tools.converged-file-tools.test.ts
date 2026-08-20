@@ -51,12 +51,70 @@ describe("createBuilderForceAgentsCodingTools — converged file tools (tools.fs
     );
   });
 
-  it("defaults OFF — native write/edit kept, no converged-only tools", async () => {
+  it("defaults ON — the converged set is what an unconfigured session gets", async () => {
     const tools = createBuilderForceAgentsCodingTools({ workspaceDir });
+    const names = tools.map((t) => t.name);
+    expect(names.filter((n) => n === "write")).toHaveLength(1);
+    expect(names.filter((n) => n === "edit")).toHaveLength(1);
+    expect(names).toContain("delete_file");
+    expect(names).toContain("list_files");
+  });
+
+  it("can be turned OFF explicitly, falling back to the native per-tool copies", async () => {
+    const nativeConfig = {
+      tools: { fs: { convergedFileTools: false } },
+    } as unknown as BuilderForceAgentsConfig;
+    const tools = createBuilderForceAgentsCodingTools({ workspaceDir, config: nativeConfig });
     const names = tools.map((t) => t.name);
     expect(names).toContain("write");
     expect(names).toContain("edit");
     expect(names).not.toContain("delete_file");
     expect(names).not.toContain("list_files");
+  });
+
+  it("leaves writes UNCONFINED by default, exactly as the native tools were", async () => {
+    // The whole reason the flag could default on: turning convergence on must not turn
+    // `tools.fs.workspaceOnly` on with it. A write outside the root still succeeds unless
+    // the operator asked for confinement — otherwise a flag flip silently starts failing
+    // every legitimate out-of-tree write.
+    const outside = await fs.mkdtemp(path.join(os.tmpdir(), "bf-outside-"));
+    try {
+      const tools = createBuilderForceAgentsCodingTools({ workspaceDir });
+      const write = tools.find((t) => t.name === "write");
+      const target = path.join(outside, "note.txt");
+      const res = await write?.execute(
+        "c1",
+        { path: target, content: "outside\n" },
+        undefined as unknown as AbortSignal,
+      );
+      expect(getText(res)).toContain('"ok":true');
+      expect(await fs.readFile(target, "utf-8")).toBe("outside\n");
+    } finally {
+      await fs.rm(outside, { recursive: true, force: true });
+    }
+  });
+
+  it("CONFINES writes when tools.fs.workspaceOnly is set", async () => {
+    const confined = {
+      tools: { fs: { workspaceOnly: true } },
+    } as unknown as BuilderForceAgentsConfig;
+    const outside = await fs.mkdtemp(path.join(os.tmpdir(), "bf-outside-"));
+    try {
+      const tools = createBuilderForceAgentsCodingTools({ workspaceDir, config: confined });
+      const write = tools.find((t) => t.name === "write");
+      // The converged tool inherits the SAME outer workspace guard the native pair gets,
+      // which refuses the call outright rather than letting the provider report it.
+      await expect(
+        write?.execute(
+          "c1",
+          { path: path.join(outside, "note.txt"), content: "nope\n" },
+          undefined as unknown as AbortSignal,
+        ),
+      ).rejects.toThrow(/escapes/i);
+      // And nothing reached disk.
+      await expect(fs.readFile(path.join(outside, "note.txt"), "utf-8")).rejects.toThrow();
+    } finally {
+      await fs.rm(outside, { recursive: true, force: true });
+    }
   });
 });

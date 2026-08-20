@@ -51,6 +51,15 @@ export class ProjectRepository implements IProjectRepository {
     return row ? toDomain(row) : null;
   }
 
+  async segmentIdOf(id: ProjectId): Promise<string | null> {
+    const [row] = await this.db
+      .select({ segmentId: projectsTable.segmentId })
+      .from(projectsTable)
+      .where(eq(projectsTable.id, id as unknown as number))
+      .limit(1);
+    return row?.segmentId ?? null;
+  }
+
   async save(project: Project): Promise<Project> {
     const plain = project.toPlain();
     const [inserted] = await this.db

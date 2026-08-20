@@ -1,7 +1,7 @@
 'use client';
 
 import { Icon } from '@/components/ui/Icon';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslations } from 'next-intl';
 import Link from 'next/link';
 import { useBrainDataRefresh } from '@/lib/brain/useBrainDataRefresh';
@@ -16,19 +16,30 @@ import { tableWrapStyle, tableStyle } from './dataTableStyles';
 export interface PRDsContentProps {
   projectId: number;
   projectName: string;
+  /**
+   * Open one spec's drawer as soon as the list has loaded, selected by kind —
+   * how "View arch analysis" lands ON the architecture PRD instead of merely on
+   * the tab that contains it. Consumed once (see `onInitialSpecConsumed`), so a
+   * re-render never re-opens a drawer the user has closed.
+   */
+  initialSpecKind?: string | null;
+  /** Same, but by exact id — wins over `initialSpecKind` when both are given. */
+  initialSpecId?: string | null;
+  /** Fired once the request above has been acted on, so the owner can clear it. */
+  onInitialSpecConsumed?: () => void;
 }
 
-const STATUS_LABELS: Record<string, string> = {
-  draft: 'Draft',
-  ready: 'Ready',
-  in_progress: 'In progress',
-  complete: 'Complete',
-};
-
-export function PRDsContent({ projectId, projectName }: PRDsContentProps) {
+export function PRDsContent({
+  projectId,
+  projectName,
+  initialSpecKind = null,
+  initialSpecId = null,
+  onInitialSpecConsumed,
+}: PRDsContentProps) {
   const t = useTranslations('prdsDrawer');
   const tc = useTranslations('common');
-  const drawerStatusLabel = (status: string): string => {
+  /** Localized spec status; unknown values fall back to the raw string. */
+  const statusLabel = (status: string): string => {
     const labels: Record<string, string> = {
       draft: t('statusDraft'),
       ready: t('statusReady'),
@@ -55,11 +66,13 @@ export function PRDsContent({ projectId, projectName }: PRDsContentProps) {
       const list = await specsApi.list(projectId);
       setSpecs(list);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load PRDs');
+      setError(e instanceof Error ? e.message : t('loadFailed'));
     } finally {
       setIsLoading(false);
     }
-  }, [projectId]);
+    // `t` is memoized per namespace by next-intl, so listing it is honest about
+    // the dependency without turning this into a refetch-every-render loop.
+  }, [projectId, t]);
 
   useEffect(() => {
     loadSpecs();
@@ -78,7 +91,7 @@ export function PRDsContent({ projectId, projectName }: PRDsContentProps) {
       setSpecs((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
       setSelectedSpec(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to save');
+      setError(e instanceof Error ? e.message : t('saveFailed'));
     } finally {
       setIsSaving(false);
     }
@@ -92,15 +105,33 @@ export function PRDsContent({ projectId, projectName }: PRDsContentProps) {
       setDeleteSpec(null);
       if (selectedSpec?.id === deleteSpec.id) setSelectedSpec(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to delete');
+      setError(e instanceof Error ? e.message : t('deleteFailed'));
     }
   };
 
-  const openEdit = (spec: Spec) => {
+  const openEdit = useCallback((spec: Spec) => {
     setSelectedSpec(spec);
     setEditPrd(spec.prd ?? '');
     setEditPreview(true);
-  };
+  }, []);
+
+  // A caller can ask for one spec's drawer to be open on arrival (the Architecture
+  // "Fix" lands on the architecture PRD, not just the PRDs tab). The request is
+  // CONSUMED — recorded in a ref and reported back — so closing the drawer sticks
+  // instead of the next render re-opening it, and a request that matches nothing
+  // is retired rather than retried against every refetch of the list.
+  const consumedSpecRequest = useRef<string | null>(null);
+  useEffect(() => {
+    const request = initialSpecId ?? initialSpecKind ?? null;
+    if (!request || isLoading) return;
+    if (consumedSpecRequest.current === request) return;
+    consumedSpecRequest.current = request;
+    const match = initialSpecId
+      ? specs.find((s) => s.id === initialSpecId)
+      : specs.find((s) => s.kind === initialSpecKind);
+    if (match) openEdit(match);
+    onInitialSpecConsumed?.();
+  }, [initialSpecId, initialSpecKind, isLoading, specs, openEdit, onInitialSpecConsumed]);
 
   // `?project=` is the global scope param adopted by ProjectScopeProvider on
   // navigation, so the Brain Storm filter (and new-chat default) lands on this
@@ -111,9 +142,9 @@ export function PRDsContent({ projectId, projectName }: PRDsContentProps) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
         <div>
-          <h3 style={{ fontWeight: 600, fontSize: 16, marginBottom: 4 }}>PRDs</h3>
+          <h3 style={{ fontWeight: 600, fontSize: 16, marginBottom: 4 }}>{t('title')}</h3>
           <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-            Product requirements documents. Create in markdown or generate with Brain.
+            {t('subtitle')}
           </p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -134,7 +165,7 @@ export function PRDsContent({ projectId, projectName }: PRDsContentProps) {
               textDecoration: 'none',
             }}
           >
-            Generate with Brain →
+            {t('generateWithBrain')} →
           </Link>
           <button
             type="button"
@@ -154,7 +185,7 @@ export function PRDsContent({ projectId, projectName }: PRDsContentProps) {
               fontFamily: 'var(--font-display)',
             }}
           >
-            + Add
+            + {t('add')}
           </button>
         </div>
       </div>
@@ -166,7 +197,7 @@ export function PRDsContent({ projectId, projectName }: PRDsContentProps) {
       )}
 
       {isLoading ? (
-        <div style={{ color: 'var(--text-muted)', padding: 24 }}>Loading PRDs…</div>
+        <div style={{ color: 'var(--text-muted)', padding: 24 }}>{t('loading')}</div>
       ) : specs.length === 0 ? (
         <div
           style={{
@@ -178,9 +209,9 @@ export function PRDsContent({ projectId, projectName }: PRDsContentProps) {
           }}
         >
           <div style={{ fontSize: 40, marginBottom: 16 }}><Icon source="📄" size="1em" /></div>
-          <p style={{ color: 'var(--text-secondary)', marginBottom: 8 }}>No PRDs yet.</p>
+          <p style={{ color: 'var(--text-secondary)', marginBottom: 8 }}>{t('emptyTitle')}</p>
           <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>
-            Add a PRD manually or generate one with Brain.
+            {t('emptyDesc')}
           </p>
           <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
             <button
@@ -196,7 +227,7 @@ export function PRDsContent({ projectId, projectName }: PRDsContentProps) {
                 cursor: 'pointer',
               }}
             >
-              + Add PRD
+              + {t('addPrd')}
             </button>
             <Link
               href={brainstormUrl}
@@ -210,7 +241,7 @@ export function PRDsContent({ projectId, projectName }: PRDsContentProps) {
                 textDecoration: 'none',
               }}
             >
-              Generate with Brain →
+              {t('generateWithBrain')} →
             </Link>
           </div>
         </div>
@@ -234,7 +265,7 @@ export function PRDsContent({ projectId, projectName }: PRDsContentProps) {
             >
               <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 8 }}>{spec.goal}</div>
               <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8 }}>
-                {STATUS_LABELS[spec.status] ?? spec.status}
+                {statusLabel(spec.status)}
               </div>
               <div
                 style={{
@@ -247,7 +278,7 @@ export function PRDsContent({ projectId, projectName }: PRDsContentProps) {
                   WebkitBoxOrient: 'vertical',
                 }}
               >
-                {spec.prd ? spec.prd.slice(0, 150) + (spec.prd.length > 150 ? '…' : '') : 'No content'}
+                {spec.prd ? spec.prd.slice(0, 150) + (spec.prd.length > 150 ? '…' : '') : t('noContent')}
               </div>
             </div>
           ))}
@@ -257,10 +288,10 @@ export function PRDsContent({ projectId, projectName }: PRDsContentProps) {
           <table style={tableStyle}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border-subtle)', textAlign: 'left' }}>
-                <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--text-secondary)' }}>Goal</th>
-                <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--text-secondary)' }}>Status</th>
-                <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--text-secondary)' }}>Preview</th>
-                <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--text-secondary)' }}>Actions</th>
+                <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--text-secondary)' }}>{t('colGoal')}</th>
+                <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--text-secondary)' }}>{t('colStatus')}</th>
+                <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--text-secondary)' }}>{t('preview')}</th>
+                <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--text-secondary)' }}>{t('colActions')}</th>
               </tr>
             </thead>
             <tbody>
@@ -268,7 +299,7 @@ export function PRDsContent({ projectId, projectName }: PRDsContentProps) {
                 <tr key={spec.id} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
                   <td style={{ padding: '12px 16px', fontWeight: 500, color: 'var(--text-primary)' }}>{spec.goal}</td>
                   <td style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>
-                    {STATUS_LABELS[spec.status] ?? spec.status}
+                    {statusLabel(spec.status)}
                   </td>
                   <td style={{ padding: '12px 16px', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {spec.prd ? spec.prd.slice(0, 80) + (spec.prd.length > 80 ? '…' : '') : '—'}
@@ -289,7 +320,7 @@ export function PRDsContent({ projectId, projectName }: PRDsContentProps) {
                           cursor: 'pointer',
                         }}
                       >
-                        Edit
+                        {tc('edit')}
                       </button>
                       <button
                         type="button"
@@ -305,7 +336,7 @@ export function PRDsContent({ projectId, projectName }: PRDsContentProps) {
                           cursor: 'pointer',
                         }}
                       >
-                        Delete
+                        {tc('delete')}
                       </button>
                     </div>
                   </td>
@@ -333,7 +364,7 @@ export function PRDsContent({ projectId, projectName }: PRDsContentProps) {
         title={selectedSpec && (
           <div>
             <div style={{ fontWeight: 700, fontSize: 16 }}>{selectedSpec.goal}</div>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{drawerStatusLabel(selectedSpec.status)}</div>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{statusLabel(selectedSpec.status)}</div>
           </div>
         )}
         headerActions={selectedSpec && (
@@ -431,10 +462,10 @@ export function PRDsContent({ projectId, projectName }: PRDsContentProps) {
 
       <ConfirmDialog
         open={!!deleteSpec}
-        message={deleteSpec ? `Delete PRD "${deleteSpec.goal}"? This cannot be undone.` : ''}
+        message={deleteSpec ? t('deleteConfirm', { goal: deleteSpec.goal }) : ''}
         onCancel={() => setDeleteSpec(null)}
         onConfirm={handleDelete}
-        confirmLabel="Delete"
+        confirmLabel={tc('delete')}
       />
     </div>
   );

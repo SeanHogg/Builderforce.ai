@@ -36,13 +36,17 @@ interface Insert {
 }
 
 /** Fake Db that records every `db.insert(table).values(row)` so a test can assert
- *  which table got which row. Matches the drizzle insert(...).values(...) chain. */
+ *  which table got which row. Matches the drizzle insert(...).values(...) chain,
+ *  including the `.returning()` the tool-audit write uses to carry the persisted
+ *  row id onto the run's live stream. */
 function makeFakeDb() {
   const inserts: Insert[] = [];
   const db = {
     insert: (table: unknown) => ({
-      values: async (row: Record<string, unknown>) => {
+      values: (row: Record<string, unknown>) => {
         inserts.push({ table, row });
+        const result = Promise.resolve([{ id: inserts.length }]);
+        return Object.assign(result, { returning: () => result });
       },
     }),
   } as unknown as Db;
@@ -117,7 +121,7 @@ describe('recordCloudToolEvent → tool_audit_events', () => {
 
   it('is best-effort: a DB failure never throws (telemetry must not break the run)', async () => {
     const db = {
-      insert: () => ({ values: async () => { throw new Error('db down'); } }),
+      insert: () => ({ values: () => ({ returning: () => Promise.reject(new Error('db down')) }) }),
     } as unknown as Db;
 
     await expect(

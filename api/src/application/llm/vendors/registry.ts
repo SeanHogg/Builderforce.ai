@@ -346,27 +346,49 @@ export class CascadeExhaustedError extends Error {
   public readonly attempts: ReadonlyArray<DispatchAttempt>;
   public readonly skippedNoKey: ReadonlyArray<string>;
   public readonly skippedNoStream: ReadonlyArray<string>;
+  public readonly skippedCooled: ReadonlyArray<string>;
   constructor(
     kind: 'json' | 'stream',
     attempts: ReadonlyArray<DispatchAttempt>,
     skippedNoKey: ReadonlyArray<string>,
     skippedNoStream: ReadonlyArray<string> = [],
+    /** Candidates skipped by the mid-cascade cooldown re-check. Named in the message
+     *  because "0 attempts" with nothing else said reads as a bug in the composer. */
+    skippedCooled: ReadonlyArray<string> = [],
   ) {
     const summary = attempts.map((a) => `${a.vendor}/${a.model}=${a.status}`).join(', ');
     const noKey = skippedNoKey.length    > 0 ? ` (skipped no-key: ${skippedNoKey.join(', ')})` : '';
     const noStr = skippedNoStream.length > 0 ? ` (skipped no-stream: ${skippedNoStream.join(', ')})` : '';
+    const cooled = skippedCooled.length  > 0 ? ` (skipped cooled: ${skippedCooled.join(', ')})` : '';
     const head  = kind === 'stream' ? 'AI streaming vendor cascade exhausted' : 'AI vendor cascade exhausted';
-    super(`${head} (${attempts.length} attempts: ${summary})${noKey}${noStr}`);
+    super(`${head} (${attempts.length} attempts: ${summary})${noKey}${noStr}${cooled}`);
     this.name = 'CascadeExhaustedError';
     this.attempts = attempts;
     this.skippedNoKey = skippedNoKey;
     this.skippedNoStream = skippedNoStream;
+    this.skippedCooled = skippedCooled;
   }
 }
 
 export interface DispatchParams extends DispatchBody {
   env: VendorEnv;
   modelChain: string[];
+  /**
+   * Defence-in-depth re-check: is this (vendor, model) cooled RIGHT NOW?
+   *
+   * The chain is filtered against cooldowns once, when it is composed. A cascade
+   * then takes seconds — a slow vendor timeout is 15s on its own — during which a
+   * concurrent request can cool a candidate this one is still about to try. Without
+   * a re-check the cascade walks knowingly into it, spends the timeout, and cools it
+   * a second time.
+   *
+   * Supplied by the CALLER (the proxy) rather than read here, because the cooldown
+   * store imports this module and the reverse import would be a cycle. Absent = no
+   * re-check, which is the pre-existing behaviour. Consulted only from the SECOND
+   * candidate onward: the first has just been filtered, so a re-read there is pure
+   * cost.
+   */
+  isCooled?: (vendor: VendorId, model: string) => Promise<boolean>;
 }
 
 export interface DispatchResult extends VendorCallResult {
@@ -427,7 +449,7 @@ async function dispatchInternal<R extends VendorCallResult | VendorStreamResult>
   params: DispatchParams,
   cfg: SurfaceConfig<R>,
 ): Promise<R & { modelUsed: string; vendorUsed: VendorId; attempts: DispatchAttempt[] }> {
-  const { env, modelChain, reasoningIntent, ...rest } = params;
+  const { env, modelChain, reasoningIntent, isCooled, ...rest } = params;
   if (modelChain.length === 0) {
     throw new Error(`${cfg.fnName}: modelChain is empty`);
   }
@@ -436,11 +458,19 @@ async function dispatchInternal<R extends VendorCallResult | VendorStreamResult>
   const skippedNoKey: string[] = [];
   const skippedNoStream: string[] = [];
 
+  const skippedCooled: string[] = [];
+
   for (const model of modelChain) {
     const { vendorId, vendorModel } = resolveVendorAndModel(model);
     const mod = MODULES_BY_ID[vendorId];
     if (!cfg.supports(mod)) {
       skippedNoStream.push(`${vendorId}:${model}`);
+      continue;
+    }
+    // Re-check cooldown from the second candidate onward — see `isCooled`. A store
+    // failure must never block a dispatch, so an error degrades to "not cooled".
+    if (isCooled && attempts.length > 0 && await isCooled(vendorId, model).catch(() => false)) {
+      skippedCooled.push(`${vendorId}:${model}`);
       continue;
     }
     const apiKey = vendorId === 'openrouter'
@@ -530,7 +560,7 @@ async function dispatchInternal<R extends VendorCallResult | VendorStreamResult>
     }
   }
 
-  throw new CascadeExhaustedError(cfg.kind, attempts, skippedNoKey, skippedNoStream);
+  throw new CascadeExhaustedError(cfg.kind, attempts, skippedNoKey, skippedNoStream, skippedCooled);
 }
 
 /** Walk a model chain non-streaming. Throws if every model in the chain fails. */

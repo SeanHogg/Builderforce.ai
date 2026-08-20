@@ -56,6 +56,11 @@ import {
 } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { isValidCron, nextCronTime } from '../../domain/workflowSchedule';
+import { projectInTenant } from '../../application/project/projectOwnership';
+import { deriveTargetZones } from '../../application/qa/deriveTargetRoutes';
+import { fireEventTriggers } from '../../application/workflow/eventTriggers';
+import { getFindingScreenshot, putFindingScreenshot } from '../../application/qa/findingScreenshots';
+import { wildcardPath } from './wildcardPath';
 import { QaFlowService } from '../../application/qa/QaFlowService';
 import { QaGeneratorService } from '../../application/qa/QaGeneratorService';
 import { QaHeatmapService, QA_HEAT_VERSION_KEY } from '../../application/qa/QaHeatmapService';
@@ -148,7 +153,7 @@ export function createQaRoutes(db: Db, taskService: TaskService, runtimeService:
     const segmentId = c.get('segmentId') as string | undefined;
     const userId    = c.get('userId') as string | undefined;
 
-    let body: { sessionId?: string; events?: IncomingEvent[] };
+    let body: { sessionId?: string; projectId?: number | string | null; events?: IncomingEvent[] };
     try {
       const json = await c.req.json();
       body = Array.isArray(json) ? { events: json } : json;
@@ -157,6 +162,17 @@ export function createQaRoutes(db: Db, taskService: TaskService, runtimeService:
     }
 
     const sessionId = (body.sessionId ?? c.req.query('sessionId') ?? '').slice(0, 64);
+    // The site-under-test this batch was captured on. Absent = the Builderforce
+    // app shell itself, which belongs to no customer project — the meaning every
+    // pre-0955 row already carries. Heat ranks per project when it is present.
+    const rawProjectId = body.projectId ?? c.req.query('projectId');
+    const projectIdNum = rawProjectId == null || rawProjectId === '' ? null : Number(rawProjectId);
+    const projectId = projectIdNum !== null && Number.isInteger(projectIdNum) && projectIdNum > 0 ? projectIdNum : null;
+    // A caller may only attribute events to a project in its OWN tenant —
+    // otherwise a batch could poison another workspace's ranking.
+    if (projectId !== null && !(await projectInTenant(db, tenantId, projectId))) {
+      return c.json({ error: 'Project not found' }, 404);
+    }
     const events = Array.isArray(body.events) ? body.events : [];
     if (!sessionId) return c.json({ error: 'sessionId is required' }, 400);
     if (events.length === 0) return c.json({ inserted: 0 });
@@ -169,6 +185,7 @@ export function createQaRoutes(db: Db, taskService: TaskService, runtimeService:
         tenantId,
         segmentId,
         userId: userId ?? null,
+        projectId,
         sessionId,
         seq:      typeof e.seq === 'number' ? e.seq : i,
         type:     e.type.slice(0, 32),
@@ -759,7 +776,14 @@ export function createQaRoutes(db: Db, taskService: TaskService, runtimeService:
     const tenantId  = c.get('tenantId') as number;
     const sinceDays = c.req.query('sinceDays') ? Number(c.req.query('sinceDays')) : undefined;
     const limit     = c.req.query('limit') ? Number(c.req.query('limit')) : undefined;
-    const zones = await new QaHeatmapService(db, c.env as Env).rankZones(tenantId, { sinceDays, limit });
+    // A project-scoped read ranks that project's own site traffic (plus the
+    // app-shell events that belong to no project); omitting it pools the tenant.
+    const projectIdRaw = c.req.query('projectId');
+    const projectId = projectIdRaw ? Number(projectIdRaw) : null;
+    if (projectId !== null && !(await projectInTenant(db, tenantId, projectId))) {
+      return c.json({ error: 'Project not found' }, 404);
+    }
+    const zones = await new QaHeatmapService(db, c.env as Env).rankZones(tenantId, { sinceDays, limit, projectId });
     return c.json({ zones, total: zones.length });
   });
 
@@ -786,12 +810,15 @@ export function createQaRoutes(db: Db, taskService: TaskService, runtimeService:
       return c.json({ error: 'Project has no active QA target (root URL). Add one first.' }, 400);
     }
 
-    let zones = await new QaHeatmapService(db, c.env as Env).rankZones(tenantId, { sinceDays, limit: heatBudget * 3 });
+    let zones = await new QaHeatmapService(db, c.env as Env)
+      .rankZones(tenantId, { sinceDays, limit: heatBudget * 3, projectId });
     if (zones.length === 0) {
       // No interaction history yet (e.g. a just-deployed app with no captured
-      // usage) — fall back to a crawl from the site root so the tester still runs
-      // instead of hard-failing. Once real usage is captured, the heatmap takes over.
-      zones = [{ route: '/', selector: null, kind: 'pageview', label: null, heat: 0, score: 0 }];
+      // usage). Derive the routes the site's own root page links to, so the first
+      // exploration covers the app rather than only its home page. Degrades to
+      // the root alone when the target is unreachable. Once real usage is
+      // captured, the heatmap takes over and this is never reached.
+      zones = await deriveTargetZones(c.env as Env, target?.baseUrl ?? null, heatBudget);
     }
     const plan = buildExplorationPlan(zones, heatBudget);
 
@@ -916,6 +943,44 @@ export function createQaRoutes(db: Db, taskService: TaskService, runtimeService:
     return c.json(await explorationBundle(tenantId, row));
   });
 
+  // ── POST /explorations/:id/screenshot ────────────────────────────────────────
+  // The harness uploads the page image it captured at the moment a finding was
+  // recorded, and gets back the key to attach to that finding. Raw bytes rather
+  // than multipart: the runner has an image buffer, not a form.
+  router.post('/explorations/:id/screenshot', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const [exploration] = await db.select({ id: qaExplorations.id }).from(qaExplorations)
+      .where(and(eq(qaExplorations.id, c.req.param('id')), eq(qaExplorations.tenantId, tenantId))).limit(1);
+    if (!exploration) return c.json({ error: 'Exploration not found' }, 404);
+
+    const result = await putFindingScreenshot((c.env as { UPLOADS?: R2Bucket }).UPLOADS, {
+      tenantId,
+      explorationId: exploration.id,
+      contentType: c.req.header('content-type') ?? '',
+      bytes: await c.req.arrayBuffer(),
+    });
+    if (!result.ok) return c.json({ error: result.reason }, result.status);
+    return c.json({ screenshotKey: result.key }, 201);
+  });
+
+  // ── GET /screenshots/* ───────────────────────────────────────────────────────
+  // Stream a stored screenshot back to the findings UI. The tenant is IN the key,
+  // so another workspace's key cannot resolve here even if it were guessed.
+  router.get('/screenshots/*', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const key = wildcardPath(c);
+    const obj = await getFindingScreenshot((c.env as { UPLOADS?: R2Bucket }).UPLOADS, tenantId, key);
+    if (!obj) return c.json({ error: 'Screenshot not found' }, 404);
+    return new Response(obj.body, {
+      headers: {
+        'Content-Type': obj.contentType,
+        'Content-Length': String(obj.size),
+        // Immutable: the key contains a uuid, so a given key's bytes never change.
+        'Cache-Control': 'private, max-age=31536000, immutable',
+      },
+    });
+  });
+
   // ── POST /explorations/:id/findings ──────────────────────────────────────────
   // The harness posts a batch of captured runtime errors. Deduped per run by
   // fingerprint; the rolled-up findingsCount is refreshed from the table.
@@ -986,6 +1051,23 @@ export function createQaRoutes(db: Db, taskService: TaskService, runtimeService:
       c.executionCtx.waitUntil(autoRouteFindings(c.env as Env, tenantId, projectId, inserted));
     }
 
+    // Workflow triggers: one event per GENUINELY NEW finding (`inserted`, not
+    // `rows` — a re-posted fingerprint is not new information and must not
+    // re-fire someone's escalation). Off the response path; a trigger failure
+    // must never cost the harness its findings.
+    if (inserted.length > 0) {
+      const env = c.env as Env;
+      c.executionCtx.waitUntil(Promise.all(inserted.map((f) => fireEventTriggers(db, {
+        tenantId, env,
+        eventType: 'qa-finding',
+        payload: {
+          findingId: f.id, explorationId: f.explorationId, projectId: f.projectId,
+          type: f.type, severity: f.severity, route: f.route, message: f.message, heat: f.heat,
+        },
+        match: { findingSeverity: f.severity, findingType: f.type },
+      }).catch(() => undefined))).then(() => undefined));
+    }
+
     return c.json({ inserted: rows.length, findingsCount: all.length }, 201);
   });
 
@@ -1011,6 +1093,23 @@ export function createQaRoutes(db: Db, taskService: TaskService, runtimeService:
 
     const [updated] = await db.update(qaExplorations).set(patch)
       .where(and(eq(qaExplorations.id, c.req.param('id')), eq(qaExplorations.tenantId, tenantId))).returning();
+
+    // A finished run is a fact a workflow can react to — "the nightly explore
+    // failed, tell the team" — and it fires ONCE per run, on the terminal
+    // transition only, so a mid-run progress PATCH cannot spam it.
+    if (updated && body.status && ['passed', 'failed', 'error'].includes(body.status)) {
+      const env = c.env as Env;
+      c.executionCtx.waitUntil(fireEventTriggers(db, {
+        tenantId, env,
+        eventType: 'qa-exploration-complete',
+        payload: {
+          explorationId: updated.id, projectId: updated.projectId, status: updated.status,
+          findingsCount: updated.findingsCount, zonesExplored: updated.zonesExplored,
+          targetUrl: updated.targetUrl, summary: updated.summary, browser: updated.browser,
+        },
+        match: { explorationOutcome: updated.status },
+      }).then(() => undefined).catch(() => undefined));
+    }
     return c.json({ exploration: updated });
   });
 

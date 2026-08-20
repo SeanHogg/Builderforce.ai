@@ -66,6 +66,16 @@ export interface AdminTenant {
    */
   paidOverflowDailyCap: number | null;
   /**
+   * Per-tenant daily PREMIUM spend ceiling, millicents (migration 0952).
+   *   null → plan default ($10/day)
+   *   -1   → unlimited (gate skipped)
+   *   >= 0 → explicit millicents/day ceiling
+   * A SEPARATE ceiling from `paidOverflowDailyCap`: that bounds spend Builderforce
+   * funds on its own keys, this bounds what the tenant runs up on the metered
+   * any-paid-OpenRouter tier.
+   */
+  premiumDailyCap: number | null;
+  /**
    * Per-tenant daily image-generation credit override (1 credit = 1 image).
    *   null → plan default (free 10 / pro 1000 / teams 5000)
    *   -1   → unlimited
@@ -1128,6 +1138,23 @@ export const adminApi = {
       {
         method: 'PATCH',
         body: JSON.stringify({ paidOverflowDailyCap }),
+      },
+    );
+  },
+
+  /**
+   * Set / clear the per-tenant daily PREMIUM spend ceiling (millicents).
+   *   null → revert to the $10/day default · -1 → unlimited · >= 0 → explicit
+   */
+  async setTenantPremiumCap(
+    tenantId: number,
+    premiumDailyCap: number | null,
+  ): Promise<{ id: number; premiumDailyCap: number | null }> {
+    return adminRequest<{ id: number; premiumDailyCap: number | null }>(
+      `/api/admin/tenants/${tenantId}/premium-cap`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ premiumDailyCap }),
       },
     );
   },

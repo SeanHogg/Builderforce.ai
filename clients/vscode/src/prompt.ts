@@ -6,13 +6,20 @@ import { getSelectedProject } from "./projectState";
  *  The persona text itself lives in {@link ideSystemPromptBase} so it can't drift
  *  from the Brain webview's prompt. The active project is injected as ambient
  *  context from the SAME selected-project state the Brain webview uses, so both
- *  surfaces are project-aware. */
+ *  surfaces are project-aware.
+ *
+ *  `platformContext` is the api-assembled run context — strategy / PRD / governance /
+ *  project memory / prior lessons — fetched by `bfApi.fetchRunContextSection` and already
+ *  rendered by the shared `@builderforce/run-context` renderer. It is the block that
+ *  brings this surface up to the cloud engine's context set; before it, the IDE agent
+ *  worked a ticket without ever seeing its PRD or the project's rules. */
 export function buildSystemMessages(
   root: string | undefined,
   summary: string | undefined,
   extraContext?: string,
   limbicBlock?: string,
   project: ActiveProject | undefined = getSelectedProject(),
+  platformContext?: string,
 ): ChatMessage[] {
   const msgs: ChatMessage[] = [{ role: "system", content: ideSystemPromptBase(!!root) }];
   const projectDirective = activeProjectDirective(project);
@@ -27,6 +34,9 @@ export function buildSystemMessages(
   }
   if (limbicBlock) {
     msgs.push({ role: "system", content: limbicBlock });
+  }
+  if (platformContext) {
+    msgs.push({ role: "system", content: platformContext });
   }
   return msgs;
 }

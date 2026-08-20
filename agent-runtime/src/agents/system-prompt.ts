@@ -57,6 +57,28 @@ function buildPersonaSection(params: {
   ];
 }
 
+/**
+ * The BuilderForce PLATFORM context section — strategy, PRD, governance, project memory
+ * and prior lessons for the work this agent is doing.
+ *
+ * Assembled by the api (the ONE `ContextSource`), fetched by
+ * `infra/run-context-client.ts` and already rendered by the shared
+ * `@builderforce/run-context` renderer, so it reads identically here, in the cloud
+ * engine, and in the VS Code client. Empty (and therefore absent) when the host is not
+ * linked to a Builderforce workspace — a local-only run is unchanged.
+ *
+ * Included in "minimal" mode too, deliberately: a sub-agent working the same ticket needs
+ * the ticket's requirements and rules just as much as the parent does, and this block is
+ * only ever present when a project genuinely has them.
+ */
+function buildRunContextSection(params: { runContextPrompt?: string }) {
+  const trimmed = params.runContextPrompt?.trim();
+  if (!trimmed) {
+    return [];
+  }
+  return [trimmed, ""];
+}
+
 function buildMemorySection(params: {
   isMinimal: boolean;
   availableTools: Set<string>;
@@ -202,6 +224,9 @@ export function buildAgentSystemPrompt(params: {
   skillsPrompt?: string;
   /** Persona system block from the agent's assigned (active) personas. */
   personaPrompt?: string;
+  /** BuilderForce platform context (strategy / PRD / governance / memory / lessons),
+   *  pre-rendered by `@builderforce/run-context`. See {@link buildRunContextSection}. */
+  runContextPrompt?: string;
   heartbeatPrompt?: string;
   docsPath?: string;
   workspaceNotes?: string[];
@@ -406,6 +431,9 @@ export function buildAgentSystemPrompt(params: {
     isMinimal,
     readToolName,
   });
+  const runContextSection = buildRunContextSection({
+    ...(params.runContextPrompt !== undefined ? { runContextPrompt: params.runContextPrompt } : {}),
+  });
   const memorySection = buildMemorySection({
     isMinimal,
     availableTools,
@@ -486,6 +514,7 @@ export function buildAgentSystemPrompt(params: {
     "If unsure, ask the user to run `builderforce help` (or `builderforce gateway --help`) and paste the output.",
     "",
     ...personaSection,
+    ...runContextSection,
     ...skillsSection,
     ...memorySection,
     // Skip self-update for subagent/none modes

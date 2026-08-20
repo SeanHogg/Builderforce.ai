@@ -65,7 +65,7 @@ describe('AgentExecutionPanel — steering echo', () => {
     });
     // Simulate the per-isolate drop: the stream NEVER echoes the user message back.
     mockStream.mockReturnValue({
-      status: 'running', execution: null, messages: [], fileChanges: [], connected: false,
+      status: 'running', execution: null, messages: [], fileChanges: [], toolEvents: [], connected: false,
     });
   });
 
@@ -100,7 +100,7 @@ describe('AgentExecutionPanel — steering echo', () => {
       },
     });
     // Cloud WS dropped cross-isolate → no live assistant messages.
-    mockStream.mockReturnValue({ status: 'running', execution: null, messages: [], fileChanges: [], connected: false });
+    mockStream.mockReturnValue({ status: 'running', execution: null, messages: [], fileChanges: [], toolEvents: [], connected: false });
 
     const { findByText, queryByText } = render(<AgentExecutionPanel task={task} agentHosts={[]} />);
 
@@ -114,7 +114,7 @@ describe('AgentExecutionPanel — steering echo', () => {
     const failed: Execution = { id: 17, taskId: 1, status: 'failed', agentHostId: null, payload: '{"cloudAgentRef":"agt_9","model":"x"}' };
     vi.spyOn(builderforceApi.runtimeApi, 'listForTask').mockResolvedValue([failed]);
     // Not running → no live stream status, so the chip shows the failed status.
-    mockStream.mockReturnValue({ status: null, execution: null, messages: [], fileChanges: [], connected: false });
+    mockStream.mockReturnValue({ status: null, execution: null, messages: [], fileChanges: [], toolEvents: [], connected: false });
     const submit = vi.spyOn(builderforceApi.runtimeApi, 'submitExecution').mockResolvedValue({ id: 18, taskId: 1, status: 'pending' });
     vi.spyOn(builderforceApi, 'isAwaitingApprovalExecution').mockReturnValue(false);
 
@@ -134,7 +134,7 @@ describe('AgentExecutionPanel — steering echo', () => {
     auth.role = 'viewer';
     const failed: Execution = { id: 17, taskId: 1, status: 'failed', agentHostId: null, payload: '{"cloudAgentRef":"agt_9"}' };
     vi.spyOn(builderforceApi.runtimeApi, 'listForTask').mockResolvedValue([failed]);
-    mockStream.mockReturnValue({ status: null, execution: null, messages: [], fileChanges: [], connected: false });
+    mockStream.mockReturnValue({ status: null, execution: null, messages: [], fileChanges: [], toolEvents: [], connected: false });
     const submit = vi.spyOn(builderforceApi.runtimeApi, 'submitExecution');
 
     const { findByLabelText, findAllByTitle, findByRole } = render(<AgentExecutionPanel task={task} agentHosts={[]} />);
@@ -171,7 +171,7 @@ describe('AgentExecutionPanel — steering echo', () => {
         ],
       },
     });
-    mockStream.mockReturnValue({ status: 'completed', execution: null, messages: [], fileChanges: [], connected: false });
+    mockStream.mockReturnValue({ status: 'completed', execution: null, messages: [], fileChanges: [], toolEvents: [], connected: false });
 
     const { findByText, findByTitle } = render(<AgentExecutionPanel task={task} agentHosts={[]} />);
 
@@ -199,7 +199,7 @@ describe('AgentExecutionPanel — steering echo', () => {
     vi.spyOn(builderforceApi.runtimeApi, 'taskFileChanges').mockResolvedValue({
       changes: [{ path: 'src/outlook-plugin.ts', change: 'created', agent: 'Coder Agent (V2)', executionId: 30, createdAt: '2026-06-08T21:00:00Z' }],
     });
-    mockStream.mockReturnValue({ status: 'completed', execution: null, messages: [], fileChanges: [], connected: false });
+    mockStream.mockReturnValue({ status: 'completed', execution: null, messages: [], fileChanges: [], toolEvents: [], connected: false });
 
     const { findByText, getByText, getByTestId, queryByTestId } = render(<AgentExecutionPanel task={task} agentHosts={[]} />);
 
@@ -224,7 +224,7 @@ describe('AgentExecutionPanel — steering echo', () => {
     const completed: Execution = { id: 55, taskId: 1, status: 'completed', agentHostId: null };
     const settle = () => {
       vi.spyOn(builderforceApi.runtimeApi, 'listForTask').mockResolvedValue([completed]);
-      mockStream.mockReturnValue({ status: 'completed', execution: null, messages: [], fileChanges: [], connected: false });
+      mockStream.mockReturnValue({ status: 'completed', execution: null, messages: [], fileChanges: [], toolEvents: [], connected: false });
     };
 
     it('confirms, then reverts, and reports the branch it deleted', async () => {

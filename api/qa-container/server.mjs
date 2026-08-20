@@ -19,6 +19,13 @@ import { chromium } from 'playwright';
 
 const PORT = Number(process.env.PORT || 8080);
 const MAX_FINDINGS = 200;
+/**
+ * How many page images one run may capture. A screenshot is the single most
+ * useful artifact a browser-driven tester produces — "TypeError at /pricing"
+ * with no picture is a guessing game — but it is also the most expensive thing
+ * in the loop, so it is bounded rather than taken per finding.
+ */
+const MAX_SCREENSHOTS = 12;
 const STEP_TIMEOUT = 8_000;
 const ERROR_BOUNDARY_RE = /something went wrong|application error|unhandled runtime error|this page isn'?t working|500 internal/i;
 
@@ -48,6 +55,16 @@ function makeApi(baseUrl, token) {
     async get(path) {
       const res = await fetch(url(path), { headers });
       if (!res.ok) throw new Error(`GET ${path} → ${res.status}`);
+      return res.json();
+    },
+    /** POST raw bytes (a PNG screenshot) rather than JSON. */
+    async postBinary(path, bytes, contentType) {
+      const res = await fetch(url(path), {
+        method: 'POST',
+        headers: { 'Content-Type': contentType, Authorization: `Bearer ${token}` },
+        body: bytes,
+      });
+      if (!res.ok) throw new Error(`POST ${path} → ${res.status}`);
       return res.json();
     },
   };
@@ -154,9 +171,32 @@ async function explore(page, plan) {
   page.on('crash', onCrash);
 
   let zonesExplored = 0;
+  let screenshotsTaken = 0;
+  /**
+   * Capture the page as it stands, and stamp it onto the findings this step just
+   * produced. Taken at the STEP boundary rather than inside the console/pageerror
+   * listeners: those fire synchronously and cannot await, and by the time a step
+   * ends the page is in the state a human needs to see anyway. Best-effort —
+   * a screenshot failure must never turn a captured finding into a lost one.
+   */
+  const captureFor = async (newFindings) => {
+    if (newFindings.length === 0 || screenshotsTaken >= MAX_SCREENSHOTS) return;
+    try {
+      const png = await page.screenshot({ type: 'png', timeout: STEP_TIMEOUT });
+      screenshotsTaken++;
+      // One image per step, attached to every finding from that step, so the
+      // whole batch is explained by the picture without N uploads of the same
+      // pixels.
+      for (const f of newFindings) f.screenshotPng = png;
+    } catch {
+      /* a page that crashed or navigated away cannot be photographed */
+    }
+  };
+
   try {
     for (const step of plan) {
       ctx.heat = step.heat ?? 0;
+      const before = findings.length;
       try {
         if (step.action === 'goto' && step.route) {
           ctx.route = step.route;
@@ -191,6 +231,7 @@ async function explore(page, plan) {
       } catch (err) {
         push({ type: 'assertion', route: ctx.route, selector: step.selector ?? null, heat: ctx.heat, message: `step '${step.action}' failed: ${errMsg(err)}` });
       }
+      await captureFor(findings.slice(before));
       await page.waitForTimeout(50).catch(() => {});
     }
   } finally {
@@ -201,6 +242,34 @@ async function explore(page, plan) {
     page.off('crash', onCrash);
   }
   return { findings, zonesExplored };
+}
+
+/**
+ * Trade each captured image for a stored key, in place.
+ *
+ * The same buffer is shared by every finding from one step, so it is uploaded
+ * ONCE and the key fanned out — a step that produced six console errors costs
+ * one PUT, not six. A failed upload silently drops the picture and keeps the
+ * finding: evidence is a bonus, the finding is the point.
+ */
+async function uploadScreenshots(api, explorationId, findings) {
+  const uploaded = new Map();
+  for (const f of findings) {
+    const png = f.screenshotPng;
+    delete f.screenshotPng; // never serialize the bytes into the findings JSON
+    if (!png) continue;
+    try {
+      if (!uploaded.has(png)) {
+        const res = await api.postBinary(`/api/qa/explorations/${explorationId}/screenshot`, png, 'image/png');
+        uploaded.set(png, res.screenshotKey ?? null);
+      }
+      const key = uploaded.get(png);
+      if (key) f.screenshotKey = key;
+    } catch (err) {
+      console.warn('[qa-runner] screenshot upload failed', errMsg(err));
+      uploaded.set(png, null);
+    }
+  }
 }
 
 function outcomeStatus(findings) {
@@ -246,7 +315,10 @@ async function runExploration(spec) {
 
     const { findings, zonesExplored } = await explore(page, plan);
     console.log(`[qa-runner] explored ${zonesExplored} zone(s), ${findings.length} finding(s).`);
-    if (findings.length > 0) await api.post(`/api/qa/explorations/${explorationId}/findings`, { findings });
+    if (findings.length > 0) {
+      await uploadScreenshots(api, explorationId, findings);
+      await api.post(`/api/qa/explorations/${explorationId}/findings`, { findings });
+    }
     await api.patch(`/api/qa/explorations/${explorationId}`, {
       status: outcomeStatus(findings), zonesExplored, browser: 'chromium', targetUrl: runBaseUrl, summary: summarize(findings),
     });

@@ -77,8 +77,12 @@ export interface ChatDiagnosticsSources {
   /** The CHAT's own project — what the learn gate keys on. */
   projectId?: number | null;
   projectName?: string | null;
-  /** The project the surrounding UI is showing, when it differs. */
+  /** The project the surrounding UI currently has SELECTED — `null` when none is.
+   *  Always reported, so "nothing selected" stays distinguishable from "selected but
+   *  the chat never adopted it" (see `ChatDiagnosticsData.selectedProjectId`). */
   selectedProjectId?: number | null;
+  /** Display name for {@link selectedProjectId}, when the host holds one. */
+  selectedProjectName?: string | null;
   tenantId?: number | string | null;
   userId?: string | null;
   /** The transcript — read only for the newest assistant turn's learn outcome. */
@@ -94,6 +98,11 @@ export interface ChatDiagnosticsSources {
   modelSurface?: ChatDiagnosticsModelSurface | null;
   /** The build that produced the capture (extension version / web app version). */
   uiVersion?: string | null;
+  /** Short SOURCE HASH of the client artifact — the identity `uiVersion` cannot carry
+   *  (two artifacts can share a version and differ in code). `"dev"` when unbundled. */
+  uiBuildId?: string | null;
+  /** ISO timestamp the client artifact was built. */
+  uiBuiltAt?: string | null;
   /** The gateway this surface is talking to. */
   baseUrl?: string | null;
 
@@ -189,6 +198,7 @@ export async function gatherChatDiagnostics(src: ChatDiagnosticsSources): Promis
     projectId: src.projectId ?? null,
     projectName: projectName ?? src.projectName ?? null,
     selectedProjectId: src.selectedProjectId ?? null,
+    selectedProjectName: src.selectedProjectName ?? null,
     tenantId: src.tenantId ?? null,
     userId: src.userId ?? null,
     evermind: toEvermind(head),
@@ -205,6 +215,11 @@ export async function gatherChatDiagnostics(src: ChatDiagnosticsSources): Promis
           advertisedLastTurn: exposure?.lastTurn ?? null,
         }
       : null,
-    versions: { ui: src.uiVersion ?? null, api: apiVersion },
+    versions: {
+      ui: src.uiVersion ?? null,
+      api: apiVersion,
+      uiBuildId: src.uiBuildId ?? null,
+      uiBuiltAt: src.uiBuiltAt ?? null,
+    },
   };
 }

@@ -3,7 +3,7 @@
  * the deriver, the allocation rollup, the goals tracker, and any UI label (DRY).
  *
  * This is the INVESTMENT axis (where is engineering time going?), orthogonal to
- * {@link ../llm/actionTypes ACTION_TYPES} (the TECHNICAL axis, what kind of work).
+ * `ACTION_TYPES` (`@builderforce/learned-routing`) (the TECHNICAL axis, what kind of work).
  * A closed enum keeps the rollup dense and the goals comparable; the column is a
  * plain varchar so the set is extensible later without a migration.
  *
@@ -18,7 +18,7 @@
  * A PM can override the stored value (source = 'manual').
  */
 
-import { type ActionType, normalizeActionType } from './actionTypes';
+import { type ActionType, normalizeActionType } from '@builderforce/learned-routing';
 
 export const ALLOCATION_CATEGORIES = [
   'innovation',

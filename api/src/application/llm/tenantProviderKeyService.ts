@@ -41,29 +41,31 @@ import {
   connectionModelRefs,
   type OpenRouterConnection,
 } from './openRouterConnectionService';
+// The provider catalog (which providers exist, which vendor each dispatches on) lives
+// in a LEAF module so `providerAuthAlerts` can share it without closing a cycle back
+// through this service — which now imports the alerts to resolve the tenant's
+// known-broken accounts. Re-exported so every existing importer of these symbols is
+// unchanged and there is still exactly one definition of each.
+import {
+  SUPPORTED_PROVIDERS,
+  PROVIDER_VENDOR_MAP,
+  isSupportedProvider,
+  byoVendorIdFor,
+  type LlmProvider,
+  type ProviderAuthType,
+} from './llmProviderCatalog';
+import { loadAlertedByoVendors } from './providerAuthAlerts';
+
+export {
+  SUPPORTED_PROVIDERS,
+  PROVIDER_VENDOR_MAP,
+  isSupportedProvider,
+  byoVendorIdFor,
+  type LlmProvider,
+  type ProviderAuthType,
+};
 
 type Env = HonoEnv['Bindings'];
-
-export type LlmProvider = 'anthropic' | 'openai' | 'google' | 'meta' | 'kimi' | 'moonshot' | 'qwen' | 'minimax' | 'xai';
-export const SUPPORTED_PROVIDERS: readonly LlmProvider[] = ['anthropic', 'openai', 'google', 'meta', 'kimi', 'moonshot', 'qwen', 'minimax', 'xai'];
-
-export type ProviderAuthType = 'api_key' | 'oauth';
-
-/** A BYO provider → the gateway vendor id + operator env-var name its tenant key
- *  overrides. `oauth` marks the provider that ALSO supports a connected
- *  subscription (Anthropic today) — the OAuth path is resolved separately via
- *  {@link resolveAnthropicOAuthToken}, so it isn't part of the api-key overlay. */
-export const PROVIDER_VENDOR_MAP: Record<LlmProvider, { vendorId: string; envKey: 'CLAUDE_API_KEY' | 'OPENAI_API_KEY' | 'GOOGLE_API_KEY' | 'META_API_KEY' | 'KIMI_CODE_API_KEY' | 'MOONSHOT_API_KEY' | 'QWEN_API_KEY' | 'MINIMAX_API_KEY' | 'XAI_API_KEY'; oauth: boolean }> = {
-  anthropic: { vendorId: 'anthropic', envKey: 'CLAUDE_API_KEY', oauth: true },
-  openai:    { vendorId: 'openai',    envKey: 'OPENAI_API_KEY', oauth: true },
-  google:    { vendorId: 'googleai',  envKey: 'GOOGLE_API_KEY', oauth: false },
-  meta:      { vendorId: 'meta',      envKey: 'META_API_KEY',   oauth: false },
-  kimi:      { vendorId: 'kimi-code', envKey: 'KIMI_CODE_API_KEY', oauth: false },
-  moonshot:  { vendorId: 'moonshot',  envKey: 'MOONSHOT_API_KEY', oauth: false },
-  qwen:      { vendorId: 'qwen',      envKey: 'QWEN_API_KEY', oauth: false },
-  minimax:   { vendorId: 'minimax',   envKey: 'MINIMAX_API_KEY', oauth: false },
-  xai:       { vendorId: 'xai',       envKey: 'XAI_API_KEY', oauth: true },
-};
 
 /** A tenant's resolved BYO API keys keyed by provider (decrypted, api_key mode
  *  only — the Anthropic subscription/OAuth token is resolved separately). Passed
@@ -77,45 +79,36 @@ export type AnthropicAuth =
   | { mode: 'oauth'; accessToken: string };
 
 /** One configured provider + how it authenticates (no secrets). */
-export interface ProviderKeySummary {
+/**
+ * The subset of a stored credential that ROUTING derives from: which provider, how
+ * it authenticates, and where the owner ranked it.
+ *
+ * Segregated from {@link ProviderKeySummary} because the pure derivations
+ * (`byoModelsFor`, `byoVendorPriorityOrder`, `byoVendorIdsFromSummaries`) answer
+ * "which models/vendors does this connection reach" and have no business knowing a
+ * credential's surrogate identity. Keeping them on the narrow type also means a test
+ * or a probe can describe a hypothetical connection without inventing a uuid for a
+ * row that does not exist.
+ */
+export interface ProviderRouteSpec {
   provider: LlmProvider;
   authType: ProviderAuthType;
-  /** Tenant-set BYO precedence — LOWER = tried FIRST by the auto-select cloud pin.
-   *  `null` = unset → the provider falls back to catalog-tier ordering. */
+  /** Tenant-set BYO precedence — LOWER = tried FIRST. `null` = unset. */
   priority: number | null;
 }
 
-export function isSupportedProvider(p: string): p is LlmProvider {
-  return (SUPPORTED_PROVIDERS as readonly string[]).includes(p);
-}
-
-/**
- * The gateway vendor a connected provider actually DISPATCHES on — which depends on
- * HOW it authenticates, not just which provider it is.
- *
- * A connected SUBSCRIPTION (OAuth) rides its own vendor because the transport differs
- * from the api-key one: ChatGPT/Codex → `openai-codex`, SuperGrok → `xai-oauth`. Only
- * Anthropic shares one vendor across both modes (the `anthropic` vendor prefers the
- * OAuth token when bound). Mapping an OAuth provider to its api-key vendor id
- * (`openai` / `xai`) yields a vendor the tenant has NO credential for: the seed picks a
- * `direct/<vendor>/…` flagship that can't dispatch, the tenant's BYO precedence stops
- * matching (`vendorForModel` returns the oauth id), and the proxy's BYO boundary filter
- * drops it — the "connected accounts were never tried" failure. THE single mapping;
- * derive every vendor-id set from it.
- */
-export function byoVendorIdFor(provider: LlmProvider, authType: ProviderAuthType): string {
-  if (authType === 'oauth') {
-    if (provider === 'openai') return 'openai-codex';
-    if (provider === 'xai') return 'xai-oauth';
-  }
-  return PROVIDER_VENDOR_MAP[provider].vendorId;
+export interface ProviderKeySummary extends ProviderRouteSpec {
+  /** Surrogate identity of THIS key instance (0953) — re-minted on every rotation,
+   *  so it names the credential that actually paid rather than the slot it sits in.
+   *  Stamped onto usage rows as `llm_usage_log.byo_credential_id`. */
+  id: string;
 }
 
 /** The gateway vendor ids a tenant can serve from their CONFIGURED provider rows —
  *  the catalog/picker view (what they connected), auth-type aware via
  *  {@link byoVendorIdFor}. For the DISPATCH view (what actually resolved this call)
  *  use {@link byoVendorIdsFromCredentials}. */
-export function byoVendorIdsFromSummaries(summaries: readonly ProviderKeySummary[]): Set<string> {
+export function byoVendorIdsFromSummaries(summaries: readonly ProviderRouteSpec[]): Set<string> {
   return new Set(summaries.map((s) => byoVendorIdFor(s.provider, s.authType)));
 }
 
@@ -206,7 +199,12 @@ export async function setTenantProviderKey(
     .values({ tenantId, provider, keyEnc, authType: 'api_key', createdByUserId: userId })
     .onConflictDoUpdate({
       target: [tenantLlmProviderKeys.tenantId, tenantLlmProviderKeys.provider],
-      set: { keyEnc, authType: 'api_key', updatedAt: sql`NOW()` },
+      // A NEW `id` on every write, because this row is upserted IN PLACE: without it a
+      // rotated key is indistinguishable from the key it replaced, and last month's
+      // spend silently re-attributes to a credential that never incurred it. Minting
+      // here retires the old instance — historical usage keeps naming it — and starts
+      // a new one. See migration 0953.
+      set: { id: sql`gen_random_uuid()`, keyEnc, authType: 'api_key', updatedAt: sql`NOW()` },
     });
 }
 
@@ -225,7 +223,9 @@ export async function setTenantProviderOAuth(
     .values({ tenantId, provider, keyEnc, authType: 'oauth', createdByUserId: userId })
     .onConflictDoUpdate({
       target: [tenantLlmProviderKeys.tenantId, tenantLlmProviderKeys.provider],
-      set: { keyEnc, authType: 'oauth', updatedAt: sql`NOW()` },
+      // Same instance-identity rule as the api-key setter above: reconnecting an
+      // account replaces the credential, so it is a new instance (0953).
+      set: { id: sql`gen_random_uuid()`, keyEnc, authType: 'oauth', updatedAt: sql`NOW()` },
     });
 }
 
@@ -492,6 +492,18 @@ export interface TenantLlmCredentials {
    *  the order the auto-select cloud pin leads its connected flagships by (empty when
    *  no precedence is set → catalog-tier ordering). See {@link byoVendorPriorityOrder}. */
   vendorPriority: string[];
+  /** Gateway vendor ids whose underlying tenant account is currently KNOWN-BROKEN —
+   *  a 401/403/out-of-budget recorded by {@link providerAuthAlerts} for THIS tenant.
+   *  Threaded into routing's `demotedVendors` so a rejected account stops LEADING the
+   *  BYO seed: without it a workspace with two connected providers burns an upstream
+   *  attempt on the dead one on every single request until the owner notices.
+   *  DEMOTED, never removed — a `capacity` alert self-heals when the billing period
+   *  rolls over, and removal would silently change the funding source to our pool.
+   *  Absent/empty for the overwhelming majority of tenants — optional for the same
+   *  reason `providerPriorities` is: it is an advisory ROUTING ORDER hint, so a
+   *  hand-built credentials object in a test or a degraded path that omits it must
+   *  keep working (it just doesn't demote), never fail to compile. */
+  alertedVendors?: string[];
   /** Provider ranks with their original shared integer positions preserved, so
    * OpenRouter connections can interleave with them in one routing seed. */
   providerPriorities?: Array<{ vendor: string; priority: number | null }>;
@@ -551,6 +563,8 @@ export async function resolveTenantLlmCredentials(env: Env, tenantId: number): P
     configuredProviders: configured.map((p) => p.provider),
     unresolvedReasons: {},
     vendorPriority: byoVendorPriorityOrder(configured),
+    // Filled in below — the alert read needs the vendor ids this object derives.
+    alertedVendors: [],
     providerPriorities: configured.map((p) => ({
       vendor: byoVendorIdFor(p.provider, p.authType),
       priority: p.priority,
@@ -562,6 +576,16 @@ export async function resolveTenantLlmCredentials(env: Env, tenantId: number): P
   // can hit). Computed against the resolved (usable) set so a working provider is skipped.
   const usable = new Set(providersFromCredentials(creds));
   creds.registeredOpenRouterModels = connectionModelRefs(openRouterConnections);
+  // Which of the tenant's OWN vendors are known-broken right now. Resolved HERE, where
+  // `tenantId` is already in scope and every consumer of `vendorPriority` picks it up
+  // for free, rather than at each of the five seams that thread routing options — the
+  // cycle that used to block this is gone (the provider catalog is a leaf now).
+  // Degrades to "none alerted": failing to read a warning must never demote a working
+  // account, which would be a worse failure than the one this prevents.
+  creds.alertedVendors = [
+    ...await loadAlertedByoVendors(env, tenantId, byoVendorIdsFromSummaries(configured))
+      .catch(() => new Set<string>()),
+  ];
   const usableProviderRanks = configured
     .filter((p) => usable.has(p.provider))
     .map((p) => p.priority ?? Number.POSITIVE_INFINITY);
@@ -664,6 +688,7 @@ export async function listTenantProviderKeys(
   const db = buildDatabase(env);
   const selected = await db
     .select({
+      id: tenantLlmProviderKeys.id,
       provider: tenantLlmProviderKeys.provider,
       authType: tenantLlmProviderKeys.authType,
       priority: tenantLlmProviderKeys.priority,
@@ -672,7 +697,8 @@ export async function listTenantProviderKeys(
     .where(eq(tenantLlmProviderKeys.tenantId, tenantId))
     // `priority` NULL = unset and MUST sort last (a set precedence always wins).
     .orderBy(sql`${tenantLlmProviderKeys.priority} ASC NULLS LAST`, asc(tenantLlmProviderKeys.provider));
-  const rows: Array<{ provider: string; auth_type?: string; priority?: number | null }> = selected.map((r) => ({
+  const rows: Array<{ id: string; provider: string; auth_type?: string; priority?: number | null }> = selected.map((r) => ({
+    id: r.id,
     provider: r.provider,
     auth_type: r.authType ?? undefined,
     priority: r.priority,
@@ -680,6 +706,7 @@ export async function listTenantProviderKeys(
   return rows
     .filter((r) => isSupportedProvider(r.provider))
     .map((r) => ({
+      id: r.id,
       provider: r.provider as LlmProvider,
       authType: ((r.auth_type ?? 'api_key') === 'oauth' ? 'oauth' : 'api_key') as ProviderAuthType,
       priority: typeof r.priority === 'number' ? r.priority : null,
@@ -740,7 +767,7 @@ export async function setTenantProviderPriorityRanks(
  * ids line up with `vendorForModel(flagship)` — otherwise the tenant's chosen order
  * silently ranks every subscription-connected provider last.
  */
-export function byoVendorPriorityOrder(summaries: readonly ProviderKeySummary[]): string[] {
+export function byoVendorPriorityOrder(summaries: readonly ProviderRouteSpec[]): string[] {
   return summaries
     .filter((s) => s.priority !== null)
     .map((s) => byoVendorIdFor(s.provider, s.authType));

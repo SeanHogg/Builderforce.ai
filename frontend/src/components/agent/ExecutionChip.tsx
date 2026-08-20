@@ -2,14 +2,17 @@
 
 import { RoleGate } from '@/components/RoleGate';
 import { EXECUTION_STATUS_COLOR, rerunAffordance, type RerunAffordance } from '../board/AgentChip';
+import { BuildStatusBadge } from '../board/BuildStatusBadge';
+import type { TaskBuildStatus } from '@/lib/builderforceApi';
 
 /**
  * Selectable execution pill (`#<id> · <status>`) used in the task Agent tab's
  * execution list. When the run is in a re-runnable state it grows an inline
- * action icon — a retry glyph for failed/cancelled runs, a play glyph for a
- * (future) paused run — so the user can kick it off again without scrolling back
- * up to the Run control. The chip decides for itself whether that icon shows
- * (via {@link rerunAffordance}); the parent only supplies the action.
+ * action icon — a retry glyph for failed/cancelled runs, a play glyph for a paused
+ * one — so the user can act on it without scrolling back up to the Run control.
+ * The chip decides for itself whether that icon shows (via
+ * {@link rerunAffordance}); the parent supplies the action, and the two glyphs mean
+ * genuinely different things: retry starts a NEW run, resume continues THIS one.
  *
  * SELECTING a chip is a read (it just changes which run you're looking at) and
  * stays open to everyone. Re-running is a DISPATCH, so the affordance carries its
@@ -21,13 +24,22 @@ export interface ExecutionChipProps {
   status: string;
   selected: boolean;
   onSelect: () => void;
-  /** Re-run/resume this execution. Omit to never show the action (e.g. read-only). */
+  /** Fire the chip's affordance — a re-run for failed/cancelled, a resume for
+   *  paused. Omit to never show the action (e.g. read-only). */
   onRerun?: () => void;
   /** True while this chip's re-run request is in flight. */
   rerunning?: boolean;
   /** Name of the agent that ran this execution — shown as a hover tooltip so the
    *  per-run agent is discoverable across the whole list, not just the selected run. */
   agentName?: string;
+  /**
+   * The ticket's build verdict, for the run whose work the branch currently carries.
+   *
+   * Passed for the NEWEST execution only — the build belongs to the branch, not to a
+   * particular run, so stamping it on every historical chip would claim each of them was
+   * separately validated. Omit (or `unknown`) and the chip renders exactly as before.
+   */
+  buildStatus?: TaskBuildStatus | null;
 }
 
 const ICON: Record<RerunAffordance, { path: string; title: string }> = {
@@ -37,7 +49,7 @@ const ICON: Record<RerunAffordance, { path: string; title: string }> = {
   resume: { path: 'M8 5v14l11-7z', title: 'Resume this run' },
 };
 
-export function ExecutionChip({ id, status, selected, onSelect, onRerun, rerunning, agentName }: ExecutionChipProps) {
+export function ExecutionChip({ id, status, selected, onSelect, onRerun, rerunning, agentName, buildStatus }: ExecutionChipProps) {
   const color = EXECUTION_STATUS_COLOR[status] ?? 'var(--text-secondary)';
   const affordance = onRerun ? rerunAffordance(status) : null;
 
@@ -63,6 +75,13 @@ export function ExecutionChip({ id, status, selected, onSelect, onRerun, rerunni
       >
         #{id} · {status}
       </button>
+      {/* The build the branch this run produced is sitting on. Same component as the
+          board card's badge, so a red build reads identically wherever it appears. */}
+      {buildStatus && buildStatus !== 'unknown' && (
+        <span style={{ display: 'flex', alignItems: 'center', paddingRight: 6 }}>
+          <BuildStatusBadge status={buildStatus} />
+        </span>
+      )}
       {affordance && (
         <RoleGate capability="runtime.execute" style={{ alignSelf: 'stretch' }}>
           <button

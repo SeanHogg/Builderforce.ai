@@ -33,6 +33,7 @@ __export(src_exports, {
   CODE_CHANGE_TOOLS: () => CODE_CHANGE_TOOLS,
   CONSOLIDATION_MARKER_PREFIX: () => CONSOLIDATION_MARKER_PREFIX,
   CONSOLIDATION_META: () => CONSOLIDATION_META,
+  DEFAULT_CHAT_ACTIVITY_LABELS: () => DEFAULT_CHAT_ACTIVITY_LABELS,
   DEFAULT_CHAT_TITLE: () => DEFAULT_CHAT_TITLE,
   DEFAULT_MODEL_CHOICE_LABELS: () => DEFAULT_MODEL_CHOICE_LABELS,
   DEFAULT_MODEL_IDENTITY: () => DEFAULT_MODEL_IDENTITY,
@@ -49,21 +50,26 @@ __export(src_exports, {
   TOOL_ROUTER_DESCRIBE: () => TOOL_ROUTER_DESCRIBE,
   TOOL_ROUTER_FIND: () => TOOL_ROUTER_FIND,
   TOOL_ROUTER_INVOKE: () => TOOL_ROUTER_INVOKE,
+  WEB_FETCH_TOOL_NAME: () => WEB_FETCH_TOOL_NAME,
   XmlToolCallFilter: () => XmlToolCallFilter,
   accountUsedInTrace: () => accountUsedInTrace,
   activeMentionToken: () => activeMentionToken,
   activeModelKey: () => activeModelKey,
+  activityIcon: () => activityIcon,
+  activityTone: () => activityTone,
   allowanceState: () => allowanceState,
   announcesUntakenAction: () => announcesUntakenAction,
   attachEvermindLearn: () => attachEvermindLearn,
   brainRequestError: () => brainRequestError,
   buildBrainTriageReport: () => buildBrainTriageReport,
+  buildComposerDirectives: () => buildComposerDirectives,
   buildModelItems: () => buildModelItems,
   byoReasonHint: () => byoReasonHint,
   byoUnresolvedInTrace: () => byoUnresolvedInTrace,
   byoUnresolvedSummary: () => byoUnresolvedSummary,
   byoVendorLabel: () => byoVendorLabel,
   catalogToolNamesMentionedIn: () => catalogToolNamesMentionedIn,
+  chatActivityText: () => chatActivityText,
   chatConversationDirective: () => chatConversationDirective,
   chatErrorAction: () => chatErrorAction,
   chatModeDirective: () => chatModeDirective,
@@ -102,6 +108,7 @@ __export(src_exports, {
   getRunSnapshot: () => getRunSnapshot,
   getRunTrace: () => getRunTrace,
   handleRouterCall: () => handleRouterCall,
+  isActivityMessage: () => isActivityMessage,
   isChatMode: () => isChatMode,
   isCodeChangeTool: () => isCodeChangeTool,
   isConnectedAccountUnused: () => isConnectedAccountUnused,
@@ -119,6 +126,7 @@ __export(src_exports, {
   isUserConfiguredModelRef: () => isUserConfiguredModelRef,
   lastConsolidationIndex: () => lastConsolidationIndex,
   linkedTicketsToAdvance: () => linkedTicketsToAdvance,
+  localStorageConfirmationPersistence: () => localStorageConfirmationPersistence,
   mcpActionsFrom: () => mcpActionsFrom,
   mentionRecipient: () => mentionRecipient,
   modelCategoryLabel: () => modelCategoryLabel,
@@ -129,6 +137,7 @@ __export(src_exports, {
   nextFallbackModel: () => nextFallbackModel,
   normalizeChatMode: () => normalizeChatMode,
   parseByoUnresolved: () => parseByoUnresolved,
+  parseChatActivity: () => parseChatActivity,
   parseDirectedRecipient: () => parseDirectedRecipient,
   parseMessageAuthor: () => parseMessageAuthor,
   parseMessageProvenance: () => parseMessageProvenance,
@@ -178,6 +187,7 @@ __export(src_exports, {
   useMcpExtensions: () => useMcpExtensions,
   useOptionalBrainContext: () => useOptionalBrainContext,
   useRegisterBrainActions: () => useRegisterBrainActions,
+  useToolConfirmationGate: () => useToolConfirmationGate,
   withDirectedMetadata: () => withDirectedMetadata,
   withProvenanceMetadata: () => withProvenanceMetadata,
   workItemLinkFromCreate: () => workItemLinkFromCreate
@@ -680,6 +690,64 @@ function reasoningForRun(o) {
   return o.thinking ? { level: effortProfile(o.effort).reasoningLevel } : void 0;
 }
 
+// src/composerDirectives.ts
+var WEB_FETCH_TOOL_NAME = "builtin_web_fetch";
+function buildComposerDirectives(o) {
+  const parts = [];
+  const { directive } = effortProfile(o.effort);
+  if (directive) parts.push(directive);
+  if (o.web) {
+    parts.push(
+      `You may browse the web: when a question needs current or external information, call the \`${WEB_FETCH_TOOL_NAME}\` tool to read the relevant URL(s) rather than relying on memory, and cite the sources you use.`
+    );
+  }
+  return parts.join("\n\n");
+}
+
+// src/useToolConfirmationGate.ts
+var import_react2 = require("react");
+function useToolConfirmationGate(options) {
+  const { isMutating, persistence, defaultOn = false } = options;
+  const [autoApprove, setAutoApproveState] = (0, import_react2.useState)(defaultOn);
+  const autoApproveRef = (0, import_react2.useRef)(defaultOn);
+  const persistenceRef = (0, import_react2.useRef)(persistence);
+  persistenceRef.current = persistence;
+  (0, import_react2.useEffect)(() => {
+    const stored = persistenceRef.current?.read();
+    const initial = stored ?? defaultOn;
+    autoApproveRef.current = initial;
+    setAutoApproveState(initial);
+  }, [defaultOn]);
+  const setAutoApprove = (0, import_react2.useCallback)((on) => {
+    autoApproveRef.current = on;
+    setAutoApproveState(on);
+    persistenceRef.current?.write(on);
+  }, []);
+  const needsConfirm = (0, import_react2.useCallback)(
+    (req) => isMutating(req.name, req.args) && !autoApproveRef.current,
+    [isMutating]
+  );
+  return { autoApprove, setAutoApprove, needsConfirm };
+}
+function localStorageConfirmationPersistence(key) {
+  return {
+    read() {
+      try {
+        const raw = localStorage.getItem(key);
+        return raw === null ? void 0 : raw !== "0";
+      } catch {
+        return void 0;
+      }
+    },
+    write(on) {
+      try {
+        localStorage.setItem(key, on ? "1" : "0");
+      } catch {
+      }
+    }
+  };
+}
+
 // src/imagePrep.ts
 var MAX_EDGE = 1568;
 var MAX_DATA_URL_BYTES = 35e5;
@@ -808,7 +876,7 @@ function countReconciledMemories(items, answer) {
 }
 
 // src/BrainActionsContext.tsx
-var import_react2 = require("react");
+var import_react3 = require("react");
 
 // src/toolSpecs.ts
 function toolSpecsFor(actions) {
@@ -824,12 +892,12 @@ function toolSpecsFor(actions) {
 
 // src/BrainActionsContext.tsx
 var import_jsx_runtime2 = require("react/jsx-runtime");
-var BrainActionsContext = (0, import_react2.createContext)(null);
+var BrainActionsContext = (0, import_react3.createContext)(null);
 function BrainActionsProvider({ children }) {
-  const registry = (0, import_react2.useRef)(/* @__PURE__ */ new Map());
-  const [version, setVersion] = (0, import_react2.useState)(0);
-  const bump = (0, import_react2.useCallback)(() => setVersion((v) => v + 1), []);
-  const register = (0, import_react2.useCallback)((actions) => {
+  const registry = (0, import_react3.useRef)(/* @__PURE__ */ new Map());
+  const [version, setVersion] = (0, import_react3.useState)(0);
+  const bump = (0, import_react3.useCallback)(() => setVersion((v) => v + 1), []);
+  const register = (0, import_react3.useCallback)((actions) => {
     const token = /* @__PURE__ */ Symbol("brain-action-registration");
     for (const action of actions) {
       registry.current.set(action.name, { action, token });
@@ -843,7 +911,7 @@ function BrainActionsProvider({ children }) {
       bump();
     };
   }, [bump]);
-  const runTool = (0, import_react2.useCallback)(async (name, args) => {
+  const runTool = (0, import_react3.useCallback)(async (name, args) => {
     const entry = registry.current.get(name);
     if (!entry) {
       return { error: `Unknown tool: ${name}` };
@@ -854,7 +922,7 @@ function BrainActionsProvider({ children }) {
       return { error: e instanceof Error ? e.message : "Tool execution failed" };
     }
   }, []);
-  const isMutating = (0, import_react2.useCallback)((name, args) => {
+  const isMutating = (0, import_react3.useCallback)((name, args) => {
     const entry = registry.current.get(name);
     if (!entry) return false;
     const m = entry.action.mutates;
@@ -867,33 +935,33 @@ function BrainActionsProvider({ children }) {
     }
     return !!m;
   }, []);
-  const toolSpecs = (0, import_react2.useMemo)(() => {
+  const toolSpecs = (0, import_react3.useMemo)(() => {
     return toolSpecsFor([...registry.current.values()].map((e) => e.action));
   }, [version]);
-  const value = (0, import_react2.useMemo)(
+  const value = (0, import_react3.useMemo)(
     () => ({ toolSpecs, runTool, isMutating, register }),
     [toolSpecs, runTool, isMutating, register]
   );
   return /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(BrainActionsContext.Provider, { value, children });
 }
 function useBrainActions() {
-  const ctx = (0, import_react2.useContext)(BrainActionsContext);
+  const ctx = (0, import_react3.useContext)(BrainActionsContext);
   if (!ctx) {
     throw new Error("useBrainActions must be used within a BrainActionsProvider");
   }
   return ctx;
 }
 function useRegisterBrainActions(actions) {
-  const ctx = (0, import_react2.useContext)(BrainActionsContext);
+  const ctx = (0, import_react3.useContext)(BrainActionsContext);
   const register = ctx?.register;
-  (0, import_react2.useEffect)(() => {
+  (0, import_react3.useEffect)(() => {
     if (!register) return;
     return register(actions);
   }, [register, actions]);
 }
 
 // src/useMcpExtensions.ts
-var import_react3 = require("react");
+var import_react4 = require("react");
 
 // src/mcpToolStatus.ts
 var status = { count: 0, error: null, loading: true };
@@ -1003,13 +1071,13 @@ function mcpActionsFrom(entries, transport, onToolResult) {
 // src/useMcpExtensions.ts
 function useMcpExtensions(options) {
   const { transport } = useBrainConfig();
-  const [entries, setEntries] = (0, import_react3.useState)([]);
-  const [loading, setLoading] = (0, import_react3.useState)(true);
-  const [error, setError] = (0, import_react3.useState)(null);
+  const [entries, setEntries] = (0, import_react4.useState)([]);
+  const [loading, setLoading] = (0, import_react4.useState)(true);
+  const [error, setError] = (0, import_react4.useState)(null);
   const skipKey = (options?.skipExtensionIds ?? []).join(",");
-  const onToolResultRef = (0, import_react3.useRef)(options?.onToolResult);
+  const onToolResultRef = (0, import_react4.useRef)(options?.onToolResult);
   onToolResultRef.current = options?.onToolResult;
-  (0, import_react3.useEffect)(() => {
+  (0, import_react4.useEffect)(() => {
     let cancelled = false;
     fetchMcpToolEntries(transport, skipKey ? skipKey.split(",") : []).then((tools) => {
       if (cancelled) return;
@@ -1026,19 +1094,19 @@ function useMcpExtensions(options) {
       cancelled = true;
     };
   }, [transport, skipKey]);
-  const actions = (0, import_react3.useMemo)(
+  const actions = (0, import_react4.useMemo)(
     () => mcpActionsFrom(entries, transport, (info) => onToolResultRef.current?.(info)),
     [entries, transport]
   );
   useRegisterBrainActions(actions);
-  (0, import_react3.useEffect)(() => {
+  (0, import_react4.useEffect)(() => {
     setMcpToolStatus({ count: actions.length, error, loading });
   }, [actions.length, error, loading]);
   return { loading, toolCount: actions.length, error };
 }
 
 // src/BrainContext.tsx
-var import_react4 = require("react");
+var import_react5 = require("react");
 var import_jsx_runtime3 = require("react/jsx-runtime");
 var OPEN_KEY = "brain.drawer.open";
 var CHAT_KEY = "brain.drawer.activeChatId";
@@ -1065,12 +1133,12 @@ var DEFAULT_CONTEXT = {
   extraSystem: void 0,
   initialChatId: null
 };
-var BrainContext = (0, import_react4.createContext)(null);
+var BrainContext = (0, import_react5.createContext)(null);
 function BrainContextProvider({ children }) {
-  const [open, setOpen] = (0, import_react4.useState)(false);
-  const [pageContext, setPageContext] = (0, import_react4.useState)(DEFAULT_CONTEXT);
-  const [activeChatId, setActiveChatId] = (0, import_react4.useState)(null);
-  (0, import_react4.useEffect)(() => {
+  const [open, setOpen] = (0, import_react5.useState)(false);
+  const [pageContext, setPageContext] = (0, import_react5.useState)(DEFAULT_CONTEXT);
+  const [activeChatId, setActiveChatId] = (0, import_react5.useState)(null);
+  (0, import_react5.useEffect)(() => {
     if (readSession(OPEN_KEY) === "1") setOpen(true);
     const savedChat = readSession(CHAT_KEY);
     if (savedChat != null) {
@@ -1078,13 +1146,13 @@ function BrainContextProvider({ children }) {
       if (Number.isFinite(n)) setActiveChatId(n);
     }
   }, []);
-  (0, import_react4.useEffect)(() => {
+  (0, import_react5.useEffect)(() => {
     writeSession(OPEN_KEY, open ? "1" : "0");
   }, [open]);
-  (0, import_react4.useEffect)(() => {
+  (0, import_react5.useEffect)(() => {
     writeSession(CHAT_KEY, activeChatId == null ? null : String(activeChatId));
   }, [activeChatId]);
-  const setContext = (0, import_react4.useCallback)((patch) => {
+  const setContext = (0, import_react5.useCallback)((patch) => {
     setPageContext((prev) => {
       const next = { ...prev, ...patch };
       if (next.projectId === prev.projectId && next.viewingProjectId === prev.viewingProjectId && next.modality === prev.modality && next.extraSystem === prev.extraSystem && next.initialChatId === prev.initialChatId && next.initialPrompt === prev.initialPrompt && next.initialTicket === prev.initialTicket) {
@@ -1093,23 +1161,23 @@ function BrainContextProvider({ children }) {
       return next;
     });
   }, []);
-  const value = (0, import_react4.useMemo)(
+  const value = (0, import_react5.useMemo)(
     () => ({ ...pageContext, open, setOpen, setContext, activeChatId, setActiveChatId }),
     [pageContext, open, setContext, activeChatId]
   );
   return /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(BrainContext.Provider, { value, children });
 }
 function useBrainContext() {
-  const ctx = (0, import_react4.useContext)(BrainContext);
+  const ctx = (0, import_react5.useContext)(BrainContext);
   if (!ctx) throw new Error("useBrainContext must be used within a BrainContextProvider");
   return ctx;
 }
 function useOptionalBrainContext() {
-  return (0, import_react4.useContext)(BrainContext);
+  return (0, import_react5.useContext)(BrainContext);
 }
 
 // src/useBrainChats.ts
-var import_react5 = require("react");
+var import_react6 = require("react");
 
 // src/chatWorkLinking.ts
 var TICKET_RECORDING_TOOLS = /* @__PURE__ */ new Set([
@@ -1285,30 +1353,30 @@ function deriveChatTitle(text) {
 function useBrainChats(options = {}) {
   const { persistence } = useBrainConfig();
   const { filterProjectId, pinnedProjectId, activeChatId: controlledActiveId, onActiveChatChange } = options;
-  const [chats, setChats] = (0, import_react5.useState)([]);
-  const [loading, setLoading] = (0, import_react5.useState)(true);
-  const [error, setError] = (0, import_react5.useState)("");
-  const [internalActiveId, setInternalActiveId] = (0, import_react5.useState)(null);
-  const assigningRef = (0, import_react5.useRef)(false);
-  const chatsRef = (0, import_react5.useRef)(chats);
+  const [chats, setChats] = (0, import_react6.useState)([]);
+  const [loading, setLoading] = (0, import_react6.useState)(true);
+  const [error, setError] = (0, import_react6.useState)("");
+  const [internalActiveId, setInternalActiveId] = (0, import_react6.useState)(null);
+  const assigningRef = (0, import_react6.useRef)(false);
+  const chatsRef = (0, import_react6.useRef)(chats);
   chatsRef.current = chats;
-  const autoTitledRef = (0, import_react5.useRef)(/* @__PURE__ */ new Set());
+  const autoTitledRef = (0, import_react6.useRef)(/* @__PURE__ */ new Set());
   const isControlled = controlledActiveId !== void 0;
   const activeChatId = isControlled ? controlledActiveId ?? null : internalActiveId;
-  const activeIdRef = (0, import_react5.useRef)(activeChatId);
+  const activeIdRef = (0, import_react6.useRef)(activeChatId);
   activeIdRef.current = activeChatId;
-  const setActiveChatId = (0, import_react5.useCallback)(
+  const setActiveChatId = (0, import_react6.useCallback)(
     (id) => {
       if (isControlled) onActiveChatChange?.(id);
       else setInternalActiveId(id);
     },
     [isControlled, onActiveChatChange]
   );
-  const defaultProjectId = (0, import_react5.useCallback)(() => {
+  const defaultProjectId = (0, import_react6.useCallback)(() => {
     if (pinnedProjectId != null) return pinnedProjectId;
     return filterProjectId && filterProjectId !== "none" ? Number(filterProjectId) : null;
   }, [pinnedProjectId, filterProjectId]);
-  const reload = (0, import_react5.useCallback)(async () => {
+  const reload = (0, import_react6.useCallback)(async () => {
     setLoading(true);
     setError("");
     try {
@@ -1321,10 +1389,10 @@ function useBrainChats(options = {}) {
       setLoading(false);
     }
   }, [persistence, filterProjectId, pinnedProjectId]);
-  (0, import_react5.useEffect)(() => {
+  (0, import_react6.useEffect)(() => {
     reload();
   }, [reload]);
-  const select = (0, import_react5.useCallback)(async (id) => {
+  const select = (0, import_react6.useCallback)(async (id) => {
     setError("");
     if (id === null) {
       setActiveChatId(null);
@@ -1342,7 +1410,7 @@ function useBrainChats(options = {}) {
       return null;
     }
   }, [persistence, chats, setActiveChatId]);
-  const create = (0, import_react5.useCallback)(async (opts) => {
+  const create = (0, import_react6.useCallback)(async (opts) => {
     setError("");
     try {
       const projectId = opts?.projectId !== void 0 ? opts.projectId : defaultProjectId();
@@ -1355,7 +1423,7 @@ function useBrainChats(options = {}) {
       return null;
     }
   }, [persistence, defaultProjectId, setActiveChatId]);
-  const setCapability = (0, import_react5.useCallback)(async (id, capability) => {
+  const setCapability = (0, import_react6.useCallback)(async (id, capability) => {
     const prevValue = chatsRef.current.find((c) => c.id === id)?.capability ?? null;
     setChats((prev) => prev.map((c) => c.id === id ? { ...c, capability } : c));
     try {
@@ -1366,7 +1434,7 @@ function useBrainChats(options = {}) {
       setError(e instanceof Error ? e.message : "Failed to set capability");
     }
   }, [persistence]);
-  const setMode = (0, import_react5.useCallback)(async (id, mode) => {
+  const setMode = (0, import_react6.useCallback)(async (id, mode) => {
     const prevValue = normalizeChatMode(chatsRef.current.find((c) => c.id === id)?.mode);
     setChats((prev) => prev.map((c) => c.id === id ? { ...c, mode } : c));
     try {
@@ -1377,7 +1445,7 @@ function useBrainChats(options = {}) {
       setError(e instanceof Error ? e.message : "Failed to switch mode");
     }
   }, [persistence]);
-  const rename = (0, import_react5.useCallback)(async (id, title) => {
+  const rename = (0, import_react6.useCallback)(async (id, title) => {
     const trimmed = title.trim();
     if (!trimmed) return;
     try {
@@ -1387,7 +1455,7 @@ function useBrainChats(options = {}) {
       setError(e instanceof Error ? e.message : "Rename failed");
     }
   }, [persistence]);
-  const autoTitle = (0, import_react5.useCallback)(async (id, firstUserText) => {
+  const autoTitle = (0, import_react6.useCallback)(async (id, firstUserText) => {
     if (autoTitledRef.current.has(id)) return;
     const chat = chatsRef.current.find((c) => c.id === id);
     if (chat && chat.title && chat.title !== DEFAULT_CHAT_TITLE) return;
@@ -1401,7 +1469,7 @@ function useBrainChats(options = {}) {
       autoTitledRef.current.delete(id);
     }
   }, [persistence]);
-  const summarize = (0, import_react5.useCallback)(async (id) => {
+  const summarize = (0, import_react6.useCallback)(async (id) => {
     setError("");
     try {
       const result = await persistence.summarizeChat(id);
@@ -1417,7 +1485,7 @@ function useBrainChats(options = {}) {
       setError(e instanceof Error ? e.message : "Summarize failed");
     }
   }, [persistence]);
-  const remove = (0, import_react5.useCallback)(async (id) => {
+  const remove = (0, import_react6.useCallback)(async (id) => {
     try {
       await persistence.deleteChat(id);
       setChats((prev) => prev.filter((c) => c.id !== id));
@@ -1426,7 +1494,7 @@ function useBrainChats(options = {}) {
       setError(e instanceof Error ? e.message : "Delete failed");
     }
   }, [persistence, setActiveChatId]);
-  const assignToProject = (0, import_react5.useCallback)(async (id, projectId) => {
+  const assignToProject = (0, import_react6.useCallback)(async (id, projectId) => {
     if (assigningRef.current) return;
     assigningRef.current = true;
     setError("");
@@ -1439,11 +1507,11 @@ function useBrainChats(options = {}) {
       assigningRef.current = false;
     }
   }, [persistence]);
-  const touch = (0, import_react5.useCallback)(async (id) => {
+  const touch = (0, import_react6.useCallback)(async (id) => {
     await reload();
     setActiveChatId(id);
   }, [reload, setActiveChatId]);
-  const activeChat = (0, import_react5.useMemo)(
+  const activeChat = (0, import_react6.useMemo)(
     () => chats.find((c) => c.id === activeChatId) ?? null,
     [chats, activeChatId]
   );
@@ -1469,7 +1537,7 @@ function useBrainChats(options = {}) {
 }
 
 // src/useBrainConversation.ts
-var import_react6 = require("react");
+var import_react7 = require("react");
 
 // src/types.ts
 var STEP_MESSAGE_ROLE = "tool";
@@ -1888,8 +1956,8 @@ function memoryAnswersInTrace(events) {
   return out;
 }
 function cap(s, n = 2e3) {
-  const str2 = typeof s === "string" ? s : JSON.stringify(s ?? "");
-  return str2.length > n ? str2.slice(0, n) + `\u2026 (+${str2.length - n} chars)` : str2;
+  const str3 = typeof s === "string" ? s : JSON.stringify(s ?? "");
+  return str3.length > n ? str3.slice(0, n) + `\u2026 (+${str3.length - n} chars)` : str3;
 }
 function isEvermindModel(model) {
   return /(^|\/)evermind\b|^project_evermind:|^tenant_model:/i.test(model);
@@ -2465,6 +2533,9 @@ function provenanceMetadata(result) {
   return withProvenanceMetadata({ model, ...account ? { account } : {} });
 }
 var MAX_TOOL_ITERATIONS = 25;
+function iterationCap(requested) {
+  return typeof requested === "number" && Number.isFinite(requested) && requested > 0 ? Math.floor(requested) : MAX_TOOL_ITERATIONS;
+}
 var HISTORY_WINDOW = 80;
 var DEDUP_READ_TOOLS = /* @__PURE__ */ new Set(["read_file", "search_code", "list_files"]);
 var isDedupableRead = (name) => DEDUP_READ_TOOLS.has(name) || isReadOnlyPlatformTool(name);
@@ -2948,6 +3019,7 @@ async function runLoop(chatId, c, req) {
   const allTools = toolSpecs && toolSpecs.length > 0 ? toolSpecs : void 0;
   const usedTools = /* @__PURE__ */ new Set();
   const runMode = normalizeChatMode(req.chatMode ?? "work");
+  const maxIterations = iterationCap(req.maxIterations);
   const metadata = {
     chatId,
     guestTurnId: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`,
@@ -3077,7 +3149,7 @@ ${turnOptimizationDirective()}`;
       }
     }
   };
-  for (let iter = 0; iter < MAX_TOOL_ITERATIONS; iter++) {
+  for (let iter = 0; iter < maxIterations; iter++) {
     if (c.abort?.signal.aborted) return;
     c.streamingText = "";
     emit(c);
@@ -3406,7 +3478,7 @@ ${turnOptimizationDirective()}`;
         label: "llm.complete",
         durationMs: nowMs2() - closeStart,
         ttftMs: closeFirstTokenAt !== void 0 ? closeFirstTokenAt - closeStart : void 0,
-        args: { model: closing.resolvedModel ?? activeModel ?? "default", requestedModel: activeModel ?? "default", step: MAX_TOOL_ITERATIONS, toolCalls: 0, forcedFinish: true, account: closing.account, byoUnresolved: closing.byoUnresolved },
+        args: { model: closing.resolvedModel ?? activeModel ?? "default", requestedModel: activeModel ?? "default", step: maxIterations, toolCalls: 0, forcedFinish: true, account: closing.account, byoUnresolved: closing.byoUnresolved },
         usage: closing.usage,
         finishReason: closing.finishReason,
         textChars: closing.text.length,
@@ -3434,7 +3506,7 @@ ${turnOptimizationDirective()}`;
     ts: nowIso(),
     category: "error",
     label: "agent.loop",
-    result: `Loop exhausted after ${MAX_TOOL_ITERATIONS} tool iterations (a forced final answer without tools also came back empty)`,
+    result: `Loop exhausted after ${maxIterations} tool iterations (a forced final answer without tools also came back empty)`,
     isError: true
   });
   c.error = "The assistant kept calling tools without finishing. Try rephrasing.";
@@ -3466,23 +3538,23 @@ function useBrainConversation(options) {
     augmentSystemPrompt,
     chatMode
   } = options;
-  const [messages, setMessages] = (0, import_react6.useState)([]);
-  const [loadingMessages, setLoadingMessages] = (0, import_react6.useState)(false);
-  const [reloadNonce, setReloadNonce] = (0, import_react6.useState)(0);
-  const reloadMessages = (0, import_react6.useCallback)(() => setReloadNonce((n) => n + 1), []);
-  const [localSending, setLocalSending] = (0, import_react6.useState)(false);
-  const [localError, setLocalError] = (0, import_react6.useState)("");
-  const [ratings, setRatings] = (0, import_react6.useState)({});
-  const [pendingAttachments, setPendingAttachments] = (0, import_react6.useState)([]);
-  const [uploading, setUploading] = (0, import_react6.useState)(false);
-  const autoRepliedChatIdRef = (0, import_react6.useRef)(null);
-  const [snapshot, setSnapshot] = (0, import_react6.useState)(() => getRunSnapshot(chatId));
-  (0, import_react6.useEffect)(() => {
+  const [messages, setMessages] = (0, import_react7.useState)([]);
+  const [loadingMessages, setLoadingMessages] = (0, import_react7.useState)(false);
+  const [reloadNonce, setReloadNonce] = (0, import_react7.useState)(0);
+  const reloadMessages = (0, import_react7.useCallback)(() => setReloadNonce((n) => n + 1), []);
+  const [localSending, setLocalSending] = (0, import_react7.useState)(false);
+  const [localError, setLocalError] = (0, import_react7.useState)("");
+  const [ratings, setRatings] = (0, import_react7.useState)({});
+  const [pendingAttachments, setPendingAttachments] = (0, import_react7.useState)([]);
+  const [uploading, setUploading] = (0, import_react7.useState)(false);
+  const autoRepliedChatIdRef = (0, import_react7.useRef)(null);
+  const [snapshot, setSnapshot] = (0, import_react7.useState)(() => getRunSnapshot(chatId));
+  (0, import_react7.useEffect)(() => {
     setSnapshot(getRunSnapshot(chatId));
     if (chatId == null) return;
     return subscribeRun(chatId, () => setSnapshot(getRunSnapshot(chatId)));
   }, [chatId]);
-  (0, import_react6.useEffect)(() => {
+  (0, import_react7.useEffect)(() => {
     let cancelled = false;
     if (chatId == null) {
       setMessages([]);
@@ -3501,12 +3573,12 @@ function useBrainConversation(options) {
       cancelled = true;
     };
   }, [persistence, chatId, reloadNonce]);
-  (0, import_react6.useEffect)(() => {
+  (0, import_react7.useEffect)(() => {
     if (chatId == null || !persistence.subscribeMessages) return;
     return persistence.subscribeMessages(chatId, reloadMessages);
   }, [persistence, chatId, reloadMessages]);
-  const lastMarkedRef = (0, import_react6.useRef)(null);
-  (0, import_react6.useEffect)(() => {
+  const lastMarkedRef = (0, import_react7.useRef)(null);
+  (0, import_react7.useEffect)(() => {
     if (chatId == null || !persistence.markChatRead || messages.length === 0) return;
     let maxSeq = 0;
     for (const m of messages) if (m.seq > maxSeq) maxSeq = m.seq;
@@ -3518,7 +3590,7 @@ function useBrainConversation(options) {
       if (lastMarkedRef.current?.chatId === chatId) lastMarkedRef.current = prev;
     });
   }, [persistence, chatId, messages]);
-  (0, import_react6.useEffect)(() => {
+  (0, import_react7.useEffect)(() => {
     const appended = snapshot.appended;
     if (appended.length === 0) return;
     setMessages((prev) => {
@@ -3527,7 +3599,7 @@ function useBrainConversation(options) {
       return fresh.length === 0 ? prev : [...prev, ...fresh];
     });
   }, [snapshot.messagesEpoch, snapshot.appended]);
-  (0, import_react6.useEffect)(() => {
+  (0, import_react7.useEffect)(() => {
     const map = {};
     for (const msg of messages) {
       if (!msg.metadata) continue;
@@ -3543,7 +3615,7 @@ function useBrainConversation(options) {
   const resolvedSystemPrompt = systemPrompt ?? resolveSystemPrompt(modality);
   const fullSystemPrompt = extraSystem ? `${resolvedSystemPrompt}
 ${extraSystem}` : resolvedSystemPrompt;
-  const buildRequest = (0, import_react6.useCallback)(
+  const buildRequest = (0, import_react7.useCallback)(
     (seed, userTurn) => ({
       resolvedSystemPrompt: fullSystemPrompt,
       tools: toolSpecs && toolSpecs.length > 0 ? toolSpecs : void 0,
@@ -3567,7 +3639,7 @@ ${extraSystem}` : resolvedSystemPrompt;
     }),
     [fullSystemPrompt, toolSpecs, model, modelStrict, routingMode, pickFallbackModel, maxTokens, reasoning, runTool, needsConfirm, stream, persistence, onActivity, evermind, augmentSystemPrompt, projectId, chatMode]
   );
-  const send = (0, import_react6.useCallback)(
+  const send = (0, import_react7.useCallback)(
     async (text, opts) => {
       const trimmed = text.trim();
       if (!trimmed || localSending || isRunning(chatId)) return false;
@@ -3636,7 +3708,7 @@ ${refs}`;
     },
     [persistence, chatId, localSending, pendingAttachments, messages, ensureChatId, buildRequest, onActivity, onFirstUserTurn]
   );
-  (0, import_react6.useEffect)(() => {
+  (0, import_react7.useEffect)(() => {
     if (chatId == null || loadingMessages || localSending || messages.length === 0) return;
     if (isRunning(chatId)) return;
     const last = messages[messages.length - 1];
@@ -3651,7 +3723,7 @@ ${refs}`;
     }));
     void startRun(chatId, buildRequest(seed, last.content));
   }, [chatId, loadingMessages, localSending, messages, buildRequest]);
-  const rateMessage = (0, import_react6.useCallback)(async (msg, rating) => {
+  const rateMessage = (0, import_react7.useCallback)(async (msg, rating) => {
     setRatings((prev) => {
       const copy = { ...prev };
       if (rating === 0) delete copy[msg.id];
@@ -3668,7 +3740,7 @@ ${refs}`;
     } catch {
     }
   }, [persistence, messages]);
-  const attach = (0, import_react6.useCallback)(async (file) => {
+  const attach = (0, import_react7.useCallback)(async (file) => {
     setUploading(true);
     try {
       const result = await persistence.upload(file);
@@ -3689,20 +3761,20 @@ ${refs}`;
       setUploading(false);
     }
   }, [persistence]);
-  const removeAttachment = (0, import_react6.useCallback)((key) => {
+  const removeAttachment = (0, import_react7.useCallback)((key) => {
     setPendingAttachments((prev) => prev.filter((a) => a.key !== key));
   }, []);
-  const resolveConfirm = (0, import_react6.useCallback)((ok) => {
+  const resolveConfirm = (0, import_react7.useCallback)((ok) => {
     if (chatId != null) resolveRunConfirm(chatId, ok);
   }, [chatId]);
-  const clearError = (0, import_react6.useCallback)(() => {
+  const clearError = (0, import_react7.useCallback)(() => {
     setLocalError("");
     clearRunError(chatId);
   }, [chatId]);
-  const stop = (0, import_react6.useCallback)(() => {
+  const stop = (0, import_react7.useCallback)(() => {
     if (chatId != null) stopRun(chatId);
   }, [chatId]);
-  const buildTriageReport = (0, import_react6.useCallback)(
+  const buildTriageReport = (0, import_react7.useCallback)(
     (agentLabel, surface) => buildBrainTriageReport({
       capturedAt: (/* @__PURE__ */ new Date()).toISOString(),
       events: getRunTrace(chatId),
@@ -3796,6 +3868,109 @@ function subscribeToChatMessages(baseUrl, getToken, chatId, onChanged) {
     socket?.close();
     socket = null;
   };
+}
+
+// src/chatActivity.ts
+var PHASES = ["started", "completed", "failed", "paused", "resumed", "cancelled"];
+function isPhase(v) {
+  return typeof v === "string" && PHASES.includes(v);
+}
+function str2(v) {
+  return typeof v === "string" && v.trim() ? v : void 0;
+}
+function parseChatActivity(msg) {
+  if (!msg.metadata) return null;
+  let meta;
+  try {
+    const parsed = JSON.parse(msg.metadata);
+    if (!parsed || typeof parsed !== "object") return null;
+    meta = parsed;
+  } catch {
+    return null;
+  }
+  const ticketKind = str2(meta.ticketKind) ?? "task";
+  const ticketRef = str2(meta.ticketRef) ?? "";
+  const agentName = str2(meta.agentName) ?? str2(meta.agentRef) ?? "";
+  if (meta.runMilestone != null && isPhase(meta.phase)) {
+    return {
+      kind: "milestone",
+      phase: meta.phase,
+      agentName,
+      ticketKind,
+      ticketRef,
+      executionId: typeof meta.executionId === "number" ? meta.executionId : null,
+      ...str2(meta.toStatus) ? { toStatus: str2(meta.toStatus) } : {},
+      ...str2(meta.note) ? { note: str2(meta.note) } : {},
+      ...str2(meta.question) ? { question: str2(meta.question) } : {}
+    };
+  }
+  if (meta.agentDispatch === true) {
+    return { kind: "dispatch", agentName, ticketKind, ticketRef };
+  }
+  return null;
+}
+function isActivityMessage(msg) {
+  return parseChatActivity(msg) !== null;
+}
+var DEFAULT_CHAT_ACTIVITY_LABELS = {
+  milestoneStarted: "{agent} started working on {kind} #{ref}",
+  milestoneCompleted: "{agent} finished {kind} #{ref}",
+  milestoneCompletedWithLane: "{agent} finished {kind} #{ref} \u2014 moved to {lane}",
+  milestoneFailed: "{agent}\u2019s run on {kind} #{ref} failed",
+  milestonePaused: "{agent} paused on {kind} #{ref} \u2014 waiting on a human answer",
+  milestonePausedWithQuestion: "{agent} paused on {kind} #{ref} \u2014 needs an answer: {question}",
+  milestoneResumed: "{agent} resumed work on {kind} #{ref}",
+  milestoneCancelled: "{agent}\u2019s run on {kind} #{ref} was cancelled",
+  agentDispatched: "{agent} was assigned to {kind} #{ref}"
+};
+function activityIcon(activity) {
+  if (activity.kind === "dispatch") return "\u{1F464}";
+  switch (activity.phase) {
+    case "started":
+      return "\u25B6";
+    case "completed":
+      return "\u2713";
+    case "failed":
+      return "!";
+    case "paused":
+      return "?";
+    case "resumed":
+      return "\u25B6";
+    case "cancelled":
+      return "\u25A0";
+    default:
+      return "\u2022";
+  }
+}
+function activityTone(activity) {
+  if (activity.kind === "dispatch") return "neutral";
+  if (activity.phase === "completed") return "good";
+  if (activity.phase === "failed") return "bad";
+  if (activity.phase === "paused") return "waiting";
+  return "neutral";
+}
+function fill(template, values) {
+  return template.replace(/\{(\w+)\}/g, (_, key) => values[key] ?? "");
+}
+function chatActivityText(activity, labels) {
+  const base = { agent: activity.agentName, kind: activity.ticketKind, ref: activity.ticketRef };
+  if (activity.kind === "dispatch") return fill(labels.agentDispatched, base);
+  switch (activity.phase) {
+    case "started":
+      return fill(labels.milestoneStarted, base);
+    case "completed":
+      return activity.toStatus ? fill(labels.milestoneCompletedWithLane, { ...base, lane: activity.toStatus }) : fill(labels.milestoneCompleted, base);
+    case "failed":
+      return fill(labels.milestoneFailed, base);
+    case "paused":
+      return activity.question ? fill(labels.milestonePausedWithQuestion, { ...base, question: activity.question }) : fill(labels.milestonePaused, base);
+    case "resumed":
+      return fill(labels.milestoneResumed, base);
+    case "cancelled":
+      return fill(labels.milestoneCancelled, base);
+    default:
+      return "";
+  }
 }
 
 // src/apiVersion.ts
@@ -4055,9 +4230,16 @@ function diagnosticsSignals(d) {
   const out = [];
   const ev = d.evermind;
   if (d.projectId == null || d.lastLearn?.reason === "not-attached") {
-    out.push(
-      "\u26A0\uFE0F Chat is NOT attached to a project (chat.projectId is null). The learn gate keys on the CHAT's project, so this chat contributes NOTHING to any Evermind \u2014 even though the panel shows the selected project as connected. Attach the chat to a project (or re-open it so the self-heal adopts the active project)."
-    );
+    const unattached = "\u26A0\uFE0F Chat is NOT attached to a project (chat.projectId is null). The learn gate keys on the CHAT's project, so this chat contributes NOTHING to any Evermind \u2014 even though the panel shows the selected project as connected.";
+    if (d.selectedProjectId == null) {
+      out.push(
+        `${unattached} No project is selected in the sidebar either, so there was nothing for the chat to adopt \u2014 SELECT a project, then re-open the chat. (Not an adopt bug.)`
+      );
+    } else {
+      out.push(
+        `${unattached} A project IS selected (${fmtProject(d.selectedProjectId, d.selectedProjectName)}) and the chat still came up unattached, so the ADOPT path is the fault, not the selection \u2014 investigate the self-heal that binds an open chat to the active project.`
+      );
+    }
   } else if (d.selectedProjectId != null && d.selectedProjectId !== d.projectId) {
     out.push(
       `\u26A0\uFE0F Chat's project (#${d.projectId}) differs from the panel's selected project (#${d.selectedProjectId}). The Evermind panel reflects the SELECTED project; this chat feeds project #${d.projectId}. They are different models \u2014 compare the versions below.`
@@ -4146,16 +4328,25 @@ function fmtAdvertised(tools) {
 function formatChatDiagnostics(d) {
   const lines = ["## Chat diagnostics"];
   if (d.surface) lines.push(`- Surface: ${d.surface}`);
-  if (d.versions && (d.versions.ui || d.versions.api)) {
-    lines.push(
-      `- Versions: UI ${d.versions.ui ?? "unknown"} \xB7 API ${d.versions.api ?? "unknown"}`
-    );
+  if (d.versions && (d.versions.ui || d.versions.api || d.versions.uiBuildId)) {
+    const buildId = d.versions.uiBuildId;
+    const ui = `${d.versions.ui ?? "unknown"}${buildId ? `+${buildId}` : ""}` + (d.versions.uiBuiltAt && d.versions.uiBuiltAt !== "dev" ? ` (built ${d.versions.uiBuiltAt})` : "");
+    lines.push(`- Versions: UI ${ui} \xB7 API ${d.versions.api ?? "unknown"}`);
+    if (buildId === "dev") {
+      lines.push(
+        '  - \u26A0\uFE0F UI build id is "dev" \u2014 this capture did NOT come from a packaged build, so its behaviour may not match any released artifact.'
+      );
+    } else if (d.versions.ui && !buildId) {
+      lines.push(
+        '  - \u26A0\uFE0F No UI build id \u2014 this client does not stamp one, so a rebuild carrying the SAME version is indistinguishable from the build it replaced. "Is the fix in?" cannot be answered from this report.'
+      );
+    }
   }
   lines.push(`- Chat: ${d.chatTitle?.trim() ? `"${d.chatTitle.trim()}"` : "Untitled"}${d.chatId != null ? ` (#${d.chatId})` : ""}${d.chatVisibility ? ` \xB7 ${d.chatVisibility}` : ""}`);
   lines.push(`- Chat's project: ${fmtProject(d.projectId, d.projectName)}`);
-  if (d.selectedProjectId != null && d.selectedProjectId !== d.projectId) {
-    lines.push(`- Panel's selected project: #${d.selectedProjectId}`);
-  }
+  lines.push(
+    `- Panel's selected project: ${fmtProject(d.selectedProjectId, d.selectedProjectName)}` + (d.selectedProjectId != null && d.selectedProjectId === d.projectId ? " (same as the chat's)" : "")
+  );
   lines.push(`- Tenant: ${d.tenantId != null ? `#${d.tenantId}` : "unknown"} \xB7 User: ${d.userId ?? "unknown"}`);
   const acct = d.account;
   if (acct) {
@@ -4284,6 +4475,7 @@ async function gatherChatDiagnostics(src) {
     projectId: src.projectId ?? null,
     projectName: projectName ?? src.projectName ?? null,
     selectedProjectId: src.selectedProjectId ?? null,
+    selectedProjectName: src.selectedProjectName ?? null,
     tenantId: src.tenantId ?? null,
     userId: src.userId ?? null,
     evermind: toEvermind(head),
@@ -4298,7 +4490,12 @@ async function gatherChatDiagnostics(src) {
       advertisedMin: exposure?.min ?? null,
       advertisedLastTurn: exposure?.lastTurn ?? null
     } : null,
-    versions: { ui: src.uiVersion ?? null, api: apiVersion }
+    versions: {
+      ui: src.uiVersion ?? null,
+      api: apiVersion,
+      uiBuildId: src.uiBuildId ?? null,
+      uiBuiltAt: src.uiBuiltAt ?? null
+    }
   };
 }
 // Annotate the CommonJS export names for ESM import in node:
@@ -4316,6 +4513,7 @@ async function gatherChatDiagnostics(src) {
   CODE_CHANGE_TOOLS,
   CONSOLIDATION_MARKER_PREFIX,
   CONSOLIDATION_META,
+  DEFAULT_CHAT_ACTIVITY_LABELS,
   DEFAULT_CHAT_TITLE,
   DEFAULT_MODEL_CHOICE_LABELS,
   DEFAULT_MODEL_IDENTITY,
@@ -4332,21 +4530,26 @@ async function gatherChatDiagnostics(src) {
   TOOL_ROUTER_DESCRIBE,
   TOOL_ROUTER_FIND,
   TOOL_ROUTER_INVOKE,
+  WEB_FETCH_TOOL_NAME,
   XmlToolCallFilter,
   accountUsedInTrace,
   activeMentionToken,
   activeModelKey,
+  activityIcon,
+  activityTone,
   allowanceState,
   announcesUntakenAction,
   attachEvermindLearn,
   brainRequestError,
   buildBrainTriageReport,
+  buildComposerDirectives,
   buildModelItems,
   byoReasonHint,
   byoUnresolvedInTrace,
   byoUnresolvedSummary,
   byoVendorLabel,
   catalogToolNamesMentionedIn,
+  chatActivityText,
   chatConversationDirective,
   chatErrorAction,
   chatModeDirective,
@@ -4385,6 +4588,7 @@ async function gatherChatDiagnostics(src) {
   getRunSnapshot,
   getRunTrace,
   handleRouterCall,
+  isActivityMessage,
   isChatMode,
   isCodeChangeTool,
   isConnectedAccountUnused,
@@ -4402,6 +4606,7 @@ async function gatherChatDiagnostics(src) {
   isUserConfiguredModelRef,
   lastConsolidationIndex,
   linkedTicketsToAdvance,
+  localStorageConfirmationPersistence,
   mcpActionsFrom,
   mentionRecipient,
   modelCategoryLabel,
@@ -4412,6 +4617,7 @@ async function gatherChatDiagnostics(src) {
   nextFallbackModel,
   normalizeChatMode,
   parseByoUnresolved,
+  parseChatActivity,
   parseDirectedRecipient,
   parseMessageAuthor,
   parseMessageProvenance,
@@ -4461,6 +4667,7 @@ async function gatherChatDiagnostics(src) {
   useMcpExtensions,
   useOptionalBrainContext,
   useRegisterBrainActions,
+  useToolConfirmationGate,
   withDirectedMetadata,
   withProvenanceMetadata,
   workItemLinkFromCreate

@@ -234,8 +234,24 @@ export function ScheduleCalendar<T extends Schedulable & { id: string | number }
   };
 
   const cellHeight = Math.max(MIN_CELL_H, DATE_ROW_H + laneCount * LANE_H + 26);
-  /** Columns the whole grid shifts by while a span is being dragged. */
-  const dragDelta = drag ? drag.deltaDays : 0;
+
+  /**
+   * The grid index the dragged item's START would land on, or null.
+   *
+   * The in-flight preview OUTLINES that day rather than sliding the bar, because
+   * a month grid wraps: shifting a bar's column by the delta puts it outside its
+   * own week row the moment a drag crosses a week boundary — which is most
+   * drags — and a bar hanging in the gutter reads as a rendering bug rather than
+   * as feedback. An outlined target day is accurate, stays inside the grid, and
+   * says exactly where the release will put it.
+   */
+  const dropIndex = useMemo(() => {
+    if (!drag || drag.deltaDays === 0) return null;
+    const schedule = getSchedule(drag.item, today);
+    if (!schedule.start) return null;
+    const landing = daysBetween(days[0]!, schedule.start) + drag.deltaDays;
+    return landing >= 0 && landing < DAYS_IN_GRID ? landing : null;
+  }, [drag, days, today]);
 
   return (
     <div>
@@ -290,6 +306,9 @@ export function ScheduleCalendar<T extends Schedulable & { id: string | number }
                             borderBottom: '1px solid var(--border-subtle)',
                             background: inMonth ? 'transparent' : 'var(--bg-base)',
                             opacity: inMonth ? 1 : 0.55,
+                            // Where the release will land. An inset ring, so it
+                            // cannot change the cell's size mid-drag.
+                            boxShadow: dayIndex === dropIndex ? 'inset 0 0 0 2px var(--accent)' : undefined,
                             display: 'flex',
                             flexDirection: 'column',
                             justifyContent: 'space-between',
@@ -326,7 +345,6 @@ export function ScheduleCalendar<T extends Schedulable & { id: string | number }
                   <div style={{ position: 'absolute', top: DATE_ROW_H, left: 0, right: 0, pointerEvents: 'none' }}>
                     {weekSpans.map((s) => {
                       const dragging = drag?.item.id === s.item.id;
-                      const shift = dragging ? dragDelta : 0;
                       const label = getLabel(s.item);
                       const accent = getAccentColor?.(s.item);
                       const roundLeft = !s.continuesLeft;
@@ -344,7 +362,7 @@ export function ScheduleCalendar<T extends Schedulable & { id: string | number }
                           style={{
                             position: 'absolute',
                             top: s.lane * LANE_H,
-                            left: `calc(${((s.col + shift) / COLS) * 100}% + 3px)`,
+                            left: `calc(${(s.col / COLS) * 100}% + 3px)`,
                             width: `calc(${(s.span / COLS) * 100}% - 6px)`,
                             height: LANE_H - 4,
                             display: 'flex',

@@ -39,6 +39,7 @@ import { buildDatabase } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { notifyBrokenProviders } from './byoCredentialAlerting';
 import type { ByoCredentialAlertRow } from '../../infrastructure/email/EmailService';
+import { mapWithConcurrency } from '../runtime/boundedPool';
 import { probeTenantByoProviders, probeTenantOpenRouterConnections } from './byoCredentialHealth';
 
 /** How many tenants are probed concurrently. Each tenant's probes are sequential, so this
@@ -78,19 +79,6 @@ async function tenantsWithConnectedAccounts(db: ReturnType<typeof buildDatabase>
     LIMIT ${MAX_TENANTS_PER_SWEEP + 1}
   `)).rows as Array<{ tenant_id: number }>;
   return rows.map((r) => Number(r.tenant_id));
-}
-
-/** Run `worker` over `items` with at most `limit` in flight. */
-async function mapWithConcurrency<T, R>(items: readonly T[], limit: number, worker: (item: T) => Promise<R>): Promise<R[]> {
-  const out: R[] = new Array(items.length);
-  let cursor = 0;
-  const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
-    for (let i = cursor++; i < items.length; i = cursor++) {
-      out[i] = await worker(items[i] as T);
-    }
-  });
-  await Promise.all(runners);
-  return out;
 }
 
 /**

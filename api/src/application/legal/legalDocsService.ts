@@ -338,24 +338,28 @@ export async function enhanceLegalContent(
     throw new LegalDocError(err instanceof Error ? err.message : 'AI generation failed', 502);
   }
 
-  if (executionCtx) {
-    logTrace(env, executionCtx, {
-      traceId,
-      surface: 'legal-ai',
-      tenantId: opts.tenantId ?? null,
-      userId: opts.userId ?? null,
-      result,
-      streamed: false,
-      requestIp: opts.requestIp ?? null,
-      origin: opts.origin ?? null,
-      userAgent: opts.userAgent ?? null,
-      requestBody: requestBody as unknown as Record<string, unknown>,
-      responseBody: null,
-      errorMessage: null,
-    });
-  }
+  const choice = await readProxyChoice(result);
+  const cleaned = stripMarkdownFence(choice.content);
+  // Traced AFTER the choice is parsed so the row carries what the model actually
+  // returned — logging before the read is what left `response_body` null here. No
+  // `executionCtx` guard: an internal caller without a request context still gets a
+  // trace, best-effort, rather than silently none.
+  logTrace(env, executionCtx, {
+    traceId,
+    surface: 'legal-ai',
+    tenantId: opts.tenantId ?? null,
+    userId: opts.userId ?? null,
+    result,
+    usage: result.usage ?? null,
+    streamed: false,
+    requestIp: opts.requestIp ?? null,
+    origin: opts.origin ?? null,
+    userAgent: opts.userAgent ?? null,
+    requestBody: requestBody as unknown as Record<string, unknown>,
+    responseBody: { content: choice.content, finishReason: choice.finishReason },
+    errorMessage: cleaned ? null : 'AI returned an empty document',
+  });
 
-  const cleaned = stripMarkdownFence((await readProxyChoice(result)).content);
   if (!cleaned) throw new LegalDocError('AI returned an empty document', 502);
   return cleaned;
 }

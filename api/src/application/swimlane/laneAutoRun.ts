@@ -37,6 +37,12 @@ export interface LaneAgentLike {
    */
   target?: string | null;
   /**
+   * True for the ticket-OWNER fallback appended by {@link withOwnerAgentFallback}.
+   * The router never reorders it ahead of explicit lane staffing: staffing is a
+   * deliberate configuration, an owner is a default.
+   */
+  isOwnerFallback?: boolean;
+  /**
    * Capability slugs (skill + persona) the LANE requires the agent to have for
    * this lane's work — the `required_capabilities` configured on the swimlane
    * agent assignment. Empty/absent → no requirement (the agent always qualifies).
@@ -98,6 +104,65 @@ export function missingCapabilities(
 }
 
 /**
+ * What a lane is FOR, expressed as capability slugs, when the lane's staffing declares
+ * no `required_capabilities` of its own.
+ *
+ * These are NOT a gate. An un-configured lane has always accepted whichever agent was
+ * staffed first, and hard-requiring a slug here would refuse lanes that run today. They
+ * are the ROUTER's expectation: when several agents qualify for a lane, the one whose
+ * skills actually match the lane's work is picked, instead of whichever row happened to
+ * be inserted first. A lane with an explicit requirement keeps using it, unchanged.
+ *
+ * Keys are `TaskStatus` values (a lane's key IS the status).
+ */
+export const LANE_DEFAULT_CAPABILITIES: Readonly<Record<string, readonly string[]>> = {
+  backlog:     ['planning', 'analysis', 'product'],
+  todo:        ['planning', 'analysis'],
+  ready:       ['coding', 'engineering'],
+  in_progress: ['coding', 'engineering', 'implementation'],
+  in_review:   ['review', 'code-review', 'qa', 'testing'],
+  blocked:     ['analysis', 'debugging', 'investigation'],
+};
+
+/**
+ * How well an agent's resolved capabilities match what a lane is for. Higher is better;
+ * 0 means "nothing matched", which is the score every agent gets on a lane with no
+ * expectation — so scoring never changes the answer where there is nothing to weigh.
+ *
+ * Deliberately generous: a slug counts when it CONTAINS an expected term (a
+ * `senior-coding-agent` skill matches `coding`), because capability slugs are
+ * free-text and an exact-match router would score almost every real tenant at zero.
+ */
+export function scoreLaneAgent(
+  agent: Pick<LaneAgentLike, 'capabilities'>,
+  expected: readonly string[] | undefined,
+): number {
+  if (!expected || expected.length === 0) return 0;
+  const have = (agent.capabilities ?? []).map((c) => c.trim().toLowerCase()).filter(Boolean);
+  if (have.length === 0) return 0;
+  let score = 0;
+  for (const want of expected) {
+    const term = want.trim().toLowerCase();
+    if (!term) continue;
+    if (have.some((h) => h === term || h.includes(term) || term.includes(h))) score++;
+  }
+  return score;
+}
+
+/**
+ * The lane's capability expectation: its staffing's explicit `required_capabilities`
+ * when it set any, else the lane-key default. Used ONLY for ranking.
+ */
+export function laneCapabilityExpectation(
+  agents: readonly LaneAgentLike[],
+  laneKey: string | null | undefined,
+): readonly string[] {
+  const explicit = agents.flatMap((a) => a.requiredCapabilities ?? []);
+  if (explicit.length > 0) return [...new Set(explicit)];
+  return LANE_DEFAULT_CAPABILITIES[(laneKey ?? '').trim()] ?? [];
+}
+
+/**
  * Decide whether a ticket entering a lane should auto-start an execution, and AS
  * which agent.
  *
@@ -115,29 +180,53 @@ export function missingCapabilities(
 export function decideLaneAutoRun(
   agents: LaneAgentLike[] | undefined,
   laneGate: 'auto' | 'human' | undefined,
+  /** The lane's key, so the router can weigh candidates against what the lane is FOR.
+   *  Omitted → no ranking, which is exactly the pre-router behaviour. */
+  laneKey?: string | null,
 ): LaneAutoRunDecision {
   if (laneGate === 'human') return { autoRun: false };
   const configured = (agents ?? []).filter((a): a is LaneAgentLike & { agentRef: string } => !!a.agentRef);
   if (configured.length === 0) return { autoRun: false };
 
+  // ── THE GATE ────────────────────────────────────────────────────────────────────
+  // Partition first, in ASSIGNMENT order, so every mismatch is recorded whichever
+  // agent ends up winning. (Ranking before the gate would hide the mismatches of
+  // agents the router happened to sort behind the winner — the diagnosis a
+  // mis-staffed lane depends on.)
   const capabilityMismatches: CapabilityMismatch[] = [];
+  const qualified: (LaneAgentLike & { agentRef: string })[] = [];
   for (const agent of configured) {
     const missing = missingCapabilities(agent.requiredCapabilities, agent.capabilities);
-    if (missing.length === 0) {
-      return {
-        autoRun: true,
-        agentRef: agent.agentRef,
-        model: agent.model ?? undefined,
-        ...(agent.runtime ? { runtime: agent.runtime } : {}),
-        ...(agent.target ? { target: agent.target } : {}),
-        ...(capabilityMismatches.length > 0 ? { capabilityMismatches } : {}),
-      };
-    }
-    capabilityMismatches.push({ agentRef: agent.agentRef, missing });
+    if (missing.length === 0) qualified.push(agent);
+    else capabilityMismatches.push({ agentRef: agent.agentRef, missing });
   }
+
   // Every configured agent failed its capability requirement — do not silently run
   // a mismatched agent; surface why so the lane staffing can be corrected.
-  return { autoRun: false, capabilityMismatches };
+  if (qualified.length === 0) return { autoRun: false, capabilityMismatches };
+
+  // ── THE ROUTER ──────────────────────────────────────────────────────────────────
+  // The guardrail only ever REFUSED an unqualified agent; among agents that qualified
+  // it took whichever row was inserted first. On a lane staffed with several agents
+  // that is a coin flip: the reviewer could take the implementation lane because it was
+  // added first. Rank by how well each matches what the lane is FOR — stably (equal
+  // scores keep assignment order), with the owner fallback pinned last, because
+  // staffing is a decision and an owner is a default.
+  const expectation = laneCapabilityExpectation(configured, laneKey);
+  const chosen = expectation.length === 0
+    ? qualified[0]!
+    : qualified
+      .map((agent, index) => ({ agent, index, score: agent.isOwnerFallback ? -1 : scoreLaneAgent(agent, expectation) }))
+      .sort((a, b) => (b.score - a.score) || (a.index - b.index))[0]!.agent;
+
+  return {
+    autoRun: true,
+    agentRef: chosen.agentRef,
+    model: chosen.model ?? undefined,
+    ...(chosen.runtime ? { runtime: chosen.runtime } : {}),
+    ...(chosen.target ? { target: chosen.target } : {}),
+    ...(capabilityMismatches.length > 0 ? { capabilityMismatches } : {}),
+  };
 }
 
 /**
@@ -164,7 +253,7 @@ export function withOwnerAgentFallback(
     // The OWNER fallback names no backplane: assigning an agent as a ticket's owner
     // says who works it, not where. Leaving runtime unset lets the dispatcher apply its
     // normal host-pin/cloud resolution, which is what the fallback always did.
-    list.push({ agentRef: ref, model: owner?.model ?? null, requiredCapabilities: null, capabilities: null, runtime: null, target: null });
+    list.push({ agentRef: ref, model: owner?.model ?? null, requiredCapabilities: null, capabilities: null, runtime: null, target: null, isOwnerFallback: true });
   }
   return list;
 }

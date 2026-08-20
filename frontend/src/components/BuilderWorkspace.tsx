@@ -3,6 +3,9 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 import { repairScaffold } from '@/lib/scaffoldRepair';
+import { defaultsForModality, isScaffoldPath } from '@/lib/vanillaDefaults';
+import { createRunLog, RUN_LOG_RULE, type RunLog } from '@/lib/runLog';
+import { datasetNameForPath, looksLikeDatasetPath, parseJsonlDataset } from '@/lib/datasetFromFile';
 import { FileExplorer } from './FileExplorer';
 import { CodePane } from './CodePane';
 import { Terminal } from './Terminal';
@@ -26,7 +29,7 @@ import { useWebContainer } from '@/hooks/useWebContainer';
 import { useCollaboration } from '@/hooks/useCollaboration';
 import { useVideoVersions } from '@/hooks/useVideoVersions';
 import type { Project, FileEntry, TrainingJob } from '@/lib/types';
-import { saveFile, fetchFileContent, deleteFile, fetchFiles, updateProject } from '@/lib/api';
+import { saveFile, fetchFileContent, deleteFile, fetchFiles, updateProject, importCanvasDataset } from '@/lib/api';
 import { validateFileContentForPath, coerceFileContent } from '@/lib/fileContentGuard';
 import { clearBuildFailures, previewErrorFrom, recordBuildFailure, teeOutput, withPreviewErrorReporter } from '@/lib/buildDiagnostics';
 import { canvasBuildActions } from '@/lib/canvasBuildTools';
@@ -42,8 +45,8 @@ import {
 import { isBrainAutoApprove } from '@/lib/brain/autoApprove';
 import { useRegisterBrainActions, useBrainContext, savePrd, saveTasks, type BrainAction } from '@/lib/brain';
 import { PrdReviewModal, TasksReviewModal } from './ArtifactReviewModals';
-import { getModality, RIGHT_TAB_LABELS, type ProjectModality, type RightTab } from '@/lib/modality';
-import { useModalityCopy } from '@/lib/useModalityCopy';
+import { getModality, type ProjectModality, type RightTab } from '@/lib/modality';
+import { useModalityCopy, useRightTabLabels } from '@/lib/useModalityCopy';
 import { getStoredTenantToken } from '@/lib/auth';
 import { getApiBaseUrl } from '@/lib/apiClient';
 import { useVoiceStudio } from '@/lib/voiceStudio';
@@ -94,6 +97,8 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
   const modality: ProjectModality = modalityDef.id;
   // Localized modality copy (label / runLabel) for the header + run button.
   const modalityCopy = useModalityCopy()(modality);
+  // Right-panel tab labels: glyph from the registry, word from the catalogs.
+  const rightTabLabel = useRightTabLabels();
   // Layout comes from the modality registry, not from `modality === '…'` checks
   // scattered through this file — see the CenterPanel/dockBrain notes there.
   const hasDockedBrain = modalityDef.dockBrain;
@@ -128,6 +133,9 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
   const [devicePanelOpen, setDevicePanelOpen] = useState(false);
   const [terminalExpanded, setTerminalExpanded] = useState(true);
   const [isChecking, setIsChecking] = useState(false);
+  // Bumped when a corpus is registered from outside the Train panel (the Brain
+  // writing a .jsonl into the workspace), so the dataset picker re-reads.
+  const [datasetsRegistered, setDatasetsRegistered] = useState(0);
   const [checkResults, setCheckResults] = useState<CheckResult[] | null>(null);
   // When on, a Run is hard-gated on the last check pass — "code must be good
   // before it runs". When off, failed checks only warn (confirm) before serving.
@@ -143,6 +151,21 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
   const [reviewError, setReviewError] = useState<string | null>(null);
   const shellStartedRef = useRef(false);
   const terminalWriteRef = useRef<((data: string) => void) | null>(null);
+  /**
+   * The run/check terminal's narration. Every line the pipeline authors goes
+   * through here so it is (a) translated and (b) formatted by one colour/glyph
+   * vocabulary. `npm`/`vite`/`tsc` output is teed through `log.raw` untouched —
+   * the tool's own words stay verbatim so they remain searchable.
+   */
+  const log = useMemo(
+    () => createRunLog(terminalWriter, (key, values) => t(`runLog.${key}` as never, values as never)),
+    [terminalWriter, t],
+  );
+  /** Same narration bound to the mount-time writer ref (used before a run). */
+  const refLog = useMemo(
+    () => createRunLog((data) => terminalWriteRef.current?.(data), (key, values) => t(`runLog.${key}` as never, values as never)),
+    [t],
+  );
   // package.json hash of the last successful npm install in this WC session, so
   // Run/Check/Build can skip a redundant install when dependencies are unchanged.
   const lastInstallHashRef = useRef<string | null>(null);
@@ -232,11 +255,11 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
       // forever. Leave the path uncached so the next click re-fetches; still
       // open the tab so the user sees something happened.
       console.error(`Failed to load ${path}:`, e);
-      terminalWriteRef.current?.(`\r\n\x1b[31m✗ Failed to load ${path} — click again to retry.\x1b[0m\r\n`);
+      refLog.error('fileLoadFailed', { path });
       setOpenFiles(prev => (prev.includes(path) ? prev : [...prev, path]));
       setActiveFile(path);
     }
-  }, [openFiles, fileContents, project.id]);
+  }, [openFiles, fileContents, project.id, refLog]);
 
   const closeTab = useCallback((path: string) => {
     setOpenFiles(prev => {
@@ -270,15 +293,20 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
   }, [activeFile, project.id, previewUrl, writeFileToContainer]);
 
   const handleFileCreate = useCallback(async (path: string) => {
+    // Creating a file posts an EMPTY body by construction — which is exactly the
+    // 0-byte write the API now refuses at a scaffold path (an empty package.json
+    // only ever breaks Run). At such a path "create" means "restore the starter
+    // file", so seed the template content instead of sending a doomed write.
+    const seed = isScaffoldPath(path) ? (defaultsForModality(modality)[path] ?? '') : '';
     try {
-      await saveFile(project.id, path, '');
-      setFiles(prev => [...prev, { path, content: '', type: 'file' }]);
-      setFileContents(prev => ({ ...prev, [path]: '' }));
+      await saveFile(project.id, path, seed);
+      setFiles(prev => [...prev, { path, content: seed, type: 'file' }]);
+      setFileContents(prev => ({ ...prev, [path]: seed }));
       openFile(path);
     } catch (e) {
       console.error('Failed to create file:', e);
     }
-  }, [project.id, openFile]);
+  }, [project.id, openFile, modality]);
 
   const handleFileDelete = useCallback(async (path: string) => {
     try {
@@ -305,7 +333,7 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
    * with NO content is ever written, so real work is never overwritten.
    */
   const assembleMountContents = useCallback(async (
-    onLog?: (s: string) => void,
+    onLog?: RunLog,
   ): Promise<Record<string, string> | null> => {
     const allContents: Record<string, string> = { ...fileContents };
     const unfetched = files.filter(f => f.type === 'file' && !(f.path in allContents));
@@ -317,7 +345,7 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
           allContents[f.path] = content;
           fetched[f.path] = content;
         } catch (error) {
-          onLog?.(`  \x1b[31m✗\x1b[0m ${f.path} - Failed to fetch\r\n`);
+          onLog?.error('fileFetchFailed', { path: f.path });
           console.error(`Failed to fetch ${f.path}:`, error);
         }
       }));
@@ -341,11 +369,7 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
     const { repaired: mount, restored } = repairScaffold(allContents, modality);
     if (restored.length > 0) {
       for (const { path, reason } of restored) {
-        onLog?.(
-          reason === 'corrupt'
-            ? `  \x1b[33m⚠\x1b[0m ${path} was corrupt — restored from the starter template\r\n`
-            : `  \x1b[33m⚠\x1b[0m ${path} was empty — restored from the starter template\r\n`,
-        );
+        onLog?.warn(reason === 'corrupt' ? 'scaffoldRestoredCorrupt' : 'scaffoldRestoredEmpty', { path });
       }
       const restoredMap = Object.fromEntries(restored.map(({ path }) => [path, mount[path]!]));
       setFileContents(prev => ({ ...prev, ...restoredMap }));
@@ -368,7 +392,7 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
       try {
         JSON.parse(mount['package.json']);
       } catch (e) {
-        onLog?.('\r\n\x1b[31m✗ Invalid package.json\x1b[0m\r\n');
+        onLog?.error('invalidPackageJson');
         return null;
       }
     }
@@ -384,11 +408,14 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
   const ensureInstalled = useCallback(async (
     mount: Record<string, string>,
     onOutput?: (data: string) => void,
+    onLog?: RunLog,
   ): Promise<number> => {
     if (!mount['package.json']) return 0;
     const hash = hashString(mount['package.json']);
     if (lastInstallHashRef.current === hash) {
-      onOutput?.('  \x1b[32m✓\x1b[0m Dependencies unchanged — skipping npm install.\r\n');
+      // Our own narration, not npm's — so it goes through the translated log
+      // rather than the raw output tee.
+      onLog?.ok('depsUnchanged');
       return 0;
     }
     const code = await runCommandAndWait('npm', ['install'], onOutput);
@@ -404,8 +431,8 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
     if (failedChecks.length > 0) {
       const summary = failedChecks.map((r) => r.label).join(', ');
       if (gateRunOnChecks) {
-        terminalWriter?.('\r\n\x1b[31m✗ Run blocked — last checks failed: ' + summary + '\x1b[0m\r\n');
-        terminalWriter?.('\x1b[33m  Fix the issues and re-run Check, or turn off "Gate Run on checks" to override.\x1b[0m\r\n');
+        log.error('runBlocked', { summary });
+        log.hint('runBlockedHint');
         return;
       }
       if (typeof window !== 'undefined' &&
@@ -419,33 +446,33 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
     // that fails the same way immediately re-records it.
     clearBuildFailures(projectIdNum);
     try {
-      terminalWriter?.('\r\n\x1b[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m\r\n');
-      terminalWriter?.('\x1b[36m▶ Run started\x1b[0m\r\n');
-      terminalWriter?.('\x1b[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m\r\n\r\n');
+      log.banner('runStarted');
 
-      terminalWriter?.('\x1b[36m[1/3] Preparing project files...\x1b[0m\r\n');
-      const mountContents = await assembleMountContents((s) => terminalWriter?.(s));
+      log.step('stepPreparing');
+      const mountContents = await assembleMountContents(log);
       if (!mountContents) {
-        throw new Error('Invalid package.json: please fix it in the Files tab.');
+        throw new Error(t('runLog.invalidPackageJsonFix'));
       }
-      terminalWriter?.('  \x1b[32m✓\x1b[0m Project files ready.\r\n\r\n');
+      log.ok('filesReady');
+      log.blank();
 
-      terminalWriter?.('\x1b[36m[2/3] Mounting project files...\x1b[0m\r\n');
+      log.step('stepMounting');
       // Both overlays go into the MOUNTED copy only — never the files on disk and
       // never the publish path — so a runtime error inside the preview reaches the
       // agent, and any element in it can be pointed at, while the user's source and
       // their published build stay exactly what they wrote.
       await mountFiles(withVisualEditor(withPreviewErrorReporter(mountContents)));
-      terminalWriter?.(`  \x1b[32m✓\x1b[0m Mounted ${Object.keys(mountContents).length} file(s).\r\n\r\n`);
+      log.ok('mounted', { count: Object.keys(mountContents).length });
+      log.blank();
 
-      terminalWriter?.('\x1b[36m[3/3] Installing dependencies...\x1b[0m\r\n');
+      log.step('stepInstalling');
       // Tee the install output: the terminal shows it to a human, the tail is what
       // an agent needs to know WHY it failed. Before this, only the exit code
       // survived and the cause stayed in pixels.
-      const installLog = teeOutput((data) => terminalWriter?.(data));
-      const installCode = await ensureInstalled(mountContents, installLog.write);
+      const installLog = teeOutput((data) => log.raw(data));
+      const installCode = await ensureInstalled(mountContents, installLog.write, log);
       if (installCode !== 0) {
-        terminalWriter?.('\r\n\x1b[31m✗ npm install failed (exit code ' + installCode + '). Fix errors above and try again.\x1b[0m\r\n');
+        log.error('installFailed', { code: installCode });
         recordBuildFailure(projectIdNum, {
           source: 'build',
           command: 'npm install',
@@ -455,12 +482,15 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
         });
         return;
       }
-      terminalWriter?.('\r\n  \x1b[32m✓\x1b[0m Dependencies ready.\r\n\r\n');
+      log.blank();
+      log.ok('depsReady');
+      log.blank();
 
-      terminalWriter?.('\x1b[36mStarting dev server...\x1b[0m\r\n');
-      const url = await startDevServer((data) => terminalWriter?.(data));
-      terminalWriter?.(`\r\n  \x1b[32m✓\x1b[0m Dev server ready at \x1b[33m${url}\x1b[0m\r\n`);
-      terminalWriter?.('\x1b[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m\r\n\r\n');
+      log.step('startingDevServer');
+      const url = await startDevServer((data) => log.raw(data));
+      log.blank();
+      log.ok('devServerReady', { url });
+      log.raw(`\x1b[36m${RUN_LOG_RULE}\x1b[0m\r\n\r\n`);
       setPreviewUrl(url);
       setCenterView('preview');
     } catch (e) {
@@ -476,36 +506,31 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
       });
 
       // Always surface the error in the terminal so the user sees it
-      if (errorMsg.includes('EJSONPARSE') || errorMsg.includes('Invalid package.json')) {
-        terminalWriter?.('\r\n\x1b[31m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m\r\n');
-        terminalWriter?.('\x1b[31m✗ PACKAGE.JSON ERROR\x1b[0m\r\n');
-        terminalWriter?.('\r\n\x1b[33mYour package.json file is invalid or empty.\x1b[0m\r\n');
-        terminalWriter?.('\x1b[33mPlease check the Files tab and ensure package.json contains valid JSON.\x1b[0m\r\n');
-        terminalWriter?.('\r\n\x1b[36mExpected format:\x1b[0m\r\n');
-        terminalWriter?.('{\r\n');
-        terminalWriter?.('  "name": "my-app",\r\n');
-        terminalWriter?.('  "version": "1.0.0",\r\n');
-        terminalWriter?.('  "scripts": { "dev": "vite" },\r\n');
-        terminalWriter?.('  "dependencies": { ... }\r\n');
-        terminalWriter?.('}\r\n');
-        terminalWriter?.('\x1b[31m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m\r\n');
+      // `Invalid package.json` is matched against the ENGLISH marker npm emits
+      // (EJSONPARSE) as well as our own localized text, so the branch survives
+      // translation of the message we throw ourselves.
+      if (errorMsg.includes('EJSONPARSE') || errorMsg === t('runLog.invalidPackageJsonFix')) {
+        log.errorBlock('packageJsonErrorTitle', ['packageJsonErrorBody', 'packageJsonErrorHint']);
+        // The example is code, not prose — it is what must be typed, so it is
+        // shown verbatim rather than translated.
+        log.step('expectedFormat');
+        log.raw('{\r\n  "name": "my-app",\r\n  "version": "1.0.0",\r\n  "scripts": { "dev": "vite" },\r\n  "dependencies": { ... }\r\n}\r\n');
       } else if (errorMsg.includes('output:')) {
         const outputMatch = errorMsg.match(/output:\n([\s\S]+)/);
         if (outputMatch) {
-          terminalWriter?.('\r\n\x1b[31m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m\r\n');
-          terminalWriter?.('\x1b[31m✗ DEV SERVER ERROR\x1b[0m\r\n\r\n');
-          terminalWriter?.(outputMatch[1]);
-          terminalWriter?.('\r\n\x1b[31m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m\r\n');
+          log.errorBlock('devServerErrorTitle', []);
+          log.raw(outputMatch[1]);
+          log.raw(`\r\n\x1b[31m${RUN_LOG_RULE}\x1b[0m\r\n`);
         } else {
-          terminalWriter?.(`\r\n\x1b[31m✗ Error: ${errorMsg}\x1b[0m\r\n`);
+          log.error('errorPrefix', { message: errorMsg });
         }
       } else {
-        terminalWriter?.(`\r\n\x1b[31m✗ Error: ${errorMsg}\x1b[0m\r\n`);
+        log.error('errorPrefix', { message: errorMsg });
       }
     } finally {
       setIsRunning(false);
     }
-  }, [isRunning, startDevServer, mountFiles, assembleMountContents, ensureInstalled, terminalWriter, checkResults, gateRunOnChecks, confirm, tc, projectIdNum]);
+  }, [isRunning, startDevServer, mountFiles, assembleMountContents, ensureInstalled, log, checkResults, gateRunOnChecks, confirm, t, tc, projectIdNum]);
 
   /**
    * Build the project in the WebContainer and capture its `dist/` output for
@@ -514,32 +539,35 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
    * singleton container, so this reuses any already-installed deps.
    */
   const handlePublishBuild = useCallback(async (): Promise<Array<{ path: string; data: Uint8Array }>> => {
-    terminalWriter?.('\r\n\x1b[36m━━━ Building for publish ━━━\x1b[0m\r\n');
+    log.bannerInline('buildingForPublish');
 
-    const mount = await assembleMountContents((s) => terminalWriter?.(s));
-    if (!mount) throw new Error('Invalid package.json: please fix it in the Files tab.');
+    const mount = await assembleMountContents(log);
+    if (!mount) throw new Error(t('runLog.invalidPackageJsonFix'));
 
     await mountFiles(mount);
-    terminalWriter?.('\x1b[36mnpm install…\x1b[0m\r\n');
-    const installCode = await ensureInstalled(mount, (d) => terminalWriter?.(d));
-    if (installCode !== 0) throw new Error(`npm install failed (exit ${installCode}).`);
+    // `npm install` / `npm run build` are the COMMANDS being run, not prose —
+    // shown verbatim so they match what the user would type.
+    log.raw('\x1b[36mnpm install…\x1b[0m\r\n');
+    const installCode = await ensureInstalled(mount, (d) => log.raw(d), log);
+    if (installCode !== 0) throw new Error(t('runLog.installFailedShort', { code: installCode }));
     // Force a RELATIVE asset base (`--base=./`). Vite defaults to `base: '/'`,
     // which emits root-absolute asset URLs (`/assets/...`). Those only resolve
     // when the site is served from the domain root, so they 404 under the path
     // form `/api/sites/<sub>/` (the "preview" + pre-TLS fallback). Relative URLs
     // resolve correctly BOTH at `<sub>.apps.builderforce.ai/` and under the path
     // prefix. The flag overrides whatever the project's vite config sets.
-    terminalWriter?.('\r\n\x1b[36mnpm run build…\x1b[0m\r\n');
-    const buildCode = await runCommandAndWait('npm', ['run', 'build', '--', '--base=./'], (d) => terminalWriter?.(d));
-    if (buildCode !== 0) throw new Error(`Build failed (exit ${buildCode}). Check the build output above.`);
+    log.raw('\r\n\x1b[36mnpm run build…\x1b[0m\r\n');
+    const buildCode = await runCommandAndWait('npm', ['run', 'build', '--', '--base=./'], (d) => log.raw(d));
+    if (buildCode !== 0) throw new Error(t('runLog.buildFailed', { code: buildCode }));
 
     const assets = await readDirRecursive('dist');
     if (assets.length === 0) {
-      throw new Error('Build produced no dist/ output. Ensure your build script outputs to "dist".');
+      throw new Error(t('runLog.noDistOutput'));
     }
-    terminalWriter?.(`\r\n  \x1b[32m✓\x1b[0m Captured ${assets.length} built file(s).\r\n`);
+    log.blank();
+    log.ok('capturedFiles', { count: assets.length });
     return assets;
-  }, [assembleMountContents, ensureInstalled, mountFiles, runCommandAndWait, readDirRecursive, terminalWriter]);
+  }, [assembleMountContents, ensureInstalled, mountFiles, runCommandAndWait, readDirRecursive, log, t]);
 
   /**
    * Run the project's quality checks inside the WebContainer — real, in-browser
@@ -553,8 +581,8 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
     setIsChecking(true);
     setCheckResults(null);
     try {
-      terminalWriter?.('\r\n\x1b[36m━━━ Running checks ━━━\x1b[0m\r\n');
-      const mount = await assembleMountContents((s) => terminalWriter?.(s));
+      log.bannerInline('runningChecks');
+      const mount = await assembleMountContents(log);
       if (!mount) {
         setCheckResults([{ label: 'package.json', status: 'fail', detail: 'Invalid JSON' }]);
         return;
@@ -597,12 +625,12 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
           null,
           2,
         );
-        terminalWriter?.('\x1b[2m  (synthesized a minimal tsconfig.json for the type-check fallback)\x1b[0m\r\n');
+        log.note('synthesizedTsconfig');
       }
 
       await mountFiles(mount);
-      const installLog = teeOutput((d) => terminalWriter?.(d));
-      const installCode = await ensureInstalled(mount, installLog.write);
+      const installLog = teeOutput((d) => log.raw(d));
+      const installCode = await ensureInstalled(mount, installLog.write, log);
       if (installCode !== 0) {
         setCheckResults([{ label: 'npm install', status: 'fail', detail: `exit ${installCode}` }]);
         recordBuildFailure(projectIdNum, {
@@ -633,8 +661,10 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
           results.push({ label: step.label, status: 'skip', detail: 'no script' });
           continue;
         }
-        terminalWriter?.(`\r\n\x1b[36m▶ ${step.label}…\x1b[0m\r\n`);
-        const stepLog = teeOutput((d) => terminalWriter?.(d));
+        // `step.label` names the npm script being run (type-check / lint /
+        // build) — an identifier, not prose, so it is interpolated verbatim.
+        log.section('checkStep', { label: step.label });
+        const stepLog = teeOutput((d) => log.raw(d));
         const code = await runCommandAndWait(step.cmd[0], step.cmd[1], stepLog.write);
         results.push({ label: step.label, status: code === 0 ? 'pass' : 'fail', detail: code === 0 ? undefined : `exit ${code}` });
         if (code !== 0) {
@@ -651,20 +681,21 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
       }
       setCheckResults(results);
       const failed = results.filter(r => r.status === 'fail').length;
-      terminalWriter?.(
-        failed === 0
-          ? '\r\n\x1b[32m✓ All checks passed.\x1b[0m\r\n'
-          : `\r\n\x1b[31m✗ ${failed} check(s) failed.\x1b[0m\r\n`,
-      );
+      if (failed === 0) {
+        log.blank();
+        log.ok('allChecksPassed');
+      } else {
+        log.error('checksFailed', { count: failed });
+      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      terminalWriter?.(`\r\n\x1b[31m✗ Check error: ${msg}\x1b[0m\r\n`);
+      log.error('checkError', { message: msg });
       setCheckResults([{ label: 'checks', status: 'fail', detail: msg }]);
       recordBuildFailure(projectIdNum, { source: 'build', message: msg.split('\n')[0] || 'Checks failed.', detail: msg });
     } finally {
       setIsChecking(false);
     }
-  }, [isChecking, isRunning, assembleMountContents, ensureInstalled, mountFiles, runCommandAndWait, terminalWriter, projectIdNum]);
+  }, [isChecking, isRunning, assembleMountContents, ensureInstalled, mountFiles, runCommandAndWait, log, projectIdNum]);
 
   const handleTerminalInput = useCallback((data: string) => {
     shellWriter?.write(data);
@@ -800,6 +831,25 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
     if (previewUrl) writeFileToContainer(path, content).catch(() => { /* best-effort */ });
     saveFile(project.id, path, content)
       .then(() => {
+        // A corpus written as a FILE must also become a registered dataset.
+        // Otherwise a `data/train.jsonl` the Brain produced is invisible to the
+        // fine-tune picker and ungoverned by `trainingDatasetGate` — the user
+        // watches the file appear and then cannot train on it anywhere. Strictly
+        // detected (every row must be an instruction/output pair), best-effort
+        // (a registration failure must never lose the file the user just got).
+        if (looksLikeDatasetPath(path)) {
+          const examples = parseJsonlDataset(content);
+          if (examples && examples.length > 0) {
+            importCanvasDataset({
+              projectId: project.id,
+              name: datasetNameForPath(path),
+              examples,
+              capabilityPrompt: `Written into the workspace as ${path}`,
+            })
+              .then(() => setDatasetsRegistered((n) => n + 1))
+              .catch((e) => console.error(`Created ${path} but could not register it as a dataset:`, e));
+          }
+        }
         refreshFiles();
         if (!openFiles.includes(path)) {
           setOpenFiles(prev => [...prev, path]);
@@ -1716,7 +1766,7 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
                   cursor: 'pointer', fontFamily: 'var(--font-display)',
                   whiteSpace: 'nowrap',
                 }}
-              >{RIGHT_TAB_LABELS[tab]}</button>
+              >{rightTabLabel(tab)}</button>
             ))}
           </div>
           <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
@@ -1739,7 +1789,8 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
             <div style={{ position: 'absolute', inset: 0, visibility: rightTab === 'train' ? 'visible' : 'hidden', pointerEvents: rightTab === 'train' ? 'auto' : 'none' }}>
               <AITrainingPanel
                 projectId={project.id}
-                onLog={(msg) => terminalWriter?.(`\r\n\x1b[35m[Train]\x1b[0m ${msg}`)}
+                datasetsVersion={datasetsRegistered}
+                onLog={(msg) => log.raw(`\r\n\x1b[35m[${t('runLog.trainTag')}]\x1b[0m ${msg}`)}
                 onJobCompleted={(job) => setCompletedJobs(prev => {
                   const exists = prev.some(j => j.id === job.id);
                   return exists ? prev.map(j => j.id === job.id ? job : j) : [job, ...prev];

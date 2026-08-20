@@ -20,6 +20,9 @@ const mocks = vi.hoisted(() => ({
     unresolvedReasons: {},
     vendorPriority: [],
   })),
+  // GAP-B2/B4: the /v1/messages BYO gate reads the full resolution (auth + WHY it
+  // was unusable), so the fail-closed tests drive it directly.
+  resolveAnthropicResolution: vi.fn(async () => ({ auth: null }) as { auth: unknown; reason?: string }),
 }));
 
 vi.mock('../../infrastructure/auth/HashService', () => ({
@@ -47,6 +50,7 @@ vi.mock('../../application/llm/tenantProviderKeyService', async (orig) => ({
   ...(await orig<typeof import('../../application/llm/tenantProviderKeyService')>()),
   resolveAnthropicOAuthToken: async () => null,
   resolveTenantLlmCredentials: mocks.resolveTenantLlmCredentials,
+  resolveAnthropicResolution: mocks.resolveAnthropicResolution,
 }));
 
 // Imports must follow the vi.mock calls above so the mocks are in place.
@@ -1284,5 +1288,136 @@ describe('POST /v1/embed-session', () => {
 
     expect(res.status).toBe(403);
     expect(mocks.signJwt).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// POST /v1/messages — cloud-agent BYO fail-closed gate (GAP-B2 / GAP-B4)
+//
+// A cloud agent run reaches the gateway through `ANTHROPIC_BASE_URL=<api>/llm`
+// and executes on the WORKSPACE's own Anthropic credential by contract. Before
+// this gate, a missing or undecryptable key fell straight through to the
+// Messages⇄OpenAI translation and the turn was served — and billed — from the
+// platform pool. That is correct for ordinary gateway traffic and a billing leak
+// for a cloud run, so the rule is scoped to requests that DECLARE themselves a
+// cloud execution.
+// ---------------------------------------------------------------------------
+describe('POST /v1/messages cloud-agent BYO gate', () => {
+  const CLOUD_HEADERS = {
+    'x-builderforce-surface': 'cloud',
+    'x-builderforce-execution-id': '4242',
+  };
+
+  function messagesRequest(extraHeaders: Record<string, string> = {}) {
+    return new Request('http://test.local/v1/messages', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer bfk_test',
+        'Content-Type': 'application/json',
+        ...extraHeaders,
+      },
+      body: JSON.stringify({ model: 'claude-sonnet-5', messages: [{ role: 'user', content: 'hi' }] }),
+    });
+  }
+
+  function seedTenant() {
+    mocks.hashSecret.mockResolvedValue('hash_of_bfk_test');
+    mocks.buildDatabase.mockReturnValue(mockDb({
+      keyRow:    { id: 'kid', tenantId: 1, revokedAt: null, allowedOrigins: null },
+      tenantRow: { id: 1, plan: 'pro', billingStatus: 'active', tokenDailyLimitOverride: null },
+      usageRow:  { used: 0 },
+    }));
+  }
+
+  beforeEach(() => {
+    mocks.hashSecret.mockReset();
+    mocks.buildDatabase.mockReset();
+    mocks.llmProxyForPlan.mockReset();
+    mocks.resolveAnthropicResolution.mockReset();
+  });
+
+  it('BYO PRESENT → the run passes through on the tenant key (never the platform pool)', async () => {
+    seedTenant();
+    mocks.resolveAnthropicResolution.mockResolvedValue({ auth: { mode: 'api_key', key: 'sk-ant-tenant' } });
+    const upstream = vi.fn(async () => new Response(
+      JSON.stringify({ content: [], usage: { input_tokens: 5, output_tokens: 2 } }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    ));
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = upstream as unknown as typeof fetch;
+    try {
+      const res = await buildApp().request(messagesRequest(CLOUD_HEADERS), {}, baseEnv as Record<string, unknown>, fakeExecutionCtx);
+      expect(res.status).toBe(200);
+      // Real Anthropic, with the TENANT's key — and our pool was never consulted.
+      const [url, init] = upstream.mock.calls[0] as unknown as [string, RequestInit];
+      expect(url).toBe('https://api.anthropic.com/v1/messages');
+      expect((init.headers as Record<string, string>)['x-api-key']).toBe('sk-ant-tenant');
+      expect(mocks.llmProxyForPlan).not.toHaveBeenCalled();
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
+
+  it('BYO MISSING on a cloud run → typed byo_key_missing, and NO platform-key fallback', async () => {
+    seedTenant();
+    mocks.resolveAnthropicResolution.mockResolvedValue({ auth: null });   // nothing connected
+
+    const res = await buildApp().request(messagesRequest(CLOUD_HEADERS), {}, baseEnv as Record<string, unknown>, fakeExecutionCtx);
+
+    expect(res.status).toBe(402);
+    const body = await res.json() as { code?: string; provider?: string; error?: string };
+    expect(body.code).toBe('byo_key_missing');
+    expect(body.provider).toBe('anthropic');
+    // The whole point: the platform-billed pool was never reached.
+    expect(mocks.llmProxyForPlan).not.toHaveBeenCalled();
+  });
+
+  it('DECRYPT FAILURE on a cloud run → typed byo_key_error carrying the reason', async () => {
+    seedTenant();
+    mocks.resolveAnthropicResolution.mockResolvedValue({ auth: null, reason: 'undecryptable' });
+
+    const res = await buildApp().request(messagesRequest(CLOUD_HEADERS), {}, baseEnv as Record<string, unknown>, fakeExecutionCtx);
+
+    expect(res.status).toBe(402);
+    const body = await res.json() as { code?: string; reason?: string };
+    expect(body.code).toBe('byo_key_error');
+    expect(body.reason).toBe('undecryptable');
+    expect(mocks.llmProxyForPlan).not.toHaveBeenCalled();
+  });
+
+  it('a REVOKED subscription on a cloud run is a byo_key_error, not a raw provider error', async () => {
+    seedTenant();
+    mocks.resolveAnthropicResolution.mockResolvedValue({ auth: null, reason: 'revoked' });
+
+    const res = await buildApp().request(messagesRequest(CLOUD_HEADERS), {}, baseEnv as Record<string, unknown>, fakeExecutionCtx);
+
+    const body = await res.json() as { code?: string; reason?: string };
+    expect(res.status).toBe(402);
+    expect(body).toMatchObject({ code: 'byo_key_error', reason: 'revoked' });
+  });
+
+  it('ordinary gateway traffic with NO BYO key is untouched — it still uses the platform pool', async () => {
+    seedTenant();
+    mocks.resolveAnthropicResolution.mockResolvedValue({ auth: null });
+
+    // No cloud-execution headers → this is a normal /llm caller (web chat, VSIX,
+    // an on-prem host). It must NOT be fail-closed; it falls through to the
+    // Messages⇄OpenAI translation, which stops at the missing pool key (503).
+    const res = await buildApp().request(messagesRequest(), {}, baseEnv as Record<string, unknown>, fakeExecutionCtx);
+
+    expect(res.status).not.toBe(402);
+    expect(res.status).toBe(503);
+  });
+
+  it('a surface hint WITHOUT an execution id does not trigger the rule (attribution ≠ policy)', async () => {
+    seedTenant();
+    mocks.resolveAnthropicResolution.mockResolvedValue({ auth: null });
+
+    const res = await buildApp().request(
+      messagesRequest({ 'x-builderforce-surface': 'cloud' }),
+      {}, baseEnv as Record<string, unknown>, fakeExecutionCtx,
+    );
+
+    expect(res.status).not.toBe(402);
   });
 });

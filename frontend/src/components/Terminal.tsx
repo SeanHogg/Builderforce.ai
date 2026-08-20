@@ -2,6 +2,7 @@
 
 import '@xterm/xterm/css/xterm.css';
 import { useEffect, useRef } from 'react';
+import { useTranslations } from 'next-intl';
 import { observeResizeOnAnimationFrame } from '../lib/observeResize';
 
 interface TerminalProps {
@@ -10,7 +11,12 @@ interface TerminalProps {
 }
 
 export function Terminal({ onReady, onInput }: TerminalProps) {
+  const t = useTranslations('ide');
   const containerRef = useRef<HTMLDivElement>(null);
+  // Read through a ref so the mount effect (which must run once) never has to
+  // list the translator as a dependency and re-create the xterm instance.
+  const tRef = useRef(t);
+  tRef.current = t;
   const terminalRef = useRef<import('@xterm/xterm').Terminal | null>(null);
 
   useEffect(() => {
@@ -65,8 +71,8 @@ export function Terminal({ onReady, onInput }: TerminalProps) {
 
       terminalRef.current = term;
 
-      term.writeln('\x1b[32mBuilderforce Terminal\x1b[0m');
-      term.writeln('WebContainer ready. Start coding!');
+      term.writeln(`\x1b[32m${tRef.current('runLog.terminalBanner')}\x1b[0m`);
+      term.writeln(tRef.current('runLog.terminalReady'));
       term.write('\r\n$ ');
 
       term.onData((data) => {

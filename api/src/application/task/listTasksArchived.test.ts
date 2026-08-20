@@ -14,6 +14,7 @@ import {
 // "hide archived by default" contract that the board / brain list_tasks rely on.
 // ---------------------------------------------------------------------------
 class ArchiveAwareTaskRepo implements ITaskRepository {
+  async repointSegment(): Promise<boolean> { return false; }
   constructor(private readonly tasks: Task[]) {}
   private visible(rows: Task[], opts?: TaskListOptions): Task[] {
     return opts?.includeArchived ? rows : rows.filter(t => !t.toPlain().archived);
@@ -73,6 +74,7 @@ function makeProject(): Project {
 }
 
 class SingleProjectRepo implements IProjectRepository {
+  async segmentIdOf(): Promise<string | null> { return null; }
   constructor(private readonly project: Project) {}
   async findByTenant(): Promise<Project[]> { return [this.project]; }
   async findById(): Promise<Project | null> { return this.project; }

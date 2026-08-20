@@ -78,7 +78,7 @@ export {
   buildPlatformActions,
   type PlatformActionContext,
 } from './platformActions';
-export { PLATFORM_BRAIN_SYSTEM_PROMPT, BRAIN_AUTO_APPROVE_DIRECTIVE, buildComposerDirectives, type BrainEffort } from './platformPrompt';
+export { PLATFORM_BRAIN_SYSTEM_PROMPT, BRAIN_AUTO_APPROVE_DIRECTIVE, buildComposerDirectives, WEB_FETCH_TOOL_NAME, type BrainEffort } from './platformPrompt';
 
 // Chat capabilities: what the chat is making (document / slides / site / game …).
 export {

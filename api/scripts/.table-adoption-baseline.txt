@@ -15,7 +15,6 @@ agency_clients
 ai_competitors
 ai_email_classifications
 ai_tool_calls
-ai_usage_records
 ai_voice_agent_calls
 answer_cache
 approval_actions
@@ -64,10 +63,7 @@ custom_kpis
 customer_engagement_feedback_widgets
 customer_journeys
 dashboard_layouts
-data_rooms
 deal_flow_opportunities
-due_diligence_checklists
-due_diligence_documents
 email_campaigns
 embed_widget_layout
 employer_branding_pages
@@ -82,16 +78,13 @@ experiments
 extension_sessions
 feed_features
 feed_posts
-feedback_sentiments
 follow_up_enrollments
-funding_rounds
 geocoder_cache
 gig_bids
 gig_disputes
 gig_projects
 headcount_impacts
 health_dimensions
-hiring_decisions
 hr_emergency_contacts
 hr_employment_records
 inbound_shipments
@@ -100,9 +93,7 @@ inbox_seat_addons
 interview_kits
 interview_question_sets
 inventory_items
-investment_opportunities
 investor_peer_comparables
-job_applications
 job_items
 job_websites
 journey_touchpoints
@@ -122,14 +113,12 @@ marketing_content_items
 marketing_emails
 marketing_heatmap_pages
 marketing_heatmap_screenshots
-marketing_leads
 marketing_seo_pages
 metric_thresholds
 model_locks
 modules
 monte_carlo_simulations
 nurture_flows
-offer_letters
 onboarding_checklists
 onboarding_flows
 onboarding_progress
@@ -142,7 +131,6 @@ page_embed_videos
 partner_program_opt_ins
 payback_period
 payment_methods
-people_employees
 people_headcount_plans
 people_objective_outcomes
 people_tenants
@@ -154,7 +142,6 @@ plan_features
 platform_pricing
 podcast_outreach
 point_redemptions
-portfolio_companies
 portfolio_items
 pricing_simulations
 product_ideas
@@ -187,7 +174,6 @@ screening_template_items
 service_agreements
 service_assets
 session_discussions
-sessions
 sign_offs
 sprint_financial_impact
 stage_lookup
@@ -201,7 +187,6 @@ system_features
 task_effort_estimates
 task_time_entries
 timesheets
-uptime_checks
 uptime_monitors
 user_badges
 user_stock_media_usage

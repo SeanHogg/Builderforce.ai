@@ -12,11 +12,12 @@
  * the admin-persona and marketplace-skill mutations via {@link invalidateCapabilityCache}.
  */
 import { and, eq } from 'drizzle-orm';
-import { marketplaceSkills, platformPersonas, marketplacePersonas } from '../../infrastructure/database/schema';
+import { marketplaceSkills, platformPersonas, marketplacePersonas, users, ideAgents } from '../../infrastructure/database/schema';
 import type { ResolvedArtifacts } from '../../domain/shared/types';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { getBuiltinSkillBody } from './builtinSkills';
 import {
   deriveLimbicSetpoints,
@@ -61,6 +62,15 @@ export interface CapabilityContext {
      *  by name (currently personas only — skills without a body are referenced by
      *  name instead of flagged here, so an assigned skill never reads as "missing"). */
     missing: string[];
+    /**
+     * Slugs this AGENT carries in its own right (`scope='agent'`) — as opposed to
+     * everything else in the lists above, which the run INHERITED from its task,
+     * project, host or tenant. The timeline used to report both as "the agent loaded
+     * X", so a tenant-wide skill read as agent configuration.
+     */
+    agentPinned: string[];
+    /** Per-slug source scope, for the slugs the resolver labelled. */
+    sources: Record<string, string>;
   };
 }
 
@@ -155,6 +165,63 @@ export function parsePsychometricProfile(
   if (!raw) return undefined;
   if (typeof raw === 'object') return raw.vector ? raw : undefined;
   return parsePsychometric(raw);
+}
+
+/**
+ * Resolve a psychometric profile from whatever the caller supplied, trying the
+ * cheapest source first: an inline profile (no DB read), then the human user's own
+ * `users.psychometric`, then the agent's `ide_agents.psychometric`, then the
+ * assigned persona (which reuses the per-slug capability cache). Returns
+ * `undefined` when nothing resolves, so the caller falls back to neutral.
+ *
+ * Lives here rather than in `limbicRoutes.ts` — where it was until 2026-08-19 —
+ * because it is the same four-source lookup every surface that seeds an appraisal
+ * needs, and it was the only reason the HTTP layer imported two schema tables.
+ *
+ * `tenantId` is REQUIRED for the agent lookup and it is not decoration: the route
+ * version of this read fetched `ide_agents` by id alone, so any authenticated
+ * caller could name any agent id in the platform and read its personality. The
+ * agent leg is skipped entirely when no tenant is known rather than falling back
+ * to an unscoped read.
+ */
+export async function resolvePsychometricProfile(
+  env: Env,
+  db: Db,
+  tenantId: number | null,
+  source: {
+    /** Inline profile (JSON string OR object) — resolved with no DB read. */
+    psychometric?: unknown;
+    /** Load this human user's `users.psychometric`. */
+    userId?: unknown;
+    /** Load this agent's `ide_agents.psychometric`. */
+    agentId?: unknown;
+    /** Load this persona's psychometric (platform/marketplace persona slug). */
+    personaId?: unknown;
+  },
+): Promise<LimbicPsychProfile | undefined> {
+  const inline = parsePsychometricProfile(source.psychometric as string | LimbicPsychProfile | null | undefined);
+  if (inline) return inline;
+
+  if (typeof source.userId === 'string' && source.userId) {
+    const [row] = await db.select({ psychometric: users.psychometric }).from(users).where(eq(users.id, source.userId)).limit(1);
+    const p = parsePsychometricProfile(row?.psychometric ?? null);
+    if (p) return p;
+  }
+  if (typeof source.agentId === 'string' && source.agentId && tenantId != null) {
+    const [row] = await db
+      .select({ psychometric: ideAgents.psychometric })
+      .from(ideAgents)
+      .where(scopedToTenant(ideAgents, tenantId, eq(ideAgents.id, source.agentId)))
+      .limit(1);
+    const p = parsePsychometricProfile(row?.psychometric ?? null);
+    if (p) return p;
+  }
+  if (typeof source.personaId === 'string' && source.personaId) {
+    const persona = await loadPersonaBody(env, db, source.personaId);
+    const p = parsePsychometricProfile(persona?.psychometric ?? null);
+    if (p) return p;
+  }
+  return undefined;
 }
 
 /**
@@ -260,11 +327,13 @@ export async function loadCapabilityContext(
   const skills = artifacts?.skills ?? [];
   const personas = artifacts?.personas ?? [];
   const content = artifacts?.content ?? [];
+  const sources: Record<string, string> = artifacts?.sources ?? {};
+  const agentPinned = [...skills, ...personas, ...content].filter((slug) => sources[slug] === 'agent');
   const ownProfile = parsePsychometric(agentPsychometric ?? null);
   const empty: CapabilityContext = {
     promptBlock: '',
     execParams: {},
-    summary: { skills, personas, content, missing: [] },
+    summary: { skills, personas, content, missing: [], agentPinned, sources },
   };
   if (skills.length === 0 && personas.length === 0 && content.length === 0 && !ownProfile) return empty;
 
@@ -328,5 +397,5 @@ export async function loadCapabilityContext(
     ? sections.join('\n\n')
     : '';
 
-  return { promptBlock, execParams, summary: { skills, personas, content, missing } };
+  return { promptBlock, execParams, summary: { skills, personas, content, missing, agentPinned, sources } };
 }

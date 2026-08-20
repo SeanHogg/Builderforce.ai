@@ -35,6 +35,11 @@ export interface ClaudeSdkEngineDeps {
   abortController: AbortController;
   /** Normalized event sinks (assistant text / tool use / result) the relay forwards. */
   sinks: V2RunnerSinks;
+  /** Execution surface declared to the gateway (`on_prem` for the self-hosted relay,
+   *  `cloud` for a cloud-hosted runner — the gateway's fail-closed BYO rule reads it). */
+  surface?: string;
+  /** The execution this loop is running, stamped onto gateway requests. */
+  executionId?: number;
 }
 
 /** The on-prem Claude-Agent-SDK loop, behind the shared {@link AgentEngine} seam. */
@@ -59,6 +64,8 @@ export class ClaudeSdkAgentEngine implements AgentEngine {
         gatewayAuthKey: this.deps.gatewayAuthKey,
         appendSystemPrompt: input.systemPrompt,
         ...(input.policy?.gates ? { policyGates: [...input.policy.gates] } : {}),
+        ...(this.deps.surface ? { surface: this.deps.surface } : {}),
+        ...(this.deps.executionId != null ? { executionId: this.deps.executionId } : {}),
         abortController: this.deps.abortController,
       },
       this.deps.sinks,

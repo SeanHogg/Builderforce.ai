@@ -5,6 +5,7 @@ import { activityLog, executionLifecycleOutbox } from '../../infrastructure/data
 import type { Env } from '../../env';
 import { bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import { activityLogVersionKey, type ActorIdentity } from '../activity/activityLog';
+import { submittingUserId } from './dispatcherLabel';
 
 const MAX_ATTEMPTS = 8;
 
@@ -39,7 +40,9 @@ function actorFor(row: {
   // Submission is attributed to the requester. Runtime transitions are
   // attributed to the executor that actually performed them.
   if (row.eventType === 'execution.submitted' && !automated) {
-    const ref = submittedBy.startsWith('user:') ? submittedBy.slice(5) : submittedBy;
+    // ONE parser for `user:<id>` (`submittingUserId`) — this used to be a second,
+    // subtly different copy that kept the whole remainder of a COMPOSED label.
+    const ref = submittingUserId(submittedBy) ?? submittedBy;
     return { type: 'human', ref, name: ref };
   }
   if (row.cloudAgentRef) {

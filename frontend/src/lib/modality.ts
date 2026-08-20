@@ -79,14 +79,20 @@ export interface ModalityDef {
   enableMobilePreview?: boolean;
 }
 
-/** Labels for the right-panel tabs — single source so Builder doesn't inline them. */
-export const RIGHT_TAB_LABELS: Record<RightTab, string> = {
-  voice: '🎙 Voice',
-  files: '📁 Files',
-  agent: '🤖 Agent',
-  train: '🧠 Train',
-  publish: '🚀 Publish',
-  state: '🔬 State',
+/**
+ * The glyph that prefixes each right-panel tab. The tab's WORD is localized
+ * (`ide.rightTab.<id>` via `useRightTabLabels`); the glyph is locale-independent
+ * and lives here so the icon vocabulary stays with the registry that defines the
+ * tabs. Nothing should render a tab label by concatenating these by hand — call
+ * the hook.
+ */
+export const RIGHT_TAB_ICONS: Record<RightTab, string> = {
+  voice: '🎙',
+  files: '📁',
+  agent: '🤖',
+  train: '🧠',
+  publish: '🚀',
+  state: '🔬',
 };
 
 /**

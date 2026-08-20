@@ -350,6 +350,10 @@ export async function probeByoProvider(
     xaiOAuthToken: resolved.xaiOAuthToken,
     tenantVendorKeys: resolved.vendorKeys,
     hostEgress: await buildHostEgress(env, tenantId),
+    // Deliberately NOT passing `byoAlertedVendors`: this proxy IS the probe that
+    // decides whether an alert should clear, so demoting the vendor it is testing
+    // would make the check self-fulfilling. The probe pins one model anyway, so seed
+    // order is irrelevant here.
     byoVendorPriority: resolved.vendorPriority,
   });
   const outcome = await dispatchProbe(service, model, (vendor, status, detail) =>

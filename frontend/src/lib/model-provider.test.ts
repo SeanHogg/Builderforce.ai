@@ -238,8 +238,10 @@ function readableOf(chunks: string[]): ReadableStream<string> {
   });
 }
 
-function installFakePromptApi(overrides: Record<string, unknown> = {}) {
-  const session = {
+type FakeSession = ReturnType<typeof makeFakeSession>;
+
+function makeFakeSession(overrides: Record<string, unknown> = {}) {
+  return {
     prompt: vi.fn().mockResolvedValue('full answer'),
     promptStreaming: vi.fn(() => readableOf(['Hel', 'lo', ' world'])),
     clone: vi.fn(),
@@ -248,12 +250,34 @@ function installFakePromptApi(overrides: Record<string, unknown> = {}) {
     inputQuota: 100,
     ...overrides,
   };
+}
+
+/** Fake Prompt API surface. Every `create()` hands back a DISTINCT session (as
+ *  the real API does), so tests can tell a reused session from a recreated one;
+ *  `sessions` is the creation order. */
+function installFakePromptApi(overrides: Record<string, unknown> = {}) {
+  const sessions: FakeSession[] = [];
   const factory = {
     availability: vi.fn().mockResolvedValue('available'),
-    create: vi.fn().mockResolvedValue(session),
+    create: vi.fn(async () => {
+      const session = makeFakeSession(overrides);
+      sessions.push(session);
+      return session;
+    }),
   };
   (globalThis as unknown as { LanguageModel?: unknown }).LanguageModel = factory;
-  return { session, factory };
+  return { sessions, factory };
+}
+
+/** The system prompt a recorded `create()` call was made with, or undefined. */
+function createdSystemPrompt(
+  factory: { create: { mock: { calls: unknown[][] } } },
+  call: number,
+): string | undefined {
+  const arg = factory.create.mock.calls[call]?.[0] as
+    | { initialPrompts?: Array<{ role: string; content: string }> }
+    | undefined;
+  return arg?.initialPrompts?.find((p) => p.role === 'system')?.content;
 }
 
 function removeFakePromptApi() {
@@ -290,8 +314,7 @@ describe('PromptApiModelProvider', () => {
     const p = new PromptApiModelProvider({ systemPrompt: 'Be concise.' });
     await p.init();
     expect(p.isReady()).toBe(true);
-    const createArg = factory.create.mock.calls[0][0];
-    expect(createArg.initialPrompts).toEqual([{ role: 'system', content: 'Be concise.' }]);
+    expect(createdSystemPrompt(factory, 0)).toBe('Be concise.');
   });
 
   it('is not ready when the model is unavailable on-device', async () => {
@@ -332,12 +355,164 @@ describe('PromptApiModelProvider', () => {
   });
 
   it('dispose() destroys the session', async () => {
-    const { session } = installFakePromptApi();
+    const { sessions } = installFakePromptApi();
     const p = new PromptApiModelProvider();
     await p.init();
     p.dispose();
-    expect(session.destroy).toHaveBeenCalledOnce();
+    expect(sessions[0]!.destroy).toHaveBeenCalledOnce();
     expect(p.isReady()).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// PromptApiModelProvider — per-turn system-prompt fidelity
+// ---------------------------------------------------------------------------
+//
+// AgentRuntime.step assembles a fresh system prompt each turn (base instructions
+// + live project context). The Prompt API only accepts one at session creation
+// and clone() copies the originating session's initial prompts, so the session
+// must be REPLACED whenever the turn's system prompt changes — and reused (with
+// its conversational context intact) whenever it does not.
+
+describe('PromptApiModelProvider per-turn system prompt', () => {
+  afterEach(() => {
+    removeFakePromptApi();
+    vi.restoreAllMocks();
+  });
+
+  it('reuses the live session when the turn repeats the session system prompt', async () => {
+    const { factory, sessions } = installFakePromptApi();
+    const p = new PromptApiModelProvider({ systemPrompt: 'Be concise.' });
+    await p.init();
+
+    await p.generate('hi', { systemPrompt: 'Be concise.' });
+    await p.generate('again', { systemPrompt: 'Be concise.' });
+
+    expect(factory.create).toHaveBeenCalledOnce();
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0]!.prompt).toHaveBeenCalledTimes(2);
+    expect(sessions[0]!.destroy).not.toHaveBeenCalled();
+  });
+
+  it('treats whitespace-only differences as unchanged (no needless recreate)', async () => {
+    const { factory } = installFakePromptApi();
+    const p = new PromptApiModelProvider({ systemPrompt: 'Be concise.' });
+    await p.init();
+
+    await p.generate('hi', { systemPrompt: '  Be concise.\n' });
+
+    expect(factory.create).toHaveBeenCalledOnce();
+  });
+
+  it('reuses the live session when the turn carries no system prompt', async () => {
+    const { factory } = installFakePromptApi();
+    const p = new PromptApiModelProvider({ systemPrompt: 'Be concise.' });
+    await p.init();
+
+    await p.generate('hi', { memoryContext: '[step=1]' });
+
+    expect(factory.create).toHaveBeenCalledOnce();
+  });
+
+  it('recreates the session so a CHANGED system prompt reaches the model', async () => {
+    const { factory, sessions } = installFakePromptApi();
+    const p = new PromptApiModelProvider({ systemPrompt: 'Be concise.' });
+    await p.init();
+    expect(p.activeSystemPrompt()).toBe('Be concise.');
+
+    await p.generate('hi', { systemPrompt: 'Be concise.\n\nProject context: alpha' });
+
+    expect(factory.create).toHaveBeenCalledTimes(2);
+    expect(createdSystemPrompt(factory, 0)).toBe('Be concise.');
+    expect(createdSystemPrompt(factory, 1)).toBe('Be concise.\n\nProject context: alpha');
+    expect(p.activeSystemPrompt()).toBe('Be concise.\n\nProject context: alpha');
+    // The turn ran on the NEW session, not the stale one.
+    expect(sessions).toHaveLength(2);
+    expect(sessions[0]!.prompt).not.toHaveBeenCalled();
+    expect(sessions[1]!.prompt).toHaveBeenCalledOnce();
+  });
+
+  it('destroys the replaced session on recreate (no leak)', async () => {
+    const { sessions } = installFakePromptApi();
+    const p = new PromptApiModelProvider({ systemPrompt: 'A' });
+    await p.init();
+
+    await p.generate('hi', { systemPrompt: 'B' });
+
+    expect(sessions[0]!.destroy).toHaveBeenCalledOnce();
+    expect(sessions[1]!.destroy).not.toHaveBeenCalled();
+
+    p.dispose();
+    expect(sessions[1]!.destroy).toHaveBeenCalledOnce();
+  });
+
+  it('stream() honours a changed system prompt too', async () => {
+    const { factory, sessions } = installFakePromptApi();
+    const p = new PromptApiModelProvider({ systemPrompt: 'A' });
+    await p.init();
+
+    const tokens: string[] = [];
+    const full = await p.stream('hi', { systemPrompt: 'B' }, (t) => tokens.push(t));
+
+    expect(createdSystemPrompt(factory, 1)).toBe('B');
+    expect(sessions[1]!.promptStreaming).toHaveBeenCalledOnce();
+    expect(sessions[0]!.promptStreaming).not.toHaveBeenCalled();
+    expect(full).toBe('Hello world');
+    expect(tokens.join('')).toBe('Hello world');
+  });
+
+  it('recreates only once when concurrent turns share the new system prompt', async () => {
+    const { factory, sessions } = installFakePromptApi();
+    const p = new PromptApiModelProvider({ systemPrompt: 'A' });
+    await p.init();
+
+    await Promise.all([
+      p.generate('one', { systemPrompt: 'B' }),
+      p.generate('two', { systemPrompt: 'B' }),
+    ]);
+
+    expect(factory.create).toHaveBeenCalledTimes(2); // init + one recreate
+    expect(sessions).toHaveLength(2);
+    expect(sessions[1]!.prompt).toHaveBeenCalledTimes(2);
+  });
+
+  it('drops a system prompt that a later turn omits entirely', async () => {
+    const { factory } = installFakePromptApi();
+    const p = new PromptApiModelProvider(); // no configured default
+    await p.init();
+    expect(createdSystemPrompt(factory, 0)).toBeUndefined();
+
+    await p.generate('hi', { systemPrompt: 'Now be terse.' });
+    expect(createdSystemPrompt(factory, 1)).toBe('Now be terse.');
+
+    await p.generate('hi again');
+    expect(factory.create).toHaveBeenCalledTimes(3);
+    expect(createdSystemPrompt(factory, 2)).toBeUndefined();
+    expect(p.activeSystemPrompt()).toBeUndefined();
+  });
+
+  it('surfaces a failed recreate instead of answering under a stale prompt', async () => {
+    const { factory, sessions } = installFakePromptApi();
+    const p = new PromptApiModelProvider({ systemPrompt: 'A' });
+    await p.init();
+    factory.create.mockRejectedValueOnce(new Error('session quota exceeded'));
+
+    await expect(p.generate('hi', { systemPrompt: 'B' })).rejects.toThrow('session quota exceeded');
+    expect(p.failureReason()).toBe('session quota exceeded');
+    // The working session is kept, not torn down, and still carries its own prompt.
+    expect(sessions[0]!.destroy).not.toHaveBeenCalled();
+    expect(p.activeSystemPrompt()).toBe('A');
+    // A later turn can still recover.
+    await p.generate('hi', { systemPrompt: 'B' });
+    expect(p.activeSystemPrompt()).toBe('B');
+  });
+
+  it('keeps returning the not-ready message when init() never produced a session', async () => {
+    const p = new PromptApiModelProvider({ systemPrompt: 'A' });
+    await p.init(); // no Prompt API installed
+    const out = await p.generate('hi', { systemPrompt: 'B' });
+    expect(out).toContain('not ready');
+    expect(p.activeSystemPrompt()).toBeUndefined();
   });
 });
 

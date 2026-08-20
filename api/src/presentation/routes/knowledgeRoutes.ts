@@ -45,7 +45,8 @@ import {
 import { ListingError } from '../../application/marketplace/creationListings';
 import { ideProxy, newTraceId } from '../../application/llm/LlmProxyService';
 import { tenantProxyForPlan } from '../../application/llm/tenantProxy';
-import { logTrace } from '../../application/llm/traceLogger';
+import { logTrace, backfillTraceUsage, backfillTraceResponseBody } from '../../application/llm/traceLogger';
+import { wrapStreamForTrace } from '../../application/llm/streamTrace';
 import {
   notifyCollaboratorInvited,
   notifyTrainingAssigned,
@@ -988,9 +989,22 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
       errorMessage: null,
     });
 
-    // Pass the gateway's OpenAI-compatible SSE stream straight through; the
-    // client accumulates `choices[].delta.content` (same shape as IDE chat).
-    return new Response(result.response.body, {
+    // Pass the gateway's OpenAI-compatible SSE stream through the shared tee: the
+    // client still accumulates `choices[].delta.content` (same shape as IDE chat),
+    // and the trace row logged above gets its tokens and its completion body
+    // back-filled instead of staying at 0/null for the whole stream.
+    const draftStream = result.response.body
+      ? wrapStreamForTrace(result.response.body, {
+          onUsage: (usage) => backfillTraceUsage(c.env, c.executionCtx, traceId, usage),
+          onComplete: (completion) => backfillTraceResponseBody(c.env, c.executionCtx, traceId, {
+            streamed: true,
+            content: completion.content,
+            finishReason: completion.finishReason,
+            model: completion.model,
+          }),
+        })
+      : result.response.body;
+    return new Response(draftStream, {
       status: result.response.status,
       headers: {
         'Content-Type': 'text/event-stream; charset=utf-8',
@@ -1055,7 +1069,9 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
       origin: c.req.header('Origin') ?? null,
       userAgent: c.req.header('User-Agent') ?? null,
       requestBody: requestBody as unknown as Record<string, unknown>,
-      responseBody: null,
+      // The parsed envelope is already in hand — a non-streamed trace has no reason
+      // to record a null body.
+      responseBody: json,
       errorMessage: raw ? null : 'empty response',
     });
 

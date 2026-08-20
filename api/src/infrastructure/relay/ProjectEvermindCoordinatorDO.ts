@@ -41,7 +41,8 @@ import {
 import { assessLMCoherence } from '../../application/llm/evermindRuntime';
 import { mergeCheckpointDiffs } from '../../application/llm/evermindMerge';
 import { buildEvermindTrainingText, resolveEvermindTeacherModel } from '../../application/llm/evermindTeacher';
-import type { EffectiveTeacher, TeacherSkipReason } from '../../application/llm/evermindTeacher';
+import { backfillEntryProvenance } from '../../application/llm/evermindProvenance';
+import type { EffectiveTeacher, RecordedSkipReason } from '../../application/llm/evermindTeacher';
 import { ingestErrorEvents } from '../../application/quality/ingestEngine';
 import type { NormalizedErrorEvent } from '../../application/quality/errorSpec';
 import { embedTokens, cosineVec, packVec, unpackVec, EMBED_MAX_TOKENS } from '../../application/llm/evermindEmbed';
@@ -198,8 +199,10 @@ interface RecentEntry {
   /** The frontier model that distilled this entry (present when `distilled`). */
   teacherModel?: string;
   /** Why distillation did NOT happen (present when a text entry wasn't distilled).
-   *  Surfaced in the console so a silently-broken teacher is visible, not guessed at. */
-  skipReason?: TeacherSkipReason;
+   *  Surfaced in the console so a silently-broken teacher is visible, not guessed at.
+   *  Widened to {@link RecordedSkipReason} because the legacy-provenance backfill also
+   *  writes here — a merge itself can only ever produce a `TeacherSkipReason`. */
+  skipReason?: RecordedSkipReason;
   /** Operator-facing detail behind `skipReason` (HTTP status, exception message). */
   skipDetail?: string;
   /** The teacher model that was pinned but failed (present on a distillation fault). */
@@ -275,6 +278,36 @@ const MEM_COUNT_KEY = 'memCount';
 function memKey(id: number): string {
   return `${MEM_PREFIX}${String(id).padStart(12, '0')}`;
 }
+/**
+ * Per-DO storage schema marker. DO storage has no migration runner and ring rows are
+ * never rewritten, so a shape change that has to reach ALREADY-STORED rows needs its
+ * own versioned, resumable walk — this key is what makes that walk run once per DO
+ * instead of on every read. `provenance` is the highest backfill version applied;
+ * `provenanceCursor` is where a partially-completed walk resumes.
+ */
+const SCHEMA_KEY = 'schema';
+
+interface CoordSchema {
+  /** Highest applied provenance-backfill version (see PROVENANCE_SCHEMA_VERSION). */
+  provenance?: number;
+  /** Resume cursor (an exclusive memory id) for an in-progress provenance walk. */
+  provenanceCursor?: number;
+}
+
+/** Bump when the provenance backfill's inference rules change and rows must be rewalked. */
+const PROVENANCE_SCHEMA_VERSION = 1;
+/**
+ * Memories rewritten by ONE pass of the provenance backfill.
+ *
+ * The walk is deliberately bounded rather than "fix everything on first touch": a
+ * project that has been learning for months holds thousands of `mem:` rows, and
+ * materialising all of them in a single DO invocation would blow the CPU budget of
+ * whatever request happened to touch the DO first — turning a cosmetic backfill into
+ * an outage on the console's own read path. Successive reads resume from the cursor
+ * and converge; each pass costs one bounded `list` plus one batched `put`.
+ */
+const PROVENANCE_BATCH = 128;
+
 const TRAINING_KEY = 'training';
 /** Held-out taught examples (rolling) used by the automatic regression check. */
 const EVAL_KEY = 'eval';
@@ -306,6 +339,7 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
     if (request.method === 'POST' && url.pathname.endsWith('/learn')) return this.handleLearn(request);
     if (request.method === 'POST' && url.pathname.endsWith('/flush')) return this.handleFlush();
     if (request.method === 'GET' && url.pathname.endsWith('/recent')) return this.handleRecent(request);
+    if (request.method === 'GET' && url.pathname.endsWith('/contribution')) return this.handleContribution(request);
     if (request.method === 'POST' && url.pathname.endsWith('/recall')) return this.handleRecall(request);
     if (request.method === 'POST' && url.pathname.endsWith('/reindex')) return this.handleReindex(request);
     if (request.method === 'POST' && url.pathname.endsWith('/discard-pending')) return this.handleDiscardPending();
@@ -350,6 +384,62 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
     await this.recountMemories();
   }
 
+  /**
+   * Backfill provenance onto LEGACY learned-memory rows, in bounded resumable passes.
+   *
+   * Rows merged before `distilled` / `skipReason` existed carry no provenance at all,
+   * and a DO ring row is never rewritten — so every reader was left inferring, forever,
+   * from the one thing a bare row can prove (text identical to the prompt = the echo a
+   * failed teacher leaves behind). That inference is correct but invisible: a legacy
+   * refine-mode row whose teacher silently failed reads as ordinary self-learning and
+   * nothing distinguishes it from a row that genuinely had no teacher.
+   *
+   * This materialises the inference the READER already makes, using the SAME rules as
+   * `evermindLearnedStatus` (brain-ui) so no row's verdict can change by being
+   * migrated — the point is to stop guessing per read, not to re-grade history:
+   *   - `kind: 'delta'`         → nothing to say (a delta has no text provenance).
+   *   - already provenanced     → untouched (`distilled` set, or any `skipReason`).
+   *   - text === prompt (echo)  → `{ distilled: false, skipReason: 'unknown' }` → fault.
+   *   - anything else           → `{ distilled: false, skipReason: 'legacy' }`  → self.
+   *
+   * `legacy` rather than `not_pinned`: the row proves no teacher evidence either way,
+   * and claiming a teacher was never pinned would be inventing a measurement.
+   *
+   * Versioned + idempotent (a stored schema marker runs it once per DO), safe on a cold
+   * DO (an empty keyspace completes on the first pass), and bounded to
+   * {@link PROVENANCE_BATCH} rows per pass so it can never exhaust the DO's CPU budget
+   * on a long ring — successive reads resume from the stored cursor.
+   */
+  private async migrateMemoryProvenance(): Promise<void> {
+    const schema = (await this.state.storage.get<CoordSchema>(SCHEMA_KEY)) ?? {};
+    if (schema.provenance === PROVENANCE_SCHEMA_VERSION) return;
+
+    const listOpts: DurableObjectListOptions = { prefix: MEM_PREFIX, reverse: true, limit: PROVENANCE_BATCH };
+    // Newest-first with an EXCLUSIVE `end`, matching readMemoryPage's cursor semantics,
+    // so a resumed walk continues strictly below where the last pass stopped.
+    if (typeof schema.provenanceCursor === 'number') listOpts.end = memKey(schema.provenanceCursor);
+    const page = await this.state.storage.list<RecentEntry>(listOpts);
+
+    const batch: Record<string, RecentEntry> = {};
+    let last: number | undefined;
+    for (const entry of page.values()) {
+      last = entry.id;
+      const backfilled = backfillEntryProvenance(entry);
+      if (backfilled) batch[memKey(entry.id)] = backfilled;
+    }
+    if (Object.keys(batch).length > 0) await this.state.storage.put(batch);
+
+    // A short page is the end of the keyspace: mark the version applied and drop the
+    // cursor, so every later read costs exactly one `get` of the marker.
+    const done = page.size < PROVENANCE_BATCH || last === undefined;
+    await this.state.storage.put(
+      SCHEMA_KEY,
+      done
+        ? { ...schema, provenance: PROVENANCE_SCHEMA_VERSION, provenanceCursor: undefined } satisfies CoordSchema
+        : { ...schema, provenanceCursor: last } satisfies CoordSchema,
+    );
+  }
+
   /** Recompute and persist the memory count. Only called when the counter is absent
    *  or after a migration — the incremental paths maintain it. */
   private async recountMemories(): Promise<number> {
@@ -386,6 +476,11 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
    */
   private async readMemoryPage(opts: { limit: number; before?: number }): Promise<{ entries: RecentEntry[]; hasMore: boolean }> {
     await this.migrateLegacyRing();
+    // Ordering matters: the legacy ring fold above is what CREATES the provenance-less
+    // `mem:` rows on a DO that predates the per-memory layout, so the backfill has to
+    // run after it, not beside it. Bounded + marker-gated, so this is one `get` once
+    // the walk has completed.
+    await this.migrateMemoryProvenance();
     const limit = Math.max(1, opts.limit);
     const listOpts: DurableObjectListOptions = {
       prefix: MEM_PREFIX,
@@ -398,6 +493,14 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
     const page = await this.state.storage.list<RecentEntry>(listOpts);
     const all = [...page.values()];
     return { entries: all.slice(0, limit), hasMore: all.length > limit };
+  }
+
+  /** One memory by id, or undefined. Goes through the same migrations as a page read
+   *  so a status poll on a cold DO can never see a pre-migration shape. */
+  private async readMemory(id: number): Promise<RecentEntry | undefined> {
+    await this.migrateLegacyRing();
+    await this.migrateMemoryProvenance();
+    return this.state.storage.get<RecentEntry>(memKey(id));
   }
 
   /** Persist memories under their own keys, and keep the counter honest. */
@@ -469,6 +572,50 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
     // `eval` = the LATEST regression check (the ▲/▼ the chip reads); null until the
     // first merge that had a held-out set to score.
     return this.json({ pending: pending.length, recent: lean, training, eval: evalPoints[0] ?? null, total, nextBefore });
+  }
+
+  /**
+   * Per-contribution status — the pollable channel behind the console's "Taught" toast.
+   *
+   * `/learn-text` enqueues and returns 200 immediately; the frontier teacher only runs
+   * later, in the debounced merge alarm. Everything the operator actually wants to know
+   * — did a teacher shape this, which one, or did distillation fault and why — is
+   * therefore not knowable at the moment the POST returns. Without this door the UI had
+   * no choice but to claim success optimistically and never correct itself, so a teach
+   * whose teacher 503'd 15 seconds later still read as "Taught".
+   *
+   * Three states, and the provenance vocabulary is the RING'S — no second vocabulary is
+   * invented here, because the console grades this payload with the very same
+   * `evermindLearnedStatus` it grades the Learnings list with:
+   *   `pending`  — still queued; the merge alarm has not consumed it.
+   *   `merged`   — it is in the weights; carries the merged `version` plus the row's
+   *                `distilled` / `teacherModel` / `skipReason` / `skipDetail` /
+   *                `attemptedTeacherModel`. A TEACHER fault is a merged row with a
+   *                `skipReason` — the contribution still learned, just un-distilled.
+   *   `dropped`  — consumed by a merge but it produced no memory: its base went stale,
+   *                it yielded no trainable window, or the head is not an `evermind-lm`.
+   *
+   * Read-only and cheap: one queue read plus (at most) one keyed memory get.
+   */
+  private async handleContribution(request: Request): Promise<Response> {
+    const asked = Number(new URL(request.url).searchParams.get('id'));
+    if (!Number.isFinite(asked) || asked <= 0) return this.json({ error: 'id is required' }, 400);
+    const id = Math.trunc(asked);
+
+    const merged = await this.readMemory(id);
+    if (merged) {
+      const { emb: _emb, ...rest } = merged;
+      return this.json({ status: 'merged', contributionId: id, ...rest });
+    }
+    const pending = (await this.state.storage.get<PendingEntry[]>(PENDING_KEY)) ?? [];
+    const queued = pending.find((e) => e.id === id);
+    if (queued) {
+      return this.json({ status: 'pending', contributionId: id, kind: queued.diffB64 ? 'delta' : 'text', queued: pending.length });
+    }
+    // Neither queued nor stored. A merge consumed it and it never became a memory —
+    // reported as its own state rather than folded into `pending` (which would leave a
+    // poller waiting forever) or into `merged` (which would claim it is in the weights).
+    return this.json({ status: 'dropped', contributionId: id });
   }
 
   /**
@@ -675,12 +822,12 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
     }
 
     const label = typeof body.label === 'string' && body.label.trim() ? body.label.trim().slice(0, RECENT_PROMPT_CHARS) : undefined;
-    const { queued, dropped } = await this.enqueue(body.tenantId, body.projectId, head.version, {
+    const { queued, dropped, contributionId } = await this.enqueue(body.tenantId, body.projectId, head.version, {
       diffB64: body.diff,
       ...(label ? { label } : {}),
       weight: typeof body.weight === 'number' && body.weight > 0 ? body.weight : 1,
     });
-    return this.json({ ok: true, queued, baseVersion: head.version, ...(dropped ? { dropped } : {}) });
+    return this.json({ ok: true, queued, contributionId, baseVersion: head.version, ...(dropped ? { dropped } : {}) });
   }
 
   /**
@@ -703,12 +850,12 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
     if (head.mode === 'offline-frozen') return this.json({ ok: false, error: 'project Evermind is offline-frozen (read-only); learning disabled', mode: head.mode }, 423);
 
     const prompt = typeof body.prompt === 'string' && body.prompt.trim() ? body.prompt.trim().slice(0, MAX_TEXT_CHARS) : undefined;
-    const { queued, dropped } = await this.enqueue(body.tenantId, body.projectId, head.version, {
+    const { queued, dropped, contributionId } = await this.enqueue(body.tenantId, body.projectId, head.version, {
       text: text.slice(0, MAX_TEXT_CHARS),
       ...(prompt ? { prompt } : {}),
       weight: typeof body.weight === 'number' && body.weight > 0 ? body.weight : 1,
     });
-    return this.json({ ok: true, queued, baseVersion: head.version, ...(dropped ? { dropped } : {}) });
+    return this.json({ ok: true, queued, contributionId, baseVersion: head.version, ...(dropped ? { dropped } : {}) });
   }
 
   /**
@@ -721,7 +868,7 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
     projectId: number,
     baseVersion: number,
     entry: { diffB64?: string; text?: string; prompt?: string; label?: string; weight: number },
-  ): Promise<{ queued: number; dropped: number }> {
+  ): Promise<{ queued: number; dropped: number; contributionId: number }> {
     await this.state.storage.put(META_KEY, { tenantId, projectId } satisfies CoordMeta);
     const seq = ((await this.state.storage.get<number>(SEQ_KEY)) ?? 0) + 1;
     await this.state.storage.put(SEQ_KEY, seq);
@@ -745,7 +892,10 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
     // one merge DEBOUNCE_MS after the FIRST contribution.
     const existingAlarm = await this.state.storage.getAlarm();
     if (existingAlarm == null) await this.state.storage.setAlarm(Date.now() + DEBOUNCE_MS);
-    return { queued: pending.length, dropped };
+    // The sequence id is handed BACK to the caller: it is the same id the merged
+    // memory is stored under (`mem:<id>`), which is what makes one contribution
+    // pollable from enqueue through to its merged provenance — see handleContribution.
+    return { queued: pending.length, dropped, contributionId: seq };
   }
 
   /** The debounced-merge entry point — drains the queue in the background. */

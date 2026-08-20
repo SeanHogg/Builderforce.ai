@@ -259,6 +259,53 @@ describe('write-time content contract', () => {
 });
 
 // ---------------------------------------------------------------------------
+// The zero-byte scaffold rule — the unidentified writer, closed by invariant
+// ---------------------------------------------------------------------------
+
+describe('zero-byte scaffold writes', () => {
+  // A Mobile project was observed with all five scaffold paths at size 0 in R2.
+  // The writer was never found, so the rule lives at the chokepoint instead.
+  it.each(['package.json', 'index.html', 'vite.config.js', 'src/main.jsx', 'App.js'])(
+    'refuses an empty write to the scaffold path %s (422), storing nothing',
+    async (path) => {
+      const r2 = fakeR2();
+      const res = await writeWorkspaceFile(asBucket(r2), 1, path, '');
+      expect(res).toMatchObject({ ok: false, status: 422 });
+      expect(r2.store.size).toBe(0);
+    },
+  );
+
+  it('refuses a whitespace-only write to a scaffold path too', async () => {
+    const res = await writeWorkspaceFile(asBucket(fakeR2()), 1, 'package.json', '   \n');
+    expect(res).toMatchObject({ ok: false, status: 422 });
+  });
+
+  it('never lets an empty write ERASE an already-good scaffold file', async () => {
+    const r2 = fakeR2();
+    const good = '{\n  "name": "my-app"\n}';
+    await writeWorkspaceFile(asBucket(r2), 1, 'package.json', good);
+    await writeWorkspaceFile(asBucket(r2), 1, 'package.json', '');
+    expect(await readWorkspaceFile(asBucket(r2), 1, 'package.json')).toBe(good);
+  });
+
+  it('refuses a zero-length BINARY upload at a scaffold path', async () => {
+    const put = vi.fn(async () => undefined);
+    const bucket = { put } as unknown as R2Bucket;
+    const res = await writeWorkspaceBinary(bucket, 1, 'index.html', new Uint8Array(0), 'image/png');
+    expect(res).toMatchObject({ ok: false, status: 422 });
+    expect(put).not.toHaveBeenCalled();
+  });
+
+  it('still allows creating a blank NON-scaffold file, and deleting a scaffold one', async () => {
+    const r2 = fakeR2();
+    expect(await writeWorkspaceFile(asBucket(r2), 1, 'src/notes.txt', '')).toEqual({ ok: true });
+    await writeWorkspaceFile(asBucket(r2), 1, 'package.json', '{"name":"x"}');
+    await deleteWorkspaceFile(asBucket(r2), 1, 'package.json');
+    expect(await readWorkspaceFile(asBucket(r2), 1, 'package.json')).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // File history — the undo behind every write
 // ---------------------------------------------------------------------------
 

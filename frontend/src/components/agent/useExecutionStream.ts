@@ -1,14 +1,21 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { runtimeApi, type Execution } from '@/lib/builderforceApi';
+import { runtimeApi, type Execution, type ToolAuditEvent } from '@/lib/builderforceApi';
 
 /**
  * Live event stream for a single execution. Subscribes to the runtime WebSocket
  * (`/executions/:id/stream`) and falls back to REST polling when the socket is
  * unavailable, so an execution updates in real time without the caller waiting
- * on the agent. Accumulates the assistant/user message thread and the set of
- * files the agent touched, which back the Output / Changes views.
+ * on the agent. Accumulates the assistant/user message thread, the set of files
+ * the agent touched, and the run's tool-audit tail — which back the Output /
+ * Changes / Logs / Timeline views.
+ *
+ * The socket is served by the run's Durable Object room, so events emitted from
+ * ANY Worker isolate arrive here — including a cloud run's tool events and a
+ * container hard-death recovered by the crash reaper, neither of which could ever
+ * reach a per-isolate subscriber map. That is what lets the observability views
+ * stop polling tool-audit for liveness.
  */
 
 export interface ExecutionMessage {
@@ -28,12 +35,27 @@ export interface ExecutionStreamState {
   execution: Execution | null;
   messages: ExecutionMessage[];
   fileChanges: ExecutionFileChange[];
+  /** Tool-audit rows pushed as the run records them, newest last. Shaped as
+   *  {@link ToolAuditEvent} so a consumer merges them straight into the rows the
+   *  REST backfill returned — `id` is the persisted row id, so dedupe is exact. */
+  toolEvents: ToolAuditEvent[];
   /** True while a live WebSocket is connected (vs polling fallback). */
   connected: boolean;
 }
 
 type StreamEvent =
-  | { type: 'status_change' | 'done'; status: string; execution: Execution }
+  | { type: 'status_change' | 'done'; status: string; execution?: Execution }
+  | {
+      type: 'tool_event';
+      executionId: number;
+      id: number | null;
+      cloudAgentRef: string | null;
+      toolName: string;
+      category: string;
+      result?: string;
+      durationMs?: number;
+      ts: string;
+    }
   | { type: 'message'; role: 'user' | 'assistant'; text: string; ts: string }
   | { type: 'file_change'; path: string; change: ExecutionFileChange['change']; ts: string }
   | { type: 'error'; message: string };
@@ -45,6 +67,7 @@ export function useExecutionStream(executionId: number | null): ExecutionStreamS
   const [execution, setExecution] = useState<Execution | null>(null);
   const [messages, setMessages] = useState<ExecutionMessage[]>([]);
   const [fileChanges, setFileChanges] = useState<ExecutionFileChange[]>([]);
+  const [toolEvents, setToolEvents] = useState<ToolAuditEvent[]>([]);
   const [connected, setConnected] = useState(false);
 
   // Allow callers to inject optimistic user messages without a round-trip; keep
@@ -56,6 +79,7 @@ export function useExecutionStream(executionId: number | null): ExecutionStreamS
     setExecution(null);
     setMessages([]);
     setFileChanges([]);
+    setToolEvents([]);
     setConnected(false);
 
     if (executionId == null) return;
@@ -67,7 +91,24 @@ export function useExecutionStream(executionId: number | null): ExecutionStreamS
       if (cancelled) return;
       if (evt.type === 'status_change' || evt.type === 'done') {
         setStatus(evt.status);
-        setExecution(evt.execution);
+        // A publisher that only knows the transition (crash recovery holds raw
+        // columns, not an entity) omits the row — keep the last full one rather
+        // than blanking the drawer.
+        if (evt.execution) setExecution(evt.execution);
+      } else if (evt.type === 'tool_event') {
+        setToolEvents((prev) => {
+          // The row id makes dedupe exact across a reconnect that re-backfills.
+          if (evt.id != null && prev.some((e) => e.id === evt.id)) return prev;
+          return [...prev.slice(-500), {
+            id: evt.id ?? -1,
+            toolName: evt.toolName,
+            category: evt.category,
+            result: evt.result ?? null,
+            durationMs: evt.durationMs ?? null,
+            executionId: evt.executionId,
+            ts: evt.ts,
+          }];
+        });
       } else if (evt.type === 'message') {
         setMessages((prev) => [...prev, { role: evt.role, text: evt.text, ts: evt.ts }]);
       } else if (evt.type === 'file_change') {
@@ -137,5 +178,5 @@ export function useExecutionStream(executionId: number | null): ExecutionStreamS
     };
   }, [executionId]);
 
-  return { status, execution, messages, fileChanges, connected };
+  return { status, execution, messages, fileChanges, toolEvents, connected };
 }

@@ -3,6 +3,7 @@
 import { useCallback, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import { Avatar, BrainTimeline } from '@seanhogg/builderforce-brain-ui';
+import { useChatActivityLabels } from '@/i18n/useChatActivityLabels';
 import '@seanhogg/builderforce-brain-ui/styles.css';
 import type { BrainMessage, BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
 import { ChatTicketsPanel } from '@/components/brain/ChatTicketsPanel';
@@ -135,6 +136,7 @@ export function BrainSurfaceBody({
   // Derived ONCE and shared: the transcript's live node and the footer strip are two
   // views of the same moment, so they must never narrate it in different words.
   const activity = useBrainActivity(running, trace, runStartedAt);
+  const activityLabels = useChatActivityLabels();
   const liveLine = brainActivityLine(activity.live);
   const timelineLabels = useMemo(() => ({
     you: t('you'),
@@ -150,7 +152,10 @@ export function BrainSurfaceBody({
     replay: t('replayMessage'),
     rateUp: t('rateUp'),
     rateDown: t('rateDown'),
-  }), [liveLine, t]);
+    // Same activity templates as the Brain panel — one hook, so a milestone can never be
+    // worded one way on the board and another in the panel.
+    activity: activityLabels,
+  }), [liveLine, t, activityLabels]);
   const typingCollaborators = collaborators.filter((member) => member.typing);
   const showPresence = joinedCollaborator != null || typingCollaborators.length > 0;
 

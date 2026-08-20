@@ -34,6 +34,19 @@ export interface ITaskRepository {
    * of rows re-keyed.
    */
   rekeyProject(projectId: ProjectId, newProjectKey: string): Promise<number>;
+  /**
+   * Re-point a task's DATA-ISOLATION segment to the one that owns its (new) project.
+   *
+   * `tasks.segment_id` is set by an INSERT trigger (migration 0056) and is NOT part of
+   * the Task aggregate — it is an isolation column, not a domain field. Moving a task
+   * between projects therefore left it stamped with the SOURCE project's segment, so on
+   * a segmented tenant the moved ticket stayed visible to the wrong segment and invisible
+   * to the right one: silent isolation drift with no error anywhere.
+   *
+   * Returns true when a row was updated. A null `segmentId` is a no-op (a single-segment
+   * tenant has nothing to re-point).
+   */
+  repointSegment(id: TaskId, segmentId: string | null): Promise<boolean>;
   save(task: Task): Promise<Task>;
   update(task: Task): Promise<Task>;
   delete(id: TaskId): Promise<void>;

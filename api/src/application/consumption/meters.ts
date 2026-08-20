@@ -25,6 +25,8 @@ import { dailyTenantOutboundFetches } from '../web/outboundFetchLedger';
 import { dailyTenantCloudRuns } from '../runtime/cloudRunLedger';
 import { dailyTenantStageSandboxRuns } from '../marketplace/stageSandboxLedger';
 import { resolveSuperadminUnlimited } from '../llm/tenantTokenAvailability';
+import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
+import { utcMonthStart, utcNextMonthStart } from '../llm/tokenUsage';
 
 export type MeterKey = 'ai_tokens' | 'ingestion' | 'error_events' | 'outbound_fetches' | 'cloud_runs' | 'stage_sandbox_runs';
 export type MeterUnit = 'tokens' | 'bytes' | 'events' | 'fetches' | 'runs' | 'sandbox_runs';
@@ -127,6 +129,39 @@ export function resolveMeterLimits(input: {
     cloudRuns: resolveCloudRunsMonthly(input),
     stageSandboxRuns: resolveStageSandboxRunsMonthly(input),
   };
+}
+
+/**
+ * The CACHED month-to-date snapshot the sidebar widget reads.
+ *
+ * 60s read-through: an aggregate scan over append-heavy ledgers that does not need
+ * to be to-the-second. Keyed by tenant + calendar month so it rolls over (and
+ * resets to 0) automatically at the month boundary — AND by whether the caller is
+ * an unlimited superadmin operator, since that changes every limit in the payload.
+ * Two entries per tenant at most, so members still share one scan; keying by user
+ * instead would multiply the cache for no benefit.
+ *
+ * The superadmin check is resolved BEFORE the cache, not inside it, for two
+ * reasons: it selects the bucket, and it must never be inherited from another
+ * caller's entry — a superadmin's unlimited snapshot must not be served to a
+ * capped member.
+ */
+export async function getConsumptionSnapshot(
+  db: Db,
+  env: Env,
+  tenantId: number,
+  actingUserId: string | null,
+): Promise<ConsumptionSnapshot> {
+  const monthStart = utcMonthStart();
+  const monthEnd = utcNextMonthStart();
+  const monthKey = monthStart.toISOString().slice(0, 7); // YYYY-MM
+  const isSuperadmin = await resolveSuperadminUnlimited(db, tenantId, { actingUserId }, env);
+  return getOrSetCached(
+    env,
+    `consumption-meter:v5:${tenantId}:${monthKey}:${isSuperadmin ? 'sa' : 'plan'}`,
+    () => buildConsumptionSnapshot(db, tenantId, monthStart, monthEnd, env, { actingIsSuperadmin: isSuperadmin }),
+    { kvTtlSeconds: 60, l1TtlMs: 30_000 },
+  );
 }
 
 /**

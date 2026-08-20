@@ -1,4 +1,3 @@
-import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * Monitor-signal webhook — /api/monitor-webhooks/:monitorId
  *
@@ -12,8 +11,6 @@ import { reportCaughtError } from '../../application/observability/caughtErrorRe
  */
 import { Hono } from 'hono';
 import { MonitoringService } from '../../application/monitoring/MonitoringService';
-import { bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
-import { monitoringVersionKey } from '../../application/insights/versionKeys';
 import type { HonoEnv, Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
@@ -45,10 +42,8 @@ export function createMonitorWebhookRoutes(db: Db): Hono<HonoEnv> {
       message: typeof body.message === 'string' ? body.message.slice(0, 500) : null,
     };
 
+    // `recordSignal` invalidates the monitoring reads itself — see MonitoringService.
     const res = await svc.recordSignal(monitor.tenantId, monitorId, signal, c.env as Env);
-    await bumpCacheVersion(c.env as Env, monitoringVersionKey(monitor.tenantId)).catch((error) => {
-      reportCaughtError(error, { source: "presentation/routes/monitorWebhookRoutes.ts", operation: "createMonitorWebhookRoutes" });
-    });
     return c.json({ ok: true, status: res.status });
   });
 

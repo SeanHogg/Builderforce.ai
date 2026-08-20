@@ -37,8 +37,12 @@
     "audit:burnrate-tenancy:validate": "node scripts/audit-burnrate-tenancy.mjs --validate-only",
     "check": "node ../scripts/run-checks.mjs scripts/checks.manifest.mjs",
     "test": "npm run check && vitest run",
+    "qa:cloud-agents": "vitest run src/application/runtime/cloudRunReconstruction.test.ts src/application/runtime/cloudLoopControl.test.ts src/application/runtime/cloudTelemetry.test.ts src/application/runtime/cloudRunLedger.test.ts src/application/runtime/cloudAgentEngine.test.ts src/application/llm/cloudByoPolicy.test.ts",
     "typecheck:native": "tsgo --noEmit",
-    "check:table-adoption": "node scripts/check-table-adoption.mjs"
+    "check:table-adoption": "node scripts/check-table-adoption.mjs",
+    "models:refresh": "node scripts/refresh-model-snapshot.mjs",
+    "models:check": "node scripts/refresh-model-snapshot.mjs --check",
+    "backfill:byo-usage": "node scripts/backfill-byo-usage.mjs"
   },
   "dependencies": {
     "@cloudflare/containers": "^0.3.7",

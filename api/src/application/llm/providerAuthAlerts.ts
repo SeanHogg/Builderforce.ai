@@ -34,15 +34,32 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  */
 
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import { and, desc, eq, gte } from 'drizzle-orm';
+import { buildTransactionalDatabase } from '../../infrastructure/database/connection';
+import { llmFailoverLog } from '../../infrastructure/database/schema';
+import { vendorForModel } from './vendors';
 import type { Env } from '../../env';
 import { CODEX_AUTH_MARKER } from './vendors/openaiCodex';
 import { CAPACITY_LIMIT_MARKER, isCapacityLimitBody } from './vendors';
-import { PROVIDER_VENDOR_MAP, isSupportedProvider, type LlmProvider } from './tenantProviderKeyService';
+// The provider catalog is a LEAF (`llmProviderCatalog`), not `tenantProviderKeyService`.
+// Importing the service here would close a cycle: the credential resolver needs THIS
+// module so routing can demote a known-broken account, and the constants are built
+// eagerly at import, so the cycle deadlocks at module-eval rather than failing loudly.
+import {
+  isSupportedProvider,
+  providerForVendor as providerForVendorId,
+  type LlmProvider,
+} from './llmProviderCatalog';
 
 /** Just the slice of `Env` this module needs — mirrors `CooldownEnv`'s narrowing so
  *  the proxy's `ProxyEnv` and route `Env` are both callable without a cast. */
 export interface ProviderAuthAlertEnv {
   AUTH_CACHE_KV?: KVNamespace;
+  /** Optional — the HISTORY fallback below reads `llm_failover_log` through
+   *  `buildTransactionalDatabase`, which needs one of these bound. Absent (as in most
+   *  unit tests) the fallback is skipped and the KV/in-memory path is unchanged. */
+  NEON_TRANSACTIONAL_DATABASE_URL?: string;
+  NEON_DATABASE_URL?: string;
 }
 
 /**
@@ -107,28 +124,11 @@ export interface ProviderAuthAlert {
   at: number;
 }
 
-/**
- * Gateway vendor id → the BYO provider a tenant connects in Settings ▸ API Keys.
- *
- * Derived from {@link PROVIDER_VENDOR_MAP} rather than hand-listed, so a new
- * provider is picked up automatically — PLUS the OAuth-only vendor aliases, which
- * that map does not carry: a connected ChatGPT subscription dispatches as
- * `openai-codex` and a connected Grok subscription as `xai-oauth`, but both are
- * managed under their base provider's card. Mirrors the same aliasing
- * `byoVendorPriorityOrder` applies in the other direction.
- */
-const PROVIDER_BY_VENDOR: ReadonlyMap<string, LlmProvider> = new Map<string, LlmProvider>([
-  ...(Object.entries(PROVIDER_VENDOR_MAP) as Array<[LlmProvider, { vendorId: string }]>)
-    .map(([provider, { vendorId }]) => [vendorId, provider] as [string, LlmProvider]),
-  ['openai-codex', 'openai'],
-  ['xai-oauth', 'xai'],
-]);
-
 /** The BYO provider a gateway vendor belongs to, or `null` when the vendor is not
- *  something a tenant can connect (an operator-pool vendor like `openrouter`). */
-export function providerForVendor(vendorId: string): LlmProvider | null {
-  return PROVIDER_BY_VENDOR.get(vendorId) ?? null;
-}
+ *  something a tenant can connect (an operator-pool vendor like `openrouter`).
+ *  Re-exported from the provider catalog so this module stays the one place callers
+ *  reach for alert-shaped questions, while the mapping itself has one definition. */
+export const providerForVendor = providerForVendorId;
 
 /**
  * Clear a stale provider warning after a real BYO completion succeeds.
@@ -362,6 +362,13 @@ export async function loadProviderAuthAlert(
   return loadAuthAlert(
     env, tenantId, { kind: 'provider', provider },
     (parsed): parsed is ProviderAuthAlert => isSupportedProvider((parsed as ProviderAuthAlert).provider),
+    // Recovery, not the primary path: only consulted when the store has no entry.
+    // A failure to reconstruct degrades to "healthy" — a missing warning is better
+    // than a fabricated one, which would demote a working account.
+    () => deriveProviderAlertFromHistory(env, tenantId, provider).catch((error) => {
+      reportCaughtError(error, { source: "application/llm/providerAuthAlerts.ts", operation: "deriveProviderAlertFromHistory" });
+      return null;
+    }),
   );
 }
 
@@ -378,6 +385,61 @@ export async function loadConnectionAuthAlert(
   );
 }
 
+/**
+ * Reconstruct a provider alert from `llm_failover_log` when KV has forgotten it.
+ *
+ * A KV-only alert is not durable: an eviction (or a Worker that never had the
+ * namespace bound) silently forgets that a tenant's credential is broken, and the
+ * very next request goes back to LEADING the seed with the dead account. Since
+ * 0946 the failover log carries `tenant_id` + `kind`, so the same fact is
+ * queryable — and reconstructible.
+ *
+ * Deliberately NOT the primary path. This runs only on a KV miss, inside
+ * `getOrSetCached`, so it costs at most one query per minute per tenant+provider
+ * and zero queries on the overwhelmingly common healthy path. It also cannot
+ * manufacture an alert out of noise: it looks only at the `auth` CLASS, only
+ * within the same 7-day window a stored alert would have lived for, and only for
+ * models that resolve to a vendor this provider owns.
+ *
+ * The reconstructed alert reports `rejected` (the 401 remediation: reconnect the
+ * same account) unless the recorded status was 403, which is the `not_entitled`
+ * case. `capacity` cannot be recovered — it is inferred from the response BODY,
+ * which the log does not keep — so a recovered alert is deliberately conservative:
+ * it demotes the account and asks the owner to look, which is right in every case,
+ * rather than guessing a remediation the row cannot support.
+ */
+async function deriveProviderAlertFromHistory(
+  env: ProviderAuthAlertEnv,
+  tenantId: number,
+  provider: LlmProvider,
+): Promise<ProviderAuthAlert | null> {
+  if (!env.NEON_TRANSACTIONAL_DATABASE_URL && !env.NEON_DATABASE_URL) return null;
+  const since = new Date(Date.now() - ALERT_TTL_SECONDS * 1000);
+  const db = buildTransactionalDatabase(env as unknown as Env);
+  const rows = await db
+    .select({ model: llmFailoverLog.model, errorCode: llmFailoverLog.errorCode, createdAt: llmFailoverLog.createdAt })
+    .from(llmFailoverLog)
+    .where(and(
+      eq(llmFailoverLog.tenantId, tenantId),
+      eq(llmFailoverLog.kind, 'auth'),
+      gte(llmFailoverLog.createdAt, since),
+    ))
+    .orderBy(desc(llmFailoverLog.createdAt))
+    .limit(50);
+
+  // `vendorForModel` is the same resolver dispatch uses, so "which provider did this
+  // row belong to" cannot drift from "which provider would have served it".
+  const own = rows.find((r) => providerForVendor(vendorForModel(r.model)) === provider);
+  if (!own) return null;
+  return {
+    provider,
+    reason: own.errorCode === 403 ? 'not_entitled' : 'rejected',
+    status: own.errorCode,
+    vendor: vendorForModel(own.model),
+    at: own.createdAt.getTime(),
+  };
+}
+
 async function loadAuthAlert<T extends AuthAlert>(
   env: ProviderAuthAlertEnv,
   tenantId: number,
@@ -385,6 +447,8 @@ async function loadAuthAlert<T extends AuthAlert>(
   // A stored value is validated against the shape the CALLER expects, so a hand-edited or
   // legacy KV entry degrades to "healthy" instead of being handed back mis-typed.
   isValid: (parsed: AuthAlert) => parsed is T,
+  /** Last resort when the store has no entry — see `deriveProviderAlertFromHistory`. */
+  recover?: () => Promise<T | null>,
 ): Promise<T | null> {
   const key = alertKey(tenantId, subject);
   return getOrSetCached<T | null>(
@@ -398,15 +462,15 @@ async function loadAuthAlert<T extends AuthAlert>(
             const parsed = JSON.parse(raw) as AuthAlert;
             if (isValid(parsed)) return parsed;
           }
-          return null;
+          return (await recover?.()) ?? null;
         } catch (error) { /* fall through to the in-memory copy */
           reportCaughtError(error, { source: "application/llm/providerAuthAlerts.ts", operation: "loadAuthAlert" });
         }
       }
       const local = memoryAlerts.get(key);
-      if (!local) return null;
-      if (Date.now() >= local.until) { memoryAlerts.delete(key); return null; }
-      return isValid(local.alert) ? local.alert : null;
+      if (local && Date.now() < local.until) return isValid(local.alert) ? local.alert : null;
+      if (local) memoryAlerts.delete(key);
+      return (await recover?.()) ?? null;
     },
     { kvTtlSeconds: ALERT_READ_TTL_SECONDS },
   );
@@ -449,4 +513,52 @@ async function clearAuthAlert(
   try { await env.AUTH_CACHE_KV.delete(key); } catch (error) { /* advisory */ 
     reportCaughtError(error, { source: "application/llm/providerAuthAlerts.ts", operation: "clearProviderAuthAlert" });
   }
+}
+
+/**
+ * The gateway vendor ids a tenant's OWN accounts are currently KNOWN-BROKEN on.
+ *
+ * This is the read that closes the "a dead account still leads the seed" gap. A
+ * workspace with two connected providers, one of which returned 401 an hour ago,
+ * otherwise leads every single request with the dead one, burns an upstream
+ * attempt, and fails over to the healthy one — for as long as the owner takes to
+ * notice. Routing already has a slot for exactly this shape (`byoAutoSeedModels`'s
+ * `demotedVendors`), but the store behind it is keyed by VENDOR ALONE and so cannot
+ * speak for one owner's account; these alerts are keyed per tenant + provider and
+ * can.
+ *
+ * DEMOTE, NEVER REMOVE — which is why this returns a set for the demotion sort
+ * rather than a filter. A `capacity` alert self-heals the moment the account's
+ * billing period rolls over, and dropping the vendor outright would silently move
+ * the funding source from the tenant's own account to the shared pool.
+ *
+ * Reads are per-provider and cached (`loadProviderAuthAlert` → `getOrSetCached`,
+ * 60s), so the common healthy case is one L1 hit per provider and the whole call
+ * collapses to nothing measurable. An unreadable alert degrades to "healthy":
+ * failing to read a warning must never remove a working vendor from the seed.
+ */
+export async function loadAlertedByoVendors(
+  env: ProviderAuthAlertEnv,
+  tenantId: number,
+  vendorIds: Iterable<string>,
+): Promise<Set<string>> {
+  const vendors = [...new Set(vendorIds)];
+  if (vendors.length === 0) return new Set();
+  // One read PER PROVIDER, not per vendor: `openai` and `openai-codex` are two
+  // dispatch vendors for one connected account and share a single alert key.
+  const byProvider = new Map<LlmProvider, string[]>();
+  for (const vendorId of vendors) {
+    const provider = providerForVendor(vendorId);
+    if (!provider) continue; // operator-pool vendor — no tenant owns it
+    byProvider.set(provider, [...(byProvider.get(provider) ?? []), vendorId]);
+  }
+  if (byProvider.size === 0) return new Set();
+
+  const alerted = await Promise.all(
+    [...byProvider].map(async ([provider, ids]) => {
+      const alert = await loadProviderAuthAlert(env, tenantId, provider).catch(() => null);
+      return alert ? ids : [];
+    }),
+  );
+  return new Set(alerted.flat());
 }

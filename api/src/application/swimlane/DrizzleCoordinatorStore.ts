@@ -4,7 +4,7 @@
  * schema tables. All orchestration lives in SwimlaneCoordinator (and its pure
  * helpers), which is why this file has no logic to test.
  */
-import { and, asc, desc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq, notInArray } from 'drizzle-orm';
 import {
   boards,
   swimlanes,
@@ -172,6 +172,33 @@ export class DrizzleCoordinatorStore implements CoordinatorStore {
           eq(ticketRuns.lifecycle, 'awaiting_workflow'),
         ),
       )
+      .limit(1);
+    return run ? toRun(run) : null;
+  }
+
+  /**
+   * The ticket's ACTIVE run on this board. "Active" is the complement of the two
+   * terminal lifecycles ('done', 'cancelled') — expressed that way rather than as a
+   * list of active states so a lifecycle added later cannot silently read as inactive
+   * and let a second run be created for the same ticket.
+   */
+  async findActiveTicketRunByTask(
+    boardId: string,
+    taskId: number,
+    tenantId: number,
+  ): Promise<TicketRunLite | null> {
+    const [run] = await this.db
+      .select()
+      .from(ticketRuns)
+      .where(
+        and(
+          eq(ticketRuns.boardId, boardId),
+          eq(ticketRuns.taskId, taskId),
+          eq(ticketRuns.tenantId, tenantId),
+          notInArray(ticketRuns.lifecycle, ['done', 'cancelled']),
+        ),
+      )
+      .orderBy(desc(ticketRuns.createdAt))
       .limit(1);
     return run ? toRun(run) : null;
   }

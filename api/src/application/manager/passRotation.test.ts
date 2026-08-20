@@ -35,37 +35,37 @@ describe('decideRotation', () => {
   it('runs ONLY the starved stages on the next pass', () => {
     const r = decideRotation({ starved: ['triage'], yields: 0 });
     expect(r.mayRun('triage')).toBe(true);
-    expect(r.mayRun('pr_merge')).toBe(false);
+    expect(r.mayRun('audit')).toBe(false);
     expect(r.mayRun('pr_conduct')).toBe(false);
     expect(r.mayRun('value')).toBe(false);
   });
 
   it('yields to every starved stage, not just the first', () => {
-    const r = decideRotation({ starved: ['pr_merge', 'audit', 'triage'], yields: 0 });
-    for (const stage of ['pr_merge', 'audit', 'triage']) expect(r.mayRun(stage), stage).toBe(true);
+    const r = decideRotation({ starved: ['pr_conduct', 'audit', 'triage'], yields: 0 });
+    for (const stage of ['pr_conduct', 'audit', 'triage']) expect(r.mayRun(stage), stage).toBe(true);
     for (const stage of ['value', 'assign', 'systemic', 'dispatch']) expect(r.mayRun(stage), stage).toBe(false);
   });
 
   /**
    * THE ASYMMETRY, and the oscillation it prevents. Triage is yielded TO but never
    * yielded. Treating the two directions as one set produces this: a pass starves
-   * [pr_merge, audit, triage]; the next yields to those three and triage runs; that pass
-   * then starves only [pr_merge, audit] (triage succeeded), so the cursor stops naming
+   * [pr_conduct, audit, triage]; the next yields to those three and triage runs; that pass
+   * then starves only [pr_conduct, audit] (triage succeeded), so the cursor stops naming
    * triage — and the pass after it yields triage away again, for no reason but having
    * worked. Triage would run every third pass, oscillating, forever.
    */
   it('never yields triage away — it is the stage the rotation exists to protect', () => {
     expect(YIELDABLE_STAGES.has('triage')).toBe(false);
     expect(ROTATABLE_STAGES.has('triage')).toBe(true);
-    for (const starved of [['pr_merge'], ['pr_merge', 'audit'], ['value', 'assign']]) {
+    for (const starved of [['pr_conduct'], ['pr_conduct', 'audit'], ['value', 'assign']]) {
       expect(decideRotation({ starved, yields: 0 }).mayRun('triage'), starved.join('+')).toBe(true);
     }
   });
 
   it('yields every OTHER rotatable stage when the cursor does not name it', () => {
-    const r = decideRotation({ starved: ['pr_merge'], yields: 0 });
+    const r = decideRotation({ starved: ['pr_conduct'], yields: 0 });
     for (const stage of YIELDABLE_STAGES) {
-      expect(r.mayRun(stage), stage).toBe(stage === 'pr_merge');
+      expect(r.mayRun(stage), stage).toBe(stage === 'pr_conduct');
     }
   });
 
@@ -80,6 +80,20 @@ describe('decideRotation', () => {
     expect(r.mayRun('census')).toBe(true);
   });
 
+  /**
+   * `pr_merge` was a rotatable stage until the merge loop left the pass entirely for its
+   * own registry sweep (`application/repos/prMergeSweep.ts`). A cursor written by the
+   * deploy before that still names it, and yielding a whole pass to a stage that no
+   * longer runs would skip every real stage — the allow-list filter is what makes the
+   * removal safe rather than a five-minute outage per project.
+   */
+  it('ignores the RETIRED pr_merge stage in a cursor written before it moved out', () => {
+    expect(ROTATABLE_STAGES.has('pr_merge')).toBe(false);
+    const r = decideRotation({ starved: ['pr_merge'], yields: 0 });
+    expect(r.yieldTo.size).toBe(0);
+    for (const stage of ROTATABLE_STAGES) expect(r.mayRun(stage), stage).toBe(true);
+  });
+
   it('ignores an unrecognised stage in a stale cursor rather than yielding to nothing', () => {
     // A cursor written by an older deploy could name a stage that no longer exists.
     // Yielding to it would skip every real stage and the pass would do nothing at all.
@@ -91,7 +105,7 @@ describe('decideRotation', () => {
   it('gives up after MAX_CONSECUTIVE_YIELDS so the skipped stages are not starved instead', () => {
     const r = decideRotation({ starved: ['triage'], yields: MAX_CONSECUTIVE_YIELDS });
     expect(r.yieldTo.size).toBe(0);
-    expect(r.mayRun('pr_merge')).toBe(true);
+    expect(r.mayRun('pr_conduct')).toBe(true);
     expect(r.yields).toBe(0);
   });
 
@@ -108,8 +122,8 @@ describe('carryOverRotation', () => {
 
   it('carries forward the stages the pass ran out of wall-clock for', () => {
     const rotation = decideRotation(null);
-    expect(carryOverRotation(rotation, ['pr_merge', 'audit', 'triage']))
-      .toEqual({ starved: ['pr_merge', 'audit', 'triage'], yields: 0 });
+    expect(carryOverRotation(rotation, ['pr_conduct', 'audit', 'triage']))
+      .toEqual({ starved: ['pr_conduct', 'audit', 'triage'], yields: 0 });
   });
 
   /**
@@ -122,17 +136,17 @@ describe('carryOverRotation', () => {
    */
   it('does NOT treat a stage this pass deliberately yielded as starved', () => {
     const rotation = decideRotation({ starved: ['triage'], yields: 0 });
-    rotation.skip('pr_merge');
+    rotation.skip('pr_conduct');
     rotation.skip('value');
     // The pass reports all three; only the genuinely-starved one may be carried over.
-    expect(carryOverRotation(rotation, ['pr_merge', 'value', 'triage']))
+    expect(carryOverRotation(rotation, ['pr_conduct', 'value', 'triage']))
       .toEqual({ starved: ['triage'], yields: 1 });
   });
 
   it('reaches an empty cursor once the yielded-to stage finally completes', () => {
     const rotation = decideRotation({ starved: ['triage'], yields: 0 });
-    rotation.skip('pr_merge');
-    expect(carryOverRotation(rotation, ['pr_merge'])).toEqual({ starved: [], yields: 0 });
+    rotation.skip('pr_conduct');
+    expect(carryOverRotation(rotation, ['pr_conduct'])).toEqual({ starved: [], yields: 0 });
   });
 
   it('drops a non-rotatable stage from the cursor — it will never be yielded to', () => {
@@ -147,14 +161,14 @@ describe('carryOverRotation', () => {
    * for the starvation of everything else.
    */
   it('cannot yield indefinitely to a stage that keeps overrunning', () => {
-    let cursor = carryOverRotation(decideRotation(null), ['pr_merge']);
+    let cursor = carryOverRotation(decideRotation(null), ['pr_conduct']);
     let yieldedPasses = 0;
     for (let pass = 0; pass < 10; pass += 1) {
       const rotation = decideRotation(cursor);
       if (rotation.yieldTo.size > 0) yieldedPasses += 1;
       // The yielded-to stage overruns again every single time.
       for (const stage of ROTATABLE_STAGES) if (!rotation.mayRun(stage)) rotation.skip(stage);
-      cursor = carryOverRotation(rotation, ['pr_merge', ...rotation.yielded]);
+      cursor = carryOverRotation(rotation, ['pr_conduct', ...rotation.yielded]);
     }
     expect(yieldedPasses).toBeGreaterThan(0);
     // And it must have handed turns back: a run of 10 passes cannot all have been yields.
@@ -173,12 +187,12 @@ describe('carryOverRotation', () => {
     const cursor = carryOverRotation(first, ['audit', 'triage']);
     expect(cursor.starved).toEqual(['audit', 'triage']);
 
-    // Pass 2 runs only those, so `pr_conduct` / `pr_merge` / `value` are not there to
+    // Pass 2 runs only those, so `pr_conduct` / `value` are not there to
     // consume the window before triage is reached.
     const second = decideRotation(cursor);
     expect(second.mayRun('triage')).toBe(true);
     expect(second.mayRun('audit')).toBe(true);
     expect(second.mayRun('pr_conduct')).toBe(false);
-    expect(second.mayRun('pr_merge')).toBe(false);
+    expect(second.mayRun('value')).toBe(false);
   });
 });

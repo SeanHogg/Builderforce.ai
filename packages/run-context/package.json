@@ -1,0 +1,17 @@
+{
+  "name": "@builderforce/run-context",
+  "version": "2026.8.20",
+  "private": true,
+  "type": "module",
+  "description": "The ONE run-context contract shared by all three prompt-assembly surfaces (cloud `prepareCloudRun`, on-prem embedded runner, VS Code): the block taxonomy a run can receive, the renderer that turns blocks into a prompt, and the ContextReconciler that routes blocks through Evermind Write-Through Cognition so a surface receives the DELTA against what the run already knows. Dependency-free and I/O-free by contract — the api owns the data and serves the assembled envelope; this package owns its SHAPE and its reconciliation.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "types": "./src/index.ts",
+  "scripts": {
+    "test": "vitest run --passWithNoTests"
+  },
+  "devDependencies": {
+    "vitest": "^4.0.18"
+  }
+}

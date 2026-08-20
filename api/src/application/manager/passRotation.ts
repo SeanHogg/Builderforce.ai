@@ -67,7 +67,12 @@ export const MAX_CONSECUTIVE_YIELDS = 2;
  * exists must be ignored rather than yield the pass to nothing.
  */
 export const ROTATABLE_STAGES: ReadonlySet<string> = new Set([
-  'value', 'assign', 'systemic', 'dispatch', 'audit', 'pr_conduct', 'pr_merge', 'triage',
+  // `pr_merge` is NOT here any more, and its absence is the point: the merge loop left
+  // the pass entirely for its own registry sweep (`application/repos/prMergeSweep.ts`)
+  // with its own budget, so there is no longer a PR merge stage for a pass to starve or
+  // to yield to. A stale cursor still naming it is ignored by the allow-list filter in
+  // `decideRotation`, which is exactly what an allow-list is for.
+  'value', 'assign', 'systemic', 'dispatch', 'audit', 'pr_conduct', 'triage',
 ]);
 
 /**

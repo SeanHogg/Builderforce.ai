@@ -13,18 +13,17 @@
  */
 
 import { Hono } from 'hono';
-import { and, desc, eq } from 'drizzle-orm';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
-import { lensSnapshots } from '../../infrastructure/database/schema';
 import {
   captureLensSnapshot, isSnapshotableLens, cadenceOfPeriod, periodFor,
-  SNAPSHOTABLE_LENSES, type SnapshotCadence,
+  listLensSnapshots, getLensSnapshot,
+  SNAPSHOTABLE_LENSES, SNAPSHOT_CADENCES, type SnapshotCadence,
 } from '../../application/reports/lensSnapshots';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
-const CADENCES: readonly SnapshotCadence[] = ['monthly', 'quarterly', 'annual'];
+const CADENCES = SNAPSHOT_CADENCES;
 
 export function createLensSnapshotRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -33,42 +32,20 @@ export function createLensSnapshotRoutes(db: Db): Hono<HonoEnv> {
   // ── GET /snapshots — list captured snapshots (metadata only, no payloads) ──
   router.get('/snapshots', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const lensFilter = c.req.query('lens');
-    const periodFilter = c.req.query('period');
-    const conds = [eq(lensSnapshots.tenantId, tenantId)];
-    if (lensFilter && isSnapshotableLens(lensFilter)) conds.push(eq(lensSnapshots.lens, lensFilter));
-    if (periodFilter) conds.push(eq(lensSnapshots.period, periodFilter));
-
-    const rows = await db
-      .select({
-        id: lensSnapshots.id,
-        lens: lensSnapshots.lens,
-        period: lensSnapshots.period,
-        generatedAt: lensSnapshots.generatedAt,
-      })
-      .from(lensSnapshots)
-      .where(and(...conds))
-      .orderBy(desc(lensSnapshots.generatedAt))
-      .limit(500);
-
-    return c.json({
-      snapshotableLenses: SNAPSHOTABLE_LENSES,
-      cadences: CADENCES,
-      snapshots: rows.map((r) => ({ ...r, cadence: cadenceOfPeriod(r.period) })),
+    const snapshots = await listLensSnapshots(db, tenantId, {
+      lens: c.req.query('lens'),
+      period: c.req.query('period'),
     });
+
+    return c.json({ snapshotableLenses: SNAPSHOTABLE_LENSES, cadences: CADENCES, snapshots });
   });
 
   // ── GET /snapshots/:id — one frozen payload ───────────────────────────────
   router.get('/snapshots/:id', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const id = c.req.param('id');
-    const [row] = await db
-      .select()
-      .from(lensSnapshots)
-      .where(and(eq(lensSnapshots.id, id), eq(lensSnapshots.tenantId, tenantId)))
-      .limit(1);
-    if (!row) return c.json({ error: 'snapshot not found' }, 404);
-    return c.json({ snapshot: { ...row, cadence: cadenceOfPeriod(row.period) } });
+    const snapshot = await getLensSnapshot(db, tenantId, c.req.param('id'));
+    if (!snapshot) return c.json({ error: 'snapshot not found' }, 404);
+    return c.json({ snapshot });
   });
 
   // ── POST /snapshots/capture — capture-now for a lens/period ───────────────

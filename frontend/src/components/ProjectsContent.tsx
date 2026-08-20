@@ -82,6 +82,7 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
   const [error, setError] = useState<string | null>(null);
   const [detailsProject, setDetailsProject] = useState<Project | null>(null);
   const [detailsInitialTab, setDetailsInitialTab] = useState<ProjectPanelTab>('analytics');
+  const [detailsInitialSpecKind, setDetailsInitialSpecKind] = useState<string | null>(null);
   const [detailsInitialAudit, setDetailsInitialAudit] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ProjectsView>('card');
   const [selectedAgentHost, setSelectedAgentHost] = useState<AgentHost | null>(null);
@@ -189,8 +190,11 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
   // Open the project Information panel on a given tab. Used by the Details button
   // (default tab) and the Architect button (PRDs to read the result, or
   // Integrations when a repo must be mapped before a run can start).
-  const openDetails = (project: Project, tab: ProjectPanelTab = 'analytics') => {
+  const openDetails = (project: Project, tab: ProjectPanelTab = 'analytics', specKind?: string) => {
     setDetailsInitialTab(tab);
+    // Which document the destination tab should open, not just which tab. Cleared
+    // on every open so a later plain Details click doesn't inherit the last one.
+    setDetailsInitialSpecKind(specKind ?? null);
     setDetailsProject(project);
   };
 
@@ -465,6 +469,7 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
           project={detailsProject}
           open={!!detailsProject}
           initialTab={detailsInitialTab}
+          initialSpecKind={detailsInitialSpecKind}
           initialAuditId={detailsInitialAudit}
           onClose={() => { setDetailsProject(null); setDetailsInitialAudit(null); }}
           onProjectUpdate={applyProjectPatch}

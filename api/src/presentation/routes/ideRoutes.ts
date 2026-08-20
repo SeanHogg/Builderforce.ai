@@ -38,7 +38,8 @@ import {
   newTraceId,
   type ChatCompletionRequest,
 } from '../../application/llm/LlmProxyService';
-import { logTrace } from '../../application/llm/traceLogger';
+import { logTrace, backfillTraceUsage, backfillTraceResponseBody } from '../../application/llm/traceLogger';
+import { wrapStreamForTrace } from '../../application/llm/streamTrace';
 import { evaluateFinetuneOutputs } from '../../application/finetune/evaluateFinetune';
 import { tenantProxyForPlan } from '../../application/llm/tenantProxy';
 import {
@@ -49,6 +50,7 @@ import {
   templateNeedsBackfill,
   type SeedableProject,
 } from '../../application/project/projectTemplate';
+import { projectInTenant as projectOwnedByTenant } from '../../application/project/projectOwnership';
 import {
   listWorkspaceFiles,
   readWorkspaceFile,
@@ -248,15 +250,11 @@ export function createIdeRoutes(): Hono<HonoEnv> {
    * caller could read/overwrite another tenant's source, datasets, models or sites by
    * guessing an id. Returns false when the project is missing or another tenant's.
    */
-  const projectInTenant = async (db: Db, tenantId: number, projectId: number): Promise<boolean> => {
-    if (!Number.isInteger(projectId) || projectId < 1) return false;
-    const [row] = await db
-      .select({ present: sql<number>`1` })
-      .from(projects)
-      .where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId)))
-      .limit(1);
-    return !!row;
-  };
+  // Extracted to `application/project/projectOwnership` so every route file that
+  // needs the same gate (QA's journey ingest and heatmap, notably) shares one
+  // definition instead of re-implementing it. Kept as a local alias so the call
+  // sites below read unchanged.
+  const projectInTenant = projectOwnedByTenant;
 
   /** Ownership gate for a training job (and its logs), via its project's tenant. */
   const trainingJobInTenant = async (db: Db, tenantId: number, jobId: string): Promise<boolean> => {
@@ -1387,7 +1385,22 @@ export function createIdeRoutes(): Hono<HonoEnv> {
         eq(ideAgents.tenantId, Number(agent.tenant_id)),
       ));
       if (!result.response.body) return c.json({ error: 'No stream body' }, 502);
-      return new Response(result.response.body, {
+      // Same stream tee the gateway and IDE-assistant streams use: a STREAMED
+      // workforce turn only learns its tokens and its completion body in passing,
+      // so both are back-filled onto the row logged above rather than left at 0/null.
+      const responseStream = streamed
+        ? wrapStreamForTrace(result.response.body, {
+            onUsage: (usage) => backfillTraceUsage(c.env, c.executionCtx, traceId, usage),
+            onComplete: (completion) => backfillTraceResponseBody(c.env, c.executionCtx, traceId, {
+              streamed: true,
+              content: completion.content,
+              finishReason: completion.finishReason,
+              model: completion.model,
+              ...(completion.toolCalls.length > 0 ? { toolCalls: completion.toolCalls } : {}),
+            }),
+          })
+        : result.response.body;
+      return new Response(responseStream, {
         headers: {
           'Content-Type': body.stream !== false ? 'text/event-stream' : 'application/json',
           'Cache-Control': 'no-cache',

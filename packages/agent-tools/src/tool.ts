@@ -42,6 +42,22 @@ export interface ToolContext {
   readonly workspaceRoot?: string;
   /** Optional structured logging/telemetry sink (a no-op when unset). */
   readonly emit?: (event: { level?: "debug" | "info" | "warn"; message: string; detail?: unknown }) => void;
+  /**
+   * Stream a PARTIAL result while the call is still running, so a long tool (a shell
+   * command, a build, a download) shows output as it happens instead of appearing to
+   * hang and then dumping everything at once.
+   *
+   * This is the piece a converged `exec`/`process` needs: the native on-prem `AgentTool`
+   * has always had an `onUpdate` callback, but the shared contract had none, so adapting
+   * a shared definition silently dropped streaming — which is why those two tools could
+   * not converge without regressing the on-prem terminal to a frozen prompt.
+   *
+   * Every parameter is optional and every surface may omit it: a tool MUST treat the
+   * absence of `onUpdate` as "nobody is watching" and still return its full result. The
+   * partial shape is the same {@link ToolResult}, so a surface renders progress with the
+   * exact code path it uses for the final value.
+   */
+  readonly onUpdate?: (partial: ToolResult) => void;
 }
 
 /**

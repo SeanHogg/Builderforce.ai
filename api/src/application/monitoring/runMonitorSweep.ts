@@ -9,6 +9,7 @@ import { and, eq, inArray } from 'drizzle-orm';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import { monitors } from '../../infrastructure/database/schema';
 import { MonitoringService } from './MonitoringService';
+import { runBoundedPool } from '../runtime/boundedPool';
 import type { Env } from '../../env';
 
 const SWEEP_TYPES = ['heartbeat', 'http_check', 'metric_threshold'];
@@ -51,16 +52,11 @@ export async function runMonitorSweep(env: Env): Promise<MonitorSweepResult> {
     }
   };
 
-  // Bounded-concurrency pool: N workers pull from a shared cursor until drained, so a
-  // slow monitor only stalls its own worker, not the entire sweep.
-  let cursor = 0;
-  const worker = async (): Promise<void> => {
-    while (cursor < active.length) {
-      const m = active[cursor++];
-      if (m) await evaluateOne(m);
-    }
-  };
-  await Promise.all(Array.from({ length: Math.min(SWEEP_CONCURRENCY, active.length) }, worker));
+  // Bounded-concurrency pool (the shared `runtime/boundedPool.ts` primitive): N workers
+  // pull from one cursor until drained, so a slow monitor stalls its own worker and not
+  // the sweep. No deadline — every active monitor must be evaluated on the tick it is
+  // due, and a partial evaluation would read as "no breach".
+  await runBoundedPool(active, { limit: SWEEP_CONCURRENCY }, evaluateOne);
 
   return out;
 }

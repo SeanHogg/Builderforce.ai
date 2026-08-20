@@ -28,8 +28,12 @@ import {
   rm as fsRm,
   writeFile as fsWriteFile,
 } from "node:fs/promises";
-import { isAbsolute, join, relative, resolve as resolvePath, sep } from "node:path";
-import { filterByGlob, normalizeScopeDir, isUnderScopeDir } from "@builderforce/agent-tools";
+import { join, relative, resolve as resolvePath, sep } from "node:path";
+import { applyStringEdit, filterByGlob, normalizeScopeDir, isUnderScopeDir } from "@builderforce/agent-tools";
+// The ONE workspace-containment resolver, shared with the VS Code local provider.
+// Node-only, so it comes from the `/node-path` export condition (the package root stays
+// node-builtin-free for the Worker).
+import { resolveInsideRoot as resolveInside } from "@builderforce/agent-tools/node-path.js";
 import type {
   Capability,
   CapabilityProvider,
@@ -68,20 +72,6 @@ export const NODE_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capability>([
   "human",
 ]);
 
-/** Resolve `relPath` inside `root`, rejecting an escape (absolute outside root, or `..`
- *  traversal). Returns the absolute path or `null` when the path leaves the workspace. */
-function resolveInside(root: string, relPath: string): string | null {
-  const abs = isAbsolute(relPath) ? resolvePath(relPath) : resolvePath(root, relPath);
-  const rel = relative(root, abs);
-  if (rel === "" || rel === ".") {
-    return abs; // the root itself (list scope)
-  }
-  if (rel.startsWith("..") || rel.split(sep).includes("..") || isAbsolute(rel)) {
-    return null;
-  }
-  return abs;
-}
-
 async function walkFiles(
   root: string,
   scope: string,
@@ -119,44 +109,33 @@ async function walkFiles(
   return { paths: out.toSorted(), truncated };
 }
 
-/** BOM/CRLF-tolerant exact replace — faithful to the native `edit` tool semantics so the
- *  converged `edit` behaves identically (read the file first; `oldString` must match once
- *  unless `replaceAll`). */
-function applyEdit(
-  content: string,
-  oldString: string,
-  newString: string,
-  replaceAll: boolean,
-): { ok: true; updated: string; replaced: number } | { ok: false; error: string } {
-  const stripBom = (s: string) => (s.charCodeAt(0) === 0xfeff ? s.slice(1) : s);
-  const lf = (s: string) => s.replace(/\r\n/g, "\n");
-  const body = lf(stripBom(content));
-  const needle = lf(oldString);
-  if (needle === "") {
-    return { ok: false, error: "old_string is required" };
-  }
-  const occurrences = body.split(needle).length - 1;
-  if (occurrences === 0) {
-    return {
-      ok: false,
-      error: "old_string not found — read_file and copy the exact text (including indentation)",
-    };
-  }
-  if (occurrences > 1 && !replaceAll) {
-    return {
-      ok: false,
-      error: `old_string is not unique (${occurrences} matches) — add surrounding context, or set replace_all`,
-    };
-  }
-  const updated = replaceAll
-    ? body.split(needle).join(lf(newString))
-    : body.replace(needle, lf(newString));
-  return { ok: true, updated, replaced: replaceAll ? occurrences : 1 };
-}
+/**
+ * How far a WRITE may reach.
+ *
+ * `read`/`list`/`search` are always confined to the root — they are additive on-prem (the
+ * native loop has no converged equivalent), so confining them changes nothing. Writes are
+ * different: the converged `write`/`edit` REPLACE native tools whose confinement is
+ * governed by `tools.fs.workspaceOnly`, so the provider has to be able to express BOTH
+ * settings — otherwise turning convergence on would silently re-scope every write, which
+ * is a security-boundary move disguised as an implementation swap.
+ */
+export type NodeWriteScope =
+  /** Every write path must resolve inside the workspace root. */
+  | "workspace"
+  /** Absolute (or `..`) paths outside the root are permitted; the root is still the base
+   *  for relative paths. Mirrors the native tools with `tools.fs.workspaceOnly` unset. */
+  | "unconfined";
 
 export interface NodeProviderOptions {
-  /** Absolute working-tree root; every file op is scoped inside it. */
+  /** Absolute working-tree root; reads are scoped inside it, writes per {@link scope}. */
   workspaceRoot: string;
+  /**
+   * Confinement for WRITE operations. Defaults to `"workspace"` — secure by default for
+   * any caller that does not think about it. The converged on-prem tool set passes the
+   * agent's own `tools.fs.workspaceOnly` here, so enabling convergence swaps the
+   * IMPLEMENTATION without moving the boundary. See {@link NodeWriteScope}.
+   */
+  scope?: NodeWriteScope;
   /** Override for the human-in-the-loop backend (DI seam for tests). Defaults to the
    *  process-wide {@link requestHumanInput} approval gate, which blocks until a human
    *  answers in the Builderforce portal (or auto-answers in standalone mode). */
@@ -165,8 +144,9 @@ export interface NodeProviderOptions {
 
 /**
  * Build the on-prem disk-backed {@link CapabilityProvider}. Read/list/search the working
- * tree, write/edit/delete files in place — every path guarded inside
- * {@link NodeProviderOptions.workspaceRoot} — and escalate to a human via the shared
+ * tree (always confined to {@link NodeProviderOptions.workspaceRoot}), write/edit/delete
+ * files in place (confined per {@link NodeProviderOptions.scope}), and escalate to a
+ * human via the shared
  * `human` capability (so the on-prem coding agent can run the SAME shared `ask_human`
  * tool as the cloud loop).
  */
@@ -174,6 +154,11 @@ export function buildNodeCapabilityProvider(options: NodeProviderOptions): Capab
   const root = resolvePath(options.workspaceRoot);
   const escaped = (path: string) => `'${path}' is outside the workspace`;
   const askHuman = options.requestHuman ?? requestHumanInput;
+  // Writes resolve through this; reads always use the confined `resolveInside`.
+  const resolveForWrite =
+    (options.scope ?? "workspace") === "workspace"
+      ? (p: string) => resolveInside(root, p)
+      : (p: string) => resolvePath(root, p);
 
   return {
     capabilities: NODE_SURFACE_CAPS,
@@ -229,6 +214,18 @@ export function buildNodeCapabilityProvider(options: NodeProviderOptions): Capab
           const content = await fsReadFile(abs, "utf-8");
           return { ok: true, path, content };
         } catch (err) {
+          // A raw `ENOENT: … open 'C:\Users\…\workspace\x.ts'` did two bad things:
+          // it leaked the host's ABSOLUTE path into the model's context (and every
+          // transcript), and it worded "missing file" differently from every other
+          // surface, so a prompt that recovers from `file not found` on the cloud did
+          // not recover on-prem. Both are cross-provider divergences the parity test
+          // caught. Normalize to the shared phrasing, keyed off the errno.
+          if ((err as NodeJS.ErrnoException | undefined)?.code === "ENOENT") {
+            return { ok: false, error: `file not found: ${path}` };
+          }
+          if ((err as NodeJS.ErrnoException | undefined)?.code === "EISDIR") {
+            return { ok: false, error: `'${path}' is a directory, not a file — use list_files to see its contents` };
+          }
           return { ok: false, error: err instanceof Error ? err.message : String(err) };
         }
       },
@@ -254,7 +251,7 @@ export function buildNodeCapabilityProvider(options: NodeProviderOptions): Capab
     },
     repoWrite: {
       async writeFile(path, content): Promise<RepoWriteResult> {
-        const abs = resolveInside(root, path);
+        const abs = resolveForWrite(path);
         if (!abs) {
           return { ok: false, error: escaped(path) };
         }
@@ -273,7 +270,7 @@ export function buildNodeCapabilityProvider(options: NodeProviderOptions): Capab
         }
       },
       async editFile(path, oldString, newString, replaceAll): Promise<RepoEditResult> {
-        const abs = resolveInside(root, path);
+        const abs = resolveForWrite(path);
         if (!abs) {
           return { ok: false, error: escaped(path) };
         }
@@ -283,19 +280,24 @@ export function buildNodeCapabilityProvider(options: NodeProviderOptions): Capab
         } catch {
           return { ok: false, error: `file not found: ${path}` };
         }
-        const result = applyEdit(raw, oldString, newString, replaceAll === true);
-        if (!result.ok) {
-          return { ok: false, error: result.error };
+        // The SHARED edit core, not a local copy. The copy this replaced normalized the
+        // WHOLE file to LF before writing, so a single surgical edit rewrote every line
+        // ending in a CRLF working tree and produced a huge spurious diff — and its error
+        // wording differed from the other two providers, so a prompt that recovers from a
+        // failed edit on the cloud did not recover on-prem.
+        const result = applyStringEdit(raw, oldString, newString, replaceAll === true);
+        if (!result.ok || result.content === undefined) {
+          return { ok: false, error: result.error ?? "edit failed" };
         }
         try {
-          await fsWriteFile(abs, result.updated, "utf-8");
+          await fsWriteFile(abs, result.content, "utf-8");
           return { ok: true, change: "modified", replaced: result.replaced };
         } catch (err) {
           return { ok: false, error: err instanceof Error ? err.message : String(err) };
         }
       },
       async deleteFile(path): Promise<RepoDeleteResult> {
-        const abs = resolveInside(root, path);
+        const abs = resolveForWrite(path);
         if (!abs) {
           return { ok: false, error: escaped(path) };
         }

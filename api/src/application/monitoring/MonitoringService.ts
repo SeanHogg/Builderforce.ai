@@ -19,6 +19,8 @@ import {
   monitoringBoards, monitors, monitorEvents, prodIncidents, incidentEvents,
 } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
+import { bumpCacheVersion, getCacheVersion, getOrSetCached } from '../../infrastructure/cache/readThroughCache';
+import { monitoringVersionKey, incidentVersionKey } from '../insights/versionKeys';
 import { IncidentService } from '../incident/IncidentService';
 import { EscalationService } from '../incident/EscalationService';
 import { findTenantIncidentManagerRef, dispatchIncidentTriage } from '../incident/incidentDispatch';
@@ -84,6 +86,33 @@ const DEPLOYED_BACKEND_SYSTEM = 'project-backend';
 
 export class MonitoringService {
   constructor(private readonly db: Db) {}
+
+  // ── Cached reads + invalidation ────────────────────────────────────────────
+  // These lived in `monitoringRoutes.ts`, which meant the HTTP layer knew the key
+  // shape and the version tokens, and the unauthenticated webhook route had to
+  // remember to bump them after a signal. Both now belong to the service that
+  // owns the data: every writer invalidates, and there is one place to look.
+
+  /** Age out both cached reads for a tenant. Called by every write below. */
+  invalidate(env: Env, tenantId: number): Promise<unknown> {
+    return bumpCacheVersion(env, monitoringVersionKey(tenantId));
+  }
+
+  /** Incident + monitor rollup, keyed on BOTH version tokens because it folds
+   *  incident state in — an incident write must refresh it too. */
+  async getCachedReport(env: Env, tenantId: number) {
+    const [mv, iv] = await Promise.all([
+      getCacheVersion(env, monitoringVersionKey(tenantId)),
+      getCacheVersion(env, incidentVersionKey(tenantId)),
+    ]);
+    return getOrSetCached(env, `monitoring:report:${tenantId}:v:${mv}:${iv}`, () => this.getReport(tenantId));
+  }
+
+  /** Board list with its per-board monitor rollup. */
+  async getCachedBoards(env: Env, tenantId: number) {
+    const ver = await getCacheVersion(env, monitoringVersionKey(tenantId));
+    return getOrSetCached(env, `monitoring:boards:${tenantId}:v:${ver}`, () => this.listBoards(tenantId));
+  }
 
   // ── Boards ─────────────────────────────────────────────────────────────────
   async createBoard(tenantId: number, input: { name: string; projectId?: number | null; imageKey?: string | null; imageWidth?: number | null; imageHeight?: number | null }) {
@@ -473,6 +502,9 @@ export class MonitoringService {
     }
     await this.applyResult(tenantId, { ...monitor, lastSignalAt: now }, result, env, signal.message ?? undefined);
     const [after] = await this.db.select({ status: monitors.status }).from(monitors).where(scopedToTenant(monitors, tenantId, eq(monitors.id, monitorId))).limit(1);
+    // Invalidate here rather than at the caller: a signal changes the rollup, and
+    // the webhook route is unauthenticated and easy to forget.
+    await this.invalidate(env, tenantId).catch(() => undefined);
     return { status: (after?.status ?? 'unknown') as MonitorStatus };
   }
 

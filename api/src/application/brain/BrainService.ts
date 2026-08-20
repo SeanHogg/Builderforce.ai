@@ -16,7 +16,8 @@ import {
   tenantMembers,
 } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
-import { ideProxy, explicitModelPreemptsByo, readProxyChoice, codingModelsForPlan, byoAutoSeedModels, type LlmProxyService } from '../llm/LlmProxyService';
+import { ideProxy, explicitModelPreemptsByo, readProxyChoice, codingModelsForPlan, byoAutoSeedModels, newTraceId, type ChatCompletionRequest, type LlmProxyService, type ProxyResult } from '../llm/LlmProxyService';
+import { logTrace } from '../llm/traceLogger';
 import { compactMessages, buildGatewaySummarizer, CLOUD_COMPACT_DEFAULTS } from '../llm/compactMessages';
 import { classifyReplyAccount, buildReplyProvenance, vendorAccountLabel } from '../llm/replyProvenance';
 import { recordActivity, cloudAgentActor, buildModelActivityMetadata } from '../activity/activityLog';
@@ -308,6 +309,30 @@ type MessageFeedback = 'up' | 'down' | null;
  * Encapsulates ownership checks, CRUD, LLM summarisation and project-memory
  * consolidation. The presentation layer delegates here and only maps HTTP ↔ DTO.
  */
+/**
+ * Per-call context for {@link BrainService.completeTraced} — the request-scoped
+ * facts a Brain LLM call needs in order to be billed AND traced.
+ *
+ * Deliberately a per-call object rather than constructor state: this service is
+ * constructed once per worker with only a `Db`, and its `env` / `ExecutionContext`
+ * belong to a REQUEST. `executionCtx` is optional because not every entry point has
+ * one (a cron-driven consolidation does not); the trace logger falls back to a
+ * floating best-effort write rather than skipping the row.
+ */
+interface BrainCallContext {
+  env: Env;
+  executionCtx?: ExecutionContext;
+  /** Operator key used for the usage row's pricing env (see recordUsage). */
+  apiKey: string | undefined;
+  tenantId: number;
+  userId?: string | null;
+  /** Ledger + trace `use_case` (brain_agent_reply | brain_summary | brain_project_memory). */
+  useCase: string;
+  chatId?: number | null;
+  projectId?: number | null;
+  agentRef?: string | null;
+}
+
 export class BrainService {
   constructor(private readonly db: Db) {}
 
@@ -435,9 +460,63 @@ export class BrainService {
   /** Record a Brain summarization call in the usage ledger [1310] (best-effort,
    *  fire-and-forget; no-ops without usage). These non-streaming background calls
    *  were previously invisible to billing. The apiKey-only env is enough for the
-   *  usage row; pricing lookup is best-effort. */
-  private recordUsage(apiKey: string | undefined, tenantId: number, useCase: string, result: Parameters<typeof recordProxyUsage>[2]['result']): void {
-    void recordProxyUsage(this.db, { OPENROUTER_API_KEY: apiKey } as Env, { tenantId, useCase, result });
+   *  usage row; pricing lookup is best-effort. `traceId` links the billing row to
+   *  the diagnostic trace {@link completeTraced} wrote for the same call. */
+  private recordUsage(apiKey: string | undefined, tenantId: number, useCase: string, result: Parameters<typeof recordProxyUsage>[2]['result'], traceId?: string): void {
+    void recordProxyUsage(this.db, { OPENROUTER_API_KEY: apiKey } as Env, { tenantId, useCase, result, ...(traceId ? { traceId } : {}) });
+  }
+
+  /**
+   * THE Brain LLM call. Dispatch + usage row + diagnostic trace, in one place.
+   *
+   * Every `complete()` in this service used to be a bare proxy call followed by a
+   * `recordUsage`, and none of them wrote an `llm_traces` row — so the Brain (agent
+   * replies, chat summaries, project-memory consolidation, agentHost-session
+   * summaries) was the largest untraced LLM caller in the system. Its calls were
+   * billed and invisible: when a reply came back empty there was no row naming the
+   * model, the cascade it walked, or the body it returned.
+   *
+   * The reason it stayed untraced was that `logTrace` needs a request context and
+   * this service has none. It is threaded the same way the rest of the service
+   * already threads one — a per-call {@link BrainCallContext} carrying `env` and the
+   * OPTIONAL `executionCtx` the route holds ({@link agentReply} already took exactly
+   * that shape) — not a module global. When no context reaches us the trace still
+   * writes, best-effort, via the trace logger's own fallback.
+   *
+   * Tracing stays off the critical path: the response is CLONED before anyone reads
+   * it (so the caller's `readProxyChoice` is untouched), the clone's parse cannot
+   * throw, and the insert is fire-and-forget.
+   */
+  private async completeTraced(
+    service: LlmProxyService,
+    request: ChatCompletionRequest,
+    call: BrainCallContext,
+  ): Promise<ProxyResult> {
+    const traceId = newTraceId();
+    const result = await service.complete(request, undefined, traceId);
+    // Clone BEFORE the caller reads the body — a Response can only be consumed once.
+    const cloned = (() => { try { return result.response.clone(); } catch { return null; } })();
+    this.recordUsage(call.apiKey, call.tenantId, call.useCase, result, traceId);
+    const responseBody = cloned ? await cloned.json().catch(() => null) : null;
+    logTrace(call.env, call.executionCtx, {
+      traceId,
+      surface: 'brain',
+      tenantId: call.tenantId,
+      userId: call.userId ?? null,
+      result,
+      usage: result.usage ?? null,
+      streamed: false,
+      useCase: call.useCase,
+      requestBody: request as unknown as Record<string, unknown>,
+      callerMetadata: {
+        ...(call.chatId != null ? { chatId: call.chatId } : {}),
+        ...(call.projectId != null ? { projectId: call.projectId } : {}),
+        ...(call.agentRef ? { agentRef: call.agentRef } : {}),
+      },
+      responseBody,
+      errorMessage: result.response.status >= 400 ? `gateway ${result.response.status}` : null,
+    });
+    return result;
   }
 
   // -----------------------------------------------------------------------
@@ -1226,18 +1305,25 @@ export class BrainService {
     // MIDDLE into a concise memory (system + task + recent turns kept verbatim, tool
     // pairing preserved), falling back to elision if the summarizer is unavailable.
     const summarize = buildGatewaySummarizer(env);
+    // ONE call context for every model turn this reply makes — so the tool loop, the
+    // forced synthesis and the Evermind regeneration are all billed AND traced
+    // identically, under the same chat/project/agent attribution.
+    const call: BrainCallContext = {
+      env, ...(opts?.executionCtx ? { executionCtx: opts.executionCtx } : {}),
+      apiKey, tenantId, userId, useCase: 'brain_agent_reply',
+      chatId, projectId: projectHint, agentRef: input.agentRef,
+    };
     for (let i = 0; i < MAX_ITERS; i++) {
       iterations = i + 1;
       const compaction = await compactMessages(convo, CLOUD_COMPACT_DEFAULTS, summarize);
       if (compaction.compacted) convo.splice(0, convo.length, ...compaction.messages);
-      const result = await service.complete({
+      const result = await this.completeTraced(service, {
         model: activeModel,
         messages: convo as never,
         tools,
         temperature: replyTemp,
         max_tokens: 1200,
-      });
-      this.recordUsage(apiKey, tenantId, 'brain_agent_reply', result);
+      } as never, call);
       lastModel = readModel(result) || lastModel;
       lastVendor = readVendor(result) || lastVendor;
       lastByoFunded = readByoFunded(result);
@@ -1394,7 +1480,7 @@ export class BrainService {
     // model that returned an empty turn): force ONE final synthesis WITHOUT tools so
     // the agent always speaks — a bounded extra call, not another tool round.
     if (!text) {
-      const finalResult = await service.complete({
+      const finalResult = await this.completeTraced(service, {
         // `activeModel`, NOT the original pin: when the loop above failed over, the pin
         // names a model that has already proven it cannot do this turn, and re-pinning it
         // for the one call that must produce the user's answer throws the failover away.
@@ -1402,8 +1488,7 @@ export class BrainService {
         messages: [...convo, { role: 'user', content: `Now write your reply to the team AS ${agentName}: plain prose, first person, no tool calls. Summarise what you found or did.` }] as never,
         temperature: replyTemp,
         max_tokens: 1000,
-      });
-      this.recordUsage(apiKey, tenantId, 'brain_agent_reply', finalResult);
+      } as never, call);
       lastModel = readModel(finalResult) || lastModel;
       lastVendor = readVendor(finalResult) || lastVendor;
       lastByoFunded = readByoFunded(finalResult);
@@ -1447,13 +1532,12 @@ export class BrainService {
     if (text && projectHint != null) {
       const head = await getProjectEvermindHead(env, this.db, tenantId, projectHint).catch(() => null);
       if (head?.inferenceEnabled && head.version >= 1 && head.ref) {
-        const evResult = await service.complete({
+        const evResult = await this.completeTraced(service, {
           model: `evermind/${head.ref}`,
           messages: [...convo, { role: 'user', content: `Write your reply to the team AS ${agentName}: plain prose, first person, no tool calls. Summarise what you found or did.` }] as never,
           temperature: replyTemp,
           max_tokens: 1000,
-        });
-        this.recordUsage(apiKey, tenantId, 'brain_agent_reply', evResult);
+        } as never, call);
         const evModel = readModel(evResult);
         const evChoice = await readProxyChoice(evResult);
         // Adopt the Evermind turn ONLY when it served a substantive AND coherent reply
@@ -1821,7 +1905,9 @@ export class BrainService {
   // Summarisation
   // -----------------------------------------------------------------------
 
-  async summarizeChat(chatId: number, tenantId: number, userId: string, env: Env) {
+  /** `opts.executionCtx` is the request context the trace write rides on. Optional:
+   *  a caller without one (cron/internal) still traces, best-effort. */
+  async summarizeChat(chatId: number, tenantId: number, userId: string, env: Env, opts?: { executionCtx?: ExecutionContext }) {
     const apiKey = env.OPENROUTER_API_KEY;
     const chat = await this.canAccessChat(chatId, tenantId, userId, {
       projectId: brainChats.projectId,
@@ -1849,15 +1935,18 @@ export class BrainService {
 
     const service = await this.buildTenantLlmService(env, tenantId);
 
-    const result = await service.complete({
+    const result = await this.completeTraced(service, {
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: transcript },
       ],
       temperature: 0.2,
       max_tokens: 800,
+    } as never, {
+      env, ...(opts?.executionCtx ? { executionCtx: opts.executionCtx } : {}),
+      apiKey, tenantId, userId, useCase: 'brain_summary',
+      chatId, projectId: chat.projectId,
     });
-    this.recordUsage(apiKey, tenantId, 'brain_summary', result);
 
     const { content: summary } = await readProxyChoice(result);
 
@@ -1925,7 +2014,9 @@ export class BrainService {
   // Project memory consolidation
   // -----------------------------------------------------------------------
 
-  async consolidateProjectMemory(tenantId: number, projectId: number, env: Env) {
+  /** `opts.executionCtx` is the request context the trace write rides on. Optional:
+   *  a caller without one (cron/internal) still traces, best-effort. */
+  async consolidateProjectMemory(tenantId: number, projectId: number, env: Env, opts?: { executionCtx?: ExecutionContext }) {
     const apiKey = env.OPENROUTER_API_KEY;
     const proj = await this.verifyProjectInTenant(projectId, tenantId);
     if (!proj) return { error: 'Project not found' as const };
@@ -1955,15 +2046,17 @@ export class BrainService {
 
     const service = await this.buildTenantLlmService(env, tenantId);
 
-    const result = await service.complete({
+    const result = await this.completeTraced(service, {
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: memoriesText },
       ],
       temperature: 0.2,
       max_tokens: 1200,
+    } as never, {
+      env, ...(opts?.executionCtx ? { executionCtx: opts.executionCtx } : {}),
+      apiKey, tenantId, useCase: 'brain_project_memory', projectId,
     });
-    this.recordUsage(apiKey, tenantId, 'brain_project_memory', result);
 
     const { content: consolidatedSummary } = await readProxyChoice(result);
 
@@ -1986,7 +2079,9 @@ export class BrainService {
   // AgentHost session summarisation — bridges agentHost chat history into brain memory
   // -----------------------------------------------------------------------
 
-  async summarizeAgentHostSession(sessionId: number, tenantId: number, env: Env) {
+  /** `opts.executionCtx` is the request context the trace write rides on. Optional:
+   *  a caller without one (cron/internal) still traces, best-effort. */
+  async summarizeAgentHostSession(sessionId: number, tenantId: number, env: Env, opts?: { executionCtx?: ExecutionContext }) {
     const apiKey = env.OPENROUTER_API_KEY;
     // Verify session belongs to tenant
     const [session] = await this.db
@@ -2022,15 +2117,17 @@ export class BrainService {
 
     const service = await this.buildTenantLlmService(env, tenantId);
 
-    const result = await service.complete({
+    const result = await this.completeTraced(service, {
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: transcript },
       ],
       temperature: 0.2,
       max_tokens: 800,
+    } as never, {
+      env, ...(opts?.executionCtx ? { executionCtx: opts.executionCtx } : {}),
+      apiKey, tenantId, useCase: 'brain_summary', projectId: session.projectId,
     });
-    this.recordUsage(apiKey, tenantId, 'brain_summary', result);
 
     const { content: summary } = await readProxyChoice(result);
 

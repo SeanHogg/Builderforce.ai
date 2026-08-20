@@ -17,7 +17,7 @@ import { ideAgents, memberProfiles, projectRoleAssignments, users } from '../../
 import { readWorkforceMetricsVersion } from '../metrics/workforceMetrics';
 import { BUILTIN_ROLES } from './roleCatalog';
 import { agentMatchesRole } from './roleMatch';
-import type { ActionType } from '../llm/actionTypes';
+import type { ActionType } from '@builderforce/learned-routing';
 
 /**
  * Kanban role key → agent-runtime persona name (agent-runtime `agent-roles.ts`).
@@ -68,6 +68,11 @@ export function personaForRole(roleKey: string): string {
  */
 export const BUILTIN_KIND_ROLE_KEYS: Readonly<Record<string, string[]>> = {
   validator: ['validator', 'team-lead', 'code-reviewer', 'qa-tester', 'business-analyst'],
+  // The Agentic Tester owns qa-tester outright. Validator keeps it too, on
+  // purpose: this is a capability list, not an exclusive assignment, and the
+  // acceptance review it performs IS a QA act. Two capable agents let the
+  // assignment pick, rather than leaving the role unfillable when one is busy.
+  qa_tester: ['qa-tester'],
   security: ['security'],
   product_manager: ['product-manager', 'product-owner', 'business-analyst'],
   designer: ['designer'],

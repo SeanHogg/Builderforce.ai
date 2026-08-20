@@ -52,6 +52,9 @@ export interface ProjectDetailsPanelProps {
   /** When opening on the diagnostics tab from a notification deep-link, the audit
    *  whose results should auto-open. */
   initialAuditId?: string | null;
+  /** When opening on the PRDs tab, the spec KIND whose document should auto-open
+   *  (e.g. 'architecture' for "view the arch analysis"). */
+  initialSpecKind?: string | null;
   /** Called when project is updated (e.g. name, description). */
   onProjectUpdate?: (project: Project) => void;
   /** Called when the user deletes the project. Component will prompt for confirmation. */
@@ -83,8 +86,12 @@ type DetailsFocusTarget = 'edit-description' | 'edit-due-date' | 'project-initia
  * re-selecting the tab the report already lives on. `edit` opens the overview
  * edit form first (the field only exists in edit mode). `workflows` is omitted —
  * the report renders that one as a link to the top-level /workflows route.
+ *
+ * `specKind` is the PRDs-tab equivalent of `focus`: the architecture fix used to
+ * drop the user on a list of every PRD the project has and leave them to find
+ * the one the report was talking about. Naming the kind opens that document.
  */
-const REC_TARGET: Record<string, { tab: ProjectPanelTab; focus?: DetailsFocusTarget; edit?: boolean }> = {
+const REC_TARGET: Record<string, { tab: ProjectPanelTab; focus?: DetailsFocusTarget; edit?: boolean; specKind?: string }> = {
   vision: { tab: 'details', focus: 'edit-description', edit: true },
   goals: { tab: 'details', focus: 'project-initiative-section' },
   deadline: { tab: 'details', focus: 'edit-due-date', edit: true },
@@ -95,7 +102,7 @@ const REC_TARGET: Record<string, { tab: ProjectPanelTab; focus?: DetailsFocusTar
   blocked: { tab: 'taskMgmt' },
   stalled: { tab: 'taskMgmt' },
   owner: { tab: 'capabilities' },
-  architecture: { tab: 'prds' },
+  architecture: { tab: 'prds', specKind: 'architecture' },
 };
 
 const panelOverlayStyle: React.CSSProperties = {
@@ -131,6 +138,7 @@ export function ProjectDetailsPanel({
   onClose,
   initialTab = 'analytics',
   initialAuditId,
+  initialSpecKind = null,
   onProjectUpdate,
   onDelete,
 }: ProjectDetailsPanelProps) {
@@ -151,6 +159,10 @@ export function ProjectDetailsPanel({
   const [showConfirm, setShowConfirm] = useState(false);
   // A details-tab field a pending "Fix" should scroll to / focus once it renders.
   const [pendingFocus, setPendingFocus] = useState<DetailsFocusTarget | null>(null);
+  // A PRDs-tab document a pending "Fix" (or the opening caller) should open. The
+  // PRDs list reports back once it has acted on it, and this clears — so the
+  // drawer opens exactly once rather than on every re-render of the panel.
+  const [pendingSpecKind, setPendingSpecKind] = useState<string | null>(initialSpecKind);
 
   /** Localized status label; falls back to the raw value for unknown statuses. */
   const statusLabel = (s: string) =>
@@ -159,6 +171,12 @@ export function ProjectDetailsPanel({
   useEffect(() => {
     if (open) setActiveTab(initialTab);
   }, [open, initialTab]);
+
+  // Re-arm the requested document each time the panel is opened, so re-opening
+  // from the same affordance lands on it again after the first visit consumed it.
+  useEffect(() => {
+    if (open) setPendingSpecKind(initialSpecKind);
+  }, [open, initialSpecKind]);
 
   useEffect(() => {
     if (activeTab !== 'details' && editingProject) {
@@ -228,6 +246,9 @@ export function ProjectDetailsPanel({
     const target = REC_TARGET[rec.key];
     if (!target) return;
     setActiveTab(target.tab);
+    // Set before the details-only early return: a PRDs fix names the document it
+    // is about, and the tab it lands on is only half of "take me to the fix".
+    if (target.specKind) setPendingSpecKind(target.specKind);
     if (target.tab !== 'details') return;
     if (target.edit) setEditingProject(true);
     if (target.focus) setPendingFocus(target.focus);
@@ -674,7 +695,12 @@ export function ProjectDetailsPanel({
           )}
 
           {activeTab === 'prds' && (
-            <PRDsContent projectId={project.id} projectName={project.name} />
+            <PRDsContent
+              projectId={project.id}
+              projectName={project.name}
+              initialSpecKind={pendingSpecKind}
+              onInitialSpecConsumed={() => setPendingSpecKind(null)}
+            />
           )}
 
           {activeTab === 'diagnostics' && (

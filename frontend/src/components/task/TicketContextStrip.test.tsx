@@ -77,6 +77,25 @@ describe('TaskBadges', () => {
     render(<TaskBadges task={makeTask()} participants={{ completed: 0, required: 0, percent: 100 }} />);
     expect(screen.queryByText('0/0')).not.toBeInTheDocument();
   });
+
+  /**
+   * A failing PR-branch build used to surface ONLY on the ticket's Pull request tab, so
+   * the board — the one surface a person scans — showed a healthy-looking card over a
+   * branch that could not build. The badge rides the same shared row as the rest, which
+   * is what stops the card and the drawer disagreeing about it.
+   */
+  it('renders the build verdict beside the other state badges', () => {
+    render(<TaskBadges task={makeTask({ buildStatus: 'failing' })} />);
+    expect(screen.getByText(/board\.build\.short\.failing/)).toBeInTheDocument();
+  });
+
+  it('says NOTHING when the build has never reported — a green badge would be a lie', () => {
+    for (const status of [undefined, null, 'unknown'] as const) {
+      const { unmount } = render(<TaskBadges task={makeTask({ buildStatus: status })} />);
+      expect(screen.queryByText(/board\.build\.short/)).not.toBeInTheDocument();
+      unmount();
+    }
+  });
 });
 
 describe('TicketContextStrip', () => {

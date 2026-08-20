@@ -37,6 +37,43 @@ export interface EvermindRecentEntry {
   attemptedTeacherModel?: string;
 }
 
+/** What a teach POST can tell the caller: the id its contribution was queued under.
+ *  Absent on a host (or server) that predates the pollable status channel. */
+export interface EvermindTeachResult {
+  contributionId?: number;
+}
+
+/**
+ * How one enqueued contribution ended up. `pending` is transient; every other state is
+ * terminal, so a poller has a defined stopping condition.
+ *
+ * `merged` means it is IN THE WEIGHTS — including when a pinned teacher faulted, since
+ * the contribution still learns un-distilled. `dropped` means a merge consumed it and it
+ * never became a memory (stale base, no trainable window, non-LM head). `unknown` is the
+ * server declining to answer (no coordinator binding, or an unreadable reply).
+ */
+export type EvermindContributionState = 'pending' | 'merged' | 'dropped' | 'unknown';
+
+/**
+ * One contribution's status. The provenance fields are the RING'S, deliberately —
+ * {@link EvermindContributionStatus} is graded by the same `evermindLearnedStatus` that
+ * grades a Learnings row, so a teach's reported outcome and that memory's own row can
+ * never tell the operator two different stories.
+ */
+export interface EvermindContributionStatus {
+  contributionId: number;
+  state: EvermindContributionState;
+  kind?: 'text' | 'delta';
+  /** The version it merged INTO (present only when `merged`). */
+  version?: number;
+  distilled?: boolean;
+  teacherModel?: string;
+  /** {@link EvermindTeacherSkipReason} — why a teacher did not shape this. */
+  skipReason?: string;
+  skipDetail?: string;
+  attemptedTeacherModel?: string;
+}
+
 /** A scored recall match — a learned memory plus its 0..1 relevance to a task. */
 export interface EvermindValidateMatch extends EvermindRecentEntry {
   /** Lexical relevance of this memory to the validated task, 0..1. */
@@ -278,8 +315,23 @@ export interface EvermindConsoleAdapter {
   setInference(enabled: boolean): Promise<void>;
   setMode(mode: EvermindMode): Promise<void>;
   setTeacher(model: string | null): Promise<void>;
-  /** Teach from raw text (a transcript / exemplar); `prompt` is the task it answered. */
-  teach(text: string, prompt?: string): Promise<void>;
+  /**
+   * Teach from raw text (a transcript / exemplar); `prompt` is the task it answered.
+   *
+   * Resolving is ACCEPTANCE, never success: the contribution is queued and the frontier
+   * teacher only runs later, in the coordinator's debounced merge. A host that can
+   * return the server's contribution id should — that is what lets the console poll
+   * {@link EvermindConsoleAdapter.teachStatus} and replace its optimistic toast with
+   * what actually happened. Returning `void` keeps the old optimistic behaviour.
+   */
+  teach(text: string, prompt?: string): Promise<EvermindTeachResult | void>;
+  /**
+   * OPTIONAL — poll one contribution's outcome by the id {@link teach} returned. When a
+   * host implements BOTH, the console resolves "Queued for learning" into the real
+   * result: taught-and-distilled, taught-without-a-teacher, or a named teacher fault.
+   * A host that omits it keeps the optimistic toast.
+   */
+  teachStatus?(contributionId: number): Promise<EvermindContributionStatus>;
   /** Force a merge now; returns how many merged + the resulting version. */
   flush(): Promise<{ merged: number; version: number }>;
   /** Validate a candidate task: which learned memories would answer it (ranked). */
@@ -396,7 +448,18 @@ export interface EvermindConsoleLabels {
   teachTextPlaceholder: string;
   teachCta: string;
   teaching: string;
+  /** INTERIM state: the contribution is queued. Resolved by the status poll below. */
   taught: string;
+  /** Resolved: a frontier teacher answered and the model learned that answer. */
+  taughtDistilled: (model: string, version: number) => string;
+  /** Resolved: learned from the raw text with no teacher pinned — a legitimate mode. */
+  taughtSelf: (version: number) => string;
+  /** Resolved: it learned, but the PINNED teacher produced nothing. Actionable. */
+  taughtTeacherFault: (model: string, reason: string) => string;
+  /** Resolved: a merge consumed it and it never became a memory. */
+  taughtDropped: string;
+  /** The poll gave up while still queued — honest about not knowing yet, not a failure. */
+  taughtStillPending: string;
   // Teach-a-task (shown instead of teach-from-transcript when a teacher is pinned)
   teachTeacherTitle: string;
   teachTeacherHint: (model: string) => string;
@@ -589,6 +652,11 @@ export const DEFAULT_EVERMIND_LABELS: EvermindConsoleLabels = {
   teachCta: 'Teach',
   teaching: 'Teaching…',
   taught: 'Queued for learning.',
+  taughtDistilled: (m, v) => `Taught: ${m} answered it and the model learned that answer (v${v}).`,
+  taughtSelf: (v) => `Taught: learned from your text, with no teacher model (v${v}).`,
+  taughtTeacherFault: (m, reason) => `Learned, but the teacher ${m} produced nothing (${reason}) — so the model learned your raw text, not an ideal answer.`,
+  taughtDropped: 'Not learned: the merge could not use this contribution.',
+  taughtStillPending: 'Still queued — this will merge on the next learning pass.',
   teachTeacherTitle: 'Teach a task',
   teachTeacherHint: (m) => `Describe a task and ${m} answers it — your Evermind learns from the ideal answer. No transcript needed.`,
   teachTaskPlaceholder: 'Describe a task to teach — the teacher will answer it…',

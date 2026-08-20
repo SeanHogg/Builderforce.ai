@@ -21,12 +21,9 @@
 
 import { Hono } from 'hono';
 import { authMiddleware } from '../middleware/authMiddleware';
-import { buildConsumptionSnapshot } from '../../application/consumption/meters';
-import { resolveSuperadminUnlimited } from '../../application/llm/tenantTokenAvailability';
-import { utcMonthStart, utcNextMonthStart } from '../../application/llm/tokenUsage';
+import { getConsumptionSnapshot } from '../../application/consumption/meters';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
-import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 
 export function createConsumptionRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -36,24 +33,7 @@ export function createConsumptionRoutes(db: Db): Hono<HonoEnv> {
   router.get('/', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const userId = c.get('userId') as string | undefined;
-
-    const monthStart = utcMonthStart();
-    const monthEnd = utcNextMonthStart();
-    const monthKey = monthStart.toISOString().slice(0, 7); // YYYY-MM
-
-    // Resolved BEFORE the cache (not inside it) for two reasons: it selects the
-    // cache bucket, and it must never be inherited from another caller's entry —
-    // a superadmin's unlimited snapshot must not be served to a capped member.
-    const isSuperadmin = await resolveSuperadminUnlimited(db, tenantId, { actingUserId: userId ?? null }, c.env as Env);
-
-    const payload = await getOrSetCached(
-      c.env as Env,
-      `consumption-meter:v5:${tenantId}:${monthKey}:${isSuperadmin ? 'sa' : 'plan'}`,
-      () => buildConsumptionSnapshot(db, tenantId, monthStart, monthEnd, c.env as Env, { actingIsSuperadmin: isSuperadmin }),
-      { kvTtlSeconds: 60, l1TtlMs: 30_000 },
-    );
-
-    return c.json(payload);
+    return c.json(await getConsumptionSnapshot(db, c.env as Env, tenantId, userId ?? null));
   });
 
   return router;

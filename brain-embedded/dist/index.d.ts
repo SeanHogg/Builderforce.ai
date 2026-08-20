@@ -618,6 +618,132 @@ declare function isTruncatedTurn(finishReason: string | null | undefined): boole
 declare function isMalformedToolCall(finishReason: string | null | undefined): boolean;
 
 /**
+ * composerDirectives — the ONE compiler from the composer's toggles (Effort,
+ * Browse-the-web) to the extra system-prompt directives a turn carries.
+ *
+ * ## Why it lives here
+ *
+ * There were two copies: `frontend/src/lib/brain/platformPrompt.ts` and a module-private
+ * one inside `clients/vscode/webview/src/App.tsx`. They had already drifted three ways,
+ * and each drift is a behaviour difference a user can feel:
+ *
+ *  1. **Effort prose vs. real params.** The web copy hardcoded the two effort sentences;
+ *     the VS Code copy derived them from {@link effortProfile}, the same table that sets
+ *     `max_tokens` and `reasoning.level`. Hardcoded prose can contradict the params it is
+ *     supposed to describe. This version always derives.
+ *  2. **A "think step by step" sentence.** The web copy still emitted it even though the
+ *     same component sends a structured `reasoning.level` on the wire — two mechanisms for
+ *     one intent, the weaker one invisible in the request. Dropped: Thinking is a real
+ *     field ({@link reasoningForRun}), not a sentence.
+ *  3. **A web-fetch tool name that does not exist.** One copy said `` `fetch_url` ``, the
+ *     other `` `web.fetch` ``. The tool is advertised to the model as
+ *     {@link WEB_FETCH_TOOL_NAME}. Naming a tool the model was never given is the exact
+ *     documented failure that `api/scripts/check-prompt-tool-names.mjs` exists to stop —
+ *     the model narrates a call it cannot make and the turn "succeeds". Both copies were
+ *     wrong; this one is right, in one place.
+ *
+ * Pure, host-agnostic, no React: the two surfaces call this and render nothing of their
+ * own.
+ */
+
+/**
+ * The name the platform's web-fetch tool is ADVERTISED to the model under.
+ *
+ * The catalog id is `web.fetch`; the gateway advertises every builtin as
+ * `builtin_<id with non-alphanumerics → _>` (api `toolNaming.ts` `advertisedName`). A
+ * prompt must name the ADVERTISED name — a prompt naming the catalog id hands the model a
+ * string that appears nowhere in its tool list, and the model responds by describing the
+ * call instead of making it, with no error anywhere in the loop.
+ */
+declare const WEB_FETCH_TOOL_NAME = "builtin_web_fetch";
+/** The composer toggles that compile into prompt directives. */
+interface ComposerDirectiveOptions {
+    /** Effort level; `balanced` (or absent) is neutral and contributes nothing. */
+    effort?: Effort;
+    /** Whether the "Browse the web" toggle is on for this turn. */
+    web?: boolean;
+}
+/**
+ * Compile the composer toggles into extra system-prompt directives, folded into the
+ * Brain's ambient system context so a toggle actually changes how the next turn runs.
+ *
+ * Returns `''` when nothing is set — the neutral default, which must add no text at all
+ * so a default turn's prompt is byte-identical to one from before the feature existed.
+ * Blocks are joined with a blank line so each directive reads as its own instruction.
+ */
+declare function buildComposerDirectives(o: ComposerDirectiveOptions): string;
+
+/**
+ * useToolConfirmationGate — the ONE human-in-the-loop approval gate for the Brain.
+ *
+ * ## The subtlety this exists to preserve
+ *
+ * `needsConfirm` is captured ONCE, at run start, by the tool loop. So the flag it reads
+ * must be a REF, not captured state: with plain state the callback the run is holding
+ * keeps the value it had when the run began, and a user who ticks "auto-approve" mid-run
+ * is prompted for every remaining tool call anyway — the reported "I checked the box and
+ * still got three prompts" bug. The ref is the source of truth; the returned
+ * `autoApprove` state exists only to drive the toggle's own rendering.
+ *
+ * That is exactly the kind of non-obvious invariant that does not survive being
+ * hand-copied, and it was hand-copied: the web `BrainPanel` and the VS Code webview each
+ * had their own ~25-line version. They had already drifted — the predicate's operands
+ * were in opposite order, and only one of them persisted the setting — so the same
+ * product decision ("does auto-approve stick between sessions?") was answered differently
+ * on each surface by accident rather than on purpose.
+ *
+ * ## What is shared and what is injected
+ *
+ * The GATE LOGIC is shared: ref-backed liveness, the `mutating && !autoApprove` predicate,
+ * and a referentially stable `needsConfirm`. PERSISTENCE is injected, because it is a real
+ * per-host decision — a browser has `localStorage` scoped to the user's profile, a VS Code
+ * webview's storage is partitioned and may be blocked outright. A host that passes no
+ * `persistence` simply starts from `defaultOn` each session, which is a policy, not a
+ * missing feature.
+ */
+/** Reads and writes the persisted auto-approve preference for one host. */
+interface ToolConfirmationPersistence {
+    /** Current stored preference, or `undefined` when nothing has been stored. */
+    read(): boolean | undefined;
+    /** Persist the preference. Must never throw — storage can be blocked. */
+    write(on: boolean): void;
+}
+interface ToolConfirmationGateOptions {
+    /**
+     * Does this call mutate anything? Supplied by the host's tool registry — normally
+     * `isMutating` from `useBrainActions()`. A throwing predicate must be treated as
+     * mutating by its implementation (fail safe), which `BrainActionsContext` already does.
+     */
+    isMutating: (name: string, args: unknown) => boolean;
+    /** Where to persist the preference. Omit for a session-only gate. */
+    persistence?: ToolConfirmationPersistence;
+    /** Value used when nothing is persisted yet. Defaults to `false` (always confirm). */
+    defaultOn?: boolean;
+}
+interface ToolConfirmationGate {
+    /** Whether auto-approve is on — for rendering the toggle ONLY, never for the gate. */
+    autoApprove: boolean;
+    /** Flip auto-approve. Takes effect immediately, including for a run already in flight. */
+    setAutoApprove: (on: boolean) => void;
+    /**
+     * The predicate handed to `useBrainConversation({ needsConfirm })`. Referentially
+     * stable across auto-approve changes — deliberately, so toggling it does not tear down
+     * and restart the conversation.
+     */
+    needsConfirm: (req: {
+        name: string;
+        args: unknown;
+    }) => boolean;
+}
+declare function useToolConfirmationGate(options: ToolConfirmationGateOptions): ToolConfirmationGate;
+/**
+ * A `localStorage`-backed {@link ToolConfirmationPersistence}, guarded so a blocked or
+ * partitioned store degrades to "not persisted" instead of throwing during render.
+ * `'1'`/`'0'` rather than JSON so an existing stored value keeps its meaning.
+ */
+declare function localStorageConfirmationPersistence(key: string): ToolConfirmationPersistence;
+
+/**
  * Client-side image preparation for vision messages.
  *
  * Turns a user-picked / pasted image File into a `data:` URL the gateway can
@@ -1956,6 +2082,16 @@ interface BrainRunRequest {
      * than silently losing their ticket lineage.
      */
     chatMode?: ChatMode;
+    /**
+     * Tool-iteration ceiling for THIS run (one iteration = one model turn, which may
+     * batch several tool calls). Omit to use the shared default.
+     *
+     * An injected capability, not a per-host branch: a surface whose budget is
+     * legitimately different — the native VS Code chat participant runs a longer
+     * coding loop than a web panel — states its own number here instead of the loop
+     * learning which host is calling it. Non-positive values are ignored.
+     */
+    maxIterations?: number;
 }
 /** Live, observable snapshot of a chat's run (what the hook renders). */
 interface BrainRunSnapshot {
@@ -2074,6 +2210,106 @@ declare function resolveRunConfirm(chatId: number, ok: boolean): void;
  * (set before any await), so two callers in the same tick can't both pass it.
  */
 declare function startRun(chatId: number, req: BrainRunRequest): Promise<void>;
+
+/**
+ * CHAT ACTIVITY — the structured contract behind a run milestone / agent dispatch line.
+ *
+ * The runtime narrates itself into the conversation that spawned the work: "▶️ **Ada**
+ * started working on task #41", "✅ … finished … — moved to **in review**". Those rows
+ * are persisted as ordinary `role:'assistant'` messages carrying `metadata.runMilestone`
+ * / `metadata.agentDispatch`, and BOTH chat renderers showed them as exactly that: an
+ * assistant bubble with an emoji glued to the front, indistinguishable from something
+ * the model said — and, because the server composed the sentence in English, untouchable
+ * by either surface's i18n.
+ *
+ * This module is the fix's foundation: the metadata carries the FACTS (who, which
+ * ticket, which phase, which lane, the first line of the result), and each surface
+ * renders the sentence itself from its own catalogue. So the line is a system/activity
+ * line rather than a bubble, and it is localized where localization actually lives —
+ * next-intl on the web, `vscode.l10n.t()` in the VS Code webview.
+ *
+ * Older rows carry only the English `content` (the structured fields did not exist yet).
+ * {@link parseChatActivity} still recognises them and reports `text: undefined`, so a
+ * renderer falls back to the stored sentence: an old transcript keeps reading correctly,
+ * it just isn't translated.
+ */
+/** The lifecycle moments a run narrates. Mirrors the api's `RunMilestonePhase`. */
+type RunMilestonePhase = 'started' | 'completed' | 'failed' | 'paused' | 'resumed' | 'cancelled';
+/** One run-lifecycle line. */
+interface RunMilestoneActivity {
+    kind: 'milestone';
+    phase: RunMilestonePhase;
+    /** Display name of the agent, resolved server-side (it owns the workforce directory). */
+    agentName: string;
+    /** `task` | `epic` | `gap` — the ticket vocabulary, rendered as-is. */
+    ticketKind: string;
+    ticketRef: string;
+    executionId: number | null;
+    /** Lane the ticket moved to on completion, already de-underscored. */
+    toStatus?: string;
+    /** First line of the run result (completed) or the error (failed). */
+    note?: string;
+    /** The `ask_human` question a `paused` milestone is blocked on. */
+    question?: string;
+}
+/** One "an agent joined this ticket" line. */
+interface AgentDispatchActivity {
+    kind: 'dispatch';
+    agentName: string;
+    ticketKind: string;
+    ticketRef: string;
+}
+type ChatActivity = RunMilestoneActivity | AgentDispatchActivity;
+/**
+ * Parse a message's activity metadata, or null when it is an ordinary turn.
+ *
+ * Defensive by construction: a malformed blob, or one missing the structured fields,
+ * yields either null or an activity whose optional fields are simply absent — never a
+ * throw, and never a half-built sentence.
+ */
+declare function parseChatActivity(msg: {
+    metadata?: string | null;
+}): ChatActivity | null;
+/** True when a message is an activity line rather than something the model said. */
+declare function isActivityMessage(msg: {
+    metadata?: string | null;
+}): boolean;
+/**
+ * The label templates a surface must supply to render an activity line in ITS language.
+ * Every value is a template with `{…}` placeholders — never a pre-composed sentence — so
+ * word order is the translator's to decide.
+ */
+interface ChatActivityLabels {
+    /** `{agent}`, `{kind}`, `{ref}` */
+    milestoneStarted: string;
+    /** `{agent}`, `{kind}`, `{ref}` */
+    milestoneCompleted: string;
+    /** `{agent}`, `{kind}`, `{ref}`, `{lane}` */
+    milestoneCompletedWithLane: string;
+    /** `{agent}`, `{kind}`, `{ref}` */
+    milestoneFailed: string;
+    /** `{agent}`, `{kind}`, `{ref}` */
+    milestonePaused: string;
+    /** `{agent}`, `{kind}`, `{ref}`, `{question}` */
+    milestonePausedWithQuestion: string;
+    /** `{agent}`, `{kind}`, `{ref}` */
+    milestoneResumed: string;
+    /** `{agent}`, `{kind}`, `{ref}` */
+    milestoneCancelled: string;
+    /** `{agent}`, `{kind}`, `{ref}` */
+    agentDispatched: string;
+}
+declare const DEFAULT_CHAT_ACTIVITY_LABELS: ChatActivityLabels;
+/** The glyph that marks each activity — one per phase, shared by both surfaces. */
+declare function activityIcon(activity: ChatActivity): string;
+/** Tone for the activity line — drives the accent colour, not the wording. */
+declare function activityTone(activity: ChatActivity): 'neutral' | 'good' | 'bad' | 'waiting';
+/**
+ * Compose the activity's sentence FROM the structured facts, in the caller's language.
+ * Pure, so both surfaces get identical wording rules from one implementation and the
+ * only thing that differs between them is the catalogue they hand in.
+ */
+declare function chatActivityText(activity: ChatActivity, labels: ChatActivityLabels): string;
 
 /**
  * persistedSteps — the READER for the durable tool/memory step rows the agent
@@ -2721,8 +2957,17 @@ interface ChatDiagnosticsData {
     /** The chat's OWN project (what the learn gate keys on), or null when unattached. */
     projectId?: number | null;
     projectName?: string | null;
-    /** The project the surrounding UI/panel is showing, when it differs from the chat's. */
+    /**
+     * The project the surrounding UI/panel currently has SELECTED — `null` when nothing is
+     * selected. Always reported (never conditionally omitted): "no project is selected" and
+     * "a project IS selected but the chat never adopted it" have opposite causes and
+     * opposite fixes, and a report that prints only the chat's project renders them
+     * identically as `Chat's project: none`. Reading that ambiguity the wrong way once cost
+     * a wrong revert.
+     */
     selectedProjectId?: number | null;
+    /** Display name for {@link selectedProjectId}, when the host holds one. */
+    selectedProjectName?: string | null;
     tenantId?: number | string | null;
     userId?: string | null;
     /** The project Evermind head for the CHAT's project (not the selected one). */
@@ -2776,6 +3021,19 @@ interface ChatDiagnosticsData {
     versions?: {
         ui?: string | null;
         api?: string | null;
+        /**
+         * Short SOURCE HASH of the client build.
+         *
+         * A version names a RELEASE, not an ARTIFACT: a client can be rebuilt and
+         * redistributed under the same version with different code, at which point `ui`
+         * alone makes a fixed bug read as unfixed. On 2026-07-25 exactly that happened —
+         * two `2026.7.104` VSIXes, one with an agent-stall recovery fix and one without,
+         * and the report said `UI 2026.7.104` for both. This is the field that separates
+         * them; `"dev"` means the surface was not running a packaged artifact at all.
+         */
+        uiBuildId?: string | null;
+        /** When the client artifact was built, so two builds of the same source are orderable. */
+        uiBuiltAt?: string | null;
     } | null;
 }
 /** How close a metered allowance is to stopping turns. */
@@ -2893,8 +3151,12 @@ interface ChatDiagnosticsSources {
     /** The CHAT's own project — what the learn gate keys on. */
     projectId?: number | null;
     projectName?: string | null;
-    /** The project the surrounding UI is showing, when it differs. */
+    /** The project the surrounding UI currently has SELECTED — `null` when none is.
+     *  Always reported, so "nothing selected" stays distinguishable from "selected but
+     *  the chat never adopted it" (see `ChatDiagnosticsData.selectedProjectId`). */
     selectedProjectId?: number | null;
+    /** Display name for {@link selectedProjectId}, when the host holds one. */
+    selectedProjectName?: string | null;
     tenantId?: number | string | null;
     userId?: string | null;
     /** The transcript — read only for the newest assistant turn's learn outcome. */
@@ -2914,6 +3176,11 @@ interface ChatDiagnosticsSources {
     modelSurface?: ChatDiagnosticsModelSurface | null;
     /** The build that produced the capture (extension version / web app version). */
     uiVersion?: string | null;
+    /** Short SOURCE HASH of the client artifact — the identity `uiVersion` cannot carry
+     *  (two artifacts can share a version and differ in code). `"dev"` when unbundled. */
+    uiBuildId?: string | null;
+    /** ISO timestamp the client artifact was built. */
+    uiBuiltAt?: string | null;
     /** The gateway this surface is talking to. */
     baseUrl?: string | null;
     /** Resolve the chat project's NAME when the host does not already hold it (the two
@@ -3247,4 +3514,4 @@ declare function handleRouterCall(catalog: BrainToolSpec[], name: string, args: 
     };
 };
 
-export { ADDRESSED_TO_META_KEY, API_VERSION_PROBE_TIMEOUT_MS, API_VERSION_TTL_MS, AUTHORED_BY_META_KEY, type AllowanceState, type AssembledToolCall, BUILDERFORCE_PRODUCT_NAME, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRunRequest, type BrainRunSnapshot, type BrainRuntime, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, type ByoUnresolvedEntry, CHAT_MODES, CODE_CHANGE_TOOLS, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type ChatCompletionMessage, type ChatDiagnosticsAccount, type ChatDiagnosticsData, type ChatDiagnosticsEvermind, type ChatDiagnosticsEvermindHead, type ChatDiagnosticsMessageLike, type ChatDiagnosticsMeter, type ChatDiagnosticsModelSurface, type ChatDiagnosticsPlanSnapshot, type ChatDiagnosticsSources, ChatErrorAction, type ChatInputAttachment, type ChatMode, type ChatModelOptions, type ChatModelSelection, type CompletionMetadata, type ContentPart, type CreatedWorkItemLink, DEFAULT_CHAT_TITLE, DEFAULT_MODEL_CHOICE_LABELS, DEFAULT_MODEL_IDENTITY, DEFAULT_TOOL_LIMIT, type DirectedRecipient, EVERMIND_LEARN_MIN_CHARS, type Effort, type EffortProfile, type EvermindLearnOutcome, type EvermindLearnTarget, type EvermindRecallItem, type EvermindRecallResult, type EvermindRunHooks, type GlobalRunState, type ImageUrlContentPart, type LinkedTicketToAdvance, MODEL_CATEGORIES, type McpToolEntry, type McpToolResultInfo, type McpToolStatus, type MentionToken, type MessageProvenance, type ModelCategory, type ModelChoiceLabels, type ModelIdentityContext, type ModelItem, NEW_CHAT_MODE, NOT_STARTED_TASK_STATUSES, PROJECT_EVERMIND_MODEL_PREFIX, PROVENANCE_META_KEY, type ParsedXmlToolCall, type PersistedStep, type PreparedImage, type ProvenanceAccount, RESTING_CHAT_MODE, type RatableMessage, type RatedTurnContext, type ReasoningIntent, type ReasoningLevel, type RecipientChoice, type RoutedProduct, STEP_MESSAGE_ROLE, type StreamChatOptions, type StreamChatResult, type StreamHandlers, TICKET_RECORDING_TOOLS, TOOL_ROUTER_DESCRIBE, TOOL_ROUTER_FIND, TOOL_ROUTER_INVOKE, type TextContentPart, type ToolCatalogMatch, type ToolExposure, type ToolSelection, type TurnInterruption, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, XmlToolCallFilter, accountUsedInTrace, activeMentionToken, activeModelKey, allowanceState, attachEvermindLearn, buildBrainTriageReport, buildModelItems, byoReasonHint, byoUnresolvedInTrace, byoUnresolvedSummary, byoVendorLabel, chatConversationDirective, chatModeDirective, chatWorkDirective, chatWorkLinkingDirective, classifyModelFunding, clearRunError, codeChangeFile, computeBrainDiagnostics, consolidationMarkerContent, consolidationMetadata, countReconciledMemories, deriveChatTitle, describeTool, detectAnnouncedButUnmadeToolCall, detectUnbackedTicketClaim, detectUnbackedWriteClaim, displayModelName, effortProfile, extractXmlToolCalls, fetchApiVersionVia, fetchMcpToolEntries, filterMentionCandidates, filterModelItems, findTools, formatBrainDiagnostics, formatBrainProvenance, formatChatDiagnostics, formatEvermindLearnStep, formatEvermindMemoryBlock, gatherChatDiagnostics, getGlobalRunState, getLastResolvedModel, getMcpToolStatus, getRunSnapshot, getRunTrace, handleRouterCall, isChatMode, isCodeChangeTool, isConnectedAccountUnused, isConsolidationMarker, isDirectedToParticipant, isEffort, isEvermindModel, isFailedToolResult, isMalformedToolCall, isRouterTool, isRunning, isStepMessage, isTicketRecordingTool, isTruncatedTurn, isUserConfiguredModelRef, lastConsolidationIndex, linkedTicketsToAdvance, mcpActionsFrom, mentionRecipient, modelCategoryLabel, modelFailoversInTrace, modelInUse, modelsUsedInTrace, narratedUnadvertisedInTrace, normalizeChatMode, parseByoUnresolved, parseDirectedRecipient, parseMessageAuthor, parseMessageProvenance, parseStepMessage, perMillionUsd, premiumCostLabel, prepareImageDataUrl, productForPlan, productModelName, ratedTurnContext, ratedTurnTool, reasoningForRun, resetApiVersionCache, resetBrainRunStore, resolveRecipient, resolveRunConfirm, revealsModelId, routerToolSpecs, routingQueryForTurn, startRun as runBrainLoop, savePendingPrompt, scopeToConsolidation, selectToolsForTurn, setLastResolvedModel, setMcpToolStatus, stallRecoveriesInTrace, stallUnrecoveredInTrace, startRun, stepSig, stopRun, streamChatCompletion, subscribeRun, subscribeRunStore, subscribeToChatMessages, takePendingPrompt, toolExposureInTrace, toolSpecsFor, traceWithPersistedSteps, turnInterruption, turnOptimizationDirective, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions, withDirectedMetadata, withProvenanceMetadata, workItemLinkFromCreate };
+export { ADDRESSED_TO_META_KEY, API_VERSION_PROBE_TIMEOUT_MS, API_VERSION_TTL_MS, AUTHORED_BY_META_KEY, type AgentDispatchActivity, type AllowanceState, type AssembledToolCall, BUILDERFORCE_PRODUCT_NAME, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRunPersistence, type BrainRunRequest, type BrainRunSnapshot, type BrainRuntime, type BrainStreamFn, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, type ByoUnresolvedEntry, CHAT_MODES, CODE_CHANGE_TOOLS, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type ChatActivity, type ChatActivityLabels, type ChatCompletionMessage, type ChatDiagnosticsAccount, type ChatDiagnosticsData, type ChatDiagnosticsEvermind, type ChatDiagnosticsEvermindHead, type ChatDiagnosticsMessageLike, type ChatDiagnosticsMeter, type ChatDiagnosticsModelSurface, type ChatDiagnosticsPlanSnapshot, type ChatDiagnosticsSources, ChatErrorAction, type ChatInputAttachment, type ChatMode, type ChatModelOptions, type ChatModelSelection, type CompletionMetadata, type ComposerDirectiveOptions, type ContentPart, type CreatedWorkItemLink, DEFAULT_CHAT_ACTIVITY_LABELS, DEFAULT_CHAT_TITLE, DEFAULT_MODEL_CHOICE_LABELS, DEFAULT_MODEL_IDENTITY, DEFAULT_TOOL_LIMIT, type DirectedRecipient, EVERMIND_LEARN_MIN_CHARS, type Effort, type EffortProfile, type EvermindLearnOutcome, type EvermindLearnTarget, type EvermindRecallItem, type EvermindRecallResult, type EvermindRunHooks, type GlobalRunState, type ImageUrlContentPart, type LinkedTicketToAdvance, MODEL_CATEGORIES, type McpToolEntry, type McpToolResultInfo, type McpToolStatus, type MemoryFirstAnswer, type MentionToken, type MessageProvenance, type ModelCategory, type ModelChoiceLabels, type ModelIdentityContext, type ModelItem, NEW_CHAT_MODE, NOT_STARTED_TASK_STATUSES, PROJECT_EVERMIND_MODEL_PREFIX, PROVENANCE_META_KEY, type ParsedXmlToolCall, type PersistedStep, type PreparedImage, type ProvenanceAccount, RESTING_CHAT_MODE, type RatableMessage, type RatedTurnContext, type ReasoningIntent, type ReasoningLevel, type RecipientChoice, type RoutedProduct, type RunMilestoneActivity, type RunMilestonePhase, STEP_MESSAGE_ROLE, type StreamChatOptions, type StreamChatResult, type StreamHandlers, TICKET_RECORDING_TOOLS, TOOL_ROUTER_DESCRIBE, TOOL_ROUTER_FIND, TOOL_ROUTER_INVOKE, type TextContentPart, type ToolCatalogMatch, type ToolConfirmationGate, type ToolConfirmationGateOptions, type ToolConfirmationPersistence, type ToolExposure, type ToolSelection, type TurnInterruption, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, WEB_FETCH_TOOL_NAME, XmlToolCallFilter, accountUsedInTrace, activeMentionToken, activeModelKey, activityIcon, activityTone, allowanceState, attachEvermindLearn, buildBrainTriageReport, buildComposerDirectives, buildModelItems, byoReasonHint, byoUnresolvedInTrace, byoUnresolvedSummary, byoVendorLabel, chatActivityText, chatConversationDirective, chatModeDirective, chatWorkDirective, chatWorkLinkingDirective, classifyModelFunding, clearRunError, codeChangeFile, computeBrainDiagnostics, consolidationMarkerContent, consolidationMetadata, countReconciledMemories, deriveChatTitle, describeTool, detectAnnouncedButUnmadeToolCall, detectUnbackedTicketClaim, detectUnbackedWriteClaim, displayModelName, effortProfile, extractXmlToolCalls, fetchApiVersionVia, fetchMcpToolEntries, filterMentionCandidates, filterModelItems, findTools, formatBrainDiagnostics, formatBrainProvenance, formatChatDiagnostics, formatEvermindLearnStep, formatEvermindMemoryBlock, gatherChatDiagnostics, getGlobalRunState, getLastResolvedModel, getMcpToolStatus, getRunSnapshot, getRunTrace, handleRouterCall, isActivityMessage, isChatMode, isCodeChangeTool, isConnectedAccountUnused, isConsolidationMarker, isDirectedToParticipant, isEffort, isEvermindModel, isFailedToolResult, isMalformedToolCall, isRouterTool, isRunning, isStepMessage, isTicketRecordingTool, isTruncatedTurn, isUserConfiguredModelRef, lastConsolidationIndex, linkedTicketsToAdvance, localStorageConfirmationPersistence, mcpActionsFrom, mentionRecipient, modelCategoryLabel, modelFailoversInTrace, modelInUse, modelsUsedInTrace, narratedUnadvertisedInTrace, normalizeChatMode, parseByoUnresolved, parseChatActivity, parseDirectedRecipient, parseMessageAuthor, parseMessageProvenance, parseStepMessage, perMillionUsd, premiumCostLabel, prepareImageDataUrl, productForPlan, productModelName, ratedTurnContext, ratedTurnTool, reasoningForRun, resetApiVersionCache, resetBrainRunStore, resolveRecipient, resolveRunConfirm, revealsModelId, routerToolSpecs, routingQueryForTurn, startRun as runBrainLoop, savePendingPrompt, scopeToConsolidation, selectToolsForTurn, setLastResolvedModel, setMcpToolStatus, stallRecoveriesInTrace, stallUnrecoveredInTrace, startRun, stepSig, stopRun, streamChatCompletion, subscribeRun, subscribeRunStore, subscribeToChatMessages, takePendingPrompt, toolExposureInTrace, toolSpecsFor, traceWithPersistedSteps, turnInterruption, turnOptimizationDirective, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions, useToolConfirmationGate, withDirectedMetadata, withProvenanceMetadata, workItemLinkFromCreate };

@@ -15,6 +15,7 @@ import {
 // ---------------------------------------------------------------------------
 
 class InMemoryTaskRepo implements ITaskRepository {
+  async repointSegment(): Promise<boolean> { return false; }
   private seq = 1;
   readonly store = new Map<number, Task>();
 
@@ -58,6 +59,7 @@ class InMemoryTaskRepo implements ITaskRepository {
 }
 
 class InMemoryProjectRepo implements IProjectRepository {
+  async segmentIdOf(): Promise<string | null> { return null; }
   constructor(private readonly project: Project) {}
   async findByTenant(): Promise<Project[]> { return [this.project]; }
   async findById(): Promise<Project | null> { return this.project; }

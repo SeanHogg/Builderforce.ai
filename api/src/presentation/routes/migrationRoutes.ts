@@ -25,7 +25,7 @@ import { MigrationService, type ImportMode } from '../../application/migration/M
 import { createMigrationStore } from '../../application/migration/migrationStore';
 import { buildMigrationProviderFactory } from '../../application/migration/buildProviderFactory';
 import { DISCOVERY_PROVIDER_IDS } from '../../application/boardsync/providerCatalog';
-import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
+import { getMigrationRuns, getMigrationDetail, invalidateMigrations } from '../../application/migration/migrationReads';
 
 const MODES: readonly ImportMode[] = ['migrate', 'sync', 'both'];
 
@@ -35,8 +35,7 @@ export function createMigrationRoutes(db: Db, env: Env): Hono<HonoEnv> {
   const manager = requireRole(TenantRole.MANAGER);
   const service = new MigrationService(createMigrationStore(db, env));
 
-  const verKey = (tenantId: number) => `migrations:${tenantId}`;
-  const bump = (c: { env: Env }, tenantId: number) => bumpCacheVersion(c.env, verKey(tenantId));
+  const bump = (c: { env: Env }, tenantId: number) => invalidateMigrations(c.env, tenantId);
 
   /** Build a provider factory bound to a run's credential (null board = discover). */
   const providerFactory = (env: Env, tenantId: number, provider: string, credentialId: string | null) =>
@@ -73,17 +72,14 @@ export function createMigrationRoutes(db: Db, env: Env): Hono<HonoEnv> {
   // GET /api/migrations — run history (cached, version-bumped on writes).
   router.get('/', manager, async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const ver = await getCacheVersion(c.env, verKey(tenantId));
-    const runs = await getOrSetCached(c.env, `migrations:list:${tenantId}:${ver}`, () => service.listRuns(tenantId));
-    return c.json({ runs });
+    return c.json({ runs: await getMigrationRuns(service, c.env, tenantId) });
   });
 
   // GET /api/migrations/:id — staging snapshot (cached).
   router.get('/:id', manager, async (c) => {
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
-    const ver = await getCacheVersion(c.env, verKey(tenantId));
-    const detail = await getOrSetCached(c.env, `migrations:run:${tenantId}:${id}:${ver}`, () => service.getDetail(id, tenantId));
+    const detail = await getMigrationDetail(service, c.env, tenantId, id);
     if (!detail) return c.json({ error: 'Migration run not found' }, 404);
     return c.json(detail);
   });

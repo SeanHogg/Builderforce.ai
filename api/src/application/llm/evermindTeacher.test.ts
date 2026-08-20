@@ -11,12 +11,25 @@ vi.mock('./LlmProxyService', async (importActual) => ({
 
 // Stub the token-availability gate so distillation cost-gating is deterministic.
 const availabilityMock = vi.fn();
+const providerKeysMock = vi.fn();
 vi.mock('./tenantTokenAvailability', () => ({
   getTenantTokenAvailability: (...args: unknown[]) => availabilityMock(...args),
+  // The teacher now asks through the SHARED autonomous-run predicate rather than
+  // reading availability directly — the same one both cron sweeps use, so the BYO
+  // bypass exists in one place instead of three. The stub reproduces its real
+  // composition (pool budget OR a connected account) over the two mocks below, so
+  // these tests still assert the behaviour and not the plumbing.
+  tenantMayRunAutonomously: async (db: unknown, tenantId: number, env: unknown) => {
+    let availability;
+    try { availability = await availabilityMock(db, tenantId, undefined, env); }
+    catch { return { allowed: true, availability: null, byoFunded: false }; }
+    if (availability.hasTokens) return { allowed: true, availability, byoFunded: false };
+    const byoFunded = (await providerKeysMock(env, tenantId)).length > 0;
+    return { allowed: byoFunded, availability, byoFunded };
+  },
 }));
 
 // Stub BYO credential/provider reads (no DB in tests). Default: nothing connected.
-const providerKeysMock = vi.fn();
 const credsMock = vi.fn();
 vi.mock('./tenantProviderKeyService', async (importActual) => ({
   ...(await importActual<typeof import('./tenantProviderKeyService')>()),
@@ -211,7 +224,9 @@ describe('resolveEvermindTeacherModel (once-per-alarm budget gate)', () => {
     availabilityMock.mockResolvedValue({ hasTokens: false, reason: 'daily_exhausted' });
     providerKeysMock.mockResolvedValue([{ provider: 'anthropic', authType: 'oauth' }]);
     expect(await resolveEvermindTeacherModel(env, db, TENANT, 'claude-opus-4-8')).toEqual({ model: 'claude-opus-4-8' });
-    expect(availabilityMock).not.toHaveBeenCalled();
+    // The BYO read happens only AFTER the pool is found exhausted, so a tenant with
+    // budget never pays for it — the ordering the shared predicate encodes.
+    expect(providerKeysMock).toHaveBeenCalled();
   });
 
   it('fails OPEN (keeps the teacher) when the token scan throws', async () => {

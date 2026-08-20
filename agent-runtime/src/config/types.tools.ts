@@ -232,8 +232,13 @@ export type FsToolsConfig = {
    * Source the overlapping file tools (`write`/`edit` + additive `delete_file`/`list_files`)
    * from the shared `@builderforce/agent-tools` registry via a disk capability provider —
    * the on-prem half of the one-definition-per-tool convergence (PRD 12 Phase B). Honored
-   * only for NON-sandboxed sessions. Default: false (native per-tool copies). Opt-in pending
-   * a live cross-provider smoke test (see PRD 12 §9).
+   * only for NON-sandboxed sessions.
+   *
+   * Default: TRUE. The converged pair takes its workspace confinement from
+   * {@link FsToolsConfig.workspaceOnly}, exactly as the native pair does, so this flag
+   * changes the IMPLEMENTATION and never the security boundary. Cross-provider parity is
+   * asserted by `agent-runtime/src/agents/cross-provider-smoke.test.ts`. Set `false` to
+   * fall back to the native per-tool copies.
    */
   convergedFileTools?: boolean;
 };

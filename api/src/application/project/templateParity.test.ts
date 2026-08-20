@@ -13,11 +13,12 @@
  * assertion turns that class of silent divergence into a failing test.
  */
 import { describe, it, expect } from 'vitest';
-import { VANILLA_TEMPLATE, MOBILE_TEMPLATE, templateForProject } from './projectTemplate';
+import { VANILLA_TEMPLATE, MOBILE_TEMPLATE, templateForProject, isScaffoldPath } from './projectTemplate';
 import {
   VANILLA_DEFAULTS,
   MOBILE_DEFAULTS,
   defaultsForModality,
+  isScaffoldPath as isScaffoldPathClient,
 } from '../../../../frontend/src/lib/vanillaDefaults';
 
 describe('IDE template parity (api ↔ frontend)', () => {
@@ -41,5 +42,21 @@ describe('IDE template parity (api ↔ frontend)', () => {
       githubRepoUrl: null,
     });
     expect(seeded).toEqual(defaultsForModality(modality));
+  });
+
+  // The zero-byte-scaffold rule is enforced server-side but ALSO consulted by the
+  // client (file-create seeds the template instead of posting an empty body), so
+  // the two path sets must name the same files or the client will either send a
+  // write the server refuses, or skip one it would have accepted.
+  it('agrees on which paths a scaffold owns', () => {
+    const paths = [...Object.keys(VANILLA_DEFAULTS), ...Object.keys(MOBILE_DEFAULTS)];
+    for (const path of paths) {
+      expect(isScaffoldPath(path)).toBe(true);
+      expect(isScaffoldPathClient(path)).toBe(true);
+    }
+    for (const path of ['src/notes.txt', 'README.md', 'src/components/Card.jsx', '']) {
+      expect(isScaffoldPath(path)).toBe(false);
+      expect(isScaffoldPathClient(path)).toBe(false);
+    }
   });
 });

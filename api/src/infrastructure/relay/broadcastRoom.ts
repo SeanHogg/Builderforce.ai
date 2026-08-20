@@ -47,6 +47,35 @@ export const projectRoomName = (tenantId: number | string, projectId: number | s
 export const brainChatRoomName = (tenantId: number | string, chatId: number | string): string =>
   `brain-chat:${tenantId}:${chatId}`;
 
+/**
+ * Room id for ONE execution's live event stream (status/message/file/tool frames).
+ *
+ * Reuses the per-execution DO name convention already established by
+ * `CLOUD_RUNNER` (`exec:<executionId>`) rather than inventing a third id shape —
+ * the two live in different namespaces (`CLOUD_RUNNER` vs `SESSION_ROOM`), so the
+ * same name means "this run" in both without colliding.
+ *
+ * Deliberately NOT tenant-qualified, unlike {@link projectRoomName}. The only
+ * subscribe path (`GET /api/runtime/executions/:id/stream`) resolves the run
+ * through `loadOwnedExecution` FIRST and relays the upgrade only for a run the
+ * caller's tenant owns, so a room name cannot be used to reach another tenant's
+ * stream. Qualifying it would mean an executionId→tenantId read on the hot
+ * publish path (every tool event) purely to re-derive something the subscribe
+ * side has already proved.
+ */
+export const executionRoomName = (executionId: number | string): string => `exec:${executionId}`;
+
+/** Publish one execution event frame (see `ExecutionSubscriberEvent`) into a run's
+ *  live room, from ANY isolate. This is the cross-isolate half of the live tail:
+ *  the emitting isolate need not be the one holding the viewer's socket. */
+export async function broadcastExecutionEvent(
+  ns: DurableObjectNamespace | undefined,
+  executionId: number | string,
+  frame: string,
+): Promise<void> {
+  return broadcastRoom(ns, executionRoomName(executionId), frame);
+}
+
 /** Tenant-qualified room for one Creation Session. */
 export const creationSessionRoomName = (tenantId: number | string, sessionId: string): string =>
   `creation:${tenantId}:${sessionId}`;

@@ -28,13 +28,9 @@ import { and, asc, eq } from 'drizzle-orm';
 import { hostOrTenantAuth, requestAgentHostId } from '../middleware/hostOrTenantAuth';
 import { agentDispatches } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
-import { SwimlaneCoordinator } from '../../application/swimlane/SwimlaneCoordinator';
-import { DrizzleCoordinatorStore } from '../../application/swimlane/DrizzleCoordinatorStore';
-import { DrizzlePrdEnsurer } from '../../application/swimlane/DrizzlePrdEnsurer';
-import {
-  AgentHostStageDispatcher,
-  type AgentHostRelayNamespace,
-} from '../../application/swimlane/agentHostStageDispatcher';
+import type { SwimlaneCoordinator } from '../../application/swimlane/SwimlaneCoordinator';
+import { makeSwimlaneCoordinator } from '../../application/swimlane/makeCoordinator';
+import type { AgentHostRelayNamespace } from '../../application/swimlane/agentHostStageDispatcher';
 import { resolveDefaultRepoForTask } from '../../application/repos/resolveDefaultRepo';
 import { openDispatchPullRequest } from '../../application/repos/openDispatchPullRequest';
 import type { Env, HonoEnv } from '../../env';
@@ -50,13 +46,11 @@ export function createAgentRuntimeRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', hostOrTenantAuth(db));
 
-  const mkCoordinator = (env: unknown): SwimlaneCoordinator =>
-    new SwimlaneCoordinator(
-      new DrizzleCoordinatorStore(db),
-      new AgentHostStageDispatcher((env as RuntimeEnv)?.AGENT_HOST_RELAY),
-      undefined,
-      new DrizzlePrdEnsurer(db, env as Env),
-    );
+  // ONE factory (makeCoordinator.ts). This site used to pass `undefined` for the
+  // workflow runner, so a lane's `run_workflow` action never fired when a BROWSER
+  // dispatch settled the stage — the same stage, reported through a different door,
+  // behaved differently. The factory wires it everywhere.
+  const mkCoordinator = (env: unknown): SwimlaneCoordinator => makeSwimlaneCoordinator(db, env);
 
   // Claim the next pending browser dispatch for this tenant. Host work is pushed
   // to the host over the relay, never queued for pull, so a host key here is a

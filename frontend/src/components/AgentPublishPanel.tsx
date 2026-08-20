@@ -170,11 +170,11 @@ export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPane
       });
       setValidation(result);
     } catch (e) {
-      setValidation({ ok: false, error: e instanceof Error ? e.message : 'Validation failed' });
+      setValidation({ ok: false, error: e instanceof Error ? e.message : tp('validationFailedFallback') });
     } finally {
       setIsValidating(false);
     }
-  }, [isProfileValid, profile, selectedJob, includeMamba, mambaSnapshot]);
+  }, [isProfileValid, profile, selectedJob, includeMamba, mambaSnapshot, tp]);
 
   const handlePublish = useCallback(async () => {
     if (!isProfileValid) return;
@@ -195,11 +195,11 @@ export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPane
       });
       setPublishedId(agent.id);
     } catch (e) {
-      setPublishError(e instanceof Error ? e.message : 'Publish failed');
+      setPublishError(e instanceof Error ? e.message : tp('publishFailedFallback'));
     } finally {
       setIsPublishing(false);
     }
-  }, [isProfileValid, projectId, selectedJob, profile]);
+  }, [isProfileValid, projectId, selectedJob, profile, tp]);
 
   // Previously a bare `.then()` with no `.catch()` — a denied clipboard became an
   // unhandled rejection. The shared hook resolves `false` instead of rejecting.
@@ -341,7 +341,7 @@ export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPane
                   <option value="">{tp('noModelSelected')}</option>
                   {completedJobs.map(j => (
                     <option key={j.id} value={j.id}>
-                      {j.base_model} (rank={j.lora_rank})
+                      {tp('jobOption', { model: j.base_model, rank: j.lora_rank })}
                     </option>
                   ))}
                 </Select>

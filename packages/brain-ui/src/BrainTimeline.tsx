@@ -1,5 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  DEFAULT_CHAT_ACTIVITY_LABELS,
+  activityIcon,
+  activityTone,
+  chatActivityText,
+  type ChatActivityLabels,
   DEFAULT_MODEL_IDENTITY,
   displayModelName,
   parseDirectedRecipient,
@@ -79,6 +84,13 @@ export interface BrainTimelineLabels {
   reconcileTitle: string;
   /** Tooltip on the reconcile step. */
   reconcileHint: string;
+  /**
+   * RUN-ACTIVITY line templates (run milestones + agent dispatch). Templates, not
+   * sentences: the server records only the FACTS, and each surface composes the line in
+   * its own language — which is the only way these can be localized at all, since the
+   * server has no idea who will read the chat. See `chatActivity.ts` for the contract.
+   */
+  activity: ChatActivityLabels;
 }
 
 export const DEFAULT_TIMELINE_LABELS: BrainTimelineLabels = {
@@ -120,6 +132,7 @@ export const DEFAULT_TIMELINE_LABELS: BrainTimelineLabels = {
   learnTargetSkipped: 'Skipped {name} (project #{projectId}) — {reason}',
   reconcileTitle: 'Reconciled {count} learned memories in Evermind v{version}',
   reconcileHint: 'The answer restated these recalled learnings, so it updates them (write-through cognition).',
+  activity: DEFAULT_CHAT_ACTIVITY_LABELS,
 };
 
 /**
@@ -761,6 +774,26 @@ function BrainTimelineInner({
                 </span>
                 <div className="bf-tl__body">
                   <span className="bf-tl__memory-line" title={hint}>{title}</span>
+                </div>
+              </li>
+            );
+          }
+          if (node.kind === 'activity') {
+            // The RUNTIME narrating itself — deliberately NOT an assistant bubble. Composed
+            // here from the structured metadata so it reads in the viewer's language; a
+            // pre-structured row falls back to the sentence the server stored.
+            const text = chatActivityText(node.activity, labels.activity) || node.fallbackText;
+            const tone = activityTone(node.activity);
+            return (
+              <li key={node.key} className={`bf-tl__item bf-tl__item--activity bf-tl__item--activity-${tone}`}>
+                <span className="bf-tl__gutter">
+                  <span className="bf-tl__dot bf-tl__dot--activity" aria-hidden>{activityIcon(node.activity)}</span>
+                </span>
+                <div className="bf-tl__body">
+                  <span className="bf-tl__activity-line">{text}</span>
+                  {node.activity.kind === 'milestone' && node.activity.note && (
+                    <span className="bf-tl__activity-note">{node.activity.note}</span>
+                  )}
                 </div>
               </li>
             );

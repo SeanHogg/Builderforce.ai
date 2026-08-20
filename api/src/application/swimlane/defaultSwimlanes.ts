@@ -39,9 +39,25 @@ export interface DefaultSwimlaneSeed {
  * A team that genuinely wants a person to approve every ticket sets the lane back to
  * `human` in Board configuration; that stays a deliberate choice rather than the
  * unexamined default it used to be.
+ *
+ * ── WHY `backlog` IS `human` ─────────────────────────────────────────────────────
+ * Backlog is the STAGING lane: it is where a raw idea, an imported issue, a
+ * feedback item and a half-written thought all land before anyone has agreed they
+ * are work. Seeding it `auto` meant every one of those started a billable run the
+ * moment it was created, on a description nobody had refined — the measured shape of
+ * which was a 299-ticket backlog cohort that autonomy kept reaching for. Moving a
+ * ticket OUT of backlog (to To Do / Ready) is the cheapest, most natural "yes, do
+ * this" a person can give, and every lane after it stays `auto`, so this costs one
+ * drag and buys back the tokens spent on unrefined tickets.
+ *
+ * `blocked` stays `auto` deliberately: a ticket lands there because something stopped
+ * it, and the lane's job is to try to unblock it.
+ *
+ * This is a SEED. Boards that already exist keep whatever gate they were configured
+ * with — a default change must never silently re-gate a running board.
  */
 export const DEFAULT_SWIMLANES: DefaultSwimlaneSeed[] = [
-  { key: TaskStatus.BACKLOG, name: 'Backlog', position: 0, isTerminal: false, gate: 'auto' },
+  { key: TaskStatus.BACKLOG, name: 'Backlog', position: 0, isTerminal: false, gate: 'human' },
   { key: TaskStatus.TODO, name: 'To Do', position: 1, isTerminal: false, gate: 'auto' },
   { key: TaskStatus.READY, name: 'Ready', position: 2, isTerminal: false, gate: 'auto' },
   { key: TaskStatus.IN_PROGRESS, name: 'In Progress', position: 3, isTerminal: false, gate: 'auto' },

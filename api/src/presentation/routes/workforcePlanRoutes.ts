@@ -11,9 +11,7 @@
 import { Hono } from 'hono';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
-import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
-import { computeWorkforcePlan } from '../../application/insights/workforcePlanning';
-import { readWorkforceMetricsVersion } from '../../application/metrics/workforceMetrics';
+import { getWorkforcePlan } from '../../application/insights/workforcePlanning';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
@@ -24,11 +22,7 @@ export function createWorkforcePlanRoutes(db: Db): Hono<HonoEnv> {
   // ── GET /plan — blended workforce capacity plan (MANAGER+) ────────────────
   router.get('/plan', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const env = c.env as Env;
-    const version = await readWorkforceMetricsVersion(env, tenantId);
-    const key = `workforce-plan:tenant:${tenantId}:v:${version}`;
-    const plan = await getOrSetCached(env, key, () => computeWorkforcePlan(db, tenantId), { kvTtlSeconds: 60, l1TtlMs: 15_000 });
-    return c.json(plan);
+    return c.json(await getWorkforcePlan(db, c.env as Env, tenantId));
   });
 
   return router;

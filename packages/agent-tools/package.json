@@ -3,9 +3,10 @@
   "version": "2026.7.2",
   "private": true,
   "type": "module",
-  "description": "Runtime-agnostic agent tool contract shared by the cloud (Worker) and on-prem (Node) engines.",
+  "description": "Runtime-agnostic agent tool contract shared by the cloud (Worker) and on-prem (Node) engines. The package ROOT is node-builtin-free (the Worker imports it); node-only helpers live behind the `./node-path` export condition, which the Worker never imports.",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./node-path": "./src/node-path.ts"
   },
   "types": "./src/index.ts",
   "scripts": {

@@ -14,18 +14,14 @@
  * Write-only by design — no read-through cache (every claim mutates a row).
  */
 import { Hono } from 'hono';
-import { and, desc, eq, gt, isNull } from 'drizzle-orm';
-import { pendingPrompts } from '../../infrastructure/database/schema';
+import { PendingPromptService, MAX_ANON_LEN } from '../../application/marketing/PendingPromptService';
 import { webAuthMiddleware } from '../middleware/webAuthMiddleware';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
-const MAX_PROMPT_LEN = 4000;
-const MAX_ANON_LEN = 64;
-const TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
-
 export function createPendingPromptRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
+  const service = new PendingPromptService(db);
 
   // ── POST /api/pending-prompts ────────────────────────────────────────────
   // Public — runs before the visitor has any auth. Records the prompt for later
@@ -38,13 +34,7 @@ export function createPendingPromptRoutes(db: Db): Hono<HonoEnv> {
     if (!anonId || anonId.length > MAX_ANON_LEN) return c.json({ error: 'anonId required' }, 400);
     if (!prompt) return c.json({ error: 'prompt required' }, 400);
 
-    await db.insert(pendingPrompts).values({
-      anonId,
-      prompt: prompt.slice(0, MAX_PROMPT_LEN),
-      path: body.path ? body.path.slice(0, 512) : null,
-      expiresAt: new Date(Date.now() + TTL_MS),
-    });
-
+    await service.record(anonId, prompt, body.path ?? null);
     return c.json({ ok: true }, 201);
   });
 
@@ -58,25 +48,7 @@ export function createPendingPromptRoutes(db: Db): Hono<HonoEnv> {
     const anonId = (body.anonId ?? '').trim();
     if (!anonId) return c.json({ prompt: null });
 
-    const [row] = await db
-      .select({ id: pendingPrompts.id, prompt: pendingPrompts.prompt })
-      .from(pendingPrompts)
-      .where(and(
-        eq(pendingPrompts.anonId, anonId),
-        isNull(pendingPrompts.claimedAt),
-        gt(pendingPrompts.expiresAt, new Date()),
-      ))
-      .orderBy(desc(pendingPrompts.createdAt))
-      .limit(1);
-
-    if (!row) return c.json({ prompt: null });
-
-    await db
-      .update(pendingPrompts)
-      .set({ claimedAt: new Date(), userId })
-      .where(eq(pendingPrompts.id, row.id));
-
-    return c.json({ prompt: row.prompt });
+    return c.json({ prompt: await service.claim(anonId, userId) });
   });
 
   return router;

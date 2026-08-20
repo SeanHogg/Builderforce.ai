@@ -21,7 +21,9 @@ import {
   agentHosts, memberProfiles, projects, tasks, users,
 } from '../../infrastructure/database/schema';
 import { notSystemTask } from '../task/taskScope';
-import { identityOf, type MemberKind } from '../metrics/workforceMetrics';
+import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
+import type { Env } from '../../env';
+import { identityOf, readWorkforceMetricsVersion, type MemberKind } from '../metrics/workforceMetrics';
 import { TaskStatus } from '../../domain/shared/types';
 
 /** Which population a member belongs to for the human-vs-agent split. */
@@ -82,6 +84,23 @@ export interface WorkforcePlan {
 }
 
 const populationOf = (kind: MemberKind): WorkforcePopulation => (kind === 'human' ? 'human' : 'agent');
+
+/**
+ * The CACHED read the HTTP layer calls. Caching lives here rather than in the
+ * route because the version token, the key shape and the TTL are properties of
+ * this computation — a second caller (a digest, a seat panel) must get the same
+ * entry rather than inventing its own key, and a route that knows the key shape
+ * is a route that has to be edited when the computation changes.
+ */
+export async function getWorkforcePlan(db: Db, env: Env, tenantId: number): Promise<WorkforcePlan> {
+  const version = await readWorkforceMetricsVersion(env, tenantId);
+  return getOrSetCached(
+    env,
+    `workforce-plan:tenant:${tenantId}:v:${version}`,
+    () => computeWorkforcePlan(db, tenantId),
+    { kvTtlSeconds: 60, l1TtlMs: 15_000 },
+  );
+}
 
 /**
  * Compute the blended workforce plan for a tenant. Two bounded queries: every

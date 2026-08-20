@@ -16,7 +16,10 @@ import {
   parseByoUnresolved,
   deriveChatTitle,
   DEFAULT_CHAT_TITLE,
+  buildComposerDirectives,
+  localStorageConfirmationPersistence,
   effortProfile,
+  useToolConfirmationGate,
   isEffort,
   reasoningForRun,
   gatherChatDiagnostics,
@@ -93,6 +96,15 @@ const MEMORY_KEY = (chatId: number) => `bf_brain_memory:${chatId}`;
  */
 const EFFORT_KEY = 'bf_brain_effort';
 const THINKING_KEY = 'bf_brain_thinking';
+const AUTO_APPROVE_KEY = 'bf_brain_auto_approve';
+
+/**
+ * Storage for the human-in-the-loop auto-approve toggle, using the SHARED guarded
+ * accessor (a partitioned/blocked webview store must degrade to "not persisted", never
+ * throw). The key is this surface's own — the editor's gate is deliberately independent
+ * of the web app's, since a mutating tool here touches the user's real working tree.
+ */
+const AUTO_APPROVE_PERSISTENCE = localStorageConfirmationPersistence(AUTO_APPROVE_KEY);
 
 /**
  * The ONE guarded localStorage accessor pair for the composer's persisted
@@ -160,6 +172,20 @@ function timelineLabels(labels: LabelBundle): Partial<BrainTimelineLabels> {
     learnTargetSkipped: t('tl.learnTargetSkipped', 'Skipped {name} (project #{projectId}) — {reason}'),
     reconcileTitle: t('tl.reconcileTitle', 'Reconciled {count} learned memories in Evermind v{version}'),
     reconcileHint: t('tl.reconcileHint', 'The answer restated these recalled learnings, so it updates them (write-through cognition).'),
+    // Run milestones / agent dispatch — rendered as system activity lines, composed from
+    // the message's structured metadata so the wording comes from the host's l10n bundle
+    // rather than from the English sentence the server stored.
+    activity: {
+      milestoneStarted: t('tl.activityStarted', '{agent} started working on {kind} #{ref}'),
+      milestoneCompleted: t('tl.activityCompleted', '{agent} finished {kind} #{ref}'),
+      milestoneCompletedWithLane: t('tl.activityCompletedWithLane', '{agent} finished {kind} #{ref} — moved to {lane}'),
+      milestoneFailed: t('tl.activityFailed', "{agent}'s run on {kind} #{ref} failed"),
+      milestonePaused: t('tl.activityPaused', '{agent} paused on {kind} #{ref} — waiting on a human answer'),
+      milestonePausedWithQuestion: t('tl.activityPausedWithQuestion', '{agent} paused on {kind} #{ref} — needs an answer: {question}'),
+      milestoneResumed: t('tl.activityResumed', '{agent} resumed work on {kind} #{ref}'),
+      milestoneCancelled: t('tl.activityCancelled', "{agent}'s run on {kind} #{ref} was cancelled"),
+      agentDispatched: t('tl.activityDispatched', '{agent} was assigned to {kind} #{ref}'),
+    },
   };
 }
 
@@ -194,28 +220,6 @@ function persistedToTraceEvent(row: PersistedTraceRow): BrainTraceEvent {
     args: parseTraceJson(row.argsJson),
     result: parseTraceJson(row.resultJson),
   };
-}
-
-/**
- * Turn the composer's Effort / Browse-the-web toggles into extra system-prompt
- * directives, riding the same `extraSystem` channel the web Brain uses.
- *
- * The Effort nudge comes from the SHARED effort table (`effortProfile`) that also
- * decides this run's `max_tokens` and reasoning level, so the prose and the real
- * params can never disagree. 'balanced' contributes nothing (the neutral default).
- *
- * Thinking is deliberately NOT here any more. It used to be a "reason step by
- * step" sentence — pure theatre, since nothing on the wire changed. It is now a
- * real, structured `reasoning.level` request field (see `reasoningForRun`), so the
- * prose version was removed rather than left as a second, weaker mechanism.
- */
-function buildComposerDirectives(o: { effort: Effort; web: boolean }): string {
-  const parts: string[] = [];
-  const { directive } = effortProfile(o.effort);
-  if (directive) parts.push(directive);
-  if (o.web)
-    parts.push('You may browse the web: when a question needs current or external information, use the `web.fetch` tool to read the relevant URL(s) rather than relying on memory, and cite the sources you use.');
-  return parts.join('\n\n');
 }
 
 /**
@@ -511,19 +515,25 @@ function Chat({ init }: { init: InitData }) {
   // the web Brain's history list uses). Commits via persistence.updateChat.
   const [renaming, setRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState('');
-  // Auto-approve skips the per-action confirm prompt. It's read through a REF (not
-  // captured state) so `needsConfirm` stays referentially stable AND the value is
-  // live: a run's tool loop captures `needsConfirm` at run start, so a plain state
-  // read would keep prompting for the rest of an in-flight run even after the user
-  // ticks "auto-approve" (the reported "checked it but got 3 prompts" bug). The ref
-  // is the single source of truth; `autoApprove` state only drives the toggle UI.
-  // Mirrors the web BrainPanel's approach so both surfaces behave identically.
-  const [autoApprove, setAutoApprove] = useState(false);
-  const autoApproveRef = useRef(false);
-  const setAutoApproveMode = useCallback((on: boolean) => {
-    autoApproveRef.current = on;
-    setAutoApprove(on);
-  }, []);
+  // Auto-approve skips the per-action confirm prompt. The gate is the SHARED hook, so
+  // the invariant that makes it work — the flag is read through a REF, because a run's
+  // tool loop captures `needsConfirm` at run START and a plain state read would keep
+  // prompting for the rest of an in-flight run (the "checked the box and still got 3
+  // prompts" bug) — is stated once instead of re-derived per surface.
+  //
+  // Persisted here too: a webview reload used to reset the toggle while the web app
+  // remembered it, so one product decision was answered two ways by accident. The guarded
+  // storage accessor is the shared one; the KEY and the default (off in the editor, where
+  // a mutating tool touches the user's real working tree) are this surface's policy.
+  const {
+    autoApprove,
+    setAutoApprove: setAutoApproveMode,
+    needsConfirm,
+  } = useToolConfirmationGate({
+    isMutating,
+    persistence: AUTO_APPROVE_PERSISTENCE,
+    defaultOn: false,
+  });
   const [input, setInput] = useState('');
   const [inputFocused, setInputFocused] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -665,11 +675,6 @@ function Chat({ init }: { init: InitData }) {
     }).catch(() => {});
     return () => { cancelled = true; };
   }, [chatId, persistence]);
-
-  const needsConfirm = useCallback(
-    (req: { name: string; args: unknown }) => !autoApproveRef.current && isMutating(req.name, req.args),
-    [isMutating],
-  );
 
   // Scope new chats to the sidebar's active project (same as task-seeded chats),
   // so a conversation is associated with the project it's about server-side.
@@ -1307,6 +1312,7 @@ function Chat({ init }: { init: InitData }) {
         projectId: pid,
         projectName: associatedProject?.name ?? null,
         selectedProjectId: init.project?.id ?? null,
+        selectedProjectName: init.project?.name ?? null,
         tenantId: claims.tid ?? null,
         userId: claims.sub ?? null,
         messages: conv.messages,
@@ -1318,6 +1324,8 @@ function Chat({ init }: { init: InitData }) {
         model: init.model ?? null,
         modelSurface,
         uiVersion: init.extensionVersion ?? null,
+        uiBuildId: init.buildId ?? null,
+        uiBuiltAt: init.builtAt ?? null,
         baseUrl: init.baseUrl ?? null,
         readAgents: () => (chatId != null ? ticketAdapter.listAgents(chatId) : Promise.resolve([])),
         readTickets: () => (chatId != null ? ticketAdapter.listTickets(chatId) : Promise.resolve([])),
@@ -1362,7 +1370,7 @@ function Chat({ init }: { init: InitData }) {
       );
       window.setTimeout(() => setCopyState('idle'), 3000);
     }
-  }, [conv, init.model, init.extensionVersion, init.baseUrl, modelSurface, toolSpecs, associatedProject, associatedProjectId, activeChat?.title, chatVisibility, chatId, ticketAdapter, apiReq, init.project?.id, t]);
+  }, [conv, init.model, init.extensionVersion, init.buildId, init.builtAt, init.baseUrl, modelSurface, toolSpecs, associatedProject, associatedProjectId, activeChat?.title, chatVisibility, chatId, ticketAdapter, apiReq, init.project?.id, init.project?.name, t]);
 
   // Consolidate: summarize the whole chat into ONE compact assistant message tagged
   // as a consolidation marker. It's shown back to the user (the "flag"), and the

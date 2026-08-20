@@ -42,3 +42,23 @@ export function composeDispatcherLabel(base: string, kind: string, detail?: stri
   // is no base left to sacrifice, and a truncated label still beats a failed INSERT.
   return suffix.slice(0, MAX_SUBMITTED_BY_CHARS);
 }
+
+/**
+ * The USER who submitted a run, or `null` when a subsystem did.
+ *
+ * `submitted_by` is `user:<id>` for an interactive dispatch and `system:*` /
+ * `manager:*` / a composed `<base>:<kind>:<detail>` for everything autonomous. The
+ * distinction is the only non-arbitrary answer to "whose entitlement applies to this
+ * run" — a superadmin's Run-now should pin the model they chose, while a cron sweep
+ * has no user and must stay funding-neutral.
+ *
+ * A COMPOSED label keeps its base first (see {@link composeDispatcherLabel}), so a
+ * `user:<id>:lane-approver:<role>` still identifies the human who set it in motion;
+ * the id is therefore everything up to the next `:`, not the whole remainder.
+ */
+export function submittingUserId(submittedBy: string | null | undefined): string | null {
+  const label = (submittedBy ?? '').trim();
+  if (!label.startsWith('user:')) return null;
+  const id = label.slice('user:'.length).split(':')[0]?.trim() ?? '';
+  return id || null;
+}

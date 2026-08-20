@@ -1,0 +1,1567 @@
+{
+  "fetchedAt": "2026-08-20T03:49:19.436Z",
+  "sources": {
+    "openrouter": {
+      "vendor": "openrouter",
+      "url": "https://openrouter.ai/api/v1/models",
+      "reachable": true,
+      "models": {
+        "~anthropic/claude-fable-latest": {
+          "tools": true
+        },
+        "~anthropic/claude-haiku-latest": {
+          "tools": true
+        },
+        "~anthropic/claude-opus-latest": {
+          "tools": true
+        },
+        "~anthropic/claude-sonnet-latest": {
+          "tools": true
+        },
+        "~deepseek/deepseek-v4-flash-latest": {
+          "tools": true
+        },
+        "~google/gemini-flash-latest": {
+          "tools": true
+        },
+        "~google/gemini-pro-latest": {
+          "tools": true
+        },
+        "~moonshotai/kimi-latest": {
+          "tools": true
+        },
+        "~openai/gpt-latest": {
+          "tools": true
+        },
+        "~openai/gpt-mini-latest": {
+          "tools": true
+        },
+        "~x-ai/grok-latest": {
+          "tools": true
+        },
+        "~z-ai/glm-latest": {
+          "tools": true
+        },
+        "aion-labs/aion-2.0": {
+          "tools": true
+        },
+        "aion-labs/aion-3.0": {
+          "tools": true
+        },
+        "aion-labs/aion-3.0-mini": {
+          "tools": true
+        },
+        "aion-labs/aion-rp-llama-3.1-8b": {
+          "tools": false
+        },
+        "allenai/olmo-3-32b-think": {
+          "tools": false
+        },
+        "amazon/nova-2-lite-v1": {
+          "tools": true
+        },
+        "amazon/nova-lite-v1": {
+          "tools": true
+        },
+        "amazon/nova-micro-v1": {
+          "tools": true
+        },
+        "amazon/nova-premier-v1": {
+          "tools": true
+        },
+        "amazon/nova-pro-v1": {
+          "tools": true
+        },
+        "anthracite-org/magnum-v4-72b": {
+          "tools": false
+        },
+        "anthropic/claude-3-haiku": {
+          "tools": true
+        },
+        "anthropic/claude-fable-5": {
+          "tools": true
+        },
+        "anthropic/claude-fable-5:batch": {
+          "tools": true
+        },
+        "anthropic/claude-haiku-4.5": {
+          "tools": true
+        },
+        "anthropic/claude-haiku-4.5:batch": {
+          "tools": true
+        },
+        "anthropic/claude-opus-4": {
+          "tools": true
+        },
+        "anthropic/claude-opus-4.1": {
+          "tools": true
+        },
+        "anthropic/claude-opus-4.1:batch": {
+          "tools": true
+        },
+        "anthropic/claude-opus-4.5": {
+          "tools": true
+        },
+        "anthropic/claude-opus-4.5:batch": {
+          "tools": true
+        },
+        "anthropic/claude-opus-4.6": {
+          "tools": true
+        },
+        "anthropic/claude-opus-4.6:batch": {
+          "tools": true
+        },
+        "anthropic/claude-opus-4.7": {
+          "tools": true
+        },
+        "anthropic/claude-opus-4.7-fast": {
+          "tools": true
+        },
+        "anthropic/claude-opus-4.7:batch": {
+          "tools": true
+        },
+        "anthropic/claude-opus-4.8": {
+          "tools": true
+        },
+        "anthropic/claude-opus-4.8-fast": {
+          "tools": true
+        },
+        "anthropic/claude-opus-4.8:batch": {
+          "tools": true
+        },
+        "anthropic/claude-opus-5": {
+          "tools": true
+        },
+        "anthropic/claude-opus-5-fast": {
+          "tools": true
+        },
+        "anthropic/claude-opus-5:batch": {
+          "tools": true
+        },
+        "anthropic/claude-sonnet-4": {
+          "tools": true
+        },
+        "anthropic/claude-sonnet-4.5": {
+          "tools": true
+        },
+        "anthropic/claude-sonnet-4.5:batch": {
+          "tools": true
+        },
+        "anthropic/claude-sonnet-4.6": {
+          "tools": true
+        },
+        "anthropic/claude-sonnet-4.6:batch": {
+          "tools": true
+        },
+        "anthropic/claude-sonnet-5": {
+          "tools": true
+        },
+        "anthropic/claude-sonnet-5:batch": {
+          "tools": true
+        },
+        "arcee-ai/trinity-large-thinking": {
+          "tools": true
+        },
+        "arcee-ai/virtuoso-large": {
+          "tools": true
+        },
+        "baidu/ernie-4.5-vl-424b-a47b": {
+          "tools": false
+        },
+        "bytedance-seed/seed-1.6": {
+          "tools": true
+        },
+        "bytedance-seed/seed-1.6-flash": {
+          "tools": true
+        },
+        "bytedance-seed/seed-2-1-turbo": {
+          "tools": true
+        },
+        "bytedance-seed/seed-2.0-code": {
+          "tools": true
+        },
+        "bytedance-seed/seed-2.0-lite": {
+          "tools": true
+        },
+        "bytedance-seed/seed-2.0-mini": {
+          "tools": true
+        },
+        "bytedance/ui-tars-1.5-7b": {
+          "tools": false
+        },
+        "cognitivecomputations/dolphin-mistral-24b-venice-edition": {
+          "tools": false
+        },
+        "cohere/command-a": {
+          "tools": false
+        },
+        "cohere/command-r-08-2024": {
+          "tools": true
+        },
+        "cohere/command-r-plus-08-2024": {
+          "tools": true
+        },
+        "cohere/command-r7b-12-2024": {
+          "tools": false
+        },
+        "cohere/north-mini-code:free": {
+          "tools": true
+        },
+        "deepcogito/cogito-v2.1-671b": {
+          "tools": false
+        },
+        "deepseek/deepseek-chat": {
+          "tools": true
+        },
+        "deepseek/deepseek-chat-v3-0324": {
+          "tools": true
+        },
+        "deepseek/deepseek-chat-v3.1": {
+          "tools": true
+        },
+        "deepseek/deepseek-r1": {
+          "tools": true
+        },
+        "deepseek/deepseek-r1-0528": {
+          "tools": true
+        },
+        "deepseek/deepseek-r1-distill-llama-70b": {
+          "tools": false
+        },
+        "deepseek/deepseek-v3.1-terminus": {
+          "tools": true
+        },
+        "deepseek/deepseek-v3.2": {
+          "tools": true
+        },
+        "deepseek/deepseek-v3.2-exp": {
+          "tools": true
+        },
+        "deepseek/deepseek-v4-flash": {
+          "tools": true
+        },
+        "deepseek/deepseek-v4-flash-0731": {
+          "tools": true
+        },
+        "deepseek/deepseek-v4-pro": {
+          "tools": true
+        },
+        "deepseek/deepseek-v4-pro-0813": {
+          "tools": true
+        },
+        "dots-studio/dots-3-note-preview:free": {
+          "tools": true
+        },
+        "google/gemini-2.5-flash": {
+          "tools": true
+        },
+        "google/gemini-2.5-flash-image": {
+          "tools": false
+        },
+        "google/gemini-2.5-flash-lite": {
+          "tools": true
+        },
+        "google/gemini-2.5-flash-lite:batch": {
+          "tools": true
+        },
+        "google/gemini-2.5-flash:batch": {
+          "tools": true
+        },
+        "google/gemini-2.5-pro": {
+          "tools": true
+        },
+        "google/gemini-2.5-pro-preview": {
+          "tools": true
+        },
+        "google/gemini-2.5-pro-preview-05-06": {
+          "tools": true
+        },
+        "google/gemini-2.5-pro:batch": {
+          "tools": true
+        },
+        "google/gemini-3-flash-preview": {
+          "tools": true
+        },
+        "google/gemini-3-flash-preview:batch": {
+          "tools": true
+        },
+        "google/gemini-3-pro-image": {
+          "tools": true
+        },
+        "google/gemini-3-pro-image-preview": {
+          "tools": false
+        },
+        "google/gemini-3.1-flash-image": {
+          "tools": false
+        },
+        "google/gemini-3.1-flash-image-preview": {
+          "tools": false
+        },
+        "google/gemini-3.1-flash-lite": {
+          "tools": true
+        },
+        "google/gemini-3.1-flash-lite-image": {
+          "tools": false
+        },
+        "google/gemini-3.1-flash-lite-preview": {
+          "tools": true
+        },
+        "google/gemini-3.1-flash-lite:batch": {
+          "tools": true
+        },
+        "google/gemini-3.1-pro-preview": {
+          "tools": true
+        },
+        "google/gemini-3.1-pro-preview-customtools": {
+          "tools": true
+        },
+        "google/gemini-3.1-pro-preview:batch": {
+          "tools": true
+        },
+        "google/gemini-3.5-flash": {
+          "tools": true
+        },
+        "google/gemini-3.5-flash-lite": {
+          "tools": true
+        },
+        "google/gemini-3.5-flash-lite:batch": {
+          "tools": true
+        },
+        "google/gemini-3.5-flash:batch": {
+          "tools": true
+        },
+        "google/gemini-3.6-flash": {
+          "tools": true
+        },
+        "google/gemini-3.6-flash:batch": {
+          "tools": true
+        },
+        "google/gemini-3.7-flash": {
+          "tools": true
+        },
+        "google/gemini-3.7-flash:batch": {
+          "tools": true
+        },
+        "google/gemma-2-27b-it": {
+          "tools": false
+        },
+        "google/gemma-3-12b-it": {
+          "tools": true
+        },
+        "google/gemma-3-27b-it": {
+          "tools": true
+        },
+        "google/gemma-3-4b-it": {
+          "tools": false
+        },
+        "google/gemma-3n-e4b-it": {
+          "tools": false
+        },
+        "google/gemma-4-26b-a4b-it": {
+          "tools": true
+        },
+        "google/gemma-4-26b-a4b-it:free": {
+          "tools": true
+        },
+        "google/gemma-4-31b-it": {
+          "tools": true
+        },
+        "google/gemma-4-31b-it:free": {
+          "tools": true
+        },
+        "google/lyria-3-clip-preview": {
+          "tools": false
+        },
+        "google/lyria-3-pro-preview": {
+          "tools": false
+        },
+        "gryphe/mythomax-l2-13b": {
+          "tools": false
+        },
+        "ibm-granite/granite-4.0-h-micro": {
+          "tools": false
+        },
+        "ibm-granite/granite-4.1-8b": {
+          "tools": true
+        },
+        "inception/mercury-2": {
+          "tools": true
+        },
+        "inclusionai/ling-2.6-1t": {
+          "tools": true
+        },
+        "inclusionai/ling-2.6-flash": {
+          "tools": true
+        },
+        "inclusionai/ling-3.0-flash": {
+          "tools": true
+        },
+        "inclusionai/ring-2.6-1t": {
+          "tools": true
+        },
+        "kwaipilot/kat-coder-air-v2.5": {
+          "tools": true
+        },
+        "kwaipilot/kat-coder-pro-v2": {
+          "tools": true
+        },
+        "kwaipilot/kat-coder-pro-v2.5": {
+          "tools": true
+        },
+        "liquid/lfm-2.5-2.6b:free": {
+          "tools": true
+        },
+        "meituan/longcat-2.0": {
+          "tools": true
+        },
+        "meta-llama/llama-3.1-70b-instruct": {
+          "tools": true
+        },
+        "meta-llama/llama-3.1-8b-instruct": {
+          "tools": true
+        },
+        "meta-llama/llama-3.2-1b-instruct": {
+          "tools": false
+        },
+        "meta-llama/llama-3.2-3b-instruct": {
+          "tools": false
+        },
+        "meta-llama/llama-3.3-70b-instruct": {
+          "tools": true
+        },
+        "meta-llama/llama-4-maverick": {
+          "tools": true
+        },
+        "meta-llama/llama-4-scout": {
+          "tools": true
+        },
+        "meta-llama/llama-guard-4-12b": {
+          "tools": false
+        },
+        "meta/muse-glimmer-30b": {
+          "tools": true
+        },
+        "meta/muse-spark-1.1": {
+          "tools": true
+        },
+        "meta/muse-spark-1.2": {
+          "tools": true
+        },
+        "microsoft/phi-4": {
+          "tools": false
+        },
+        "microsoft/wizardlm-2-8x22b": {
+          "tools": false
+        },
+        "minimax/minimax-01": {
+          "tools": false
+        },
+        "minimax/minimax-m1": {
+          "tools": true
+        },
+        "minimax/minimax-m2": {
+          "tools": true
+        },
+        "minimax/minimax-m2-her": {
+          "tools": false
+        },
+        "minimax/minimax-m2.1": {
+          "tools": true
+        },
+        "minimax/minimax-m2.5": {
+          "tools": true
+        },
+        "minimax/minimax-m2.7": {
+          "tools": true
+        },
+        "minimax/minimax-m3": {
+          "tools": true
+        },
+        "minimax/minimax-m3:batch": {
+          "tools": true
+        },
+        "mistralai/codestral-2508": {
+          "tools": true
+        },
+        "mistralai/ministral-14b-2512": {
+          "tools": true
+        },
+        "mistralai/ministral-3b-2512": {
+          "tools": true
+        },
+        "mistralai/ministral-8b-2512": {
+          "tools": true
+        },
+        "mistralai/mistral-large": {
+          "tools": true
+        },
+        "mistralai/mistral-large-2407": {
+          "tools": true
+        },
+        "mistralai/mistral-large-2512": {
+          "tools": true
+        },
+        "mistralai/mistral-medium-3": {
+          "tools": true
+        },
+        "mistralai/mistral-medium-3-5": {
+          "tools": true
+        },
+        "mistralai/mistral-medium-3.1": {
+          "tools": true
+        },
+        "mistralai/mistral-nemo": {
+          "tools": true
+        },
+        "mistralai/mistral-saba": {
+          "tools": true
+        },
+        "mistralai/mistral-small-24b-instruct-2501": {
+          "tools": false
+        },
+        "mistralai/mistral-small-2603": {
+          "tools": true
+        },
+        "mistralai/mistral-small-3.1-24b-instruct": {
+          "tools": false
+        },
+        "mistralai/mistral-small-3.2-24b-instruct": {
+          "tools": true
+        },
+        "mistralai/mixtral-8x22b-instruct": {
+          "tools": true
+        },
+        "mistralai/voxtral-small-24b-2507": {
+          "tools": true
+        },
+        "moonshotai/kimi-k2": {
+          "tools": true
+        },
+        "moonshotai/kimi-k2-0905": {
+          "tools": true
+        },
+        "moonshotai/kimi-k2-thinking": {
+          "tools": true
+        },
+        "moonshotai/kimi-k2.5": {
+          "tools": true
+        },
+        "moonshotai/kimi-k2.6": {
+          "tools": true
+        },
+        "moonshotai/kimi-k2.7-code": {
+          "tools": true
+        },
+        "moonshotai/kimi-k2.7-code:batch": {
+          "tools": true
+        },
+        "moonshotai/kimi-k3": {
+          "tools": true
+        },
+        "morph/morph-v3-fast": {
+          "tools": false
+        },
+        "morph/morph-v3-large": {
+          "tools": false
+        },
+        "nex-agi/nex-n2-mini": {
+          "tools": true
+        },
+        "nex-agi/nex-n2-pro": {
+          "tools": true
+        },
+        "nousresearch/hermes-3-llama-3.1-405b": {
+          "tools": false
+        },
+        "nousresearch/hermes-3-llama-3.1-70b": {
+          "tools": false
+        },
+        "nousresearch/hermes-4-405b": {
+          "tools": false
+        },
+        "nousresearch/hermes-4-70b": {
+          "tools": false
+        },
+        "nvidia/nemotron-3-nano-30b-a3b": {
+          "tools": true
+        },
+        "nvidia/nemotron-3-nano-30b-a3b:free": {
+          "tools": true
+        },
+        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free": {
+          "tools": true
+        },
+        "nvidia/nemotron-3-super-120b-a12b": {
+          "tools": true
+        },
+        "nvidia/nemotron-3-super-120b-a12b:free": {
+          "tools": true
+        },
+        "nvidia/nemotron-3-ultra-550b-a55b": {
+          "tools": true
+        },
+        "nvidia/nemotron-3-ultra-550b-a55b:batch": {
+          "tools": true
+        },
+        "nvidia/nemotron-3-ultra-550b-a55b:free": {
+          "tools": true
+        },
+        "nvidia/nemotron-3.5-content-safety:free": {
+          "tools": false
+        },
+        "nvidia/nemotron-3.5-lightning": {
+          "tools": true
+        },
+        "nvidia/nemotron-3.5-lightning:free": {
+          "tools": true
+        },
+        "nvidia/nemotron-nano-12b-v2-vl:free": {
+          "tools": true
+        },
+        "nvidia/nemotron-nano-9b-v2:free": {
+          "tools": true
+        },
+        "openai/gpt-3.5-turbo": {
+          "tools": true
+        },
+        "openai/gpt-3.5-turbo-0613": {
+          "tools": true
+        },
+        "openai/gpt-3.5-turbo-16k": {
+          "tools": true
+        },
+        "openai/gpt-3.5-turbo-instruct": {
+          "tools": false
+        },
+        "openai/gpt-3.5-turbo:batch": {
+          "tools": true
+        },
+        "openai/gpt-4": {
+          "tools": true
+        },
+        "openai/gpt-4-turbo": {
+          "tools": true
+        },
+        "openai/gpt-4-turbo-preview": {
+          "tools": true
+        },
+        "openai/gpt-4-turbo:batch": {
+          "tools": true
+        },
+        "openai/gpt-4.1": {
+          "tools": true
+        },
+        "openai/gpt-4.1-mini": {
+          "tools": true
+        },
+        "openai/gpt-4.1-mini:batch": {
+          "tools": true
+        },
+        "openai/gpt-4.1-nano": {
+          "tools": true
+        },
+        "openai/gpt-4.1-nano:batch": {
+          "tools": true
+        },
+        "openai/gpt-4.1:batch": {
+          "tools": true
+        },
+        "openai/gpt-4o": {
+          "tools": true
+        },
+        "openai/gpt-4o-2024-05-13": {
+          "tools": true
+        },
+        "openai/gpt-4o-2024-08-06": {
+          "tools": true
+        },
+        "openai/gpt-4o-2024-11-20": {
+          "tools": true
+        },
+        "openai/gpt-4o-mini": {
+          "tools": true
+        },
+        "openai/gpt-4o-mini-2024-07-18": {
+          "tools": true
+        },
+        "openai/gpt-4o-mini:batch": {
+          "tools": true
+        },
+        "openai/gpt-4o:batch": {
+          "tools": true
+        },
+        "openai/gpt-5": {
+          "tools": true
+        },
+        "openai/gpt-5-codex:batch": {
+          "tools": true
+        },
+        "openai/gpt-5-image": {
+          "tools": false
+        },
+        "openai/gpt-5-image-mini": {
+          "tools": false
+        },
+        "openai/gpt-5-mini": {
+          "tools": true
+        },
+        "openai/gpt-5-mini:batch": {
+          "tools": true
+        },
+        "openai/gpt-5-nano": {
+          "tools": true
+        },
+        "openai/gpt-5-nano:batch": {
+          "tools": true
+        },
+        "openai/gpt-5-pro": {
+          "tools": true
+        },
+        "openai/gpt-5-pro:batch": {
+          "tools": true
+        },
+        "openai/gpt-5:batch": {
+          "tools": true
+        },
+        "openai/gpt-5.1": {
+          "tools": true
+        },
+        "openai/gpt-5.1-codex": {
+          "tools": true
+        },
+        "openai/gpt-5.1-codex-max": {
+          "tools": true
+        },
+        "openai/gpt-5.1-codex-mini": {
+          "tools": true
+        },
+        "openai/gpt-5.1:batch": {
+          "tools": true
+        },
+        "openai/gpt-5.2": {
+          "tools": true
+        },
+        "openai/gpt-5.2-chat": {
+          "tools": true
+        },
+        "openai/gpt-5.2-codex": {
+          "tools": true
+        },
+        "openai/gpt-5.2-pro": {
+          "tools": true
+        },
+        "openai/gpt-5.2-pro:batch": {
+          "tools": true
+        },
+        "openai/gpt-5.2:batch": {
+          "tools": true
+        },
+        "openai/gpt-5.3-codex": {
+          "tools": true
+        },
+        "openai/gpt-5.4": {
+          "tools": true
+        },
+        "openai/gpt-5.4-image-2": {
+          "tools": false
+        },
+        "openai/gpt-5.4-mini": {
+          "tools": true
+        },
+        "openai/gpt-5.4-mini:batch": {
+          "tools": true
+        },
+        "openai/gpt-5.4-nano": {
+          "tools": true
+        },
+        "openai/gpt-5.4-nano:batch": {
+          "tools": true
+        },
+        "openai/gpt-5.4-pro": {
+          "tools": true
+        },
+        "openai/gpt-5.4-pro:batch": {
+          "tools": true
+        },
+        "openai/gpt-5.4:batch": {
+          "tools": true
+        },
+        "openai/gpt-5.5": {
+          "tools": true
+        },
+        "openai/gpt-5.5-pro": {
+          "tools": true
+        },
+        "openai/gpt-5.5-pro:batch": {
+          "tools": true
+        },
+        "openai/gpt-5.5:batch": {
+          "tools": true
+        },
+        "openai/gpt-5.6-luna": {
+          "tools": true
+        },
+        "openai/gpt-5.6-luna-pro": {
+          "tools": true
+        },
+        "openai/gpt-5.6-luna-pro:batch": {
+          "tools": true
+        },
+        "openai/gpt-5.6-luna:batch": {
+          "tools": true
+        },
+        "openai/gpt-5.6-sol": {
+          "tools": true
+        },
+        "openai/gpt-5.6-sol-pro": {
+          "tools": true
+        },
+        "openai/gpt-5.6-sol-pro:batch": {
+          "tools": true
+        },
+        "openai/gpt-5.6-sol:batch": {
+          "tools": true
+        },
+        "openai/gpt-5.6-terra": {
+          "tools": true
+        },
+        "openai/gpt-5.6-terra-pro": {
+          "tools": true
+        },
+        "openai/gpt-5.6-terra-pro:batch": {
+          "tools": true
+        },
+        "openai/gpt-5.6-terra:batch": {
+          "tools": true
+        },
+        "openai/gpt-audio": {
+          "tools": true
+        },
+        "openai/gpt-audio-mini": {
+          "tools": true
+        },
+        "openai/gpt-chat-latest": {
+          "tools": true
+        },
+        "openai/gpt-oss-120b": {
+          "tools": true
+        },
+        "openai/gpt-oss-20b": {
+          "tools": true
+        },
+        "openai/gpt-oss-20b:free": {
+          "tools": true
+        },
+        "openai/gpt-oss-safeguard-20b": {
+          "tools": true
+        },
+        "openai/o1": {
+          "tools": true
+        },
+        "openai/o1-pro": {
+          "tools": false
+        },
+        "openai/o1-pro:batch": {
+          "tools": false
+        },
+        "openai/o1:batch": {
+          "tools": true
+        },
+        "openai/o3": {
+          "tools": true
+        },
+        "openai/o3-mini": {
+          "tools": true
+        },
+        "openai/o3-mini-high": {
+          "tools": true
+        },
+        "openai/o3-mini-high:batch": {
+          "tools": true
+        },
+        "openai/o3-mini:batch": {
+          "tools": true
+        },
+        "openai/o3-pro": {
+          "tools": true
+        },
+        "openai/o3-pro:batch": {
+          "tools": true
+        },
+        "openai/o3:batch": {
+          "tools": true
+        },
+        "openai/o4-mini": {
+          "tools": true
+        },
+        "openai/o4-mini-high": {
+          "tools": true
+        },
+        "openai/o4-mini-high:batch": {
+          "tools": true
+        },
+        "openai/o4-mini:batch": {
+          "tools": true
+        },
+        "openrouter/auto": {
+          "tools": true
+        },
+        "openrouter/auto-beta": {
+          "tools": true
+        },
+        "openrouter/bodybuilder": {
+          "tools": false
+        },
+        "openrouter/free": {
+          "tools": true
+        },
+        "openrouter/fusion": {
+          "tools": false
+        },
+        "openrouter/pareto-code": {
+          "tools": false
+        },
+        "perceptron/perceptron-mk1": {
+          "tools": false
+        },
+        "perplexity/sonar": {
+          "tools": false
+        },
+        "perplexity/sonar-deep-research": {
+          "tools": false
+        },
+        "perplexity/sonar-pro": {
+          "tools": false
+        },
+        "perplexity/sonar-pro-search": {
+          "tools": false
+        },
+        "perplexity/sonar-reasoning-pro": {
+          "tools": false
+        },
+        "poolside/laguna-s-2.1": {
+          "tools": true
+        },
+        "poolside/laguna-s-2.1:free": {
+          "tools": true
+        },
+        "poolside/laguna-xs-2.1": {
+          "tools": true
+        },
+        "poolside/laguna-xs-2.1:free": {
+          "tools": true
+        },
+        "qwen/qwen-2.5-72b-instruct": {
+          "tools": true
+        },
+        "qwen/qwen-2.5-7b-instruct": {
+          "tools": true
+        },
+        "qwen/qwen-2.5-coder-32b-instruct": {
+          "tools": false
+        },
+        "qwen/qwen-plus": {
+          "tools": true
+        },
+        "qwen/qwen-plus-2025-07-28": {
+          "tools": true
+        },
+        "qwen/qwen-plus-2025-07-28:thinking": {
+          "tools": true
+        },
+        "qwen/qwen2.5-vl-72b-instruct": {
+          "tools": false
+        },
+        "qwen/qwen3-14b": {
+          "tools": true
+        },
+        "qwen/qwen3-235b-a22b": {
+          "tools": true
+        },
+        "qwen/qwen3-235b-a22b-2507": {
+          "tools": true
+        },
+        "qwen/qwen3-235b-a22b-thinking-2507": {
+          "tools": true
+        },
+        "qwen/qwen3-30b-a3b": {
+          "tools": true
+        },
+        "qwen/qwen3-30b-a3b-instruct-2507": {
+          "tools": true
+        },
+        "qwen/qwen3-30b-a3b-thinking-2507": {
+          "tools": true
+        },
+        "qwen/qwen3-32b": {
+          "tools": true
+        },
+        "qwen/qwen3-8b": {
+          "tools": true
+        },
+        "qwen/qwen3-coder": {
+          "tools": true
+        },
+        "qwen/qwen3-coder-30b-a3b-instruct": {
+          "tools": true
+        },
+        "qwen/qwen3-coder-flash": {
+          "tools": true
+        },
+        "qwen/qwen3-coder-next": {
+          "tools": true
+        },
+        "qwen/qwen3-coder-plus": {
+          "tools": true
+        },
+        "qwen/qwen3-max": {
+          "tools": true
+        },
+        "qwen/qwen3-max-thinking": {
+          "tools": true
+        },
+        "qwen/qwen3-next-80b-a3b-instruct": {
+          "tools": true
+        },
+        "qwen/qwen3-next-80b-a3b-thinking": {
+          "tools": true
+        },
+        "qwen/qwen3-vl-235b-a22b-instruct": {
+          "tools": true
+        },
+        "qwen/qwen3-vl-235b-a22b-thinking": {
+          "tools": true
+        },
+        "qwen/qwen3-vl-30b-a3b-instruct": {
+          "tools": true
+        },
+        "qwen/qwen3-vl-30b-a3b-thinking": {
+          "tools": true
+        },
+        "qwen/qwen3-vl-32b-instruct": {
+          "tools": true
+        },
+        "qwen/qwen3-vl-8b-instruct": {
+          "tools": true
+        },
+        "qwen/qwen3-vl-8b-thinking": {
+          "tools": true
+        },
+        "qwen/qwen3.5-122b-a10b": {
+          "tools": true
+        },
+        "qwen/qwen3.5-27b": {
+          "tools": true
+        },
+        "qwen/qwen3.5-35b-a3b": {
+          "tools": true
+        },
+        "qwen/qwen3.5-397b-a17b": {
+          "tools": true
+        },
+        "qwen/qwen3.5-9b": {
+          "tools": true
+        },
+        "qwen/qwen3.5-flash-02-23": {
+          "tools": true
+        },
+        "qwen/qwen3.5-plus-02-15": {
+          "tools": true
+        },
+        "qwen/qwen3.5-plus-20260420": {
+          "tools": true
+        },
+        "qwen/qwen3.6-27b": {
+          "tools": true
+        },
+        "qwen/qwen3.6-35b-a3b": {
+          "tools": true
+        },
+        "qwen/qwen3.6-flash": {
+          "tools": true
+        },
+        "qwen/qwen3.6-max-preview": {
+          "tools": true
+        },
+        "qwen/qwen3.6-plus": {
+          "tools": true
+        },
+        "qwen/qwen3.7-flash": {
+          "tools": true
+        },
+        "qwen/qwen3.7-max": {
+          "tools": true
+        },
+        "qwen/qwen3.7-plus": {
+          "tools": true
+        },
+        "qwen/qwen3.8-2.4t-a95b": {
+          "tools": true
+        },
+        "qwen/qwen3.8-27b": {
+          "tools": true
+        },
+        "qwen/qwen3.8-max": {
+          "tools": true
+        },
+        "rekaai/reka-edge": {
+          "tools": true
+        },
+        "rekaai/reka-flash-3": {
+          "tools": false
+        },
+        "relace/relace-apply-3": {
+          "tools": false
+        },
+        "relace/relace-search": {
+          "tools": true
+        },
+        "sakana/fugu-ultra": {
+          "tools": true
+        },
+        "sakana/sakana-namazu": {
+          "tools": true
+        },
+        "sao10k/l3-lunaris-8b": {
+          "tools": false
+        },
+        "sao10k/l3.1-euryale-70b": {
+          "tools": true
+        },
+        "sao10k/l3.3-euryale-70b": {
+          "tools": false
+        },
+        "stepfun/step-3.5-flash": {
+          "tools": true
+        },
+        "stepfun/step-3.7-flash": {
+          "tools": true
+        },
+        "tencent/hunyuan-a13b-instruct": {
+          "tools": false
+        },
+        "tencent/hy3": {
+          "tools": true
+        },
+        "tencent/hy3-preview": {
+          "tools": true
+        },
+        "thedrummer/cydonia-24b-v4.1": {
+          "tools": false
+        },
+        "thedrummer/rocinante-12b": {
+          "tools": false
+        },
+        "thedrummer/skyfall-36b-v2": {
+          "tools": false
+        },
+        "thedrummer/unslopnemo-12b": {
+          "tools": true
+        },
+        "thinkingmachines/inkling": {
+          "tools": true
+        },
+        "thinkingmachines/inkling-small": {
+          "tools": true
+        },
+        "thinkingmachines/inkling:batch": {
+          "tools": true
+        },
+        "undi95/remm-slerp-l2-13b": {
+          "tools": false
+        },
+        "upstage/solar-pro-3": {
+          "tools": true
+        },
+        "upstage/solar-pro4": {
+          "tools": true
+        },
+        "writer/palmyra-x5": {
+          "tools": false
+        },
+        "x-ai/grok-4.20": {
+          "tools": true
+        },
+        "x-ai/grok-4.20-multi-agent": {
+          "tools": false
+        },
+        "x-ai/grok-4.3": {
+          "tools": true
+        },
+        "x-ai/grok-4.5": {
+          "tools": true
+        },
+        "x-ai/grok-4.6": {
+          "tools": true
+        },
+        "x-ai/grok-build-0.1": {
+          "tools": true
+        },
+        "xiaomi/mimo-v2.5": {
+          "tools": true
+        },
+        "xiaomi/mimo-v2.5-pro": {
+          "tools": true
+        },
+        "z-ai/glm-4.5": {
+          "tools": true
+        },
+        "z-ai/glm-4.5-air": {
+          "tools": true
+        },
+        "z-ai/glm-4.5v": {
+          "tools": true
+        },
+        "z-ai/glm-4.6": {
+          "tools": true
+        },
+        "z-ai/glm-4.6v": {
+          "tools": true
+        },
+        "z-ai/glm-4.7": {
+          "tools": true
+        },
+        "z-ai/glm-4.7-flash": {
+          "tools": true
+        },
+        "z-ai/glm-5": {
+          "tools": true
+        },
+        "z-ai/glm-5-turbo": {
+          "tools": true
+        },
+        "z-ai/glm-5.1": {
+          "tools": true
+        },
+        "z-ai/glm-5.2": {
+          "tools": true
+        },
+        "z-ai/glm-5.2:batch": {
+          "tools": true
+        },
+        "z-ai/glm-5.2:free": {
+          "tools": true
+        },
+        "z-ai/glm-5.3": {
+          "tools": true
+        },
+        "z-ai/glm-5v-turbo": {
+          "tools": true
+        }
+      }
+    },
+    "nvidia": {
+      "vendor": "nvidia",
+      "url": "https://integrate.api.nvidia.com/v1/models",
+      "reachable": true,
+      "models": {
+        "01-ai/yi-large": {
+          "tools": null
+        },
+        "adept/fuyu-8b": {
+          "tools": null
+        },
+        "ai21labs/jamba-1.5-large-instruct": {
+          "tools": null
+        },
+        "aisingapore/sea-lion-7b-instruct": {
+          "tools": null
+        },
+        "baai/bge-m3": {
+          "tools": null
+        },
+        "bigcode/starcoder2-15b": {
+          "tools": null
+        },
+        "databricks/dbrx-instruct": {
+          "tools": null
+        },
+        "deepseek-ai/deepseek-coder-6.7b-instruct": {
+          "tools": null
+        },
+        "deepseek-ai/deepseek-v4-flash-0731": {
+          "tools": null
+        },
+        "google/codegemma-1.1-7b": {
+          "tools": null
+        },
+        "google/codegemma-7b": {
+          "tools": null
+        },
+        "google/deplot": {
+          "tools": null
+        },
+        "google/diffusiongemma-26b-a4b-it": {
+          "tools": null
+        },
+        "google/gemma-2b": {
+          "tools": null
+        },
+        "google/gemma-3-12b-it": {
+          "tools": null
+        },
+        "google/gemma-3-4b-it": {
+          "tools": null
+        },
+        "google/gemma-4-31b-it": {
+          "tools": null
+        },
+        "google/recurrentgemma-2b": {
+          "tools": null
+        },
+        "ibm/granite-3.0-3b-a800m-instruct": {
+          "tools": null
+        },
+        "ibm/granite-3.0-8b-instruct": {
+          "tools": null
+        },
+        "ibm/granite-34b-code-instruct": {
+          "tools": null
+        },
+        "ibm/granite-8b-code-instruct": {
+          "tools": null
+        },
+        "meta/codellama-70b": {
+          "tools": null
+        },
+        "meta/llama-3.1-70b-instruct": {
+          "tools": null
+        },
+        "meta/llama-3.1-8b-instruct": {
+          "tools": null
+        },
+        "meta/llama-3.2-11b-vision-instruct": {
+          "tools": null
+        },
+        "meta/llama-3.2-1b-instruct": {
+          "tools": null
+        },
+        "meta/llama-3.2-3b-instruct": {
+          "tools": null
+        },
+        "meta/llama-3.2-90b-vision-instruct": {
+          "tools": null
+        },
+        "meta/llama-3.3-70b-instruct": {
+          "tools": null
+        },
+        "meta/llama-guard-4-12b": {
+          "tools": null
+        },
+        "meta/llama2-70b": {
+          "tools": null
+        },
+        "meta/muse-glimmer-30b": {
+          "tools": null
+        },
+        "microsoft/kosmos-2": {
+          "tools": null
+        },
+        "microsoft/phi-3-vision-128k-instruct": {
+          "tools": null
+        },
+        "microsoft/phi-3.5-moe-instruct": {
+          "tools": null
+        },
+        "minimaxai/minimax-m3": {
+          "tools": null
+        },
+        "mistralai/codestral-22b-instruct-v0.1": {
+          "tools": null
+        },
+        "mistralai/mistral-7b-instruct-v0.3": {
+          "tools": null
+        },
+        "mistralai/mistral-large": {
+          "tools": null
+        },
+        "mistralai/mistral-large-2-instruct": {
+          "tools": null
+        },
+        "mistralai/mistral-nemotron": {
+          "tools": null
+        },
+        "mistralai/mixtral-8x22b-v0.1": {
+          "tools": null
+        },
+        "moonshotai/kimi-k2.6": {
+          "tools": null
+        },
+        "nv-mistralai/mistral-nemo-12b-instruct": {
+          "tools": null
+        },
+        "nvidia/ai-synthetic-video-detector": {
+          "tools": null
+        },
+        "nvidia/cosmos-reason2-8b": {
+          "tools": null
+        },
+        "nvidia/embed-qa-4": {
+          "tools": null
+        },
+        "nvidia/ising-calibration-1.5-31b": {
+          "tools": null
+        },
+        "nvidia/llama-3.1-nemoguard-8b-content-safety": {
+          "tools": null
+        },
+        "nvidia/llama-3.1-nemoguard-8b-topic-control": {
+          "tools": null
+        },
+        "nvidia/llama-3.1-nemotron-51b-instruct": {
+          "tools": null
+        },
+        "nvidia/llama-3.1-nemotron-70b-instruct": {
+          "tools": null
+        },
+        "nvidia/llama-3.1-nemotron-nano-8b-v1": {
+          "tools": null
+        },
+        "nvidia/llama-3.1-nemotron-nano-vl-8b-v1": {
+          "tools": null
+        },
+        "nvidia/llama-3.1-nemotron-safety-guard-8b-v3": {
+          "tools": null
+        },
+        "nvidia/llama-3.1-nemotron-ultra-253b-v1": {
+          "tools": null
+        },
+        "nvidia/llama-3.2-nemoretriever-1b-vlm-embed-v1": {
+          "tools": null
+        },
+        "nvidia/llama-3.2-nv-embedqa-1b-v1": {
+          "tools": null
+        },
+        "nvidia/llama-3.3-nemotron-super-49b-v1": {
+          "tools": null
+        },
+        "nvidia/llama-3.3-nemotron-super-49b-v1.5": {
+          "tools": null
+        },
+        "nvidia/llama-nemotron-embed-1b-v2": {
+          "tools": null
+        },
+        "nvidia/llama-nemotron-embed-vl-1b-v2": {
+          "tools": null
+        },
+        "nvidia/llama3-chatqa-1.5-70b": {
+          "tools": null
+        },
+        "nvidia/mistral-nemo-minitron-8b-8k-instruct": {
+          "tools": null
+        },
+        "nvidia/nemoretriever-parse": {
+          "tools": null
+        },
+        "nvidia/nemotron-3-embed-1b": {
+          "tools": null
+        },
+        "nvidia/nemotron-3-nano-30b-a3b": {
+          "tools": null
+        },
+        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning": {
+          "tools": null
+        },
+        "nvidia/nemotron-3-super-120b-a12b": {
+          "tools": null
+        },
+        "nvidia/nemotron-3-ultra-550b-a55b": {
+          "tools": null
+        },
+        "nvidia/nemotron-3.5-content-safety": {
+          "tools": null
+        },
+        "nvidia/nemotron-3.5-lightning-30b-a3b": {
+          "tools": null
+        },
+        "nvidia/nemotron-4-340b-instruct": {
+          "tools": null
+        },
+        "nvidia/nemotron-4-340b-reward": {
+          "tools": null
+        },
+        "nvidia/nemotron-mini-4b-instruct": {
+          "tools": null
+        },
+        "nvidia/nemotron-nano-12b-v2-vl": {
+          "tools": null
+        },
+        "nvidia/nemotron-nano-3-30b-a3b": {
+          "tools": null
+        },
+        "nvidia/nemotron-parse": {
+          "tools": null
+        },
+        "nvidia/neva-22b": {
+          "tools": null
+        },
+        "nvidia/nv-embed-v1": {
+          "tools": null
+        },
+        "nvidia/nv-embedcode-7b-v1": {
+          "tools": null
+        },
+        "nvidia/nv-embedqa-e5-v5": {
+          "tools": null
+        },
+        "nvidia/nv-embedqa-mistral-7b-v2": {
+          "tools": null
+        },
+        "nvidia/nvclip": {
+          "tools": null
+        },
+        "nvidia/nvidia-nemotron-nano-9b-v2": {
+          "tools": null
+        },
+        "nvidia/riva-translate-4b-instruct": {
+          "tools": null
+        },
+        "nvidia/riva-translate-4b-instruct-v1.1": {
+          "tools": null
+        },
+        "nvidia/riva-translate-4b-instruct-v2": {
+          "tools": null
+        },
+        "nvidia/vila": {
+          "tools": null
+        },
+        "openai/gpt-oss-120b": {
+          "tools": null
+        },
+        "openai/gpt-oss-20b": {
+          "tools": null
+        },
+        "poolside/laguna-xs-2.1": {
+          "tools": null
+        },
+        "snowflake/arctic-embed-l": {
+          "tools": null
+        },
+        "stepfun-ai/step-3.7-flash": {
+          "tools": null
+        },
+        "thinkingmachines/inkling": {
+          "tools": null
+        },
+        "writer/palmyra-creative-122b": {
+          "tools": null
+        },
+        "writer/palmyra-fin-70b-32k": {
+          "tools": null
+        },
+        "writer/palmyra-med-70b": {
+          "tools": null
+        },
+        "writer/palmyra-med-70b-32k": {
+          "tools": null
+        },
+        "z-ai/glm-5.2": {
+          "tools": null
+        },
+        "zyphra/zamba2-7b-instruct": {
+          "tools": null
+        }
+      }
+    }
+  }
+}

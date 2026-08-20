@@ -21,7 +21,8 @@ import {
   artifactAssignments,
 } from '../../infrastructure/database/schema';
 import { TenantRole, AssignmentScope } from '../../domain/shared/types';
-import type { HonoEnv } from '../../env';
+import type { Env, HonoEnv } from '../../env';
+import { invalidateProjectGovernance } from '../../application/runtime/runContextSource';
 import type { Db } from '../../infrastructure/database/connection';
 
 const VALID_KINDS = new Set(['workforce', 'registered']);
@@ -145,6 +146,9 @@ export function createProjectAgentRoutes(db: Db): Hono<HonoEnv> {
       .returning();
 
     if (!updated) return c.json({ error: 'Agent not found' }, 404);
+    // These rules bind the agent's next RUN, so drop the cached governance block now
+    // rather than letting a run execute for up to a TTL under the superseded policy.
+    await invalidateProjectGovernance(c.env as Env, tenantId);
     return c.json({ agent: updated });
   });
 

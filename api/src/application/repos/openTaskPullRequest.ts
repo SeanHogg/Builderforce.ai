@@ -16,6 +16,7 @@ import { resolveRepoCredential, isResolveError } from './resolveRepoCredential';
 import { createPullRequest } from './createPullRequest';
 import { mergeBranchToBase, cloudAutoMergeRequiresGreen, cloudAutoMergeEnabled } from './mergeBranchToBase';
 import { recordPullRequestRow } from './recordPullRequestRow';
+import { listSpanningRepoWrites, recordBindingPullRequest } from './taskRepoSet';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { Db } from '../../infrastructure/database/connection';
 
@@ -27,7 +28,9 @@ export interface OpenTaskPrInput {
 }
 
 export type OpenTaskPrResult =
-  | { ok: true; url: string; number: number; merged: boolean; mergeError?: string }
+  | { ok: true; url: string; number: number; merged: boolean; mergeError?: string;
+      /** Extra PRs opened in the OTHER repos of a spanning task's set (0956). */
+      spanning?: SpanningPullRequest[] }
   /** Another finalize path already claimed (or completed) this task's PR — no PR
    *  opened by THIS call. Not an error: the single-PR invariant held. */
   | { ok: false; status: 409; error: string; claimLost: true }
@@ -159,5 +162,106 @@ export async function openTaskPullRequest(
     .set({ githubPrUrl: pr.url, githubPrNumber: pr.number, gitBranch: input.branch.trim(), updatedAt: now })
     .where(scopedToTenant(tasks, tenantId, eq(tasks.id, taskId)));
 
-  return { ok: true, url: pr.url, number: pr.number, merged: merge.ok, mergeError: merge.ok ? undefined : merge.reason };
+  // MULTI-REPO (0956): the primary PR is open; now open one per OTHER repo in the
+  // task's set that actually received writes. No-op for a single-repo task.
+  const spanning = await openTaskRepoSetPullRequests(db, secret, tenantId, taskId, resolved.repo.id, {
+    title, body: prBody,
+  }).catch((error) => {
+    reportCaughtError(error, { source: 'application/repos/openTaskPullRequest.ts', operation: 'openTaskPullRequest' });
+    return [] as SpanningPullRequest[];
+  });
+
+  return {
+    ok: true, url: pr.url, number: pr.number, merged: merge.ok,
+    mergeError: merge.ok ? undefined : merge.reason,
+    ...(spanning.length ? { spanning } : {}),
+  };
+}
+
+/** One extra repo's PR, opened because that repo actually received writes. */
+export interface SpanningPullRequest {
+  repoId: string;
+  slug: string;
+  branch: string;
+  url?: string;
+  number?: number;
+  /** Present instead of url/number when the provider refused. */
+  error?: string;
+}
+
+/**
+ * MULTI-REPO SPANNING (0956): open a PR in every OTHER repo of this task's bound
+ * set that received writes.
+ *
+ * The task's PRIMARY repo keeps the existing single-PR path above (atomic claim,
+ * `tasks.github_pr_url`, auto-merge policy) — untouched. This is only the tail: a
+ * task bound to 2+ repos gets one branch and one PR *per repo that got code*, and
+ * a bound repo that received nothing gets nothing. Both finalize surfaces (the
+ * inline cloud finalize and the human "Done" drag through {@link
+ * openTaskPullRequest}) call this so a spanning run cannot open its extra PRs on
+ * one path and silently drop them on the other.
+ *
+ * Best-effort by construction: a failure here never fails the run — the primary
+ * PR is already open and the extra branch is already pushed, so the worst case is
+ * a PR a human opens by hand, reported in the returned list.
+ */
+export async function openTaskRepoSetPullRequests(
+  db: Db,
+  secret: string,
+  tenantId: number,
+  taskId: number,
+  primaryRepoId: string | null,
+  input: { title: string; body: string },
+): Promise<SpanningPullRequest[]> {
+  const pending = await listSpanningRepoWrites(db, tenantId, taskId, primaryRepoId).catch(() => []);
+  if (pending.length === 0) return [];  // single-repo task, or nothing else was written
+
+  const opened: SpanningPullRequest[] = [];
+  for (const binding of pending) {
+    const slug = `${binding.owner}/${binding.repo}`;
+    const branch = binding.branch?.trim();
+    if (!branch) continue;  // no branch pinned ⇒ nothing was pushed here
+    const resolved = await resolveRepoCredential(db, secret, tenantId, binding.repoId);
+    if (isResolveError(resolved)) {
+      opened.push({ repoId: binding.repoId, slug, branch, error: resolved.error });
+      continue;
+    }
+    const base = (binding.defaultBranch ?? resolved.repo.defaultBranch ?? 'main').trim();
+    const pr = await createPullRequest({
+      provider: resolved.repo.provider,
+      host: resolved.repo.host,
+      owner: resolved.repo.owner,
+      repo: resolved.repo.repo,
+      token: resolved.token,
+      head: branch,
+      base,
+      title: input.title,
+      body: input.body,
+    }).catch(() => ({ ok: false as const, code: 'provider_error' as const, reason: 'pr failed' }));
+    if (!pr.ok) {
+      opened.push({ repoId: binding.repoId, slug, branch, error: pr.reason });
+      continue;
+    }
+    await recordPullRequestRow(db, {
+      tenantId,
+      segmentId: resolved.repo.segmentId,
+      projectId: resolved.repo.projectId,
+      repoId: resolved.repo.id,
+      taskId,
+      provider: resolved.repo.provider,
+      number: pr.number,
+      url: pr.url,
+      branchName: branch,
+      baseBranch: base,
+      status: 'open',
+    }).catch((error) => {
+      reportCaughtError(error, { source: 'application/repos/openTaskPullRequest.ts', operation: 'openTaskRepoSetPullRequests' });
+      return null;
+    });
+    await recordBindingPullRequest(db, tenantId, taskId, binding.repoId, {
+      url: pr.url, number: pr.number, status: 'open',
+    }).catch((error) => reportCaughtError(error, { source: 'application/repos/openTaskPullRequest.ts', operation: 'openTaskRepoSetPullRequests' }));
+    opened.push({ repoId: binding.repoId, slug, branch, url: pr.url, number: pr.number });
+  }
+  return opened;
 }

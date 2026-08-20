@@ -5,10 +5,11 @@ import { useTranslations } from 'next-intl';
 import type { Task } from '@/lib/builderforceApi';
 import { taskTypeBadgeClass, taskTypeLabelKey } from '@/lib/taskType';
 import { taskPriorityBadgeClass } from '@/lib/taskPriority';
+import { BuildStatusBadge } from '@/components/board/BuildStatusBadge';
 
 /**
  * The ticket's badge row — priority, work-item type, review verdict, audit flag,
- * role sign-off rollup, business value, PRD count.
+ * role sign-off rollup, business value, BUILD verdict, PRD count.
  *
  * ONE component for every surface that shows them: the board card, the table row,
  * and the ticket drawer's header. It used to exist only on the card, which is why
@@ -120,6 +121,11 @@ export function TaskBadges({
           {tBoard('businessValue.badge', { value: task.businessValue })}
         </span>
       )}
+      {/* THE BUILD VERDICT. Placed with the other state badges rather than beside the PR
+          link, because it is a fact about the ticket's readiness, not about the link —
+          and because the table row and the drawer show this row too, which is how the
+          card and the ticket stopped disagreeing about whether the build was red. */}
+      <BuildStatusBadge status={task.buildStatus} />
       {task.specCount ? (
         <span
           title={tBoard('prdBadgeTitle', { count: task.specCount })}

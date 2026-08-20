@@ -19,6 +19,17 @@ export interface ProjectEvermindSyncConfig {
   projectId: number;
   /** Max characters of run text sent in one contribution. Default 8000. */
   maxChars?: number;
+  /**
+   * Contribute as a PRE-DIFFED WEIGHT DELTA instead of raw text (see
+   * `project-evermind-delta.ts`). Opt-in, because it is a genuine trade rather than a
+   * strict improvement: the host pulls the project's `.evermind` base and runs the
+   * training fit itself — spending local CPU and bandwidth — so the coordinator does
+   * not have to, which is what stops one busy project's contributions queueing behind
+   * each other's fits on the single writer. Off by default: a small or bandwidth-
+   * constrained host is better served by the cheap text POST. Falls back to the text
+   * door on every failure, so enabling it can never cost a contribution.
+   */
+  deltaPath?: boolean;
 }
 
 export interface ContributeResult {

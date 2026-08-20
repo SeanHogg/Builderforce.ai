@@ -5,6 +5,14 @@
  * (free preview); saving a run goes through the authenticated `toolsApi`.
  */
 
+/**
+ * The architecture analysis's diagnostic id. It is registered like every other
+ * audit, but it is the one whose RESULT is a document (the architecture PRD)
+ * rather than a scorecard — so more than one surface has to recognise it, and
+ * the string lives here rather than being re-typed at each of them.
+ */
+export const ARCHITECTURE_DIAGNOSTIC_ID = 'architecture-analysis';
+
 export type ToolCategory = 'delivery' | 'finops' | 'governance' | 'quality' | 'career';
 export type ToolKind = 'calculator' | 'questionnaire' | 'quiz' | 'analyzer';
 

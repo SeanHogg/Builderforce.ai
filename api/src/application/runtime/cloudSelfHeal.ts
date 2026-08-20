@@ -23,15 +23,26 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * before kickoff, so a second detector finds it set and falls through to failing the
  * run — never an infinite re-queue loop. This module is intentionally a leaf (no
  * import of {@link ./cloudAgentEngine}) so the engine's `fail` op can depend on it
- * without a cycle; the small telemetry insert below mirrors `recordCloudToolEvent`
- * for that reason.
+ * without a cycle — which is why telemetry goes through {@link ./cloudToolEvents}
+ * (the extracted single writer) rather than the local copy of that insert it used
+ * to carry: the copy predated the extraction and, being a copy, also missed the
+ * live push the real writer now performs.
+ *
+ * ── IT PUSHES, IT DOES NOT ONLY RECORD ──────────────────────────────────────
+ * A hard death recovered here used to be invisible until something polled: the
+ * detector runs in whichever isolate noticed (a cron sweep, a container error
+ * handler), never the one holding the viewer's socket. Events now go through the
+ * execution hub, whose relay sink publishes into the run's Durable Object room, so
+ * "the container died and here is why" reaches an open drawer live.
  */
 import { and, eq, ne } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
-import { executions, pullRequests, tasks, toolAuditEvents } from '../../infrastructure/database/schema';
+import { executions, pullRequests, tasks } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { Env } from '../../env';
 import { markReaperRequeued, wasReaperRequeued, parseCloudAgentRef } from './cloudDispatch';
+import { recordCloudToolEvent } from './cloudToolEvents';
+import { notifyExecutionSubscribers } from './executionEvents';
 
 /** Live (non-terminal) statuses an orphaned/crashed run can be recovered from. */
 const RECOVERABLE = new Set(['running', 'submitted', 'pending']);
@@ -117,27 +128,6 @@ async function countOpenPrs(db: Db, taskId: number): Promise<number> {
   }
 }
 
-/** Best-effort tool-audit write. Mirrors `recordCloudToolEvent` (kept local to avoid
- *  an import cycle with cloudAgentEngine — see the file header). */
-async function recordEvent(db: Db, args: { tenantId: number; cloudAgentRef: string | null; executionId: number; toolName: string; category: string; detail?: unknown; result: string }): Promise<void> {
-  try {
-    await db.insert(toolAuditEvents).values({
-      tenantId: args.tenantId, agentHostId: null, cloudAgentRef: args.cloudAgentRef ?? null,
-      executionId: args.executionId, sessionKey: `exec:${args.executionId}`, toolCallId: null,
-      toolName: args.toolName, category: args.category,
-      args: args.detail != null ? JSON.stringify(args.detail) : null,
-      result: args.result, durationMs: null, ts: new Date(),
-    });
-  } catch (error) {
-    reportCaughtError(error, { source: "application/runtime/cloudSelfHeal.ts", operation: "recordEvent", context: { logMessage: '[cloud-self-heal] telemetry append failed', details: {
-      tenantId: args.tenantId,
-      executionId: args.executionId,
-      toolName: args.toolName,
-      error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
-    } } });
-  }
-}
-
 /**
  * Attempt the once-only durable self-heal (drizzle). Returns 'requeued' when the
  * durable executor accepted the run, else 'ineligible'. Persists the one-retry flag
@@ -167,8 +157,9 @@ export async function selfHealCloudRun(env: Env, db: Db, input: SelfHealInput): 
   const ok = await dispatchDurableStart(env, input.executionId, buildDurableStartBody({ ...input, payload: requeuedPayload }));
   if (!ok) return 'ineligible';
 
-  await recordEvent(db, {
-    tenantId: input.tenantId, cloudAgentRef: input.cloudAgentRef, executionId: input.executionId,
+  await recordCloudToolEvent(db, {
+    tenantId: input.tenantId, ...(input.cloudAgentRef ? { cloudAgentRef: input.cloudAgentRef } : {}),
+    executionId: input.executionId,
     toolName: 'runtime.requeue', category: 'planning',
     result: 'Crashed/orphaned cloud run re-queued once on the durable executor (CloudRunnerDO) to run to completion.',
   });
@@ -227,26 +218,46 @@ export async function handleCloudRunCrash(env: Env, db: Db, executionId: number,
 
   const outcome = await selfHealCloudRun(env, db, run);
   if (outcome === 'requeued') {
-    await recordEvent(db, {
-      tenantId: run.tenantId, cloudAgentRef: run.cloudAgentRef, executionId,
+    await recordCloudToolEvent(db, {
+      tenantId: run.tenantId, ...(run.cloudAgentRef ? { cloudAgentRef: run.cloudAgentRef } : {}),
+      executionId,
       toolName: 'runtime.crash', category: 'planning', detail: { reason },
       result: `Runtime crashed (${reason}) — re-queued once on the durable executor to run to completion.`,
     });
     return 'requeued';
   }
 
-  await db.update(executions)
+  const failed = await db.update(executions)
     .set({ status: 'failed', errorMessage: reason, completedAt: new Date(), updatedAt: new Date() })
     .where(and(eq(executions.id, executionId), ne(executions.status, 'failed'), ne(executions.status, 'cancelled')))
-    .catch((error) => reportCaughtError(error, { source: "application/runtime/cloudSelfHeal.ts", operation: "handleCloudRunCrash", context: { logMessage: '[cloud-self-heal] terminal failure transition failed', details: {
-      tenantId: run.tenantId,
-      executionId,
-      reason,
-      error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
-    } } }));
-  await recordEvent(db, {
-    tenantId: run.tenantId, cloudAgentRef: run.cloudAgentRef, executionId,
+    .returning({ id: executions.id })
+    .catch((error) => {
+      reportCaughtError(error, { source: "application/runtime/cloudSelfHeal.ts", operation: "handleCloudRunCrash", context: { logMessage: '[cloud-self-heal] terminal failure transition failed', details: {
+        tenantId: run.tenantId,
+        executionId,
+        reason,
+        error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+      } } });
+      return [] as { id: number }[];
+    });
+  await recordCloudToolEvent(db, {
+    tenantId: run.tenantId, ...(run.cloudAgentRef ? { cloudAgentRef: run.cloudAgentRef } : {}),
+    executionId,
     toolName: 'run.failed', category: 'error', result: reason,
   });
+  // Only announce a transition that actually happened — the guarded UPDATE is a
+  // no-op for a run something else already terminated, and a `done` for a run that
+  // did not just die would overwrite a truthful terminal state in every open view.
+  // `taskId` is carried because this module holds raw columns, not a hydrated
+  // Execution; the board sink resolves the project room from it.
+  if (failed.length > 0) {
+    notifyExecutionSubscribers(executionId, {
+      type: 'done',
+      executionId,
+      status: 'failed',
+      taskId: run.taskId,
+      ts: new Date().toISOString(),
+    });
+  }
   return 'ineligible';
 }

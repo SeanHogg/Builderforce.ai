@@ -2,12 +2,12 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Concrete board-level fan-out for execution lifecycle events.
  *
- * The per-execution stream ({@link notifyExecutionSubscribers}) only reaches
+ * The per-execution stream ({@link ./executionRelayBroadcast}) only reaches
  * clients holding a single run's socket. This sink additionally pushes a
  * `{type:"changed"}` signal to the run's PROJECT room so every board / kanban /
  * calendar / list (and any open task drawer) refetches as the run advances — the
  * same live channel humans get for their own edits. Wired once per isolate from
- * the composition root via {@link setExecutionBoardSink}.
+ * the composition root via {@link setExecutionEventSinks}.
  *
  * Only status_change/done events broadcast: message/file_change deltas are
  * per-run drawer concerns already carried by the execution stream, and fanning
@@ -19,7 +19,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { projects, tasks } from '../../infrastructure/database/schema';
 import { broadcastProjectChanged } from '../../infrastructure/relay/broadcastRoom';
-import type { ExecutionBoardSink, ExecutionSubscriberEvent } from './executionEvents';
+import type { ExecutionEventSink, ExecutionSubscriberEvent } from './executionEvents';
 
 /** Per-isolate taskId→{projectId, tenantId} memo so repeated events for a run skip
  *  the lookup. The tenant is needed because the project live room is tenant-scoped
@@ -28,11 +28,15 @@ const projectRefByTask = new Map<number, { projectId: number; tenantId: number }
 
 function taskIdOf(event: ExecutionSubscriberEvent): number | null {
   if (event.type !== 'status_change' && event.type !== 'done') return null;
+  // The event's own `taskId` wins: a publisher that omits the hydrated execution
+  // (crash recovery holds raw columns, not an entity) still names its task, and
+  // the board must refetch for a run that just died exactly as for one that ended.
+  if (typeof event.taskId === 'number') return event.taskId;
   const taskId = (event.execution as { taskId?: unknown } | undefined)?.taskId;
   return typeof taskId === 'number' ? taskId : null;
 }
 
-export function makeExecutionBoardSink(env: Env, db: Db): ExecutionBoardSink {
+export function makeExecutionBoardSink(env: Env, db: Db): ExecutionEventSink {
   return (event) => {
     const taskId = taskIdOf(event);
     if (taskId == null) return;

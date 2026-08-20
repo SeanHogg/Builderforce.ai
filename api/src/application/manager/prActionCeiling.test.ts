@@ -40,8 +40,17 @@ import { MAX_REMEDY_ATTEMPTS, isActionExhausted } from './stallTriage';
  * recovery can never start — got the same ceiling.
  */
 describe('manager PR action ceiling + rotation', () => {
+  /**
+   * ── WHERE THE LOOP LIVES NOW ─────────────────────────────────────────────────────
+   * `application/repos/prMergeSweep.ts`. It was stage 4b of the manager pass and measured
+   * 93% of the pass's wall-clock, starving every stage behind it including triage; it is
+   * now its own registry sweep with its own budget. Every invariant below is about the
+   * LOOP, not about where it is mounted, so they follow it — and `PR_ACTION_TYPES` is
+   * still imported from ManagerService here on purpose, because that re-export is what
+   * keeps every existing caller resolving.
+   */
   const source = readFileSync(
-    fileURLToPath(new URL('./ManagerService.ts', import.meta.url).href),
+    fileURLToPath(new URL('../repos/prMergeSweep.ts', import.meta.url).href),
     'utf8',
   );
 
@@ -92,7 +101,7 @@ describe('manager PR action ceiling + rotation', () => {
   it('orders the open-PR window oldest-first and STABLE, and bounds it', () => {
     expect(source).toContain('asc(pullRequests.createdAt), asc(pullRequests.id)');
     expect(source).toContain("pullRequests.buildStatus} = 'success'");
-    expect(source).toMatch(/\.limit\(MAX_PR_ACTIONS_PER_RUN\)/);
+    expect(source).toMatch(/\.limit\(PR_MERGE_WINDOW\)/);
     // The rotation must not come back: re-sorting the window by when the manager last
     // touched each PR is precisely what dilutes the attempts below the ceiling.
     expect(source).not.toMatch(/lastActedAt\} asc nulls first/);

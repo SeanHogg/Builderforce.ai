@@ -311,8 +311,16 @@ export function createBuilderForceAgentsCodingTools(options?: {
   // Converge the overlapping file tools onto the shared registry (PRD 12 Phase B) only
   // for non-sandboxed sessions — a sandboxed session routes file ops through the fs-bridge,
   // which the disk-backed Node provider does not (yet) use.
+  //
+  // DEFAULT ON (`!== false`). It was opt-in while two things were unproven, and both now
+  // are: `cross-provider-smoke.test.ts` drives the shared definitions over two independent
+  // providers and asserts they agree result-for-result (it found and fixed two real
+  // divergences doing so), and the converged `write`/`edit` now take their confinement
+  // from the SAME `tools.fs.workspaceOnly` the native pair uses, so turning this on swaps
+  // the implementation without moving the security boundary. Set
+  // `tools.fs.convergedFileTools: false` to fall back to the native copies.
   const useConvergedFileTools =
-    (options?.convergedFileTools ?? fsConfig.convergedFileTools) === true && !sandboxRoot;
+    (options?.convergedFileTools ?? fsConfig.convergedFileTools) !== false && !sandboxRoot;
   const imageSanitization = resolveImageSanitizationLimits(options?.config);
 
   // The native coding tool set is read/bash/edit/write; bash is dropped here (replaced by
@@ -417,7 +425,17 @@ export function createBuilderForceAgentsCodingTools(options?: {
   // copies skipped above, delete_file/list_files are additive. They join `tools` here so
   // the normalize/hook/abort/policy pipeline below wraps them like every other tool.
   const convergedFileTools = useConvergedFileTools
-    ? buildConvergedFileTools({ workspaceRoot })
+    ? buildConvergedFileTools({
+        workspaceRoot,
+        // Native `write`/`edit` are confined ONLY when `tools.fs.workspaceOnly` is set.
+        // The converged pair inherits exactly that, so convergence swaps the
+        // implementation and never the security boundary.
+        scope: workspaceOnly ? "workspace" : "unconfined",
+      }).map((tool) =>
+        // …and the same outer guard native gets, so the path normalization and
+        // `assertSandboxPath` check are identical on both sides of the flag too.
+        workspaceOnly ? wrapToolWorkspaceRootGuard(tool, workspaceRoot) : tool,
+      )
     : [];
   // Active cross-run memory tools (memory_recall / memory_remember), backed by the SSM
   // memory service. Self-gating: [] when the memory layer is unavailable.

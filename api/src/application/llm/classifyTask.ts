@@ -13,7 +13,7 @@
  */
 
 import type { Env } from '../../env';
-import { ACTION_TYPES, type ActionType, normalizeActionType, learnedRoutingEnabled } from './actionTypes';
+import { ACTION_TYPES, type ActionType, normalizeActionType, learnedRoutingEnabled } from '@builderforce/learned-routing';
 import { ideProxy, readProxyChoice } from './LlmProxyService';
 
 export interface TaskClassification {

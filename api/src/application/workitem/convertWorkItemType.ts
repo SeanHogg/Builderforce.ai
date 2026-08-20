@@ -31,10 +31,8 @@ import { TaskType } from '../../domain/shared/types';
 import type { TaskService } from '../task/TaskService';
 import { bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import { invalidateProjectsList } from '../project/projectsListCache';
+import { pmoVersionKey } from '../pmo/pmoCacheKeys';
 
-/** The PMO rollup/tree version token (mirrors pmoRoutes.pmoVersionKey). Inlined to
- *  avoid a pmoRoutes ↔ this-module import cycle — pmoRoutes calls convertWorkItemType. */
-const pmoVersionKey = (tenantId: number): string => `pmo-version:tenant:${tenantId}`;
 
 export type WorkItemKind = 'task' | 'epic' | 'objective';
 

@@ -256,6 +256,57 @@
   background: var(--bf-accent-bg, rgba(144, 133, 233, 0.12));
 }
 
+/* ---- Run ACTIVITY lines (run milestones + agent dispatch) ----
+   The runtime narrating itself. Deliberately NOT a bubble: no background, no avatar,
+   smaller and quieter than a turn, so a transcript reads as conversation punctuated by
+   system events rather than as the model announcing its own dispatch. Colour carries the
+   tone only (good / bad / waiting); the words carry the meaning. */
+.bf-tl__item--activity .bf-tl__body {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  padding-block: 1px;
+}
+.bf-tl__activity-line {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--bf-text-muted, #8a8a8a);
+}
+/* The first line of a result / error, kept subordinate to the event itself. */
+.bf-tl__activity-note {
+  font-size: 0.78rem;
+  font-weight: 400;
+  color: var(--bf-text-muted, #8a8a8a);
+  opacity: 0.85;
+  overflow-wrap: anywhere;
+}
+.bf-tl__dot--activity {
+  border-color: var(--bf-border-strong, rgba(128, 128, 128, 0.55));
+  color: var(--bf-text-muted, #8a8a8a);
+}
+.bf-tl__item--activity-good .bf-tl__activity-line,
+.bf-tl__item--activity-good .bf-tl__dot--activity {
+  color: var(--bf-success, #2ea043);
+}
+.bf-tl__item--activity-good .bf-tl__dot--activity {
+  border-color: var(--bf-success, #2ea043);
+}
+.bf-tl__item--activity-bad .bf-tl__activity-line,
+.bf-tl__item--activity-bad .bf-tl__dot--activity {
+  color: var(--bf-error, #e5534b);
+}
+.bf-tl__item--activity-bad .bf-tl__dot--activity {
+  border-color: var(--bf-error, #e5534b);
+}
+.bf-tl__item--activity-waiting .bf-tl__activity-line,
+.bf-tl__item--activity-waiting .bf-tl__dot--activity {
+  color: var(--bf-warning, #d29922);
+}
+.bf-tl__item--activity-waiting .bf-tl__dot--activity {
+  border-color: var(--bf-warning, #d29922);
+}
+
 /* ---- Evermind memory steps (recall / learn / reconcile) ---- */
 .bf-tl__memory-line {
   font-size: 0.82rem;

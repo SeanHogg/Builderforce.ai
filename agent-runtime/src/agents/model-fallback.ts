@@ -181,7 +181,15 @@ function resolveImageFallbackCandidates(params: {
   return candidates;
 }
 
-function resolveFallbackCandidates(params: {
+/**
+ * The ordered model chain a run may traverse: the primary first, then the configured
+ * fallbacks, allowlist-filtered and de-duplicated.
+ *
+ * EXPORTED because learned routing needs the same list this failover loop walks. The
+ * seeder re-orders exactly these candidates — a second, hand-rolled "primary plus
+ * fallbacks" would be able to seed a model this loop would never have tried.
+ */
+export function resolveFallbackCandidates(params: {
   cfg: BuilderForceAgentsConfig | undefined;
   provider: string;
   model: string;

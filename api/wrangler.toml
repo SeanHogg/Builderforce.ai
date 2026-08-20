@@ -108,10 +108,17 @@ class_name = "StageSandboxContainerDO"
 # persistent Node process with a real shell (build/test/lint). The image lives in
 # api/container; build context is that dir. Requires a Workers Paid plan with
 # Containers enabled. `max_instances` caps concurrent containers (cost guard).
+# max_instances is the INSTANCE BUDGET, and it now covers two consumption shapes:
+# an agent RUN (starts, works, exits) and a live PREVIEW (one instance pinned open for
+# as long as an editor tab watches it). 5 was sized for runs alone and cannot serve
+# previews past a handful of concurrent users. 25 = 15 reserved for previews (capped and
+# idle-evicted by application/runtime/previewSessions.ts, which is where the numbers and
+# the reasoning live) + >=10 that previews can never take, so a preview surge cannot
+# starve dispatch.
 [[containers]]
 class_name = "AgentContainerDO"
 image = "./container/Dockerfile"
-max_instances = 5
+max_instances = 25
 name = "builderforce-agent-container"
 
 # Agentic Tester runner — the Playwright browser-exploration container. The
@@ -145,6 +152,22 @@ bucket_name = "builderforce-uploads"
 [[kv_namespaces]]
 binding = "AUTH_CACHE_KV"
 id = "ce66c3418ad64952b6847227962429d0"
+
+# SEMANTIC_CACHE_KV — the shared (L2) semantic response cache's own namespace.
+#
+# Deliberately NOT bound here yet: creating it needs `wrangler kv namespace create`
+# against this Cloudflare account, and an invented id fails the deploy. It is a pure
+# isolation/quota improvement — the cache falls back to AUTH_CACHE_KV when this is
+# absent (see `src/env.ts` and `application/llm/semanticCache.ts`), so the feature is
+# LIVE either way rather than waiting on the ops task, which is what left it a
+# permanent no-op in production with both clients already wired.
+#
+#   npx wrangler kv namespace create SEMANTIC_CACHE_KV
+# then uncomment with the id from the output:
+#
+# [[kv_namespaces]]
+# binding = "SEMANTIC_CACHE_KV"
+# id = "<id from create output>"
 
 [[migrations]]
 tag = "v1"

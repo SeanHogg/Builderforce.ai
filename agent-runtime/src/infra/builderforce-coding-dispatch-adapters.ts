@@ -10,12 +10,16 @@
  */
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { dirname, join, relative, sep } from "node:path";
 import { normalizeBaseUrl } from "../utils/normalize-base-url.js";
 import type {
   CodingDispatchAgent,
+  CodingDispatchFs,
   CodingDispatchGit,
   CodingDispatchHttp,
   DispatchDetail,
+  WorkspaceFile,
 } from "./builderforce-coding-dispatch.js";
 import { awaitCodingSession } from "./coding-session-broker.js";
 
@@ -60,6 +64,39 @@ export function makeCodingHttp(opts: {
       return typeof body.url === "string" && typeof body.number === "number"
         ? { url: body.url, number: body.number }
         : null;
+    },
+
+    // Repo-less dispatch: the project's IDE workspace (R2) is the working tree.
+    // Same auth boundary as the git-proxy above — the host key is all we send, and
+    // the server does every bucket operation through its ONE workspace access layer.
+    async fetchWorkspaceFiles(filesPath) {
+      const res = await fetch(`${base}${filesPath}`, {
+        headers: { Authorization: auth.Authorization },
+        signal: AbortSignal.timeout(60_000),
+      });
+      if (!res.ok) return null;
+      const body = (await res.json()) as { files?: WorkspaceFile[]; truncated?: boolean };
+      return { files: body.files ?? [], truncated: body.truncated === true };
+    },
+
+    async pushWorkspaceChanges(filesPath, payload) {
+      const res = await fetch(`${base}${filesPath}`, {
+        method: "POST",
+        headers: auth,
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(120_000),
+      });
+      if (!res.ok) return null;
+      const body = (await res.json()) as {
+        written?: number;
+        deleted?: number;
+        rejected?: Array<{ path: string; reason: string }>;
+      };
+      return {
+        written: body.written ?? 0,
+        deleted: body.deleted ?? 0,
+        rejected: body.rejected ?? [],
+      };
     },
 
     async reportResult(dispatchId, result): Promise<void> {
@@ -172,6 +209,73 @@ export function makeCodingAgent(getGateway: () => GatewayLike | null): CodingDis
       }
       const outcome = await done;
       return { ok: outcome.ok, summary: outcome.text };
+    },
+  };
+}
+
+
+/**
+ * Local-disk port for the workspace path. Everything the agent sees is a normal
+ * directory tree, so the agent (and its tools) need no notion of R2 — the diff on
+ * the way out is what turns "files on disk" back into a workspace change set.
+ *
+ * Directories that can never be project SOURCE are skipped on the way out
+ * (`node_modules`, `.git`, build output, caches): an agent that runs an install
+ * would otherwise try to upload tens of thousands of dependency files back into
+ * the workspace. Binary/oversized files are skipped for the same reason the
+ * server caps the tree it hands out — they are not editable text.
+ */
+const SKIP_DIRS = new Set([
+  "node_modules",
+  ".git",
+  ".next",
+  "dist",
+  "build",
+  "out",
+  ".cache",
+  ".turbo",
+  "coverage",
+  ".venv",
+  "__pycache__",
+]);
+
+/** Above this a file is treated as an asset, not source, and is not sent back. */
+const MAX_SNAPSHOT_FILE_BYTES = 512 * 1024;
+
+export function makeCodingFs(): CodingDispatchFs {
+  return {
+    async materialize(dir, files): Promise<void> {
+      await mkdir(dir, { recursive: true });
+      for (const file of files) {
+        const target = join(dir, file.path);
+        await mkdir(dirname(target), { recursive: true });
+        await writeFile(target, file.content, "utf8");
+      }
+    },
+
+    async snapshot(dir): Promise<WorkspaceFile[]> {
+      const out: WorkspaceFile[] = [];
+      const walk = async (current: string): Promise<void> => {
+        const entries = await readdir(current, { withFileTypes: true }).catch(() => []);
+        for (const entry of entries) {
+          if (entry.isDirectory()) {
+            if (SKIP_DIRS.has(entry.name)) continue;
+            await walk(join(current, entry.name));
+            continue;
+          }
+          if (!entry.isFile()) continue;
+          const full = join(current, entry.name);
+          const buf = await readFile(full).catch(() => null);
+          if (!buf || buf.byteLength > MAX_SNAPSHOT_FILE_BYTES) continue;
+          // A NUL byte is the cheap, reliable "this is not text" signal; the
+          // workspace stores text, so a binary would round-trip corrupted.
+          if (buf.includes(0)) continue;
+          // Workspace paths are always forward-slashed, on every platform.
+          out.push({ path: relative(dir, full).split(sep).join("/"), content: buf.toString("utf8") });
+        }
+      };
+      await walk(dir);
+      return out;
     },
   };
 }

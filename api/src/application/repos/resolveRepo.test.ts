@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolveRepoForTask, parseMatchHints } from './resolveRepo';
+import { resolveRepoForTask, parseMatchHints, routeWritePathToRepo, pathGlobMatches } from './resolveRepo';
 
 const hints = (h: { labels?: string[]; keywords?: string[]; pathGlobs?: string[] }) => JSON.stringify(h);
 
@@ -123,5 +123,85 @@ describe('resolveRepoForTask precedence', () => {
   it('single repo with no hints and no default still fails closed', () => {
     const repos = [{ id: 'only' }];
     expect(resolveRepoForTask({ description: 'whatever' }, repos)).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Multi-repo spanning (0956): routing ONE file write to ONE repo in a task's set
+// ---------------------------------------------------------------------------
+
+describe('pathGlobMatches', () => {
+  it('anchors a directory glob so a nested lookalike is not claimed', () => {
+    expect(pathGlobMatches('api/**', 'api/src/x.ts')).toBe(true);
+    expect(pathGlobMatches('api/**', 'frontend/api/x.ts')).toBe(false);
+  });
+
+  it('treats a bare directory name as that directory', () => {
+    expect(pathGlobMatches('frontend', 'frontend/src/App.tsx')).toBe(true);
+    expect(pathGlobMatches('frontend', 'api/src/App.tsx')).toBe(false);
+  });
+
+  it('matches a bare suffix glob at any depth', () => {
+    expect(pathGlobMatches('*.md', 'README.md')).toBe(true);
+    expect(pathGlobMatches('*.md', 'docs/guide/intro.md')).toBe(true);
+    expect(pathGlobMatches('*.md', 'docs/guide/intro.mdx')).toBe(false);
+  });
+
+  it('single * does not cross a path separator', () => {
+    expect(pathGlobMatches('src/*.ts', 'src/a.ts')).toBe(true);
+    expect(pathGlobMatches('src/*.ts', 'src/deep/a.ts')).toBe(false);
+  });
+});
+
+describe('routeWritePathToRepo', () => {
+  const set = [
+    { id: 'api', isPrimary: true, matchHints: hints({ pathGlobs: ['api/**'] }) },
+    { id: 'web', matchHints: hints({ pathGlobs: ['frontend/**', '*.md'] }) },
+  ];
+
+  it('routes each write to the repo whose pathGlob claims it', () => {
+    expect(routeWritePathToRepo('api/src/routes/x.ts', set)).toEqual({
+      repoId: 'api', method: 'glob', glob: 'api/**',
+    });
+    expect(routeWritePathToRepo('frontend/src/App.tsx', set)).toEqual({
+      repoId: 'web', method: 'glob', glob: 'frontend/**',
+    });
+    expect(routeWritePathToRepo('README.md', set)).toEqual({
+      repoId: 'web', method: 'glob', glob: '*.md',
+    });
+  });
+
+  it('falls back to the primary when nothing claims the path — a write is never dropped', () => {
+    expect(routeWritePathToRepo('scripts/tool.sh', set)).toEqual({ repoId: 'api', method: 'primary' });
+    expect(routeWritePathToRepo('', set)).toEqual({ repoId: 'api', method: 'primary' });
+  });
+
+  it('the MOST SPECIFIC glob wins when two repos both match', () => {
+    const overlapping = [
+      { id: 'mono', isPrimary: true, matchHints: hints({ pathGlobs: ['**'] }) },
+      { id: 'ui', matchHints: hints({ pathGlobs: ['frontend/src/**'] }) },
+    ];
+    expect(routeWritePathToRepo('frontend/src/App.tsx', overlapping)?.repoId).toBe('ui');
+    expect(routeWritePathToRepo('server/main.go', overlapping)?.repoId).toBe('mono');
+  });
+
+  it('an equally specific tie breaks toward the primary, deterministically', () => {
+    const tied = [
+      { id: 'b', matchHints: hints({ pathGlobs: ['shared/**'] }) },
+      { id: 'a', isPrimary: true, matchHints: hints({ pathGlobs: ['shared/**'] }) },
+    ];
+    expect(routeWritePathToRepo('shared/util.ts', tied)?.repoId).toBe('a');
+    expect(routeWritePathToRepo('shared/util.ts', tied)?.repoId).toBe('a');
+  });
+
+  // The single-repo case must be untouched by 0956: one candidate, no hints,
+  // every path goes there.
+  it('a single-repo set routes everything to that repo', () => {
+    const one = [{ id: 'only', isPrimary: true }];
+    expect(routeWritePathToRepo('anything/at/all.ts', one)).toEqual({ repoId: 'only', method: 'primary' });
+  });
+
+  it('returns null for an empty set', () => {
+    expect(routeWritePathToRepo('a.ts', [])).toBeNull();
   });
 });

@@ -185,6 +185,20 @@ export type ResolvedArtifacts = {
   skills:   string[];
   personas: string[];
   content:  string[];
+  /**
+   * Where each resolved slug came FROM — its most-specific assignment scope
+   * ('agent' | 'task' | 'project' | 'host' | 'tenant').
+   *
+   * The resolver returns a UNION across the whole scope hierarchy, so a slug in
+   * `skills` may be pinned to this agent or inherited from the tenant. Without the
+   * scope the two are indistinguishable, and the `capabilities.load` timeline event
+   * reported "the agent loaded X" for artifacts the agent never carried — which is
+   * the difference between "this agent is configured for this" and "everyone is".
+   *
+   * Optional so older/synthetic resolutions stay valid; absent means "unlabelled",
+   * never "tenant".
+   */
+  sources?: Record<string, AssignmentScope>;
 };
 
 // ---------------------------------------------------------------------------

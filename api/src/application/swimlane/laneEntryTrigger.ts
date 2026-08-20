@@ -41,6 +41,8 @@ import { evaluateExecutionApprovalGate } from '../runtime/executionApprovalGate'
 import { evaluateTaskAutoRun, type TenantTokenVerdict } from './evaluateAutoRun';
 import { enforceLaneRequirements } from './laneRequirementGate';
 import { resolveLaneAgentHostId } from './laneAgentHost';
+import { tryCoordinatorLaneEntry } from './laneCoordinatorEntry';
+import { findCanonicalBoard } from './canonicalBoard';
 import { TicketAuditService } from '../audit/ticketAuditService';
 import { TicketParticipantsService } from '../kanban/ticketParticipants';
 import { buildRoleRunPayload, requestRoleRun, type RoleRunRequest } from '../kanban/requestRoleRun';
@@ -471,6 +473,60 @@ export interface LaneEntrySignal {
 }
 
 /**
+ * WHICH ENGINE runs the lane. The board's own configuration decides:
+ *
+ *  • a LIFECYCLE-MANAGED board hands the ticket to `onManagedBoard` (the multi-role
+ *    manager state machine) when the caller supplies one;
+ *  • a lane the simple executor cannot express — several staffed agents, a success
+ *    policy, a lane action, a browser-claimed agent — is driven by the
+ *    SwimlaneCoordinator, which a manual drag used to bypass entirely;
+ *  • everything else keeps the direct one-agent lane trigger.
+ *
+ * Every lane-entry caller goes through here, so the two engines cannot diverge by which
+ * door the ticket came in.
+ */
+export async function routeLaneEntry(
+  env: Env,
+  db: Db,
+  runtimeService: RuntimeService,
+  args: {
+    tenantId: number;
+    projectId: number;
+    taskId: number;
+    status: string;
+    submittedBy: string;
+    originLaneKey?: string;
+    /** What a lifecycle-managed board does. Omitted → the inline trigger, which is what
+     *  the internal `onTaskLandedInLane` writers have always done. */
+    onManagedBoard?: () => Promise<void>;
+  },
+): Promise<boolean> {
+  if (args.onManagedBoard) {
+    const board = await findCanonicalBoard(db, args.projectId, args.tenantId).catch(() => null);
+    if (board?.lifecycleManaged) {
+      await args.onManagedBoard().catch((error) => {
+        reportCaughtError(error, { source: 'application/swimlane/laneEntryTrigger.ts', operation: 'routeLaneEntry:managed' });
+      });
+      return true;
+    }
+  }
+
+  const staged = await tryCoordinatorLaneEntry(env, db, {
+    tenantId: args.tenantId, projectId: args.projectId, taskId: args.taskId, status: args.status,
+  });
+  if (staged !== 'not_applicable') return staged === 'started';
+
+  return maybeAutoRunOnLaneEntry(env, db, runtimeService, {
+    tenantId: args.tenantId,
+    projectId: args.projectId,
+    taskId: args.taskId,
+    status: args.status,
+    submittedBy: args.submittedBy,
+    ...(args.originLaneKey ? { originLaneKey: args.originLaneKey } : {}),
+  });
+}
+
+/**
  * THE funnel: fire the canonical lane trigger for a ticket that a writer just
  * landed in a lane. Resolves any missing `projectId` / `status` from the row,
  * builds a RuntimeService if the caller has none, and never throws (a telemetry
@@ -499,7 +555,7 @@ export async function onTaskLandedInLane(env: Env, db: Db, signal: LaneEntrySign
     if (projectId == null || !status) return false;
 
     const runtimeService = signal.runtimeService ?? buildRuntimeService(env, db);
-    return await maybeAutoRunOnLaneEntry(env, db, runtimeService, {
+    return await routeLaneEntry(env, db, runtimeService, {
       tenantId:  signal.tenantId,
       projectId,
       taskId:    signal.taskId,

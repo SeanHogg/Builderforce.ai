@@ -10,6 +10,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { SlideOutPanel } from '../SlideOutPanel';
 import { BoardConnectionsManager } from '../integrations/BoardConnectionsManager';
 import { useBoardConfig } from './useBoardConfig';
+import { LaneRunNowButton } from './LaneRunNowButton';
 import {
   boardsApi,
   kanbanApi,
@@ -483,7 +484,10 @@ function AgentList({ board, lane, agents, reload }: { board: Board; lane: Swimla
           )}
         </>
       ) : (
-        <button type="button" style={{ ...btnSubtle, marginTop: 8 }} onClick={() => setAdding(true)}>{t('assignAgent')}</button>
+        <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          <button type="button" style={btnSubtle} onClick={() => setAdding(true)}>{t('assignAgent')}</button>
+          {agents.length > 0 && <LaneRunNowButton boardId={board.id} laneId={lane.id} style={btnSubtle} />}
+        </div>
       )}
     </div>
   );

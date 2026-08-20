@@ -20,7 +20,7 @@ import { llmUsageLog, projects } from '../../infrastructure/database/schema';
 import { computeDora } from '../metrics/workforceMetrics';
 import { computeEngineeringInsights } from '../insights/engineeringInsights';
 import { buildConsumptionSnapshot } from '../consumption/meters';
-import { buildTenantDriftReport } from '../../presentation/routes/evalRoutes';
+import { buildTenantDriftReport } from '../eval/driftReport';
 import { millicentsToUsd } from '../../domain/shared/money';
 
 const HOUR_MS = 3_600_000;

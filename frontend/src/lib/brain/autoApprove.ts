@@ -1,5 +1,10 @@
 'use client';
 
+import {
+  localStorageConfirmationPersistence,
+  type ToolConfirmationPersistence,
+} from '@seanhogg/builderforce-brain-embedded';
+
 /**
  * Single source of truth for the Brain's "Auto-approve actions" mode.
  *
@@ -17,20 +22,28 @@
 
 export const BRAIN_AUTO_APPROVE_KEY = 'brain.autoApprove';
 
-/** Whether auto-approve is enabled. New browsers default on; an explicit off is preserved. */
+/**
+ * This browser's storage adapter for the shared {@link useToolConfirmationGate}.
+ *
+ * The guarded read/write pair itself is the SHARED one — a blocked or partitioned
+ * `localStorage` must degrade to "not persisted" rather than throw, and that guard has no
+ * business existing twice. What stays here is the web app's POLICY: which key, and that a
+ * browser with nothing stored defaults ON (see {@link BRAIN_AUTO_APPROVE_DEFAULT}).
+ */
+export const brainAutoApprovePersistence: ToolConfirmationPersistence =
+  localStorageConfirmationPersistence(BRAIN_AUTO_APPROVE_KEY);
+
+/** New browsers default ON; an explicit off is preserved. */
+export const BRAIN_AUTO_APPROVE_DEFAULT = true;
+
+/** Whether auto-approve is enabled. For the NON-gate consumers (the IDE artifact tools
+ *  and the canvas), which read the flag outside a React render. The gate itself uses
+ *  {@link useToolConfirmationGate} with {@link brainAutoApprovePersistence}. */
 export function isBrainAutoApprove(): boolean {
-  try {
-    return localStorage.getItem(BRAIN_AUTO_APPROVE_KEY) !== '0';
-  } catch {
-    return true;
-  }
+  return brainAutoApprovePersistence.read() ?? BRAIN_AUTO_APPROVE_DEFAULT;
 }
 
 /** Persist the auto-approve mode for this browser. */
 export function setBrainAutoApprove(on: boolean): void {
-  try {
-    localStorage.setItem(BRAIN_AUTO_APPROVE_KEY, on ? '1' : '0');
-  } catch {
-    /* ignore */
-  }
+  brainAutoApprovePersistence.write(on);
 }

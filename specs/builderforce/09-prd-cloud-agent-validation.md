@@ -100,7 +100,7 @@ Each gap is phrased as a check that currently fails, is unverified, or is missin
 ### B. Workspace, git & PR lifecycle
 
 9. **GAP-W1 (P0, E:V1,V2)** — `ensureTaskWorkspace` clones once per ticket but there is no validation that a *re-run* on the same ticket reuses vs. re-clones cleanly (stale branch state). *Acceptance:* re-run test asserting branch is reset/fast-forwarded, not duplicated.
-10. **GAP-W2 (P0, E:V1,V2)** — Workspace teardown (`finalizeTask` ~504) only runs on the Done path; an **errored/cancelled** run leaks `.builderforce/tasks/<taskId>` on disk. *Acceptance:* teardown in a `finally`/on terminal states.
+10. **GAP-W2 (P0, E:V1,V2)** — Workspace teardown (`finalizeTask` ~504) only runs on the Done path; an **errored/cancelled** run leaks `.builderforce/tasks/<taskId>` on disk. *Acceptance:* teardown in a `finally`/on terminal states. — **CLOSED**: `releaseTaskWorkspaceOnTerminal` (task-workspace.ts) is the ONE teardown; the relay releases on done/failed/cancelled/aborted, committing + pushing the branch first so nothing is lost.
 11. **GAP-W3 (P0, E:fallback)** — Cloud-Worker commits go straight to the ticket branch via provider REST with **no diff preview**; a bad write is already on the branch before review. *Acceptance:* stage to a draft/PR-only branch, never the protected base.
 12. **GAP-W4 (P1, E:V1)** — V1 attributes changes by diffing `git status --porcelain` *after* the session; concurrent edits or an interrupted session mis-attribute or drop changes. *Acceptance:* per-turn snapshotting or a clean-tree precondition assertion.
 13. **GAP-W5 (P1, E:all)** — No handling for an **empty diff** finalize (agent ran, changed nothing): does it open an empty PR? *Acceptance:* skip PR + mark execution `no_changes`.
@@ -129,14 +129,14 @@ Each gap is phrased as a check that currently fails, is unverified, or is missin
 30. **GAP-S2 (P1, E:V1,V2)** — `buildSteeringInjection` formats the follow-up as the next user turn, but there's no ordering guarantee if two steers arrive before the agent's turn. *Acceptance:* queue + ordering test.
 31. **GAP-S3 (P1, E:all)** — No backpressure: a user can spam `execution.message` frames; relay DO forwards all. *Acceptance:* rate-limit per execution.
 32. **GAP-S4 (P1, E:V2)** — Cancel aborts the V2 SDK handle but does **not** verify the in-flight provider request is actually torn down (token spend continues). *Acceptance:* assert request abort + stop usage accrual.
-33. **GAP-S5 (P0, E:fallback)** — The cloud-Worker fallback loop has **no steering path** (it's a server-side loop, not a live session). Steering silently no-ops. *Acceptance:* either support mid-loop injection or surface "steering unavailable for cloud-fallback runs" in the UI.
-34. **GAP-S6 (P0, E:fallback)** — Same for **cancellation**: a queued/running cloud-Worker run has no `execution.cancel` honoring. *Acceptance:* cooperative cancel check between loop iterations.
+33. **GAP-S5 (P0, E:fallback)** — The cloud-Worker fallback loop has **no steering path** (it's a server-side loop, not a live session). Steering silently no-ops. *Acceptance:* either support mid-loop injection or surface "steering unavailable for cloud-fallback runs" in the UI. — **CLOSED**: mid-loop injection is real. `applyPendingSteering` (cloudLoopControl.ts) drains the durable steering thread between iterations and splices each steer in as the next user turn; both cloud surfaces (loop + container `llm` op) call it.
+34. **GAP-S6 (P0, E:fallback)** — Same for **cancellation**: a queued/running cloud-Worker run has no `execution.cancel` honoring. *Acceptance:* cooperative cancel check between loop iterations. — **CLOSED**: `startCancelWatcher` (cloudLoopControl.ts) gives the loop a between-iteration `check()` plus a background poll that aborts the in-flight fetch; the container `llm` op now refuses a cancelled run BEFORE the paid call.
 35. **GAP-S7 (P2, E:all)** — Steering after a run has terminated returns no clear error to the portal (silent drop). *Acceptance:* `409 execution_not_live`.
 
 ### E. Observability & telemetry integrity
 
-36. **GAP-O1 (P0, E:all)** — No test reconstructs a full run from `tool_audit_events` + `usage_snapshots` + `llm_usage_log` by `execution_id`; this is the core "validated" claim. *Acceptance:* reconstruction test asserting every tool call + token row is present and joinable.
-37. **GAP-O2 (P0, E:fallback)** — `recordCloudUsage` writes to both `usage_snapshots` and `llm_usage_log`; no assertion the two **agree** (double-count or drift in the billing ledger). *Acceptance:* invariant test: ledger total == snapshot total per execution.
+36. **GAP-O1 (P0, E:all)** — No test reconstructs a full run from `tool_audit_events` + `usage_snapshots` + `llm_usage_log` by `execution_id`; this is the core "validated" claim. *Acceptance:* reconstruction test asserting every tool call + token row is present and joinable. — **CLOSED**: `cloudRunReconstruction.test.ts`.
+37. **GAP-O2 (P0, E:fallback)** — `recordCloudUsage` writes to both `usage_snapshots` and `llm_usage_log`; no assertion the two **agree** (double-count or drift in the billing ledger). *Acceptance:* invariant test: ledger total == snapshot total per execution. — **CLOSED**: `cloudRunReconstruction.test.ts`; the two ledgers agree today (one shared clamp, one row per turn each).
 38. **GAP-O3 (P1, E:V2)** — V2 inference flows through the gateway; verify tool-call telemetry is captured for SDK-internal tools (Read/Edit/Bash), not just file changes. *Acceptance:* per-tool emission for V2 (logged today as a known gap).
 39. **GAP-O4 (P1, E:all)** — On a crashed run, partial telemetry leaves the execution with no terminal status row → "stuck running" forever in the UI. *Acceptance:* heartbeat + reaper that marks orphaned executions `failed`.
 40. **GAP-O5 (P1, E:all)** — CLOUD vs ON-PREM pill derives from `kind`; no test that a cloud run never renders as ON-PREM (mis-attribution in the buyer-facing timeline). *Acceptance:* snapshot test on KIND_PILL mapping.
@@ -146,9 +146,9 @@ Each gap is phrased as a check that currently fails, is unverified, or is missin
 ### F. Billing, limits & BYO keys
 
 43. **GAP-B1 (P0, E:fallback)** — Cloud execution uses **global tenant plan limits, not per-host daily caps** (V1/on-prem honors these). A cloud run can exceed a cap the operator believed was enforced. *Acceptance:* apply a per-cloud-agent budget ceiling.
-44. **GAP-B2 (P0, E:V2)** — If a tenant BYO Anthropic key is missing/invalid, does V2 silently fall to the **default (platform-billed) key**? That's a billing-leak. *Acceptance:* explicit "BYO required" mode that fails closed.
+44. **GAP-B2 (P0, E:V2)** — If a tenant BYO Anthropic key is missing/invalid, does V2 silently fall to the **default (platform-billed) key**? That's a billing-leak. *Acceptance:* explicit "BYO required" mode that fails closed. — **CLOSED**: `cloudByoPolicy.ts`. A request declaring itself a cloud execution (`x-builderforce-surface: cloud` + `x-builderforce-execution-id`) is refused `402 byo_key_missing` rather than served from the platform pool; ordinary gateway traffic is untouched.
 45. **GAP-B3 (P1, E:all)** — No pre-flight budget check before dispatch; a run starts, burns tokens, then hits the limit mid-loop with a half-done PR. *Acceptance:* reserve/estimate before dispatch.
-46. **GAP-B4 (P1, E:V2)** — `tenantProviderKeyService` decrypt failures during a run have an unclear failure mode. *Acceptance:* typed `byo_key_error`, no fallback to platform key.
+46. **GAP-B4 (P1, E:V2)** — `tenantProviderKeyService` decrypt failures during a run have an unclear failure mode. *Acceptance:* typed `byo_key_error`, no fallback to platform key. — **CLOSED**: `classifyCloudByoAnthropic` returns `byo_key_error` with the reason (undecryptable/revoked/expired); `assertCloudRunByo` is the cloud loop's pre-flight — a workspace whose connected providers ALL failed to resolve stops before the first paid call (`byo.blocked` on the timeline).
 
 ### G. Security & isolation
 
@@ -158,7 +158,7 @@ Each gap is phrased as a check that currently fails, is unverified, or is missin
 
 ### H. Validation harness itself
 
-50. **GAP-V1 (P0, E:all)** — There is **no repeatable golden-path E2E** (§5) wired into `qa-e2e/` that an operator can run to validate the whole cloud-agent flow on demand. Without it, every validation is manual and non-reproducible. *Acceptance:* a single `pnpm qa:cloud-agents` run that walks the §3 matrix and asserts §4 P0 checks.
+50. **GAP-V1 (P0, E:all)** — There is **no repeatable golden-path E2E** (§5) wired into `qa-e2e/` that an operator can run to validate the whole cloud-agent flow on demand. Without it, every validation is manual and non-reproducible. *Acceptance:* a single `pnpm qa:cloud-agents` run that walks the §3 matrix and asserts §4 P0 checks. — **PARTIAL**: `pnpm qa:cloud-agents` exists in `api/` and runs the offline cloud-agent P0 assertion suite (telemetry reconstruction, ledger==snapshot, steering/cancel, BYO fail-closed) with no network. The §5 golden path itself is still OPEN: it needs a live deploy + a sandbox repo + provider credentials, which cannot be asserted offline and must not be faked.
 
 ---
 

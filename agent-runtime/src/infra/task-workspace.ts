@@ -1,6 +1,6 @@
-import path from "node:path";
-import fs from "node:fs/promises";
 import { execFile } from "node:child_process";
+import fs from "node:fs/promises";
+import path from "node:path";
 import { promisify } from "node:util";
 
 const pExecFile = promisify(execFile);
@@ -72,13 +72,97 @@ export function parseGitPorcelain(porcelain: string, agent: string): AttributedF
 }
 
 /** Run `git status --porcelain` in `dir` and return attributed changes. Empty on error. */
-export async function detectTaskChanges(dir: string, agent: string): Promise<AttributedFileChange[]> {
+export async function detectTaskChanges(
+  dir: string,
+  agent: string,
+): Promise<AttributedFileChange[]> {
   try {
-    const { stdout } = await pExecFile("git", ["-C", dir, "status", "--porcelain"], { maxBuffer: 8 * 1024 * 1024 });
+    const { stdout } = await pExecFile("git", ["-C", dir, "status", "--porcelain"], {
+      maxBuffer: 8 * 1024 * 1024,
+    });
     return parseGitPorcelain(stdout, agent);
   } catch {
     return [];
   }
+}
+
+/**
+ * THE teardown of a ticket workspace — the single place `.builderforce/tasks/<id>`
+ * is removed from disk. Every caller (terminal-state release, the stale sweep) goes
+ * through here so "how a workspace is reclaimed" has exactly one implementation.
+ * Best-effort: returns false rather than throwing when the dir can't be removed.
+ */
+export async function removeTaskWorkspace(
+  baseDir: string,
+  taskId: number | string,
+): Promise<boolean> {
+  return removeWorkspaceDir(taskWorkspaceDir(baseDir, taskId));
+}
+
+/** Remove one already-resolved workspace dir. Internal to the two entry points above. */
+async function removeWorkspaceDir(dir: string): Promise<boolean> {
+  try {
+    await fs.rm(dir, { recursive: true, force: true });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The states a run/ticket can END in. A ticket workspace is ephemeral: once the
+ * work it held is terminal, the directory (and its git clone) must be reclaimed —
+ * whatever the outcome was.
+ *
+ *   done      — the ticket reached Done (the `task.finalize` frame).
+ *   failed    — the run reported a terminal failure.
+ *   cancelled — a human cancelled the run mid-flight.
+ *   aborted   — the runner threw before it could report anything.
+ *
+ * `completed` is deliberately NOT here: a run that finished successfully leaves the
+ * ticket open for the next agent, and the workspace IS the ticket's shared context.
+ */
+export const TASK_TERMINAL_STATES = ["done", "failed", "cancelled", "aborted"] as const;
+export type TaskTerminalState = (typeof TASK_TERMINAL_STATES)[number];
+
+/** True when `state` is a terminal state that releases the ticket workspace. Pure. */
+export function releasesTaskWorkspace(state: string): state is TaskTerminalState {
+  return (TASK_TERMINAL_STATES as readonly string[]).includes(state);
+}
+
+/**
+ * Terminal-state hook — the ONE path a ticket workspace is released on.
+ *
+ * Before this existed, teardown lived only on the Done path (`finalizeTask`), so an
+ * errored/cancelled/crashed run leaked `.builderforce/tasks/<taskId>` — and its whole
+ * git clone — on disk until the 24h stale sweep found it (GAP-W2).
+ *
+ * `preserve` runs FIRST (commit + push whatever is on the branch) so removing the
+ * directory can never lose work; it runs inside a `try` and the removal is in the
+ * matching `finally`, so a failing push still reclaims the disk. Never throws.
+ */
+export async function releaseTaskWorkspaceOnTerminal(args: {
+  baseDir: string;
+  taskId: number | string;
+  /** The terminal state that ended the run/ticket. A non-terminal state is a no-op. */
+  state: string;
+  /** Optional "don't lose the work" step — commit + push the ticket branch. */
+  preserve?: () => Promise<void>;
+}): Promise<{ released: boolean; preserved: boolean }> {
+  if (!releasesTaskWorkspace(args.state)) {
+    return { released: false, preserved: false };
+  }
+  let preserved = false;
+  try {
+    if (args.preserve) {
+      await args.preserve();
+      preserved = true;
+    }
+  } catch {
+    /* the work could not be pushed; the directory is still reclaimed below */
+  }
+  const released = await removeTaskWorkspace(args.baseDir, args.taskId);
+  return { released, preserved };
 }
 
 /** Default age past which an idle ticket workspace is considered orphaned. */
@@ -114,13 +198,22 @@ export async function sweepStaleTaskWorkspaces(
   }
 
   for (const entry of entries) {
-    if (active.has(entry)) { continue; }
+    if (active.has(entry)) {
+      continue;
+    }
     const dir = path.join(tasksRoot, entry);
     try {
       const stat = await fs.stat(dir);
-      if (!stat.isDirectory()) { continue; }
-      if (nowMs - stat.mtimeMs < maxAgeMs) { continue; }
-      await fs.rm(dir, { recursive: true, force: true });
+      if (!stat.isDirectory()) {
+        continue;
+      }
+      if (nowMs - stat.mtimeMs < maxAgeMs) {
+        continue;
+      }
+      // Same teardown primitive the terminal-state release uses (one implementation).
+      if (!(await removeWorkspaceDir(dir))) {
+        continue;
+      }
       removed.push(dir);
     } catch {
       /* best-effort — skip anything we can't stat/remove */

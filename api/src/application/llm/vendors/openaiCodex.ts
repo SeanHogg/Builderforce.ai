@@ -177,6 +177,36 @@ async function codexFetch(params: VendorCallParams): Promise<Response> {
         `[vendors] openai-codex/${params.model} auth ${response.status} — connected ChatGPT account is ${response.status === 403 ? 'authenticated but NOT entitled to Codex (lapsed plan / no Codex access / stale accountId)' : 'unauthenticated (token expired or revoked)'}; reconnect it in Settings ▸ API Keys. Failing over to the next model.`,
         message.slice(0, 200),
       );
+      // ── DECISION: a dead Codex account stands the VENDOR down, never the RUN. ──
+      //
+      // The question this settles: should a 401/403 be a `VendorFatalError` (which the
+      // dispatcher rethrows, killing the request) instead of a retryable one?
+      //
+      // NO, and the reasoning is about blast radius. This status says ONE tenant's
+      // ChatGPT account is not entitled to Codex — a fact about a credential, not
+      // about the request. Making it fatal means a workspace with four connected
+      // providers has every request killed by the one that lapsed, including requests
+      // that three healthy accounts could have served. The failure mode we would be
+      // choosing is strictly worse than the one we would be preventing.
+      //
+      // Both regimes already behave correctly under the retryable classification:
+      //   • BYO-STRICT (the tenant declared BYO execution) — `premiumFallback` is
+      //     empty, so there is no platform-funded fallback to degrade onto. If every
+      //     connected account fails, the cascade surfaces `byo_unavailable` and NAMES
+      //     the providers and their reasons. An honest failure, not a silent one.
+      //   • NON-STRICT — the run is served from another route, which is the whole
+      //     point of a cascade.
+      //
+      // The thing that WAS missing is not fatality, it is visibility and cost: the
+      // account used to keep LEADING the seed and burn an upstream attempt on every
+      // single request. `providerAuthAlerts` records the verdict per tenant+provider,
+      // and routing now demotes an alerted vendor out of the lead
+      // (`byoAlertedVendors` → `demotedVendors`), so a broken account costs ONE
+      // wasted attempt in total rather than one per run — while the operator gets the
+      // "reconnect your ChatGPT account" prompt that closes it for good.
+      //
+      // Revisit only if someone can name a case where killing a servable request is
+      // better than serving it from a route the tenant also connected.
       throw new VendorRetryableError(
         'openai-codex',
         params.model,

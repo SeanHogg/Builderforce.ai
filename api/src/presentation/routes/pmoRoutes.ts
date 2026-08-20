@@ -57,15 +57,14 @@ import {
   loadPlanningSpine,
   type CostClass,
 } from '../../application/pmo/planningSpine';
+import { pmoVersionKey } from '../../application/pmo/pmoCacheKeys';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
-/** One version token per tenant: every PMO write bumps it, orphaning the tree +
- *  rollup + spine caches that embed it. Exported so cross-cutting writes (e.g. a
- *  time-entry, which changes spine human cost) can invalidate the spine too. */
-export function pmoVersionKey(tenantId: number): string {
-  return `pmo-version:tenant:${tenantId}`;
-}
+/** Re-exported for the routes/tests that already import it from here. The ONE
+ *  definition lives in `application/pmo/pmoCacheKeys` so application services can use
+ *  it without reaching into the presentation layer. */
+export { pmoVersionKey } from '../../application/pmo/pmoCacheKeys';
 
 const SCOPE_KINDS = new Set<PmoScopeKind>(['portfolio', 'initiative', 'project', 'workspace']);
 

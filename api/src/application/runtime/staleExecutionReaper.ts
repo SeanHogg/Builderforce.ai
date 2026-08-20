@@ -27,8 +27,8 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { and, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import type { Env } from '../../env';
 import { buildDatabase, type Db } from '../../infrastructure/database/connection';
-import { executions, pullRequests, tasks, toolAuditEvents } from '../../infrastructure/database/schema';
-import { scopedToTenant } from '../../infrastructure/database/tenantScope';
+import { executionPauseState, executions, pullRequests, tasks, toolAuditEvents } from '../../infrastructure/database/schema';
+import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { ChatTicketService, ticketKindForTaskType } from '../brain/ChatTicketService';
 import { cloudOrphanReason, cloudSilenceCeilingMs, PAUSED_DEADLINE_MS, PAUSED_ORPHAN_REASON } from './orphanReasons';
 import { markReaperRequeued, parseExecutor } from './cloudDispatch';
@@ -214,6 +214,24 @@ export async function reapStaleExecutions(env: Env, nowMs = Date.now()): Promise
     })
     .where(and(eq(executions.status, 'paused'), sql`coalesce(${executions.updatedAt}, ${executions.startedAt}, ${executions.createdAt}) < ${pausedCutoff}`))
     .returning(REAPED_RETURNING);
+
+  // A reaped question is never going to be answered, so its resume record is now
+  // dead weight: nothing will redispatch a terminal run, and leaving one row behind
+  // per abandoned question grows the table forever. Dropping it is the pause's
+  // symmetric cleanup — `resumePausedExecution` does the same on the happy path.
+  // (The ticket deliberately STAYS in the needs-attention lane: nobody answered, so
+  // it still needs a human.) Best-effort — never blocks the sweep.
+  if (paused.length > 0) {
+    await db.delete(executionPauseState)
+      // A DECLARED cross-tenant write: this cron sweeps every tenant at once, and the
+      // execution ids it just reaped ARE the access predicate — each one came from a
+      // row this statement's sibling update above already owned.
+      .where(acrossTenants(executionPauseState, 'scheduled_sweep', inArray(executionPauseState.executionId, paused.map((r) => r.id))))
+      .catch((error) => reportCaughtError(error, { source: "application/runtime/staleExecutionReaper.ts", operation: "reapStaleExecutions", context: { logMessage: '[execution-reaper] paused resume-state cleanup failed', details: {
+        executionIds: paused.map((r) => r.id),
+        error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+      } } }));
+  }
 
   // Mirror each reaped failure onto the Observability Logs/Timeline (derived only
   // from tool_audit_events). Without this the run just stops at its last

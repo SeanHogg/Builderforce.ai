@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { blendedQualityScore, qualityEvidence, ratingScore } from './modelQualityScore';
-import { rankModelsForAction } from './LlmProxyService';
+import { blendedQualityScore, qualityEvidence, rankModelsForAction, ratingScore } from '@builderforce/learned-routing';
 
 describe('ratingScore', () => {
   it('shrinks a thin record toward neutral so one lucky thumb cannot lead', () => {

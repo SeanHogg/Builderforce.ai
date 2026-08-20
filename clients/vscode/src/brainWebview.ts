@@ -1,9 +1,11 @@
 import * as vscode from "vscode";
+import { BUILD_ID, BUILT_AT } from "./buildInfo";
 import { getTenantJwt, getCurrentUserId } from "./bfApi";
 import { TOOL_DEFS } from "./fileTools";
 import { getBaseUrl, getWebBaseUrl, SECRET_KEY, fetchPersonalityBlock, fetchLimbicBlock, getSessionTabMode, type SessionTabMode } from "./gateway";
 import { attentionFor, sessionTabIcon, sessionTabPrefix } from "./attention";
-import { getGroundingSummary } from "./grounding";
+import { getGroundingWithHistory } from "./grounding";
+import { appendSessionNote, readRecentSessionNotes, SessionNotes } from "./sessionNotes";
 import { getEditorContext, getEditorContextLive, watchEditorContext } from "./editorContext";
 import { resolveEffectiveModelChoice, setSelectedModel, setSelectedModelPool } from "./modelState";
 import { modelChoiceLabels } from "./modelChoiceLabels";
@@ -111,6 +113,19 @@ function buildLabels(): Record<string, string> {
     "tl.apply": t("Apply"),
     "tl.createFile": t("Create file"),
     "tl.preview": t("Preview"),
+    // Run milestones + agent dispatch render as system ACTIVITY lines in the shared
+    // transcript, composed client-side from each message's structured metadata. The
+    // server records the FACTS in one language; these templates are what make the line
+    // readable in the editor's. `{…}` are substituted by the renderer, not by l10n.
+    "tl.activityStarted": t("{agent} started working on {kind} #{ref}"),
+    "tl.activityCompleted": t("{agent} finished {kind} #{ref}"),
+    "tl.activityCompletedWithLane": t("{agent} finished {kind} #{ref} — moved to {lane}"),
+    "tl.activityFailed": t("{agent}'s run on {kind} #{ref} failed"),
+    "tl.activityPaused": t("{agent} paused on {kind} #{ref} — waiting on a human answer"),
+    "tl.activityPausedWithQuestion": t("{agent} paused on {kind} #{ref} — needs an answer: {question}"),
+    "tl.activityResumed": t("{agent} resumed work on {kind} #{ref}"),
+    "tl.activityCancelled": t("{agent}'s run on {kind} #{ref} was cancelled"),
+    "tl.activityDispatched": t("{agent} was assigned to {kind} #{ref}"),
     // Composer + chrome
     "app.signInPrompt": t("Sign in to BuilderForce to start."),
     "app.signIn": t("Sign in"),
@@ -321,6 +336,16 @@ export class BrainWebview extends WebviewPanelBase<BrainInbound> {
   private chatTitle = "";
   /** Identifies this panel in the shared local-run overlay (see BrainWebviewHooks). */
   private readonly sourceId = `brain:${++BrainWebview.seq}`;
+  /**
+   * This panel's contribution to the `.builderforce/` knowledge loop: what the current
+   * run has touched, flushed as a dated note when the run finishes. The editor used to
+   * write the grounding MAP and nothing else, so its knowledge never compounded the way
+   * the on-prem runtime's did — see `sessionNotes.ts`.
+   */
+  private notes = new SessionNotes();
+  /** Whether a local run was in flight on the previous `runs.local` report, so the
+   *  non-empty → empty transition can be read as "the run finished". */
+  private runWasActive = false;
 
   private constructor(ctx: vscode.ExtensionContext, intent: BrainIntent | undefined, private readonly mode: SessionTabMode) {
     super(ctx, { viewType: "builderforce.brain", title: "BuilderForce", htmlTitle: "BuilderForce" });
@@ -356,10 +381,16 @@ export class BrainWebview extends WebviewPanelBase<BrainInbound> {
           Array.isArray(v) ? v.filter((n): n is number => typeof n === "number") : [];
         // Repainting this panel's tab rides the overlay's change event (which the host
         // already fans out to refreshTabStatus) — no direct call needed here.
+        const running = nums(msg.running);
         BrainWebview.hooks.onLocalRunsChanged?.(this.sourceId, {
-          running: nums(msg.running),
+          running,
           awaiting: nums(msg.awaiting),
         });
+        // The non-empty → empty transition IS run completion, which is when the on-prem
+        // loop writes its note too. Flushing per tool call instead would scatter one run
+        // across many headings and make the history unreadable.
+        if (this.runWasActive && running.length === 0) void this.flushSessionNote();
+        this.runWasActive = running.length > 0;
         break;
       }
       // The webview switched to (or created / renamed) the chat it is showing. A
@@ -629,6 +660,11 @@ export class BrainWebview extends WebviewPanelBase<BrainInbound> {
       // The installed build, for the diagnostics report (a stale VSIX explains a
       // surprising share of "this was already fixed" reports).
       extensionVersion: this.ctx.extension.packageJSON.version as string,
+      // …and the ARTIFACT identity the version cannot carry: two VSIXes can share a
+      // version and differ in code, so the source hash is what actually answers
+      // "did you get the fix?". See `buildInfo.ts`.
+      buildId: BUILD_ID,
+      builtAt: BUILT_AT,
       token,
       // Manual pick > active project's Evermind pin > configured default. Sending the
       // `project_evermind:<id>` pin lets the gateway serve the project's CURRENT learned
@@ -636,7 +672,7 @@ export class BrainWebview extends WebviewPanelBase<BrainInbound> {
       model: modelChoice.model,
       modelStrict: modelChoice.modelStrict,
       routingMode: modelChoice.routingMode,
-      grounding: root ? getGroundingSummary() : undefined,
+      grounding: await getGroundingWithHistory(root),
       // Live editor context (active file / selection / open tabs). Seeds the React
       // app's ambient system channel; refreshed via `editorContext` messages below.
       editorContext,
@@ -683,6 +719,9 @@ export class BrainWebview extends WebviewPanelBase<BrainInbound> {
     try {
       const result = await def.execute(args, root);
       this.respond(id, true, result);
+      // Feed the knowledge loop. Recorded on SUCCESS only — a note claiming a file was
+      // written when the write threw would ground every later run on a lie.
+      this.notes.record(def.name, args);
       // Link the change back to the editor: reveal the file the agent just wrote
       // or edited so the user SEES each change land (a preview tab beside the
       // chat, focus preserved). Fire-and-forget — never blocks the tool result.
@@ -716,7 +755,26 @@ export class BrainWebview extends WebviewPanelBase<BrainInbound> {
     }
   }
 
+  /**
+   * Write this run's note and start a fresh accumulator. Best-effort throughout: a
+   * read-only workspace or a locked file costs a note, never a turn.
+   */
+  private async flushSessionNote(): Promise<void> {
+    const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    if (!root || this.notes.isEmpty) return;
+    const activity = this.notes.activity;
+    // Reset BEFORE the await so a run that starts while this write is in flight
+    // accumulates into a new note instead of being folded into the one being written.
+    this.notes = new SessionNotes();
+    await appendSessionNote(root, {
+      sessionKey: this.ownChatId != null ? `chat-${this.ownChatId}` : this.sourceId,
+      activity,
+    });
+  }
+
   protected onDispose(): void {
+    // Closing the panel mid-run still ends the run, so its work must not be lost.
+    void this.flushSessionNote();
     if (BrainWebview.reused === this) BrainWebview.reused = undefined;
     if (this.ownChatId != null && BrainWebview.byChat.get(this.ownChatId) === this) {
       BrainWebview.byChat.delete(this.ownChatId);

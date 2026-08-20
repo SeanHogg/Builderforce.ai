@@ -355,6 +355,21 @@ export const tenants = pgTable('tenants', {
    * UTC day (the tenant's primary pool still runs); resets at UTC midnight.
    */
   paidOverflowDailyCap:   integer('paid_overflow_daily_cap'),
+  /**
+   * Per-tenant daily ceiling on PREMIUM spend — the any-paid-OpenRouter tier a paid
+   * tenant pins explicitly, billed at vendor cost plus a flat per-request surcharge —
+   * in millicents (1/100000 USD), migration 0952.
+   *
+   * Its sibling above caps the overflow Builderforce funds on its OWN keys; this caps
+   * what the tenant runs up on the metered long tail. They are separate ceilings
+   * because they answer to different budgets, but they share one convention:
+   *   NULL  → plan default (see `resolvePremiumDailyCapMillicents`)
+   *   -1    → unlimited; the premium gate is skipped
+   *   >= 0  → use this value instead of the plan default
+   * Once exceeded the gateway refuses premium pins for the rest of the UTC day; the
+   * tenant's plan pool still runs. Resets at UTC midnight.
+   */
+  premiumDailyCap:        integer('premium_daily_cap'),
   /** Per-tenant daily image-generation credit override (1 credit = 1 returned
    *  image). NULL → plan default; -1 → unlimited; >= 0 → explicit. Metered
    *  independently of `tokenDailyLimit` so image and text budgets don't starve
@@ -1119,6 +1134,18 @@ export const memberPersonas = pgTable('member_personas', {
  * reads to decode it. `priority`: LOWER number = tried FIRST, NULL = unset (0338).
  */
 export const tenantLlmProviderKeys = pgTable('tenant_llm_provider_keys', {
+  /**
+   * Surrogate identity for THIS KEY INSTANCE (0953). The composite primary key below
+   * is deliberately kept — it is what makes the write an upsert — so this is an
+   * ADDITIONAL identity, not a replacement.
+   *
+   * Minted fresh whenever the stored key MATERIAL changes, which is the whole point:
+   * a rotation overwrites the row in place, so without a value that changes with the
+   * secret, a rotated key is indistinguishable from its predecessor and last month's
+   * spend silently re-attributes to the new key. Usage rows carry it as
+   * `llm_usage_log.byo_credential_id`.
+   */
+  id:              uuid('id').notNull().defaultRandom(),
   tenantId:        integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   provider:        text('provider').notNull(),
   keyEnc:          text('key_enc').notNull(),

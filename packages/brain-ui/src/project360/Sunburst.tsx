@@ -1,4 +1,22 @@
 import type { Project360Dimension, Project360Pillar } from './types';
+// ALL wheel geometry lives in ONE pure module so it can be asserted without a DOM —
+// this component owns presentation only and never re-derives a coordinate.
+import {
+  ARC_PAD_DEG,
+  CX,
+  CY,
+  labelAt,
+  padSlice,
+  R_CENTER,
+  R_INNER_0,
+  R_INNER_1,
+  R_OUTER_0,
+  R_OUTER_1,
+  sector,
+  slice,
+  twoLines,
+  VIEWBOX,
+} from './sunburstGeometry';
 
 /**
  * The Project 360 wheel — a two-ring sunburst. Inner ring = the four pillars,
@@ -17,48 +35,6 @@ export interface SunburstProps {
   ariaLabel?: string;
 }
 
-const CX = 160;
-const CY = 160;
-const R_CENTER = 46;
-const R_INNER_0 = 48; // pillar ring
-const R_INNER_1 = 96;
-const R_OUTER_0 = 100; // dimension ring
-const R_OUTER_1 = 150;
-
-function polar(r: number, angleDeg: number): [number, number] {
-  const a = ((angleDeg - 90) * Math.PI) / 180; // 0° at top, clockwise
-  return [CX + r * Math.cos(a), CY + r * Math.sin(a)];
-}
-
-/** Annular sector path from `startDeg`→`endDeg` (clockwise) between two radii. */
-function sector(rInner: number, rOuter: number, startDeg: number, endDeg: number): string {
-  const large = endDeg - startDeg > 180 ? 1 : 0;
-  const [ox0, oy0] = polar(rOuter, startDeg);
-  const [ox1, oy1] = polar(rOuter, endDeg);
-  const [ix1, iy1] = polar(rInner, endDeg);
-  const [ix0, iy0] = polar(rInner, startDeg);
-  return [
-    `M${ox0.toFixed(2)},${oy0.toFixed(2)}`,
-    `A${rOuter},${rOuter} 0 ${large} 1 ${ox1.toFixed(2)},${oy1.toFixed(2)}`,
-    `L${ix1.toFixed(2)},${iy1.toFixed(2)}`,
-    `A${rInner},${rInner} 0 ${large} 0 ${ix0.toFixed(2)},${iy0.toFixed(2)}`,
-    'Z',
-  ].join(' ');
-}
-
-function labelAt(r: number, angleDeg: number): { x: number; y: number } {
-  const [x, y] = polar(r, angleDeg);
-  return { x, y };
-}
-
-/** Split a label onto two lines if it is long, so it fits inside a 45° arc. */
-function twoLines(label: string): string[] {
-  if (label.length <= 9) return [label];
-  const mid = label.indexOf(' ', Math.floor(label.length / 2) - 3);
-  if (mid > 0) return [label.slice(0, mid), label.slice(mid + 1)];
-  return [label];
-}
-
 export function Sunburst({ pillars, dimensions, overall, selected, onSelect, ariaLabel }: SunburstProps) {
   const nPillars = pillars.length || 1;
   const pillarSpan = 360 / nPillars;
@@ -70,22 +46,20 @@ export function Sunburst({ pillars, dimensions, overall, selected, onSelect, ari
   return (
     <svg
       className="bf-360-wheel"
-      viewBox="0 0 320 320"
+      viewBox={`0 0 ${VIEWBOX} ${VIEWBOX}`}
       role="img"
       aria-label={ariaLabel ?? 'Project 360 health wheel'}
     >
       {pillars.map((pillar, pi) => {
-        const pStart = pi * pillarSpan;
-        const pEnd = pStart + pillarSpan;
+        const [pStart, pEnd] = slice(0, 360, pi, nPillars);
         const pMid = (pStart + pEnd) / 2;
         const dims = dimsByPillar[pi];
-        const dimSpan = pillarSpan / (dims.length || 1);
         const pLabel = labelAt((R_INNER_0 + R_INNER_1) / 2, pMid);
         return (
           <g key={pillar.key}>
             {/* Inner ring — pillar */}
             <path
-              d={sector(R_INNER_0, R_INNER_1, pStart + 0.6, pEnd - 0.6)}
+              d={sector(R_INNER_0, R_INNER_1, ...padSlice(pStart, pEnd, ARC_PAD_DEG))}
               fill={pillar.color}
               fillOpacity={0.9}
               className="bf-360-arc bf-360-arc--pillar"
@@ -102,8 +76,7 @@ export function Sunburst({ pillars, dimensions, overall, selected, onSelect, ari
 
             {/* Outer ring — dimensions */}
             {dims.map((dim, di) => {
-              const dStart = pStart + di * dimSpan;
-              const dEnd = dStart + dimSpan;
+              const [dStart, dEnd] = slice(pStart, pillarSpan, di, dims.length);
               const dMid = (dStart + dEnd) / 2;
               const isSel = selected === dim.key;
               const lab = labelAt((R_OUTER_0 + R_OUTER_1) / 2, dMid);
@@ -118,7 +91,7 @@ export function Sunburst({ pillars, dimensions, overall, selected, onSelect, ari
                   aria-label={`${dim.label}: ${dim.score} of 100`}
                 >
                   <path
-                    d={sector(R_OUTER_0, R_OUTER_1, dStart + 0.6, dEnd - 0.6)}
+                    d={sector(R_OUTER_0, R_OUTER_1, ...padSlice(dStart, dEnd, ARC_PAD_DEG))}
                     fill={dim.color}
                     fillOpacity={isSel ? 1 : 0.82}
                     className={`bf-360-arc bf-360-arc--dim${isSel ? ' is-selected' : ''}`}

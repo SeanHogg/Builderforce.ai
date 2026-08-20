@@ -64,3 +64,30 @@ describe("ClaudeSdkAgentEngine", () => {
     expect(result).toEqual({ ok: false, output: "stopped", cancelled: true, finished: true });
   });
 });
+
+/**
+ * GAP-B2/B4 — the gateway can only apply its fail-closed BYO rule to a CLOUD agent
+ * execution if the runner declares what it is. The SDK exposes no header hook other
+ * than `ANTHROPIC_CUSTOM_HEADERS`, so that string is the contract.
+ */
+describe("gateway surface declaration", () => {
+  it("passes the surface + execution id through to the SDK runner", async () => {
+    runMock.mockResolvedValueOnce({ ok: true, text: "done" });
+    const { engine } = makeEngine({ surface: "on_prem", executionId: 77 });
+
+    await engine.run({ systemPrompt: "", userContent: "x" });
+
+    expect(runMock.mock.calls.at(-1)![0]).toMatchObject({ surface: "on_prem", executionId: 77 });
+  });
+
+  it("omits both when the caller declares neither (unchanged behaviour)", async () => {
+    runMock.mockResolvedValueOnce({ ok: true, text: "done" });
+    const { engine } = makeEngine();
+
+    await engine.run({ systemPrompt: "", userContent: "x" });
+
+    const params = runMock.mock.calls.at(-1)![0] as Record<string, unknown>;
+    expect("surface" in params).toBe(false);
+    expect("executionId" in params).toBe(false);
+  });
+});

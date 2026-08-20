@@ -52,3 +52,45 @@ describe("ToolDefinition -> AgentTool adapter", () => {
     expect(result.content).toContainEqual({ type: "image", data: "AAAA", mimeType: "image/jpeg" });
   });
 });
+
+describe("streaming — the seam a converged exec/process needs", () => {
+  /**
+   * The native `AgentTool.execute` has always taken an `onUpdate` callback, and the
+   * adapter used to drop it: a shared tool ran to completion in silence and the terminal
+   * looked hung. That is why `exec`/`process` could not converge without regressing.
+   */
+  const streamingDef: ToolDefinition = {
+    name: "stream",
+    requires: [],
+    schema: {
+      type: "function",
+      function: { name: "stream", description: "streams", parameters: { type: "object", properties: {} } },
+    },
+    execute: async (_args, ctx) => {
+      ctx.onUpdate?.({ data: { chunk: 1 } });
+      ctx.onUpdate?.({ data: { chunk: 2 }, content: [{ type: "text", text: "partial" }] });
+      return { data: { done: true } };
+    },
+  };
+
+  it("forwards partial results to the loop's onUpdate callback", async () => {
+    const tool = toAgentTool(streamingDef, provider, "/work");
+    const seen: unknown[] = [];
+    const result = await tool.execute("call1", {}, undefined, (partial) => seen.push(partial));
+
+    expect(seen).toHaveLength(2);
+    // Partials are mapped through the SAME result mapper as the final value, so a host
+    // renders progress with the code path it already uses.
+    expect((seen[0] as { content: Array<{ text: string }> }).content[0].text).toBe(
+      JSON.stringify({ chunk: 1 }),
+    );
+    expect((seen[1] as { content: Array<{ text: string }> }).content[1].text).toBe('partial');
+    expect(result.content[0]).toEqual({ type: "text", text: JSON.stringify({ done: true }) });
+  });
+
+  it("runs to completion when the loop supplies NO callback — nobody is watching", async () => {
+    const tool = toAgentTool(streamingDef, provider, "/work");
+    const result = await tool.execute("call1", {});
+    expect(result.content[0]).toEqual({ type: "text", text: JSON.stringify({ done: true }) });
+  });
+});

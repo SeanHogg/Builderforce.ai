@@ -21,6 +21,7 @@ import {
   setProjectEvermindMode,
   setProjectEvermindTeacher,
   teachProjectEvermindFromText,
+  getProjectEvermindContributionStatus,
   flushProjectEvermind,
   validateProjectEvermind,
   probeProjectEvermind,
@@ -82,7 +83,14 @@ export function ProjectEvermindPanel({ projectId, showRecent = true }: { project
     setInference: async (enabled) => { await setProjectEvermindInference(projectId, enabled); },
     setMode: async (mode) => { await setProjectEvermindMode(projectId, mode); },
     setTeacher: async (model) => { await setProjectEvermindTeacher(projectId, model); },
-    teach: async (text, prompt) => { await teachProjectEvermindFromText(projectId, text, prompt); },
+    // The teach POST is ACCEPTANCE, not success — the teacher runs later, in the
+    // coordinator's debounced merge. Hand the console the contribution id so it can
+    // poll `teachStatus` and correct its optimistic toast with the real outcome.
+    teach: async (text, prompt) => {
+      const r = await teachProjectEvermindFromText(projectId, text, prompt);
+      return r.contributionId ? { contributionId: r.contributionId } : {};
+    },
+    teachStatus: (contributionId) => getProjectEvermindContributionStatus(projectId, contributionId),
     flush: async () => { const r = await flushProjectEvermind(projectId); return { merged: r.merged, version: r.version }; },
     validate: (prompt) => validateProjectEvermind(projectId, prompt),
     loadTargets: () => listProjectEvermindTargets(projectId),
@@ -157,6 +165,11 @@ export function ProjectEvermindPanel({ projectId, showRecent = true }: { project
     teachCta: t('teachCta'),
     teaching: t('teaching'),
     taught: t('taught'),
+    taughtDistilled: (model, version) => t('taughtDistilled', { model, version }),
+    taughtSelf: (version) => t('taughtSelf', { version }),
+    taughtTeacherFault: (model, reason) => t('taughtTeacherFault', { model, reason }),
+    taughtDropped: t('taughtDropped'),
+    taughtStillPending: t('taughtStillPending'),
     teachTeacherTitle: t('teachTeacherTitle'),
     teachTeacherHint: (model) => t('teachTeacherHint', { model }),
     teachTaskPlaceholder: t('teachTaskPlaceholder'),

@@ -190,6 +190,19 @@ export const BUILTIN_AGENTS: BuiltinAgentSeed[] = [
     skills: ['onboarding', 'people-development', 'engagement', 'policy', 'retention'],
   },
   {
+    // The Agentic Tester's identity. It ran as a synthetic machine subject with
+    // no `ide_agents` row at all, which meant the one autonomous worker that
+    // exercises the live product could not be assigned a ticket, did not appear
+    // on the workforce board with the rest of the team, and had no place to
+    // carry its own model or persona. It is an employee like the others.
+    kind: 'qa_tester',
+    idPrefix: 'qa-tester-t',
+    name: 'Agentic Tester',
+    title: 'Agentic Tester — explores the live product in a real browser',
+    bio: 'Drives a real browser through the app the way people actually use it, ranked by where they actually go: it reads the interaction heat map, plans an exploration over the hottest routes and controls, and reports what genuinely broke — runtime errors, failed navigations, server errors, crashes — with the page image captured at the moment it happened. It reports what it observed rather than what it expected, files one finding per distinct fault, and turns a finding into a board ticket only when a human or an opt-in routing rule asks it to.',
+    skills: ['exploratory-testing', 'browser-automation', 'playwright', 'regression-testing', 'accessibility'],
+  },
+  {
     kind: 'ceo',
     idPrefix: 'ceo-t',
     name: 'CEO',

@@ -23,6 +23,8 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { and, eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
+import { listTenantProviderKeys } from './tenantProviderKeyService';
+import { getMemberSpendAvailability } from '../consumption/memberSpend';
 import { tenants, tenantMembers, users } from '../../infrastructure/database/schema';
 import { TenantPlan, TenantBillingStatus } from '../../domain/shared/types';
 import { resolveEffectivePlan } from '../../domain/tenant/effectivePlan';
@@ -31,6 +33,11 @@ import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { sumTenantTextTokensDayAndMonth, utcDayStart, utcMonthStart } from './tokenUsage';
 
 export type TokenExhaustionReason = 'daily_exhausted' | 'monthly_exhausted';
+
+/** Why an interactive dispatch was refused. A superset of {@link TokenExhaustionReason}
+ *  because the gate now also pre-blocks on the PER-SEAT monthly spend cap — which is
+ *  not a tenant-pool exhaustion at all, and must not be reported as one. */
+export type DispatchBlockReason = TokenExhaustionReason | 'member_spend_exhausted';
 
 export interface TenantTokenAvailability {
   /** True when the tenant may spend on our pool (neither daily nor monthly cap hit). */
@@ -259,8 +266,11 @@ export async function tenantHasSuperadminMember(db: Db, tenantId: number, env?: 
  *  handles the gateway's 429 handles these identically. */
 export interface TokenGateBlock {
   error: string;
-  code: 'plan_token_limit_exceeded' | 'plan_monthly_token_limit_exceeded';
-  reason: TokenExhaustionReason;
+  /** `member_spend_cap_exceeded` is the SAME code the gateway returns for the same
+   *  condition, so a client branches on one value regardless of which surface refused
+   *  first — the pre-block and the gateway block must not read as different failures. */
+  code: 'plan_token_limit_exceeded' | 'plan_monthly_token_limit_exceeded' | 'member_spend_cap_exceeded';
+  reason: DispatchBlockReason;
   effectivePlan: 'free' | 'pro' | 'teams';
 }
 
@@ -303,6 +313,41 @@ export async function checkTenantTokenGate(
   } catch {
     return null; // fail open
   }
+
+  // PER-SEAT SPEND, checked here and not only at the gateway.
+  //
+  // The seat cap was enforced in `enforceTokenCaps` alone, which runs on the first
+  // PAID MODEL CALL — so a seat already at its cap could still be DISPATCHED: Run-now
+  // spawned a cloud run, the run made one call, took a 429, and terminated cleanly.
+  // Cleanly, but after spawning: an execution row, a container, a lane transition and
+  // a chat narration all happened for work that could never proceed. Asking the same
+  // question BEFORE the spawn turns that into an immediate, explainable refusal.
+  //
+  // Same evaluator (`getMemberSpendAvailability`), so the pre-block and the gateway
+  // block can never disagree about whether a seat has budget. Ordered AFTER the plan
+  // check because a tenant out of plan tokens is the broader, cheaper answer, and
+  // deliberately fail-open: a spend-scan failure must not block a human clicking Run.
+  if (availability.hasTokens && env && opts?.actingUserId) {
+    try {
+      const spend = await getMemberSpendAvailability(db, env, tenantId, opts.actingUserId, {
+        effectivePlan: availability.effectivePlan,
+        ...(opts.actingUserId ? { actingUserId: opts.actingUserId } : {}),
+        ...(opts.actingIsSuperadmin !== undefined ? { actingIsSuperadmin: opts.actingIsSuperadmin } : {}),
+      });
+      if (spend.seatControlsEnabled && spend.capMillicents != null && !spend.hasBudget) {
+        const capUsd = (spend.capMillicents / 100_000).toFixed(2);
+        return {
+          error: `Monthly AI spend cap reached for this seat ($${capUsd}). New paid model usage is paused `
+            + 'until the cap resets or your workspace owner raises it. Connect your own model key to keep '
+            + 'going at your own rate.',
+          code: 'member_spend_cap_exceeded',
+          reason: 'member_spend_exhausted',
+          effectivePlan: availability.effectivePlan,
+        };
+      }
+    } catch { /* fail open — never block a human clicking Run on a spend-scan error */ }
+  }
+
   if (availability.hasTokens || !availability.reason) return null;
 
   const window = availability.reason === 'monthly_exhausted' ? 'monthly' : 'daily';
@@ -316,4 +361,61 @@ export async function checkTenantTokenGate(
     reason: availability.reason,
     effectivePlan: availability.effectivePlan,
   };
+}
+
+/**
+ * Does this tenant fund its OWN model runs from a connected provider account?
+ *
+ * THE single predicate for the BYO bypass, extracted because three independent
+ * gates had (or needed) the same check and only one of them had it: the Evermind
+ * teacher already skipped its budget gate for a BYO tenant, while the autonomous
+ * execution sweep and the manager sweep did not — so a workspace paying for its
+ * own runs on its own key had its SCHEDULED work silently stop the moment OUR
+ * shared pool ran dry, for a budget it was not spending.
+ *
+ * Cached read-through: the answer changes only when a credential is connected or
+ * removed, and the sweeps ask it once per tenant per tick.
+ *
+ * Degrades to `false` (i.e. keep the budget gate) if the lookup fails. That is the
+ * conservative direction: wrongly gating a BYO tenant delays work by one tick,
+ * wrongly bypassing spends our pool.
+ */
+export async function tenantFundsOwnLlmRuns(env: Env | undefined, tenantId: number): Promise<boolean> {
+  if (!env) return false;
+  try {
+    return await getOrSetCached(
+      env,
+      `byo-funded:${tenantId}`,
+      async () => (await listTenantProviderKeys(env, tenantId)).length > 0,
+      { kvTtlSeconds: 120 },
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The autonomous/scheduled counterpart of {@link checkTenantTokenGate}: may this
+ * tenant's background work run right now?
+ *
+ * Two independent reasons it may: it still has OUR pool budget, or it funds its own
+ * runs (`tenantFundsOwnLlmRuns`). Fails OPEN on an error — a usage-scan failure must
+ * not freeze a tenant's board, which is the pre-existing contract at both sweep
+ * sites and is deliberately preserved here.
+ */
+export async function tenantMayRunAutonomously(
+  db: Db,
+  tenantId: number,
+  env?: Env,
+): Promise<{ allowed: boolean; availability: TenantTokenAvailability | null; byoFunded: boolean }> {
+  let availability: TenantTokenAvailability | null;
+  try {
+    availability = await getTenantTokenAvailability(db, tenantId, undefined, env);
+  } catch {
+    return { allowed: true, availability: null, byoFunded: false }; // fail open
+  }
+  if (availability.hasTokens) return { allowed: true, availability, byoFunded: false };
+  // Out of OUR budget — but a tenant on their own key is not spending it.
+  const byoFunded = await tenantFundsOwnLlmRuns(env, tenantId);
+  return { allowed: byoFunded, availability, byoFunded };
 }

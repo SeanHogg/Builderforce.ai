@@ -30,7 +30,7 @@ import {
   promptLibraryEntries,
   catalogAdoptionEvents,
 } from '../../infrastructure/database/schema';
-import { bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
+import { bumpCacheVersion, getCacheVersion, getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 
@@ -97,6 +97,28 @@ function dayKey(ts: number | Date): string {
 
 /** One normalized adoption event, kind-agnostic, ready to bucket. */
 interface Ev { ts: number; itemId: string; itemName: string; type: 'install' | 'usage' }
+
+/**
+ * The CACHED read the HTTP layer calls — short TTL over hot adoption tables,
+ * with the version token `recordCatalogAdoption` bumps folded into the key so a
+ * fresh install or use refreshes immediately. Owned here, next to the writer
+ * that invalidates it, rather than in the route.
+ */
+export async function getCatalogAnalytics(
+  db: Db,
+  env: Env,
+  tenantId: number,
+  kind: CatalogKind,
+  windowDays: number,
+): Promise<CatalogAnalytics> {
+  const ver = await getCacheVersion(env, catalogAnalyticsVersionKey(tenantId));
+  return getOrSetCached(
+    env,
+    `catalog-analytics:t:${tenantId}:k:${kind}:w:${windowDays}:v:${ver}`,
+    () => computeCatalogAnalytics(db, tenantId, kind, windowDays),
+    { kvTtlSeconds: 60, l1TtlMs: 15_000 },
+  );
+}
 
 /**
  * Compute the adoption analytics for one catalog `kind` over the last

@@ -21,25 +21,24 @@ import { reportCaughtError } from '../../application/observability/caughtErrorRe
  * ("personality = setpoints"), so the affect reflects the personality rather than the
  * neutral resting state. Backward-compatible: with no profile the behaviour is identical
  * to the original neutral appraisal.
+ *
+ * Resolving that profile is `resolvePsychometricProfile` in the application layer —
+ * this file no longer reads `users` or `ide_agents` itself.
  */
 import { Hono } from 'hono';
-import { eq } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
-import { users, ideAgents } from '../../infrastructure/database/schema';
 import {
   appraiseTask,
   buildLimbicBlock,
   buildPsychometricBlock,
   deriveLimbicSetpoints,
   neutralState,
-  type LimbicPsychProfile,
 } from '@builderforce/agent-tools';
 import {
   buildUserPersonalityBlock,
-  loadPersonaBody,
-  parsePsychometricProfile,
+  resolvePsychometricProfile,
 } from '../../application/artifact/capabilityContext';
 
 interface LimbicBlockBody {
@@ -52,37 +51,6 @@ interface LimbicBlockBody {
   agentId?: unknown;
   /** Load this persona's psychometric (platform/marketplace persona slug). */
   personaId?: unknown;
-}
-
-/** Resolve the caller-requested profile from the request body, trying the cheapest
- *  source first (inline) before any DB read. Returns `undefined` when nothing resolves. */
-async function resolveProfile(
-  env: Env,
-  db: Db,
-  body: LimbicBlockBody,
-): Promise<LimbicPsychProfile | undefined> {
-  // 1. Inline profile — no DB read.
-  const inline = parsePsychometricProfile(body.psychometric as string | LimbicPsychProfile | null | undefined);
-  if (inline) return inline;
-  // 2. Human user's own personality.
-  if (typeof body.userId === 'string' && body.userId) {
-    const [row] = await db.select({ psychometric: users.psychometric }).from(users).where(eq(users.id, body.userId)).limit(1);
-    const p = parsePsychometricProfile(row?.psychometric ?? null);
-    if (p) return p;
-  }
-  // 3. Agent's own personality.
-  if (typeof body.agentId === 'string' && body.agentId) {
-    const [row] = await db.select({ psychometric: ideAgents.psychometric }).from(ideAgents).where(eq(ideAgents.id, body.agentId)).limit(1);
-    const p = parsePsychometricProfile(row?.psychometric ?? null);
-    if (p) return p;
-  }
-  // 4. Assigned persona (platform/marketplace) — reuses the per-slug capability cache.
-  if (typeof body.personaId === 'string' && body.personaId) {
-    const persona = await loadPersonaBody(env, db, body.personaId);
-    const p = parsePsychometricProfile(persona?.psychometric ?? null);
-    if (p) return p;
-  }
-  return undefined;
 }
 
 export function createLimbicRoutes(db: Db): Hono<HonoEnv> {
@@ -106,12 +74,15 @@ export function createLimbicRoutes(db: Db): Hono<HonoEnv> {
       body = (await c.req.json()) as LimbicBlockBody;
     } catch (error) {
       /* empty / non-JSON body → neutral appraisal, no profile */
-    
+
       reportCaughtError(error, { source: "presentation/routes/limbicRoutes.ts", operation: "createLimbicRoutes" });
     }
     const text = typeof body.text === 'string' ? body.text : '';
 
-    const profile = await resolveProfile(c.env as Env, db, body).catch(() => undefined);
+    // The agent leg is tenant-scoped, so pass the caller's tenant: an authenticated
+    // member must not be able to read another workspace's agent personality by id.
+    const tenantId = (c.get('tenantId') as number | undefined) ?? null;
+    const profile = await resolvePsychometricProfile(c.env as Env, db, tenantId, body).catch(() => undefined);
     // Personality = homeostatic setpoints: seed the appraisal from the profile's derived
     // setpoints so the affect reflects personality; neutral resting state when none.
     const base = profile ? { ...neutralState(), ...deriveLimbicSetpoints(profile) } : neutralState();

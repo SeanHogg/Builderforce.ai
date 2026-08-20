@@ -59,10 +59,23 @@ export const CONVERGED_TOOL_NAMES: ReadonlySet<string> = new Set(["write", "edit
  */
 export function buildConvergedFileTools(params: {
   workspaceRoot: string;
+  /**
+   * Write confinement, forwarded verbatim to the disk provider.
+   *
+   * THIS IS THE ANSWER TO THE OPEN QUESTION the convergence flag was gated on ("do the
+   * converged `write`/`edit` narrow scope to workspace-root vs native's opt-in guard?").
+   * They must NOT: native `write`/`edit` are confined only when `tools.fs.workspaceOnly`
+   * is set, so a converged set that always confined would turn a flag flip into a silent
+   * security-boundary change and start failing every legitimate write outside the tree.
+   * The caller passes the agent's own `workspaceOnly`, which makes turning convergence on
+   * a pure implementation swap — the only property that makes it safe to default ON.
+   */
+  scope?: Parameters<typeof buildNodeCapabilityProvider>[0]["scope"];
   requestHuman?: Parameters<typeof buildNodeCapabilityProvider>[0]["requestHuman"];
 }): AnyAgentTool[] {
   const provider = buildNodeCapabilityProvider({
     workspaceRoot: params.workspaceRoot,
+    scope: params.scope,
     requestHuman: params.requestHuman,
   });
   return registryToAgentTools(CONVERGED_REGISTRY, provider, params.workspaceRoot, NATIVE_NAME_ALIASES);

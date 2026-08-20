@@ -11,6 +11,7 @@
  */
 import { useTranslations } from 'next-intl';
 import { useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { adminApi } from '@/lib/adminApi';
 import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
 import { useFormat } from "@/i18n/useFormat";
@@ -135,8 +136,6 @@ export function LlmTracesPanel() {
     }
   }, []);
 
-  useEffect(() => { void load(''); }, [load]);
-
   const openTrace = useCallback(async (traceId: string) => {
     setDetailLoading(true);
     setError(null);
@@ -149,6 +148,20 @@ export function LlmTracesPanel() {
       setDetailLoading(false);
     }
   }, []);
+
+  /**
+   * Deep link: `/admin?tab=llm&sub=traces&traceId=llm-…`.
+   *
+   * A run's Model-turns tab links each turn straight here, so a superadmin lands
+   * on the full row instead of pasting the id into the search box by hand. The id
+   * also seeds the query so the surrounding list is the one that contains it.
+   */
+  const deepLinkTraceId = useSearchParams()?.get('traceId') ?? '';
+  useEffect(() => {
+    setQuery(deepLinkTraceId);
+    void load(deepLinkTraceId);
+    if (deepLinkTraceId) void openTrace(deepLinkTraceId);
+  }, [deepLinkTraceId, load, openTrace]);
 
   return (
     <div style={{ color: 'var(--text-primary)' }}>

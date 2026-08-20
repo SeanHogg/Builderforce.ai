@@ -51,4 +51,33 @@ describe('evermindLearnedStatus', () => {
     expect(evermindLearnedStatus({ kind: 'text', prompt: TASK, text: 'A real, distinct answer.' }))
       .toEqual({ state: 'self' });
   });
+
+  it('grades a BACKFILLED legacy row exactly as it graded the bare one', () => {
+    // The API's per-DO provenance backfill materialises this reader's own inference onto
+    // legacy rows so nothing has to guess on every read. That is only safe if the two
+    // agree — a migration that re-graded history would rewrite what users were told.
+    const bareSelf = { kind: 'text' as const, prompt: TASK, text: 'A real, distinct answer.' };
+    const bareFault = { kind: 'text' as const, prompt: TASK, text: TASK };
+
+    expect(evermindLearnedStatus({ ...bareSelf, distilled: false, skipReason: 'legacy' }))
+      .toEqual(evermindLearnedStatus(bareSelf));
+    expect(evermindLearnedStatus({ ...bareFault, distilled: false, skipReason: 'unknown' }))
+      .toEqual(evermindLearnedStatus(bareFault));
+  });
+
+  it('treats `legacy` as self-learning, never as a fault to act on', () => {
+    // `legacy` says "recorded before provenance existed" — an absence of evidence, not
+    // evidence of a broken teacher. Grading it as a fault would fill the console with
+    // alarms about history nobody can fix.
+    expect(evermindLearnedStatus({ kind: 'text', prompt: TASK, text: 'answer', distilled: false, skipReason: 'legacy' }))
+      .toEqual({ state: 'self' });
+  });
+
+  it.each([['cooling'], ['unroutable']])('reports %s (breaker/routing) as a named fault', (reason) => {
+    // Both are real `TeacherSkipReason`s the coordinator emits; the console's union used
+    // to omit them, so they arrived as unnamed strings.
+    expect(evermindLearnedStatus({
+      kind: 'text', prompt: TASK, distilled: false, skipReason: reason, attemptedTeacherModel: 'vendor/model',
+    })).toEqual({ state: 'fault', reason, teacherModel: 'vendor/model' });
+  });
 });

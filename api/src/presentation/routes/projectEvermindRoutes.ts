@@ -12,6 +12,7 @@
  *   GET  /model       — download a version's `.evermind` bytes (replica refresh)
  *   GET  /tokenizer    — download a version's tokenizer.json
  *   POST /learn        — push a weight delta (→ coordinator DO, the single writer)
+ *   GET  /contribution/:id — poll ONE contribution from enqueue to merged provenance
  *   POST /seed         — initialize the project's base model (manager, JWT only)
  *   PATCH /mode        — connected | offline-frozen (manager, JWT only)
  */
@@ -50,6 +51,7 @@ import {
   dispatchProjectEvermindLearn,
   dispatchProjectEvermindLearnText,
   getProjectEvermindContributions,
+  getProjectEvermindContributionStatus,
   validateProjectEvermindRecall,
   recallProjectEvermindMemory,
   flushProjectEvermind,
@@ -138,6 +140,26 @@ async function contributionsCore(env: Env, db: Db, tenantId: number, projectId: 
     inherited,
     ...(inherited ? { inheritedFromProjectId: effectiveId } : {}),
   });
+}
+
+/**
+ * Poll ONE enqueued contribution's outcome.
+ *
+ * `/learn-text` returns the moment the contribution is queued — the frontier teacher
+ * only runs later, in the coordinator's debounced merge alarm — so the POST's 200 can
+ * only ever mean "accepted", never "taught". This is the read that lets a surface
+ * resolve its optimistic state into the real one: still pending, merged (with the
+ * teacher provenance the ring recorded), or dropped without becoming a memory.
+ *
+ * Follows the same inheritance as the console's other reads: an IDE build with no
+ * Evermind of its own polls its container's coordinator, which is where its
+ * contribution was actually enqueued.
+ */
+async function contributionStatusCore(env: Env, db: Db, tenantId: number, projectId: number, contributionId: number): Promise<Response> {
+  if (!(await ownsProject(db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
+  if (!Number.isInteger(contributionId) || contributionId <= 0) return json({ error: 'contributionId must be a positive integer' }, 400);
+  const effectiveId = await resolveEffectiveEvermindProjectId(env, db, tenantId, projectId);
+  return json(await getProjectEvermindContributionStatus(env, tenantId, effectiveId, contributionId));
 }
 
 /**
@@ -275,6 +297,7 @@ export function createProjectEvermindRoutes(db: Db): Hono<HonoEnv> {
   router.get('/:projectId/evermind/head', (c) => headCore(c.env as Env, db, t(c), pid(c)));
   router.get('/:projectId/evermind/targets', (c) => targetsCore(c.env as Env, db, t(c), pid(c)));
   router.get('/:projectId/evermind/contributions', (c) => contributionsCore(c.env as Env, db, t(c), pid(c)));
+  router.get('/:projectId/evermind/contribution/:contributionId', (c) => contributionStatusCore(c.env as Env, db, t(c), pid(c), Number(c.req.param('contributionId'))));
   router.post('/:projectId/evermind/validate', (c) => validateCore(c.env as Env, db, t(c), pid(c), c));
   router.post('/:projectId/evermind/recall', (c) => recallCore(c.env as Env, db, t(c), pid(c), c));
   router.get('/:projectId/evermind/model', (c) => artifactCore(c.env as Env, db, t(c), pid(c), c.req.query('version'), 'model.evermind'));

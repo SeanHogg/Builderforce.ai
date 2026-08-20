@@ -346,6 +346,7 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
       c.get('tenantId') as number,
       c.get('userId') as string,
       c.env,
+      { executionCtx: c.executionCtx },
     );
     if ('error' in result) return c.json({ error: result.error }, 404);
     return c.json(result);
@@ -700,6 +701,7 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
       c.get('tenantId') as number,
       id,
       c.env,
+      { executionCtx: c.executionCtx },
     );
     if ('error' in result) return c.json({ error: result.error }, 404);
     return c.json(result);
@@ -717,6 +719,7 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
       id,
       c.get('tenantId') as number,
       c.env,
+      { executionCtx: c.executionCtx },
     );
     if ('error' in result) return c.json({ error: result.error }, 404);
     return c.json(result);

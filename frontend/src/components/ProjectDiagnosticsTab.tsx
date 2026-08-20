@@ -4,21 +4,30 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { toolsApi } from '@/lib/builderforceApi';
-import { runArchitectureAnalysis } from '@/lib/api';
+import {
+  fetchLatestArchitectureRun,
+  retryArchitectureAnalysis,
+  runArchitectureAnalysis,
+  type ArchitectureRunSummary,
+} from '@/lib/api';
+import { ApiRequestError } from '@/lib/apiClient';
 import { DiagnosticsResultsPanel } from '@/components/DiagnosticsResultsPanel';
-import type { ProjectScore, ToolSummary, SystemAuditSummary } from '@/lib/tools';
+import {
+  ARCHITECTURE_DIAGNOSTIC_ID,
+  type ProjectScore,
+  type ToolSummary,
+  type SystemAuditSummary,
+} from '@/lib/tools';
 import { Icon } from '@/components/ui/Icon';
 import { StakeholderAlignmentPanel } from '@/components/stakeholder-alignment/StakeholderAlignmentPanel';
-
-/** The architecture analysis is just another diagnostic — a run-only one (it
- *  kicks off the repo analysis rather than navigating to the tool runner). */
-const ARCHITECTURE_DIAGNOSTIC_ID = 'architecture-analysis';
 
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 16,
 };
 const rowStyle: React.CSSProperties = {
-  display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px',
+  // Wraps rather than overflowing: the architecture row can carry a Results, a
+  // Retry and a Run control at once, which does not fit a 360px viewport in a row.
+  display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', flexWrap: 'wrap',
   background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)',
 };
 const primaryBtn: React.CSSProperties = {
@@ -55,6 +64,12 @@ export function ProjectDiagnosticsTab({ projectId, initialAuditId }: { projectId
   const [error, setError] = useState<string | null>(null);
   const [archState, setArchState] = useState<'idle' | 'running' | 'started' | 'error'>('idle');
   const [archMsg, setArchMsg] = useState('');
+  // The project's last analysis run. Its `retryableKinds` is the ONE signal that
+  // decides whether a repair is on offer: the server already accounts for a run
+  // still being in flight and for sections this plan cannot generate, so the
+  // component never re-derives that judgement from statuses of its own.
+  const [archRun, setArchRun] = useState<ArchitectureRunSummary | null>(null);
+  const [retryState, setRetryState] = useState<'idle' | 'running'>('idle');
   const [auditState, setAuditState] = useState<Record<string, 'idle' | 'running' | 'started' | 'error'>>({});
   const [results, setResults] = useState<{ open: boolean; filterToolId: string | null }>({ open: false, filterToolId: null });
 
@@ -62,7 +77,17 @@ export function ProjectDiagnosticsTab({ projectId, initialAuditId }: { projectId
     try {
       setScore(await toolsApi.projectScore(projectId));
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load');
+      setError(e instanceof Error ? e.message : t('loadError'));
+    }
+  }, [projectId, t]);
+
+  // Best-effort: a project that has never been analysed simply has no run, and a
+  // read failure must not stop the diagnostics list from rendering.
+  const loadArchRun = useCallback(async () => {
+    try {
+      setArchRun(await fetchLatestArchitectureRun(projectId));
+    } catch {
+      setArchRun(null);
     }
   }, [projectId]);
 
@@ -70,10 +95,11 @@ export function ProjectDiagnosticsTab({ projectId, initialAuditId }: { projectId
     setLoading(true);
     Promise.all([
       loadScore(),
+      loadArchRun(),
       toolsApi.list().then(setTools).catch(() => {}),
       toolsApi.listAudits().then(setAudits).catch(() => {}),
     ]).finally(() => setLoading(false));
-  }, [loadScore]);
+  }, [loadScore, loadArchRun]);
 
   // Deep-link: a notification "View report" opens that audit's results directly.
   useEffect(() => {
@@ -87,12 +113,41 @@ export function ProjectDiagnosticsTab({ projectId, initialAuditId }: { projectId
       await runArchitectureAnalysis(projectId);
       setArchState('started');
       setArchMsg(t('architectureStarted'));
+      await loadArchRun();
     } catch (e) {
       setArchState('error');
       const m = e instanceof Error ? e.message : t('architectureError');
       setArchMsg(m.includes('no_repo') ? t('architectureNeedsRepo') : m);
     }
   };
+
+  /**
+   * Repair the last run instead of paying for a whole new one. The two refusals
+   * the server can give are both ordinary answers, not faults: the run is still
+   * moving (409), or every section already landed (400) — usually because
+   * another tab retried first. Both are shown inline and the summary is
+   * refetched so the offer disappears once it is no longer true.
+   */
+  const retryArchitecture = async () => {
+    if (!archRun) return;
+    setRetryState('running');
+    setArchMsg('');
+    try {
+      const { kinds } = await retryArchitectureAnalysis(archRun.runId);
+      setArchState('started');
+      setArchMsg(t('architectureRetryStarted', { count: kinds.length }));
+    } catch (e) {
+      setArchState('error');
+      if (e instanceof ApiRequestError && e.status === 409) setArchMsg(t('architectureRetryBusy'));
+      else if (e instanceof ApiRequestError && e.status === 400) setArchMsg(t('architectureRetryNone'));
+      else setArchMsg(e instanceof Error ? e.message : t('architectureRetryError'));
+    } finally {
+      setRetryState('idle');
+      await loadArchRun();
+    }
+  };
+
+  const retryableCount = archRun?.retryableKinds.length ?? 0;
 
   const runAudit = async (auditId: string) => {
     setAuditState((s) => ({ ...s, [auditId]: 'running' }));
@@ -157,7 +212,11 @@ export function ProjectDiagnosticsTab({ projectId, initialAuditId }: { projectId
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)' }}>{row.name}</div>
                   <div style={{ fontSize: 11, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {diag?.score != null ? `${diag.score.toFixed(1)} / 5 — ${diag.scoreLabel}` : row.tagline}
+                    {row.kind === 'architecture' && retryableCount > 0
+                      ? t('architectureRetryHint', { count: retryableCount })
+                      : diag?.score != null
+                        ? `${diag.score.toFixed(1)} / 5 — ${diag.scoreLabel}`
+                        : row.tagline}
                   </div>
                 </div>
                 {hasRun(row.id) && (
@@ -166,14 +225,32 @@ export function ProjectDiagnosticsTab({ projectId, initialAuditId }: { projectId
                   </button>
                 )}
                 {row.kind === 'architecture' ? (
-                  <button
-                    type="button"
-                    onClick={runArchitecture}
-                    disabled={archState === 'running'}
-                    style={{ ...primaryBtn, opacity: archState === 'running' ? 0.6 : 1, cursor: archState === 'running' ? 'not-allowed' : 'pointer' }}
-                  >
-                    {archState === 'running' ? t('architectureRunning') : t('run')} →
-                  </button>
+                  <>
+                    {/* Repairing beats re-running: same evidence, only the broken
+                        sections, so it is offered ahead of the full run whenever
+                        the last analysis left something to redo. */}
+                    {retryableCount > 0 && (
+                      <button
+                        type="button"
+                        onClick={retryArchitecture}
+                        disabled={retryState === 'running'}
+                        title={t('architectureRetryHint', { count: retryableCount })}
+                        style={{ ...subtleBtn, opacity: retryState === 'running' ? 0.6 : 1, cursor: retryState === 'running' ? 'not-allowed' : 'pointer' }}
+                      >
+                        {retryState === 'running'
+                          ? t('architectureRetrying')
+                          : t('architectureRetry', { count: retryableCount })}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={runArchitecture}
+                      disabled={archState === 'running'}
+                      style={{ ...primaryBtn, opacity: archState === 'running' ? 0.6 : 1, cursor: archState === 'running' ? 'not-allowed' : 'pointer' }}
+                    >
+                      {archState === 'running' ? t('architectureRunning') : t('run')} →
+                    </button>
+                  </>
                 ) : row.kind === 'audit' ? (
                   <button
                     type="button"

@@ -15,11 +15,15 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
 
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
-import { llmUsageLog } from '../../infrastructure/database/schema';
+import { llmUsageLog, tenantLlmProviderKeys } from '../../infrastructure/database/schema';
 import type { LlmUsage } from './LlmProxyService';
 import { getCatalogCached } from './modelCatalog';
-import { buildTransactionalDatabase } from '../../infrastructure/database/connection';
+import { buildDatabase, buildTransactionalDatabase } from '../../infrastructure/database/connection';
 import { clearProviderAuthAlertAfterByoSuccess } from './providerAuthAlerts';
+import { providerForVendor } from './llmProviderCatalog';
+import { and, eq, gte, sql } from 'drizzle-orm';
+import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
+import { utcDayStart } from './tokenUsage';
 
 /** Cache-tier multipliers relative to the base input (prompt) price. cache_read
  *  is billed ~0.1x input, cache_creation ~1.25x — both are subsets of
@@ -39,6 +43,81 @@ export const DEFAULT_PAID_OVERFLOW_CAP_MILLICENTS = 50_000; // $0.50
  *  request (not per token), so the billed cost is exactly "OpenRouter cost + a penny".
  *  See `isPremiumModelSelection` (the gate) and the gateway `premiumSurcharge` flag. */
 export const PREMIUM_REQUEST_SURCHARGE_MILLICENTS = 1_000; // $0.01 / request
+
+/**
+ * Default daily PREMIUM $ ceiling (millicents) for a tenant with no explicit cap —
+ * $10.00/day.
+ *
+ * A DEFAULT, not unlimited, and that is the point. Premium lets a paid tenant pin any
+ * paid OpenRouter model, including Opus-class ids at ~$75/M output; entitlement was
+ * the only gate, so a runaway agent could bill without bound inside one UTC day and
+ * the first signal was the invoice. $10/day is deliberately far above ordinary
+ * interactive use (hundreds of premium turns) and far below a runaway loop, so it
+ * reads as a circuit breaker rather than a quota. A tenant that genuinely needs more
+ * sets an explicit cap — or `-1` to opt out entirely.
+ */
+export const DEFAULT_PREMIUM_DAILY_CAP_MILLICENTS = 1_000_000; // $10.00
+
+/**
+ * Resolve a tenant's effective daily PREMIUM cap (millicents) from its per-tenant
+ * override + effective plan. Same three-state convention as
+ * {@link resolvePaidOverflowCapMillicents} so an operator learns one rule:
+ *   • override === -1  → -1 (unlimited; the caller skips the gate)
+ *   • override >= 0    → that explicit value
+ *   • override null    → {@link DEFAULT_PREMIUM_DAILY_CAP_MILLICENTS}
+ *
+ * Unlike the overflow cap this does NOT vary by plan: premium is a paid-plan feature
+ * to begin with, so "free tenants get a tighter default" has nothing to say here —
+ * a free tenant cannot reach premium at all.
+ */
+export function resolvePremiumDailyCapMillicents(
+  override: number | null | undefined,
+): number {
+  if (override === -1) return -1;
+  if (override != null && override >= 0) return override;
+  return DEFAULT_PREMIUM_DAILY_CAP_MILLICENTS;
+}
+
+/**
+ * Has this tenant spent its daily PREMIUM budget?
+ *
+ * Lives here, beside the cap resolver, because TWO surfaces have to agree on the
+ * answer and they reach it from different places: the gateway route (which has a
+ * Hono context) and the cloud agent loop (which has a bare `Env` and no request).
+ * A second copy in either would be the classic drift — the route refusing a pin the
+ * loop happily dispatched.
+ *
+ * Best-effort by design: a query error returns `false`. Refusing a paid, entitled
+ * request because a metering query hiccuped is the worse failure of the two, and the
+ * cap is a circuit breaker rather than an accounting control.
+ */
+export async function isPremiumCapExhausted(
+  env: Env,
+  tenantId: number,
+  capOverride: number | null | undefined,
+  opts?: { isSuperadmin?: boolean },
+): Promise<boolean> {
+  if (opts?.isSuperadmin) return false;
+  const cap = resolvePremiumDailyCapMillicents(capOverride);
+  if (cap < 0) return false; // unlimited
+  try {
+    // The SAME database the rows are written to — `resolveUsageDatabase` sends them to
+    // the operational account when its secret is bound, and a cap that summed the
+    // primary copy there would read zero forever.
+    const db = resolveUsageDatabase(env, buildDatabase(env));
+    const [row] = await db
+      .select({ spent: sql<number>`COALESCE(SUM(${llmUsageLog.costUsdMillicents}), 0)` })
+      .from(llmUsageLog)
+      .where(and(
+        eq(llmUsageLog.tenantId, tenantId),
+        eq(llmUsageLog.premium, true),
+        gte(llmUsageLog.createdAt, utcDayStart()),
+      ));
+    return Math.max(0, Number(row?.spent ?? 0)) >= cap;
+  } catch {
+    return false; // fail open
+  }
+}
 
 /**
  * Resolve a tenant's effective daily paid-overflow cap (millicents) from its
@@ -129,13 +208,20 @@ export type UsageSurface = 'web' | 'vsix' | 'on_prem' | 'cloud' | 'sdk';
 /** Map internal gateway vendor ids to the stable provider ids shown in the BYO
  * integrations UI. */
 export function normalizeByoProvider(vendor: string): string {
-  const aliases: Record<string, string> = {
-    googleai: 'google',
-    'openai-codex': 'openai',
-    'kimi-code': 'kimi',
-    moonshot: 'moonshot',
-  };
-  return aliases[vendor] ?? vendor;
+  // DERIVED, not hand-listed. The old map was a second copy of `byoVendorIdFor`'s
+  // inverse and had already drifted from it: `xai-oauth` was missing entirely, so a
+  // SuperGrok-funded row was stamped `xai-oauth`, matched no `provider-keys` row, and
+  // silently dropped out of the tenant's own integration breakdown. Deriving it from
+  // the one catalog means a new provider — or a new OAuth vendor alias — is picked up
+  // without a second edit nobody remembers to make.
+  //
+  // This is provider-level BY DESIGN and it is not the lossy part it used to be:
+  // "subscription-funded vs key-funded" is now recoverable from
+  // `llm_usage_log.byo_credential_id` → the credential row's `auth_type` (0953),
+  // which also survives the case this string cannot express — the same account
+  // rotating its key. Overloading one denormalized column to carry both would lose
+  // the account identity the moment a key is rotated.
+  return providerForVendor(vendor) ?? vendor;
 }
 
 /**
@@ -208,6 +294,12 @@ export interface RecordUsageRow {
    *  fallback / backstop on Builderforce's key, not a plan-pool model). Metered
    *  against the per-tenant `paid_overflow_daily_cap`. See isPaidOverflowModel. */
   paidOverflow?: boolean | null;
+  /** Did this row run on a PREMIUM (any-paid-OpenRouter) model the tenant pinned?
+   *  Persisted as a real column (0952) because the daily premium cap SUMs it on every
+   *  premium request — the `metadata.premiumSurchargeMillicents` key it replaces
+   *  would have made that a scan. Distinct from `paidOverflow`, which flags spend
+   *  WE fund; this flags spend the tenant ran up on the metered long tail. */
+  premium?: boolean | null;
   /** True when the tenant's OWN provider credential (BYO key / connected
    *  subscription) served the call. Forces `cost_usd_millicents = 0` (the
    *  platform paid nothing) and, combined with an on-prem/VSIX `surface`, exempts
@@ -232,6 +324,8 @@ export interface RecordUsageRow {
 interface ProxyUsageResult {
   usage?: LlmUsage;
   resolvedModel?: string;
+  /** Authoritative gateway trace id stamped by `complete()`. */
+  traceId?: string;
   byoFunded?: boolean;
   resolvedVendor?: string;
   /** The served model came from a registered OpenRouter connection, so the
@@ -271,6 +365,10 @@ export async function recordProxyUsage(
     llmProduct?: string;
     attribution?: UsageAttribution | null;
     surface?: UsageSurface | null;
+    /** The diagnostic trace this call wrote, so an internal-caller usage row can
+     *  pivot to its `llm_traces` row exactly like the gateway chat path does
+     *  [1299]. Falls back to the id `complete()` stamped on the result. */
+    traceId?: string | null;
   },
 ): Promise<void> {
   if (!opts.result.usage) return;
@@ -278,6 +376,7 @@ export async function recordProxyUsage(
   await recordUsageRow(db, env, {
     tenantId:   opts.tenantId,
     userId:     opts.userId ?? null,
+    traceId:    opts.traceId ?? opts.result.traceId ?? null,
     llmProduct: opts.llmProduct ?? 'builderforceLLM',
     model:      opts.result.resolvedModel ?? 'unknown',
     usage:      opts.result.usage,
@@ -294,6 +393,47 @@ export async function recordProxyUsage(
 
 /** Insert one usage row, stamping an authoritative cost priced from the catalog.
  *  Best-effort — never throws (logging must not fail a run). */
+/**
+ * The surrogate id of the credential INSTANCE currently serving `provider` for this
+ * tenant (0953), or `null` when nothing is connected.
+ *
+ * Read at the usage-write boundary rather than threaded through the proxy: every
+ * producer already arrives here with (tenant, provider), and none of them carries a
+ * credential id. Cached for a minute — the value changes only on a rotation, and the
+ * worst case of a stale read is one row attributed to the key that was live seconds
+ * earlier, which is a rounding error against the alternative of a query on every
+ * logged call.
+ *
+ * Degrades to `null` on any failure: a usage row missing its credential id is a
+ * slightly less specific record; a usage row that failed to write is lost revenue.
+ */
+async function resolveByoCredentialId(
+  env: Env,
+  tenantId: number,
+  provider: string,
+): Promise<string | null> {
+  try {
+    return await getOrSetCached(
+      env,
+      `byo-cred-id:${tenantId}:${provider}`,
+      async () => {
+        const [row] = await buildDatabase(env)
+          .select({ id: tenantLlmProviderKeys.id })
+          .from(tenantLlmProviderKeys)
+          .where(and(
+            eq(tenantLlmProviderKeys.tenantId, tenantId),
+            eq(tenantLlmProviderKeys.provider, provider),
+          ))
+          .limit(1);
+        return row?.id ?? null;
+      },
+      { kvTtlSeconds: 60 },
+    );
+  } catch {
+    return null;
+  }
+}
+
 export async function recordUsageRow(db: Db, env: Env, row: RecordUsageRow): Promise<void> {
   try {
     const usageDb = resolveUsageDatabase(env, db);
@@ -340,6 +480,15 @@ export async function recordUsageRow(db: Db, env: Env, row: RecordUsageRow): Pro
     // silently drops every row whose metadata is absent or not an object. It stays
     // in metadata as well — the SDK's billing trace-back contract reads it there.
     const chatAttribution = readChatAttribution(metadata);
+    // WHICH key instance paid (0953). Resolved here — the single write boundary —
+    // rather than threaded through the proxy, because every producer already reaches
+    // this function with the two facts it needs (tenant + the provider we stamped)
+    // and none of them would otherwise carry a credential id. Cached, so a BYO row
+    // costs at most one lookup per tenant+provider per minute; a platform-funded row
+    // costs nothing at all.
+    const byoCredentialId = row.byo && row.byoProvider && row.tenantId != null
+      ? await resolveByoCredentialId(env, row.tenantId, row.byoProvider)
+      : null;
 
     await usageDb.insert(llmUsageLog).values({
       tenantId:            row.tenantId,
@@ -367,8 +516,13 @@ export async function recordUsageRow(db: Db, env: Env, row: RecordUsageRow): Pro
       costUsdMillicents,
       traceId:             row.traceId ?? null,
       paidOverflow:        row.paidOverflow ?? false,
+      // Premium-ness rides its own column so the daily cap can SUM it (0952). It is
+      // derived from the same `premiumSurcharge` signal that stamps the metadata key,
+      // so the two can never disagree about what a premium turn was.
+      premium:             row.premium ?? row.premiumSurcharge ?? false,
       byo:                 row.byo ?? false,
       byoProvider:         row.byo ? (row.byoProvider ?? null) : null,
+      byoCredentialId,
       surface:             row.surface ?? 'web',
     });
 

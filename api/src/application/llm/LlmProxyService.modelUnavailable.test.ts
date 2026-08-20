@@ -18,7 +18,7 @@ describe('removed model handling', () => {
 
     const proxy = adminPoolProxy(
       { NVIDIA_API_KEY: 'nvapi-test' } as ProxyEnv,
-      ['minimaxai/minimax-m2.7'],
+      ['moonshotai/kimi-k2.6'],
       'builderforceLLM',
     );
     const result = await proxy.complete({ messages: [{ role: 'user', content: 'hi' }] });
@@ -26,7 +26,7 @@ describe('removed model handling', () => {
     expect(result.response.status).toBe(503);
     expect(result.outcome).toBe('model_unavailable');
     expect(result.resolvedVendor).toBe('nvidia');
-    expect(result.resolvedModel).toBe('minimaxai/minimax-m2.7');
+    expect(result.resolvedModel).toBe('moonshotai/kimi-k2.6');
 
     const body = await result.response.json() as {
       error: {
@@ -41,7 +41,7 @@ describe('removed model handling', () => {
     expect(body.error.reason).toBe('all_models_unavailable');
     expect(body.error.details.failovers).toEqual([
       expect.objectContaining({
-        model: 'minimaxai/minimax-m2.7',
+        model: 'moonshotai/kimi-k2.6',
         vendor: 'nvidia',
         code: 410,
         kind: 'client_error',

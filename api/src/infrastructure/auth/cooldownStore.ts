@@ -189,7 +189,27 @@ export function classifyFailure(status: number, hint?: string): CooldownClass {
   return 'transient';
 }
 
-const cacheKey         = (vendor: VendorId, model: string) => `cooldown:${vendor}:${model}`;
+/**
+ * ONE composite key per vendor holding EVERY cooled model on it, rather than one
+ * key per (vendor, model).
+ *
+ * WHY. A failed cascade cools every attempt it made, and the old scheme turned that
+ * into 2N parallel KV writes on the failure path (one `recordFailure` per attempt —
+ * itself a read + a write — plus a vendor-fault write per attempt). The read side
+ * was worse: composing a chain prefetched one KV read PER CANDIDATE, which is what
+ * `COOLDOWN_PREFETCH_LIMIT` exists to cap. A Worker has a hard subrequest ceiling,
+ * and spending it on bookkeeping is spending it instead of on the actual retries.
+ * Grouped by vendor, a whole cascade costs one read + one write per DISTINCT VENDOR
+ * — typically one or two, regardless of how many models were tried.
+ *
+ * THE TRADE-OFF, stated plainly: the blob is read-modify-written, so two concurrent
+ * requests cooling different models on the same vendor can lose one of the two
+ * writes. That is acceptable and it is not a new class of error — a cooldown is
+ * ADVISORY (the worst case is one extra doomed attempt, which the cascade already
+ * handles), whereas exhausting the subrequest budget fails the request outright.
+ * Writes prune expired entries, so the blob cannot grow without bound.
+ */
+const vendorModelsKey   = (vendor: VendorId) => `cooldowns:${vendor}`;
 const vendorCooldownKey = (vendor: VendorId) => `vendor_cooldown:${vendor}`;
 const vendorFailuresKey = (vendor: VendorId) => `vendor_failures:${vendor}`;
 
@@ -219,13 +239,16 @@ interface VendorCooldownRecord {
   strikes?: number;
 }
 
+/** Every cooled model on one vendor, keyed by model id — the composite blob. */
+type VendorModelCooldowns = Record<string, CooldownRecord>;
+
 interface CooldownBackend {
-  /** Returns the stored record (full `until` + optional `trialAfter`), or
-   *  undefined if not cooled at all. Does NOT apply half-open eligibility —
-   *  callers (`read`-gating vs `status`-display) decide via `isStillActive`. */
-  read(vendor: VendorId, model: string): Promise<CooldownRecord | undefined>;
-  /** Persists `until` epoch-ms + `trialAfter` + the strike count with a `ttlSec` lifetime. Errors are absorbed. */
-  write(vendor: VendorId, model: string, until: number, trialAfter: number, ttlSec: number, status: number, cls: CooldownClass, strikes: number): Promise<void>;
+  /** The whole composite blob for one vendor. Expired entries are dropped on read
+   *  so a caller never has to re-check `until` for membership. ONE KV read. */
+  readModels(vendor: VendorId): Promise<VendorModelCooldowns>;
+  /** Replace one vendor's blob. `ttlSec` must cover the LONGEST-lived entry in it,
+   *  or a still-valid auth cooldown would expire with a short transient one. */
+  writeModels(vendor: VendorId, models: VendorModelCooldowns, ttlSec: number): Promise<void>;
 
   /** Returns the vendor's cooldown record (expiry epoch-ms + strike count); undefined if not cooled. */
   readVendor(vendor: VendorId): Promise<VendorCooldownRecord | undefined>;
@@ -237,20 +260,28 @@ interface CooldownBackend {
   writeVendorFailures(vendor: VendorId, ring: number[]): Promise<void>;
 }
 
-const memMap            = new Map<string, CooldownRecord>();
+const memMap            = new Map<VendorId, VendorModelCooldowns>();
 const memVendorCooldown = new Map<VendorId, VendorCooldownRecord>();
 const memVendorRing     = new Map<VendorId, number[]>();
 
+/** Drop entries whose full TTL has elapsed. Applied on every read AND before every
+ *  write so the composite blob is self-pruning and cannot grow without bound. */
+function livingEntries(models: VendorModelCooldowns, now: number): VendorModelCooldowns {
+  const out: VendorModelCooldowns = {};
+  for (const [model, rec] of Object.entries(models)) {
+    if (rec && typeof rec.until === 'number' && now < rec.until) out[model] = rec;
+  }
+  return out;
+}
+
 const memBackend: CooldownBackend = {
-  async read(vendor, model) {
-    const k = cacheKey(vendor, model);
-    const rec = memMap.get(k);
-    if (!rec) return undefined;
-    if (Date.now() >= rec.until) { memMap.delete(k); return undefined; }
-    return rec;
+  async readModels(vendor) {
+    return livingEntries(memMap.get(vendor) ?? {}, Date.now());
   },
-  async write(vendor, model, until, trialAfter, _ttlSec, _status, _cls, strikes) {
-    memMap.set(cacheKey(vendor, model), { until, trialAfter, strikes });
+  async writeModels(vendor, models, _ttlSec) {
+    const living = livingEntries(models, Date.now());
+    if (Object.keys(living).length === 0) memMap.delete(vendor);
+    else memMap.set(vendor, living);
   },
   async readVendor(vendor) {
     const rec = memVendorCooldown.get(vendor);
@@ -272,24 +303,38 @@ const memBackend: CooldownBackend = {
 
 function kvBackend(kv: KVNamespace): CooldownBackend {
   return {
-    async read(vendor, model) {
-      const v = await kv.get(cacheKey(vendor, model)).catch(() => null);
-      if (v == null) return undefined;
+    async readModels(vendor) {
+      const v = await kv.get(vendorModelsKey(vendor)).catch(() => null);
+      if (v == null) return {};
       try {
-        const parsed = JSON.parse(v) as { until?: unknown; trialAfter?: unknown; strikes?: unknown };
-        const until = typeof parsed?.until === 'number' ? parsed.until : 0;
-        const trialAfter = typeof parsed?.trialAfter === 'number' ? parsed.trialAfter : undefined;
-        const strikes = typeof parsed?.strikes === 'number' ? parsed.strikes : undefined;
-        return { until, trialAfter, strikes };
-      } catch { return { until: 0 }; /* malformed value — still cooled, expiry unknown */ }
+        const parsed = JSON.parse(v) as { models?: unknown };
+        const models = (parsed?.models ?? {}) as Record<string, unknown>;
+        const out: VendorModelCooldowns = {};
+        for (const [model, raw] of Object.entries(models)) {
+          const r = raw as { until?: unknown; trialAfter?: unknown; strikes?: unknown };
+          out[model] = {
+            until: typeof r?.until === 'number' ? r.until : 0,
+            ...(typeof r?.trialAfter === 'number' ? { trialAfter: r.trialAfter } : {}),
+            ...(typeof r?.strikes === 'number' ? { strikes: r.strikes } : {}),
+          };
+        }
+        return livingEntries(out, Date.now());
+      } catch { return {}; /* malformed blob — treat the vendor as uncooled */ }
     },
-    async write(vendor, model, until, trialAfter, ttlSec, status, cls, strikes) {
+    async writeModels(vendor, models, ttlSec) {
+      const living = livingEntries(models, Date.now());
+      if (Object.keys(living).length === 0) {
+        await kv.delete(vendorModelsKey(vendor)).catch((error) => { /* absorb */
+          reportCaughtError(error, { source: "infrastructure/auth/cooldownStore.ts", operation: "writeModels" });
+        });
+        return;
+      }
       await kv.put(
-        cacheKey(vendor, model),
-        JSON.stringify({ cls, status, until, trialAfter, strikes }),
-        { expirationTtl: ttlSec },
+        vendorModelsKey(vendor),
+        JSON.stringify({ models: living }),
+        { expirationTtl: Math.max(60, ttlSec) },
       ).catch((err) => {
-        reportCaughtError(err, { source: "infrastructure/auth/cooldownStore.ts", operation: "write", level: 'warning', context: { logMessage: `[cooldown] kv.put failed for ${vendor}/${model}: ${err}` } });
+        reportCaughtError(err, { source: "infrastructure/auth/cooldownStore.ts", operation: "writeModels", level: 'warning', context: { logMessage: `[cooldown] kv.put failed for ${vendor} cooldown blob: ${err}` } });
       });
     },
     async readVendor(vendor) {
@@ -367,13 +412,48 @@ export async function loadCooldownExpiries(
   const backend = backendFor(env);
   const now = Date.now();
   const out = new Map<string, number>();
-  await Promise.all(candidates.map(async ({ vendor, model }) => {
-    const rec = await backend.read(vendor, model);
-    if (rec === undefined) return;
-    if (mode === 'gate' && !isStillActive(now, rec.until, rec.trialAfter)) return;
-    out.set(`${vendor}/${model}`, rec.until);
+  // ONE read per DISTINCT VENDOR. Previously this was one read per candidate, which
+  // is what `COOLDOWN_PREFETCH_LIMIT` had to cap: a wide chain spent its subrequest
+  // budget asking about cooldowns instead of making the retries the budget is for.
+  const byVendor = new Map<VendorId, string[]>();
+  for (const { vendor, model } of candidates) {
+    byVendor.set(vendor, [...(byVendor.get(vendor) ?? []), model]);
+  }
+  await Promise.all([...byVendor].map(async ([vendor, models]) => {
+    const blob: VendorModelCooldowns = await backend.readModels(vendor).catch(() => ({}));
+    for (const model of models) {
+      const rec = blob[model];
+      if (rec === undefined) continue;
+      if (mode === 'gate' && !isStillActive(now, rec.until, rec.trialAfter)) continue;
+      out.set(`${vendor}/${model}`, rec.until);
+    }
   }));
   return out;
+}
+
+/**
+ * Every model currently cooled on ONE vendor, in ONE read.
+ *
+ * The composite key scheme makes this the natural query: a whole vendor's cooldowns
+ * live in a single blob, so asking "what is cooled on this vendor" costs exactly the
+ * same as asking about one model. Used by the mid-cascade re-check, which needs to
+ * answer that question repeatedly for different models on the same vendor without
+ * paying a read each time.
+ *
+ * Half-open (`trialAfter` elapsed) models are OMITTED — same `'gate'` semantics as
+ * `loadCooldowns`, so a model due for its one probe is reported as eligible.
+ */
+export async function loadCooledModelsForVendor(
+  env: CooldownEnv,
+  vendor: VendorId,
+): Promise<Set<string>> {
+  const now = Date.now();
+  const blob = await backendFor(env).readModels(vendor);
+  return new Set(
+    Object.entries(blob)
+      .filter(([, rec]) => isStillActive(now, rec.until, rec.trialAfter))
+      .map(([model]) => model),
+  );
 }
 
 /**
@@ -407,44 +487,109 @@ export async function recordFailure(
   status: number,
   hint?: string,
 ): Promise<void> {
-  const cls = classifyFailure(status, hint);
+  // Delegates so the single-attempt and whole-cascade paths cannot diverge —
+  // classification, the request_error carve-out, and the vendor trip all live in
+  // `recordFailures`.
+  await recordFailures(env, [{ vendor, model, status, ...(hint !== undefined ? { hint } : {}) }]);
+}
 
-  // Request-validation failures (400/422) are the caller's bug, not the model's
-  // or vendor's. Record NOTHING — cooling a healthy model would bench it for the
-  // next caller, and tripping vendor cooldown would starve every other tenant on
-  // that upstream for one malformed payload. The cascade surfaces these as a
-  // fatal 4xx instead (see LlmProxyService.exhaustedResponse).
-  if (cls === 'request_error') {
-    console.warn(
-      `[cooldown] ${vendor}/${model} request_error status=${status} — NOT cooled (caller-side validation)` +
-      (hint ? ` hint="${hint.slice(0, 120)}"` : ''),
-    );
-    return;
-  }
-
-  const backend = backendFor(env);
-
-  // ONE extra read on the FAILURE path (never the success path) buys the strike count.
-  // An entry that has already lived out its TTL is gone from the store, so a model that
-  // recovered starts the ladder over at one — the escalation self-resets without needing
-  // a success hook that would write KV on every good request.
-  const prior = await backend.read(vendor, model).catch(() => undefined);
-  const strikes = (prior?.strikes ?? 0) + 1;
-
+/** One model's cooldown decision, folded into an existing blob. PURE except for the
+ *  log line — separated so the single and batch paths cannot diverge. */
+function coolInto(
+  models: VendorModelCooldowns,
+  vendor: VendorId,
+  model: string,
+  cls: Exclude<CooldownClass, 'request_error'>,
+  status: number,
+  hint: string | undefined,
+  now: number,
+): number {
+  // The strike count comes from the blob we already read. An entry that has lived out
+  // its TTL is pruned on read, so a model that recovered starts the ladder over at one
+  // — the escalation self-resets with no success hook writing KV on every good request.
+  const strikes = (models[model]?.strikes ?? 0) + 1;
   const ttl = escalatedTtlSeconds(cls, strikes);
-  const now = Date.now();
-  const until = now + ttl * 1000;
   const trialAfter = trialAfterFor(now, ttl, strikes);
-
+  models[model] = { until: now + ttl * 1000, trialAfter, strikes };
   console.warn(
     `[cooldown] ${vendor}/${model} cooled for ${ttl}s (strike ${strikes}, half-open trial after ${Math.round((trialAfter - now) / 1000)}s) — class=${cls} status=${status}` +
     (hint ? ` hint="${hint.slice(0, 120)}"` : ''),
   );
+  return ttl;
+}
 
-  await Promise.all([
-    backend.write(vendor, model, until, trialAfter, ttl, status, cls, strikes),
-    maybeTripVendorCooldown(backend, vendor, cls, status),
-  ]);
+/**
+ * Cool a WHOLE cascade's worth of failed attempts in one pass.
+ *
+ * This is the shape the failure path actually has: a cascade that exhausted N
+ * candidates has N attempts to record, and doing them one at a time cost 2N+
+ * parallel KV operations on a request that had already spent its budget failing.
+ * Grouped by vendor it is one read + one write per DISTINCT VENDOR, plus the
+ * vendor-level trip decision — which is where the real signal is anyway.
+ *
+ * `recordFailure` is the single-attempt front door onto exactly this code, so the
+ * two paths cannot drift.
+ */
+export async function recordFailures(
+  env: CooldownEnv,
+  attempts: ReadonlyArray<{ vendor: VendorId; model: string; status: number; hint?: string }>,
+): Promise<void> {
+  if (attempts.length === 0) return;
+  const backend = backendFor(env);
+  const now = Date.now();
+
+  const byVendor = new Map<VendorId, Array<{ model: string; status: number; hint?: string; cls: CooldownClass }>>();
+  for (const a of attempts) {
+    const cls = classifyFailure(a.status, a.hint);
+    // Request-validation failures (400/422) are the caller's bug, not the model's or
+    // vendor's. Record NOTHING — cooling a healthy model would bench it for the next
+    // caller, and tripping vendor cooldown would starve every other tenant on that
+    // upstream for one malformed payload. The cascade surfaces these as a fatal 4xx
+    // instead (see LlmProxyService.exhaustedResponse).
+    if (cls === 'request_error') {
+      console.warn(
+        `[cooldown] ${a.vendor}/${a.model} request_error status=${a.status} — NOT cooled (caller-side validation)` +
+        (a.hint ? ` hint="${a.hint.slice(0, 120)}"` : ''),
+      );
+      continue;
+    }
+    byVendor.set(a.vendor, [...(byVendor.get(a.vendor) ?? []), { model: a.model, status: a.status, ...(a.hint !== undefined ? { hint: a.hint } : {}), cls }]);
+  }
+  if (byVendor.size === 0) return;
+
+  await Promise.all([...byVendor].map(async ([vendor, entries]) => {
+    const models = await backend.readModels(vendor).catch(() => ({} as VendorModelCooldowns));
+    let maxTtl = 0;
+    for (const e of entries) {
+      maxTtl = Math.max(maxTtl, coolInto(models, vendor, e.model, e.cls as Exclude<CooldownClass, 'request_error'>, e.status, e.hint, now));
+    }
+    // The blob's TTL must cover its LONGEST-lived entry — a 30-min auth cooldown
+    // sharing a key with a 5-min transient one must not expire in five minutes. The
+    // pre-existing entries are already inside their own `until`, so taking the max of
+    // what we just wrote plus what survived pruning is the correct bound.
+    const survivingTtl = Math.max(
+      ...Object.values(models).map((r) => Math.ceil((r.until - now) / 1000)),
+      maxTtl,
+    );
+    await backend.writeModels(vendor, models, survivingTtl);
+    // The vendor-level decision is per VENDOR, not per attempt: three transient
+    // failures on one vendor is one signal, and firing it once per attempt was how a
+    // single cascade could trip a vendor bench on its own noise.
+    // Auth/capacity trip on a SINGLE strike, so one is enough to decide. Otherwise the
+    // transient ring must still see EVERY attempt: three transient failures on one
+    // vendor inside the window is the signal that makes the cascade jump upstream, and
+    // collapsing a 3-attempt cascade to one timestamp would stop it ever tripping from
+    // the case it was written for.
+    const decisive = entries.find((e) => e.cls === 'auth' || e.cls === 'capacity');
+    if (decisive) {
+      await maybeTripVendorCooldown(backend, vendor, decisive.cls, decisive.status);
+    } else {
+      const transient = entries.filter((e) => e.cls === 'transient');
+      if (transient.length > 0) {
+        await maybeTripVendorCooldown(backend, vendor, 'transient', transient[0]!.status, transient.length);
+      }
+    }
+  }));
 }
 
 /**
@@ -476,6 +621,10 @@ async function maybeTripVendorCooldown(
   vendor: VendorId,
   cls: CooldownClass,
   status: number,
+  /** How many transient failures this call represents. >1 when a single cascade hit
+   *  several models on the same vendor — each one is a distinct data point for the
+   *  sliding window, so they all have to land in the ring. */
+  transientCount = 1,
 ): Promise<void> {
   // `embedded` is model-specific; `request_error` is caller-side and never even
   // reaches here (recordFailure returns first). Neither propagates to the vendor.
@@ -501,7 +650,7 @@ async function maybeTripVendorCooldown(
   const now    = Date.now();
   const cutoff = now - VENDOR_FAILURE_WINDOW_MS;
   const prior  = await backend.readVendorFailures(vendor);
-  const ring   = [...prior.filter((t) => t >= cutoff), now];
+  const ring   = [...prior.filter((t) => t >= cutoff), ...Array.from({ length: Math.max(1, transientCount) }, () => now)];
 
   if (ring.length >= VENDOR_FAILURE_THRESHOLD) {
     const strikes = await nextVendorStrike(backend, vendor);

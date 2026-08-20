@@ -39,7 +39,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import { rankEvermindRecall, hashRecallPrompt, type RankedRecall } from './evermindRecall';
-import type { TeacherSkipReason } from './evermindTeacher';
+import type { RecordedSkipReason } from './evermindTeacher';
 import type { EvermindCoherenceAssessment } from './evermindRuntime';
 
 /** R2 key prefix under which per-project Evermind model versions live. */
@@ -844,8 +844,9 @@ export interface ProjectEvermindRecentEntry {
   distilled?: boolean;
   /** The frontier model that distilled this entry (present when `distilled`). */
   teacherModel?: string;
-  /** Why distillation did NOT happen, so a broken teacher is visible in the console. */
-  skipReason?: TeacherSkipReason;
+  /** Why distillation did NOT happen, so a broken teacher is visible in the console.
+   *  {@link RecordedSkipReason}: the live teacher reasons plus the backfill buckets. */
+  skipReason?: RecordedSkipReason;
   /** Operator-facing detail behind `skipReason` (HTTP status, exception message). */
   skipDetail?: string;
   /** The pinned teacher model that failed (present on a distillation fault). */
@@ -944,6 +945,98 @@ export async function getProjectEvermindActivity(
   } catch {
     return EMPTY_ACTIVITY;
   }
+}
+
+/**
+ * How a single enqueued contribution ended up. `pending` is transient; `merged` and
+ * `dropped` are terminal, so a poller has a defined stopping condition.
+ */
+export type ProjectEvermindContributionState = 'pending' | 'merged' | 'dropped' | 'unknown';
+
+/**
+ * The status of ONE contribution, from enqueue through to what the merge made of it.
+ *
+ * The provenance fields are the RING'S, verbatim — the surface that renders this grades
+ * it with the same `evermindLearnedStatus` it grades the Learnings list with, so a
+ * teach's outcome and the same memory's row in the history can never disagree. A
+ * teacher fault is a `merged` row carrying a `skipReason`: the contribution DID learn,
+ * un-distilled, which is exactly what the ring records.
+ */
+export interface ProjectEvermindContributionStatus {
+  contributionId: number;
+  state: ProjectEvermindContributionState;
+  /** 'text' = a run/exemplar; 'delta' = a pre-diffed weight delta. Absent when unknown. */
+  kind?: 'text' | 'delta';
+  /** The version this contribution merged INTO (present only when `merged`). */
+  version?: number;
+  /** True when a frontier teacher shaped what was learned. */
+  distilled?: boolean;
+  /** The frontier model that distilled it (present when `distilled`). */
+  teacherModel?: string;
+  /** Why distillation did NOT happen — a broken teacher, made visible. */
+  skipReason?: RecordedSkipReason;
+  /** Operator-facing detail behind `skipReason` (HTTP status, exception message). */
+  skipDetail?: string;
+  /** The pinned teacher that failed (present on a distillation fault). */
+  attemptedTeacherModel?: string;
+}
+
+/**
+ * Read one contribution's status from the coordinator.
+ *
+ * Read-through cached, keyed on the per-project version token: a merge is the only
+ * thing that can move a contribution off `pending`, and a merge bumps that token
+ * (`recordProjectEvermindMerge`), so the cache is invalidated at precisely the moment
+ * the answer changes. The short KV TTL on top covers the one transition the token does
+ * NOT bump — a contribution consumed by a merge that produced no memory at all — so a
+ * poller can never be pinned to a stale `pending` indefinitely.
+ *
+ * Degrades to `unknown` when the coordinator binding is unset, so a caller can always
+ * render (and stop polling) rather than retrying against a door that does not exist.
+ */
+export async function getProjectEvermindContributionStatus(
+  env: Env,
+  tenantId: number,
+  projectId: number,
+  contributionId: number,
+): Promise<ProjectEvermindContributionStatus> {
+  const id = Math.trunc(contributionId);
+  if (!Number.isFinite(id) || id <= 0) return { contributionId: 0, state: 'unknown' };
+  const token = await getCacheVersion(env, versionKey(tenantId, projectId));
+  return getOrSetCached(
+    env,
+    `project_evermind:contrib-status:${tenantId}:${projectId}:${id}:v:${token}`,
+    async (): Promise<ProjectEvermindContributionStatus> => {
+      const stub = coordinatorStub(env, tenantId, projectId);
+      if (!stub) return { contributionId: id, state: 'unknown' };
+      try {
+        const url = new URL('https://coordinator/contribution');
+        url.searchParams.set('id', String(id));
+        const res = await stub.fetch(url.toString());
+        if (!res.ok) return { contributionId: id, state: 'unknown' };
+        const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+        const state = body['status'];
+        if (state !== 'pending' && state !== 'merged' && state !== 'dropped') {
+          return { contributionId: id, state: 'unknown' };
+        }
+        const str = (k: string): string | undefined => (typeof body[k] === 'string' ? (body[k] as string) : undefined);
+        return {
+          contributionId: id,
+          state,
+          ...(body['kind'] === 'text' || body['kind'] === 'delta' ? { kind: body['kind'] } : {}),
+          ...(typeof body['version'] === 'number' ? { version: body['version'] as number } : {}),
+          ...(typeof body['distilled'] === 'boolean' ? { distilled: body['distilled'] as boolean } : {}),
+          ...(str('teacherModel') ? { teacherModel: str('teacherModel')! } : {}),
+          ...(str('skipReason') ? { skipReason: str('skipReason') as RecordedSkipReason } : {}),
+          ...(str('skipDetail') ? { skipDetail: str('skipDetail')! } : {}),
+          ...(str('attemptedTeacherModel') ? { attemptedTeacherModel: str('attemptedTeacherModel')! } : {}),
+        };
+      } catch {
+        return { contributionId: id, state: 'unknown' };
+      }
+    },
+    { kvTtlSeconds: 5 },
+  );
 }
 
 /**

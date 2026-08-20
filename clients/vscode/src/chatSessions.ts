@@ -11,6 +11,27 @@ const SESSION_TYPE = "builderforce";
  * on a compatible build. When the API is absent it logs once and no-ops, so the stable
  * sidebar + @builderforce participant are never affected.
  *
+ * ## Decision: the two per-tab surfaces do NOT converge (recorded 2026-08-20)
+ *
+ * The open question was whether this and the stable `BrainWebview` per-session tabs
+ * (`sessionTabs:perSession`) should collapse into one implementation if VS Code ever
+ * promotes `chatSessionsProvider` to stable. They should not, and the reason is that they
+ * were never two implementations of one thing:
+ *
+ *  - This file is a ~75-line REGISTRATION ADAPTER. It owns no chat logic: every turn is
+ *    served by {@link createBuilderForceHandler}, the exact handler the stable
+ *    `@builderforce` participant uses. There is no duplicated loop, tool wiring, model
+ *    resolution or persistence here to converge — that consolidation already happened.
+ *  - `BrainWebview` is a different SURFACE, not a second copy of this one. It carries what
+ *    the native chat UI has no contract for: the Evermind console, the model picker, the
+ *    creation canvas, per-chat project attachment, diagnostics capture. Retiring it to
+ *    gain a native tab would delete features, not duplication.
+ *
+ * So promotion of the proposed API changes exactly one thing — the feature detection below
+ * starts succeeding on stable builds — and nothing else. Keep both. This adapter stays
+ * thin BY RULE: any behaviour that would need to live here belongs in the shared handler
+ * instead, which is what keeps a second implementation from ever appearing.
+ *
  * Returns a Disposable, or undefined when the proposed API isn't available.
  */
 export function registerChatSessions(

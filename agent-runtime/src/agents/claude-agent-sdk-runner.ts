@@ -35,6 +35,18 @@ export interface V2RunParams {
   /** Auth key the gateway resolves the tenant from (sent as x-api-key by the SDK). */
   gatewayAuthKey: string;
   /**
+   * Which surface this run executes on — stamped onto every gateway request as
+   * `x-builderforce-surface` so usage is attributed correctly AND so the gateway's
+   * fail-closed BYO rule can tell a CLOUD agent execution (which must run on the
+   * workspace's own provider credential, never the platform key — GAP-B2/B4) from
+   * ordinary on-prem traffic (which keeps its platform-pool floor). Defaults to
+   * `on_prem`, which is what the self-hosted relay is.
+   */
+  surface?: string;
+  /** The execution this run belongs to — stamped so a gateway-side refusal or usage
+   *  row is attributable to the run, not just the host. */
+  executionId?: number;
+  /**
    * Assigned-capability block (persona + skill/content references) appended to
    * the SDK's system prompt so the V2 agent adopts what was assigned. Omitted/''
    * when nothing is assigned.
@@ -55,6 +67,21 @@ export function allowedToolsAfterGates(gates: readonly PolicyGate[] | undefined)
   if (blocked.some((g) => !g.tool || g.tool === "*")) return [];
   const blockedNames = new Set(blocked.map((g) => (g.tool ?? "").toLowerCase()));
   return SDK_TOOLS.filter((t) => !blockedNames.has(t.toLowerCase()));
+}
+
+/**
+ * The `ANTHROPIC_CUSTOM_HEADERS` value the SDK sends on every gateway request:
+ * the run's surface and (when known) its execution id. The SDK exposes no header
+ * hook other than this env var, so it is the ONE seam a runner has to declare what
+ * kind of traffic it is — the gateway's usage attribution and its fail-closed BYO
+ * gate both read it. Pure, so the contract is unit-testable.
+ */
+export function buildGatewayHeaders(params: Pick<V2RunParams, "surface" | "executionId">): string {
+  const parts = [`x-builderforce-surface: ${params.surface?.trim() || "on_prem"}`];
+  if (params.executionId != null && Number.isFinite(params.executionId)) {
+    parts.push(`x-builderforce-execution-id: ${params.executionId}`);
+  }
+  return parts.join(", ");
 }
 
 export async function runClaudeAgentSdkV2(
@@ -86,6 +113,7 @@ export async function runClaudeAgentSdkV2(
           ...process.env,
           ANTHROPIC_BASE_URL: params.anthropicBaseUrl,
           ANTHROPIC_API_KEY: params.gatewayAuthKey,
+          ANTHROPIC_CUSTOM_HEADERS: buildGatewayHeaders(params),
         },
         stderr: (data: string) => logDebug(`[v2-runner] ${data}`),
       },
@@ -101,7 +129,10 @@ export async function runClaudeAgentSdkV2(
           sawResult = true;
           ok = ev.ok;
           finalText = ev.text;
-          sinks.onResult(ev.ok, ev.text, { inputTokens: ev.inputTokens, outputTokens: ev.outputTokens });
+          sinks.onResult(ev.ok, ev.text, {
+            inputTokens: ev.inputTokens,
+            outputTokens: ev.outputTokens,
+          });
         }
       }
     }

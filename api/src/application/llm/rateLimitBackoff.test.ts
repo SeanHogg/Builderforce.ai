@@ -20,9 +20,13 @@ import {
   recordFailure,
   trialAfterDelaySeconds,
 } from '../../infrastructure/auth/cooldownStore';
-import { isChronicallyRateLimited, RATE_LIMIT_MIN_RUNS } from './modelQualityScore';
+import {
+  isChronicallyRateLimited,
+  rankModelsForAction,
+  RATE_LIMIT_MIN_RUNS,
+  type ActionModelRankStat,
+} from '@builderforce/learned-routing';
 import { applyObservation, type RoutingTable } from './routingTable';
-import { rankModelsForAction, type ActionModelRankStat } from './LlmProxyService';
 import { judgePoolHealth, codingPoolVendors, POOL_RATE_LIMITED_RATIO } from './poolHealth';
 import type { VendorId } from './vendors';
 

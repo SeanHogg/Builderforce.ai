@@ -98,6 +98,17 @@ function provenanceMetadata(result: StreamChatResult): string | undefined {
  * complete instead of dying with "kept calling tools without finishing".
  */
 const MAX_TOOL_ITERATIONS = 25;
+/**
+ * The cap a run ACTUALLY uses: the host's injected ceiling when it supplied one
+ * (see {@link BrainRunRequest.maxIterations}), otherwise the shared default. A
+ * non-positive / non-finite value is ignored rather than trusted, so a host can
+ * never accidentally configure a zero-iteration (silently answerless) run.
+ */
+function iterationCap(requested: number | undefined): number {
+  return typeof requested === 'number' && Number.isFinite(requested) && requested > 0
+    ? Math.floor(requested)
+    : MAX_TOOL_ITERATIONS;
+}
 /** How much history we send to the model (message-count ceiling). */
 const HISTORY_WINDOW = 80;
 
@@ -302,6 +313,16 @@ export interface BrainRunRequest {
    * than silently losing their ticket lineage.
    */
   chatMode?: ChatMode;
+  /**
+   * Tool-iteration ceiling for THIS run (one iteration = one model turn, which may
+   * batch several tool calls). Omit to use the shared default.
+   *
+   * An injected capability, not a per-host branch: a surface whose budget is
+   * legitimately different — the native VS Code chat participant runs a longer
+   * coding loop than a web panel — states its own number here instead of the loop
+   * learning which host is calling it. Non-positive values are ignored.
+   */
+  maxIterations?: number;
 }
 
 /** Live, observable snapshot of a chat's run (what the hook renders). */
@@ -1198,6 +1219,8 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
   // metadata below and the system-prompt directive further down need it, and they must
   // never disagree about which mode this run was.
   const runMode = normalizeChatMode(req.chatMode ?? 'work');
+  // The host may raise/lower this run's tool-iteration ceiling (see BrainRunRequest.maxIterations).
+  const maxIterations = iterationCap(req.maxIterations);
   const metadata: CompletionMetadata = {
     chatId,
     guestTurnId: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`,
@@ -1393,7 +1416,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
     }
   };
 
-  for (let iter = 0; iter < MAX_TOOL_ITERATIONS; iter++) {
+  for (let iter = 0; iter < maxIterations; iter++) {
     // User hit Stop between turns (or after a tool call) — unwind cleanly.
     if (c.abort?.signal.aborted) return;
     c.streamingText = '';
@@ -1840,7 +1863,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
         label: 'llm.complete',
         durationMs: nowMs() - closeStart,
         ttftMs: closeFirstTokenAt !== undefined ? closeFirstTokenAt - closeStart : undefined,
-        args: { model: closing.resolvedModel ?? activeModel ?? 'default', requestedModel: activeModel ?? 'default', step: MAX_TOOL_ITERATIONS, toolCalls: 0, forcedFinish: true, account: closing.account, byoUnresolved: closing.byoUnresolved },
+        args: { model: closing.resolvedModel ?? activeModel ?? 'default', requestedModel: activeModel ?? 'default', step: maxIterations, toolCalls: 0, forcedFinish: true, account: closing.account, byoUnresolved: closing.byoUnresolved },
         usage: closing.usage,
         finishReason: closing.finishReason,
         textChars: closing.text.length,
@@ -1873,7 +1896,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
     ts: nowIso(),
     category: 'error',
     label: 'agent.loop',
-    result: `Loop exhausted after ${MAX_TOOL_ITERATIONS} tool iterations (a forced final answer without tools also came back empty)`,
+    result: `Loop exhausted after ${maxIterations} tool iterations (a forced final answer without tools also came back empty)`,
     isError: true,
   });
   c.error = 'The assistant kept calling tools without finishing. Try rephrasing.';

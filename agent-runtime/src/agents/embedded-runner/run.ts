@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import { DEFAULT_ACTION_TYPE, type ActionType } from "@builderforce/learned-routing";
 import type { ThinkLevel } from "../../auto-reply/thinking.js";
 import { getGlobalHookRunner } from "../../plugins/hook-runner-global.js";
 import { enqueueCommandInLane } from "../../process/command-queue.js";
@@ -17,15 +18,6 @@ import {
   resolveContextWindowInfo,
 } from "../context-window-guard.js";
 import { DEFAULT_CONTEXT_TOKENS, DEFAULT_MODEL, DEFAULT_PROVIDER } from "../defaults.js";
-import { FailoverError, resolveFailoverStatus } from "../failover-error.js";
-import {
-  ensureAuthProfileStore,
-  getApiKeyForModel,
-  resolveAuthProfileOrder,
-  type ResolvedProviderAuth,
-} from "../model-auth.js";
-import { normalizeProviderId } from "../model-selection.js";
-import { ensureBuilderForceAgentsModelsJson } from "../models-config.js";
 import {
   formatBillingErrorMessage,
   classifyFailoverReason,
@@ -43,13 +35,23 @@ import {
   pickFallbackThinkingLevel,
   type FailoverReason,
 } from "../embedded-helpers.js";
+import { FailoverError, isFailoverError, resolveFailoverStatus } from "../failover-error.js";
+import {
+  ensureAuthProfileStore,
+  getApiKeyForModel,
+  resolveAuthProfileOrder,
+  type ResolvedProviderAuth,
+} from "../model-auth.js";
+import { normalizeProviderId } from "../model-selection.js";
+import { ensureBuilderForceAgentsModelsJson } from "../models-config.js";
 import { derivePromptTokens, normalizeUsage, type UsageLike } from "../usage.js";
 import { redactRunIdentifier, resolveRunWorkspaceDir } from "../workspace-run.js";
 import { compactEmbeddedSessionDirect } from "./compact.js";
 import { buildAutoContinuePrompt, shouldAutoContinueRun } from "./continuation-policy.js";
 import { resolveGlobalLane, resolveSessionLane } from "./lanes.js";
+import { completeLearnedRun, type CompleteRunInput } from "./learned-routing/index.js";
 import { log } from "./logger.js";
-import { resolveModel } from "./model.js";
+import { resolveLearnedModelSeed, resolveModel } from "./model.js";
 import { runEmbeddedAttempt } from "./run/attempt.js";
 import type { RunEmbeddedAgentParams } from "./run/params.js";
 import { buildEmbeddedRunPayloads } from "./run/payloads.js";
@@ -172,9 +174,7 @@ function resolveActiveErrorContext(params: {
   };
 }
 
-export async function runEmbeddedAgent(
-  params: RunEmbeddedAgentParams,
-): Promise<EmbeddedRunResult> {
+export async function runEmbeddedAgent(params: RunEmbeddedAgentParams): Promise<EmbeddedRunResult> {
   const sessionLane = resolveSessionLane(params.sessionKey?.trim() || params.sessionId);
   const globalLane = resolveGlobalLane(params.lane);
   const enqueueGlobal =
@@ -191,7 +191,52 @@ export async function runEmbeddedAgent(
       : "markdown");
   const isProbeSession = params.sessionId?.startsWith("probe-") ?? false;
 
-  return enqueueSession(() =>
+  /**
+   * Learned Model Routing (PRD 13) — what this run will teach the fleet.
+   *
+   * Filled in as the run learns it (the action label at seed time, the model it
+   * actually LOCKED ONTO as failover resolves) and reported once, after the run has
+   * terminated, by the wrapper below. It lives out here because the run body has many
+   * exits — a timeout return, a normal return, a thrown FailoverError — and a report
+   * attached to only some of them would teach the learner a survivorship-biased table
+   * in which models mostly succeed.
+   */
+  const outcome: {
+    actionType: ActionType;
+    provider: string;
+    model: string;
+    steps: number;
+    degraded: boolean;
+  } = {
+    actionType: DEFAULT_ACTION_TYPE,
+    provider: "",
+    model: "",
+    steps: 0,
+    degraded: false,
+  };
+
+  const reportOutcome = (
+    terminalStatus: CompleteRunInput["terminalStatus"],
+    error?: unknown,
+  ): void => {
+    if (!outcome.model || isProbeSession) {
+      return;
+    }
+    const rateLimited = isFailoverError(error) && error.reason === "rate_limit";
+    // Fire-and-forget: a run that has already finished must never be held up — or
+    // failed — by bookkeeping about it. `completeLearnedRun` never throws.
+    void completeLearnedRun({
+      runId: params.runId,
+      model: `${outcome.provider}/${outcome.model}`,
+      actionType: outcome.actionType,
+      terminalStatus,
+      rateLimited,
+      degraded: outcome.degraded,
+      steps: outcome.steps,
+    });
+  };
+
+  const runPromise: Promise<EmbeddedRunResult> = enqueueSession(() =>
     enqueueGlobal(async () => {
       const started = Date.now();
       const workspaceResolution = resolveRunWorkspaceDir({
@@ -268,6 +313,33 @@ export async function runEmbeddedAgent(
         log.info(`[hooks] model overridden to ${modelId}`);
       }
 
+      // Learned Model Routing (PRD 13) — seed from what the fleet learned about THIS
+      // kind of work, then keep the label for the write-back. Opt-in on the read side
+      // (see learned-routing/settings.ts); the label is computed either way because a
+      // run reported without one lands in `other` and teaches the wrong bucket.
+      const learnedSeed = await resolveLearnedModelSeed({
+        provider,
+        modelId,
+        prompt: params.prompt,
+        cfg: params.config,
+      });
+      outcome.actionType = learnedSeed.actionType;
+      if (
+        learnedSeed.reordered &&
+        (learnedSeed.provider !== provider || learnedSeed.modelId !== modelId)
+      ) {
+        log.info(
+          `[learned-routing] seeding ${learnedSeed.provider}/${learnedSeed.modelId} over ${provider}/${modelId} (action=${learnedSeed.actionType} scope=${learnedSeed.scope ?? "none"})`,
+        );
+        provider = learnedSeed.provider;
+        modelId = learnedSeed.modelId;
+        // NOT `degraded`. A learned seed IS the intent, not a fall away from it —
+        // marking it degraded would dock the outcome score of the very model learned
+        // routing chose, and teach the table to stop choosing it. `degraded` is
+        // reserved for a real failover (below, where the locked model differs from the
+        // resolved one).
+      }
+
       const { model, error, authStorage, modelRegistry } = resolveModel(
         provider,
         modelId,
@@ -277,6 +349,8 @@ export async function runEmbeddedAgent(
       if (!model) {
         throw new Error(error ?? `Unknown model: ${provider}/${modelId}`);
       }
+      outcome.provider = provider;
+      outcome.model = model.id;
 
       const ctxInfo = resolveContextWindowInfo({
         cfg: params.config,
@@ -982,6 +1056,20 @@ export async function runEmbeddedAgent(
           // the final call, giving an accurate snapshot of current context.
           const lastCallUsage = normalizeUsage(lastAssistant?.usage as UsageLike);
           const promptTokens = derivePromptTokens(lastRunPromptUsage);
+          // The run may have failed over: what it LOCKED ONTO is the truth the learner
+          // must be told, not the model it was seeded with.
+          outcome.provider = lastAssistant?.provider ?? provider;
+          outcome.model = lastAssistant?.model ?? model.id;
+          // `steps` feeds the api's EFFICIENCY half of the outcome score, which counts
+          // model turns. The closest honest local proxy is the tool calls this run made
+          // plus each auto-continue nudge plus the final turn.
+          outcome.steps =
+            (Array.isArray(attempt.toolMetas) ? attempt.toolMetas.length : 0) +
+            autoContinueNudges +
+            1;
+          if (outcome.model !== model.id) {
+            outcome.degraded = true;
+          }
           const agentMeta: EmbeddedAgentMeta = {
             sessionId: sessionIdUsed,
             provider: lastAssistant?.provider ?? provider,
@@ -1134,5 +1222,18 @@ export async function runEmbeddedAgent(
         process.chdir(prevCwd);
       }
     }),
+  );
+
+  // ONE report per run, on every exit. `aborted` is reported as 'cancelled' rather
+  // than a failure: a user stopping a run says nothing about the model.
+  return runPromise.then(
+    (result) => {
+      reportOutcome(result.meta?.aborted ? "cancelled" : "completed");
+      return result;
+    },
+    (error: unknown) => {
+      reportOutcome("failed", error);
+      throw error;
+    },
   );
 }

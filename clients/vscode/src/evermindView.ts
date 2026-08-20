@@ -1,11 +1,10 @@
 import * as vscode from "vscode";
-import * as fs from "fs/promises";
 import * as path from "path";
 import { canManageActiveWorkspace, getTenantJwt } from "./bfApi";
 import { getBaseUrl, SECRET_KEY } from "./gateway";
 import { getSelectedProject } from "./projectState";
 import { renderWebviewHtml } from "./webviewShared";
-import { parseSnapshotArray, snapshotEntryKey, snapshotEntryContent, setSnapshotEntryContent, memoryStub, isStub } from "./memorySnapshot";
+import { compactMemoryFiles, compactionTargets, readMemorySource, type CompactRequest } from "./memoryImport";
 
 /**
  * The Evermind sidebar view — a bundled-React webview view that renders the SHARED
@@ -51,7 +50,7 @@ export class EvermindViewProvider implements vscode.WebviewViewProvider {
     void this.view?.webview.postMessage({ type: "refresh" });
   }
 
-  private async onMessage(msg: { type?: string; id?: string; path?: string; absorbedKeys?: string[]; version?: number; text?: string }): Promise<void> {
+  private async onMessage(msg: { type?: string; id?: string; version?: number; text?: string } & CompactRequest): Promise<void> {
     switch (msg.type) {
       case "ready":
         await this.sendInit();
@@ -64,16 +63,20 @@ export class EvermindViewProvider implements vscode.WebviewViewProvider {
       case "signin":
         void vscode.commands.executeCommand("builderforce.signIn");
         break;
-      // Import step 1 — let the user pick a builderforce-memory snapshot; read + parse it
-      // and hand the webview the learnable entries (already-stubbed ones are excluded so
-      // re-import is idempotent). The FILE touch lives here because only the host has fs.
+      // Import step 1 — let the user pick a memory SOURCE (a builderforce-memory JSON
+      // snapshot or a Claude Code auto-memory folder); read + parse it and hand the
+      // webview the learnable entries, each tagged with the file it came from
+      // (already-stubbed ones are excluded so re-import is idempotent). The FILE touch
+      // lives here because only the host has fs.
       case "evermind.pickMemory":
         await this.pickMemory(msg.id);
         break;
       // Import step 3 — after the gateway absorbed the entries, rewrite THOSE to terse
       // stubs in place (preserving every other field), recovering the context they ate.
+      // The request carries one group PER SOURCE FILE, because a markdown memory
+      // directory holds each absorbed fact in its own file.
       case "evermind.compactMemory":
-        await this.compactMemory(msg.id, msg.path, msg.absorbedKeys, msg.version);
+        await this.compactMemory(msg.id, msg, msg.version);
         break;
       // Diagnostics export. The clipboard write happens on the HOST because a webview is
       // not reliably granted the Clipboard API — `vscode.env.clipboard` always works,
@@ -99,59 +102,49 @@ export class EvermindViewProvider implements vscode.WebviewViewProvider {
     }
   }
 
-  /** Open a snapshot, parse it, and return `{ path, fileName, entries:[{key,text}] }` —
-   *  or `null` (a plain no-op) when the user cancels the picker. */
+  /** Open a memory source, parse it, and return `{ path, fileName, entries:[{key,text,prompt?,path}] }`
+   *  — or `null` (a plain no-op) when the user cancels the picker. Each entry carries its OWN
+   *  source path: a JSON snapshot yields one shared path, a Claude Code memory directory yields
+   *  one path per fact, and everything downstream is written against that single shape. */
   private async pickMemory(id: string | undefined): Promise<void> {
     try {
       const picked = await vscode.window.showOpenDialog({
         canSelectMany: false,
+        canSelectFiles: true,
+        // A Claude Code auto-memory is a FOLDER. Where the platform's native dialog
+        // cannot offer files and folders at once, its `MEMORY.md` index is the
+        // file-shaped way in — `readMemorySource` accepts either.
+        canSelectFolders: true,
         openLabel: vscode.l10n.t("Import"),
-        title: vscode.l10n.t("Import builderforce-memory snapshot"),
-        filters: { "builderforce-memory (JSON)": ["json"], "All files": ["*"] },
+        title: vscode.l10n.t("Import agent memory (JSON snapshot or memory folder)"),
+        filters: {
+          [vscode.l10n.t("Agent memory (snapshot or MEMORY.md)")]: ["json", "md"],
+          [vscode.l10n.t("All files")]: ["*"],
+        },
       });
       const uri = picked?.[0];
       if (!uri) { this.respond(id, true, null); return; }
-      const text = await fs.readFile(uri.fsPath, "utf8");
-      const entries = parseSnapshotArray(text);
+      const entries = await readMemorySource(uri.fsPath);
       if (!entries) {
-        this.respond(id, false, undefined, vscode.l10n.t("Unrecognized file — expected a builderforce-memory JSON snapshot (an array of {{ key, content }} entries)."));
+        this.respond(id, false, undefined, vscode.l10n.t("Unrecognized file — expected a builderforce-memory JSON snapshot (an array of {{ key, content }} entries), or a Claude Code memory folder of *.md facts."));
         return;
       }
-      const wire = entries
-        .map((e) => ({ key: snapshotEntryKey(e), content: snapshotEntryContent(e) }))
-        .filter((e) => e.key && e.content.trim() && !isStub(e.content))
-        .map((e) => ({ key: e.key, text: e.content }));
-      this.respond(id, true, { path: uri.fsPath, fileName: path.basename(uri.fsPath), entries: wire });
+      this.respond(id, true, { path: uri.fsPath, fileName: path.basename(uri.fsPath), entries });
     } catch (e) {
       this.respond(id, false, undefined, e instanceof Error ? e.message : String(e));
     }
   }
 
   /** Rewrite each absorbed entry's body to a `[absorbed→Evermind vN] …` stub, in place,
-   *  preserving all other fields. Returns `{ compacted, bytesSaved }`. */
-  private async compactMemory(id: string | undefined, filePath?: string, absorbedKeys?: string[], version?: number): Promise<void> {
+   *  preserving all other fields — across EVERY source file the import touched.
+   *  Returns `{ compacted, bytesSaved }`. */
+  private async compactMemory(id: string | undefined, req: CompactRequest, version?: number): Promise<void> {
     try {
-      if (!filePath) { this.respond(id, false, undefined, "missing file path"); return; }
-      const absorbed = new Set(Array.isArray(absorbedKeys) ? absorbedKeys : []);
-      const v = typeof version === "number" ? version : 0;
-      const text = await fs.readFile(filePath, "utf8");
-      const entries = parseSnapshotArray(text);
-      if (!entries) { this.respond(id, false, undefined, vscode.l10n.t("Could not re-read the memory file to compact it.")); return; }
-      let compacted = 0;
-      let bytesSaved = 0;
-      for (const e of entries) {
-        const key = snapshotEntryKey(e);
-        if (!absorbed.has(key)) continue;
-        const content = snapshotEntryContent(e);
-        if (!content || isStub(content)) continue;
-        const stub = memoryStub(content, v);
-        if (stub.length >= content.length) continue; // never grow an entry
-        setSnapshotEntryContent(e, stub);
-        compacted++;
-        bytesSaved += content.length - stub.length;
-      }
-      if (compacted > 0) await fs.writeFile(filePath, `${JSON.stringify(entries, null, 2)}\n`);
-      this.respond(id, true, { compacted, bytesSaved });
+      // No targets is not an error — the gateway absorbed nothing, so there is nothing
+      // to stub. The import reports "compacted 0" exactly as it did before.
+      const outcome = await compactMemoryFiles(compactionTargets(req), typeof version === "number" ? version : 0);
+      if (!outcome.ok) { this.respond(id, false, undefined, vscode.l10n.t("Could not re-read the memory file to compact it.")); return; }
+      this.respond(id, true, { compacted: outcome.compacted, bytesSaved: outcome.bytesSaved });
     } catch (e) {
       this.respond(id, false, undefined, e instanceof Error ? e.message : String(e));
     }
@@ -250,13 +243,20 @@ function buildEvermindLabels(): Record<string, string> {
     "ev.teachCta": t("Teach"),
     "ev.teaching": t("Teaching…"),
     "ev.taught": t("Queued for learning."),
+    // Resolved teach outcomes — the console polls the per-contribution status door and
+    // replaces the interim "Queued" notice above with one of these.
+    "ev.taughtDistilled": t("Taught: {model} answered it and the model learned that answer (v{version})."),
+    "ev.taughtSelf": t("Taught: learned from your text, with no teacher model (v{version})."),
+    "ev.taughtTeacherFault": t("Learned, but the teacher {model} produced nothing ({reason}) — so the model learned your raw text, not an ideal answer."),
+    "ev.taughtDropped": t("Not learned: the merge could not use this contribution."),
+    "ev.taughtStillPending": t("Still queued — this will merge on the next learning pass."),
     "ev.flushCta": t("Learn now"),
     "ev.flushing": t("Learning…"),
     "ev.flushedNone": t("Nothing queued to learn yet."),
     "ev.flushedN": t("Merged {merged} contribution(s) into v{version}."),
     // Import from builderforce-memory (editor-only — the host has filesystem access).
     "ev.importTitle": t("Import from builderforce-memory"),
-    "ev.importHint": t("Fold a local memory snapshot into this model, then compact the absorbed facts to stubs so they stop filling your context."),
+    "ev.importHint": t("Fold a local memory snapshot or Claude Code memory folder into this model, then compact the absorbed facts to stubs so they stop filling your context."),
     "ev.importCta": t("Import & compact…"),
     "ev.importing": t("Importing…"),
     "ev.importDone": t("Absorbed {absorbed} memory(ies) into v{version}; compacted {compacted} to stubs (~{savedKb} KB recovered)."),

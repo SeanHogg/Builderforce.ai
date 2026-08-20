@@ -122,8 +122,17 @@ export interface ChatDiagnosticsData {
   /** The chat's OWN project (what the learn gate keys on), or null when unattached. */
   projectId?: number | null;
   projectName?: string | null;
-  /** The project the surrounding UI/panel is showing, when it differs from the chat's. */
+  /**
+   * The project the surrounding UI/panel currently has SELECTED — `null` when nothing is
+   * selected. Always reported (never conditionally omitted): "no project is selected" and
+   * "a project IS selected but the chat never adopted it" have opposite causes and
+   * opposite fixes, and a report that prints only the chat's project renders them
+   * identically as `Chat's project: none`. Reading that ambiguity the wrong way once cost
+   * a wrong revert.
+   */
   selectedProjectId?: number | null;
+  /** Display name for {@link selectedProjectId}, when the host holds one. */
+  selectedProjectName?: string | null;
   tenantId?: number | string | null;
   userId?: string | null;
   /** The project Evermind head for the CHAT's project (not the selected one). */
@@ -161,7 +170,23 @@ export interface ChatDiagnosticsData {
    * deploy is indistinguishable from one taken after, so a fixed bug reads as
    * unfixed — which is exactly what happened while debugging chat #71.
    */
-  versions?: { ui?: string | null; api?: string | null } | null;
+  versions?: {
+    ui?: string | null;
+    api?: string | null;
+    /**
+     * Short SOURCE HASH of the client build.
+     *
+     * A version names a RELEASE, not an ARTIFACT: a client can be rebuilt and
+     * redistributed under the same version with different code, at which point `ui`
+     * alone makes a fixed bug read as unfixed. On 2026-07-25 exactly that happened —
+     * two `2026.7.104` VSIXes, one with an agent-stall recovery fix and one without,
+     * and the report said `UI 2026.7.104` for both. This is the field that separates
+     * them; `"dev"` means the surface was not running a packaged artifact at all.
+     */
+    uiBuildId?: string | null;
+    /** When the client artifact was built, so two builds of the same source are orderable. */
+    uiBuiltAt?: string | null;
+  } | null;
 }
 
 function fmtProject(id: number | null | undefined, name?: string | null): string {
@@ -237,9 +262,21 @@ function diagnosticsSignals(d: ChatDiagnosticsData): string[] {
   // #1 real cause: the chat isn't bound to a project (the learn gate keys on the
   // CHAT's projectId, not the panel's selected project).
   if (d.projectId == null || d.lastLearn?.reason === 'not-attached') {
-    out.push(
-      '⚠️ Chat is NOT attached to a project (chat.projectId is null). The learn gate keys on the CHAT\'s project, so this chat contributes NOTHING to any Evermind — even though the panel shows the selected project as connected. Attach the chat to a project (or re-open it so the self-heal adopts the active project).',
-    );
+    // Two DIFFERENT faults present as one line unless the selected project is named:
+    // nothing to adopt (the user has no project selected at all) vs. a broken adopt (a
+    // project IS selected and the chat still came up unattached). Branch on it, so the
+    // reader is pointed at the right fix instead of guessing between them.
+    const unattached =
+      "⚠️ Chat is NOT attached to a project (chat.projectId is null). The learn gate keys on the CHAT's project, so this chat contributes NOTHING to any Evermind — even though the panel shows the selected project as connected.";
+    if (d.selectedProjectId == null) {
+      out.push(
+        `${unattached} No project is selected in the sidebar either, so there was nothing for the chat to adopt — SELECT a project, then re-open the chat. (Not an adopt bug.)`,
+      );
+    } else {
+      out.push(
+        `${unattached} A project IS selected (${fmtProject(d.selectedProjectId, d.selectedProjectName)}) and the chat still came up unattached, so the ADOPT path is the fault, not the selection — investigate the self-heal that binds an open chat to the active project.`,
+      );
+    }
   } else if (d.selectedProjectId != null && d.selectedProjectId !== d.projectId) {
     out.push(
       `⚠️ Chat's project (#${d.projectId}) differs from the panel's selected project (#${d.selectedProjectId}). The Evermind panel reflects the SELECTED project; this chat feeds project #${d.projectId}. They are different models — compare the versions below.`,
@@ -359,16 +396,31 @@ export function formatChatDiagnostics(d: ChatDiagnosticsData): string[] {
   if (d.surface) lines.push(`- Surface: ${d.surface}`);
   // FIRST, deliberately: every other number below is only meaningful once you know
   // which build produced them.
-  if (d.versions && (d.versions.ui || d.versions.api)) {
-    lines.push(
-      `- Versions: UI ${d.versions.ui ?? 'unknown'} · API ${d.versions.api ?? 'unknown'}`,
-    );
+  if (d.versions && (d.versions.ui || d.versions.api || d.versions.uiBuildId)) {
+    // The build id rides the UI version, never a separate line: they answer one
+    // question ("which client produced this?") and split lines get quoted apart.
+    const buildId = d.versions.uiBuildId;
+    const ui = `${d.versions.ui ?? 'unknown'}${buildId ? `+${buildId}` : ''}`
+      + (d.versions.uiBuiltAt && d.versions.uiBuiltAt !== 'dev' ? ` (built ${d.versions.uiBuiltAt})` : '');
+    lines.push(`- Versions: UI ${ui} · API ${d.versions.api ?? 'unknown'}`);
+    if (buildId === 'dev') {
+      lines.push(
+        '  - ⚠️ UI build id is "dev" — this capture did NOT come from a packaged build, so its behaviour may not match any released artifact.',
+      );
+    } else if (d.versions.ui && !buildId) {
+      lines.push(
+        '  - ⚠️ No UI build id — this client does not stamp one, so a rebuild carrying the SAME version is indistinguishable from the build it replaced. "Is the fix in?" cannot be answered from this report.',
+      );
+    }
   }
   lines.push(`- Chat: ${d.chatTitle?.trim() ? `"${d.chatTitle.trim()}"` : 'Untitled'}${d.chatId != null ? ` (#${d.chatId})` : ''}${d.chatVisibility ? ` · ${d.chatVisibility}` : ''}`);
   lines.push(`- Chat's project: ${fmtProject(d.projectId, d.projectName)}`);
-  if (d.selectedProjectId != null && d.selectedProjectId !== d.projectId) {
-    lines.push(`- Panel's selected project: #${d.selectedProjectId}`);
-  }
+  // ALWAYS printed, even when it matches (or is absent). Printing it only on a mismatch
+  // is what made "nothing selected" and "selected but unadopted" indistinguishable.
+  lines.push(
+    `- Panel's selected project: ${fmtProject(d.selectedProjectId, d.selectedProjectName)}`
+      + (d.selectedProjectId != null && d.selectedProjectId === d.projectId ? " (same as the chat's)" : ''),
+  );
   lines.push(`- Tenant: ${d.tenantId != null ? `#${d.tenantId}` : 'unknown'} · User: ${d.userId ?? 'unknown'}`);
 
   // Account: plan, billing, quota and model entitlement. Rendered BEFORE the Evermind

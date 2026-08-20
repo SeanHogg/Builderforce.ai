@@ -116,7 +116,15 @@ export async function reconcilePullRequestState(
     if (pr.status !== 'open' || providerState === 'open' || providerState == null) return base;
 
     if (providerState === 'merged') {
-      await markPullRequestMergedById(db, pr.id, tenantId, { mergedBy: 'provider:reconcile' });
+      // Record the MERGE COMMIT, not just the fact. Post-merge build validation
+      // correlates a deploy-branch CI event back to its ticket through
+      // `pull_requests.merge_sha`; reconciling a human's provider-side merge without it
+      // left that column NULL, so exactly the PRs a person merged were the ones whose
+      // post-merge build never reached the ticket.
+      await markPullRequestMergedById(db, pr.id, tenantId, {
+        mergedBy: 'provider:reconcile',
+        mergeSha: detail.mergeSha ?? null,
+      });
     } else {
       await markPullRequestClosedById(db, pr.id, tenantId);
     }

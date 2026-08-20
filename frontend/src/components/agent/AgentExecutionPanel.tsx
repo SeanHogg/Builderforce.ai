@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useAuth } from '@/lib/AuthContext';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import {
@@ -16,6 +17,7 @@ import {
   type Execution,
   type ExecutionTrace,
   type ExecutionTraceToolEvent,
+  type ExecutionLlmTurn,
   type TaskFileChange,
   type TaskRepoStatus,
 } from '@/lib/builderforceApi';
@@ -25,7 +27,7 @@ import { useConfirm } from '@/components/ConfirmProvider';
 import { RunAgentControl } from '../task/RunAgentControl';
 import { ApprovalResolveControl } from '../humanRequests/ApprovalResolveControl';
 import { ChatMessageBubble } from '../ChatMessageBubble';
-import { EXECUTION_STATUS_COLOR as STATUS_COLOR } from '../board/AgentChip';
+import { EXECUTION_STATUS_COLOR as STATUS_COLOR, rerunAffordance } from '../board/AgentChip';
 import { ExecutionChip } from './ExecutionChip';
 import { EvermindRunChip } from './EvermindRunChip';
 import { useExecutionStream, type ExecutionFileChange } from './useExecutionStream';
@@ -37,10 +39,12 @@ import { useFormat } from "@/i18n/useFormat";
 /**
  * Live execution view for a task. Queued runs stream their status, output
  * (rendered as markdown in a fixed-height scroll region), file changes, and tool
- * calls in real time. The Output chatbox steers a RUNNING agent mid-run, and on a
- * SETTLED run it starts a NEW run seeded with the message as its directive (the
- * directive is also recorded as a PRD revision server-side, so the spec evolves
- * with each run). Reused by both the project and task "Agent / Capabilities" surfaces.
+ * calls in real time. The Output chatbox does one of three things depending on the
+ * run's state: it steers a RUNNING agent mid-run; it ANSWERS a PAUSED one, which
+ * resumes that same run on whichever surface parked it; and on a SETTLED run it
+ * starts a NEW run seeded with the message as its directive (the directive is also
+ * recorded as a PRD revision server-side, so the spec evolves with each run).
+ * Reused by both the project and task "Agent / Capabilities" surfaces.
  */
 
 interface AgentResult {
@@ -129,9 +133,20 @@ function runProvenance(toolEvents: ExecutionTraceToolEvent[]): {
   return { dispatch, models: [...models.entries()].map(([m, n]) => `${m} ×${n}`), repo };
 }
 
-type SubTab = 'output' | 'changes' | 'tools' | 'logs' | 'timeline' | 'pull-request';
+type SubTab = 'output' | 'changes' | 'tools' | 'model' | 'logs' | 'timeline' | 'pull-request';
 const card: React.CSSProperties = { border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 14, marginBottom: 12 };
 const RUNNING = new Set(['pending', 'submitted', 'running']);
+/**
+ * A run that still has a session of its own — everything non-terminal, INCLUDING
+ * `paused`.
+ *
+ * The distinction matters because `paused` is idle but not over: nothing is
+ * ticking (so it must not drive the live poll or the "live" dot), yet the run is
+ * still there to be talked to. Treating it as terminal is what made the Output
+ * composer offer to "start a new run" at precisely the moment the agent was
+ * waiting for an answer to THIS one.
+ */
+const LIVE = new Set([...RUNNING, 'paused']);
 
 /** The cloud agent that ran a specific execution — read from that execution's own
  *  persisted payload, so each run's logs/triage are scoped to the agent that
@@ -198,6 +213,9 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
   const fmt = useFormat();
   const t = useTranslations('agentExecution');
   const confirm = useConfirm();
+  // Only a superadmin can open the FULL trace row (it holds the request/response
+  // bodies), so the deep link is gated on that; everyone else sees the id.
+  const { user } = useAuth();
   const [executions, setExecutions] = useState<Execution[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [trace, setTrace] = useState<ExecutionTrace | null>(null);
@@ -301,6 +319,18 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
   // Genuine tool calls only — the Tools tab count + list exclude lifecycle/telemetry
   // events (agent.message, llm.complete, …) so "Tools (N)" reflects real invocations.
   const realToolEvents = toolEvents.filter(isGenuineToolCall);
+  // Structured per-turn model + token facts for this run (0949) — real columns off
+  // the run's own trace rows, not a JSON blob the UI has to re-parse.
+  const llmTurns: ExecutionLlmTurn[] = trace?.trace.llmTurns ?? [];
+  const llmTurnTotals = useMemo(() => llmTurns.reduce(
+    (acc, turn) => ({
+      promptTokens: acc.promptTokens + turn.promptTokens,
+      completionTokens: acc.completionTokens + turn.completionTokens,
+      totalTokens: acc.totalTokens + turn.totalTokens,
+      durationMs: acc.durationMs + turn.durationMs,
+    }),
+    { promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMs: 0 },
+  ), [llmTurns]);
   const errorMessage = (selected as { errorMessage?: string } | null)?.errorMessage;
   const prUrl = (selected as { githubPrUrl?: string } | null)?.githubPrUrl ?? task.githubPrUrl;
 
@@ -358,6 +388,9 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
   }, [result, toolEvents, stream.fileChanges]);
 
   const isRunning = status != null && RUNNING.has(status);
+  // Parked on a human question: idle, but still this run's conversation to answer.
+  const isPaused = status === 'paused';
+  const isLive = status != null && LIVE.has(status);
 
   // PRD (materials) for this task — fed into the copy-triage report so a shared
   // log carries the GOAL, not just telemetry.
@@ -518,13 +551,21 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
     if (!text || selectedId == null || sending) return;
     setSending(true);
     setDraft('');
-    // Steering a LIVE run: render the direction immediately — we can't wait on the
-    // stream's echo, which is unreliable cross-isolate. (A follow-up to a terminal
-    // run spawns a NEW run, so we don't echo onto the old one — we switch to the new
-    // execution once it's created.) Rolled back below if the post fails.
-    if (isRunning) setSentMessages((prev) => [...prev, text]);
+    // Steering a LIVE run — or ANSWERING a paused one: render the direction
+    // immediately, because we can't wait on the stream's echo (unreliable
+    // cross-isolate) and a paused run has no stream at all until it wakes.
+    // (A follow-up to a terminal run spawns a NEW run, so we don't echo onto the old
+    // one — we switch to the new execution once it's created.) Rolled back below if
+    // the post fails.
+    if (isLive) setSentMessages((prev) => [...prev, text]);
     try {
       const res = await runtimeApi.postMessage(selectedId, text);
+      if (res.resumed) {
+        // Paused run → the message answered its question and woke it. Refresh so the
+        // chip and header show `running` instead of `paused`.
+        await loadExecutions();
+        onTaskChanged?.();
+      }
       if (res.rerun?.executionId) {
         // Terminal run → a new run was started with this directive. Follow it.
         await loadExecutions(true);
@@ -533,7 +574,7 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
       }
     } catch {
       // Roll back the optimistic echo (if any) and restore the draft for retry.
-      if (isRunning) {
+      if (isLive) {
         setSentMessages((prev) => {
           const i = prev.lastIndexOf(text);
           if (i < 0) return prev;
@@ -582,14 +623,32 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
     }
   };
 
-  // Re-run a terminal execution (failed/cancelled) — or resume a paused one — by
-  // re-submitting the task with the original run's target + payload (its model +
-  // cloud-agent ref), so the retry runs as the same agent rather than the default.
-  const rerun = async (e: Execution) => {
+  /**
+   * The chip's inline action. The chip decides WHICH affordance it shows
+   * ({@link rerunAffordance}); this decides what that affordance DOES, and the two
+   * are not the same operation:
+   *
+   *   • `retry` (failed/cancelled) → a NEW run, re-submitted with the original
+   *     run's target + payload (its model + cloud-agent ref) so the retry runs as
+   *     the same agent rather than the default.
+   *   • `resume` (paused) → CONTINUE that run. It renders a play glyph and said
+   *     "Resume this run", but it used to call submitExecution — a fresh billable
+   *     run that discarded the paused conversation and left the agent's question
+   *     hanging. Resuming now hits the resume endpoint, which answers the open
+   *     question, restores the ticket's lane and wakes the surface that parked it.
+   */
+  const rerun = async (e: Execution, liveStatus?: string) => {
     if (rerunningId != null) return;
+    const affordance = rerunAffordance(liveStatus ?? e.status);
     setRerunningId(e.id);
     setRerunError(null);
     try {
+      if (affordance === 'resume') {
+        await runtimeApi.resume(e.id);
+        loadExecutions();
+        onTaskChanged?.();
+        return;
+      }
       const result = await runtimeApi.submitExecution({
         taskId: task.id,
         agentHostId: e.agentHostId ?? undefined,
@@ -603,7 +662,7 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
       loadExecutions(true);
       onTaskChanged?.();
     } catch (err) {
-      setRerunError(err instanceof Error ? err.message : t('failedToRerun'));
+      setRerunError(err instanceof Error ? err.message : t(affordance === 'resume' ? 'failedToResume' : 'failedToRerun'));
     } finally {
       setRerunningId(null);
     }
@@ -681,7 +740,7 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
         <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('noExecutions')}</div>
       ) : (
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: rerunError ? 6 : 12 }}>
-          {executions.map((e) => {
+          {executions.map((e, i) => {
             const st = (e.id === selectedId && stream.status) || e.status;
             return (
               <ExecutionChip
@@ -690,9 +749,13 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
                 status={st}
                 selected={selectedId === e.id}
                 onSelect={() => setSelectedId(e.id)}
-                onRerun={() => rerun(e)}
+                onRerun={() => rerun(e, st)}
                 rerunning={rerunningId === e.id}
                 agentName={executionAgentName(e, agentHosts, cloudAgentNames)}
+                // NEWEST RUN ONLY (the list is newest-first). The build verdict is a fact
+                // about the branch as it stands now, so badging every historical chip
+                // with it would claim each of those runs had been validated separately.
+                buildStatus={i === 0 ? task.buildStatus : undefined}
               />
             );
           })}
@@ -727,7 +790,7 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
               </span>
             )}
             <div style={{ flex: 1 }} />
-            {isRunning && (
+            {isLive && (
               /* Cancelling a run is a dispatch-tier action (requireRole(DEVELOPER) on
                  /api/runtime/executions/:id/cancel) — everything else in this header
                  (status, agent, live/polling indicator) is read-only and stays open. */
@@ -737,7 +800,7 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
                 </button>
               </RoleGate>
             )}
-            {!isRunning && (
+            {!isLive && (
               /* Reverting a finished run is DESTRUCTIVE (closes its PR, deletes its
                  branch) — manager-gated server-side, so gate it at the same tier
                  here. RoleGate disables rather than hides, so a developer still
@@ -778,7 +841,7 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
 
           {/* Sub-tabs */}
           <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--border-subtle)', marginBottom: 10 }}>
-            {(() => { const changeCount = taskChanges.length || files.length; const base: Array<readonly [SubTab, string]> = [['output', t('tabOutput')], ['changes', `${t('tabChanges')}${changeCount ? ` (${changeCount})` : ''}`], ['tools', `${t('tabTools')}${realToolEvents.length ? ` (${realToolEvents.length})` : ''}`], ['logs', t('tabLogs')], ['timeline', t('tabTimeline')]]; if (prUrl) base.push(['pull-request', t('tabPullRequest')]); return base; })().map(([id, label]) => (
+            {(() => { const changeCount = taskChanges.length || files.length; const base: Array<readonly [SubTab, string]> = [['output', t('tabOutput')], ['changes', `${t('tabChanges')}${changeCount ? ` (${changeCount})` : ''}`], ['tools', `${t('tabTools')}${realToolEvents.length ? ` (${realToolEvents.length})` : ''}`], ['model', `${t('tabModelTurns')}${llmTurns.length ? ` (${llmTurns.length})` : ''}`], ['logs', t('tabLogs')], ['timeline', t('tabTimeline')]]; if (prUrl) base.push(['pull-request', t('tabPullRequest')]); return base; })().map(([id, label]) => (
               <button
                 key={id}
                 type="button"
@@ -805,7 +868,7 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
               >
                 {thread.length === 0 ? (
                   <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: 8 }}>
-                    {isRunning ? t('agentWorking') : t('noOutput')}
+                    {isRunning ? t('agentWorking') : isPaused ? t('awaitingAnswer') : t('noOutput')}
                   </div>
                 ) : (
                   thread.map((m, i) => (
@@ -820,8 +883,9 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
                 )}
               </div>
 
-              {/* Chatbox — steer the running agent (or spawn a follow-up run on a
-                  terminal one). Both are dispatch: POST /api/runtime/executions/:id/messages
+              {/* Chatbox — steer the running agent, ANSWER a paused one (which resumes
+                  it), or spawn a follow-up run on a terminal one. All three are
+                  dispatch: POST /api/runtime/executions/:id/messages
                   is requireRole(DEVELOPER). Gated as a BLOCK so a viewer doesn't type a
                   directive into a composer that can never send. READING the thread above
                   is untouched. */}
@@ -831,7 +895,7 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
                   value={draft}
                   onChange={(e) => setDraft(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void send(); } }}
-                  placeholder={isRunning ? t('steerPlaceholder') : t('followUpPlaceholder')}
+                  placeholder={isPaused ? t('answerPlaceholder') : isRunning ? t('steerPlaceholder') : t('followUpPlaceholder')}
                   rows={2}
                   style={{ flex: 1, resize: 'vertical', padding: '8px 10px', fontSize: 13, borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)', fontFamily: 'inherit' }}
                 />
@@ -840,9 +904,11 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
                   onClick={send}
                   disabled={!draft.trim() || sending || selectedId == null}
                   style={{ alignSelf: 'flex-end', padding: '8px 16px', fontSize: 13, fontWeight: 600, borderRadius: 'var(--radius-md)', border: 'none', background: !draft.trim() || sending ? 'var(--bg-elevated)' : 'var(--coral-bright)', color: !draft.trim() || sending ? 'var(--text-muted)' : 'var(--text-on-accent)', cursor: !draft.trim() || sending ? 'default' : 'pointer' }}
-                  title={isRunning ? t('steerTitle') : t('startRunTitle')}
+                  title={isPaused ? t('answerTitle') : isRunning ? t('steerTitle') : t('startRunTitle')}
                 >
-                  {sending ? (isRunning ? t('sendingLabel') : t('startingLabel')) : isRunning ? t('send') : t('startRun')}
+                  {sending
+                    ? (isPaused ? t('resumingLabel') : isRunning ? t('sendingLabel') : t('startingLabel'))
+                    : isPaused ? t('answerAndResume') : isRunning ? t('send') : t('startRun')}
                 </button>
               </div>
               </RoleGate>
@@ -894,16 +960,79 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
             </div>
           )}
 
+          {subTab === 'model' && (
+            <div style={{ minHeight: 80, maxHeight: 360, overflow: 'auto' }}>
+              {llmTurns.length === 0 ? (
+                <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: 8 }}>{t('noModelTurns')}</div>
+              ) : (
+                <>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, padding: '4px 0 8px', fontSize: 12, color: 'var(--text-secondary)' }}>
+                    <span>{t('modelTurnsTotalTokens', { count: llmTurnTotals.totalTokens })}</span>
+                    <span>{t('modelTurnsPromptTokens', { count: llmTurnTotals.promptTokens })}</span>
+                    <span>{t('modelTurnsCompletionTokens', { count: llmTurnTotals.completionTokens })}</span>
+                    <span>{t('modelTurnsTotalDuration', { ms: llmTurnTotals.durationMs })}</span>
+                  </div>
+                  {llmTurns.map((turn) => (
+                    <div
+                      key={turn.traceId}
+                      style={{
+                        padding: '6px 0', borderTop: '1px solid var(--border-subtle)',
+                        display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'baseline',
+                        fontSize: 12, color: 'var(--text-secondary)',
+                      }}
+                    >
+                      <span style={{ fontFamily: 'var(--font-mono)', color: turn.success ? 'var(--coral-bright)' : 'var(--status-error, var(--text-primary))', wordBreak: 'break-all' }}>
+                        {turn.model ?? t('modelTurnUnknownModel')}
+                      </span>
+                      {turn.vendor && <span style={{ color: 'var(--text-muted)' }}>{turn.vendor}</span>}
+                      <span style={{ color: 'var(--text-muted)' }}>
+                        {t('modelTurnTokens', { prompt: turn.promptTokens, completion: turn.completionTokens })}
+                      </span>
+                      <span style={{ color: 'var(--text-muted)' }}>{t('modelTurnDuration', { ms: turn.durationMs })}</span>
+                      {turn.outcome && turn.outcome !== 'success' && (
+                        <span style={{ color: 'var(--text-muted)' }}>{turn.outcome}</span>
+                      )}
+                      {/* The deep link only exists for a superadmin — the full trace row
+                          (request/response bodies) is builder-side data. Everyone else
+                          still gets the id itself, which is what a support thread quotes. */}
+                      {user?.isSuperadmin ? (
+                        <Link
+                          href={`/admin?tab=llm&sub=traces&traceId=${encodeURIComponent(turn.traceId)}`}
+                          style={{ fontFamily: 'var(--font-mono)', color: 'var(--coral-bright)', wordBreak: 'break-all' }}
+                        >
+                          {t('modelTurnOpenTrace')}
+                        </Link>
+                      ) : (
+                        <code style={{ color: 'var(--text-muted)', wordBreak: 'break-all' }}>{turn.traceId}</code>
+                      )}
+                      {turn.errorMessage && (
+                        <div style={{ flexBasis: '100%', fontSize: 11, color: 'var(--text-muted)', wordBreak: 'break-word' }}>
+                          {turn.errorMessage.slice(0, 240)}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </>
+              )}
+            </div>
+          )}
+
           {/* Logs + Timeline reuse the Observability views, scoped to the agent
               that executed this run (host or cloud). Same component the
-              Observability page renders, so there's one source of truth. */}
+              Observability page renders, so there's one source of truth.
+              The run's tool-audit tail is handed DOWN from the socket this panel
+              already holds — a cloud run has no relay log stream of its own, and
+              opening a second stream per tab to get one would be a duplicate
+              connection to the same room. */}
           {subTab === 'logs' && selectedId != null && (
             <ObservabilityContent embedded initialView="logs" executionId={selectedId} {...obsScopeProps}
+              liveToolEvents={stream.toolEvents} liveConnected={stream.connected}
               reportMaterials={reportPreamble} reportTransaction={buildTransaction} />
           )}
 
           {subTab === 'timeline' && selectedId != null && (
             <ObservabilityContent embedded initialView="timeline" executionId={selectedId} {...obsScopeProps}
+              liveToolEvents={stream.toolEvents} liveConnected={stream.connected}
               reportMaterials={reportPreamble} reportTransaction={buildTransaction} />
           )}
 

@@ -66,11 +66,16 @@ export function toAgentTool(
     // TypeBox schemas ARE JSON-Schema objects; the shared schema's `parameters` is the
     // same structural shape the loop forwards to the model.
     parameters,
-    execute: async (_toolCallId, params, signal) => {
+    execute: async (_toolCallId, params, signal, onUpdate) => {
       const ctx: ToolContext = {
         caps: provider,
         signal,
         workspaceRoot,
+        // Forward the loop's streaming callback so a shared tool can emit progress
+        // exactly as a native one does. Dropping it here is what made the shared
+        // contract unable to back a streaming `exec`/`process`: the tool would run to
+        // completion in silence and the terminal would look hung.
+        ...(onUpdate ? { onUpdate: (partial: ToolResult) => onUpdate(toAgentToolResult(partial)) } : {}),
       };
       const result = await def.execute((params ?? {}) as Record<string, unknown>, ctx);
       return toAgentToolResult(result);

@@ -153,8 +153,13 @@ async function listFiles(dir, sub, glob) {
 
 /** Execute one tool call. Repo reads/writes hit local disk (the clone); write also
  *  mirrors to the ticket branch via the Worker; run_command and the git_* tools run
- *  in the shell; memory_* and builtin_* relay to the Worker (no DB creds here). */
-async function execTool(spec, workdir, writtenPaths, name, parsed, proc) {
+ *  in the shell; memory_* and builtin_* relay to the Worker (no DB creds here).
+ *
+ *  `ask_human` is the one tool that ENDS this process: it hands the conversation
+ *  (`loop.messages`) to the Worker, which parks the run, and returns `paused: true`
+ *  so runLoop stops without posting a terminal op. See the `ask_human` container-op
+ *  for why the pause is exit-and-redispatch rather than block-and-poll. */
+async function execTool(spec, workdir, writtenPaths, name, parsed, proc, loop) {
   if (name === 'list_files') {
     if (!workdir) return { ok: false, error: 'no repository bound to this task' };
     return listFiles(
@@ -221,6 +226,20 @@ async function execTool(spec, workdir, writtenPaths, name, parsed, proc) {
   if (name === 'memory_forget') {
     return op(spec, { op: 'memory', args: { action: 'forget', key: parsed.key } });
   }
+  // The ticket's PRD. The container holds no DB creds and the PRD lives in the
+  // platform's spec store (not the clone), so both modes relay to the Worker's `prd`
+  // op — the SAME capability the durable loop calls, so an `update_prd` on this surface
+  // lands identically to one on that surface.
+  if (name === 'update_prd') {
+    return op(spec, {
+      op: 'prd',
+      args: {
+        action: parsed.mode === 'section' ? 'section' : 'append',
+        section: parsed.section,
+        content: parsed.content,
+      },
+    });
+  }
   // Multi-agent leases + blackboard. The Worker owns both stores; this image only
   // relays the four shared coordination verbs, exactly like durable memory above.
   if (name === 'claim_resource') {
@@ -234,6 +253,34 @@ async function execTool(spec, workdir, writtenPaths, name, parsed, proc) {
   }
   if (name === 'workspace_read') {
     return op(spec, { op: 'coordinate', args: { action: 'read', query: parsed.query, limit: parsed.limit } });
+  }
+  // Human-in-the-loop. The Worker opens the question, routes the ticket to the
+  // board's needs-attention lane, parks the row in `paused` and PERSISTS the
+  // conversation we hand it — so a fresh container process can be started with the
+  // same conversation once someone answers. We deliberately send `messages` rather
+  // than a summary: the resumed process must continue the run, not re-derive it.
+  if (name === 'ask_human') {
+    const question = typeof parsed.question === 'string' ? parsed.question.trim() : '';
+    if (!question) return { ok: false, error: 'question is required to ask a human' };
+    const r = await op(spec, {
+      op: 'ask_human',
+      args: {
+        question,
+        context: typeof parsed.context === 'string' ? parsed.context : undefined,
+        messages: loop && Array.isArray(loop.messages) ? loop.messages : [],
+        writtenPaths: [...writtenPaths],
+        step: loop && typeof loop.step === 'number' ? loop.step : 0,
+        // This turn's tool-call ids so the Worker can close the pairing before it
+        // freezes the transcript: our own call has no result yet, and any sibling
+        // call never runs because the loop stops here.
+        toolCallId: (loop && loop.toolCallId) || '',
+        toolCallIds: (loop && loop.toolCallIds) || [],
+      },
+    });
+    // `paused` is what stops the loop; anything else (a cancelled run, a rejected
+    // question) is an ordinary tool failure the agent can react to.
+    if (r && r.paused) return { ok: true, paused: true, note: r.note };
+    return r && typeof r === 'object' ? r : { ok: false, error: 'could not park the run on a human question' };
   }
   // Platform (project-management) tools — the container holds no DB creds, so it
   // relays each `builtin_*` call back to the Worker, which runs the curated,
@@ -327,13 +374,25 @@ async function gitTool(spec, workdir, proc, name, parsed) {
   return { ok: false, error: `unknown git tool '${name}'` };
 }
 
-/** Drive the agent loop to completion, then finalize (PR) via the Worker. */
+/**
+ * Drive the agent loop to completion, then finalize (PR) via the Worker.
+ *
+ * THREE ways out, and exactly one terminal op each:
+ *   • finished / cancelled → `finalize` (opens the PR, settles the row);
+ *   • the loop threw       → `fail` (the Worker self-heals or fails with the reason);
+ *   • the agent asked a human → NEITHER. The run is parked in `paused` by the
+ *     `ask_human` op and this process exits clean, because a paused run is not a
+ *     finished one and must not be marked failed. `resumePausedExecution` starts a
+ *     fresh process seeded with `spec.resume` once someone answers.
+ */
 async function runLoop(spec) {
   let workdir = null;
   const writtenPaths = new Set();
   let finalOutput = '';
   let cancelled = false;
   let crashed = null;
+  // Set when the agent called ask_human: the run is parked, not over.
+  let paused = false;
   // Holds the live child process so the heartbeat can kill it on cancel.
   const proc = { current: null };
   // Liveness heartbeat: bump the run's `updated_at` on a timer so a long shell step
@@ -378,10 +437,21 @@ async function runLoop(spec) {
       }
     }
 
-    const messages = [
-      { role: 'system', content: spec.systemPrompt },
-      { role: 'user', content: spec.userContent },
-    ];
+    // A RESUMED run continues the conversation the previous process exited with —
+    // the human's answer arrives separately, as a pending steer the Worker injects
+    // into the very next `llm` op. Only a fresh run starts from the task prompt.
+    // (`writtenPaths` is carried too, so the finalize still reports every file this
+    // execution wrote across both processes.)
+    const resume = spec.resume && Array.isArray(spec.resume.messages) && spec.resume.messages.length > 0 ? spec.resume : null;
+    const messages = resume
+      ? [...resume.messages]
+      : [
+          { role: 'system', content: spec.systemPrompt },
+          { role: 'user', content: spec.userContent },
+        ];
+    if (resume && Array.isArray(resume.writtenPaths)) {
+      for (const p of resume.writtenPaths) if (typeof p === 'string') writtenPaths.add(p);
+    }
     const maxSteps = Number(spec.maxSteps) || 20;
 
     for (let step = 0; step < maxSteps; step++) {
@@ -425,10 +495,14 @@ async function runLoop(spec) {
           finished = true;
           result = { ok: true };
         } else {
-          result = await execTool(spec, workdir, writtenPaths, name, parsed, proc);
+          result = await execTool(spec, workdir, writtenPaths, name, parsed, proc, { messages, step, toolCallId: tc.id ?? '', toolCallIds: toolCalls.map((c) => c.id ?? '') });
         }
         messages.push({ role: 'tool', tool_call_id: tc.id ?? '', content: JSON.stringify(result) });
+        // The run is parked on a human question. Stop immediately — running further
+        // tools would spend tokens against a row the Worker has already paused.
+        if (result && result.paused) { paused = true; break; }
       }
+      if (paused) break;
       // Apply steers AFTER this turn's tool results so the agent reacts to them next
       // step. A steer also overrides a finish in the same turn: the user added work.
       for (const steer of steering) { messages.push({ role: 'user', content: steer }); finished = false; }
@@ -442,7 +516,14 @@ async function runLoop(spec) {
   } finally {
     clearInterval(heartbeat); // stop beating before the terminal op
     try {
-      if (crashed) {
+      // PAUSED runs post NOTHING here. The `ask_human` op already parked the row and
+      // persisted the resume state; a `finalize` would open a PR on half-done work
+      // and a `fail` would mark a perfectly healthy, answerable run as failed.
+      if (paused) {
+        // A pause AND a crash means the crash happened after the park — report it as
+        // telemetry, not as the run's outcome.
+        if (crashed) await op(spec, { op: 'event', args: { toolName: 'runtime.paused_exit', category: 'error', result: `container exited after pausing, with an error: ${crashed}`.slice(0, 300) } }).catch(() => {});
+      } else if (crashed) {
         await op(spec, { op: 'fail', args: { error: crashed } }).catch(() => {});
       } else {
         await op(spec, { op: 'finalize', args: { writtenPaths: [...writtenPaths], finalOutput, cancelled } }).catch(() => {});

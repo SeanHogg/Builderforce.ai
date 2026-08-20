@@ -42,15 +42,15 @@ const CATALOG: ReadonlyArray<VendorModelEntry> = [
   { id: 'nvidia/nemotron-3-nano-30b-a3b:free',       tier: 'FREE', label: 'Nemotron 3 Nano 30B (Free)',         brand: 'NVIDIA'     },
   { id: 'nvidia/nemotron-nano-12b-v2-vl:free',       tier: 'FREE', label: 'Nemotron Nano 12B v2 VL (Free)',     brand: 'NVIDIA'     },
   { id: 'nvidia/nemotron-nano-9b-v2:free',           tier: 'FREE', label: 'Nemotron Nano 9B v2 (Free)',         brand: 'NVIDIA'     },
-  { id: 'inclusionai/ling-3.0-tiny:free',            tier: 'FREE', label: 'Ling 3.0 Tiny (Free)',                brand: 'InclusionAI' },
+  { id: 'z-ai/glm-5.2:free',                         tier: 'FREE', label: 'GLM 5.2 (Free)',                      brand: 'Z.AI'       },
 
   // ── STANDARD tier — paid low-cost models, prefixed in the paid pool so
   //    Pro/Teams tenants land on cheap models before reaching PREMIUM/ULTRA.
-  { id: 'meta-llama/llama-3-8b-instruct',            tier: 'STANDARD', label: 'Llama 3 8B Instruct',      brand: 'Meta'      },
-  { id: 'google/gemma-3-4b-it',                      tier: 'STANDARD', label: 'Gemma 3 4B Instruct',      brand: 'Google'    },
-  { id: 'microsoft/phi-4',                           tier: 'STANDARD', label: 'Phi-4',                    brand: 'Microsoft' },
+  { id: 'meta-llama/llama-3.1-8b-instruct',          tier: 'STANDARD', label: 'Llama 3.1 8B Instruct',    brand: 'Meta'      },
+  { id: 'google/gemma-3-12b-it',                     tier: 'STANDARD', label: 'Gemma 3 12B Instruct',     brand: 'Google'    },
+  { id: 'ibm-granite/granite-4.1-8b',                tier: 'STANDARD', label: 'Granite 4.1 8B',           brand: 'IBM'       },
   { id: 'qwen/qwen3.5-9b',                           tier: 'STANDARD', label: 'Qwen 3.5 9B',              brand: 'Qwen'      },
-  { id: 'z-ai/glm-4-32b',                            tier: 'STANDARD', label: 'GLM 4 32B',                brand: 'Z.AI'      },
+  { id: 'z-ai/glm-4.7',                              tier: 'STANDARD', label: 'GLM 4.7',                  brand: 'Z.AI'      },
   { id: 'openai/gpt-5-nano',                         tier: 'STANDARD', label: 'GPT-5 Nano',               brand: 'OpenAI'    },
   // Cheap, top-ranked agentic coders (verified live; cost ~$0.1-0.3/M).
   { id: 'xiaomi/mimo-v2.5',                          tier: 'STANDARD', label: 'MiMo-V2.5 (Programming #1)', brand: 'Xiaomi'  },
@@ -66,8 +66,8 @@ const CATALOG: ReadonlyArray<VendorModelEntry> = [
   { id: 'openai/o4-mini',                            tier: 'PREMIUM', label: 'o4-mini (reasoning)',   brand: 'OpenAI'    },
   { id: 'google/gemini-2.5-pro',                     tier: 'PREMIUM', label: 'Gemini 2.5 Pro',        brand: 'Google'    },
   { id: 'qwen/qwen3.7-plus',                         tier: 'PREMIUM', label: 'Qwen3.7 Plus (agentic + vision)', brand: 'Qwen' },
-  { id: 'x-ai/grok-3-mini',                          tier: 'PREMIUM', label: 'Grok 3 Mini',           brand: 'xAI'       },
-  { id: 'alibaba/qwen3.5-397b-a17b',                 tier: 'PREMIUM', label: 'Qwen 3.5 397B (MoE)',   brand: 'Alibaba'   },
+  { id: 'x-ai/grok-4.20',                            tier: 'PREMIUM', label: 'Grok 4.20',             brand: 'xAI'       },
+  { id: 'qwen/qwen3.5-397b-a17b',                    tier: 'PREMIUM', label: 'Qwen 3.5 397B (MoE)',   brand: 'Alibaba'   },
 
   // NOTE: `google/gemini-2.5-flash-lite` is part of the vendor-diverse premium
   // fallback chain (see `PREMIUM_FALLBACK_MODELS` in LlmProxyService) and is

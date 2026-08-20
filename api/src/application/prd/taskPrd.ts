@@ -85,6 +85,58 @@ export function appendPrdRevision(
   return `${currentPrd.trimEnd()}\n\n---\n\n${block}`;
 }
 
+/** A PRD's own section headings are `## ` (see {@link scaffoldPrdSections}); a signed
+ *  revision block is `### ` under a `---` rule. Both are boundaries for a section edit. */
+const PRD_SECTION_HEADING = /^##\s+(.+?)\s*$/;
+
+/** The `## ` headings a PRD body carries, in document order. Pure. */
+export function listPrdSections(prd: string): string[] {
+  const out: string[] = [];
+  for (const line of prd.split(/\r?\n/)) {
+    const m = PRD_SECTION_HEADING.exec(line);
+    if (m?.[1]) out.push(m[1].trim());
+  }
+  return out;
+}
+
+/**
+ * Replace the BODY of one `## <heading>` section, leaving the heading and the rest of
+ * the document untouched. Pure → unit-testable, and deliberately NOT a fuzzy match: an
+ * unknown heading returns the headings that exist rather than guessing which section
+ * the caller meant, because guessing here silently overwrites the wrong requirement.
+ *
+ * The section ends at the next `#`/`##` heading OR the next `---` rule — the rule
+ * matters, because {@link appendPrdRevision} parks the signed revision blocks after one.
+ * Without that boundary, editing the LAST `##` section would swallow every revision
+ * signature on the document.
+ */
+export function replacePrdSection(
+  prd: string,
+  heading: string,
+  body: string,
+): { ok: true; prd: string; section: string } | { ok: false; sections: string[] } {
+  const want = heading.trim().replace(/^#+\s*/, '').toLowerCase();
+  const lines = prd.split(/\r?\n/);
+  let start = -1;
+  let canonical = '';
+  for (let i = 0; i < lines.length; i++) {
+    const m = PRD_SECTION_HEADING.exec(lines[i] ?? '');
+    const name = m?.[1]?.trim();
+    if (name && name.toLowerCase() === want) { start = i; canonical = name; break; }
+  }
+  if (start < 0) return { ok: false, sections: listPrdSections(prd) };
+
+  let end = lines.length;
+  for (let i = start + 1; i < lines.length; i++) {
+    const line = lines[i] ?? '';
+    if (/^#{1,2}\s/.test(line) || /^---\s*$/.test(line)) { end = i; break; }
+  }
+  const tail = lines.slice(end);
+  while (tail.length && !(tail[0] ?? '').trim()) tail.shift();
+  const next = [...lines.slice(0, start + 1), '', body.trim(), ...(tail.length ? ['', ...tail] : [])];
+  return { ok: true, prd: next.join('\n').trimEnd(), section: canonical };
+}
+
 /** Resolve the task's canonical PRD: the primary link, else the most recent. Null if none. */
 export async function findTaskPrimarySpec(
   db: Db,
@@ -251,4 +303,56 @@ export async function appendTaskPrdRevision(
     await linkSpecToTask(db, { taskId: args.taskId, specId, tenantId: args.tenantId, isPrimary: true });
   }
   return { specId, prd };
+}
+
+/** Why a section edit could not be applied. Typed so the tool can tell the model what
+ *  to do next — retry a real heading, or append instead of editing. */
+export type EditPrdSectionFailure = 'no_prd' | 'section_not_found' | 'persist_failed';
+
+export type EditPrdSectionResult =
+  | { ok: true; specId: string; prd: string; section: string }
+  | { ok: false; reason: EditPrdSectionFailure; sections?: string[] };
+
+/**
+ * Rewrite ONE `## ` section of a task's PRD and persist it — the correcting twin of
+ * {@link appendTaskPrdRevision}. Pure string surgery lives in {@link replacePrdSection};
+ * this owns the DB read/write, so `specs` still has exactly ONE writer for a task PRD.
+ *
+ * Deliberately refuses to CREATE a PRD (unlike the append path, which records a
+ * directive that arrived before any draft): a section edit says "this part of the spec
+ * is wrong", which is meaningless against a spec that does not exist. The run's PRD-first
+ * prep is what creates one. Never throws.
+ */
+export async function editTaskPrdSection(
+  db: Db,
+  args: {
+    taskId: number;
+    tenantId: number;
+    agentLabel: string;
+    heading: string;
+    body: string;
+    isoTimestamp: string;
+  },
+): Promise<EditPrdSectionResult> {
+  const existing = await findTaskPrimarySpec(db, args.taskId);
+  const current = existing?.prd?.trim();
+  if (!existing?.id || !current) return { ok: false, reason: 'no_prd' };
+
+  // Sign the rewritten section in place. A later edit replaces the whole body, so the
+  // signature is refreshed rather than accumulated — the section always says who last
+  // owned it, which is the "each agent signs its change" contract applied to a rewrite.
+  const signed = `${args.body.trim()}\n\n_— rewritten by ${args.agentLabel} · ${args.isoTimestamp}_`;
+  const edit = replacePrdSection(current, args.heading, signed);
+  if (!edit.ok) return { ok: false, reason: 'section_not_found', sections: edit.sections };
+
+  try {
+    await db
+      .update(specs)
+      .set({ prd: edit.prd, updatedAt: new Date() })
+      .where(scopedToTenant(specs, args.tenantId, eq(specs.id, existing.id)));
+  } catch (error) {
+    reportCaughtError(error, { source: 'application/prd/taskPrd.ts', operation: 'editTaskPrdSection' });
+    return { ok: false, reason: 'persist_failed' };
+  }
+  return { ok: true, specId: existing.id, prd: edit.prd, section: edit.section };
 }

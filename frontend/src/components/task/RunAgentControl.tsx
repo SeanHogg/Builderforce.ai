@@ -18,6 +18,7 @@ import { useLlmModels } from '@/lib/useLlmModels';
 import { ModelSelect } from '@/components/llm/ModelSelect';
 import { RoleGate } from '@/components/RoleGate';
 import { useTaskRunner, defaultRunTarget } from './useTaskRunner';
+import { TicketRepoSet } from './TicketRepoSet';
 
 /**
  * Run-with-agent control — replaces the old "Send to AgentHost" button. A button
@@ -176,6 +177,10 @@ export function RunAgentControl({ task, agentHosts, onRan, onAwaitingApproval }:
         </RoleGate>
       </div>
       {error && <div style={{ fontSize: 12, color: 'var(--danger)', marginTop: 6 }}>{error}</div>}
+      {/* MULTI-REPO SPANNING: the picker above pins the ONE repo a run resolves to;
+          this binds the SET a run may span (branch + PR per repo that gets code).
+          Self-hiding when the project has fewer than two repos. */}
+      <TicketRepoSet taskId={task.id} projectId={task.projectId} />
       {repoStatus && (!repoStatus.bound || !repoStatus.hasCredential) && (
         <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 8, padding: '8px 10px', background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)' }}>
           <span style={{ color: 'var(--warning, var(--warning))', fontWeight: 600 }}><Icon source="⚠" size="1em" /> {t('noWritableRepo')} </span>

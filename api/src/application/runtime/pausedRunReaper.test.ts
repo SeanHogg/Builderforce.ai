@@ -22,6 +22,8 @@ interface Captured {
   pausedReason: string | null;
   /** tool_audit_events rows: [executionId, toolName]. */
   events: Array<{ executionId: number; toolName: string }>;
+  /** execution ids whose resume record the sweep cleaned up. */
+  clearedPauseState: number[];
 }
 
 let pausedRows: Array<Record<string, unknown>> = [];
@@ -38,6 +40,8 @@ function leaf<T>(rows: T[]) {
     returning: () => Promise.resolve(rows),
     then: <R1, R2>(ok?: ((v: T[]) => R1 | PromiseLike<R1>) | null, err?: ((e: unknown) => R2 | PromiseLike<R2>) | null) =>
       Promise.resolve(rows).then(ok, err),
+    // Best-effort writers attach `.catch(...)` directly to the builder.
+    catch: <R>(err?: ((e: unknown) => R | PromiseLike<R>) | null) => Promise.resolve(rows).catch(err),
   };
 }
 
@@ -63,6 +67,13 @@ function fakeDb() {
         },
       }),
     }),
+    // Resume-record cleanup for the questions nobody answered.
+    delete: () => ({
+      where: (cond: unknown) => {
+        for (const p of paramsOf(cond)) captured.clearedPauseState.push(Number(p));
+        return leaf<Record<string, unknown>>([]);
+      },
+    }),
     // Telemetry mirror.
     insert: () => ({
       values: (v: Record<string, unknown>) => {
@@ -85,7 +96,7 @@ const NOW = Date.parse('2026-07-19T12:00:00.000Z');
 
 beforeEach(() => {
   pausedRows = [];
-  captured = { pausedCutoff: null, pausedReason: null, events: [] };
+  captured = { pausedCutoff: null, pausedReason: null, events: [], clearedPauseState: [] };
 });
 
 describe('reapStaleExecutions — abandoned ask_human pause', () => {
@@ -98,6 +109,14 @@ describe('reapStaleExecutions — abandoned ask_human pause', () => {
     // Not conflated with the running/queued counters — a paused timeout is its own class.
     expect(res.failedRunning).toBe(0);
     expect(res.failedQueued).toBe(0);
+  });
+
+  it('drops the resume record of a question nobody answered (a terminal run is never redispatched)', async () => {
+    pausedRows = [{ id: 77, tenant_id: 1, agent_host_id: null, payload: null, error_message: PAUSED_ORPHAN_REASON }];
+
+    await reapStaleExecutions(env, NOW);
+
+    expect(captured.clearedPauseState).toEqual([77]);
   });
 
   it('stamps the actionable paused reason (not a crash/timeout message)', async () => {

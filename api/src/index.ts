@@ -43,8 +43,6 @@ import { createProjectRoutes }     from './presentation/routes/projectRoutes';
 import { createTaskRoutes } from './presentation/routes/taskRoutes';
 import { createManagerRoutes } from './presentation/routes/managerRoutes';
 import { createVscodeRoutes } from './presentation/routes/vscodeRoutes';
-import { setExecutionBoardSink }   from './application/runtime/executionEvents';
-import { makeExecutionBoardSink }  from './application/runtime/executionBoardBroadcast';
 import { createMemberRoutes }      from './presentation/routes/memberRoutes';
 import { createTenantRoutes }      from './presentation/routes/tenantRoutes';
 import { createSegmentRoutes }     from './presentation/routes/segmentRoutes';
@@ -225,6 +223,7 @@ import { createStudioRoutes }          from './presentation/routes/studioWeightR
 import { createEvermindModelRoutes }   from './presentation/routes/evermindModelRoutes';
 import { createProjectEvermindRoutes, createProjectEvermindAgentRoutes }  from './presentation/routes/projectEvermindRoutes';
 import { createProjectFactsRoutes, createProjectFactsAgentRoutes }  from './presentation/routes/projectFactsRoutes';
+import { createRunContextRoutes }    from './presentation/routes/runContextRoutes';
 // Cloud Agent Boards — agentic swimlanes, external board sync, PRD versioning, multi-repo PRs
 import { createBoardRoutes }           from './presentation/routes/boardRoutes';
 import { createKanbanRoutes }          from './presentation/routes/kanbanRoutes';
@@ -368,11 +367,8 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   const agentHostService     = new AgentHostService(agentHostRepo);
   const brainService    = new BrainService(db);
 
-  // Wire execution lifecycle events to the project's live board room so a run's
-  // progress (pending→running→done) pushes to every board/calendar/list viewer,
-  // not just whoever opened the run's drawer. Idempotent per isolate (last writer
-  // wins with an equivalent closure); needs env+db, which the events hub lacks.
-  setExecutionBoardSink(makeExecutionBoardSink(env, db));
+  // (Execution live-event sinks are registered by buildRuntimeService above — the
+  // factory EVERY execution-driving entry point goes through, not just this one.)
 
   // --- Presentation ---
   const app = new Hono<HonoEnv>();
@@ -953,6 +949,12 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/agent/projects', createProjectEvermindAgentRoutes(db));
   app.route('/api/projects',  createProjectFactsRoutes(db));
   app.route('/api/agent/projects', createProjectFactsAgentRoutes(db));
+  // The ONE run-context source every prompt-assembly surface consumes (the cloud engine
+  // in-process; VS Code and the on-prem runner over HTTP). ONE router on both paths —
+  // `hostOrTenantAuth` already accepts either a tenant JWT or an agent-host API key, so
+  // the two callers' path conventions do not need two handlers.
+  app.route('/api/projects',  createRunContextRoutes(db));
+  app.route('/api/agent/projects', createRunContextRoutes(db));
   app.route('/api/studio',    createStudioRoutes());
 
   // Owner-side control of a published site: custom domain, form collections and

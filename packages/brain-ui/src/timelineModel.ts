@@ -9,7 +9,7 @@
  * verbatim across surfaces.
  */
 
-import { isStepMessage, parseStepMessage, stepSig, type BrainMessage, type BrainTraceEvent, type ChatInputAttachment, type EvermindRecallItem, type EvermindLearnTarget, type PersistedStep } from '@seanhogg/builderforce-brain-embedded';
+import { isStepMessage, parseChatActivity, parseStepMessage, stepSig, type BrainMessage, type ChatActivity, type BrainTraceEvent, type ChatInputAttachment, type EvermindRecallItem, type EvermindLearnTarget, type PersistedStep } from '@seanhogg/builderforce-brain-embedded';
 
 export interface TimelineImage {
   url: string;
@@ -28,6 +28,10 @@ function isLearnSkipReason(v: unknown): v is BrainLearnSkipReason {
 export type TimelineNode =
   | { key: string; kind: 'user'; ts: number; order: number; message: BrainMessage; text: string; images: TimelineImage[] }
   | { key: string; kind: 'assistant'; ts: number; order: number; message: BrainMessage; text: string }
+  // A run milestone / agent dispatch: the RUNTIME narrating itself, not the model
+  // talking. Carries the structured facts so the renderer composes the sentence in the
+  // reader's language rather than showing the server's English one.
+  | { key: string; kind: 'activity'; ts: number; order: number; message: BrainMessage; activity: ChatActivity; fallbackText: string }
   | { key: string; kind: 'thinking'; ts: number; order: number; durationMs?: number; step: number }
   | { key: string; kind: 'tool'; ts: number; order: number; label: string; args: unknown; result: unknown; isError: boolean; durationMs?: number }
   | { key: string; kind: 'error'; ts: number; order: number; label: string; message: string }
@@ -51,6 +55,9 @@ const ORDER: Record<TimelineNode['kind'], number> = {
   recall: 1,
   thinking: 2,
   assistant: 3,
+  // An activity line reports what happened AFTER the turn that triggered it, so it sorts
+  // with the tool steps rather than ahead of the narration.
+  activity: 4,
   tool: 4,
   learn: 5,
   reconcile: 6,
@@ -181,6 +188,23 @@ export function buildSettledTimeline(messages: BrainMessage[], trace: BrainTrace
       const node = stepNode(parsed.step, parseTs(parsed.tsIso, ts), `msg-${message.id}`);
       if (node) nodes.push(node);
     } else {
+      // A run milestone / dispatch is an ACTIVITY line, never an assistant bubble — the
+      // runtime said it, not the model, and the reader needs to be able to tell.
+      const activity = parseChatActivity(message);
+      if (activity) {
+        nodes.push({
+          key: `msg-${message.id}`,
+          kind: 'activity',
+          ts,
+          order: ORDER.activity,
+          message,
+          activity,
+          // Pre-structured rows carry only the server's English sentence; showing it
+          // beats showing nothing, so it rides along as the fallback.
+          fallbackText: message.content,
+        });
+        return;
+      }
       nodes.push({
         key: `msg-${message.id}`,
         kind: 'assistant',

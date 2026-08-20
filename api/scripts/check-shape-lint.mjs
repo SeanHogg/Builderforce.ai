@@ -10,12 +10,13 @@
  * Across the three schemas being consolidated, 564 of 1,206 tables are one of 25
  * shapes re-modelled once per feature: 70 event/log/history tables, 59 balance and
  * transaction tables, 58 per-vendor connection tables, 43 membership tables, 33
- * annotation tables. This repo has 54 names matching a kernel shape today.
+ * annotation tables. This repo has 65 names matching a kernel shape today, after 31 of the 96 were
+ * adjudicated below as genuinely different nouns (2026-08-19).
  *
  * WHAT A FINDING MEANS. Not "this table is wrong" — a matching name is a question,
  * not a verdict. `chat_messages` matching the `message` shape is correct, it IS
- * the message table. What the baseline forces is that each of the 54 has been
- * LOOKED at once, and that the 55th cannot arrive unnoticed. Entries that are
+ * the message table. What the baseline forces is that each of the 65 has been
+ * LOOKED at once, and that the 66th cannot arrive unnoticed. Entries that are
  * legitimate stay in the baseline with a comment; entries that are duplication get
  * migrated and trimmed out.
  *
@@ -188,6 +189,253 @@ const ADJUDICATED = new Map([
       'mechanics, and those already live in exactly one place — `shareToken.ts`, whose ' +
       '`shareGrantState()` is the single revoked/expired predicate this table and the ' +
       'other three all resolve through.',
+  ],
+  [
+    'activity_events',
+      'an ingested THIRD-PARTY event, not a platform audit entry. Every row arrives from a ' +
+      'provider (`provider` + `externalId` = a commit SHA or a PR number) and carries the ' +
+      'quantitative payload DevEx metrics are computed from — `linesAdded`, `filesChanged`, ' +
+      '`cycleTimeHours`. `activity_log` records what a principal of THIS platform did; nobody ' +
+      'here did any of this. It also holds `mergedFromContributorId`, a reversibility marker ' +
+      'that lets a contributor un-merge re-point exactly its own rows — an append-only audit ' +
+      'log has no such operation by construction.',
+  ],
+  [
+    'agent_dispatches',
+      'a unit of agent EXECUTION whose name happened to match the `deliveries` suffix list. ' +
+      'Nothing is delivered: it carries a model, a runtime tier, an input, an output, a ' +
+      '`dependsOn` fan-in and a `stageSeq` the swimlane coordinator advances on. It is nearer ' +
+      'the `runs` primitive than `deliveries`, and it is not that either — a stage is the SET ' +
+      'of dispatches sharing (ticketRun, swimlane, stageSeq), which is a grain `runs` cannot ' +
+      'express without a second table to group them.',
+  ],
+  [
+    'agent_host_directory_files',
+      'a synced directory MIRROR, not a stored artifact. Identity is (agentHost, directory, ' +
+      'relPath) with a `contentHash` — the row is replaced in place when the file on the host ' +
+      'changes, and deleting it means the path no longer exists on that host. An `artifacts` ' +
+      'row is immutable content with its own identity that outlives the place it came from; ' +
+      'these rows exist only as the current state of somebody else\'s disk.',
+  ],
+  [
+    'business_value_configs',
+      'a named CATALOGUE, not a settings bag. Each row is a value type an operator defined, ' +
+      'with a display mode and a reward multiplier, and tickets reference it by id — so rows ' +
+      'are created, renamed and deactivated like any domain entity. `settings` is a key/value ' +
+      'store scoped to an owner; a row of it is never referenced by another table.',
+  ],
+  [
+    'compliance_events',
+      'an OBLIGATION, not an event. It has a `dueDate`, an `assignedTo`, an `isRecurring` ' +
+      'cadence and a `completedAt` — a thing that has not happened yet and that somebody ' +
+      'owes. `activity_log` is append-only and records the past. The test is that this row is ' +
+      'created before its subject occurs and is then updated when it does.',
+  ],
+  [
+    'creation_session_connections',
+      'an EDGE between two canvas objects (`sourceObjectId` → `targetObjectId` with a kind ' +
+      'and a label), not a connection to a vendor. It shares one word with the `connection` ' +
+      'primitive and not one column: there is no provider, no credential, no token and no ' +
+      'sync state, because nothing outside the canvas is on the other end.',
+  ],
+  [
+    'creation_session_events',
+      'the ORDERED OPERATION LOG that drives collaborative replay, not an audit trail. Each ' +
+      'row carries a monotonic `revision` and an `idempotencyKey`, and a client that ' +
+      'reconnects replays them from its last known revision to rebuild the graph — so the ' +
+      'rows ARE the document\'s state, and deleting old ones changes what the canvas is. ' +
+      '`activity_log` is a record OF state changes that can be truncated without changing ' +
+      'anything.',
+  ],
+  [
+    'creation_session_members',
+      'realtime PRESENCE, not membership. `viewport`, `cursor`, `selection`, `typing` and ' +
+      '`followingUserId` are written many times a second and are meaningless the moment the ' +
+      'socket drops; `lastSeenRevision` is the replay cursor above. `memberships` answers ' +
+      '"may this principal act on this object", which is a durable authorisation fact. ' +
+      'Putting a cursor position on the kernel membership row would make every permission ' +
+      'read a write target.',
+  ],
+  [
+    'cron_jobs',
+      'a SCHEDULE, not an execution. `schedule`, `enabled` and `nextRunAt` describe work that ' +
+      'is going to happen repeatedly; `lastRunAt`/`lastStatus` are a cache of the most recent ' +
+      'one. The `runs` primitive models ONE attempt with an input and an output. A cron job ' +
+      'produces runs; it is not one, the same way a recurring meeting is not a meeting.',
+  ],
+  [
+    'demo_events',
+      'written BEFORE any account exists — keyed by an opaque `visitorId`, with no tenant and ' +
+      'no user. `activity_log` is `tenant_id NOT NULL` and is scoped to a principal, so there ' +
+      'is nothing to file this under. Same pre-tenant argument the `marketing_sessions` ' +
+      'retraction rests on (PRD 20 §3.3); the two tables are the same visitor\'s trail.',
+  ],
+  [
+    'equity_events',
+      'the append-only OWNERSHIP LEDGER — the only place a share quantity lives, and the cap ' +
+      'table is the fold over it. Seven verbs with declared debit and credit legs, cut on ' +
+      '`effectiveAt` rather than `createdAt` so a March issuance typed in May still answers ' +
+      '"what did we own in March". That is `ledger_entries`\' shape, not `activity_log`\'s, and ' +
+      'it is not `ledger_entries` either: those legs are share classes and holders, not a ' +
+      'denomination and an account.',
+  ],
+  [
+    'error_events',
+      'high-volume ingest keyed to an `errorGroups` row, retention-bounded and written by an ' +
+      'adapter rather than by a principal. It carries no actor at all — `userKey` is the ' +
+      'AFFECTED end user, not the one who acted — and the interesting operations on it are ' +
+      '"count by release" and "drop everything older than N days". `activity_log` is a ' +
+      'tenant\'s own audit record and must not be pruned.',
+  ],
+  [
+    'headcount_events',
+      'an EFFECTIVE-DATED employment change: `effectiveOn` is a date the fold cuts on and is ' +
+      'deliberately not `createdAt`, so a leave recorded a week late still lands in the right ' +
+      'month of the attrition rate. `activity_log` has one timestamp and it is when the write ' +
+      'happened, which is the wrong number for every HR question this table answers.',
+  ],
+  [
+    'ide_training_logs',
+      'a training-curve DATAPOINT — (job, epoch, step, loss) — that a chart plots and that ' +
+      'the trainer emits thousands of per job. It is a numeric series, not a record of ' +
+      'something a principal did, and its access pattern is "give me the loss curve for this ' +
+      'job" rather than "what happened to this object".',
+  ],
+  [
+    'legal_documents',
+      'the PLATFORM\'s own legal instruments — Terms of Use, Privacy Policy — versioned ' +
+      'globally with one `isActive` row per `documentType` that every signup is bound to. ' +
+      'There is no tenant, no owner object and no author beyond a superadmin, so `artifacts` ' +
+      '(tenant-scoped, owned, made by somebody) cannot hold it. The tenant-side counterpart ' +
+      'is `legal_document_files`, adjudicated above, which is why THAT one carries the ' +
+      'suffix.',
+  ],
+  [
+    'lens_snapshots',
+      'a periodic MATERIALISED ROLLUP, not a step in an edit history. The cron sweep upserts ' +
+      'one row per (tenant, lens, period) from data that already exists elsewhere; nothing ' +
+      'was edited, and re-running the sweep legitimately overwrites the row. `revisions` is ' +
+      'keyed by a monotonic history number under one object and must never be overwritten, ' +
+      'because the history IS the value.',
+  ],
+  [
+    'llm_action_ratings',
+      'labelled ROUTING SIGNAL, not a user\'s comment on an object. Grain is one row per rater ' +
+      'per rated thing, keyed by (surface, subject, resolvedModel), and the reader is the ' +
+      'model router — the sibling fact to `run_model_outcomes`, which learns from merges and ' +
+      'CI while this learns from thumbs on turns that have no run and no PR. An `annotations` ' +
+      'row is content a person authored for other people to read; nobody reads these.',
+  ],
+  [
+    'marketing_audience_members',
+      'an EMAIL-GRAIN contact, not a principal↔object membership. The member may never become ' +
+      'a user: the row is an address with a phone, a subscription status and free-form ' +
+      '`attributes` a campaign segments on. `memberships` joins a principal that exists to an ' +
+      'object that exists, and answers an authorisation question; this answers "who receives ' +
+      'this send".',
+  ],
+  [
+    'newsletter_subscribers',
+      'the same argument as `marketing_audience_members`, one product earlier: `userId` is ' +
+      'nullable and most rows never have one, because a subscriber is an address that ' +
+      'consented. It carries its own lifecycle — `subscribedAt`, `unsubscribedAt`, ' +
+      '`unsubscribeReason` — which is consent state, not access.',
+  ],
+  [
+    'pii_data_assets',
+      'a DATA-INVENTORY register entry: what personal data the company holds, its ' +
+      'classification, where it is stored, its retention period and its legal basis. There is ' +
+      'no file. It is the GDPR Article 30 record, created by a compliance officer describing ' +
+      'systems, and an `artifacts` row cannot exist without content to point at.',
+  ],
+  [
+    'qa_journey_events',
+      'captured INPUT to test generation, not a record of the past. A journey is replayed ' +
+      'step by step (`seq`, `selector`, `value`) to synthesise a Playwright spec, so the rows ' +
+      'are consumed as a program rather than read as history, and they are pruned once the ' +
+      'spec is generated. `activity_log` rows are never executed and never pruned.',
+  ],
+  [
+    'reference_shares',
+      'grants a chosen SUBSET — `referenceIds` is a set, immutable once issued, because ' +
+      'widening an existing token would silently extend access a holder already has. ' +
+      '`share_links` grants one object-registry `objects.id`; expressing "these four ' +
+      'references and no others" would need either a link row per reference (four tokens ' +
+      'where the product issues one) or a set column on the kernel primitive that only this ' +
+      'caller uses. The credential mechanics are already shared through `shareToken.ts`, ' +
+      'which is the part that must not be duplicated.',
+  ],
+  [
+    'release_notes',
+      'a PUBLISHED PRODUCT UPDATE — global, authored by the vendor, with a stage, a category, ' +
+      'an optional beta opt-in and its own terms. It annotates nothing: there is no owner ' +
+      'object, and the audience is everyone who uses the platform. `annotations` hangs off an ' +
+      'object and is scoped to the tenant that owns it.',
+  ],
+  [
+    'security_audits',
+      'a scan RUN with a verdict, not an audit trail. It goes running → complete|failed, ' +
+      'carries a score and rollups by severity and Trust Service Criterion, and each finding ' +
+      'it produces becomes a SECURITY task pointing back at it. The `_audits` suffix names ' +
+      'the subject matter, not the shape — the shape is `runs`, and it stays its own table ' +
+      'because the rollup columns are what the Security seat reads and they would be ' +
+      'unqueryable inside a kernel `output` blob.',
+  ],
+  [
+    'service_assets',
+      'physical EQUIPMENT — an asset tag, a serial number, a site address, a criticality, a ' +
+      'meter reading and a next-service date. The `_assets` suffix collides with the ' +
+      '`artifacts` shape and shares nothing else: there is no content, no rendition and no ' +
+      'storage key, because the thing is a chiller in a plant room.',
+  ],
+  [
+    'sso_connections',
+      'a FEDERATION CONFIG that gates login, not an outbound credential. It holds an issuer, ' +
+      'a JWKS url, a client secret used only in the authorisation code exchange, plus ' +
+      '`jitProvisioning` and `defaultRole` — policy about who may become a member. It is read ' +
+      'BEFORE a session exists, by the sign-in path, once per tenant. The `connections` ' +
+      'primitive holds a per-user token the platform later calls somebody else\'s API with; ' +
+      'the direction of trust is opposite.',
+  ],
+  [
+    'ticket_audits',
+      'a COMPUTED VERDICT, upserted one row per task — `coverage`, `requiredCount`, ' +
+      '`satisfiedCount`, `missing`, `computedAt`. It is recomputed and overwritten, never ' +
+      'appended, which is the exact inverse of `activity_log`\'s invariant. It is a ' +
+      'materialised projection of `ticket_participants`, kept as a table because the board ' +
+      'renders the flag chip for every visible ticket in one read.',
+  ],
+  [
+    'ticket_participants',
+      'a role OBLIGATION with state, not a membership. Each row is a required responsibility ' +
+      'at a stage, with a `state`, a `signoffId`, an `evidence` payload, a `quorumGroup` and ' +
+      'an optional child task — the row is what the role-gated lifecycle advances on and what ' +
+      'blocks Done. `memberships` answers "may this principal act"; this answers "has this ' +
+      'role discharged its duty on this ticket, and with what proof".',
+  ],
+  [
+    'ticket_runs',
+      'a per-ticket STATE-MACHINE CURSOR sitting above the workflow engine, not an execution ' +
+      'attempt. There is no attempt number, no input, no output and no retry: there is one ' +
+      'row per ticket, long-lived, whose `lifecycle` and `currentSwimlaneId` are updated in ' +
+      'place as the board advances it, and whose `stageHistory` records where it has been. ' +
+      'The executions it causes are `agent_dispatches`; the kernel `runs` shape describes ' +
+      'those, not this.',
+  ],
+  [
+    'usage_snapshots',
+      'a telemetry SAMPLE at a timestamp — token counts and context-window occupancy read off ' +
+      'a live session, emitted on a timer. Nothing was revised: two consecutive rows for the ' +
+      'same session are two observations, not two versions, and the series is what the ' +
+      'context-pressure chart plots. `revisions` requires an object whose content changed.',
+  ],
+  [
+    'vscode_connections',
+      'device PRESENCE, not a stored credential. `machineName`, `extensionVersion`, ' +
+      '`connectedAt` and `lastSeenAt` say which editor is currently attached and on what ' +
+      'build; there is no token, no provider and no scope, because the extension ' +
+      'authenticates as the user rather than holding a secret of its own. The `connections` ' +
+      'primitive exists to hold that secret.',
   ],
 ]);
 

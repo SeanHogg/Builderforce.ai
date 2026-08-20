@@ -11,14 +11,13 @@ import {
   codingModelsForPlan,
   codingDefaultForPlan,
   pickCloudModel,
-  rankModelsForAction,
   byoAutoSeedModels,
   isDispatchableSeed,
   explicitModelPreemptsByo,
   canonicalModelId,
   SUPERSEDED_MODEL_IDS,
-  type ActionModelRankStat,
 } from './LlmProxyService';
+import { rankModelsForAction, type ActionModelRankStat } from '@builderforce/learned-routing';
 import { CODING_BACKSTOP_MODELS } from './modelPool';
 import { parseModel, withDefaultModel } from '../runtime/cloudDispatch';
 import { catalogEntry, vendorForModel, autoRoutableModelsByTier, modelsByTier, tierForModel } from './vendors';
@@ -47,13 +46,19 @@ describe('CODING_MODEL_POOL', () => {
     expect(CODING_MODEL_POOL).toContain(CODING_DEFAULT_MODEL);
   });
 
-  it('uses the confirmed-stable NVIDIA MiniMax generation, not the currently-flaky M3', () => {
-    // Rolled back 2026-08-17: M3's NIM endpoint 404s/hangs for many callers, M2.7 is
-    // confirmed live — see the CODING_MODEL_POOL comment in modelPool.ts.
-    expect(CODING_DEFAULT_MODEL).toBe('minimaxai/minimax-m2.7');
-    expect(FREE_MODEL_POOL).toContain('minimaxai/minimax-m2.7');
-    expect(FREE_MODEL_POOL).not.toContain('minimaxai/minimax-m3');
+  it('routes to NO MiniMax generation — M2.7 is retired and M3 is the measured-flaky one', () => {
+    // Rolled back 2026-08-17: M3's NIM endpoint 404s/hangs for many callers, so the
+    // pool was pinned to M2.7. NIM has since retired M2.7 outright (caught by
+    // `modelDrift.test.ts` against the live `/models` snapshot), and its only
+    // remaining MiniMax id is the generation we already measured as unreliable.
+    // Neither is routable, so the family is absent from the catalog entirely —
+    // see the CODING_MODEL_POOL comment in modelPool.ts. Reinstate only with
+    // fresh evidence, and this assertion is what will tell you to update.
+    expect(catalogEntry('minimaxai/minimax-m2.7')).toBeNull();
     expect(catalogEntry('minimaxai/minimax-m3')).toBeNull();
+    expect(FREE_MODEL_POOL).not.toContain('minimaxai/minimax-m2.7');
+    expect(FREE_MODEL_POOL).not.toContain('minimaxai/minimax-m3');
+    expect(CODING_DEFAULT_MODEL).toBe('nvidia/nemotron-3-ultra-550b-a55b:free');
   });
 
   it('isKnownModel accepts catalog ids and rejects garbage', () => {

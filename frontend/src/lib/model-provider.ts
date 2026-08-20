@@ -512,7 +512,10 @@ export class ExternalLLMProvider implements ModelProvider {
 interface PromptApiSession {
   prompt(input: string, opts?: { signal?: AbortSignal }): Promise<string>;
   promptStreaming(input: string, opts?: { signal?: AbortSignal }): ReadableStream<string>;
-  clone(): Promise<PromptApiSession>;
+  /** Forks the conversation, PRESERVING the original session's initial prompts —
+   *  it takes only `{ signal }`, so it can never install a different system
+   *  prompt. Changing the system prompt therefore requires a fresh `create()`. */
+  clone(opts?: { signal?: AbortSignal }): Promise<PromptApiSession>;
   destroy(): void;
   readonly inputUsage?: number;
   readonly inputQuota?: number;
@@ -548,10 +551,18 @@ export function hasPromptApi(): boolean {
 }
 
 export interface PromptApiProviderConfig {
-  /** System instruction applied to every session (the article's "You are a concise…"). */
+  /** Default system instruction, used for any turn that doesn't carry its own
+   *  `ModelContext.systemPrompt` (the article's "You are a concise…"). */
   systemPrompt?: string;
   temperature?: number;
   topK?: number;
+}
+
+/** Canonical form of a system prompt: whitespace-only and missing both collapse
+ *  to `undefined`, so "no system prompt" compares equal however it was spelled. */
+function normaliseSystemPrompt(prompt: string | undefined): string | undefined {
+  const trimmed = prompt?.trim();
+  return trimmed ? trimmed : undefined;
 }
 
 export class PromptApiModelProvider implements ModelProvider {
@@ -560,6 +571,12 @@ export class PromptApiModelProvider implements ModelProvider {
   readonly isLocal = true;
 
   private session: PromptApiSession | null = null;
+  /** The (normalised) system prompt the LIVE session was created with — the
+   *  baseline every turn is compared against to decide whether to recreate. */
+  private sessionSystemPrompt: string | undefined = undefined;
+  /** Serialises session creation so two concurrent turns can't each build a
+   *  session and leak one of them. */
+  private sessionLock: Promise<unknown> = Promise.resolve();
   private _ready = false;
   private _failureReason: string | null = null;
   private readonly config: PromptApiProviderConfig;
@@ -572,27 +589,8 @@ export class PromptApiModelProvider implements ModelProvider {
     if (this._ready) return;
     this._failureReason = null;
 
-    const factory = promptApiFactory();
-    if (!factory) {
-      this._failureReason = 'Chrome Prompt API (built-in AI) is not available in this browser';
-      return;
-    }
     try {
-      const status = await factory.availability();
-      if (status === 'unavailable') {
-        this._failureReason = 'Built-in model is unavailable on this device';
-        return;
-      }
-      // 'downloadable'/'downloading' still let create() proceed — the browser
-      // fetches/awaits the model, surfacing progress via the monitor.
-      const initialPrompts = this.config.systemPrompt
-        ? [{ role: 'system' as const, content: this.config.systemPrompt }]
-        : undefined;
-      this.session = await factory.create({
-        temperature: this.config.temperature,
-        topK: this.config.topK,
-        initialPrompts,
-      });
+      await this.withSessionLock(() => this.installSession(normaliseSystemPrompt(this.config.systemPrompt)));
       this._ready = true;
     } catch (err) {
       this._failureReason = err instanceof Error ? err.message : String(err);
@@ -608,6 +606,12 @@ export class PromptApiModelProvider implements ModelProvider {
     return this._failureReason;
   }
 
+  /** The system prompt the live session currently carries — `undefined` when the
+   *  session has none (or there is no session). Exposed for diagnostics/tests. */
+  activeSystemPrompt(): string | undefined {
+    return this.session ? this.sessionSystemPrompt : undefined;
+  }
+
   /** Best-effort remaining context budget, so callers can proactively trim
    *  history before the session's fixed token quota is exhausted. */
   tokenBudget(): { used: number; quota: number } | null {
@@ -617,8 +621,9 @@ export class PromptApiModelProvider implements ModelProvider {
   }
 
   async generate(input: string, context?: ModelContext): Promise<string> {
-    if (!this.session) return `[Prompt API not ready${this._failureReason ? `: ${this._failureReason}` : ''}]`;
-    return this.session.prompt(this.buildInput(input, context));
+    const session = await this.sessionForTurn(context);
+    if (!session) return this.notReadyMessage();
+    return session.prompt(this.buildInput(input, context));
   }
 
   async stream(
@@ -626,12 +631,13 @@ export class PromptApiModelProvider implements ModelProvider {
     context?: ModelContext,
     onToken?: (token: string) => void,
   ): Promise<string> {
-    if (!this.session) {
-      const msg = `[Prompt API not ready${this._failureReason ? `: ${this._failureReason}` : ''}]`;
+    const session = await this.sessionForTurn(context);
+    if (!session) {
+      const msg = this.notReadyMessage();
       if (onToken) await wordStream(msg, onToken);
       return msg;
     }
-    const stream = this.session.promptStreaming(this.buildInput(input, context));
+    const stream = session.promptStreaming(this.buildInput(input, context));
     const reader = stream.getReader();
     let full = '';
     try {
@@ -654,14 +660,96 @@ export class PromptApiModelProvider implements ModelProvider {
   dispose(): void {
     this.session?.destroy();
     this.session = null;
+    this.sessionSystemPrompt = undefined;
     this._ready = false;
     this._failureReason = null;
   }
 
+  // ---------------------------------------------------------------------------
+  // Private helpers
+  // ---------------------------------------------------------------------------
+
+  private notReadyMessage(): string {
+    return `[Prompt API not ready${this._failureReason ? `: ${this._failureReason}` : ''}]`;
+  }
+
+  /**
+   * The session this turn must run on.
+   *
+   * `AgentRuntime.step` assembles a system prompt per turn (base instructions +
+   * live project context), but the Prompt API only accepts a system prompt at
+   * session creation — `clone()` copies the originating session's initial
+   * prompts and takes nothing but a `signal`, so it can never install a new one.
+   * So when the turn's effective system prompt differs from the baseline the
+   * live session was created with, the session is REPLACED; when it matches
+   * (the overwhelmingly common case) the live session is reused untouched and
+   * its conversational context survives.
+   *
+   * Returns null only when the provider has no session and never became ready,
+   * so callers keep emitting the existing not-ready message. A failed recreate
+   * throws instead of silently answering under a stale system prompt — the
+   * cascade then falls through to a tier that honours the prompt in full.
+   */
+  private async sessionForTurn(context?: ModelContext): Promise<PromptApiSession | null> {
+    const wanted = normaliseSystemPrompt(context?.systemPrompt ?? this.config.systemPrompt);
+    if (this.session && wanted === this.sessionSystemPrompt) return this.session;
+    if (!this.session) return null;
+    return this.withSessionLock(async () => {
+      // Re-check inside the lock: a concurrent turn may already have installed
+      // exactly the session this one wants.
+      if (this.session && wanted === this.sessionSystemPrompt) return this.session;
+      try {
+        return await this.installSession(wanted);
+      } catch (err) {
+        this._failureReason = err instanceof Error ? err.message : String(err);
+        throw err;
+      }
+    });
+  }
+
+  /**
+   * Create a session carrying `systemPrompt` and make it the live one, destroying
+   * the session it replaces. The outgoing session is destroyed only AFTER the
+   * replacement exists, so a failed create leaves the provider on its working
+   * session rather than tearing it down; on success nothing is leaked.
+   */
+  private async installSession(systemPrompt: string | undefined): Promise<PromptApiSession> {
+    const factory = promptApiFactory();
+    if (!factory) {
+      throw new Error('Chrome Prompt API (built-in AI) is not available in this browser');
+    }
+    const status = await factory.availability();
+    if (status === 'unavailable') {
+      throw new Error('Built-in model is unavailable on this device');
+    }
+    // 'downloadable'/'downloading' still let create() proceed — the browser
+    // fetches/awaits the model, surfacing progress via the monitor.
+    const next = await factory.create({
+      temperature: this.config.temperature,
+      topK: this.config.topK,
+      initialPrompts: systemPrompt ? [{ role: 'system' as const, content: systemPrompt }] : undefined,
+    });
+    const previous = this.session;
+    this.session = next;
+    this.sessionSystemPrompt = systemPrompt;
+    if (previous && previous !== next) previous.destroy();
+    return next;
+  }
+
+  /** Run `fn` after any in-flight session work, so creates never interleave. */
+  private withSessionLock<T>(fn: () => Promise<T>): Promise<T> {
+    const run = this.sessionLock.then(fn, fn);
+    this.sessionLock = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+
   private buildInput(input: string, context?: ModelContext): string {
     const parts: string[] = [];
-    // The system prompt is applied at session creation; here we fold in the
-    // per-turn memory/file context the same way the other providers do.
+    // The system prompt rides on the session (see sessionForTurn); here we fold
+    // in the per-turn memory/file context the same way the other providers do.
     if (context?.memoryContext) parts.push(`[Memory: ${context.memoryContext}]`);
     if (context?.fileContext) parts.push(`[File context]\n${context.fileContext}`);
     parts.push(input);

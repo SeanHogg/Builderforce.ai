@@ -25,9 +25,19 @@ import { authedFetch } from './authedFetch';
 import { fetchIsPaidPlan } from './accountPlan';
 import { getToken, onRefresh, refreshToken, request, type InitData, type LabelBundle } from './vscodeBridge';
 
-/** Host reply to `evermind.pickMemory` — the parsed, learnable snapshot entries (or null
- *  when the user cancels the file picker). */
-interface PickedMemory { path: string; fileName: string; entries: Array<{ key: string; text: string; prompt?: string }> }
+/** Host reply to `evermind.pickMemory` — the parsed, learnable entries (or null when the
+ *  user cancels the picker).
+ *
+ *  Every entry carries its OWN `path`. A JSON snapshot yields one shared path (so the
+ *  compaction below is exactly the single-file rewrite it always was); a Claude Code
+ *  auto-memory FOLDER yields one path per fact, because each fact is its own `*.md` file
+ *  and must be stubbed there. `path`/`fileName` describe the source the user picked — the
+ *  file or the folder — and only label the result. */
+interface PickedMemory {
+  path: string;
+  fileName: string;
+  entries: Array<{ key: string; text: string; prompt?: string; path?: string }>;
+}
 /** Gateway reply from POST …/extract-memories. */
 interface ExtractResponse { absorbed: string[]; skipped: Array<{ key: string; reason: string }>; merged: number; version: number }
 
@@ -60,6 +70,7 @@ function evLabels(labels: LabelBundle): Partial<EvermindConsoleLabels> {
     'learningLabel', 'learningHint', 'on', 'off', 'connected', 'frozen', 'teacherLabel',
     'teacherHint', 'teacherNone', 'teacherPaidOnly', 'teachTitle', 'teachHint',
     'teachPromptPlaceholder', 'teachTextPlaceholder', 'teachCta', 'teaching', 'taught',
+    'taughtDropped', 'taughtStillPending',
     'flushCta', 'flushing', 'flushedNone', 'inspectTitle', 'inspectEmpty', 'kindText',
     'kindDelta', 'deltaEntry', 'refresh', 'errorGeneric',
     'importTitle', 'importHint', 'importCta', 'importing', 'importNothing',
@@ -97,6 +108,15 @@ function evLabels(labels: LabelBundle): Partial<EvermindConsoleLabels> {
   if (targetSeeded) out.targetSeeded = (version) => targetSeeded.replace('{version}', String(version));
   const targetProjectId = s('targetProjectId');
   if (targetProjectId) out.targetProjectId = (id) => targetProjectId.replace('{id}', String(id));
+  // The resolved teach outcomes — what the contribution's merge actually did.
+  const taughtDistilled = s('taughtDistilled');
+  if (taughtDistilled) out.taughtDistilled = (model, version) =>
+    taughtDistilled.replace('{model}', model).replace('{version}', String(version));
+  const taughtSelf = s('taughtSelf');
+  if (taughtSelf) out.taughtSelf = (version) => taughtSelf.replace('{version}', String(version));
+  const taughtTeacherFault = s('taughtTeacherFault');
+  if (taughtTeacherFault) out.taughtTeacherFault = (model, reason) =>
+    taughtTeacherFault.replace('{model}', model).replace('{reason}', reason);
   return out;
 }
 
@@ -161,7 +181,12 @@ export function EvermindScreen({ init }: { init: InitData }) {
       setInference: (enabled) => req(`${base}/inference`, { method: 'PATCH', body: JSON.stringify({ enabled }) }).then(() => undefined),
       setMode: (mode) => req(`${base}/mode`, { method: 'PATCH', body: JSON.stringify({ mode }) }).then(() => undefined),
       setTeacher: (model) => req(`${base}/teacher`, { method: 'PATCH', body: JSON.stringify({ model }) }).then(() => undefined),
-      teach: (text, prompt) => req(`${base}/learn-text`, { method: 'POST', body: JSON.stringify({ text, ...(prompt ? { prompt } : {}) }) }).then(() => undefined),
+      // The POST only means "queued" — the teacher runs later in the coordinator's
+      // debounced merge — so hand the console the contribution id and let it poll the
+      // status door for what actually happened.
+      teach: (text, prompt) => req<{ contributionId?: number }>(`${base}/learn-text`, { method: 'POST', body: JSON.stringify({ text, ...(prompt ? { prompt } : {}) }) })
+        .then((r) => (r.contributionId ? { contributionId: r.contributionId } : {})),
+      teachStatus: (contributionId) => req(`${base}/contribution/${contributionId}`),
       flush: () => req<{ merged?: number; version?: number }>(`${base}/flush`, { method: 'POST' }).then((r) => ({ merged: r.merged ?? 0, version: r.version ?? 0 })),
       validate: (prompt) => req(`${base}/validate`, { method: 'POST', body: JSON.stringify({ prompt }) }),
       // Read-only list of every Evermind under this project (self + IDE builds).
@@ -190,8 +215,21 @@ export function EvermindScreen({ init }: { init: InitData }) {
         const picked = await request<PickedMemory | null>('evermind.pickMemory');
         if (!picked || picked.entries.length === 0) return null;
         const res = await req<ExtractResponse>(`${base}/extract-memories`, { method: 'POST', body: JSON.stringify({ entries: picked.entries }) });
+        // The gateway answers with absorbed KEYS; the host compacts FILES. Regroup the
+        // absorbed keys by the source path each entry came from — one group for a
+        // snapshot, one per fact file for a memory folder.
+        const absorbed = new Set(res.absorbed);
+        const byPath = new Map<string, string[]>();
+        for (const e of picked.entries) {
+          if (!absorbed.has(e.key)) continue;
+          const p = e.path ?? picked.path;
+          const keys = byPath.get(p) ?? [];
+          keys.push(e.key);
+          byPath.set(p, keys);
+        }
+        const files = [...byPath].map(([path, absorbedKeys]) => ({ path, absorbedKeys }));
         const comp = await request<{ compacted: number; bytesSaved: number }>('evermind.compactMemory', {
-          path: picked.path, absorbedKeys: res.absorbed, version: res.version,
+          files, version: res.version,
         });
         return {
           fileName: picked.fileName,

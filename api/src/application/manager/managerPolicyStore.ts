@@ -195,7 +195,7 @@ export async function getEffectiveManagerPolicy(
  */
 export async function getProjectManagerState(
   db: Db, tenantId: number, projectId: number, env?: Env,
-): Promise<{ policy: EffectiveManagerPolicy; configured: boolean; managed: boolean }> {
+): Promise<{ policy: EffectiveManagerPolicy; configured: boolean; managed: boolean; lastRunAt: Date | null }> {
   const [tenant, project] = await Promise.all([
     getTenantManagerDefaults(db, tenantId, env),
     getManagerConfigRow(db, tenantId, projectId),
@@ -204,6 +204,11 @@ export async function getProjectManagerState(
     policy: resolveTieredManagerPolicy({ tenant, project }),
     configured: !!project,
     managed: isProjectManaged({ tenant, project }),
+    // WHEN THE PREVIOUS PASS ENDED — handed back from the row this read already holds,
+    // so it costs nothing. The pass needs it to attribute the merges the PR merge sweep
+    // journalled since then (see `countPrMergesSince`); reading it separately would be a
+    // second round-trip for a column already in hand.
+    lastRunAt: project?.lastRunAt ?? null,
   };
 }
 

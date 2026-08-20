@@ -14,11 +14,21 @@
  *
  * This guard is the reason `object` is the one NEW table in a document otherwise
  * about deleting them. It fails when a polymorphic pair exists with no registry
- * to reference, which is exactly the state the schema is in today: three tables
- * (`activity_log`, `creation_session_objects`, `proposal_evaluations`) already use
- * the pattern and there is no `objects` table for them to point at.
+ * to reference.
  *
- * Once `objects` exists, the baseline empties and this becomes a real gate.
+ * WHERE THIS STANDS (re-measured 2026-08-19). `objects` EXISTS — migration 0418,
+ * declared in `schema/kernel.ts`, written by `registryProjection.ts` and by
+ * `EntityService` on every entity-layer write. So the sentence this docstring used
+ * to carry ("there is no objects table for them to point at") is no longer true,
+ * and the three baseline entries no longer mean what they used to.
+ *
+ * What they mean NOW is the harder half: the pair still has no FOREIGN KEY. Adding
+ * one is not a schema edit that can land on its own, because a hard FK rejects any
+ * row whose target is not registered yet, and the projection only covers the
+ * navigable kinds. Each of the three clears when every target it can name is
+ * registered — i.e. as PRD 20 §5 step 5 moves that family onto the entity layer —
+ * not before. The guard counts them until then, and the detail line below already
+ * says the right thing once the registry is present.
  */
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -78,8 +88,8 @@ reportRatchet({
   name: 'check-polymorphic-fk',
   baselinePath: resolve(here, '.polymorphic-fk-baseline.txt'),
   findings,
-  unit: `polymorphic reference(s) with no ${REGISTRY_TABLE} registry`,
-  header: `Tables using a (kind, id) pair with nothing to reference (PRD 20 §2). Empties once \`${REGISTRY_TABLE}\` exists.`,
+  unit: `polymorphic reference(s) not yet keyed to ${REGISTRY_TABLE}`,
+  header: `Tables using a (kind, id) pair with no FOREIGN KEY to \`${REGISTRY_TABLE}\` (PRD 20 §2). The registry exists; each entry clears when every target it can name is registered.`,
   fixHint:
     `A new table references another by an untyped (kind, id) pair. The database cannot\n` +
     `    enforce that, so it will orphan. Register the target in \`${REGISTRY_TABLE}\` and add a real FK.`,

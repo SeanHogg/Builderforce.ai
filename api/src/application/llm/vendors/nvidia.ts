@@ -18,21 +18,31 @@ import type { VendorModelEntry } from './types';
  * `model` field of the request body (`<org>/<name>` form).
  */
 const CATALOG: ReadonlyArray<VendorModelEntry> = [
-  { id: 'mistralai/mistral-medium-3.5-128b',            tier: 'FREE', label: 'Mistral Medium 3.5 128B (NIM)',  brand: 'Mistral'   },
-  { id: 'nvidia/mistral-nemotron',                      tier: 'FREE', label: 'Mistral Nemotron (NIM)',         brand: 'NVIDIA'    },
+  // Every id below is present in NIM's own `GET /v1/models` payload — the committed
+  // snapshot the model-drift guard reconciles against (`liveModels.snapshot.json`,
+  // refreshed by `npm run models:refresh`). NIM retires ids briskly: the previous
+  // hand-maintained list had gone 10-of-11 dead, which meant most of the FREE pool's
+  // NIM segment burned an attempt on a 404 before the cascade could advance. Do not
+  // add an id here from memory — refresh the snapshot and take it from there.
+  { id: 'nvidia/nemotron-3-ultra-550b-a55b',            tier: 'FREE', label: 'Nemotron 3 Ultra 550B (NIM)',    brand: 'NVIDIA'    },
+  { id: 'nvidia/nemotron-3-super-120b-a12b',            tier: 'FREE', label: 'Nemotron 3 Super 120B (NIM)',    brand: 'NVIDIA'    },
+  { id: 'moonshotai/kimi-k2.6',                         tier: 'FREE', label: 'Kimi K2.6 (NIM)',                brand: 'Moonshot'  },
+  { id: 'z-ai/glm-5.2',                                 tier: 'FREE', label: 'GLM 5.2 (NIM)',                  brand: 'Z.AI'      },
+  { id: 'deepseek-ai/deepseek-v4-flash-0731',           tier: 'FREE', label: 'DeepSeek V4 Flash (NIM)',        brand: 'DeepSeek'  },
+  { id: 'openai/gpt-oss-120b',                          tier: 'FREE', label: 'GPT-OSS 120B (NIM)',             brand: 'OpenAI'    },
+  { id: 'mistralai/mistral-large-2-instruct',           tier: 'FREE', label: 'Mistral Large 2 (NIM)',          brand: 'Mistral'   },
+  { id: 'mistralai/mistral-nemotron',                   tier: 'FREE', label: 'Mistral Nemotron (NIM)',         brand: 'NVIDIA'    },
+  { id: 'meta/llama-3.3-70b-instruct',                  tier: 'FREE', label: 'Llama 3.3 70B (NIM)',            brand: 'Meta'      },
+  { id: 'stepfun-ai/step-3.7-flash',                    tier: 'FREE', label: 'Step 3.7 Flash (NIM)',           brand: 'StepFun'   },
+  { id: 'google/gemma-4-31b-it',                        tier: 'FREE', label: 'Gemma 4 31B (NIM)',              brand: 'Google'    },
   { id: 'nvidia/nemotron-mini-4b-instruct',             tier: 'FREE', label: 'Nemotron Mini 4B (NIM)',         brand: 'NVIDIA'    },
-  { id: 'qwen/qwen3-coder-480b-a35b-instruct',          tier: 'FREE', label: 'Qwen 3 Coder 480B (NIM)',        brand: 'Qwen'      },
-  { id: 'google/gemma-2-2b-it',                         tier: 'FREE', label: 'Gemma 2 2B (NIM)',               brand: 'Google'    },
-  { id: 'google/gemma-3n-e4b-it',                       tier: 'FREE', label: 'Gemma 3n E4B (NIM)',             brand: 'Google'    },
-  { id: 'microsoft/phi-4-multimodal-instruct',          tier: 'FREE', label: 'Phi-4 Multimodal (NIM)',         brand: 'Microsoft', capabilities: ['vision'] },
-  // M3 (not M2.7) is the one currently flaky on NIM: confirmed 404s / hangs for many
-  // callers as of 2026-08 (NVIDIA's own catalog + third-party reports), while M2.7 is
-  // confirmed live. See the CODING_MODEL_POOL comment in modelPool.ts for the routing
-  // side of this rollback.
-  { id: 'minimaxai/minimax-m2.7',                       tier: 'FREE', label: 'MiniMax M2.7 (NIM)',             brand: 'MiniMax'   },
-  { id: 'stepfun-ai/step-3.5-flash',                    tier: 'FREE', label: 'Step 3.5 Flash (NIM)',           brand: 'StepFun'   },
-  { id: 'bytedance/seed-oss-36b-instruct',              tier: 'FREE', label: 'Seed OSS 36B (NIM)',             brand: 'ByteDance' },
-  { id: 'abacusai/dracarys-llama-3_1-70b-instruct',     tier: 'FREE', label: 'Dracarys Llama 3.1 70B (NIM)',   brand: 'AbacusAI'  },
+  { id: 'nvidia/nemotron-nano-12b-v2-vl',               tier: 'FREE', label: 'Nemotron Nano 12B VL (NIM)',     brand: 'NVIDIA',    capabilities: ['vision'] },
+  // DELIBERATELY ABSENT: `minimaxai/minimax-m2.7`. NIM has retired it, and the only
+  // MiniMax id it still serves is `minimax-m3` — the generation that was rolled back
+  // on 2026-08-17 for 404ing and hanging mid-stream. Re-listing M3 would put a model
+  // we already measured as unreliable back at the head of the free coding pool, so
+  // the entry is dropped rather than bumped; the coding pool now leads with the
+  // OpenRouter Nemotron 3 Ultra free slug. Reinstate M3 only with fresh evidence.
 ];
 
 export const nvidiaModule = createOpenAICompatibleVendor({

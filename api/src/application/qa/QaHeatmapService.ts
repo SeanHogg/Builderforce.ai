@@ -6,15 +6,24 @@
  * control thousands of users click every day is a far more valuable thing to
  * smoke than one nobody touches, so heat (recency-weighted) is the ranking.
  *
- * Heat is tenant-wide (events carry no project_id — capture runs in the app
- * shell, not per customer site), mirroring QaFlowService.aggregate. The
- * exploration that consumes a plan still targets a specific project/target/URL.
+ * Heat is PROJECT-SPECIFIC when a project is asked for (0955). Journey events
+ * carry a nullable `project_id`: set = captured on that project's site, null =
+ * captured in the Builderforce app shell, which belongs to no customer project.
+ * A project-scoped read therefore includes both that project's own events AND
+ * the shell events (which is where every pre-0955 row lives, and where the
+ * self-test's own interactions still land), while a workspace read pools
+ * everything as before. Without this the exploration for project A was planned
+ * from project B's traffic — every downstream object (exploration, schedule,
+ * finding→task) was already project-scoped; only the ranking that decides what
+ * to look at was not.
  *
  * Read-through cached behind a per-tenant version token bumped on event ingest,
- * so a hot read costs nothing until new interactions land.
+ * so a hot read costs nothing until new interactions land. The project is part
+ * of the cache KEY, not the version, so two projects never serve each other's
+ * plan out of cache.
  */
 
-import { and, desc, gte, isNotNull, sql } from 'drizzle-orm';
+import { and, desc, gte, isNotNull, sql, type SQL } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { qaJourneyEvents } from '../../infrastructure/database/schema';
 import { getCacheVersion, getOrSetCached } from '../../infrastructure/cache/readThroughCache';
@@ -32,6 +41,11 @@ interface RankOpts {
   sinceDays?: number;
   /** How many ranked zones to return. */
   limit?: number;
+  /**
+   * Narrow heat to one project's site (plus the shell events that belong to no
+   * project). Omit for the workspace-wide ranking.
+   */
+  projectId?: number | null;
 }
 
 function score(heat: number, lastTs: string | Date | null, now: number): number {
@@ -45,26 +59,42 @@ function score(heat: number, lastTs: string | Date | null, now: number): number 
 export class QaHeatmapService {
   constructor(private readonly db: Db, private readonly env?: Env) {}
 
-  /** Ranked hot zones for a tenant, recency-weighted, cached. */
+  /** Ranked hot zones for a tenant (optionally one project), recency-weighted, cached. */
   async rankZones(tenantId: number, opts: RankOpts = {}): Promise<QaHeatZone[]> {
     const sinceDays = Math.max(1, opts.sinceDays ?? 30);
     const limit = Math.min(Math.max(1, opts.limit ?? 50), 200);
+    const projectId = opts.projectId ?? null;
 
-    const load = () => this.computeZones(tenantId, sinceDays, limit);
+    const load = () => this.computeZones(tenantId, sinceDays, limit, projectId);
     if (!this.env) return load();
 
     const ver = await getCacheVersion(this.env, QA_HEAT_VERSION_KEY(tenantId));
     return getOrSetCached(
       this.env,
-      `qa-heatmap:tenant:${tenantId}:v:${ver}:d:${sinceDays}:n:${limit}`,
+      `qa-heatmap:tenant:${tenantId}:p:${projectId ?? 'all'}:v:${ver}:d:${sinceDays}:n:${limit}`,
       load,
       { kvTtlSeconds: 300 },
     );
   }
 
-  private async computeZones(tenantId: number, sinceDays: number, limit: number): Promise<QaHeatZone[]> {
+  /**
+   * The project predicate: this project's own events, plus the shell events that
+   * belong to no project. Stated once so both aggregations cannot drift.
+   */
+  private projectScope(projectId: number | null): SQL | undefined {
+    if (projectId === null) return undefined;
+    return sql`(${qaJourneyEvents.projectId} = ${projectId} or ${qaJourneyEvents.projectId} is null)`;
+  }
+
+  private async computeZones(
+    tenantId: number,
+    sinceDays: number,
+    limit: number,
+    projectId: number | null,
+  ): Promise<QaHeatZone[]> {
     const since = new Date(Date.now() - sinceDays * DAY_MS);
     const now = Date.now();
+    const scope = this.projectScope(projectId);
 
     // Element-level zones: a specific control, by its dominant interaction kind.
     const elementRows = await this.db
@@ -81,6 +111,7 @@ export class QaHeatmapService {
         gte(qaJourneyEvents.ts, since),
         isNotNull(qaJourneyEvents.selector),
         sql`${qaJourneyEvents.tenantId} = ${tenantId}`,
+        scope,
       ))
       .groupBy(qaJourneyEvents.route, qaJourneyEvents.selector, qaJourneyEvents.type)
       .orderBy(desc(sql`count(*)`))
@@ -99,6 +130,7 @@ export class QaHeatmapService {
         isNotNull(qaJourneyEvents.route),
         sql`${qaJourneyEvents.type} in ('pageview','nav')`,
         sql`${qaJourneyEvents.tenantId} = ${tenantId}`,
+        scope,
       ))
       .groupBy(qaJourneyEvents.route)
       .orderBy(desc(sql`count(*)`))

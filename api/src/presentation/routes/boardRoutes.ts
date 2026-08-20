@@ -33,7 +33,8 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { and, asc, desc, eq, sql } from 'drizzle-orm';
-import { authMiddleware, isManager } from '../middleware/authMiddleware';
+import { authMiddleware, isManager, requireRole } from '../middleware/authMiddleware';
+import { TenantRole } from '../../domain/shared/types';
 import { ForbiddenError } from '../../domain/shared/errors';
 import {
   boards,
@@ -49,9 +50,8 @@ import {
   TicketRunNotFoundError,
   InvalidTicketTransitionError,
 } from '../../application/swimlane/SwimlaneCoordinator';
-import { DrizzleCoordinatorStore } from '../../application/swimlane/DrizzleCoordinatorStore';
-import { DrizzleStageWorkflowRunner } from '../../application/swimlane/stageWorkflowRunner';
-import { DrizzlePrdEnsurer } from '../../application/swimlane/DrizzlePrdEnsurer';
+import { makeSwimlaneCoordinator } from '../../application/swimlane/makeCoordinator';
+import { backfillLaneResidents } from '../../application/swimlane/laneResidentBackfill';
 import {
   resolveAssignedAgent,
   AssignedAgentNotFoundError,
@@ -59,10 +59,7 @@ import {
 } from '../../application/swimlane/resolveAssignedAgent';
 import { buildDefaultLaneRows, findOrCreateBoard } from '../../application/swimlane/findOrCreateBoard';
 import { reassignOrphanedTasksOnLaneDelete } from '../../application/swimlane/reassignOrphanedTasks';
-import {
-  AgentHostStageDispatcher,
-  type AgentHostRelayNamespace,
-} from '../../application/swimlane/agentHostStageDispatcher';
+import type { AgentHostRelayNamespace } from '../../application/swimlane/agentHostStageDispatcher';
 import type { WorkflowStatus } from '../../application/swimlane/transitions';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
@@ -130,13 +127,9 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
   router.use('*', authMiddleware);
 
   // Built per-request so the agentHost dispatcher is bound to this request's env.
-  const mkCoordinator = (env: unknown): SwimlaneCoordinator =>
-    new SwimlaneCoordinator(
-      new DrizzleCoordinatorStore(db),
-      new AgentHostStageDispatcher((env as BoardEnv)?.AGENT_HOST_RELAY),
-      new DrizzleStageWorkflowRunner(db),
-      new DrizzlePrdEnsurer(db, env as Env),
-    );
+  // ONE factory (see makeCoordinator.ts) — four call sites used to construct this by
+  // hand and disagreed on whether the workflow runner was wired.
+  const mkCoordinator = (env: unknown): SwimlaneCoordinator => makeSwimlaneCoordinator(db, env);
 
   // ── Boards CRUD ───────────────────────────────────────────────────────────
 
@@ -433,12 +426,17 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
 
   // ── Agent assignments (nested under a lane) ────────────────────────────────
 
-  async function assertLane(tenantId: number, boardId: string, laneId: string): Promise<boolean> {
+  /** The lane's key when it belongs to this board+tenant, else null. */
+  async function loadLaneKey(tenantId: number, boardId: string, laneId: string): Promise<string | null> {
     const [lane] = await db
-      .select({ id: swimlanes.id })
+      .select({ key: swimlanes.key })
       .from(swimlanes)
       .where(and(eq(swimlanes.id, laneId), eq(swimlanes.boardId, boardId), eq(swimlanes.tenantId, tenantId)));
-    return Boolean(lane);
+    return lane?.key ?? null;
+  }
+
+  async function assertLane(tenantId: number, boardId: string, laneId: string): Promise<boolean> {
+    return (await loadLaneKey(tenantId, boardId, laneId)) != null;
   }
 
   router.get('/:boardId/swimlanes/:laneId/agents', async (c) => {
@@ -546,7 +544,58 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
         createdAt: new Date(),
       })
       .returning();
+
+    // ── THE MOMENT THE ANSWER CHANGES ───────────────────────────────────────────
+    // The autonomous trigger only fires when a ticket ENTERS a lane. Staffing a lane
+    // that already holds tickets therefore did nothing to any of them — they never
+    // "entered", so nothing ever asked whether they should run, and the only way to
+    // start them was to drag each one out and back in. Staffing IS the event; sweep
+    // the residents through the same funnel a drag uses. Off the response path.
+    const laneKey = await loadLaneKey(tenantId, boardId, laneId);
+    if (laneKey) {
+      c.executionCtx.waitUntil(
+        backfillLaneResidents(c.env as Env, db, {
+          tenantId,
+          boardId,
+          laneKey,
+          submittedBy: (c as { get(k: 'userId'): string | undefined }).get('userId') ?? 'system:lane-staffed',
+        }).then(() => undefined).catch(() => undefined),
+      );
+    }
     return c.json(row, 201);
+  });
+
+  /**
+   * POST /:boardId/swimlanes/:laneId/run-lane — "Run this lane now".
+   *
+   * The explicit half of the same fix: an operator who staffed a lane before this
+   * existed (or who relaxed a gate, or fixed a capability requirement) can start the
+   * tickets already sitting in it without dragging each one out and back. Every
+   * per-ticket guard still applies — it routes through the ordinary lane funnel.
+   *
+   * DEVELOPER+, the same tier as `POST /api/tasks/:id/run-now`: this starts billable
+   * runs, and doing so for a whole lane at once is emphatically not a read.
+   */
+  router.post('/:boardId/swimlanes/:laneId/run-lane', requireRole(TenantRole.DEVELOPER), async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const boardId = c.req.param('boardId');
+    const laneId = c.req.param('laneId');
+    const laneKey = await loadLaneKey(tenantId, boardId, laneId);
+    if (!laneKey) return c.json({ error: 'Swimlane not found' }, 404);
+
+    const body = await c.req.json<{ limit?: unknown }>().catch(() => ({ limit: undefined }));
+    const limit = typeof body.limit === 'number' && Number.isSafeInteger(body.limit) && body.limit > 0
+      ? body.limit
+      : undefined;
+
+    const result = await backfillLaneResidents(c.env as Env, db, {
+      tenantId,
+      boardId,
+      laneKey,
+      submittedBy: (c as { get(k: 'userId'): string | undefined }).get('userId') ?? 'system:run-lane',
+      ...(limit != null ? { limit } : {}),
+    });
+    return c.json(result);
   });
 
   router.delete('/:boardId/swimlanes/:laneId/agents/:id', async (c) => {

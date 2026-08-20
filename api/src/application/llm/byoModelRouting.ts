@@ -16,7 +16,7 @@
  */
 
 import { getCatalog } from './vendors';
-import { byoVendorIdFor, type ProviderKeySummary } from './tenantProviderKeyService';
+import { byoVendorIdFor, type ProviderRouteSpec } from './tenantProviderKeyService';
 
 /** Convert a catalog entry into the canonical route that uses the tenant's key.
  *  Prefixing every model as `<vendor>/<id>` is incorrect:
@@ -39,7 +39,7 @@ function byoModelRef(entry: { id: string; vendor: string }): string {
  *  ids) because the route depends on how the provider authenticates: a connected
  *  ChatGPT/SuperGrok subscription serves `openai-codex/…` / `xai-oauth/…` models,
  *  NOT the `direct/<vendor>/…` api-key ones the tenant has no key for. */
-export function byoModelsFor(summaries: readonly ProviderKeySummary[]): Array<{ id: string; vendor: string; tier: string; contextWindow?: number }> {
+export function byoModelsFor(summaries: readonly ProviderRouteSpec[]): Array<{ id: string; vendor: string; tier: string; contextWindow?: number }> {
   const catalog = getCatalog();
   const seen = new Set<string>();
   // `summaries` is already sorted by the tenant's precedence. Walk it first, then

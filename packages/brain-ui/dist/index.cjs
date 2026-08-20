@@ -400,6 +400,9 @@ var ORDER = {
   recall: 1,
   thinking: 2,
   assistant: 3,
+  // An activity line reports what happened AFTER the turn that triggered it, so it sorts
+  // with the tool steps rather than ahead of the narration.
+  activity: 4,
   tool: 4,
   learn: 5,
   reconcile: 6,
@@ -485,6 +488,21 @@ function buildSettledTimeline(messages, trace) {
       const node = stepNode(parsed.step, parseTs(parsed.tsIso, ts), `msg-${message.id}`);
       if (node) nodes.push(node);
     } else {
+      const activity = (0, import_builderforce_brain_embedded.parseChatActivity)(message);
+      if (activity) {
+        nodes.push({
+          key: `msg-${message.id}`,
+          kind: "activity",
+          ts,
+          order: ORDER.activity,
+          message,
+          activity,
+          // Pre-structured rows carry only the server's English sentence; showing it
+          // beats showing nothing, so it rides along as the fallback.
+          fallbackText: message.content
+        });
+        return;
+      }
       nodes.push({
         key: `msg-${message.id}`,
         kind: "assistant",
@@ -575,7 +593,8 @@ var DEFAULT_TIMELINE_LABELS = {
   learnTargetContributed: "Contributed to {name} (project #{projectId} v{version})",
   learnTargetSkipped: "Skipped {name} (project #{projectId}) \u2014 {reason}",
   reconcileTitle: "Reconciled {count} learned memories in Evermind v{version}",
-  reconcileHint: "The answer restated these recalled learnings, so it updates them (write-through cognition)."
+  reconcileHint: "The answer restated these recalled learnings, so it updates them (write-through cognition).",
+  activity: import_builderforce_brain_embedded2.DEFAULT_CHAT_ACTIVITY_LABELS
 };
 function ProvenanceChip({
   prov,
@@ -954,6 +973,17 @@ function BrainTimelineInner({
           return /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("li", { className: "bf-tl__item bf-tl__item--memory", children: [
             /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: "bf-tl__dot bf-tl__dot--muted", children: dotIcon("learn") }) }),
             /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("div", { className: "bf-tl__body", children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: "bf-tl__memory-line", title: hint, children: title }) })
+          ] }, node.key);
+        }
+        if (node.kind === "activity") {
+          const text = (0, import_builderforce_brain_embedded2.chatActivityText)(node.activity, labels.activity) || node.fallbackText;
+          const tone = (0, import_builderforce_brain_embedded2.activityTone)(node.activity);
+          return /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("li", { className: `bf-tl__item bf-tl__item--activity bf-tl__item--activity-${tone}`, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: "bf-tl__dot bf-tl__dot--activity", "aria-hidden": true, children: (0, import_builderforce_brain_embedded2.activityIcon)(node.activity) }) }),
+            /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "bf-tl__body", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: "bf-tl__activity-line", children: text }),
+              node.activity.kind === "milestone" && node.activity.note && /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: "bf-tl__activity-note", children: node.activity.note })
+            ] })
           ] }, node.key);
         }
         if (node.kind === "reconcile") {
@@ -2424,6 +2454,11 @@ var DEFAULT_EVERMIND_LABELS = {
   teachCta: "Teach",
   teaching: "Teaching\u2026",
   taught: "Queued for learning.",
+  taughtDistilled: (m, v) => `Taught: ${m} answered it and the model learned that answer (v${v}).`,
+  taughtSelf: (v) => `Taught: learned from your text, with no teacher model (v${v}).`,
+  taughtTeacherFault: (m, reason) => `Learned, but the teacher ${m} produced nothing (${reason}) \u2014 so the model learned your raw text, not an ideal answer.`,
+  taughtDropped: "Not learned: the merge could not use this contribution.",
+  taughtStillPending: "Still queued \u2014 this will merge on the next learning pass.",
   teachTeacherTitle: "Teach a task",
   teachTeacherHint: (m) => `Describe a task and ${m} answers it \u2014 your Evermind learns from the ideal answer. No transcript needed.`,
   teachTaskPlaceholder: "Describe a task to teach \u2014 the teacher will answer it\u2026",
@@ -2538,7 +2573,7 @@ function evermindLearnedStatus(entry) {
     return { state: "distilled", ...entry.teacherModel ? { teacherModel: entry.teacherModel } : {} };
   }
   if (entry.skipReason) {
-    if (entry.skipReason === "not_pinned") return { state: "self" };
+    if (entry.skipReason === "not_pinned" || entry.skipReason === "legacy") return { state: "self" };
     return {
       state: "fault",
       reason: entry.skipReason,
@@ -3398,6 +3433,8 @@ function buildEvermindDiagnostics(input) {
 
 // src/evermind/EvermindConsole.tsx
 var import_jsx_runtime16 = require("react/jsx-runtime");
+var TEACH_POLL_INTERVAL_MS = 3e3;
+var TEACH_POLL_TIMEOUT_MS = 12e4;
 function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectName, showRecent = true, showHeaderRefresh = true, refreshSignal, onValidate, host = "web" }) {
   const t = (0, import_react13.useMemo)(() => ({ ...DEFAULT_EVERMIND_LABELS, ...labels ?? {} }), [labels]);
   const [data, setData] = (0, import_react13.useState)(null);
@@ -3411,6 +3448,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
   const [validating, setValidating] = (0, import_react13.useState)(false);
   const [validateResult, setValidateResult] = (0, import_react13.useState)(null);
   const [notice, setNotice] = (0, import_react13.useState)(null);
+  const [noticeTone, setNoticeTone] = (0, import_react13.useState)("good");
   const [error, setError] = (0, import_react13.useState)(null);
   const [loaded, setLoaded] = (0, import_react13.useState)(false);
   const [tab, setTab] = (0, import_react13.useState)("teach");
@@ -3489,10 +3527,70 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
     setValidateResult(null);
     onValidate?.(null);
   }, [onValidate]);
+  const pollTimer = (0, import_react13.useRef)(null);
+  const mounted = (0, import_react13.useRef)(true);
+  (0, import_react13.useEffect)(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      if (pollTimer.current) clearTimeout(pollTimer.current);
+    };
+  }, []);
+  const describeTeachOutcome = (0, import_react13.useCallback)((status) => {
+    if (status.state === "dropped") return { text: t.taughtDropped, tone: "warn" };
+    if (status.state !== "merged") return { text: t.taughtStillPending, tone: "warn" };
+    const verdict = evermindLearnedStatus({
+      kind: status.kind ?? "text",
+      ...status.distilled !== void 0 ? { distilled: status.distilled } : {},
+      ...status.teacherModel ? { teacherModel: status.teacherModel } : {},
+      ...status.skipReason ? { skipReason: status.skipReason } : {},
+      ...status.skipDetail ? { skipDetail: status.skipDetail } : {},
+      ...status.attemptedTeacherModel ? { attemptedTeacherModel: status.attemptedTeacherModel } : {}
+    });
+    const version = status.version ?? 0;
+    if (verdict.state === "distilled") return { text: t.taughtDistilled(verdict.teacherModel ?? "", version), tone: "good" };
+    if (verdict.state === "fault") return { text: t.taughtTeacherFault(verdict.teacherModel ?? "", verdict.reason), tone: "warn" };
+    return { text: t.taughtSelf(version), tone: "good" };
+  }, [t]);
+  const trackTeach = (0, import_react13.useCallback)((contributionId) => {
+    const readStatus = adapter.teachStatus;
+    if (!readStatus || !Number.isInteger(contributionId) || contributionId <= 0) return;
+    if (pollTimer.current) clearTimeout(pollTimer.current);
+    const deadline = Date.now() + TEACH_POLL_TIMEOUT_MS;
+    const tick = async () => {
+      let status = null;
+      try {
+        status = await readStatus(contributionId);
+      } catch {
+        status = null;
+      }
+      if (!mounted.current) return;
+      if (!status || status.state === "unknown") return;
+      if (status.state === "merged" || status.state === "dropped") {
+        const outcome = describeTeachOutcome(status);
+        setNotice(outcome.text);
+        setNoticeTone(outcome.tone);
+        if (status.state === "merged") void reload();
+        return;
+      }
+      if (Date.now() >= deadline) {
+        setNotice(t.taughtStillPending);
+        setNoticeTone("warn");
+        return;
+      }
+      pollTimer.current = setTimeout(() => {
+        void tick();
+      }, TEACH_POLL_INTERVAL_MS);
+    };
+    pollTimer.current = setTimeout(() => {
+      void tick();
+    }, TEACH_POLL_INTERVAL_MS);
+  }, [adapter, describeTeachOutcome, reload, t.taughtStillPending]);
   const run = (0, import_react13.useCallback)(async (op, successNotice) => {
     setBusy(true);
     setError(null);
     setNotice(null);
+    setNoticeTone("good");
     try {
       await op();
       await reload();
@@ -3612,13 +3710,10 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
               async () => {
                 const task = teachPrompt.trim();
                 const body = teachText.trim();
-                if (head.teacherModel && body.length < 20 && task.length >= 20) {
-                  await adapter.teach(task, task);
-                } else {
-                  await adapter.teach(body, task || void 0);
-                }
+                const result = head.teacherModel && body.length < 20 && task.length >= 20 ? await adapter.teach(task, task) : await adapter.teach(body, task || void 0);
                 setTeachText("");
                 setTeachPrompt("");
+                if (result?.contributionId) trackTeach(result.contributionId);
               },
               t.taught
             ),
@@ -3815,7 +3910,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       ),
       showRecent && /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(RecentList, { t, entries: data?.recent ?? [] })
     ] }),
-    notice && /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("p", { style: { margin: 0, fontSize: "0.74rem", color: C.accent }, role: "status", children: notice }),
+    notice && /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("p", { style: { margin: 0, fontSize: "0.74rem", lineHeight: 1.5, color: noticeTone === "warn" ? C.warnText : C.accent }, role: "status", children: notice }),
     error && /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("p", { style: { margin: 0, fontSize: "0.76rem", color: C.danger }, role: "alert", children: error })
   ] });
 }
@@ -4123,8 +4218,8 @@ var targetChip = {
 // src/project360/Project360View.tsx
 var import_react14 = require("react");
 
-// src/project360/Sunburst.tsx
-var import_jsx_runtime17 = require("react/jsx-runtime");
+// src/project360/sunburstGeometry.ts
+var VIEWBOX = 320;
 var CX = 160;
 var CY = 160;
 var R_CENTER = 46;
@@ -4160,6 +4255,22 @@ function twoLines(label) {
   if (mid > 0) return [label.slice(0, mid), label.slice(mid + 1)];
   return [label];
 }
+function slice(startDeg, spanDeg, index, count) {
+  const each = spanDeg / (count || 1);
+  const from = startDeg + index * each;
+  return [from, from + each];
+}
+function padSlice(startDeg, endDeg, padDeg) {
+  if (endDeg - startDeg <= padDeg * 2) {
+    const mid = (startDeg + endDeg) / 2;
+    return [mid, mid];
+  }
+  return [startDeg + padDeg, endDeg - padDeg];
+}
+var ARC_PAD_DEG = 0.6;
+
+// src/project360/Sunburst.tsx
+var import_jsx_runtime17 = require("react/jsx-runtime");
 function Sunburst({ pillars, dimensions, overall, selected, onSelect, ariaLabel }) {
   const nPillars = pillars.length || 1;
   const pillarSpan = 360 / nPillars;
@@ -4168,22 +4279,20 @@ function Sunburst({ pillars, dimensions, overall, selected, onSelect, ariaLabel 
     "svg",
     {
       className: "bf-360-wheel",
-      viewBox: "0 0 320 320",
+      viewBox: `0 0 ${VIEWBOX} ${VIEWBOX}`,
       role: "img",
       "aria-label": ariaLabel ?? "Project 360 health wheel",
       children: [
         pillars.map((pillar, pi) => {
-          const pStart = pi * pillarSpan;
-          const pEnd = pStart + pillarSpan;
+          const [pStart, pEnd] = slice(0, 360, pi, nPillars);
           const pMid = (pStart + pEnd) / 2;
           const dims = dimsByPillar[pi];
-          const dimSpan = pillarSpan / (dims.length || 1);
           const pLabel = labelAt((R_INNER_0 + R_INNER_1) / 2, pMid);
           return /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("g", { children: [
             /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
               "path",
               {
-                d: sector(R_INNER_0, R_INNER_1, pStart + 0.6, pEnd - 0.6),
+                d: sector(R_INNER_0, R_INNER_1, ...padSlice(pStart, pEnd, ARC_PAD_DEG)),
                 fill: pillar.color,
                 fillOpacity: 0.9,
                 className: "bf-360-arc bf-360-arc--pillar"
@@ -4201,8 +4310,7 @@ function Sunburst({ pillars, dimensions, overall, selected, onSelect, ariaLabel 
               }
             ),
             dims.map((dim, di) => {
-              const dStart = pStart + di * dimSpan;
-              const dEnd = dStart + dimSpan;
+              const [dStart, dEnd] = slice(pStart, pillarSpan, di, dims.length);
               const dMid = (dStart + dEnd) / 2;
               const isSel = selected === dim.key;
               const lab = labelAt((R_OUTER_0 + R_OUTER_1) / 2, dMid);
@@ -4219,7 +4327,7 @@ function Sunburst({ pillars, dimensions, overall, selected, onSelect, ariaLabel 
                     /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
                       "path",
                       {
-                        d: sector(R_OUTER_0, R_OUTER_1, dStart + 0.6, dEnd - 0.6),
+                        d: sector(R_OUTER_0, R_OUTER_1, ...padSlice(dStart, dEnd, ARC_PAD_DEG)),
                         fill: dim.color,
                         fillOpacity: isSel ? 1 : 0.82,
                         className: `bf-360-arc bf-360-arc--dim${isSel ? " is-selected" : ""}`

@@ -19,6 +19,11 @@ export function buildEmbeddedSystemPrompt(params: {
   skillsPrompt?: string;
   /** Persona system block from the agent's assigned (active) personas. */
   personaPrompt?: string;
+  /** BuilderForce platform context (strategy / PRD / governance / project memory /
+   *  prior lessons) for the work this run is doing — assembled by the api's ONE
+   *  `ContextSource` and rendered by `@builderforce/run-context`. Absent for a run on a
+   *  host that is not linked to a Builderforce workspace. */
+  runContextPrompt?: string;
   docsPath?: string;
   ttsHint?: string;
   reactionGuidance?: {
@@ -61,6 +66,7 @@ export function buildEmbeddedSystemPrompt(params: {
     heartbeatPrompt: params.heartbeatPrompt,
     skillsPrompt: params.skillsPrompt,
     personaPrompt: params.personaPrompt,
+    runContextPrompt: params.runContextPrompt,
     docsPath: params.docsPath,
     ttsHint: params.ttsHint,
     workspaceNotes: params.workspaceNotes,

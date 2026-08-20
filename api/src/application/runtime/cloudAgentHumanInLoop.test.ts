@@ -27,9 +27,14 @@ describe('ask_human cloud tool', () => {
     expect(finish!.function.description.toLowerCase()).toContain('ask_human');
   });
 
-  it('is NOT yet wired into the container surface (documented residual — container has no pause hook)', () => {
-    // The container executor picks per-op with no run-start/pause path, so it must
-    // not advertise a tool it cannot honour. If this flips, wire the container pause.
-    expect(byName(CONTAINER_AGENT_TOOLS, 'ask_human')).toBeUndefined();
+  it('is ALSO offered to the container / GitHub Actions surface, which now honours it', () => {
+    // Both images drive their whole loop in one process, so their pause is
+    // exit-and-redispatch: they post the `ask_human` container-op with their
+    // conversation, exit WITHOUT a terminal op, and are restarted with the answer.
+    // See containerPauseContract.test.ts for the image side of that contract.
+    const tool = byName(CONTAINER_AGENT_TOOLS, 'ask_human');
+    expect(tool).toBeDefined();
+    const params = tool!.function.parameters as { required?: string[] };
+    expect(params.required).toContain('question');
   });
 });

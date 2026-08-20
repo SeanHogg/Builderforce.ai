@@ -16,17 +16,14 @@
  */
 
 import { Hono } from 'hono';
-import { and, desc, eq, gte, isNotNull } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { evaluateResponse, type EvalJudge } from '../../application/eval/semanticEval';
 import { gatewayJudge } from '../../application/eval/gatewayJudge';
-import { detectGroupDrift, type ScoredSample } from '../../application/eval/driftMonitor';
+import { getTenantDriftReport } from '../../application/eval/driftReport';
 import { evaluateVariant } from '../../application/eval/variantEval';
 import { resolveTenantPlan } from './llmRoutes';
-import { runModelOutcomes } from '../../infrastructure/database/schema';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
-import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 
 export function createEvalRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -62,13 +59,7 @@ export function createEvalRoutes(db: Db): Hono<HonoEnv> {
   // (a scan over the append-only outcomes ledger that needn't be to-the-second).
   router.get('/drift', async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const report = await getOrSetCached(
-      c.env as Env,
-      `eval-drift:v1:${tenantId}`,
-      () => buildTenantDriftReport(db, tenantId),
-      { kvTtlSeconds: 300, l1TtlMs: 60_000 },
-    );
-    return c.json(report);
+    return c.json(await getTenantDriftReport(db, c.env as Env, tenantId));
   });
 
   // ── GET /api/eval/variant-compare ─────────────────────────────────────────
@@ -91,41 +82,6 @@ export function createEvalRoutes(db: Db): Hono<HonoEnv> {
   return router;
 }
 
-/** Loads recent eval-scored runs for a tenant and computes per-group drift. */
-export async function buildTenantDriftReport(db: Db, tenantId: number) {
-  // Last 60 days of eval-scored outcomes — enough for a baseline-vs-recent split.
-  const sinceMs = Date.now() - 60 * 24 * 60 * 60 * 1000;
-  const rows = await db
-    .select({
-      actionType: runModelOutcomes.actionType,
-      model: runModelOutcomes.resolvedModel,
-      faithfulness: runModelOutcomes.faithfulness,
-      answerRelevance: runModelOutcomes.answerRelevance,
-      createdAt: runModelOutcomes.createdAt,
-    })
-    .from(runModelOutcomes)
-    .where(
-      and(
-        eq(runModelOutcomes.tenantId, tenantId),
-        isNotNull(runModelOutcomes.faithfulness),
-        gte(runModelOutcomes.createdAt, new Date(sinceMs)),
-      ),
-    )
-    .orderBy(desc(runModelOutcomes.createdAt))
-    .limit(2000);
-
-  // Drift the overall quality proxy (mean of faithfulness + answer-relevance).
-  const samples: ScoredSample[] = rows.map((r) => ({
-    group: `${r.actionType}:${r.model}`,
-    score: ((r.faithfulness ?? 0) + (r.answerRelevance ?? 0)) / 2,
-    ts: r.createdAt instanceof Date ? r.createdAt.getTime() : Number(new Date(r.createdAt as never)),
-  }));
-
-  const groups = detectGroupDrift(samples, { minSamples: 8 });
-  return {
-    generatedAt: new Date().toISOString(),
-    totalScored: rows.length,
-    drifting: groups.filter((g) => g.result.drifted),
-    groups,
-  };
-}
+// `buildTenantDriftReport` moved to `application/eval/driftReport.ts` on
+// 2026-08-19. Two application modules imported it from this route file, which
+// made a cron sweep depend on an HTTP module.

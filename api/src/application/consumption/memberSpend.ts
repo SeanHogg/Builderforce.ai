@@ -22,7 +22,7 @@ import { and, eq, gte, sql as dsql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { llmUsageLog, tenantMembers, tenants, users } from '../../infrastructure/database/schema';
-import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import { getOrSetCached, invalidateCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import { resolveSuperadminUnlimited } from '../llm/tenantTokenAvailability';
 import { getLimits } from '../../domain/tenant/PlanLimits';
 import { resolveEffectivePlan } from '../../domain/tenant/effectivePlan';
@@ -78,10 +78,17 @@ export function seatCostControlsEnabled(effectivePlan: 'free' | 'pro' | 'teams')
 
 // ── cache keys ──────────────────────────────────────────────────────────────
 // Config (caps) changes rarely → cache 120s and invalidate the specific member's
-// key on a per-seat write. A tenant-default change can't enumerate per-member keys,
-// so it relies on the 120s TTL (acceptable lag for a config change) — the owner UI
-// reads the fresh value from the mutation response regardless.
-const configKey = (tenantId: number, userId: string) => `member-spend-config:v1:${tenantId}:${userId}`;
+// key on a per-seat write.
+//
+// A TENANT-DEFAULT change cannot enumerate per-member keys to invalidate them, so it
+// used to rely on the 120s TTL — meaning an owner who lowered the default watched
+// seats keep spending against the OLD number for up to two minutes with nothing
+// saying why. The key now embeds a per-tenant VERSION TOKEN: bumping the token
+// orphans every seat's entry at once, which is exactly the enumeration KV cannot do.
+// Orphaned entries age out on their own TTL, so the bump costs one write.
+const configVersionKey = (tenantId: number) => `member-spend-config-ver:${tenantId}`;
+const configKey = (tenantId: number, userId: string, version: string) =>
+  `member-spend-config:v1:${version}:${tenantId}:${userId}`;
 // Spend sum changes constantly → cache 60s (same freshness the consumption meter uses).
 const spendKey = (tenantId: number, userId: string, monthKey: string) => `member-spend:v1:${tenantId}:${userId}:${monthKey}`;
 // Owner overview (all seats) → cache 30s; invalidated on any spend-limit write.
@@ -106,7 +113,8 @@ async function loadMemberSpendConfig(db: Db, env: Env | undefined, tenantId: num
     return { memberCap: row?.memberCap ?? null, tenantDefault: row?.tenantDefault ?? null };
   };
   if (!env) return compute();
-  return getOrSetCached(env, configKey(tenantId, userId), compute, { kvTtlSeconds: 120, l1TtlMs: 60_000 });
+  const version = await getCacheVersion(env, configVersionKey(tenantId));
+  return getOrSetCached(env, configKey(tenantId, userId, version), compute, { kvTtlSeconds: 120, l1TtlMs: 60_000 });
 }
 
 /** Month-to-date non-BYO spend (millicents) for one seat (cached 60s). BYO rows
@@ -359,14 +367,24 @@ export async function getTeamSpendOverview(db: Db, env: Env | undefined, tenantI
   return getOrSetCached(env, overviewKey(tenantId, monthKey), compute, { kvTtlSeconds: 30, l1TtlMs: 15_000 });
 }
 
-/** Invalidate the cached config + overview after an owner changes a spend limit, so
- *  the next gate check + owner read reflect it immediately (rather than at TTL). Pass
- *  `userId` to also drop that seat's config entry. Best-effort. */
+/**
+ * Invalidate the cached config + overview after an owner changes a spend limit, so
+ * the next gate check + owner read reflect it immediately rather than at TTL.
+ *
+ * Omit `userId` for a TENANT-DEFAULT change: that bumps the per-tenant version token,
+ * which orphans EVERY seat's config entry in one write. Per-member keys are not
+ * enumerable in KV, so this is the only way a default change lands instantly instead
+ * of trickling in over the 120s TTL. Pass `userId` for a single-seat change and only
+ * that seat's entry is dropped. Best-effort.
+ */
 export async function invalidateTeamSpendCaches(env: Env | undefined, tenantId: number, userId?: string): Promise<void> {
   if (!env) return;
   const monthKey = monthKeyOf(utcMonthStart());
   await Promise.all([
     invalidateCached(env, overviewKey(tenantId, monthKey)),
-    userId ? invalidateCached(env, configKey(tenantId, userId)) : Promise.resolve(),
+    userId
+      ? getCacheVersion(env, configVersionKey(tenantId))
+          .then((v) => invalidateCached(env, configKey(tenantId, userId, v)))
+      : bumpCacheVersion(env, configVersionKey(tenantId)),
   ]);
 }

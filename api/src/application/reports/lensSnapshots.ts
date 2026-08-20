@@ -19,7 +19,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * runDueReports. Pure period math is unit-testable without a DB.
  */
 
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { buildDatabase, type Db } from '../../infrastructure/database/connection';
 import { lensSnapshots, segments, tenants } from '../../infrastructure/database/schema';
 import type { Env } from '../../env';
@@ -102,6 +102,48 @@ async function defaultSegmentId(db: Db, tenantId: number): Promise<string | null
  * in-progress period updates; a closed one simply isn't re-swept). Returns the
  * stored row's payload, or null for a non-snapshotable lens.
  */
+/** Cadences a snapshot period can belong to — the vocabulary the console offers. */
+export const SNAPSHOT_CADENCES: readonly SnapshotCadence[] = ['monthly', 'quarterly', 'annual'];
+
+/**
+ * Captured-snapshot metadata for the console list — deliberately WITHOUT the
+ * frozen payloads, which are large and only read one at a time. Tenant-scoped in
+ * the query rather than by the caller, and capped at 500 rows.
+ */
+export async function listLensSnapshots(
+  db: Db,
+  tenantId: number,
+  filters: { lens?: string; period?: string } = {},
+) {
+  const conds = [eq(lensSnapshots.tenantId, tenantId)];
+  if (filters.lens && isSnapshotableLens(filters.lens)) conds.push(eq(lensSnapshots.lens, filters.lens));
+  if (filters.period) conds.push(eq(lensSnapshots.period, filters.period));
+
+  const rows = await db
+    .select({
+      id: lensSnapshots.id,
+      lens: lensSnapshots.lens,
+      period: lensSnapshots.period,
+      generatedAt: lensSnapshots.generatedAt,
+    })
+    .from(lensSnapshots)
+    .where(and(...conds))
+    .orderBy(desc(lensSnapshots.generatedAt))
+    .limit(500);
+
+  return rows.map((r) => ({ ...r, cadence: cadenceOfPeriod(r.period) }));
+}
+
+/** One snapshot's frozen payload, scoped to the tenant that owns it. */
+export async function getLensSnapshot(db: Db, tenantId: number, id: string) {
+  const [row] = await db
+    .select()
+    .from(lensSnapshots)
+    .where(and(eq(lensSnapshots.id, id), eq(lensSnapshots.tenantId, tenantId)))
+    .limit(1);
+  return row ? { ...row, cadence: cadenceOfPeriod(row.period) } : null;
+}
+
 export async function captureLensSnapshot(
   db: Db,
   tenantId: number,

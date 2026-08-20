@@ -55,7 +55,7 @@ describe('CRON_SWEEPS registry', () => {
    */
   it('flags every sweep that can start billable agent runs', () => {
     const dispatching = CRON_SWEEPS.filter((s) => s.dispatches).map((s) => s.key).sort();
-    expect(dispatching).toEqual(['auto-exec', 'mailbox-automation', 'manager', 'qa-sweep', 'security', 'validator']);
+    expect(dispatching).toEqual(['auto-exec', 'mailbox-automation', 'manager', 'pr-merge', 'qa-sweep', 'security', 'validator']);
   });
 
   it('resolves the frequent group to the KV-gated tick sweeps', () => {

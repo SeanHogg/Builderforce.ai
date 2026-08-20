@@ -11,95 +11,45 @@
  *   POST   /                create a release                        [manager]
  *   PATCH  /:id             update a release                        [manager]
  *   DELETE /:id             delete a release                        [manager]
+ *
+ * The rows themselves belong to `ProductReleaseService` — this file decides who
+ * may call, parses the request, and picks a status code.
  */
 
 import { Hono } from 'hono';
-import { and, desc, eq } from 'drizzle-orm';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
 import { scope } from './segmentTrackerRoutes';
-import { productReleases } from '../../infrastructure/database/schema';
+import { ProductReleaseService, type ReleaseInput } from '../../application/delivery/ProductReleaseService';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { positiveIntParam } from './queryParams';
 
-
-/** Coerce an ISO date string/number to a Date, or null. */
-function parseDate(raw: unknown): Date | null {
-  if (raw == null || raw === '') return null;
-  const d = new Date(raw as string);
-  return Number.isNaN(d.getTime()) ? null : d;
-}
-
-const RELEASE_STATUSES = ['planned', 'in_progress', 'released', 'cancelled'] as const;
-
 export function createReleasesRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
+  const service = new ProductReleaseService(db);
 
   // List releases, optionally scoped to a project (the picker's "releases for this
   // project" mode). Newest target/release date first.
   router.get('/', requireRole(TenantRole.DEVELOPER), async (c) => {
     const { tenantId } = scope(c);
     const projectId = positiveIntParam(c.req.query('projectId'));
-    const where = projectId != null
-      ? and(eq(productReleases.tenantId, tenantId), eq(productReleases.projectId, projectId))
-      : eq(productReleases.tenantId, tenantId);
-    const rows = await db
-      .select({
-        id: productReleases.id, name: productReleases.name, version: productReleases.version,
-        projectId: productReleases.projectId, status: productReleases.status,
-        targetDate: productReleases.targetDate, releasedAt: productReleases.releasedAt,
-        releaseDate: productReleases.releaseDate, notes: productReleases.notes,
-      })
-      .from(productReleases)
-      .where(where)
-      .orderBy(desc(productReleases.targetDate), desc(productReleases.createdAt))
-      .limit(500);
-    return c.json({ releases: rows });
+    return c.json({ releases: await service.list(tenantId, projectId) });
   });
 
   router.post('/', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId } = scope(c);
-    type Body = { name?: string; version?: string; projectId?: number; status?: string; targetDate?: string; releasedAt?: string; notes?: string };
-    const body = await c.req.json<Body>().catch(() => ({} as Body));
-    const name = typeof body.name === 'string' ? body.name.trim().slice(0, 255) : '';
+    const body = await c.req.json<ReleaseInput>().catch(() => ({} as ReleaseInput));
+    const name = typeof body.name === 'string' ? body.name.trim() : '';
     if (!name) return c.json({ error: 'name is required' }, 400);
-    const status = RELEASE_STATUSES.includes(body.status as never) ? body.status! : 'planned';
-    const [row] = await db
-      .insert(productReleases)
-      .values({
-        tenantId, name,
-        version: typeof body.version === 'string' ? body.version.trim().slice(0, 50) : null,
-        projectId: positiveIntParam(body.projectId) ?? null,
-        status,
-        targetDate: parseDate(body.targetDate),
-        releasedAt: parseDate(body.releasedAt),
-        notes: typeof body.notes === 'string' ? body.notes.slice(0, 4000) : null,
-      })
-      .returning();
-    return c.json(row, 201);
+    return c.json(await service.create(tenantId, { ...body, name }), 201);
   });
 
   router.patch('/:id', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId } = scope(c);
-    const id = c.req.param('id');
-    type Body = { name?: string; version?: string; projectId?: number | null; status?: string; targetDate?: string | null; releasedAt?: string | null; notes?: string };
-    const body = await c.req.json<Body>().catch(() => ({} as Body));
-    const set: Record<string, unknown> = { updatedAt: new Date() };
-    if (typeof body.name === 'string' && body.name.trim()) set.name = body.name.trim().slice(0, 255);
-    if (typeof body.version === 'string') set.version = body.version.trim().slice(0, 50);
-    if ('projectId' in body) set.projectId = positiveIntParam(body.projectId) ?? null;
-    if (RELEASE_STATUSES.includes(body.status as never)) set.status = body.status;
-    if ('targetDate' in body) set.targetDate = parseDate(body.targetDate);
-    if ('releasedAt' in body) set.releasedAt = parseDate(body.releasedAt);
-    if (typeof body.notes === 'string') set.notes = body.notes.slice(0, 4000);
-
-    const [row] = await db
-      .update(productReleases)
-      .set(set)
-      .where(and(eq(productReleases.id, id), eq(productReleases.tenantId, tenantId)))
-      .returning();
+    const body = await c.req.json<ReleaseInput>().catch(() => ({} as ReleaseInput));
+    const row = await service.update(tenantId, c.req.param('id'), body);
     if (!row) return c.json({ error: 'release not found' }, 404);
     return c.json(row);
   });
@@ -107,7 +57,7 @@ export function createReleasesRoutes(db: Db): Hono<HonoEnv> {
   router.delete('/:id', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId } = scope(c);
     const id = c.req.param('id');
-    await db.delete(productReleases).where(and(eq(productReleases.id, id), eq(productReleases.tenantId, tenantId)));
+    await service.remove(tenantId, id);
     return c.json({ deleted: id });
   });
 

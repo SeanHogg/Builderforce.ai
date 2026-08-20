@@ -69,7 +69,7 @@ import { maybeAutoRunOnLaneEntry } from '../../presentation/routes/taskRoutes';
 import { evaluateTaskAutoRun, AUTO_RUN_REASON_TEXT, type AutoRunReason } from '../swimlane/evaluateAutoRun';
 import { invalidateProjectsList } from '../project/projectsListCache';
 import { recordActivity, resolveHumanActor, SYSTEM_ACTOR } from '../activity/activityLog';
-import { pmoVersionKey } from '../../presentation/routes/pmoRoutes';
+import { pmoVersionKey } from '../pmo/pmoCacheKeys';
 import { bumpCacheVersion, invalidateCached, trackerCacheKey, bumpTicketSearchVersion } from '../../infrastructure/cache/readThroughCache';
 import { convertWorkItemType, promoteOrphanOkrEpics, ConvertError, type WorkItemKind } from '../workitem/convertWorkItemType';
 import { buildRuntimeService } from '../../buildRuntimeService';

@@ -1399,6 +1399,13 @@ export type TaskStatus =
   | 'blocked';
 export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent';
 
+/**
+ * The build verdict a ticket's card and execution chip badge. Mirrors
+ * `api/src/domain/task/buildStatus.ts` — `unknown` is a member rather than an absence,
+ * so a caller cannot forget the "nothing to say" case.
+ */
+export type TaskBuildStatus = 'passing' | 'failing' | 'pending' | 'unknown';
+
 export interface Task {
   id: number;
   projectId: number;
@@ -1459,6 +1466,16 @@ export interface Task {
   /** Count of linked PRDs (task_specs) — drives the board card's PRD indicator
    *  [1266]. Best-effort from GET /api/tasks; 0/absent where unknown. */
   specCount?: number;
+  /**
+   * CI verdict on the ticket's CURRENT pull request — the open one if there is one,
+   * else the newest settled one (the server applies that rule; see
+   * `domain/task/buildStatus.ts`).
+   *
+   * Derived, never stored on the ticket: the fact lives on `pull_requests.build_status`
+   * and is written by CI. Present only on GET /api/tasks, and null/absent for a ticket
+   * with no pull request — which renders no badge, exactly like a ticket whose build has
+   * never reported. */
+  buildStatus?: TaskBuildStatus | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -2773,6 +2790,30 @@ export interface ExecutionMessage {
   ts: string;
 }
 
+/**
+ * One traced LLM turn of a run (migration 0949).
+ *
+ * The run's model and token facts used to be readable only by parsing the JSON
+ * `args` string on an `llm.complete` tool-audit event, and the trace id that event
+ * carried resolved to nothing. These are the real columns off the run's own
+ * `llm_traces` rows, with `traceId` as the deep-link into the superadmin viewer.
+ */
+export interface ExecutionLlmTurn {
+  traceId: string;
+  ts: string | null;
+  model: string | null;
+  vendor: string | null;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  durationMs: number;
+  status: number | null;
+  success: boolean;
+  outcome: string | null;
+  candidateChain: string[] | null;
+  errorMessage: string | null;
+}
+
 export interface ExecutionTrace {
   execution: Execution;
   trace: {
@@ -2781,6 +2822,8 @@ export interface ExecutionTrace {
     toolEvents: ExecutionTraceToolEvent[];
     /** Durable steering/chat thread — persisted user steers + assistant replies. */
     messages?: ExecutionMessage[];
+    /** Structured per-turn model + token detail for this run, oldest first. */
+    llmTurns?: ExecutionLlmTurn[];
   };
 }
 
@@ -2949,10 +2992,26 @@ export const runtimeApi = {
    * returns the new execution id (`rerun.executionId`) so the UI can follow it.
    * Either way the directive is recorded as a PRD revision server-side.
    */
-  postMessage: (id: number, text: string): Promise<{ ok: true; steered?: boolean; rerun?: { executionId: number } }> =>
-    request<{ ok: true; steered?: boolean; rerun?: { executionId: number } }>(`/api/runtime/executions/${id}/messages`, {
+  postMessage: (id: number, text: string): Promise<{ ok: true; steered?: boolean; resumed?: boolean; rerun?: { executionId: number } }> =>
+    request<{ ok: true; steered?: boolean; resumed?: boolean; rerun?: { executionId: number } }>(`/api/runtime/executions/${id}/messages`, {
       method: 'POST',
       body: JSON.stringify({ text }),
+    }),
+
+  /**
+   * RESUME a run parked on `ask_human` — continue THAT run rather than starting a
+   * new one. `answer` is the reply to the agent's question; omit it to mean "carry
+   * on with your best judgement" (the server records that verbatim, because an
+   * agent that asked something has to get an answer back).
+   *
+   * Refuses with a 409 (`refusal: 'run_not_paused'`) on a run that is still working
+   * or has already finished — a finished run is re-run via `submitExecution`, not
+   * resumed.
+   */
+  resume: (id: number, answer?: string): Promise<{ ok: true; resumed: true; execution: Execution | null }> =>
+    request<{ ok: true; resumed: true; execution: Execution | null }>(`/api/runtime/executions/${id}/resume`, {
+      method: 'POST',
+      body: JSON.stringify(answer?.trim() ? { answer: answer.trim() } : {}),
     }),
 
   /**
@@ -4488,7 +4547,7 @@ export type LlmModelsResponse =
   | { configured: true;  product: string; effectivePlan: EffectivePlanLabel; premium?: boolean; object: 'list'; data: LlmModelStatus[]; freeModels?: string[]; codingModels?: string[]; teacherModels?: string[]; canChooseModel?: boolean; canUseFrontierModels?: boolean; canUsePremiumModels?: boolean; premiumInfo?: PremiumModelInfo; byo?: ByoModelInfo };
 
 /** Learned Model Routing (PRD 13) — closed action-type taxonomy. MIRRORS
- *  `api/src/application/llm/actionTypes.ts` (the api is the source of truth). */
+ *  `packages/learned-routing/src/actionTypes.ts` (the shared package is the source of truth). */
 export const ACTION_TYPES = [
   'sql', 'frontend_ui', 'backend_api', 'refactor', 'bugfix',
   'tests', 'docs', 'devops_ci', 'data_migration', 'other',
@@ -7050,11 +7109,25 @@ export const reposApi = {
     request<{ pullRequests: unknown[] }>(`/api/repos/projects/${projectId}/pull-requests`).then((r) => r.pullRequests ?? []),
 
   // The latest recorded PR for a task + live provider detail (pullRequest is null
-  // when the task has no PR yet).
+  // when the task has no PR yet). `pullRequests` is the per-repo PR SET of a task
+  // that spans repositories — empty for the ordinary single-repo ticket.
   getTaskPullRequest: (taskId: number): Promise<TaskPullRequest | null> =>
-    request<{ pullRequest: PullRequestRow | null; detail: PullRequestDetail | null }>(
+    request<{ pullRequest: PullRequestRow | null; detail: PullRequestDetail | null; pullRequests?: TaskRepoPullRequest[] }>(
       `/api/repos/tasks/${taskId}/pull-request`,
-    ).then((r) => (r.pullRequest ? { pullRequest: r.pullRequest, detail: r.detail } : null)),
+    ).then((r) => (r.pullRequest ? { pullRequest: r.pullRequest, detail: r.detail, pullRequests: r.pullRequests ?? [] } : null)),
+
+  /** MULTI-REPO SPANNING: the repos this ticket is bound to, plus the one it
+   *  resolves to by default. A ticket may bind more than one; each gets its own
+   *  branch and its own PR. */
+  getTaskRepoBindings: (taskId: number): Promise<TaskRepoBindingSet> =>
+    request<TaskRepoBindingSet>(`/api/repos/tasks/${taskId}/repositories`),
+
+  /** Replace the ticket's bound repo set (DEVELOPER+ server-side). */
+  setTaskRepoBindings: (taskId: number, repoIds: string[]): Promise<TaskRepoBindingSet> =>
+    request<TaskRepoBindingSet>(`/api/repos/tasks/${taskId}/repositories`, {
+      method: 'PUT',
+      body: JSON.stringify({ repoIds }),
+    }),
 
   // Approve & merge a recorded PR in-product (server-side with the tenant's token).
   mergePullRequest: (prId: string, method: MergeMethod = 'squash'): Promise<MergePrResponse> =>
@@ -7104,6 +7177,39 @@ export interface PullRequestDetail {
 export interface TaskPullRequest {
   pullRequest: PullRequestRow;
   detail: PullRequestDetail | null;
+  /** One entry per repo in a SPANNING ticket's set; empty for a single-repo ticket. */
+  pullRequests?: TaskRepoPullRequest[];
+}
+
+/** One repo of a spanning ticket: its branch, what it received, and its PR. */
+export interface TaskRepoPullRequest {
+  repoId: string;
+  slug: string;
+  branch: string | null;
+  prUrl: string | null;
+  prNumber: number | null;
+  prStatus: string | null;
+  writesCount: number;
+}
+
+/** One repo bound to a ticket (migration 0956). */
+export interface TaskRepoBinding {
+  repoId: string;
+  slug: string;
+  provider: string;
+  isDefault: boolean;
+  matchHints: string | null;
+  branch: string | null;
+  writesCount: number;
+  prUrl: string | null;
+  prNumber: number | null;
+  prStatus: string | null;
+}
+
+export interface TaskRepoBindingSet {
+  /** The repo the ticket resolves to when nothing is explicitly bound. */
+  primaryRepoId: string | null;
+  bindings: TaskRepoBinding[];
 }
 
 export interface MergePrResponse {
@@ -7564,6 +7670,16 @@ export interface SwimlaneRequirement {
   position: number;
 }
 
+/** What a "Run this lane now" sweep did to the tickets already resident in a lane. */
+export interface LaneRunResult {
+  /** Resident tickets considered (after the sweep's per-call limit). */
+  considered: number;
+  /** Tickets that actually started a run (or a coordinated stage). */
+  started: number;
+  /** Tickets the funnel declined — unstaffed, gated, capped, in backoff, already live. */
+  skipped: number;
+}
+
 export interface SwimlaneAgent {
   id: string;
   swimlaneId: string;
@@ -7657,6 +7773,20 @@ export const boardsApi = {
     remove: (boardId: string, laneId: string, id: string): Promise<void> =>
       request<void>(`/api/boards/${boardId}/swimlanes/${laneId}/agents/${id}`, { method: 'DELETE' }),
   },
+
+  /**
+   * "Run this lane now" — start the tickets ALREADY resident in a lane.
+   *
+   * The autonomous trigger is an ENTRY trigger, so staffing a lane that already holds
+   * tickets never started any of them; they had to be dragged out and back in. Staffing
+   * now sweeps residents automatically, and this is the explicit half for a lane that
+   * was staffed before that existed (or whose gate/requirement was just relaxed).
+   */
+  runLane: (boardId: string, laneId: string, body?: { limit?: number }): Promise<LaneRunResult> =>
+    request<LaneRunResult>(`/api/boards/${boardId}/swimlanes/${laneId}/run-lane`, {
+      method: 'POST',
+      body: JSON.stringify(body ?? {}),
+    }),
 
   /** LIVE per-lane requirements — directly editable on a running board (no template re-apply). */
   requirements: {

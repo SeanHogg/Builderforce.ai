@@ -35,6 +35,8 @@ function leaf<T>(rows: T[]) {
     returning: () => Promise.resolve(rows),
     then: <R1, R2>(ok?: ((v: T[]) => R1 | PromiseLike<R1>) | null, err?: ((e: unknown) => R2 | PromiseLike<R2>) | null) =>
       Promise.resolve(rows).then(ok, err),
+    // Best-effort writers attach `.catch(...)` directly to the builder.
+    catch: <R>(err?: ((e: unknown) => R | PromiseLike<R>) | null) => Promise.resolve(rows).catch(err),
   };
 }
 
@@ -63,6 +65,8 @@ function fakeDb() {
         },
       }),
     }),
+    // Resume-record cleanup for the reaped (unanswered) questions.
+    delete: () => ({ where: () => leaf<Record<string, unknown>>([]) }),
     // tool_audit_events telemetry mirror — asserted elsewhere.
     insert: () => ({ values: () => Promise.resolve() }),
   };

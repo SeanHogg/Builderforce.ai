@@ -18,6 +18,7 @@ import { qaExplorations, qaSchedules, qaTargets } from '../../infrastructure/dat
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { QaHeatmapService } from './QaHeatmapService';
 import { buildExplorationPlan } from './qaTypes';
+import { deriveTargetZones } from './deriveTargetRoutes';
 import { dispatchQaRunner } from './dispatchQaRunner';
 import { nextCronTime } from '../../domain/workflowSchedule';
 import type { Env } from '../../env';
@@ -70,10 +71,24 @@ export async function runQaExplorationSweep(env: Env): Promise<{ enqueued: numbe
       if (!target) {
         lastStatus = 'no_target';
       } else {
-        const zones = await heatmap.rankZones(s.tenantId, { sinceDays: s.sinceDays, limit: s.heatBudget * 3 });
+        // Rank THIS schedule's project (plus the app-shell events that belong to
+        // no project). Pooling the whole tenant planned one product's routes from
+        // another product's traffic.
+        let zones = await heatmap.rankZones(s.tenantId, {
+          sinceDays: s.sinceDays,
+          limit: s.heatBudget * 3,
+          projectId: s.projectId,
+        });
         if (zones.length === 0) {
-          lastStatus = 'no_heat';
-        } else {
+          // A schedule that finds no heat used to record `no_heat` and enqueue
+          // NOTHING — so a scheduled tester on a site with no captured usage
+          // never ran at all. Derive the routes the site's root links to instead;
+          // `deriveTargetZones` degrades to the root alone when the target is
+          // unreachable, so the schedule always produces a real run.
+          zones = await deriveTargetZones(env, target.baseUrl, s.heatBudget);
+          lastStatus = 'enqueued_derived';
+        }
+        {
           const plan = buildExplorationPlan(zones, s.heatBudget);
           const [exploration] = await db.insert(qaExplorations).values({
             tenantId: s.tenantId, segmentId: s.segmentId ?? undefined, projectId: s.projectId,

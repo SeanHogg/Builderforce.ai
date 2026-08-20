@@ -2286,6 +2286,11 @@ export const qaJourneyEvents = pgTable('qa_journey_events', {
   tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId:  uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
   userId:     varchar('user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  // Project (site-under-test) the interaction happened on. Null = captured in the
+  // Builderforce app shell itself, which belongs to no customer project — that is
+  // what every pre-0955 row means, so no backfill was needed. Heat ranks per
+  // project when this is set (0955).
+  projectId:  integer('project_id').references(() => projects.id, { onDelete: 'cascade' }),
   // Client-generated journey id — groups events from one continuous session.
   sessionId:  varchar('session_id', { length: 64 }).notNull(),
   seq:        integer('seq').notNull().default(0),
@@ -2577,6 +2582,42 @@ export const repoBranches = pgTable('repo_branches', {
   createdBy:  varchar('created_by', { length: 120 }),
   createdAt:  timestamp('created_at').notNull().defaultNow(),
 });
+
+
+/**
+ * task_repo_bindings (0956) — the per-task repo SET that makes a run able to span
+ * repositories: one row per (task, repo), each carrying its own working branch,
+ * a write counter and the PR that branch produced.
+ *
+ * A task with 0 or 1 rows is the single-repo case and behaves exactly as before
+ * (the existing `resolveDefaultRepoForTask` pick, one branch, one PR). With 2+
+ * rows, each file write is routed to a repo by `matchHints` (per-task override;
+ * NULL inherits `project_repositories.match_hints`) and finalize opens a PR per
+ * repo whose `writesCount` actually moved — a bound repo that received no writes
+ * opens nothing.
+ */
+export const taskRepoBindings = pgTable('task_repo_bindings', {
+  id:          uuid('id').primaryKey().defaultRandom(),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:   uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  taskId:      integer('task_id').notNull().references(() => tasks.id, { onDelete: 'cascade' }),
+  repoId:      uuid('repo_id').notNull().references(() => projectRepositories.id, { onDelete: 'cascade' }),
+  /** Per-task routing override, same JSON shape as project_repositories.match_hints. */
+  matchHints:  text('match_hints'),
+  /** Working branch inside THIS repo; null until the first write pins it. */
+  branch:      varchar('branch', { length: 255 }),
+  baseBranch:  varchar('base_branch', { length: 255 }),
+  /** Files committed to this repo for this task. 0 ⇒ finalize opens no PR here. */
+  writesCount: integer('writes_count').notNull().default(0),
+  lastWriteAt: timestamp('last_write_at'),
+  prUrl:       varchar('pr_url', { length: 500 }),
+  prNumber:    integer('pr_number'),
+  prStatus:    varchar('pr_status', { length: 16 }),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  byTaskRepo: uniqueIndex('uq_task_repo_bindings_task_repo').on(t.taskId, t.repoId),
+}));
 
 
 /** A pull/merge request opened by an agent, linked to ticket + PRD for traceability. */

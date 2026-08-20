@@ -120,7 +120,7 @@ describe('a factory vendor builds a correct OpenAI-compatible request', () => {
     (globalThis as { fetch: typeof fetch }).fetch = vi.fn(async (_input: string | URL, init?: RequestInit) => {
       const request = JSON.parse(String(init?.body)) as { model: string };
       calledModels.push(request.model);
-      if (request.model === 'minimaxai/minimax-m2.7') {
+      if (request.model === 'moonshotai/kimi-k2.6') {
         return new Response(JSON.stringify({ detail: 'model has reached end of life' }), {
           status: 410,
           headers: { 'content-type': 'application/json' },
@@ -134,15 +134,15 @@ describe('a factory vendor builds a correct OpenAI-compatible request', () => {
 
     const result = await dispatchVendor({
       env: { NVIDIA_API_KEY: 'nvapi-test' } as VendorEnv,
-      modelChain: ['minimaxai/minimax-m2.7', 'mistralai/mistral-medium-3.5-128b'],
+      modelChain: ['moonshotai/kimi-k2.6', 'mistralai/mistral-large-2-instruct'],
       messages: [{ role: 'user', content: 'hi' }],
     });
 
-    expect(calledModels).toEqual(['minimaxai/minimax-m2.7', 'mistralai/mistral-medium-3.5-128b']);
-    expect(result.modelUsed).toBe('mistralai/mistral-medium-3.5-128b');
+    expect(calledModels).toEqual(['moonshotai/kimi-k2.6', 'mistralai/mistral-large-2-instruct']);
+    expect(result.modelUsed).toBe('mistralai/mistral-large-2-instruct');
     expect(result.attempts).toEqual([
       expect.objectContaining({
-        model: 'minimaxai/minimax-m2.7',
+        model: 'moonshotai/kimi-k2.6',
         vendor: 'nvidia',
         status: 410,
         kind: 'client_error',

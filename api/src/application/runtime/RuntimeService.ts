@@ -19,6 +19,7 @@ import {
 import { parseExecutor, parseActAsRole, parseCloudAgentRef, isRoleAttributedRun } from './cloudDispatch';
 import type { PolicyGate } from '@builderforce/agent-tools';
 import { ticketKindForTaskType, type RunMilestonePhase } from '../brain/ChatTicketService';
+import { notifyExecutionSubscribers } from './executionEvents';
 
 export interface SubmitTaskDto {
   taskId:      number;
@@ -408,6 +409,21 @@ export class RuntimeService {
         source,
       }),
     }));
+
+    // ── THE RUN EXISTS NOW — SAY SO ON THE BOARD ────────────────────────────────
+    // Every LATER lifecycle event fans out to the project room (pending→running→done),
+    // but CREATION did not: an autonomously dispatched run appeared on the board only
+    // when `useBoardLiveRuns` next polled, so a ticket a human had just dragged sat
+    // visibly idle for up to a poll interval while the agent was already working.
+    // Same notifier, same event shape — the sink ignores anything that is not a
+    // lifecycle event, and a `status_change` at creation IS one.
+    notifyExecutionSubscribers(execution.id, {
+      type: 'status_change',
+      executionId: execution.id,
+      status: execution.toPlain().status,
+      execution: execution.toPlain(),
+      ts: new Date().toISOString(),
+    });
 
     return execution;
   }

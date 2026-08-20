@@ -16,3 +16,14 @@ export const rdFinancialsVersionKey = (tenantId: number): string => `insights-rd
 export const incidentVersionKey = (tenantId: number): string => `incidents-version:tenant:${tenantId}`;
 export const knowledgeVersionKey = (tenantId: number): string => `knowledge:${tenantId}`;
 export const monitoringVersionKey = (tenantId: number): string => `monitoring-version:tenant:${tenantId}`;
+
+/** Bumped on every recommendation dismissal so the cached list ages out. Lived in
+ *  `recommendationsRoutes.ts` until 2026-08-19, which made a second route module
+ *  import a route module to share a cache key. */
+export const recsVersionKey = (tenantId: number): string => `insights-recs-version:tenant:${tenantId}`;
+
+/** The recommendations read-through key for a tenant + window + dismissal token.
+ *  ONE definition: the drill-down read and the bundled `/ai-overview` read must
+ *  land on the same entry or the bundle serves dismissed rows. */
+export const recommendationsCacheKey = (tenantId: number, days: number, ver: string): string =>
+  `insights:recs:t:${tenantId}:d:${days}:v:${ver}`;

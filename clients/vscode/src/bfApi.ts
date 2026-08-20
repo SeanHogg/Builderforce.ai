@@ -1,5 +1,11 @@
 import * as vscode from "vscode";
-import type { EvermindLearnOutcome } from "@seanhogg/builderforce-brain-embedded";
+import type {
+  EvermindLearnOutcome,
+  EvermindRecallResult,
+  EvermindRunHooks,
+  MemoryFirstAnswer,
+} from "@seanhogg/builderforce-brain-embedded";
+import { renderPlatformContextSection, type RunContextEnvelope } from "@builderforce/run-context";
 import { getApiKey, getBaseUrl } from "./gateway";
 import { ttlCache } from "./ttlCache";
 
@@ -448,6 +454,60 @@ export async function rememberProjectFact(
   } catch {
     return false;
   }
+}
+
+/**
+ * The project-Evermind memory hooks for a run loop, bound to one project — the host
+ * half of "recall → memory-first answer → cache the answer".
+ *
+ * This is the SAME three endpoints the webview Brain calls (`App.tsx`'s `evermind`
+ * memo); the native chat participant reaches them through the extension's own
+ * JWT-exchanging `authed` helper instead of the webview's bearer fetch. Every hook is
+ * best-effort: a failure resolves to null / no-op and the loop simply runs the model,
+ * which is what makes memory an OPTIMISATION rather than a dependency.
+ */
+export function projectEvermindHooks(
+  secrets: vscode.SecretStorage,
+  projectId: number,
+): EvermindRunHooks {
+  return {
+    async recall(query: string): Promise<EvermindRecallResult | null> {
+      try {
+        return (
+          (await authed<EvermindRecallResult>(secrets, `/api/projects/${projectId}/evermind/recall`, {
+            method: "POST",
+            body: JSON.stringify({ query }),
+          })) ?? null
+        );
+      } catch {
+        return null;
+      }
+    },
+    // Memory-first: BEFORE spending a model call, ask the project's own memory. `tools=0`
+    // is what unlocks the Evermind SSM leg — it cannot call a tool, so on a run that CAN
+    // call one the server serves exact-repeat cache hits only, rather than answering a
+    // live question from stale weights while the tools that could answer it go uncalled.
+    async answer(query: string, opts: { toolsAvailable: boolean }): Promise<MemoryFirstAnswer | null> {
+      try {
+        const res = await authed<{ answer: MemoryFirstAnswer | null }>(
+          secrets,
+          `/api/projects/${projectId}/answer?query=${encodeURIComponent(query)}&tools=${opts.toolsAvailable ? "1" : "0"}`,
+        );
+        return res?.answer ?? null;
+      } catch {
+        return null;
+      }
+    },
+    // Remember a fresh (question → answer) so the next exact repeat is free.
+    cacheAnswer(query: string, answer: string): void {
+      void authed(secrets, `/api/projects/${projectId}/answer`, {
+        method: "POST",
+        body: JSON.stringify({ question: query, answer }),
+      }).catch(() => {
+        /* best-effort — never delays or fails the reply */
+      });
+    },
+  };
 }
 
 /** A workspace (tenant) the signed-in user belongs to. */
@@ -1153,4 +1213,48 @@ export async function joinMeeting(secrets: vscode.SecretStorage, id: string): Pr
   });
   if (!r) throw new Error("not signed in");
   return r;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Run context — the ONE assembled context every prompt-assembly surface consumes
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * The platform context for the work this chat is doing — strategy (OKRs), the ticket's
+ * PRD, project + agent governance, durable project memory and prior Evermind lessons —
+ * assembled by the api's single `ContextSource` and reconciled through Evermind
+ * cognition, then rendered by the SHARED `@builderforce/run-context` renderer.
+ *
+ * The IDE agent used to get NONE of this: `buildSystemMessages` carried the IDE persona,
+ * the workspace map, the editor selection and the limbic block, and nothing about what
+ * the project is FOR or what rules bind it — while a cloud run on the same ticket had
+ * carried PRD + governance since day one. Same source now, same words.
+ *
+ * `scope` is the continuity key the reconciler measures the delta against (`chat:<id>`
+ * for a conversation that already has a Brain chat). Best-effort: `''` when signed out,
+ * project-less, or the api is unreachable — the turn simply runs without it.
+ */
+export async function fetchRunContextSection(
+  secrets: vscode.SecretStorage,
+  projectId: number,
+  opts: { scope?: string; query?: string; taskId?: number } = {},
+): Promise<string> {
+  try {
+    const qs = new URLSearchParams();
+    if (opts.scope) qs.set("scope", opts.scope.slice(0, 160));
+    if (opts.query?.trim()) qs.set("query", opts.query.trim().slice(0, 2000));
+    if (opts.taskId != null) qs.set("taskId", String(opts.taskId));
+    const r = await authed<{ envelope?: RunContextEnvelope }>(
+      secrets,
+      `/api/projects/${projectId}/run-context?${qs.toString()}`,
+    );
+    if (!r?.envelope) return "";
+    return renderPlatformContextSection(r.envelope, {
+      // The IDE already shows the agent its own workspace, its own tools and its own
+      // capabilities; the cloud executor's versions of those blocks would contradict them.
+      omit: ["workspace", "prior_changes", "tooling", "capabilities"],
+    });
+  } catch {
+    return "";
+  }
 }

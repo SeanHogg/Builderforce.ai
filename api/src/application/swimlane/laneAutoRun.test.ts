@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { decideLaneAutoRun, missingCapabilities, withOwnerAgentFallback, type LaneAgentLike } from './laneAutoRun';
+import { decideLaneAutoRun, missingCapabilities, scoreLaneAgent, withOwnerAgentFallback, type LaneAgentLike } from './laneAutoRun';
 
 const agent = (over: Partial<LaneAgentLike> = {}): LaneAgentLike => ({
   agentRef: 'agent_kevin',
@@ -76,12 +76,87 @@ describe('decideLaneAutoRun', () => {
   });
 });
 
+describe('decideLaneAutoRun — the staffed BACKPLANE of a lane', () => {
+  it('carries runtime + target off the chosen lane agent', () => {
+    const lane: LaneAgentLike[] = [{ agentRef: 'agent_ada', model: null, runtime: 'remote', target: '42' }];
+    expect(decideLaneAutoRun(lane, 'auto')).toEqual({
+      autoRun: true, agentRef: 'agent_ada', model: undefined, runtime: 'remote', target: '42',
+    });
+  });
+
+  it('omits both when the assignment names neither (a cloud lane, unchanged)', () => {
+    const lane: LaneAgentLike[] = [{ agentRef: 'agent_ada', model: null }];
+    expect(decideLaneAutoRun(lane, 'auto')).toEqual({ autoRun: true, agentRef: 'agent_ada', model: undefined });
+  });
+
+  it('reads the backplane of the agent that actually QUALIFIED, not the first staffed one', () => {
+    const lane: LaneAgentLike[] = [
+      { agentRef: 'agent_docs', model: null, runtime: 'cloud', requiredCapabilities: ['coding'], capabilities: ['writing'] },
+      { agentRef: 'agent_dev', model: null, runtime: 'local', requiredCapabilities: ['coding'], capabilities: ['coding'] },
+    ];
+    const d = decideLaneAutoRun(lane, 'auto');
+    expect(d.agentRef).toBe('agent_dev');
+    expect(d.runtime).toBe('local');
+  });
+});
+
+describe('capability-aware routing — which qualified agent the lane actually gets', () => {
+  it('prefers the agent whose skills match what the lane is FOR, not the first row', () => {
+    const lane: LaneAgentLike[] = [
+      { agentRef: 'agent_reviewer', model: null, capabilities: ['code-review', 'qa'] },
+      { agentRef: 'agent_coder', model: null, capabilities: ['coding'] },
+    ];
+    // Un-configured lane: no required_capabilities anywhere, so the LANE KEY supplies
+    // the expectation. Before the router this returned agent_reviewer every time.
+    expect(decideLaneAutoRun(lane, 'auto', 'in_progress').agentRef).toBe('agent_coder');
+    expect(decideLaneAutoRun(lane, 'auto', 'in_review').agentRef).toBe('agent_reviewer');
+  });
+
+  it('keeps assignment order when nothing distinguishes the candidates', () => {
+    const lane: LaneAgentLike[] = [
+      { agentRef: 'agent_a', model: null, capabilities: ['coding'] },
+      { agentRef: 'agent_b', model: null, capabilities: ['coding'] },
+    ];
+    expect(decideLaneAutoRun(lane, 'auto', 'in_progress').agentRef).toBe('agent_a');
+  });
+
+  it('is inert on a lane key it has no expectation for', () => {
+    const lane: LaneAgentLike[] = [
+      { agentRef: 'agent_reviewer', model: null, capabilities: ['code-review'] },
+      { agentRef: 'agent_coder', model: null, capabilities: ['coding'] },
+    ];
+    expect(decideLaneAutoRun(lane, 'auto', 'some_custom_lane').agentRef).toBe('agent_reviewer');
+    expect(decideLaneAutoRun(lane, 'auto').agentRef).toBe('agent_reviewer');
+  });
+
+  it('never promotes the owner fallback ahead of explicit staffing', () => {
+    const staffed: LaneAgentLike[] = [{ agentRef: 'agent_staffed', model: null, capabilities: [] }];
+    const withOwner = withOwnerAgentFallback(staffed, { agentRef: 'agent_owner' });
+    // The owner has no resolved capabilities either, but it must stay last on merit or not.
+    expect(decideLaneAutoRun(withOwner, 'auto', 'in_progress').agentRef).toBe('agent_staffed');
+  });
+
+  it('still REFUSES an agent that fails an explicit requirement, however well it scores', () => {
+    const lane: LaneAgentLike[] = [
+      { agentRef: 'agent_coder', model: null, requiredCapabilities: ['security-clearance'], capabilities: ['coding'] },
+    ];
+    expect(decideLaneAutoRun(lane, 'auto', 'in_progress')).toMatchObject({ autoRun: false });
+  });
+
+  it('scoreLaneAgent matches a slug that CONTAINS the expected term', () => {
+    expect(scoreLaneAgent({ capabilities: ['senior-coding-agent'] }, ['coding'])).toBe(1);
+    expect(scoreLaneAgent({ capabilities: ['writing'] }, ['coding'])).toBe(0);
+    expect(scoreLaneAgent({ capabilities: null }, ['coding'])).toBe(0);
+    expect(scoreLaneAgent({ capabilities: ['coding'] }, [])).toBe(0);
+  });
+});
+
 describe('withOwnerAgentFallback', () => {
   it('appends the owner agent as a fallback when the lane has no staffing', () => {
     const list = withOwnerAgentFallback([], { agentRef: 'agent_ada' });
     // `runtime`/`target` are explicitly null: the owner fallback names WHO works the
     // ticket, not WHERE, so the dispatcher keeps its ordinary host-pin/cloud resolution.
-    expect(list).toEqual([{ agentRef: 'agent_ada', model: null, requiredCapabilities: null, capabilities: null, runtime: null, target: null }]);
+    expect(list).toEqual([{ agentRef: 'agent_ada', model: null, requiredCapabilities: null, capabilities: null, runtime: null, target: null, isOwnerFallback: true }]);
     // …and the decision then auto-runs AS the owner (the bug fix: an agent-owned
     // ticket in an auto lane with no lane staffing now runs).
     expect(decideLaneAutoRun(list, 'auto')).toEqual({ autoRun: true, agentRef: 'agent_ada', model: undefined });
@@ -89,7 +164,7 @@ describe('withOwnerAgentFallback', () => {
 
   it('also covers an undefined lane-agent list', () => {
     expect(withOwnerAgentFallback(undefined, { agentRef: 'agent_ada' })).toEqual([
-      { agentRef: 'agent_ada', model: null, requiredCapabilities: null, capabilities: null, runtime: null, target: null },
+      { agentRef: 'agent_ada', model: null, requiredCapabilities: null, capabilities: null, runtime: null, target: null, isOwnerFallback: true },
     ]);
   });
 

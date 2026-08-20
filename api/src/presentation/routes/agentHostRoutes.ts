@@ -38,11 +38,14 @@ import { generateApiKey, hashSecret } from '../../infrastructure/auth/HashServic
 import { invalidateAgentHostKeyCache } from '../../infrastructure/auth/keyResolutionCache';
 import { verifyJwt } from '../../infrastructure/auth/JwtService';
 import { resolveArtifacts } from '../../application/artifact/resolveArtifacts';
-import { SwimlaneCoordinator } from '../../application/swimlane/SwimlaneCoordinator';
-import { DrizzleCoordinatorStore } from '../../application/swimlane/DrizzleCoordinatorStore';
-import { DrizzlePrdEnsurer } from '../../application/swimlane/DrizzlePrdEnsurer';
-import { AgentHostStageDispatcher } from '../../application/swimlane/agentHostStageDispatcher';
+import { makeSwimlaneCoordinator } from '../../application/swimlane/makeCoordinator';
 import { resolveDefaultRepoForTask } from '../../application/repos/resolveDefaultRepo';
+import {
+  applyTaskWorkspaceChanges,
+  readTaskWorkspaceTree,
+  resolveTaskWorkspaceTarget,
+  workspaceProjectInTenant,
+} from '../../application/ide/taskWorkspaceTarget';
 import { openDispatchPullRequest } from '../../application/repos/openDispatchPullRequest';
 import { openTaskPullRequest } from '../../application/repos/openTaskPullRequest';
 import { GIT_PROXY_SUBPATHS, handleGitProxyRequest } from './gitProxyHandler';
@@ -62,6 +65,7 @@ import { taskInTenant } from '../../infrastructure/database/tenantScope';
 import { isAgentHostOnline } from '../../domain/agentHost/onlineStatus';
 import { normalizeRequestKind } from '../../domain/approval/requestKind';
 import type { HonoEnv, Env } from '../../env';
+import { invalidateProjectGovernance } from '../../application/runtime/runContextSource';
 import type { Db } from '../../infrastructure/database/connection';
 import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelayDO';
 import type { AgentHostService } from '../../application/agentHost/AgentHostService';
@@ -1514,12 +1518,10 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
       return c.json({ error: 'status must be completed | failed | cancelled' }, 400);
     }
 
-    const coordinator = new SwimlaneCoordinator(
-      new DrizzleCoordinatorStore(db),
-      new AgentHostStageDispatcher(c.env.AGENT_HOST_RELAY),
-      undefined,
-      new DrizzlePrdEnsurer(db, c.env),
-    );
+    // ONE factory (makeCoordinator.ts). This site used to pass `undefined` for the
+    // workflow runner — so a lane's `run_workflow` action was skipped for every
+    // host-reported dispatch result, which is the main settle path on a staffed board.
+    const coordinator = makeSwimlaneCoordinator(db, c.env);
     try {
       await coordinator.reportDispatchResult(body.dispatchId, agentHost.tenantId, {
         status: body.status,
@@ -1562,6 +1564,16 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     if (!d) return c.json({ error: 'Dispatch not found' }, 404);
 
     const repo = await resolveDefaultRepoForTask(db, agentHost.tenantId, d.taskId);
+    // NO REPO ⇒ hand the runtime the project's IDE workspace (R2) as its working
+    // tree instead of letting it degrade to reasoning-only. See the decision note
+    // in application/ide/taskWorkspaceTarget.ts: a Brain-created project has no
+    // connected repo AND usually no connected provider to create one through, but
+    // it always has this workspace — the same tree the IDE and the WebContainer
+    // preview build against. Only when BOTH are absent does the runtime fall back
+    // to prose, and it then says so.
+    const workspace = repo || d.taskId == null
+      ? null
+      : await resolveTaskWorkspaceTarget(db, agentHost.tenantId, d.taskId).catch(() => null);
     return c.json({
       dispatch: {
         dispatchId: d.id,
@@ -1573,8 +1585,93 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
         repo: repo
           ? { ...repo, gitProxyPath: `/api/agent-hosts/${agentHostId}/git-proxy/${repo.repoId}` }
           : null,
+        workspace: workspace
+          ? {
+              projectId: workspace.projectId,
+              projectName: workspace.projectName,
+              filesPath: `/api/agent-hosts/${agentHostId}/workspace/${workspace.projectId}/files`,
+            }
+          : null,
       },
     });
+  });
+
+  // -------------------------------------------------------------------------
+  // Workspace working tree for a REPO-LESS dispatch   (agentHost API key auth)
+  //
+  //   GET  /api/agent-hosts/:id/workspace/:projectId/files   → the whole tree
+  //   POST /api/agent-hosts/:id/workspace/:projectId/files   → apply writes/deletes
+  //
+  // The R2 analogue of the git-proxy above: the host never touches the bucket, and
+  // the tenant boundary is re-proved here from the host's own key rather than
+  // trusted from the request. All object access goes through the ONE workspace
+  // access layer (application/ide/workspaceStore, via taskWorkspaceTarget), so the
+  // path and content contracts an agent write must satisfy are exactly the ones
+  // the IDE editor satisfies.
+  // -------------------------------------------------------------------------
+  router.get('/:id/workspace/:projectId/files', async (c) => {
+    const agentHostId = Number(c.req.param('id'));
+    const agentHost = await verifyAgentHostApiKey(agentHostId, extractAgentHostKey(c));
+    if (!agentHost) return c.text('Unauthorized', 401);
+    const projectId = Number(c.req.param('projectId'));
+    if (!Number.isFinite(projectId)) return c.json({ error: 'Invalid projectId' }, 400);
+    const bucket = (c.env as { UPLOADS?: R2Bucket }).UPLOADS;
+    if (!bucket) return c.json({ error: 'Storage not configured' }, 503);
+    if (!(await workspaceProjectInTenant(db, agentHost.tenantId, projectId))) {
+      return c.json({ error: 'Project not found' }, 404);
+    }
+    const tree = await readTaskWorkspaceTree(bucket, projectId);
+    return c.json({ files: tree.files, truncated: tree.truncated });
+  });
+
+  router.post('/:id/workspace/:projectId/files', async (c) => {
+    const agentHostId = Number(c.req.param('id'));
+    const agentHost = await verifyAgentHostApiKey(agentHostId, extractAgentHostKey(c));
+    if (!agentHost) return c.text('Unauthorized', 401);
+    const projectId = Number(c.req.param('projectId'));
+    if (!Number.isFinite(projectId)) return c.json({ error: 'Invalid projectId' }, 400);
+    const bucket = (c.env as { UPLOADS?: R2Bucket }).UPLOADS;
+    if (!bucket) return c.json({ error: 'Storage not configured' }, 503);
+    if (!(await workspaceProjectInTenant(db, agentHost.tenantId, projectId))) {
+      return c.json({ error: 'Project not found' }, 404);
+    }
+    type WorkspaceChangeBody = {
+      taskId?: number | null;
+      agent?: string;
+      writes?: Array<{ path: string; content: string }>;
+      deletes?: string[];
+    };
+    const body = await c.req.json<WorkspaceChangeBody>().catch((): WorkspaceChangeBody => ({}));
+    // `taskId` arrives in the BODY, so re-prove it belongs to this host's tenant
+    // before anything is attributed to it (same rule as /file-change below).
+    const taskId = Number(body.taskId);
+    const ownedTask = Number.isFinite(taskId) && taskId > 0
+      ? await taskInTenant(db, taskId, agentHost.tenantId)
+      : false;
+    // Traceability: hang the workspace changes off this host's latest execution for
+    // the task, so the ticket's Changes tab shows an R2 run exactly like a git run.
+    // No execution ⇒ the files still land; only the attribution rows are skipped.
+    const [execution] = ownedTask
+      ? await db
+          .select({ id: executions.id })
+          .from(executions)
+          .where(and(
+            eq(executions.taskId, taskId),
+            eq(executions.tenantId, agentHost.tenantId),
+            eq(executions.agentHostId, agentHostId),
+          ))
+          .orderBy(desc(executions.id))
+          .limit(1)
+      : [];
+    const applied = await applyTaskWorkspaceChanges(db, bucket, {
+      tenantId: agentHost.tenantId,
+      taskId: ownedTask ? taskId : 0,
+      projectId,
+      executionId: execution?.id ?? null,
+      agent: (body.agent ?? 'agent').slice(0, 120),
+      changes: { writes: body.writes ?? [], deletes: body.deletes ?? [] },
+    });
+    return c.json(applied);
   });
 
   // -------------------------------------------------------------------------
@@ -2155,6 +2252,11 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
       .update(projects)
       .set({ governance: body.governance, updatedAt: new Date() })
       .where(and(eq(projects.id, projectId), eq(projects.tenantId, Number(agentHost.tenantId))));
+
+    // Project rules bind the next agent RUN, and the run-context assembler caches them.
+    // Invalidate on write so a rules push from a host takes effect on the very next run
+    // rather than after a TTL.
+    await invalidateProjectGovernance(c.env as Env, Number(agentHost.tenantId));
 
     return c.json({ ok: true, projectId });
   });

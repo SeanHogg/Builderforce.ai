@@ -46,6 +46,9 @@ export const EVENT_TRIGGER_TYPES = [
   'incident-status-change',
   // Delivery
   'board-event',
+  // Quality — the Agentic Tester events. See the note below the array.
+  'qa-finding',
+  'qa-exploration-complete',
   // Growth
   'form-submit',
   'page-view',
@@ -56,6 +59,26 @@ export const EVENT_TRIGGER_TYPES = [
   'integration',
 ] as const;
 export type EventTriggerType = (typeof EVENT_TRIGGER_TYPES)[number];
+
+/**
+ * QUALITY EVENTS — why the Agentic Tester belongs in this list.
+ *
+ * A tester that can only be started by a person, or by its own private cron, is
+ * a tool bolted onto the side of delivery. One whose results can START a workflow
+ * is part of the loop: "a critical finding on the checkout route opens a ticket
+ * and pages the on-call", "a failed nightly run posts the verdict to the team".
+ * The tester already had a schedule of its own (`qa_schedules`) and no way to be
+ * a cause of anything else.
+ *
+ * `qa-finding` fires once per genuinely NEW finding — a re-post of the same
+ * fingerprint is deduped and is not new information, so it must not re-fire.
+ * `qa-exploration-complete` fires once per run so a workflow can react to the
+ * VERDICT rather than to each individual error in it.
+ *
+ * NOTE: comments inside the arrays above must avoid apostrophes —
+ * `check-trigger-palette-parity.mjs` parses those arrays as text with a
+ * single-quote regex, and a contraction reads as a phantom trigger type.
+ */
 
 /**
  * The config keys a trigger row may filter on, and therefore the keys an emitting
@@ -73,6 +96,10 @@ export const TRIGGER_FILTER_KEYS = [
   'severity', 'affectedSystem', 'incidentSource', 'monitorType', 'status',
   // Delivery
   'boardEvent',
+  // Quality. `findingSeverity` is deliberately its own key rather than reusing
+  // `severity`: the incident taxonomy is sev1..sev4 and the QA one is
+  // low/medium/high/critical, so one key would silently never match.
+  'findingSeverity', 'findingType', 'explorationOutcome',
   // Growth
   'formId', 'pagePath', 'sku', 'campaign', 'integrationEvent',
   // NOTE: the palette's `source` field is a free-text LABEL on every trigger node,

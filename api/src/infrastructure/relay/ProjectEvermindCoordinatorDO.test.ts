@@ -275,3 +275,229 @@ describe('/reindex', () => {
     expect(await res.json()).toMatchObject({ ok: true, reindexed: 0, done: true });
   });
 });
+
+describe('legacy provenance backfill', () => {
+  /** A LEGACY row: merged before `distilled`/`skipReason` were recorded at all. */
+  const legacy = (id: number, over: Record<string, unknown> = {}) => ({
+    id, kind: 'text' as const, version: 1, at: id, weight: 1,
+    prompt: `task ${id}`, text: `learned answer ${id}`, ...over,
+  });
+
+  /**
+   * The grading `evermindLearnedStatus` (packages/brain-ui/src/evermind/learnedStatus.ts)
+   * applies. Transcribed here because the API Worker cannot import the UI package — this
+   * is what pins the backfill to the reader it is supposed to be materialising.
+   */
+  const verdict = (e: Record<string, unknown>): string => {
+    if (e.kind === 'delta') return 'delta';
+    if (e.distilled) return 'distilled';
+    if (e.skipReason) return (e.skipReason === 'not_pinned' || e.skipReason === 'legacy') ? 'self' : 'fault';
+    const p = typeof e.prompt === 'string' ? e.prompt.trim() : '';
+    const t = typeof e.text === 'string' ? e.text.trim() : '';
+    return p && t && p === t ? 'fault' : 'self';
+  };
+
+  const readRecent = async (doInstance: InstanceType<typeof ProjectEvermindCoordinatorDO>) =>
+    ((await (await doInstance.fetch(recentUrl('?limit=200'))).json()) as { recent: Record<string, unknown>[] }).recent;
+
+  it('backfills a legacy row so the reader stops inferring — same verdict, now recorded', async () => {
+    const { doInstance, map } = makeDO();
+    map.set('mem:000000000001', legacy(1));
+
+    const before = verdict(legacy(1));
+    const [row] = await readRecent(doInstance);
+
+    expect(row!.skipReason).toBe('legacy');
+    expect(row!.distilled).toBe(false);
+    // The whole safety property of this migration: materialising the inference must not
+    // re-grade history.
+    expect(verdict(row!)).toBe(before);
+    expect(verdict(row!)).toBe('self');
+  });
+
+  it('marks a legacy ECHO row (text === prompt) as the fault it provably is', async () => {
+    const { doInstance, map } = makeDO();
+    // A teach-a-task whose pinned teacher produced nothing: all that was left to learn
+    // was the question, so the row echoes it back as its own answer.
+    map.set('mem:000000000002', legacy(2, { prompt: 'How do I retry?', text: 'How do I retry?' }));
+
+    const [row] = await readRecent(doInstance);
+
+    expect(row!.skipReason).toBe('unknown');
+    expect(verdict(row!)).toBe('fault');
+  });
+
+  it('leaves an already-provenanced row untouched', async () => {
+    const { doInstance, map } = makeDO();
+    map.set('mem:000000000003', legacy(3, { distilled: true, teacherModel: 'anthropic/claude' }));
+    map.set('mem:000000000004', legacy(4, { distilled: false, skipReason: 'gateway_error', attemptedTeacherModel: 'x/y', skipDetail: '503' }));
+
+    const rows = await readRecent(doInstance);
+    const byId = new Map(rows.map((r) => [r.id, r]));
+
+    expect(byId.get(4)!.skipReason).toBe('gateway_error'); // NOT overwritten with 'legacy'
+    expect(byId.get(3)!.skipReason).toBeUndefined();
+    expect(byId.get(3)!.distilled).toBe(true);
+  });
+
+  it('says nothing about a pre-diffed delta row — it has no text provenance', async () => {
+    const { doInstance, map } = makeDO();
+    map.set('mem:000000000005', { id: 5, kind: 'delta', version: 1, at: 5, weight: 1, prompt: 'ticket 5' });
+
+    const [row] = await readRecent(doInstance);
+    expect(row!.skipReason).toBeUndefined();
+    expect(row!.distilled).toBeUndefined();
+    expect(verdict(row!)).toBe('delta');
+  });
+
+  it('is idempotent: a completed migration never rewrites a row again', async () => {
+    const { doInstance, map } = makeDO();
+    map.set('mem:000000000001', legacy(1));
+
+    const first = await readRecent(doInstance);
+    expect(first[0]!.skipReason).toBe('legacy');
+    expect((map.get('schema') as { provenance?: number }).provenance).toBe(1);
+
+    // A REAL recorded reason landing later must survive every subsequent read — proof
+    // the walk is marker-gated rather than re-deriving provenance on each pass.
+    map.set('mem:000000000001', { ...(map.get('mem:000000000001') as object), skipReason: 'empty_output' });
+    const second = await readRecent(doInstance);
+    expect(second[0]!.skipReason).toBe('empty_output');
+  });
+
+  it('completes on a COLD DO with nothing stored, and marks itself done', async () => {
+    const { doInstance, map } = makeDO();
+    const rows = await readRecent(doInstance);
+    expect(rows).toEqual([]);
+    expect((map.get('schema') as { provenance?: number }).provenance).toBe(1);
+  });
+
+  it('is bounded per pass and resumes from its cursor on a long ring', async () => {
+    const { doInstance, map } = makeDO();
+    // 200 legacy rows > the 128-row batch, so ONE pass cannot finish — which is the
+    // point: an unbounded walk here would blow the DO's CPU budget on whichever read
+    // happened to touch it first.
+    for (let i = 1; i <= 200; i++) map.set(`mem:${String(i).padStart(12, '0')}`, legacy(i));
+
+    await readRecent(doInstance);
+    const afterOne = map.get('schema') as { provenance?: number; provenanceCursor?: number };
+    expect(afterOne.provenance).toBeUndefined();
+    expect(afterOne.provenanceCursor).toBe(73); // 200 - 128 + 1: the oldest row of pass one
+
+    await readRecent(doInstance);
+    expect((map.get('schema') as { provenance?: number }).provenance).toBe(1);
+
+    // Every row ends up backfilled, newest and oldest alike.
+    const rows = await readRecent(doInstance);
+    expect(rows.every((r) => r.skipReason === 'legacy')).toBe(true);
+  });
+
+  it('folds the LEGACY RING first, then backfills what it produced', async () => {
+    const { doInstance, map } = makeDO();
+    map.set('recent', [legacy(2), legacy(1, { prompt: 'same', text: 'same' })]);
+
+    const rows = await readRecent(doInstance);
+    const byId = new Map(rows.map((r) => [r.id, r]));
+
+    expect(map.has('recent')).toBe(false);
+    expect(byId.get(2)!.skipReason).toBe('legacy');
+    expect(byId.get(1)!.skipReason).toBe('unknown');
+  });
+});
+
+describe('/contribution — the pollable teach status', () => {
+  const post = (path: string, body: unknown) =>
+    new Request(`https://coordinator/${path}`, { method: 'POST', body: JSON.stringify(body) });
+  const statusOf = async (doInstance: InstanceType<typeof ProjectEvermindCoordinatorDO>, id: number) =>
+    (await (await doInstance.fetch(new Request(`https://coordinator/contribution?id=${id}`))).json()) as Record<string, unknown>;
+
+  it('hands back a contribution id at enqueue time, and reports it PENDING', async () => {
+    const { doInstance } = makeDO();
+    const queued = (await (await doInstance.fetch(post('learn-text', {
+      tenantId: 1, projectId: 2, text: 'a run long enough to be trainable text', prompt: 'the ticket',
+    }))).json()) as { ok: boolean; contributionId: number };
+
+    // Without an id returned here, a surface has nothing to poll — which is exactly why
+    // the console could only ever claim success optimistically.
+    expect(queued.ok).toBe(true);
+    expect(queued.contributionId).toBe(1);
+    expect(await statusOf(doInstance, queued.contributionId)).toMatchObject({ status: 'pending', kind: 'text' });
+  });
+
+  it('reports MERGED with the ring provenance once the memory exists', async () => {
+    const { doInstance } = makeDO();
+    const priv = doInstance as unknown as { recordRecent(e: unknown[]): Promise<void> };
+    await priv.recordRecent([entry(4, { version: 9, distilled: true, teacherModel: 'anthropic/claude', emb: 'AAAA' })]);
+
+    const status = await statusOf(doInstance, 4);
+
+    expect(status).toMatchObject({ status: 'merged', version: 9, distilled: true, teacherModel: 'anthropic/claude' });
+    // The recall-only embedding is an internal, never part of a status payload.
+    expect(status).not.toHaveProperty('emb');
+  });
+
+  it('carries the teacher FAULT on a merged row — it learned, just un-distilled', async () => {
+    const { doInstance } = makeDO();
+    const priv = doInstance as unknown as { recordRecent(e: unknown[]): Promise<void> };
+    await priv.recordRecent([entry(5, {
+      distilled: false, skipReason: 'gateway_error', skipDetail: 'HTTP 503', attemptedTeacherModel: 'vendor/model',
+    })]);
+
+    expect(await statusOf(doInstance, 5)).toMatchObject({
+      status: 'merged', distilled: false, skipReason: 'gateway_error', skipDetail: 'HTTP 503', attemptedTeacherModel: 'vendor/model',
+    });
+  });
+
+  it('reports DROPPED for an id a merge consumed without producing a memory', async () => {
+    const { doInstance } = makeDO();
+    // Never queued, never stored — a poller must be able to stop, not wait forever.
+    expect(await statusOf(doInstance, 77)).toMatchObject({ status: 'dropped' });
+  });
+
+  it('rejects a call with no usable id', async () => {
+    const { doInstance } = makeDO();
+    const res = await doInstance.fetch(new Request('https://coordinator/contribution?id=0'));
+    expect(res.status).toBe(400);
+  });
+});
+
+describe('/learn — the stale-baseVersion guard', () => {
+  const learn = (body: unknown) =>
+    new Request('https://coordinator/learn', { method: 'POST', body: JSON.stringify(body) });
+
+  it('rejects a delta whose base no longer matches, and names the current head', async () => {
+    const { doInstance, map } = makeDO();
+    mocks.head.mockResolvedValue({ version: 8, ref: 'ref-8', mode: 'connected' });
+
+    const res = await doInstance.fetch(learn({ tenantId: 1, projectId: 2, diff: 'AAAA', baseVersion: 7 }));
+
+    expect(res.status).toBe(409);
+    // The head number is the whole point: a producer cannot rebase without being told
+    // what to rebase ONTO. This is the contract the on-prem delta producer recovers on.
+    expect(await res.json()).toMatchObject({ ok: false, headVersion: 8 });
+    // Nothing was queued — a stale diff must never reach the merge.
+    expect(map.get('pending')).toBeUndefined();
+  });
+
+  it('accepts the SAME delta once it is rebased onto the current head', async () => {
+    const { doInstance } = makeDO();
+    mocks.head.mockResolvedValue({ version: 8, ref: 'ref-8', mode: 'connected' });
+
+    const res = await doInstance.fetch(learn({ tenantId: 1, projectId: 2, diff: 'AAAA', baseVersion: 8, label: 'ticket 12' }));
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ ok: true, queued: 1, contributionId: 1, baseVersion: 8 });
+  });
+
+  it('refuses on an unseeded project and on a frozen one, without queueing', async () => {
+    const { doInstance, map } = makeDO();
+
+    mocks.head.mockResolvedValue({ version: 0, ref: null, mode: 'connected' });
+    expect((await doInstance.fetch(learn({ tenantId: 1, projectId: 2, diff: 'AAAA', baseVersion: 0 }))).status).toBe(409);
+
+    mocks.head.mockResolvedValue({ version: 3, ref: 'ref-3', mode: 'offline-frozen' });
+    expect((await doInstance.fetch(learn({ tenantId: 1, projectId: 2, diff: 'AAAA', baseVersion: 3 }))).status).toBe(423);
+
+    expect(map.get('pending')).toBeUndefined();
+  });
+});

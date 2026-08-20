@@ -108,6 +108,13 @@ export interface InitData {
   /** The installed extension's version, so a copied diagnostics report pins the exact
    *  client build it came from (a stale VSIX is a routine cause of "already fixed" bugs). */
   extensionVersion?: string;
+  /** Short SOURCE HASH of the installed artifact. A version names a release, not a
+   *  build: two VSIXes can carry the same version and different code, so this is the
+   *  field a "did you get the fix?" question is actually answerable from. `"dev"` when
+   *  the host is running unbundled. See `src/buildInfo.ts`. */
+  buildId?: string;
+  /** ISO timestamp the installed artifact was bundled, or `"dev"` when unbundled. */
+  builtAt?: string;
 }
 
 interface VsCodeApi {

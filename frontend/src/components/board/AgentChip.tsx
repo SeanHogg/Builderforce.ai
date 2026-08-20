@@ -27,10 +27,12 @@ export const ACTIVE_EXECUTION_STATUSES = new Set(['running', 'submitted', 'pendi
  * `resume` continues a halted one. Single source of truth so every surface that
  * renders an execution chip agrees on when the action appears.
  *
- * The `paused` lifecycle is now live (migration 0120): a cloud agent that calls
+ * The `paused` lifecycle is live (migration 0120): a cloud agent that calls
  * `ask_human` parks its run in `paused` until a human answers its question, so the
- * `resume` affordance is reachable. The primary resume path is answering the
- * question in the human-requests queue; the chip glyph is a secondary nudge.
+ * `resume` affordance is reachable. There are three doors onto the same resume —
+ * answering in the human-requests queue, answering in the run's Output composer,
+ * and this glyph (which resumes without an answer: "carry on, you have enough").
+ * All three continue THAT run; none of them starts a new one.
  */
 export type RerunAffordance = 'retry' | 'resume';
 export function rerunAffordance(status: string | undefined): RerunAffordance | null {

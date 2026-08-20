@@ -73,3 +73,46 @@ export function firstLine(content: string, max = 140): string {
 export function memoryStub(content: string, version: number): string {
   return `${STUB_PREFIX} v${version}] ${firstLine(content)}`;
 }
+
+/** The result of compacting a snapshot's absorbed entries in place. */
+export interface SnapshotCompaction {
+  /** The rewritten file text, ready to write. */
+  next: string;
+  /** How many entries were stubbed. */
+  compacted: number;
+  /** Characters recovered across those entries. */
+  bytesSaved: number;
+}
+
+/**
+ * Rewrite every ABSORBED entry in a snapshot's text to a stub, preserving all other
+ * fields and every untouched entry. Returns `null` when the text isn't a recognizable
+ * snapshot, so the caller can report rather than corrupt the file.
+ *
+ * Pure — the host does the I/O. This is the JSON half of the two-format compactor;
+ * `markdownMemory.compactMarkdownMemory` is the markdown half, and both produce the
+ * same `STUB_PREFIX` marker so neither ever double-stubs the other's work.
+ */
+export function compactSnapshotText(
+  text: string,
+  absorbedKeys: Iterable<string>,
+  version: number,
+): SnapshotCompaction | null {
+  const entries = parseSnapshotArray(text);
+  if (!entries) return null;
+  const absorbed = new Set(absorbedKeys);
+  let compacted = 0;
+  let bytesSaved = 0;
+  for (const e of entries) {
+    const key = snapshotEntryKey(e);
+    if (!absorbed.has(key)) continue;
+    const content = snapshotEntryContent(e);
+    if (!content || isStub(content)) continue;
+    const stub = memoryStub(content, version);
+    if (stub.length >= content.length) continue; // never grow an entry
+    setSnapshotEntryContent(e, stub);
+    compacted++;
+    bytesSaved += content.length - stub.length;
+  }
+  return { next: `${JSON.stringify(entries, null, 2)}\n`, compacted, bytesSaved };
+}

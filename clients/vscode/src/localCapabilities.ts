@@ -18,6 +18,10 @@ import * as path from "path";
 import { exec } from "child_process";
 import { promisify } from "util";
 import { filterByGlob, applyStringEdit, normalizeScopeDir } from "@builderforce/agent-tools";
+// The ONE workspace-containment resolver, shared with the agent-runtime Node provider.
+// Node-only, so it comes from the `/node-path` export condition (the package root stays
+// node-builtin-free for the Worker).
+import { resolveInsideRootOrThrow as resolveInRoot } from "@builderforce/agent-tools/node-path";
 import type {
   Capability,
   CapabilityProvider,
@@ -60,17 +64,6 @@ const SKIP_DIRS = new Set([
 export const LOCAL_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capability>([
   "repo.read", "repo.search", "repo.write", "repo.edit", "repo.delete", "shell",
 ]);
-
-/** Resolve `rel` under `root`, rejecting any path that escapes the workspace. */
-function resolveInRoot(root: string, rel: unknown): string {
-  if (typeof rel !== "string") throw new Error("a 'path' string is required");
-  const abs = path.resolve(root, rel);
-  const within = path.relative(path.resolve(root), abs);
-  if (within !== "" && (within.startsWith("..") || path.isAbsolute(within))) {
-    throw new Error(`path escapes the workspace: ${rel}`);
-  }
-  return abs;
-}
 
 function clamp(text: string, max: number): string {
   return text.length <= max ? text : `${text.slice(0, max)}\n…(${text.length - max} more chars truncated)`;

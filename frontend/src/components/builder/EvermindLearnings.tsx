@@ -289,14 +289,23 @@ function LearnedSection({ entry, t }: { entry: ListedEntry; t: ReturnType<typeof
   );
 }
 
-/** Human-readable cause for each way a pinned teacher can produce nothing. */
+/** Human-readable cause for each way a pinned teacher can produce nothing.
+ *
+ *  Exhaustive over the reason union on purpose: a reason the coordinator can emit but
+ *  this map has no copy for would render as a raw key in front of an operator, so the
+ *  compiler is the thing that catches a new reason before a user does. `not_pinned` and
+ *  `legacy` never actually reach here (both grade as self-learning, not a fault) — they
+ *  are present because the map is keyed by the union, not by the fault subset. */
 const FAULT_KEY: Record<EvermindTeacherSkipReason, string> = {
   not_pinned: 'faultNotPinned',
   budget_exhausted: 'faultBudget',
+  cooling: 'faultCooling',
+  unroutable: 'faultUnroutable',
   input_too_short: 'faultTooShort',
   gateway_error: 'faultGateway',
   empty_output: 'faultEmpty',
   exception: 'faultException',
+  legacy: 'faultLegacy',
   unknown: 'faultUnknown',
 };
 

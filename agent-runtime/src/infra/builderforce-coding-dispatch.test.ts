@@ -2,8 +2,11 @@ import { describe, it, expect, vi } from "vitest";
 import {
   runCodingDispatch,
   codingBranchSlug,
+  diffWorkspace,
   type CodingDispatchDeps,
+  type CodingDispatchFs,
   type DispatchDetail,
+  type WorkspaceFile,
 } from "./builderforce-coding-dispatch.js";
 
 const repoDetail = {
@@ -27,6 +30,36 @@ function detail(over: Partial<DispatchDetail> = {}): DispatchDetail {
   };
 }
 
+const workspaceDetail = {
+  projectId: 34,
+  projectName: "Brain App",
+  filesPath: "/api/agent-hosts/12/workspace/34/files",
+};
+
+/** Every CodingDispatchHttp port, so a test only overrides what it cares about. */
+function fakeHttp(over: Partial<CodingDispatchDeps["http"]> = {}): CodingDispatchDeps["http"] {
+  return {
+    fetchDispatchDetail: vi.fn(async () => detail()),
+    openPullRequest: vi.fn(async () => ({ url: "https://github.com/o/r/pull/3", number: 3 })),
+    fetchWorkspaceFiles: vi.fn(async () => ({ files: [] as WorkspaceFile[], truncated: false })),
+    pushWorkspaceChanges: vi.fn(async () => ({ written: 0, deleted: 0, rejected: [] })),
+    reportResult: vi.fn(async () => {}),
+    ...over,
+  };
+}
+
+/** In-memory disk port: the agent's edits are staged into `after`. */
+function fakeFs(after: WorkspaceFile[]): CodingDispatchFs & { materialized: WorkspaceFile[] } {
+  const materialized: WorkspaceFile[] = [];
+  return {
+    materialized,
+    materialize: vi.fn(async (_dir: string, files: WorkspaceFile[]) => {
+      materialized.push(...files);
+    }),
+    snapshot: vi.fn(async () => after),
+  };
+}
+
 function fakeGit() {
   return {
     hasClone: vi.fn(async () => false),
@@ -42,11 +75,7 @@ function fakeGit() {
 
 function deps(over: Partial<CodingDispatchDeps> = {}): CodingDispatchDeps {
   return {
-    http: {
-      fetchDispatchDetail: vi.fn(async () => detail()),
-      openPullRequest: vi.fn(async () => ({ url: "https://github.com/o/r/pull/3", number: 3 })),
-      reportResult: vi.fn(async () => {}),
-    },
+    http: fakeHttp(),
     git: fakeGit(),
     agent: { run: vi.fn(async () => ({ ok: true, summary: "edited files" })) },
     baseUrl: "https://api.builderforce.ai",
@@ -112,13 +141,7 @@ describe("runCodingDispatch", () => {
   });
 
   it("still reports completed when PR opening is unsupported (branch pushed)", async () => {
-    const d = deps({
-      http: {
-        fetchDispatchDetail: vi.fn(async () => detail()),
-        openPullRequest: vi.fn(async () => null),
-        reportResult: vi.fn(async () => {}),
-      },
-    });
+    const d = deps({ http: fakeHttp({ openPullRequest: vi.fn(async () => null) }) });
     await runCodingDispatch(d, "d-1234567890");
 
     expect(d.git.push).toHaveBeenCalled();
@@ -127,35 +150,133 @@ describe("runCodingDispatch", () => {
     expect(reported.output).toContain("no PR opened");
   });
 
-  it("runs reasoning-only and reports when no repo is bound", async () => {
+  // Reasoning-only is now the LAST resort — no repo AND no workspace — and it
+  // must name the reason rather than silently returning prose.
+  it("degrades to reasoning-only ONLY when there is no repo and no workspace", async () => {
     const d = deps({
-      http: {
-        fetchDispatchDetail: vi.fn(async () => detail({ repo: null })),
-        openPullRequest: vi.fn(async () => null),
-        reportResult: vi.fn(async () => {}),
-      },
+      http: fakeHttp({ fetchDispatchDetail: vi.fn(async () => detail({ repo: null, workspace: null })) }),
     });
     await runCodingDispatch(d, "d-1234567890");
 
     expect(d.git.clone).not.toHaveBeenCalled();
-    expect(d.http.reportResult).toHaveBeenCalledWith(
-      "d-1234567890",
-      expect.objectContaining({ status: "completed", output: "edited files" }),
-    );
+    const reported = (d.http.reportResult as ReturnType<typeof vi.fn>).mock.calls[0][1];
+    expect(reported.status).toBe("completed");
+    expect(reported.output).toContain("edited files");
+    expect(reported.output).toContain("No files were written");
+    expect(reported.output).toContain("neither a connected git repository nor an IDE workspace");
   });
 
   it("reports failed when dispatch detail is missing", async () => {
-    const d = deps({
-      http: {
-        fetchDispatchDetail: vi.fn(async () => null),
-        openPullRequest: vi.fn(async () => null),
-        reportResult: vi.fn(async () => {}),
-      },
-    });
+    const d = deps({ http: fakeHttp({ fetchDispatchDetail: vi.fn(async () => null) }) });
     await runCodingDispatch(d, "d-1234567890");
     expect(d.http.reportResult).toHaveBeenCalledWith("d-1234567890", {
       status: "failed",
       error: "Dispatch detail not found",
+    });
+  });
+});
+
+describe("runCodingDispatch — repo-less workspace path", () => {
+  it("materialises the IDE workspace, runs the agent, and saves the diff back", async () => {
+    const fs = fakeFs([
+      { path: "src/App.jsx", content: "export default () => 1;" },
+      { path: "src/new.js", content: "export const n = 1;" },
+    ]);
+    const http = fakeHttp({
+      fetchDispatchDetail: vi.fn(async () => detail({ repo: null, workspace: workspaceDetail })),
+      fetchWorkspaceFiles: vi.fn(async () => ({
+        files: [
+          { path: "src/App.jsx", content: "old" },
+          { path: "package.json", content: "{}" },
+        ],
+        truncated: false,
+      })),
+      pushWorkspaceChanges: vi.fn(async () => ({ written: 2, deleted: 1, rejected: [] })),
+    });
+    const d = deps({ http, fs });
+    await runCodingDispatch(d, "d-1234567890");
+
+    // The tree was written to disk before the agent ran…
+    expect(fs.materialized.map((f) => f.path)).toEqual(["src/App.jsx", "package.json"]);
+    // …and NO git operation happened: this path has no repo to clone or push to.
+    expect(d.git.clone).not.toHaveBeenCalled();
+    expect(d.git.push).not.toHaveBeenCalled();
+    expect(d.http.openPullRequest).not.toHaveBeenCalled();
+
+    // Only changed/new files are sent back; the untouched file is a delete because
+    // the agent removed it from a COMPLETE tree.
+    const pushed = (http.pushWorkspaceChanges as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(pushed[0]).toBe("/api/agent-hosts/12/workspace/34/files");
+    expect(pushed[1].writes.map((f: WorkspaceFile) => f.path).sort()).toEqual(["src/App.jsx", "src/new.js"]);
+    expect(pushed[1].deletes).toEqual(["package.json"]);
+    expect(pushed[1].taskId).toBe(7);
+
+    const reported = (http.reportResult as ReturnType<typeof vi.fn>).mock.calls[0][1];
+    expect(reported.status).toBe("completed");
+    expect(reported.output).toContain("Saved 2 file(s)");
+    expect(reported.output).toContain("Brain App");
+  });
+
+  it("reports completed without a save when the agent changed nothing", async () => {
+    const files = [{ path: "src/App.jsx", content: "same" }];
+    const http = fakeHttp({
+      fetchDispatchDetail: vi.fn(async () => detail({ repo: null, workspace: workspaceDetail })),
+      fetchWorkspaceFiles: vi.fn(async () => ({ files, truncated: false })),
+    });
+    const d = deps({ http, fs: fakeFs([...files]) });
+    await runCodingDispatch(d, "d-1234567890");
+
+    expect(http.pushWorkspaceChanges).not.toHaveBeenCalled();
+    const reported = (http.reportResult as ReturnType<typeof vi.fn>).mock.calls[0][1];
+    expect(reported.status).toBe("completed");
+    expect(reported.output).toContain("nothing to save");
+  });
+
+  it("fails loudly when the workspace cannot be fetched", async () => {
+    const http = fakeHttp({
+      fetchDispatchDetail: vi.fn(async () => detail({ repo: null, workspace: workspaceDetail })),
+      fetchWorkspaceFiles: vi.fn(async () => null),
+    });
+    const d = deps({ http, fs: fakeFs([]) });
+    await runCodingDispatch(d, "d-1234567890");
+
+    expect(http.reportResult).toHaveBeenCalledWith("d-1234567890", {
+      status: "failed",
+      error: "workspace fetch failed for project 34",
+    });
+  });
+
+  it("falls back to reasoning-only when the runtime has no disk port, and says so", async () => {
+    const http = fakeHttp({
+      fetchDispatchDetail: vi.fn(async () => detail({ repo: null, workspace: workspaceDetail })),
+    });
+    const d = deps({ http, fs: undefined });
+    await runCodingDispatch(d, "d-1234567890");
+
+    const reported = (http.reportResult as ReturnType<typeof vi.fn>).mock.calls[0][1];
+    expect(reported.status).toBe("completed");
+    expect(reported.output).toContain("no filesystem port");
+  });
+});
+
+describe("diffWorkspace", () => {
+  it("sends only changed files and never deletes from a truncated tree", () => {
+    const before = new Map([
+      ["a.txt", "1"],
+      ["b.txt", "2"],
+    ]);
+    const after = [
+      { path: "a.txt", content: "1" },      // unchanged → not re-uploaded
+      { path: "c.txt", content: "3" },      // new
+    ];
+    expect(diffWorkspace(before, after, false)).toEqual({
+      writes: [{ path: "c.txt", content: "3" }],
+      deletes: ["b.txt"],
+    });
+    // The tree was incomplete, so an absent file is "never materialised", not "deleted".
+    expect(diffWorkspace(before, after, true)).toEqual({
+      writes: [{ path: "c.txt", content: "3" }],
+      deletes: [],
     });
   });
 });

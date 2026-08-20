@@ -3,11 +3,13 @@
 import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useState } from 'react';
 import { Select } from '@/components/Select';
+import { useTranslations } from 'next-intl';
 import {
   reposApi,
   type MergeMethod,
   type TaskPullRequest,
   type PullRequestDetail,
+  type TaskRepoPullRequest,
 } from '@/lib/builderforceApi';
 import { getMergeBlockReason } from './pullRequestMergeState';
 import { useFormat } from "@/i18n/useFormat";
@@ -83,6 +85,47 @@ function BuildStatus({ status, error, phase, showValidating }: {
           maxHeight: 220, overflow: 'auto', fontFamily: 'var(--font-mono)',
         }}>{error}</pre>
       )}
+    </div>
+  );
+}
+
+/**
+ * MULTI-REPO SPANNING (0956): the ticket's PR SET.
+ *
+ * A run used to be one repo → one branch → one PR, and this panel showed that one.
+ * A ticket bound to a repo set has a PR per repo that RECEIVED code — and, just as
+ * importantly, no PR at all for a bound repo the agent never touched. Both are
+ * shown, because "why is there no PR in the other repo" is the question a reviewer
+ * actually asks. Renders null for the single-repo ticket, so nothing changes there.
+ */
+function RepoPullRequestSet({ repos }: { repos: TaskRepoPullRequest[] }) {
+  const t = useTranslations('pullRequestSet');
+  if (repos.length < 2) return null;
+  return (
+    <div style={{ marginTop: 14, borderTop: '1px solid var(--border-subtle)', paddingTop: 10 }}>
+      <div className="ui-text-field-label" style={{ marginBottom: 6 }}>{t('title')}</div>
+      <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {repos.map((r) => (
+          <li key={r.repoId} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', minWidth: 0 }}>
+            <span className="ui-text-small" style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-primary)', overflowWrap: 'anywhere' }}>{r.slug}</span>
+            {r.prUrl ? (
+              <>
+                <a href={r.prUrl} className="ui-text-small" target="_blank" rel="noopener noreferrer" style={{ fontWeight: 600, color: 'var(--coral-bright)' }}>
+                  {t('prLink', { number: r.prNumber ?? 0 })}
+                </a>
+                {r.prStatus && <Badge label={r.prStatus} color={STATUS_COLOR[r.prStatus] ?? 'var(--text-muted)'} />}
+              </>
+            ) : (
+              <span className="ui-text-small" style={{ color: 'var(--text-muted)' }}>
+                {r.writesCount > 0 ? t('writesNoPr', { count: r.writesCount }) : t('noWrites')}
+              </span>
+            )}
+            {r.branch && (
+              <span className="ui-text-small" style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>{r.branch}</span>
+            )}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -235,6 +278,9 @@ export function PullRequestPanel({ taskId, onMerged }: { taskId: number; onMerge
       )}
 
       {error && <div style={{ fontSize: 12, color: 'var(--danger)', marginTop: 8 }}>{error}</div>}
+
+      {/* The other repos this ticket spans (empty for a single-repo ticket). */}
+      <RepoPullRequestSet repos={data.pullRequests ?? []} />
 
       {pr.url && (
         <a href={pr.url} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block', marginTop: 12, fontSize: 12, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>

@@ -3,7 +3,7 @@
  * over apiRequest so the observability QA tab stays declarative.
  */
 
-import { apiRequest } from '../apiClient';
+import { apiRequest, apiRequestStream } from '../apiClient';
 
 export interface QaFlow {
   id: string;
@@ -210,13 +210,36 @@ export interface QaFinding {
   heat: number;
   status: string;
   taskId: number | null;
+  /**
+   * R2 key of the page image captured at the moment this finding was recorded,
+   * or null when the runner could not photograph the page (it had crashed or
+   * navigated away) or the run exhausted its screenshot budget.
+   */
+  screenshotKey: string | null;
   createdAt: string;
 }
 
-export function fetchHeatmap(opts?: { sinceDays?: number; limit?: number }): Promise<{ zones: QaHeatZone[] }> {
+/**
+ * Load a finding's screenshot as an object URL.
+ *
+ * Not an `<img src>` straight at the endpoint: the read is authenticated with a
+ * bearer token, and putting a credential in a URL an `<img>` would fetch is how
+ * tokens end up in referrer headers and browser history. Fetch it through the
+ * shared authenticated transport and hand back a blob URL the caller must revoke.
+ */
+export async function fetchFindingScreenshot(screenshotKey: string): Promise<string> {
+  const res = await apiRequestStream(`/api/qa/screenshots/${screenshotKey.split('/').map(encodeURIComponent).join('/')}`);
+  if (!res.ok) throw new Error('Screenshot not available');
+  return URL.createObjectURL(await res.blob());
+}
+
+export function fetchHeatmap(opts?: { sinceDays?: number; limit?: number; projectId?: number | null }): Promise<{ zones: QaHeatZone[] }> {
   const qs = new URLSearchParams();
   if (opts?.sinceDays != null) qs.set('sinceDays', String(opts.sinceDays));
   if (opts?.limit != null) qs.set('limit', String(opts.limit));
+  // Heat is ranked per project when one is in scope — the workspace-wide pool
+  // planned one product's exploration from another product's traffic.
+  if (opts?.projectId != null) qs.set('projectId', String(opts.projectId));
   const suffix = qs.toString() ? `?${qs.toString()}` : '';
   return apiRequest(`/api/qa/heatmap${suffix}`);
 }

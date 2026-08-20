@@ -114,6 +114,12 @@ export const cloudToolRegistry = buildCoreToolRegistry();
  * on-prem SSM store which supersedes), and coordination is the `resource_leases` /
  * `coordination_notes` pair from migration 0370.
  *
+ * `prd.write` is a surface capability here because the Worker owns the `specs` store
+ * the ticket PRD lives in AND the branch-commit path that mirrors it — the same writer
+ * the run's PRD-first prep used. Prep hands every run its PRD as context, so a surface
+ * that can serve the PRD and not accept a correction to it leaves the agent able to read
+ * a wrong requirement and unable to fix it.
+ *
  * `web.search` IS in this constant, and it used to not be. It was tenant-gated while
  * search had no backing a tenant hadn't paid for; it is now a surface capability
  * because `resolveWebSearchBacking` always resolves one — a tenant BYO key, an
@@ -124,7 +130,7 @@ export const cloudToolRegistry = buildCoreToolRegistry();
  */
 export const CLOUD_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capability>([
   'repo.read', 'repo.search', 'repo.write', 'repo.edit', 'repo.delete', 'static-check', 'human', 'memory', 'memory.forget',
-  'coordinate', 'web', 'web.search',
+  'coordinate', 'prd.write', 'web', 'web.search',
 ]);
 
 /**
@@ -134,9 +140,9 @@ export const CLOUD_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capability>([
  * the `memory` container-op back to the Worker (the container holds no DB creds, so
  * the SAME `agent_memory`/`project_facts` backing serves both cloud surfaces) — so it
  * advertises repo.read + repo.write + shell + memory, and NOT repo.search /
- * static-check (shell-free) / human (not yet wired in the image).
+ * static-check (shell-free).
  * → list_files, read_file, write_file, run_command, memory_recall, memory_remember,
- * memory_forget, finish — plus the six git tools `shell` also unlocks (git_status,
+ * memory_forget, ask_human, finish — plus the six git tools `shell` also unlocks (git_status,
  * git_diff, git_history, git_sync_latest, git_undo, git_redo), which the image
  * genuinely implements in its `gitTool` handler. `memory_forget` relays through the
  * SAME `memory` container-op as recall/remember (action:'forget'), so it needs no new
@@ -146,6 +152,10 @@ export const CLOUD_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capability>([
  * reserve work before its first write and read the shared blackboard while the Worker
  * remains the sole owner of the lease/note stores.
  *
+ * `prd.write` relays the same way, through the `prd` op — BOTH images that run this
+ * toolset (the Cloudflare Container and the GitHub Actions runner) dispatch `update_prd`
+ * to it, so the capability is backed on every surface it is advertised to.
+ *
  * `repo.edit` is INTENTIONALLY omitted (not a gap): unlike the shell-less durable
  * surface — which must do surgical edits over the git API (read blob → string-replace
  * → commit), hence advertises `repo.edit` — the container edits files IN its local
@@ -154,11 +164,19 @@ export const CLOUD_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capability>([
  * here would surface an `edit_file` tool that 400s. If the image ever gains an in-loop
  * edit handler, add both `repo.edit` here AND the `edit` op in `handleContainerOp`.
  *
+ * `human` IS wired now (it was the last documented residual). Both images that run
+ * this toolset — the Cloudflare Container and the GitHub Actions runner — handle
+ * `ask_human` by posting the `ask_human` container-op with their conversation and
+ * then exiting WITHOUT a terminal op, and `resumePausedExecution` restarts them
+ * seeded with that conversation plus the human's answer (exit-and-redispatch; see
+ * the op's own comment for why blocking-and-polling was rejected for a runtime
+ * whose process is billed by the second and can be recycled).
+ *
  * The container runs its OWN loop in its image; this set is only the schema it
  * advertises to the gateway, so it MUST match what that image implements.
  */
 export const CONTAINER_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capability>([
-  'repo.read', 'repo.write', 'shell', 'memory', 'memory.forget', 'coordinate',
+  'repo.read', 'repo.write', 'shell', 'memory', 'memory.forget', 'coordinate', 'prd.write', 'human',
 ]);
 
 /** Durable/Worker schema array — derived from {@link CLOUD_SURFACE_CAPS}, not

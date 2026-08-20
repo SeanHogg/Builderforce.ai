@@ -41,6 +41,7 @@ export const PLAN_FEATURE_LABEL: Record<PlanFeature, string> = {
   voiceCloning: 'voice cloning',
   advancedInsights: 'advanced insights (forecasting & exec lenses)',
   evermindTraining: 'training your own model',
+  livePreview: 'live preview on a real device',
 };
 
 /**

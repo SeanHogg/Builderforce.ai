@@ -18,6 +18,7 @@ import {
   type EvermindConsoleAdapter,
   type EvermindConsoleData,
   type EvermindConsoleLabels,
+  type EvermindContributionStatus,
   type EvermindEvalPoint,
   type EvermindKnowledgeAnalysis,
   type EvermindProbeResult,
@@ -39,6 +40,23 @@ import {
   C, italic, fieldLabel, fieldTitle, fieldHint, select, optionStyle, sectionBlock,
   primaryBtn, secondaryBtn, ghostBtn, linkBtn, pill, tag, warnBox,
 } from './consoleStyles';
+
+/**
+ * How often the console asks the server what became of a teach it just submitted.
+ * Comfortably under the coordinator's own debounce (a burst folds into one merge
+ * ~15s after the first contribution), so the resolution lands within a tick or two of
+ * the merge actually happening rather than long after the operator has moved on.
+ */
+const TEACH_POLL_INTERVAL_MS = 3_000;
+/**
+ * How long to keep asking before saying so plainly.
+ *
+ * A merge can legitimately be deferred — the per-alarm fit cap leaves surplus text
+ * entries queued for the NEXT debounced merge — so a poll that has not resolved is not
+ * evidence of failure. Giving up loudly ("still queued") is the honest end state; the
+ * Learnings list is where the eventual outcome shows up.
+ */
+const TEACH_POLL_TIMEOUT_MS = 120_000;
 
 export interface EvermindConsoleProps {
   adapter: EvermindConsoleAdapter;
@@ -91,6 +109,10 @@ export function EvermindConsole({ adapter, canManage, labels, refreshMs = 20_000
   const [validating, setValidating] = useState(false);
   const [validateResult, setValidateResult] = useState<EvermindValidateResult | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // A resolved teach outcome can be a FAULT that still merged — it learned, but not from
+  // the teacher you pinned. Rendering that in the same accent as a clean success would
+  // be the optimistic toast all over again, one step later, so the notice carries a tone.
+  const [noticeTone, setNoticeTone] = useState<'good' | 'warn'>('good');
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   // Which working surface is open. Teach first: it is the only one an operator uses
@@ -177,8 +199,70 @@ export function EvermindConsole({ adapter, canManage, labels, refreshMs = 20_000
 
   const clearValidate = useCallback(() => { setValidateResult(null); onValidate?.(null); }, [onValidate]);
 
+  /**
+   * Resolve the OPTIMISTIC teach toast into the real outcome.
+   *
+   * `/learn-text` returns as soon as the contribution is queued; the frontier teacher
+   * only runs later, inside the coordinator's debounced merge. So "Taught" was being
+   * claimed at a moment when nothing was known — and stayed claimed even when
+   * distillation subsequently faulted. These two callbacks poll the per-contribution
+   * status channel and replace the interim notice with what actually happened.
+   *
+   * The verdict is derived by the SAME `evermindLearnedStatus` that grades a Learnings
+   * row, so the toast and that memory's own row can never say different things.
+   */
+  const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; if (pollTimer.current) clearTimeout(pollTimer.current); };
+  }, []);
+
+  const describeTeachOutcome = useCallback((status: EvermindContributionStatus): { text: string; tone: 'good' | 'warn' } => {
+    if (status.state === 'dropped') return { text: t.taughtDropped, tone: 'warn' };
+    if (status.state !== 'merged') return { text: t.taughtStillPending, tone: 'warn' };
+    const verdict = evermindLearnedStatus({
+      kind: status.kind ?? 'text',
+      ...(status.distilled !== undefined ? { distilled: status.distilled } : {}),
+      ...(status.teacherModel ? { teacherModel: status.teacherModel } : {}),
+      ...(status.skipReason ? { skipReason: status.skipReason } : {}),
+      ...(status.skipDetail ? { skipDetail: status.skipDetail } : {}),
+      ...(status.attemptedTeacherModel ? { attemptedTeacherModel: status.attemptedTeacherModel } : {}),
+    });
+    const version = status.version ?? 0;
+    if (verdict.state === 'distilled') return { text: t.taughtDistilled(verdict.teacherModel ?? '', version), tone: 'good' };
+    if (verdict.state === 'fault') return { text: t.taughtTeacherFault(verdict.teacherModel ?? '', verdict.reason), tone: 'warn' };
+    return { text: t.taughtSelf(version), tone: 'good' };
+  }, [t]);
+
+  const trackTeach = useCallback((contributionId: number) => {
+    const readStatus = adapter.teachStatus;
+    if (!readStatus || !Number.isInteger(contributionId) || contributionId <= 0) return;
+    if (pollTimer.current) clearTimeout(pollTimer.current); // a newer teach supersedes an older poll
+    const deadline = Date.now() + TEACH_POLL_TIMEOUT_MS;
+    const tick = async (): Promise<void> => {
+      let status: EvermindContributionStatus | null = null;
+      try { status = await readStatus(contributionId); } catch { status = null; }
+      if (!mounted.current) return;
+      // A server that cannot answer (no coordinator binding, unreadable reply) must not
+      // be reported as an outcome — the interim "Queued" notice stands, which is the
+      // most that is actually known.
+      if (!status || status.state === 'unknown') return;
+      if (status.state === 'merged' || status.state === 'dropped') {
+        const outcome = describeTeachOutcome(status);
+        setNotice(outcome.text); setNoticeTone(outcome.tone);
+        // The ring now holds this memory — pull it so the Learnings list agrees.
+        if (status.state === 'merged') void reload();
+        return;
+      }
+      if (Date.now() >= deadline) { setNotice(t.taughtStillPending); setNoticeTone('warn'); return; }
+      pollTimer.current = setTimeout(() => { void tick(); }, TEACH_POLL_INTERVAL_MS);
+    };
+    pollTimer.current = setTimeout(() => { void tick(); }, TEACH_POLL_INTERVAL_MS);
+  }, [adapter, describeTeachOutcome, reload, t.taughtStillPending]);
+
   const run = useCallback(async (op: () => Promise<void>, successNotice?: string) => {
-    setBusy(true); setError(null); setNotice(null);
+    setBusy(true); setError(null); setNotice(null); setNoticeTone('good');
     try {
       await op();
       await reload();
@@ -322,12 +406,13 @@ export function EvermindConsole({ adapter, canManage, labels, refreshMs = 20_000
                 const body = teachText.trim();
                 // With a teacher pinned you teach a TASK: the teacher answers it and the
                 // model learns (task → ideal answer), so send the task as both text + prompt.
-                if (head.teacherModel && body.length < 20 && task.length >= 20) {
-                  await adapter.teach(task, task);
-                } else {
-                  await adapter.teach(body, task || undefined);
-                }
+                const result = (head.teacherModel && body.length < 20 && task.length >= 20)
+                  ? await adapter.teach(task, task)
+                  : await adapter.teach(body, task || undefined);
                 setTeachText(''); setTeachPrompt('');
+                // `run` sets the interim "Queued" notice after this resolves; the poll
+                // started here replaces it with the real outcome once the merge lands.
+                if (result?.contributionId) trackTeach(result.contributionId);
               },
               t.taught,
             )}
@@ -532,7 +617,7 @@ export function EvermindConsole({ adapter, canManage, labels, refreshMs = 20_000
         </>
       )}
 
-      {notice && <p style={{ margin: 0, fontSize: '0.74rem', color: C.accent }} role="status">{notice}</p>}
+      {notice && <p style={{ margin: 0, fontSize: '0.74rem', lineHeight: 1.5, color: noticeTone === 'warn' ? C.warnText : C.accent }} role="status">{notice}</p>}
       {error && <p style={{ margin: 0, fontSize: '0.76rem', color: C.danger }} role="alert">{error}</p>}
     </Section>
   );

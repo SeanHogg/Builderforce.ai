@@ -16,8 +16,10 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  *                the calendar — and step 2's own urgency term — actually read.
  *   3. ASSIGN  — give unowned work to the best-fit teammate/agent (so nothing sits
  *                invisible to autonomy).
- *   4. PR      — CONDUCT (open) PRs for finished work and MERGE + CLOSE open PRs per
- *                the project's PR authority policy.
+ *   4. PR      — CONDUCT (open) PRs for finished work. MERGING is NOT here: it is its
+ *                own registry sweep (`application/repos/prMergeSweep.ts`) with its own
+ *                budget, because a mechanical provider-bound loop measured at 93% of
+ *                this pass must not be able to starve the judgement it sits inside.
  *   5. DISPATCH— kick the top-ranked runnable tickets NOW (in priority order) so the
  *                team keeps moving without waiting for the next cron tick.
  *
@@ -29,7 +31,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * the pass, and each mutation is idempotent (re-scoring/re-ranking is a no-op-ish
  * overwrite; merge dedupes on an already-merged PR), so overlapping runs are safe.
  */
-import { and, asc, desc, eq, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { cronSweepEnabled, readCronControls } from '../runtime/cronControls';
@@ -64,7 +66,7 @@ export {
   type ManagerConfigRowWithMeta, type TenantManagerDefaultsPatch,
 } from './managerPolicyStore';
 import { getEffectiveManagerPolicy, getManagerConfigRow, getProjectManagerState } from './managerPolicyStore';
-import { recordManagerAction, recordManagerActionOnChange, stateFingerprint } from './managerActionJournal';
+import { countPrMergesSince, recordManagerAction, recordManagerActionOnChange, stateFingerprint } from './managerActionJournal';
 import { resolveManagerIdentity } from './managerIdentity';
 import { resolveManagerTypeById } from './managerTypes';
 import { listActiveManagerDirectives } from './managerDirectives';
@@ -73,13 +75,12 @@ import { assignTicketOwner } from './assignOwner';
 import { classifySignoffOwnership, resolveRequiredSignoffGate } from '../kanban/signoffGate';
 import { driveOutstandingSignoffs } from '../kanban/driveSignoffs';
 import { decideTicketReadiness, type CompletionShape, type TicketPrState } from './evaluateTicketReadiness';
+import { normalizeBuildStatus, pickCurrentPr } from '../../domain/task/buildStatus';
 import { classifyDeliverablePaths } from '../delivery/deliverableEvidence';
 import {
   runStallTriage, loadBulkSignals, describeTriageDeferral,
   MAX_TRIAGE_DISPATCHES_PER_RUN, TRIAGE_PASS_STATE_KEY,
 } from './triageStage';
-import { MAX_REMEDY_ATTEMPTS } from './stallTriage';
-import { planMergeQueue, summarizeMergeQueue } from './prMergeQueue';
 import { computeStallCensus, invalidateStallCensus } from './stallCensus';
 import { findCanonicalBoard } from '../swimlane/canonicalBoard';
 import {
@@ -89,8 +90,6 @@ import {
 import { loadPassRotation, savePassRotation } from './passRotation';
 import { invalidateDailyDigest } from './dailyDigest';
 import { raiseSystemicFindings } from './systemicDiagnosis';
-import { mergeRecordedPullRequest, updateRecordedPullRequestBranch } from '../repos/mergeRecordedPr';
-import { pollPrCiStatus } from '../repos/pollPrCiStatus';
 import { dispatchTaskFinalize } from '../../presentation/routes/taskRoutes';
 import { maybeAutoRunOnLaneEntry } from '../../presentation/routes/taskRoutes';
 import { TicketAuditService } from '../audit/ticketAuditService';
@@ -114,166 +113,20 @@ const MAX_RANKED = 300;
 const MAX_ASSIGNMENTS_PER_RUN = 15;
 const MAX_PR_ACTIONS_PER_RUN = 20;
 
-/**
- * Wall-clock the whole pass may spend before it starts shedding OPTIONAL work to
- * guarantee it reaches its own closing journal.
- *
- * THE FAILURE THIS CLOSES. A pass runs inside ONE Worker invocation, and on a real
- * project (11: 673 tickets, 354 open PRs) it was being evicted partway through:
- * `manager_actions` showed triage journalling every few minutes while the `manager.pass`
- * activity row that CLOSES a pass had not been written since **2026-07-13**, and
- * `lastRunAt` sat 6 hours stale against a 5-minute cadence. Every stage after PR
- * coordination was in a dead zone, and — worse than the lost work — the pass never
- * recorded that it had been cut short. A truncated pass and a clean pass were
- * indistinguishable, so the manager reported health it had not verified.
- *
- * The census stage was moved ahead of the PR loop as a mitigation (see stage 3.5), but
- * reordering only decides WHO gets starved. This budget is the actual fix: past the
- * deadline the pass stops starting new optional work, records exactly which stage it
- * stopped at and why, and still writes its closing row. A short honest pass beats a long
- * silent one — and because the cadence is 5 minutes, the deferred work is picked up
- * almost immediately.
- *
- * 20s against a Worker CPU/wall ceiling comfortably above it: the point is to leave
- * room for the closing journal, not to run to the edge.
- */
-export const MANAGER_PASS_BUDGET_MS = 20_000;
-
-/**
- * Wall-clock held back from the discretionary stages and kept for TRIAGE (stage 7).
- *
- * ── THE FAILURE THIS CLOSES ──────────────────────────────────────────────────────
- * A plain deadline decides only WHO gets starved, and the answer was always the same
- * stage: triage runs last, so on any project where stages 1–6 exceed the budget it is
- * shed on EVERY pass, not occasionally. Measured on project 11 once the budget shipped —
- * every observed pass truncated `triage`, and its 12 stuck-register remedies sat at
- * `attempts=0` for 26 days. That is worse than no triage at all: because an attempt that
- * never happens cannot fail, the 3-attempt escalation ceiling is never reached either, so
- * nothing is worked AND nothing is handed to a human. The skip journal even promised "it
- * runs first on the next pass" — a rotation that did not exist, and could not, because
- * every pass restarts at stage 1.
- *
- * A reservation fixes it without a rotation cursor: the discretionary stages stop at
- * `budgetMs - MANAGER_TRIAGE_RESERVE_MS`, so triage always gets its slice and always makes
- * SOME progress. It is a floor, not a promise of completion — triage is itself bounded and
- * paces across passes — but a floor is what turns `attempts=0` forever into progress.
- */
-export const MANAGER_TRIAGE_RESERVE_MS = 6_000;
-
-/**
- * The pass's time budget. `over()` is checked BETWEEN units of optional work, never
- * mid-write — a stage that has started a mutation always finishes it, so the budget can
- * shed work but never leave a half-applied action.
- */
-export interface PassBudget {
-  /**
-   * True when the DISCRETIONARY stages must stop. Fires early by
-   * {@link MANAGER_TRIAGE_RESERVE_MS} so the reserved stage still has room to run.
-   */
-  over: () => boolean;
-  /**
-   * True when the WHOLE budget is gone — the reserved stage's own deadline. Only triage
-   * checks this; everything else uses `over()`.
-   */
-  exhausted: () => boolean;
-  elapsedMs: () => number;
-  /** Wall-clock left before the DISCRETIONARY deadline; 0 once `over()`. */
-  remainingMs: () => number;
-  /**
-   * True when a unit expected to cost `estimateMs` still fits before the discretionary
-   * deadline.
-   *
-   * `over()` answers "has the deadline passed?", which cannot stop a unit that has not
-   * started from running straight through it. Measured on project 11: the PR loop began an
-   * iteration at ~11s of a 14s discretionary window, hit a merge conflict, dispatched a
-   * recovery run, and returned at 27.6s — 7.6s past the whole 20s budget, reserve and all.
-   * A reservation that can only be checked between units is not a reservation, so the
-   * expensive units ask whether they FIT.
-   */
-  canAfford: (estimateMs: number) => boolean;
-  /** Stages that were skipped or cut short, in order — journalled on the closing row. */
-  truncated: string[];
-  /** Record that `stage` was shed, once per stage. Returns true the first time. */
-  shed: (stage: string) => boolean;
-  /**
-   * Close the current segment and attribute its wall-clock to `stage`.
-   *
-   * ── WHY THE PASS HAD TO START TIMING ITSELF ──────────────────────────────────
-   * The pass already reported `elapsedMs` and the list of stages it SHED — enough to
-   * prove it overran, and not enough to say WHERE. Diagnosing it from the decision feed
-   * alone means inferring cost from which stages appear, and that inference was made
-   * twice and was wrong twice: RANK was identified as the culprit from
-   * `truncated: ["value", …]` (the budget was gone before `value`, and RANK was the only
-   * expensive thing ahead of it), fixed — 300 writes a pass down to ~45, measured — and
-   * the pass still overran identically: 20183 / 20827 / 21118 / 22032 / 23957 / 26024 ms
-   * against a 20s budget, with `Stall triage skipped this pass` going from 3 to 7 of the
-   * last 30 decisions.
-   *
-   * A budget that can only report that it was exceeded cannot be tuned, only guessed at.
-   * These marks cost one `Date.now()` per stage and turn the next capture into an
-   * answer instead of another hypothesis.
-   */
-  mark: (stage: string) => void;
-  /** Wall-clock per stage, ms — journalled beside `truncated`. */
-  timings: Record<string, number>;
-}
-
-export function createPassBudget(
-  startedAt: number,
-  budgetMs = MANAGER_PASS_BUDGET_MS,
-  reserveMs = MANAGER_TRIAGE_RESERVE_MS,
-): PassBudget {
-  const truncated: string[] = [];
-  const timings: Record<string, number> = {};
-  let segmentStartedAt = startedAt;
-  // Clamped so a caller-supplied budget smaller than the reserve cannot invert the two
-  // deadlines and make `over()` fire before the pass has started.
-  const discretionaryMs = Math.max(0, budgetMs - Math.min(reserveMs, budgetMs));
-  const remainingMs = () => Math.max(0, discretionaryMs - (Date.now() - startedAt));
-  return {
-    timings,
-    mark: (stage: string) => {
-      const at = Date.now();
-      // Accumulated, not assigned: a stage that runs in two segments (the PR loop's
-      // conduct and merge halves) must report its TOTAL, or the one number a reader
-      // most needs is the one that silently under-reports.
-      timings[stage] = (timings[stage] ?? 0) + (at - segmentStartedAt);
-      segmentStartedAt = at;
-    },
-    over: () => Date.now() - startedAt >= discretionaryMs,
-    exhausted: () => Date.now() - startedAt >= budgetMs,
-    elapsedMs: () => Date.now() - startedAt,
-    remainingMs,
-    canAfford: (estimateMs: number) => remainingMs() >= estimateMs,
-    truncated,
-    shed: (stage: string) => {
-      if (truncated.includes(stage)) return false;
-      truncated.push(stage);
-      return true;
-    },
-  };
-}
-/**
- * The discretionary window a dispatch-shaped unit must still have before it may START.
- *
- * ── WHY THIS IS A FLOOR AND NOT THE UNIT'S COST ──────────────────────────────────
- * Starting a billable cloud run is the most expensive thing a pass does, and it is
- * expensive for reasons outside this codebase: the run's creation is preceded by artifact,
- * agent, repo and inference-model resolution, each a round-trip, before any container is
- * touched. Measured on project 11, the PR loop's conflict-recovery dispatch took **16.4s**
- * end to end (decision feed, 11:01:05.921 → 11:01:22.308) — more than the entire 14s
- * discretionary window.
- *
- * So gating on the unit's real cost would refuse every recovery dispatch forever, trading
- * a starved triage stage for a remedy that never runs. The honest reading is that a
- * reserve CANNOT be defended against a unit larger than itself; that guarantee is made
- * structurally instead, by `passRotation.ts`, which gives a starved stage the whole of the
- * next pass.
- *
- * What this floor still buys is real and cheap: it stops a pass beginning a many-second
- * unit with a second of window left, which is indefensible whatever the rotation does.
- */
-export const MIN_DISPATCH_WINDOW_MS = 5_000;
+// ── THE PASS BUDGET LIVES IN ITS OWN LEAF MODULE ────────────────────────────────
+// `passBudget.ts`. It was extracted when the PR merge loop became its own registry
+// sweep (`application/repos/prMergeSweep.ts`): that sweep is bounded by the same
+// budget with the same "check between units, never mid-write" contract, and a sweep in
+// `repos/` should not have to import this 2,500-line module for a clock. Re-exported
+// here because every existing caller imports these from ManagerService.
+export {
+  MANAGER_PASS_BUDGET_MS, MANAGER_TRIAGE_RESERVE_MS, MIN_DISPATCH_WINDOW_MS,
+  createPassBudget, type PassBudget,
+} from './passBudget';
+import {
+  MANAGER_PASS_BUDGET_MS, MANAGER_TRIAGE_RESERVE_MS, MIN_DISPATCH_WINDOW_MS,
+  createPassBudget, type PassBudget,
+} from './passBudget';
 
 const MAX_DISPATCHES_PER_RUN = 12;
 const MAX_AUDITS_PER_RUN = 40;
@@ -283,46 +136,15 @@ const MAX_REMEDIATIONS_PER_RUN = 10;
  * cohort is treated as failed verification and its objective is reopened. */
 const SYSTEMIC_VERIFICATION_GRACE_MS = 30 * 60_000;
 
-/** `manager_actions.action_type` for "PR is ready but merge authority is withheld"
- *  (0363). Its own type — not 'flag' — so the surface can say "waiting on a human to
- *  merge" and the dedupe query can find prior reports for a PR in one indexed lookup.
- *  Must fit `action_type varchar(24)`. */
-const MERGE_BLOCKED_ACTION = 'merge_blocked';
-
-/**
- * `manager_actions.action_type` for "the provider REFUSED this merge" (0381).
- *
- * Its own type for the same reason `merge_blocked` is: it must be COUNTABLE. The refusal
- * used to be journalled as a generic 'flag', which meant nothing could tell one PR's
- * third failed merge from any of the 1,770 other flags that project files in a day — so
- * the attempt was never counted and the merge was retried every five minutes forever.
- * Measured on project 11, 2026-07-28: "Could not merge PR #29 … Pull Request is not
- * mergeable" four times in the last thirty decisions, one per pass, indefinitely.
- */
-const MERGE_FAILED_ACTION = 'merge_failed';
-
-/**
- * `manager_actions.action_type` for "this PR's branch conflicts with its base" (0381).
- *
- * Also promoted out of 'flag', and for a second reason beyond counting: it is the only
- * record that the manager TOUCHED a conflicting PR at all. The sync path writes
- * `sync_pr`, but a PR that conflicts never reaches the sync — so with the conflict
- * hidden inside 'flag' the fair-rotation ordering below would read every conflicting PR
- * as "never acted on" and pin it to the front of the queue on every pass, which is
- * precisely the starvation it exists to end.
- */
-const PR_CONFLICT_ACTION = 'pr_conflict';
-
-/**
- * The action types that count as "the manager did PR work on this ticket".
- *
- * The rotation orders by the newest of these, so the set has to be exactly the actions a
- * PR pass can take and nothing else — including a general type like 'flag' would make
- * every ticket look recently touched and collapse the ordering to arbitrary again.
- */
-export const PR_ACTION_TYPES = [
-  'sync_pr', 'merge_pr', MERGE_BLOCKED_ACTION, MERGE_FAILED_ACTION, PR_CONFLICT_ACTION,
-] as const;
+// ── THE PR ACTION VOCABULARY MOVED TO THE JOURNAL ───────────────────────────────
+// `managerActionJournal.ts`. The merge loop that WROTE these types is now its own
+// registry sweep (`application/repos/prMergeSweep.ts`), and this pass only READS the
+// result — so the constants belong to the journal both of them share rather than to
+// either. Re-exported because existing callers (and the ceiling contract test) import
+// `PR_ACTION_TYPES` from here.
+export {
+  PR_ACTION_TYPES, MERGE_BLOCKED_ACTION, MERGE_FAILED_ACTION, PR_CONFLICT_ACTION,
+} from './managerActionJournal';
 
 export interface ManagerRunSummary {
   projectId: number;
@@ -381,18 +203,6 @@ export interface ManagerRunSummary {
    * manager that appears to have found nothing wrong.
    */
   truncated: string[];
-  /**
-   * How the open-PR window was DISPOSED of this pass — see {@link planMergeQueue}.
-   *
-   * Journalled because the shape of this object is the whole thesis of the queue, and
-   * without it the next capture can only be read the way the last four were: by
-   * inferring cost from which decisions appear, which was wrong twice. `worked` bounded
-   * at the depth with a large `queued` beside it is the queue holding; `retired` climbing
-   * is the queue DRAINING (a PR that cannot merge leaving for a human is progress, not
-   * failure); `worked` at the depth with `queued` at 0 means the window is finally
-   * smaller than the queue and the backlog is nearly gone.
-   */
-  prQueue?: { worked: number; queued: number; retired: number; running: number; cooling: number; depth: number };
 }
 
 
@@ -996,7 +806,7 @@ export async function runManagerForProject(
     truncated: [],
   };
 
-  const { policy, managed: projectIsManaged } = await getProjectManagerState(db, tenantId, projectId, env);
+  const { policy, managed: projectIsManaged, lastRunAt: previousPassAt } = await getProjectManagerState(db, tenantId, projectId, env);
   // THE OPT-IN, checked on the manual path too. The sweep filters unconfigured projects
   // out in SQL, but "Run manager now" reaches this function directly — and the two must
   // give the same answer, or a button would manage a project the schedule refuses to.
@@ -1052,7 +862,7 @@ export async function runManagerForProject(
    * did not run out of time. See `carryOverRotation`.
    */
   const mayRunStage = (stage: string): boolean => {
-    if (!prManagementEnabled && (stage === 'pr_conduct' || stage === 'pr_merge')) return false;
+    if (!prManagementEnabled && stage === 'pr_conduct') return false;
     if (rotation.mayRun(stage)) return true;
     rotation.skip(stage);
     budget.shed(stage);
@@ -1486,6 +1296,13 @@ export async function runManagerForProject(
     tenantId, projectId, policy, managed, summary, runTaskId, conductedTaskIds, budget, runs, mayRunStage,
   });
 
+  // WHAT LANDED, READ FROM THE JOURNAL THE MERGE SWEEP WRITES (see `countPrMergesSince`).
+  // The pass no longer merges anything — `application/repos/prMergeSweep.ts` does, on its
+  // own budget — but "what shipped since I last looked" is still part of what a manager
+  // accounts for, so the number stays on the closing row. One indexed COUNT, and only for
+  // a project that has been passed before (a first pass has no window to attribute).
+  summary.prsMerged = await countPrMergesSince(db, { tenantId, projectId, since: previousPassAt });
+
   budget.mark('pr');
   // 5. DISPATCH — kick the top-ranked runnable tickets NOW, in priority order. ---
   // Skipped on the cron path (the autonomous executor sweep owns dispatch there — see
@@ -1646,11 +1463,6 @@ export async function runManagerForProject(
         // find the expensive stage is to infer it from which stages got shed, which is
         // how the wrong stage was blamed twice. See `PassBudget.mark`.
         stageMs: budget.timings,
-        // The PR stage is what `stageMs` named as 93% of the pass, so its disposition
-        // belongs on the decision that reports the overrun. This one is journalled on
-        // EVERY pass; the closing summary is written only by a manual run, so a cron
-        // pass's queue shape would otherwise be invisible.
-        prQueue: summary.prQueue,
       },
     }).catch(() => undefined);
   } else {
@@ -1808,7 +1620,7 @@ export async function runManagerForProject(
         censusStalled: summary.censusStalled, censusTopCause: summary.censusTopCause,
         systemicFindings: summary.systemicFindings, systemicTicketsCreated: summary.systemicTicketsCreated,
         truncated: summary.truncated, passMs: budget.elapsedMs(), passBudgetMs: MANAGER_PASS_BUDGET_MS,
-        stageMs: budget.timings, prQueue: summary.prQueue,
+        stageMs: budget.timings,
         trigger: submittedBy, managerType: policy.managerType, coachingApplied: coachingDirectives.length,
       },
     });
@@ -1831,18 +1643,14 @@ export async function runManagerForProject(
 }
 
 /**
- * PR coordination for one project:
- *   • CONDUCT — a finished-but-parked ticket (in review, has a branch, no PR, no live
- *     run) gets advanced to Done under any non-'queue' policy, opening its PR through
- *     the shared finalize path.
- *   • MERGE   — open PRs are merged + closed per policy: 'immediate' merges now,
- *     'on_green' merges only once CI is green, 'queue' leaves them for a human.
+ * PR CONDUCT for one project: a finished-but-parked ticket (in review, has a branch, no
+ * PR, no live run) is advanced to Done under any non-'queue' policy, opening its PR
+ * through the shared finalize path.
+ *
+ * MERGING used to be the second half of this function and is now its own registry sweep
+ * (`application/repos/prMergeSweep.ts`) — see the note at the end of the body for the
+ * measurement that split them.
  */
-/** Narrow the free-form `pull_requests.build_status` column to the readiness vocabulary. */
-function normalizeBuildStatus(v: string | null | undefined): 'success' | 'failure' | 'pending' | null {
-  return v === 'success' || v === 'failure' || v === 'pending' ? v : null;
-}
-
 async function coordinatePullRequests(
   env: Env,
   db: Db,
@@ -1905,6 +1713,9 @@ async function coordinatePullRequests(
           eq(pullRequests.tenantId, tenantId),
           inArray(pullRequests.taskId, reviewReady.map((t) => t.id)),
         ))
+        // NEWEST FIRST, so the "no open PR left" fallback below is the most recent
+        // settled one rather than whatever the heap scan happened to yield last.
+        .orderBy(desc(pullRequests.updatedAt))
       : [];
     const reviewFileRows = reviewReady.length
       ? await db.select({ taskId: taskFileChanges.taskId, path: taskFileChanges.path })
@@ -1924,13 +1735,24 @@ async function coordinatePullRequests(
     // anything left to land and whose build verdict matters. Reading "the last row the
     // scan happened to return" is how a settled PR's green build could speak for an open
     // PR that had not built at all.
-    const prByTask = new Map<number, { state: TicketPrState; buildStatus: string | null }>();
+    // The rule itself is `pickCurrentPr` (domain/task/buildStatus.ts) — the same one the
+    // board card's build badge is derived through, so the ticket and its card can never
+    // disagree about which pull request speaks for it.
+    const prRowsByTask = new Map<number, typeof reviewPrBuild>();
     for (const r of reviewPrBuild) {
       if (r.taskId == null) continue;
-      const open = r.status === 'open';
-      const current = prByTask.get(r.taskId);
-      if (current?.state === 'open' && !open) continue;
-      prByTask.set(r.taskId, { state: open ? 'open' : 'settled', buildStatus: r.buildStatus });
+      const list = prRowsByTask.get(r.taskId);
+      if (list) list.push(r);
+      else prRowsByTask.set(r.taskId, [r]);
+    }
+    const prByTask = new Map<number, { state: TicketPrState; buildStatus: string | null }>();
+    for (const [taskId, rows] of prRowsByTask) {
+      const current = pickCurrentPr(rows);
+      if (!current) continue;
+      prByTask.set(taskId, {
+        state: current.status === 'open' ? 'open' : 'settled',
+        buildStatus: current.buildStatus,
+      });
     }
 
     for (const t of reviewReady) {
@@ -2134,433 +1956,22 @@ async function coordinatePullRequests(
     }
   }
 
-  // MERGE + CLOSE open PRs per policy.
-  if (policy.prMergePolicy === 'queue') return;
-  if (!ctx.mayRunStage('pr_merge')) return;
-  // ── WHO GETS A TURN, AND IN WHAT ORDER ──────────────────────────────────────────
+  // ── THE MERGE LOOP IS NOT HERE ANY MORE ─────────────────────────────────────────
+  // It is its own registry sweep: `application/repos/prMergeSweep.ts`, registered in
+  // `cronSweeps.ts` beside `runBoardSyncSweep` with its own budget.
   //
-  // This query used to be an UNORDERED `limit(20)` over every open PR on the project.
-  // With 386 of them (project 11, measured 2026-07-28) an unordered LIMIT returns
-  // whatever the heap scan yields first, which in practice is the same twenty rows every
-  // pass — so 366 PRs were never examined once, on any pass, ever.
+  // WHY. Merging is mechanical, high-volume, provider-bound work whose cadence is set by
+  // PR volume and provider latency — nothing to do with how often a backlog is worth
+  // re-ranking or a stall worth re-triaging. Inside this pass it was 93% of the measured
+  // wall-clock (project 11, 2026-07-30: `pr: 28839ms` of a 30888ms pass) and it starved
+  // every stage behind it. The merge queue later bounded it to ~4s, which stopped the
+  // bleeding without fixing the shape: the guarantee that triage still ran was a tuned
+  // depth rather than a structural fact. Split out, the pass cannot be starved by PR
+  // volume BY CONSTRUCTION.
   //
-  // The fix is LEAST-RECENTLY-WORKED FIRST. One grouped scan of the manager's own PR
-  // actions gives, per ticket, when this loop last did anything to it — never-touched
-  // PRs sort first (NULL), then longest-since-touched. Every open PR therefore reaches
-  // the window within ceil(386/20) ≈ 20 passes instead of never, and a PR the manager
-  // keeps re-handling naturally sinks behind the ones it has been ignoring.
-  //
-  // The SAME scan carries the ceilings this loop enforces (syncs, failed merges,
-  // unrecoverable conflicts) and the merge_blocked dedupe, which were previously THREE
-  // separate grouped queries over the same table on every pass. It is index-backed by
-  // `idx_manager_actions_pr_scope (tenant_id, project_id, action_type, pr_id)` — 0383
-  // added it, because `manager_actions` grows by ~3.5k rows a day on one project and the
-  // prior queries were sequential scans on a five-minute path.
-  //
-  // KEYED ON THE PULL REQUEST, NOT ITS TICKET (0383). 0381 grouped by `task_id` and
-  // joined it to `pull_requests.task_id`, which is NULLABLE — so an orphan PR's own
-  // journalled actions could never be counted back to it (`NULL = NULL` is never true in
-  // a join), every `pr.taskId != null &&` guard below skipped it, and its NULL
-  // `last_acted_at` pinned it to the front of a NULLS-FIRST rotation on every pass.
-  // Measured on project 11, 2026-07-29: "Could not merge PR #29 … not mergeable" written
-  // with `{"attempt":1,"maxAttempts":3}` six times in thirty minutes, attempt 1 every
-  // time, while 381 open PRs queued behind it. The PR is also the right key on its own
-  // terms — a replacement PR must not inherit a retired one's refusals.
-  const prActivity = db
-    .select({
-      prId: managerActions.prId,
-      syncs: sql<number>`count(*) filter (where ${managerActions.actionType} = 'sync_pr')::int`.as('syncs'),
-      mergeFailures: sql<number>`count(*) filter (where ${managerActions.actionType} = ${MERGE_FAILED_ACTION})::int`.as('merge_failures'),
-      conflicts: sql<number>`count(*) filter (where ${managerActions.actionType} = ${PR_CONFLICT_ACTION})::int`.as('conflicts'),
-      lastConflictAt: sql<Date | null>`max(${managerActions.createdAt}) filter (where ${managerActions.actionType} = ${PR_CONFLICT_ACTION})`.as('last_conflict_at'),
-      // A historical conflict_exhausted report is no longer terminal. Excluding it here
-      // revives the existing backlog after deploy while retaining true authority,
-      // provider-refusal and sync ceilings.
-      blockedReports: sql<number>`count(*) filter (where ${managerActions.actionType} = ${MERGE_BLOCKED_ACTION} and coalesce(${managerActions.detail}, '') not like '%"reason":"conflict_exhausted"%')::int`.as('blocked_reports'),
-      // `last_acted_at` was dropped with the least-recently-worked rotation it ordered:
-      // the queue is oldest-first and stable, so when the manager last touched a PR is
-      // no longer an input to anything. Selecting a `max()` nothing reads is a grouped
-      // aggregate paid for on every pass.
-    })
-    .from(managerActions)
-    .where(and(
-      eq(managerActions.tenantId, tenantId),
-      eq(managerActions.projectId, projectId),
-      inArray(managerActions.actionType, [...PR_ACTION_TYPES]),
-    ))
-    .groupBy(managerActions.prId)
-    .as('pr_activity');
-
-  const openPrs = await db
-    .select({
-      id: pullRequests.id, number: pullRequests.number, taskId: pullRequests.taskId,
-      buildStatus: pullRequests.buildStatus, repoId: pullRequests.repoId, updatedAt: pullRequests.updatedAt,
-      syncs: prActivity.syncs,
-      mergeFailures: prActivity.mergeFailures,
-      conflicts: prActivity.conflicts,
-      lastConflictAt: prActivity.lastConflictAt,
-      blockedReports: prActivity.blockedReports,
-    })
-    .from(pullRequests)
-    .leftJoin(prActivity, eq(prActivity.prId, pullRequests.id))
-    .where(and(
-      eq(pullRequests.tenantId, tenantId),
-      eq(pullRequests.projectId, projectId),
-      eq(pullRequests.status, 'open'),
-      // An unlinked provider PR is visible to reconciliation but cannot bypass
-      // ticket review/sign-off governance by entering the merge queue as an orphan.
-      isNotNull(pullRequests.taskId),
-      // ── HOW A PR LEAVES THE QUEUE ───────────────────────────────────────────────
-      // Retiring a PR to a human writes `merge_blocked`; it does NOT close the pull
-      // request, which stays `open` on the provider until a person deals with it. Under
-      // the old rotation that was harmless — the window moved on regardless. Under a
-      // STABLE oldest-first order it is fatal: the twenty oldest PRs exhaust their
-      // ceilings, get reported once, and then sit at the head of the window forever, so
-      // the queue deadlocks on its own retirements and PR 21 is never reached.
-      //
-      // The exit is RETIRED AND REPORTED, and both halves are load-bearing. Exhausted
-      // but not yet reported must stay IN — that pass is what tells the human. And
-      // reported alone must not evict, because `merge_blocked` also carries "ready, but
-      // merge authority is withheld" (0363), which is a project POLICY rather than a
-      // spent ceiling: those PRs have low counters, must keep their place, and must
-      // merge on the next pass after a person grants the authority.
-      sql`not (
-        coalesce(${prActivity.blockedReports}, 0) > 0
-        and greatest(
-          coalesce(${prActivity.syncs}, 0),
-          coalesce(${prActivity.mergeFailures}, 0)
-        ) >= ${MAX_REMEDY_ATTEMPTS}
-      )`,
-    ))
-    // OLDEST FIRST, AND STABLE — see `prMergeQueue.ts`. 0383 ordered this
-    // least-recently-worked-first so every PR got a turn, which fixed one starvation and
-    // caused a worse one: a turn every ~19 passes against a base that moves every few
-    // minutes means no PR ever accumulates the three attempts its ceiling needs, so
-    // nothing merges and nothing retires either (measured: `attempts=2` on row after row
-    // of the stuck register after 16–28 days). A queue has to keep the same PR at its
-    // head until that head reaches a conclusion. `id` breaks ties so the order is total.
-    // Green/unknown rows first. Explicitly red or pending rows are retained for
-    // CI remediation but cannot fill the bounded 20-row window ahead of ready work.
-    .orderBy(
-      sql`case when ${pullRequests.buildStatus} = 'success' then 0 when ${pullRequests.buildStatus} is null then 1 else 2 end`,
-      asc(pullRequests.createdAt), asc(pullRequests.id),
-    )
-    .limit(MAX_PR_ACTIONS_PER_RUN);
-  const activePrRuns = openPrs.some((pr) => pr.taskId != null)
-    ? await runtimeService.listActiveByTasks(openPrs.flatMap((pr) => pr.taskId == null ? [] : [pr.taskId])).catch(() => [])
-    : [];
-  const activePrTaskIds = new Set<number>(activePrRuns.map((e) => e.taskId as unknown as number));
-
-  // ── THE TWO CEILINGS AND THE DEDUPE, all from the one scan above ────────────────
-  //
-  // SYNC: how many times a PR has been brought up to date with its base without ever
-  // merging. Syncing a stale branch is a correct action; syncing the same branch forever
-  // is the platform's largest measured livelock — 40,580 `sync_pr` actions against 10
-  // merges all-time, still running at 13,549/week with ZERO merges when re-measured on
-  // 2026-07-26. The remedy was never wrong; nothing ever asked whether it worked.
-  //
-  // MERGE: how many times the PROVIDER has refused the merge. This one had no ceiling at
-  // all until 0381 — the refusal was journalled as a generic 'flag' and the loop simply
-  // went round again, so "Could not merge PR #29: … not mergeable" fired once per pass
-  // indefinitely. It is the same livelock as the sync, one branch further down the same
-  // function, and it now obeys the same rule ({@link isActionExhausted}).
-  //
-  // CONFLICT: how many times the loop has found this branch conflicting with its base.
-  // The third unbounded remedy on the same function, and the one still running when 0381
-  // shipped: a conflicting PR whose recovery cannot START — its ticket has no agent to
-  // hand the branch back to — journals `pr_conflict` and continues, every pass, with
-  // nothing counting it. Measured on project 11, 2026-07-29: 102 `pr_conflict` decisions
-  // in one day, including "Could not start conflict recovery for PR #46: merge conflict"
-  // re-taken on every pass. A conflict handed back three times and still conflicting is
-  // the same livelock the two ceilings above end, so it obeys the same rule.
-  //
-  // MERGE AUTHORITY (0363) withheld is a STATE that persists across passes, not an event,
-  // so it is reported once per PR rather than every five minutes. All three ceilings
-  // report through that same `merge_blocked` type and share its dedupe.
-  //
-  // KEYED BY PR ID (0383) — see the query above. Keyed by ticket, these maps held nothing
-  // at all for an orphan PR, which is how one escaped every ceiling indefinitely.
-  const alreadyReportedBlocked = new Set<string>();
-  for (const pr of openPrs) if ((pr.blockedReports ?? 0) > 0) alreadyReportedBlocked.add(pr.id);
-
-  // ── THE QUEUE ───────────────────────────────────────────────────────────────────
-  // Three counters and the active-run check decide, in one pure pass, which PRs may
-  // cost provider round-trips — see `prMergeQueue.ts` for why a window of 20 conflicting
-  // branches all targeting one base is a QUEUE and not twenty independent repairs. The
-  // counters are read straight off the PR row (the grouped scan above is keyed on
-  // `pr_id`), so there is no intermediate map that could reintroduce a ticket key.
-  const queue = planMergeQueue(openPrs, {
-    hasActiveRun: (pr) => pr.taskId != null && activePrTaskIds.has(pr.taskId),
-    requireGreen: policy.prMergePolicy === 'on_green',
-  });
-  summary.prQueue = summarizeMergeQueue(queue);
-
-  /**
-   * Hand a conflicting PR back to the ticket's agent. A conflict can be found
-   * either while updating the branch or by the final merge API (GitHub commonly
-   * returns the latter as HTTP 405), so both paths must use the same recovery.
-   */
-  const startConflictRecovery = async (pr: (typeof openPrs)[number], mayRecover: boolean) => {
-    const task = pr.taskId == null ? null : managed.find((t) => t.id === pr.taskId) ?? null;
-    const affordable = budget.canAfford(MIN_DISPATCH_WINDOW_MS);
-    if (!affordable) budget.shed('pr_merge');
-    // TWO REASONS TO HOLD A RECOVERY, and they are not the same reason. `pass_budget`
-    // says this pass ran out of time; `merge_queue` says the work would be void — a
-    // second resolution running beside the head's is invalidated the moment the head
-    // merges, and it costs a billable run to find that out. Journalled apart so the
-    // feed can never again read as "the manager tried" when it deliberately did not.
-    const deferred = !affordable ? 'pass_budget' : !mayRecover ? 'merge_queue' : null;
-    let recoveryStarted = false;
-    if (deferred == null && task && (task.assignedAgentRef || task.assignedAgentHostId != null)) {
-      const recoveryNote = `\n\n[Manager recovery] PR #${pr.number ?? '?'} conflicts with the latest base branch. Sync the latest base, resolve every conflict while preserving both sets of intended changes, run the relevant checks, and update the existing PR.`;
-      await db.update(tasks).set({
-        status: TaskStatus.IN_PROGRESS,
-        completedAt: null,
-        description: task.description?.includes('[Manager recovery]')
-          ? task.description
-          : `${task.description ?? ''}${recoveryNote}`.trim(),
-        updatedAt: new Date(),
-      }).where(scopedToTenant(tasks, tenantId, eq(tasks.id, task.id)));
-      recoveryStarted = (await runs.spend(
-        () => maybeAutoRunOnLaneEntry(env, db, runtimeService, {
-          tenantId, projectId, taskId: task.id, status: TaskStatus.IN_PROGRESS,
-          submittedBy: `manager:conflict-resolution:${policy.managerRef ?? 'system'}`,
-        }),
-        (v) => v === true,
-      )).result === true;
-      if (recoveryStarted) summary.dispatched += 1;
-    }
-    return { deferred, recoveryStarted };
-  };
-
-  for (const { pr, disposition, mayRecover } of queue) {
-    // The eviction point. Each iteration does provider round-trips (sync, poll, merge),
-    // so this loop is where the pass dies on a project with hundreds of open PRs. Stop
-    // at the budget, between PRs, and let the closing journal say so.
-    if (budget.over()) { budget.shed('pr_merge'); break; }
-    try {
-      // A previous conflict-resolution run owns this branch until it finishes.
-      if (disposition === 'running') continue;
-
-      // BEHIND THE HEAD. Not skipped for lack of time — skipped because only the front
-      // of the queue can merge, and every branch behind it goes stale the moment it
-      // does. This is the branch that gives the pass its budget back: it costs nothing,
-      // and it is where 17 of the 20 PRs in a window now land.
-      if (disposition === 'queued') continue;
-
-      // Red/pending CI is remediation work, not an integration head. Its ticket was
-      // reopened by reconciliation/CI handling; do not let it consume queue depth.
-      if (disposition === 'ci_blocked') continue;
-
-      // Exhausted sync: this PR has been brought up to date with its base
-      // MAX_REMEDY_ATTEMPTS times and still has not merged, so a further sync is not a
-      // fix in progress — it is the livelock. Report it once (the `merge_blocked` dedupe
-      // below is the same "state, not event" rule) and leave it for a human.
-      if (disposition === 'sync_exhausted') {
-        if (!alreadyReportedBlocked.has(pr.id)) {
-          await recordManagerAction(db, {
-            tenantId, projectId, taskId: pr.taskId, prId: pr.id, runTaskId, actionType: MERGE_BLOCKED_ACTION,
-            summary: `PR #${pr.number ?? '?'} has been synced with its base ${pr.syncs} times without merging — stopping the sync loop and handing it to a human.`,
-            detail: { reason: 'sync_exhausted', syncAttempts: pr.syncs },
-          });
-          alreadyReportedBlocked.add(pr.id);
-        }
-        continue;
-      }
-
-      // EXHAUSTED MERGE (0381). The provider has refused this merge MAX_REMEDY_ATTEMPTS
-      // times. Nothing the manager does between attempts changes the answer — a PR that
-      // is not mergeable for a structural reason (a required review, a branch rule, a
-      // merge queue, squash disabled on the repo) is not mergeable on the next tick
-      // either, and re-asking is the same livelock the sync ceiling above exists to end.
-      // Report the reason ONCE and leave it for a person, who is the only one who can
-      // clear any of those.
-      if (disposition === 'merge_exhausted') {
-        if (!alreadyReportedBlocked.has(pr.id)) {
-          await recordManagerAction(db, {
-            tenantId, projectId, taskId: pr.taskId, prId: pr.id, runTaskId, actionType: MERGE_BLOCKED_ACTION,
-            summary: `PR #${pr.number ?? '?'} has been refused by the provider ${pr.mergeFailures} times — stopping the merge loop and handing it to a human. Open it on the provider for the exact block (required reviews, branch rules, a merge queue, or squash merges disabled).`,
-            detail: { reason: 'merge_failed_exhausted', mergeFailures: pr.mergeFailures },
-          });
-          alreadyReportedBlocked.add(pr.id);
-        }
-        continue;
-      }
-
-      // A content conflict is recoverable work, not a permanent human terminal. Once
-      // repeated attempts spend the fast-retry allowance, the queue holds its single
-      // integration head for a bounded cooldown. It then retries autonomously; the
-      // branches behind it remain untouched so they cannot invalidate one another.
-      if (disposition === 'conflict_backoff') continue;
-
-      // Always integrate the latest base first. This prevents a queue of agent PRs
-      // from all being merged against the same stale main revision.
-      const prepared = await updateRecordedPullRequestBranch(db, env, { tenantId, prId: pr.id });
-      if (!prepared.ok) {
-        // THE UNIT THAT OVERRAN THE PASS. This branch dispatches a cloud run, and a
-        // dispatch is the most expensive thing a pass does — measured at 16.4s here, on a
-        // 14s discretionary window. `budget.over()` at the top of the loop cannot stop a
-        // unit that has not started yet, so this one asks whether it still FITS. With too
-        // little window left the conflict is journalled without recovery and the stage is
-        // shed, which hands the next pass to whatever this one starved (see
-        // `passRotation.ts`) rather than silently running 7.6s past the whole budget.
-        const recovery = prepared.code === 'conflict'
-          ? await startConflictRecovery(pr, mayRecover)
-          : { deferred: null, recoveryStarted: false };
-        await recordManagerAction(db, {
-          // PR_CONFLICT_ACTION, not 'flag' (0381): this is the only trace that the loop
-          // touched a conflicting PR, and the rotation orders by it. Left as 'flag' it
-          // was invisible to that ordering, so every conflicting PR read as "never acted
-          // on" and held the front of the queue forever.
-          tenantId, projectId, taskId: pr.taskId, prId: pr.id, runTaskId, actionType: PR_CONFLICT_ACTION,
-          summary: recovery.recoveryStarted
-            ? `PR #${pr.number ?? '?'} conflicts with the latest base; started its ticket agent to resolve and update it.`
-            : recovery.deferred === 'pass_budget'
-              // "Could not update" would read as a provider failure. It is a scheduling
-              // decision, and the honest version is the one that says the work is coming.
-              ? `PR #${pr.number ?? '?'} conflicts with the latest base; deferred starting its resolution agent because this pass has too little time left to start a run — it goes out on the next pass.`
-              : recovery.deferred === 'merge_queue'
-                ? `PR #${pr.number ?? '?'} conflicts with the latest base; holding its resolution until the pull request ahead of it in the merge queue lands, because resolving against a base that is about to move would have to be redone.`
-                : `Could not update PR #${pr.number ?? '?'} from the latest base: ${prepared.error}`,
-          detail: {
-            code: prepared.code,
-            recoveryStarted: recovery.recoveryStarted,
-            ...(recovery.deferred ? { deferred: recovery.deferred } : {}),
-          },
-        });
-        continue;
-      }
-      if (prepared.updated) {
-        await recordManagerAction(db, {
-          tenantId, projectId, taskId: pr.taskId, prId: pr.id, runTaskId, actionType: 'sync_pr',
-          summary: `Updated PR #${pr.number ?? '?'} with the latest base branch before merge.`,
-        });
-        // Both GitHub updates and GitLab rebases are accepted asynchronously. Never
-        // race the provider by merging the old head in this pass. The next manager
-        // pass observes the current head; on-green also polls CI for that new commit.
-        continue;
-      }
-      // 'on_green' waits for CI to pass. Don't depend on the inbound CI webhook — POLL
-      // the provider's live status ourselves (self-trigger), persisting the verdict, so
-      // an on_green PR merges even on a repo with no webhook installed. 'immediate'
-      // policy skips the poll (it merges regardless of CI).
-      if (policy.prMergePolicy === 'on_green') {
-        const live = await pollPrCiStatus(env, db, tenantId, pr);
-        if (live !== 'success') continue; // still pending or red — leave it for the next tick
-      }
-
-      // SELF-GOVERNANCE (0362), enforced again at the merge itself. CONDUCT above is not
-      // the only way a PR reaches this loop — the inline run-end finalize, the Done-drag
-      // finalize and board-sync can all record one — so gating only the completion step
-      // would leave an unreviewed back door straight to a squash-merge. Re-checking here
-      // costs one cached manifest read and makes "merged ⇒ signed off" an invariant
-      // rather than a property of the path taken.
-      //
-      // Through the SAME policy-aware read as the conduct step, not a hand-rolled `if`:
-      // the project setting is consulted in one place, so the two gates cannot disagree
-      // about whether this project requires sign-off at all.
-      if (pr.taskId != null) {
-        const gate = await resolveRequiredSignoffGate(env, db, {
-          tenantId, taskId: pr.taskId, requireSignoff: policy.requireSignoffToComplete,
-        });
-        if (!gate.satisfied) {
-          await recordManagerAction(db, {
-            tenantId, projectId, taskId: pr.taskId, prId: pr.id, runTaskId, actionType: 'flag',
-            summary: `Did not merge PR #${pr.number ?? '?'} — ${gate.detail}`,
-            detail: {
-              signoffGate: gate.reason,
-              requiredCount: gate.requiredCount,
-              satisfiedCount: gate.satisfiedCount,
-              outstanding: gate.outstanding.map((o) => ({ roleKey: o.roleKey, roleName: o.roleName, state: o.state })),
-            },
-          });
-          continue;
-        }
-      }
-      // MERGE AUTHORITY (0363) — the last gate, and a different question from every check
-      // above it. Those ask "is this change ready?"; this asks "may the manager act on
-      // that answer unattended?". It used to be inferred from `prMergePolicy !== 'queue'`,
-      // conflating HOW a merge happens with WHETHER one is permitted, and the inferred
-      // answer for a default-configured project was yes. It is now granted explicitly at
-      // the workspace or project tier, defaults to withheld, and — because a withheld
-      // grant on a ready PR is a decision — it is journalled rather than skipped, so the
-      // surface shows "waiting on a human to merge" instead of a PR that quietly never
-      // moves. Both this and the sign-off gate above must pass.
-      if (!policy.allowAutoMerge) {
-        if (!alreadyReportedBlocked.has(pr.id)) {
-          await recordManagerAction(db, {
-            tenantId, projectId, taskId: pr.taskId, prId: pr.id, runTaskId, actionType: MERGE_BLOCKED_ACTION,
-            summary: `PR #${pr.number ?? '?'} is ready to merge, but autonomous merge authority is not granted — a human needs to approve & merge it.`,
-            detail: {
-              gate: 'allow_auto_merge',
-              allowAutoMerge: false,
-              prMergePolicy: policy.prMergePolicy,
-              requireSignoffToComplete: policy.requireSignoffToComplete,
-              grantAt: 'workspace manager defaults, or this project’s manager policy',
-            },
-          });
-          alreadyReportedBlocked.add(pr.id);
-        }
-        continue;
-      }
-
-      const result = await mergeRecordedPullRequest(db, env, {
-        tenantId, prId: pr.id, method: 'squash', mergedBy: `manager:${policy.managerRef ?? 'system'}`,
-      });
-      if (!result.ok) {
-        // GitHub can discover a content conflict only at the final merge call and
-        // reports it as HTTP 405. Treat it exactly like an update-branch conflict:
-        // reopen the ticket and send its assigned agent to resolve the existing PR.
-        if (result.code === 'conflict') {
-          const recovery = await startConflictRecovery(pr, mayRecover);
-          await recordManagerAction(db, {
-            tenantId, projectId, taskId: pr.taskId, prId: pr.id, runTaskId, actionType: PR_CONFLICT_ACTION,
-            summary: recovery.recoveryStarted
-              ? `PR #${pr.number ?? '?'} was refused at merge because it conflicts with the latest base; started its ticket agent to resolve and update it.`
-              : recovery.deferred === 'pass_budget'
-                ? `PR #${pr.number ?? '?'} was refused at merge because it conflicts with the latest base; deferred starting its resolution agent because this pass has too little time left.`
-                : recovery.deferred === 'merge_queue'
-                  ? `PR #${pr.number ?? '?'} was refused at merge because it conflicts with the latest base; holding its resolution until the pull request ahead of it in the merge queue lands.`
-                  : `Could not start conflict recovery for PR #${pr.number ?? '?'}: ${result.error}`,
-            detail: {
-              code: result.code,
-              detectedAt: 'merge',
-              recoveryStarted: recovery.recoveryStarted,
-              attempt: (pr.conflicts ?? 0) + 1,
-              maxAttempts: MAX_REMEDY_ATTEMPTS,
-              ...(recovery.deferred ? { deferred: recovery.deferred } : {}),
-            },
-          });
-          continue;
-        }
-        // Journalled as MERGE_FAILED_ACTION, not 'flag' (0381) — the ceiling above counts
-        // these, and a refusal buried among a project's ~1,770 daily flags is a refusal
-        // nothing can count. The Nth failure is what retires the PR to a human.
-        await recordManagerAction(db, {
-          tenantId, projectId, taskId: pr.taskId, prId: pr.id, runTaskId, actionType: MERGE_FAILED_ACTION,
-          summary: `Could not merge PR #${pr.number ?? '?'}: ${result.error}`,
-          detail: {
-            code: result.code,
-            attempt: (pr.mergeFailures ?? 0) + 1,
-            maxAttempts: MAX_REMEDY_ATTEMPTS,
-          },
-        });
-        continue;
-      }
-      summary.prsMerged += 1;
-      // Ticket completion now happens inside mergeRecordedPullRequest (the shared
-      // merge core), so the manager, the human "Approve & Merge" and the green-CI
-      // auto-merge all complete the ticket via the ONE completeTaskOnMerge path —
-      // which also records the lifecycle transition/DORA the old direct update skipped.
-      await recordManagerAction(db, {
-        tenantId, projectId, taskId: pr.taskId, prId: pr.id, runTaskId, actionType: 'merge_pr',
-        summary: `Merged & closed PR #${pr.number ?? '?'}${result.merged ? '' : ' (already up to date)'} — ticket done.`,
-        detail: { sha: result.sha },
-      });
-    } catch (error) { /* skip */ 
-      reportCaughtError(error, { source: "application/manager/ManagerService.ts", operation: "coordinatePullRequests" });
-    }
-  }
+  // The pass still REPORTS what landed (`summary.prsMerged`) — it reads
+  // `countPrMergesSince` off the journal the sweep writes. Reading the result is not the
+  // same as doing the work, and that distinction is the whole point of the split.
 }
 
 /**

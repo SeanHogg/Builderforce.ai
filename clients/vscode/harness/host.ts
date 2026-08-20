@@ -18,6 +18,7 @@
 
 import type { BrainAction, BrainMessage } from '@seanhogg/builderforce-brain-embedded';
 import { TOOL_DEFS } from '../src/fileTools';
+import { toolDefActions } from '../src/nativeBrainRun';
 
 /** An in-memory chat store that satisfies the loop's persistence port. */
 export interface HarnessPersistence {
@@ -97,13 +98,10 @@ export function harnessTools(opts: {
   const calls: Array<{ name: string; args: unknown }> = [];
   const responses = opts.responses ?? {};
 
-  const localSpecs: BrainAction[] = TOOL_DEFS.map((def) => ({
-    name: def.name,
-    description: def.description,
-    parameters: def.parameters,
-    mutates: def.mutating,
-    run: async () => ({ ok: true }),
-  }));
+  // The SHIPPED ToolDef → BrainAction mapping, not a copy of it: a scenario has to
+  // advertise exactly what a real chat turn advertises, or per-turn tool selection is
+  // scoring against a different catalogue than the product's.
+  const localSpecs: BrainAction[] = toolDefActions(TOOL_DEFS, async () => ({ ok: true }));
 
   // A small stand-in for the gateway MCP catalog: real names + shapes for the platform
   // tools a chat run leans on, so tool SELECTION behaves as it does in the product.

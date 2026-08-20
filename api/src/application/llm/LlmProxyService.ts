@@ -60,18 +60,26 @@ import {
 } from './poolRouting';
 import { composeFreeCappedCascade, buildCooldownPredicate } from './cascadeComposer';
 import { sanitizeRequestToolCalls, restoreResponseToolNames, restoreStreamToolNames } from './toolNameSanitizer';
+import { instrumentStream } from './streamDiagnostics';
 import {
   loadCooldownExpiries,
   loadCooldowns,
+  loadCooledModelsForVendor,
   loadCooledVendors,
   loadCooledVendorExpiries,
-  recordFailure,
+  recordFailures,
 } from '../../infrastructure/auth/cooldownStore';
 import { validateJsonSchema } from './jsonSchemaValidator';
 import { parseClientReasoningIntent } from './reasoningCapability';
 import { estimateTokensFromChars } from './tokenUsage';
-import type { ActionType } from './actionTypes';
-import { blendedQualityScore, isChronicallyRateLimited, qualityEvidence } from './modelQualityScore';
+import type { ActionType } from '@builderforce/learned-routing';
+import {
+  DEFAULT_MIN_SAMPLES,
+  qualityEvidence,
+  rankModelsForAction,
+  type ActionModelRankStat,
+  type RankModelsOptions,
+} from '@builderforce/learned-routing';
 import { PROVIDER_VENDOR_MAP, byoVendorIdsFromCredentials, type TenantVendorKeys } from './tenantProviderKeyService';
 import {
   bareModelId,
@@ -80,7 +88,7 @@ import {
 } from './openRouterConnectionService';
 import {
   loadDemotedVendors,
-  recordVendorUpstreamFault,
+  recordVendorUpstreamFaults,
   recordVendorUpstreamSuccess,
 } from './vendors/vendorHealth';
 
@@ -431,6 +439,15 @@ export interface LlmProxyOptions {
    *  so the gateway completion seed leads with the owner's chosen account (e.g. Meta
    *  first), matching the cloud-agent pin. Empty/undefined = catalog-tier order. */
   byoVendorPriority?: readonly string[];
+  /** Gateway vendor ids whose underlying TENANT account is currently known-broken
+   *  (401 / 403 / out-of-budget, per `providerAuthAlerts`). Unioned with the global
+   *  5xx-streak set and passed to {@link byoAutoSeedModels} as `demotedVendors`, so a
+   *  rejected account stops LEADING the seed. Resolved by the caller because the
+   *  alert is keyed per tenant and this service has no tenant id — the same seam that
+   *  already threads `byoVendorPriority` (`TenantLlmCredentials.alertedVendors`).
+   *  Demotion only: the vendor stays in the seed, one position back, because a
+   *  `capacity` alert self-heals and removal would silently change the funding source. */
+  byoAlertedVendors?: readonly string[];
   /** Shared precedence ranks for provider accounts. Unlike `byoVendorPriority`,
    * this preserves gaps occupied by OpenRouter connections so both kinds can
    * interleave in one ordered list. */
@@ -489,6 +506,7 @@ export class LlmProxyService {
   private readonly tenantVendorKeys: TenantVendorKeys;
   private readonly hostEgress: VendorEgress | null;
   private readonly byoVendorPriority: readonly string[];
+  private readonly byoAlertedVendors: readonly string[];
   private readonly byoProviderPriorities: readonly { vendor: string; priority: number | null }[];
   private readonly openRouterConnections: readonly OpenRouterConnection[];
   private readonly openRouterModelKeys: Readonly<Record<string, string>>;
@@ -514,6 +532,7 @@ export class LlmProxyService {
     this.tenantVendorKeys = options?.tenantVendorKeys ?? {};
     this.hostEgress = options?.hostEgress ?? null;
     this.byoVendorPriority = options?.byoVendorPriority ?? [];
+    this.byoAlertedVendors = options?.byoAlertedVendors ?? [];
     this.byoProviderPriorities = options?.byoProviderPriorities ?? [];
     this.openRouterConnections = options?.openRouterConnections ?? [];
     this.openRouterModelKeys = options?.openRouterModelKeys ?? {};
@@ -751,10 +770,22 @@ export class LlmProxyService {
     // lead over the connection the tenant ranked #1 (see explicitModelPreemptsByo).
     const callerLeads = hasCallerModel
       && explicitModelPreemptsByo(callerModel as string, connectedByo, this.openRouterConnectionModels);
-    // Demote any connected vendor on a 5xx streak out of the LEAD position (it stays
-    // in the seed — see `byoAutoSeedModels`). Returns an empty set and issues no reads
-    // when nothing is connected, so the non-BYO path is untouched.
-    const demotedVendors = await loadDemotedVendors(this.env, connectedByo);
+    // Demote any connected vendor we KNOW is currently unhealthy out of the LEAD
+    // position (it stays in the seed — see `byoAutoSeedModels`). Two independent
+    // sources, unioned, because they answer different questions:
+    //   • `loadDemotedVendors` — a 5xx streak against the VENDOR, keyspace global.
+    //     It cannot speak for one owner's account, which is why it alone left a
+    //     tenant whose account returned 401 leading the seed on every request.
+    //   • `byoAlertedVendors` — a 401/403/out-of-budget recorded for THIS TENANT's
+    //     account (`providerAuthAlerts`), resolved by the caller alongside
+    //     `byoVendorPriority`. This is the half that makes a broken BYO account cost
+    //     one wasted attempt in total instead of one per run.
+    // Returns an empty set and issues no reads when nothing is connected, so the
+    // non-BYO path is untouched.
+    const streakDemoted = await loadDemotedVendors(this.env, connectedByo);
+    const demotedVendors = this.byoAlertedVendors.length
+      ? new Set([...streakDemoted, ...this.byoAlertedVendors])
+      : streakDemoted;
     const providerSeeds = byoAutoSeedModels(connectedByo, {
       agentic: this.codingOnly,
       vendorPriority: this.byoVendorPriority,
@@ -993,6 +1024,62 @@ export class LlmProxyService {
     if (result.platformSurcharge === undefined) {
       result.platformSurcharge = this.openRouterConnectionModels.has(result.resolvedModel);
     }
+    return this.instrumentStreamingResult(result, traceId);
+  }
+
+  /**
+   * Attach the two things a STREAM could not previously report.
+   *
+   * Done HERE rather than in `dispatchStream` because `finalize` is the single seam
+   * every result leaves `complete()` through — and it is the first point at which the
+   * trace id exists, which is the id a caller quotes back. A non-streaming result and
+   * an error envelope both pass through untouched.
+   *
+   *   • `failovers[]` — a JSON completion carries them in its envelope; a stream had
+   *     nowhere to put them, so a run that burned four models before succeeding looked
+   *     identical to one that answered first try. Now a terminal SSE frame carries them.
+   *   • EMPTY-BUT-200 — `dispatchVendor`'s `validate` hook catches this on the JSON
+   *     path, but it cannot on a stream: it runs before any bytes exist, and the
+   *     headers are already sent. The model was therefore never cooled and the next
+   *     request picked it straight back up. The emptiness is now observed when the
+   *     stream ENDS, and cooled then.
+   */
+  private instrumentStreamingResult(result: ProxyResult, traceId: string): ProxyResult {
+    const body = result.response.body;
+    const isSse = (result.response.headers.get('content-type') ?? '').includes('text/event-stream');
+    if (!body || !isSse || result.response.status >= 400) return result;
+
+    const instrumented = instrumentStream(body, {
+      payload: {
+        failovers: result.failovers.map((f) => ({
+          model: f.model, vendor: f.vendor, code: f.code, ...(f.kind ? { kind: f.kind } : {}),
+        })),
+        resolvedModel: result.resolvedModel,
+        resolvedVendor: result.resolvedVendor,
+        traceId,
+      },
+      onEmptyStream: () => {
+        // Same `embedded:` hint the JSON path uses, so this lands in the 5-minute
+        // `embedded` cooldown class rather than the 30-minute auth one — the model
+        // answered, it just answered with nothing. Fire-and-forget by necessity: the
+        // response was returned long ago and this is the last moment the fact exists.
+        // An owner-served model is exempt for the usual reason (the keyspace is global
+        // and cannot speak for one tenant's own credential).
+        if (this.isOwnerServedModel(result.resolvedModel)) return;
+        void recordFailures(this.env, [{
+          vendor: result.resolvedVendor,
+          model: result.resolvedModel,
+          status: 502,
+          hint: `embedded:empty: stream closed with no content for ${result.resolvedVendor}/${result.resolvedModel}`,
+        }]).catch((error) => {
+          reportCaughtError(error, { source: 'application/llm/LlmProxyService.ts', operation: 'onEmptyStream' });
+        });
+      },
+    });
+    result.response = new Response(instrumented, {
+      status: result.response.status,
+      headers: result.response.headers,
+    });
     return result;
   }
 
@@ -1313,6 +1400,7 @@ export class LlmProxyService {
         result = await dispatchVendor({
           env: vendorEnv,
           modelChain: chain,
+          isCooled: this.midCascadeCooldownCheck(),
           ...callParams,
         });
       } catch (err) {
@@ -1349,7 +1437,7 @@ export class LlmProxyService {
 
       const conformanceErr = checkResponseFormatConformance(body, result.raw);
       if (!conformanceErr) {
-        return this.successJsonResult(result, totalAttempts, totalFailovers, schemaRetries);
+        return await this.successJsonResult(result, totalAttempts, totalFailovers, schemaRetries);
       }
 
       // Non-conforming: advance past the model that just answered.
@@ -1362,23 +1450,27 @@ export class LlmProxyService {
     // body so callers see whatever the most-capable model produced, but
     // surface the retry count so they can detect the conformance failure.
     if (lastResult) {
-      return this.successJsonResult(lastResult, totalAttempts, totalFailovers, schemaRetries);
+      return await this.successJsonResult(lastResult, totalAttempts, totalFailovers, schemaRetries);
     }
     return this.exhaustedResponse(candidates, schemaRetries);
   }
 
-  private successJsonResult(
+  private async successJsonResult(
     result: Awaited<ReturnType<typeof dispatchVendor>>,
     totalAttempts: number,
     totalFailovers: FailoverEvent[],
     schemaRetries: number,
-  ): ProxyResult {
+  ): Promise<ProxyResult> {
     // The vendor that served this request is demonstrably healthy — clear any 5xx
     // streak so it reclaims its lead position in the BYO seed immediately instead of
-    // waiting out the health TTL. Fire-and-forget: this method is synchronous, and
-    // the signal is advisory (a dropped clear costs at most one extra demoted
-    // ordering window, never a wrong routing decision).
-    void this.clearVendorHealth(result.vendorUsed);
+    // waiting out the health TTL.
+    //
+    // AWAITED, matching the streaming path. It used to be `void`, which on Workers
+    // means the promise can be cancelled the moment the response is returned: a
+    // recovered vendor then kept its seed-order demotion for the full 30-minute
+    // health TTL, on the exact request that proved it had recovered. One KV write on
+    // the success path is a fair price for a promotion that actually happens.
+    await this.clearVendorHealth(result.vendorUsed);
     // Restore dotted tool names that the request-side sanitizer escaped, so
     // `tool_calls[*].function.name` round-trips to the caller's namespace.
     const restoredRaw = restoreResponseToolNames(result.raw);
@@ -1637,9 +1729,14 @@ export class LlmProxyService {
       const result = await dispatchVendorStream({
         env: vendorEnv,
         modelChain: candidates,
+        isCooled: this.midCascadeCooldownCheck(),
         ...callParams,
       });
-      this.applyCooldowns(result.attempts);
+      // AWAITED. Its own doc-comment says a `void` promise on Workers can be aborted
+      // when the request lifecycle ends — and the streaming path is exactly where that
+      // happens, because the response is returned the moment headers arrive. Left
+      // floating, a streaming cascade's cooldowns were the ones most likely to be lost.
+      await this.applyCooldowns(result.attempts);
       // Restore dotted tool names in the streamed SSE deltas — symmetric to the
       // non-streaming `restoreResponseToolNames` in successJsonResult. Names can
       // arrive in fragments, so a stateful restorer buffers per tool-call index.
@@ -1698,14 +1795,21 @@ export class LlmProxyService {
     // fault below (seed order) plus the per-tenant `providerAuthAlerts` record the gateway
     // route and the daily BYO probe both write.
     const coolable = attempts.filter((a) => !this.isOwnerServedModel(a.model));
+    // BOTH writes are now GROUPED BY VENDOR rather than issued per attempt. A failed
+    // cascade used to fan out 2N parallel KV operations — one `recordFailure` (itself
+    // a read + a write) and one vendor-fault read-modify-write per attempt — on a
+    // request that had already spent its subrequest budget failing. Grouped, an
+    // N-attempt cascade costs one read + one write per distinct vendor.
     await Promise.all([
-      ...coolable.map((a) => recordFailure(this.env, a.vendor, a.model, a.status, a.error)),
+      recordFailures(this.env, coolable.map((a) => ({
+        vendor: a.vendor, model: a.model, status: a.status, ...(a.error ? { hint: a.error } : {}),
+      }))),
       // Independent of the cooldown above: extend the 5xx streak that governs BYO
-      // SEED ORDER. `recordVendorUpstreamFault` ignores non-5xx, so handing it every
-      // attempt is safe — a 429 or an auth failure must not demote a vendor, those
-      // are the cooldown store's business. See `vendorHealth` for why the two
-      // signals are deliberately separate.
-      ...attempts.map((a) => recordVendorUpstreamFault(this.env, a.vendor, a.status)),
+      // SEED ORDER. Non-5xx statuses are ignored inside, so handing it every attempt
+      // is safe — a 429 or an auth failure must not demote a vendor, those are the
+      // cooldown store's business. See `vendorHealth` for why the two signals are
+      // deliberately separate.
+      recordVendorUpstreamFaults(this.env, attempts.map((a) => ({ vendorId: a.vendor, status: a.status }))),
     ]);
   }
 
@@ -1718,6 +1822,36 @@ export class LlmProxyService {
    * Only the vendor that actually SERVED the request is cleared — vendors that
    * failed on the way to it were just recorded as faults by `applyCooldowns`.
    */
+  /**
+   * A mid-cascade cooldown re-check, memoized per DISPATCH.
+   *
+   * The chain was filtered when it was composed, but a cascade takes seconds — one
+   * slow vendor timeout is 15s on its own — and a concurrent request can cool a
+   * candidate this one has not reached yet. Without a re-check, the cascade walks
+   * into it, spends the timeout, and cools it again.
+   *
+   * The cost is bounded by the memo, not by the chain length: the store is keyed by
+   * vendor now (one composite blob per vendor), and each vendor is read at most once
+   * per dispatch. So a 10-candidate cascade across two vendors costs two reads on the
+   * failing path and zero on the happy path (the check never fires before the first
+   * failure). Skips owner-served models for the same reason `applyCooldowns` does —
+   * the keyspace is global and cannot speak for one tenant's own credential.
+   */
+  private midCascadeCooldownCheck(): (vendor: VendorId, model: string) => Promise<boolean> {
+    const seen = new Map<VendorId, Promise<Set<string>>>();
+    return async (vendor, model) => {
+      if (this.isOwnerServedModel(model)) return false;
+      let cooled = seen.get(vendor);
+      if (!cooled) {
+        // The whole vendor's cooled set in one read — the composite key scheme makes
+        // "everything cooled on this vendor" exactly as cheap as "is this one model".
+        cooled = loadCooledModelsForVendor(this.env, vendor).catch(() => new Set<string>());
+        seen.set(vendor, cooled);
+      }
+      return (await cooled).has(model);
+    };
+  }
+
   private async clearVendorHealth(vendor: VendorId): Promise<void> {
     await recordVendorUpstreamSuccess(this.env, vendor).catch((error) => { /* advisory */ 
       reportCaughtError(error, { source: "application/llm/LlmProxyService.ts", operation: "clearVendorHealth" });
@@ -1881,7 +2015,7 @@ export function llmProxyForPlan(
   env: ProxyEnv,
   effectivePlan: EffectivePlan,
   premiumOverride = false,
-  opts?: { backstopModels?: readonly string[]; disablePaidOverflow?: boolean; codingOnly?: boolean; anthropicOAuthToken?: string | null; openaiCodexAuth?: { accessToken: string; accountId: string } | null; xaiOAuthToken?: string | null; tenantVendorKeys?: TenantVendorKeys | null; hostEgress?: VendorEgress | null; vendorCallTimeoutMs?: number; byoVendorPriority?: readonly string[]; byoProviderPriorities?: readonly { vendor: string; priority: number | null }[]; openRouterConnections?: readonly OpenRouterConnection[]; openRouterModelKeys?: Readonly<Record<string, string>>; byoRequired?: boolean; allowGatewayAuto?: boolean; byoDiagnostics?: ByoDiagnostics },
+  opts?: { backstopModels?: readonly string[]; disablePaidOverflow?: boolean; codingOnly?: boolean; anthropicOAuthToken?: string | null; openaiCodexAuth?: { accessToken: string; accountId: string } | null; xaiOAuthToken?: string | null; tenantVendorKeys?: TenantVendorKeys | null; hostEgress?: VendorEgress | null; vendorCallTimeoutMs?: number; byoVendorPriority?: readonly string[]; byoAlertedVendors?: readonly string[]; byoProviderPriorities?: readonly { vendor: string; priority: number | null }[]; openRouterConnections?: readonly OpenRouterConnection[]; openRouterModelKeys?: Readonly<Record<string, string>>; byoRequired?: boolean; allowGatewayAuto?: boolean; byoDiagnostics?: ByoDiagnostics },
 ): LlmProxyService {
   const routing = resolveRouting(effectivePlan, premiumOverride);
   const { productName, modelPool } = routing;
@@ -1921,6 +2055,8 @@ export function llmProxyForPlan(
     // Tenant BYO precedence — leads the connected-flagship seed with the owner's
     // chosen account (e.g. Meta first), matching the cloud-agent pin.
     ...(opts?.byoVendorPriority?.length ? { byoVendorPriority: opts.byoVendorPriority } : {}),
+    // Tenant accounts we KNOW are broken right now — demoted out of the lead position.
+    ...(opts?.byoAlertedVendors?.length ? { byoAlertedVendors: opts.byoAlertedVendors } : {}),
     ...(opts?.byoProviderPriorities?.length ? { byoProviderPriorities: opts.byoProviderPriorities } : {}),
     ...(opts?.openRouterConnections?.length ? { openRouterConnections: opts.openRouterConnections } : {}),
     ...(opts?.openRouterModelKeys && Object.keys(opts.openRouterModelKeys).length
@@ -2005,95 +2141,18 @@ export function isPremiumModelSelection(
  *   • absent / typo'd / off-catalog → the plan's default coding model, soft (so a
  *     cold model can fail over once before the run locks onto what resolved).
  */
-/** Minimal per-model stat shape the learned router ranks on — a structural subset
- *  of `routingTable.ActionModelStat`, declared here so this pure module never imports
- *  the routing-table/DB layer (keeps `rankModelsForAction` I/O-free + unit-testable). */
-export interface ActionModelRankStat {
-  model: string;
-  n: number;
-  avgScore: number;
-  avgCostMc: number;
-  /** Human thumbs on this (action, model) — see `modelQualityScore.ts`. Optional:
-   *  absent on blobs written before migration 0468. */
-  ratedUp?: number;
-  ratedDown?: number;
-  /** Share of this bucket's runs that died on a provider 429 (migration 0485).
-   *  An AVAILABILITY signal — see `modelQualityScore.isChronicallyRateLimited`. */
-  rateLimitRate?: number;
-}
-
-export interface RankModelsOptions {
-  /** Minimum samples a (action_type, model) bucket needs before it can lead. */
-  minSamples?: number;
-  /** Optional client-computed SSM recall nudge (model → +/- weight) applied to the
-   *  learned score BEFORE the sort. Personalization on top of the shared table. */
-  bias?: Record<string, number>;
-}
-
-export const DEFAULT_MIN_SAMPLES = 8;
-
 /**
- * Learned-routing reorder (PURE — no I/O). Stable-reorders the curated, plan-reachable
- * coding pool so the empirically-best model for this action type leads:
- *   • a model is ELIGIBLE to lead only with `minSamples` observations, counting BOTH
- *     scored runs and human thumbs ({@link qualityEvidence}) — a model with no runs
- *     but a dozen ratings is not cold, and treating it as cold is how chat-quality
- *     feedback ends up changing nothing;
- *   • eligible models sort by `blendedQualityScore (+ bias)` desc — run outcomes and
- *     human satisfaction, each weighted by how much evidence it has — ties broken by
- *     lower `avgCostMc`, then by the curated index (stable);
- *   • every model below the floor keeps the curated order, appended after;
- *   • when NO model clears the floor, the curated order is returned UNCHANGED
- *     (cold-start safety — routing degrades to today's static order).
- * The optional `bias` only nudges ordering AMONG already-eligible models (a nudge on
- * top of the table, never a way to surface a cold model). Never invents a model: the
- * output is always a permutation of `reachable`.
+ * The learned re-ranker moved to `@builderforce/learned-routing` so the on-prem /
+ * IDE host can seed from the SAME ranking without importing this Worker-side
+ * application service. Re-exported here because `pickCloudModel` below is its main
+ * caller and the api's existing importers look for it at this address.
  */
-export function rankModelsForAction(
-  reachable: readonly string[],
-  stats: ReadonlyArray<ActionModelRankStat> | undefined,
-  opts?: RankModelsOptions,
-): string[] {
-  const minSamples = opts?.minSamples ?? DEFAULT_MIN_SAMPLES;
-  const bias = opts?.bias ?? {};
-  const statByModel = new Map<string, ActionModelRankStat>();
-  for (const s of stats ?? []) statByModel.set(s.model, s);
-
-  const curatedIndex = new Map<string, number>();
-  reachable.forEach((m, i) => curatedIndex.set(m, i));
-
-  // THROTTLED models are pulled out FIRST, before eligibility is even asked, and
-  // appended last. A model whose recent history is mostly 429s is not a low scorer to
-  // be ranked below the good ones — it is one the provider will refuse again, and
-  // seeding it costs a real dispatch and a failed run to rediscover that. It is never
-  // DROPPED: the cascade must always have somewhere to land, and "the only model left
-  // is one that keeps getting throttled" beats returning nothing. Applied across both
-  // bands because a chronically-refused model is frequently ALSO cold on quality
-  // evidence (its runs never produced a deliverable to score), and leaving it in the
-  // curated `rest` in its original position is exactly how it kept getting seeded.
-  const throttled: string[] = [];
-  const eligible: string[] = [];
-  const rest: string[] = [];
-  for (const m of reachable) {
-    const s = statByModel.get(m);
-    if (s && isChronicallyRateLimited(s)) throttled.push(m);
-    else if (s && qualityEvidence(s) >= minSamples) eligible.push(m);
-    else rest.push(m);
-  }
-  // Cold-start safety: with nothing ranked AND nothing throttled, the curated order
-  // stands unchanged. A throttled model alone is still worth demoting.
-  if (eligible.length === 0 && throttled.length === 0) return [...reachable];
-
-  const scoreOf = (m: string): number => blendedQualityScore(statByModel.get(m)!) + (bias[m] ?? 0);
-  eligible.sort((a, b) => {
-    const d = scoreOf(b) - scoreOf(a);
-    if (d !== 0) return d;
-    const c = statByModel.get(a)!.avgCostMc - statByModel.get(b)!.avgCostMc;
-    if (c !== 0) return c;
-    return (curatedIndex.get(a)! - curatedIndex.get(b)!);
-  });
-  return [...eligible, ...rest, ...throttled];
-}
+export {
+  DEFAULT_MIN_SAMPLES,
+  rankModelsForAction,
+  type ActionModelRankStat,
+  type RankModelsOptions,
+};
 
 export interface PickCloudModelOptions {
   actionType?: ActionType;
@@ -2116,6 +2175,21 @@ export interface PickCloudModelOptions {
    *  When set, the connected-flagship soft seed leads with the owner's chosen account
    *  (e.g. Meta first) instead of catalog-tier order. See {@link byoAutoSeedModels}. */
   byoVendorPriority?: readonly string[];
+  /** Gateway vendor ids whose underlying tenant account is currently known-broken
+   *  (`providerAuthAlerts`). Demotes them out of the LEAD of the connected-flagship
+   *  seed — the cloud pin previously ignored vendor health entirely, so a cloud run
+   *  locked turn 1 onto an account we already knew had returned 401 and then rode
+   *  the failover for the whole run. Demotion only; the vendor stays in the seed. */
+  byoAlertedVendors?: readonly string[];
+  /** Is the user who SUBMITTED this run a platform superadmin? Folded into the
+   *  can-choose-a-model gate and the premium gate, so a superadmin's run pins the
+   *  frontier model it asked for instead of silently auto-routing to the free coding
+   *  pool with no paywall shown anywhere.
+   *
+   *  "Whose superadmin" is answered by `executions.submitted_by` (`user:<id>`), which
+   *  is the only non-arbitrary answer: a `system:*` dispatcher has no user, so an
+   *  autonomous sweep resolves to `false` and keeps funding-neutral behaviour. */
+  isSuperadmin?: boolean;
   /** Models selected in the tenant's OpenRouter registrations. Registered
    * models are valid pins even when they are outside the curated catalog. */
   registeredOpenRouterModels?: readonly string[];
@@ -2227,14 +2301,20 @@ export function pickCloudModel(
   const explicitIsRegistered = !!explicit && !!opts?.registeredOpenRouterModels?.includes(explicit.trim());
   const explicitIsByo = !!explicit && (!!opts?.byoVendors?.has(vendorForModel(explicit.trim())) || explicitIsRegistered);
   if (explicitModelPreemptsByo(explicit, opts?.byoVendors, opts?.registeredOpenRouterModels)) {
-    const canChooseModel = premiumOverride || effectivePlan !== 'free' || explicitIsByo;
+    // A superadmin is folded in alongside the comped override: both mean "this caller
+    // is not the one the paywall exists for". Without it a superadmin on a free plan
+    // with no override and no BYO silently auto-routed to the free coding pool — and
+    // because a cloud run shows no paywall, there was nothing anywhere saying why.
+    const canChooseModel = premiumOverride || opts?.isSuperadmin === true
+      || effectivePlan !== 'free' || explicitIsByo;
     // A PREMIUM pin (paid OpenRouter model off the plan pool) additionally needs the
     // card-validated entitlement — a cloud run never passes the route's premium gate,
     // so it is enforced here or nowhere. Un-entitled → ignore the pin and use the
     // plan's coding default (same shape as the free-plan gate: a background run
     // degrades to a model it may use rather than failing).
     const isPremiumPin = !explicitIsByo && isPremiumModelSelection(explicit, effectivePlan, premiumOverride);
-    const premiumBlocked = isPremiumPin && opts?.premiumEntitled !== true;
+    const premiumBlocked = isPremiumPin
+      && opts?.premiumEntitled !== true && opts?.isSuperadmin !== true;
     // `isKnownModel` normally guards against strict-pinning a typo'd/retired id (which
     // would 503 with no failover). But a PREMIUM id is off our curated catalog BY
     // DEFINITION — it's the paid OpenRouter long tail — so that guard would reject
@@ -2258,7 +2338,15 @@ export function pickCloudModel(
   // completion seed so both surfaces agree. Soft (not strict) so a transient provider
   // error still fails over.
   const byoSeed = opts?.preferredRegisteredModel
-    ?? byoAutoSeedModels(opts?.byoVendors, { agentic: true, vendorPriority: opts?.byoVendorPriority })[0];
+    ?? byoAutoSeedModels(opts?.byoVendors, {
+      agentic: true,
+      vendorPriority: opts?.byoVendorPriority,
+      // Same health demotion the gateway completion seed applies. Omitted here before,
+      // which is why a cloud run could lock turn 1 onto a known-401 account.
+      ...(opts?.byoAlertedVendors?.length
+        ? { demotedVendors: new Set(opts.byoAlertedVendors) }
+        : {}),
+    })[0];
   if (byoSeed) return { model: byoSeed, strict: false };
 
   // Soft-seed branch — the ONLY place learned routing changes anything. Reorder the

@@ -5,7 +5,7 @@ import type { Formatter } from '@/i18n/format';
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { Project } from '@/lib/types';
-import type { ProjectDiagnosticSummary } from '@/lib/tools';
+import { ARCHITECTURE_DIAGNOSTIC_ID, type ProjectDiagnosticSummary } from '@/lib/tools';
 import { ProjectHealthGauges } from './ProjectHealth';
 import { ProjectInspectionGrade } from './ProjectInspection';
 import { ProjectConfigProgress } from './ProjectConfigProgress';
@@ -24,10 +24,16 @@ export interface ProjectCardProps {
   project: Project;
   /** Called when the card body is clicked (e.g. open details panel). */
   onCardClick?: (project: Project) => void;
-  /** Open the project Information panel. The Details icon opens the default tab;
-   *  the Architecture button opens 'prds' (view result) or 'integrations' (map a
-   *  repo first). A card that can open details gets the full button group. */
-  onDetailsClick?: (project: Project, tab?: ProjectPanelTab) => void;
+  /**
+   * Open the project Information panel. The Details icon opens the default tab;
+   * the diagnostics strip opens 'diagnostics' and the connections strip opens
+   * 'integrations'. A card that can open details gets the full button group.
+   *
+   * `specKind` names a document the destination tab should OPEN, not merely
+   * contain: the architecture chip on a project that already has an analysis
+   * lands on the architecture PRD itself rather than on a list of every PRD.
+   */
+  onDetailsClick?: (project: Project, tab?: ProjectPanelTab, specKind?: string) => void;
   /** Show the Details button. Default true when onDetailsClick is provided. */
   showDetailsButton?: boolean;
   /** When user clicks the assigned agent (Workforce), called with assignedAgentHost so parent can open agent panel. */
@@ -337,7 +343,14 @@ export function ProjectCard({
           card can show them without a per-card fetch. Self-hides when none. */}
       <ProjectDiagnosticsStrip
         diagnostics={diagnostics ?? []}
-        onOpen={onDetailsClick ? () => onDetailsClick(project, 'diagnostics') : undefined}
+        onOpen={onDetailsClick ? (toolId) => (
+          // The architecture analysis is the one diagnostic whose real result is a
+          // DOCUMENT. Once the project has that document, its chip should open it;
+          // before then there is nothing to read and the scorecard is the answer.
+          toolId === ARCHITECTURE_DIAGNOSTIC_ID && project.hasArchitecturePrd
+            ? onDetailsClick(project, 'prds', 'architecture')
+            : onDetailsClick(project, 'diagnostics')
+        ) : undefined}
       />
 
       {/* What this project is connected to — repo(s) and external board(s) — with

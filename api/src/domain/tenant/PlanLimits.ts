@@ -133,6 +133,18 @@ export interface PlanLimits {
    * `CANVAS_CAPABILITY_FEATURES` below for the map the palette now resolves through.
    */
   evermindTraining: boolean;
+  /**
+   * Whether a run may hold a LIVE container preview — a dev server started inside the
+   * run's container and served through the public preview ingress, so a phone can load
+   * the work in progress by scanning a QR.
+   *
+   * Paid because it is the platform's most expensive consumption shape: unlike a run,
+   * which starts, works and exits, a preview PINS a container instance open for as long
+   * as an editor tab is open, against a fixed `max_instances` budget
+   * (`application/runtime/previewSessions.ts` holds the numbers and the reasoning). Any
+   * paid plan — the capacity guard, not the plan tier, is what bounds the spend.
+   */
+  livePreview: boolean;
 }
 
 export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
@@ -166,6 +178,7 @@ export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
     voiceCloning: false,
     advancedInsights: false,
     evermindTraining: false,
+    livePreview: false,
   },
   [TenantPlan.PRO]: {
     maxCreationSessions: 500,
@@ -197,6 +210,7 @@ export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
     voiceCloning: true,
     advancedInsights: true,
     evermindTraining: true,
+    livePreview: true,
   },
   [TenantPlan.TEAMS]: {
     maxCreationSessions: -1,
@@ -228,6 +242,7 @@ export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
     voiceCloning: true,
     advancedInsights: true,
     evermindTraining: true,
+    livePreview: true,
   },
 };
 

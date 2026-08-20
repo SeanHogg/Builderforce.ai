@@ -97,7 +97,6 @@ presentation/routes/githubWebhookRoutes.ts:1
 presentation/routes/ideProjectRoutes.ts:1
 presentation/routes/jobRoutes.ts:6
 presentation/routes/knowledgeRoutes.ts:3
-presentation/routes/limbicRoutes.ts:1
 presentation/routes/personaRoutes.ts:4
 presentation/routes/projectRoutes.ts:2
 presentation/routes/promptLibraryRoutes.ts:5

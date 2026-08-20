@@ -269,14 +269,46 @@ export async function teachProjectEvermindFromText(
   projectId: number,
   text: string,
   prompt?: string,
-): Promise<{ ok: boolean; queued?: number }> {
-  return apiRequest<{ ok: boolean; queued?: number }>(
+): Promise<{ ok: boolean; queued?: number; contributionId?: number }> {
+  return apiRequest<{ ok: boolean; queued?: number; contributionId?: number }>(
     `/api/projects/${projectId}/evermind/learn-text`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text, ...(prompt ? { prompt } : {}) }),
     },
+  );
+}
+
+/** How one enqueued contribution ended up (mirrors the api `ProjectEvermindContributionState`). */
+export type ProjectEvermindContributionState = 'pending' | 'merged' | 'dropped' | 'unknown';
+
+/** One contribution's status, from enqueue through to the provenance its merge recorded. */
+export interface ProjectEvermindContributionStatus {
+  contributionId: number;
+  state: ProjectEvermindContributionState;
+  kind?: 'text' | 'delta';
+  /** The version it merged INTO (present only when `merged`). */
+  version?: number;
+  distilled?: boolean;
+  teacherModel?: string;
+  skipReason?: string;
+  skipDetail?: string;
+  attemptedTeacherModel?: string;
+}
+
+/**
+ * Poll what became of a teach. `/learn-text` returns the instant the contribution is
+ * queued — the frontier teacher only runs later in the coordinator's debounced merge —
+ * so this is the only read that can say whether it was actually distilled, learned
+ * un-taught, or faulted, and why.
+ */
+export async function getProjectEvermindContributionStatus(
+  projectId: number,
+  contributionId: number,
+): Promise<ProjectEvermindContributionStatus> {
+  return apiRequest<ProjectEvermindContributionStatus>(
+    `/api/projects/${projectId}/evermind/contribution/${contributionId}`,
   );
 }
 

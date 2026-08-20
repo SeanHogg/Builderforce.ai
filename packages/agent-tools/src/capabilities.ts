@@ -54,6 +54,15 @@ export type Capability =
   | "static-check"
   /** Escalate to a human and block until answered (approval / question / feedback). */
   | "human"
+  /**
+   * Record a change on the TICKET'S PRD — the shared spec every agent on the ticket
+   * reads. Separate from `repo.write` because it is not a file write: the PRD lives in
+   * the platform's spec store (and is mirrored onto the ticket branch by the surface),
+   * so a surface backs this only when it can reach that store. A surface that hands the
+   * agent a PRD in its prompt but cannot back this leaves the agent able to READ the
+   * shared spec and unable to correct it.
+   */
+  | "prd.write"
   /** Persist / recall cross-run knowledge (memory, handoff, project knowledge). */
   | "memory"
   /** Authoritatively DELETE a stored memory entry. Split from `memory` for the same
@@ -132,6 +141,47 @@ export interface StaticCheckCapability {
  *  arrives on resume, so this never blocks the loop in-process on the cloud. */
 export interface HumanCapability {
   ask(question: string, context?: string): Promise<HumanAskResult>;
+}
+
+/**
+ * Write to the ticket's PRD (capability `prd.write`).
+ *
+ * The run is handed its ticket's PRD as context, so the agent knows the spec; without
+ * this it cannot record a decision it made or correct a section it discovered was
+ * wrong, and the next run re-derives (or repeats) the same mistake.
+ *
+ * TWO verbs, not one, because they are different acts on the document:
+ *   • `append`      — add a dated, signed revision block at the end. Additive; nothing
+ *     already written can be lost. This is the "I decided X / I found Y" verb.
+ *   • `editSection` — replace the BODY of one named `## Heading` section. Destructive
+ *     within that section only, which is why it names the section and refuses when the
+ *     heading does not exist (returning the headings that do) rather than guessing.
+ *
+ * The surface — never the model — decides WHICH ticket's PRD is written and how the
+ * change is attributed and mirrored, exactly as `memory` resolves its own scope.
+ */
+export interface PrdWriteCapability {
+  /** Append a dated, attributed revision block to the ticket's PRD. */
+  append(note: string): Promise<PrdUpdateResult>;
+  /** Replace the body of the `## <heading>` section. Fails (never throws) with the
+   *  available headings when `heading` names no section. */
+  editSection(heading: string, body: string): Promise<PrdUpdateResult>;
+}
+
+/** Result of a {@link PrdWriteCapability} write. */
+export interface PrdUpdateResult {
+  ok: boolean;
+  mode?: "append" | "section";
+  /** The section actually rewritten (echoed back, canonically cased). */
+  section?: string;
+  /** The `## ` headings the PRD carries — returned when `section` matched none, so the
+   *  model can retry against a real one instead of guessing again. */
+  sections?: string[];
+  /** The ticket branch the revision was committed to, when the surface mirrors it. */
+  branch?: string;
+  /** Model-facing guidance on a SUCCESSFUL write (see {@link RepoWriteResult.note}). */
+  note?: string;
+  error?: string;
 }
 
 /** Persist / recall cross-run knowledge (capability `memory`). On-prem it is backed by
@@ -223,6 +273,7 @@ export interface CapabilityProvider {
   readonly shell?: ShellCapability;
   readonly staticCheck?: StaticCheckCapability;
   readonly human?: HumanCapability;
+  readonly prd?: PrdWriteCapability;
   readonly web?: WebCapability;
   readonly memory?: MemoryCapability;
   readonly coordination?: CoordinationCapability;

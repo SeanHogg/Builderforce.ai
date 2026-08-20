@@ -17,16 +17,9 @@
 
 import { Hono } from 'hono';
 import { authMiddleware } from '../middleware/authMiddleware';
-import { getOrSetCached, getCacheVersion } from '../../infrastructure/cache/readThroughCache';
-import {
-  computeCatalogAnalytics,
-  toCatalogKind,
-  catalogAnalyticsVersionKey,
-} from '../../application/insights/catalogAnalytics';
+import { getCatalogAnalytics, toCatalogKind } from '../../application/insights/catalogAnalytics';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
-
-const SHORT_TTL = { kvTtlSeconds: 60, l1TtlMs: 15_000 };
 
 /** Clamp `?window=` (days) to 1..365, default 30. */
 function parseWindow(raw: string | undefined): number {
@@ -46,9 +39,7 @@ export function createCatalogAnalyticsRoutes(db: Db): Hono<HonoEnv> {
     const windowDays = parseWindow(c.req.query('window'));
     const env = c.env as Env;
 
-    const ver = await getCacheVersion(env, catalogAnalyticsVersionKey(tenantId));
-    const key = `catalog-analytics:t:${tenantId}:k:${kind}:w:${windowDays}:v:${ver}`;
-    return c.json(await getOrSetCached(env, key, () => computeCatalogAnalytics(db, tenantId, kind, windowDays), SHORT_TTL));
+    return c.json(await getCatalogAnalytics(db, env, tenantId, kind, windowDays));
   });
 
   return router;

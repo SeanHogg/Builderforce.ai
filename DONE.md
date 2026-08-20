@@ -426,8 +426,19 @@ that broke the moment a section was renamed, or translated. The toggle is self-g
   have added to the boundary count without moving the boundary.
 * **Off-scale font sizes** in every file touched replaced with the role tokens.
 
-**Verification:** api `tsgo --noEmit` clean, **7,030 tests passing**; frontend `tsgo --noEmit`
-clean, `check:i18n-keys` green, the migration guards green on all 451 files.
+**Verification:** api `tsgo --noEmit` clean and **7,030 tests passing**; 23 of 24 api guards green
+(the 24th is a concurrent session's unclassified canvas tool — logged with its blocker). Frontend:
+every file this pass touched typechecks clean, `check:i18n-keys` green, the schedule/tool/insight
+suites green, and the design-scale and 800-line ratchets that this work tripped are fixed at source
+rather than rebaselined. The migration guards are green on all 451 files, and the new seed-FK guard
+was verified to FAIL on 0243 with its `DROP CONSTRAINT` removed.
+
+Frontend `tsgo` and two guards are red on files another session was editing throughout this pass
+(`model-provider.test.ts`, `AITrainingPanel.tsx`, `CreationCanvas.module.css`, the `'use client'`
+count), and `CreationCanvas.test.tsx` overruns the default 60 s per-test timeout — measured, not
+guessed: one of its failures passes in 36 s with `--testTimeout=300000`, so it is priced above its
+budget rather than broken. `CreationCanvas.tsx` references none of the modules this pass touched.
+Each is in the Gap Register with its blocker named; none of them is in this diff.
 
 ---
 

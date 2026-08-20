@@ -121,6 +121,16 @@ export class TaskRepository implements ITaskRepository {
     return toDomain(inserted);
   }
 
+  async repointSegment(id: TaskId, segmentId: string | null): Promise<boolean> {
+    if (segmentId == null) return false;
+    const rows = await this.db
+      .update(tasksTable)
+      .set({ segmentId })
+      .where(eq(tasksTable.id, id as unknown as number))
+      .returning({ id: tasksTable.id });
+    return rows.length > 0;
+  }
+
   async update(task: Task): Promise<Task> {
     const plain = task.toPlain();
     const [updated] = await this.db

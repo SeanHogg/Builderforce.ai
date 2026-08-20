@@ -22,6 +22,7 @@ import { AuditRepository } from './infrastructure/repositories/AuditRepository';
 import { RuntimeService } from './application/runtime/RuntimeService';
 import { recordRunFailureEvent } from './application/runtime/recordRunFailureEvent';
 import { loadCloudRunForSelfHeal, selfHealCloudRun } from './application/runtime/cloudSelfHeal';
+import { wireExecutionEventSinks } from './application/runtime/wireExecutionEventSinks';
 import { syncExecutionTaskLifecycle } from './application/task/taskLifecycle';
 import { maybeAutoRunOnLaneEntry } from './presentation/routes/taskRoutes';
 import { resolveNextTaskStatus } from './application/swimlane/nextLane';
@@ -34,6 +35,12 @@ import { agentRegistrations, tenants } from './infrastructure/database/schema';
 import { and, eq } from 'drizzle-orm';
 
 export function buildRuntimeService(env: Env, db: Db): RuntimeService {
+  // Live execution events are published from whichever isolate drives the run — a
+  // request, a cron sweep, the durable executor — and the sink registry is per-isolate.
+  // Registering here, in the factory they ALL go through, is what stops an event
+  // emitted off the request path from reaching nobody. Idempotent (replace, not append).
+  wireExecutionEventSinks(env, db);
+
   // eslint-disable-next-line prefer-const -- the lane-auto callback closes over the
   // instance it belongs to; it is only ever invoked after construction completes.
   let runtimeService: RuntimeService;

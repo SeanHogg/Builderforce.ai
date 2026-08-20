@@ -17,11 +17,8 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { and, eq, isNotNull, inArray } from 'drizzle-orm';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import { ticketRuns, workflows } from '../../infrastructure/database/schema';
-import { SwimlaneCoordinator } from './SwimlaneCoordinator';
-import { DrizzleCoordinatorStore } from './DrizzleCoordinatorStore';
-import { DrizzleStageWorkflowRunner } from './stageWorkflowRunner';
-import { DrizzlePrdEnsurer } from './DrizzlePrdEnsurer';
-import { AgentHostStageDispatcher, type AgentHostRelayNamespace } from './agentHostStageDispatcher';
+import { makeSwimlaneCoordinator } from './makeCoordinator';
+import type { AgentHostRelayNamespace } from './agentHostStageDispatcher';
 import type { WorkflowStatus } from './transitions';
 import type { Env } from '../../env';
 
@@ -61,12 +58,7 @@ export async function runParkedWorkflowSweep(env: ResumeParkedEnv): Promise<Resu
   const result: ResumeParkedResult = { parked: rows.length, resumed: 0, errors: 0 };
   if (rows.length === 0) return result;
 
-  const coordinator = new SwimlaneCoordinator(
-    new DrizzleCoordinatorStore(db),
-    new AgentHostStageDispatcher(env.AGENT_HOST_RELAY),
-    new DrizzleStageWorkflowRunner(db),
-    new DrizzlePrdEnsurer(db, env as unknown as Env),
-  );
+  const coordinator = makeSwimlaneCoordinator(db, env);
 
   for (const row of rows) {
     if (!row.workflowId) continue;

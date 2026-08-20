@@ -1,0 +1,17 @@
+{
+  "name": "@builderforce/learned-routing",
+  "version": "2026.8.19",
+  "private": true,
+  "type": "module",
+  "description": "Learned Model Routing (PRD 13) contract + pure decision logic shared by the cloud router (Worker) and the on-prem/IDE host (Node): the action-type taxonomy, the model quality score, the pure ranker, the routing scope token, and the run-outcome write-back payload. Dependency-free and I/O-free by contract.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "types": "./src/index.ts",
+  "scripts": {
+    "test": "vitest run --passWithNoTests"
+  },
+  "devDependencies": {
+    "vitest": "^4.0.18"
+  }
+}

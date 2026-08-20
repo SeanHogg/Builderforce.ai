@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ACTION_TYPES, DEFAULT_ACTION_TYPE, normalizeActionType, learnedRoutingEnabled, actionTypeLabel } from './actionTypes';
+import { ACTION_TYPES, DEFAULT_ACTION_TYPE, normalizeActionType, learnedRoutingEnabled, actionTypeLabel } from '@builderforce/learned-routing';
 
 describe('actionTypes', () => {
   it('the enum is closed and includes the fallback bucket', () => {

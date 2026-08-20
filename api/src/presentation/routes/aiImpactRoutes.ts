@@ -18,15 +18,9 @@ import { Hono } from 'hono';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
 import { scope } from './segmentTrackerRoutes';
-import { getOrSetCached, getCacheVersion } from '../../infrastructure/cache/readThroughCache';
-import { computeAiImpact } from '../../application/insights/aiImpactInsights';
-import { computeEngineeringInsights } from '../../application/insights/engineeringInsights';
-import { computeRecommendations } from '../../application/insights/recommendationsEngine';
-import { recsVersionKey, recommendationsCacheKey } from './recommendationsRoutes';
+import { getAiImpact, getAiOverview } from '../../application/insights/aiInsightsReads';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
-
-const SHORT_TTL = { kvTtlSeconds: 60, l1TtlMs: 15_000 };
 
 /** Clamp a `?days=` window to a sane range (default 30). */
 function parseDays(raw: string | undefined, def = 30): number {
@@ -42,37 +36,18 @@ export function createAiImpactRoutes(db: Db): Hono<HonoEnv> {
   router.get('/ai-impact', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId } = scope(c);
     const days = parseDays(c.req.query('days'));
-    const env = c.env as Env;
-    const key = `insights:aiimpact:t:${tenantId}:d:${days}`;
-    return c.json(await getOrSetCached(env, key, () => computeAiImpact(db, tenantId, days), SHORT_TTL));
+    return c.json(await getAiImpact(db, c.env as Env, tenantId, days));
   });
 
   // AI OVERVIEW — the AI Insights dashboard's three summary cards (AI Impact +
   // AI Effectiveness + Recommendations) in ONE cached read, so the landing page
   // makes a single round-trip instead of three (and the drill-down lenses reuse
   // these same per-lens caches). Same manager gate + window as the individual
-  // endpoints, which stay for the drill-downs. Each leg fans out in parallel; a
-  // failing leg degrades to null so one slow/erroring lens never blanks the page.
+  // endpoints, which stay for the drill-downs.
   router.get('/ai-overview', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId } = scope(c);
     const days = parseDays(c.req.query('days'));
-    const env = c.env as Env;
-    const key = `insights:aioverview:t:${tenantId}:d:${days}`;
-    // The recommendations lens folds a dismissal version token into its key; read it
-    // so the bundle shares that exact cache entry (and honours dismissals).
-    const recsVer = await getCacheVersion(env, recsVersionKey(tenantId));
-    const overview = await getOrSetCached(env, key, async () => {
-      const [aiImpact, engineering, recommendations] = await Promise.all([
-        // Reuse each lens's own cached read so the bundle and the drill-downs share
-        // one computation (no second definition of any summary). A failing leg
-        // degrades to null so one erroring lens never blanks the whole page.
-        getOrSetCached(env, `insights:aiimpact:t:${tenantId}:d:${days}`, () => computeAiImpact(db, tenantId, days), SHORT_TTL).catch(() => null),
-        getOrSetCached(env, `insights:eng:t:${tenantId}:d:${days}`, () => computeEngineeringInsights(db, tenantId, days), SHORT_TTL).catch(() => null),
-        getOrSetCached(env, recommendationsCacheKey(tenantId, days, recsVer), () => computeRecommendations(db, tenantId, days), SHORT_TTL).catch(() => null),
-      ]);
-      return { windowDays: days, aiImpact, engineering, recommendations };
-    }, SHORT_TTL);
-    return c.json(overview);
+    return c.json(await getAiOverview(db, c.env as Env, tenantId, days));
   });
 
   return router;

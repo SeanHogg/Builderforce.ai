@@ -5,12 +5,16 @@
  * AnalysisRunnerDO owns persistence + ordering, so this service stays a clean,
  * agent-wrappable unit (the future "Architect Agent" calls these directly).
  *
- * Generation uses response_format json_object (the free model pool's reliable
- * structured mode, as in QaGeneratorService) with the exact JSON shape spelled
- * out in each system prompt; output is parsed defensively and rendered into
- * deterministic Markdown so even a weak model produces a clean artifact.
+ * Generation uses a STRICT `json_schema` response_format per artifact kind (see
+ * `artifactSchemas.ts`) so the shape is a decoding constraint, not a request the
+ * model may ignore. The prompts still describe the shape in prose — that is what
+ * a vendor which rejects the schema falls back to, because the gateway
+ * auto-downgrades a too-complex strict schema to json_object. For the same
+ * reason the output is still parsed defensively and rendered into deterministic
+ * Markdown, so even a weak model on the downgraded path produces a clean artifact.
  */
 import { ideProxy, readProxyChoice } from '../llm/LlmProxyService';
+import { artifactResponseFormat } from './artifactSchemas';
 import type { Env } from '../../env';
 import type {
   ArtifactKind,
@@ -285,7 +289,7 @@ export class ArchitectAnalysisService {
         ],
         temperature: 0.2,
         max_tokens: MAX_TOKENS[kind],
-        response_format: { type: 'json_object' },
+        response_format: artifactResponseFormat(kind),
         useCase: `repo_analysis_${kind}`,
       });
     } catch (err) {

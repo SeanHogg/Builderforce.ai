@@ -56,6 +56,7 @@ import {
   stageSignoffFor, RUN_SPENDING_REMEDIES, STALL_AFTER_MS, type StallInput, type StallRemedy,
 } from './stallTriage';
 import { loadOpenStalls, gradeStall, recordStall, resolveStalls, type OpenStall } from './stallWatch';
+import { normalizeBuildStatus, pickCurrentPr } from '../../domain/task/buildStatus';
 import {
   createTickDispatchBudget, tenantDispatchReserver, MAX_TENANT_DISPATCHES_PER_TICK,
   type DispatchReserver,
@@ -486,12 +487,25 @@ export async function loadBulkSignals(
   const everRan = new Set<number>();
   for (const r of ran) if (r.taskId != null) everRan.add(r.taskId);
 
-  // Newest PR per task wins (the query is already ordered), so a task that had an
-  // earlier closed PR is judged on its CURRENT one.
-  const prByTask = new Map<number, BulkSignals['prByTask'] extends Map<number, infer V> ? V : never>();
+  // WHICH PR SPEAKS FOR THE TICKET — one rule, `pickCurrentPr`
+  // (domain/task/buildStatus.ts), shared with the conduct stage and the board card's
+  // build badge. An OPEN row wins outright and the newest settled row is the fallback
+  // (the query is ordered `updatedAt` desc). This used to be "newest wins" alone, which
+  // let a settled PR touched after the open one speak for a ticket that still has
+  // something to land.
+  type PrRow = (typeof prs)[number];
+  const prRowsByTask = new Map<number, PrRow[]>();
   for (const p of prs) {
-    if (p.taskId == null || prByTask.has(p.taskId)) continue;
-    prByTask.set(p.taskId, {
+    if (p.taskId == null) continue;
+    const list = prRowsByTask.get(p.taskId);
+    if (list) list.push(p);
+    else prRowsByTask.set(p.taskId, [p]);
+  }
+  const prByTask = new Map<number, BulkSignals['prByTask'] extends Map<number, infer V> ? V : never>();
+  for (const [taskId, rows] of prRowsByTask) {
+    const p = pickCurrentPr(rows);
+    if (!p) continue;
+    prByTask.set(taskId, {
       id: p.id, number: p.number, repoId: p.repoId, status: p.status,
       buildStatus: p.buildStatus, updatedAt: p.updatedAt as Date,
     });
@@ -503,11 +517,6 @@ export async function loadBulkSignals(
   const deliverableByTask = new Map<number, Exclude<DeliverableEvidence, 'unknown'>>();
   for (const [taskId, paths] of pathsByTask) deliverableByTask.set(taskId, classifyDeliverablePaths(paths));
   return { lastMovedAt, everRan, prByTask, liveTaskIds, deliverableByTask };
-}
-
-/** Normalize the free-form `pull_requests.build_status` to the readiness vocabulary. */
-function normalizeBuildStatus(v: string | null | undefined): 'success' | 'failure' | 'pending' | null {
-  return v === 'success' || v === 'failure' || v === 'pending' ? v : null;
 }
 
 /**

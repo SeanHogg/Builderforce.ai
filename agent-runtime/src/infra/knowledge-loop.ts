@@ -1,9 +1,29 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import {
+  buildKnowledgeMemoryEntry as buildSharedKnowledgeMemoryEntry,
+  deriveActivitySummary,
+  KNOWLEDGE_DIRS,
+} from "@builderforce/agent-tools";
 
 const DEFAULT_BUILDERFORCE_URL = "https://api.builderforce.ai";
+
+/**
+ * Should this host contribute PRE-DIFFED weight deltas rather than raw run text?
+ *
+ * Read per call rather than captured at construction so an operator can flip it on a
+ * long-lived host without a restart. Off unless explicitly enabled: the delta path
+ * downloads the project's `.evermind` base and runs a training fit locally, which is a
+ * clear win on a capable on-prem box and a clear loss on a small one — so it is the
+ * operator's call, not a default imposed on every host.
+ */
+function deltaPathEnabled(): boolean {
+  const raw = (process.env["BUILDERFORCE_EVERMIND_DELTA"] ?? "").trim().toLowerCase();
+  return raw === "1" || raw === "true" || raw === "yes";
+}
 import { appendKnowledgeMemory } from "../builderforce/project-context.js";
 import { contributeProjectEvermindFromText, type ProjectEvermindSyncConfig } from "./project-evermind-sync.js";
+import { contributeProjectEvermindFromDelta } from "./project-evermind-delta.js";
 import { pushProjectFact, recallSharedProjectFacts } from "./project-facts-sync.js";
 import { logDebug } from "../logger.js";
 import { normalizeBaseUrl } from "../utils/normalize-base-url.js";
@@ -17,78 +37,12 @@ import { registerKnowledgeLoop, registerTeamMemoryContextBuilder } from "./memor
 import { getSsmMemoryService } from "./ssm-memory-service.js";
 
 /**
- * Derive a human-readable one-line summary of what happened in an agent run
- * based on heuristics over the tool activity. No model call required.
- *
- * Priority order (first matching rule wins):
- * 1. "Multi-agent workflow execution"   — orchestrate or workflow_status used
- * 2. "Code review / analysis"           — git_history, code_analysis, or project_knowledge used
- * 3. "Test suite created"               — *.test.* / *.spec.* file created
- * 4. "Tests updated"                    — *.test.* / *.spec.* file edited
- * 5. "Codebase exploration / read-only analysis" — only grep/glob/view, no bash, no file changes
- * 6. "Feature implementation: new files + edits" — both created and edited files
- * 7. "New file(s) created: N"           — only file creation
- * 8. "Code modifications: N file(s) changed" — only file edits
- * 9. "Agent activity (no file changes)" — tools used but no files created or edited
- * 10. ""                                — no activity at all
- *
- * @returns A short English label, or an empty string when there was no activity.
+ * The activity heuristic and the note format both live in
+ * `@builderforce/agent-tools` `knowledge-notes` now, so the VS Code extension can append
+ * notes to the SAME `.builderforce/memory` tree in the SAME shape. Re-exported here
+ * because `deriveActivitySummary` is part of this module's existing public surface.
  */
-export function deriveActivitySummary(params: {
-  created: string[];
-  edited: string[];
-  tools: string[];
-}): string {
-  const { created, edited, tools } = params;
-  const hasCreate = created.length > 0;
-  const hasEdit = edited.length > 0;
-  const toolSet = new Set(tools);
-
-  const isTest =
-    [...created, ...edited].some(
-      (f) => f.includes(".test.") || f.includes(".spec.") || f.includes("__tests__"),
-    ) || toolSet.has("test");
-
-  const isAnalysis =
-    !hasCreate &&
-    !hasEdit &&
-    (toolSet.has("grep") || toolSet.has("glob") || toolSet.has("view")) &&
-    !toolSet.has("bash");
-
-  const isReview =
-    toolSet.has("git_history") || toolSet.has("code_analysis") || toolSet.has("project_knowledge");
-
-  const isOrchestration = toolSet.has("orchestrate") || toolSet.has("workflow_status");
-
-  if (isOrchestration) {
-    return "Multi-agent workflow execution";
-  }
-  if (isReview) {
-    return "Code review / analysis";
-  }
-  if (isTest && hasCreate) {
-    return "Test suite created";
-  }
-  if (isTest && hasEdit) {
-    return "Tests updated";
-  }
-  if (isAnalysis) {
-    return "Codebase exploration / read-only analysis";
-  }
-  if (hasCreate && hasEdit) {
-    return "Feature implementation: new files + edits";
-  }
-  if (hasCreate) {
-    return `New file(s) created: ${created.length}`;
-  }
-  if (hasEdit) {
-    return `Code modifications: ${edited.length} file(s) changed`;
-  }
-  if (tools.length > 0) {
-    return "Agent activity (no file changes)";
-  }
-  return "";
-}
+export { deriveActivitySummary } from "@builderforce/agent-tools";
 
 export type KnowledgeLoopOptions = {
   workspaceDir: string;
@@ -108,43 +62,31 @@ type RunAccumulator = {
   prompt?: string;
 };
 
+/**
+ * The dated activity note for one finished run.
+ *
+ * A thin adapter over the SHARED note format: this surface's accumulator carries extra
+ * fields (the initiating prompt, used by the Evermind teacher) that the note does not
+ * render, so the MAPPING lives here while the FORMAT lives in one place both surfaces
+ * read. Two surfaces writing differently-shaped notes into one `.builderforce/memory`
+ * tree is exactly what stops the knowledge loop compounding.
+ */
 export function buildKnowledgeMemoryEntry(params: {
   sessionKey: string;
   ts: string;
   acc?: RunAccumulator;
 }): string | null {
-  const lines: string[] = [`\n## [${params.ts}] session:${params.sessionKey}`, ""];
-  let hasMeaningfulContent = false;
-
-  if (params.acc) {
-    const created = [...new Set(params.acc.filesCreated)];
-    const edited = [...new Set(params.acc.filesEdited)];
-    const tools = [...new Set(params.acc.toolNames)];
-    if (created.length > 0) {
-      lines.push(`**Created**: ${created.join(", ")}`);
-      hasMeaningfulContent = true;
-    }
-    if (edited.length > 0) {
-      lines.push(`**Edited**: ${edited.join(", ")}`);
-      hasMeaningfulContent = true;
-    }
-    if (tools.length > 0) {
-      lines.push(`**Tools**: ${tools.join(", ")}`);
-      hasMeaningfulContent = true;
-    }
-    const summary = deriveActivitySummary({ created, edited, tools });
-    if (summary) {
-      lines.push(`**Summary**: ${summary}`);
-      hasMeaningfulContent = true;
-    }
-  }
-
-  if (!hasMeaningfulContent) {
-    return null;
-  }
-
-  lines.push("");
-  return lines.join("\n");
+  return buildSharedKnowledgeMemoryEntry({
+    sessionKey: params.sessionKey,
+    ts: params.ts,
+    activity: params.acc
+      ? {
+          created: params.acc.filesCreated,
+          edited: params.acc.filesEdited,
+          tools: params.acc.toolNames,
+        }
+      : undefined,
+  });
 }
 
 /**
@@ -351,7 +293,13 @@ export class KnowledgeLoopService {
     const { apiKey, baseUrl, agentNodeId, projectId } = this.opts;
     const hostId = Number(agentNodeId);
     if (!apiKey || !Number.isInteger(hostId) || hostId <= 0 || !projectId) return null;
-    return { gatewayUrl: baseUrl ?? DEFAULT_BUILDERFORCE_URL, apiKey, agentHostId: hostId, projectId: Number(projectId) };
+    return {
+      gatewayUrl: baseUrl ?? DEFAULT_BUILDERFORCE_URL,
+      apiKey,
+      agentHostId: hostId,
+      projectId: Number(projectId),
+      deltaPath: deltaPathEnabled(),
+    };
   }
 
   /** Adapt-and-push a project-Evermind contribution (best-effort, non-fatal). The
@@ -363,8 +311,15 @@ export class KnowledgeLoopService {
     const cfg = this.projectEvermindConfig();
     if (!cfg || text.length < 20) return;
     try {
-      const res = await contributeProjectEvermindFromText(cfg, text, prompt, producedChanges ? 0.7 : 0.4);
-      if (res.ok) logDebug(`[project-evermind] contributed a delta (base v${res.version})`);
+      const weight = producedChanges ? 0.7 : 0.4;
+      // Two doors, one decision, made here: with the delta path enabled this host does
+      // the training fit itself and pushes only the weight diff (and falls back to the
+      // text door on its own if it can't); otherwise it posts the text and the
+      // coordinator fits it in its merge alarm.
+      const res = cfg.deltaPath
+        ? await contributeProjectEvermindFromDelta(cfg, text, prompt, weight)
+        : await contributeProjectEvermindFromText(cfg, text, prompt, weight);
+      if (res.ok) logDebug(`[project-evermind] contributed (base v${res.version})`);
       else logDebug(`[project-evermind] skipped: ${res.reason}`);
     } catch (err) {
       logDebug(`[project-evermind] contribution error: ${String(err)}`);
@@ -436,7 +391,17 @@ export class KnowledgeLoopService {
    */
   async pullTeamMemory(limit = 20): Promise<TeamMemoryEntry[]> {
     const { apiKey, baseUrl, workspaceDir } = this.opts;
-    const cacheFile = path.join(workspaceDir, ".builderForceAgents", "memory", "team-memory.json");
+    // The directory name comes from the SHARED constant, never a literal. It was spelled
+    // ".builderForceAgents" here while every other path in this file resolves
+    // ".builderforce" — on a case-sensitive filesystem that is a SECOND, invisible cache
+    // directory that never hits and never expires, so team memory was re-fetched on every
+    // call on Linux/macOS and cached correctly only on Windows.
+    const cacheFile = path.join(
+      workspaceDir,
+      KNOWLEDGE_DIRS.root,
+      KNOWLEDGE_DIRS.memory,
+      "team-memory.json",
+    );
     const TTL_MS = 5 * 60 * 1000;
 
     // Check cache first

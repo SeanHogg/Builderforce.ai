@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import os from "node:os";
+import { fetchRunContextSection } from "../../infra/run-context-client.js";
 import { resolveHeartbeatPrompt } from "../../auto-reply/heartbeat.js";
 import type { ReasoningLevel, ThinkLevel } from "../../auto-reply/thinking.js";
 import {
@@ -495,6 +496,12 @@ export async function compactEmbeddedSessionDirect(
         : undefined,
       skillsPrompt,
       personaPrompt,
+      // Same platform context the live run gets — a compaction pass must summarize
+      // against the ticket's requirements and rules, not against a stripped prompt.
+      runContextPrompt: await fetchRunContextSection({
+        workspaceDir: resolvedWorkspace,
+        sessionKey: params.sessionKey,
+      }),
       docsPath: docsPath ?? undefined,
       ttsHint,
       promptMode,

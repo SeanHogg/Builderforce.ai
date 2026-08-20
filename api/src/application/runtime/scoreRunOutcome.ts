@@ -19,7 +19,17 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { approvals, executions, llmUsageLog, pullRequests, tasks, toolAuditEvents, runModelOutcomes } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
-import { normalizeActionType } from '../llm/actionTypes';
+import {
+  normalizeActionType,
+  type NormalizedRunOutcome,
+  type OutcomeSource,
+  type TerminalStatus,
+} from '@builderforce/learned-routing';
+
+// The wire contract owns these two vocabularies (the on-prem host sends them, this
+// scorer records them), so they are DEFINED in `@builderforce/learned-routing` and
+// only re-exported here for the api callers that already import them from this module.
+export type { NormalizedRunOutcome, OutcomeSource, TerminalStatus };
 import { classifyRunFailure } from './runFailureReasons';
 import { applyOutcomeToRoutingTable } from '../llm/routingTable';
 import { bumpOutcomesVersion } from '../../infrastructure/cache/readThroughCache';
@@ -41,8 +51,6 @@ export const EFFICIENCY_STEP_NORM = 20;
 /** Per-run cost (millicents) at/above which the cost half of efficiency hits 0
  *  ($2.00). Cheaper runs score proportionally higher. */
 export const EFFICIENCY_COST_NORM_MC = 200_000;
-
-export type TerminalStatus = 'completed' | 'failed' | 'cancelled';
 
 export interface OutcomeScoreInputs {
   terminalStatus: TerminalStatus;
@@ -156,32 +164,6 @@ export function runProducedOutput(s: RunProduct): boolean {
   return s.merged || s.prOpened || s.producedChanges || s.movedTicket === true;
 }
 
-export type OutcomeSource = 'cloud' | 'onprem' | 'ide' | 'external';
-
-export interface ClientRunOutcome {
-  /** Caller's idempotency key — one outcome per clientRunId (partial-unique). */
-  clientRunId: string;
-  /** Where the run executed. Anything non-'cloud' has no execution row. */
-  source: OutcomeSource;
-  /** The model the run actually used (the gateway's resolved model). */
-  model: string;
-  /** Terminal status of the run. Non-'completed' scores 0 (see computeOutcomeScore). */
-  terminalStatus: TerminalStatus;
-  actionType?: string;
-  projectId?: number | null;
-  taskId?: number | null;
-  /** Optional richer signals when the client has them (else conservative defaults). */
-  merged?: boolean;
-  ciGreen?: boolean;
-  degraded?: boolean;
-  steps?: number;
-  costMc?: number;
-  approved?: boolean;
-  /** The run died on a provider rate limit. An AVAILABILITY signal that demotes the
-   *  model in the learned router without teaching it the model is low-quality
-   *  (migration 0485). Defaults false when the client cannot tell. */
-  rateLimited?: boolean;
-}
 
 /**
  * Record ONE outcome for a NON-cloud run (IDE-native / on-prem / external SDK) —
@@ -193,7 +175,7 @@ export interface ClientRunOutcome {
  * the caller's run). Respects the learned-routing kill switch implicitly via
  * `applyOutcomeToRoutingTable` (which no-ops when routing is disabled).
  */
-export async function recordClientRunOutcome(env: Env, db: Db, tenantId: number, o: ClientRunOutcome): Promise<void> {
+export async function recordClientRunOutcome(env: Env, db: Db, tenantId: number, o: NormalizedRunOutcome): Promise<void> {
   try {
     const clientRunId = o.clientRunId?.trim();
     if (!clientRunId || !o.model?.trim()) return;

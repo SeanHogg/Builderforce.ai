@@ -78,3 +78,75 @@ describe('tool counts distinguish registered from advertised', () => {
     expect(out).toContain('the per-turn relevance selection, not the catalog');
   });
 });
+
+describe('build identity — a version names a release, not an artifact', () => {
+  /**
+   * Two VSIXes carrying the SAME version and different code is not hypothetical: a
+   * rebuilt `2026.7.104` fixed an agent-stall bug the earlier `2026.7.104` had, and the
+   * user who hit that exact bug filed a report reading `UI 2026.7.104` — true of both
+   * builds, useful for neither. The build id is what separates them.
+   */
+  it('rides the UI version rather than taking its own line', () => {
+    const out = render({ ...base, versions: { ui: '2026.7.104', api: '2026.7.114', uiBuildId: 'a1b2c3d4e5f6' } });
+    expect(out).toContain('- Versions: UI 2026.7.104+a1b2c3d4e5f6 · API 2026.7.114');
+  });
+
+  it('states when the artifact was built, so same-source rebuilds stay orderable', () => {
+    const out = render({
+      ...base,
+      versions: { ui: '2026.7.104', api: null, uiBuildId: 'a1b2c3d4e5f6', uiBuiltAt: '2026-07-25T22:09:00.000Z' },
+    });
+    expect(out).toContain('UI 2026.7.104+a1b2c3d4e5f6 (built 2026-07-25T22:09:00.000Z)');
+  });
+
+  it('warns when a client reports a version but no build id at all', () => {
+    const out = render({ ...base, versions: { ui: '2026.7.104', api: null } });
+    expect(out).toContain('No UI build id');
+    expect(out).toContain('indistinguishable from the build it replaced');
+  });
+
+  it('warns that a "dev" stamp did not come from a packaged build', () => {
+    const out = render({ ...base, versions: { ui: '2026.7.104', api: null, uiBuildId: 'dev' } });
+    expect(out).toContain('did NOT come from a packaged build');
+  });
+
+  it('still renders the line when only a build id was gathered', () => {
+    expect(render({ ...base, versions: { ui: null, api: null, uiBuildId: 'a1b2c3d4e5f6' } }))
+      .toContain('- Versions: UI unknown+a1b2c3d4e5f6');
+  });
+});
+
+describe("the panel's selected project is ALWAYS reported", () => {
+  /**
+   * "no project is selected in the sidebar" and "a project IS selected but the chat is
+   * unattached" have OPPOSITE causes and opposite fixes, and both used to render as the
+   * single line `Chat's project: none` — reading it as the first once cost a wrong revert.
+   */
+  it('prints "none" rather than omitting the line when nothing is selected', () => {
+    expect(render({ ...base, projectId: null, selectedProjectId: null }))
+      .toContain("- Panel's selected project: none");
+  });
+
+  it('prints the line even when it matches the chat, and says so', () => {
+    expect(render({ ...base, projectId: 7, selectedProjectId: 7 }))
+      .toContain("- Panel's selected project: #7 (same as the chat's)");
+  });
+
+  it('names the selected project when the host holds one', () => {
+    expect(render({ ...base, projectId: null, selectedProjectId: 7, selectedProjectName: 'Atlas' }))
+      .toContain("- Panel's selected project: Atlas (#7)");
+  });
+
+  it('blames the SELECTION when an unattached chat had nothing to adopt', () => {
+    const out = render({ ...base, projectId: null, selectedProjectId: null });
+    expect(out).toContain('No project is selected in the sidebar either');
+    expect(out).toContain('Not an adopt bug');
+  });
+
+  it('blames the ADOPT PATH when a project was selected and still not adopted', () => {
+    const out = render({ ...base, projectId: null, selectedProjectId: 7, selectedProjectName: 'Atlas' });
+    expect(out).toContain('A project IS selected (Atlas (#7))');
+    expect(out).toContain('the ADOPT path is the fault, not the selection');
+    expect(out).not.toContain('Not an adopt bug');
+  });
+});

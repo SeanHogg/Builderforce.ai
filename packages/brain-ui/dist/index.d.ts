@@ -1,6 +1,6 @@
 import * as React from 'react';
 import React__default, { HTMLAttributes, ReactNode } from 'react';
-import { BrainMessage, BrainTraceEvent, ModelIdentityContext, ChatErrorAction, ModelChoiceLabels, Effort, ChatModelSelection, ChatModelOptions, DirectedRecipient, EvermindRecallItem, EvermindLearnTarget, ChatInputAttachment } from '@seanhogg/builderforce-brain-embedded';
+import { BrainMessage, BrainTraceEvent, ChatActivityLabels, ModelIdentityContext, ChatErrorAction, ModelChoiceLabels, Effort, ChatModelSelection, ChatModelOptions, DirectedRecipient, ChatActivity, EvermindRecallItem, EvermindLearnTarget, ChatInputAttachment } from '@seanhogg/builderforce-brain-embedded';
 export { BUILDERFORCE_PRODUCT_NAME, ChatModelOptions, ChatModelSelection, DEFAULT_MODEL_IDENTITY, MODEL_CATEGORIES, ModelCategory, ModelChoiceLabels, ModelIdentityContext, ModelItem, PROJECT_EVERMIND_MODEL_PREFIX, RoutedProduct, activeModelKey, buildModelItems, byoVendorLabel, displayModelName, filterModelItems, modelCategoryLabel, modelInUse, perMillionUsd, premiumCostLabel, productForPlan, productModelName, revealsModelId } from '@seanhogg/builderforce-brain-embedded';
 
 interface BrainTimelineLabels {
@@ -71,6 +71,13 @@ interface BrainTimelineLabels {
     reconcileTitle: string;
     /** Tooltip on the reconcile step. */
     reconcileHint: string;
+    /**
+     * RUN-ACTIVITY line templates (run milestones + agent dispatch). Templates, not
+     * sentences: the server records only the FACTS, and each surface composes the line in
+     * its own language — which is the only way these can be localized at all, since the
+     * server has no idea who will read the chat. See `chatActivity.ts` for the contract.
+     */
+    activity: ChatActivityLabels;
 }
 declare const DEFAULT_TIMELINE_LABELS: BrainTimelineLabels;
 /** +1 up, -1 down, 0 = cleared. Mirrors the `llm_action_ratings.rating` domain. */
@@ -955,6 +962,14 @@ type TimelineNode = {
     text: string;
 } | {
     key: string;
+    kind: 'activity';
+    ts: number;
+    order: number;
+    message: BrainMessage;
+    activity: ChatActivity;
+    fallbackText: string;
+} | {
+    key: string;
     kind: 'thinking';
     ts: number;
     order: number;
@@ -1076,6 +1091,40 @@ interface EvermindRecentEntry {
     /** Operator-facing detail behind `skipReason` (HTTP status, exception message). */
     skipDetail?: string;
     /** The pinned teacher model that failed (present on a distillation fault). */
+    attemptedTeacherModel?: string;
+}
+/** What a teach POST can tell the caller: the id its contribution was queued under.
+ *  Absent on a host (or server) that predates the pollable status channel. */
+interface EvermindTeachResult {
+    contributionId?: number;
+}
+/**
+ * How one enqueued contribution ended up. `pending` is transient; every other state is
+ * terminal, so a poller has a defined stopping condition.
+ *
+ * `merged` means it is IN THE WEIGHTS — including when a pinned teacher faulted, since
+ * the contribution still learns un-distilled. `dropped` means a merge consumed it and it
+ * never became a memory (stale base, no trainable window, non-LM head). `unknown` is the
+ * server declining to answer (no coordinator binding, or an unreadable reply).
+ */
+type EvermindContributionState = 'pending' | 'merged' | 'dropped' | 'unknown';
+/**
+ * One contribution's status. The provenance fields are the RING'S, deliberately —
+ * {@link EvermindContributionStatus} is graded by the same `evermindLearnedStatus` that
+ * grades a Learnings row, so a teach's reported outcome and that memory's own row can
+ * never tell the operator two different stories.
+ */
+interface EvermindContributionStatus {
+    contributionId: number;
+    state: EvermindContributionState;
+    kind?: 'text' | 'delta';
+    /** The version it merged INTO (present only when `merged`). */
+    version?: number;
+    distilled?: boolean;
+    teacherModel?: string;
+    /** {@link EvermindTeacherSkipReason} — why a teacher did not shape this. */
+    skipReason?: string;
+    skipDetail?: string;
     attemptedTeacherModel?: string;
 }
 /** A scored recall match — a learned memory plus its 0..1 relevance to a task. */
@@ -1306,8 +1355,23 @@ interface EvermindConsoleAdapter {
     setInference(enabled: boolean): Promise<void>;
     setMode(mode: EvermindMode): Promise<void>;
     setTeacher(model: string | null): Promise<void>;
-    /** Teach from raw text (a transcript / exemplar); `prompt` is the task it answered. */
-    teach(text: string, prompt?: string): Promise<void>;
+    /**
+     * Teach from raw text (a transcript / exemplar); `prompt` is the task it answered.
+     *
+     * Resolving is ACCEPTANCE, never success: the contribution is queued and the frontier
+     * teacher only runs later, in the coordinator's debounced merge. A host that can
+     * return the server's contribution id should — that is what lets the console poll
+     * {@link EvermindConsoleAdapter.teachStatus} and replace its optimistic toast with
+     * what actually happened. Returning `void` keeps the old optimistic behaviour.
+     */
+    teach(text: string, prompt?: string): Promise<EvermindTeachResult | void>;
+    /**
+     * OPTIONAL — poll one contribution's outcome by the id {@link teach} returned. When a
+     * host implements BOTH, the console resolves "Queued for learning" into the real
+     * result: taught-and-distilled, taught-without-a-teacher, or a named teacher fault.
+     * A host that omits it keeps the optimistic toast.
+     */
+    teachStatus?(contributionId: number): Promise<EvermindContributionStatus>;
     /** Force a merge now; returns how many merged + the resulting version. */
     flush(): Promise<{
         merged: number;
@@ -1419,7 +1483,18 @@ interface EvermindConsoleLabels {
     teachTextPlaceholder: string;
     teachCta: string;
     teaching: string;
+    /** INTERIM state: the contribution is queued. Resolved by the status poll below. */
     taught: string;
+    /** Resolved: a frontier teacher answered and the model learned that answer. */
+    taughtDistilled: (model: string, version: number) => string;
+    /** Resolved: learned from the raw text with no teacher pinned — a legitimate mode. */
+    taughtSelf: (version: number) => string;
+    /** Resolved: it learned, but the PINNED teacher produced nothing. Actionable. */
+    taughtTeacherFault: (model: string, reason: string) => string;
+    /** Resolved: a merge consumed it and it never became a memory. */
+    taughtDropped: string;
+    /** The poll gave up while still queued — honest about not knowing yet, not a failure. */
+    taughtStillPending: string;
     teachTeacherTitle: string;
     teachTeacherHint: (model: string) => string;
     teachTaskPlaceholder: string;
@@ -1594,9 +1669,11 @@ declare function EvermindConsole({ adapter, canManage, labels, refreshMs, projec
  * look like it echoed the question back as its own answer. This helper is what turns
  * that silent fallback into a visible, named fault.
  */
-/** Why distillation didn't happen (mirrors the API's `TeacherSkipReason`, plus the
- *  `unknown` bucket for rows written before the reason was recorded). */
-type EvermindTeacherSkipReason = 'not_pinned' | 'budget_exhausted' | 'input_too_short' | 'gateway_error' | 'empty_output' | 'exception' | 'unknown';
+/** Why distillation didn't happen. Mirrors the API's `RecordedSkipReason`: every reason
+ *  a live merge can emit, plus the two buckets its legacy-provenance backfill writes —
+ *  `legacy` (no teacher evidence either way) and `unknown` (provably a fault, cause not
+ *  nameable). Keep in lockstep with `api/src/application/llm/evermindTeacher.ts`. */
+type EvermindTeacherSkipReason = 'not_pinned' | 'budget_exhausted' | 'cooling' | 'unroutable' | 'input_too_short' | 'gateway_error' | 'empty_output' | 'exception' | 'legacy' | 'unknown';
 /** The provenance verdict for one learned memory. */
 type EvermindLearnedStatus = 
 /** A pre-diffed weight delta — no text provenance to report. */
@@ -1911,4 +1988,4 @@ interface ProjectListViewProps {
 }
 declare function ProjectListView({ title, subtitle, data, loading, error, labels, onAction, onRefresh }: ProjectListViewProps): React.JSX.Element;
 
-export { type AgentOptionVM, type AskUserLabels, type AskUserOption, type AskUserPayload, Avatar, type AvatarProps, BrainTimeline, type BrainTimelineLabels, type BrainTimelineProps, type BuildTimelineInput, type ChatAgentVM, ChatErrorBanner, type ChatErrorBannerLabels, type ChatErrorBannerProps, type ChatOptionVM, type ChatTicketsAdapter, type ChatTicketsLabels, ChatTicketsPanel, type ChatTicketsPanelProps, DEFAULT_ASK_USER_LABELS, DEFAULT_CHAT_ERROR_LABELS, DEFAULT_CHAT_TICKETS_LABELS, DEFAULT_EVERMIND_LABELS, DEFAULT_PROJECT360_LABELS, DEFAULT_PROJECT_LIST_LABELS, DEFAULT_PROMPT_OPTIONS_LABELS, DEFAULT_TIMELINE_LABELS, type EvermindActionGuideInput, type EvermindActionId, type EvermindCleanupResult, EvermindConsole, type EvermindConsoleAdapter, type EvermindConsoleData, type EvermindConsoleLabels, type EvermindConsoleProps, type EvermindKnowledgeAnalysis, type EvermindKnowledgeFinding, type EvermindKnowledgeRepair, type EvermindKnowledgeVerdict, type EvermindLearnedStatus, type EvermindMode, type EvermindNextAction, type EvermindProbeResult, type EvermindProbeSample, type EvermindRecentEntry, type EvermindReindexResult, type EvermindSeedModel, type EvermindTarget, type EvermindTeacherOptions, type EvermindTeacherSkipReason, type EvermindValidateMatch, type EvermindValidateResult, HealthRing, type HealthRingProps, type HealthTier, type LearnedStatusInput, type LineageVM, type LinkType, Markdown, type MarkdownLabels, type MarkdownProps, type MentionAutocomplete, type MentionLabels, type MessageRating, ParticipantBadge, type PendingAskUser, PendingQuestionBanner, type Project360, type Project360Action, type Project360Dimension, type Project360Gap, type Project360Labels, type Project360Member, type Project360Pillar, Project360View, type Project360ViewProps, type ProjectListAction, type ProjectListBadge, type ProjectListGroup, type ProjectListItem, type ProjectListLabels, type ProjectListModel, type ProjectListTicketRef, type ProjectListTone, ProjectListView, type ProjectListViewProps, type PromptOptionsAutoMode, type PromptOptionsLabels, type PromptOptionsMemory, PromptOptionsMenu, type PromptOptionsMenuProps, type PromptOptionsMode, type PromptOptionsModeChoice, type PromptOptionsModel, type PromptOptionsSession, PromptPanel, type PromptPanelProps, QuestionCard, RUNNABLE_KINDS, Sunburst, type SunburstProps, TICKET_KINDS, type ThinkSegment, type TicketKind, type TicketLinkVM, type TicketOptionVM, type TimelineImage, type TimelineNode, type UseMentionAutocompleteOptions, askUserAnchorId, attachmentsOf, avatarColor, buildSettledTimeline, buildTimeline, evermindLearnedStatus, evermindNextAction, formatDuration, formatPayload, healthRingColor, initialsOf, parseAskUser, promptOptionsLabels, selectPendingAskUser, serializeAskUser, splitThinkSegments, streamingNode, stripAskUser, useChatParticipants, useMentionAutocomplete };
+export { type AgentOptionVM, type AskUserLabels, type AskUserOption, type AskUserPayload, Avatar, type AvatarProps, BrainTimeline, type BrainTimelineLabels, type BrainTimelineProps, type BuildTimelineInput, type ChatAgentVM, ChatErrorBanner, type ChatErrorBannerLabels, type ChatErrorBannerProps, type ChatOptionVM, type ChatTicketsAdapter, type ChatTicketsLabels, ChatTicketsPanel, type ChatTicketsPanelProps, DEFAULT_ASK_USER_LABELS, DEFAULT_CHAT_ERROR_LABELS, DEFAULT_CHAT_TICKETS_LABELS, DEFAULT_EVERMIND_LABELS, DEFAULT_PROJECT360_LABELS, DEFAULT_PROJECT_LIST_LABELS, DEFAULT_PROMPT_OPTIONS_LABELS, DEFAULT_TIMELINE_LABELS, type EvermindActionGuideInput, type EvermindActionId, type EvermindCleanupResult, EvermindConsole, type EvermindConsoleAdapter, type EvermindConsoleData, type EvermindConsoleLabels, type EvermindConsoleProps, type EvermindContributionState, type EvermindContributionStatus, type EvermindKnowledgeAnalysis, type EvermindKnowledgeFinding, type EvermindKnowledgeRepair, type EvermindKnowledgeVerdict, type EvermindLearnedStatus, type EvermindMode, type EvermindNextAction, type EvermindProbeResult, type EvermindProbeSample, type EvermindRecentEntry, type EvermindReindexResult, type EvermindSeedModel, type EvermindTarget, type EvermindTeachResult, type EvermindTeacherOptions, type EvermindTeacherSkipReason, type EvermindValidateMatch, type EvermindValidateResult, HealthRing, type HealthRingProps, type HealthTier, type LearnedStatusInput, type LineageVM, type LinkType, Markdown, type MarkdownLabels, type MarkdownProps, type MentionAutocomplete, type MentionLabels, type MessageRating, ParticipantBadge, type PendingAskUser, PendingQuestionBanner, type Project360, type Project360Action, type Project360Dimension, type Project360Gap, type Project360Labels, type Project360Member, type Project360Pillar, Project360View, type Project360ViewProps, type ProjectListAction, type ProjectListBadge, type ProjectListGroup, type ProjectListItem, type ProjectListLabels, type ProjectListModel, type ProjectListTicketRef, type ProjectListTone, ProjectListView, type ProjectListViewProps, type PromptOptionsAutoMode, type PromptOptionsLabels, type PromptOptionsMemory, PromptOptionsMenu, type PromptOptionsMenuProps, type PromptOptionsMode, type PromptOptionsModeChoice, type PromptOptionsModel, type PromptOptionsSession, PromptPanel, type PromptPanelProps, QuestionCard, RUNNABLE_KINDS, Sunburst, type SunburstProps, TICKET_KINDS, type ThinkSegment, type TicketKind, type TicketLinkVM, type TicketOptionVM, type TimelineImage, type TimelineNode, type UseMentionAutocompleteOptions, askUserAnchorId, attachmentsOf, avatarColor, buildSettledTimeline, buildTimeline, evermindLearnedStatus, evermindNextAction, formatDuration, formatPayload, healthRingColor, initialsOf, parseAskUser, promptOptionsLabels, selectPendingAskUser, serializeAskUser, splitThinkSegments, streamingNode, stripAskUser, useChatParticipants, useMentionAutocomplete };

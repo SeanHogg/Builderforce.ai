@@ -49,6 +49,23 @@ export type { ChatErrorAction, ChatErrorActionKind } from './chatError';
 export { effortProfile, isEffort, reasoningForRun } from './effort';
 export type { Effort, EffortProfile, ReasoningLevel, ReasoningIntent } from './effort';
 
+// The composer's toggles → prompt directives. ONE compiler, both surfaces: the web and
+// VS Code copies had drifted on the effort prose, on a redundant "think step by step"
+// sentence, and on the NAME of the web-fetch tool (neither copy named a tool the model
+// is actually given). See `composerDirectives.ts`.
+export { buildComposerDirectives, WEB_FETCH_TOOL_NAME } from './composerDirectives';
+export type { ComposerDirectiveOptions } from './composerDirectives';
+
+// The human-in-the-loop approval gate. Shared because its central invariant — the
+// auto-approve flag must be read through a REF so an in-flight run honours a mid-run
+// toggle — is exactly what does not survive being hand-copied.
+export { useToolConfirmationGate, localStorageConfirmationPersistence } from './useToolConfirmationGate';
+export type {
+  ToolConfirmationGate,
+  ToolConfirmationGateOptions,
+  ToolConfirmationPersistence,
+} from './useToolConfirmationGate';
+
 // Client-side image prep for vision messages (downscale → inline data URL)
 export { prepareImageDataUrl } from './imagePrep';
 export type { PreparedImage } from './imagePrep';
@@ -63,6 +80,7 @@ export type {
   EvermindRunHooks,
   EvermindRecallResult,
   EvermindRecallItem,
+  MemoryFirstAnswer,
 } from './evermindMemory';
 
 // MCP-style client action registry (the extension contract)
@@ -128,7 +146,7 @@ export {
   // store is a module-level singleton keyed by it.
   resetBrainRunStore,
 } from './brainRunStore';
-export type { BrainRunRequest, BrainRunSnapshot } from './brainRunStore';
+export type { BrainRunRequest, BrainRunSnapshot, BrainRunPersistence, BrainStreamFn } from './brainRunStore';
 
 // Execution triage — capture the Brain run (LLM/tool/error trace) as a report.
 export {
@@ -158,6 +176,18 @@ export type { BrainTraceEvent, BuildBrainTriageOptions, BrainDiagnostics, ByoUnr
 // Durable tool/memory STEP rows — the reader for what the run loop persisted, so a
 // reopened chat's timeline AND its triage diagnostics both see the steps the live
 // in-memory trace no longer holds.
+// Run-milestone / agent-dispatch ACTIVITY lines — the structured metadata contract both
+// chat renderers drive their (localized) system line from, instead of showing the
+// server's English sentence as an assistant bubble.
+export {
+  parseChatActivity,
+  isActivityMessage,
+  chatActivityText,
+  activityIcon,
+  activityTone,
+  DEFAULT_CHAT_ACTIVITY_LABELS,
+} from './chatActivity';
+export type { ChatActivity, RunMilestoneActivity, AgentDispatchActivity, ChatActivityLabels, RunMilestonePhase } from './chatActivity';
 export { stepSig, parseStepMessage, traceWithPersistedSteps } from './persistedSteps';
 export type { PersistedStep } from './persistedSteps';
 

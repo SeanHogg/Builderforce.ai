@@ -362,6 +362,10 @@ const ToolExecSchema = z.object(ToolExecBaseShape).strict().optional();
 const ToolFsSchema = z
   .object({
     workspaceOnly: z.boolean().optional(),
+    // The schema is `.strict()`, so a key missing here is REJECTED at config load —
+    // which is how `convergedFileTools` came to exist as a flag nobody could actually
+    // set from a config file. Every `FsToolsConfig` key belongs in this object.
+    convergedFileTools: z.boolean().optional(),
   })
   .strict()
   .optional();

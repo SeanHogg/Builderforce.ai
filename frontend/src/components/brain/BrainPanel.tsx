@@ -14,6 +14,7 @@ import { useTranslations } from 'next-intl';
 
 import type { Formatter } from '@/i18n/format';
 import { useFormat } from '@/i18n/useFormat';
+import { useChatActivityLabels } from '@/i18n/useChatActivityLabels';
 import Link from 'next/link';
 import { BrainTimeline, Avatar, PendingQuestionBanner, selectPendingAskUser, askUserAnchorId } from '@seanhogg/builderforce-brain-ui';
 import '@seanhogg/builderforce-brain-ui/styles.css';
@@ -29,6 +30,7 @@ import {
   nextFallbackModel,
   effortProfile,
   reasoningForRun,
+  useToolConfirmationGate,
   type BrainTraceEvent,
 } from '@seanhogg/builderforce-brain-embedded';
 import { useConfirm } from '@/components/ConfirmProvider';
@@ -92,7 +94,7 @@ import { dispatchBrainDataChanged } from '@/lib/brain/brainDataEvent';
 import { loadAgentPoolCached, type PoolAgent } from '@/lib/agentPool';
 import { getModality } from '@/lib/modality';
 import { useModalityCopy, useLocalizedModalities } from '@/lib/useModalityCopy';
-import { isBrainAutoApprove, setBrainAutoApprove } from '@/lib/brain/autoApprove';
+import { BRAIN_AUTO_APPROVE_DEFAULT, brainAutoApprovePersistence } from '@/lib/brain/autoApprove';
 import { nextSeedPromptStep } from '@/lib/brain/seedPrompt';
 import { usePersonalityBlock, getSessionPsychometric } from '@/lib/usePersonalityBlock';
 import { fetchLimbicBlock } from '@/lib/personalityApi';
@@ -200,6 +202,7 @@ export function BrainPanel({
   const fmt = useFormat();
   const isPage = variant === 'page';
   const tTimeline = useTranslations('brain.timeline');
+  const activityLabels = useChatActivityLabels();
   const tCommon = useTranslations('common');
   const tRepo = useTranslations('repoContext');
   const tBrain = useTranslations('brain');
@@ -274,24 +277,18 @@ export function BrainPanel({
   //
   // Auto-approve mode lets the user skip the per-action prompt — essential for
   // bulk runs (link 50 tickets, archive 18) where approving each one by hand is
-  // unworkable. It's read through a ref so `needsConfirm` stays referentially
-  // stable, mirrored to state for the toggle UI, and persisted per-browser.
-  const [autoApprove, setAutoApprove] = useState(false);
-  const autoApproveRef = useRef(false);
-  useEffect(() => {
-    const on = isBrainAutoApprove();
-    autoApproveRef.current = on;
-    setAutoApprove(on);
-  }, []);
-  const setAutoApproveMode = useCallback((on: boolean) => {
-    autoApproveRef.current = on;
-    setAutoApprove(on);
-    setBrainAutoApprove(on);
-  }, []);
-  const needsConfirm = useCallback(
-    (req: { name: string; args: unknown }) => isMutating(req.name, req.args) && !autoApproveRef.current,
-    [isMutating],
-  );
+  // unworkable. The gate is the SHARED hook (its ref-backed liveness is what makes a
+  // mid-run toggle take effect on the very next tool call); this surface supplies only
+  // its own persistence policy.
+  const {
+    autoApprove,
+    setAutoApprove: setAutoApproveMode,
+    needsConfirm,
+  } = useToolConfirmationGate({
+    isMutating,
+    persistence: brainAutoApprovePersistence,
+    defaultOn: BRAIN_AUTO_APPROVE_DEFAULT,
+  });
 
   // Composer run-shaping toggles (the `/` menu + the `+` menu's web option) —
   // compiled into the ambient system context below so each actually changes the
@@ -526,7 +523,9 @@ export function BrainPanel({
     // from asking for permission in prose anyway.
     if (autoApprove) parts.push(BRAIN_AUTO_APPROVE_DIRECTIVE);
     // Effort / Thinking / Browse-the-web composer toggles.
-    const composer = buildComposerDirectives({ effort, thinking, web: webBrowsing });
+    // `thinking` is NOT passed: it is a structured `reasoning.level` on the request (see
+    // `reasoningForRun` below), never a prompt sentence.
+    const composer = buildComposerDirectives({ effort, web: webBrowsing });
     if (composer) parts.push(composer);
     return parts.length > 0 ? parts.join('\n') : undefined;
   }, [ctxProjectId, projects, extraSystem, capabilityPrompt, autoApprove, effort, thinking, webBrowsing, personalityBlock, responseInstructions]);
@@ -947,7 +946,11 @@ export function BrainPanel({
     learnTargetSkipped: tTimeline('learnTargetSkipped'),
     reconcileTitle: tTimeline('reconcileTitle'),
     reconcileHint: tTimeline('reconcileHint'),
-  }), [tTimeline]);
+    // Run milestones / agent dispatch render as system ACTIVITY lines composed from the
+    // message's structured metadata — see useChatActivityLabels for why these are
+    // templates rather than sentences.
+    activity: activityLabels,
+  }), [tTimeline, activityLabels]);
 
   const timelineApplyCode = useMemo(
     () => (hasTool('apply_code_to_active_file')
@@ -1114,6 +1117,8 @@ export function BrainPanel({
         projectId: chatProjectId,
         projectName: projects.find((p) => p.id === chatProjectId)?.name ?? null,
         selectedProjectId: pinnedProjectId ?? viewingProjectId ?? null,
+        selectedProjectName:
+          projects.find((p) => p.id === (pinnedProjectId ?? viewingProjectId))?.name ?? null,
         tenantId: tenant?.id ?? null,
         userId: user?.id ?? null,
         messages: conv.messages,

@@ -401,13 +401,20 @@ export interface Env {
   CRON_FLOOR_INTERVAL_MS?: string;
 
   /**
-   * Optional KV namespace backing the shared (L2) semantic response cache
-   * (`/v1/semantic-cache`). Holds, per tenant+namespace partition, a bounded
-   * list of {embedding, response} so a paraphrased prompt answered on one
-   * surface (web or agent) can be reused by the other. Unbound → the endpoint
-   * degrades to "always miss / no-op store" and clients fall back to local-only.
+   * DEDICATED KV namespace for the shared (L2) semantic response cache
+   * (`/v1/semantic-cache`), holding the LSH bucket index that lets a paraphrased
+   * prompt answered on one surface (web or agent) be reused by the other.
    *
-   * Provision once:  `npx wrangler kv:namespace create SEMANTIC_CACHE_KV`
+   * OPTIONAL, AND NO LONGER LOAD-BEARING. When it is unbound the cache falls back to
+   * `AUTH_CACHE_KV` rather than turning itself off — the `semcache:` key prefix keeps
+   * the two concerns apart inside one namespace exactly as `cooldown:` and `auth:`
+   * already do. It used to degrade to "always miss / no-op store", which meant the
+   * feature was a permanent no-op in production: every `FetchSemanticCacheBackend`
+   * client (web and agent-runtime) was already wired and getting nothing back,
+   * waiting on an ops task nobody was tracking. Binding a dedicated namespace is now
+   * an isolation/quota improvement, not a prerequisite.
+   *
+   * Provision once:  `npx wrangler kv namespace create SEMANTIC_CACHE_KV`
    * Then bind in wrangler.toml:
    *   [[kv_namespaces]]  binding = "SEMANTIC_CACHE_KV"  id = "<id from create output>"
    */

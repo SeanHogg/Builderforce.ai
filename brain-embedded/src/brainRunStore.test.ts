@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
+  startRun,
   subscribeRun,
   subscribeRunStore,
   getGlobalRunState,
@@ -12,6 +13,7 @@ import {
   pinnedDirectiveIndex,
   COMPACT_TAIL_TURNS,
 } from './brainRunStore';
+import type { BrainStreamFn } from './brainRunStore';
 import type { ChatCompletionMessage } from './streamChatCompletion';
 
 // These tests pin the memory-eviction contract. They assume MAX_CELLS = 50
@@ -163,5 +165,52 @@ describe('auto-compaction partitioning (summarize the middle, never orphan a too
     expect(pinnedDirectiveIndex(convo, COMPACT_TAIL_TURNS)).toBe(-1);
     const out = assembleCompacted('SYS', convo, 'MEMO', COMPACT_TAIL_TURNS);
     expect(out.filter((m) => m.content === 'later')).toHaveLength(1);
+  });
+});
+
+describe('the host-injected tool-iteration ceiling (BrainRunRequest.maxIterations)', () => {
+  /** A gateway that always asks for one more tool call, so only the cap ends the run. */
+  const alwaysCallsATool = (): { stream: BrainStreamFn; turns: () => number } => {
+    let turns = 0;
+    const stream: BrainStreamFn = async (opts) => {
+      turns += 1;
+      const toolless = opts.tools === undefined;
+      return {
+        text: toolless ? 'Here is what I found.' : '',
+        toolCalls: toolless ? [] : [{ id: `c${turns}`, name: 'read_file', args: '{}' }],
+        finishReason: toolless ? 'stop' : 'tool_calls',
+      };
+    };
+    return { stream, turns: () => turns };
+  };
+
+  const persistence = { sendMessages: async () => [] };
+
+  it('stops at the host ceiling, then forces one final tools-free answer', async () => {
+    const gateway = alwaysCallsATool();
+    await startRun(4242, {
+      resolvedSystemPrompt: 'sys',
+      tools: [{ type: 'function', function: { name: 'read_file', description: 'read', parameters: {} } }],
+      runTool: async () => ({ ok: true }),
+      stream: gateway.stream,
+      persistence,
+      userTurn: 'read everything',
+      maxIterations: 3,
+    });
+    // Three capped tool turns + the loop's always-speak closing synthesis.
+    expect(gateway.turns()).toBe(4);
+  });
+
+  it('ignores a nonsensical ceiling rather than running a zero-turn (answerless) loop', async () => {
+    const gateway = alwaysCallsATool();
+    await startRun(4243, {
+      resolvedSystemPrompt: 'sys',
+      stream: gateway.stream,
+      persistence,
+      userTurn: 'hello',
+      maxIterations: 0,
+    });
+    // Falls back to the shared default, so the run still produces a turn.
+    expect(gateway.turns()).toBeGreaterThan(0);
   });
 });

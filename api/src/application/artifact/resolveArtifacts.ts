@@ -126,6 +126,9 @@ export async function resolveArtifacts(
     .select({
       artifactType: artifactAssignments.artifactType,
       artifactSlug: artifactAssignments.artifactSlug,
+      // WHERE the assignment lives. The result is a union across the whole hierarchy,
+      // so without this an agent-pinned skill and a tenant-wide one are the same string.
+      scope:        artifactAssignments.scope,
     })
     .from(artifactAssignments)
     .where(and(
@@ -137,6 +140,8 @@ export async function resolveArtifacts(
   const skills   = new Set<string>();
   const personas = new Set<string>();
   const content  = new Set<string>();
+  // Most-specific scope wins per slug — the same precedence the merge documents.
+  const sources: Record<string, AssignmentScope> = {};
 
   for (const row of rows) {
     switch (row.artifactType) {
@@ -144,11 +149,34 @@ export async function resolveArtifacts(
       case ArtifactType.PERSONA: personas.add(row.artifactSlug); break;
       case ArtifactType.CONTENT: content.add(row.artifactSlug);  break;
     }
+    const scope = normalizeScope(row.scope);
+    if (scope == null) continue;
+    const held = sources[row.artifactSlug];
+    if (held == null || SCOPE_SPECIFICITY[scope] > SCOPE_SPECIFICITY[held]) {
+      sources[row.artifactSlug] = scope;
+    }
   }
 
   return {
     skills:   [...skills],
     personas: [...personas],
     content:  [...content],
+    sources,
   };
+}
+
+/** How specific each scope is — higher wins when the same slug is assigned twice. */
+const SCOPE_SPECIFICITY: Record<AssignmentScope, number> = {
+  [AssignmentScope.TENANT]:  0,
+  [AssignmentScope.HOST]:    1,
+  [AssignmentScope.PROJECT]: 2,
+  [AssignmentScope.TASK]:    3,
+  [AssignmentScope.AGENT]:   4,
+};
+
+/** Coerce the raw scope column to the enum; an unknown value is left unlabelled. */
+function normalizeScope(raw: string | null | undefined): AssignmentScope | null {
+  return (Object.values(AssignmentScope) as string[]).includes(raw ?? '')
+    ? (raw as AssignmentScope)
+    : null;
 }

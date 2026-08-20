@@ -26,11 +26,13 @@ import {
   type LlmUsage,
 } from '../../application/llm/LlmProxyService';
 import { parseClientReasoningIntent } from '../../application/llm/reasoningCapability';
-import { normalizeByoProvider, resolvePaidOverflowCapMillicents, PREMIUM_REQUEST_SURCHARGE_MILLICENTS } from '../../application/llm/usageLedger';
+import { readUsageWorkHints, resolveUsageWorkHints, type UsageWorkHints } from '../../application/llm/usageWorkHints';
+import { normalizeByoProvider, resolvePaidOverflowCapMillicents, resolvePremiumDailyCapMillicents, isPremiumCapExhausted, PREMIUM_REQUEST_SURCHARGE_MILLICENTS } from '../../application/llm/usageLedger';
 import { classifyReplyAccount } from '../../application/llm/replyProvenance';
 import { recordActivity, cloudAgentActor, buildModelActivityMetadata } from '../../application/activity/activityLog';
 import { USAGE_KIND } from '../../application/llm/usageSource';
-import { logTrace, backfillTraceUsage } from '../../application/llm/traceLogger';
+import { logTrace, backfillTraceUsage, backfillTraceResponseBody, imageTraceResult } from '../../application/llm/traceLogger';
+import { wrapStreamForTrace } from '../../application/llm/streamTrace';
 import { recordUsageRow, type UsageAttribution, type RecordUsageRow, type UsageSurface } from '../../application/llm/usageLedger';
 import { pickUsage, vendorForModel, type VendorEgress } from '../../application/llm/vendors';
 import {
@@ -51,11 +53,16 @@ import {
 import { buildDatabase, buildTransactionalDatabase } from '../../infrastructure/database/connection';
 import { resolveTenantModel, TENANT_MODEL_REF_PREFIX } from '../../application/llm/tenantModelService';
 import { resolveProjectEvermindModelPin, PROJECT_EVERMIND_MODEL_PREFIX } from '../../application/llm/projectEvermind';
-import { recordClientRunOutcome, type OutcomeSource, type TerminalStatus } from '../../application/runtime/scoreRunOutcome';
+import { recordClientRunOutcome } from '../../application/runtime/scoreRunOutcome';
 import { resolveWorkforceModel, WORKFORCE_MODEL_REF_PREFIX } from '../../application/agent/agentPrompt';
 import { llmUsageLog, llmFailoverLog, tenants, tenantMembers, agentHosts, tenantApiKeys, users, projects, tasks, runModelOutcomes } from '../../infrastructure/database/schema';
 import { getRoutingTable, parseScopeToken, scopeToken } from '../../application/llm/routingTable';
-import { actionTypeLabel, type ActionType } from '../../application/llm/actionTypes';
+import {
+  actionTypeLabel,
+  OWN_TENANT_SCOPE_TOKEN,
+  parseRunOutcomeRequest,
+  type ActionType,
+} from '@builderforce/learned-routing';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import {
   buildBuilderInsightsSnapshot,
@@ -65,9 +72,15 @@ import { originAllowed, deserializeScopes } from '../../application/llm/tenantAp
 import { coerceStringArrayOrNull } from '../../domain/shared/jsonColumn';
 import { callGatewayMcpTool, listGatewayMcpTools } from '../../application/llm/mcpGateway';
 import {
+  isCloudAgentExecutionRequest,
+  classifyCloudByoAnthropic,
+  cloudByoFailureBody,
+  CLOUD_BYO_FAILURE_STATUS,
+} from '../../application/llm/cloudByoPolicy';
+import {
   setTenantProviderKey,
   setTenantProviderOAuth,
-  resolveAnthropicAuth,
+  resolveAnthropicResolution,
   resolveOpenAICodexResolution,
   resolveTenantVendorKeys,
   resolveTenantLlmCredentials,
@@ -175,20 +188,40 @@ function secondsUntilNextUtcMidnight(): number {
   return Math.max(1, Math.ceil((next.getTime() - now) / 1000));
 }
 
-/** Bulk-insert failover events into llm_failover_log, fire-and-forget.
- *  Accepts the minimal shape used by both chat (`FailoverEvent`) and image
- *  (`ImageFailoverEvent`) surfaces — only `model` + `code` are persisted, the
- *  `vendor` label rides along on the typed event but isn't written here. */
+/**
+ * Bulk-insert failover events into `llm_failover_log`, fire-and-forget.
+ *
+ * Accepts the minimal shape shared by the chat (`FailoverEvent`) and image
+ * (`ImageFailoverEvent`) surfaces. Since 0946 the row carries the three facts that
+ * make the log answerable rather than merely voluminous:
+ *   • `tenantId`  — WHOSE cascade. Null for guest/unauthenticated traffic, which
+ *     genuinely has no tenant; inventing one would be worse than a null.
+ *   • `kind`      — the failure CLASS the dispatcher already computed. `auth` is the
+ *     class provider alerts derive from, and without it an expired credential and a
+ *     saturated free tier are indistinguishable rows.
+ *   • `requestId` — the gateway trace id, shared by every attempt of one cascade, so
+ *     a four-attempt failover is a GROUP BY instead of a guess from timestamps.
+ * The `vendor` label still rides along on the typed event without being written: it
+ * is derivable from `model` (`vendorForModel`), so storing it would be a second copy
+ * of a fact that can go stale.
+ */
 function logFailovers(
   env: HonoEnv['Bindings'],
   ctx: ExecutionContext,
-  failovers: ReadonlyArray<{ model: string; code: number }>,
+  failovers: ReadonlyArray<{ model: string; code: number; kind?: string }>,
+  attribution?: { tenantId?: number | null; requestId?: string | null },
 ): void {
   if (failovers.length === 0) return;
   ctx.waitUntil(
     buildTransactionalDatabase(env)
       .insert(llmFailoverLog)
-      .values(failovers.map(f => ({ model: f.model, errorCode: f.code })))
+      .values(failovers.map(f => ({
+        model: f.model,
+        errorCode: f.code,
+        tenantId: attribution?.tenantId ?? null,
+        kind: f.kind ?? null,
+        requestId: attribution?.requestId ?? null,
+      })))
       .catch((error) => { /* never let logging fail the request */ 
         reportCaughtError(error, { source: "presentation/routes/llmRoutes.ts", operation: "logFailovers" });
       }),
@@ -329,6 +362,9 @@ export type TenantAccess = {
    * DEFAULT_PAID_OVERFLOW_CAP_MILLICENTS.
    */
   paidOverflowDailyCap: number | null;
+  /** Per-tenant daily ceiling on PREMIUM spend, millicents (0952). null → plan
+   *  default; -1 → unlimited. See `isPremiumSpendExhausted`. */
+  premiumDailyCap: number | null;
   /**
    * Per-tenant daily image-generation credit override (1 credit = 1 returned
    * image), or null to use the plan default. -1 = unlimited. Metered separately
@@ -369,7 +405,7 @@ function toTenantPlan(ep: TenantAccess['effectivePlan']): TenantPlan {
 export async function resolveTenantPlan(
   env: Env,
   tenantId: number,
-): Promise<Pick<TenantAccess, 'plan' | 'billingStatus' | 'effectivePlan' | 'tokenDailyLimitOverride' | 'paidOverflowDailyCap' | 'imageCreditsDailyLimit' | 'premiumOverride' | 'cardValidated' | 'cardValidationStatus'>> {
+): Promise<Pick<TenantAccess, 'plan' | 'billingStatus' | 'effectivePlan' | 'tokenDailyLimitOverride' | 'paidOverflowDailyCap' | 'premiumDailyCap' | 'imageCreditsDailyLimit' | 'premiumOverride' | 'cardValidated' | 'cardValidationStatus'>> {
   const db = buildDatabase(env);
   const [tenantRow] = await db
     .select({
@@ -379,6 +415,7 @@ export async function resolveTenantPlan(
       trialEndsAt: tenants.trialEndsAt,
       tokenDailyLimitOverride: tenants.tokenDailyLimitOverride,
       paidOverflowDailyCap: tenants.paidOverflowDailyCap,
+      premiumDailyCap: tenants.premiumDailyCap,
       imageCreditsDailyLimit: tenants.imageCreditsDailyLimit,
       premiumOverride: tenants.premiumOverride,
       cardValidatedAt: tenants.cardValidatedAt,
@@ -408,6 +445,7 @@ export async function resolveTenantPlan(
     effectivePlan,
     tokenDailyLimitOverride: tenantRow.tokenDailyLimitOverride ?? null,
     paidOverflowDailyCap: tenantRow.paidOverflowDailyCap ?? null,
+    premiumDailyCap: tenantRow.premiumDailyCap ?? null,
     imageCreditsDailyLimit: tenantRow.imageCreditsDailyLimit ?? null,
     premiumOverride: tenantRow.premiumOverride === true,
     // A card counts as validated only when the flow COMPLETED (status + stamp) —
@@ -422,6 +460,25 @@ export async function resolveTenantPlan(
 // so every paid-plan gate — plan grant, premium override, AND superadmin bypass —
 // runs through one evaluator. `resolveTenantPlan` (below/above) stays here as the
 // gateway's plan resolver; the gate imports it.
+
+/**
+ * Resolve validated work-attribution hints for THIS request.
+ *
+ * Gateway, image and on-prem rows previously wrote `attribution: { agentHostId }`
+ * and nothing else, so every one of them landed with a NULL ticket and project and
+ * disappeared from the per-ticket / per-project cost rollups — which is to say
+ * "what did this ticket cost" quietly excluded the surface most spend goes through.
+ * The hints are validated against the authenticated tenant (see `usageWorkHints`),
+ * so a caller cannot attribute its spend to somebody else's ticket, and a hint that
+ * does not check out is dropped rather than allowed to fail the completion.
+ */
+async function resolveWorkHints(c: Context<HonoEnv>, access: TenantAccess, metadata?: unknown): Promise<UsageWorkHints> {
+  return resolveUsageWorkHints(
+    c.env,
+    access.tenantId,
+    readUsageWorkHints((name) => c.req.header(name), metadata),
+  );
+}
 
 /** What a passing {@link enforceTokenCaps} returns for the response headers/body. */
 interface TokenCapUsage {
@@ -609,6 +666,22 @@ async function isPaidOverflowExhausted(
   } catch {
     return false; // fail open — never let the cap query break a request
   }
+}
+
+/** The 429 a premium pin gets once the day's premium budget is spent. Names the cap
+ *  and when it resets, so the caller can retry precisely rather than poll. */
+function premiumCapExceededBody(cap: number) {
+  return {
+    error: {
+      message:
+        `Daily premium-model budget exhausted (cap $${(cap / 100_000).toFixed(2)}/day). `
+        + 'Premium pins resume at UTC midnight; your plan pool is unaffected. '
+        + 'Raise or remove the cap from workspace billing settings.',
+      type: 'premium_daily_cap_exceeded',
+      code: 'premium_daily_cap_exceeded',
+      capMillicents: cap,
+    },
+  };
 }
 
 /**
@@ -895,60 +968,6 @@ export async function requireTenantAccess(c: Context<HonoEnv>): Promise<TenantAc
   };
 }
 
-/**
- * Wrap a ReadableStream to intercept OpenRouter SSE usage data from the final
- * chunk before [DONE], then call onUsage with the extracted counts.
- *
- * OpenRouter emits usage in the second-to-last data line:
- *   data: {...,"usage":{"prompt_tokens":N,"completion_tokens":M,"total_tokens":P}}
- *   data: [DONE]
- */
-function wrapStreamForUsage(
-  source: ReadableStream<Uint8Array>,
-  onUsage: (usage: LlmUsage) => void,
-): ReadableStream<Uint8Array> {
-  const decoder = new TextDecoder();
-  let lastDataJson = '';
-
-  const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>({
-    transform(chunk, controller) {
-      const text = decoder.decode(chunk, { stream: true });
-      // Track the last non-[DONE] data line in this chunk
-      for (const line of text.split('\n')) {
-        const trimmed = line.trim();
-        if (trimmed.startsWith('data: ') && trimmed !== 'data: [DONE]') {
-          lastDataJson = trimmed.slice(6);
-        } else if (trimmed === 'data: [DONE]' && lastDataJson) {
-          try {
-            const parsed = JSON.parse(lastDataJson) as Record<string, unknown>;
-            const rawUsage = parsed['usage'];
-            if (rawUsage) {
-              // Reuse the vendor usage normalizer so the streaming path captures
-              // the same prompt-cache breakdown (cache_read/creation) as JSON.
-              const u = pickUsage(rawUsage);
-              onUsage({
-                promptTokens:     u.prompt_tokens     ?? 0,
-                completionTokens: u.completion_tokens ?? 0,
-                totalTokens:      u.total_tokens      ?? 0,
-                ...(u.cache_read_tokens     != null ? { cacheReadTokens:     u.cache_read_tokens     } : {}),
-                ...(u.cache_creation_tokens != null ? { cacheCreationTokens: u.cache_creation_tokens } : {}),
-              });
-            }
-          } catch (error) { /* ignore parse errors */ 
-            reportCaughtError(error, { source: "presentation/routes/llmRoutes.ts", operation: "transform" });
-          }
-        }
-      }
-      controller.enqueue(chunk);
-    },
-  });
-
-  source.pipeTo(writable).catch((error) => { /* stream may be cancelled by client */ 
-    reportCaughtError(error, { source: "presentation/routes/llmRoutes.ts", operation: "wrapStreamForUsage" });
-  });
-  return readable;
-}
-
 /** A completion whose body carries `tools` IS an agentic tool-loop (the VS Code
  *  Brain chat, on-prem hosts, any tool-calling SDK caller) — as opposed to a plain
  *  chat completion. This is the discriminator for the coding capability floor. */
@@ -1006,7 +1025,7 @@ function proxyForCompletion(
   env: Env,
   access: TenantAccess,
   body: ChatCompletionRequest,
-  opts: { disablePaidOverflow: boolean; anthropicOAuthToken?: string | null; openaiCodexAuth?: { accessToken: string; accountId: string } | null; xaiOAuthToken?: string | null; tenantVendorKeys?: TenantVendorKeys | null; hostEgress?: VendorEgress | null; byoVendorPriority?: readonly string[]; byoProviderPriorities?: readonly { vendor: string; priority: number | null }[]; openRouterConnections?: readonly import('../../application/llm/openRouterConnectionService').OpenRouterConnection[]; openRouterModelKeys?: Readonly<Record<string, string>>; byoRequired?: boolean; allowGatewayAuto?: boolean; byoDiagnostics?: ByoDiagnostics },
+  opts: { disablePaidOverflow: boolean; anthropicOAuthToken?: string | null; openaiCodexAuth?: { accessToken: string; accountId: string } | null; xaiOAuthToken?: string | null; tenantVendorKeys?: TenantVendorKeys | null; hostEgress?: VendorEgress | null; byoVendorPriority?: readonly string[]; byoAlertedVendors?: readonly string[]; byoProviderPriorities?: readonly { vendor: string; priority: number | null }[]; openRouterConnections?: readonly import('../../application/llm/openRouterConnectionService').OpenRouterConnection[]; openRouterModelKeys?: Readonly<Record<string, string>>; byoRequired?: boolean; allowGatewayAuto?: boolean; byoDiagnostics?: ByoDiagnostics },
 ): ReturnType<typeof llmProxyForPlan> {
   return llmProxyForPlan(env, access.effectivePlan, access.premiumOverride, {
     disablePaidOverflow: opts.disablePaidOverflow,
@@ -1017,6 +1036,7 @@ function proxyForCompletion(
     ...(opts.xaiOAuthToken ? { xaiOAuthToken: opts.xaiOAuthToken } : {}),
     ...(opts.tenantVendorKeys ? { tenantVendorKeys: opts.tenantVendorKeys } : {}),
     ...(opts.byoVendorPriority?.length ? { byoVendorPriority: opts.byoVendorPriority } : {}),
+    ...(opts.byoAlertedVendors?.length ? { byoAlertedVendors: opts.byoAlertedVendors } : {}),
     ...(opts.byoProviderPriorities?.length ? { byoProviderPriorities: opts.byoProviderPriorities } : {}),
     ...(opts.openRouterConnections?.length ? { openRouterConnections: opts.openRouterConnections } : {}),
     ...(opts.openRouterModelKeys && Object.keys(opts.openRouterModelKeys).length ? { openRouterModelKeys: opts.openRouterModelKeys } : {}),
@@ -1220,10 +1240,12 @@ async function handleGuestChat(c: Context<HonoEnv>): Promise<Response> {
   if (body.stream && result.response.body) {
     headers.set('cache-control', 'no-cache');
     headers.set('connection', 'keep-alive');
-    logFailovers(c.env, c.executionCtx, result.failovers);
+    logFailovers(c.env, c.executionCtx, result.failovers, { requestId: result.traceId ?? traceId });
     if (result.response.ok) {
-      const instrumented = wrapStreamForUsage(result.response.body, (usage) => {
-        c.executionCtx.waitUntil(guest.addTokens(visitorId, usage.totalTokens ?? 0));
+      const instrumented = wrapStreamForTrace(result.response.body, {
+        onUsage: (usage) => {
+          c.executionCtx.waitUntil(guest.addTokens(visitorId, usage.totalTokens ?? 0));
+        },
       });
       return new Response(instrumented, { status: result.response.status, headers });
     }
@@ -1231,7 +1253,7 @@ async function handleGuestChat(c: Context<HonoEnv>): Promise<Response> {
   }
 
   const upstream = await result.response.json() as Record<string, unknown>;
-  logFailovers(c.env, c.executionCtx, result.failovers);
+  logFailovers(c.env, c.executionCtx, result.failovers, { requestId: result.traceId ?? traceId });
   if (result.response.ok) {
     c.executionCtx.waitUntil(guest.addTokens(visitorId, result.usage?.totalTokens ?? 0));
   }
@@ -1821,12 +1843,30 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     const model = typeof parsed.model === 'string' ? parsed.model : 'unknown';
     const product = productNameForPlan(access.effectivePlan, access.premiumOverride);
     const idempotencyKey = c.req.header('idempotency-key') ?? null;
+    // Which ticket/project this spend belongs to — validated against THIS tenant, so a
+    // caller cannot bill another workspace's ticket. Resolved once for both branches.
+    const workHints = await resolveWorkHints(c, access, (parsed as { metadata?: unknown }).metadata);
 
     // Resolve the tenant's Anthropic credential — an API key OR a connected
     // Claude Pro/Max subscription (OAuth, auto-refreshed). Both pass through to
     // real Anthropic; they differ only in the auth header and (for OAuth) the
-    // required Claude Code system-prompt injection + oauth beta header.
-    const anthropicAuth = await resolveAnthropicAuth(c.env, access.tenantId);
+    // required Claude Code system-prompt injection + oauth beta header. The full
+    // resolution (not just the auth) is taken so a CONNECTED-but-unusable credential
+    // can be reported with its reason rather than looking like "nothing connected".
+    const anthropicResolution = await resolveAnthropicResolution(c.env, access.tenantId);
+
+    // ── Cloud-agent execution: fail closed, never bill the platform key ─────
+    // A cloud agent run executes on the WORKSPACE's own credential by contract
+    // (GAP-B2/B4). Without this gate a missing/undecryptable key fell through to the
+    // Messages⇄OpenAI translation below and served the turn from the platform pool —
+    // correct for ordinary gateway traffic, a billing leak for a cloud run. Scoped to
+    // requests that DECLARE themselves a cloud execution, so web/VSIX/on-prem chat
+    // keeps its platform-pool floor unchanged.
+    if (isCloudAgentExecutionRequest((name) => c.req.header(name))) {
+      const gate = classifyCloudByoAnthropic(anthropicResolution);
+      if (!gate.ok) return c.json(cloudByoFailureBody(gate), CLOUD_BYO_FAILURE_STATUS);
+    }
+    const anthropicAuth = anthropicResolution.auth;
 
     // ── BYO Anthropic credential → pass through to real Anthropic ───────────
     if (anthropicAuth) {
@@ -1871,7 +1911,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
               cacheCreationTokens: u.cache_creation_input_tokens ?? 0,
             },
             metadata: { engine: 'agent' }, idempotencyKey, useCase: 'agent',
-            tenantApiKeyId: access.tenantApiKeyId, attribution: { agentHostId: access.agentHostId },
+            tenantApiKeyId: access.tenantApiKeyId, attribution: { agentHostId: access.agentHostId, ...workHints },
             // This branch IS the tenant's connected Anthropic credential serving the
             // call, so name it — an unstamped byo row can't attribute to an integration.
             byo: true, byoProvider: 'anthropic', surface: resolveUsageSurface(c, access),
@@ -1892,7 +1932,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
             tenantId: access.tenantId, userId: access.userId, llmProduct: product, model,
             retries: 0, streamed: true, usage: parseAnthropicSseUsage(text),
             metadata: { engine: 'agent' }, idempotencyKey, useCase: 'agent',
-            tenantApiKeyId: access.tenantApiKeyId, attribution: { agentHostId: access.agentHostId },
+            tenantApiKeyId: access.tenantApiKeyId, attribution: { agentHostId: access.agentHostId, ...workHints },
             byo: true, byoProvider: 'anthropic', surface: resolveUsageSurface(c, access),
           });
         } catch (error) { /* metering is best-effort */ 
@@ -1944,7 +1984,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     // rather than the lite general backstop. (BYO-Claude turns were served above.)
     const service = proxyForCompletion(c.env, access, openaiBody as unknown as ChatCompletionRequest, { disablePaidOverflow, tenantVendorKeys, hostEgress: await buildHostEgress(c.env, access.tenantId) });
     const result = await service.complete(openaiBody as unknown as ChatCompletionRequest, undefined, traceId);
-    logFailovers(c.env, c.executionCtx, result.failovers);
+    logFailovers(c.env, c.executionCtx, result.failovers, { tenantId: access.tenantId, requestId: traceId });
     logProviderAuthAlerts(c.env, c.executionCtx, access.tenantId, result.failovers);
 
     if (streamed && result.response.body) {
@@ -1955,7 +1995,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
           retries: result.retries, streamed: true, usage,
           metadata: { engine: 'agent', resolvedModel: result.resolvedModel }, idempotencyKey,
           useCase: 'agent', tenantApiKeyId: access.tenantApiKeyId,
-          attribution: { agentHostId: access.agentHostId }, traceId,
+          attribution: { agentHostId: access.agentHostId, ...workHints }, traceId,
           paidOverflow: result.paidOverflow,
           byo: result.byoFunded ?? false,
           byoProvider: result.byoFunded ? normalizeByoProvider(result.resolvedVendor) : null,
@@ -1975,7 +2015,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       usage: result.usage ?? { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
       metadata: { engine: 'agent', resolvedModel: result.resolvedModel }, idempotencyKey,
       useCase: 'agent', tenantApiKeyId: access.tenantApiKeyId,
-      attribution: { agentHostId: access.agentHostId }, traceId,
+      attribution: { agentHostId: access.agentHostId, ...workHints }, traceId,
       paidOverflow: result.paidOverflow,
       byo: result.byoFunded ?? false,
       byoProvider: result.byoFunded ? normalizeByoProvider(result.resolvedVendor) : null,
@@ -2209,6 +2249,10 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     // (see STANDARD_BODY_FIELDS).
     const callerMetadata = (bodyAny.metadata as Record<string, unknown> | undefined) ?? null;
     const callerUseCase  = typeof bodyAny.useCase === 'string' ? bodyAny.useCase : null;
+    // Ticket/project attribution for this row — header first, then `metadata`, each
+    // validated against THIS tenant (see `usageWorkHints`). Without it every gateway
+    // and image row lands with a NULL ticket and vanishes from the cost rollups.
+    const workHints = await resolveWorkHints(c, access, callerMetadata);
     const idempotencyKey = c.req.header('Idempotency-Key') ?? null;
 
     // ── Strict-pin entitlement gate ─────────────────────────────────────────
@@ -2276,6 +2320,19 @@ export function createLlmRoutes(): Hono<HonoEnv> {
         cardValidated: access.cardValidated,
       });
       if (!premium.entitled) return c.json(premiumModelGateBody(premium), 402);
+      // ENTITLED IS NOT UNBOUNDED. Premium is the metered long tail — an Opus-class id
+      // at ~$75/M output — and until 0952 nothing capped it: the overflow cap is -1 for
+      // paid plans and premium models are deliberately not in PAID_OVERFLOW_MODELS, so
+      // a runaway agent pinned to an expensive model could bill without bound inside a
+      // single UTC day. 429, not 402: the tenant IS entitled and has simply spent
+      // today's budget — that distinction is what tells a client to retry tomorrow
+      // rather than to go and buy something.
+      if (await isPremiumCapExhausted(c.env, access.tenantId, access.premiumDailyCap, { isSuperadmin: access.isSuperadmin })) {
+        const cap = resolvePremiumDailyCapMillicents(access.premiumDailyCap);
+        return c.json(premiumCapExceededBody(cap), 429, {
+          'Retry-After': String(secondsUntilNextUtcMidnight()),
+        });
+      }
     }
 
     // ── Token usage + limit checks (daily + monthly) ────────────────────────
@@ -2377,7 +2434,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       ? bodyAny.routingMode
       : undefined;
     if (bodyAny.routingMode != null && routingMode == null) delete bodyAny.routingMode;
-    const service = proxyForCompletion(c.env, access, body, { disablePaidOverflow, anthropicOAuthToken, openaiCodexAuth, xaiOAuthToken, tenantVendorKeys, hostEgress, byoVendorPriority: tenantCreds.vendorPriority, byoProviderPriorities: tenantCreds.providerPriorities, openRouterConnections: tenantCreds.openRouterConnections, openRouterModelKeys: tenantCreds.openRouterModelKeys, byoRequired: routingMode === 'byo_pool' || (routingMode == null && tenantCreds.configuredProviders.length > 0), allowGatewayAuto: routingMode === 'auto', byoDiagnostics: { configuredProviders: tenantCreds.configuredProviders, unresolvedReasons: tenantCreds.unresolvedReasons as Record<string, string> } });
+    const service = proxyForCompletion(c.env, access, body, { disablePaidOverflow, anthropicOAuthToken, openaiCodexAuth, xaiOAuthToken, tenantVendorKeys, hostEgress, byoVendorPriority: tenantCreds.vendorPriority, byoAlertedVendors: tenantCreds.alertedVendors ?? [], byoProviderPriorities: tenantCreds.providerPriorities, openRouterConnections: tenantCreds.openRouterConnections, openRouterModelKeys: tenantCreds.openRouterModelKeys, byoRequired: routingMode === 'byo_pool' || (routingMode == null && tenantCreds.configuredProviders.length > 0), allowGatewayAuto: routingMode === 'auto', byoDiagnostics: { configuredProviders: tenantCreds.configuredProviders, unresolvedReasons: tenantCreds.unresolvedReasons as Record<string, string> } });
     // Context-fit seeding: estimate the turn's tokens so the proxy drops
     // small-window models from the first-pass seed. This is the preventive half
     // of the Brain "dies after several executions" fix — the reactive 413
@@ -2515,7 +2572,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       upstreamHeaders.set('connection', 'keep-alive');
 
       // Log any failovers that happened before this successful model
-      logFailovers(c.env, c.executionCtx, result.failovers);
+      logFailovers(c.env, c.executionCtx, result.failovers, { tenantId: access.tenantId, requestId: traceId });
       logProviderAuthAlerts(c.env, c.executionCtx, access.tenantId, result.failovers);
 
       // Full diagnostic trace (builder-side only). For streams the completion
@@ -2531,26 +2588,38 @@ export function createLlmRoutes(): Hono<HonoEnv> {
         responseBody: null, errorMessage: null,
       });
 
-      // Wrap the stream to capture usage from the final SSE chunk
-      const instrumentedStream = wrapStreamForUsage(
-        result.response.body,
-        (usage) => {
+      // Tee the stream so the trace row gets BOTH halves it can only learn in
+      // passing: the token counts from the final usage frame, and the completion
+      // body reassembled from the deltas (`response_body` was null on every
+      // streamed trace until this tee existed).
+      const instrumentedStream = wrapStreamForTrace(result.response.body, {
+        onUsage: (usage) => {
           logUsage(c.env, c.executionCtx, {
             tenantId: access.tenantId, userId: access.userId, llmProduct,
             model: result.resolvedModel, retries: result.retries, streamed: true, usage,
             metadata: callerMetadata, idempotencyKey, useCase: callerUseCase,
-            tenantApiKeyId: access.tenantApiKeyId, attribution: { agentHostId: access.agentHostId }, traceId,
+            tenantApiKeyId: access.tenantApiKeyId, attribution: { agentHostId: access.agentHostId, ...workHints }, traceId,
             paidOverflow: result.paidOverflow,
             byo: result.byoFunded ?? false,
             byoProvider: result.byoFunded ? normalizeByoProvider(result.resolvedVendor) : null,
             surface: resolveUsageSurface(c, access),
             premiumSurcharge: platformSurcharge,
+            premium: premiumServed,
           });
           // Back-fill the streamed trace row (logged above with 0 tokens) [1298].
           backfillTraceUsage(c.env, c.executionCtx, traceId, usage);
           recordBrainChatModelActivity();
         },
-      );
+        onComplete: (completion) => {
+          backfillTraceResponseBody(c.env, c.executionCtx, traceId, {
+            streamed: true,
+            content: completion.content,
+            finishReason: completion.finishReason,
+            model: completion.model,
+            ...(completion.toolCalls.length > 0 ? { toolCalls: completion.toolCalls } : {}),
+          });
+        },
+      });
 
       return new Response(instrumentedStream, {
         status: result.response.status,
@@ -2562,19 +2631,20 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     const upstream = await result.response.json() as Record<string, unknown>;
 
     // Log any failovers, then log usage
-    logFailovers(c.env, c.executionCtx, result.failovers);
+    logFailovers(c.env, c.executionCtx, result.failovers, { tenantId: access.tenantId, requestId: traceId });
     logProviderAuthAlerts(c.env, c.executionCtx, access.tenantId, result.failovers);
     logUsage(c.env, c.executionCtx, {
       tenantId: access.tenantId, userId: access.userId, llmProduct,
       model: result.resolvedModel, retries: result.retries, streamed: false,
       usage: result.usage ?? { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
       metadata: callerMetadata, idempotencyKey, useCase: callerUseCase,
-      tenantApiKeyId: access.tenantApiKeyId, attribution: { agentHostId: access.agentHostId }, traceId,
+      tenantApiKeyId: access.tenantApiKeyId, attribution: { agentHostId: access.agentHostId, ...workHints }, traceId,
       paidOverflow: result.paidOverflow,
       byo: result.byoFunded ?? false,
       byoProvider: result.byoFunded ? normalizeByoProvider(result.resolvedVendor) : null,
       surface: resolveUsageSurface(c, access),
       premiumSurcharge: platformSurcharge,
+      premium: premiumServed,
     });
     recordBrainChatModelActivity();
 
@@ -2851,10 +2921,11 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       return respondToAccessError(c, err);
     }
 
-    const rawScope = c.req.query('scope') ?? 'tenant';
-    // `tenant` resolves to the caller's own tenant id; `global` and `project:<id>`
-    // pass through. Anything malformed → 400.
-    const scope = rawScope === 'tenant'
+    const rawScope = c.req.query('scope') ?? OWN_TENANT_SCOPE_TOKEN;
+    // `tenant` resolves to the caller's own tenant id (a client cannot know it, so the
+    // shared contract spells that token once); `global` and `project:<id>` pass
+    // through. Anything malformed → 400.
+    const scope = rawScope === OWN_TENANT_SCOPE_TOKEN
       ? ({ kind: 'tenant', id: access.tenantId } as const)
       : parseScopeToken(rawScope);
     if (!scope) return c.json({ error: `invalid scope '${rawScope}' (use project:<id> | tenant | global)` }, 400);
@@ -2880,12 +2951,19 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       .map(([actionType, models]) => ({
         actionType,
         label: actionTypeLabel(actionType),
+        // The row carries EVERY field `rankModelsForAction` consumes, not just the
+        // display ones: this endpoint is also the on-prem/IDE host's read of the
+        // learned table, and a client that cannot see the thumbs or the 429 share
+        // would rank the same evidence differently from the cloud router.
         models: (models ?? []).map((m) => ({
           model: m.model,
           samples: m.n,
           avgScore: Math.round(m.avgScore * 1000) / 1000,
           mergeRate: Math.round(m.mergeRate * 1000) / 1000,
           avgCostMillicents: Math.round(m.avgCostMc),
+          ratedUp: m.ratedUp ?? 0,
+          ratedDown: m.ratedDown ?? 0,
+          rateLimitRate: Math.round((m.rateLimitRate ?? 0) * 1000) / 1000,
         })),
       }));
     return c.json({ scope: scopeToken(scope), updatedAt: table.updatedAt, byAction });
@@ -2954,38 +3032,17 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     } catch (err) {
       return respondToAccessError(c, err);
     }
-    const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+    const body = await c.req.json().catch(() => ({}));
 
-    const clientRunId = typeof body.clientRunId === 'string' ? body.clientRunId.trim() : '';
-    const model = typeof body.model === 'string' ? body.model.trim() : '';
-    if (!clientRunId || !model) {
-      return c.json({ error: 'clientRunId and model are required' }, 400);
-    }
-    // `terminalStatus` wins; `success:boolean` is a friendly alias.
-    const terminalStatus: TerminalStatus =
-      body.terminalStatus === 'completed' || body.terminalStatus === 'failed' || body.terminalStatus === 'cancelled'
-        ? body.terminalStatus
-        : body.success === true ? 'completed' : body.success === false ? 'failed' : 'completed';
-    const source: OutcomeSource =
-      body.source === 'onprem' || body.source === 'ide' || body.source === 'external' ? body.source : 'external';
-    const num = (v: unknown): number | undefined => (typeof v === 'number' && Number.isFinite(v) ? v : undefined);
+    // Validation + normalization is the SHARED contract (`@builderforce/learned-routing`),
+    // the same module the on-prem host builds its body from — so the door and the only
+    // client that knocks on it can never disagree about a field name, and a signal the
+    // client CAN report (`rateLimited`) cannot be silently dropped here.
+    const parsed = parseRunOutcomeRequest(body);
+    if (!parsed.ok) return c.json({ error: parsed.error }, 400);
 
     const db = buildDatabase(c.env);
-    await recordClientRunOutcome(c.env, db, access.tenantId, {
-      clientRunId,
-      source,
-      model,
-      terminalStatus,
-      ...(typeof body.actionType === 'string' ? { actionType: body.actionType } : {}),
-      ...(num(body.projectId) != null ? { projectId: num(body.projectId) } : {}),
-      ...(num(body.taskId) != null ? { taskId: num(body.taskId) } : {}),
-      ...(typeof body.merged === 'boolean' ? { merged: body.merged } : {}),
-      ...(typeof body.ciGreen === 'boolean' ? { ciGreen: body.ciGreen } : {}),
-      ...(typeof body.degraded === 'boolean' ? { degraded: body.degraded } : {}),
-      ...(num(body.steps) != null ? { steps: num(body.steps) } : {}),
-      ...(num(body.costMc) != null ? { costMc: num(body.costMc) } : {}),
-      ...(typeof body.approved === 'boolean' ? { approved: body.approved } : {}),
-    });
+    await recordClientRunOutcome(c.env, db, access.tenantId, parsed.outcome);
     return c.json({ ok: true });
   });
 
@@ -3231,6 +3288,9 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     if (!body || (typeof body.input !== 'string' && !Array.isArray(body.input))) {
       return c.json({ error: '`input` must be a string or array of strings' }, 400);
     }
+    // Embedding spend belongs to a ticket/project too — a RAG index rebuild is real
+    // cost against real work. Validated against THIS tenant before it is written.
+    const workHints = await resolveWorkHints(c, access, body.metadata);
 
     // Plan/daily/monthly token cap — gate BEFORE the funded vendor call so a
     // cap-exhausted (or per-agentHost-limited) tenant can't loop the operator's
@@ -3286,7 +3346,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
         useCase: 'embedding',
         metadata: { vendor: result.vendorUsed, ...(tokensEstimated ? { tokensEstimated: true } : {}) },
         tenantApiKeyId: access.tenantApiKeyId,
-        attribution: { agentHostId: access.agentHostId },
+        attribution: { agentHostId: access.agentHostId, ...workHints },
         // Funded (operator key) — byo defaults false, so the row is always billable.
         surface: resolveUsageSurface(c, access),
       });
@@ -3340,6 +3400,10 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     const bodyAny = body as Record<string, unknown>;
     const callerMetadata = (bodyAny.metadata as Record<string, unknown> | undefined) ?? null;
     const callerUseCase  = typeof bodyAny.useCase === 'string' ? bodyAny.useCase : null;
+    // Ticket/project attribution for this row — header first, then `metadata`, each
+    // validated against THIS tenant (see `usageWorkHints`). Without it every gateway
+    // and image row lands with a NULL ticket and vanishes from the cost rollups.
+    const workHints = await resolveWorkHints(c, access, callerMetadata);
     const idempotencyKey = c.req.header('Idempotency-Key') ?? null;
 
     const productName = imageProductNameForPlan(access.effectivePlan, access.premiumOverride);
@@ -3349,7 +3413,12 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     // stops. Reuses the shared `isPaidOverflowExhausted` gate.
     const disablePaidOverflow = await isPaidOverflowExhausted(c, access);
     const service = imageProxyForPlan(c.env, access.effectivePlan, access.premiumOverride, { disablePaidOverflow });
+    // Images get the same authoritative trace id chat does, so a consumer can quote
+    // ONE id for either surface and a superadmin can look it up the same way.
+    const traceId = newTraceId();
+    const imageStartedAt = Date.now();
     const result = await service.generate(body);
+    const imageDurationMs = Date.now() - imageStartedAt;
 
     // Image accounting: still charge a flat per-image token estimate onto the
     // usage row (retained for cost rollups), but image generation is now gated by
@@ -3361,17 +3430,47 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     const cascadeExhausted = result.body.data.length === 0;
 
     // Log usage (always, even on cascade-exhausted runs so failure rates are visible).
-    logFailovers(c.env, c.executionCtx, result.failovers);
+    logFailovers(c.env, c.executionCtx, result.failovers, { tenantId: access.tenantId });
     logUsage(c.env, c.executionCtx, {
       tenantId: access.tenantId, userId: access.userId, llmProduct: productName,
       model: result.resolvedModel, retries: result.retries, streamed: false,
       usage: { promptTokens: 0, completionTokens: 0, totalTokens: billedTokens },
       metadata: callerMetadata, idempotencyKey, useCase: callerUseCase,
-      tenantApiKeyId: access.tenantApiKeyId, attribution: { agentHostId: access.agentHostId },
+      tenantApiKeyId: access.tenantApiKeyId, attribution: { agentHostId: access.agentHostId, ...workHints },
       paidOverflow: result.paidOverflow,
       // No `byo`: image generation has no tenant-credential path (imageProxyForPlan
       // never takes tenant vendor keys), so every image row is platform-funded.
       surface: resolveUsageSurface(c, access),
+    });
+
+    // Full diagnostic trace. `ImageProxyService` returns an `ImageProxyResult`, not
+    // a `ProxyResult`, so it reaches the ONE trace writer through the shared
+    // `imageTraceResult` adapter rather than a second copy of the row builder.
+    const imageError = (result.body as unknown as { _builderforceError?: { message?: string } })._builderforceError;
+    logTrace(c.env, c.executionCtx, {
+      traceId, surface: 'image',
+      tenantId: access.tenantId, userId: access.userId, agentHostId: access.agentHostId,
+      tenantApiKeyId: access.tenantApiKeyId, llmProduct: productName,
+      effectivePlan: access.effectivePlan, premiumOverride: access.premiumOverride,
+      result: imageTraceResult(result, { durationMs: imageDurationMs }),
+      usage: { promptTokens: 0, completionTokens: 0, totalTokens: billedTokens },
+      streamed: false, useCase: callerUseCase, idempotencyKey,
+      consumerRequestId: c.req.header('x-request-id') ?? c.req.header('x-correlation-id') ?? null,
+      requestIp: c.req.header('cf-connecting-ip') ?? null,
+      origin: c.req.header('Origin') ?? null,
+      userAgent: c.req.header('User-Agent') ?? null,
+      requestBody: body as unknown as Record<string, unknown>,
+      callerMetadata,
+      // The image DATA urls/base64 are deliberately NOT stored: they are megabytes
+      // of payload with no diagnostic value. What a trace is opened for is which
+      // model served, how many images came back, and why a run returned none.
+      responseBody: {
+        created: result.body.created,
+        model: result.body.model,
+        images: imagesReturned,
+        ...(result.failovers.length > 0 ? { failovers: result.failovers } : {}),
+      },
+      errorMessage: imageError?.message ?? null,
     });
 
     if (cascadeExhausted) {
@@ -3382,7 +3481,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
           message: 'Image vendor cascade exhausted. Retry shortly or simplify the prompt.',
           code: 429,
           type: 'rate_limit_error',
-          details: { failovers: result.failovers },
+          details: { failovers: result.failovers, correlationId: traceId, traceId },
         },
       }, 429);
     }
@@ -3392,6 +3491,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       data: result.body.data,
       model: result.body.model,
       _builderforce: {
+        traceId,
         resolvedModel: result.resolvedModel,
         resolvedVendor: result.resolvedVendor,
         retries: result.retries,

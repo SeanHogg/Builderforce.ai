@@ -308,6 +308,23 @@ export function templateForProject(project: SeedableProject): Record<string, str
 const ALL_TEMPLATE_PATHS = new Set(Object.values(TEMPLATES).flatMap((t) => Object.keys(t)));
 
 /**
+ * Is this workspace-relative path a file that some starter scaffold owns?
+ *
+ * Used by the write chokepoint to refuse a ZERO-BYTE write at one of these
+ * paths. A Mobile project was once observed with all five scaffold paths present
+ * in R2 at size 0 — something wrote empty objects at exactly those keys, and the
+ * writer was never identified. Rather than keep hunting the caller, the invariant
+ * is enforced where every writer must pass: a scaffold file may be edited or
+ * deleted, but it may never be *emptied*, because an empty `package.json` /
+ * `index.html` / `vite.config.js` is never a state a user or an agent means to
+ * reach — it only ever breaks Run. Cross-runtime twin: `isScaffoldPath` in
+ * `frontend/src/lib/vanillaDefaults.ts`, pinned by `templateParity.test.ts`.
+ */
+export function isScaffoldPath(path: string): boolean {
+  return ALL_TEMPLATE_PATHS.has(path);
+}
+
+/**
  * The project's IDE workspace looks FULLY unseeded when NO template file is
  * present with content — i.e. it is freshly-created (no objects) or legacy (the
  * template paths exist but are empty). Used to decide whether to import a linked

@@ -1,17 +1,34 @@
 import * as vscode from "vscode";
-import { runAgent } from "./agent";
-import { ChatMessage, SECRET_KEY, fetchLimbicBlock } from "./gateway";
-import { getCurrentUserId, createBrainChat, appendBrainMessages, updateBrainChatProject } from "./bfApi";
-import { formatEvermindLearnStep } from "@seanhogg/builderforce-brain-embedded";
-import { formatChatError } from "./upgradeAction";
-import { getGroundingSummary } from "./grounding";
+import { formatEvermindLearnStep, type ChatCompletionMessage } from "@seanhogg/builderforce-brain-embedded";
+import { ChatMessage, SECRET_KEY, fetchLimbicBlock, getBaseUrl } from "./gateway";
+import {
+  getCurrentUserId,
+  createBrainChat,
+  appendBrainMessages,
+  fetchRunContextSection,
+  projectEvermindHooks,
+  updateBrainChatProject,
+} from "./bfApi";
+import { formatChatErrorVerdict } from "./upgradeAction";
+import { getGroundingWithHistory } from "./grounding";
 import { getEditorContextLive } from "./editorContext";
 import { editorContextDirective } from "./idePersona";
 import { resolveEffectiveModelChoice } from "./modelState";
 import { getSelectedProject } from "./projectState";
 import { buildSystemMessages } from "./prompt";
+import { TOOL_DEFS, type ToolDef } from "./fileTools";
+import { listPlatformTools } from "./platformTools";
+import { cognitionToolDefs } from "./cognition";
+import { createNativeStream, runNativeBrain, unlinkedRunId, type NativeApprovalRequest } from "./nativeBrainRun";
 
 const PARTICIPANT_ID = "builderforce.agent";
+
+/**
+ * Tool-iteration ceiling for a native turn. Higher than the shared default because the
+ * participant runs a real coding loop against an open workspace, where a single request
+ * ("rename this across the repo") legitimately spans many read/edit turns.
+ */
+const MAX_ITERATIONS = 40;
 
 /**
  * Recover the session's Brain chat id from the native chat history: it is stashed in
@@ -31,6 +48,29 @@ function priorBrainChatId(history: readonly vscode.ChatRequestTurn[] | readonly 
 }
 
 /**
+ * The shared run loop takes ONE system prompt string plus a plain conversation seed,
+ * where this surface has always assembled a list of `system` messages (persona, active
+ * project, workspace map, editor context, limbic block, governance). Fold them here —
+ * order preserved, so the model reads exactly what it read before.
+ */
+function splitSystemPrompt(messages: readonly ChatMessage[]): {
+  systemPrompt: string;
+  seed: ChatCompletionMessage[];
+} {
+  const system: string[] = [];
+  const seed: ChatCompletionMessage[] = [];
+  for (const message of messages) {
+    const content = typeof message.content === "string" ? message.content : "";
+    if (message.role === "system") {
+      if (content) system.push(content);
+    } else if (content) {
+      seed.push({ role: message.role, content });
+    }
+  }
+  return { systemPrompt: system.join("\n\n"), seed };
+}
+
+/**
  * The shared chat request handler — drives the agent loop and streams into a
  * ChatResponseStream. Used by BOTH the native @builderforce participant and the
  * dedicated chat-session tab (so there is one implementation).
@@ -39,8 +79,9 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext): vscode.
   return async (request, context, stream, token) => {
     const key = await ctx.secrets.get(SECRET_KEY);
     if (!key) {
-      stream.markdown("You're not signed in to BuilderForce.\n\n");
-      stream.button({ command: "builderforce.signIn", title: "Sign in to BuilderForce" });
+      stream.markdown(vscode.l10n.t("You're not signed in to BuilderForce."));
+      stream.markdown("\n\n");
+      stream.button({ command: "builderforce.signIn", title: vscode.l10n.t("Sign in to BuilderForce") });
       return {};
     }
 
@@ -62,7 +103,31 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext): vscode.
     // selection" to what's open and knows where the code lives instead of asking.
     // Read fresh each turn; awaited so git is resolved on the very first turn.
     const editorCtx = editorContextDirective(await getEditorContextLive());
-    const messages: ChatMessage[] = [...buildSystemMessages(root, getGroundingSummary(), editorCtx, limbicBlock)];
+    // The PLATFORM context — strategy (OKRs), the ticket PRD, project + agent governance,
+    // durable project memory and prior Evermind lessons — from the api's ONE
+    // `ContextSource`. This is the block that brings the IDE agent up to the cloud
+    // engine's context set; without it the editor worked a project it had never been told
+    // the requirements or the rules of. Continuity-scoped to THIS conversation (the Brain
+    // chat carried in prior turns' metadata) so the reconciler measures the delta against
+    // what this chat was already told. Best-effort: '' when signed out / project-less.
+    const selectedProject = getSelectedProject();
+    const priorChatId = priorBrainChatId(context.history);
+    const platformContext = selectedProject
+      ? await fetchRunContextSection(ctx.secrets, selectedProject.id, {
+          ...(priorChatId != null ? { scope: `chat:${priorChatId}` } : {}),
+          query: request.prompt,
+        })
+      : "";
+    const messages: ChatMessage[] = [
+      ...buildSystemMessages(
+        root,
+        await getGroundingWithHistory(root),
+        editorCtx,
+        limbicBlock,
+        selectedProject,
+        platformContext,
+      ),
+    ];
     // Reconstruct prior turns from the native chat history.
     for (const turn of context.history) {
       if (turn instanceof vscode.ChatRequestTurn) {
@@ -80,7 +145,6 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext): vscode.
         if (text) messages.push({ role: "assistant", content: text });
       }
     }
-    messages.push({ role: "user", content: request.prompt });
 
     const abort = new AbortController();
     token.onCancellationRequested(() => abort.abort());
@@ -90,52 +154,82 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext): vscode.
     // runs — best-effort, gated by `builderforce.evermindLearning`).
     let assistantText = "";
 
-    const activeProject = getSelectedProject();
+    const activeProject = selectedProject;
     // Resolve THIS session's Brain chat: reuse the one carried in prior turns'
     // response metadata, else create one lazily (scoped to the active project) so the
     // work this chat does — created tickets, from_delta code-change captures — links
     // back to a real conversation, exactly like the webview Brain. Best-effort: a null
-    // id just runs unlinked (the code-change backstop still mints a ticket).
-    let brainChatId = priorBrainChatId(context.history);
+    // id just runs unlinked (the chat-scoped backstops then have nothing to link to).
+    let brainChatId = priorChatId;
     if (brainChatId == null) {
-      const title = request.prompt.trim().slice(0, 80) || "VS Code chat";
+      const title = request.prompt.trim().slice(0, 80) || vscode.l10n.t("VS Code chat");
       brainChatId = (await createBrainChat(ctx.secrets, { title, projectId: activeProject?.id ?? null })) ?? undefined;
     }
-    await runAgent(
-      messages,
-      {
-        secrets: ctx.secrets,
-        root,
-        sdkConfigDir: vscode.Uri.joinPath(ctx.globalStorageUri, "claude-agent-sdk").fsPath,
-        ...(activeProject ? { projectId: activeProject.id } : {}),
-        ...(brainChatId != null ? { chatId: brainChatId } : {}),
-        model: modelChoice.model,
-        modelStrict: modelChoice.modelStrict,
-        routingMode: modelChoice.routingMode,
-        permissionMode,
-        approve: async (summary) => {
-          const pick = await vscode.window.showWarningMessage(
-            `BuilderForce wants to ${summary}.`,
-            { modal: true },
-            "Apply",
-            "Skip",
-          );
-          return pick === "Apply";
-        },
-        signal: abort.signal,
+
+    // The SAME brain as the web: local workspace tools (file edits) + Evermind's
+    // write-through `remember_fact` + the SHARED, server-side platform catalog
+    // (projects, tasks, OKRs, specs, …) fetched from the gateway MCP relay. File tools
+    // need a workspace; `remember_fact` needs only a project (works chat-only). Gate
+    // each on what it actually requires.
+    const cognitionTools = activeProject ? cognitionToolDefs(ctx.secrets, activeProject.id) : [];
+    const platformTools = await listPlatformTools(ctx.secrets);
+    const tools: ToolDef[] = [...(root ? TOOL_DEFS : []), ...cognitionTools, ...platformTools];
+
+    const { systemPrompt, seed } = splitSystemPrompt(messages);
+
+    await runNativeBrain({
+      // With no server chat (the platform was unreachable) the run still needs a cell
+      // key; a unique negative id keeps it isolated and unmistakable for a real chat.
+      chatId: brainChatId ?? unlinkedRunId(),
+      systemPrompt,
+      seed,
+      userTurn: request.prompt,
+      tools,
+      root: root ?? "",
+      // The chat-scoped backstops (mint a ticket for an unrecorded code change, advance
+      // a linked ticket off backlog) write a link against a REAL conversation, so they
+      // are gated on one existing — minting a ticket against a chat id that does not
+      // exist would be worse than not minting it.
+      ...(activeProject && brainChatId != null ? { projectId: activeProject.id } : {}),
+      // Memory, by contrast, is scoped to the PROJECT and needs no chat: a turn that
+      // could not create a conversation can still be answered from memory for free.
+      ...(activeProject ? { evermind: projectEvermindHooks(ctx.secrets, activeProject.id) } : {}),
+      ...(brainChatId == null ? { chatMode: "chat" as const } : {}),
+      ...(modelChoice.model ? { model: modelChoice.model } : {}),
+      modelStrict: modelChoice.modelStrict,
+      ...(modelChoice.routingMode ? { routingMode: modelChoice.routingMode } : {}),
+      permissionMode,
+      maxIterations: MAX_ITERATIONS,
+      stream: createNativeStream(getBaseUrl(), key),
+      signal: abort.signal,
+      approve: async (req: NativeApprovalRequest) => {
+        const prompt = req.gateReason
+          ? vscode.l10n.t('Governance: approve "{0}"? {1}', req.label, req.gateReason)
+          : vscode.l10n.t("BuilderForce wants to {0}.", req.label);
+        const apply = vscode.l10n.t("Apply");
+        const pick = await vscode.window.showWarningMessage(prompt, { modal: true }, apply, vscode.l10n.t("Skip"));
+        return pick === apply;
       },
-      {
-        onText: (delta) => { assistantText += delta; stream.markdown(delta); },
+      labels: {
+        dispatchHint: vscode.l10n.t(
+          "_This turn reached its tool budget. For work this long, dispatch a cloud agent from the board instead — it runs without a turn limit._",
+        ),
+        blockedByPolicy: (reason: string) => vscode.l10n.t("Blocked by a governance gate: {0}", reason),
+      },
+      events: {
+        onText: (delta) => {
+          assistantText += delta;
+          stream.markdown(delta);
+        },
         onToolStart: (label) => stream.progress(label),
         onToolResult: (label, ok) => stream.markdown(`\n\n${ok ? "✓" : "✗"} ${label}\n\n`),
         // An entitlement failure gets the fix appended as a link (Upgrade / Add a
         // card) — same verdict the webview banner renders as a button, so the two
-        // chat surfaces never disagree about what a block means. Falls back to the
-        // bare message for an ordinary error.
-        onError: (message, cause) =>
-          stream.markdown(`\n\n**Error:** ${formatChatError(cause ?? message)}\n`),
+        // chat surfaces never disagree about what a block means.
+        onError: (message, action) =>
+          stream.markdown(`\n\n**${vscode.l10n.t("Error:")}** ${formatChatErrorVerdict(message, action)}\n`),
       },
-    );
+    });
 
     // Persist the turn into the SAME Brain store the webview + web app read, so the
     // linked chat carries the actual conversation (not just ticket lineage). This is

@@ -35,6 +35,7 @@ import { resolveApproval } from "./approval-gate.js";
 import { performHostEgress } from "./host-egress.js";
 import {
   makeCodingAgent,
+  makeCodingFs,
   makeCodingGit,
   makeCodingHttp,
 } from "./builderforce-coding-dispatch-adapters.js";
@@ -62,6 +63,8 @@ import {
   isCloned,
   detectTaskChanges,
   sweepStaleTaskWorkspaces,
+  releaseTaskWorkspaceOnTerminal,
+  type TaskTerminalState,
 } from "./task-workspace.js";
 import { setRelayHook } from "./workflow-telemetry.js";
 
@@ -413,52 +416,86 @@ export class BuilderforceRelayService implements IRelayService {
       // Anthropic-Messages endpoint lives under /llm.
       anthropicBaseUrl: `${normalizeBaseUrl(this.opts.baseUrl)}/llm`,
       gatewayAuthKey: this.opts.apiKey,
+      // Declare what this run IS to the gateway: a self-hosted host execution. The
+      // gateway attributes usage from it and — for a CLOUD runner declaring
+      // `cloud` — applies the fail-closed BYO rule (GAP-B2/B4), which on-prem
+      // traffic is deliberately exempt from.
+      surface: "on_prem",
+      ...(payload.executionId != null ? { executionId: payload.executionId } : {}),
       abortController,
       sinks,
     });
-    let result: { ok: boolean; text: string };
+    // The terminal state this run ended in, or null when it completed normally (the
+    // ticket stays open and KEEPS its workspace — it is the shared ticket context).
+    // Every non-null value releases the workspace in the `finally` below (GAP-W2):
+    // before this, only the Done path tore down, so an errored/cancelled run leaked
+    // `.builderforce/tasks/<taskId>` (and its clone) until the 24h stale sweep.
+    let terminal: TaskTerminalState | null = null;
     try {
-      const run = await engine.run({
-        // Assigned Skills/Personas/Content ride as the system prompt (the SDK
-        // engine folds it into the prompt); the task message is the user content.
-        systemPrompt: appendSystemPrompt,
-        userContent: prompt,
-        model: payload.model,
-        signal: abortController.signal,
-        ...(payload.policyGates?.length ? { policy: { gates: payload.policyGates } } : {}),
-      });
-      result = { ok: run.ok, text: run.output };
-    } finally {
-      if (payload.executionId != null) {
-        this.v2Aborts.delete(payload.executionId);
+      let result: { ok: boolean; text: string };
+      try {
+        const run = await engine.run({
+          // Assigned Skills/Personas/Content ride as the system prompt (the SDK
+          // engine folds it into the prompt); the task message is the user content.
+          systemPrompt: appendSystemPrompt,
+          userContent: prompt,
+          model: payload.model,
+          signal: abortController.signal,
+          ...(payload.policyGates?.length ? { policy: { gates: payload.policyGates } } : {}),
+        });
+        result = { ok: run.ok, text: run.output };
+      } finally {
+        if (payload.executionId != null) {
+          this.v2Aborts.delete(payload.executionId);
+        }
       }
-    }
 
-    // If the run was cancelled, the API already flipped the row to CANCELLED (a
-    // terminal state); don't report completed/failed over it.
-    if (abortController.signal.aborted) {
+      // If the run was cancelled, the API already flipped the row to CANCELLED (a
+      // terminal state); don't report completed/failed over it. The workspace is
+      // still committed/pushed + released by the terminal hook below.
+      if (abortController.signal.aborted) {
+        await this.emitTaskChanges(cwd, agentLabel, payload.executionId, payload.taskId);
+        terminal = "cancelled";
+        return;
+      }
+
+      // Attribute the files this agent changed (traceability), then commit + push
+      // them to the ticket branch as pending changes.
       await this.emitTaskChanges(cwd, agentLabel, payload.executionId, payload.taskId);
-      return;
-    }
+      if (payload.taskId != null && payload.repo?.repoId) {
+        await this.commitAndPushTicketBranch(
+          payload.taskId,
+          payload.repo,
+          payload.title ?? `Task ${payload.taskId}`,
+          agentLabel,
+        );
+      }
 
-    // Attribute the files this agent changed (traceability), then commit + push
-    // them to the ticket branch as pending changes.
-    await this.emitTaskChanges(cwd, agentLabel, payload.executionId, payload.taskId);
-    if (payload.taskId != null && payload.repo?.repoId) {
-      await this.commitAndPushTicketBranch(
-        payload.taskId,
-        payload.repo,
-        payload.title ?? `Task ${payload.taskId}`,
-        agentLabel,
-      );
-    }
-
-    if (payload.executionId != null) {
-      await this.reportExecutionState(
-        payload.executionId,
-        result.ok ? "completed" : "failed",
-        result.ok ? { result: result.text } : { errorMessage: result.text },
-      );
+      if (payload.executionId != null) {
+        await this.reportExecutionState(
+          payload.executionId,
+          result.ok ? "completed" : "failed",
+          result.ok ? { result: result.text } : { errorMessage: result.text },
+        );
+      }
+      if (!result.ok) terminal = "failed";
+    } catch (err) {
+      // The engine threw before it could report anything — still a terminal end.
+      const message = err instanceof Error ? err.message : String(err);
+      logWarn(`[builderforce] V2 run failed: ${message}`);
+      terminal = "aborted";
+      if (payload.executionId != null) {
+        await this.reportExecutionState(payload.executionId, "failed", { errorMessage: message });
+      }
+    } finally {
+      if (payload.taskId != null && terminal) {
+        await this.releaseTaskWorkspace(terminal, {
+          taskId: payload.taskId,
+          ...(payload.title ? { title: payload.title } : {}),
+          ...(payload.repo?.repoId ? { repoId: payload.repo.repoId } : {}),
+          defaultBranch: payload.repo?.defaultBranch ?? null,
+        });
+      }
     }
   }
 
@@ -473,19 +510,50 @@ export class BuilderforceRelayService implements IRelayService {
     repoId?: string;
     defaultBranch?: string | null;
   }): Promise<void> {
-    const dir = taskWorkspaceDir(this.opts.workspaceDir ?? process.cwd(), payload.taskId);
-    if (payload.repoId && (await isCloned(dir))) {
-      await this.commitAndPushTicketBranch(
-        payload.taskId,
-        { repoId: payload.repoId, defaultBranch: payload.defaultBranch ?? null },
-        payload.title ?? `Task ${payload.taskId}`,
-        "BuilderForce",
-      );
-    }
-    // Tear the ticket workspace down — the work is committed/pushed, ticket is Done.
-    await fs.rm(dir, { recursive: true, force: true }).catch(() => {
-      /* best-effort */
+    await this.releaseTaskWorkspace("done", payload);
+  }
+
+  /**
+   * Release the ticket workspace on a terminal state — the ONE teardown path.
+   *
+   * Done, failed, cancelled and aborted all land here: the work on disk is first
+   * committed + pushed to the ticket branch (so nothing is lost — a later run
+   * re-clones the branch), then `.builderforce/tasks/<taskId>` is removed. The
+   * ordering + the "release even if the push fails" guarantee live in the shared
+   * {@link releaseTaskWorkspaceOnTerminal} hook, not here (GAP-W2). Never throws.
+   */
+  private async releaseTaskWorkspace(
+    state: TaskTerminalState,
+    payload: {
+      taskId: number;
+      title?: string;
+      repoId?: string;
+      defaultBranch?: string | null;
+    },
+  ): Promise<void> {
+    const baseDir = this.opts.workspaceDir ?? process.cwd();
+    const dir = taskWorkspaceDir(baseDir, payload.taskId);
+    const repoId = payload.repoId;
+    const preserve = repoId
+      ? async () => {
+          if (!(await isCloned(dir))) return;
+          await this.commitAndPushTicketBranch(
+            payload.taskId,
+            { repoId, defaultBranch: payload.defaultBranch ?? null },
+            payload.title ?? `Task ${payload.taskId}`,
+            "BuilderForce",
+          );
+        }
+      : undefined;
+    const result = await releaseTaskWorkspaceOnTerminal({
+      baseDir,
+      taskId: payload.taskId,
+      state,
+      ...(preserve ? { preserve } : {}),
     });
+    if (!result.released) {
+      logWarn(`[builderforce] task ${payload.taskId}: workspace release (${state}) did not complete`);
+    }
   }
 
   /**
@@ -505,6 +573,9 @@ export class BuilderforceRelayService implements IRelayService {
             apiKey: this.opts.apiKey,
           }),
           git: makeCodingGit({ apiKey: this.opts.apiKey }),
+          // Disk port for the REPO-LESS path: a project with no connected git repo
+          // codes against its IDE workspace instead of degrading to prose.
+          fs: makeCodingFs(),
           agent: makeCodingAgent(() => this.gatewayClient),
           baseUrl: normalizeBaseUrl(this.opts.baseUrl),
           workspaceDir,

@@ -24,7 +24,7 @@ describe('CLOUD_SURFACE_CAPS → durable/Worker toolset', () => {
     expect(names(CLOUD_AGENT_TOOLS)).toEqual([
       'ask_human', 'claim_resource', 'delete_file', 'edit_file', 'finish', 'list_files',
       'memory_forget', 'memory_recall', 'memory_remember', 'read_file', 'release_resource',
-      'run_checks', 'search_code', 'web_fetch', 'web_search', 'workspace_note',
+      'run_checks', 'search_code', 'update_prd', 'web_fetch', 'web_search', 'workspace_note',
       'workspace_read', 'write_file',
     ]);
   });
@@ -58,6 +58,14 @@ describe('CLOUD_SURFACE_CAPS → durable/Worker toolset', () => {
     expect(names(CLOUD_AGENT_TOOLS)).toContain('web_search');
   });
 
+  it('backs `prd.write` — the run can correct the spec it was handed', () => {
+    // Prep hands every run its ticket PRD as context. A surface that can serve the PRD
+    // and not accept a correction to it leaves the agent reading a wrong requirement it
+    // cannot fix — and the next run repeats the mistake.
+    expect(CLOUD_SURFACE_CAPS.has('prd.write')).toBe(true);
+    expect(names(CLOUD_AGENT_TOOLS)).toContain('update_prd');
+  });
+
   it('has no shell tool — this surface cannot run a build/test and must not claim to', () => {
     expect(names(CLOUD_AGENT_TOOLS)).not.toContain('run_command');
   });
@@ -66,9 +74,9 @@ describe('CLOUD_SURFACE_CAPS → durable/Worker toolset', () => {
 describe('CONTAINER_SURFACE_CAPS → container toolset (must match server.mjs)', () => {
   it('advertises exactly what the image implements', () => {
     expect(names(CONTAINER_AGENT_TOOLS)).toEqual([
-      'claim_resource', 'finish', 'git_diff', 'git_history', 'git_redo', 'git_status', 'git_sync_latest',
-      'git_undo', 'list_files', 'memory_forget', 'memory_recall', 'memory_remember',
-      'read_file', 'release_resource', 'run_command', 'workspace_note', 'workspace_read',
+      'ask_human', 'claim_resource', 'finish', 'git_diff', 'git_history', 'git_redo', 'git_status',
+      'git_sync_latest', 'git_undo', 'list_files', 'memory_forget', 'memory_recall', 'memory_remember',
+      'read_file', 'release_resource', 'run_command', 'update_prd', 'workspace_note', 'workspace_read',
       'write_file',
     ]);
   });
@@ -96,9 +104,24 @@ describe('CONTAINER_SURFACE_CAPS → container toolset (must match server.mjs)',
   it('omits the tools the image has no handler for (they would 400 mid-run)', () => {
     const got = names(CONTAINER_AGENT_TOOLS);
     // `repo.edit` — no `edit` container-op; `repo.search` — it greps via the shell;
-    // `static-check` — shell-free validator; `human` — not wired in the image.
-    for (const t of ['edit_file', 'delete_file', 'search_code', 'run_checks', 'ask_human']) {
+    // `static-check` — shell-free validator. (`human` USED to be on this list; the
+    // image now implements the exit-and-redispatch pause, so it is advertised.)
+    for (const t of ['edit_file', 'delete_file', 'search_code', 'run_checks']) {
       expect(got).not.toContain(t);
     }
+  });
+
+  it('backs `human` — the image parks the run and is redispatched with the answer', () => {
+    expect(CONTAINER_SURFACE_CAPS.has('human')).toBe(true);
+    expect(names(CONTAINER_AGENT_TOOLS)).toContain('ask_human');
+  });
+
+  it('backs `prd.write` — both images relay `update_prd` through the shared `prd` op', () => {
+    // The container image (api/container/server.mjs) and the GitHub Actions runner
+    // (githubActionsRunner.ts) share this capability set and BOTH dispatch `update_prd`
+    // to the Worker's `prd` op. Advertising it to only one of them is the dead seam
+    // this set exists to prevent.
+    expect(CONTAINER_SURFACE_CAPS.has('prd.write')).toBe(true);
+    expect(names(CONTAINER_AGENT_TOOLS)).toContain('update_prd');
   });
 });

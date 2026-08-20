@@ -20,6 +20,7 @@ import type {
   MemoryRecallResult,
   MemoryRememberResult,
   MemoryScopeKind,
+  PrdUpdateResult,
   WorkspaceNoteResult,
   WorkspaceReadResult,
   RepoDeleteResult,
@@ -202,7 +203,11 @@ export const deleteFileTool: ToolDefinition = defineTool({
     const reason = typeof args.reason === "string" ? args.reason : undefined;
     const r = (await ctx.caps.repoWrite!.deleteFile(path, reason)) as RepoDeleteResult;
     if (r.ok && r.deleted === false) return { data: { ok: true, deleted: false, note: r.note } };
-    return { data: r.ok ? { ok: true, branch: r.branch, commitUrl: r.commitUrl } : { ok: false, error: r.error } };
+    // `deleted: true` is stated EXPLICITLY, not implied by the absence of the key. The
+    // no-op branch above reports `deleted: false`, so a success that omitted the field
+    // left the model distinguishing "removed it" from "there was nothing to remove" by
+    // noticing a MISSING key — which it reliably does not do.
+    return { data: r.ok ? { ok: true, deleted: true, branch: r.branch, commitUrl: r.commitUrl } : { ok: false, error: r.error } };
   },
 });
 
@@ -669,6 +674,71 @@ export const gitRedoTool: ToolDefinition = defineTool({
   execute: (_args, ctx) => runGitTool("redo", {}, ctx),
 });
 
+// ── The ticket's PRD ─────────────────────────────────────────────────────────────
+// Every run is handed its ticket's PRD as context and, until now, could only READ it:
+// a decision made mid-run went nowhere, and a requirement the agent discovered was
+// wrong stayed wrong for every later run on the ticket.
+//
+// ONE tool with a `mode`, not two tools, deliberately. The two writes are the same act
+// on the same document — record what this run learned about the spec — differing only
+// in WHERE the text lands, and that is a parameter, not an identity. Concretely: one
+// name is one thing for the model to discover among ~25 advertised tools (`update_prd`
+// is findable from the word "PRD"; `append_prd_note` vs `edit_prd_section` makes the
+// model pick before it knows the document), one `requires` gate, and one op to
+// implement on every surface — the container image and the Actions runner each dispatch
+// by tool name, so a second name is a second handler that can be forgotten in one of
+// them. The modes stay separate CAPABILITY verbs (append / editSection) because their
+// risk differs; only the model-facing surface is unified.
+export const updatePrdTool: ToolDefinition = defineTool({
+  name: "update_prd",
+  description:
+    'Record a change on THIS TICKET\'S PRD — the shared spec you were given in your context and that every other agent on this ticket reads. Use mode "append" (the default, and the safe one) to add a dated, signed note: a decision you made, a constraint you discovered, an assumption you had to take, or work you deliberately left out of scope. Use mode "section" ONLY to correct a section that is actually WRONG — it replaces that section\'s whole body, so pass the full replacement text, not a fragment; name the section by its exact heading (e.g. "Acceptance criteria", "Implementation Notes"). If the heading does not exist the call fails and returns the headings that do — retry with one of those, or append instead. This is not a substitute for doing the work: keep it to what a later run genuinely needs to know.',
+  parameters: {
+    type: "object",
+    properties: {
+      mode: {
+        type: "string",
+        enum: ["append", "section"],
+        description:
+          '"append" adds a dated, attributed note at the end (nothing already written is lost). "section" REPLACES the named section\'s body — only for correcting something wrong.',
+      },
+      section: {
+        type: "string",
+        description:
+          'Required when mode is "section": the exact heading to replace, without the leading "##" (e.g. "Acceptance criteria").',
+      },
+      content: {
+        type: "string",
+        description:
+          'The markdown to record. For mode "append", the note. For mode "section", the section\'s COMPLETE new body.',
+      },
+    },
+    required: ["mode", "content"],
+  },
+  requires: ["prd.write"],
+  async execute(args, ctx): Promise<ToolResult> {
+    const mode = args.mode === "section" ? "section" : "append";
+    const content = typeof args.content === "string" ? args.content.trim() : "";
+    if (!content) return { data: { ok: false, error: "content is required" } };
+    if (mode === "section") {
+      const heading = typeof args.section === "string" ? args.section.trim() : "";
+      if (!heading) {
+        return {
+          data: {
+            ok: false,
+            error:
+              'section is required when mode is "section" — pass the exact heading to replace, or use mode "append" to add a note instead.',
+          },
+        };
+      }
+      const edited = (await ctx.caps.prd!.editSection(heading, content)) as PrdUpdateResult;
+      return { data: edited as unknown as Record<string, unknown> };
+    }
+    const appended = (await ctx.caps.prd!.append(content)) as PrdUpdateResult;
+    return { data: appended as unknown as Record<string, unknown> };
+  },
+});
+
 export const finishTool: ToolDefinition = defineTool({
   name: "finish",
   description:
@@ -712,6 +782,7 @@ export const CORE_TOOLS: readonly ToolDefinition[] = [
   workspaceNoteTool,
   workspaceReadTool,
   askHumanTool,
+  updatePrdTool,
   finishTool,
 ];
 

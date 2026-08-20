@@ -1613,6 +1613,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
         t.external_subscription_id AS "externalSubscriptionId",
         t.token_daily_limit_override AS "tokenDailyLimitOverride",
         t.paid_overflow_daily_cap AS "paidOverflowDailyCap",
+        t.premium_daily_cap AS "premiumDailyCap",
         t.image_credits_daily_limit AS "imageCreditsDailyLimit",
         t.premium_override AS "premiumOverride",
         d.code AS "discountCode",
@@ -1636,7 +1637,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
         ORDER BY dr.applied_at DESC
         LIMIT 1
       ) d ON true
-      GROUP BY t.id, t.name, t.slug, t.status, t.plan, t.billing_status, t.billing_email, t.billing_updated_at, t.external_customer_id, t.external_subscription_id, t.token_daily_limit_override, t.paid_overflow_daily_cap, t.image_credits_daily_limit, t.premium_override, t.created_at, d.code, d.percent_off, d.duration_years, d.status, d.applied_at
+      GROUP BY t.id, t.name, t.slug, t.status, t.plan, t.billing_status, t.billing_email, t.billing_updated_at, t.external_customer_id, t.external_subscription_id, t.token_daily_limit_override, t.paid_overflow_daily_cap, t.premium_daily_cap, t.image_credits_daily_limit, t.premium_override, t.created_at, d.code, d.percent_off, d.duration_years, d.status, d.applied_at
       ORDER BY t.created_at DESC
       LIMIT 500
     `);
@@ -1732,6 +1733,54 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     });
 
     return c.json({ id: updated.id, paidOverflowDailyCap: updated.paidOverflowDailyCap });
+  });
+
+  // -------------------------------------------------------------------------
+  // PATCH /api/admin/tenants/:id/premium-cap
+  // Body: { premiumDailyCap: number | null }  (millicents/day, 1/100000 USD)
+  //   null → clear override (plan default $10/day) · -1 → unlimited · >= 0 → explicit
+  //
+  // The sibling of the paid-overflow cap above, and deliberately a SEPARATE ceiling:
+  // that one bounds spend Builderforce funds on its own keys, this one bounds what a
+  // tenant runs up on the metered premium long tail. One number cannot answer to two
+  // budgets — merging them would mean a tenant exhausting its premium allowance also
+  // closed our reliability backstop. Migration 0952.
+  // -------------------------------------------------------------------------
+  router.patch('/tenants/:id/premium-cap', async (c) => {
+    const tenantId = Number(c.req.param('id'));
+    if (!tenantId) return c.json({ error: 'Invalid tenant id' }, 400);
+
+    const body = await c.req.json<{ premiumDailyCap?: number | null }>();
+    const value = body.premiumDailyCap;
+    if (value !== null && value !== undefined) {
+      if (!Number.isInteger(value) || value < -1) {
+        return c.json({
+          error: 'premiumDailyCap must be null, -1 (unlimited), or a non-negative integer (millicents)',
+        }, 400);
+      }
+    }
+    const next = value === undefined ? null : value;
+
+    const db = buildDatabase(c.env);
+    const [before] = await db.select({ prev: tenants.premiumDailyCap }).from(tenants).where(eq(tenants.id, tenantId));
+    const [updated] = await db
+      .update(tenants)
+      .set({ premiumDailyCap: next, updatedAt: new Date() })
+      .where(eq(tenants.id, tenantId))
+      .returning({ id: tenants.id, premiumDailyCap: tenants.premiumDailyCap });
+
+    if (!updated) return c.json({ error: 'Tenant not found' }, 404);
+
+    // Forensic trail: raising a premium ceiling is raising a spend ceiling.
+    await writeAudit(db, 'PREMIUM_CAP_CHANGED', c.get('userId') as string, {
+      tenantId,
+      metadata: { from: before?.prev ?? null, to: updated.premiumDailyCap },
+      ipAddress: c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For') ?? null,
+    }).catch((error) => {
+      reportCaughtError(error, { source: "presentation/routes/adminRoutes.ts", operation: "createAdminRoutes" });
+    });
+
+    return c.json({ id: updated.id, premiumDailyCap: updated.premiumDailyCap });
   });
 
   // -------------------------------------------------------------------------
@@ -2320,7 +2369,11 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // -------------------------------------------------------------------------
   router.get('/llm-usage', async (c) => {
     const days = Math.min(Number(c.req.query('days') ?? '30'), 90);
-    const db = buildDatabase(c.env);
+    // The SAME database `recordUsageRow` writes to. This read used to be
+    // `buildDatabase` (primary) while the writer routes rows to the operational
+    // account whenever NEON_TRANSACTIONAL_DATABASE_URL is bound — so in exactly the
+    // deployment that has one, this page summed an empty table and reported zero.
+    const db = buildTransactionalDatabase(c.env);
 
     // Per-model totals
     const byModel = await db.execute(sql`
@@ -2369,6 +2422,28 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       model_count: number;
     }>;
 
+    // ORPHANED ROWS — the reconciliation that stops admin and tenant totals from
+    // silently disagreeing.
+    //
+    // `llm_usage_log.tenant_id` is nullable with ON DELETE SET NULL, so usage
+    // SURVIVES tenant deletion but matches no `tenant_id = ?` filter. Those rows are
+    // therefore invisible on every tenant surface while still counting in this
+    // untenanted rollup — which is why the sum of all tenants has never equalled the
+    // platform total, with nothing anywhere naming the difference. Reporting the
+    // orphan bucket explicitly makes the two reconcile BY CONSTRUCTION:
+    //   platform total = Σ(tenant totals) + orphaned.
+    // Deleting the rows instead would destroy the record of spend that really
+    // happened; hiding them would keep the discrepancy.
+    const [orphaned] = (await db.execute(sql`
+      SELECT
+        COUNT(*)::int                          AS requests,
+        COALESCE(SUM(total_tokens), 0)::bigint AS total_tokens,
+        COALESCE(SUM(cost_usd_millicents), 0)::bigint AS cost_millicents
+      FROM llm_usage_log
+      WHERE created_at >= NOW() - (${days} || ' days')::interval
+        AND tenant_id IS NULL
+    `)).rows as Array<{ requests: number; total_tokens: bigint; cost_millicents: bigint }>;
+
     // Per-model failover counts (errors that triggered a fallback)
     const failovers = await db.execute(sql`
       SELECT
@@ -2394,6 +2469,14 @@ export function createAdminRoutes(): Hono<HonoEnv> {
         promptTokens:      Number(totals?.total_prompt_tokens     ?? 0),
         completionTokens:  Number(totals?.total_completion_tokens ?? 0),
         modelCount:        Number(totals?.model_count             ?? 0),
+      },
+      /** Usage whose tenant was deleted (`tenant_id IS NULL`). Counted in `totals`
+       *  above and in NO tenant's own view — surfaced separately so the platform
+       *  total and the sum of tenant totals reconcile instead of quietly differing. */
+      orphaned: {
+        requests:        Number(orphaned?.requests        ?? 0),
+        totalTokens:     Number(orphaned?.total_tokens    ?? 0),
+        costMillicents:  Number(orphaned?.cost_millicents ?? 0),
       },
       byModel:    enrichVendor(byModel.rows as Array<{ model: string }>),
       daily:      daily.rows,

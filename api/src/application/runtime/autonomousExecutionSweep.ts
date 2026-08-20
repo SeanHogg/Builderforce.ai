@@ -36,7 +36,7 @@ import { executions, tasks, projects, boards, pullRequests, swimlanes, swimlaneA
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { RuntimeService } from './RuntimeService';
 import { TaskStatus } from '../../domain/shared/types';
-import { getTenantTokenAvailability } from '../llm/tenantTokenAvailability';
+import { tenantMayRunAutonomously } from '../llm/tenantTokenAvailability';
 import { sendPendingAgentsUpgradeEmail } from './pendingAgentsUpgradeEmail';
 import { maybeAutoRunOnLaneEntry } from '../../presentation/routes/taskRoutes';
 import type { Env } from '../../env';
@@ -268,14 +268,17 @@ export async function runAutonomousExecutionSweep(
     try {
       // Token gate — the ONLY reason to withhold autonomous execution. Fail OPEN on
       // an unknown (a usage-scan error must not silently freeze a tenant's board).
-      let availability;
-      try {
-        availability = await getTenantTokenAvailability(db, tenantId, undefined, env);
-      } catch {
-        availability = null;
-      }
+      //
+      // BYO BYPASS: a workspace that funds runs from its OWN connected account is not
+      // spending our pool, so exhausting our pool has nothing to say about whether its
+      // scheduled work may run. Without this, a paying-their-own-way tenant's board
+      // went quiet the moment the shared free budget ran dry — for a budget they were
+      // not using. `tenantMayRunAutonomously` is the ONE predicate; the Evermind
+      // teacher and the manager sweep ask the same question through it.
+      const gate = await tenantMayRunAutonomously(db, tenantId, env);
+      const availability = gate.availability;
 
-      if (availability && !availability.hasTokens) {
+      if (!gate.allowed && availability) {
         // The tenant is skipped WHOLESALE, above the trigger — so not one of its
         // tickets gets a per-ticket skip row, and each ticket's chain of custody shows
         // an unbroken silence for as long as the block lasts (measured: eleven days on

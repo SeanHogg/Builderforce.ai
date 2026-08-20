@@ -34,6 +34,7 @@ import {
 } from './LlmProxyService';
 import {
   resolveTenantLlmCredentials,
+  type TenantLlmCredentials,
   byoVendorIdsFromCredentials,
   type TenantVendorKeys,
 } from './tenantProviderKeyService';
@@ -100,7 +101,10 @@ export async function tenantProxyForPlan(
       : resolveTenantPlan(env, tenantId)
           .then((p) => ({ effectivePlan: p.effectivePlan, premiumOverride: p.premiumOverride }))
           .catch(() => ({ effectivePlan: 'free' as const, premiumOverride: false })),
-    resolveTenantLlmCredentials(env, tenantId).catch(() => ({
+    // A credential-resolution failure degrades to "nothing connected" — typed as
+    // `TenantLlmCredentials` so this literal cannot silently omit a field the routing
+    // options read (it omitted `alertedVendors` and widened the union instead).
+    resolveTenantLlmCredentials(env, tenantId).catch((): TenantLlmCredentials => ({
       anthropicOAuthToken: null,
       openaiCodexAuth: null,
       xaiOAuthToken: null,
@@ -108,6 +112,7 @@ export async function tenantProxyForPlan(
       configuredProviders: [],
       unresolvedReasons: {},
       vendorPriority: [],
+      alertedVendors: [],
       providerPriorities: [],
       openRouterConnections: [],
       openRouterModelKeys: {},
@@ -129,6 +134,7 @@ export async function tenantProxyForPlan(
     ...(creds.xaiOAuthToken ? { xaiOAuthToken: creds.xaiOAuthToken } : {}),
     ...(hasVendorKeys(creds.vendorKeys) ? { tenantVendorKeys: creds.vendorKeys } : {}),
     ...(creds.vendorPriority.length ? { byoVendorPriority: creds.vendorPriority } : {}),
+    ...(creds.alertedVendors?.length ? { byoAlertedVendors: creds.alertedVendors } : {}),
     ...(creds.providerPriorities?.length ? { byoProviderPriorities: creds.providerPriorities } : {}),
     ...(creds.openRouterConnections?.length ? { openRouterConnections: creds.openRouterConnections } : {}),
     ...(creds.openRouterModelKeys && Object.keys(creds.openRouterModelKeys).length ? { openRouterModelKeys: creds.openRouterModelKeys } : {}),

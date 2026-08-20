@@ -14,6 +14,8 @@
       "@builderforce/agent-tools": ["../packages/agent-tools/src/index.ts"],
       "@builderforce/agent-tools/*": ["../packages/agent-tools/src/*"],
       "@builderforce/agent-stall": ["../packages/agent-stall/src/index.ts"],
+      "@builderforce/learned-routing": ["../packages/learned-routing/src/index.ts"],
+      "@builderforce/run-context": ["../packages/run-context/src/index.ts"],
       "@builderforce/creation-canvas-contract": ["../packages/creation-canvas-contract/src/index.ts"]
     }
   },

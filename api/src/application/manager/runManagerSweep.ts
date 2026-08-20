@@ -3,8 +3,13 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * runManagerSweep — the always-on driver that runs the AI Manager pass for every
  * managed project, every tick. This is what "keeps the agents and team members
  * moving": the mechanical autonomous sweep only dispatches already-owned work in
- * arrival order, whereas this sweep grooms value, ranks by priority, assigns
- * unowned work, and merges/closes PRs — the manager judgement a human PM would do.
+ * arrival order, whereas this sweep grooms value, ranks by priority, assigns unowned
+ * work, conducts finished tickets into pull requests, and triages what is stuck — the
+ * manager JUDGEMENT a human PM would do.
+ *
+ * MERGING is deliberately not on that list any more. It is mechanical, provider-bound and
+ * high-volume, it measured 93% of a pass's wall-clock, and it now runs as its own registry
+ * sweep (`application/repos/prMergeSweep.ts`) on its own budget.
  *
  * Scope — OPT-IN. A project qualifies when a human has configured a manager for it (an
  * enabled `project_manager_configs` row of its own), it has a board, and it has open
@@ -23,9 +28,10 @@ import { buildRuntimeService } from '../../buildRuntimeService';
 import { tasks, projects, boards, projectManagerConfigs, pullRequests } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { TaskStatus, NON_TERMINAL_TASK_STATUSES } from '../../domain/shared/types';
-import { getTenantTokenAvailability } from '../llm/tenantTokenAvailability';
+import { tenantMayRunAutonomously } from '../llm/tenantTokenAvailability';
 import { runManagerForProject } from './ManagerService';
 import { createTickDispatchBudget, type TickDispatchBudget } from '../runtime/tickDispatchBudget';
+import { runBoundedPool } from '../runtime/boundedPool';
 import type { Env } from '../../env';
 
 
@@ -131,9 +137,10 @@ interface ManagedProject { projectId: number; tenantId: number; }
  * are the same fix: every project the sweep can now select is one it can also stamp.
  */
 export async function loadManagedProjects(db: Db, limit: number): Promise<ManagedProject[]> {
-  // Something to manage. Open PRs count as work in their own right — the merge queue is
-  // real work on a project whose tickets are all closed, and gating on tickets alone
-  // would strand a finished board's last pull requests.
+  // Something to manage. Open PRs count as work in their own right: a project whose
+  // tickets are all closed can still have pull requests to CONDUCT, to reconcile and to
+  // triage, and gating on tickets alone would strand a finished board's last branches.
+  // (The merge itself belongs to `prMergeSweep`, which selects its own projects.)
   const hasWork = exists(
     db.select({ one: sql`1` }).from(tasks)
       .where(and(eq(tasks.projectId, projects.id), eq(tasks.archived, false), inArray(tasks.status, NON_TERMINAL_TASK_STATUSES))),
@@ -220,11 +227,14 @@ export async function runManagerSweep(
     const cached = tokenOk.get(tenantId);
     if (cached) return cached;
     const pending = (async () => {
-      let availability;
-      try { availability = await getTenantTokenAvailability(db, tenantId, undefined, env); } catch { availability = null; }
-      const ok = !availability || availability.hasTokens; // fail OPEN on an unknown
-      if (!ok) result.tokenBlockedTenants += 1;
-      return ok;
+      // BYO BYPASS (shared predicate — the autonomous executor and the Evermind
+      // teacher ask the same question through `tenantMayRunAutonomously`): a tenant
+      // funding runs from its OWN connected account is not spending our pool, so an
+      // exhausted pool has nothing to say about whether its manager may sweep. Fails
+      // OPEN on an unknown, as before.
+      const gate = await tenantMayRunAutonomously(db, tenantId, env);
+      if (!gate.allowed) result.tokenBlockedTenants += 1;
+      return gate.allowed;
     })();
     tokenOk.set(tenantId, pending);
     return pending;
@@ -285,30 +295,20 @@ export async function runManagerSweep(
 
   // ── THE POOL ─────────────────────────────────────────────────────────────────────
   // N workers drawing from one cursor, rather than `for (const p of managed) await …`.
-  // `cursor++` needs no lock: it is a synchronous read-modify-write, and JS cannot
-  // interleave two of those — the only suspension points are the `await`s inside
-  // `runOne`, by which time the slot is already claimed.
+  // The pool itself is the shared primitive (`runtime/boundedPool.ts`) — four sweeps had
+  // grown their own copy of the same eight lines and disagreed about the details that
+  // matter (whether there is a deadline; whether the skipped items are reported).
   //
-  // Each worker stops on the deadline as well as on the end of the list, and it checks
-  // BEFORE claiming so a project is never half-started by the clock. A project not
-  // reached is not lost: it sorted to the front of the next tick the moment this one
-  // declined to stamp its `last_run_at`.
-  const startedAt = Date.now();
-  let cursor = 0;
-  const worker = async (): Promise<void> => {
-    for (;;) {
-      if (Date.now() - startedAt >= MANAGER_SWEEP_BUDGET_MS) return;
-      const next = managed[cursor++];
-      if (!next) return;
-      await runOne(next);
-    }
-  };
-  await Promise.all(
-    Array.from({ length: Math.min(MAX_CONCURRENT_PROJECT_PASSES, managed.length) }, worker),
+  // A project not reached is not lost: it sorted to the front of the next tick the moment
+  // this one declined to stamp its `last_run_at`.
+  const pool = await runBoundedPool(
+    managed,
+    { limit: MAX_CONCURRENT_PROJECT_PASSES, deadlineAt: Date.now() + MANAGER_SWEEP_BUDGET_MS },
+    runOne,
   );
   // Honest accounting of what the tick did NOT get to. `projects` alone reads as
   // coverage; this is the number that says whether the fleet has outgrown the sweep.
-  result.notReached = Math.max(0, managed.length - cursor);
+  result.notReached = pool.notReached;
 
   return result;
 }

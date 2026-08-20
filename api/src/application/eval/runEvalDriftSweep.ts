@@ -14,7 +14,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { sql } from 'drizzle-orm';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import { alertEvents, runModelOutcomes } from '../../infrastructure/database/schema';
-import { buildTenantDriftReport } from '../../presentation/routes/evalRoutes';
+import { buildTenantDriftReport } from './driftReport';
 import { notifyAlert } from '../alerts/runAlertSweep';
 import type { Env } from '../../env';
 

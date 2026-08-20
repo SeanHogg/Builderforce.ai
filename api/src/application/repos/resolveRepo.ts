@@ -160,6 +160,106 @@ export function resolveRepoForTask(
   return null;
 }
 
+// ---------------------------------------------------------------------------
+// Multi-repo spanning (0956): route ONE file path to ONE repo in a task's set
+// ---------------------------------------------------------------------------
+
+/** A repo in a task's bound SET, as seen by the pure write router. */
+export type RepoSetCandidate = {
+  id: string;
+  /** The task's primary repo — the fallback when no glob claims the path. */
+  isPrimary?: boolean;
+  /** JSON string: { labels?, keywords?, pathGlobs? }. Per-task override first,
+   *  else the repo's own project-wide hints — the caller decides which. */
+  matchHints?: string | null;
+};
+
+export type RouteWriteMethod = 'glob' | 'primary';
+
+export type RouteWriteResult = {
+  repoId: string;
+  method: RouteWriteMethod;
+  /** The glob that claimed the path (only when method === 'glob'). */
+  glob?: string;
+};
+
+/**
+ * Route one FILE PATH to the repo that should receive it.
+ *
+ * Distinct from {@link resolveRepoForTask}, which answers "which repo is this
+ * TASK about" from its title/labels. This answers "which repo does THIS write
+ * belong in", and is therefore matched against a path, not prose — `pathGlobs`
+ * is the only hint kind that can decide it (labels/keywords describe a ticket,
+ * not a file).
+ *
+ * Deterministic and total:
+ *   • most SPECIFIC glob wins (longest literal, i.e. wildcard-stripped, length),
+ *     so `frontend/src/**` beats `**` and two repos can share a prefix;
+ *   • ties break toward the primary, then by repo id, so the same path always
+ *     lands in the same repo across runs;
+ *   • no match ⇒ the primary repo. A write is never dropped for want of a hint.
+ */
+export function routeWritePathToRepo(
+  path: string,
+  repos: RepoSetCandidate[],
+): RouteWriteResult | null {
+  if (!Array.isArray(repos) || repos.length === 0) return null;
+  const primary = repos.find((r) => r.isPrimary === true) ?? repos[0]!;
+
+  const normalized = (path ?? '').trim().replace(/^\.?\//, '');
+  if (!normalized) return { repoId: primary.id, method: 'primary' };
+
+  let best: { repo: RepoSetCandidate; glob: string; specificity: number } | null = null;
+  for (const repo of repos) {
+    for (const glob of parseMatchHints(repo.matchHints).pathGlobs) {
+      if (!pathGlobMatches(glob, normalized)) continue;
+      const specificity = glob.replace(/\*/g, '').length;
+      if (
+        !best ||
+        specificity > best.specificity ||
+        (specificity === best.specificity && preferOver(repo, best.repo))
+      ) {
+        best = { repo, glob, specificity };
+      }
+    }
+  }
+
+  return best
+    ? { repoId: best.repo.id, method: 'glob', glob: best.glob }
+    : { repoId: primary.id, method: 'primary' };
+}
+
+/** Stable tie-break: the primary wins, otherwise the lower id — never coin-flip. */
+function preferOver(candidate: RepoSetCandidate, incumbent: RepoSetCandidate): boolean {
+  if (candidate.isPrimary === incumbent.isPrimary) return candidate.id < incumbent.id;
+  return candidate.isPrimary === true;
+}
+
+/**
+ * Does a path glob claim this path? WHOLE-path match, not the substring match
+ * {@link candidateMatchesHints} does against prose — otherwise `api/**` would
+ * claim `frontend/api/x.ts`.
+ *
+ * Two authoring shapes are honored, because both are what people mean:
+ *   • a directory glob (`api/**`, `packages/*​/src/**`) anchors at the root;
+ *   • a bare suffix glob (`*.md`) matches at ANY depth — "*.md goes to the docs
+ *     repo" plainly includes `docs/guide/intro.md`.
+ * A trailing `/` or a bare directory name (`api`) is treated as `api/**`, since
+ * a directory can never itself be a written file path.
+ */
+export function pathGlobMatches(glob: string, path: string): boolean {
+  let g = glob.trim().replace(/^\.?\//, '');
+  if (!g) return false;
+  if (g.endsWith('/')) g = `${g}**`;
+  else if (!g.includes('*') && !g.includes('.')) g = `${g}/**`;
+  const matches = (candidate: string): boolean =>
+    new RegExp(`^(?:${globToRegExp(candidate).source})$`, 'i').test(path);
+  // A bare suffix glob is depth-free: `*.md` must claim BOTH `README.md` and
+  // `docs/intro.md`, so try it at the root and at any depth.
+  if (g.startsWith('*') && !g.startsWith('**/')) return matches(g) || matches(`**/${g}`);
+  return matches(g);
+}
+
 function dedupeById(items: ResolveRepoCandidate[]): ResolveRepoCandidate[] {
   const seen = new Set<string>();
   const out: ResolveRepoCandidate[] = [];

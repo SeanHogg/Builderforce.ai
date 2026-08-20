@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { fetchBuildError } from './fetchBuildError';
+import { fetchBuildError, LOG_TAIL_CHARS, MAX_LOG_JOBS } from './fetchBuildError';
 import { cloudAutofixOnBuildFailure, MAX_AUTOFIX_ATTEMPTS } from '../repos/mergeBranchToBase';
 
 afterEach(() => vi.unstubAllGlobals());
@@ -25,6 +25,85 @@ describe('cloudAutofixOnBuildFailure', () => {
   });
   it('caps attempts at 2', () => {
     expect(MAX_AUTOFIX_ATTEMPTS).toBe(2);
+  });
+});
+
+/**
+ * THE LOG TAIL — the diagnostic half of a build failure.
+ *
+ * Step NAMES told the auto-fix agent which command failed and nothing about WHY, so
+ * every fix run started by guessing. A failing build prints its error last, so each
+ * failed job now contributes the tail of its plain-text job log.
+ */
+describe('fetchBuildError — job log tails', () => {
+  /** Route the jobs API and the per-job log endpoint to different canned responses. */
+  const routed = (jobs: unknown, logs: Record<string, { status: number; body: string }>) =>
+    vi.fn(async (url: string) => {
+      const match = /\/actions\/jobs\/(\d+)\/logs$/.exec(String(url));
+      if (match) {
+        const hit = logs[match[1]!];
+        return new Response(hit?.body ?? 'missing', { status: hit?.status ?? 404 });
+      }
+      return new Response(JSON.stringify(jobs), { status: 200 });
+    });
+
+  it('appends the TAIL of a failed job log, not the head', async () => {
+    const head = 'X'.repeat(LOG_TAIL_CHARS);
+    vi.stubGlobal('fetch', routed(
+      { jobs: [{ id: 77, name: 'test', conclusion: 'failure', steps: [{ name: 'unit tests', conclusion: 'failure' }] }] },
+      { 77: { status: 200, body: `${head}
+TypeError: cannot read property 'id' of undefined` } },
+    ));
+    const be = await fetchBuildError(env, { ...coords, runId: 9001 });
+    expect(be.summary).toContain("TypeError: cannot read property 'id' of undefined");
+    // The oldest characters are the ones dropped.
+    expect(be.summary.includes(head)).toBe(false);
+  });
+
+  it('degrades to the step-name summary when the log cannot be read', async () => {
+    vi.stubGlobal('fetch', routed(
+      { jobs: [{ id: 78, name: 'test', conclusion: 'failure', steps: [{ name: 'unit tests', conclusion: 'failure' }] }] },
+      { 78: { status: 403, body: 'forbidden' } },
+    ));
+    const be = await fetchBuildError(env, { ...coords, runId: 9002 });
+    expect(be.failedJobs).toEqual(['test']);
+    expect(be.summary).toContain('unit tests');
+    expect(be.summary).not.toContain('last ');
+  });
+
+  it('caps how many failed jobs contribute a log — one matrix must not blow the prompt', async () => {
+    const jobs = { jobs: Array.from({ length: 6 }, (_, i) => ({ id: 100 + i, name: `shard-${i}`, conclusion: 'failure', steps: [] })) };
+    const logs = Object.fromEntries(Array.from({ length: 6 }, (_, i) => [String(100 + i), { status: 200, body: `boom-${i}` }]));
+    const fetchSpy = routed(jobs, logs);
+    vi.stubGlobal('fetch', fetchSpy);
+    const be = await fetchBuildError(env, { ...coords, runId: 9003 });
+    // Every failed job is NAMED …
+    expect(be.failedJobs).toHaveLength(6);
+    // … but only the capped few are FETCHED.
+    const logCalls = fetchSpy.mock.calls.filter((c) => /\/logs$/.test(String(c[0])));
+    expect(logCalls).toHaveLength(MAX_LOG_JOBS);
+    expect(be.summary).toContain('boom-0');
+    expect(be.summary).not.toContain('boom-5');
+  });
+
+  it('skips a failed job the provider reported without an id', async () => {
+    const fetchSpy = routed(
+      { jobs: [{ name: 'test', conclusion: 'failure', steps: [] }] },
+      {},
+    );
+    vi.stubGlobal('fetch', fetchSpy);
+    const be = await fetchBuildError(env, { ...coords, runId: 9004 });
+    expect(be.failedJobs).toEqual(['test']);
+    expect(fetchSpy.mock.calls.filter((c) => /\/logs$/.test(String(c[0])))).toHaveLength(0);
+  });
+
+  it('ignores an EMPTY log rather than emitting a blank tail block', async () => {
+    vi.stubGlobal('fetch', routed(
+      { jobs: [{ id: 79, name: 'test', conclusion: 'failure', steps: [] }] },
+      { 79: { status: 200, body: '   \n  ' } },
+    ));
+    const be = await fetchBuildError(env, { ...coords, runId: 9005 });
+    expect(be.summary).not.toContain('last ');
   });
 });
 

@@ -56,6 +56,15 @@ export interface ObservabilityContentProps {
   /** When set, scope cloud telemetry to a single execution (precise per-run
    *  Logs/Timeline, robust to later agent re-assignment). */
   executionId?: number;
+  /** Tool-audit rows pushed live over `executionId`'s stream (see
+   *  `useExecutionStream`). Cloud runs have no relay log socket of their own, so
+   *  this IS their live tail — merged, by row id, with what the REST backfill
+   *  returned. Supplied by the panel that already holds the run's socket, so the
+   *  drawer opens exactly one connection rather than one per tab. */
+  liveToolEvents?: ToolAuditEvent[];
+  /** True while that stream is connected. When it is, the telemetry poll stands
+   *  down: push is the liveness path, the poll is only the disconnected backstop. */
+  liveConnected?: boolean;
   /** Optional leading prose injected into the copy-triage report by the embedding
    *  panel — "Review Context" (PR URL, branch, outcome, the model(s) that actually
    *  ran) followed by "Materials & Context" (task + PRD). Telemetry alone isn't
@@ -183,6 +192,8 @@ export function ObservabilityContent({
   cloudAgentName: propCloudAgentName,
   embedded = false,
   executionId: propExecutionId,
+  liveToolEvents,
+  liveConnected = false,
   reportMaterials,
   reportTransaction,
 }: ObservabilityContentProps) {
@@ -370,7 +381,7 @@ export function ObservabilityContent({
   // Auto-scroll logs
   useEffect(() => {
     if (autoScroll) logEndRef.current?.scrollIntoView();
-  }, [logLines, cloudEventsByRef, autoScroll]);
+  }, [logLines, cloudEventsByRef, liveToolEvents?.length, autoScroll]);
 
   // ---- Diagnostics loader: host tool-audit + workflows + cloud tool-audit ----
   const loadDiagnostics = useCallback(async () => {
@@ -416,19 +427,47 @@ export function ObservabilityContent({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, selectionKey, loadDiagnostics]);
 
-  // Embedded in an execution panel, the diagnostics must stay live as the run
-  // emits events (the host page refreshes manually). Poll while embedded so the
-  // Logs/Timeline keep parity with the auto-polling Tools tab next to them.
+  // Embedded in an execution panel, the diagnostics must stay live as the run emits
+  // events. The LIVE TAIL does that now (`liveToolEvents`), so this poll is no longer
+  // the liveness path — it is the reconnect backstop, and it only runs while the run's
+  // stream is DOWN (no socket yet, a dropped connection, an older surface that passes
+  // no live feed at all). While the stream is up, nothing here polls.
   useEffect(() => {
-    if (!embedded || !hasSelection) return;
+    if (!embedded || !hasSelection || liveConnected) return;
     const poll = setInterval(() => { void loadDiagnostics(); }, 5000);
     return () => clearInterval(poll);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [embedded, selectionKey, loadDiagnostics]);
+  }, [embedded, selectionKey, liveConnected, loadDiagnostics]);
+
+  // Reconcile ONCE on (re)connect: the socket only carries what happened after it
+  // opened, so a fetch at that moment is what closes the gap it was down for.
+  useEffect(() => {
+    if (!liveConnected || !hasSelection) return;
+    void loadDiagnostics();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveConnected, selectionKey, loadDiagnostics]);
+
+  // ---- Cloud telemetry = REST backfill + the live tail ----------------------
+  // The fetched rows are the run's history (everything before this view attached);
+  // `liveToolEvents` are the rows recorded since, pushed as they happen. Merged by
+  // persisted row id, so the overlap between "what the backfill already had" and
+  // "what arrived while it was in flight" collapses exactly rather than double-
+  // rendering. Every cloud reader below (logs, timeline, triage report) uses THIS
+  // map, so all three go live together.
+  const cloudEvents = new Map<string, ToolAuditEvent[]>(cloudEventsByRef);
+  if (liveToolEvents && liveToolEvents.length > 0) {
+    for (const ref of selectedCloudRefs) {
+      const fetched = cloudEvents.get(ref) ?? [];
+      const seen = new Set(fetched.map((e) => e.id));
+      const fresh = liveToolEvents.filter((e) => !seen.has(e.id));
+      if (fresh.length > 0) cloudEvents.set(ref, [...fetched, ...fresh]);
+      else if (!cloudEvents.has(ref)) cloudEvents.set(ref, fetched);
+    }
+  }
 
   // ---- Derive log lines (host WS + cloud telemetry), timeline tracks --------
   const cloudLogLines: LogLine[] = [];
-  for (const [ref, evts] of cloudEventsByRef) {
+  for (const [ref, evts] of cloudEvents) {
     const name = nameForKey(`cloud:${ref}`);
     for (const ev of evts) {
       cloudLogLines.push({
@@ -471,7 +510,7 @@ export function ObservabilityContent({
     const name = nameForKey(key);
     for (const ev of evts) pushToolEvent(ev, key, name);
   }
-  for (const [ref, evts] of cloudEventsByRef) {
+  for (const [ref, evts] of cloudEvents) {
     const key = `cloud:${ref}`;
     const name = nameForKey(key);
     for (const ev of evts) pushToolEvent(ev, key, name);
@@ -514,7 +553,7 @@ export function ObservabilityContent({
     };
     const flatEvents: Array<{ ev: ToolAuditEvent; agentName: string }> = [];
     for (const [hostId, evts] of eventsByHost) for (const ev of evts) flatEvents.push({ ev, agentName: nameForKey(`host:${hostId}`) });
-    for (const [ref, evts] of cloudEventsByRef) for (const ev of evts) flatEvents.push({ ev, agentName: nameForKey(`cloud:${ref}`) });
+    for (const [ref, evts] of cloudEvents) for (const ev of evts) flatEvents.push({ ev, agentName: nameForKey(`cloud:${ref}`) });
     flatEvents.sort((a, b) => a.ev.ts.localeCompare(b.ev.ts));
 
     const errors = flatEvents.filter((e) => isErrorEvent(e.ev));
@@ -729,6 +768,21 @@ export function ObservabilityContent({
                   <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t(`conn.${connState}`)}</span>
                 </>
               )}
+              {hasCloudSelection && liveToolEvents != null && (
+                <>
+                  <span
+                    style={{
+                      width: 8,
+                      height: 8,
+                      borderRadius: '50%',
+                      background: liveConnected ? 'var(--success)' : 'var(--text-muted)',
+                    }}
+                  />
+                  <span style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>
+                    {t(`conn.${liveConnected ? 'connected' : 'connecting'}`)}
+                  </span>
+                </>
+              )}
               {hasCloudSelection && (
                 <button type="button" onClick={() => void loadDiagnostics()} disabled={diagLoading} style={smallBtn}>
                   {diagLoading ? t('refreshing') : t('refreshCloud')}
@@ -761,8 +815,8 @@ export function ObservabilityContent({
             </div>
           )}
           {hasCloudSelection && (
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8 }}>
-              {t('cloudNote')}
+            <div style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', marginBottom: 8 }}>
+              {t(liveToolEvents != null ? 'cloudNoteLive' : 'cloudNote')}
             </div>
           )}
           <div style={logPaneStyle}>

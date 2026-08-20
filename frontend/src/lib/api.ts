@@ -328,6 +328,36 @@ export async function fetchSite(projectId: number | string): Promise<SiteInfo | 
 }
 
 /**
+ * The LIVE preview link for a project, or null when there isn't one.
+ *
+ * A live preview is a dev server running inside the project's cloud-run container,
+ * exposed through the signed preview ingress — it reflects the work in progress, where a
+ * published build reflects the last publish. Null covers every "not right now" (the
+ * feature is off for this deployment, the plan doesn't include it, no run is holding a
+ * preview, the container died), because the caller's fallback is the same in all of
+ * them: show the published build instead.
+ */
+export interface LivePreviewLink {
+  url: string;
+  expiresInSeconds: number;
+  /** `starting` = the dev server is booting; the link works as soon as it answers. */
+  status: 'live' | 'starting';
+}
+
+export async function fetchLivePreviewUrl(projectId: number | string): Promise<LivePreviewLink | null> {
+  try {
+    const res = await apiRequest<{ available?: boolean; url?: string; expiresInSeconds?: number; status?: 'live' | 'starting' }>(
+      `/api/runtime/projects/${projectId}/preview-url`,
+    );
+    if (!res?.available || !res.url) return null;
+    return { url: res.url, expiresInSeconds: res.expiresInSeconds ?? 0, status: res.status ?? 'live' };
+  } catch {
+    // 404 (feature off) / 402 (plan) / 429 (at capacity) are all "no live preview".
+    return null;
+  }
+}
+
+/**
  * Publish a built static site. `assets` are the files under the build's `dist/`
  * root (path is dist-relative). Sent as multipart/form-data — one part per file,
  * the part name being the relative path — plus an optional `subdomain` field.
@@ -1031,4 +1061,63 @@ export async function runArchitectureAnalysis(projectId: number | string): Promi
     body: JSON.stringify({}),
     expectedErrors: [409],
   });
+}
+
+/** One artifact of the six-part architecture report. */
+export type ArchitectureArtifactKind =
+  | 'diagnostic'
+  | 'recommendation'
+  | 'business'
+  | 'arch_4plus1'
+  | 'antipatterns'
+  | 'principles';
+
+/**
+ * A project's most recent analysis run and what repairing it would cover.
+ * `retryableKinds` is empty while the run is still moving, so a surface can gate
+ * the retry affordance on that one field alone.
+ */
+export interface ArchitectureRunSummary {
+  runId: string;
+  projectId: number;
+  status: string;
+  stage: string | null;
+  progress: number;
+  retryableKinds: ArchitectureArtifactKind[];
+  /** Withheld sections this plan does not cover — an upgrade, not a retry. */
+  lockedKinds: ArchitectureArtifactKind[];
+  createdAt: string | null;
+  finishedAt: string | null;
+}
+
+/** The project's last architecture run, or null if it has never been analysed. */
+export async function fetchLatestArchitectureRun(
+  projectId: number | string,
+): Promise<ArchitectureRunSummary | null> {
+  const { run } = await apiRequest<{ run: ArchitectureRunSummary | null }>(
+    `/api/repo-analysis/projects/${projectId}/latest-run`,
+  );
+  return run ?? null;
+}
+
+/**
+ * Re-run only the sections a finished analysis failed on (plus any it withheld
+ * that the plan now covers). Far cheaper than a full re-run: the evidence is
+ * reused, so it costs the model calls for the broken sections only.
+ *
+ * 409 (`run_in_progress`) and 400 (`nothing_to_retry`) are expected answers the
+ * caller renders inline, not global error toasts.
+ */
+export async function retryArchitectureAnalysis(
+  runId: string,
+): Promise<{ runId: string; kinds: ArchitectureArtifactKind[] }> {
+  return apiRequest<{ runId: string; kinds: ArchitectureArtifactKind[] }>(
+    `/api/repo-analysis/runs/${runId}/retry`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+      expectedErrors: [400, 409],
+    },
+  );
 }

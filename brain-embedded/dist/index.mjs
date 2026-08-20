@@ -441,6 +441,64 @@ function reasoningForRun(o) {
   return o.thinking ? { level: effortProfile(o.effort).reasoningLevel } : void 0;
 }
 
+// src/composerDirectives.ts
+var WEB_FETCH_TOOL_NAME = "builtin_web_fetch";
+function buildComposerDirectives(o) {
+  const parts = [];
+  const { directive } = effortProfile(o.effort);
+  if (directive) parts.push(directive);
+  if (o.web) {
+    parts.push(
+      `You may browse the web: when a question needs current or external information, call the \`${WEB_FETCH_TOOL_NAME}\` tool to read the relevant URL(s) rather than relying on memory, and cite the sources you use.`
+    );
+  }
+  return parts.join("\n\n");
+}
+
+// src/useToolConfirmationGate.ts
+import { useCallback, useEffect, useRef, useState } from "react";
+function useToolConfirmationGate(options) {
+  const { isMutating, persistence, defaultOn = false } = options;
+  const [autoApprove, setAutoApproveState] = useState(defaultOn);
+  const autoApproveRef = useRef(defaultOn);
+  const persistenceRef = useRef(persistence);
+  persistenceRef.current = persistence;
+  useEffect(() => {
+    const stored = persistenceRef.current?.read();
+    const initial = stored ?? defaultOn;
+    autoApproveRef.current = initial;
+    setAutoApproveState(initial);
+  }, [defaultOn]);
+  const setAutoApprove = useCallback((on) => {
+    autoApproveRef.current = on;
+    setAutoApproveState(on);
+    persistenceRef.current?.write(on);
+  }, []);
+  const needsConfirm = useCallback(
+    (req) => isMutating(req.name, req.args) && !autoApproveRef.current,
+    [isMutating]
+  );
+  return { autoApprove, setAutoApprove, needsConfirm };
+}
+function localStorageConfirmationPersistence(key) {
+  return {
+    read() {
+      try {
+        const raw = localStorage.getItem(key);
+        return raw === null ? void 0 : raw !== "0";
+      } catch {
+        return void 0;
+      }
+    },
+    write(on) {
+      try {
+        localStorage.setItem(key, on ? "1" : "0");
+      } catch {
+      }
+    }
+  };
+}
+
 // src/imagePrep.ts
 var MAX_EDGE = 1568;
 var MAX_DATA_URL_BYTES = 35e5;
@@ -569,7 +627,7 @@ function countReconciledMemories(items, answer) {
 }
 
 // src/BrainActionsContext.tsx
-import { createContext as createContext2, useCallback, useContext as useContext2, useEffect, useMemo as useMemo2, useRef, useState } from "react";
+import { createContext as createContext2, useCallback as useCallback2, useContext as useContext2, useEffect as useEffect2, useMemo as useMemo2, useRef as useRef2, useState as useState2 } from "react";
 
 // src/toolSpecs.ts
 function toolSpecsFor(actions) {
@@ -587,10 +645,10 @@ function toolSpecsFor(actions) {
 import { jsx as jsx2 } from "react/jsx-runtime";
 var BrainActionsContext = createContext2(null);
 function BrainActionsProvider({ children }) {
-  const registry = useRef(/* @__PURE__ */ new Map());
-  const [version, setVersion] = useState(0);
-  const bump = useCallback(() => setVersion((v) => v + 1), []);
-  const register = useCallback((actions) => {
+  const registry = useRef2(/* @__PURE__ */ new Map());
+  const [version, setVersion] = useState2(0);
+  const bump = useCallback2(() => setVersion((v) => v + 1), []);
+  const register = useCallback2((actions) => {
     const token = /* @__PURE__ */ Symbol("brain-action-registration");
     for (const action of actions) {
       registry.current.set(action.name, { action, token });
@@ -604,7 +662,7 @@ function BrainActionsProvider({ children }) {
       bump();
     };
   }, [bump]);
-  const runTool = useCallback(async (name, args) => {
+  const runTool = useCallback2(async (name, args) => {
     const entry = registry.current.get(name);
     if (!entry) {
       return { error: `Unknown tool: ${name}` };
@@ -615,7 +673,7 @@ function BrainActionsProvider({ children }) {
       return { error: e instanceof Error ? e.message : "Tool execution failed" };
     }
   }, []);
-  const isMutating = useCallback((name, args) => {
+  const isMutating = useCallback2((name, args) => {
     const entry = registry.current.get(name);
     if (!entry) return false;
     const m = entry.action.mutates;
@@ -647,14 +705,14 @@ function useBrainActions() {
 function useRegisterBrainActions(actions) {
   const ctx = useContext2(BrainActionsContext);
   const register = ctx?.register;
-  useEffect(() => {
+  useEffect2(() => {
     if (!register) return;
     return register(actions);
   }, [register, actions]);
 }
 
 // src/useMcpExtensions.ts
-import { useEffect as useEffect2, useMemo as useMemo3, useRef as useRef2, useState as useState2 } from "react";
+import { useEffect as useEffect3, useMemo as useMemo3, useRef as useRef3, useState as useState3 } from "react";
 
 // src/mcpToolStatus.ts
 var status = { count: 0, error: null, loading: true };
@@ -764,13 +822,13 @@ function mcpActionsFrom(entries, transport, onToolResult) {
 // src/useMcpExtensions.ts
 function useMcpExtensions(options) {
   const { transport } = useBrainConfig();
-  const [entries, setEntries] = useState2([]);
-  const [loading, setLoading] = useState2(true);
-  const [error, setError] = useState2(null);
+  const [entries, setEntries] = useState3([]);
+  const [loading, setLoading] = useState3(true);
+  const [error, setError] = useState3(null);
   const skipKey = (options?.skipExtensionIds ?? []).join(",");
-  const onToolResultRef = useRef2(options?.onToolResult);
+  const onToolResultRef = useRef3(options?.onToolResult);
   onToolResultRef.current = options?.onToolResult;
-  useEffect2(() => {
+  useEffect3(() => {
     let cancelled = false;
     fetchMcpToolEntries(transport, skipKey ? skipKey.split(",") : []).then((tools) => {
       if (cancelled) return;
@@ -792,14 +850,14 @@ function useMcpExtensions(options) {
     [entries, transport]
   );
   useRegisterBrainActions(actions);
-  useEffect2(() => {
+  useEffect3(() => {
     setMcpToolStatus({ count: actions.length, error, loading });
   }, [actions.length, error, loading]);
   return { loading, toolCount: actions.length, error };
 }
 
 // src/BrainContext.tsx
-import { createContext as createContext3, useCallback as useCallback2, useContext as useContext3, useEffect as useEffect3, useMemo as useMemo4, useState as useState3 } from "react";
+import { createContext as createContext3, useCallback as useCallback3, useContext as useContext3, useEffect as useEffect4, useMemo as useMemo4, useState as useState4 } from "react";
 import { jsx as jsx3 } from "react/jsx-runtime";
 var OPEN_KEY = "brain.drawer.open";
 var CHAT_KEY = "brain.drawer.activeChatId";
@@ -828,10 +886,10 @@ var DEFAULT_CONTEXT = {
 };
 var BrainContext = createContext3(null);
 function BrainContextProvider({ children }) {
-  const [open, setOpen] = useState3(false);
-  const [pageContext, setPageContext] = useState3(DEFAULT_CONTEXT);
-  const [activeChatId, setActiveChatId] = useState3(null);
-  useEffect3(() => {
+  const [open, setOpen] = useState4(false);
+  const [pageContext, setPageContext] = useState4(DEFAULT_CONTEXT);
+  const [activeChatId, setActiveChatId] = useState4(null);
+  useEffect4(() => {
     if (readSession(OPEN_KEY) === "1") setOpen(true);
     const savedChat = readSession(CHAT_KEY);
     if (savedChat != null) {
@@ -839,13 +897,13 @@ function BrainContextProvider({ children }) {
       if (Number.isFinite(n)) setActiveChatId(n);
     }
   }, []);
-  useEffect3(() => {
+  useEffect4(() => {
     writeSession(OPEN_KEY, open ? "1" : "0");
   }, [open]);
-  useEffect3(() => {
+  useEffect4(() => {
     writeSession(CHAT_KEY, activeChatId == null ? null : String(activeChatId));
   }, [activeChatId]);
-  const setContext = useCallback2((patch) => {
+  const setContext = useCallback3((patch) => {
     setPageContext((prev) => {
       const next = { ...prev, ...patch };
       if (next.projectId === prev.projectId && next.viewingProjectId === prev.viewingProjectId && next.modality === prev.modality && next.extraSystem === prev.extraSystem && next.initialChatId === prev.initialChatId && next.initialPrompt === prev.initialPrompt && next.initialTicket === prev.initialTicket) {
@@ -870,7 +928,7 @@ function useOptionalBrainContext() {
 }
 
 // src/useBrainChats.ts
-import { useCallback as useCallback3, useEffect as useEffect4, useMemo as useMemo5, useRef as useRef3, useState as useState4 } from "react";
+import { useCallback as useCallback4, useEffect as useEffect5, useMemo as useMemo5, useRef as useRef4, useState as useState5 } from "react";
 
 // src/chatWorkLinking.ts
 var TICKET_RECORDING_TOOLS = /* @__PURE__ */ new Set([
@@ -1046,30 +1104,30 @@ function deriveChatTitle(text) {
 function useBrainChats(options = {}) {
   const { persistence } = useBrainConfig();
   const { filterProjectId, pinnedProjectId, activeChatId: controlledActiveId, onActiveChatChange } = options;
-  const [chats, setChats] = useState4([]);
-  const [loading, setLoading] = useState4(true);
-  const [error, setError] = useState4("");
-  const [internalActiveId, setInternalActiveId] = useState4(null);
-  const assigningRef = useRef3(false);
-  const chatsRef = useRef3(chats);
+  const [chats, setChats] = useState5([]);
+  const [loading, setLoading] = useState5(true);
+  const [error, setError] = useState5("");
+  const [internalActiveId, setInternalActiveId] = useState5(null);
+  const assigningRef = useRef4(false);
+  const chatsRef = useRef4(chats);
   chatsRef.current = chats;
-  const autoTitledRef = useRef3(/* @__PURE__ */ new Set());
+  const autoTitledRef = useRef4(/* @__PURE__ */ new Set());
   const isControlled = controlledActiveId !== void 0;
   const activeChatId = isControlled ? controlledActiveId ?? null : internalActiveId;
-  const activeIdRef = useRef3(activeChatId);
+  const activeIdRef = useRef4(activeChatId);
   activeIdRef.current = activeChatId;
-  const setActiveChatId = useCallback3(
+  const setActiveChatId = useCallback4(
     (id) => {
       if (isControlled) onActiveChatChange?.(id);
       else setInternalActiveId(id);
     },
     [isControlled, onActiveChatChange]
   );
-  const defaultProjectId = useCallback3(() => {
+  const defaultProjectId = useCallback4(() => {
     if (pinnedProjectId != null) return pinnedProjectId;
     return filterProjectId && filterProjectId !== "none" ? Number(filterProjectId) : null;
   }, [pinnedProjectId, filterProjectId]);
-  const reload = useCallback3(async () => {
+  const reload = useCallback4(async () => {
     setLoading(true);
     setError("");
     try {
@@ -1082,10 +1140,10 @@ function useBrainChats(options = {}) {
       setLoading(false);
     }
   }, [persistence, filterProjectId, pinnedProjectId]);
-  useEffect4(() => {
+  useEffect5(() => {
     reload();
   }, [reload]);
-  const select = useCallback3(async (id) => {
+  const select = useCallback4(async (id) => {
     setError("");
     if (id === null) {
       setActiveChatId(null);
@@ -1103,7 +1161,7 @@ function useBrainChats(options = {}) {
       return null;
     }
   }, [persistence, chats, setActiveChatId]);
-  const create = useCallback3(async (opts) => {
+  const create = useCallback4(async (opts) => {
     setError("");
     try {
       const projectId = opts?.projectId !== void 0 ? opts.projectId : defaultProjectId();
@@ -1116,7 +1174,7 @@ function useBrainChats(options = {}) {
       return null;
     }
   }, [persistence, defaultProjectId, setActiveChatId]);
-  const setCapability = useCallback3(async (id, capability) => {
+  const setCapability = useCallback4(async (id, capability) => {
     const prevValue = chatsRef.current.find((c) => c.id === id)?.capability ?? null;
     setChats((prev) => prev.map((c) => c.id === id ? { ...c, capability } : c));
     try {
@@ -1127,7 +1185,7 @@ function useBrainChats(options = {}) {
       setError(e instanceof Error ? e.message : "Failed to set capability");
     }
   }, [persistence]);
-  const setMode = useCallback3(async (id, mode) => {
+  const setMode = useCallback4(async (id, mode) => {
     const prevValue = normalizeChatMode(chatsRef.current.find((c) => c.id === id)?.mode);
     setChats((prev) => prev.map((c) => c.id === id ? { ...c, mode } : c));
     try {
@@ -1138,7 +1196,7 @@ function useBrainChats(options = {}) {
       setError(e instanceof Error ? e.message : "Failed to switch mode");
     }
   }, [persistence]);
-  const rename = useCallback3(async (id, title) => {
+  const rename = useCallback4(async (id, title) => {
     const trimmed = title.trim();
     if (!trimmed) return;
     try {
@@ -1148,7 +1206,7 @@ function useBrainChats(options = {}) {
       setError(e instanceof Error ? e.message : "Rename failed");
     }
   }, [persistence]);
-  const autoTitle = useCallback3(async (id, firstUserText) => {
+  const autoTitle = useCallback4(async (id, firstUserText) => {
     if (autoTitledRef.current.has(id)) return;
     const chat = chatsRef.current.find((c) => c.id === id);
     if (chat && chat.title && chat.title !== DEFAULT_CHAT_TITLE) return;
@@ -1162,7 +1220,7 @@ function useBrainChats(options = {}) {
       autoTitledRef.current.delete(id);
     }
   }, [persistence]);
-  const summarize = useCallback3(async (id) => {
+  const summarize = useCallback4(async (id) => {
     setError("");
     try {
       const result = await persistence.summarizeChat(id);
@@ -1178,7 +1236,7 @@ function useBrainChats(options = {}) {
       setError(e instanceof Error ? e.message : "Summarize failed");
     }
   }, [persistence]);
-  const remove = useCallback3(async (id) => {
+  const remove = useCallback4(async (id) => {
     try {
       await persistence.deleteChat(id);
       setChats((prev) => prev.filter((c) => c.id !== id));
@@ -1187,7 +1245,7 @@ function useBrainChats(options = {}) {
       setError(e instanceof Error ? e.message : "Delete failed");
     }
   }, [persistence, setActiveChatId]);
-  const assignToProject = useCallback3(async (id, projectId) => {
+  const assignToProject = useCallback4(async (id, projectId) => {
     if (assigningRef.current) return;
     assigningRef.current = true;
     setError("");
@@ -1200,7 +1258,7 @@ function useBrainChats(options = {}) {
       assigningRef.current = false;
     }
   }, [persistence]);
-  const touch = useCallback3(async (id) => {
+  const touch = useCallback4(async (id) => {
     await reload();
     setActiveChatId(id);
   }, [reload, setActiveChatId]);
@@ -1230,7 +1288,7 @@ function useBrainChats(options = {}) {
 }
 
 // src/useBrainConversation.ts
-import { useCallback as useCallback4, useEffect as useEffect5, useRef as useRef4, useState as useState5 } from "react";
+import { useCallback as useCallback5, useEffect as useEffect6, useRef as useRef5, useState as useState6 } from "react";
 
 // src/types.ts
 var STEP_MESSAGE_ROLE = "tool";
@@ -1649,8 +1707,8 @@ function memoryAnswersInTrace(events) {
   return out;
 }
 function cap(s, n = 2e3) {
-  const str = typeof s === "string" ? s : JSON.stringify(s ?? "");
-  return str.length > n ? str.slice(0, n) + `\u2026 (+${str.length - n} chars)` : str;
+  const str2 = typeof s === "string" ? s : JSON.stringify(s ?? "");
+  return str2.length > n ? str2.slice(0, n) + `\u2026 (+${str2.length - n} chars)` : str2;
 }
 function isEvermindModel(model) {
   return /(^|\/)evermind\b|^project_evermind:|^tenant_model:/i.test(model);
@@ -2226,6 +2284,9 @@ function provenanceMetadata(result) {
   return withProvenanceMetadata({ model, ...account ? { account } : {} });
 }
 var MAX_TOOL_ITERATIONS = 25;
+function iterationCap(requested) {
+  return typeof requested === "number" && Number.isFinite(requested) && requested > 0 ? Math.floor(requested) : MAX_TOOL_ITERATIONS;
+}
 var HISTORY_WINDOW = 80;
 var DEDUP_READ_TOOLS = /* @__PURE__ */ new Set(["read_file", "search_code", "list_files"]);
 var isDedupableRead = (name) => DEDUP_READ_TOOLS.has(name) || isReadOnlyPlatformTool(name);
@@ -2709,6 +2770,7 @@ async function runLoop(chatId, c, req) {
   const allTools = toolSpecs && toolSpecs.length > 0 ? toolSpecs : void 0;
   const usedTools = /* @__PURE__ */ new Set();
   const runMode = normalizeChatMode(req.chatMode ?? "work");
+  const maxIterations = iterationCap(req.maxIterations);
   const metadata = {
     chatId,
     guestTurnId: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`,
@@ -2838,7 +2900,7 @@ ${turnOptimizationDirective()}`;
       }
     }
   };
-  for (let iter = 0; iter < MAX_TOOL_ITERATIONS; iter++) {
+  for (let iter = 0; iter < maxIterations; iter++) {
     if (c.abort?.signal.aborted) return;
     c.streamingText = "";
     emit(c);
@@ -3167,7 +3229,7 @@ ${turnOptimizationDirective()}`;
         label: "llm.complete",
         durationMs: nowMs2() - closeStart,
         ttftMs: closeFirstTokenAt !== void 0 ? closeFirstTokenAt - closeStart : void 0,
-        args: { model: closing.resolvedModel ?? activeModel ?? "default", requestedModel: activeModel ?? "default", step: MAX_TOOL_ITERATIONS, toolCalls: 0, forcedFinish: true, account: closing.account, byoUnresolved: closing.byoUnresolved },
+        args: { model: closing.resolvedModel ?? activeModel ?? "default", requestedModel: activeModel ?? "default", step: maxIterations, toolCalls: 0, forcedFinish: true, account: closing.account, byoUnresolved: closing.byoUnresolved },
         usage: closing.usage,
         finishReason: closing.finishReason,
         textChars: closing.text.length,
@@ -3195,7 +3257,7 @@ ${turnOptimizationDirective()}`;
     ts: nowIso(),
     category: "error",
     label: "agent.loop",
-    result: `Loop exhausted after ${MAX_TOOL_ITERATIONS} tool iterations (a forced final answer without tools also came back empty)`,
+    result: `Loop exhausted after ${maxIterations} tool iterations (a forced final answer without tools also came back empty)`,
     isError: true
   });
   c.error = "The assistant kept calling tools without finishing. Try rephrasing.";
@@ -3227,23 +3289,23 @@ function useBrainConversation(options) {
     augmentSystemPrompt,
     chatMode
   } = options;
-  const [messages, setMessages] = useState5([]);
-  const [loadingMessages, setLoadingMessages] = useState5(false);
-  const [reloadNonce, setReloadNonce] = useState5(0);
-  const reloadMessages = useCallback4(() => setReloadNonce((n) => n + 1), []);
-  const [localSending, setLocalSending] = useState5(false);
-  const [localError, setLocalError] = useState5("");
-  const [ratings, setRatings] = useState5({});
-  const [pendingAttachments, setPendingAttachments] = useState5([]);
-  const [uploading, setUploading] = useState5(false);
-  const autoRepliedChatIdRef = useRef4(null);
-  const [snapshot, setSnapshot] = useState5(() => getRunSnapshot(chatId));
-  useEffect5(() => {
+  const [messages, setMessages] = useState6([]);
+  const [loadingMessages, setLoadingMessages] = useState6(false);
+  const [reloadNonce, setReloadNonce] = useState6(0);
+  const reloadMessages = useCallback5(() => setReloadNonce((n) => n + 1), []);
+  const [localSending, setLocalSending] = useState6(false);
+  const [localError, setLocalError] = useState6("");
+  const [ratings, setRatings] = useState6({});
+  const [pendingAttachments, setPendingAttachments] = useState6([]);
+  const [uploading, setUploading] = useState6(false);
+  const autoRepliedChatIdRef = useRef5(null);
+  const [snapshot, setSnapshot] = useState6(() => getRunSnapshot(chatId));
+  useEffect6(() => {
     setSnapshot(getRunSnapshot(chatId));
     if (chatId == null) return;
     return subscribeRun(chatId, () => setSnapshot(getRunSnapshot(chatId)));
   }, [chatId]);
-  useEffect5(() => {
+  useEffect6(() => {
     let cancelled = false;
     if (chatId == null) {
       setMessages([]);
@@ -3262,12 +3324,12 @@ function useBrainConversation(options) {
       cancelled = true;
     };
   }, [persistence, chatId, reloadNonce]);
-  useEffect5(() => {
+  useEffect6(() => {
     if (chatId == null || !persistence.subscribeMessages) return;
     return persistence.subscribeMessages(chatId, reloadMessages);
   }, [persistence, chatId, reloadMessages]);
-  const lastMarkedRef = useRef4(null);
-  useEffect5(() => {
+  const lastMarkedRef = useRef5(null);
+  useEffect6(() => {
     if (chatId == null || !persistence.markChatRead || messages.length === 0) return;
     let maxSeq = 0;
     for (const m of messages) if (m.seq > maxSeq) maxSeq = m.seq;
@@ -3279,7 +3341,7 @@ function useBrainConversation(options) {
       if (lastMarkedRef.current?.chatId === chatId) lastMarkedRef.current = prev;
     });
   }, [persistence, chatId, messages]);
-  useEffect5(() => {
+  useEffect6(() => {
     const appended = snapshot.appended;
     if (appended.length === 0) return;
     setMessages((prev) => {
@@ -3288,7 +3350,7 @@ function useBrainConversation(options) {
       return fresh.length === 0 ? prev : [...prev, ...fresh];
     });
   }, [snapshot.messagesEpoch, snapshot.appended]);
-  useEffect5(() => {
+  useEffect6(() => {
     const map = {};
     for (const msg of messages) {
       if (!msg.metadata) continue;
@@ -3304,7 +3366,7 @@ function useBrainConversation(options) {
   const resolvedSystemPrompt = systemPrompt ?? resolveSystemPrompt(modality);
   const fullSystemPrompt = extraSystem ? `${resolvedSystemPrompt}
 ${extraSystem}` : resolvedSystemPrompt;
-  const buildRequest = useCallback4(
+  const buildRequest = useCallback5(
     (seed, userTurn) => ({
       resolvedSystemPrompt: fullSystemPrompt,
       tools: toolSpecs && toolSpecs.length > 0 ? toolSpecs : void 0,
@@ -3328,7 +3390,7 @@ ${extraSystem}` : resolvedSystemPrompt;
     }),
     [fullSystemPrompt, toolSpecs, model, modelStrict, routingMode, pickFallbackModel, maxTokens, reasoning, runTool, needsConfirm, stream, persistence, onActivity, evermind, augmentSystemPrompt, projectId, chatMode]
   );
-  const send = useCallback4(
+  const send = useCallback5(
     async (text, opts) => {
       const trimmed = text.trim();
       if (!trimmed || localSending || isRunning(chatId)) return false;
@@ -3397,7 +3459,7 @@ ${refs}`;
     },
     [persistence, chatId, localSending, pendingAttachments, messages, ensureChatId, buildRequest, onActivity, onFirstUserTurn]
   );
-  useEffect5(() => {
+  useEffect6(() => {
     if (chatId == null || loadingMessages || localSending || messages.length === 0) return;
     if (isRunning(chatId)) return;
     const last = messages[messages.length - 1];
@@ -3412,7 +3474,7 @@ ${refs}`;
     }));
     void startRun(chatId, buildRequest(seed, last.content));
   }, [chatId, loadingMessages, localSending, messages, buildRequest]);
-  const rateMessage = useCallback4(async (msg, rating) => {
+  const rateMessage = useCallback5(async (msg, rating) => {
     setRatings((prev) => {
       const copy = { ...prev };
       if (rating === 0) delete copy[msg.id];
@@ -3429,7 +3491,7 @@ ${refs}`;
     } catch {
     }
   }, [persistence, messages]);
-  const attach = useCallback4(async (file) => {
+  const attach = useCallback5(async (file) => {
     setUploading(true);
     try {
       const result = await persistence.upload(file);
@@ -3450,20 +3512,20 @@ ${refs}`;
       setUploading(false);
     }
   }, [persistence]);
-  const removeAttachment = useCallback4((key) => {
+  const removeAttachment = useCallback5((key) => {
     setPendingAttachments((prev) => prev.filter((a) => a.key !== key));
   }, []);
-  const resolveConfirm = useCallback4((ok) => {
+  const resolveConfirm = useCallback5((ok) => {
     if (chatId != null) resolveRunConfirm(chatId, ok);
   }, [chatId]);
-  const clearError = useCallback4(() => {
+  const clearError = useCallback5(() => {
     setLocalError("");
     clearRunError(chatId);
   }, [chatId]);
-  const stop = useCallback4(() => {
+  const stop = useCallback5(() => {
     if (chatId != null) stopRun(chatId);
   }, [chatId]);
-  const buildTriageReport = useCallback4(
+  const buildTriageReport = useCallback5(
     (agentLabel, surface) => buildBrainTriageReport({
       capturedAt: (/* @__PURE__ */ new Date()).toISOString(),
       events: getRunTrace(chatId),
@@ -3557,6 +3619,109 @@ function subscribeToChatMessages(baseUrl, getToken, chatId, onChanged) {
     socket?.close();
     socket = null;
   };
+}
+
+// src/chatActivity.ts
+var PHASES = ["started", "completed", "failed", "paused", "resumed", "cancelled"];
+function isPhase(v) {
+  return typeof v === "string" && PHASES.includes(v);
+}
+function str(v) {
+  return typeof v === "string" && v.trim() ? v : void 0;
+}
+function parseChatActivity(msg) {
+  if (!msg.metadata) return null;
+  let meta;
+  try {
+    const parsed = JSON.parse(msg.metadata);
+    if (!parsed || typeof parsed !== "object") return null;
+    meta = parsed;
+  } catch {
+    return null;
+  }
+  const ticketKind = str(meta.ticketKind) ?? "task";
+  const ticketRef = str(meta.ticketRef) ?? "";
+  const agentName = str(meta.agentName) ?? str(meta.agentRef) ?? "";
+  if (meta.runMilestone != null && isPhase(meta.phase)) {
+    return {
+      kind: "milestone",
+      phase: meta.phase,
+      agentName,
+      ticketKind,
+      ticketRef,
+      executionId: typeof meta.executionId === "number" ? meta.executionId : null,
+      ...str(meta.toStatus) ? { toStatus: str(meta.toStatus) } : {},
+      ...str(meta.note) ? { note: str(meta.note) } : {},
+      ...str(meta.question) ? { question: str(meta.question) } : {}
+    };
+  }
+  if (meta.agentDispatch === true) {
+    return { kind: "dispatch", agentName, ticketKind, ticketRef };
+  }
+  return null;
+}
+function isActivityMessage(msg) {
+  return parseChatActivity(msg) !== null;
+}
+var DEFAULT_CHAT_ACTIVITY_LABELS = {
+  milestoneStarted: "{agent} started working on {kind} #{ref}",
+  milestoneCompleted: "{agent} finished {kind} #{ref}",
+  milestoneCompletedWithLane: "{agent} finished {kind} #{ref} \u2014 moved to {lane}",
+  milestoneFailed: "{agent}\u2019s run on {kind} #{ref} failed",
+  milestonePaused: "{agent} paused on {kind} #{ref} \u2014 waiting on a human answer",
+  milestonePausedWithQuestion: "{agent} paused on {kind} #{ref} \u2014 needs an answer: {question}",
+  milestoneResumed: "{agent} resumed work on {kind} #{ref}",
+  milestoneCancelled: "{agent}\u2019s run on {kind} #{ref} was cancelled",
+  agentDispatched: "{agent} was assigned to {kind} #{ref}"
+};
+function activityIcon(activity) {
+  if (activity.kind === "dispatch") return "\u{1F464}";
+  switch (activity.phase) {
+    case "started":
+      return "\u25B6";
+    case "completed":
+      return "\u2713";
+    case "failed":
+      return "!";
+    case "paused":
+      return "?";
+    case "resumed":
+      return "\u25B6";
+    case "cancelled":
+      return "\u25A0";
+    default:
+      return "\u2022";
+  }
+}
+function activityTone(activity) {
+  if (activity.kind === "dispatch") return "neutral";
+  if (activity.phase === "completed") return "good";
+  if (activity.phase === "failed") return "bad";
+  if (activity.phase === "paused") return "waiting";
+  return "neutral";
+}
+function fill(template, values) {
+  return template.replace(/\{(\w+)\}/g, (_, key) => values[key] ?? "");
+}
+function chatActivityText(activity, labels) {
+  const base = { agent: activity.agentName, kind: activity.ticketKind, ref: activity.ticketRef };
+  if (activity.kind === "dispatch") return fill(labels.agentDispatched, base);
+  switch (activity.phase) {
+    case "started":
+      return fill(labels.milestoneStarted, base);
+    case "completed":
+      return activity.toStatus ? fill(labels.milestoneCompletedWithLane, { ...base, lane: activity.toStatus }) : fill(labels.milestoneCompleted, base);
+    case "failed":
+      return fill(labels.milestoneFailed, base);
+    case "paused":
+      return activity.question ? fill(labels.milestonePausedWithQuestion, { ...base, question: activity.question }) : fill(labels.milestonePaused, base);
+    case "resumed":
+      return fill(labels.milestoneResumed, base);
+    case "cancelled":
+      return fill(labels.milestoneCancelled, base);
+    default:
+      return "";
+  }
 }
 
 // src/apiVersion.ts
@@ -3816,9 +3981,16 @@ function diagnosticsSignals(d) {
   const out = [];
   const ev = d.evermind;
   if (d.projectId == null || d.lastLearn?.reason === "not-attached") {
-    out.push(
-      "\u26A0\uFE0F Chat is NOT attached to a project (chat.projectId is null). The learn gate keys on the CHAT's project, so this chat contributes NOTHING to any Evermind \u2014 even though the panel shows the selected project as connected. Attach the chat to a project (or re-open it so the self-heal adopts the active project)."
-    );
+    const unattached = "\u26A0\uFE0F Chat is NOT attached to a project (chat.projectId is null). The learn gate keys on the CHAT's project, so this chat contributes NOTHING to any Evermind \u2014 even though the panel shows the selected project as connected.";
+    if (d.selectedProjectId == null) {
+      out.push(
+        `${unattached} No project is selected in the sidebar either, so there was nothing for the chat to adopt \u2014 SELECT a project, then re-open the chat. (Not an adopt bug.)`
+      );
+    } else {
+      out.push(
+        `${unattached} A project IS selected (${fmtProject(d.selectedProjectId, d.selectedProjectName)}) and the chat still came up unattached, so the ADOPT path is the fault, not the selection \u2014 investigate the self-heal that binds an open chat to the active project.`
+      );
+    }
   } else if (d.selectedProjectId != null && d.selectedProjectId !== d.projectId) {
     out.push(
       `\u26A0\uFE0F Chat's project (#${d.projectId}) differs from the panel's selected project (#${d.selectedProjectId}). The Evermind panel reflects the SELECTED project; this chat feeds project #${d.projectId}. They are different models \u2014 compare the versions below.`
@@ -3907,16 +4079,25 @@ function fmtAdvertised(tools) {
 function formatChatDiagnostics(d) {
   const lines = ["## Chat diagnostics"];
   if (d.surface) lines.push(`- Surface: ${d.surface}`);
-  if (d.versions && (d.versions.ui || d.versions.api)) {
-    lines.push(
-      `- Versions: UI ${d.versions.ui ?? "unknown"} \xB7 API ${d.versions.api ?? "unknown"}`
-    );
+  if (d.versions && (d.versions.ui || d.versions.api || d.versions.uiBuildId)) {
+    const buildId = d.versions.uiBuildId;
+    const ui = `${d.versions.ui ?? "unknown"}${buildId ? `+${buildId}` : ""}` + (d.versions.uiBuiltAt && d.versions.uiBuiltAt !== "dev" ? ` (built ${d.versions.uiBuiltAt})` : "");
+    lines.push(`- Versions: UI ${ui} \xB7 API ${d.versions.api ?? "unknown"}`);
+    if (buildId === "dev") {
+      lines.push(
+        '  - \u26A0\uFE0F UI build id is "dev" \u2014 this capture did NOT come from a packaged build, so its behaviour may not match any released artifact.'
+      );
+    } else if (d.versions.ui && !buildId) {
+      lines.push(
+        '  - \u26A0\uFE0F No UI build id \u2014 this client does not stamp one, so a rebuild carrying the SAME version is indistinguishable from the build it replaced. "Is the fix in?" cannot be answered from this report.'
+      );
+    }
   }
   lines.push(`- Chat: ${d.chatTitle?.trim() ? `"${d.chatTitle.trim()}"` : "Untitled"}${d.chatId != null ? ` (#${d.chatId})` : ""}${d.chatVisibility ? ` \xB7 ${d.chatVisibility}` : ""}`);
   lines.push(`- Chat's project: ${fmtProject(d.projectId, d.projectName)}`);
-  if (d.selectedProjectId != null && d.selectedProjectId !== d.projectId) {
-    lines.push(`- Panel's selected project: #${d.selectedProjectId}`);
-  }
+  lines.push(
+    `- Panel's selected project: ${fmtProject(d.selectedProjectId, d.selectedProjectName)}` + (d.selectedProjectId != null && d.selectedProjectId === d.projectId ? " (same as the chat's)" : "")
+  );
   lines.push(`- Tenant: ${d.tenantId != null ? `#${d.tenantId}` : "unknown"} \xB7 User: ${d.userId ?? "unknown"}`);
   const acct = d.account;
   if (acct) {
@@ -4045,6 +4226,7 @@ async function gatherChatDiagnostics(src) {
     projectId: src.projectId ?? null,
     projectName: projectName ?? src.projectName ?? null,
     selectedProjectId: src.selectedProjectId ?? null,
+    selectedProjectName: src.selectedProjectName ?? null,
     tenantId: src.tenantId ?? null,
     userId: src.userId ?? null,
     evermind: toEvermind(head),
@@ -4059,7 +4241,12 @@ async function gatherChatDiagnostics(src) {
       advertisedMin: exposure?.min ?? null,
       advertisedLastTurn: exposure?.lastTurn ?? null
     } : null,
-    versions: { ui: src.uiVersion ?? null, api: apiVersion }
+    versions: {
+      ui: src.uiVersion ?? null,
+      api: apiVersion,
+      uiBuildId: src.uiBuildId ?? null,
+      uiBuiltAt: src.uiBuiltAt ?? null
+    }
   };
 }
 export {
@@ -4076,6 +4263,7 @@ export {
   CODE_CHANGE_TOOLS,
   CONSOLIDATION_MARKER_PREFIX,
   CONSOLIDATION_META,
+  DEFAULT_CHAT_ACTIVITY_LABELS,
   DEFAULT_CHAT_TITLE,
   DEFAULT_MODEL_CHOICE_LABELS,
   DEFAULT_MODEL_IDENTITY,
@@ -4092,21 +4280,26 @@ export {
   TOOL_ROUTER_DESCRIBE,
   TOOL_ROUTER_FIND,
   TOOL_ROUTER_INVOKE,
+  WEB_FETCH_TOOL_NAME,
   XmlToolCallFilter,
   accountUsedInTrace,
   activeMentionToken,
   activeModelKey,
+  activityIcon,
+  activityTone,
   allowanceState,
   announcesUntakenAction,
   attachEvermindLearn,
   brainRequestError,
   buildBrainTriageReport,
+  buildComposerDirectives,
   buildModelItems,
   byoReasonHint,
   byoUnresolvedInTrace,
   byoUnresolvedSummary,
   byoVendorLabel,
   catalogToolNamesMentionedIn,
+  chatActivityText,
   chatConversationDirective,
   chatErrorAction,
   chatModeDirective,
@@ -4145,6 +4338,7 @@ export {
   getRunSnapshot,
   getRunTrace,
   handleRouterCall,
+  isActivityMessage,
   isChatMode,
   isCodeChangeTool,
   isConnectedAccountUnused,
@@ -4162,6 +4356,7 @@ export {
   isUserConfiguredModelRef,
   lastConsolidationIndex,
   linkedTicketsToAdvance,
+  localStorageConfirmationPersistence,
   mcpActionsFrom,
   mentionRecipient,
   modelCategoryLabel,
@@ -4172,6 +4367,7 @@ export {
   nextFallbackModel,
   normalizeChatMode,
   parseByoUnresolved,
+  parseChatActivity,
   parseDirectedRecipient,
   parseMessageAuthor,
   parseMessageProvenance,
@@ -4221,6 +4417,7 @@ export {
   useMcpExtensions,
   useOptionalBrainContext,
   useRegisterBrainActions,
+  useToolConfirmationGate,
   withDirectedMetadata,
   withProvenanceMetadata,
   workItemLinkFromCreate

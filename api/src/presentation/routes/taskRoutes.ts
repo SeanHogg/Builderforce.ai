@@ -19,6 +19,7 @@ import { convertWorkItemType, ConvertError, type WorkItemKind } from '../../appl
 import type { Db } from '../../infrastructure/database/connection';
 import { resolveDefaultRepoForTask } from '../../application/repos/resolveDefaultRepo';
 import { openTaskPullRequest } from '../../application/repos/openTaskPullRequest';
+import { loadTicketBuildStatuses } from '../../application/repos/ticketBuildStatus';
 import { ensureTaskPrdRecord, linkSpecToTask } from '../../application/prd/taskPrd';
 import { recordStatusTransition } from '../../application/task/taskLifecycle';
 import { recordActivity, resolveActorFromContext } from '../../application/activity/activityLog';
@@ -31,8 +32,7 @@ import { dispatchCloudRunForTask } from './runtimeRoutes';
 import { recordCloudToolEvent } from '../../application/runtime/cloudAgentEngine';
 import { evaluateTaskAutoRun, type AutoRunReason } from '../../application/swimlane/evaluateAutoRun';
 import { resolveLaneAgentHostId } from '../../application/swimlane/laneAgentHost';
-import { maybeAutoRunOnLaneEntry } from '../../application/swimlane/laneEntryTrigger';
-import { findCanonicalBoard } from '../../application/swimlane/canonicalBoard';
+import { routeLaneEntry } from '../../application/swimlane/laneEntryTrigger';
 import { coordinateTicket } from '../../application/manager/coordinateTicket';
 import { TicketParticipantsService } from '../../application/kanban/ticketParticipants';
 import { SecurityTicketAccessService } from '../../application/security/SecurityTicketAccessService';
@@ -182,19 +182,17 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     c.executionCtx.waitUntil((async () => {
       const tenantId = c.get('tenantId');
       const submittedBy = (c as { get(k: 'userId'): string | undefined }).get('userId') ?? 'system:lane-auto';
-      // On a lifecycle-managed board the coordinator owns lane transitions — a manual
-      // drag must drive the coordinated multi-role state machine (rewind to the earliest
-      // unmet required stage, run the right producer, enforce review gates), NOT a
-      // one-off producer. A simple board keeps the direct lane trigger.
-      const board = await findCanonicalBoard(db, info.projectId, tenantId).catch(() => null);
-      if (board?.lifecycleManaged) {
-        await coordinateTicket(c.env as Env, db, runtimeService, { tenantId, taskId: info.taskId }).catch((error) => {
-          reportCaughtError(error, { source: "presentation/routes/taskRoutes.ts", operation: "fireLaneAutoRun" });
-        });
-        return;
-      }
-      await maybeAutoRunOnLaneEntry(c.env as Env, db, runtimeService, {
+      // WHICH ENGINE runs the lane is `routeLaneEntry`'s decision, not this route's:
+      //  • a lifecycle-managed board hands the ticket to the coordinated multi-role state
+      //    machine (rewind to the earliest unmet required stage, run the right producer,
+      //    enforce review gates), NOT a one-off producer;
+      //  • a lane the simple executor cannot express — several staffed agents, a success
+      //    policy, a lane action, a browser-claimed agent — is driven by the
+      //    SwimlaneCoordinator, which a manual drag used to bypass entirely;
+      //  • everything else keeps the direct lane trigger.
+      await routeLaneEntry(c.env as Env, db, runtimeService, {
         tenantId, projectId: info.projectId, taskId: info.taskId, status: info.status, submittedBy,
+        onManagedBoard: async () => { await coordinateTicket(c.env as Env, db, runtimeService, { tenantId, taskId: info.taskId }); },
       });
     })());
   };
@@ -277,9 +275,26 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     // Augment each card with its linked-PRD count [1266] — one grouped query (no
     // N+1), and best-effort so it no-ops where task_specs (migration 0098) isn't
     // applied yet (the board still renders, just with no PRD dots).
+    //
+    // The BUILD VERDICT rides the same list for the same reason. A failing PR-branch
+    // build used to surface only on the ticket's PR tab, so the one place a person scans
+    // — the board — showed a green-looking card over a branch that could not build. It is
+    // one grouped read beside the PRD counts (`loadTicketBuildStatuses`), never a query
+    // per card: this is the most-loaded read path the product has.
     const ids = plain.map(t => Number(t.id)).filter(n => Number.isFinite(n));
-    const specCounts = await countSpecsByTask(db, ids);
-    return c.json({ tasks: plain.map(t => ({ ...t, specCount: specCounts.get(Number(t.id)) ?? 0 })) });
+    const [specCounts, buildStatuses] = await Promise.all([
+      countSpecsByTask(db, ids),
+      loadTicketBuildStatuses(db, c.get('tenantId'), ids),
+    ]);
+    return c.json({
+      tasks: plain.map(t => ({
+        ...t,
+        specCount: specCounts.get(Number(t.id)) ?? 0,
+        // Absent for a ticket with no pull request — the client's default is `unknown`
+        // and both render nothing, so there is no reason to spend a field per card.
+        buildStatus: buildStatuses.get(Number(t.id)) ?? null,
+      })),
+    });
   });
 
   // GET /api/tasks/assignees — the team members (humans) a task can be assigned to.
@@ -866,6 +881,11 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
       summary: `Moved ${task.key ?? `#${id}`} to another project`,
       metadata: { fromProjectId: before?.projectId ?? null, toProjectId: body.projectId },
     });
+
+    // Landing on ANOTHER board's lane is a lane entry like any other. This route was the
+    // one status-writer that never fired the trigger, so a ticket moved onto a staffed
+    // board sat inert until the 30-minute autonomous sweep happened to notice it.
+    fireLaneAutoRun(c, { projectId: body.projectId, taskId: id, status: task.toPlain().status });
 
     return c.json(task.toPlain());
   });

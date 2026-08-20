@@ -92,6 +92,15 @@ export class QaFlowService {
     const maxEvents = Math.max(1, opts.maxEvents ?? 20_000);
     const pageSize = Math.min(Math.max(1, opts.pageSize ?? 5_000), maxEvents);
     const since = new Date(Date.now() - sinceDays * 24 * 60 * 60 * 1000);
+    // Scope the EVENTS, not just the flow row we stamp with it. `projectId` used
+    // to be applied only to the upserted `qa_flows` row, so aggregating for
+    // project A built A's flows out of every project's sessions. Journey events
+    // carry a nullable project_id (0955): set = that project's site, null = the
+    // app shell, which belongs to no project and is therefore in scope for any
+    // project's aggregation.
+    const projectScope: SQL | undefined = opts.projectId == null
+      ? undefined
+      : sql`(${qaJourneyEvents.projectId} = ${opts.projectId} or ${qaJourneyEvents.projectId} is null)`;
 
     // Group ordered events by session as we stream pages in. Because the keyset
     // order is (sessionId, seq), a session's events are always contiguous across
@@ -125,7 +134,12 @@ export class QaFlowService {
           value:     qaJourneyEvents.value,
         })
         .from(qaJourneyEvents)
-        .where(and(eq(qaJourneyEvents.tenantId, tenantId), gte(qaJourneyEvents.ts, since), ...(keyset ? [keyset] : [])))
+        .where(and(
+          eq(qaJourneyEvents.tenantId, tenantId),
+          gte(qaJourneyEvents.ts, since),
+          projectScope,
+          ...(keyset ? [keyset] : []),
+        ))
         .orderBy(asc(qaJourneyEvents.sessionId), asc(qaJourneyEvents.seq))
         .limit(take);
 
@@ -151,6 +165,7 @@ export class QaFlowService {
           .where(and(
             eq(qaJourneyEvents.tenantId, tenantId),
             gte(qaJourneyEvents.ts, since),
+            projectScope,
             or(
               gt(qaJourneyEvents.sessionId, cursorSession),
               and(eq(qaJourneyEvents.sessionId, cursorSession), gt(qaJourneyEvents.seq, cursorSeq)),

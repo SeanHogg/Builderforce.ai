@@ -1,4 +1,4 @@
-import { chatErrorAction } from "@seanhogg/builderforce-brain-embedded/chatError";
+import { chatErrorAction, type ChatErrorAction } from "@seanhogg/builderforce-brain-embedded/chatError";
 import * as vscode from "vscode";
 import { getWebBaseUrl } from "./gateway";
 
@@ -37,7 +37,18 @@ export interface UpgradeAction {
  * offer their own sign-in affordance.
  */
 export function upgradeActionFor(error: unknown): UpgradeAction | null {
-  const action = chatErrorAction(error);
+  return upgradeActionForVerdict(chatErrorAction(error));
+}
+
+/**
+ * The same call-to-action, from an ALREADY-CLASSIFIED verdict.
+ *
+ * The shared run loop classifies a failure once (on the run cell's `errorAction`) and
+ * surfaces the sentence separately — the original thrown value is gone by the time a
+ * host reads it. Rendering from the verdict keeps that path on the SAME mapping as the
+ * throw-carrying one instead of re-deriving it from error prose.
+ */
+export function upgradeActionForVerdict(action: ChatErrorAction | null): UpgradeAction | null {
   if (!action || action.kind === "auth") return null;
 
   const url = `${getWebBaseUrl()}${PATHS[action.kind]}`;
@@ -60,6 +71,12 @@ export function upgradeActionFor(error: unknown): UpgradeAction | null {
  */
 export function formatChatError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
-  const action = upgradeActionFor(error);
-  return action ? `${message}\n\n[${action.label}](${action.url})` : message;
+  return formatChatErrorVerdict(message, chatErrorAction(error));
+}
+
+/** {@link formatChatError} for a message whose verdict was classified elsewhere (the
+ *  shared run loop's `errorAction`). One renderer for both entry points. */
+export function formatChatErrorVerdict(message: string, action: ChatErrorAction | null): string {
+  const cta = upgradeActionForVerdict(action);
+  return cta ? `${message}\n\n[${cta.label}](${cta.url})` : message;
 }

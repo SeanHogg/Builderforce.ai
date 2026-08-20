@@ -30,8 +30,8 @@ import type { Env } from '../../env';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { llmActionRatings } from '../../infrastructure/database/schema';
 import { acrossTenants, scopedToNullableTenant, scopedToTenant } from '../../infrastructure/database/tenantScope';
-import { normalizeActionType, type ActionType } from './actionTypes';
-import { ratingScore } from './modelQualityScore';
+import { normalizeActionType, type ActionType } from '@builderforce/learned-routing';
+import { ratingScore } from '@builderforce/learned-routing';
 import { applyRatingToRoutingTable, ROUTING_WINDOW_DAYS } from './routingTable';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 

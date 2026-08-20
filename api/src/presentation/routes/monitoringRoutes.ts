@@ -19,7 +19,7 @@
 import { Hono } from 'hono';
 import { authMiddleware, requireRole, isManager } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
-import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
+
 import { monitoringVersionKey, incidentVersionKey } from '../../application/insights/versionKeys';
 import { MonitoringService, type MonitorType } from '../../application/monitoring/MonitoringService';
 import type { HonoEnv } from '../../env';
@@ -34,22 +34,18 @@ interface MonitorBody {
 export function createMonitoringRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
-  const invalidate = (c: { env: HonoEnv['Bindings'] }, tenantId: number) => bumpCacheVersion(c.env, monitoringVersionKey(tenantId));
+  const invalidate = (c: { env: HonoEnv['Bindings'] }, tenantId: number) => new MonitoringService(db).invalidate(c.env, tenantId);
 
   // ── Reporting (folds monitor + incident version tokens) ────────────────────
   router.get('/report', async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const [mv, iv] = await Promise.all([getCacheVersion(c.env, monitoringVersionKey(tenantId)), getCacheVersion(c.env, incidentVersionKey(tenantId))]);
-    const data = await getOrSetCached(c.env, `monitoring:report:${tenantId}:v:${mv}:${iv}`, () => new MonitoringService(db).getReport(tenantId));
-    return c.json(data);
+    return c.json(await new MonitoringService(db).getCachedReport(c.env, tenantId));
   });
 
   // ── Boards ─────────────────────────────────────────────────────────────────
   router.get('/boards', async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const ver = await getCacheVersion(c.env, monitoringVersionKey(tenantId));
-    const data = await getOrSetCached(c.env, `monitoring:boards:${tenantId}:v:${ver}`, () => new MonitoringService(db).listBoards(tenantId));
-    return c.json({ boards: data });
+    return c.json({ boards: await new MonitoringService(db).getCachedBoards(c.env, tenantId) });
   });
   router.post('/boards', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;

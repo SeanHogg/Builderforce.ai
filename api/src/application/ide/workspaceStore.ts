@@ -27,7 +27,7 @@ import { isR2SameObjectRateLimit, retryTransient } from '../../infrastructure/sh
  * `fileContentGuard` over a shared vector set, since the two runtimes cannot
  * share a module (see the template-parity note in projectTemplate.ts).
  */
-import { IDE_PREFIX } from '../project/projectTemplate';
+import { IDE_PREFIX, isScaffoldPath } from '../project/projectTemplate';
 
 // ---------------------------------------------------------------------------
 // Paths
@@ -157,6 +157,34 @@ export interface WorkspaceEntry {
   size: number;
 }
 
+/**
+ * The ZERO-BYTE SCAFFOLD rule, enforced on top of the content contract.
+ *
+ * {@link validateWorkspaceContent} deliberately allows an empty body — creating a
+ * blank file is legitimate. It is NOT legitimate at a path a starter scaffold
+ * owns. A Mobile project was found with all five scaffold paths present in R2 at
+ * size 0; the writer was never identified, and neither the creation seed nor the
+ * file-list self-heal repaired them because both treat "present" as "seeded"
+ * unless it is also empty at the moment they happen to look.
+ *
+ * So instead of naming the writer, the invariant is closed at the one place every
+ * writer passes — the editor's mount-time onChange, file-create, an agent tool, a
+ * canvas build tool, a script hitting `PUT /files/*` directly. Emptying a
+ * scaffold file is refused with 422; deleting it is still allowed (the seed
+ * re-creates it), and writing real content is untouched.
+ *
+ * Kept separate from `validateWorkspaceContent` because that function is a pure
+ * CONTENT-FORMAT contract mirrored byte-for-byte by the frontend guard
+ * (`contentGuardParity.test.ts`); this is a path+size rule, not a format rule.
+ */
+export function validateScaffoldNotEmptied(path: string, isEmpty: boolean): ContentValidation {
+  if (!isEmpty || !isScaffoldPath(path)) return { ok: true };
+  return {
+    ok: false,
+    reason: `${path} is a starter-scaffold file and cannot be written empty — delete it instead, or write its real content`,
+  };
+}
+
 export type WriteResult =
   | { ok: true }
   | { ok: false; status: 400 | 422; reason: string };
@@ -224,6 +252,8 @@ export async function writeWorkspaceFile(
   if (!validPath.ok) return { ok: false, status: 400, reason: validPath.reason };
   const validContent = validateWorkspaceContent(path, content);
   if (!validContent.ok) return { ok: false, status: 422, reason: validContent.reason };
+  const scaffoldOk = validateScaffoldNotEmptied(path, content.trim() === '');
+  if (!scaffoldOk.ok) return { ok: false, status: 422, reason: scaffoldOk.reason };
   // Keep the version this write is about to destroy. Done HERE, at the single
   // chokepoint, so every writer is covered by construction — the editor, the
   // canvas build tools, an agent, the scaffold self-heal — rather than each one
@@ -422,6 +452,11 @@ export async function writeWorkspaceBinary(
 ): Promise<WriteResult> {
   const validPath = validateWorkspacePath(path);
   if (!validPath.ok) return { ok: false, status: 400, reason: validPath.reason };
+  // Same zero-byte scaffold rule as the text path — a 0-length upload at
+  // `package.json` is the exact state that broke Run, whatever content-type it
+  // arrived under.
+  const scaffoldOk = validateScaffoldNotEmptied(path, bytes.length === 0);
+  if (!scaffoldOk.ok) return { ok: false, status: 422, reason: scaffoldOk.reason };
   await withSameObjectRetry(() =>
     bucket.put(workspacePrefix(projectId) + path, bytes as unknown as ArrayBuffer, {
       ...(contentType ? { httpMetadata: { contentType } } : {}),

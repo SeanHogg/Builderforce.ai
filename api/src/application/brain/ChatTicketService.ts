@@ -861,7 +861,10 @@ export class ChatTicketService {
         tenantId,
         t.chatId,
         `🤖 **${name}** has been assigned to ${kind} #${ref}. Progress will appear here as it works.`,
-        { agentDispatch: true, agentRef, ticketKind: kind, ticketRef: ref },
+        // The STRUCTURED facts, not just the sentence: both chat renderers compose the
+        // activity line from these in the reader's language (see brain-embedded's
+        // `chatActivity.ts`). `content` stays the English fallback for older clients.
+        { agentDispatch: true, agentRef, agentName: name, ticketKind: kind, ticketRef: ref },
       );
     }
   }
@@ -934,8 +937,21 @@ export class ChatTicketService {
         ?? (input.agentRef ? await this.agentDisplayName(tenantId, input.agentRef) : 'The agent');
       const key = `${executionId}:${phase}${input.eventNonce ? `:${input.eventNonce}` : ''}`;
       const text = ChatTicketService.runMilestoneText(name, kind, ref, input);
+      // Everything a client needs to RE-COMPOSE this line in its own language: who, which
+      // ticket, which phase, the lane it moved to, and the one line of result/error worth
+      // showing. `text` remains the English fallback for rows written before this
+      // contract and for any surface that has no activity renderer.
+      const lane = phase === 'completed' && input.toStatus ? input.toStatus.replace(/_/g, ' ') : null;
+      const note = phase === 'completed'
+        ? ChatTicketService.firstLine(input.resultText)
+        : (phase === 'failed' ? ChatTicketService.firstLine(input.errorMessage) : '');
+      const question = phase === 'paused' ? ChatTicketService.firstLine(input.questionText) : '';
       await Promise.all(chats.map((c) => this.postSystemMessage(tenantId, c.chatId, text, {
           runMilestone: key, ticketKind: kind, ticketRef: ref, phase, executionId, agentRef: input.agentRef ?? null,
+          agentName: name,
+          ...(lane ? { toStatus: lane } : {}),
+          ...(note ? { note } : {}),
+          ...(question ? { question } : {}),
         }, `run:${key}`)));
     } catch (error) {
       // Narration remains best-effort, but delivery failures must be observable.

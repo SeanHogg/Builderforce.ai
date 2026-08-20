@@ -12,15 +12,20 @@
  * that silent fallback into a visible, named fault.
  */
 
-/** Why distillation didn't happen (mirrors the API's `TeacherSkipReason`, plus the
- *  `unknown` bucket for rows written before the reason was recorded). */
+/** Why distillation didn't happen. Mirrors the API's `RecordedSkipReason`: every reason
+ *  a live merge can emit, plus the two buckets its legacy-provenance backfill writes —
+ *  `legacy` (no teacher evidence either way) and `unknown` (provably a fault, cause not
+ *  nameable). Keep in lockstep with `api/src/application/llm/evermindTeacher.ts`. */
 export type EvermindTeacherSkipReason =
   | 'not_pinned'
   | 'budget_exhausted'
+  | 'cooling'
+  | 'unroutable'
   | 'input_too_short'
   | 'gateway_error'
   | 'empty_output'
   | 'exception'
+  | 'legacy'
   | 'unknown';
 
 /** The provenance verdict for one learned memory. */
@@ -54,8 +59,11 @@ export function evermindLearnedStatus(entry: LearnedStatusInput): EvermindLearne
   }
 
   if (entry.skipReason) {
-    // A teacher was never pinned → self-learning, which is a legitimate mode.
-    if (entry.skipReason === 'not_pinned') return { state: 'self' };
+    // A teacher was never pinned → self-learning, which is a legitimate mode. `legacy`
+    // is the backfill's equivalent: a row merged before provenance was recorded, which
+    // proves no teacher evidence either way — graded exactly as the bare legacy row
+    // below was graded, so materialising the inference can never re-grade history.
+    if (entry.skipReason === 'not_pinned' || entry.skipReason === 'legacy') return { state: 'self' };
     return {
       state: 'fault',
       reason: entry.skipReason as EvermindTeacherSkipReason,

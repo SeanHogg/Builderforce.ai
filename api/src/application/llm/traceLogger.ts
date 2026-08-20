@@ -21,10 +21,49 @@ import { eq } from 'drizzle-orm';
 import { buildTransactionalDatabase } from '../../infrastructure/database/connection';
 import { llmTraces } from '../../infrastructure/database/schema';
 import { redactSecrets } from '../../infrastructure/security/redactSecrets';
-import type { ProxyResult } from './LlmProxyService';
+import type { ImageProxyResult } from './ImageProxyService';
 import type { HonoEnv } from '../../env';
 
 type Env = HonoEnv['Bindings'];
+
+/**
+ * The trace-shaped view of a dispatched LLM call.
+ *
+ * Structural on purpose: `ProxyResult` (chat) satisfies it as-is, and any other
+ * dispatcher shape reaches it through ONE adapter rather than a second copy of the
+ * row-building code below. {@link imageTraceResult} is that adapter for
+ * `ImageProxyService`, whose result is an `ImageProxyResult`, not a `ProxyResult`.
+ */
+export interface TraceResult {
+  response: { status: number };
+  resolvedModel?: string;
+  resolvedVendor?: string;
+  status?: number;
+  outcome?: string;
+  classification?: string | null;
+  attempts?: unknown[];
+  retries?: number;
+  schemaRetries?: number;
+  durationMs?: number;
+  candidateChain?: string[] | null;
+}
+
+/**
+ * The slice of `ExecutionContext` tracing needs.
+ *
+ * Optional at every call site: tracing must never be on the critical path, and a
+ * caller with no request context (the Brain's background summarizations, a cloud
+ * run driven from a DO alarm) must still be traceable rather than silently untraced.
+ * {@link enqueueTrace} degrades to a swallowed floating promise when there is none.
+ */
+export type TraceCtx = { waitUntil(promise: Promise<unknown>): void };
+
+/** Hand a best-effort write to `waitUntil` when there is one, else let it float.
+ *  Either way the promise's rejection is already caught by the caller. */
+function enqueueTrace(ctx: TraceCtx | undefined | null, promise: Promise<unknown>): void {
+  if (ctx && typeof ctx.waitUntil === 'function') ctx.waitUntil(promise);
+  else void promise;
+}
 
 /** Per-body cap. Full bodies are wanted for diagnostics, but a runaway payload
  *  shouldn't bloat a single row unbounded — truncate with a visible marker. */
@@ -84,7 +123,7 @@ function requestShapeOf(body: Record<string, unknown> | undefined): Record<strin
 
 export interface TraceInput {
   traceId: string;
-  /** chat | image | ide-chat | brain | dataset-gen | agent */
+  /** chat | image | ide-chat | brain | dataset-gen | agent | cloud | knowledge-ai | legal-ai */
   surface: string;
   tenantId?: number | null;
   userId?: string | null;
@@ -94,8 +133,14 @@ export interface TraceInput {
   effectivePlan?: string | null;
   premiumOverride?: boolean;
   /** The dispatched result — source of resolvedModel/vendor, status, outcome,
-   *  classification, durationMs, retries, schemaRetries, attempts, chain. */
-  result: ProxyResult;
+   *  classification, durationMs, retries, schemaRetries, attempts, chain.
+   *  `ProxyResult` satisfies this structurally; other dispatchers adapt into it
+   *  (see {@link imageTraceResult}). */
+  result: TraceResult;
+  /** The cloud execution this call served, when it served one (0949). This is the
+   *  join key that makes a run's LLM turns readable from the run itself — without
+   *  it a cloud trace id was recorded on the timeline but resolved to nothing. */
+  executionId?: number | null;
   usage?: { promptTokens: number; completionTokens: number; totalTokens: number } | null;
   streamed?: boolean;
   useCase?: string | null;
@@ -117,7 +162,7 @@ export interface TraceInput {
  * Write one full diagnostic trace, fire-and-forget. Safe to call on every LLM
  * request (success or failure, streaming or not). Builder-side only.
  */
-export function logTrace(env: Env, ctx: ExecutionContext, input: TraceInput): void {
+export function logTrace(env: Env, ctx: TraceCtx | undefined | null, input: TraceInput): void {
   const r = input.result;
   const status = r.status ?? r.response.status;
   const success = status < 400;
@@ -125,6 +170,7 @@ export function logTrace(env: Env, ctx: ExecutionContext, input: TraceInput): vo
     traceId:           input.traceId,
     tenantId:          input.tenantId ?? null,
     userId:            input.userId ?? null,
+    executionId:       input.executionId ?? null,
     agentHostId:            input.agentHostId ?? null,
     tenantApiKeyId:    input.tenantApiKeyId ?? null,
     llmProduct:        input.llmProduct ?? null,
@@ -162,7 +208,8 @@ export function logTrace(env: Env, ctx: ExecutionContext, input: TraceInput): vo
     responseBody:      redactedJsonOrNull(input.responseBody ?? null),
     callerMetadata:    jsonOrNull(input.callerMetadata ?? null),
   };
-  ctx.waitUntil(
+  enqueueTrace(
+    ctx,
     buildTransactionalDatabase(env)
       .insert(llmTraces)
       .values(row)
@@ -179,16 +226,17 @@ export function logTrace(env: Env, ctx: ExecutionContext, input: TraceInput): vo
  * chain) with zero tokens, because usage is only known from the final SSE chunk.
  * The stream's usage callback calls this to UPDATE the matching row by trace id,
  * so streamed traces show real token counts instead of 0. Fire-and-forget; never
- * fails the request. (The completion `response_body` for streams is still not
- * captured — that needs buffering the stream; tokens are the higher-value half.)
+ * fails the request. The completion body is back-filled separately by
+ * {@link backfillTraceResponseBody}, which the same stream tee drives.
  */
 export function backfillTraceUsage(
   env: Env,
-  ctx: ExecutionContext,
+  ctx: TraceCtx | undefined | null,
   traceId: string,
   usage: { promptTokens?: number; completionTokens?: number; totalTokens?: number },
 ): void {
-  ctx.waitUntil(
+  enqueueTrace(
+    ctx,
     buildTransactionalDatabase(env)
       .update(llmTraces)
       .set({
@@ -201,4 +249,79 @@ export function backfillTraceUsage(
         reportCaughtError(error, { source: "application/llm/traceLogger.ts", operation: "backfillTraceUsage" });
       }),
   );
+}
+
+/**
+ * Back-fill the COMPLETION BODY onto an already-written streaming trace.
+ *
+ * A streamed trace used to capture everything except the one field a reader opens
+ * it for: what the model actually said. `response_body` stayed null because the
+ * body is only assembled as the SSE frames arrive, long after the row is written.
+ * The stream tee ({@link wrapStreamForTrace}) reassembles the completion as it
+ * passes through to the client and hands it here, so a streamed trace reads the
+ * same as a non-streamed one.
+ *
+ * Redacted and capped by the same helper the insert path uses — a streamed body is
+ * no less likely to echo a pasted key. Fire-and-forget; a failure here can never
+ * touch the stream, which has already been delivered.
+ */
+export function backfillTraceResponseBody(
+  env: Env,
+  ctx: TraceCtx | undefined | null,
+  traceId: string,
+  responseBody: unknown,
+  errorMessage?: string | null,
+): void {
+  const body = redactedJsonOrNull(responseBody ?? null);
+  if (body == null && !errorMessage) return;
+  enqueueTrace(
+    ctx,
+    buildTransactionalDatabase(env)
+      .update(llmTraces)
+      .set({
+        ...(body != null ? { responseBody: body } : {}),
+        ...(errorMessage ? { errorMessage } : {}),
+      })
+      .where(eq(llmTraces.traceId, traceId))
+      .catch((error) => { /* tracing must never fail the request */
+        reportCaughtError(error, { source: "application/llm/traceLogger.ts", operation: "backfillTraceResponseBody" });
+      }),
+  );
+}
+
+/**
+ * THE image trace-shape adapter.
+ *
+ * `ImageProxyService.generate()` returns an {@link ImageProxyResult} — no HTTP
+ * `Response`, no outcome/classification/duration — so `/v1/images` was the one
+ * gateway surface with no `llm_traces` row at all. Rather than duplicate the
+ * row-building code for images, this maps the image result onto the SAME
+ * {@link TraceResult} shape `logTrace` already consumes, so there is exactly one
+ * trace writer for every surface.
+ *
+ * Mapping notes:
+ *   • `data.length === 0` is the image cascade's failure signal and the route turns
+ *     it into a 429 — so status/outcome mirror what the caller actually receives.
+ *   • image failovers carry `{ model, vendor, code }`; attempts are normalised to
+ *     the `{ model, vendor, status }` shape the trace viewer renders for chat.
+ */
+export function imageTraceResult(
+  result: ImageProxyResult,
+  opts: { durationMs: number },
+): TraceResult {
+  const exhausted = result.body.data.length === 0;
+  const status = exhausted ? 429 : 200;
+  return {
+    response: { status },
+    resolvedModel:  result.resolvedModel,
+    resolvedVendor: result.resolvedVendor,
+    status,
+    outcome:        exhausted ? 'cascade_exhausted' : 'success',
+    classification: exhausted ? 'mixed' : null,
+    attempts:       result.failovers.map((f) => ({ model: f.model, vendor: f.vendor, status: f.code })),
+    retries:        result.retries,
+    schemaRetries:  0,
+    durationMs:     opts.durationMs,
+    candidateChain: result.failovers.map((f) => f.model),
+  };
 }

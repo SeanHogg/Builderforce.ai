@@ -669,7 +669,10 @@ export async function evaluateTaskAutoRun(
     rows.map(async (r): Promise<LaneAgentLike> => {
       const requiredCapabilities = parseRequiredCapabilities(r.requiredCapabilities);
       let capabilities: string[] | undefined;
-      if (requiredCapabilities.length > 0 && r.agentRef) {
+      // Resolve the agent's capabilities when the GATE needs them (an explicit
+      // requirement) OR when the ROUTER does (more than one candidate to rank). A
+      // single-agent lane still costs zero extra lookups — there is nothing to weigh.
+      if ((requiredCapabilities.length > 0 || rows.length > 1) && r.agentRef) {
         const resolved = await resolveArtifacts(db, { tenantId: args.tenantId, taskId: args.taskId, cloudAgentRef: r.agentRef })
           .catch(() => ({ skills: [], personas: [], content: [] }));
         capabilities = [...resolved.skills, ...resolved.personas];
@@ -841,11 +844,11 @@ async function finishEvaluation(input: {
 }): Promise<AutoRunEvaluation> {
   const { db, runtimeService, args, status, gate, agents } = input;
 
-  const decision = decideLaneAutoRun(agents, gate);
+  const decision = decideLaneAutoRun(agents, gate, status);
   // The agent a manual Run-now would use: the same pick, but gate-blind (a human
   // click overrides a 'human' gate). decideLaneAutoRun(_, 'auto') never returns a
   // gate-block, so it surfaces the first capability-qualified candidate or none.
-  const forced = decideLaneAutoRun(agents, 'auto');
+  const forced = decideLaneAutoRun(agents, 'auto', status);
   const candidate = forced.autoRun && forced.agentRef
     ? {
       agentRef: forced.agentRef,

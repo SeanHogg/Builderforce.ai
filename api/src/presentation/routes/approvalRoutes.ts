@@ -358,6 +358,9 @@ export function createApprovalRoutes(db: Db, runtimeService: RuntimeService): Ho
         tenantId,
         answer: responseText,
         approvalId: id,
+        // Reuse this request's service: the redispatch surfaces need it for the
+        // running transition + the `resumed` chat milestone.
+        runtimeService,
       });
     }
 

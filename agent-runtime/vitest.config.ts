@@ -14,6 +14,13 @@ export default defineConfig({
     // Keep this ordered: the base `@seanhogg/builderforce-agents/plugin-sdk` alias is a prefix match.
     alias: [
       {
+        // agent-tools' node-only export condition (the shared workspace-containment path
+        // resolver). MUST precede the bare-specifier alias below, which is a prefix match
+        // and would otherwise swallow this subpath.
+        find: "@builderforce/agent-tools/node-path.js",
+        replacement: path.join(repoRoot, "..", "packages", "agent-tools", "src", "node-path.ts"),
+      },
+      {
         // Shared cross-package tool contract (also a tsconfig path; vitest needs its own).
         find: "@builderforce/agent-tools",
         replacement: path.join(repoRoot, "..", "packages", "agent-tools", "src", "index.ts"),
@@ -23,6 +30,19 @@ export default defineConfig({
         // Also a tsconfig path; vitest needs its own.
         find: "@builderforce/agent-stall",
         replacement: path.join(repoRoot, "..", "packages", "agent-stall", "src", "index.ts"),
+      },
+      {
+        // Learned Model Routing contract + pure ranker, shared with the api's cloud
+        // router. Also a tsconfig path; vitest needs its own.
+        find: "@builderforce/learned-routing",
+        replacement: path.join(repoRoot, "..", "packages", "learned-routing", "src", "index.ts"),
+      },
+      {
+        // Surface-agnostic run context. Also a tsconfig path; vitest needs its own —
+        // without it EVERY test that transitively imports `run-context-client.ts` fails
+        // to resolve the package and the whole suite file is skipped as a failed import.
+        find: "@builderforce/run-context",
+        replacement: path.join(repoRoot, "..", "packages", "run-context", "src", "index.ts"),
       },
       {
         // Render seam (ink/headless renderers). Also a tsconfig path; vitest needs its own.

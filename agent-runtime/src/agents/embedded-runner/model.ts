@@ -1,3 +1,4 @@
+import { DEFAULT_ACTION_TYPE, type ActionType } from "@builderforce/learned-routing";
 import type { Api, Model } from "../../builderforce/model/types.js";
 import type { BuilderForceAgentsConfig } from "../../config/config.js";
 import type { ModelDefinitionConfig } from "../../config/types.js";
@@ -5,14 +6,16 @@ import { resolveBuilderForceAgentsAgentDir } from "../agent-paths.js";
 import { DEFAULT_CONTEXT_TOKENS } from "../defaults.js";
 import { buildModelAliasLines } from "../model-alias-lines.js";
 import { normalizeModelCompat } from "../model-compat.js";
-import { resolveForwardCompatModel } from "../model-forward-compat.js";
-import { normalizeProviderId } from "../model-selection.js";
 import {
   discoverAuthStorage,
   discoverModels,
   type AuthStorage,
   type ModelRegistry,
 } from "../model-discovery.js";
+import { resolveFallbackCandidates } from "../model-fallback.js";
+import { resolveForwardCompatModel } from "../model-forward-compat.js";
+import { normalizeProviderId } from "../model-selection.js";
+import { seedLearnedModel } from "./learned-routing/index.js";
 
 type InlineModelEntry = ModelDefinitionConfig & { provider: string; baseUrl?: string };
 type InlineProviderConfig = {
@@ -22,6 +25,70 @@ type InlineProviderConfig = {
 };
 
 export { buildModelAliasLines };
+
+/**
+ * Learned Model Routing (PRD 13) — WHICH of this host's configured models leads.
+ *
+ * `resolveModel` below answers "can I run this model"; this answers "which one should
+ * I try first", and it is the on-prem counterpart of the cloud router's soft seed. It
+ * re-orders the SAME chain the failover loop walks (`resolveFallbackCandidates`) using
+ * the fleet's learned ranking for this kind of work, nudged by this host's own recent
+ * outcomes — never introducing a model, never dropping one, only changing who goes
+ * first. The heavy lifting (classification, the cached read, the bias, the ranker)
+ * lives in `./learned-routing/`; this is the seam the runner calls.
+ *
+ * Read-side re-ranking is OPT-IN (`BUILDERFORCE_LEARNED_ROUTING_SEED`) because
+ * `agents.defaults.model.primary` is an explicit operator pin — see
+ * `learned-routing/settings.ts`. When it is off (the default) this still returns the
+ * action label, because the write-back needs it, and the order is left untouched.
+ *
+ * Never throws: any failure resolves to the configured provider/model unchanged.
+ */
+export async function resolveLearnedModelSeed(params: {
+  provider: string;
+  modelId: string;
+  prompt?: string | null;
+  cfg?: BuilderForceAgentsConfig;
+  projectId?: number;
+}): Promise<{
+  provider: string;
+  modelId: string;
+  actionType: ActionType;
+  reordered: boolean;
+  scope?: string;
+}> {
+  const fallback = {
+    provider: params.provider,
+    modelId: params.modelId,
+    actionType: DEFAULT_ACTION_TYPE,
+    reordered: false,
+  };
+  try {
+    const candidates = resolveFallbackCandidates({
+      cfg: params.cfg,
+      provider: params.provider,
+      model: params.modelId,
+    });
+    const seed = await seedLearnedModel({
+      candidates,
+      ...(params.prompt != null ? { prompt: params.prompt } : {}),
+      ...(params.projectId != null ? { projectId: params.projectId } : {}),
+    });
+    const lead = seed.ranked[0];
+    if (!lead) {
+      return { ...fallback, actionType: seed.actionType };
+    }
+    return {
+      provider: lead.provider,
+      modelId: lead.model,
+      actionType: seed.actionType,
+      reordered: seed.reordered,
+      ...(seed.scope != null ? { scope: seed.scope } : {}),
+    };
+  } catch {
+    return fallback;
+  }
+}
 
 export function buildInlineProviderModels(
   providers: Record<string, InlineProviderConfig>,

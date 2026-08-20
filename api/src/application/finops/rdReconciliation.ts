@@ -17,6 +17,9 @@
 
 import type { Db } from '../../infrastructure/database/connection';
 import { computeRdTaxCredit } from './rdTaxCredit';
+import { getCacheVersion, getOrSetCached } from '../../infrastructure/cache/readThroughCache';
+import { rdFinancialsVersionKey } from '../insights/versionKeys';
+import type { Env } from '../../env';
 import { computeRdFinancials, type QuarterFinancials } from '../insights/rdFinancialsInsights';
 
 const DAY_MS = 86_400_000;
@@ -66,6 +69,21 @@ export function reconFlag(derivedBaseUsd: number, reportedActualUsd: number): { 
  * derivation is a trailing-window rollup; the reported side sums the manual
  * quarterly facts for the year.
  */
+/**
+ * The CACHED read the HTTP layer calls. Short TTL with the R&D financials
+ * version token folded in, so a manual quarterly-fact edit refreshes it. The key
+ * shape belongs beside the computation, not in a route handler.
+ */
+export async function getRdReconciliation(db: Db, env: Env, tenantId: number, fiscalYear: number): Promise<RdReconciliation> {
+  const ver = await getCacheVersion(env, rdFinancialsVersionKey(tenantId));
+  return getOrSetCached(
+    env,
+    `finops:rdrecon:t:${tenantId}:fy:${fiscalYear}:v:${ver}`,
+    () => reconcileRd(db, tenantId, fiscalYear),
+    { kvTtlSeconds: 60, l1TtlMs: 15_000 },
+  );
+}
+
 export async function reconcileRd(db: Db, tenantId: number, fiscalYear: number): Promise<RdReconciliation> {
   const now = Date.now();
   const fyStart = Date.UTC(fiscalYear, 0, 1);

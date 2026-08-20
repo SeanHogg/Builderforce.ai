@@ -55,16 +55,39 @@ describe('semanticStore + semanticLookup', () => {
     expect((await semanticLookup(env, a, 'ns1', [1, 0], 0.5))?.response).toBe('A answer');
   });
 
-  it('trims a partition to its bound (newest kept)', async () => {
+  it('bounds each BUCKET, not the whole partition — the corpus is no longer capped at 200', async () => {
+    // The regression this replaces: one bounded list per tenant+namespace meant a busy
+    // namespace evicted its own hits, so the hit rate FELL as the cache was used more.
+    // With a keyed index the bound is per bucket, and total capacity is
+    // buckets x tables x bucket-bound — orders of magnitude past the old 200.
     const kv = fakeKV();
     const env = envWith(kv);
     const t = nextTenant();
     for (let i = 0; i < 205; i++) {
       await semanticStore(env, t, 'default', [i, 1], `r${i}`);
     }
-    const stored = JSON.parse(kv.store.get(`semcache:${t}:default`)!) as unknown[];
-    expect(stored.length).toBe(200);          // capped
-    expect((stored[0] as { r: string }).r).toBe('r204'); // newest first
+    const partitionKeys = [...kv.store.keys()].filter((k) => k.startsWith(`semcache:${t}:default:`));
+    expect(partitionKeys.length).toBeGreaterThan(1); // a real index, not one list
+
+    const total = partitionKeys.reduce((n, k) => n + (JSON.parse(kv.store.get(k)!) as unknown[]).length, 0);
+    // Every write lands in HASH_TABLES buckets, so the stored-copy count is a multiple
+    // of the distinct associations retained — and far exceeds the old whole-partition cap.
+    expect(total).toBeGreaterThan(200);
+    for (const key of partitionKeys) {
+      expect((JSON.parse(kv.store.get(key)!) as unknown[]).length).toBeLessThanOrEqual(64);
+    }
+  });
+
+  it('a stored association is still found after the corpus grows past the old cap', async () => {
+    // Directly the failure the bound used to cause: entry #1 evicted by entry #201.
+    const env = envWith(fakeKV());
+    const t = nextTenant();
+    await semanticStore(env, t, 'default', [1, 0, 0], 'the first answer');
+    for (let i = 0; i < 300; i++) {
+      await semanticStore(env, t, 'default', [Math.cos(i), Math.sin(i), 0.5], `noise-${i}`);
+    }
+    const hit = await semanticLookup(env, t, 'default', [0.999, 0.02, 0], 0.92);
+    expect(hit?.response).toBe('the first answer');
   });
 
   it('degrades to miss / no-op when SEMANTIC_CACHE_KV is unbound', async () => {
