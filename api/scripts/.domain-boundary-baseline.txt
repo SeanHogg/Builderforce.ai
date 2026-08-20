@@ -2,7 +2,6 @@
 # Regenerate: node scripts/check-domain-boundary.mjs --update
 agents.ts -> canvas.ts
 agents.ts -> delivery.ts
-agents.ts -> governance.ts
 agents.ts -> identity.ts
 agents.ts -> platform.ts
 canvas.ts -> agents.ts
@@ -15,7 +14,6 @@ commerce.ts -> delivery.ts
 commerce.ts -> identity.ts
 delivery.ts -> agents.ts
 delivery.ts -> canvas.ts
-delivery.ts -> finance.ts
 delivery.ts -> governance.ts
 delivery.ts -> identity.ts
 delivery.ts -> platform.ts
@@ -27,13 +25,12 @@ governance.ts -> delivery.ts
 governance.ts -> identity.ts
 growth.ts -> canvas.ts
 growth.ts -> delivery.ts
+growth.ts -> identity.ts
 growth.ts -> integrations.ts
 growth.ts -> platform.ts
 identity.ts -> agents.ts
 identity.ts -> canvas.ts
 identity.ts -> delivery.ts
-identity.ts -> finance.ts
-integrations.ts -> identity.ts
 platform.ts -> agents.ts
 platform.ts -> delivery.ts
 platform.ts -> finance.ts

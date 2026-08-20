@@ -69,6 +69,14 @@ const TENANCY_ANCHORS = new Set(['tenants', 'segments']);
  * moment the kernel depends on a domain the fifteen modules stop being
  * independently reviewable in the one place it is fatal (§6.2, interface
  * segregation). The kernel currently imports nothing, by construction.
+ *
+ * WHERE AN ACCEPTED EDGE IS ARGUED. `--update` rewrites the baseline file, so a
+ * comment placed there does not survive one regeneration. An edge that is
+ * deliberately accepted rather than outstanding work is argued in the DOCSTRING
+ * of the table that creates it — see `marketingSessions` in `growth.ts` for the
+ * `growth -> identity` edge, which names the two alternatives (a polymorphic
+ * `objects` pointer, or a bare uuid) and why both are worse than one counted
+ * edge. The baseline stays what it is: a count that may only shrink.
  */
 const KERNEL_MODULE = 'kernel.ts';
 
