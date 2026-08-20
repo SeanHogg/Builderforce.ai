@@ -99,77 +99,74 @@ errors, 12 warnings**.
 results — including the error above, which is a legitimate `next@15` rule. Pinning back to 15.x would be the riskier
 change, so the major-version gap is recorded as verified rather than left as a task nobody should do.
 
-## ✅ RESOLVED 2026-08-19 — Permission overrides now bite on the surfaces operators actually use, and the busiest table is finally inside the tenant guard
+## ✅ RESOLVED 2026-08-19 — The permission matrix now says "not applicable" where it used to imply "not yet"
 
-**Roadmap items closed:** *11 of 38 permissions are enforced; the other 27 are advisory* and *`tasks` carries no
-`tenant_id`, so the tenant-scope guard cannot cover the busiest table* (both §15 · 🏛️ Architecture pass residuals).
+**Roadmap item closed:** the structural half of *permissions are enforced / advisory* (§15 · 🏛️ Architecture pass
+residuals).
 
-### 1 · 11 of 38 enforced → 30 of 38
+This landed alongside a parallel enforcement pass on `main` that gated `project:*`, `task:*`, `workflow:read/write`,
+`member:read` and `report:*`. Where the two overlapped, `main`'s mapping was kept — including its better call on
+`POST /api/tasks/:id/run-now`, which is gated on **`task:assign`** rather than `workflow:execute`, because handing a
+ticket to an agent is the assignment act and that is the permission an operator would revoke to stop someone
+dispatching runs while still letting them edit tickets. What this pass adds is the part that pass had ruled out.
 
-`ENFORCED_PERMISSIONS` is a promise: a permission listed there is backed by a real request-time gate, and one that is
-not is decoration an operator can toggle to no effect. Six whole resource groups were on the wrong side of that line —
-`project:*`, `task:*`, `workflow:*`, `agentHost:*`, `report:*`, `marketplace:*` — which are exactly the surfaces
-per-user overrides are most often wanted for.
+### Two groups it had recorded as un-gateable are gated now
 
-**19 permissions migrated, across 5 route files, 88 handlers gated.** `permissionEnforcement.test.ts` passes in both
-directions, so the registry and the routes cannot drift apart again.
+The standing note said `marketplace:*` and `agentHost:*` could not be enforced because their callers are not tenant
+members. True of the routers it named — but not of the surfaces where a tenant member actually performs those actions:
 
-**The part that needed care: which handlers must NOT be gated.** `requirePermission` resolves a permission for a
-*member of a tenant* — it reads `tenantId`, `userId` and `role` off the context and throws if any is missing. Several
-of these groups serve machine callers that have none of them:
+- **`agentHost:*` (4 permissions).** `agentHostRoutes` is 56 handlers, and exactly **26** mount `authMiddleware` and
+  carry a member session; the other 30 authenticate with a host API key and have no `tenantId`/`userId`/`role` for
+  `requirePermission` to resolve. Gating those 26 only — read / register / configure / delete — enforces the group
+  without touching the machine seam. A blanket gate would have taken the agent fleet offline, which is why the split,
+  not the router, is the unit.
+- **`marketplace:*` (3 permissions).** `marketplaceRoutes` really is behind `requireMarketplaceAuth`, a separate
+  identity system. But the surface where a *tenant member* lists, buys, installs and gets paid is
+  `creationListingRoutes`, which is behind `authMiddleware` — 19 handlers, gated read / purchase / publish. Unifying the
+  two identities remains a design change; it just was not a prerequisite for these.
 
-- **`agentHostRoutes`** is 56 handlers, and only the **26** that mount `authMiddleware` themselves carry a session.
-  The other 30 authenticate with a host key (`verifyAgentHostApiKey`). Gating those would have 403'd the entire agent
-  fleet — an outage dressed as a security improvement.
-- **`workflowRoutes`** mounts `authMiddleware` partway down the file. The three handlers ABOVE it (`POST /` under
-  `hostOrTenantAuth`, `/claim`, `/:id/host-result`) are executor endpoints and were left alone.
-- **`marketplaceRoutes`** was skipped entirely: it authenticates marketplace users via `requireMarketplaceAuth`, who
-  are not tenant members at all. The tenant-facing surface is `creationListingRoutes`, which is where the
-  `marketplace:*` gates went.
+`workflow:execute` stays advisory and now says why in the registry: its claim / host-result pair sits on the machine
+seam, and the on-demand run route is `task:assign`. `permissionEnforcement.test.ts` passes in both directions, so the
+registry and the routes cannot drift.
 
-Cost is bounded: `memberHasPermission` resolves through `effectivePermissionsFor`, which is already read-through
-cached (L1 + KV, 15-minute TTL, invalidated on override change), so a gated read path costs a cache hit.
-
-### The four that can never be enforced, stated rather than left looking unfinished
+### The four that can never be enforced, stated instead of left looking unfinished
 
 The `system:*` four are Super Admin actions, and Super Admin routes authenticate with `superAdminMiddleware`, which
-establishes a `userId` and **nothing else** — no tenantId, no member role. `requirePermission` would therefore reject
-every caller on those routes, superadmin included. They are already gated by something strictly stronger: being a
-superadmin at all.
+establishes a `userId` and **nothing else** — no tenantId, no member role. `requirePermission` resolves a permission for
+a MEMBER OF A TENANT, so on those routes it would reject every caller, superadmin included. They are already gated by
+something strictly stronger: being a superadmin at all.
 
-Leaving them in the advisory bucket would have read as "nobody has got to these yet", which is a different and false
-promise. They are now a declared `UNENFORCEABLE_PERMISSIONS` set, returned by `/api/admin/permissions/matrix` as its
-own field, and the Permission Debugger renders a **third badge state** — "Not applicable" in amber, distinct from both
-green "Enforced" and grey "Advisory". The three-way verdict lives in one `permissionGate()` helper so the label, the
-tooltip and the colours cannot disagree about the same row; badge colours are token-driven and localized in all five
-catalogs.
+Leaving them in the advisory bucket read as "nobody has got to these yet" — a different and false promise. They are now
+a declared `UNENFORCEABLE_PERMISSIONS` set, returned by `/api/admin/permissions/matrix` as its own field, and the
+Permission Debugger renders a **third badge state**: "Not applicable" in amber, distinct from green "Enforced" and grey
+"Advisory". The three-way verdict lives in one `permissionGate()` helper so the label, the tooltip and the colours
+cannot disagree about a row; badge colours are token-driven for both themes and the copy is in all five catalogs.
 
-The genuinely-still-advisory four are `project:archive`, `workflow:delete`, `member:read` and `approval:read` — the
-first two have no route that performs the action yet, and the second two have no separate read endpoint to attach to.
+Cost is bounded: `memberHasPermission` resolves through `effectivePermissionsFor`, which is already read-through cached
+(L1 + KV, 15-minute TTL, invalidated on override change), so a gated read path costs a cache hit.
 
-### 2 · `tasks` was invisible to the tenant-scope guard — 211 statements now checkable
+### Superseded in the same window: the `tasks` tenant-scope work
 
-`check:tenant-scope` finds tenant-owned tables by looking for a `tenantId` column. `tasks` has none — it inherits
-tenancy through `projects.tenantId`, which is why `taskProjectIfInTenant` exists — so **the busiest table on the
-platform was the one table the guard never looked at**, and a query against it could omit any tenant predicate and
-nothing would say so.
+This pass also taught `check:tenant-scope` about tables that inherit tenancy through a foreign key, so that `tasks` —
+invisible to the guard because it had no `tenant_id` column — became checkable without a migration.
 
-`INHERITED_TENANCY` now declares that inheritance (`tasks` ← `projectId → projects.tenantId`), which made **211
-statements across 61 files** visible at once. `SCOPED` also learned `taskProjectIfInTenant` / `taskInTenant`, because
-those helpers verify the parent row and then filter by it — that is the CORRECT pattern, and without the names the
-guard would have flagged the very thing it wants people to do.
+**Migration `0944` landed on `main` first and denormalised `tenant_id` onto `tasks` outright**, with a trigger that
+re-derives on `INSERT OR UPDATE OF project_id` so a moved task cannot keep a stale tenant. That is the stronger of the
+two options: the database enforces the invariant instead of the guard inferring it. The `INHERITED_TENANCY` registry
+was therefore **removed rather than merged** — with `tasks.tenantId` declared, the guard's ordinary column scan already
+finds it, and keeping the registry would have left a second mechanism claiming to do a job the schema now does.
 
-Verified as a wall, not just a report: a deliberately unscoped `tasks` query added to an unrelated file was caught as
-new (`0 → 1`) and disappeared on revert.
+What was kept is the one piece still load-bearing: `SCOPED` recognises `taskProjectIfInTenant` / `taskInTenant`. Those
+call sites verify the parent project and filter the child by it, are genuinely scoped, and frequently never spell
+`tenantId` themselves — without the names the guard reports a correct pattern as a violation.
 
-**Deliberately NOT denormalised.** The alternative was adding `tenant_id` to `tasks` with a migration, a backfill and a
-trigger. That would make the database enforce the invariant, but it breaks 3NF on the hottest table for a property the
-FK already determines. The accepted trade is that the invariant stays implicit in the FK — recorded in the roadmap
-rather than left as an unexplained choice.
+### Also fixed: a duplicated migration that had `check:migrations` red
 
-The 211 went into the baseline as frozen debt (528 statements / 170 files, up from 410 / 135). **That is not a
-regression**: the pre-`tasks` trend was 522 → 505 → 410 and the ratchet still only allows it to fall. They have not
-been audited one by one, which is now the same open item the rest of the baseline carries.
+`0942_agent_host_channels.sql` and `0943_agent_host_channels.sql` were **byte-identical copies of the same migration**,
+which read as a prefix collision against `0942_projects_start_date.sql`. Renumbering would have preserved the real
+defect — the same DDL twice — so the duplicate was deleted and `0943` kept. `check:migrations` is green: 451 files, no
+new duplicate prefixes.
+
 
 ## ✅ RESOLVED 2026-08-19 — The "different file fails every run" flake was the working tree being edited underneath the suite
 

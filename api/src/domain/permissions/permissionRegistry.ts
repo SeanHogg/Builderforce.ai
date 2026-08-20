@@ -140,7 +140,6 @@ export const ENFORCED_PERMISSIONS: ReadonlySet<Permission> = new Set<Permission>
   'member:read',
   'report:read',
   'report:export',
-  'workflow:execute',
   'agentHost:read',
   'agentHost:register',
   'agentHost:configure',
@@ -182,19 +181,24 @@ export const UNENFORCEABLE_PERMISSIONS: ReadonlySet<Permission> = new Set<Permis
  *     no ad-hoc report export endpoint beyond the scheduled deliveries already
  *     gated by `report:export`. A gate cannot be added to a route that is not there.
  *
- *   - **The caller is not a tenant member.** `marketplace:read` / `:purchase` /
- *     `:publish` live behind `requireMarketplaceAuth`, a SEPARATE identity system
- *     (marketplace accounts) with no `tenantId`/`role` on the request.
- *     `requirePermission` reads exactly those, so gating the marketplace router
- *     would 403 every marketplace user. Making these real means unifying the two
- *     identities first, which is a design change, not a middleware line.
+ *   - **The caller is not a tenant member.** `marketplaceRoutes` lives behind
+ *     `requireMarketplaceAuth`, a SEPARATE identity system (marketplace accounts) with
+ *     no `tenantId`/`role` on the request, so gating THAT router would 403 every
+ *     marketplace user. The `marketplace:*` three are nonetheless ENFORCED, on the
+ *     tenant-facing surface where a tenant member actually lists, buys and installs —
+ *     `creationListingRoutes`, which is behind `authMiddleware`. Unifying the two
+ *     identities is still a design change; it is just not a prerequisite for these.
  *
- *   - **The caller is a machine.** `agentHost:*` is spread across a router where
- *     roughly half the endpoints authenticate with a host API key and never
- *     establish a member session, and `workflow:execute` is the claim/host-result
- *     pair on that same seam. `approval:read` sits on a router with the same mix.
- *     A blanket gate there takes the agent fleet offline. The tenant-JWT half of
- *     `workflowRoutes` IS gated — the split is the point.
+ *   - **The caller is a machine.** `agentHostRoutes` is 56 handlers of which only the
+ *     26 that mount `authMiddleware` carry a member session; the rest authenticate with
+ *     a host API key. `agentHost:*` is enforced on those 26 ONLY — a blanket gate would
+ *     take the agent fleet offline. `workflow:execute` stays advisory: the claim /
+ *     host-result pair sits on that same machine seam, and the one route that runs work
+ *     on demand (`POST /api/tasks/:id/run-now`) is gated on `task:assign` instead,
+ *     because handing a ticket to an agent is the assignment act — that is the
+ *     permission an operator would revoke to stop someone dispatching runs while still
+ *     letting them edit tickets. `approval:read` sits on a router with the same mix.
+ *     The tenant-JWT half of `workflowRoutes` IS gated — the split is the point.
  *
  * `permissionEnforcement.test.ts` keeps this honest in both directions.
  */

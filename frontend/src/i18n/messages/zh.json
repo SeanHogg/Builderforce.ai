@@ -2268,6 +2268,7 @@
       "epic": "史诗",
       "project": "项目",
       "exporting": "正在准备…",
+      "exportCsv": "导出报告（CSV）",
       "exportReport": "下载报告",
       "exportFormat": "下载格式",
       "format": {

@@ -2268,6 +2268,7 @@
       "epic": "Epic",
       "project": "Projekt",
       "exporting": "Wird vorbereitet…",
+      "exportCsv": "Bericht exportieren (CSV)",
       "exportReport": "Bericht herunterladen",
       "exportFormat": "Downloadformat",
       "format": {

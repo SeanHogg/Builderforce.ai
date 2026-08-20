@@ -23,8 +23,6 @@ import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { MILLICENTS_PER_USD } from '../../domain/shared/money';
 import { resolveHostAuth } from '../../infrastructure/auth/agentHostAuth';
 import { hostOrTenantAuth, requestAgentHostId } from '../middleware/hostOrTenantAuth';
-import { requirePermission } from '../middleware/requirePermission';
-import { PERMISSIONS } from '../../domain/permissions/permissionRegistry';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
