@@ -19,6 +19,10 @@
  */
 
 import { registerSpecObjectSet, SUMMARY_FIELD, type SpecObjectSpec } from './specObjects';
+// The cadence arithmetic — enrolled, replied, per-state progress — computed in the
+// contract because the runner on the server and the card on the board must not disagree
+// about how far through a sequence somebody is.
+import { sequenceProgress } from '@builderforce/creation-canvas-contract';
 
 /**
  * Rows out of a `rows` field, whatever the model wrote there.
@@ -43,6 +47,94 @@ function wordsIn(value: unknown): number {
 export const SHARED_NAMESPACE = 'creationCanvas.shared';
 
 export const SHARED_OBJECT_SPECS: readonly SpecObjectSpec[] = [
+  // ── THE ONE MULTI-TOUCH CADENCE ─────────────────────────────────────────────
+  // Two of these shipped independently — a seller's `sequence` and a recruiter's
+  // `outreachSequence` — and a third was about to be written for a job seeker. Same
+  // object all three times: ordered steps with a channel and a delay, an audience,
+  // stop-on-reply, a reply rate. `direction` is what collapses them, exactly as
+  // `funnelDomain` collapses the marketing and hiring funnels below.
+  //
+  // Filed under `Integrations` rather than `Revenue` (where the seller's version lived)
+  // or `Hiring` (where the recruiter's did): a kind can only be in one palette section,
+  // and the section holding `inbox`, `emailCampaign` and `socialCampaign` is the one
+  // every seat already opens when the question is "reach somebody", which is the only
+  // section all three of its audiences have a reason to look in.
+  {
+    kind: 'sequence',
+    icon: '⇉',
+    group: 'Integrations',
+    defaultStatus: 'draft',
+    // `start`/`pause` change whether the runner sends, and `enrol` adds real people to a
+    // real send list — all three reach outside the tenant, so all three are gated. The
+    // deliberate asymmetry: STOPPING is never gated, because a control that needs
+    // approval to stop is not a safety control.
+    actions: ['start', 'pause', 'stop', 'enrol'],
+    fields: [
+      {
+        name: 'direction', render: 'stat', label: 'direction',
+        hint: 'Which conversation this cadence belongs to: sales | hiring | seeking | support. It decides whose list `enrol` draws from and what the copy is allowed to promise, and it is the field that lets ONE cadence object serve a seller chasing a prospect, a recruiter chasing a candidate and a person chasing their own applications. Defaults to `sales` when absent; a board migrated from the old `outreachSequence` kind is `hiring`.',
+      },
+      {
+        name: 'sequenceState', render: 'stat', label: 'sequenceState',
+        hint: 'draft | running | paused | stopped | completed. Only `running` causes the runner to send anything — a paused cadence keeps its cursor so resuming does not re-send day 0.',
+        bookkeeping: true,
+      },
+      {
+        name: 'audience', render: 'stat', label: 'audience',
+        hint: 'Who this cadence is for, in one line — "Series-A founders who opened the pricing page". What makes the copy specific enough to answer.',
+      },
+      {
+        name: 'steps', render: 'rows', label: 'steps',
+        columns: ['dayOffset', 'channel', 'subject'],
+        hint: 'The cadence: {dayOffset, channel, subject, body}. `dayOffset` is days after ENROLMENT (0 = immediately), so a missed runner tick catches up instead of sliding the whole cadence. `channel` is email | social | call | sms | task — each one a port this workspace already has connected. Four to six steps ending in a breakup is the shape that works; twelve is the shape that gets you blocked.',
+      },
+      {
+        name: 'stopOnReply', render: 'stat', label: 'stopOnReply',
+        hint: 'Whether a reply on ANY channel halts the cadence for that person. Default true, and turning it off should be a decision somebody defends — this is the property that separates a sequence from a mail blast.',
+      },
+      {
+        name: 'enrolments', render: 'rows', label: 'enrolments',
+        columns: ['name', 'contactRef', 'stepsSent', 'repliedAtISO'],
+        hint: 'Who is in it and how far they have got. READ-ONLY: this is the runner\'s CURSOR, and a model editing it could re-send a breakup email to somebody who already replied — the one outreach failure that loses a deal outright. Use the enrol action to add people.',
+        derived: true,
+      },
+      {
+        name: 'enrolled', render: 'stat', label: 'enrolled',
+        hint: 'How many people are in the cadence. Computed from the enrolments.',
+        derive: (data) => {
+          const progress = sequenceProgress({ steps: data.steps, enrolments: data.enrolments });
+          return progress.enrolled > 0 ? progress.enrolled : undefined;
+        },
+      },
+      {
+        name: 'replyRate', render: 'meter', label: 'replyRate',
+        hint: 'Replies as a share of enrolments, 0-100. Computed — and `undefined` rather than 0 when nobody is enrolled, because a 0% reply rate on an empty sequence reads as a catastrophe and is an absence of data.',
+        derive: (data) => sequenceProgress({ steps: data.steps, enrolments: data.enrolments }).replyRatePercent,
+      },
+      {
+        name: 'sequenceProgress', render: 'bars', label: 'sequenceProgress',
+        hint: 'Where everybody is: replied, stopped, completed, still running. Computed from the enrolments and the step list.',
+        derive: (data) => {
+          const progress = sequenceProgress({ steps: data.steps, enrolments: data.enrolments });
+          if (progress.enrolled === 0) return undefined;
+          const inFlight = progress.enrolled - progress.replied - progress.stopped - progress.completed;
+          return [
+            { label: 'replied', value: progress.replied },
+            { label: 'completed', value: progress.completed },
+            { label: 'stopped', value: progress.stopped },
+            { label: 'inFlight', value: Math.max(0, inFlight) },
+          ].filter((bar) => bar.value > 0);
+        },
+      },
+      {
+        name: 'lastRunAt', render: 'stat', label: 'lastRunAt',
+        hint: 'ISO instant the runner last swept this cadence. Written by the sweep — a cadence whose last run is days old is one nothing is driving, and that is worth seeing on the card.',
+        derived: true,
+      },
+      SUMMARY_FIELD,
+    ],
+  },
+
   {
     kind: 'funnel',
     icon: '⧗',
@@ -133,12 +225,17 @@ export const SHARED_OBJECT_SPECS: readonly SpecObjectSpec[] = [
 export const SHARED_LABELS: Record<string, string> = {
   funnel: 'Funnel',
   book: 'Book',
+  sequence: 'Sequence',
 };
 
 /** Blank-object status fallbacks under `creationCanvas.shared.status.*`. */
 export const SHARED_STATUSES: Record<string, string> = {
   notMeasured: 'Not measured',
   manuscript: 'Manuscript',
+  // A blank cadence is a DRAFT and never `running`: only `running` makes the runner
+  // send, so a default claiming it would put a card that looks live in front of
+  // somebody who has written no steps.
+  draft: 'Draft',
 };
 
 registerSpecObjectSet({

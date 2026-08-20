@@ -16,7 +16,9 @@
  *  · `quote.acceptedAt` / `acceptedBy` — written only by the buyer-facing accept route.
  *    A model that could assert an acceptance could close a deal nobody agreed to, and it
  *    would show up in the weighted pipeline before anybody noticed.
- *  · `sequence.enrolments` — the cadence CURSOR. A model that could edit it could re-send
+ *  · `sequence.enrolments` — the cadence CURSOR (the kind moved to `sharedCanvasObjects.ts`
+ *    when the seller's and recruiter's cadences merged; the RUNNER contract below stayed
+ *    here, because the sweep that sends is still the sell motion's). A model that could edit it could re-send
  *    a breakup email to somebody who already replied, which is the one outreach failure
  *    that costs a deal outright.
  *  · `call.transcript` — evidence of what a person actually said. An LLM-authored
@@ -42,7 +44,6 @@ import {
   readSequenceEnrolments,
   readSequenceSteps,
   readTrustAnswers,
-  sequenceProgress,
   trustPacketReadiness,
   type SellMotionObjectKind,
 } from '@builderforce/creation-canvas-contract';
@@ -211,79 +212,6 @@ export const SELL_MOTION_OBJECT_SPECS: readonly SpecObjectSpec[] = [
         hint: 'The non-price terms a buyer is agreeing to: payment days, notice, what is included. Short and specific — this is what a procurement team reads before the number.',
       },
       ...ENGAGEMENT_FIELDS,
-      SUMMARY_FIELD,
-    ],
-  },
-
-  // -------------------------------------------------------------------------
-  {
-    kind: 'sequence',
-    icon: '⇉',
-    group: 'Revenue',
-    defaultStatus: 'draft',
-    // `start`/`pause` change whether the runner sends, and `enrol` adds real people to a
-    // real send list — all three reach outside the tenant, so all three are gated. The
-    // deliberate asymmetry: STOPPING is never gated, because a control that needs
-    // approval to stop is not a safety control.
-    actions: ['start', 'pause', 'stop', 'enrol'],
-    fields: [
-      {
-        name: 'sequenceState', render: 'stat', label: 'sequenceState',
-        hint: 'draft | running | paused | stopped | completed. Only `running` causes the runner to send anything — a paused cadence keeps its cursor so resuming does not re-send day 0.',
-        bookkeeping: true,
-      },
-      {
-        name: 'audience', render: 'stat', label: 'audience',
-        hint: 'Who this cadence is for, in one line — "Series-A founders who opened the pricing page". What makes the copy specific enough to answer.',
-      },
-      {
-        name: 'steps', render: 'rows', label: 'steps',
-        columns: ['dayOffset', 'channel', 'subject'],
-        hint: 'The cadence: {dayOffset, channel, subject, body}. `dayOffset` is days after ENROLMENT (0 = immediately), so a missed runner tick catches up instead of sliding the whole cadence. `channel` is email | social | call | sms | task — each one a port this workspace already has connected. Four to six steps ending in a breakup is the shape that works; twelve is the shape that gets you blocked.',
-      },
-      {
-        name: 'stopOnReply', render: 'stat', label: 'stopOnReply',
-        hint: 'Whether a reply on ANY channel halts the cadence for that person. Default true, and turning it off should be a decision somebody defends — this is the property that separates a sequence from a mail blast.',
-      },
-      {
-        name: 'enrolments', render: 'rows', label: 'enrolments',
-        columns: ['name', 'contactRef', 'stepsSent', 'repliedAtISO'],
-        hint: 'Who is in it and how far they have got. READ-ONLY: this is the runner\'s CURSOR, and a model editing it could re-send a breakup email to somebody who already replied — the one outreach failure that loses a deal outright. Use the enrol action to add people.',
-        derived: true,
-      },
-      {
-        name: 'enrolled', render: 'stat', label: 'enrolled',
-        hint: 'How many people are in the cadence. Computed from the enrolments.',
-        derive: (data) => {
-          const progress = sequenceProgress({ steps: data.steps, enrolments: data.enrolments });
-          return progress.enrolled > 0 ? progress.enrolled : undefined;
-        },
-      },
-      {
-        name: 'replyRate', render: 'meter', label: 'replyRate',
-        hint: 'Replies as a share of enrolments, 0-100. Computed — and `undefined` rather than 0 when nobody is enrolled, because a 0% reply rate on an empty sequence reads as a catastrophe and is an absence of data.',
-        derive: (data) => sequenceProgress({ steps: data.steps, enrolments: data.enrolments }).replyRatePercent,
-      },
-      {
-        name: 'sequenceProgress', render: 'bars', label: 'sequenceProgress',
-        hint: 'Where everybody is: replied, stopped, completed, still running. Computed from the enrolments and the step list.',
-        derive: (data) => {
-          const progress = sequenceProgress({ steps: data.steps, enrolments: data.enrolments });
-          if (progress.enrolled === 0) return undefined;
-          const inFlight = progress.enrolled - progress.replied - progress.stopped - progress.completed;
-          return [
-            { label: 'replied', value: progress.replied },
-            { label: 'completed', value: progress.completed },
-            { label: 'stopped', value: progress.stopped },
-            { label: 'inFlight', value: Math.max(0, inFlight) },
-          ].filter((bar) => bar.value > 0);
-        },
-      },
-      {
-        name: 'lastRunAt', render: 'stat', label: 'lastRunAt',
-        hint: 'ISO instant the runner last swept this cadence. Written by the sweep — a cadence whose last run is days old is one nothing is driving, and that is worth seeing on the card.',
-        derived: true,
-      },
       SUMMARY_FIELD,
     ],
   },
@@ -561,7 +489,6 @@ export const SELL_MOTION_OBJECT_SPECS: readonly SpecObjectSpec[] = [
  */
 export const SELL_MOTION_LABELS: Record<SellMotionObjectKind, string> = {
   quote: 'Quote',
-  sequence: 'Sequence',
   call: 'Call',
   trial: 'Trial',
   trustPacket: 'Trust packet',

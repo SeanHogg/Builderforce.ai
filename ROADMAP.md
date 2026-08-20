@@ -1029,35 +1029,24 @@ are not file-disjoint and must be serialized and rebased before merge:
 ### Career layer — what the 2026-08-13 tool pass did NOT close
 
 
-> The tools, the pure `application/career/*` domain, the career intent on the hire-me listing, the guest
-> surface and — as of 2026-08-19 — the canvas OBJECT KINDS have all shipped; see [DONE.md](./DONE.md). The board
-> now holds `job`, `jobApplication`, `applicationPipeline`, `coverLetter`, `interviewPrep` and `runway`, a
-> `resume` can be tailored into a variant that knows which posting it answers, and a visitor is addressed by a
-> Career category and a `job-hunt` pack before they type.
+> Everything this section was opened for has shipped; see [DONE.md](./DONE.md). The tools, the pure
+> `application/career/*` domain, the career intent on the hire-me listing and the guest surface landed first,
+> and on 2026-08-19 the board gained the objects: `job`, `jobApplication`, `applicationPipeline`, `coverLetter`,
+> `interviewPrep`, `runway` and `timecard`, a `resume` that can be tailored into a variant knowing which posting
+> it answers, a Career category and a `job-hunt` pack, and a measurement gate that refuses to author a career
+> answer until the tool that computes it has actually run.
 >
-> What is left is entirely the OUTWARD-FACING half — the acts that leave the board and touch somebody else:
-> sending, signing, invoicing and being paid. Each blocker is named per item below.
+> The OUTWARD-FACING half this intro used to describe as the remainder was mostly already built and wrongly
+> recorded. Signing (`canvasSignatureActions`) and invoicing (`runInvoiceAction`) had shipped; `timecard` closed
+> the third. The follow-up cadence a seeker needed turned out to be a DUPLICATE rather than an absence — a
+> seller's `sequence` and a recruiter's `outreachSequence` had shipped independently — so the fix was to merge
+> them into one `sequence` carrying its `direction`, which gave the seeker the object without adding a kind. And
+> a personal mailbox was never blocked the way the entry claimed: every signed-in person gets an automatic
+> Default workspace, so connecting a personal Gmail there already puts a real inbox on the board.
+>
+> What remains below is the HRMS-backed half of the HR agent, which is a different subject and states its own
+> position.
 
-- **Outreach still requires a tenant mailbox, and outreach is the whole job.** `canvas_add_inbox` /
-  `canvas_pin_email` remain account-required on a connected TENANT mailbox and `emailCampaign.send` sends to
-  a tenant `audienceId`. An individual with a personal Gmail can compose forty applications on the canvas and
-  send none, and there is no sequence object holding the follow-up dates
-  (`recruiter_outreach_sequences` exists employer-side only). **DECIDED 2026-08-19 — the operator ruled that
-  a personal, non-tenant mailbox connection IS in scope for the `MailboxProvider` port: an individual account
-  may hold a provider credential outside a tenant.** The tenancy question that blocked this is therefore
-  settled and the remainder is ordinary engineering, not a decision: `oauthTokenVault` and
-  `providerOAuthConnect` are already the shared primitives, so the work is an owner axis on the connection
-  (user-scoped as well as tenant-scoped) rather than a second connect flow, plus the outreach-sequence object
-  that holds the follow-up dates. **Not built in the 2026-08-19 pass** — it lands in
-  `connectedAccounts`/`MailboxProvider`, and that surface was held by a concurrent writer for the duration.
-  Unblocks: applications and follow-ups as tracked objects rather than memory.
-- **Nothing can be signed, invoiced or paid from the board.** Unchanged by this pass and unchanged by the
-  tools: `contract` advertises a `sign` action with no implementation anywhere, and `freelancer_invoices`,
-  `invoice_line_items`, `payment_methods` and `application/integrations/payments.ts` are all live with no
-  `invoice` kind and no payment action in the canvas contract. `timecards` likewise has routes and no canvas
-  surface. For the one seat where REAL is unambiguously *money arriving*, "Idea → Real" still terminates at
-  a drafted agreement. Fix = an `invoice` kind over `freelancer_invoices` with a hosted payment link, a
-  `timecard` kind, and the shared e-sign port the HR review specifies (one primitive, both seats).
 - **The five HRMS-backed `hr.*` tools PRD 18 §1.2 names are still absent, and honestly so.**
   `hr.org_review`, `hr.headcount_plan`, `hr.performance_review`, `hr.team_health` and `hr.hrms_sync` were
   deliberately NOT shipped with the other twenty: each needs the employee roster, departments, requisitions

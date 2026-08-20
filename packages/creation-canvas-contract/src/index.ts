@@ -304,9 +304,6 @@ export const HIRING_OBJECT_KINDS = [
   // are one object because a posting nobody can see is not a posting: the board list is
   // the field that makes "post this role" end in something real.
   'jobPosting',
-  // HOW WE REACH THEM. Per-candidate, multi-touch, and STOPS ON REPLY — which is the
-  // property that separates it from `emailCampaign` and the reason it is not one.
-  'outreachSequence',
   // WHO MADE THE CUT. N résumés ranked against ONE posting, with the reason each rank
   // was given. The screening half the ATS scorer could not express when it took one
   // résumé and one job description.
@@ -378,7 +375,32 @@ export function isLegalObjectKind(value: unknown): value is LegalObjectKind {
  * A kind belongs here when it is genuinely cross-domain. A kind that only looks generic
  * because nobody has written the second consumer yet belongs to its vocabulary.
  */
-export const SHARED_OBJECT_KINDS = ['funnel', 'book'] as const;
+export const SHARED_OBJECT_KINDS = ['funnel', 'book', 'sequence'] as const;
+
+/**
+ * Which side of a conversation a `sequence` is run from.
+ *
+ * ── THE DUPLICATE THIS ENDED ─────────────────────────────────────────────────────
+ * Two multi-touch cadences shipped independently and neither knew about the other:
+ * `SELL_MOTION_OBJECT_KINDS.sequence` (a seller following up a prospect) and
+ * `HIRING_OBJECT_KINDS.outreachSequence` (a recruiter following up a candidate). Same
+ * object, both times: ordered steps, a channel and a delay per step, an audience,
+ * stop-on-reply, a reply rate. Two specs, two i18n namespaces, two node bodies, and two
+ * places to fix the day the send runner changes.
+ *
+ * A THIRD was about to be written for the job seeker, who needs exactly the same thing
+ * pointed the other way — which is the moment this stopped being tolerable duplication
+ * and became the twenty-fifth intra-product copy the data-model analysis warned about.
+ *
+ * So there is ONE `sequence`, and which conversation it belongs to is a VALUE. That is
+ * the same open/closed answer `funnel` gives one entry up, for the same reason: a new
+ * cadence is data, not a kind, not DDL and not a render branch. `seeking` is the entry
+ * that did not exist before and is the whole point — a person chasing their own
+ * applications now has the object a recruiter chasing them has always had.
+ */
+export const SEQUENCE_DIRECTIONS = ['sales', 'hiring', 'seeking', 'support'] as const;
+
+export type SequenceDirection = typeof SEQUENCE_DIRECTIONS[number];
 
 export type SharedObjectKind = typeof SHARED_OBJECT_KINDS[number];
 
@@ -396,6 +418,13 @@ export type SharedObjectKind = typeof SHARED_OBJECT_KINDS[number];
  */
 export const RENAMED_OBJECT_KINDS: Readonly<Record<string, string>> = {
   interview: 'customerInterview',
+  // The hiring cadence folded into the ONE `sequence` — see `SEQUENCE_DIRECTIONS`.
+  // Boards saved by a recruiter still hold `outreachSequence`, and a kind the registry
+  // no longer knows renders as nothing, so the rename is a read-time map exactly as the
+  // header describes. The direction those rows should carry is `hiring`, which
+  // `sequence`'s own spec defaults to when the field is absent rather than leaving a
+  // migrated card unlabelled.
+  outreachSequence: 'sequence',
 };
 
 /** The current name for a possibly-legacy kind. Identity for everything else, so it is

@@ -226,7 +226,6 @@ export function ProjectEvermindPanel({ projectId, showRecent = true }: { project
     analyzeClean: (analyzed) => t('analyzeClean', { analyzed }),
     analyzeSummary: (issues, analyzed, model) => t('analyzeSummary', { issues, analyzed, model }),
     analyzeSummaryLocal: (issues, analyzed) => t('analyzeSummaryLocal', { issues, analyzed }),
-    analyzeCoverage: (analyzed, total) => t('analyzeCoverage', { analyzed, total }),
     analyzeVerdict: (verdict) => t('analyzeVerdict', { verdict }),
     analyzeCorrectionLabel: t('analyzeCorrectionLabel'),
     analyzeSelectAll: t('analyzeSelectAll'),

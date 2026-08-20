@@ -5329,7 +5329,12 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         return { error: `Object ${source.id} kept no bytes, so there is nothing left to read. Ask for the file again.` };
       }
       if (persistence !== 'server') {
-        return { error: `Reading a scan takes a model call billed to a workspace, which needs a signed-in, saved Creation Canvas session — ask the person to sign in, then try again.` };
+        // Through `accountGateResult` rather than a bare `error`, which is what makes it
+        // a GATE rather than a dead end: the shape carries `requiresAccount`, the canvas
+        // opens the account prompt as the model reads this, and the turn ends with a
+        // one-click reason instead of a sentence the model may relay as a limitation of
+        // the product. Same contract as `canvas_add_image` — see GUEST_GATED_CANVAS_TOOLS.
+        return accountGateResult('canvas_read_attachment', 'Reading a scan takes a model call billed to a workspace, which needs a free Builderforce account and a saved canvas. The account prompt is now open and the canvas is unchanged. Say that in one sentence — never claim the product cannot read scanned documents.');
       }
 
       const fileName = typeof source.data.fileName === 'string' ? source.data.fileName : String(source.data.title || 'attachment');

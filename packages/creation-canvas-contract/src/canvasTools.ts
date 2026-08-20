@@ -209,6 +209,12 @@ export const GUEST_GATED_CANVAS_TOOLS = [
   // which is exactly what an absent tool buys. Gated rather than absent so a visitor
   // hears the true, one-click reason instead.
   'canvas_capture_screenshot',
+  // The ONLY route to the text of a SCANNED page, and classified by the failure its
+  // absence causes rather than by what it touches. Without it a visitor who drops a
+  // photographed contract hears "I can't read scanned documents" — a fact about a model
+  // presented as a fact about the product, on a board where the true answer is one
+  // click away. It self-gates on a saved session and returns the account gate.
+  'canvas_read_attachment',
   // The ONLY route to a playable game. Deliberately here rather than in the safe set
   // even though HALF of it is guest-safe: a web game is authored in the visitor's own
   // browser and needs no account, while a Roblox place is written on the server. The
@@ -301,6 +307,9 @@ export const ACCOUNT_REQUIRED_CANVAS_TOOLS = [
   // thread. `canvas_open_deal` is the one that makes a firm an OBJECT rather than a
   // string in a cell, which is what `fundingRound.investors` never was.
   'canvas_sync_funding_round',
+  // The round's PLAN, as a record. `funding_rounds` had no writer at all until
+  // 0937, so a target and a valuation were board JSON beside an empty table.
+  'canvas_plan_funding_round',
   'canvas_open_deal',
   'canvas_log_deal_touch',
   // ── The data room, actually sent (FO-E2) ─────────────────────────────────────
@@ -310,6 +319,9 @@ export const ACCOUNT_REQUIRED_CANVAS_TOOLS = [
   'canvas_sync_data_room',
   'canvas_share_data_room',
   'canvas_revoke_data_room_share',
+  // A room holds TWO shapes: a diligence obligation and an encrypted legal file
+  // filed into it (0937). This is how the second one gets there — and how it leaves.
+  'canvas_file_document_in_data_room',
   // The founders' agreement and its siblings, drafted from the one template registry
   // (FO-D5). Account-required because it renders a real workspace's formation
   // paperwork and lands it on a `contract` card that is then SENT for signature.
@@ -360,6 +372,11 @@ export const ACCOUNT_REQUIRED_CANVAS_TOOLS = [
   // The generic e-signature request for an AUTHORED object (a contract, an offer) rather
   // than an uploaded file. Same reason: it emails a real counterparty.
   'canvas_request_signature',
+  // The RETURN LEG. `canvas_request_signature` wrote "sent" and nothing ever wrote
+  // what happened next, so `policy.roster` and `acknowledgementRate` — both declared
+  // as "written by the signature subsystem" — had no writer at all. Account-required
+  // for the same reason as its sibling: it reads a real tenant record.
+  'canvas_sync_signature',
   // ── The sell motion ──────────────────────────────────────────────────────────
   //
   // The commercial half of "idea to real". Every one is account-required, and for a

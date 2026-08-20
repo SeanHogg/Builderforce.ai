@@ -156,36 +156,6 @@ export const HIRING_OBJECT_SPECS: readonly SpecObjectSpec[] = [
       SUMMARY_FIELD,
     ],
   },
-  // ── How we reach them ─────────────────────────────────────────────────────────
-  {
-    kind: 'outreachSequence',
-    icon: '↝',
-    group: 'Hiring',
-    defaultStatus: 'draft',
-    actions: ['draft', 'enroll', 'start', 'pause'],
-    fields: [
-      {
-        name: 'steps',
-        render: 'rows',
-        label: 'steps',
-        columns: ['step', 'channel', 'delayDays', 'subject'],
-        hint: 'The cadence: {step, channel, delayDays, subject}. Write the actual subject lines — a sequence with placeholder subjects is a plan, not a sequence. Three to five steps is the useful range; more reads as spam to the person receiving it.',
-      },
-      { name: 'audience', render: 'stat', label: 'audience', hint: 'The talent pool this sequence enrols from, by id or title.' },
-      { name: 'enrolled', render: 'stat', label: 'enrolled', hint: 'People currently enrolled.', bookkeeping: true },
-      { name: 'replied', render: 'stat', label: 'replied', hint: 'People who replied and were therefore removed from the cadence.', bookkeeping: true },
-      { name: 'replyRate', render: 'meter', label: 'replyRate', hint: '0-100 reply rate. Under 10 on a sourced pool means the message is wrong, not the list.', bookkeeping: true },
-      {
-        name: 'stopOnReply',
-        render: 'stat',
-        label: 'stopOnReply',
-        hint: 'Whether a reply removes the person from the remaining steps. Defaults to true and should stay true: continuing to mail someone who already answered is the failure candidates screenshot.',
-        bookkeeping: true,
-      },
-      { name: 'lastSentAt', render: 'stat', label: 'lastSentAt', hint: 'ISO instant the most recent step went out.', bookkeeping: true },
-      SUMMARY_FIELD,
-    ],
-  },
   // ── Who made the cut ──────────────────────────────────────────────────────────
   {
     kind: 'shortlist',
@@ -330,7 +300,6 @@ export const HIRING_LABELS: Record<HiringObjectKind, string> = {
   candidate: 'Candidate',
   talentPool: 'Talent pool',
   jobPosting: 'Job posting',
-  outreachSequence: 'Outreach sequence',
   shortlist: 'Shortlist',
   interviewLoop: 'Interview loop',
   scorecard: 'Interview scorecard',

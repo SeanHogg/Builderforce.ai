@@ -82,10 +82,6 @@ export const SELL_MOTION_OBJECT_KINDS = [
   // without an account. The object where a negotiated price stops dying on the way to
   // checkout.
   'quote',
-  // HOW WE FOLLOW UP. Day-0 email → day-2 social → day-4 call → day-7 breakup, auto-stop
-  // on reply. Ordered over time and across channels, which is what separates it from
-  // `emailCampaign`.
-  'sequence',
   // WHAT THEY ACTUALLY SAID. Recording, transcript, objections, commitment, next step —
   // the highest-signal artifact in selling, and the one the board could not hold.
   'call',

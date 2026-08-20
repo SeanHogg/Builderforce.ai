@@ -1,3 +1,130 @@
+## ✅ RESOLVED 2026-08-19 — The presentation walks, the guest board remembers, the career answer is measured, and there is ONE cadence
+
+**Roadmap items closed:** *Presentation mode has no ORDERED SEQUENCE*, *There is no board-level version history
+or restore* (the half that was genuinely missing), *The use-case picker's Career intents are prompts, not a
+bound tool call*, *Nothing can be signed, invoiced or paid from the board*, and *Outreach still requires a
+tenant mailbox* — the last two mostly by finding them already built and closing what actually remained.
+
+### 1 · A presentation walks an ordered sequence, and every follower comes along
+
+`presentMode` shipped, follow-mode shipped beside it, and the presence channel has carried `viewport` on every
+pan and zoom the whole time. What was missing was the SEQUENCE: entering present mode hid the chrome and then
+left navigation to whoever was driving, so "walk the room through this board" meant remembering which card came
+next and panning to it by hand, in front of an audience, with every follower's viewport snapping along behind
+each mis-aimed drag.
+
+`lib/canvasPresentation.ts` computes the walk. **The order is DERIVED, not stored** — a stored array of node ids
+is wrong the moment two people edit: a deleted frame leaves a dangling id, an added one is absent from a list
+nobody updated, and two reorders have to be merged. So the sequence is a function of the board: authored
+`presentationOrder` first, reading order otherwise, banded so two frames roughly side by side read as a row
+rather than by a one-pixel difference in `y`, and TOTAL so two clients cannot disagree about a tie.
+
+**The transport was free**, which is why this was worth chasing: `goToPresentationStep` writes the presenter's
+own viewport, and `followedViewport` already applies whatever the presence channel carries — so moving the
+presenter's camera moves every follower's, with no new transport at all.
+
+Frames only (every object as a step is a 180-step sequence on a real board), hidden frames skipped, arrow
+keys/space/PageUp/PageDown/Home/End bound while presenting, Escape leaves the mode, and stepping CLAMPS rather
+than wraps — pressing forward on the last slide and landing back on the title reads as a crash. A board with no
+frames has no sequence and no control, so present mode is unchanged where there is nothing to walk. 20 tests.
+
+**One real bug the tests caught before anyone saw it:** `Number('')` is `0` and finite, so every frame that had
+never been numbered read as `presentationOrder: 0`, every frame compared equal, and the authored override did
+nothing at all while appearing to work.
+
+### 2 · The board that had no history now has one
+
+The original roadmap entry said there was no board-level version history, restore, or whole-board archive. Two
+thirds of that was wrong and the corrections are what made the work small: a saved canvas has had server
+revisions, named checkpoints and restore the whole time, and `exportSession` has written a whole-board JSON
+archive for both saved and local boards. `canvasActionJournal` was named as the thing to fold a restore over
+and cannot be — it records labelled ACTIONS with durations, not state.
+
+What was genuinely missing is the GUEST board, which the panel answered with "history is only available for
+saved sessions" — on the one surface with no autosave beyond a single overwriting snapshot, and the one most
+likely to be handed to an agent that rewrites half of it. Answering "sign in first" there is answering after
+the work is gone.
+
+`lib/creationCheckpoints.ts` gives a local board the same two verbs against the same panel. **The quota is the
+interesting part:** a real board serializes to megabytes and `localStorage` throws when full, so the naive
+version works until somebody has done enough work to care and then silently stops saving at exactly that
+moment. Writes SHED — on a quota failure the OLDEST checkpoint is dropped and the write retried, down to a
+single entry, and only then is failure reported. A history keeping the newest three beats one that kept twelve
+until the day it stopped. 11 tests, including the shed-and-retry path.
+
+`removeLocalCreationSession` now sweeps every sidecar keyed off a board by prefix, so a claimed or deleted board
+cannot leave a checkpoint stack leaking against the same quota — and cannot resurface attached to a board it is
+not about if an id is reused.
+
+**And the checkpoint namer stopped being a native prompt.** It was `window.prompt('Name this checkpoint')`: a
+browser dialog on a product whose own convention forbids them, carrying a hardcoded English string in a
+component whose every other string goes through `useTranslations` — so four of five locales were shown English
+at the moment they were asked to name something. It is an inline field in the panel now, which also lets a
+person see the list they are adding to while they name the entry.
+
+### 3 · A career answer must be MEASURED, and the canvas enforces it
+
+The gap left open by the previous pass. Every career intent stated a completion condition and trusted the model
+to reach for the tool — and for domain-evidence intents that is enough, because the rows only exist behind a
+domain read. The canvas-evidence intents have the opposite property, and the career set is where it bites: a
+résumé and a posting are both already in context, so "report the match score" is a sentence a language model can
+answer plausibly and unreproducibly. A score that moves when you ask twice is precisely what
+`careerToolCatalog.ts` exists to end.
+
+`ExecutiveCanvasWorkflow.requiredTools` is now DATA, and it is enforced where the fabricated number would land:
+`canvas_add_object` and `canvas_update_object` refuse a use case's own declared output kinds until the named
+tool has actually been called this turn, and the refusal names the tool. Checking it in the preparation tool
+would enforce nothing (it runs first, before any tool); checking it at turn end is worse (the card is on the
+board and the only move left is deleting somebody's work).
+
+Seven of the eight career intents name their tool. `career.application.track` deliberately names none —
+recording where you sent an application and when to chase has no measurement to fabricate, and a gate there
+would stand between somebody and a fact about their own week. Scoped to declared outputs, so a gated turn may
+still add a note or a task freely. The turn's tool ledger rides the existing trace hook; names are compared
+suffix-tolerantly because a strict compare fails CLOSED, and a turn that can never author anything is worse
+than one that occasionally accepts a near-match.
+
+### 4 · `timecard` — the seat where REAL means money arriving can now bill for the work
+
+`timecards` has had a table, routes, a five-state lifecycle and a freelancer dashboard the whole time and no
+canvas surface, so the board could draft the agreement and had to leave the room to invoice for it. (Signing
+and invoicing were already built — `canvasSignatureActions` and `runInvoiceAction` — so the roadmap entry
+claiming none of the three existed was stale in two of its three clauses.)
+
+`timecard` is the seventh career kind and PROJECTS its row exactly as `jobApplication` does: `state`,
+`submittedAt`, `approvedAt` and `rejectReason` are read from `timecards` and are not the card's to assert —
+a card that could set its own status to approved would be a person approving their own invoice. Hours are
+derived from the entries, and non-billable time is RECORDED rather than dropped: the hours somebody spent and
+the hours somebody pays for are two facts, and tracking only the second is how a rate quietly becomes a
+fiction. `billableShare` separates a rate that is too low from a week with too much unpaid work in it.
+
+### 5 · ONE multi-touch cadence, three directions
+
+Found while closing the seeker's follow-up gap, and it turned out the gap was a duplicate rather than an
+absence. TWO cadences had shipped independently and neither knew about the other:
+`SELL_MOTION_OBJECT_KINDS.sequence` (a seller chasing a prospect) and `HIRING_OBJECT_KINDS.outreachSequence`
+(a recruiter chasing a candidate). Same object both times — ordered steps with a channel and a delay, an
+audience, stop-on-reply, a reply rate — with two specs, two i18n namespaces and two places to fix the day the
+send runner changes. A THIRD was about to be written for the job seeker.
+
+So there is ONE `sequence` in the shared vocabulary, and which conversation it belongs to is a `direction`
+value: `sales | hiring | seeking | support`. That is the same open/closed answer `funnel` gave for the
+marketing and hiring funnels, and `seeking` is the entry that did not exist before — a person chasing their own
+applications now has the object a recruiter chasing them has always had. `renameLegacyKind` migrates boards a
+recruiter already saved; the runner's cursor stays unwritable by a model, because editing it could re-send a
+breakup email to somebody who already replied.
+
+Filed under `Integrations` rather than `Revenue` or `Hiring`: a kind lives in exactly one palette section, and
+the section holding `inbox`, `emailCampaign` and `socialCampaign` is the only one all three audiences open.
+
+### 6 · Three breaks fixed in passing
+
+None of these were this pass's subject; all three stopped the tree building or the panel telling the truth.
+`api.ts` had an import spliced inside another import block. `CREATIVE_OUTPUTS` still read `capability.outputs`
+after the contract replaced it with `outputProfiles` — the rename that stopped a format being advertised with
+no producer behind it. `ProjectEvermindPanel`'s `analyzeCoverage` was declared, referenced by nothing, and
+outside its object's contextual type, which is exactly why its two parameters had no inferred type.
+
 ## ✅ RESOLVED 2026-08-19 — FO-E5 and its sibling: the round header is a record, and a data room can hold a file
 
 Migration **0937** closed both residuals of the FO-E pass, and the register was still carrying them as

@@ -42,7 +42,6 @@ describe('sell-motion vocabulary', () => {
     expect(specMutableFields('quote')).not.toContain('acceptedAt');
     expect(specMutableFields('quote')).not.toContain('acceptedBy');
     expect(specMutableFields('quote')).not.toContain('quoteState');
-    expect(specMutableFields('sequence')).not.toContain('enrolments');
     expect(specMutableFields('call')).not.toContain('transcript');
     expect(specMutableFields('trial')).not.toContain('workspaceId');
     expect(specMutableFields('trustPacket')).not.toContain('controls');
