@@ -894,6 +894,12 @@
     "convertToOkr": "Convertir en objectif OKR",
     "convertToTask": "Convertir en tâche",
     "convertToOkrConfirm": "Promouvoir cet épic en objectif OKR ? Ses tâches enfants seront liées au nouvel objectif et cet élément du tableau sera supprimé.",
+    "epicPriority": {
+      "low": "Basse",
+      "medium": "Moyenne",
+      "high": "Haute",
+      "urgent": "Urgente"
+    },
     "epicStatus": {
       "backlog": "Backlog",
       "todo": "À faire",
@@ -903,12 +909,6 @@
       "done": "Terminé",
       "blocked": "Bloqué",
       "shipped": "Livré"
-    },
-    "epicPriority": {
-      "low": "Basse",
-      "medium": "Moyenne",
-      "high": "Haute",
-      "urgent": "Urgente"
     }
   },
   "ide": {
@@ -3533,6 +3533,8 @@
     "signInToGet": "Se connecter pour obtenir",
     "installFailed": "Impossible d'ajouter à vos Connaissances. Réessayez.",
     "checkoutUnavailable": "Le paiement n'est pas encore disponible sur ce déploiement.",
+    "checkoutCancelled": "Le paiement a été annulé. Aucun montant n'a été prélevé.",
+    "checkoutFailed": "Nous n'avons pas pu confirmer ce paiement. Si vous avez été débité, contactez le support.",
     "installing": "Installation…",
     "by": "par {author}"
   },
@@ -8979,7 +8981,7 @@
     "analyzeSelectNone": "Effacer la sélection",
     "analyzeApplyCta": "Corriger {count} sélectionnés",
     "analyzeApplying": "Correction…",
-    "analyzeApplied": "Corrigé : {corrected} corrigés, {forgotten} oubliés. Le modèle est désormais en v{version}.",
+    "analyzeApplied": "{corrected} corrigées et réapprises, {forgotten} retirées du rappel (l'influence déjà apprise est remplacée par la correction, pas effacée). Le modèle est désormais en v{version}.",
     "analyzeSkipped": "{count} n’ont pas pu être appliqués.",
     "tabsLabel": "Commandes Evermind",
     "tabTeach": "Enseigner",
@@ -8992,7 +8994,8 @@
     "diagnosticsCopied": "Copié dans le presse-papiers.",
     "diagnosticsShow": "Afficher le rapport",
     "diagnosticsHide": "Masquer le rapport",
-    "diagnosticsManualHint": "La copie automatique a été bloquée ici — le rapport est sélectionné ci-dessous, appuyez sur Ctrl/Cmd+C pour le copier."
+    "diagnosticsManualHint": "La copie automatique a été bloquée ici — le rapport est sélectionné ci-dessous, appuyez sur Ctrl/Cmd+C pour le copier.",
+    "analyzeCoverage": "Les {analyzed} mémoires les plus récentes sur {total} ont été examinées — relancez pour poursuivre avec les autres."
   },
   "topbar": {
     "cart": "Panier",
@@ -11683,6 +11686,8 @@
         "expired": "expirée",
         "undecryptable": "identifiant illisible",
         "unsupported-auth": "enregistré comme abonnement, mais ce fournisseur nécessite une clé API",
+        "other-workspace": "connectée dans un autre espace de travail, pas celui-ci",
+        "lookup_failed": "échec de la recherche de l'identifiant — réessayez sous peu",
         "unavailable": "indisponible",
         "failed": "en échec",
         "upstream_error": "erreur du fournisseur du modèle",
@@ -12311,7 +12316,14 @@
     "errorComplete": "Impossible de terminer la session",
     "startSession": "Démarrer la mêlée",
     "startSessionHint": "Démarrer la mêlée",
-    "startSessionFacilitatorOnly": "Seul l’animateur peut la démarrer"
+    "startSessionFacilitatorOnly": "Seul l’animateur peut la démarrer",
+    "briefcase": {
+      "open": "{count} assignées — ouvrir le travail"
+    },
+    "assignedWork": {
+      "assignedTo": "{count} assignées · {name}",
+      "empty": "Rien d’assigné."
+    }
   },
   "meetings": {
     "title": "Réunions",
@@ -12953,7 +12965,8 @@
     "logMambaFailInit": "❌ Échec de l’initialisation du modèle Mamba : {reason}",
     "logMambaEpoch": "  📊 Époque {epoch} : perte={loss}",
     "logMambaComplete": "✅ Entraînement Mamba terminé — perte finale : {loss}",
-    "logMambaFailed": "❌ Échec de l’entraînement Mamba : {error}"
+    "logMambaFailed": "❌ Échec de l’entraînement Mamba : {error}",
+    "corpusRefused": "Ce jeu de données ne peut pas servir de corpus d’entraînement."
   },
   "evermindBuild": {
     "title": "Build Evermind",
@@ -15756,7 +15769,8 @@
       "Research": "Recherche",
       "Hiring": "Recrutement",
       "Operations": "Opérations",
-      "Revenue": "Revenus"
+      "Revenue": "Revenus",
+      "Career": "Carrière"
     },
     "datasetRowLimit": "Votre offre autorise jusqu’à {limit} lignes de données par import dans le canevas.",
     "datasetNoColumns": "Aucune colonne n’a été trouvée dans ce fichier.",
@@ -15974,7 +15988,6 @@
       "noFollowUp": "Aucune action de suivi enregistrée.",
       "evermindSyncing": "Synchronisation de l’Evermind du projet actif…",
       "evermindSyncingDetail": "Chargement de la version actuelle, de l’activité d’apprentissage, de l’état de préparation et des contributions récentes.",
-      "model": "Modèle",
       "learned": "Appris",
       "queued": "En file",
       "trainingLoss": "Perte d’entraînement",
@@ -16474,7 +16487,8 @@
       "pipelineWeighted": "Pondéré {amount}",
       "pipelineOpen": "{count} en cours · {amount}",
       "pipelineUnpriced": "{count} sans prix",
-      "pipelineOdds": "{percent} %"
+      "pipelineOdds": "{percent} %",
+      "adapterVersion": "Adaptateur"
     },
     "editor": {
       "toolbar": "Mise en forme",
@@ -16847,7 +16861,16 @@
       "call": "Appel",
       "trial": "Essai",
       "trustPacket": "Dossier de confiance",
-      "mutualActionPlan": "Plan d'action commun"
+      "mutualActionPlan": "Plan d'action commun",
+      "equityGrant": "Attribution d’actions",
+      "convertible": "SAFE / billet",
+      "payRun": "Cycle de paie",
+      "job": "Poste",
+      "jobApplication": "Candidature",
+      "applicationPipeline": "Pipeline de candidatures",
+      "coverLetter": "Lettre de motivation",
+      "interviewPrep": "Préparation d’entretien",
+      "runway": "Autonomie financière"
     },
     "twilioSetup": {
       "title": "Intégration Twilio",
@@ -16968,7 +16991,6 @@
     "prompt": "Invite",
     "status": "Statut",
     "priority": "Priorité",
-    "model": "Modèle",
     "prd": "PRD",
     "role": "Rôle",
     "tools": "Outils",
@@ -17770,6 +17792,10 @@
       "field-operations": {
         "name": "Opérations terrain",
         "description": "Pilotez le travail que vous vendez : les équipements dont vous avez la charge, les ordres de travail qui s’y rapportent, la journée sur laquelle ils sont planifiés, les pièces consommées et la certification qui les rend conformes."
+      },
+      "job-hunt": {
+        "name": "Poste de pilotage de la recherche d’emploi",
+        "description": "Menez votre recherche d’emploi avec des objets plutôt que de mémoire : combien de temps l’argent tient, les annonces qui valent le coup, une variante de CV par poste, la lettre, la répétition d’entretien et le pipeline qui indique qui ne répond plus."
       }
     },
     "pitch": {
@@ -20341,7 +20367,129 @@
     "noticeInvoiceChased": "{reference} relancée — envoyée à {to}.",
     "noticeInvoiceChaseNoRecipient": "Relance de {reference} enregistrée, mais la carte ne porte aucune adresse e-mail client à qui l’envoyer.",
     "noticeInvoiceActionFailed": "Cela n’a pas pu être fait. Rien n’a été envoyé.",
-    "noticePayRunSync": "Demandez à Brain de synchroniser les paies : il les relit depuis votre prestataire de paie connecté."
+    "noticePayRunSync": "Demandez à Brain de synchroniser les paies : il les relit depuis votre prestataire de paie connecté.",
+    "stickyShapeEllipse": "Ellipse",
+    "stickyShapeRhombus": "Losange",
+    "stickyShapeTriangle": "Triangle",
+    "stickyShapeParallelogram": "Parallélogramme",
+    "stickyShapeStar": "Étoile",
+    "stickyShapeArrow": "Flèche",
+    "career": {
+      "empty": "Ce {label} ne contient encore rien.",
+      "emptyHint": "Demandez à Brain de faire la recherche et de le remplir, ou ouvrez l’inspecteur pour l’écrire vous-même.",
+      "meterLabel": "{label} : {score} sur 100",
+      "freshJustNow": "à l’instant",
+      "freshMinutes": "il y a {count} min",
+      "freshHours": "il y a {count} h",
+      "freshDays": "il y a {count} j",
+      "label": {
+        "job": "Poste",
+        "jobApplication": "Candidature",
+        "applicationPipeline": "Pipeline de candidatures",
+        "coverLetter": "Lettre de motivation",
+        "interviewPrep": "Préparation d’entretien",
+        "runway": "Autonomie financière"
+      },
+      "status": {
+        "researching": "En recherche",
+        "drafting": "En rédaction",
+        "draft": "Brouillon",
+        "notTracked": "Non suivi",
+        "notPrepared": "Non préparé",
+        "notCalculated": "Non calculé"
+      },
+      "field": {
+        "employer": "Employeur",
+        "location": "Lieu",
+        "compensation": "Rémunération",
+        "postingUrl": "Annonce",
+        "postedAt": "Publiée le",
+        "closesAt": "Clôture",
+        "requirements": "Exigences",
+        "matchScore": "Correspondance",
+        "matchedSkills": "Compétences correspondantes",
+        "missingSkills": "Compétences manquantes",
+        "verdict": "Verdict",
+        "jobRef": "Poste",
+        "proposalRef": "Candidature liée",
+        "stage": "Étape",
+        "submittedAt": "Envoyée le",
+        "lastResponseAt": "Dernière réponse",
+        "followUpAt": "Relance",
+        "channel": "Canal",
+        "contact": "Contact",
+        "resumeRef": "CV envoyé",
+        "coverLetterRef": "Lettre envoyée",
+        "offerTerms": "Conditions de l’offre",
+        "daysSinceResponse": "Jours sans réponse",
+        "seeking": "Recherche",
+        "weeklyTarget": "Objectif hebdomadaire",
+        "applications": "Candidatures",
+        "total": "Total",
+        "open": "En cours",
+        "responseRate": "Taux de réponse",
+        "interviewRate": "Taux d’entretien",
+        "longestSilence": "Silence le plus long",
+        "bottleneck": "Goulet d’étranglement",
+        "addressedTo": "À l’attention de",
+        "hook": "Phrase d’accroche",
+        "body": "Lettre",
+        "evidence": "Preuves",
+        "referees": "Références",
+        "wordCount": "Mots",
+        "interviewType": "Type d’entretien",
+        "scheduledAt": "Programmé le",
+        "panel": "Jury",
+        "questions": "Questions",
+        "riskAreas": "Points faibles",
+        "questionsToAsk": "Questions à poser",
+        "stories": "Anecdotes préparées",
+        "rehearsed": "Répétées",
+        "currency": "Devise",
+        "savings": "Épargne",
+        "monthlyExpenses": "Dépenses mensuelles",
+        "monthlyIncome": "Revenus mensuels",
+        "expectedInflows": "Entrées prévues",
+        "expectedOutflows": "Sorties prévues",
+        "projection": "Projection",
+        "netMonthlyBurn": "Consommation nette mensuelle",
+        "weeksRemaining": "Semaines restantes",
+        "pressure": "Pression",
+        "assumptions": "Hypothèses",
+        "sources": "Sources",
+        "summary": "Résumé"
+      },
+      "column": {
+        "component": "Composant",
+        "amount": "Montant",
+        "notes": "Notes",
+        "role": "Poste",
+        "employer": "Employeur",
+        "stage": "Étape",
+        "submittedAt": "Envoyée le",
+        "lastResponseAt": "Dernière réponse",
+        "jobRef": "Poste",
+        "requirement": "Exigence",
+        "claim": "Affirmation",
+        "proof": "Preuve",
+        "name": "Nom",
+        "focus": "Axe",
+        "question": "Question",
+        "category": "Catégorie",
+        "difficulty": "Difficulté",
+        "lookFor": "À rechercher",
+        "answer": "Votre réponse",
+        "label": "Intitulé",
+        "situation": "Situation",
+        "action": "Action",
+        "result": "Résultat",
+        "inMonths": "Dans (mois)",
+        "month": "Mois",
+        "balance": "Solde",
+        "note": "Note"
+      }
+    },
+    "agentModel": "Modèle de l’agent"
   },
   "canvasCommands": {
     "cleanLayout": "Réorganiser la toile",
@@ -23226,6 +23374,30 @@
     "confirming": "Confirmation de votre paiement…",
     "payByTransfer": "Cette facture se règle par virement bancaire. Répondez au message qui vous a envoyé ce lien si vous avez besoin des coordonnées bancaires.",
     "settled": "Cette facture est réglée. Merci."
+  },
+  "taskStatus": {
+    "backlog": "Backlog",
+    "todo": "À faire",
+    "ready": "Prêt",
+    "in_progress": "En cours",
+    "in_review": "En revue",
+    "done": "Terminé",
+    "blocked": "Bloqué",
+    "shipped": "Livré"
+  },
+  "agentWorker": {
+    "title": "Exécuteur d'agents dans le navigateur",
+    "intro": "Exécute les agents affectés aux couloirs de vos tableaux directement dans cet onglet, chacun sur son propre modèle. Au fur et à mesure que les agents terminent, le kanban avance de façon autonome.",
+    "run": "Exécuter les agents en attente",
+    "running": "Exécution…",
+    "runAria": "Exécuter les agents en attente",
+    "tally": "Exécutés {ran} · Terminés {completed} · Échoués {failed}",
+    "outcomesAria": "Résultats d'exécution",
+    "outcome": {
+      "idle": "Rien à exécuter",
+      "completed": "Terminé",
+      "failed": "Échoué"
+    }
   },
   "milestones": {
     "heading": "Échéancier de paiement",

@@ -894,6 +894,12 @@
     "convertToOkr": "In OKR-Ziel umwandeln",
     "convertToTask": "In Aufgabe umwandeln",
     "convertToOkrConfirm": "Dieses Epic zu einem OKR-Ziel hochstufen? Seine untergeordneten Aufgaben werden mit dem neuen Ziel verknüpft und dieses Board-Element wird entfernt.",
+    "epicPriority": {
+      "low": "Niedrig",
+      "medium": "Mittel",
+      "high": "Hoch",
+      "urgent": "Dringend"
+    },
     "epicStatus": {
       "backlog": "Backlog",
       "todo": "Zu erledigen",
@@ -903,12 +909,6 @@
       "done": "Erledigt",
       "blocked": "Blockiert",
       "shipped": "Ausgeliefert"
-    },
-    "epicPriority": {
-      "low": "Niedrig",
-      "medium": "Mittel",
-      "high": "Hoch",
-      "urgent": "Dringend"
     }
   },
   "ide": {
@@ -3533,6 +3533,8 @@
     "signInToGet": "Anmelden zum Abrufen",
     "installFailed": "Konnte nicht zu deinem Wissen hinzugefügt werden. Bitte erneut versuchen.",
     "checkoutUnavailable": "Bezahlvorgang ist auf dieser Instanz noch nicht verfügbar.",
+    "checkoutCancelled": "Die Zahlung wurde abgebrochen. Es wurde nichts berechnet.",
+    "checkoutFailed": "Wir konnten diese Zahlung nicht bestätigen. Falls dir etwas berechnet wurde, wende dich an den Support.",
     "installing": "Installation…",
     "by": "von {author}"
   },
@@ -8979,7 +8981,7 @@
     "analyzeSelectNone": "Auswahl aufheben",
     "analyzeApplyCta": "{count} ausgewählte beheben",
     "analyzeApplying": "Behebe…",
-    "analyzeApplied": "Behoben: {corrected} korrigiert, {forgotten} vergessen. Modell ist jetzt v{version}.",
+    "analyzeApplied": "{corrected} korrigiert und neu gelernt, {forgotten} aus dem Abruf entfernt (bereits gelernter Einfluss wird durch die Korrektur ersetzt, nicht gelöscht). Modell ist jetzt v{version}.",
     "analyzeSkipped": "{count} konnten nicht angewendet werden.",
     "tabsLabel": "Evermind-Steuerung",
     "tabTeach": "Beibringen",
@@ -8992,7 +8994,8 @@
     "diagnosticsCopied": "In die Zwischenablage kopiert.",
     "diagnosticsShow": "Bericht anzeigen",
     "diagnosticsHide": "Bericht ausblenden",
-    "diagnosticsManualHint": "Das automatische Kopieren wurde hier blockiert – der Bericht ist unten markiert, drücke Strg/Cmd+C zum Kopieren."
+    "diagnosticsManualHint": "Das automatische Kopieren wurde hier blockiert – der Bericht ist unten markiert, drücke Strg/Cmd+C zum Kopieren.",
+    "analyzeCoverage": "Die {analyzed} neuesten von {total} Erinnerungen wurden geprüft — erneut ausführen, um mit den übrigen fortzufahren."
   },
   "topbar": {
     "cart": "Warenkorb",
@@ -11683,6 +11686,8 @@
         "expired": "abgelaufen",
         "undecryptable": "Anmeldedaten unlesbar",
         "unsupported-auth": "als Abonnement gespeichert, dieser Anbieter benötigt jedoch einen API-Schlüssel",
+        "other-workspace": "in einem anderen Workspace verbunden, nicht in diesem",
+        "lookup_failed": "Abruf der Anmeldedaten fehlgeschlagen – bitte in Kürze erneut versuchen",
         "unavailable": "nicht verfügbar",
         "failed": "fehlgeschlagen",
         "upstream_error": "Fehler des Modellanbieters",
@@ -12311,7 +12316,14 @@
     "errorComplete": "Sitzung konnte nicht abgeschlossen werden",
     "startSession": "Standup starten",
     "startSessionHint": "Das Standup starten",
-    "startSessionFacilitatorOnly": "Nur der Moderator kann starten"
+    "startSessionFacilitatorOnly": "Nur der Moderator kann starten",
+    "briefcase": {
+      "open": "{count} zugewiesen — Arbeit öffnen"
+    },
+    "assignedWork": {
+      "assignedTo": "{count} zugewiesen · {name}",
+      "empty": "Nichts zugewiesen."
+    }
   },
   "meetings": {
     "title": "Besprechungen",
@@ -12953,7 +12965,8 @@
     "logMambaFailInit": "❌ Mamba-Modell konnte nicht initialisiert werden: {reason}",
     "logMambaEpoch": "  📊 Epoche {epoch}: Verlust={loss}",
     "logMambaComplete": "✅ Mamba-Training abgeschlossen — Endverlust: {loss}",
-    "logMambaFailed": "❌ Mamba-Training fehlgeschlagen: {error}"
+    "logMambaFailed": "❌ Mamba-Training fehlgeschlagen: {error}",
+    "corpusRefused": "Dieser Datensatz kann nicht als Trainingskorpus verwendet werden."
   },
   "evermindBuild": {
     "title": "Evermind-Build",
@@ -15756,7 +15769,8 @@
       "Research": "Forschung",
       "Hiring": "Recruiting",
       "Operations": "Betrieb",
-      "Revenue": "Umsatz"
+      "Revenue": "Umsatz",
+      "Career": "Karriere"
     },
     "datasetRowLimit": "Dein Tarif erlaubt bis zu {limit} Datenzeilen pro Canvas-Import.",
     "datasetNoColumns": "In dieser Datei wurden keine Spalten gefunden.",
@@ -15974,7 +15988,6 @@
       "noFollowUp": "Keine Folgemaßnahme erfasst.",
       "evermindSyncing": "Evermind des aktiven Projekts wird synchronisiert…",
       "evermindSyncingDetail": "Aktuelle Version, Lernaktivität, Bereitschaft und jüngste Beiträge werden geladen.",
-      "model": "Modell",
       "learned": "Gelernt",
       "queued": "In Warteschlange",
       "trainingLoss": "Trainingsverlust",
@@ -16474,7 +16487,8 @@
       "pipelineWeighted": "Gewichtet {amount}",
       "pipelineOpen": "{count} offen · {amount}",
       "pipelineUnpriced": "{count} ohne Preis",
-      "pipelineOdds": "{percent} %"
+      "pipelineOdds": "{percent} %",
+      "adapterVersion": "Adapter"
     },
     "editor": {
       "toolbar": "Formatierung",
@@ -16847,7 +16861,16 @@
       "call": "Anruf",
       "trial": "Testphase",
       "trustPacket": "Vertrauenspaket",
-      "mutualActionPlan": "Gemeinsamer Aktionsplan"
+      "mutualActionPlan": "Gemeinsamer Aktionsplan",
+      "equityGrant": "Anteilszuteilung",
+      "convertible": "SAFE / Wandeldarlehen",
+      "payRun": "Lohnlauf",
+      "job": "Stelle",
+      "jobApplication": "Bewerbung",
+      "applicationPipeline": "Bewerbungs-Pipeline",
+      "coverLetter": "Anschreiben",
+      "interviewPrep": "Interviewvorbereitung",
+      "runway": "Finanzieller Puffer"
     },
     "twilioSetup": {
       "title": "Twilio-Integration",
@@ -16968,7 +16991,6 @@
     "prompt": "Prompt",
     "status": "Status",
     "priority": "Priorität",
-    "model": "Modell",
     "prd": "PRD",
     "role": "Rolle",
     "tools": "Werkzeuge",
@@ -17770,6 +17792,10 @@
       "field-operations": {
         "name": "Außendienst-Betrieb",
         "description": "Steuern Sie die Leistung, die Sie verkaufen: die betreuten Anlagen, die Aufträge dazu, den Tag ihrer Einsatzplanung, die verbrauchten Teile und das Zertifikat, das die Arbeit rechtmäßig macht."
+      },
+      "job-hunt": {
+        "name": "Kommandozentrale für die Jobsuche",
+        "description": "Führen Sie Ihre Jobsuche als Objekte statt aus dem Gedächtnis: wie lange das Geld reicht, welche Stellen sich lohnen, pro Rolle eine Lebenslauf-Variante, das Anschreiben, die Interviewprobe und die Pipeline, die zeigt, wer nicht mehr antwortet."
       }
     },
     "pitch": {
@@ -20341,7 +20367,129 @@
     "noticeInvoiceChased": "{reference} gemahnt – an {to} gesendet.",
     "noticeInvoiceChaseNoRecipient": "Mahnung zu {reference} erfasst, aber auf der Karte steht keine Kunden-E-Mail, an die sie gehen könnte.",
     "noticeInvoiceActionFailed": "Das war nicht möglich. Es wurde nichts gesendet.",
-    "noticePayRunSync": "Bitten Sie Brain, die Lohnläufe zu synchronisieren – sie werden vom verbundenen Lohnanbieter zurückgelesen."
+    "noticePayRunSync": "Bitten Sie Brain, die Lohnläufe zu synchronisieren – sie werden vom verbundenen Lohnanbieter zurückgelesen.",
+    "stickyShapeEllipse": "Ellipse",
+    "stickyShapeRhombus": "Raute",
+    "stickyShapeTriangle": "Dreieck",
+    "stickyShapeParallelogram": "Parallelogramm",
+    "stickyShapeStar": "Stern",
+    "stickyShapeArrow": "Pfeil",
+    "career": {
+      "empty": "Dieses Element ({label}) enthält noch nichts.",
+      "emptyHint": "Lassen Sie Brain recherchieren und ausfüllen oder öffnen Sie den Inspektor, um es selbst zu schreiben.",
+      "meterLabel": "{label}: {score} von 100",
+      "freshJustNow": "gerade eben",
+      "freshMinutes": "vor {count} Min.",
+      "freshHours": "vor {count} Std.",
+      "freshDays": "vor {count} T.",
+      "label": {
+        "job": "Stelle",
+        "jobApplication": "Bewerbung",
+        "applicationPipeline": "Bewerbungs-Pipeline",
+        "coverLetter": "Anschreiben",
+        "interviewPrep": "Interviewvorbereitung",
+        "runway": "Finanzieller Puffer"
+      },
+      "status": {
+        "researching": "Recherche läuft",
+        "drafting": "In Arbeit",
+        "draft": "Entwurf",
+        "notTracked": "Nicht erfasst",
+        "notPrepared": "Nicht vorbereitet",
+        "notCalculated": "Nicht berechnet"
+      },
+      "field": {
+        "employer": "Arbeitgeber",
+        "location": "Standort",
+        "compensation": "Vergütung",
+        "postingUrl": "Stellenanzeige",
+        "postedAt": "Veröffentlicht",
+        "closesAt": "Bewerbungsschluss",
+        "requirements": "Anforderungen",
+        "matchScore": "Übereinstimmung",
+        "matchedSkills": "Passende Fähigkeiten",
+        "missingSkills": "Fehlende Fähigkeiten",
+        "verdict": "Fazit",
+        "jobRef": "Stelle",
+        "proposalRef": "Bewerbungsdatensatz",
+        "stage": "Phase",
+        "submittedAt": "Eingereicht",
+        "lastResponseAt": "Letzte Antwort",
+        "followUpAt": "Nachfassen",
+        "channel": "Kanal",
+        "contact": "Kontakt",
+        "resumeRef": "Gesendeter Lebenslauf",
+        "coverLetterRef": "Gesendetes Anschreiben",
+        "offerTerms": "Angebotskonditionen",
+        "daysSinceResponse": "Tage ohne Antwort",
+        "seeking": "Gesucht",
+        "weeklyTarget": "Wochenziel",
+        "applications": "Bewerbungen",
+        "total": "Gesamt",
+        "open": "Offen",
+        "responseRate": "Antwortquote",
+        "interviewRate": "Interviewquote",
+        "longestSilence": "Längste Funkstille",
+        "bottleneck": "Engpass",
+        "addressedTo": "Adressiert an",
+        "hook": "Einstiegssatz",
+        "body": "Anschreiben",
+        "evidence": "Belege",
+        "referees": "Referenzen",
+        "wordCount": "Wörter",
+        "interviewType": "Interviewart",
+        "scheduledAt": "Termin",
+        "panel": "Gesprächsrunde",
+        "questions": "Fragen",
+        "riskAreas": "Schwachstellen",
+        "questionsToAsk": "Eigene Fragen",
+        "stories": "Vorbereitete Beispiele",
+        "rehearsed": "Geprobt",
+        "currency": "Währung",
+        "savings": "Ersparnisse",
+        "monthlyExpenses": "Monatliche Ausgaben",
+        "monthlyIncome": "Monatliches Einkommen",
+        "expectedInflows": "Erwartete Zuflüsse",
+        "expectedOutflows": "Erwartete Abflüsse",
+        "projection": "Prognose",
+        "netMonthlyBurn": "Netto-Monatsverbrauch",
+        "weeksRemaining": "Verbleibende Wochen",
+        "pressure": "Dringlichkeit",
+        "assumptions": "Annahmen",
+        "sources": "Quellen",
+        "summary": "Zusammenfassung"
+      },
+      "column": {
+        "component": "Bestandteil",
+        "amount": "Betrag",
+        "notes": "Notizen",
+        "role": "Rolle",
+        "employer": "Arbeitgeber",
+        "stage": "Phase",
+        "submittedAt": "Eingereicht",
+        "lastResponseAt": "Letzte Antwort",
+        "jobRef": "Stelle",
+        "requirement": "Anforderung",
+        "claim": "Aussage",
+        "proof": "Nachweis",
+        "name": "Name",
+        "focus": "Schwerpunkt",
+        "question": "Frage",
+        "category": "Kategorie",
+        "difficulty": "Schwierigkeit",
+        "lookFor": "Worauf es ankommt",
+        "answer": "Ihre Antwort",
+        "label": "Bezeichnung",
+        "situation": "Situation",
+        "action": "Handlung",
+        "result": "Ergebnis",
+        "inMonths": "In Monaten",
+        "month": "Monat",
+        "balance": "Kontostand",
+        "note": "Hinweis"
+      }
+    },
+    "agentModel": "Agentenmodell"
   },
   "canvasCommands": {
     "cleanLayout": "Leinwand-Layout aufräumen",
@@ -23226,6 +23374,30 @@
     "confirming": "Ihre Zahlung wird bestätigt …",
     "payByTransfer": "Diese Rechnung wird per Banküberweisung bezahlt. Antworten Sie auf die Nachricht mit diesem Link, wenn Sie die Kontodaten benötigen.",
     "settled": "Diese Rechnung ist beglichen. Vielen Dank."
+  },
+  "taskStatus": {
+    "backlog": "Backlog",
+    "todo": "Zu erledigen",
+    "ready": "Bereit",
+    "in_progress": "In Arbeit",
+    "in_review": "In Prüfung",
+    "done": "Erledigt",
+    "blocked": "Blockiert",
+    "shipped": "Ausgeliefert"
+  },
+  "agentWorker": {
+    "title": "Browser-Agent-Runner",
+    "intro": "Führt die Agenten, die den Swimlanes deiner Boards zugewiesen sind, direkt in diesem Tab aus – jeder mit seinem eigenen Modell. Sobald Agenten fertig sind, rückt das Kanban-Board autonom weiter.",
+    "run": "Ausstehende Agenten ausführen",
+    "running": "Läuft…",
+    "runAria": "Ausstehende Agenten ausführen",
+    "tally": "Ausgeführt {ran} · Abgeschlossen {completed} · Fehlgeschlagen {failed}",
+    "outcomesAria": "Ausführungsergebnisse",
+    "outcome": {
+      "idle": "Nichts auszuführen",
+      "completed": "Abgeschlossen",
+      "failed": "Fehlgeschlagen"
+    }
   },
   "milestones": {
     "heading": "Zahlungsplan",

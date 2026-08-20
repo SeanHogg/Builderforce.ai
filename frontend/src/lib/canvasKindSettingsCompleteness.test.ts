@@ -76,8 +76,36 @@ describe('canvas kind settings completeness', () => {
     expect(stale).toEqual([]);
   });
 
+  /**
+   * A kind whose manifest AUTHORS the inputs its spec DERIVES from.
+   *
+   * The guard below reads a double declaration as drift, and for every kind it has ever
+   * caught that was right: two places describing one card is two places to disagree
+   * about it. `llm` is the case that is genuinely both, and the split is clean rather
+   * than duplicated — the manifest declares the rate card and the volume, which are
+   * numbers a PERSON types into the inspector, and the spec declares what is computed
+   * from them (cost per request, projected monthly cost, monthly tokens, the
+   * input/output split) and draws it on the card. Neither declares a field the other
+   * does, and deliberately there is no control for a price: an authored total is exactly
+   * what `SpecField.derive` exists to abolish.
+   *
+   * Named here rather than the guard relaxed, so a second entry is a deliberate act with
+   * this argument to answer, and a kind that appears twice by accident still fails.
+   */
+  const AUTHORED_INPUTS_DERIVED_OUTPUTS = new Set(['llm']);
+
   it('never double-declares a kind in both registries', () => {
-    const doubled = CREATION_OBJECT_KINDS.filter((kind) => isSpecObjectKind(kind) && isKindSettingsKind(kind));
+    const doubled = CREATION_OBJECT_KINDS.filter(
+      (kind) => !AUTHORED_INPUTS_DERIVED_OUTPUTS.has(kind) && isSpecObjectKind(kind) && isKindSettingsKind(kind),
+    );
     expect(doubled).toEqual([]);
+  });
+
+  it('does not exempt a kind that is no longer declared twice', () => {
+    // The other direction, matching the pending-list guard above: an exemption kept
+    // after the condition it describes is gone would hide the next real double
+    // declaration of that kind.
+    const stale = [...AUTHORED_INPUTS_DERIVED_OUTPUTS].filter((kind) => !(isSpecObjectKind(kind) && isKindSettingsKind(kind)));
+    expect(stale).toEqual([]);
   });
 });

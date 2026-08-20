@@ -1962,7 +1962,7 @@ function EvermindBody({ data }: { data: CreationNodeData }) {
   });
   return <div className={styles.evermindBody}>
     <div className={styles.evermindMetrics}>
-      <span><small>{t('model')}</small><b>{version ? `v${version}` : t('blueprint')}</b></span>
+      <span><small>{t('adapterVersion')}</small><b>{version ? `v${version}` : t('blueprint')}</b></span>
       <span><small>{t('learned')}</small><b>{contributions}</b></span>
       <span><small>{t('queued')}</small><b>{pending}</b></span>
       <span><small>{t('trainingLoss')}</small><b>{loss == null ? '—' : loss.toFixed(3)}</b></span>
@@ -2674,6 +2674,17 @@ export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenD
   // PERSON chose and the board stores, which is why they arrive as inline style and
   // not as a theme token — see `authoredColors.ts`.
   const stickyStyle = data.kind === 'sticky' ? { background: String(data.stickyColor || STICKY_COLORS[0]) } : undefined;
+  // THE GEOMETRY, DRAWN — the reason `stickyShape` has been written since the Miro
+  // importer shipped. An imported ellipse arrived as a sticky that REMEMBERED it was an
+  // ellipse and was still drawn as a square card, so a migrated diagram looked like a
+  // wall of notes and the field was a fact nothing acted on.
+  //
+  // It is an ATTRIBUTE and a stylesheet rather than a render branch for the same reason
+  // the sticky's own chrome is hidden in CSS: the card keeps ONE structure, and a shape
+  // is a treatment of that structure, not a different component. Anything the importer
+  // wrote that this stylesheet has no rule for still lands as the square card it does
+  // today — an unknown geometry must degrade to a legible note, never to nothing.
+  const stickyShape = data.kind === 'sticky' && typeof data.stickyShape === 'string' && data.stickyShape ? data.stickyShape : undefined;
   const cardStyle = { ...frameStyle, ...stickyStyle, ...authoredSize };
   // `data-testid` is per KIND, not per instance: a test asks for "the testCase card",
   // and an id built from the node's uuid would change every run. The instance is
@@ -2780,7 +2791,7 @@ export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenD
   );
 
   return (
-    <article style={cardStyle} data-testid={`canvas-node-${data.kind}`} data-node-id={id} data-node-kind={data.kind} data-viewport={data.viewport} data-density={density} className={`${styles.node} ${styles[`node_${data.kind}`]} ${selected ? styles.selected : ''} ${isWide ? styles.wideNode : ''}`}>
+    <article style={cardStyle} data-testid={`canvas-node-${data.kind}`} data-node-id={id} data-node-kind={data.kind} data-sticky-shape={stickyShape} data-viewport={data.viewport} data-density={density} className={`${styles.node} ${styles[`node_${data.kind}`]} ${selected ? styles.selected : ''} ${isWide ? styles.wideNode : ''}`}>
       <NodeResizer isVisible={selected} minWidth={240} minHeight={130} lineClassName={styles.resizeLine} handleClassName={styles.resizeHandle} />
       <Handle type="target" position={Position.Left} className={styles.handle} />
       <header className={styles.nodeHeader}>

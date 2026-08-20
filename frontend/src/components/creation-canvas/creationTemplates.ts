@@ -12,7 +12,19 @@ export interface CreationTemplate {
   description: string;
   category: 'Marketplace template' | 'Object pack';
   objects: Array<{ kind: CreationObjectKind; title?: string; x: number; y: number; data?: Partial<CreationNodeData> }>;
-  connections?: Array<{ source: number; target: number; label: string }>;
+  /**
+   * The edges, and optionally the FIELD each one fills in.
+   *
+   * An edge used to carry a label and nothing else, which was enough while every pack
+   * paired kinds that read fine side by side — a `chart` beside a `dataset` needs no
+   * reference to be legible. The career pack broke that: `jobApplication.resumeRef`,
+   * `.coverLetterRef`, `.jobRef` and `resume.tailoredFor` are the whole value of those
+   * kinds, and a placed pack whose refs are all empty documents how it SHOULD be wired
+   * instead of being wired. `ref` names the field on the TARGET that the source card's
+   * title fills, which is the shape every one of those references already uses
+   * (`specDeriveBoard.byRef` matches on title first) — so a pack places pre-connected.
+   */
+  connections?: Array<{ source: number; target: number; label: string; ref?: string }>;
 }
 
 /**
@@ -169,6 +181,43 @@ export const CREATION_TEMPLATES: readonly CreationTemplate[] = [
       { kind: 'file', title: 'Exported files', x: 430, y: 330 },
     ],
     connections: [{ source: 0, target: 1, label: 'supports' }, { source: 0, target: 2, label: 'presents' }, { source: 1, target: 3, label: 'exports' }, { source: 2, target: 3, label: 'exports' }],
+  },
+  {
+    // THE JOB HUNT, as a board.
+    //
+    // `career-documents` above is a DOCUMENT studio: a resume, a supporting file and a
+    // deck. It is the only personal entry in this catalogue and it stops at the point a
+    // search actually begins -- it can make the documents and cannot hold the search
+    // they are sent into. This pack is the search: the posting, the money that paces it,
+    // the variant cut for the role, the letter, the rehearsal, and the pipeline that
+    // says which of the nine has gone quiet.
+    //
+    // The `runway` card is first on the board and first in the connection list for a
+    // reason that is not layout: weeks-to-zero is what decides whether this is a search
+    // for the right role or a search for any role, and every other card on the pack is
+    // paced against it. Placing it last would make it the thing somebody fills in after
+    // the decisions it should have governed.
+    id: 'job-hunt', name: 'Job search command center', category: 'Marketplace template',
+    description: 'Run a job search as objects rather than memory: how long the money lasts, the postings worth chasing, a resume variant per role, the letter, the rehearsal, and the pipeline that says who has gone quiet.',
+    objects: [
+      { kind: 'runway', title: 'How long the money lasts', x: 0, y: 0 },
+      { kind: 'applicationPipeline', title: 'My applications', x: 520, y: 0 },
+      { kind: 'job', title: 'A role worth chasing', x: 1040, y: 0 },
+      { kind: 'resume', title: 'Master resume', x: 0, y: 400 },
+      { kind: 'coverLetter', title: 'Cover letter', x: 520, y: 400 },
+      { kind: 'jobApplication', title: 'This application', x: 1040, y: 400 },
+      { kind: 'interviewPrep', title: 'Interview rehearsal', x: 1560, y: 200 },
+    ],
+    connections: [
+      { source: 0, target: 1, label: 'paces' },
+      { source: 2, target: 5, label: 'applied to', ref: 'jobRef' },
+      { source: 3, target: 5, label: 'sent', ref: 'resumeRef' },
+      { source: 4, target: 5, label: 'sent', ref: 'coverLetterRef' },
+      { source: 2, target: 3, label: 'tailors', ref: 'tailoredFor' },
+      { source: 2, target: 4, label: 'addressed to', ref: 'jobRef' },
+      { source: 5, target: 1, label: 'tracked in' },
+      { source: 2, target: 6, label: 'rehearses', ref: 'jobRef' },
+    ],
   },
   {
     id: 'pitch-competition', name: 'Pitch competition war room', category: 'Marketplace template',

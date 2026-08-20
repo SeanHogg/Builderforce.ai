@@ -54,6 +54,17 @@ export * from './websiteDocument';
 // seller's card, the buyer-facing page served to somebody with no account, and the Worker
 // route that turns an acceptance into a checkout intent. See its own header.
 export * from './sellMotion';
+// DATA GOVERNANCE — the classification vocabulary and the dataset-use gate. Shared
+// because the use it most needs to refuse is a FINE-TUNE, dispatched by the API, which
+// cannot import the frontend module the gate used to live in. See its own header.
+export * from './dataGovernance';
+// The CAREER vocabulary — the SAME hiring transaction from the seeker's side: the
+// posting somebody else opened, the application as a projection of the `job_proposals`
+// row that already owns its lifecycle, the pipeline that is a shortlist transposed, the
+// letter, the rehearsal, and the personal runway every other decision is paced against.
+// Shared because the guest canvas authors these with no tenant and no API call, and the
+// runway band it lands in must be the band `application/career/runway.ts` would compute.
+export * from './career';
 // `export *` re-exports a binding; it does not bring it INTO scope here, and the
 // kind list below spreads it — without this import the whole contract module
 // throws `PEOPLE_OBJECT_KINDS is not defined` at import time, which takes every
@@ -63,6 +74,7 @@ import { ACADEMIC_OBJECT_KINDS } from './academic';
 import { DATA_SCIENCE_OBJECT_KINDS } from './dataScience';
 import { OPERATIONS_OBJECT_KINDS } from './operations';
 import { SELL_MOTION_OBJECT_KINDS } from './sellMotion';
+import { CAREER_OBJECT_KINDS } from './career';
 
 /**
  * The FOUNDER objects — the half of "idea to real" that is not a made artifact.
@@ -548,6 +560,12 @@ export const CREATION_OBJECT_KINDS = [
   // models how the company BUILDS; this is the first that models how it SELLS. See
   // `sellMotion.ts` for why each of the six is not one of the six sales kinds above.
   ...SELL_MOTION_OBJECT_KINDS,
+  // The job search, as objects. Every other vocabulary on this list is authored by a
+  // company; this is the first authored by ONE PERSON about their own working life —
+  // which is why `job` is research rather than a requisition, `applicationPipeline` is a
+  // `shortlist` transposed, and `runway` is a personal clock rather than a budget. See
+  // `career.ts` for why none of the six folds into `HIRING_OBJECT_KINDS`.
+  ...CAREER_OBJECT_KINDS,
 ] as const;
 
 export type CreationObjectKind = typeof CREATION_OBJECT_KINDS[number];

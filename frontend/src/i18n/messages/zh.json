@@ -894,6 +894,12 @@
     "convertToOkr": "转换为 OKR 目标",
     "convertToTask": "转换为任务",
     "convertToOkrConfirm": "将此史诗提升为 OKR 目标？其子任务将链接到新目标，此看板项将被移除。",
+    "epicPriority": {
+      "low": "低",
+      "medium": "中",
+      "high": "高",
+      "urgent": "紧急"
+    },
     "epicStatus": {
       "backlog": "待办池",
       "todo": "待办",
@@ -903,12 +909,6 @@
       "done": "已完成",
       "blocked": "受阻",
       "shipped": "已发布"
-    },
-    "epicPriority": {
-      "low": "低",
-      "medium": "中",
-      "high": "高",
-      "urgent": "紧急"
     }
   },
   "ide": {
@@ -3533,6 +3533,8 @@
     "signInToGet": "登录获取",
     "installFailed": "无法添加到您的知识库，请重试。",
     "checkoutUnavailable": "此部署尚不支持付费结账。",
+    "checkoutCancelled": "付款已取消，未产生任何扣费。",
+    "checkoutFailed": "无法确认该笔付款。如已被扣款，请联系客服。",
     "installing": "安装中…",
     "by": "作者：{author}"
   },
@@ -8979,7 +8981,7 @@
     "analyzeSelectNone": "清除选择",
     "analyzeApplyCta": "修复选中的 {count} 项",
     "analyzeApplying": "修复中…",
-    "analyzeApplied": "已修复：更正 {corrected} 条，遗忘 {forgotten} 条。模型当前为 v{version}。",
+    "analyzeApplied": "已纠正并重新学习 {corrected} 条，从召回中移除 {forgotten} 条（已学习的影响由纠正取代，而非被抹除）。模型现已升至 v{version}。",
     "analyzeSkipped": "有 {count} 项无法应用。",
     "tabsLabel": "Evermind 控制项",
     "tabTeach": "教学",
@@ -8992,7 +8994,8 @@
     "diagnosticsCopied": "已复制到剪贴板。",
     "diagnosticsShow": "显示报告",
     "diagnosticsHide": "隐藏报告",
-    "diagnosticsManualHint": "此处无法自动复制——报告已在下方选中，请按 Ctrl/Cmd+C 复制。"
+    "diagnosticsManualHint": "此处无法自动复制——报告已在下方选中，请按 Ctrl/Cmd+C 复制。",
+    "analyzeCoverage": "已审阅 {total} 条记忆中最新的 {analyzed} 条 — 再次运行以继续处理其余部分。"
   },
   "topbar": {
     "cart": "购物车",
@@ -11683,6 +11686,8 @@
         "expired": "已过期",
         "undecryptable": "凭据无法读取",
         "unsupported-auth": "已存储为订阅账户，但该提供商需要 API 密钥",
+        "other-workspace": "已在其他工作区连接，而非当前工作区",
+        "lookup_failed": "凭据查询失败——请稍后重试",
         "unavailable": "不可用",
         "failed": "失败",
         "upstream_error": "模型提供方出错",
@@ -12311,7 +12316,14 @@
     "errorComplete": "无法结束会话",
     "startSession": "开始站会",
     "startSessionHint": "开始本次站会",
-    "startSessionFacilitatorOnly": "只有主持人可以开始"
+    "startSessionFacilitatorOnly": "只有主持人可以开始",
+    "briefcase": {
+      "open": "已分配 {count} 项 — 打开工作"
+    },
+    "assignedWork": {
+      "assignedTo": "已分配 {count} 项 · {name}",
+      "empty": "暂无分配。"
+    }
   },
   "meetings": {
     "title": "会议",
@@ -12953,7 +12965,8 @@
     "logMambaFailInit": "❌ Mamba 模型初始化失败：{reason}",
     "logMambaEpoch": "  📊 第 {epoch} 轮：损失={loss}",
     "logMambaComplete": "✅ Mamba 训练完成 —— 最终损失：{loss}",
-    "logMambaFailed": "❌ Mamba 训练失败：{error}"
+    "logMambaFailed": "❌ Mamba 训练失败：{error}",
+    "corpusRefused": "该数据集不能用作训练语料。"
   },
   "evermindBuild": {
     "title": "Evermind 构建",
@@ -15756,7 +15769,8 @@
       "Research": "科研",
       "Hiring": "招聘",
       "Operations": "运营",
-      "Revenue": "营收"
+      "Revenue": "营收",
+      "Career": "求职"
     },
     "datasetRowLimit": "当前套餐每次画布导入最多支持 {limit} 行数据。",
     "datasetNoColumns": "该文件中未找到任何列。",
@@ -15974,7 +15988,6 @@
       "noFollowUp": "未记录后续行动。",
       "evermindSyncing": "正在同步当前项目的 Evermind…",
       "evermindSyncingDetail": "正在加载当前版本、学习活动、就绪状态和最近的贡献。",
-      "model": "模型",
       "learned": "已学习",
       "queued": "排队中",
       "trainingLoss": "训练损失",
@@ -16474,7 +16487,8 @@
       "pipelineWeighted": "加权 {amount}",
       "pipelineOpen": "{count} 个进行中 · {amount}",
       "pipelineUnpriced": "{count} 个未定价",
-      "pipelineOdds": "{percent}%"
+      "pipelineOdds": "{percent}%",
+      "adapterVersion": "适配器"
     },
     "editor": {
       "toolbar": "格式",
@@ -16847,7 +16861,16 @@
       "call": "通话",
       "trial": "试用",
       "trustPacket": "信任资料包",
-      "mutualActionPlan": "双方行动计划"
+      "mutualActionPlan": "双方行动计划",
+      "equityGrant": "股权授予",
+      "convertible": "可转换票据",
+      "payRun": "薪资发放",
+      "job": "职位",
+      "jobApplication": "求职申请",
+      "applicationPipeline": "申请管道",
+      "coverLetter": "求职信",
+      "interviewPrep": "面试准备",
+      "runway": "资金续航"
     },
     "twilioSetup": {
       "title": "Twilio 集成",
@@ -16968,7 +16991,6 @@
     "prompt": "提示词",
     "status": "状态",
     "priority": "优先级",
-    "model": "模型",
     "prd": "PRD",
     "role": "角色",
     "tools": "工具",
@@ -17770,6 +17792,10 @@
       "field-operations": {
         "name": "现场作业",
         "description": "运行你所销售的业务：你维护的资产、针对资产的工单、派工的当天排班、消耗的备件，以及使作业合法的资质证书。"
+      },
+      "job-hunt": {
+        "name": "求职指挥中心",
+        "description": "把求职变成看得见的对象，而不是靠记忆：钱还能撑多久、值得投的职位、为每个职位定制的简历、求职信、面试演练，以及告诉你谁迟迟未回复的申请管道。"
       }
     },
     "pitch": {
@@ -20341,7 +20367,129 @@
     "noticeInvoiceChased": "已催收 {reference}——发送至 {to}。",
     "noticeInvoiceChaseNoRecipient": "已记录 {reference} 的催收，但卡片上没有客户邮箱可发送。",
     "noticeInvoiceActionFailed": "操作未能完成，未发送任何内容。",
-    "noticePayRunSync": "请让 Brain 同步工资单——它会从您连接的薪资服务商读取。"
+    "noticePayRunSync": "请让 Brain 同步工资单——它会从您连接的薪资服务商读取。",
+    "stickyShapeEllipse": "椭圆",
+    "stickyShapeRhombus": "菱形",
+    "stickyShapeTriangle": "三角形",
+    "stickyShapeParallelogram": "平行四边形",
+    "stickyShapeStar": "星形",
+    "stickyShapeArrow": "箭头",
+    "career": {
+      "empty": "此{label}尚未填写任何内容。",
+      "emptyHint": "让 Brain 调研并填写，或打开检查器自行填写。",
+      "meterLabel": "{label}：{score} 分（满分 100）",
+      "freshJustNow": "刚刚",
+      "freshMinutes": "{count} 分钟前",
+      "freshHours": "{count} 小时前",
+      "freshDays": "{count} 天前",
+      "label": {
+        "job": "职位",
+        "jobApplication": "求职申请",
+        "applicationPipeline": "申请管道",
+        "coverLetter": "求职信",
+        "interviewPrep": "面试准备",
+        "runway": "资金续航"
+      },
+      "status": {
+        "researching": "调研中",
+        "drafting": "撰写中",
+        "draft": "草稿",
+        "notTracked": "未跟踪",
+        "notPrepared": "未准备",
+        "notCalculated": "未计算"
+      },
+      "field": {
+        "employer": "雇主",
+        "location": "工作地点",
+        "compensation": "薪酬",
+        "postingUrl": "职位链接",
+        "postedAt": "发布时间",
+        "closesAt": "截止时间",
+        "requirements": "岗位要求",
+        "matchScore": "匹配度",
+        "matchedSkills": "匹配技能",
+        "missingSkills": "欠缺技能",
+        "verdict": "结论",
+        "jobRef": "职位",
+        "proposalRef": "投递记录",
+        "stage": "阶段",
+        "submittedAt": "投递时间",
+        "lastResponseAt": "最近回复",
+        "followUpAt": "跟进时间",
+        "channel": "投递渠道",
+        "contact": "联系人",
+        "resumeRef": "所投简历",
+        "coverLetterRef": "所投求职信",
+        "offerTerms": "录用条件",
+        "daysSinceResponse": "静默天数",
+        "seeking": "求职方向",
+        "weeklyTarget": "每周目标",
+        "applications": "申请记录",
+        "total": "总数",
+        "open": "进行中",
+        "responseRate": "回复率",
+        "interviewRate": "面试转化率",
+        "longestSilence": "最长静默",
+        "bottleneck": "瓶颈",
+        "addressedTo": "收件人",
+        "hook": "开场句",
+        "body": "正文",
+        "evidence": "佐证",
+        "referees": "推荐人",
+        "wordCount": "字数",
+        "interviewType": "面试类型",
+        "scheduledAt": "面试时间",
+        "panel": "面试官",
+        "questions": "问题清单",
+        "riskAreas": "薄弱环节",
+        "questionsToAsk": "向对方提问",
+        "stories": "预备案例",
+        "rehearsed": "已准备",
+        "currency": "货币",
+        "savings": "储蓄",
+        "monthlyExpenses": "每月支出",
+        "monthlyIncome": "每月收入",
+        "expectedInflows": "预期收入",
+        "expectedOutflows": "预期支出",
+        "projection": "资金推演",
+        "netMonthlyBurn": "每月净消耗",
+        "weeksRemaining": "剩余周数",
+        "pressure": "紧迫程度",
+        "assumptions": "假设条件",
+        "sources": "来源",
+        "summary": "摘要"
+      },
+      "column": {
+        "component": "构成项",
+        "amount": "金额",
+        "notes": "备注",
+        "role": "职位",
+        "employer": "雇主",
+        "stage": "阶段",
+        "submittedAt": "投递时间",
+        "lastResponseAt": "最近回复",
+        "jobRef": "职位",
+        "requirement": "要求",
+        "claim": "主张",
+        "proof": "证据",
+        "name": "姓名",
+        "focus": "关注点",
+        "question": "问题",
+        "category": "类别",
+        "difficulty": "难度",
+        "lookFor": "评分要点",
+        "answer": "你的回答",
+        "label": "标签",
+        "situation": "情境",
+        "action": "行动",
+        "result": "结果",
+        "inMonths": "第几个月",
+        "month": "月份",
+        "balance": "余额",
+        "note": "说明"
+      }
+    },
+    "agentModel": "智能体模型"
   },
   "canvasCommands": {
     "cleanLayout": "整理画布布局",
@@ -23226,6 +23374,30 @@
     "confirming": "正在确认您的付款……",
     "payByTransfer": "此发票通过银行转账支付。如需账户信息，请回复发送此链接的邮件。",
     "settled": "此发票已结清，谢谢。"
+  },
+  "taskStatus": {
+    "backlog": "待办池",
+    "todo": "待办",
+    "ready": "就绪",
+    "in_progress": "进行中",
+    "in_review": "审核中",
+    "done": "已完成",
+    "blocked": "受阻",
+    "shipped": "已发布"
+  },
+  "agentWorker": {
+    "title": "浏览器代理执行器",
+    "intro": "直接在此标签页中运行分配给看板泳道的代理，每个代理使用各自的模型。代理完成后，看板会自动推进。",
+    "run": "运行待处理的代理",
+    "running": "运行中…",
+    "runAria": "运行待处理的代理",
+    "tally": "已运行 {ran} · 已完成 {completed} · 已失败 {failed}",
+    "outcomesAria": "运行结果",
+    "outcome": {
+      "idle": "无可运行项",
+      "completed": "已完成",
+      "failed": "已失败"
+    }
   },
   "milestones": {
     "heading": "付款计划",

@@ -27,6 +27,15 @@ export const C_SUITE_CANVAS_OWNERS = {
   executivePeople: { stages: ['run'], domains: ['people'], objects: ['dashboard', 'roadmap', 'chart', 'spreadsheet', 'report'] },
   executiveProduct: { stages: ['idea', 'make'], domains: ['investor', 'delivery', 'canvas'], objects: ['table', 'featureSummary', 'report', 'targetMarket', 'dashboard'] },
   executiveResearch: { stages: ['idea'], domains: ['canvas'], objects: ['dataset', 'report', 'document', 'slides'] },
+  // -- THE ONE CATEGORY THAT IS NOT AN EXECUTIVE ------------------------------
+  // Every entry above addresses somebody with a company: a sprint, a pipeline, a
+  // control register. The visitor this product acquires most of is a person looking
+  // for work, and until the career object kinds existed there was nothing on the
+  // canvas for a starting point here to produce. `objects` names those kinds because
+  // that is what the execution contract permits the turn to create -- a career intent
+  // that could only author a `document` would be exactly the prose-in-a-document
+  // failure the whole vocabulary was written to end.
+  personalCareer: { stages: ['idea', 'run', 'measure'], domains: ['canvas'], objects: ['job', 'jobApplication', 'applicationPipeline', 'coverLetter', 'interviewPrep', 'runway', 'resume'] },
 } as const;
 
 export function cSuiteCanvasOwner(useCase: PromptUseCase) {
@@ -105,6 +114,19 @@ export const C_SUITE_CANVAS_WORKFLOWS: Readonly<Record<string, ExecutiveCanvasWo
   'scratchpad.update_page': executiveWorkflow('canvas', 'update', ['document'], ['document'], 'Only the confirmed page content/title changes and other pages remain identical.', true),
   'scratchpad.rename_page': executiveWorkflow('canvas', 'rename', ['document'], ['document'], 'Only the confirmed page title changes; its content and sibling pages are preserved.', true),
   'scratchpad.set_title': executiveWorkflow('canvas', 'rename', ['document'], ['document'], 'Only the selected working-notes document title changes.', true),
+  // -- Career -----------------------------------------------------------------
+  // `evidence: 'canvas'` on every one of these, deliberately: a job search has no
+  // owning DOMAIN to read -- the resume, the postings and the money are all on the
+  // board or supplied in the turn -- and pointing them at `domain` evidence would make
+  // each intent fail on a tenant that has no hiring data because it is one person.
+  'career.runway.snapshot': executiveWorkflow('canvas', 'analyze', ['runway', 'savings', 'expenses'], ['runway'], 'The card leads with WEEKS, states its currency, and every figure it shows came from the person rather than an assumption.'),
+  'career.job.assess': executiveWorkflow('canvas', 'analyze', ['job', 'posting', 'resume'], ['job'], 'The posting is on the board with its stated compensation, its requirements in the wording the posting used, a measured match score, and the missing skills named honestly.'),
+  'career.resume.tailor': executiveWorkflow('canvas', 'upsert', ['resume', 'job', 'tailor'], ['resume'], 'A NEW resume variant exists carrying `tailoredFor`, and every move it applied quotes the existing line it changed. No skill was added that the person did not confirm.'),
+  'career.cover_letter.draft': executiveWorkflow('canvas', 'upsert', ['coverLetter', 'job', 'resume'], ['coverLetter'], 'The letter names the posting it answers, its opening sentence would break if the employer name were swapped, and every claim in the evidence rows has a proof beside it.'),
+  'career.application.track': executiveWorkflow('canvas', 'upsert', ['jobApplication', 'proposal', 'followUp'], ['jobApplication'], 'The application carries its stage, the resume variant that went, and a follow-up date. Nothing claims it was submitted unless it was.'),
+  'career.pipeline.review': executiveWorkflow('canvas', 'analyze', ['applicationPipeline', 'jobApplication', 'proposal'], ['applicationPipeline'], 'The pipeline names ONE bottleneck -- volume, replies, or interview conversion -- with the rate behind it, and every count is derived from the applications rather than typed.'),
+  'career.interview.prepare': executiveWorkflow('canvas', 'upsert', ['interviewPrep', 'job', 'resume'], ['interviewPrep'], 'Every question carries the rubric it is scored against and the gap it targets, and the answer column is left for the person to write.'),
+  'career.offer.compare': executiveWorkflow('canvas', 'analyze', ['offer', 'runway', 'compensation'], ['jobApplication', 'runway'], 'Each offer is broken into components and compared in WEEKS OF RUNWAY, so a bigger number arriving after the balance hits zero is visibly worth less.'),
   'scratchpad.create_deck': executiveWorkflow('canvas', 'upsert', ['document', 'slides'], ['slides'], 'A fully authored ordered slide narrative exists rather than an empty deck shell.'),
 };
 
@@ -183,6 +205,15 @@ export const C_SUITE_CANVAS_USE_CASES: readonly PromptUseCase[] = [
   { id: 'scratchpad.update_page', category: 'executiveResearch', categoryLabel: 'Research & notes', label: 'Update notes page', prompt: 'Update the identified document page with the requested complete content and optional title, leaving other pages unchanged.' },
   { id: 'scratchpad.rename_page', category: 'executiveResearch', categoryLabel: 'Research & notes', label: 'Rename notes page', prompt: 'Rename the identified document page and preserve all of its content and the rest of the working notes.' },
   { id: 'scratchpad.set_title', category: 'executiveResearch', categoryLabel: 'Research & notes', label: 'Rename working notes', prompt: 'Update the title of the selected working-notes document without changing its pages or content.' },
+  { id: 'career.runway.snapshot', category: 'personalCareer', categoryLabel: 'Career', label: 'How long does my money last?', prompt: 'Create a personal runway card from the savings, monthly outgoings and any income still arriving. Lead with the WEEKS, not the currency, and record the assumptions rather than hiding them. Ask for any figure you do not have instead of estimating it.' },
+  { id: 'career.job.assess', category: 'personalCareer', categoryLabel: 'Career', label: 'Is this job worth applying for?', prompt: 'Create a job card for this posting: what it pays as ADVERTISED, its requirements in the wording the posting used, the measured match against the resume, and the skills it names that the resume does not evidence. Report the gaps honestly rather than talking the person into or out of it.' },
+  { id: 'career.resume.tailor', category: 'personalCareer', categoryLabel: 'Career', label: 'Tailor my resume to this job', prompt: 'Build the tailoring plan for this resume against this posting and author the result as a NEW resume variant carrying tailoredFor, so the original survives. Quote every existing line you change. Never add a skill the person has not confirmed.' },
+  { id: 'career.cover_letter.draft', category: 'personalCareer', categoryLabel: 'Career', label: 'Write a cover letter', prompt: 'Create a cover letter against this posting: an opening sentence that would break if the employer name were swapped, three short paragraphs, and an evidence table mapping each requirement to a specific thing the person actually did. Do not restate the resume.' },
+  { id: 'career.application.track', category: 'personalCareer', categoryLabel: 'Career', label: 'Track this application', prompt: 'Create an application card for this posting with its stage, which resume variant went, how it was sent, and the date to follow up. Do not mark it submitted unless it has been sent.' },
+  { id: 'career.pipeline.review', category: 'personalCareer', categoryLabel: 'Career', label: 'How is my job search going?', prompt: 'Create or refresh the application pipeline from the applications on this canvas and from proposals.mine, then name the ONE bottleneck with the rate behind it: not enough applications, applications not converting to replies, or interviews not converting to offers. Do not type any count the rows can compute.' },
+  { id: 'career.interview.prepare', category: 'personalCareer', categoryLabel: 'Career', label: 'Prepare me for this interview', prompt: 'Create an interview prep card from what this posting actually emphasises: each question with why it is being asked and the rubric a strong answer must satisfy, plus the gaps between the resume and the posting that the hard questions will target. Leave the answer column empty for the person to write.' },
+  { id: 'career.offer.compare', category: 'personalCareer', categoryLabel: 'Career', label: 'Should I take this offer?', prompt: 'Break each offer into its components on its application card, then compare the options in WEEKS OF RUNWAY against the runway card. The comparison people get wrong is the start date, not the rate: a bigger number arriving after the balance hits zero is worth less.' },
+
   { id: 'scratchpad.create_deck', category: 'executiveResearch', categoryLabel: 'Research & notes', label: 'Create executive deck', prompt: 'Create a polished slides object from the supplied deck title and slide content, preserving the requested slide order and authoring a clear executive narrative.' },
 ];
 

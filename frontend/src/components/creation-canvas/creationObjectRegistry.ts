@@ -1,5 +1,5 @@
 import type { CreationNodeData, CreationObjectKind } from './types';
-import { CREATION_CONNECTION_KINDS, defaultConfidentialityForKind, emptyCanvasVideoTimeline, emptyCanvasWorldScene, FOUNDER_OBJECT_KINDS, type AcademicObjectKind, type CreationConnectionKind, type DataScienceObjectKind, type FounderObjectKind, type HiringObjectKind, type LegalObjectKind, type OperationsObjectKind, type PeopleObjectKind, type SellMotionObjectKind, type SharedObjectKind } from '@builderforce/creation-canvas-contract';
+import { CREATION_CONNECTION_KINDS, defaultConfidentialityForKind, emptyCanvasVideoTimeline, emptyCanvasWorldScene, FOUNDER_OBJECT_KINDS, type AcademicObjectKind, type CareerObjectKind, type CreationConnectionKind, type DataScienceObjectKind, type FounderObjectKind, type HiringObjectKind, type LegalObjectKind, type OperationsObjectKind, type PeopleObjectKind, type SellMotionObjectKind, type SharedObjectKind } from '@builderforce/creation-canvas-contract';
 import { FOUNDER_BOOKKEEPING_FIELDS, FOUNDER_FIELD_NAMES, FOUNDER_OBJECT_SPECS, founderMutableFields } from '@/lib/founderObjects';
 // Importing the vocabulary registers it (see `specObjects.ts`), which is what makes the
 // academic kinds resolvable everywhere else without a second list of them here.
@@ -20,15 +20,21 @@ import { OPERATIONS_OBJECT_SPECS } from '@/lib/operationsObjects';
 // mutual action plan. Imported for the same registration side effect as every vocabulary
 // above; see `sellMotion.ts` for why these six are not more `sales*` kinds.
 import { SELL_MOTION_OBJECT_SPECS } from '@/lib/sellMotionObjects';
+// The Models group. Imported for the same registration side effect as every vocabulary
+// above — and it is what gives `llm` a `derive` hook, so its projected monthly cost is
+// computed from its own rate card instead of typed on top of it.
+import { MODEL_OBJECT_SPECS } from '@/lib/modelObjects';
 import { specBookkeepingFields, specFieldNames, type SpecDeriveBoard } from '@/lib/specObjects';
 import {
   ACADEMIC_MUTABLE_FIELDS, ACADEMIC_REGISTRY, FOUNDER_MUTABLE_FIELDS, FOUNDER_REGISTRY,
+  CAREER_MUTABLE_FIELDS, CAREER_REGISTRY,
   HIRING_MUTABLE_FIELDS, HIRING_REGISTRY, PEOPLE_MUTABLE_FIELDS, PEOPLE_REGISTRY,
   SHARED_MUTABLE_FIELDS, SHARED_REGISTRY, SPEC_ACTIONS,
   DATA_SCIENCE_MUTABLE_FIELDS, DATA_SCIENCE_REGISTRY,
   OPERATIONS_MUTABLE_FIELDS, OPERATIONS_REGISTRY,
   LEGAL_MUTABLE_FIELDS, LEGAL_REGISTRY,
   SELL_MOTION_MUTABLE_FIELDS, SELL_MOTION_REGISTRY,
+  MODEL_MUTABLE_FIELDS, MODEL_REGISTRY,
 } from './specDerivedRegistry';
 import {
   DATA_ARCHITECTURE_FIELD_NAMES, DATA_ARCHITECTURE_SPECS, dataArchitectureMutableFields, dataArchitectureSeed,
@@ -128,7 +134,7 @@ const BASE_CREATION_OBJECT_REGISTRY = [
   // everything else is written by the `refresh` action, never authored.
   { kind: 'deliveryRollup', label: 'Delivery rollup', icon: '◈', group: 'Work', createData: () => ({ kind: 'deliveryRollup', title: 'Delivery rollup', status: 'Not loaded', scopeKind: 'workspace', scopeId: null }) },
   { kind: 'environment', label: 'Environment', icon: '◈', group: 'Build', createData: () => ({ kind: 'environment', title: 'Environment', status: 'active' }) },
-  { kind: 'llm', label: 'LLM', icon: '◉', group: 'Models', createData: () => ({ kind: 'llm', title: 'Language model', status: 'Blueprint', model: 'gpt-4o' }) },
+  // `llm` moved to the Models VOCABULARY (`lib/modelObjects.ts`) — see its header.
   // A course knows its SUBJECT, and Brain writes the rest. It used to be created
   // as `buildLlmCourse()` — so every course object on the platform, whatever it
   // was dragged out for, arrived as the same five modules about tokenizers and
@@ -275,7 +281,11 @@ const ACTIONS: Partial<Record<CreationObjectKind, readonly string[]>> = {
   evermind: ['teach', 'train', 'evaluate', 'publish'], voice: ['record', 'play'], video: ['generate', 'capture', 'edit', 'preview', 'export'], mcp: ['authenticate', 'execute'],
   image: ['generate', 'preview', 'export', 'convert-to-diagram'], animation: ['generate', 'preview', 'export'], podcast: ['generate', 'preview', 'export'],
   comic: ['generate', 'preview', 'export'], game: ['generate', 'preview', 'export'], cad: ['generate', 'preview', 'export', 'convert-to-diagram'], model3d: ['generate', 'preview', 'export'],
-  resume: ['generate', 'preview', 'export'], template: ['browse', 'apply'],
+  // `tailor` takes a `job` and produces a VARIANT — a second `resume` carrying
+  // `tailoredFor`, rather than an edit in place. Two applications need two documents,
+  // and a tailor that overwrote would leave the person unable to answer the question
+  // every seeker asks in week three: which version did they actually see?
+  resume: ['generate', 'preview', 'export', 'tailor'], template: ['browse', 'apply'],
   mockup: ['preview', 'deliver'], mockupSet: ['expand', 'deliver'], standup: ['start'],
   pitch: ['rehearse', 'export'], pitchScorecard: ['score', 'export'], pitchQa: ['drill', 'export'], pitchApplication: ['review', 'export'],
   document: ['export'], slides: ['present', 'export'], diagram: ['export', 'convert-to-diagram'], spreadsheet: ['export'], drawing: ['convert-to-diagram'],
@@ -408,7 +418,6 @@ const BASE_MUTABLE_FIELDS = {
   // question that decides whether an LLM feature ships at all. `projectedMonthlyCost` is
   // derived from the rest rather than typed, so a card cannot quote a price that
   // disagrees with its own inputs.
-  llm: ['content', 'model', 'instructions', 'parameters', 'costPerMillionInput', 'costPerMillionOutput', 'tokensPerRequestIn', 'tokensPerRequestOut', 'latencyP50Ms', 'latencyP95Ms', 'monthlyRequests', 'projectedMonthlyCost', 'promptObjectId'],
   course: ['content', 'course', 'exportStandards'],
   // `attempts` is absent on purpose: it is the learner's record of what they
   // actually answered, and a model that could write it could report mastery
@@ -475,7 +484,12 @@ const BASE_MUTABLE_FIELDS = {
   // Hand-authored (see the registry entry): no `mediaKind`/`capabilityId`/`mcpTool`
   // siblings — `world` is the whole authored state, same as `website`/`document`.
   world: ['content', 'world'],
-  resume: ['content', 'markdown', 'resumeDocument', 'prompt', 'mediaKind', 'capabilityId', 'provider', 'templateId', 'outputFormat', 'outputUrl', 'thumbnailUrl', 'resumeId', 'fileName', 'mimeType', 'fileSize', 'mcpServer', 'mcpTool', 'mcpArguments'],
+  // `tailoredFor` names the `job` this variant was cut for, by that card's title. It is
+  // the only thing that distinguishes nine résumés from nine unlabelled files, and it is
+  // a REFERENCE rather than a copy of the posting for the reason `jobApplication.jobRef`
+  // is: correcting the role on the posting must not leave nine variants quoting the old
+  // one. Empty on the master résumé, which is what makes the master identifiable.
+  resume: ['content', 'markdown', 'resumeDocument', 'tailoredFor', 'prompt', 'mediaKind', 'capabilityId', 'provider', 'templateId', 'outputFormat', 'outputUrl', 'thumbnailUrl', 'resumeId', 'fileName', 'mimeType', 'fileSize', 'mcpServer', 'mcpTool', 'mcpArguments'],
   template: ['content', 'prompt', 'mediaKind', 'capabilityId', 'provider', 'templateId', 'templateCategory', 'outputFormat', 'thumbnailUrl', 'mcpServer', 'mcpTool', 'mcpArguments'],
   document: ['content', 'markdown', 'sources'],
   slides: ['content', 'markdown', 'items', 'sources'],
@@ -518,7 +532,7 @@ const BASE_MUTABLE_FIELDS = {
     // Their omission made this annotation demand six entries the object above is not
     // supposed to carry, so the exhaustiveness check it exists to perform could not
     // compile at all — a guard that fails for every kind protects none of them.
-    FounderObjectKind | AcademicObjectKind | HiringObjectKind | PeopleObjectKind | SharedObjectKind | DataArchitectureKind | DataScienceObjectKind | OperationsObjectKind | LegalObjectKind | SellMotionObjectKind
+    FounderObjectKind | AcademicObjectKind | HiringObjectKind | PeopleObjectKind | SharedObjectKind | DataArchitectureKind | DataScienceObjectKind | OperationsObjectKind | LegalObjectKind | SellMotionObjectKind | CareerObjectKind | 'llm'
   >,
   readonly string[]
 >;
@@ -530,12 +544,14 @@ const MUTABLE_FIELDS: Record<CreationObjectKind, readonly string[]> = {
   ...FOUNDER_MUTABLE_FIELDS,
   ...ACADEMIC_MUTABLE_FIELDS,
   ...HIRING_MUTABLE_FIELDS,
+  ...CAREER_MUTABLE_FIELDS,
   ...PEOPLE_MUTABLE_FIELDS,
   ...SHARED_MUTABLE_FIELDS,
   ...DATA_SCIENCE_MUTABLE_FIELDS,
   ...OPERATIONS_MUTABLE_FIELDS,
   ...LEGAL_MUTABLE_FIELDS,
   ...SELL_MOTION_MUTABLE_FIELDS,
+  ...MODEL_MUTABLE_FIELDS,
   // Cast to the named kind union rather than left as an index signature: an
   // index-signature map satisfies ANY key, so spreading one silently switched the
   // exhaustiveness annotation below off for these six kinds.
@@ -775,6 +791,7 @@ export const CREATION_OBJECT_REGISTRY: readonly CreationObjectDefinition[] = [
   ...FOUNDER_REGISTRY,
   ...ACADEMIC_REGISTRY,
   ...HIRING_REGISTRY,
+  ...CAREER_REGISTRY,
   ...PEOPLE_REGISTRY,
   ...SHARED_REGISTRY,
   ...DATA_SCIENCE_REGISTRY,
@@ -782,6 +799,7 @@ export const CREATION_OBJECT_REGISTRY: readonly CreationObjectDefinition[] = [
   ...OPERATIONS_REGISTRY,
   ...LEGAL_REGISTRY,
   ...SELL_MOTION_REGISTRY,
+  ...MODEL_REGISTRY,
 ].map((definition) => ({
   ...definition,
   ...(CAPABILITIES[definition.kind] ? { capability: CAPABILITIES[definition.kind] } : {}),
@@ -844,7 +862,7 @@ export function availableCreationObjects(
  */
 export const CREATION_PALETTE_GROUPS = ([
   'Build', 'Data', 'Knowledge', 'Insights', 'Work', 'Quality', 'Teaching', 'Research',
-  'Pitch', 'People', 'Hiring', 'Operations', 'Revenue', 'Agents', 'Models', 'Collaborate', 'Integrations',
+  'Pitch', 'People', 'Hiring', 'Career', 'Operations', 'Revenue', 'Agents', 'Models', 'Collaborate', 'Integrations',
 ] as const satisfies readonly CreationObjectGroup[])
   .map((group) => ({ group, items: CREATION_OBJECT_REGISTRY.filter((definition) => definition.group === group) }));
 

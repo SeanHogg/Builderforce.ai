@@ -1604,6 +1604,78 @@
 }
 .stickyInput::placeholder { color:var(--canvas-ink-on-light); opacity:.45; }
 .stickyInput:focus-visible { outline:2px solid var(--canvas-accent); outline-offset:3px; }
+
+/* --- Imported geometry ---------------------------------------------------
+   A Miro `shape` imports as a sticky that REMEMBERS what it was (`stickyShape`,
+   written by `miroImport.ts`). Until these rules existed the field was a fact
+   nothing acted on: an ellipse in the original became a square note, so a
+   migrated diagram looked like a wall of stickies and a reader could not see
+   that the ellipse had never been a note at all.
+
+   Drawn here rather than in a branch in `CreationNode` because a shape is a
+   TREATMENT of the one card structure, not a different component — the same
+   argument that hides the sticky's chrome in CSS. Every rule is additive: a
+   geometry with no rule below keeps the square card, which is the right
+   degradation for an import from a board with shapes we do not model.
+
+   `clip-path` rather than an SVG background: it clips the real element, so the
+   text inside stays selectable, the resizer still measures the node React Flow
+   thinks it has, and the author's pigment is still the element's own
+   background. The padding compensation on the clipped shapes keeps the text
+   inside the visible area rather than under a cut corner. */
+.node_sticky[data-sticky-shape='circle'],
+.node_sticky[data-sticky-shape='ellipse'] { border-radius:50%; }
+.node_sticky[data-sticky-shape='circle'] .nodeBody,
+.node_sticky[data-sticky-shape='ellipse'] .nodeBody { padding:30px 26px; }
+
+.node_sticky[data-sticky-shape='round_rectangle'],
+/* `round` is the value the sticky picker has written since it shipped, and it means
+   rounded CORNERS rather than a circle — a note, softened. It is listed beside Miro's
+   own spelling rather than translated at the import boundary, because a value a person
+   chose and a value an importer read are two facts and only one of them may be rewritten. */
+.node_sticky[data-sticky-shape='round'] { border-radius:22px; }
+
+/* A rectangle is what the card already is; the rule exists so the SQUARE case is
+   deliberate rather than the fallthrough, and so a re-export can tell the two apart. */
+.node_sticky[data-sticky-shape='rectangle'],
+.node_sticky[data-sticky-shape='square'] { border-radius:2px; }
+
+.node_sticky[data-sticky-shape='rhombus'] { clip-path:polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%); }
+.node_sticky[data-sticky-shape='rhombus'] .nodeBody { padding:44px 34px; }
+
+.node_sticky[data-sticky-shape='triangle'] { clip-path:polygon(50% 0%, 100% 100%, 0% 100%); }
+.node_sticky[data-sticky-shape='triangle'] .nodeBody { padding:70px 22px 12px; }
+
+.node_sticky[data-sticky-shape='parallelogram'] { clip-path:polygon(14% 0%, 100% 0%, 86% 100%, 0% 100%); }
+.node_sticky[data-sticky-shape='parallelogram'] .nodeBody { padding:12px 30px; }
+
+.node_sticky[data-sticky-shape='star'] { clip-path:polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%); }
+.node_sticky[data-sticky-shape='star'] .nodeBody { padding:60px 40px 20px; }
+
+.node_sticky[data-sticky-shape='right_arrow'] { clip-path:polygon(0% 25%, 68% 25%, 68% 0%, 100% 50%, 68% 100%, 68% 75%, 0% 75%); }
+.node_sticky[data-sticky-shape='right_arrow'] .nodeBody { padding:48px 56px 48px 16px; }
+
+/* A CLIPPED card cannot carry a drop shadow — the shadow is painted outside the
+   clip and is cut away with it, leaving a shape that floats differently from
+   every other card. A hairline of the ink colour restores the edge instead. */
+.node_sticky[data-sticky-shape='rhombus'],
+.node_sticky[data-sticky-shape='triangle'],
+.node_sticky[data-sticky-shape='parallelogram'],
+.node_sticky[data-sticky-shape='star'],
+.node_sticky[data-sticky-shape='right_arrow'] {
+  box-shadow:none; filter:drop-shadow(0 2px 5px rgba(16,32,58,.22));
+}
+
+/* The text a shape holds is centred, because a shape is a diagram node and a
+   diagram node's label sits in the middle of it — unlike a note, whose text
+   starts at the top-left because it is prose somebody is still writing. */
+.node_sticky:not([data-sticky-shape]) .stickyText,
+.node_sticky:not([data-sticky-shape]) .stickyInput { min-height:132px; }
+.node_sticky[data-sticky-shape] .stickyText,
+.node_sticky[data-sticky-shape] .stickyInput {
+  display:flex; align-items:center; justify-content:center;
+  min-height:0; height:100%; text-align:center;
+}
 .frameBody { min-height:220px; display:grid; align-content:start; gap:5px; padding:4px; color:#5d527d; }
 .canvasToolActive { border-color:#5b5ce2!important; background:#eeebff!important; color:#503cc9!important; }
 .templateMenu { position:absolute; z-index:18; right:0; top:42px; width:330px; max-height:70vh; overflow:auto; padding:12px; border:1px solid var(--canvas-line); border-radius:var(--radius-lg); background:#fff; box-shadow:0 18px 55px rgba(60,48,36,.18); }

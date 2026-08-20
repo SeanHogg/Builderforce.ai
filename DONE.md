@@ -1,3 +1,302 @@
+## ✅ RESOLVED 2026-08-19 — One door for both executors: the agent-runtime and git-proxy seams stop being browser-only
+
+Six of the nine "Deferred residuals" (§ Drizzle single-access-layer residuals) closed together,
+because four of them were the same root cause: **the same question was being answered in four
+places, each with its own idea of what counts as an answer.**
+
+### The question was "may this caller act for this tenant?", asked four different ways
+
+`/api/agent-runtime` (claim / running / result / pull-request) and `/api/git-proxy` accepted a
+tenant JWT and nothing else, so a non-browser executor could not close its loop — it could be
+handed work it had no way to report on. But three OTHER route files already accepted a host key
+alongside a JWT, and each had open-coded the fallback differently: `repoRoutes` took
+`Bearer` + `X-AgentHost-Id` or `?agentHostId=&key=`; `specRoutes` took only the query form;
+`workflowRoutes` took both but in its own nested shape; and `agentHostRoutes`'
+`/:id/context-bundle` advertised a tenant-JWT branch that read `tenantId` off a context **no
+middleware on that router had ever populated** — so its documented portal door 401'd every
+caller and only the host key had ever worked.
+
+`presentation/middleware/hostOrTenantAuth.ts` is now the ONE spelling. It resolves all three key
+conventions — `Bearer` + `X-AgentHost-Id`, `?agentHostId=&key=`, and (opt-in per route, since a
+wildcard `use` runs before Hono matches a path) a bare `Bearer` with the id in the route path —
+and publishes exactly the request identity the JWT-exchange door mints: `agentHost:<id>` subject,
+DEVELOPER role, a `machineActor` so writes are credited to a machine rather than to a person, and
+the tenant's default segment. A handler downstream cannot tell the two doors apart. All four
+call sites were migrated in the same pass; `verifyBearerAgentHost` is no longer exported.
+
+### Two key checks, neither of which asked whether the host was still allowed in
+
+`POST /api/auth/agentHost-token` has always refused a host whose `status` is not `active`. The
+two DIRECT key paths — `infrastructure/auth/agentHostAuth.verifyAgentHostApiKey` and
+`AgentHostRepository.verifyApiKey` — did not, so **deactivating or suspending an agent host
+revoked its JWT door and left every key-authed seam open to it.** `AgentHostRepository.updateStatus`
+even self-invalidates the auth cache on a status change, which only ever bought a fresh lookup of a
+key that then still passed. Both now gate on `status === 'active'`.
+
+### The git proxy was two copies of itself
+
+`/api/git-proxy/:repoId/...` and `/api/agent-hosts/:id/git-proxy/:repoId/...` were the same twenty
+lines twice — credential resolution, sub-path allow-list, error mapping — so a change to either
+reached exactly one of them. Both now call `presentation/routes/gitProxyHandler.handleGitProxyRequest`
+and iterate ONE `GIT_PROXY_SUBPATHS` list; only the door differs. `/claim` deliberately did NOT
+become dual-auth: `browser` is the one PULL lane (`SwimlaneCoordinator.dispatchOne` leaves those
+`pending` and PUSHES every other runtime over the relay), so a host key there would be stealing the
+browser worker's queue — it gets a 409 that says so.
+
+### `lastSeenAt` is now written by the thing that knows the socket is open
+
+Online-ness is `lastSeenAt` within 15 minutes, but the column was only written on connect and by the
+host's own heartbeat poller — so a connected host whose poller stalled went "offline" in the UI while
+its socket was still live, and stage dispatch skipped it. `AgentHostRelayDO` now beats liveness on
+connect and every 5 minutes **iff the upstream socket is OPEN** (a third of the staleness window: two
+chances to land before the host is judged offline). Getting there meant collapsing five near-identical
+`persist*` methods — base-URL resolution, the host Bearer, the "no identity yet" guard, the error
+report — into one `callApi`.
+
+The `claws` / `agent-hosts` / `agentNodes` triplication converged too: the two legacy paths are now a
+single `LEGACY_AGENT_HOST_PATHS` list mounted in a loop, and every response from one carries
+`Deprecation: true` + `Link: </api/agent-hosts>; rel="successor-version"`. Three hand-copied mounts
+with three prose comments were not a migration plan — nothing said WHICH alias was still in use, so
+nothing could ever be removed. Now the callers' own logs say.
+
+### The spec namespace question, answered by deletion
+
+`createPrdRoutes` was mounted twice: canonically at `/api/specs` and legacily at `/api/prd`. **No
+client in the repo has ever called `/api/prd`** — frontend, SDK, studio and clients all use
+`/api/specs`. The legacy mount and the `specPrefix` parameter that existed only to serve it are gone,
+which is what makes `/api/specs` the answer rather than the preference.
+
+### Cloud-coded tickets had nothing to diff
+
+A headless host POSTs each edit to `/file-change`, so its changes are durable `task_file_changes`
+rows. The browser worker has no `executions` row to hang them on — a browser dispatch is an
+`agent_dispatches` row — so its file list existed only inside a **prose summary**
+(`Changed files:
+  - src/a.ts`). The Changes tab read only the durable table, so a cloud-coded
+ticket showed nothing to list and nothing the Monaco viewer could open, no matter how many files the
+run touched.
+
+`runCodingDispatch` now returns structured `files` and the worker reports
+`toResultPayload(result)` — JSON carrying summary, branch, commit, PR **and** the file list — and
+`application/task/taskFileChangeFeed` projects that onto the same feed
+`GET /api/runtime/tasks/:taskId/file-content` already serves, so `TaskChangesPanel` and its diff
+viewer are executor-agnostic with no new surface, no new store and no migration. The projection is
+tolerant by design: a pre-structured (prose) output contributes nothing rather than throwing, so old
+rows degrade to "no diffs". Only a PUSHED run reports files — the branch is where the viewer reads
+content from, so an unpushed proposal must not claim any.
+
+### Three residuals were already fixed and the register had not noticed
+
+- **PR-open was never GitHub-only for the browser path.** `createPullRequest` implements GitHub,
+  GitLab, Bitbucket Cloud and Bitbucket Server, with idempotent already-exists resolution on all
+  four; the browser path reaches it through the same `openDispatchPullRequest` → `openTaskPullRequest`
+  chain the host path uses.
+- **`PwaToastStack` exists.** `PwaInstallPrompt` and `PwaUpdateBanner` both register through
+  `useAppToastSlot` in the shared `appToastStack`, so the install toast yields the lower slot to the
+  update banner instead of overlapping it.
+- **The cross-tenant write on `POST /api/agent-hosts/:id/file-change` is closed.** The handler
+  validates `taskId` against the host's tenant via `taskInTenant` before inserting.
+
+### Also in this pass
+
+`frontend/src/app/agent-worker/AgentWorker.tsx` was fully localized (new `agentWorker.*` namespace in
+all five catalogs) — it was shipping hardcoded English, and it is a page this change modified. Its
+`crimson` error colour became `var(--danger)` so it reads in both themes.
+
+**Still open, and genuinely blocked:** credential rotation (needs the live provider consoles), the
+npm publishes (needs an authenticated npm session), and the `/install` self-driving combo (needs the
+publishes first). Those three stay in the Gap Register with their blockers named.
+
+---
+
+## ✅ RESOLVED 2026-08-19 — One diagnostics assembler, one answer per question, and the first tests that open a real editor
+
+Five Consolidated Gap Register entries from §12 (VS Code Extension), closed together because
+four of them are the same root cause: a shared RENDERER with three private assemblies behind it.
+
+### The tool line stops answering its own question twice
+
+`formatChatDiagnostics` rendered `up to 64 advertised per turn (relevance-selected)` — a
+CEILING computed from the registry size — while the Diagnostics block directly below it
+rendered the MEASURED range off the same run's trace (`Tools advertised per turn: 40–64`).
+One report, one question, two answers, and the ceiling was the one that could never look
+wrong enough to investigate.
+
+`ChatDiagnosticsData.tools` now carries `advertisedMin` / `advertisedLastTurn`, read off the
+trace by the same `toolExposureInTrace` the Diagnostics block uses, and the line states what
+was actually sent (`40–64 advertised per turn (measured)`). When no turn has been measured it
+says so rather than inventing a bound; when the registry is already under the cap it says
+nothing, because every tool goes every turn. A new Signal names the case a ceiling could
+never show — a full catalog and a turn handed ZERO tools, which is a per-turn *selection*
+fault, not a model fault.
+
+### `gatherChatDiagnostics` — the assembly is shared, not just the rendering
+
+`brain-embedded/src/gatherChatDiagnostics.ts` takes the facts a host already holds plus
+READERS for the ones it must fetch, and owns what must not be re-derived: concurrent
+best-effort reads, per-field degradation, the observed tool exposure, and the model-funding
+classification. It never rejects — a capture whose whole point is explaining a broken chat
+must not fail because the endpoint it asks about is the broken one — and a reader that throws
+*synchronously* degrades identically to one that rejects.
+
+All three hosts migrated in the same pass (per the DRY rule — extracting without migrating
+would have left a fourth copy): `clients/vscode/webview/src/App.tsx`,
+`frontend/src/components/brain/BrainPanel.tsx`, `clients/vscode/harness/probe.ts`. The probe's
+report is no longer merely *equivalent* to a Copy click: `projectName`, `chatVisibility`,
+`modelFunding` and `extensionVersion` — the four fields it silently dropped because they came
+from React state — are all present, the last three from the shared assembler and
+`projectName` through a `readProjectName` reader (the two UI surfaces hold it in loaded state;
+a CLI has to ask).
+
+### The `/health` probe is bounded once, for everyone
+
+UNREACHABLE and SLOW are different failures and only the first was handled. `fetchApiVersionVia`
+now takes a deadline (`API_VERSION_PROBE_TIMEOUT_MS`, 2.5s) and abandons a read that never
+settles; a late answer still warms the cache for the next caller, it just stops blocking this
+one. The web app's local `Promise.race` — which is why only ONE of the two copy buttons
+survived a stalled probe — is deleted, and `frontend/src/lib/appVersions.ts` now inherits the
+bound and only keeps its `AbortSignal` (the courtesy that frees the socket; the helper is
+what guarantees the bound).
+
+### The VSIX copy button fails loudly
+
+The header ⧉ was wired `onClick={() => void copyTranscript()}`, so any rejection inside it
+disappeared with no toast, no error and nothing on the clipboard — a click indistinguishable
+from an unwired button. It now has an idle → copied → error state: the icon shows `⚠`, the
+title changes, and the chat error banner carries the reason. `app.copyFailed` shipped in all
+five VSIX l10n bundles.
+
+### `PendingQuestionBanner` reaches the web chat
+
+The pinned "answer needed" banner and `selectPendingAskUser` have lived in the shared
+`packages/brain-ui` since the session-tabs pass but only the VSIX rendered them, so an open
+`ask_user` stayed buried in the web transcript and a BLOCKED chat read as merely idle.
+`BrainPanel` now selects it with the same shared predicate and renders the same banner above
+the composer, answering through the same `<QuestionCard>` (no second options UI to drift),
+with "show in conversation" scrolling to the anchored card. `askPending` / `askJumpTo` added
+to all five next-intl catalogs with real translations; the banner styles read `--bf-warning` /
+`--bf-warning-bg`, which `globals.css` maps to the app's theme tokens, so it is correct in
+light and dark and wraps at narrow widths.
+
+### Extension-host integration tests
+
+`clients/vscode/test-integration/` runs a REAL VS Code via `@vscode/test-electron` and asserts
+what only a running host can: that the extension activates, that every command in
+`contributes.commands` is registered (and that no `builderforce.*` command is registered
+without being declared — the drift is checked both ways), that every contributed view has the
+focus command its provider registration produces, that the shipped `media/webview` bundle
+exists where the shell points, and that the real bundle BOOTS — a webview loaded under the
+panels' CSP and the first message it posts arriving back at the host. Bundled by the same
+esbuild step as the extension and the harness, written to `out-integration/` (gitignored,
+`.vscodeignore`d), and deliberately NOT part of `pnpm test`: the first run downloads a VS Code
+build, so the unit suite stays offline and instant while this is the pre-package gate
+(`pnpm test:integration`).
+
+**Verified:** brain-embedded 309/309 (30 files) including 7 new `gatherChatDiagnostics` tests,
+5 rewritten tool-line tests and 3 new deadline tests; `clients/vscode` 37/37; `tsgo` clean on
+the extension, webview, harness and the new `test-integration` project; frontend `tsgo` clean
+on every file this pass touched.
+
+## ✅ RESOLVED 2026-08-19 — The Models vocabulary, and ONE data-use gate that a training run has to pass
+
+Three Consolidated Gap Register entries — the two from the Data-scientist canvas review
+("The LLM cost projector is written, tested and wired to nothing", "A PII classification can
+now restrain an EXPORT and still cannot restrain a training run") and the HR-review entry
+`llm` is not a spec object — plus two defects found while closing them and fixed in the same
+pass.
+
+### `llm` is a spec object, and its price is arithmetic
+
+`frontend/src/lib/modelObjects.ts` is the Models vocabulary, registered through
+`specObjectSets.ts` the way every other set is. `llm` moved out of
+`BASE_CREATION_OBJECT_REGISTRY` and out of the hand-written `MUTABLE_FIELDS.llm`, so it now
+has what every hand-declared kind lacks: a `SpecField.derive` hook.
+
+Four numbers are now COMPUTED from the rate card and the volume beside them —
+`costPerRequest`, `projectedMonthlyCost`, `monthlyTokens` and the input/output split — by
+`projectLlmCost()`, which until this pass was imported by nothing but its own test.
+`projectedMonthlyCost` is gone from the authorable list by construction (`specMutableFields`
+omits every field that declares a `derive`), so the model can no longer assert a price that
+disagrees with the inputs printed directly above it — the stored-total defect
+[[spec-field-derive]] exists to forbid.
+
+`cacheHitRate` is new: `projectLlmCost` has always modelled prompt caching as a discount on
+INPUT tokens and nothing on the card ever supplied the rate, so the one lever that most
+changes an architecture's price was unreachable from the surface where the architecture is
+chosen. The eight rate-card and volume fields also gained inspector controls
+(`canvasKindSettings.board.ts`) — before this they were writable only by Brain, which is the
+other half of why a projector nobody could feed sat unimported.
+
+`evermind` is deliberately NOT in the set, and the header says why: it has a bespoke node
+body, and `SpecObjectBody` renders every registered spec kind, so registering it would draw
+a second body under the one that already exists.
+
+Localized as `creationCanvas.models.*` across all five catalogs. The namespace is plural
+because `creationCanvas.model` is already a flat label string and next-intl cannot hold a
+string and a namespace at one path.
+
+### ONE data-use gate, after two that had never met
+
+The training arm could not be closed as specified, because the specification assumed one
+gate and there were two:
+
+* `packages/creation-canvas-contract/src/dataScience.ts` declared `DATA_PURPOSES`
+  (`analysis`/`training`/`evaluation`/`export`/`sharing`), `LAWFUL_BASES` (hyphenated) and
+  `checkDataUse` — what the canvas tools call.
+* `frontend/src/lib/canvasDataGovernance.ts` declared `DATASET_USES`
+  (`train`/`export`/`publish`/`share`), `LAWFUL_BASES` (underscored) and
+  `evaluateDatasetUse` — what the export path calls.
+
+Two gates over one question, two spellings of the Article 6 bases, two vocabularies for the
+same five acts. A dataset governed through one was ungoverned at the other.
+
+**And the second one was inert.** `exportArtifact` read `target.data.usePolicy` — a field
+that is not in `MUTABLE_FIELDS.dataset`, that no tool writes, and that no importer produces.
+It has been `undefined` on every dataset that has ever existed, so the export gate the
+previous pass reported as live was refusing nothing.
+
+Both are now one, in `packages/creation-canvas-contract/src/dataGovernance.ts`. The
+surviving spellings are the ones REAL BOARDS HOLD (`training`/`sharing`, hyphenated bases,
+the `dataUse` field) because `canvas_set_data_use` is the only writer either model ever had
+and adopting the other set would have silently unenforced every policy already declared.
+`checkDataUse` is deleted rather than aliased: its signature could not see the column
+classifications, which is exactly the input that decides whether training may proceed.
+`canvasDataGovernance.ts` re-exports every symbol, so no canvas import path changed;
+detection, masking and the data-contract evaluator stay there, because they read
+`TabularSource` and only ever run in a browser.
+
+The merged evaluator is the UNION of what both predecessors permitted — retention outranks
+everything, a declared purpose binds personal data or not, a lawful basis is asked of
+training/sharing/publish but never of a plain export, and training is the one use that must
+be affirmatively permitted and that special categories cannot reach on legitimate interests.
+23 tests, up from 17 + 4.
+
+### The gate now runs where the mistake is permanent
+
+* **Migration 0936** adds `classifications`, `use_policy`, `source_session_id` and
+  `source_object_id` to `ide_datasets`. NULL means "nobody classified this", which the
+  evaluator reads exactly as it reads today's rows — so applying it changes no existing
+  pipeline.
+* **`api/src/application/finetune/trainingDatasetGate.ts`** reads that row and decides;
+  `POST /api/ide/training` answers 403 with the reason and the canvas card to go and fix,
+  BEFORE the job row exists — a queued job is already a decision somebody has to reverse.
+* **`POST /api/ide/datasets/import`** is the lineage that populates the columns: rows,
+  classifications, policy and source object in ONE call, because a corpus created in one
+  request and classified in a second can be trained on in between.
+* **`canvas_promote_dataset_to_corpus`** is the door from the board — it maps named columns
+  to instruction/output pairs, refuses locally with the same evaluator so the refusal names
+  the card rather than a dataset id, and posts the governance across.
+* **`AITrainingPanel`** shows the verdict at the dataset picker and disables Start, so a
+  refusal is read before the button rather than after it.
+
+### Two catalog gaps found and fixed on the way
+
+`equityGrant`, `convertible` and `payRun` had no `creationCanvas.object.*` label in any
+locale — three palette cards that rendered a raw dotted key. And
+`providerKeys.diagnostic.state.*` was missing `other-workspace` and `lookup_failed`, exactly
+as `PROVIDER_PROBE_STATES`' own header predicted it would be. Both added in all five
+catalogs.
+
 ## ✅ RESOLVED 2026-08-19 — Fixed-price escrow has a surface, and a bid can carry its own schedule
 
 Two Consolidated Gap Register entries under §10 (Marketplace, talent, freelance), plus the
@@ -71,6 +370,276 @@ Files: `api/src/application/marketplace/milestones.ts`,
 `frontend/src/app/freelancer/dashboard/page.tsx`,
 `frontend/src/app/marketplace/MarketplaceGigsSection.tsx`.
 
+
+## ✅ RESOLVED 2026-08-19 — The job search is objects on the board, not prose in a document
+
+**Roadmap items closed (§10 · Career / seeker seat):** *The canvas has no object kind for anything the career
+tools produce*, *`interview` still means a CUSTOMER interview, so the canvas kind for a job interview does not
+exist*, *`resume` has no `tailor` action and no per-application variant*, and the built half of *The free
+`/api/tools` diagnostics catalog and the use-case picker are still enterprise-only*. Also closed: *Two elements
+are labelled "Model" on the Creation Canvas* (§10 · Canvas).
+
+### 1 · `CAREER_OBJECT_KINDS` — six kinds, as spec DATA
+
+Twenty-five career tools shipped in `careerToolCatalog.ts` and every one of them COMPUTES an answer — weeks to
+zero with the projection behind it, an anchored tailoring plan against one posting, a question set with the
+rubric each is scored against, the whole application pipeline. The canvas had nowhere to put a single one, so
+every answer landed as prose in a `document` and stopped being an object the next turn could reason over: the
+exact defect `founderObjects.ts` was written to end, reproduced for the seat with the most visitors and the
+least company behind them.
+
+`packages/creation-canvas-contract/src/career.ts` declares the six and argues each against the employer-side
+vocabulary it is NOT part of. The full pattern, one file per layer and no render branches anywhere:
+`lib/careerObjects.ts` (the specs) → `specObjectSets.ts` (registration) → `specDerivedRegistry.ts`
+(`CAREER_REGISTRY`, `CAREER_MUTABLE_FIELDS`, `SPEC_ACTIONS`) → `creationObjectRegistry.ts` (palette, mutable
+fields, exhaustiveness annotation) → a `Career` palette group → `creationCanvas.career.*` in all five catalogs.
+
+- **`job`** — a posting SOMEONE ELSE opened. Not a `jobPosting`: that is a requisition we own and may edit,
+  this is research with a match score, the compensation exactly as advertised, and the missing skills named
+  honestly. `closesAt` is a declared deadline, so a `trigger` can watch it.
+- **`jobApplication`** — one application, PROJECTING a `job_proposals` row rather than copying it.
+  `job_postings.postingType` already accepts `'fte'` and the proposal lifecycle already runs submitted →
+  shortlisted → accepted → declined → withdrawn, so a second copy would be two answers to "did I hear back".
+  `followUpAt` is a deadline — the single most-missed date in any job search.
+- **`applicationPipeline`** — a `shortlist` TRANSPOSED: one person's N applications rather than N people
+  against one posting. Every count is derived, never stored, and it deduplicates rows against
+  `jobApplication` cards on the board so working either way gives one number.
+- **`coverLetter`**, **`interviewPrep`**, **`runway`** — the letter written against a posting, the rehearsal
+  that persists between sessions, and the clock every other decision is paced against.
+
+**Nothing that can be computed is authorable.** `applicationPipeline` derives `total`, `open`, `responseRate`,
+`interviewRate` and `longestSilence`; `interviewPrep` derives its rehearsal coverage; `runway` derives the burn,
+the weeks AND the pressure band — the band from the same arithmetic that prints the weeks, so the card cannot
+say "critical" over a projection showing eleven months. Every one returns `undefined` rather than a zero when
+its inputs are missing: on this seat a 0% reply rate reads as a catastrophe and is an answer nobody computed.
+Drafts are excluded from the reply-rate denominator for the same reason — counting unsent applications against
+yourself is the arithmetic that makes a search feel worse than it is.
+
+**The two words that were not available.** `interview` is reserved by the hiring domain's kernel entity, which
+is why the founder set renamed itself `customerInterview`; a third claimant would re-open that collision, so the
+rehearsal is `interviewPrep` — which is the more accurate noun anyway, since the object exists before the event
+does. `offer` is the employer's, with its approval chain; the offer a seeker RECEIVES is `jobApplication.offerTerms`,
+broken into components because that is how `hr.compare_offers` reads it.
+
+`careerObjects.test.ts` — 36 cases: kind/contract parity, no word taken from the hiring vocabulary, the
+deduplicating pipeline counts, the drafts-excluded denominators, the runway bands against the server's, and the
+refusal to report a rate at all when nothing has been submitted.
+
+### 2 · `resume` gained `tailor`, and a variant now knows which posting it answers
+
+`ACTIONS.resume` was `['generate','preview','export']`. It is now `['generate','preview','export','tailor']`, and
+`tailoredFor` is authorable and readable on a `resume` — naming the `job` card by title, a reference rather than
+a copy so correcting the role on the posting does not leave nine variants quoting the old one. `tailor` produces
+a NEW variant rather than editing in place, which is what makes "which version did they actually see?" — the
+question every seeker asks in week three — answerable at all.
+
+### 3 · The visitor is addressed before they type
+
+- **`personal-runway`** in the free `/api/tools` catalog — the only one of the sixteen career tools that is not
+  about a document, and the one that decides how the search is run at all. It is an adapter over `computeRunway`,
+  so the page, `hr.runway` and the canvas `runway` card cannot grade the same money three ways. Leads with weeks;
+  stores nothing.
+- **A `Career` category in `PromptUseCasePicker`** — eight intents ("How long does my money last?", "Is this job
+  worth applying for?", "Tailor my resume to this job", "How is my job search going?"), each with an execution
+  contract naming the career object kinds the turn may create. Every one declares `evidence: 'canvas'`: a job
+  search has no owning domain to read, and pointing them at a tenant domain would make each one fail for the
+  person who is not a company.
+- **`job-hunt` — "Job search command center"** — the placeable pack, wiring `runway` → `applicationPipeline` →
+  `job` → `resume` → `coverLetter` → `jobApplication` → `interviewPrep`. `runway` is first on the board and
+  first in the connection list because weeks-to-zero decides whether this is a search for the right role or for
+  any role, and placing it last would make it the card somebody fills in after the decisions it should govern.
+
+### 4 · A placed pack is wired, not merely drawn
+
+Found while building `job-hunt` and closed in the same pass. `CreationTemplate.connections` carried a LABEL and
+nothing else, which was enough while every pack paired kinds that read fine side by side — a `chart` beside a
+`dataset` needs no reference to be legible. The career kinds broke that: `jobApplication.resumeRef`,
+`.coverLetterRef`, `.jobRef` and `resume.tailoredFor` are the whole value of those kinds, so a pack whose refs
+were all empty would have documented how it should be wired instead of being wired.
+
+An edge may now declare `ref`, naming the field on the TARGET that the source card's title fills. The title is
+resolved at PLACEMENT rather than baked into the pack data — an item may carry its own `title` or fall back to
+its kind's label, and a hard-coded string would break the moment either changed. The write is guarded by
+`creationObjectMutableFields`, so a pack cannot use this to set a field the kind does not accept from an author.
+It is the same title-first matching `SpecDeriveBoard.byRef` already does, which is why no new resolution rule
+was needed for it.
+
+### 5 · An imported ellipse is drawn as an ellipse
+
+One of the three Miro items the operator scheduled on 2026-08-19, and the smallest. `miroImport.ts` has written
+`stickyShape` since it shipped — "what it WAS", so a reader can see the ellipse in the original was never a note
+— and nothing read it. A migrated diagram therefore arrived as a wall of square stickies, and the field was a
+fact with no consequence.
+
+The card now publishes `data-sticky-shape` and `CreationCanvas.module.css` draws it: ellipse and circle by
+border-radius, diamond / triangle / parallelogram / star / arrow by `clip-path`. `clip-path` rather than an SVG
+background because it clips the real element — the text inside stays selectable, the resizer still measures the
+node React Flow believes it has, and the author's pigment is still the element's own background. Clipped shapes
+swap `box-shadow` for `drop-shadow`, because a shadow painted outside a clip is cut away with it and the shape
+would float differently from every other card.
+
+Every rule is additive and keyed on the attribute, so a geometry the stylesheet has no rule for keeps the square
+card — the right degradation for an import from a board with shapes we do not model. Nothing branches in
+`CreationNode`: a shape is a treatment of the one card structure, which is the same argument that hides the
+sticky's chrome in CSS rather than in the component.
+
+**And the picker caught up.** `stickyShape` offered Square and Round while the renderer drew neither, so it was a
+stored preference with no visible effect. It now offers the eight geometries the stylesheet can draw, under
+Miro's own spellings — one value space for an import and a hand-drawn shape, because two would need a
+translation table at the boundary and a translation table is where a shape silently becomes a note. Labels in
+all five catalogs.
+
+### 6 · Two controls no longer answer to the same name
+
+`creationCanvas.model` (the participant editor's per-agent select) and `creationCanvas.node.model` (the Evermind
+adapter version) both resolved to the literal "Model", as did the composer's run-model control — so after opening
+a participant card a screen reader heard two identical "Model" controls with no way to tell which governed the
+run. That is `prompt-options-menu-single-model-control` violated in the DOM rather than in the code. The composer
+keeps the bare noun because it IS the one model control; the other two are now **Agent model** and **Adapter**,
+in all five catalogs. The keys were renamed rather than re-valued, so a stale consumer fails loudly.
+
+## ✅ RESOLVED 2026-08-19 — Scheduled work wakes on time on an idle platform, and the cron feed stops writing the payload that bloated it
+
+**Roadmap items closed:** *Idle-platform scheduled tasks coarsen to the floor interval* and the insert-side half of
+*`manager_actions` re-bloats because the every-5-min manager sweep inserts feed rows across all tenants*, plus two
+*CI safety* items. All under §15 Platform.
+
+### 1 · Dynamic next-due gate — exact scheduling WITHOUT giving up autosuspend
+
+The KV work-gate lets Neon scale to zero by skipping the DB fan-out on idle ticks. It only ever knew about
+**write-driven** work: `signalPendingWork` fires when a ticket enters a runnable lane. A schedule that merely comes
+due — a 09:00 report, a 15-minute QA run — signals nothing, so it could only be picked up by the **floor** sweep and
+ran up to a full floor interval (default 30 min) late.
+
+- **`publishNextDue(env, nowMs)`** — at the end of every ACTIVE tick, `MIN(next_run_at)` across the five schedule
+  tables, published to KV `cron:next-due`. Runs only on a tick that is already talking to Postgres, so it costs one
+  extra statement and never wakes the endpoint by itself. `SCHEDULE_SOURCES` is a registry (table + its `next_run_at` +
+  the flag that decides whether the row is armed) rather than five `UNION` arms, so a new scheduled surface is a data
+  change. A DISABLED row is excluded deliberately: it would otherwise wake Neon for a due time nothing will act on.
+- **`evaluateCronGate` gained a `due` branch.** The idle path still reads **KV only** — the whole contract of the
+  module — because what is stored is the ANSWER (a timestamp), not the question.
+- **`toEpochMs` pins TZ-less text to UTC.** `neon-http` disables the TIMESTAMP type parser globally, so a `MIN()` over
+  a `timestamp` column can arrive as a `Date` OR as `"2026-08-19 09:00:00"`. `Date.parse` reads the bare form as LOCAL
+  time, which on a non-UTC host would shift every due time by the offset.
+
+**The bound that protects autosuspend.** A row whose sweep never re-arms it stays due *forever*. An unbounded
+`now >= nextDue` would then open the gate on **every** tick and quietly undo the savings the module exists to buy — a
+regression that would have looked like "the gate stopped working" with nothing pointing at why. Past one floor interval
+a due time stops counting as fresh and the floor sweep takes over. 23 tests, including that case and its converse
+(a long-overdue schedule still runs once the floor is due).
+
+### 2 · `manager_actions` — the roadmap's own rule would have been a silent correctness bug
+
+`manager_actions` measured **593 MB holding ~24 MB of real data**. The driver is the every-5-minute cross-tenant sweep
+storing a `detail` blob (capped at 4000 chars) on rows nothing reads.
+
+The roadmap proposed skipping `detail` for feed-only rows, identified as **`run_task_id IS NULL`**. That column is the
+wrong discriminator: **`merge_blocked` is cron-written with a null `run_task_id`**, and ManagerService's PR-loop ceiling
+counts blocked reports with ``detail NOT LIKE '%"reason":"conflict_exhausted"%'``. Dropping that payload would make
+every historical block read as still-terminal and **withhold merge authority on a backlog that should have revived** —
+green tests, no error, wrong behaviour.
+
+So retention is **declared per action type** (`DETAIL_READING_ACTIONS`) rather than inferred from a column that merely
+correlates with it. `retainsDetail` keeps `detail` when the row is a STATE row (the fingerprint markers ARE the
+dedupe contract), when something parses that action type's detail, or when it belongs to a MANUAL run a human asked
+for. Otherwise a cron feed row stores its `summary` (capped at 500) and nothing else. 5 tests pin all four arms.
+
+### 3 · CI safety
+
+- **`environment: production` on `deploy-api` and `deploy-frontend`.** A required-reviewer rule is now a repository
+  settings change rather than a workflow edit. Until protection rules are configured the jobs run exactly as before —
+  GitHub creates the environment implicitly with no rules and repo-level secrets stay readable. Gating only the API
+  would have let a reviewed backend ship behind an unreviewed frontend. **The protection rule itself is unset and is an
+  operator action.**
+- **`sed` → `scripts/patch-worker-fetch.mjs`.** `cf-build` rewrote `r.fetch` to `(r||self).fetch` in the minified
+  `_worker.js` with a bare `sed -i`. `r` is a MINIFIER-CHOSEN name — one next-on-pages bump and it becomes `n`, and
+  `sed` **exits 0 whether it matched or not**, so the patch silently stops applying and the broken bundle ships. The
+  replacement asserts the anchor: zero matches is a hard failure that prints the `*.fetch` call shapes actually present
+  so the new binding can be re-derived, and a rerun over already-patched output is a no-op rather than a false alarm.
+  Verified against all three cases (patches, idempotent rerun, renamed binding → exit 1).
+
+
+## ✅ RESOLVED 2026-08-19 — The Drizzle single-access-layer residuals are closed; the last one was a localization hole with no guard
+
+**Roadmap section closed:** *Drizzle single-access-layer migration — residuals (opened 2026-07-25)* — deleted from [ROADMAP.md](./ROADMAP.md).
+
+A verification pass over all ten residuals in that section found **nine already fixed** in the intervening work but never
+reconciled, and **one genuinely open**. Verifying before implementing was the whole value here: every one of the nine
+would otherwise have been "re-fixed" against code that already had the fix.
+
+### The nine already closed (verified against the tree, not assumed)
+
+| Residual | Evidence it is closed |
+| --- | --- |
+| Timestamp wire format SPLIT | `rawTs` is gone repo-wide (0 occurrences); the four named routes carry no `::text` timestamp projections. `staleExecutionReaper.tsToMs` does an explicit epoch conversion. The one surviving `::text` (`ideRoutes` `total_bytes`) is a bigint cast, not a timestamp. |
+| `ide_agents.tenant_id` nullable | Migration `0439_ide_agents_tenant_not_null.sql`; the Drizzle `.notNull()` is now honest. |
+| 15 removable escape hatches | `ideRoutes` is at **0** `db.execute(sql)`, `freelancerRoutes` at **1** — a multi-subquery `COUNT` aggregate of the legitimately-raw kind the entry itself carved out. |
+| Correlated-subquery unqualified-column trap | Both named instances interpolate the TABLE now (`job_postings.id`, `ide_agents.id`), each with a comment naming the inner-scope capture it avoids. |
+| Column-level reverse schema drift | `check-schema-drift.mjs` grew a per-column reverse check (a migrated column absent from an existing `pgTable()` now fails CI). |
+| Cross-tenant write on `POST /api/agent-hosts/:id/file-change` | `taskInTenant(db, taskId, agentHost.tenantId)` gates the insert, plus an execution check bound to the same tenant AND host. |
+| Silent-degradation swallows (3) | `loadProviderRow` returns `{ lookup_failed: true }` and `lookup_failed` is a first-class `ByoUnresolvedReason`; `resolveCloudAgent` no longer catches at all; `notify()` returns a `NotifyResult`. |
+| Marketplace / freelance correctness | `accept` runs in a transaction behind a conditional `status='open'` claim (replay → 409); private postings gated; `getOrCreateConversation` uses a TARGETED `onConflictDoNothing` + reads the winner back; the read watermark is stamped BEFORE the append; `canAutofill` reads a projected column. |
+| Dead/loose surface | `createFreelancerMessagingRoutes()` / `createGigMarketplaceRoutes()` take no `Db`; the feedback route returns 201/200 off `created`; `bridges[0]` is gone; `getOrSetCached` normalizes through `toJsonShape` so a miss and a KV hit have the SAME shape. |
+
+### The one that was still open — and the guard that was actually missing
+
+**Probe/credential failure details reaching the UI as English.** Half-fixed, in the way that is worse than not fixed:
+the API already returned the reason CODE as `status`, and `probeVerdict` already composed its sentence from
+`diagnostic.state.*` instead of the server's prose. But **the catalogs had no entry for `lookup_failed` or
+`other-workspace`**, and `stateLabel`'s miss-fallback is `status.replaceAll('_', ' ')` — so those two reasons rendered
+as plausible-looking English ("lookup failed", "other-workspace") to **every zh/es/fr/de operator**, with nothing
+visibly broken in `en` to hint at it.
+
+`lookup_failed` was added to `ByoUnresolvedReason` by the `loadProviderRow` fix in this very section. That is the
+lesson: the API's reason union could grow and the catalogs could not tell.
+
+- **Both keys added to all five catalogs** with real translations.
+- **`PROVIDER_PROBE_STATES`** (`lib/builderforceApi.ts`) — one runtime registry for every status the three probe shapes
+  can carry (`ProviderDiagnostic`, `ProviderConnectionTestResult`, `OpenRouterConnectionTestResult`), all three of which
+  resolve labels from the SAME `providerKeys.diagnostic.state.*` namespace. `ProviderConnectionTestResult.status` was
+  bare `string`; all three are now typed off the registry.
+- **`messages.test.ts` asserts the registry against all five locales**, so the next reason the API adds fails the build
+  instead of shipping untranslated. This is the class of bug that needs a test rather than review: it is invisible in
+  `en` and indistinguishable from real copy everywhere else.
+
+### Found while there — three canvas object kinds had no label in ANY locale
+
+`equityGrant`, `convertible` and `payRun` are fully implemented (`founderObjects.ts`, `canvasEquityTools.ts`,
+`specDerivedRegistry.ts`) but had no `creationCanvas.object.*` entry, so **`messages.test.ts` was already RED** — 5
+failing assertions across the 5 locales. Labelled in all five; that file is now **74/74 green**.
+
+
+## ✅ RESOLVED 2026-08-19 — Schema/DDL type drift is now a build gate, and the six drifts it found were live bugs
+
+**Roadmap items closed:** *Migration guards — residual coverage gaps* (both P2 and P3) and *`llm_usage_log` has no `chat_id` column* (Brain & Chat).
+
+### The guards
+
+- **P2 — column TYPE drift between the Drizzle schema and the migrations (FIFTH GUARD, `api/scripts/check-migrations.mjs`).** `check-schema-drift.mjs` verified a column EXISTS and the FK guard verified the subset Postgres refuses outright; a column declared `text()` in `schema/*.ts` and `JSONB` in the migration passed both. The new guard compares every column the migrations declare against the Drizzle declaration by **behavioural family** (string / integer / number / boolean / uuid / json / temporal / binary), so `VARCHAR(255)` vs `text` — a width-and-spelling difference with identical runtime behaviour — is deliberately NOT reported, while `text` vs `jsonb` is. The migration side takes `ALTER TABLE … ALTER COLUMN … TYPE` into account, so a column legitimately migrated to a new type does not report against the schema that correctly followed it. Grandfathering lives in `migrations/.schema-type-drift-allowlist.txt`; stale entries are reported so the list shrinks. **The allowlist ships empty — all six findings were fixed rather than grandfathered.**
+- **P3 — the FK type check no longer silently skips an unresolvable target.** `resolveTargetType` returning null is produced both by a legitimate baseline table and by a typo (`REFERENCES userz(id)`), and the two are indistinguishable, so failing would block every deploy on the first kind. It is now reported as a **non-fatal warning** grouped by target, with a near-miss suggestion (a known table gets column suggestions; an unknown table gets table suggestions). Currently surfaces exactly one: the legacy `coderclaw_instances.id`, referenced by 16 pre-rename migrations.
+
+### What the type-drift guard found on its first run — six drifts, three of them live defects
+
+| Column | Schema said | DB is | Consequence |
+|---|---|---|---|
+| `tenant_api_keys.allowed_origins` | `text()` | `jsonb` | **Live bug.** `deserializeOrigins` ran `JSON.parse` on an already-parsed array, which stringifies it to `https://a,https://b`, throws, and returns `null` — and `originAllowed(null, …)` returns false. **Every browser API key with an origin allowlist rejected every request it was minted to permit.** |
+| `llm_usage_log.metadata` | `text()` | `jsonb` | **Live bug.** `chatModeInsights` guarded with `u.metadata ~ '^\s*\{'` — a TEXT-only operator applied to jsonb, so the whole chat-mode rollup threw `operator does not exist: jsonb ~ unknown` and returned nothing. |
+| `admin_impersonation_sessions.pages_visited` | `text()` | `jsonb` | **Live bug.** Same `JSON.parse`-an-array failure, caught into `[]` — the impersonation audit trail rendered an empty page list for every session. |
+| `admin_audit_log.metadata` | `text()` | `jsonb` | Writer stringified into jsonb (stored a JSON *string* inside the jsonb). |
+| `tenant_custom_roles.permissions` | `text()` | `jsonb` | Type lie only — `coercePermissions` happened to handle both shapes. |
+| `platform_modules.permissions` | `text()` | `jsonb` | Same. This is the exact case named in `check-schema-drift.mjs`'s own header as the one it could not catch. |
+
+All six Drizzle declarations corrected to `jsonb()` with `$type<>()`. With the types honest, `tsgo` immediately surfaced every writer that had been stringifying into a jsonb column — those were fixed in the same pass.
+
+### DRY — one JSON-column reader
+
+Four call sites had written their own reader on the assumption a jsonb column arrives as a string, and `coercePermissions` existed **twice** with identical bodies (`application/rbac/effectivePermissions.ts` and `presentation/routes/adminRoutes.ts`). All now route through one primitive, `api/src/domain/shared/jsonColumn.ts` — `coerceStringArray`, `coerceStringArrayOrNull` (preserves NULL, because an absent origin allowlist means "server-only key", not "an allowlist permitting nothing"), `coerceJsonArray<T>`, `coerceJsonObject`. Each tolerates both the parsed value and a legacy stringified row, so historical rows stay readable.
+
+### `llm_usage_log` chat attribution (migration 0934)
+
+Real `chat_id INTEGER` + `chat_mode VARCHAR(16)` columns, backfilled from the metadata JSON with `jsonb_typeof(metadata) = 'object'` (the correct, index-friendly form of the regex guard that was crashing), plus a partial index on `(tenant_id, chat_id, created_at DESC) WHERE chat_id IS NOT NULL`. `usageLedger` promotes the attribution out of metadata through one `readChatAttribution` reader and writes both columns; metadata keeps carrying them, because the SDK's billing trace-back contract reads it there. `computeChatModeUsage` now joins the indexed column, so the figures are a total rather than a floor — and no longer a crash.
+
+---
 
 ## ✅ RESOLVED 2026-08-19 — Second roadmap validation pass: every cited path checked, and the two red frontend ratchets actually fixed
 

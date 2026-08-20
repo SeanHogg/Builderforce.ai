@@ -22,7 +22,7 @@
  * the model in the conversation with them) writes the replacement.
  */
 import {
-  analyzeSalary, auditProfile, compareResumeToJob, consolidateResumes,
+  analyzeSalary, auditProfile, compareResumeToJob, computeRunway, consolidateResumes,
   buildInterviewKit, employerResearchBrief, extractSkills, optimizeResume, planForTarget,
   resumeSentiment, scoreResume, suggestTargets, summarizeResume, tailorResume,
   valueProposition, ROLE_PROFILES,
@@ -703,6 +703,99 @@ const salaryCalculator: AnalyzerTool = {
   },
 };
 
+// ── 13b. Personal Runway ──────────────────────────────────────────────────────
+//
+// The one free tool in this catalogue that is not about a document.
+//
+// Fifteen of the sixteen entries around it read a resume, a posting or a market
+// band -- all of them questions about the SEARCH. This is the question that decides
+// how the search is run at all, and it is the one nobody puts in a tool because the
+// inputs are embarrassing: how much money is left, and what leaves the account each
+// month. Under about thirteen weeks, taking contract work while interviewing beats
+// holding out for the right salaried role, and somebody who does not know which side
+// of that line they are on spends the runway finding out.
+//
+// It leads with WEEKS rather than currency for the reason `application/career/runway.ts`
+// argues: a balance is a number you can feel good about and a number of weeks is a
+// decision. Nothing here is stored -- the compute is pure and the page is the free,
+// no-login surface, which for this particular input is the whole point.
+
+const personalRunway: AnalyzerTool = {
+  id: 'personal-runway',
+  name: 'Personal Runway',
+  tagline: 'How many weeks does the money last, and what that means for the search.',
+  icon: '⏳',
+  category: 'career',
+  kind: 'analyzer',
+  about:
+    'Projects your balance forward month by month from savings, monthly outgoings and any income still arriving, and reports the weeks remaining plus the pressure band the rest of a job search should be paced against. Every figure is one you supplied — nothing is estimated on your behalf, and nothing is stored.',
+  fields: [
+    { id: 'savings', label: 'Cash available now', type: 'line', required: true, placeholder: 'Savings, notice pay — anything already banked' },
+    { id: 'monthlyExpenses', label: 'Monthly outgoings', type: 'line', required: true, placeholder: 'Everything that leaves in a normal month, incl. annual bills ÷ 12' },
+    { id: 'monthlyIncome', label: 'Monthly income still arriving', type: 'line', required: false, placeholder: 'Optional — benefits, a partner’s contribution, residual income' },
+    { id: 'currency', label: 'Currency', type: 'line', required: false, placeholder: 'GBP' },
+  ],
+  analyze: (values) => {
+    const savings = num(values, 'savings');
+    const monthlyExpenses = num(values, 'monthlyExpenses');
+    if (savings === undefined || monthlyExpenses === undefined) return needsInput('the cash you have now and what leaves the account each month');
+
+    const reading = computeRunway({
+      savings,
+      monthlyExpenses,
+      monthlyIncome: num(values, 'monthlyIncome'),
+      currency: text(values, 'currency') || undefined,
+    });
+    const amount = (n: number) => `${reading.currency} ${Math.round(n).toLocaleString()}`;
+
+    // The bands are the domain's, restated ONLY as a tier for the shared meter. A
+    // second set of thresholds here would let the page disagree with the same reading
+    // taken through `hr.runway` or drawn on a canvas `runway` card.
+    const PRESSURE_TIER: Record<string, number> = { none: 5, comfortable: 4, planning: 3, urgent: 2, critical: 1 };
+    const cliff = reading.projection.find((month) => month.balance <= 0);
+
+    return {
+      headline: reading.weeksRemaining === null
+        ? 'The money is not running out'
+        : `${reading.weeksRemaining} weeks`,
+      summary: reading.weeksRemaining === null
+        ? `Income covers the outgoings, so there is no cliff to plan against. Net position ${amount(-reading.netMonthlyBurn)} a month.`
+        : `Net burn ${amount(reading.netMonthlyBurn)} a month against ${amount(savings)}. ${cliff ? `The balance reaches zero in month ${cliff.month}.` : ''}`.trim(),
+      score: reading.weeksRemaining === null ? null : Math.min(100, Math.round((reading.weeksRemaining / 52) * 100)),
+      scoreLabel: reading.pressure,
+      metrics: [
+        { label: 'Weeks remaining', value: reading.weeksRemaining === null ? '—' : String(reading.weeksRemaining), hint: 'The number every other career decision is paced against.', tier: PRESSURE_TIER[reading.pressure] },
+        countMetric('Months remaining', reading.monthsRemaining === null ? '—' : String(reading.monthsRemaining)),
+        countMetric('Net monthly burn', reading.netMonthlyBurn <= 0 ? 'None — income covers it' : amount(reading.netMonthlyBurn)),
+        { label: 'Pressure', value: reading.pressure, hint: 'Under about 13 weeks, contract work while interviewing usually beats holding out.', tier: PRESSURE_TIER[reading.pressure] },
+        listMetric('Assumptions', reading.assumptions, 'None'),
+      ],
+      recommendations: [
+        ...(reading.weeksRemaining !== null && reading.weeksRemaining < 13
+          ? [{
+            title: 'Take the bridge work and keep interviewing',
+            detail: `With ${reading.weeksRemaining} weeks left, a salaried role that starts in three months arrives after the balance does. Contract or part-time work that starts sooner buys the runway to hold out for the right permanent role instead of accepting the first one.`,
+            priority: 'high' as const,
+          }]
+          : []),
+        ...(reading.weeksRemaining !== null && reading.weeksRemaining >= 26
+          ? [{
+            title: 'Search for the right role, not any role',
+            detail: 'The runway supports a targeted search. Spend the time on fewer, better-tailored applications — the reply rate on a tailored application is several times that of a volume one, and you can afford to find out which.',
+            priority: 'medium' as const,
+          }]
+          : []),
+        {
+          title: 'Check the outgoings against a real statement',
+          detail: 'The single most common error in this calculation is an under-stated monthly figure, because the annual bills are forgotten. Divide them by twelve and add them in before trusting the weeks above.',
+          priority: 'medium' as const,
+        },
+        ...instructionRec(reading.instruction),
+      ],
+    };
+  },
+};
+
 // ── 14. Employer Research ─────────────────────────────────────────────────────
 
 const employerResearch: AnalyzerTool = {
@@ -867,6 +960,7 @@ export const CAREER_TOOLS: readonly AnalyzerTool[] = [
   profileAudit,
   career360,
   salaryCalculator,
+  personalRunway,
   employerResearch,
   interviewPrep,
   vendorSync,

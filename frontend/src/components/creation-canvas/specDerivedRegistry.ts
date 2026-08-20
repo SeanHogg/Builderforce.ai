@@ -22,15 +22,17 @@
  */
 
 import type {
-  AcademicObjectKind, DataScienceObjectKind, FounderObjectKind, HiringObjectKind,
+  AcademicObjectKind, CareerObjectKind, DataScienceObjectKind, FounderObjectKind, HiringObjectKind,
   LegalObjectKind, OperationsObjectKind, PeopleObjectKind, SellMotionObjectKind, SharedObjectKind,
 } from '@builderforce/creation-canvas-contract';
 import { OPERATIONS_LABELS, OPERATIONS_OBJECT_SPECS, OPERATIONS_STATUSES } from '@/lib/operationsObjects';
 import { ACADEMIC_LABELS, ACADEMIC_OBJECT_SPECS, ACADEMIC_STATUSES } from '@/lib/academicObjects';
+import { CAREER_LABELS, CAREER_OBJECT_SPECS, CAREER_STATUSES } from '@/lib/careerObjects';
 import { DATA_SCIENCE_LABELS, DATA_SCIENCE_OBJECT_SPECS, DATA_SCIENCE_STATUSES } from '@/lib/dataScienceObjects';
 import { FOUNDER_OBJECT_SPECS } from '@/lib/founderObjects';
 import { HIRING_LABELS, HIRING_OBJECT_SPECS, HIRING_STATUSES } from '@/lib/hiringObjects';
 import { LEGAL_LABELS, LEGAL_OBJECT_SPECS, LEGAL_STATUSES } from '@/lib/legalObjects';
+import { MODEL_LABELS, MODEL_OBJECT_SPECS, MODEL_STATUSES } from '@/lib/modelObjects';
 import { PEOPLE_LABELS, PEOPLE_OBJECT_SPECS, PEOPLE_STATUSES } from '@/lib/peopleObjects';
 import { SELL_MOTION_LABELS, SELL_MOTION_OBJECT_SPECS, SELL_MOTION_STATUSES } from '@/lib/sellMotionObjects';
 import { SHARED_LABELS, SHARED_OBJECT_SPECS, SHARED_STATUSES } from '@/lib/sharedCanvasObjects';
@@ -132,6 +134,9 @@ export const FOUNDER_REGISTRY = lower({ specs: FOUNDER_OBJECT_SPECS, labels: FOU
 export const ACADEMIC_REGISTRY = lower({ specs: ACADEMIC_OBJECT_SPECS, labels: ACADEMIC_LABELS, statuses: ACADEMIC_STATUSES });
 /** The recruiter's funnel, sourcing to fee — nine kinds, no render branches. */
 export const HIRING_REGISTRY = lower({ specs: HIRING_OBJECT_SPECS, labels: HIRING_LABELS, statuses: HIRING_STATUSES });
+/** The SAME transaction from the seeker's side — six kinds, and the first vocabulary on
+ *  this list authored by one person about their own working life. See `career.ts`. */
+export const CAREER_REGISTRY = lower({ specs: CAREER_OBJECT_SPECS, labels: CAREER_LABELS, statuses: CAREER_STATUSES });
 /** Twelve HR kinds, of which the last is `form`: the collection primitive that closes
  *  the largest "idea to REAL" break the canvas had — it could author anything and
  *  collect nothing back from a human. */
@@ -154,6 +159,11 @@ export const LEGAL_REGISTRY = lower({ specs: LEGAL_OBJECT_SPECS, labels: LEGAL_L
  *  Six kinds, no render branches, and the first vocabulary that models how the company
  *  SELLS rather than how it builds. See `sellMotion.ts`. */
 export const SELL_MOTION_REGISTRY = lower({ specs: SELL_MOTION_OBJECT_SPECS, labels: SELL_MOTION_LABELS, statuses: SELL_MOTION_STATUSES });
+/** The Models group. One kind today — `llm` — and the reason it is a vocabulary rather
+ *  than one more hand-declared entry: a hand-declared kind has no `SpecField.derive`
+ *  hook, which is why the LLM cost projector sat unimported for a release. See
+ *  `modelObjects.ts`. */
+export const MODEL_REGISTRY = lower({ specs: MODEL_OBJECT_SPECS, labels: MODEL_LABELS, statuses: MODEL_STATUSES });
 
 /**
  * The authorable fields per vocabulary.
@@ -166,19 +176,25 @@ export const SELL_MOTION_REGISTRY = lower({ specs: SELL_MOTION_OBJECT_SPECS, lab
 export const FOUNDER_MUTABLE_FIELDS = specMutableFieldMap<FounderObjectKind>(FOUNDER_OBJECT_SPECS);
 export const ACADEMIC_MUTABLE_FIELDS = specMutableFieldMap<AcademicObjectKind>(ACADEMIC_OBJECT_SPECS);
 export const HIRING_MUTABLE_FIELDS = specMutableFieldMap<HiringObjectKind>(HIRING_OBJECT_SPECS);
+export const CAREER_MUTABLE_FIELDS = specMutableFieldMap<CareerObjectKind>(CAREER_OBJECT_SPECS);
 export const PEOPLE_MUTABLE_FIELDS = specMutableFieldMap<PeopleObjectKind>(PEOPLE_OBJECT_SPECS);
 export const SHARED_MUTABLE_FIELDS = specMutableFieldMap<SharedObjectKind>(SHARED_OBJECT_SPECS);
 export const DATA_SCIENCE_MUTABLE_FIELDS = specMutableFieldMap<DataScienceObjectKind>(DATA_SCIENCE_OBJECT_SPECS);
 export const OPERATIONS_MUTABLE_FIELDS = specMutableFieldMap<OperationsObjectKind>(OPERATIONS_OBJECT_SPECS);
 export const LEGAL_MUTABLE_FIELDS = specMutableFieldMap<LegalObjectKind>(LEGAL_OBJECT_SPECS);
 export const SELL_MOTION_MUTABLE_FIELDS = specMutableFieldMap<SellMotionObjectKind>(SELL_MOTION_OBJECT_SPECS);
+/** `projectedMonthlyCost` is absent from this map BY CONSTRUCTION — it declares a
+ *  `derive`, and `specMutableFields` omits every computed field. That single line is what
+ *  makes "the model cannot assert a price" a property of the declaration. */
+export const MODEL_MUTABLE_FIELDS = specMutableFieldMap<'llm'>(MODEL_OBJECT_SPECS);
 
 /** Actions, from the same declaration that gives each kind its fields — so a kind cannot
  *  advertise an action its body has no affordance for. */
 export const SPEC_ACTIONS: Readonly<Record<string, readonly string[]>> = Object.fromEntries(
   [
-    ...FOUNDER_OBJECT_SPECS, ...ACADEMIC_OBJECT_SPECS, ...HIRING_OBJECT_SPECS,
+    ...FOUNDER_OBJECT_SPECS, ...ACADEMIC_OBJECT_SPECS, ...HIRING_OBJECT_SPECS, ...CAREER_OBJECT_SPECS,
     ...PEOPLE_OBJECT_SPECS, ...SHARED_OBJECT_SPECS, ...DATA_SCIENCE_OBJECT_SPECS,
     ...OPERATIONS_OBJECT_SPECS, ...LEGAL_OBJECT_SPECS, ...SELL_MOTION_OBJECT_SPECS,
+    ...MODEL_OBJECT_SPECS,
   ].map((spec) => [spec.kind, spec.actions]),
 );

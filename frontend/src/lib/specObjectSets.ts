@@ -43,5 +43,12 @@ import './legalObjects';
 // header gives: a set that registers itself and is never listed works in whichever surface
 // happens to import it and silently renders nothing everywhere else.
 import './sellMotionObjects';
+// The job search from the SEEKER's side — the other half of the hiring transaction, and
+// the first vocabulary authored by one person about their own working life. Listed here
+// for the reason the header gives; see `career.ts` for why none of it folds into hiring.
+import './careerObjects';
+// The Models group as spec DATA — `llm` and its derived rate card. Listed here for the
+// reason the header gives; see `modelObjects.ts` for why `evermind` is not in it.
+import './modelObjects';
 
 export {};

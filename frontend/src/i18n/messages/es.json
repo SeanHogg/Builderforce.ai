@@ -894,6 +894,12 @@
     "convertToOkr": "Convertir en objetivo OKR",
     "convertToTask": "Convertir en tarea",
     "convertToOkrConfirm": "¿Promover esta épica a un objetivo OKR? Sus tareas secundarias se vincularán al nuevo objetivo y este elemento del tablero se eliminará.",
+    "epicPriority": {
+      "low": "Baja",
+      "medium": "Media",
+      "high": "Alta",
+      "urgent": "Urgente"
+    },
     "epicStatus": {
       "backlog": "Pendientes",
       "todo": "Por hacer",
@@ -903,12 +909,6 @@
       "done": "Hecha",
       "blocked": "Bloqueada",
       "shipped": "Entregado"
-    },
-    "epicPriority": {
-      "low": "Baja",
-      "medium": "Media",
-      "high": "Alta",
-      "urgent": "Urgente"
     }
   },
   "ide": {
@@ -3533,6 +3533,8 @@
     "signInToGet": "Inicia sesión para obtener",
     "installFailed": "No se pudo añadir a tu Conocimiento. Inténtalo de nuevo.",
     "checkoutUnavailable": "El pago aún no está disponible en esta implementación.",
+    "checkoutCancelled": "Se canceló el pago. No se realizó ningún cargo.",
+    "checkoutFailed": "No pudimos confirmar ese pago. Si se te cobró, contacta con soporte.",
     "installing": "Instalando…",
     "by": "por {author}"
   },
@@ -8979,7 +8981,7 @@
     "analyzeSelectNone": "Borrar selección",
     "analyzeApplyCta": "Corregir {count} seleccionados",
     "analyzeApplying": "Corrigiendo…",
-    "analyzeApplied": "Corregido: {corrected} corregidos, {forgotten} olvidados. El modelo está ahora en v{version}.",
+    "analyzeApplied": "{corrected} corregidas y reenseñadas, {forgotten} eliminadas de la recuperación (la influencia ya aprendida se sustituye con la corrección, no se borra). El modelo está ahora en v{version}.",
     "analyzeSkipped": "No se pudieron aplicar {count}.",
     "tabsLabel": "Controles de Evermind",
     "tabTeach": "Enseñar",
@@ -8992,7 +8994,8 @@
     "diagnosticsCopied": "Copiado al portapapeles.",
     "diagnosticsShow": "Mostrar informe",
     "diagnosticsHide": "Ocultar informe",
-    "diagnosticsManualHint": "Aquí se ha bloqueado la copia automática: el informe está seleccionado abajo, pulsa Ctrl/Cmd+C para copiarlo."
+    "diagnosticsManualHint": "Aquí se ha bloqueado la copia automática: el informe está seleccionado abajo, pulsa Ctrl/Cmd+C para copiarlo.",
+    "analyzeCoverage": "Se revisaron las {analyzed} memorias más recientes de {total}: ejecútalo de nuevo para continuar con el resto."
   },
   "topbar": {
     "cart": "Carrito de compras",
@@ -11683,6 +11686,8 @@
         "expired": "caducada",
         "undecryptable": "credencial ilegible",
         "unsupported-auth": "guardado como suscripción, pero este proveedor necesita una clave de API",
+        "other-workspace": "conectada en otro espacio de trabajo, no en este",
+        "lookup_failed": "no se pudo consultar la credencial: inténtalo de nuevo en breve",
         "unavailable": "no disponible",
         "failed": "con errores",
         "upstream_error": "error del proveedor del modelo",
@@ -12311,7 +12316,14 @@
     "errorComplete": "No se pudo finalizar la sesión",
     "startSession": "Iniciar daily",
     "startSessionHint": "Iniciar la daily",
-    "startSessionFacilitatorOnly": "Solo el facilitador puede iniciarla"
+    "startSessionFacilitatorOnly": "Solo el facilitador puede iniciarla",
+    "briefcase": {
+      "open": "{count} asignadas — abrir trabajo"
+    },
+    "assignedWork": {
+      "assignedTo": "{count} asignadas · {name}",
+      "empty": "Nada asignado."
+    }
   },
   "meetings": {
     "title": "Reuniones",
@@ -12953,7 +12965,8 @@
     "logMambaFailInit": "❌ No se pudo inicializar el modelo Mamba: {reason}",
     "logMambaEpoch": "  📊 Época {epoch}: pérdida={loss}",
     "logMambaComplete": "✅ Entrenamiento Mamba completado — pérdida final: {loss}",
-    "logMambaFailed": "❌ Falló el entrenamiento Mamba: {error}"
+    "logMambaFailed": "❌ Falló el entrenamiento Mamba: {error}",
+    "corpusRefused": "Este conjunto de datos no puede usarse como corpus de entrenamiento."
   },
   "evermindBuild": {
     "title": "Compilación de Evermind",
@@ -15756,7 +15769,8 @@
       "Research": "Investigación",
       "Hiring": "Contratación",
       "Operations": "Operaciones",
-      "Revenue": "Ingresos"
+      "Revenue": "Ingresos",
+      "Career": "Carrera"
     },
     "datasetRowLimit": "Tu plan admite hasta {limit} filas de datos por importación al lienzo.",
     "datasetNoColumns": "No se encontró ninguna columna en ese archivo.",
@@ -15974,7 +15988,6 @@
       "noFollowUp": "No se registró ninguna acción de seguimiento.",
       "evermindSyncing": "Sincronizando el Evermind del proyecto activo…",
       "evermindSyncingDetail": "Cargando la versión actual, la actividad de aprendizaje, la disponibilidad y las contribuciones recientes.",
-      "model": "Modelo",
       "learned": "Aprendido",
       "queued": "En cola",
       "trainingLoss": "Pérdida de entrenamiento",
@@ -16474,7 +16487,8 @@
       "pipelineWeighted": "Ponderado {amount}",
       "pipelineOpen": "{count} abiertas · {amount}",
       "pipelineUnpriced": "{count} sin precio",
-      "pipelineOdds": "{percent} %"
+      "pipelineOdds": "{percent} %",
+      "adapterVersion": "Adaptador"
     },
     "editor": {
       "toolbar": "Formato",
@@ -16847,7 +16861,16 @@
       "call": "Llamada",
       "trial": "Prueba",
       "trustPacket": "Paquete de confianza",
-      "mutualActionPlan": "Plan de acción conjunto"
+      "mutualActionPlan": "Plan de acción conjunto",
+      "equityGrant": "Concesión de acciones",
+      "convertible": "SAFE / pagaré",
+      "payRun": "Nómina",
+      "job": "Puesto",
+      "jobApplication": "Candidatura",
+      "applicationPipeline": "Embudo de candidaturas",
+      "coverLetter": "Carta de presentación",
+      "interviewPrep": "Preparación de entrevista",
+      "runway": "Autonomía financiera"
     },
     "twilioSetup": {
       "title": "Integración de Twilio",
@@ -16968,7 +16991,6 @@
     "prompt": "Instrucción",
     "status": "Estado",
     "priority": "Prioridad",
-    "model": "Modelo",
     "prd": "PRD",
     "role": "Rol",
     "tools": "Herramientas",
@@ -17770,6 +17792,10 @@
       "field-operations": {
         "name": "Operaciones de campo",
         "description": "Gestiona el trabajo que vendes: los activos que mantienes, las órdenes sobre ellos, el día en que se despachan, las piezas que consumen y el certificado que las hace legales."
+      },
+      "job-hunt": {
+        "name": "Centro de mando de búsqueda de empleo",
+        "description": "Gestiona la búsqueda de empleo con objetos en vez de con la memoria: cuánto dura el dinero, las ofertas que merecen la pena, una versión del CV por puesto, la carta, el ensayo de la entrevista y el embudo que te dice quién ha dejado de responder."
       }
     },
     "pitch": {
@@ -20341,7 +20367,129 @@
     "noticeInvoiceChased": "{reference} reclamada — enviada a {to}.",
     "noticeInvoiceChaseNoRecipient": "Reclamación de {reference} registrada, pero la tarjeta no tiene correo del cliente al que enviarla.",
     "noticeInvoiceActionFailed": "No se ha podido hacer. No se ha enviado nada.",
-    "noticePayRunSync": "Pide a Brain que sincronice las nóminas: las lee de tu proveedor de nóminas conectado."
+    "noticePayRunSync": "Pide a Brain que sincronice las nóminas: las lee de tu proveedor de nóminas conectado.",
+    "stickyShapeEllipse": "Elipse",
+    "stickyShapeRhombus": "Rombo",
+    "stickyShapeTriangle": "Triángulo",
+    "stickyShapeParallelogram": "Paralelogramo",
+    "stickyShapeStar": "Estrella",
+    "stickyShapeArrow": "Flecha",
+    "career": {
+      "empty": "Este {label} aún no tiene nada escrito.",
+      "emptyHint": "Pide a Brain que lo investigue y lo rellene, o ábrelo en el inspector para escribirlo tú.",
+      "meterLabel": "{label}: {score} de 100",
+      "freshJustNow": "ahora mismo",
+      "freshMinutes": "hace {count} min",
+      "freshHours": "hace {count} h",
+      "freshDays": "hace {count} d",
+      "label": {
+        "job": "Puesto",
+        "jobApplication": "Candidatura",
+        "applicationPipeline": "Embudo de candidaturas",
+        "coverLetter": "Carta de presentación",
+        "interviewPrep": "Preparación de entrevista",
+        "runway": "Autonomía financiera"
+      },
+      "status": {
+        "researching": "Investigando",
+        "drafting": "En redacción",
+        "draft": "Borrador",
+        "notTracked": "Sin seguimiento",
+        "notPrepared": "Sin preparar",
+        "notCalculated": "Sin calcular"
+      },
+      "field": {
+        "employer": "Empleador",
+        "location": "Ubicación",
+        "compensation": "Retribución",
+        "postingUrl": "Oferta",
+        "postedAt": "Publicada",
+        "closesAt": "Cierra",
+        "requirements": "Requisitos",
+        "matchScore": "Coincidencia",
+        "matchedSkills": "Aptitudes coincidentes",
+        "missingSkills": "Aptitudes ausentes",
+        "verdict": "Veredicto",
+        "jobRef": "Puesto",
+        "proposalRef": "Propuesta",
+        "stage": "Etapa",
+        "submittedAt": "Enviada",
+        "lastResponseAt": "Última respuesta",
+        "followUpAt": "Seguimiento",
+        "channel": "Canal",
+        "contact": "Contacto",
+        "resumeRef": "CV enviado",
+        "coverLetterRef": "Carta enviada",
+        "offerTerms": "Condiciones de la oferta",
+        "daysSinceResponse": "Días en silencio",
+        "seeking": "Busca",
+        "weeklyTarget": "Objetivo semanal",
+        "applications": "Candidaturas",
+        "total": "Total",
+        "open": "Abiertas",
+        "responseRate": "Tasa de respuesta",
+        "interviewRate": "Tasa de entrevistas",
+        "longestSilence": "Silencio más largo",
+        "bottleneck": "Cuello de botella",
+        "addressedTo": "Dirigida a",
+        "hook": "Frase de apertura",
+        "body": "Carta",
+        "evidence": "Evidencia",
+        "referees": "Referencias",
+        "wordCount": "Palabras",
+        "interviewType": "Tipo de entrevista",
+        "scheduledAt": "Programada",
+        "panel": "Panel",
+        "questions": "Preguntas",
+        "riskAreas": "Puntos débiles",
+        "questionsToAsk": "Preguntas que hacer",
+        "stories": "Historias preparadas",
+        "rehearsed": "Ensayadas",
+        "currency": "Moneda",
+        "savings": "Ahorros",
+        "monthlyExpenses": "Gastos mensuales",
+        "monthlyIncome": "Ingresos mensuales",
+        "expectedInflows": "Entradas previstas",
+        "expectedOutflows": "Salidas previstas",
+        "projection": "Proyección",
+        "netMonthlyBurn": "Consumo neto mensual",
+        "weeksRemaining": "Semanas restantes",
+        "pressure": "Presión",
+        "assumptions": "Supuestos",
+        "sources": "Fuentes",
+        "summary": "Resumen"
+      },
+      "column": {
+        "component": "Componente",
+        "amount": "Importe",
+        "notes": "Notas",
+        "role": "Puesto",
+        "employer": "Empleador",
+        "stage": "Etapa",
+        "submittedAt": "Enviada",
+        "lastResponseAt": "Última respuesta",
+        "jobRef": "Puesto",
+        "requirement": "Requisito",
+        "claim": "Afirmación",
+        "proof": "Prueba",
+        "name": "Nombre",
+        "focus": "Enfoque",
+        "question": "Pregunta",
+        "category": "Categoría",
+        "difficulty": "Dificultad",
+        "lookFor": "Qué se busca",
+        "answer": "Tu respuesta",
+        "label": "Etiqueta",
+        "situation": "Situación",
+        "action": "Acción",
+        "result": "Resultado",
+        "inMonths": "En meses",
+        "month": "Mes",
+        "balance": "Saldo",
+        "note": "Nota"
+      }
+    },
+    "agentModel": "Modelo del agente"
   },
   "canvasCommands": {
     "cleanLayout": "Ordenar el diseño del lienzo",
@@ -23226,6 +23374,30 @@
     "confirming": "Confirmando tu pago…",
     "payByTransfer": "Esta factura se paga por transferencia bancaria. Responde al mensaje que te envió este enlace si necesitas los datos de la cuenta.",
     "settled": "Esta factura está saldada. Gracias."
+  },
+  "taskStatus": {
+    "backlog": "Pendientes",
+    "todo": "Por hacer",
+    "ready": "Lista",
+    "in_progress": "En curso",
+    "in_review": "En revisión",
+    "done": "Hecha",
+    "blocked": "Bloqueada",
+    "shipped": "Entregado"
+  },
+  "agentWorker": {
+    "title": "Ejecutor de agentes en el navegador",
+    "intro": "Ejecuta los agentes asignados a los carriles de tus tableros directamente en esta pestaña, cada uno con su propio modelo. A medida que los agentes terminan, el kanban avanza de forma autónoma.",
+    "run": "Ejecutar agentes pendientes",
+    "running": "Ejecutando…",
+    "runAria": "Ejecutar agentes pendientes",
+    "tally": "Ejecutados {ran} · Completados {completed} · Fallidos {failed}",
+    "outcomesAria": "Resultados de la ejecución",
+    "outcome": {
+      "idle": "Nada que ejecutar",
+      "completed": "Completado",
+      "failed": "Fallido"
+    }
   },
   "milestones": {
     "heading": "Calendario de pagos",

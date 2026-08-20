@@ -13,6 +13,7 @@ import {
   type RequestOptions,
 } from './apiClient';
 import { getOrSetClientCached, invalidateClientCache } from '@/infrastructure/http/readThrough';
+import type { ColumnClassification, DatasetUsePolicy } from '@builderforce/creation-canvas-contract';
 import type {
   Project,
   IdeProject,
@@ -546,6 +547,32 @@ export async function generateDataset(
     }
   }
   return res.json() as Promise<Dataset>;
+}
+
+/**
+ * Promote a CLASSIFIED canvas dataset into a fine-tune corpus.
+ *
+ * Distinct from {@link generateDataset}, which synthesises instruction pairs from a
+ * prompt: this carries real rows a person uploaded, together with the classification and
+ * the use policy authored on the board. Sending them in one call is deliberate — a corpus
+ * created in one request and classified in a second is a corpus that can be trained on in
+ * between, which is the window the whole gate exists to close.
+ */
+export async function importCanvasDataset(input: {
+  projectId: number | string;
+  name: string;
+  examples: Array<{ instruction: string; input?: string; output: string }>;
+  capabilityPrompt?: string;
+  classifications?: readonly ColumnClassification[];
+  usePolicy?: DatasetUsePolicy | null;
+  sourceSessionId?: string;
+  sourceObjectId?: string;
+}): Promise<Dataset> {
+  return apiRequest<Dataset>(`${IDE}/datasets/import`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
 }
 
 export async function listDatasets(projectId: number | string): Promise<Dataset[]> {

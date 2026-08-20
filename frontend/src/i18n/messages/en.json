@@ -894,6 +894,12 @@
     "convertToOkr": "Convert to OKR objective",
     "convertToTask": "Convert to task",
     "convertToOkrConfirm": "Promote this epic to an OKR objective? Its child tasks will be linked to the new objective and this board item will be removed.",
+    "epicPriority": {
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High",
+      "urgent": "Urgent"
+    },
     "epicStatus": {
       "backlog": "Backlog",
       "todo": "To do",
@@ -903,12 +909,6 @@
       "done": "Done",
       "blocked": "Blocked",
       "shipped": "Shipped"
-    },
-    "epicPriority": {
-      "low": "Low",
-      "medium": "Medium",
-      "high": "High",
-      "urgent": "Urgent"
     }
   },
   "ide": {
@@ -3533,6 +3533,8 @@
     "signInToGet": "Sign in to get",
     "installFailed": "Couldn't add this to your Knowledge. Try again.",
     "checkoutUnavailable": "Paid checkout isn't available on this deployment yet.",
+    "checkoutCancelled": "Payment was cancelled. Nothing was charged.",
+    "checkoutFailed": "We couldn't confirm that payment. If you were charged, contact support.",
     "installing": "Installing…",
     "by": "by {author}"
   },
@@ -8979,7 +8981,7 @@
     "analyzeSelectNone": "Clear selection",
     "analyzeApplyCta": "Fix {count} selected",
     "analyzeApplying": "Fixing…",
-    "analyzeApplied": "Fixed: {corrected} corrected, {forgotten} forgotten. Model is now at v{version}.",
+    "analyzeApplied": "{corrected} corrected and re-taught, {forgotten} removed from recall (already-learned influence is superseded by the correction, not erased). Model is now at v{version}.",
     "analyzeSkipped": "{count} could not be applied.",
     "tabsLabel": "Evermind controls",
     "tabTeach": "Teach",
@@ -8992,7 +8994,8 @@
     "diagnosticsCopied": "Copied to your clipboard.",
     "diagnosticsShow": "Show report",
     "diagnosticsHide": "Hide report",
-    "diagnosticsManualHint": "Copying automatically was blocked here — the report is selected below, press Ctrl/Cmd+C to copy it."
+    "diagnosticsManualHint": "Copying automatically was blocked here — the report is selected below, press Ctrl/Cmd+C to copy it.",
+    "analyzeCoverage": "Reviewed the {analyzed} most recent of {total} memories — run again to continue through the rest."
   },
   "topbar": {
     "cart": "Shopping cart",
@@ -11683,6 +11686,8 @@
         "expired": "expired",
         "undecryptable": "unreadable credential",
         "unsupported-auth": "stored as a subscription, but this provider needs an API key",
+        "other-workspace": "connected in a different workspace, not this one",
+        "lookup_failed": "credential lookup failed — try again shortly",
         "unavailable": "unavailable",
         "failed": "failed",
         "upstream_error": "model provider error",
@@ -12311,7 +12316,14 @@
     "errorComplete": "Could not complete session",
     "startSession": "Start standup",
     "startSessionHint": "Start the standup",
-    "startSessionFacilitatorOnly": "Only the facilitator can start"
+    "startSessionFacilitatorOnly": "Only the facilitator can start",
+    "briefcase": {
+      "open": "{count} assigned — open work"
+    },
+    "assignedWork": {
+      "assignedTo": "{count} assigned · {name}",
+      "empty": "Nothing assigned."
+    }
   },
   "meetings": {
     "title": "Meetings",
@@ -12953,7 +12965,8 @@
     "logMambaFailInit": "❌ Mamba model failed to initialise: {reason}",
     "logMambaEpoch": "  📊 Epoch {epoch}: loss={loss}",
     "logMambaComplete": "✅ Mamba training complete — final loss: {loss}",
-    "logMambaFailed": "❌ Mamba training failed: {error}"
+    "logMambaFailed": "❌ Mamba training failed: {error}",
+    "corpusRefused": "This dataset cannot be used as a training corpus."
   },
   "evermindBuild": {
     "title": "Evermind build",
@@ -15756,7 +15769,8 @@
       "Research": "Research",
       "Hiring": "Hiring",
       "Operations": "Operations",
-      "Revenue": "Revenue"
+      "Revenue": "Revenue",
+      "Career": "Career"
     },
     "datasetRowLimit": "This plan supports up to {limit} dataset rows per canvas import.",
     "datasetNoColumns": "No columns were found in that file.",
@@ -15974,7 +15988,6 @@
       "noFollowUp": "No follow-up action recorded.",
       "evermindSyncing": "Syncing active project Evermind…",
       "evermindSyncingDetail": "Loading the current version, learning activity, readiness, and recent contributions.",
-      "model": "Model",
       "learned": "Learned",
       "queued": "Queued",
       "trainingLoss": "Training loss",
@@ -16474,7 +16487,8 @@
       "pipelineWeighted": "Weighted {amount}",
       "pipelineOpen": "{count} open · {amount}",
       "pipelineUnpriced": "{count} unpriced",
-      "pipelineOdds": "{percent}%"
+      "pipelineOdds": "{percent}%",
+      "adapterVersion": "Adapter"
     },
     "editor": {
       "toolbar": "Formatting",
@@ -16847,7 +16861,16 @@
       "call": "Call",
       "trial": "Trial",
       "trustPacket": "Trust packet",
-      "mutualActionPlan": "Mutual action plan"
+      "mutualActionPlan": "Mutual action plan",
+      "equityGrant": "Equity grant",
+      "convertible": "SAFE / note",
+      "payRun": "Pay run",
+      "job": "Job",
+      "jobApplication": "Application",
+      "applicationPipeline": "Application pipeline",
+      "coverLetter": "Cover letter",
+      "interviewPrep": "Interview prep",
+      "runway": "Runway"
     },
     "twilioSetup": {
       "title": "Twilio integration",
@@ -16968,7 +16991,6 @@
     "prompt": "Prompt",
     "status": "Status",
     "priority": "Priority",
-    "model": "Model",
     "prd": "PRD",
     "role": "Role",
     "tools": "Tools",
@@ -17770,6 +17792,10 @@
       "field-operations": {
         "name": "Field operations",
         "description": "Run the work you sell: the assets you look after, the jobs against them, the day they are dispatched on, the parts they consume, and the certificate that makes them lawful."
+      },
+      "job-hunt": {
+        "name": "Job search command center",
+        "description": "Run a job search as objects rather than memory: how long the money lasts, the postings worth chasing, a résumé variant per role, the letter, the rehearsal, and the pipeline that says who has gone quiet."
       }
     },
     "pitch": {
@@ -20341,7 +20367,129 @@
     "noticeInvoiceChased": "{reference} chased — sent to {to}.",
     "noticeInvoiceChaseNoRecipient": "{reference} chase recorded, but there is no customer email on the card to send it to.",
     "noticeInvoiceActionFailed": "That could not be done. Nothing was sent.",
-    "noticePayRunSync": "Ask Brain to sync pay runs — it reads them back from your connected payroll provider."
+    "noticePayRunSync": "Ask Brain to sync pay runs — it reads them back from your connected payroll provider.",
+    "stickyShapeEllipse": "Ellipse",
+    "stickyShapeRhombus": "Diamond",
+    "stickyShapeTriangle": "Triangle",
+    "stickyShapeParallelogram": "Parallelogram",
+    "stickyShapeStar": "Star",
+    "stickyShapeArrow": "Arrow",
+    "career": {
+      "empty": "This {label} has nothing authored yet.",
+      "emptyHint": "Ask Brain to research and fill it, or open the inspector to write it yourself.",
+      "meterLabel": "{label}: {score} out of 100",
+      "freshJustNow": "just now",
+      "freshMinutes": "{count}m ago",
+      "freshHours": "{count}h ago",
+      "freshDays": "{count}d ago",
+      "label": {
+        "job": "Job",
+        "jobApplication": "Application",
+        "applicationPipeline": "Application pipeline",
+        "coverLetter": "Cover letter",
+        "interviewPrep": "Interview prep",
+        "runway": "Runway"
+      },
+      "status": {
+        "researching": "Researching",
+        "drafting": "Drafting",
+        "draft": "Draft",
+        "notTracked": "Not tracked",
+        "notPrepared": "Not prepared",
+        "notCalculated": "Not calculated"
+      },
+      "field": {
+        "employer": "Employer",
+        "location": "Location",
+        "compensation": "Compensation",
+        "postingUrl": "Posting",
+        "postedAt": "Posted",
+        "closesAt": "Closes",
+        "requirements": "Requirements",
+        "matchScore": "Match",
+        "matchedSkills": "Matched skills",
+        "missingSkills": "Missing skills",
+        "verdict": "Verdict",
+        "jobRef": "Job",
+        "proposalRef": "Proposal",
+        "stage": "Stage",
+        "submittedAt": "Submitted",
+        "lastResponseAt": "Last reply",
+        "followUpAt": "Follow up",
+        "channel": "Channel",
+        "contact": "Contact",
+        "resumeRef": "Résumé sent",
+        "coverLetterRef": "Cover letter sent",
+        "offerTerms": "Offer terms",
+        "daysSinceResponse": "Days silent",
+        "seeking": "Seeking",
+        "weeklyTarget": "Weekly target",
+        "applications": "Applications",
+        "total": "Total",
+        "open": "Still open",
+        "responseRate": "Reply rate",
+        "interviewRate": "Interview rate",
+        "longestSilence": "Longest silence",
+        "bottleneck": "Bottleneck",
+        "addressedTo": "Addressed to",
+        "hook": "Opening line",
+        "body": "Letter",
+        "evidence": "Evidence",
+        "referees": "Referees",
+        "wordCount": "Words",
+        "interviewType": "Interview type",
+        "scheduledAt": "Scheduled",
+        "panel": "Panel",
+        "questions": "Questions",
+        "riskAreas": "Exposed gaps",
+        "questionsToAsk": "Questions to ask",
+        "stories": "Prepared stories",
+        "rehearsed": "Rehearsed",
+        "currency": "Currency",
+        "savings": "Savings",
+        "monthlyExpenses": "Monthly outgoings",
+        "monthlyIncome": "Monthly income",
+        "expectedInflows": "Expected inflows",
+        "expectedOutflows": "Expected outgoings",
+        "projection": "Projection",
+        "netMonthlyBurn": "Net monthly burn",
+        "weeksRemaining": "Weeks left",
+        "pressure": "Pressure",
+        "assumptions": "Assumptions",
+        "sources": "Sources",
+        "summary": "Summary"
+      },
+      "column": {
+        "component": "Component",
+        "amount": "Amount",
+        "notes": "Notes",
+        "role": "Role",
+        "employer": "Employer",
+        "stage": "Stage",
+        "submittedAt": "Submitted",
+        "lastResponseAt": "Last reply",
+        "jobRef": "Job",
+        "requirement": "Requirement",
+        "claim": "Claim",
+        "proof": "Proof",
+        "name": "Name",
+        "focus": "Focus",
+        "question": "Question",
+        "category": "Category",
+        "difficulty": "Difficulty",
+        "lookFor": "Look for",
+        "answer": "Your answer",
+        "label": "Label",
+        "situation": "Situation",
+        "action": "Action",
+        "result": "Result",
+        "inMonths": "In months",
+        "month": "Month",
+        "balance": "Balance",
+        "note": "Note"
+      }
+    },
+    "agentModel": "Agent model"
   },
   "canvasCommands": {
     "cleanLayout": "Clean up canvas layout",
@@ -23226,6 +23374,30 @@
     "confirming": "Confirming your payment…",
     "payByTransfer": "This invoice is paid by bank transfer. Reply to the message that sent you this link if you need the account details.",
     "settled": "This invoice is settled. Thank you."
+  },
+  "taskStatus": {
+    "backlog": "Backlog",
+    "todo": "To do",
+    "ready": "Ready",
+    "in_progress": "In progress",
+    "in_review": "In review",
+    "done": "Done",
+    "blocked": "Blocked",
+    "shipped": "Shipped"
+  },
+  "agentWorker": {
+    "title": "Browser agent worker",
+    "intro": "Runs the agents assigned to your boards' swimlanes directly in this tab, each on its own model. As agents finish, the kanban advances autonomously.",
+    "run": "Run pending agents",
+    "running": "Running…",
+    "runAria": "Run pending agents",
+    "tally": "Ran {ran} · Completed {completed} · Failed {failed}",
+    "outcomesAria": "Run outcomes",
+    "outcome": {
+      "idle": "Nothing to run",
+      "completed": "Completed",
+      "failed": "Failed"
+    }
   },
   "milestones": {
     "heading": "Payment schedule",

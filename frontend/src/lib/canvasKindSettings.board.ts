@@ -78,9 +78,25 @@ registerKindSettings({
 registerKindSettings({
   kinds: ['llm'],
   marketplace: { sellable: () => true },
+  // The rate card and the volume are AUTHORED here; every number computed from them —
+  // cost per request, projected monthly cost, monthly tokens, the input/output split —
+  // is derived by the spec and drawn on the card, so there is deliberately no control
+  // for a price. See `lib/modelObjects.ts`. Until these existed the cost fields were
+  // writable only by Brain, which is why a projector nothing could feed sat unimported.
   fields: [
     { name: 'model', control: 'text', section: 'basic', labelKey: 'model', surface: 'full', placeholderKey: 'modelPlaceholder' },
     { name: 'instructions', control: 'textarea', section: 'basic', labelKey: 'instructions', surface: 'full' },
+    { name: 'costPerMillionInput', control: 'number', section: 'basic', labelKey: 'llmCostPerMillionInput', surface: 'full', min: 0 },
+    { name: 'costPerMillionOutput', control: 'number', section: 'basic', labelKey: 'llmCostPerMillionOutput', surface: 'full', min: 0 },
+    { name: 'tokensPerRequestIn', control: 'number', section: 'basic', labelKey: 'llmTokensPerRequestIn', surface: 'full', min: 0 },
+    { name: 'tokensPerRequestOut', control: 'number', section: 'basic', labelKey: 'llmTokensPerRequestOut', surface: 'full', min: 0 },
+    { name: 'monthlyRequests', control: 'number', section: 'basic', labelKey: 'llmMonthlyRequests', surface: 'full', min: 0 },
+    // 0–1, not 0–100: it is the share `projectLlmCost` multiplies by, and converting in
+    // the control would put the same conversion in two places the day a second surface
+    // edits it.
+    { name: 'cacheHitRate', control: 'number', section: 'advanced', labelKey: 'llmCacheHitRate', surface: 'full', min: 0, max: 1 },
+    { name: 'latencyP50Ms', control: 'number', section: 'advanced', labelKey: 'llmLatencyP50Ms', surface: 'full', min: 0 },
+    { name: 'latencyP95Ms', control: 'number', section: 'advanced', labelKey: 'llmLatencyP95Ms', surface: 'full', min: 0 },
   ],
   actions: [],
 });
@@ -93,7 +109,23 @@ registerKindSettings({
     { name: 'stickyColor', control: 'color', section: 'basic', labelKey: 'stickyColor', surface: 'full' },
     {
       name: 'stickyShape', control: 'select', section: 'basic', labelKey: 'stickyShape', surface: 'full',
-      options: [{ value: 'square', labelKey: 'stickyShapeSquare' }, { value: 'round', labelKey: 'stickyShapeRound' }],
+      // The geometries `CreationCanvas.module.css` can DRAW. It offered two while the
+      // renderer drew none, so `stickyShape` was a stored preference with no visible
+      // effect; now that an ellipse renders as an ellipse a person can reach the same
+      // shapes an imported Miro board arrives carrying, rather than only being able to
+      // receive them. The values are Miro's own spellings so an import and a hand-drawn
+      // shape are one value space — two would need a translation table at the boundary,
+      // and a translation table is where a shape silently becomes a note.
+      options: [
+        { value: 'square', labelKey: 'stickyShapeSquare' },
+        { value: 'round', labelKey: 'stickyShapeRound' },
+        { value: 'ellipse', labelKey: 'stickyShapeEllipse' },
+        { value: 'rhombus', labelKey: 'stickyShapeRhombus' },
+        { value: 'triangle', labelKey: 'stickyShapeTriangle' },
+        { value: 'parallelogram', labelKey: 'stickyShapeParallelogram' },
+        { value: 'star', labelKey: 'stickyShapeStar' },
+        { value: 'right_arrow', labelKey: 'stickyShapeArrow' },
+      ],
     },
   ],
   actions: [],

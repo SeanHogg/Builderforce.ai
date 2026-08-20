@@ -86,6 +86,9 @@ const CONTEXT_FIELDS = [
   'gaps', 'recommendations', 'milestones', 'code', 'language', 'path', 'url', 'branch',
   'diagnostics', 'findings', 'checks', 'results', 'result', 'nextSteps', 'actions', 'remediation',
   'mediaKind', 'capabilityId', 'provider', 'templateId', 'templateCategory', 'outputFormat', 'outputUrl', 'thumbnailUrl', 'duration', 'pages', 'units', 'mcpServer', 'mcpTool', 'resumeFamily',
+  // Which posting a résumé variant was cut for. Readable, or a board with nine variants
+  // reads to the model as nine identical documents and it re-tailors the wrong one.
+  'tailoredFor',
   'diagramFormat',
   // A framed page is opaque to everything else on the board; the title and text
   // the panel read off it are what let Brain reason about the page a user is

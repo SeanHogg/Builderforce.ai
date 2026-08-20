@@ -40,7 +40,7 @@ export type CreationNodeData = {
  */
 export type CreationObjectGroup =
   | 'Build' | 'Data' | 'Knowledge' | 'Insights' | 'Work' | 'Quality' | 'Teaching' | 'Research'
-  | 'Pitch' | 'People' | 'Hiring' | 'Operations' | 'Revenue' | 'Agents' | 'Models' | 'Collaborate' | 'Integrations';
+  | 'Pitch' | 'People' | 'Hiring' | 'Career' | 'Operations' | 'Revenue' | 'Agents' | 'Models' | 'Collaborate' | 'Integrations';
 
 /**
  * Someone on this canvas right now.

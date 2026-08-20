@@ -59,8 +59,24 @@ design, chargebacks and PCI scope reduction preferred. Comfortable with Python
 and Kubernetes.`;
 
 describe('career tools — the article contract', () => {
-  it('registers exactly the ids the ported articles link to', () => {
-    expect(CAREER_TOOLS.map((t) => t.id).sort()).toEqual([...ARTICLE_SLUGS].sort());
+  it('registers every id the ported articles link to', () => {
+    // A SUPERSET, not an equality, and the difference is deliberate. The failure this
+    // guard exists to catch is a RENAMED or DELETED slug, which 404s a reader who
+    // followed a call to action — so every article slug must still resolve, forever.
+    // An ADDED tool cannot cause that failure: `personal-runway` was the first one no
+    // article links to, and asserting equality would have made "ship a free tool the
+    // catalogue did not previously have" fail a test whose entire subject is dead links.
+    const registered = new Set(CAREER_TOOLS.map((tool) => tool.id));
+    for (const slug of ARTICLE_SLUGS) {
+      expect(registered.has(slug), `${slug} is linked by a blog post and must stay registered`).toBe(true);
+    }
+  });
+
+  it('registers each id exactly once', () => {
+    // What equality was also buying, kept: two entries under one slug means `getTool`
+    // resolves whichever the array happened to reach first.
+    const ids = CAREER_TOOLS.map((tool) => tool.id);
+    expect(new Set(ids).size).toBe(ids.length);
   });
 
   it('resolves every article slug through the shared registry', () => {
