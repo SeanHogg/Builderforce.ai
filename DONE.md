@@ -1,31 +1,40 @@
-## ✅ RESOLVED 2026-08-20 — 4.98 MiB of brand icons nobody asked for, in every edge function
+## ✅ RESOLVED 2026-08-20 — The Worker size ceiling is now measured, and the first theory about it was wrong
 
 `Deploy frontend` could not upload: `error 10027 — Your Worker exceeded the size limit of 10 MiB`.
 It surfaced only once the `sharp` fix let the build reach upload for the first time.
 
-`scripts/check-worker-size.mjs` (added in the same pass) measured it: **11.29 MiB compressed,
-44.80 MiB raw across 217 modules**, with one outlier — a single shared webpack chunk at
-**6.71 MiB** against a long tail of ~200 route functions at ~0.3 MiB each.
+`scripts/check-worker-size.mjs` measures the bundle the moment it exists, prints the largest
+modules, fails at Cloudflare's actual limit and warns at 90%. Before it, the ceiling was
+measured by nothing but Cloudflare, at upload, eleven minutes into a deploy, in an error that
+names no file. It reported: **11.29 MiB compressed, 44.80 MiB raw across 217 modules**, with one
+outlier — a single shared webpack chunk at **6.71 MiB** against a tail of ~200 route functions
+at ~0.3 MiB each.
 
-That chunk was `simple-icons`. `src/app/agents/integrations/page.tsx` imported 31 icons from
-it and read exactly one field of each (`.path`, a short SVG string). The package ships ONE
-module — `index.js` and `index.mjs` are 4.98 MiB apiece, every brand it knows, and v16 removed
-the per-icon entry points. It sets `sideEffects: false`, so on the CLIENT webpack shakes it;
-but the page is a SERVER component, Next resolves the CommonJS build for it, and CommonJS
-cannot be tree-shaken. All ~3,300 icons arrived whole, in a chunk shared by every route.
+**The threshold was corrected by what it measured.** It first failed at 90%, reasoning that the
+build which adds the weight should be the one that breaks. The real number retired that: this
+app sits legitimately near the ceiling, and a gate that rejects deploys Cloudflare would accept
+is a gate somebody switches off — after which it guards nothing.
 
-Fixed by generating the subset: `scripts/gen-brand-paths.mjs` reads the installed package and
-writes `src/app/agents/brandPaths.ts` — **35.2 KB for 32 icons**, verified byte-identical to
-upstream. Generated rather than hand-copied so the provenance is executable and a version bump
-reproduces it; `simple-icons` moved from `dependencies` to `devDependencies`, since only the
-generator needs it now.
+### The first theory was wrong, and the guard is what proved it
 
-**The guard's own threshold was corrected by what it measured.** It first failed at 90% of the
-limit, on the reasoning that the build which adds the weight should be the one that breaks.
-The real number retired that: this app sits legitimately close to the ceiling, and a gate that
-rejects deploys Cloudflare accepts is a gate somebody switches off. It now FAILS at Cloudflare's
-actual limit and WARNS at 90%, carrying the same module breakdown either way. Both paths were
-smoke-tested against synthetic bundles before shipping.
+The obvious suspect was `simple-icons`: the integrations page imported 31 icons from a package
+that ships ONE 4.98 MiB module with no per-icon entry points, and since the page is a server
+component Next resolves its CommonJS build, which cannot be tree-shaken. A tidy story, and the
+arithmetic fit.
+
+It was wrong. The build after the change reported **the identical 11.29 MiB / 44.80 MiB / 217
+modules, and the same chunk hash** — byte for byte. Whatever is in that 6.71 MiB chunk,
+`simple-icons` was not it; it was already being shaken out.
+
+The change was kept because it stands on its own — `scripts/gen-brand-paths.mjs` generates the
+35.2 KB subset actually rendered (spot-verified byte-identical upstream), and `simple-icons`
+moved to `devDependencies` since only the generator needs it — but it is recorded here as what
+it turned out to be: a dependency-surface tidy-up, not the size fix it was committed as.
+
+So the guard grew a second half: when the bundle is over, it now reports what is INSIDE the
+largest chunk — the biggest embedded string literals (what data-shaped weight looks like) and
+the most repeated long identifiers (what code-shaped weight looks like). Guessing from the
+dependency list cost a build cycle; the next investigation starts from evidence.
 
 ---
 

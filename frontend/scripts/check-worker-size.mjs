@@ -126,6 +126,55 @@ if (compressed > WARN_BYTES) {
     '       arrived whole. Fixed by generating a subset: scripts/gen-brand-paths.mjs.\n',
   );
 
+  /*
+   * WHAT IS ACTUALLY IN THE BIGGEST ONE.
+   *
+   * The list above says WHICH file is heavy; it cannot say why, and guessing from the
+   * dependency list is how an afternoon disappears — a plausible 4.98 MiB barrel import
+   * was blamed for this bundle, and removing it left the chunk hash byte-for-byte
+   * identical. So this reports evidence instead: the largest embedded STRING LITERALS,
+   * which is what data-shaped weight looks like (JSON, base64, path data, wordlists), and
+   * the most repeated long identifiers, which is what code-shaped weight looks like.
+   */
+  const biggest = sized[0];
+  if (biggest) {
+    const text = readFileSync(biggest.file, 'utf8');
+    say(`\n   Inside ${relative(workerDir, biggest.file).split('\\').join('/')}:\n`);
+
+    const literals = [...text.matchAll(/"((?:[^"\\]|\\.){2000,})"|'((?:[^'\\]|\\.){2000,})'/g)]
+      .map((m) => m[1] ?? m[2] ?? '')
+      .sort((a, b) => b.length - a.length)
+      .slice(0, 8);
+
+    if (literals.length > 0) {
+      const held = literals.reduce((total, literal) => total + literal.length, 0);
+      say(`     largest embedded strings (${mib(held)} across the top ${literals.length}):`);
+      for (const literal of literals) {
+        const preview = literal.slice(0, 70).replace(/\s+/g, ' ');
+        say(`       ${String(Math.round(literal.length / 1024)).padStart(6)} KB  ${preview}…`);
+      }
+    } else {
+      say('     no large embedded strings — this chunk is CODE, not data.');
+    }
+
+    const freq = new Map();
+    const SCAN_BYTES = 4 * MIB;
+    // Bounded at 40 chars: a real identifier is not 400 long -- past that it is data
+    // (base64, a hash, a key) wearing an identifier's shape. Sampled because counting
+    // every match over megabytes builds one Map entry per unique base64 run and dies
+    // before reporting; a webpack chunk repeats its identifiers, so the head is
+    // representative.
+    for (const [ident] of text.slice(0, SCAN_BYTES).matchAll(/[A-Za-z_$][A-Za-z0-9_$]{11,39}/g)) {
+      freq.set(ident, (freq.get(ident) ?? 0) + 1);
+    }
+    const top = [...freq.entries()]
+      .sort((a, b) => b[1] * b[0].length - a[1] * a[0].length)
+      .slice(0, 12);
+    say(`\n     most repeated long identifiers (by length × count${text.length > SCAN_BYTES ? `, first ${mib(SCAN_BYTES)} sampled` : ''}):`);
+    for (const [ident, n] of top) say(`       ${String(n).padStart(6)}x  ${ident}`);
+    say('');
+  }
+
   // Only a bundle Cloudflare would REJECT fails the build. The warning above is loud on
   // purpose; failing early on a deploy that would have worked is how a guard gets muted.
   if (over) process.exit(1);
