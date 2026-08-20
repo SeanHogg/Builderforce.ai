@@ -1,0 +1,11 @@
+{
+  "name": "@builderforce/ide-templates",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The IDE starter scaffolds (vanilla / mobile) and the modality→template choice, shared by the API that SEEDS them into R2 and the frontend that mounts them as the Run fallback. Source-only: every consumer aliases the bare specifier straight at src/index.ts.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "types": "./src/index.ts"
+}

@@ -55,6 +55,9 @@ export default defineConfig({
   },
   resolve: {
     alias: {
+      '@builderforce/ide-templates': fileURLToPath(
+        new URL('../packages/ide-templates/src/index.ts', import.meta.url),
+      ),
       '@builderforce/agent-tools': fileURLToPath(
         new URL('../packages/agent-tools/src/index.ts', import.meta.url),
       ),

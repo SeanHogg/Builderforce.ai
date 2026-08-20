@@ -1,3 +1,51 @@
+## ✅ RESOLVED 2026-08-19 — The IDE starter templates are one module, not two copies and a test
+
+**Roadmap item closed:** *The IDE starter templates exist twice, guarded only by a test* (§15 · CI/CD) — deleted from
+[ROADMAP.md](./ROADMAP.md).
+
+### The deferral reason was stale
+
+The entry deferred the real fix because "wiring a new package through `wrangler` + `next-on-pages` risks the deploy
+path". That path already exists and already ships: **`packages/creation-canvas-contract` is consumed by BOTH** the
+Worker (`api/tsconfig.json` paths + `api/vitest.config.ts` alias, resolved by esbuild at bundle time) and the Next app
+(`frontend/tsconfig.json` paths). `@builderforce/ide-templates` is wired identically — a source-only package aliased
+straight at `src/index.ts`, no build step, no `transpilePackages` entry, nothing new for the deploy to do.
+
+### Why the parity test was never going to be enough
+
+The two copies were held together by a byte-for-byte assertion. They drifted anyway, and it shipped a broken product:
+the frontend knew about the `webmobile` modality and the API's registry did not, so **"Web + Mobile" projects were
+created with no files at all**.
+
+The test could not have caught it. The two FILE MAPS agreed perfectly — what had forked was the
+modality→template **decision**, which lived in `TEMPLATE_BY_MODALITY` on one side and `defaultsForModality` on the
+other. A guard comparing the data was structurally blind to the branch.
+
+So the package owns both: the scaffolds AND `templateForModality()`. Adding a modality is now one edit that both
+runtimes see, which is the class of bug that produced the outage.
+
+### What moved
+
+- **`packages/ide-templates`** — `VANILLA_TEMPLATE`, `MOBILE_TEMPLATE`, the `TEMPLATES` registry,
+  `TEMPLATE_BY_MODALITY`, and `templateForModality()`.
+- **`api/.../projectTemplate.ts`: 421 → 198 lines.** It keeps what is genuinely the Worker's — `SeedableProject`, the
+  repo-linked skip, the unseeded/backfill gates, and the R2 writes — and re-exports the scaffold names so existing
+  importers keep one import site. `scaffoldForProject` is now the explicit-template lookup plus a call to the shared
+  decision.
+- **`frontend/.../vanillaDefaults.ts`: 215 → 34 lines.** A naming layer over the contract: the `*_DEFAULTS` aliases stay
+  because the Run and publish call sites read in terms of "defaults", and `defaultsForModality` delegates to
+  `templateForModality`, falling back to vanilla because Run must boot *something* rather than mount an empty
+  WebContainer.
+
+### The test now proves reachability, not equality
+
+Equality is true by construction, so asserting it would be theatre. `templateParity.test.ts` asserts **reference
+identity** (`toBe`, not `toEqual`) in both directions — deep equality would still pass if someone reintroduced a local
+copy with the same contents, which is the exact state this change exists to end. It also pins the decision for
+`designer` / `mobile` / `webmobile`, asserts the generative modalities (video / evermind / finetune / voice) seed
+*nothing*, and asserts no registered scaffold is empty — the silent failure mode that leaves a workspace blank.
+10 tests, green; both typechecks clean; no new guard failures in either package.
+
 ## ✅ RESOLVED 2026-08-19 — One override editor instead of two, a README that describes the API that exists, and frontend lint back to zero errors
 
 **Roadmap items closed** (all from *Lint / test debt*, §15): the `TenantTokenLimitOverrideEditor` /

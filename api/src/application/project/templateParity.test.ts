@@ -1,37 +1,54 @@
 /**
- * Drift guard for the IDE starter templates.
+ * The IDE starter templates are ONE module now — this proves both runtimes reach it.
  *
- * The scaffold exists in TWO runtimes that cannot share a module: the API
- * (Cloudflare Worker) SEEDS it into R2 at project creation, and the frontend
- * keeps the same files as the run-only fallback the WebContainer mounts when a
- * workspace file is missing or empty. Since neither package can import the
- * other, this test is what keeps them one source in practice.
+ * ── WHAT CHANGED ────────────────────────────────────────────────────────────────
+ * The scaffold used to exist as two byte-identical copies (the API's
+ * `projectTemplate.ts`, which SEEDS them into R2, and the frontend's
+ * `vanillaDefaults.ts`, which mounts them as the Run fallback), held together by a
+ * byte-for-byte assertion here because neither package could import the other.
  *
- * They drifted once already and it shipped a broken product: the frontend knew
- * about the `webmobile` modality while the API's template registry did not, so
- * "Web + Mobile" projects were created with no files at all. A byte-for-byte
- * assertion turns that class of silent divergence into a failing test.
+ * They still drifted, and it shipped a broken product: the frontend knew about the
+ * `webmobile` modality and the API's registry did not, so "Web + Mobile" projects were
+ * created with no files at all. The comparison could not catch it, because the two
+ * FILE MAPS agreed — it was the modality→template DECISION that had forked.
+ *
+ * Both now import `@builderforce/ide-templates`, so the file maps are identical by
+ * construction and the decision is a single `templateForModality`. What is left to
+ * test is not equality but REACHABILITY: that both consumers still resolve the shared
+ * module (the alias exists in `api/tsconfig.json` + `api/vitest.config.ts` and in
+ * `frontend/tsconfig.json`), and that neither has quietly reintroduced a local copy.
  */
 import { describe, it, expect } from 'vitest';
 import { VANILLA_TEMPLATE, MOBILE_TEMPLATE, templateForProject } from './projectTemplate';
+import * as shared from '@builderforce/ide-templates';
 import {
   VANILLA_DEFAULTS,
   MOBILE_DEFAULTS,
   defaultsForModality,
 } from '../../../../frontend/src/lib/vanillaDefaults';
 
-describe('IDE template parity (api ↔ frontend)', () => {
-  it('seeds byte-identical vanilla files to the ones Run falls back on', () => {
-    expect(VANILLA_TEMPLATE).toEqual(VANILLA_DEFAULTS);
+describe('IDE templates are one shared module', () => {
+  /**
+   * Reference equality, not deep equality. `toEqual` would still pass if someone
+   * reintroduced a local copy with the same contents — which is the exact state this
+   * change exists to end — so identity is the assertion that means anything now.
+   */
+  it('the API seeds the SAME object the shared package exports', () => {
+    expect(VANILLA_TEMPLATE).toBe(shared.VANILLA_TEMPLATE);
+    expect(MOBILE_TEMPLATE).toBe(shared.MOBILE_TEMPLATE);
   });
 
-  it('seeds byte-identical mobile files to the ones Run falls back on', () => {
-    expect(MOBILE_TEMPLATE).toEqual(MOBILE_DEFAULTS);
+  it('the frontend Run fallback is the SAME object the shared package exports', () => {
+    expect(VANILLA_DEFAULTS).toBe(shared.VANILLA_TEMPLATE);
+    expect(MOBILE_DEFAULTS).toBe(shared.MOBILE_TEMPLATE);
   });
 
-  // The two sides pick a template independently — the API from the project row,
-  // the frontend from the live modality. Every modality that runs code must
-  // agree, or a project gets seeded with one scaffold and run with the other.
+  /**
+   * The decision, not just the data. The API resolves a template from a project ROW
+   * and the frontend from the live modality; both must land on the same scaffold, or a
+   * project is seeded with one and run with the other. `webmobile` is the regression
+   * case and is listed explicitly.
+   */
   it.each(['designer', 'mobile', 'webmobile'])('agrees on the %s scaffold', (modality) => {
     const seeded = templateForProject({
       id: 1,
@@ -40,6 +57,21 @@ describe('IDE template parity (api ↔ frontend)', () => {
       sourceControlRepoFullName: null,
       githubRepoUrl: null,
     });
-    expect(seeded).toEqual(defaultsForModality(modality));
+    expect(seeded).toBe(defaultsForModality(modality));
+  });
+
+  /** A modality that never runs the Vite app must seed nothing rather than a scaffold. */
+  it.each(['video', 'evermind', 'finetune', 'voice'])('seeds no scaffold for %s', (modality) => {
+    expect(shared.templateForModality(modality)).toBeNull();
+  });
+
+  /** Every scaffold the registry can select must be non-empty — an empty map is the
+   *  failure mode that left workspaces blank, and it is silent without this. */
+  it('exposes only non-empty scaffolds', () => {
+    const entries = Object.entries(shared.TEMPLATES);
+    expect(entries.length).toBeGreaterThan(0);
+    for (const [name, files] of entries) {
+      expect(Object.keys(files).length, `${name} scaffold is empty`).toBeGreaterThan(0);
+    }
   });
 });

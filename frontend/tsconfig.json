@@ -25,6 +25,7 @@
       "@/*": [
         "./src/*"
       ],
+      "@builderforce/ide-templates": ["../packages/ide-templates/src/index.ts"],
       "@builderforce/creation-canvas-contract": ["../packages/creation-canvas-contract/src/index.ts"]
     },
     "target": "ES2017"
