@@ -1,3 +1,155 @@
+## ✅ RESOLVED 2026-08-19 — Both Known Implementation Gaps, and the guard that could not see a hoisted predicate
+
+The two rows that had stood in ROADMAP.md's **Known Implementation Gaps** table since
+2026-08-18 are closed: a paid knowledge listing can now be bought, and the agent-host
+channels endpoint reads a real registry instead of a hardcoded empty array. A third item
+was not on any list — a repository guard was reporting scoped queries as unscoped, which is
+the kind of false positive that teaches people to stop believing a guard.
+
+### A guard that punished the DRY answer
+
+`check-tenant-scope` admits a tenant predicate built OUTSIDE the statement, because
+conditions are routinely accumulated before the query. It only recognised one shape of
+that: a spread array (`.where(and(...conds))`). A predicate hoisted into a single `SQL`
+const and shared by several statements — exactly what the DRY rule asks for when three
+queries share one scope — read as **unscoped**, and the only way to silence it was to
+re-type the tenant predicate at every call site.
+
+* **Both shapes are now admitted on the same terms**: the declaration has to carry a tenant
+  predicate of its own. Identifiers are collected from the `.where(...)` arguments
+  specifically, paren-balanced, so a `.set({ … })` payload or a `.from()` alias can never
+  stand in for a predicate.
+* **The frozen baseline ratcheted 151 → 138 files.** Every one of the 32 improvements was
+  verified as caused by the guard change and not by unrelated edits, by running the previous
+  guard against the same tree: it reported no improvements at all.
+
+### Paid knowledge listings, through the payment machine that already existed
+
+`POST /listings/:id/checkout` answered `{ requiresConfig: true }` and recorded nothing, so
+`/install` 402'd forever and a seller could publish a price that was never payable.
+
+* **`application/finance/verifiedCheckout.ts`** is the extracted primitive: "was this
+  checkout really paid, really for this, and really by you?". Three settlements — a creation
+  listing, a tenant invoice and a hosted-app subscription — each wrote those five checks out
+  longhand, **each with its own comment explaining the ownership check**, which is three
+  places for the security-critical one to drift. All three were migrated onto it in the same
+  pass; the refusal wording and error TYPE stay each domain's own.
+* **`application/knowledge/knowledgeCommerce.ts`** contributes only what is genuinely its
+  own — which listing, who may buy it, what a purchase entitles them to. It refuses to sell
+  a workspace what it published, to charge twice, to take money for a free listing, and to
+  honour a payment that no longer covers a raised price. The seller is credited through the
+  same lifetime-threshold rule creation listings use, so the fee does not depend on which
+  page a seller published from.
+* **A buyer who closes the tab is still granted.** Knowledge would otherwise have been the
+  one paid product on the platform without that safety net. The three webhook branches that
+  now exist collapsed into one `settleOneOff` helper, which states the acknowledgement
+  contract once: incomplete metadata is acknowledged rather than retried forever, and a
+  throw is acknowledged too, because the common cause is the redirect having already
+  recorded the purchase.
+* **A seller could not install their own paid listing** — the purchase gate applied to the
+  publishing workspace as well, while checkout correctly refuses to sell somebody their own
+  document. Found while wiring the gate; fixed in the same pass.
+
+**Not verified live**: no test card has been driven through this, for the same reason
+recorded under the Stripe section of ROADMAP.md — `STRIPE_SECRET_KEY` and
+`STRIPE_WEBHOOK_SECRET` are not set on the Worker. Every decision is covered by tests
+against the real handlers.
+
+### Where an agent host speaks
+
+`GET /api/agent-hosts/:id/channels` returned a hardcoded `{ channels: [] }` while
+`AgentHostChannelsContent` shipped a complete CRUD panel against it — so the list was
+permanently empty and add/toggle/delete answered 404.
+
+* **`agent_host_channels`** (migration 0943). Deliberately NOT a `connector_connections`
+  row: a connection is an ACCOUNT ("our production Slack"), a channel is a routing TARGET
+  inside one ("#general") bound to the host that runs the adapter. One account carries many
+  targets, so folding them together would put a repeating group in a row read on every
+  listing. `connection_id` points at the account when one exists.
+* **The credential is write-only.** The panel takes a bot token or webhook URL; it is sealed
+  with the same per-tenant AES-GCM crypto every other integration uses and is never read
+  back out. The read model projects whether a config EXISTS. A panel that round-tripped the
+  value would put a live Slack credential in every browser that opened it and every log that
+  recorded the response. An empty config clears the credentials; an ABSENT one leaves them
+  alone, so a toggle cannot erase them.
+* **The platform is a column value** from one declared list, not a table per platform and
+  not a branch. An unknown platform is refused rather than stored.
+* **The host's own verdict rides the relay.** A `channel.status` frame lands on
+  `POST /channel-status`, whose tenant comes from the verified host key and never the body.
+  "Credentials are stored" and "the adapter actually connected" are different facts, and
+  only the host knows the second.
+* **The panel was not localized at all** — it shipped hardcoded English. It is now fully
+  routed through a new `agentHostChannels` namespace in all five catalogs, with real
+  translations, theme tokens throughout, and a layout that wraps at 360px.
+
+**Still open, and registered rather than implied**: config flows UP only — a channel added
+in the portal is recorded, not connected. That, the USD-only price, and the platform union
+declared in two packages are the three rows now in the Known Implementation Gaps table.
+
+## ✅ RESOLVED 2026-08-19 — A scan you can read, and a room that holds the document
+
+One Consolidated Gap Register entry closed outright ("A scanned or encrypted PDF still
+lands as an attachment, not as pages — the OCR half"), and the CODE half of "Real-time
+co-editing — server-authoritative CollaborationRoom + deploy" (the deploy half remains, and
+is stated below rather than quietly folded in).
+
+### Dropping a scanned contract and reading it on the board
+
+`uploadAttachmentSource` has retained the bytes of every unreadable drop since it shipped —
+`office/pdf.ts` correctly refuses a page it cannot decode above the legibility gate, and
+neither an image-only page nor an `/Encrypt`ed file can ever pass it — so the escalation
+door was open the whole time and nothing read through it.
+
+* **`POST /api/creative/attachments/read`** takes the retained `sourceFileKey` (or an
+  inline `dataUrl`, the guest path) and hands the file to the multimodal pool with the
+  `attachment_ocr` use case — the slug `poolRouting.hasOcr` already matches, so the
+  OCR-capable models float up. It returns MARKDOWN and not JSON: the route knows nothing
+  about the document, so imposing a schema would be inventing one.
+* **The prompt transcribes rather than summarises**, and instructs `[illegible]` over a
+  guess. The caller turns the answer into a document somebody will read and edit; a summary
+  would silently destroy the clause they dropped it to find, and a plausible invention
+  reads as authoritative while saying something nobody wrote.
+* **`canvas_read_attachment`** is the board-side action — the general case of the
+  escalation `canvas_import_resume` had for exactly one destination. It produces a
+  `document` beside the attachment, carries the source file name as provenance (an
+  `[illegible]` marker is only honest if the original is still reachable), and reports the
+  count so the turn can say so instead of presenting a partial read as complete.
+* **It refuses the cheap cases loudly**: a CSV or an Office file is 415, because those are
+  parsed for free in the browser and a model would spend tokens producing a worse answer.
+  A guest session is refused with the reason, because the read is billed to a workspace.
+* 8 route tests, including the two things a response cannot show — the tenant boundary on a
+  guessable key, and the OCR routing signal.
+
+### The collaboration room is authoritative (code half)
+
+`yjs`, `y-protocols` and `lib0` are now dependencies of `worker/`, and `CollaborationRoom`
+holds the `Y.Doc` rather than relaying bytes past it:
+
+* It **answers the handshake**. A Yjs client connecting to a relay never completes sync —
+  nobody answers its SyncStep1 — so a late joiner adopted an empty document and then merged
+  its emptiness into the room. `shouldSeed` in the client hook (lowest user id wins, after
+  a settle window) is a workaround for that missing server, and no longer load-bearing.
+* It **persists** to `state.storage`, debounced 2s so a write is never on the keystroke
+  path, so a room that evicts or a person who opens the document an hour later gets the
+  document.
+* It **holds awareness**, so a joiner sees who is already here instead of waiting up to the
+  15-second heartbeat, and a disconnect retires exactly that participant's cursors instead
+  of leaving a ghost for the 30-second timeout.
+* **A hibernation bug went with it.** Sessions lived in an instance `Map`, and
+  `state.acceptWebSocket` lets the runtime evict the object between messages — after which
+  that Map is empty, `webSocketMessage` finds no session, and every message on that
+  connection is dropped. It works in a test and on a fast local demo and fails on an idle
+  connection. Identity now rides on the socket (`serializeAttachment`) and the roster is
+  read from `state.getWebSockets()`.
+* The old test suite asserted on that private `Map`, which is how it stayed green through
+  the defect. Rewritten against the real `yjs`/`y-protocols` packages: 19 tests covering the
+  handshake, the late joiner, persistence, awareness retirement and the JSON protocol the
+  terminal surfaces still use. 63 worker tests pass.
+
+**Still open, and unchanged:** `worker/` has not been deployed, `NEXT_PUBLIC_COLLAB_WS_URL`
+is unset, and no live 2-client smoke has run. That entry stays in ROADMAP.md with the code
+half struck out — see it for what remains.
+
 ## ✅ RESOLVED 2026-08-19 — Evermind knowledge is auditable for its whole life, generation has a clock, and the tool-choice bar can finally be calibrated
 
 ## ✅ RESOLVED 2026-08-19 — The HRMS / ATS category exists, and it is read-only
@@ -2936,6 +3088,18 @@ baseline the sales deck computed differently from the same rows.
   `northStar`/`proveThisIdea` strings, in all five catalogs with real translations. The
   scorecard's hardcoded `#b14f45` / `#16856f` deltas became `--tone-danger-ink` /
   `--tone-success-ink`, which had no dark-theme definition before.
+* **And the two blind spots that let it ship are closed.** Both halves of the miss were
+  invisible to `check-i18n-keys.mjs`, which is why the VSIX job caught them and nothing
+  else did. (a) `proveThisIdea` is a `labelKey` in the `CANVAS_SESSION_ACTIONS` registry,
+  so it never appears as a literal at a `t(…)` call site — the board rendered the dotted
+  path as its button label with every guard green. (b) The `outcomeMetrics.*` vocabulary is
+  assembled inside `outcomeMetrics.ts`, which FALLS BACK to the English on the wire, so an
+  absent key renders plausible English in all five locales rather than a raw key and
+  nothing goes red at all. `messages.test.ts` now enumerates both — the guard's own stated
+  contract for registry-supplied suffixes — and `translated()` only accepts a key listed in
+  the exported `OUTCOME_METRIC_MESSAGE_KEYS`, so a new fixed literal cannot be added
+  without listing it. Both were verified by deleting keys (including the hyphenated
+  `family.read-prove`) and confirming red, not by assuming.
 * **Honest denominators.** A rate with no denominator reports `null` — "Not measured" —
   never zero; `OUTCOME_DEFINITION_VERSION` rides every payload so a deck states which
   definitions produced the figure it quotes; and proof grading is excluded from the
