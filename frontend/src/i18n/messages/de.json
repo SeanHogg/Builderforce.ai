@@ -4870,20 +4870,8 @@
       "autoOriginMix": "Wer die Arbeit anlegt",
       "autoFunnelTable": "Autonomie-Funnel (Tabelle)",
       "autoCoverage": "Prüfungsabdeckung",
-      "autoVerdictMissRate": {
-        "en": "Reviews with no verdict",
-        "zh": "未给出裁定的审阅",
-        "es": "Revisiones sin veredicto",
-        "fr": "Revues sans verdict",
-        "de": "Prüfungen ohne Urteil"
-      },
-      "autoVerdictByAgent": {
-        "en": "Verdict miss rate by agent",
-        "zh": "按代理划分的裁定缺失率",
-        "es": "Tasa de veredictos omitidos por agente",
-        "fr": "Taux de verdicts manquants par agent",
-        "de": "Quote fehlender Urteile je Agent"
-      },
+      "autoVerdictMissRate": "Prüfungen ohne Urteil",
+      "autoVerdictByAgent": "Quote fehlender Urteile je Agent",
       "chatModeWorkShare": "Arbeitsanteil",
       "chatModeExecutionRate": "Ausführungsquote",
       "chatModeCostShare": "Anteil der Ausführungskosten",

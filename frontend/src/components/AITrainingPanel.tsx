@@ -730,13 +730,17 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted, initialDataM
                     role="status"
                     className="mt-1 text-xs rounded px-2 py-1.5"
                     style={{
-                      background: 'var(--surface-raised, #2a2118)',
-                      color: 'var(--text-primary, #f5f5f5)',
-                      border: '1px solid var(--border-warning, var(--border, #7c5a1e))',
+                      // Tokens with no literal fallback: all four are declared in
+                      // globals.css under BOTH themes, so a hex here is dead weight that
+                      // only ever renders if the stylesheet failed to load — and it reads
+                      // as a dark-only value in a light theme when it does.
+                      background: 'var(--surface-raised)',
+                      color: 'var(--text-primary)',
+                      border: '1px solid var(--warning)',
                     }}
                   >
                     <strong>{t('corpusRefused')}</strong>{' '}
-                    <span style={{ color: 'var(--text-secondary, #c9c9c9)' }}>{corpusGate.reason}</span>
+                    <span style={{ color: 'var(--text-secondary)' }}>{corpusGate.reason}</span>
                   </p>
                 )}
                 <input

@@ -90,7 +90,7 @@ function Rung({
     <div role={role} style={{ display: 'flex', gap: 8, marginInlineStart: indent, minWidth: 0 }}>
       {/* The step marker doubles as the connector: a left rule in the rung's own
           accent, so the ladder reads as a chain without an SVG to draw one. */}
-      <span aria-hidden="true" style={{ width: 3, borderRadius: 2, background: accent, flex: '0 0 auto' }} />
+      <span aria-hidden="true" style={{ width: 3, borderRadius: 'var(--radius-full)', background: accent, flex: '0 0 auto' }} />
       <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0, flex: 1 }}>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
           <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>

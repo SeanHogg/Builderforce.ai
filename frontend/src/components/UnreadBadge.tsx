@@ -31,7 +31,9 @@ export function UnreadBadge({ count, size = 18 }: { count?: number | null; size?
         minWidth: size,
         height: size,
         padding: '0 6px',
-        borderRadius: size,
+        // A pill, not a computed corner: `borderRadius: size` happened to draw one
+        // only while the height matched, and is off the radius scale by construction.
+        borderRadius: 'var(--radius-full)',
         fontSize: 11,
         fontWeight: 700,
         lineHeight: 1,

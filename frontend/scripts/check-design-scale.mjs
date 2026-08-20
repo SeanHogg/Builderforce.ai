@@ -226,6 +226,11 @@ const COLOUR_EXEMPT = [
   // fill is worth carrying onto the vertex. Nothing is painted here, and no theme
   // has an opinion about what the SVG spec's default is.
   /^lib\/diagramSvg\.ts$/,
+  // The résumé MINIATURE on the blog's template gallery. It draws the same printed
+  // sheet `canvasResumeRenderer` emits — already exempt on these grounds — at 104px
+  // wide: `--paper` is the document's own variable, and its `#fff` is the paper the
+  // sheet is printed on, which must not flip with the reader's theme.
+  /^components\/blog\/BlogResumeTemplates\.module\.css$/,
   /^lib\/qrCode\.ts$/,
   /^components\/builder\/QrCode\.tsx$/,
   // A résumé is PAPER. This composes the standalone `<!doctype html>` document that
@@ -419,6 +424,9 @@ const FONT_SIZE_EXEMPT = [
   // The résumé document's own type — see COLOUR_EXEMPT. Its sizes are print
   // measurements inside a standalone HTML document, not roles in this product's ramp.
   /^lib\/canvasResumeRenderer\.ts$/,
+  // The résumé miniature of that same sheet — a 104px-wide A4 page whose type and
+  // corners are the DOCUMENT's proportions, not this product's chrome.
+  /^components\/blog\/BlogResumeTemplates\.module\.css$/,
 ];
 
 /**
@@ -446,6 +454,15 @@ const RADIUS_EXEMPT = [
   // is laid out on is measured in millimetres. A `px` scale is not the right unit and
   // `var(--radius-sm)` resolves to nothing where this HTML is opened.
   /^lib\/canvasResumeRenderer\.ts$/,
+  // The résumé MINIATURE of that same sheet, on the blog's template gallery: a
+  // 104px-wide A4 page whose 1px and 3px corners are the DOCUMENT's proportions.
+  /^components\/blog\/BlogResumeTemplates\.module\.css$/,
+  // The board declares its own palette (§2.6 rule 9) and this file is already in
+  // COLOUR_EXEMPT on those grounds. Its off-scale radii are the same kind of thing:
+  // `[data-sticky-shape]` DRAWS eight geometries, so 22px is what makes a `round`
+  // sticky round and 2px is what makes a `square` one square. Snapping them to the
+  // chrome's radius scale would change the shape the author picked.
+  /^components\/creation-canvas\/CreationCanvas\.module\.css$/,
 ];
 
 function collect(dir, out = []) {
