@@ -65,18 +65,36 @@ export function fakeDb(results: Array<unknown[] | Error> = []): FakeDb {
         return chain;
       };
     }
-    // Thenable: awaiting the builder resolves the next queued result.
-    chain.then = (
-      resolve: (value: unknown) => unknown,
-      reject?: (reason: unknown) => unknown,
-    ) => {
+    /** Run the statement, consuming one queued result. Shared by every settle
+     *  method below so a builder cannot be resolved twice by two different ones. */
+    const settle = (): Promise<unknown> => {
       const next = queue.shift() ?? [];
       // A queued Error means "this statement rejects" — needed to exercise the
       // paths where the DATABASE is the arbiter (a unique-index conflict the
       // service is expected to translate rather than a read it can pre-empt).
-      if (next instanceof Error) return Promise.reject(next).then(resolve, reject);
-      return Promise.resolve(next).then(resolve, reject);
+      return next instanceof Error ? Promise.reject(next) : Promise.resolve(next);
     };
+
+    // Thenable: awaiting the builder resolves the next queued result.
+    chain.then = (
+      resolve: (value: unknown) => unknown,
+      reject?: (reason: unknown) => unknown,
+    ) => settle().then(resolve, reject);
+
+    /**
+     * A Drizzle builder is a full PromiseLike, and production code uses that:
+     * a best-effort write is spelled `db.update(...).set(...).where(...).catch(…)`
+     * with no `await`, which is how a failed audit write is stopped from taking
+     * down the operation it was recording.
+     *
+     * Without these, that shape throws `.catch is not a function` INSIDE the code
+     * under test — a failure that looks like a bug in the service and is really a
+     * gap in the double. `finally` is here for the same reason: both are part of
+     * the interface being stood in for, so both are provided rather than the one
+     * that happened to be needed first.
+     */
+    chain.catch = (reject: (reason: unknown) => unknown) => settle().catch(reject);
+    chain.finally = (onFinally: () => void) => settle().finally(onFinally);
     return chain;
   };
 

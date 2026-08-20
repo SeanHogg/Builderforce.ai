@@ -1,5 +1,38 @@
 ## ✅ RESOLVED 2026-08-19 — FO-C, the four things it still owed
 
+## ✅ RESOLVED 2026-08-19 — The revert escalation has a test, and the test double grew a `.catch`
+
+*Closes "`revertRun`'s escalation wiring has no direct test" under "Bitbucket Server
+parity". `runtime/runRollback.test.ts` (new), `test/fakeDb.ts`.*
+
+The decision inputs (`branchTeardownDecision`) and the provider module
+(`revertMergedPullRequest`) were each covered; the seam BETWEEN them was covered only by
+construction. `runRollback.test.ts` now drives `revertRun` end to end with a Drizzle
+double and asserts the four things that seam has to get right:
+
+- a `pull_request_merged` refusal escalates into `revertMergedWork`, against the
+  SNAPSHOTTED base rather than whatever the task points at now;
+- the rollback row lands on **`revert_pr`, not `reverted`** — the distinction the whole
+  subsystem exists for, because after a merge nothing is undone until a human merges the
+  revert PR, and a test that only asserted "returned ok" would pass on the wrong status.
+  The earlier refusal is cleared at the same time, so a row that escalated does not keep
+  reporting the refusal it escalated from;
+- `unsupported` (Bitbucket) keeps the ORIGINAL `pull_request_merged` refusal rather than
+  becoming `merge_revert_failed` — "we cannot reverse it here" and "the attempt failed"
+  are different facts and only one is worth retrying;
+- the refusals that must NOT escalate do not: an OPEN pull request, a merged one with no
+  number to reverse, a spent snapshot, a missing undo payload, a deleted execution.
+
+**`fakeDb` gained `catch` and `finally`.** A Drizzle builder is a full PromiseLike and
+production code uses that — a best-effort audit write is spelled
+`db.update(…).set(…).where(…).catch(…)` with no `await`, which is how a failed write is
+stopped from taking down the operation it was recording. The double implemented only
+`then`, so that shape threw `.catch is not a function` INSIDE the code under test: a
+failure that reads like a bug in the service and is really a gap in the double. Both
+settle methods share one `settle()` so a builder cannot be resolved twice. All 22 files
+and 416 tests that use the double still pass.
+
+
 The money track shipped and left four ends loose. Each was the same shape of defect the track
 itself exists to close: something DECLARED with nothing behind it.
 
