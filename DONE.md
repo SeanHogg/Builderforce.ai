@@ -1,3 +1,56 @@
+## ✅ RESOLVED 2026-08-19 — FO-E5 and its sibling: the round header is a record, and a data room can hold a file
+
+Migration **0937** closed both residuals of the FO-E pass, and the register was still carrying them as
+open — one of them as a QUESTION blocked on a decision that has since been made in the migration
+itself.
+
+**FO-E5 — `funding_rounds` had no writer, and one column was a stored total.** `grep` returned
+exactly two references to the table: the Drizzle declaration and its entity registration. So the
+`fundingRound` card's `roundType`, `targetAmount`, `valuation` and `closeTarget` were board JSON
+sitting beside an empty table, and three of the four had no column to live in.
+
+The decision the entry asked for was made the strict way: **`amount_raised` is DROPPED, not filled.**
+A stored total the `deals` allocations can contradict is the exact shape migration 0464 forbids for
+`work_estimates.lines`, so the raise projection derives "how much have we closed" from the allocation
+rows and nothing can disagree with them. `pre_money`/`post_money` stay, and the distinction is the
+point: a valuation is NEGOTIATED, not summed, so it is a fact about the round rather than a rollup.
+`application/finance/fundingRounds.ts` is the writer, and it separates the round's PLAN (typed,
+decided) from its RESULT (arithmetic over allocations).
+
+**A data room could hold a diligence obligation and not a FILE.** `resolveDataRoomShare` read a room's
+contents from `due_diligence_documents` joined through its checklists, so an encrypted
+`legal_document_files` row — the formation certificate, the executed IP assignment, the first thing a
+fund asks for — could not be put in a room at all. Both already resolve to a `kernel.artifacts` row,
+so the fix was a JOIN and not a second store: the room reference sits on `legal_document_files`
+rather than in a link table, because a file belongs to at most one room at a time and moving it is an
+act rather than a fan-out.
+
+**Why they were still listed.** Both were logged on 2026-08-19 as the residuals of the FO-E1/FO-E2
+pass and closed later the same day by 0937, which names them in its own header. The register entry and
+the migration were written by different passes over the same tree.
+
+## ✅ RESOLVED 2026-08-19 — The Recruiter and HR agents exist; the register was describing a state that ended at migration 0436
+
+**The entry claimed** that `BUILTIN_AGENTS` "seeds validator / security / compliance_auditor /
+product_manager / designer / incident_manager / manager / pr_reconciler / cto / product_owner — there
+is no `builtin_kind='recruiter'` … and no `builtin_kind='hr'`", and that closing it needed the seed
+**plus** an existing-tenant backfill in the same pass.
+
+**Both halves are done, and have been.** `provisionBuiltinAgents.ts` seeds `kind: 'recruiter'`
+(*"owns hiring: postings, screening, interviews and offers"*) and `kind: 'hr'` (*"owns people:
+onboarding, development, engagement and retention"*), and migration **0436 — the footer roster is
+filled** backfills them onto existing tenants alongside CMO, CFO, CRO and CEO, idempotently
+(`WHERE NOT EXISTS` per kind, so it is a no-op against a racing `provisionBuiltinAgents`).
+
+Both bios name **no tool ids**, which was the entry's other condition — the persisted-bio-vs-code-catalog
+trap 0379 fixed for the Manager.
+
+**Why it was still in the register.** The entry was written from the hired.video port audit (PRD 18
+T1/T3) against a roster that had three of ten seats filled. 0436 filled the remaining six as part of
+the PRD 21 footer work, which is a different track — so nobody reading either track had a reason to
+look at the other's register entry. Verified by reading the seed list and the migration, not by
+grepping for the words.
+
 ## ✅ RESOLVED 2026-08-19 — Both Known Implementation Gaps, and the guard that could not see a hoisted predicate
 
 The two rows that had stood in ROADMAP.md's **Known Implementation Gaps** table since

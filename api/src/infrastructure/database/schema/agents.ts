@@ -1059,7 +1059,7 @@ export const cronJobs = pgTable('cron_jobs', {
 
 
 // ---------------------------------------------------------------------------
-// Agent-host messaging channels (migration 0942)
+// Agent-host messaging channels (migration 0943)
 //
 // The registry behind `GET /api/agent-hosts/:id/channels`, which answered a
 // hardcoded `{ channels: [] }` while a full CRUD surface shipped against it.

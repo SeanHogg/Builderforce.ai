@@ -135,7 +135,7 @@ follows is what closing them surfaced.*
 
 ## Consolidated Gap Register — grouped index
 
-*Counts re-derived from the cleaned body on 2026-08-18. A bullet can be compound, so this is a guide, not a ticket count.*
+*Counts re-derived from the body on 2026-08-19. One entry = one top-level `- ` bullet, which is the grain the register is written in; a bullet can be compound, so this is a guide rather than a ticket count. 0 open entries.*
 
 | # | Group | Open items |
 |---|-------|-----------|
@@ -350,7 +350,7 @@ sequenced into waves because nothing in them gates the sell motion.
   **45 keys across 17 domains**, not the 40 across 15 recorded here before; `operations` and `legal`
   were added as seats since.)* The registry projection writes `<domain>.items` and `<domain>.events` for
   every seat (see DONE.md), so no surface ships an empty Trends panel, and **three domains now write real
-  numbers** — `financeRollup.ts`, `operationsRollup.ts` and `legalRollup.ts` all insert into
+  numbers** — `kernel/rollups/{finance,operations,legal}.ts` all insert into
   `metric_facts`. The other fourteen do not, as do the five derived-number rollups §3.1 names
   (`channel_performance`, `site_traffic_daily`, `arr_projections`, `quota_attainment`,
   `rd_financials_quarterly`). Each is a scheduled aggregate over a table the Step 4/5 data move has not
@@ -614,7 +614,6 @@ sequenced into waves because nothing in them gates the sell motion.
 
 ### Workforce, boards, kanban, ceremonies
 
-- **No Recruiter agent and no HR agent** *(hired.video port, T1/T3 — see [PRD 18](./specs/builderforce/18-prd-hired-video-port.md))*. `BUILTIN_AGENTS` in `api/src/application/agent/provisionBuiltinAgents.ts` seeds validator / security / compliance_auditor / product_manager / designer / incident_manager / manager / pr_reconciler / cto / product_owner — there is no `builtin_kind='recruiter'` (résumé tailoring, ATS scoring, JD matching, screening, candidate packets) and no `builtin_kind='hr'` (Career 360, career coaching, HRMS reads, org-plan review, hiring/reduction recommendations). Both need the seed **plus** the existing-tenant backfill migration in the same pass, or tenants created before the change never get them. Bios must name no tool ids — the persisted-bio-vs-code-catalog trap fixed for the Manager by 0379. Unblocks: the whole recruiting and people-ops surface having an owner a user can actually address.
 - **hired.video's `people_strategic_objectives` would fork the OKR store** *(hired.video port, T3)*. hired.video carries its own strategic-objectives + outcomes + milestones tables (`api/src/routes/people-strategy.ts`, ~5 tables in `peopleOps.ts`), and Builderforce already owns `objectives` / `key_results` with `project_id` scope (0268). A literal port would stand up a second, unreconciled OKR store. The port must map onto the existing tables and invalidate `projectsList` on write. Unblocks: `hr.org_review` reading one objective set rather than picking a side.
 
 - **Ticket %-complete treats every lane as forward progress** — `computeCompletion` (`api/src/application/task/ticketContext.ts`) ranks a ticket's lane by `swimlanes.position`, so a board that places `Blocked` late in the order (as the default board does, at position 7 of 9) reports a blocked ticket as ~87% through its lane progression. `swimlanes` carries `is_terminal` but no flag for a PARKING lane (blocked / on-hold / cancelled) that is off the delivery path. Add an `is_parking`-style column (or derive it from `action_type`/gate config), exclude those lanes from the rank denominator, and surface "parked" instead of a percentage. Until then the sign-off half of the blend is what keeps the headline number honest on a stalled ticket.
@@ -840,7 +839,7 @@ sequenced into waves because nothing in them gates the sell motion.
 
 #### What is left, and what still gates it
 
-Nine items across the three headings below. **Nothing is sequenced behind anything else any more** —
+Seven items across the three headings below. **Nothing is sequenced behind anything else any more** —
 the two foundations everything downstream waited on have both landed, so the build-order argument that
 used to sit here is finished work and lives in [DONE.md](./DONE.md).
 
@@ -848,8 +847,6 @@ used to sit here is finished work and lives in [DONE.md](./DONE.md).
 |---|---|---|
 | **FO-B3** — `jobPosting` applications | FO-B | **Blocked on a decision** — see its entry |
 | **FO-B4** — e-signature vendor adapter | FO-B | Open, unblocked |
-| **FO-E5** — the `funding_rounds` header and its stored total | FO-E | **Blocked on a decision** — see its entry |
-| A data room cannot hold a legal FILE | FO-E | Open, unblocked |
 | A watermarked BINARY is not actually stamped | FO-E | Open, unblocked |
 | `legalEntity` / `ipAsset` / `matter` have no canvas kind | FO-G | Open, unblocked |
 | `policy.acknowledge`'s return leg is never written back | FO-G | Open, unblocked |
@@ -895,29 +892,9 @@ are not file-disjoint and must be serialized and rebased before merge:
 
 > The raise is the sales board read through a different pipeline FAMILY (`deals.kind='investment'`),
 > and the data room's three safety columns are enforced at the one place a token resolves — both landed
-> 2026-08-19 (0925); see [DONE.md](./DONE.md). The three items below are what that pass left.
+> 2026-08-19 (0925); see [DONE.md](./DONE.md). The round HEADER and the data room holding a legal
+> FILE both landed the same day (0937, also in DONE.md), so the one item below is what is left.
 
-- **FO-E5 — QUESTION, not a task: `funding_rounds` still has no writer, and one of its columns is a
-  stored total.** *(new 2026-08-19, the residual of FO-E1.)* The raise is now projected from the
-  allocations, so `committed` is DERIVED and correct. The round's own header — instrument, pre/post
-  money, lead investor, close status — lives in `finance.funding_rounds`, which `grep` shows has no
-  application writer at all: the `fundingRound` card's `roundType`, `targetAmount` and `valuation` are
-  typed onto board JSON beside an empty table. Projecting the header is a small read. What is NOT small
-  is `funding_rounds.amount_raised`: it is a stored total the allocations can contradict, which is
-  exactly what the "no stored totals" rule (0464, `work_estimates.lines`) forbids — so the choice is to
-  DROP that column and derive it, or to declare the table the system of record for closed money and make
-  the projection defer to it. Recorded as a question for the same reason FO-E4 was: building either
-  answer before somebody decides is guessing, and the wrong answer produces two numbers for "how much
-  have we raised". **Blocked on that decision.** Unblocks: the round header being a record rather than
-  four fields typed onto a card.
-- **A data room can only hold a diligence obligation, not a legal FILE.** *(new 2026-08-19, the residual
-  of FO-E2.)* `resolveDataRoomShare` reads the room's contents from `due_diligence_documents` joined
-  through its checklists, so an encrypted `legal_document_files` row — the formation certificate, the
-  executed IP assignment, the thing a fund actually asks for first — cannot be put in a data room at
-  all. Both already resolve to a `kernel.artifacts` row, so the fix is a join and not a second store:
-  either a `data_room_id` on `legal_document_files`, or a `due_diligence_documents` row that points at
-  the legal file's current artifact. **Not blocked.** Unblocks: the diligence list and the document
-  vault being one room rather than two.
 - **A watermarked BINARY is served inline and is not actually stamped.** *(new 2026-08-19, the residual
   of FO-E2.)* `readDataRoomDocument` stamps text-shaped documents with the recipient and the instant, and
   a PDF or spreadsheet cannot be stamped in a Worker — so for those the column is enforced as "no

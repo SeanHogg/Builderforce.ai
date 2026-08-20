@@ -14108,7 +14108,9 @@
     "colDue": "Fällig",
     "colAge": "Alter",
     "daysOverdue": "{count, plural, one {# Tag} other {# Tage}}",
-    "current": "Aktuell"
+    "current": "Aktuell",
+    "collectionsTitle": "Überfälliges anmahnen",
+    "collectionsIntro": "Jede Nacht steigt eine überfällige Rechnung eine Stufe. Standardmäßig wird die Stufe nur erfasst und nichts versendet – dies ist also die Warteschlange: von hier senden, oder eine Rechnung auf automatisches Mahnen stellen."
   },
   "policyPacks": {
     "title": "Richtlinienpakete",
@@ -16812,7 +16814,6 @@
       "candidate": "Kandidat",
       "talentPool": "Talentpool",
       "jobPosting": "Stellenausschreibung",
-      "outreachSequence": "Kontaktsequenz",
       "shortlist": "Auswahlliste",
       "interviewLoop": "Interviewschleife",
       "scorecard": "Interview-Bewertungsbogen",
@@ -19026,7 +19027,6 @@
         "candidate": "Kandidat",
         "talentPool": "Talentpool",
         "jobPosting": "Stellenausschreibung",
-        "outreachSequence": "Kontaktsequenz",
         "shortlist": "Auswahlliste",
         "interviewLoop": "Interviewschleife",
         "scorecard": "Interview-Bewertungsbogen",
@@ -19159,7 +19159,8 @@
       "freshDays": "vor {count} T.",
       "label": {
         "funnel": "Funnel",
-        "book": "Buch"
+        "book": "Buch",
+        "sequence": "Sequenz"
       },
       "field": {
         "funnelDomain": "Funnel",
@@ -19184,7 +19185,17 @@
         "trimSize": "Endformat",
         "pageCount": "Seitenzahl",
         "figureCount": "Anzahl Abbildungen",
-        "wordCount": "Wörter"
+        "wordCount": "Wörter",
+        "direction": "Richtung",
+        "sequenceState": "Sequenzstatus",
+        "audience": "Zielgruppe",
+        "steps": "Schritte",
+        "stopOnReply": "Stopp bei Antwort",
+        "enrolments": "Teilnehmer",
+        "enrolled": "Aufgenommen",
+        "replyRate": "Antwortquote",
+        "sequenceProgress": "Fortschritt",
+        "lastRunAt": "Letzter Lauf"
       },
       "column": {
         "stage": "Phase",
@@ -19204,10 +19215,18 @@
         "altText": "Alternativtext",
         "url": "Datei",
         "chapter": "Kapitel",
-        "title": "Titel"
+        "title": "Titel",
+        "dayOffset": "Tag",
+        "channel": "Kanal",
+        "subject": "Betreff",
+        "name": "Name",
+        "contactRef": "Kontakt",
+        "stepsSent": "Gesendet",
+        "repliedAtISO": "Geantwortet"
       },
       "status": {
-        "manuscript": "Manuskript"
+        "manuscript": "Manuskript",
+        "draft": "Entwurf"
       }
     },
     "noticeGateEvaluated": "Freigabekriterium anhand der Läufe und Fehler auf diesem Board bewertet — {score} % der Kriterien erfüllt.",
@@ -20240,7 +20259,6 @@
       "barValue": "{value} ({percent} %)",
       "label": {
         "quote": "Angebot",
-        "sequence": "Sequenz",
         "call": "Anruf",
         "trial": "Testphase",
         "trustPacket": "Vertrauenspaket",
@@ -23560,5 +23578,19 @@
     "emptyProjects": "Noch keine geplanten Projekte. Füge Start- oder Fälligkeitsdaten hinzu, um sie auf der Zeitachse zu sehen.",
     "emptyTasks": "Noch keine geplanten Aufgaben. Füge Start- oder Fälligkeitsdaten hinzu, um sie auf der Zeitachse zu sehen.",
     "emptyRoadmapItems": "Noch keine geplanten Roadmap-Einträge. Füge Zieldaten hinzu, um sie auf der Zeitachse zu sehen."
+  },
+  "collections": {
+    "loading": "Mahnliste wird gelesen …",
+    "loadFailed": "Die Mahnliste konnte nicht gelesen werden.",
+    "empty": "Nichts wartet auf eine Mahnung. Sobald eine Rechnung eine Stufe erreicht, erscheint sie hier zum Versenden.",
+    "due": "{reference} — {customer}",
+    "dueDetail": "{step} · {amount} offen",
+    "send": "Senden",
+    "sending": "Wird gesendet …",
+    "sendFailed": "Diese Erinnerung konnte nicht gesendet werden.",
+    "needsAPerson": "Braucht eine Person",
+    "ladderTitle": "Was wann versendet wird",
+    "rungBefore": "{label} — {days} Tage vor Fälligkeit",
+    "rungAfter": "{label} — {days} Tage nach Fälligkeit"
   }
 }

@@ -1156,7 +1156,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
   });
 
   // ---- CHANNELS: where this host speaks -----------------------------------
-  // Backed by `agent_host_channels` (migration 0942). This used to answer a
+  // Backed by `agent_host_channels` (migration 0943). This used to answer a
   // hardcoded `{ channels: [] }` while the panel shipped a full CRUD surface
   // against it, so the list was permanently empty and the writes 404'd.
   //

@@ -14108,7 +14108,9 @@
     "colDue": "Due",
     "colAge": "Age",
     "daysOverdue": "{count, plural, one {# day over} other {# days over}}",
-    "current": "Current"
+    "current": "Current",
+    "collectionsTitle": "Chasing what is overdue",
+    "collectionsIntro": "Each night an overdue invoice climbs one rung of the ladder. By default the rung is recorded and nothing is sent, so this is the queue — send from here, or set an invoice to chase automatically."
   },
   "policyPacks": {
     "title": "Policy packs",
@@ -16811,7 +16813,6 @@
       "candidate": "Candidate",
       "talentPool": "Talent pool",
       "jobPosting": "Job posting",
-      "outreachSequence": "Outreach sequence",
       "shortlist": "Shortlist",
       "interviewLoop": "Interview loop",
       "scorecard": "Interview scorecard",
@@ -19026,7 +19027,6 @@
         "candidate": "Candidate",
         "talentPool": "Talent pool",
         "jobPosting": "Job posting",
-        "outreachSequence": "Outreach sequence",
         "shortlist": "Shortlist",
         "interviewLoop": "Interview loop",
         "scorecard": "Interview scorecard",
@@ -19159,7 +19159,8 @@
       "freshDays": "{count}d ago",
       "label": {
         "funnel": "Funnel",
-        "book": "Book"
+        "book": "Book",
+        "sequence": "Sequence"
       },
       "field": {
         "funnelDomain": "Funnel",
@@ -19184,7 +19185,17 @@
         "trimSize": "Trim size",
         "pageCount": "Page count",
         "figureCount": "Figure count",
-        "wordCount": "Words"
+        "wordCount": "Words",
+        "direction": "Direction",
+        "sequenceState": "Sequence state",
+        "audience": "Audience",
+        "steps": "Steps",
+        "stopOnReply": "Stop on reply",
+        "enrolments": "Enrolments",
+        "enrolled": "Enrolled",
+        "replyRate": "Reply rate",
+        "sequenceProgress": "Progress",
+        "lastRunAt": "Last run"
       },
       "column": {
         "stage": "Stage",
@@ -19204,10 +19215,18 @@
         "altText": "Alt text",
         "url": "File",
         "chapter": "Chapter",
-        "title": "Title"
+        "title": "Title",
+        "dayOffset": "Day",
+        "channel": "Channel",
+        "subject": "Subject",
+        "name": "Name",
+        "contactRef": "Contact",
+        "stepsSent": "Sent",
+        "repliedAtISO": "Replied"
       },
       "status": {
-        "manuscript": "Manuscript"
+        "manuscript": "Manuscript",
+        "draft": "Draft"
       }
     },
     "noticeGateEvaluated": "Release gate evaluated from the runs and defects on this board — {score}% of criteria met.",
@@ -20240,7 +20259,6 @@
       "barValue": "{value} ({percent}%)",
       "label": {
         "quote": "Quote",
-        "sequence": "Sequence",
         "call": "Call",
         "trial": "Trial",
         "trustPacket": "Trust packet",
@@ -23560,5 +23578,19 @@
     "emptyProjects": "No scheduled projects yet. Add start or due dates to see them on the timeline.",
     "emptyTasks": "No scheduled tasks yet. Add start or due dates to see them on the timeline.",
     "emptyRoadmapItems": "No scheduled roadmap items yet. Add target dates to see them on the timeline."
+  },
+  "collections": {
+    "loading": "Reading the collections queue…",
+    "loadFailed": "The collections queue could not be read.",
+    "empty": "Nothing is waiting to be chased. When an invoice passes a rung of the ladder, it appears here for you to send.",
+    "due": "{reference} — {customer}",
+    "dueDetail": "{step} · {amount} outstanding",
+    "send": "Send it",
+    "sending": "Sending…",
+    "sendFailed": "That reminder could not be sent.",
+    "needsAPerson": "Needs a person",
+    "ladderTitle": "What gets sent, and when",
+    "rungBefore": "{label} — {days} days before it falls due",
+    "rungAfter": "{label} — {days} days after it falls due"
   }
 }

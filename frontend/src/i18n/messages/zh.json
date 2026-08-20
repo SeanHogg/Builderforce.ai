@@ -14108,7 +14108,9 @@
     "colDue": "到期日",
     "colAge": "账龄",
     "daysOverdue": "逾期 {count} 天",
-    "current": "未到期"
+    "current": "未到期",
+    "collectionsTitle": "催收逾期款项",
+    "collectionsIntro": "每晚，逾期发票会沿阶梯上升一档。默认只记录该档而不发送，因此这里就是待办队列——可从此处发送，或将某张发票设为自动催收。"
   },
   "policyPacks": {
     "title": "策略包",
@@ -16811,7 +16813,6 @@
       "candidate": "候选人",
       "talentPool": "人才库",
       "jobPosting": "职位发布",
-      "outreachSequence": "触达序列",
       "shortlist": "入围名单",
       "interviewLoop": "面试流程",
       "scorecard": "面试评分表",
@@ -16854,7 +16855,7 @@
       "sticky": "便签",
       "legalDocument": "法律文件",
       "quote": "报价单",
-      "sequence": "跟进序列",
+      "sequence": "触达序列",
       "call": "通话",
       "trial": "试用",
       "trustPacket": "信任资料包",
@@ -19026,7 +19027,6 @@
         "candidate": "候选人",
         "talentPool": "人才库",
         "jobPosting": "职位发布",
-        "outreachSequence": "触达序列",
         "shortlist": "入围名单",
         "interviewLoop": "面试流程",
         "scorecard": "面试评分表",
@@ -19159,7 +19159,8 @@
       "freshDays": "{count} 天前",
       "label": {
         "funnel": "转化漏斗",
-        "book": "书籍"
+        "book": "书籍",
+        "sequence": "触达序列"
       },
       "field": {
         "funnelDomain": "漏斗类型",
@@ -19184,7 +19185,17 @@
         "trimSize": "成品尺寸",
         "pageCount": "页数",
         "figureCount": "插图数",
-        "wordCount": "字数"
+        "wordCount": "字数",
+        "direction": "方向",
+        "sequenceState": "序列状态",
+        "audience": "目标人群",
+        "steps": "步骤",
+        "stopOnReply": "回复即停",
+        "enrolments": "加入名单",
+        "enrolled": "已加入",
+        "replyRate": "回复率",
+        "sequenceProgress": "进度",
+        "lastRunAt": "上次运行"
       },
       "column": {
         "stage": "阶段",
@@ -19204,10 +19215,18 @@
         "altText": "替代文本",
         "url": "文件",
         "chapter": "章",
-        "title": "标题"
+        "title": "标题",
+        "dayOffset": "第几天",
+        "channel": "渠道",
+        "subject": "主题",
+        "name": "姓名",
+        "contactRef": "联系方式",
+        "stepsSent": "已发送",
+        "repliedAtISO": "回复时间"
       },
       "status": {
-        "manuscript": "手稿"
+        "manuscript": "手稿",
+        "draft": "草稿"
       }
     },
     "noticeGateEvaluated": "已根据此画布上的运行与缺陷评估发布门禁——满足 {score}% 的标准。",
@@ -20240,7 +20259,6 @@
       "barValue": "{value}（{percent}%）",
       "label": {
         "quote": "报价单",
-        "sequence": "跟进序列",
         "call": "通话",
         "trial": "试用",
         "trustPacket": "信任资料包",
@@ -23560,5 +23578,19 @@
     "emptyProjects": "尚无已排期的项目。添加开始日期或截止日期后即可在时间线上显示。",
     "emptyTasks": "尚无已排期的任务。添加开始日期或截止日期后即可在时间线上显示。",
     "emptyRoadmapItems": "尚无已排期的路线图条目。添加目标日期后即可在时间线上显示。"
+  },
+  "collections": {
+    "loading": "正在读取催收队列……",
+    "loadFailed": "无法读取催收队列。",
+    "empty": "没有待催收的事项。当发票到达阶梯的某一档时，会显示在此处供您发送。",
+    "due": "{reference} — {customer}",
+    "dueDetail": "{step} · 未付 {amount}",
+    "send": "发送",
+    "sending": "发送中……",
+    "sendFailed": "无法发送该提醒。",
+    "needsAPerson": "需要人工处理",
+    "ladderTitle": "将发送什么，何时发送",
+    "rungBefore": "{label} — 到期前 {days} 天",
+    "rungAfter": "{label} — 到期后 {days} 天"
   }
 }

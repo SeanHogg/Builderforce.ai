@@ -14108,7 +14108,9 @@
     "colDue": "Vence",
     "colAge": "Antigüedad",
     "daysOverdue": "{count, plural, one {# día} other {# días}}",
-    "current": "Al día"
+    "current": "Al día",
+    "collectionsTitle": "Reclamar lo vencido",
+    "collectionsIntro": "Cada noche una factura vencida sube un peldaño de la escalera. Por defecto el peldaño se registra y no se envía nada, así que esta es la cola: envía desde aquí o configura una factura para que se reclame sola."
   },
   "policyPacks": {
     "title": "Paquetes de políticas",
@@ -16811,7 +16813,6 @@
       "candidate": "Candidato",
       "talentPool": "Cantera de talento",
       "jobPosting": "Oferta de empleo",
-      "outreachSequence": "Secuencia de contacto",
       "shortlist": "Lista de preseleccionados",
       "interviewLoop": "Ciclo de entrevistas",
       "scorecard": "Evaluación de entrevista",
@@ -19026,7 +19027,6 @@
         "candidate": "Candidato",
         "talentPool": "Cantera de talento",
         "jobPosting": "Oferta de empleo",
-        "outreachSequence": "Secuencia de contacto",
         "shortlist": "Lista de preseleccionados",
         "interviewLoop": "Ciclo de entrevistas",
         "scorecard": "Evaluación de entrevista",
@@ -19159,7 +19159,8 @@
       "freshDays": "hace {count} d",
       "label": {
         "funnel": "Embudo",
-        "book": "Libro"
+        "book": "Libro",
+        "sequence": "Secuencia"
       },
       "field": {
         "funnelDomain": "Embudo",
@@ -19184,7 +19185,17 @@
         "trimSize": "Tamaño final",
         "pageCount": "Número de páginas",
         "figureCount": "Número de figuras",
-        "wordCount": "Palabras"
+        "wordCount": "Palabras",
+        "direction": "Dirección",
+        "sequenceState": "Estado de la secuencia",
+        "audience": "Audiencia",
+        "steps": "Pasos",
+        "stopOnReply": "Parar al responder",
+        "enrolments": "Inscripciones",
+        "enrolled": "Inscritos",
+        "replyRate": "Tasa de respuesta",
+        "sequenceProgress": "Progreso",
+        "lastRunAt": "Última ejecución"
       },
       "column": {
         "stage": "Etapa",
@@ -19204,10 +19215,18 @@
         "altText": "Texto alternativo",
         "url": "Archivo",
         "chapter": "Capítulo",
-        "title": "Título"
+        "title": "Título",
+        "dayOffset": "Día",
+        "channel": "Canal",
+        "subject": "Asunto",
+        "name": "Nombre",
+        "contactRef": "Contacto",
+        "stepsSent": "Enviados",
+        "repliedAtISO": "Respondió"
       },
       "status": {
-        "manuscript": "Manuscrito"
+        "manuscript": "Manuscrito",
+        "draft": "Borrador"
       }
     },
     "noticeGateEvaluated": "Criterio de publicación evaluado con las ejecuciones y los defectos de este lienzo: {score}% de los criterios cumplidos.",
@@ -20240,7 +20259,6 @@
       "barValue": "{value} ({percent} %)",
       "label": {
         "quote": "Presupuesto",
-        "sequence": "Secuencia",
         "call": "Llamada",
         "trial": "Prueba",
         "trustPacket": "Paquete de confianza",
@@ -23560,5 +23578,19 @@
     "emptyProjects": "Todavía no hay proyectos planificados. Añade fechas de inicio o de vencimiento para verlos en la línea de tiempo.",
     "emptyTasks": "Todavía no hay tareas planificadas. Añade fechas de inicio o de vencimiento para verlas en la línea de tiempo.",
     "emptyRoadmapItems": "Todavía no hay elementos del roadmap planificados. Añade fechas objetivo para verlos en la línea de tiempo."
+  },
+  "collections": {
+    "loading": "Leyendo la cola de reclamaciones…",
+    "loadFailed": "No se ha podido leer la cola de reclamaciones.",
+    "empty": "No hay nada pendiente de reclamar. Cuando una factura alcance un peldaño de la escalera, aparecerá aquí para que la envíes.",
+    "due": "{reference} — {customer}",
+    "dueDetail": "{step} · {amount} pendientes",
+    "send": "Enviar",
+    "sending": "Enviando…",
+    "sendFailed": "No se ha podido enviar ese recordatorio.",
+    "needsAPerson": "Necesita a una persona",
+    "ladderTitle": "Qué se envía y cuándo",
+    "rungBefore": "{label} — {days} días antes del vencimiento",
+    "rungAfter": "{label} — {days} días después del vencimiento"
   }
 }

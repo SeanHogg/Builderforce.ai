@@ -14108,7 +14108,9 @@
     "colDue": "Échéance",
     "colAge": "Ancienneté",
     "daysOverdue": "{count, plural, one {# jour} other {# jours}}",
-    "current": "À jour"
+    "current": "À jour",
+    "collectionsTitle": "Relancer les impayés",
+    "collectionsIntro": "Chaque nuit, une facture en retard monte d’un échelon. Par défaut l’échelon est enregistré et rien n’est envoyé : voici donc la file — envoyez d’ici, ou réglez une facture pour qu’elle se relance seule."
   },
   "policyPacks": {
     "title": "Packs de politiques",
@@ -16811,7 +16813,6 @@
       "candidate": "Candidat",
       "talentPool": "Vivier de talents",
       "jobPosting": "Offre d’emploi",
-      "outreachSequence": "Séquence de prospection",
       "shortlist": "Liste restreinte",
       "interviewLoop": "Parcours d’entretiens",
       "scorecard": "Grille d’entretien",
@@ -19026,7 +19027,6 @@
         "candidate": "Candidat",
         "talentPool": "Vivier de talents",
         "jobPosting": "Offre d’emploi",
-        "outreachSequence": "Séquence de prospection",
         "shortlist": "Liste restreinte",
         "interviewLoop": "Parcours d’entretiens",
         "scorecard": "Grille d’entretien",
@@ -19159,7 +19159,8 @@
       "freshDays": "il y a {count} j",
       "label": {
         "funnel": "Entonnoir",
-        "book": "Livre"
+        "book": "Livre",
+        "sequence": "Séquence"
       },
       "field": {
         "funnelDomain": "Entonnoir",
@@ -19184,7 +19185,17 @@
         "trimSize": "Format fini",
         "pageCount": "Nombre de pages",
         "figureCount": "Nombre de figures",
-        "wordCount": "Mots"
+        "wordCount": "Mots",
+        "direction": "Sens",
+        "sequenceState": "État de la séquence",
+        "audience": "Audience",
+        "steps": "Étapes",
+        "stopOnReply": "Arrêt à la réponse",
+        "enrolments": "Inscriptions",
+        "enrolled": "Inscrits",
+        "replyRate": "Taux de réponse",
+        "sequenceProgress": "Avancement",
+        "lastRunAt": "Dernière exécution"
       },
       "column": {
         "stage": "Étape",
@@ -19204,10 +19215,18 @@
         "altText": "Texte alternatif",
         "url": "Fichier",
         "chapter": "Chapitre",
-        "title": "Titre"
+        "title": "Titre",
+        "dayOffset": "Jour",
+        "channel": "Canal",
+        "subject": "Objet",
+        "name": "Nom",
+        "contactRef": "Contact",
+        "stepsSent": "Envoyés",
+        "repliedAtISO": "A répondu"
       },
       "status": {
-        "manuscript": "Manuscrit"
+        "manuscript": "Manuscrit",
+        "draft": "Brouillon"
       }
     },
     "noticeGateEvaluated": "Critère de publication évalué à partir des exécutions et des anomalies de ce canevas — {score} % des critères remplis.",
@@ -20240,7 +20259,6 @@
       "barValue": "{value} ({percent} %)",
       "label": {
         "quote": "Devis",
-        "sequence": "Séquence",
         "call": "Appel",
         "trial": "Essai",
         "trustPacket": "Dossier de confiance",
@@ -23560,5 +23578,19 @@
     "emptyProjects": "Aucun projet planifié pour le moment. Ajoutez une date de début ou d’échéance pour l’afficher sur la chronologie.",
     "emptyTasks": "Aucune tâche planifiée pour le moment. Ajoutez une date de début ou d’échéance pour l’afficher sur la chronologie.",
     "emptyRoadmapItems": "Aucun élément de roadmap planifié pour le moment. Ajoutez une date cible pour l’afficher sur la chronologie."
+  },
+  "collections": {
+    "loading": "Lecture de la file de relances…",
+    "loadFailed": "La file de relances n’a pas pu être lue.",
+    "empty": "Rien n’attend d’être relancé. Dès qu’une facture atteint un échelon, elle apparaît ici pour que vous l’envoyiez.",
+    "due": "{reference} — {customer}",
+    "dueDetail": "{step} · {amount} restant dû",
+    "send": "Envoyer",
+    "sending": "Envoi…",
+    "sendFailed": "Cette relance n’a pas pu être envoyée.",
+    "needsAPerson": "Demande une personne",
+    "ladderTitle": "Ce qui part, et quand",
+    "rungBefore": "{label} — {days} jours avant l’échéance",
+    "rungAfter": "{label} — {days} jours après l’échéance"
   }
 }
