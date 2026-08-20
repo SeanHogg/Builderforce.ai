@@ -682,7 +682,9 @@
     "viewLive": "实时圆桌",
     "viewSchedules": "定期安排",
     "viewSwitchLabel": "仪式视图",
-    "viewHistory": "历史记录"
+    "viewHistory": "历史记录",
+    "viewRetro": "回顾会",
+    "viewPoker": "扑克"
   },
   "projectCard": {
     "details": "详情",
@@ -1402,7 +1404,9 @@
     },
     "resultCount": "{n, plural, =0 {无结果} other {# 条结果}}",
     "done": "完成",
-    "keepYourWork": "保留你的成果"
+    "keepYourWork": "保留你的成果",
+    "yes": "是",
+    "no": "否"
   },
   "prdCreate": {
     "title": "新建 PRD",
@@ -2258,8 +2262,16 @@
       "noEpics": "此时间窗口内没有有活动的史诗。",
       "epic": "史诗",
       "project": "项目",
-      "exportCsv": "下载 CSV",
-      "exporting": "正在准备…"
+      "exporting": "正在准备…",
+      "exportReport": "下载报告",
+      "exportFormat": "下载格式",
+      "format": {
+        "xlsx": "Excel (.xlsx)",
+        "csv": "CSV",
+        "json": "JSON"
+      },
+      "measured": "实测工时占比",
+      "measuredSub": "{total} 中有 {logged} 来自实际记录的工时，而非估算"
     },
     "deliv": {
       "title": "交付",
@@ -8332,7 +8344,9 @@
         "initiative": "举措",
         "portfolio": "组合",
         "roadmap": "路线图",
-        "spec": "规格"
+        "spec": "规格",
+        "retro": "回顾会",
+        "poker": "计划扑克"
       }
     },
     "approveAll": "全部批准",
@@ -15775,7 +15789,7 @@
     "datasetNoColumns": "该文件中未找到任何列。",
     "datasetImported": "已导入 {name} — {rows} 行，{columns} 列",
     "datasetImportFailed": "数据集导入失败",
-    "datasetShape": "{rows} 行 · {columns} 列",
+    "datasetShape": "{rows, number} 行 · {columns} 列",
     "datasetStatusImported": "已导入",
     "roleCannotEdit": "你在本会话中的角色无权编辑",
     "fileGeneric": "文件",
@@ -15790,14 +15804,14 @@
       "statusUnreadable": "无法读取",
       "statusTextUnavailable": "无法提取文本",
       "fileGeneric": "文件",
-      "datasetShape": "{rows} 行 · {columns} 列",
-      "workbookShape": "{sheets} 个工作表 · {rows} 行 · {columns} 列",
+      "datasetShape": "{rows, number} 行 · {columns} 列",
+      "workbookShape": "{sheets} 个工作表 · {rows, number} 行 · {columns} 列",
       "deckShape": "{slides} 张幻灯片",
-      "documentShape": "{words} 个词",
+      "documentShape": "{words, number} 个词",
       "documentPages": "{pages} 页",
       "pdfPages": "PDF · {pages} 页",
-      "codeShape": "{lines} 行",
-      "noticeDataset": "{name} 已作为数据集载入 — {rows} 行，{columns} 列",
+      "codeShape": "{lines, number} 行",
+      "noticeDataset": "{name} 已作为数据集载入 — {rows, number} 行，{columns} 列",
       "noticeResume": "{name} 已识别为简历 — 可用任意模板重新排版",
       "resumeShape": "{sections, plural, other {# 个板块}}",
       "noticeWorkbook": "{name} 已作为工作簿载入 — {sheets} 个工作表",
@@ -15814,17 +15828,18 @@
       "promptImage": "{name} 里有什么，我该如何使用它？",
       "promptCode": "审阅 {name} 并说明它的作用。",
       "promptFile": "关于 {name} 你能告诉我什么？",
-      "meshShape": "{facets} 个面 · {format}",
+      "meshShape": "{facets, number} 个面 · {format}",
       "drawingShape": "{format} 图纸",
       "statusMeshUnreadable": "无法读取几何体",
       "promptModel": "关于 {name}，需要我检查什么？",
       "promptDrawing": "关于 {name} 这张图纸，需要我检查什么？",
-      "noticeModel": "{name} 已读取为三维模型 —— {facets} 个面",
+      "noticeModel": "{name} 已读取为三维模型 —— {facets, number} 个面",
       "noticeDrawing": "{name} 已读取为 CAD 图纸",
       "noticeDiagram": "{name} 已作为 {notation} 图表放在板上",
       "noticeDiagramConverted": "{name} 原为 {source} 图纸——已读取为可编辑的 {notation} 图表",
       "promptDiagram": "{name} 需要我做哪些改动？",
-      "diagramShape": "{notation} · {shapes} 个图形 · {connections} 条连接"
+      "diagramShape": "{notation} · {shapes} 个图形 · {connections} 条连接",
+      "fileMeta": "{type} · {kb, number} KB"
     },
     "datasetImportBeforeVisualizing": "请先导入数据再进行可视化",
     "datasetImportBeforeProfiling": "请先导入数据再分析列结构",
@@ -22816,11 +22831,13 @@
     "ndaHelp": "发送链接时已将签署请求发到您的邮箱。请先签署再刷新本页——在此之前这里不会打开任何内容。",
     "ndaPending": "签署保密协议后，本资料室才会开放。",
     "notProvided": "尚未提供",
+    "unstampableHelp": "其中 {count} 份的文件格式无法承载水印，因此只能在标签页中打开、不可保存。其余文件的每一页都会加盖您的邮箱地址水印。",
+    "viewOnly": "仅可查看",
     "open": "打开",
     "required": "必需",
     "viewHelp": "文件将在新标签页中打开。此链接不允许保存副本。",
-    "viewHelpWatermarked": "文件将在新标签页中打开，并加盖您的邮箱地址和打开时间的水印。本资料室不允许保存副本。",
-    "watermarked": "这里的每份文件都带有 {label} 的水印。本资料室已关闭下载，文件只能在标签页中打开。"
+    "viewHelpWatermarked": "文件将在新标签页中打开，每一页都加盖您的邮箱地址和打开时间的水印。每一次打开都会记录在此链接名下。",
+    "watermarked": "您在此打开的每一页都会加盖 {label} 的水印。若某份文件的格式无法承载水印，则只能在标签页中打开。"
   },
   "legalDocumentShare": {
     "eyebrow": "已与您共享",
@@ -23592,5 +23609,73 @@
     "ladderTitle": "将发送什么，何时发送",
     "rungBefore": "{label} — 到期前 {days} 天",
     "rungAfter": "{label} — 到期后 {days} 天"
+  },
+  "agile": {
+    "retrosTitle": "回顾会",
+    "pokerTitle": "计划扑克",
+    "sessions": "会话",
+    "loading": "加载中…",
+    "saving": "保存中…",
+    "create": "创建",
+    "add": "添加",
+    "startSession": "开始会话",
+    "reveal": "亮牌",
+    "setEstimate": "设定估算…",
+    "upvote": "赞同",
+    "noRetros": "还没有回顾会。",
+    "noSessions": "还没有会话。",
+    "noStories": "还没有故事。",
+    "retroNamePlaceholder": "新回顾会名称",
+    "sessionNamePlaceholder": "新会话名称",
+    "addStoryPlaceholder": "添加故事",
+    "addItemPlaceholder": "添加…",
+    "addItemTo": "添加到{column}",
+    "retroTemplateLabel": "回顾会模板",
+    "voteValue": "投票 {value}",
+    "voteCount": "{count} 票：",
+    "closeCeremony": "结束会话",
+    "reopenCeremony": "重新开启会话",
+    "retroLoadFailed": "无法加载回顾会。",
+    "pokerLoadFailed": "无法加载会话。",
+    "createFailedManager": "创建失败（需要管理员角色）。",
+    "statusFailedManager": "无法更改状态（需要管理员角色）。",
+    "addFailed": "添加失败。",
+    "addStoryFailed": "添加故事失败。",
+    "voteFailed": "投票失败。",
+    "revealFailed": "亮牌失败。",
+    "ceremonyStatus": {
+      "active": "进行中",
+      "completed": "已完成",
+      "cancelled": "已取消",
+      "closed": "已关闭",
+      "archived": "已归档"
+    },
+    "storyStatus": {
+      "pending": "未估算",
+      "revealed": "已亮牌",
+      "estimated": "已估算"
+    },
+    "retroTemplate": {
+      "start_stop_continue": "开始 / 停止 / 继续",
+      "mad_sad_glad": "生气 / 难过 / 高兴",
+      "four_ls": "4L 模型",
+      "what_went_well": "哪些做得好"
+    },
+    "retroColumn": {
+      "Start": "开始",
+      "Stop": "停止",
+      "Continue": "继续",
+      "Mad": "生气",
+      "Sad": "难过",
+      "Glad": "高兴",
+      "Liked": "喜欢",
+      "Learned": "学到",
+      "Lacked": "欠缺",
+      "Longed for": "期待",
+      "Went well": "做得好",
+      "To improve": "待改进",
+      "Action items": "行动项",
+      "Notes": "备注"
+    }
   }
 }

@@ -42,7 +42,8 @@ interface BrainInbound extends WebviewInbound {
 /** A work item to auto-link to the chat the intent opens, so the conversation is
  *  tied to (and has context on) the item that spawned it. `kind` is a
  *  ChatTicketService ticket kind (task | epic | gap | objective | initiative |
- *  portfolio | roadmap); `ref` is the item id (task id as text, else a UUID). */
+ *  portfolio | roadmap | spec | retro | poker); `ref` is the item id (task id as text,
+ *  else a UUID). */
 export interface IntentTicket {
   kind: string;
   ref: string;
@@ -460,6 +461,10 @@ export class BrainWebview extends WebviewPanelBase<BrainInbound> {
     let path: string;
     if (kind === "objective" || kind === "initiative" || kind === "portfolio") {
       path = "/projects?tab=portfolio";
+    } else if (kind === "retro" || kind === "poker") {
+      // Team ceremonies live on the Ceremonies tab and are workspace-wide, so no
+      // project scope rides along; `session` opens the exact one.
+      path = `/projects?tab=ceremonies&ceremony=${kind}${ref ? `&session=${encodeURIComponent(ref)}` : ""}`;
     } else {
       const base = projectId != null ? `/projects?tab=tasks&project=${projectId}` : "/projects?tab=tasks";
       // task/epic/gap → deep-link straight into the ticket's detail drawer.

@@ -682,7 +682,9 @@
     "viewLive": "Mesa redonda en vivo",
     "viewSchedules": "Programaciones",
     "viewSwitchLabel": "Vista de ceremonia",
-    "viewHistory": "Historial"
+    "viewHistory": "Historial",
+    "viewRetro": "Retros",
+    "viewPoker": "Póker"
   },
   "projectCard": {
     "details": "Detalles",
@@ -1402,7 +1404,9 @@
     },
     "resultCount": "{n, plural, =0 {Sin resultados} one {# resultado} other {# resultados}}",
     "done": "Listo",
-    "keepYourWork": "Conserva tu trabajo"
+    "keepYourWork": "Conserva tu trabajo",
+    "yes": "Sí",
+    "no": "No"
   },
   "prdCreate": {
     "title": "Nuevo PRD",
@@ -2258,8 +2262,16 @@
       "noEpics": "No hay épicas con actividad en esta ventana.",
       "epic": "Épica",
       "project": "Proyecto",
-      "exportCsv": "Descargar CSV",
-      "exporting": "Preparando…"
+      "exporting": "Preparando…",
+      "exportReport": "Descargar informe",
+      "exportFormat": "Formato de descarga",
+      "format": {
+        "xlsx": "Excel (.xlsx)",
+        "csv": "CSV",
+        "json": "JSON"
+      },
+      "measured": "Esfuerzo medido",
+      "measuredSub": "{logged} de {total} proceden de tiempo registrado, no de estimaciones"
     },
     "deliv": {
       "title": "Entrega",
@@ -8332,7 +8344,9 @@
         "initiative": "Iniciativa",
         "portfolio": "Portafolio",
         "roadmap": "Hoja de ruta",
-        "spec": "Especificación"
+        "spec": "Especificación",
+        "retro": "Retrospectiva",
+        "poker": "Planning poker"
       }
     },
     "approveAll": "Aprobar todo",
@@ -15775,7 +15789,7 @@
     "datasetNoColumns": "No se encontró ninguna columna en ese archivo.",
     "datasetImported": "{name} importado: {rows} filas, {columns} columnas",
     "datasetImportFailed": "No se pudo importar el conjunto de datos",
-    "datasetShape": "{rows} filas · {columns} columnas",
+    "datasetShape": "{rows, number} filas · {columns} columnas",
     "datasetStatusImported": "Importado",
     "roleCannotEdit": "Tu rol en esta sesión no permite editar",
     "fileGeneric": "Archivo",
@@ -15790,14 +15804,14 @@
       "statusUnreadable": "No se pudo leer",
       "statusTextUnavailable": "Texto no extraíble",
       "fileGeneric": "Archivo",
-      "datasetShape": "{rows} filas · {columns} columnas",
-      "workbookShape": "{sheets} hojas · {rows} filas · {columns} columnas",
+      "datasetShape": "{rows, number} filas · {columns} columnas",
+      "workbookShape": "{sheets} hojas · {rows, number} filas · {columns} columnas",
       "deckShape": "{slides, plural, one {# diapositiva} other {# diapositivas}}",
-      "documentShape": "{words} palabras",
+      "documentShape": "{words, number} palabras",
       "documentPages": "{pages, plural, one {# página} other {# páginas}}",
       "pdfPages": "PDF · {pages, plural, one {# página} other {# páginas}}",
-      "codeShape": "{lines} líneas",
-      "noticeDataset": "{name} cargado como conjunto de datos: {rows} filas, {columns} columnas",
+      "codeShape": "{lines, number} líneas",
+      "noticeDataset": "{name} cargado como conjunto de datos: {rows, number} filas, {columns} columnas",
       "noticeResume": "{name} leído como currículum: dale otro estilo con cualquier plantilla",
       "resumeShape": "{sections, plural, one {# sección} other {# secciones}}",
       "noticeWorkbook": "{name} cargado como libro: {sheets, plural, one {# hoja} other {# hojas}}",
@@ -15814,17 +15828,18 @@
       "promptImage": "¿Qué hay en {name} y qué debería hacer con ello?",
       "promptCode": "Revisa {name} y explica qué hace.",
       "promptFile": "¿Qué puedes decirme sobre {name}?",
-      "meshShape": "{facets} caras · {format}",
+      "meshShape": "{facets, number} caras · {format}",
       "drawingShape": "Plano {format}",
       "statusMeshUnreadable": "No se pudo leer la geometría",
       "promptModel": "¿Qué quieres que revise de {name}?",
       "promptDrawing": "¿Qué quieres que revise del plano {name}?",
-      "noticeModel": "{name} leído como modelo 3D: {facets} caras",
+      "noticeModel": "{name} leído como modelo 3D: {facets, number} caras",
       "noticeDrawing": "{name} leído como plano CAD",
       "noticeDiagram": "{name} está en el tablero como diagrama de {notation}",
       "noticeDiagramConverted": "{name} era un dibujo de {source}: se ha leído como un diagrama de {notation} editable",
       "promptDiagram": "¿Qué debería cambiar de {name}?",
-      "diagramShape": "{notation} · {shapes} formas · {connections} conexiones"
+      "diagramShape": "{notation} · {shapes} formas · {connections} conexiones",
+      "fileMeta": "{type} · {kb, number} KB"
     },
     "datasetImportBeforeVisualizing": "Importa datos antes de visualizarlos",
     "datasetImportBeforeProfiling": "Importa datos antes de analizar sus columnas",
@@ -22816,11 +22831,13 @@
     "ndaHelp": "La solicitud de firma se te envió por correo junto con el enlace. Fírmala y recarga esta página: hasta entonces aquí no se abre nada.",
     "ndaPending": "Esta sala de datos se abre en cuanto firmes el acuerdo de confidencialidad.",
     "notProvided": "Aún no aportado",
+    "unstampableHelp": "{count} de estos no admiten marca de agua por su formato, así que se abren en una pestaña y no se pueden guardar. Todo lo demás lleva tu dirección estampada en cada página.",
+    "viewOnly": "solo lectura",
     "open": "Abrir",
     "required": "obligatorio",
     "viewHelp": "Los documentos se abren en una pestaña nueva. Este enlace no permite guardar copias.",
-    "viewHelpWatermarked": "Los documentos se abren en una pestaña nueva, marcados con tu dirección y la hora en que los abriste. Esta sala no permite copias guardadas.",
-    "watermarked": "Todos los documentos llevan una marca de agua con {label}. Las descargas están desactivadas en esta sala; los documentos solo se abren en una pestaña."
+    "viewHelpWatermarked": "Los documentos se abren en una pestaña nueva, con tu dirección y la hora de apertura estampadas en cada página. Cada apertura queda registrada en este enlace.",
+    "watermarked": "Cada página que abras aquí lleva estampado {label}. Un documento cuyo formato no admita la marca de agua solo se abre en una pestaña."
   },
   "legalDocumentShare": {
     "eyebrow": "Compartido contigo",
@@ -23592,5 +23609,73 @@
     "ladderTitle": "Qué se envía y cuándo",
     "rungBefore": "{label} — {days} días antes del vencimiento",
     "rungAfter": "{label} — {days} días después del vencimiento"
+  },
+  "agile": {
+    "retrosTitle": "Retrospectivas",
+    "pokerTitle": "Planning Poker",
+    "sessions": "Sesiones",
+    "loading": "Cargando…",
+    "saving": "Guardando…",
+    "create": "Crear",
+    "add": "Añadir",
+    "startSession": "Iniciar sesión",
+    "reveal": "Revelar",
+    "setEstimate": "Fijar estimación…",
+    "upvote": "Votar a favor",
+    "noRetros": "Todavía no hay retrospectivas.",
+    "noSessions": "Todavía no hay sesiones.",
+    "noStories": "Todavía no hay historias.",
+    "retroNamePlaceholder": "Nombre de la retrospectiva",
+    "sessionNamePlaceholder": "Nombre de la sesión",
+    "addStoryPlaceholder": "Añadir una historia",
+    "addItemPlaceholder": "Añadir…",
+    "addItemTo": "Añadir a {column}",
+    "retroTemplateLabel": "Plantilla de retrospectiva",
+    "voteValue": "Votar {value}",
+    "voteCount": "{count} voto(s):",
+    "closeCeremony": "Cerrar sesión",
+    "reopenCeremony": "Reabrir sesión",
+    "retroLoadFailed": "No se pudieron cargar las retrospectivas.",
+    "pokerLoadFailed": "No se pudieron cargar las sesiones.",
+    "createFailedManager": "No se pudo crear (se requiere rol de manager).",
+    "statusFailedManager": "No se pudo cambiar el estado (se requiere rol de manager).",
+    "addFailed": "No se pudo añadir.",
+    "addStoryFailed": "No se pudo añadir la historia.",
+    "voteFailed": "No se pudo votar.",
+    "revealFailed": "No se pudo revelar.",
+    "ceremonyStatus": {
+      "active": "Abierta",
+      "completed": "Completada",
+      "cancelled": "Cancelada",
+      "closed": "Cerrada",
+      "archived": "Archivada"
+    },
+    "storyStatus": {
+      "pending": "Sin estimar",
+      "revealed": "Votos revelados",
+      "estimated": "Estimada"
+    },
+    "retroTemplate": {
+      "start_stop_continue": "Empezar / Parar / Continuar",
+      "mad_sad_glad": "Enfado / Pena / Alegría",
+      "four_ls": "Las 4 L",
+      "what_went_well": "Qué fue bien"
+    },
+    "retroColumn": {
+      "Start": "Empezar",
+      "Stop": "Parar",
+      "Continue": "Continuar",
+      "Mad": "Enfado",
+      "Sad": "Pena",
+      "Glad": "Alegría",
+      "Liked": "Gustó",
+      "Learned": "Aprendido",
+      "Lacked": "Faltó",
+      "Longed for": "Deseado",
+      "Went well": "Fue bien",
+      "To improve": "A mejorar",
+      "Action items": "Acciones",
+      "Notes": "Notas"
+    }
   }
 }

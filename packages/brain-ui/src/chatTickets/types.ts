@@ -5,10 +5,19 @@
  * (its own REST calls) and a {@link ChatTicketsLabels} bundle (its own i18n).
  */
 
-/** The work-item kinds a chat can be tied to (planning spine + roadmap + spec + gap). */
-export type TicketKind = 'portfolio' | 'objective' | 'initiative' | 'roadmap' | 'spec' | 'epic' | 'gap' | 'task';
-export const TICKET_KINDS: TicketKind[] = ['task', 'epic', 'gap', 'objective', 'initiative', 'portfolio', 'roadmap', 'spec'];
-/** Only these kinds are runnable (a real board ticket an agent can execute). */
+/** The work-item kinds a chat can be tied to (planning spine + roadmap + spec + gap +
+ *  the two team ceremonies). Mirrors `TICKET_KINDS` in the api's ChatTicketService. */
+export type TicketKind = 'portfolio' | 'objective' | 'initiative' | 'roadmap' | 'spec' | 'epic' | 'gap' | 'task' | 'retro' | 'poker';
+export const TICKET_KINDS: TicketKind[] = ['task', 'epic', 'gap', 'objective', 'initiative', 'portfolio', 'roadmap', 'spec', 'retro', 'poker'];
+/**
+ * Only these kinds are RUNNABLE — a board ticket an agent can be dispatched to execute.
+ *
+ * The ceremonies are deliberately absent, and that is the whole distinction between
+ * "linkable" and "runnable": a retrospective and an estimation session are work a TEAM
+ * performs together, so a chat can be tied to one and its progress read back, but there
+ * is nothing for a single agent to go and do. Offering "run an agent on this retro"
+ * would be a control that cannot mean anything.
+ */
 export const RUNNABLE_KINDS: TicketKind[] = ['task', 'epic', 'gap'];
 
 export type LinkType = 'linked' | 'created';
@@ -261,7 +270,7 @@ export const DEFAULT_CHAT_TICKETS_LABELS: ChatTicketsLabels = {
   mergeNoOthers: 'No other chats to merge.',
   showTickets: 'Show linked tickets',
   hideTickets: 'Hide linked tickets',
-  kind: { task: 'Task', epic: 'Epic', gap: 'Gap', objective: 'Objective', initiative: 'Initiative', portfolio: 'Portfolio', roadmap: 'Roadmap', spec: 'Spec' },
+  kind: { task: 'Task', epic: 'Epic', gap: 'Gap', objective: 'Objective', initiative: 'Initiative', portfolio: 'Portfolio', roadmap: 'Roadmap', spec: 'Spec', retro: 'Retrospective', poker: 'Planning poker' },
   ringAria: (label, pct) => `${label}: ${pct}% done`,
   ticketCount: (n) => `${n} ticket${n === 1 ? '' : 's'}`,
   overallAria: (pct) => `Overall progress: ${pct}% done`,

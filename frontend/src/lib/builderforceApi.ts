@@ -603,7 +603,7 @@ export interface BrainChatTraceEventInput {
 }
 
 /** A work-item kind a chat can be tied to (planning spine + roadmap + spec + gap). */
-export type TicketKind = 'portfolio' | 'objective' | 'initiative' | 'roadmap' | 'spec' | 'epic' | 'gap' | 'task';
+export type TicketKind = 'portfolio' | 'objective' | 'initiative' | 'roadmap' | 'spec' | 'epic' | 'gap' | 'task' | 'retro' | 'poker';
 
 /** A chat ↔ ticket link with a live health summary. */
 export interface ChatTicketLink {
@@ -5864,6 +5864,18 @@ export interface PokerStory { id: string; title: string; description: string | n
 export interface PokerSessionDetail extends PokerSession { stories: PokerStory[]; }
 export interface RetroItem { id: string; category: string; content: string; authorId: string | null; votes: number; }
 export interface Retrospective { id: string; name: string; template: string; status: string; }
+
+/**
+ * The lifecycle a team ceremony (retro / poker session) moves through. Mirrors the
+ * api's `domain/agile/ceremonySession` write vocabulary — `closed`/`archived` may come
+ * back on older rows and are read as finished, but only these three can be SET.
+ */
+export const CEREMONY_SESSION_STATUSES = ['active', 'completed', 'cancelled'] as const;
+export type CeremonySessionStatus = (typeof CEREMONY_SESSION_STATUSES)[number];
+/** True when a ceremony is finished — the read-side rule, wider than what may be set. */
+export function isCeremonySessionDone(status: string | null | undefined): boolean {
+  return !!status && ['completed', 'cancelled', 'closed', 'archived'].includes(status.toLowerCase());
+}
 export interface RetroDetail extends Retrospective { items: RetroItem[]; }
 
 export const pokerApi = {
@@ -5874,6 +5886,10 @@ export const pokerApi = {
   vote: (storyId: string, value: string) => request<{ ok: boolean }>(`/api/agile/poker/stories/${storyId}/vote`, { method: 'POST', body: JSON.stringify({ value }) }),
   reveal: (storyId: string) => request<{ ok: boolean }>(`/api/agile/poker/stories/${storyId}/reveal`, { method: 'POST' }),
   patchStory: (storyId: string, body: { finalEstimate?: string; status?: string }) => request<PokerStory>(`/api/agile/poker/stories/${storyId}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  /** Close (or re-open) the SESSION. Until this route existed the status column was
+   *  written once at insert and never again, so a session could never be finished. */
+  setSessionStatus: (id: string, status: CeremonySessionStatus) =>
+    request<PokerSession>(`/api/agile/poker/sessions/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) }),
 };
 
 export const retroApi = {
@@ -5883,6 +5899,9 @@ export const retroApi = {
   addItem: (retroId: string, category: string, content: string) => request<RetroItem>(`/api/agile/retros/${retroId}/items`, { method: 'POST', body: JSON.stringify({ category, content }) }),
   voteItem: (itemId: string) => request<RetroItem>(`/api/agile/retros/items/${itemId}/vote`, { method: 'POST' }),
   deleteItem: (itemId: string) => request<{ deleted: string }>(`/api/agile/retros/items/${itemId}`, { method: 'DELETE' }),
+  /** Close (or re-open) the retrospective — see the poker note above. */
+  setStatus: (id: string, status: CeremonySessionStatus) =>
+    request<Retrospective>(`/api/agile/retros/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) }),
 };
 
 // ---------------------------------------------------------------------------
@@ -7983,8 +8002,25 @@ export interface AllocationHistoryMonth {
   month: string; status: 'ready' | 'in_progress';
   capitalizedFteMonths: number; totalFteMonths: number;
   capitalizedUsd: number; notCapitalizedUsd: number; uncategorizedUsd: number; totalUsd: number; taskCount: number;
+  /** Of the month's effort hours, how many came from RECORDED time rather than a
+   *  cycle-time estimate, and that share as a percentage. A capitalization figure
+   *  built from timesheets and one built from ticket open/close guesses print
+   *  identically; this is what says which the row is holding. */
+  hours: number; loggedHours: number; measuredEffortPct: number;
 }
 export interface AllocationHistory { months: AllocationHistoryMonth[]; dataAsOf: string }
+
+/**
+ * Formats the capitalization report downloads in.
+ *
+ * `xlsx` is the default because it is the one a finance reviewer works in — the
+ * monthly claim and the epic evidence land on their own sheets, numbers arrive as
+ * numbers, and the header freezes and filters. `csv` remains for anything that
+ * imports rather than reads, and `json` for a script.
+ */
+export const CAPITALIZATION_EXPORT_FORMATS = ['xlsx', 'csv', 'json'] as const;
+export type CapitalizationExportFormat = (typeof CAPITALIZATION_EXPORT_FORMATS)[number];
+export const DEFAULT_CAPITALIZATION_FORMAT: CapitalizationExportFormat = 'xlsx';
 export interface AllocationGoal extends TrackerRow {
   scopeKind: string; teamId: number | null; projectId: number | null;
   periodMonth: string; category: AllocationCategory; targetPct: number; notes: string | null;
@@ -8119,23 +8155,23 @@ export const insightsApi = {
   },
   /**
    * Download the capitalization report (monthly series + the epic evidence behind
-   * it) as CSV or JSON.
+   * it) in the caller's chosen {@link CapitalizationExportFormat}.
    *
    * Not cached anywhere: what finance hands to an auditor has to be the numbers as
    * they are now, and it comes from the same two collectors the on-screen report
    * renders from, so a downloaded file cannot disagree with the page it came from.
    */
-  capitalizationExport: async (q: { months?: number; projectId?: number | null; format?: 'csv' | 'json' } = {}): Promise<void> => {
+  capitalizationExport: async (q: { months?: number; projectId?: number | null; format?: CapitalizationExportFormat } = {}): Promise<void> => {
     const p = new URLSearchParams();
     if (q.months) p.set('months', String(q.months));
     if (q.projectId != null) p.set('projectId', String(q.projectId));
-    p.set('format', q.format ?? 'csv');
+    p.set('format', q.format ?? DEFAULT_CAPITALIZATION_FORMAT);
     const res = await apiRequestStream(`/api/insights/allocation/history/export?${p.toString()}`);
     if (!res.ok) throw new Error(`Export failed (${res.status})`);
     const blob = await res.blob();
     // The server names the file (it knows the scope + as-of date); the fallback
     // only matters when a proxy strips content-disposition.
-    downloadBlob(blob, filenameFromResponse(res, `capitalization-${new Date().toISOString().slice(0, 10)}.${q.format ?? 'csv'}`));
+    downloadBlob(blob, filenameFromResponse(res, `capitalization-${new Date().toISOString().slice(0, 10)}.${q.format ?? DEFAULT_CAPITALIZATION_FORMAT}`));
   },
 
   delivery: (scope: DeliverableScope, id: string): Promise<DeliveryInsights> =>

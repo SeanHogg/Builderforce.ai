@@ -1,3 +1,92 @@
+## ✅ RESOLVED 2026-08-19 — A retro and an estimation session are team work, so they can be finished, linked and read
+
+The Gap Register carried "Retro & Poker sessions are not linkable ticket kinds" as
+**deliberate**, on the reasoning that they are "ceremony *sessions*, not health-bearing
+`(kind,ref)` work items". That reasoning does not survive contact with what they are: a
+retrospective and a planning-poker session are work a TEAM performs, they have an
+outcome, and they are exactly the kind of thing a chat gets opened about. Closing it
+surfaced two further defects underneath, all three fixed together because they share one
+root cause — these were modelled as ephemeral rooms rather than as work.
+
+### Neither ceremony could ever FINISH
+
+`poker_sessions.status` and `retrospectives.status` were created with a default of
+`'active'` and then nothing in the codebase ever wrote them again — not a route, not a
+tool, not a job. Every session in every workspace was permanently open, so "is this retro
+done?" had no answer and any consumer deriving one would have been reading a constant.
+
+`api/src/domain/agile/ceremonySession.ts` is now the one vocabulary: a strict write set
+(`active` | `completed` | `cancelled`) and a deliberately WIDER read-side terminal set
+that also accepts `closed`/`archived` from older rows, so a legacy value reads as
+finished instead of as in-flight forever. `PATCH /api/agile/poker/sessions/:id` and
+`PATCH /api/agile/retros/:id` (MANAGER+, matching every other session-level write) close
+or re-open one, and both surfaces grew the control that drives them — an API with no
+consumer would have been the same defect one layer up.
+
+A cancelled ceremony counts as DONE. It is not outstanding work, and leaving it short of
+100% would park a ring that no action could ever move.
+
+### The two derivations are different, because the two things are different
+
+`retro` and `poker` join `TICKET_KINDS`, and each gets the health rule its own shape
+implies rather than a shared approximation:
+
+- A **retro is a leaf** — its items are observations, not work that completes — so
+  progress comes from its own status. The middle value is the honest part: an OPEN retro
+  reads 0% until the team has actually put something in it, because a status-only rule
+  would hand every retro 50% the instant it was created.
+- A **poker session is a container** — its stories are the work, and a story is done when
+  it carries a final estimate, which is the entire point of the ceremony. The ring means
+  "5 of 8 stories estimated", not merely "open / closed", and falls back to its own
+  status only when there is nothing to roll up.
+
+Both roll up in BATCH: one parent query plus one grouped child query per kind, however
+many ceremonies a chat links. Health is derived live and deliberately uncached, so the
+query count is the thing that had to stay bounded — a test asserts six linked ceremonies
+still cost four queries.
+
+Neither is RUNNABLE, and that is the whole distinction between linkable and runnable: a
+chat can be tied to a ceremony and its progress read back, but there is nothing for a
+single agent to go and execute, so offering "run an agent on this retro" would be a
+control that cannot mean anything.
+
+### They had no home in the product at all
+
+Retro and Poker existed ONLY behind `/embed/<view>` — the third-party embed boundary —
+so making them linkable would have produced an "Open" button with nowhere to go. They are
+now sub-views of the Ceremonies tab, which is their conceptual home, reached by
+`/projects?tab=ceremonies&ceremony=<retro|poker>&session=<id>` from a linked chat on BOTH
+hosts (the web panel routes there; the VSIX opens the same URL through `open.artifact`).
+The project gate now applies only to the three project-scoped views — neither ceremony
+table carries a `projectId`, so gating a workspace-wide surface behind a project
+selection would have hidden it behind a choice that does not apply to it.
+
+`builtin_retro_create` and `builtin_poker_create_session` joined the auto-link map, so a
+ceremony the Brain sets up FROM a conversation is tied back to it deterministically
+rather than depending on the model remembering — which is the "auto-link" the register
+entry was named after.
+
+### Both surfaces were fully unlocalized
+
+`RetroSurface` and `PokerSurface` had zero `useTranslations` between them, so touching
+them meant localizing them: the whole `agile.*` namespace shipped in all five catalogs
+with real translations, including the ceremony and story status vocabularies and the
+retro template names.
+
+One trap avoided: the retro column headings (`Start`/`Stop`/`Continue`, …) are ALSO the
+persisted `retro_items.category` value, so translating them in place would have orphaned
+every stored item. They stay stable identifiers, and `agile.retroColumn.<key>` supplies
+the visible heading. Both surfaces also moved to `auto-fit` columns so a four-column retro
+becomes two (then one) on a phone instead of overflowing, and every control now takes an
+explicit theme token for text colour — several inherited only a background, which reads
+in one theme and not the other.
+
+**Verified:** 15 new tests (the lifecycle vocabulary + both health derivations + the
+deleted-ceremony case + the batching bound); api brain/agile suites 52/52;
+brain-embedded 310/310; the i18n key guard, the five-catalog parity test (74) and the
+design-token guard all green; `tsgo` clean on the api, the frontend and both VSIX
+projects for every file this pass touched.
+
 ## ✅ RESOLVED 2026-08-19 — Evermind emits parallel tool calls, and a new table can no longer slip past the entity ratchet
 
 ### P3 — parallel tool calls (roadmap: "Evermind emits at most ONE tool call per turn")

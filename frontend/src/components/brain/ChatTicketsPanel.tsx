@@ -45,7 +45,8 @@ export function ChatTicketsPanel({ chatId, projectId, chatList, onChanged }: {
 
   // Open a linked work item in its own view. Routes to the surface the item lives on
   // (board for task/epic/gap + spec-in-project; Portfolio ▸ OKRs tab for the strategy
-  // tiers), reusing the same project-scoped board route the Brain's navigate_to uses.
+  // tiers; Ceremonies ▸ Retro/Poker for the two team ceremonies), reusing the same
+  // project-scoped board route the Brain's navigate_to uses.
   // For a task/epic/gap we also append `&task=<ref>` so the board opens straight into
   // that ticket's DETAIL drawer (assignee/status/PRD) rather than just the board.
   const openTicket = useMemo(() => (tk: TicketLinkVM) => {
@@ -58,6 +59,12 @@ export function ChatTicketsPanel({ chatId, projectId, chatList, onChanged }: {
         router.push(`${base}&task=${encodeURIComponent(tk.ref)}`);
         break;
       }
+      // Team ceremonies live on the Ceremonies tab and are workspace-wide, so no
+      // project scope rides along — `session` opens the exact retro/session rather
+      // than the list.
+      case 'retro': case 'poker':
+        router.push(`/projects?tab=ceremonies&ceremony=${tk.kind}&session=${encodeURIComponent(tk.ref)}`);
+        break;
       default: // spec | roadmap → the project's board (no per-item drawer)
         router.push(projectId != null ? `/projects?tab=tasks&project=${projectId}` : '/projects?tab=tasks');
     }
@@ -97,7 +104,7 @@ export function ChatTicketsPanel({ chatId, projectId, chatList, onChanged }: {
     visibilityShared: t('visibilityShared'), visibilityLocked: t('visibilityLocked'), lockHint: t('lockHint'),
     mergeHint: t('mergeHint'), mergeNoOthers: t('mergeNoOthers'),
     showTickets: t('showTickets'), hideTickets: t('hideTickets'),
-    kind: { task: t('kind.task'), epic: t('kind.epic'), gap: t('kind.gap'), objective: t('kind.objective'), initiative: t('kind.initiative'), portfolio: t('kind.portfolio'), roadmap: t('kind.roadmap'), spec: t('kind.spec') },
+    kind: { task: t('kind.task'), epic: t('kind.epic'), gap: t('kind.gap'), objective: t('kind.objective'), initiative: t('kind.initiative'), portfolio: t('kind.portfolio'), roadmap: t('kind.roadmap'), spec: t('kind.spec'), retro: t('kind.retro'), poker: t('kind.poker') },
     ringAria: (label, pct) => t('ringAria', { label, pct }),
     ticketCount: (n) => t('ticketCount', { n }),
     overallAria: (pct) => t('overallAria', { pct }),

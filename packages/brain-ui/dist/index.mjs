@@ -1516,7 +1516,7 @@ function resolveRunGate(adapter) {
 }
 
 // src/chatTickets/types.ts
-var TICKET_KINDS = ["task", "epic", "gap", "objective", "initiative", "portfolio", "roadmap", "spec"];
+var TICKET_KINDS = ["task", "epic", "gap", "objective", "initiative", "portfolio", "roadmap", "spec", "retro", "poker"];
 var RUNNABLE_KINDS = ["task", "epic", "gap"];
 var DEFAULT_CHAT_TICKETS_LABELS = {
   none: "No tickets linked yet.",
@@ -1568,7 +1568,7 @@ var DEFAULT_CHAT_TICKETS_LABELS = {
   mergeNoOthers: "No other chats to merge.",
   showTickets: "Show linked tickets",
   hideTickets: "Hide linked tickets",
-  kind: { task: "Task", epic: "Epic", gap: "Gap", objective: "Objective", initiative: "Initiative", portfolio: "Portfolio", roadmap: "Roadmap", spec: "Spec" },
+  kind: { task: "Task", epic: "Epic", gap: "Gap", objective: "Objective", initiative: "Initiative", portfolio: "Portfolio", roadmap: "Roadmap", spec: "Spec", retro: "Retrospective", poker: "Planning poker" },
   ringAria: (label, pct) => `${label}: ${pct}% done`,
   ticketCount: (n) => `${n} ticket${n === 1 ? "" : "s"}`,
   overallAria: (pct) => `Overall progress: ${pct}% done`,
@@ -2450,7 +2450,8 @@ var DEFAULT_EVERMIND_LABELS = {
   analyzeSelectNone: "Clear selection",
   analyzeApplyCta: (count) => `Fix ${count} selected`,
   analyzeApplying: "Fixing\u2026",
-  analyzeApplied: (corrected, forgotten, version) => `Fixed: ${corrected} corrected, ${forgotten} forgotten. Model is now at v${version}.`,
+  analyzeApplied: (corrected, forgotten, version) => `${corrected} corrected and re-taught, ${forgotten} removed from recall (already-learned influence is superseded by the correction, not erased). Model is now at v${version}.`,
+  analyzeCoverage: (analyzed, total) => `Reviewed the ${analyzed} most recent of ${total} memories \u2014 run again to continue through the rest.`,
   analyzeSkipped: (count) => `${count} could not be applied.`,
   tabsLabel: "Evermind controls",
   tabTeach: "Teach",
@@ -2935,6 +2936,7 @@ function EvermindAnalyzer({ t, disabled, onAnalyze, onApply, onRepaired, analysi
     ] }),
     analysis?.warning && /* @__PURE__ */ jsx13("p", { style: warnBox, role: "note", children: analysis.warning }),
     analysis && findings.length === 0 && /* @__PURE__ */ jsx13("p", { style: italic, children: t.analyzeClean(analysis.analyzed) }),
+    analysis?.truncated && typeof analysis.total === "number" && /* @__PURE__ */ jsx13("p", { style: italic, children: t.analyzeCoverage(analysis.analyzed, analysis.total) }),
     analysis && findings.length > 0 && /* @__PURE__ */ jsxs13(Fragment4, { children: [
       /* @__PURE__ */ jsx13("p", { style: { margin: 0, fontSize: "0.74rem", color: C.text2 }, children: analysis.model ? t.analyzeSummary(findings.length, analysis.analyzed, analysis.model) : t.analyzeSummaryLocal(findings.length, analysis.analyzed) }),
       /* @__PURE__ */ jsx13("ul", { style: { listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 6 }, children: findings.map((f) => /* @__PURE__ */ jsx13(

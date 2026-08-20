@@ -598,10 +598,19 @@ declare function HealthRing({ percent, size, stroke, caption, muted, ariaLabel }
  * presentational + self-managing; each host injects a {@link ChatTicketsAdapter}
  * (its own REST calls) and a {@link ChatTicketsLabels} bundle (its own i18n).
  */
-/** The work-item kinds a chat can be tied to (planning spine + roadmap + spec + gap). */
-type TicketKind = 'portfolio' | 'objective' | 'initiative' | 'roadmap' | 'spec' | 'epic' | 'gap' | 'task';
+/** The work-item kinds a chat can be tied to (planning spine + roadmap + spec + gap +
+ *  the two team ceremonies). Mirrors `TICKET_KINDS` in the api's ChatTicketService. */
+type TicketKind = 'portfolio' | 'objective' | 'initiative' | 'roadmap' | 'spec' | 'epic' | 'gap' | 'task' | 'retro' | 'poker';
 declare const TICKET_KINDS: TicketKind[];
-/** Only these kinds are runnable (a real board ticket an agent can execute). */
+/**
+ * Only these kinds are RUNNABLE — a board ticket an agent can be dispatched to execute.
+ *
+ * The ceremonies are deliberately absent, and that is the whole distinction between
+ * "linkable" and "runnable": a retrospective and an estimation session are work a TEAM
+ * performs together, so a chat can be tied to one and its progress read back, but there
+ * is nothing for a single agent to go and do. Offering "run an agent on this retro"
+ * would be a control that cannot mean anything.
+ */
 declare const RUNNABLE_KINDS: TicketKind[];
 type LinkType = 'linked' | 'created';
 /** A chat↔ticket link with a live health summary. */
@@ -1241,6 +1250,12 @@ interface EvermindKnowledgeAnalysis {
     /** The frontier model that graded, or null when only the local screen ran. */
     model: string | null;
     findings: EvermindKnowledgeFinding[];
+    /** How many memories the model holds in total. Differs from `analyzed` once the
+     *  project has learned more than one pass reviews. Absent from an older API. */
+    total?: number;
+    /** True when there is more history than this pass looked at — the summary says so
+     *  rather than implying the whole model was audited. */
+    truncated?: boolean;
     /** Present when the frontier review could not run — local findings still returned. */
     warning?: string;
 }
@@ -1248,7 +1263,11 @@ interface EvermindKnowledgeAnalysis {
 interface EvermindKnowledgeRepair {
     /** Memories re-taught with corrected knowledge. */
     corrected: number;
-    /** Memories dropped from the recall ring. */
+    /** Memories dropped from the recall index — they can no longer be retrieved or
+     *  ground a reply. NOT "unlearned": the residual influence a memory already had on
+     *  the weights is superseded the normal write-through way, by teaching the
+     *  correction, and for an `unusable`/`redundant` finding there IS no correction to
+     *  teach. The strings below say this rather than claiming more than happened. */
     forgotten: number;
     /** Contributions merged by the closing flush. */
     merged: number;
@@ -1491,6 +1510,8 @@ interface EvermindConsoleLabels {
     analyzeApplyCta: (count: number) => string;
     analyzeApplying: string;
     analyzeApplied: (corrected: number, forgotten: number, version: number) => string;
+    /** Coverage line shown when the audit reviewed only part of the history. */
+    analyzeCoverage: (analyzed: number, total: number) => string;
     analyzeSkipped: (count: number) => string;
     tabsLabel: string;
     tabTeach: string;

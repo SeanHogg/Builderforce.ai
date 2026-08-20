@@ -682,7 +682,9 @@
     "viewLive": "Live-Runde",
     "viewSchedules": "Zeitpläne",
     "viewSwitchLabel": "Zeremonie-Ansicht",
-    "viewHistory": "Verlauf"
+    "viewHistory": "Verlauf",
+    "viewRetro": "Retros",
+    "viewPoker": "Poker"
   },
   "projectCard": {
     "details": "Details",
@@ -1402,7 +1404,9 @@
     },
     "resultCount": "{n, plural, =0 {Keine Ergebnisse} one {# Ergebnis} other {# Ergebnisse}}",
     "done": "Fertig",
-    "keepYourWork": "Arbeit behalten"
+    "keepYourWork": "Arbeit behalten",
+    "yes": "Ja",
+    "no": "Nein"
   },
   "prdCreate": {
     "title": "Neues PRD",
@@ -2258,8 +2262,16 @@
       "noEpics": "Keine Epics mit Aktivität in diesem Zeitraum.",
       "epic": "Epic",
       "project": "Projekt",
-      "exportCsv": "CSV herunterladen",
-      "exporting": "Wird vorbereitet…"
+      "exporting": "Wird vorbereitet…",
+      "exportReport": "Bericht herunterladen",
+      "exportFormat": "Downloadformat",
+      "format": {
+        "xlsx": "Excel (.xlsx)",
+        "csv": "CSV",
+        "json": "JSON"
+      },
+      "measured": "Gemessener Aufwand",
+      "measuredSub": "{logged} von {total} aus erfasster Zeit, nicht aus Schätzungen"
     },
     "deliv": {
       "title": "Lieferung",
@@ -8332,7 +8344,9 @@
         "initiative": "Initiative",
         "portfolio": "Portfolio",
         "roadmap": "Roadmap",
-        "spec": "Spezifikation"
+        "spec": "Spezifikation",
+        "retro": "Retrospektive",
+        "poker": "Planning Poker"
       }
     },
     "approveAll": "Alle genehmigen",
@@ -15775,7 +15789,7 @@
     "datasetNoColumns": "In dieser Datei wurden keine Spalten gefunden.",
     "datasetImported": "{name} importiert – {rows} Zeilen, {columns} Spalten",
     "datasetImportFailed": "Import des Datensatzes fehlgeschlagen",
-    "datasetShape": "{rows} Zeilen · {columns} Spalten",
+    "datasetShape": "{rows, number} Zeilen · {columns} Spalten",
     "datasetStatusImported": "Importiert",
     "roleCannotEdit": "Deine Rolle in dieser Sitzung erlaubt kein Bearbeiten",
     "fileGeneric": "Datei",
@@ -15790,14 +15804,14 @@
       "statusUnreadable": "Konnte nicht gelesen werden",
       "statusTextUnavailable": "Text nicht extrahierbar",
       "fileGeneric": "Datei",
-      "datasetShape": "{rows} Zeilen · {columns} Spalten",
-      "workbookShape": "{sheets} Blätter · {rows} Zeilen · {columns} Spalten",
+      "datasetShape": "{rows, number} Zeilen · {columns} Spalten",
+      "workbookShape": "{sheets} Blätter · {rows, number} Zeilen · {columns} Spalten",
       "deckShape": "{slides, plural, one {# Folie} other {# Folien}}",
-      "documentShape": "{words} Wörter",
+      "documentShape": "{words, number} Wörter",
       "documentPages": "{pages, plural, one {# Seite} other {# Seiten}}",
       "pdfPages": "PDF · {pages, plural, one {# Seite} other {# Seiten}}",
-      "codeShape": "{lines} Zeilen",
-      "noticeDataset": "{name} als Datensatz geladen – {rows} Zeilen, {columns} Spalten",
+      "codeShape": "{lines, number} Zeilen",
+      "noticeDataset": "{name} als Datensatz geladen – {rows, number} Zeilen, {columns} Spalten",
       "noticeResume": "{name} als Lebenslauf gelesen – mit jeder Vorlage neu gestalten",
       "resumeShape": "{sections, plural, one {# Abschnitt} other {# Abschnitte}}",
       "noticeWorkbook": "{name} als Arbeitsmappe geladen – {sheets, plural, one {# Blatt} other {# Blätter}}",
@@ -15814,17 +15828,18 @@
       "promptImage": "Was ist auf {name} zu sehen und was soll ich damit machen?",
       "promptCode": "Prüfe {name} und erkläre, was der Code macht.",
       "promptFile": "Was kannst du mir über {name} sagen?",
-      "meshShape": "{facets} Facetten · {format}",
+      "meshShape": "{facets, number} Facetten · {format}",
       "drawingShape": "{format}-Zeichnung",
       "statusMeshUnreadable": "Geometrie konnte nicht gelesen werden",
       "promptModel": "Was soll ich an {name} prüfen?",
       "promptDrawing": "Was soll ich an der Zeichnung {name} prüfen?",
-      "noticeModel": "{name} als 3D-Modell gelesen — {facets} Facetten",
+      "noticeModel": "{name} als 3D-Modell gelesen — {facets, number} Facetten",
       "noticeDrawing": "{name} als CAD-Zeichnung gelesen",
       "noticeDiagram": "{name} liegt als {notation}-Diagramm auf der Fläche",
       "noticeDiagramConverted": "{name} war eine {source}-Zeichnung – als bearbeitbares {notation}-Diagramm eingelesen",
       "promptDiagram": "Was soll ich an {name} ändern?",
-      "diagramShape": "{notation} · {shapes} Formen · {connections} Verbindungen"
+      "diagramShape": "{notation} · {shapes} Formen · {connections} Verbindungen",
+      "fileMeta": "{type} · {kb, number} KB"
     },
     "datasetImportBeforeVisualizing": "Importiere Daten, bevor du sie visualisierst",
     "datasetImportBeforeProfiling": "Importiere Daten, bevor du die Spalten analysierst",
@@ -22816,11 +22831,13 @@
     "ndaHelp": "Die Signaturanfrage wurde Ihnen zusammen mit dem Link per E-Mail geschickt. Unterschreiben Sie sie und laden Sie diese Seite neu — vorher öffnet sich hier nichts.",
     "ndaPending": "Dieser Datenraum öffnet sich, sobald Ihre Geheimhaltungsvereinbarung unterschrieben ist.",
     "notProvided": "Noch nicht bereitgestellt",
+    "unstampableHelp": "{count} davon können ihr Format nicht mit einem Wasserzeichen versehen und öffnen sich daher nur in einem Tab, ohne Speichern. Alles andere trägt Ihre Adresse auf jeder Seite.",
+    "viewOnly": "nur ansehen",
     "open": "Öffnen",
     "required": "erforderlich",
     "viewHelp": "Dokumente öffnen sich in einem neuen Tab. Über diesen Link lässt sich keine Kopie speichern.",
-    "viewHelpWatermarked": "Dokumente öffnen sich in einem neuen Tab, gestempelt mit Ihrer Adresse und dem Zeitpunkt des Öffnens. Dieser Datenraum erlaubt keine gespeicherten Kopien.",
-    "watermarked": "Jedes Dokument hier trägt ein Wasserzeichen mit {label}. Downloads sind für diesen Datenraum abgeschaltet; Dokumente öffnen sich nur in einem Tab."
+    "viewHelpWatermarked": "Dokumente öffnen sich in einem neuen Tab, auf jeder Seite mit Ihrer Adresse und dem Zeitpunkt des Öffnens gestempelt. Jedes Öffnen wird zu diesem Link protokolliert.",
+    "watermarked": "Jede Seite, die Sie hier öffnen, ist mit {label} gestempelt. Ein Dokument, dessen Format den Stempel nicht tragen kann, öffnet sich nur in einem Tab."
   },
   "legalDocumentShare": {
     "eyebrow": "Mit Ihnen geteilt",
@@ -23592,5 +23609,73 @@
     "ladderTitle": "Was wann versendet wird",
     "rungBefore": "{label} — {days} Tage vor Fälligkeit",
     "rungAfter": "{label} — {days} Tage nach Fälligkeit"
+  },
+  "agile": {
+    "retrosTitle": "Retrospektiven",
+    "pokerTitle": "Planning Poker",
+    "sessions": "Sitzungen",
+    "loading": "Wird geladen…",
+    "saving": "Wird gespeichert…",
+    "create": "Erstellen",
+    "add": "Hinzufügen",
+    "startSession": "Sitzung starten",
+    "reveal": "Aufdecken",
+    "setEstimate": "Schätzung festlegen…",
+    "upvote": "Zustimmen",
+    "noRetros": "Noch keine Retrospektiven.",
+    "noSessions": "Noch keine Sitzungen.",
+    "noStories": "Noch keine Stories.",
+    "retroNamePlaceholder": "Name der Retrospektive",
+    "sessionNamePlaceholder": "Name der Sitzung",
+    "addStoryPlaceholder": "Story hinzufügen",
+    "addItemPlaceholder": "Hinzufügen…",
+    "addItemTo": "Zu {column} hinzufügen",
+    "retroTemplateLabel": "Retro-Vorlage",
+    "voteValue": "{value} wählen",
+    "voteCount": "{count} Stimme(n):",
+    "closeCeremony": "Sitzung abschließen",
+    "reopenCeremony": "Sitzung wieder öffnen",
+    "retroLoadFailed": "Retrospektiven konnten nicht geladen werden.",
+    "pokerLoadFailed": "Sitzungen konnten nicht geladen werden.",
+    "createFailedManager": "Anlegen fehlgeschlagen (Manager-Rolle erforderlich).",
+    "statusFailedManager": "Status konnte nicht geändert werden (Manager-Rolle erforderlich).",
+    "addFailed": "Hinzufügen fehlgeschlagen.",
+    "addStoryFailed": "Story konnte nicht hinzugefügt werden.",
+    "voteFailed": "Abstimmung fehlgeschlagen.",
+    "revealFailed": "Aufdecken fehlgeschlagen.",
+    "ceremonyStatus": {
+      "active": "Offen",
+      "completed": "Abgeschlossen",
+      "cancelled": "Abgebrochen",
+      "closed": "Geschlossen",
+      "archived": "Archiviert"
+    },
+    "storyStatus": {
+      "pending": "Nicht geschätzt",
+      "revealed": "Stimmen aufgedeckt",
+      "estimated": "Geschätzt"
+    },
+    "retroTemplate": {
+      "start_stop_continue": "Start / Stopp / Weiter",
+      "mad_sad_glad": "Wütend / Traurig / Froh",
+      "four_ls": "Die 4 L",
+      "what_went_well": "Was gut lief"
+    },
+    "retroColumn": {
+      "Start": "Start",
+      "Stop": "Stopp",
+      "Continue": "Weiter",
+      "Mad": "Wütend",
+      "Sad": "Traurig",
+      "Glad": "Froh",
+      "Liked": "Gefallen",
+      "Learned": "Gelernt",
+      "Lacked": "Gefehlt",
+      "Longed for": "Gewünscht",
+      "Went well": "Lief gut",
+      "To improve": "Zu verbessern",
+      "Action items": "Maßnahmen",
+      "Notes": "Notizen"
+    }
   }
 }

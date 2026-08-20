@@ -682,7 +682,9 @@
     "viewLive": "Live round-table",
     "viewSchedules": "Schedules",
     "viewSwitchLabel": "Ceremony view",
-    "viewHistory": "History"
+    "viewHistory": "History",
+    "viewRetro": "Retros",
+    "viewPoker": "Poker"
   },
   "projectCard": {
     "details": "Details",
@@ -1402,7 +1404,9 @@
     },
     "resultCount": "{n, plural, =0 {No results} one {# result} other {# results}}",
     "done": "Done",
-    "keepYourWork": "Keep your work"
+    "keepYourWork": "Keep your work",
+    "yes": "Yes",
+    "no": "No"
   },
   "prdCreate": {
     "title": "New PRD",
@@ -2258,8 +2262,16 @@
       "noEpics": "No epics with activity in this window.",
       "epic": "Epic",
       "project": "Project",
-      "exportCsv": "Download CSV",
-      "exporting": "Preparing…"
+      "exporting": "Preparing…",
+      "exportReport": "Download report",
+      "exportFormat": "Download format",
+      "format": {
+        "xlsx": "Excel (.xlsx)",
+        "csv": "CSV",
+        "json": "JSON"
+      },
+      "measured": "Measured effort",
+      "measuredSub": "{logged} of {total} from recorded time, not estimates"
     },
     "deliv": {
       "title": "Delivery",
@@ -8332,7 +8344,9 @@
         "initiative": "Initiative",
         "portfolio": "Portfolio",
         "roadmap": "Roadmap",
-        "spec": "Spec"
+        "spec": "Spec",
+        "retro": "Retrospective",
+        "poker": "Planning poker"
       }
     },
     "approveAll": "Approve all",
@@ -15775,7 +15789,7 @@
     "datasetNoColumns": "No columns were found in that file.",
     "datasetImported": "{name} imported — {rows} rows, {columns} columns",
     "datasetImportFailed": "Dataset import failed",
-    "datasetShape": "{rows} rows · {columns} columns",
+    "datasetShape": "{rows, number} rows · {columns} columns",
     "datasetStatusImported": "Imported",
     "roleCannotEdit": "Your session role does not allow editing",
     "fileGeneric": "File",
@@ -15790,14 +15804,14 @@
       "statusUnreadable": "Could not be read",
       "statusTextUnavailable": "Text not extractable",
       "fileGeneric": "File",
-      "datasetShape": "{rows} rows · {columns} columns",
-      "workbookShape": "{sheets} sheets · {rows} rows · {columns} columns",
+      "datasetShape": "{rows, number} rows · {columns} columns",
+      "workbookShape": "{sheets} sheets · {rows, number} rows · {columns} columns",
       "deckShape": "{slides, plural, one {# slide} other {# slides}}",
-      "documentShape": "{words} words",
+      "documentShape": "{words, number} words",
       "documentPages": "{pages, plural, one {# page} other {# pages}}",
       "pdfPages": "PDF · {pages, plural, one {# page} other {# pages}}",
-      "codeShape": "{lines} lines",
-      "noticeDataset": "{name} loaded as a dataset — {rows} rows, {columns} columns",
+      "codeShape": "{lines, number} lines",
+      "noticeDataset": "{name} loaded as a dataset — {rows, number} rows, {columns} columns",
       "noticeResume": "{name} read as a résumé — restyle it with any template",
       "resumeShape": "{sections, plural, one {# section} other {# sections}}",
       "noticeWorkbook": "{name} loaded as a workbook — {sheets, plural, one {# sheet} other {# sheets}}",
@@ -15814,17 +15828,18 @@
       "promptImage": "What is in {name}, and what should I do with it?",
       "promptCode": "Review {name} and explain what it does.",
       "promptFile": "What can you tell me about {name}?",
-      "meshShape": "{facets} facets · {format}",
+      "meshShape": "{facets, number} facets · {format}",
       "drawingShape": "{format} drawing",
       "statusMeshUnreadable": "Geometry could not be read",
       "promptModel": "What should I check about {name}?",
       "promptDrawing": "What should I check about the {name} drawing?",
-      "noticeModel": "{name} read as a 3D model — {facets} facets",
+      "noticeModel": "{name} read as a 3D model — {facets, number} facets",
       "noticeDrawing": "{name} read as a CAD drawing",
       "noticeDiagram": "{name} is on the board as a {notation} diagram",
       "noticeDiagramConverted": "{name} was a {source} drawing — read as an editable {notation} diagram",
       "promptDiagram": "What should I change about {name}?",
-      "diagramShape": "{notation} · {shapes} shapes · {connections} connections"
+      "diagramShape": "{notation} · {shapes} shapes · {connections} connections",
+      "fileMeta": "{type} · {kb, number} KB"
     },
     "datasetImportBeforeVisualizing": "Import data before visualizing it",
     "datasetImportBeforeProfiling": "Import data before profiling it",
@@ -22816,11 +22831,13 @@
     "ndaHelp": "The signing request was emailed to you when the link was sent. Sign it and reload this page — nothing here opens before then.",
     "ndaPending": "This data room opens once your NDA is signed.",
     "notProvided": "Not provided yet",
+    "unstampableHelp": "{count} of these cannot carry a watermark in their format, so they open in a tab and cannot be saved. Everything else is stamped with your address on every page.",
+    "viewOnly": "view only",
     "open": "Open",
     "required": "required",
     "viewHelp": "Documents open in a new tab. This link does not let you save a copy.",
-    "viewHelpWatermarked": "Documents open in a new tab, stamped with your address and the time you opened them. This room does not allow saved copies.",
-    "watermarked": "Every document here is watermarked with {label}. Downloads are turned off for this room; documents open in a tab only."
+    "viewHelpWatermarked": "Documents open in a new tab, stamped on every page with your address and the time you opened them. Every open is recorded against this link.",
+    "watermarked": "Every page you open here is stamped with {label}. A document that cannot carry the stamp in its format opens in a tab only."
   },
   "legalDocumentShare": {
     "eyebrow": "Shared with you",
@@ -23592,5 +23609,73 @@
     "ladderTitle": "What gets sent, and when",
     "rungBefore": "{label} — {days} days before it falls due",
     "rungAfter": "{label} — {days} days after it falls due"
+  },
+  "agile": {
+    "retrosTitle": "Retrospectives",
+    "pokerTitle": "Planning Poker",
+    "sessions": "Sessions",
+    "loading": "Loading…",
+    "saving": "Saving…",
+    "create": "Create",
+    "add": "Add",
+    "startSession": "Start session",
+    "reveal": "Reveal",
+    "setEstimate": "Set estimate…",
+    "upvote": "Upvote",
+    "noRetros": "No retrospectives yet.",
+    "noSessions": "No sessions yet.",
+    "noStories": "No stories yet.",
+    "retroNamePlaceholder": "New retro name",
+    "sessionNamePlaceholder": "New session name",
+    "addStoryPlaceholder": "Add a story",
+    "addItemPlaceholder": "Add…",
+    "addItemTo": "Add to {column}",
+    "retroTemplateLabel": "Retro template",
+    "voteValue": "Vote {value}",
+    "voteCount": "{count} vote(s):",
+    "closeCeremony": "Close session",
+    "reopenCeremony": "Re-open session",
+    "retroLoadFailed": "Could not load retros.",
+    "pokerLoadFailed": "Could not load sessions.",
+    "createFailedManager": "Create failed (manager role required).",
+    "statusFailedManager": "Could not change the status (manager role required).",
+    "addFailed": "Add failed.",
+    "addStoryFailed": "Add story failed.",
+    "voteFailed": "Vote failed.",
+    "revealFailed": "Reveal failed.",
+    "ceremonyStatus": {
+      "active": "Open",
+      "completed": "Completed",
+      "cancelled": "Cancelled",
+      "closed": "Closed",
+      "archived": "Archived"
+    },
+    "storyStatus": {
+      "pending": "Not estimated",
+      "revealed": "Votes revealed",
+      "estimated": "Estimated"
+    },
+    "retroTemplate": {
+      "start_stop_continue": "Start / Stop / Continue",
+      "mad_sad_glad": "Mad / Sad / Glad",
+      "four_ls": "4 Ls",
+      "what_went_well": "What went well"
+    },
+    "retroColumn": {
+      "Start": "Start",
+      "Stop": "Stop",
+      "Continue": "Continue",
+      "Mad": "Mad",
+      "Sad": "Sad",
+      "Glad": "Glad",
+      "Liked": "Liked",
+      "Learned": "Learned",
+      "Lacked": "Lacked",
+      "Longed for": "Longed for",
+      "Went well": "Went well",
+      "To improve": "To improve",
+      "Action items": "Action items",
+      "Notes": "Notes"
+    }
   }
 }

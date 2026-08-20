@@ -106,6 +106,19 @@ describe('workItemLinkFromCreate', () => {
       .toEqual({ kind: 'task', ref: '7', linkType: 'created' });
   });
 
+  /**
+   * A retro and an estimation session are TEAM WORK, not ambient rooms. When the Brain
+   * sets one up from a conversation, that session is the conversation's outcome — so it
+   * links like every other item the agent creates. Without this the chat that arranged
+   * the ceremony kept no trace of it.
+   */
+  it('links a ceremony the Brain creates back to the conversation', () => {
+    expect(workItemLinkFromCreate('builtin_retro_create', { id: 'retro-uuid' }))
+      .toEqual({ kind: 'retro', ref: 'retro-uuid', linkType: 'created' });
+    expect(workItemLinkFromCreate('builtin_poker_create_session', { id: 'poker-uuid' }))
+      .toEqual({ kind: 'poker', ref: 'poker-uuid', linkType: 'created' });
+  });
+
   it('maps the strategy + spec create tools to their tier with the uuid ref', () => {
     expect(workItemLinkFromCreate('builtin_objectives_create', { id: 'obj-uuid' }))
       .toEqual({ kind: 'objective', ref: 'obj-uuid', linkType: 'created' });

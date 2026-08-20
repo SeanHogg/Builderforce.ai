@@ -18,6 +18,7 @@ import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { broadcastRoom } from '../../infrastructure/relay/broadcastRoom';
 import { relayToRoom } from './realtimeRelay';
+import { isCeremonySessionStatus } from '../../domain/agile/ceremonySession';
 
 /** Resolve a story's parent session (to know which room to broadcast to). */
 async function sessionIdForStory(db: Db, storyId: string, tenantId: number, segmentId: string): Promise<string | null> {
@@ -131,6 +132,29 @@ export function createPokerRoutes(db: Db): Hono<HonoEnv> {
     return c.json(row);
   });
 
+  /**
+   * Close (or re-open) the session itself. Until this existed `poker_sessions.status`
+   * was written once, at insert, and never again — so an estimation session could be
+   * run to completion and still read as `active` forever, and nothing downstream could
+   * tell a finished ceremony from an abandoned one. MANAGER+, matching every other
+   * session-level write here.
+   */
+  r.patch('/sessions/:id', requireRole(TenantRole.MANAGER), async (c) => {
+    const { tenantId, segmentId } = scope(c);
+    const id = c.req.param('id');
+    const body = await c.req.json<{ status?: unknown }>();
+    if (!isCeremonySessionStatus(body.status)) {
+      return c.json({ error: 'status must be one of: active, completed, cancelled' }, 400);
+    }
+    const [row] = await db.update(pokerSessions)
+      .set({ status: body.status.toLowerCase(), updatedAt: new Date() })
+      .where(and(eq(pokerSessions.id, id), eq(pokerSessions.tenantId, tenantId), eq(pokerSessions.segmentId, segmentId)))
+      .returning();
+    if (!row) return c.json({ error: 'not found' }, 404);
+    await broadcastRoom(c.env?.SESSION_ROOM, `poker:${id}`);
+    return c.json(row);
+  });
+
   return r;
 }
 
@@ -199,6 +223,28 @@ export function createRetroRoutes(db: Db): Hono<HonoEnv> {
     if (!row) return c.json({ error: 'not found' }, 404);
     await broadcastRoom(c.env?.SESSION_ROOM, `retro:${row.retroId}`);
     return c.json({ deleted: row.id });
+  });
+
+  /**
+   * Close (or re-open) the retrospective. Same defect as the poker session above:
+   * `retrospectives.status` was written at insert and never again, so a retro the team
+   * held and finished stayed `active` indefinitely and there was no way to say it was
+   * over. MANAGER+, matching the create above (adding items stays member-level).
+   */
+  r.patch('/:id', requireRole(TenantRole.MANAGER), async (c) => {
+    const { tenantId, segmentId } = scope(c);
+    const id = c.req.param('id');
+    const body = await c.req.json<{ status?: unknown }>();
+    if (!isCeremonySessionStatus(body.status)) {
+      return c.json({ error: 'status must be one of: active, completed, cancelled' }, 400);
+    }
+    const [row] = await db.update(retrospectives)
+      .set({ status: body.status.toLowerCase(), updatedAt: new Date() })
+      .where(and(eq(retrospectives.id, id), eq(retrospectives.tenantId, tenantId), eq(retrospectives.segmentId, segmentId)))
+      .returning();
+    if (!row) return c.json({ error: 'not found' }, 404);
+    await broadcastRoom(c.env?.SESSION_ROOM, `retro:${id}`);
+    return c.json(row);
   });
 
   return r;

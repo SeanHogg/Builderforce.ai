@@ -29,8 +29,13 @@ import {
   roadmapItems,
   specs,
   ideAgents,
+  pokerSessions,
+  pokerStories,
+  retrospectives,
+  retroItems,
 } from '../../infrastructure/database/schema';
 import { resolveSegment } from '../../infrastructure/auth/segmentResolver';
+import { isCeremonySessionDone } from '../../domain/agile/ceremonySession';
 import { notSystemTask } from '../task/taskScope';
 import { keyResultProgress, objectiveProgress } from '../pmo/portfolioRollup';
 import { AgentAssignmentService } from '../agent/AgentAssignmentService';
@@ -41,8 +46,18 @@ import { broadcastBrainChatChanged } from '../../infrastructure/relay/broadcastR
 
 const CHAT_SCOPE = 'chat';
 
-/** The work-item kinds a chat can be tied to (planning spine + roadmap + spec + gap). */
-export const TICKET_KINDS = ['portfolio', 'objective', 'initiative', 'roadmap', 'spec', 'epic', 'gap', 'task'] as const;
+/**
+ * The work-item kinds a chat can be tied to (planning spine + roadmap + spec + gap +
+ * the two team CEREMONIES).
+ *
+ * `retro` and `poker` were long excluded on the grounds that they are "ceremony
+ * sessions, not health-bearing work items". That reasoning does not survive contact
+ * with what they are: a retrospective and an estimation session are work a TEAM
+ * performs, they have an outcome, and they are exactly the kind of thing a chat gets
+ * opened about. Excluding them meant a conversation that planned or ran one had
+ * nowhere to record it, so the lineage simply went missing.
+ */
+export const TICKET_KINDS = ['portfolio', 'objective', 'initiative', 'roadmap', 'spec', 'epic', 'gap', 'task', 'retro', 'poker'] as const;
 export type TicketKind = (typeof TICKET_KINDS)[number];
 
 export type LinkType = 'linked' | 'created';
@@ -190,6 +205,17 @@ export class ChatTicketService {
       return row ? { label: row.goal, status: row.status } : null;
     }
     const seg = await resolveSegment(this.db, tenantId);
+    // Team ceremonies — segment-scoped, tenant-wide (they are not project-owned).
+    if (kind === 'retro') {
+      const [row] = await this.db.select({ name: retrospectives.name, status: retrospectives.status }).from(retrospectives)
+        .where(and(eq(retrospectives.id, ref), eq(retrospectives.tenantId, tenantId), eq(retrospectives.segmentId, seg))).limit(1);
+      return row ? { label: row.name, status: row.status } : null;
+    }
+    if (kind === 'poker') {
+      const [row] = await this.db.select({ name: pokerSessions.name, status: pokerSessions.status }).from(pokerSessions)
+        .where(and(eq(pokerSessions.id, ref), eq(pokerSessions.tenantId, tenantId), eq(pokerSessions.segmentId, seg))).limit(1);
+      return row ? { label: row.name, status: row.status } : null;
+    }
     if (kind === 'objective') {
       const [row] = await this.db.select({ title: objectives.title, status: objectives.status }).from(objectives)
         .where(and(eq(objectives.id, ref), eq(objectives.tenantId, tenantId), eq(objectives.segmentId, seg))).limit(1);
@@ -266,6 +292,22 @@ export class ChatTicketService {
 
     // Strategy tiers — segment-scoped, tenant-wide (no project filter, matching the picker).
     const seg = await resolveSegment(this.db, tenantId);
+    // Team ceremonies. Not project-filtered: neither table carries a projectId — a
+    // retro or an estimation session belongs to the TEAM, not to one project.
+    if (kind === 'retro') {
+      const conds: SQL[] = [eq(retrospectives.tenantId, tenantId), eq(retrospectives.segmentId, seg)];
+      if (like) conds.push(ilike(retrospectives.name, like));
+      const rows = await this.db.select({ id: retrospectives.id, name: retrospectives.name })
+        .from(retrospectives).where(and(...conds)).orderBy(desc(retrospectives.updatedAt)).limit(lim);
+      return rows.map((r) => ({ ref: r.id, label: r.name }));
+    }
+    if (kind === 'poker') {
+      const conds: SQL[] = [eq(pokerSessions.tenantId, tenantId), eq(pokerSessions.segmentId, seg)];
+      if (like) conds.push(ilike(pokerSessions.name, like));
+      const rows = await this.db.select({ id: pokerSessions.id, name: pokerSessions.name })
+        .from(pokerSessions).where(and(...conds)).orderBy(desc(pokerSessions.updatedAt)).limit(lim);
+      return rows.map((r) => ({ ref: r.id, label: r.name }));
+    }
     if (kind === 'objective') {
       const conds: SQL[] = [eq(objectives.tenantId, tenantId), eq(objectives.segmentId, seg)];
       if (like) conds.push(ilike(objectives.title, like));
@@ -306,6 +348,8 @@ export class ChatTicketService {
     const pfIds = new Set<string>();
     const roadmapIds = new Set<string>();
     const specIds = new Set<string>();
+    const retroIds = new Set<string>();
+    const pokerIds = new Set<string>();
     for (const t of clean) {
       if (t.kind === 'task') { const n = Number(t.ref); if (Number.isInteger(n)) taskIds.add(n); }
       else if (t.kind === 'epic') { const n = Number(t.ref); if (Number.isInteger(n)) epicIds.add(n); }
@@ -315,6 +359,8 @@ export class ChatTicketService {
       else if (t.kind === 'portfolio') pfIds.add(t.ref);
       else if (t.kind === 'roadmap') roadmapIds.add(t.ref);
       else if (t.kind === 'spec') specIds.add(t.ref);
+      else if (t.kind === 'retro') retroIds.add(t.ref);
+      else if (t.kind === 'poker') pokerIds.add(t.ref);
     }
 
     // Tasks + epics + gaps share the tasks table: fetch self rows (title/status) for
@@ -460,6 +506,68 @@ export class ChatTicketService {
         const done = st === 'complete' ? 1 : 0;
         const progressPct = done ? 100 : (st === 'in_progress' || st === 'ready' ? 50 : 0);
         out.set(key('spec', id), { kind: 'spec', ref: id, label: s.goal, status: s.status, progressPct, done, total: done ? 1 : 0, exists: true });
+      }
+    }
+
+    // ── Team ceremonies ──────────────────────────────────────────────────────
+    // A retro is a LEAF (its items are observations, not work that completes), so it
+    // reads like roadmap/spec: terminal status ⇒ 100. The middle value is the honest
+    // part — an OPEN retro is only "underway" once the team has actually put something
+    // in it, so an empty one reports 0 rather than the flat 50% a status-only rule
+    // would give every retro the moment it is created.
+    if (retroIds.size > 0) {
+      const rows = await this.db.select({ id: retrospectives.id, name: retrospectives.name, status: retrospectives.status })
+        .from(retrospectives)
+        .where(and(inArray(retrospectives.id, [...retroIds]), eq(retrospectives.tenantId, tenantId)));
+      const byId = new Map(rows.map((r) => [r.id, r]));
+      // One grouped count for EVERY linked retro — never a query per link.
+      const itemCounts = rows.length
+        ? await this.db.select({ retroId: retroItems.retroId, n: sql<number>`count(*)::int` })
+            .from(retroItems)
+            .where(and(inArray(retroItems.retroId, rows.map((r) => r.id)), eq(retroItems.tenantId, tenantId)))
+            .groupBy(retroItems.retroId)
+        : [];
+      const itemsById = new Map(itemCounts.map((c) => [c.retroId, Number(c.n) || 0]));
+      for (const id of retroIds) {
+        const r = byId.get(id);
+        if (!r) { out.set(key('retro', id), missing('retro', id)); continue; }
+        const done = isCeremonySessionDone(r.status) ? 1 : 0;
+        const items = itemsById.get(id) ?? 0;
+        const progressPct = done ? 100 : (items > 0 ? 50 : 0);
+        out.set(key('retro', id), { kind: 'retro', ref: id, label: r.name, status: r.status, progressPct, done, total: done ? 1 : 0, exists: true });
+      }
+    }
+
+    // A poker session IS a container: its stories are the work, and a story is done
+    // when it carries a final estimate — which is the entire point of the ceremony.
+    // So the ring means "5 of 8 stories estimated", not merely "open / closed". A
+    // session with no stories yet has nothing to roll up, so it falls back to its own
+    // status, which is also what makes a closed-but-empty session read as complete.
+    if (pokerIds.size > 0) {
+      const rows = await this.db.select({ id: pokerSessions.id, name: pokerSessions.name, status: pokerSessions.status })
+        .from(pokerSessions)
+        .where(and(inArray(pokerSessions.id, [...pokerIds]), eq(pokerSessions.tenantId, tenantId)));
+      const byId = new Map(rows.map((r) => [r.id, r]));
+      const storyCounts = rows.length
+        ? await this.db.select({
+              sessionId: pokerStories.sessionId,
+              total: sql<number>`count(*)::int`,
+              estimated: sql<number>`count(*) filter (where ${pokerStories.finalEstimate} is not null)::int`,
+            })
+            .from(pokerStories)
+            .where(and(inArray(pokerStories.sessionId, rows.map((r) => r.id)), eq(pokerStories.tenantId, tenantId)))
+            .groupBy(pokerStories.sessionId)
+        : [];
+      const countsById = new Map(storyCounts.map((c) => [c.sessionId, { total: Number(c.total) || 0, done: Number(c.estimated) || 0 }]));
+      for (const id of pokerIds) {
+        const p = byId.get(id);
+        if (!p) { out.set(key('poker', id), missing('poker', id)); continue; }
+        const c = countsById.get(id) ?? { total: 0, done: 0 };
+        const closed = isCeremonySessionDone(p.status);
+        const done = c.total > 0 ? c.done : (closed ? 1 : 0);
+        const total = c.total > 0 ? c.total : (closed ? 1 : 0);
+        const progressPct = total > 0 ? Math.round((done / total) * 100) : 0;
+        out.set(key('poker', id), { kind: 'poker', ref: id, label: p.name, status: p.status, progressPct, done, total, exists: true });
       }
     }
 

@@ -890,7 +890,12 @@ var CREATE_TOOL_KIND = {
   builtin_objectives_create: "objective",
   builtin_specs_create: "spec",
   builtin_portfolios_create: "portfolio",
-  builtin_initiatives_create: "initiative"
+  builtin_initiatives_create: "initiative",
+  // Team ceremonies. A retro or an estimation session the Brain sets up FROM a
+  // conversation is that conversation's outcome, so it links like any other item it
+  // creates — without this the chat that arranged the ceremony kept no trace of it.
+  builtin_retro_create: "retro",
+  builtin_poker_create_session: "poker"
 };
 function workItemLinkFromCreate(toolName, result) {
   if (!result || typeof result !== "object") return null;

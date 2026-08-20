@@ -682,7 +682,9 @@
     "viewLive": "Table ronde en direct",
     "viewSchedules": "Planifications",
     "viewSwitchLabel": "Vue de cérémonie",
-    "viewHistory": "Historique"
+    "viewHistory": "Historique",
+    "viewRetro": "Rétros",
+    "viewPoker": "Poker"
   },
   "projectCard": {
     "details": "Détails",
@@ -1402,7 +1404,9 @@
     },
     "resultCount": "{n, plural, =0 {Aucun résultat} one {# résultat} other {# résultats}}",
     "done": "Terminé",
-    "keepYourWork": "Garder mon travail"
+    "keepYourWork": "Garder mon travail",
+    "yes": "Oui",
+    "no": "Non"
   },
   "prdCreate": {
     "title": "Nouveau PRD",
@@ -2258,8 +2262,16 @@
       "noEpics": "Aucune épopée active sur cette période.",
       "epic": "Épopée",
       "project": "Projet",
-      "exportCsv": "Télécharger le CSV",
-      "exporting": "Préparation…"
+      "exporting": "Préparation…",
+      "exportReport": "Télécharger le rapport",
+      "exportFormat": "Format de téléchargement",
+      "format": {
+        "xlsx": "Excel (.xlsx)",
+        "csv": "CSV",
+        "json": "JSON"
+      },
+      "measured": "Effort mesuré",
+      "measuredSub": "{logged} sur {total} proviennent de temps réellement saisi, pas d’estimations"
     },
     "deliv": {
       "title": "Livraison",
@@ -8332,7 +8344,9 @@
         "initiative": "Initiative",
         "portfolio": "Portefeuille",
         "roadmap": "Feuille de route",
-        "spec": "Spécification"
+        "spec": "Spécification",
+        "retro": "Rétrospective",
+        "poker": "Planning poker"
       }
     },
     "approveAll": "Tout approuver",
@@ -15775,7 +15789,7 @@
     "datasetNoColumns": "Aucune colonne n’a été trouvée dans ce fichier.",
     "datasetImported": "{name} importé — {rows} lignes, {columns} colonnes",
     "datasetImportFailed": "Échec de l’import du jeu de données",
-    "datasetShape": "{rows} lignes · {columns} colonnes",
+    "datasetShape": "{rows, number} lignes · {columns} colonnes",
     "datasetStatusImported": "Importé",
     "roleCannotEdit": "Votre rôle dans cette session ne permet pas la modification",
     "fileGeneric": "Fichier",
@@ -15790,14 +15804,14 @@
       "statusUnreadable": "Lecture impossible",
       "statusTextUnavailable": "Texte non extractible",
       "fileGeneric": "Fichier",
-      "datasetShape": "{rows} lignes · {columns} colonnes",
-      "workbookShape": "{sheets} feuilles · {rows} lignes · {columns} colonnes",
+      "datasetShape": "{rows, number} lignes · {columns} colonnes",
+      "workbookShape": "{sheets} feuilles · {rows, number} lignes · {columns} colonnes",
       "deckShape": "{slides, plural, one {# diapositive} other {# diapositives}}",
-      "documentShape": "{words} mots",
+      "documentShape": "{words, number} mots",
       "documentPages": "{pages, plural, one {# page} other {# pages}}",
       "pdfPages": "PDF · {pages, plural, one {# page} other {# pages}}",
-      "codeShape": "{lines} lignes",
-      "noticeDataset": "{name} chargé comme jeu de données — {rows} lignes, {columns} colonnes",
+      "codeShape": "{lines, number} lignes",
+      "noticeDataset": "{name} chargé comme jeu de données — {rows, number} lignes, {columns} colonnes",
       "noticeResume": "{name} lu comme un CV — changez son style avec n’importe quel modèle",
       "resumeShape": "{sections, plural, one {# rubrique} other {# rubriques}}",
       "noticeWorkbook": "{name} chargé comme classeur — {sheets, plural, one {# feuille} other {# feuilles}}",
@@ -15814,17 +15828,18 @@
       "promptImage": "Que contient {name} et qu'en faire ?",
       "promptCode": "Relis {name} et explique ce qu'il fait.",
       "promptFile": "Que peux-tu me dire à propos de {name} ?",
-      "meshShape": "{facets} facettes · {format}",
+      "meshShape": "{facets, number} facettes · {format}",
       "drawingShape": "Plan {format}",
       "statusMeshUnreadable": "La géométrie n'a pas pu être lue",
       "promptModel": "Que dois-je vérifier à propos de {name} ?",
       "promptDrawing": "Que dois-je vérifier à propos du plan {name} ?",
-      "noticeModel": "{name} lu comme modèle 3D — {facets} facettes",
+      "noticeModel": "{name} lu comme modèle 3D — {facets, number} facettes",
       "noticeDrawing": "{name} lu comme plan CAO",
       "noticeDiagram": "{name} est sur le tableau en tant que diagramme {notation}",
       "noticeDiagramConverted": "{name} était un dessin {source} — lu comme un diagramme {notation} modifiable",
       "promptDiagram": "Que dois-je modifier dans {name} ?",
-      "diagramShape": "{notation} · {shapes} formes · {connections} connexions"
+      "diagramShape": "{notation} · {shapes} formes · {connections} connexions",
+      "fileMeta": "{type} · {kb, number} Ko"
     },
     "datasetImportBeforeVisualizing": "Importez des données avant de les visualiser",
     "datasetImportBeforeProfiling": "Importez des données avant d’analyser leurs colonnes",
@@ -22816,11 +22831,13 @@
     "ndaHelp": "La demande de signature vous a été envoyée par e-mail en même temps que le lien. Signez-la puis rechargez cette page — rien ne s’ouvre avant.",
     "ndaPending": "Cette data room s’ouvrira dès que votre accord de confidentialité sera signé.",
     "notProvided": "Pas encore fourni",
+    "unstampableHelp": "{count} d’entre eux ne peuvent pas porter de filigrane dans leur format : ils s’ouvrent dans un onglet et ne peuvent pas être enregistrés. Tout le reste est estampillé de votre adresse sur chaque page.",
+    "viewOnly": "consultation seule",
     "open": "Ouvrir",
     "required": "obligatoire",
     "viewHelp": "Les documents s’ouvrent dans un nouvel onglet. Ce lien ne permet pas d’en enregistrer une copie.",
-    "viewHelpWatermarked": "Les documents s’ouvrent dans un nouvel onglet, estampillés de votre adresse et de l’heure d’ouverture. Cette data room n’autorise aucune copie enregistrée.",
-    "watermarked": "Chaque document porte un filigrane indiquant {label}. Les téléchargements sont désactivés pour cette data room ; les documents s’ouvrent uniquement dans un onglet."
+    "viewHelpWatermarked": "Les documents s’ouvrent dans un nouvel onglet, estampillés sur chaque page de votre adresse et de l’heure d’ouverture. Chaque ouverture est enregistrée pour ce lien.",
+    "watermarked": "Chaque page que vous ouvrez ici porte la mention {label}. Un document dont le format ne peut pas porter le filigrane s’ouvre uniquement dans un onglet."
   },
   "legalDocumentShare": {
     "eyebrow": "Partagé avec vous",
@@ -23592,5 +23609,73 @@
     "ladderTitle": "Ce qui part, et quand",
     "rungBefore": "{label} — {days} jours avant l’échéance",
     "rungAfter": "{label} — {days} jours après l’échéance"
+  },
+  "agile": {
+    "retrosTitle": "Rétrospectives",
+    "pokerTitle": "Planning Poker",
+    "sessions": "Sessions",
+    "loading": "Chargement…",
+    "saving": "Enregistrement…",
+    "create": "Créer",
+    "add": "Ajouter",
+    "startSession": "Démarrer la session",
+    "reveal": "Révéler",
+    "setEstimate": "Définir l’estimation…",
+    "upvote": "Voter pour",
+    "noRetros": "Aucune rétrospective pour l’instant.",
+    "noSessions": "Aucune session pour l’instant.",
+    "noStories": "Aucune story pour l’instant.",
+    "retroNamePlaceholder": "Nom de la rétrospective",
+    "sessionNamePlaceholder": "Nom de la session",
+    "addStoryPlaceholder": "Ajouter une story",
+    "addItemPlaceholder": "Ajouter…",
+    "addItemTo": "Ajouter à {column}",
+    "retroTemplateLabel": "Modèle de rétrospective",
+    "voteValue": "Voter {value}",
+    "voteCount": "{count} vote(s) :",
+    "closeCeremony": "Clore la session",
+    "reopenCeremony": "Rouvrir la session",
+    "retroLoadFailed": "Impossible de charger les rétrospectives.",
+    "pokerLoadFailed": "Impossible de charger les sessions.",
+    "createFailedManager": "Création impossible (rôle manager requis).",
+    "statusFailedManager": "Impossible de changer le statut (rôle manager requis).",
+    "addFailed": "Ajout impossible.",
+    "addStoryFailed": "Impossible d’ajouter la story.",
+    "voteFailed": "Vote impossible.",
+    "revealFailed": "Révélation impossible.",
+    "ceremonyStatus": {
+      "active": "Ouverte",
+      "completed": "Terminée",
+      "cancelled": "Annulée",
+      "closed": "Close",
+      "archived": "Archivée"
+    },
+    "storyStatus": {
+      "pending": "Non estimée",
+      "revealed": "Votes révélés",
+      "estimated": "Estimée"
+    },
+    "retroTemplate": {
+      "start_stop_continue": "Commencer / Arrêter / Continuer",
+      "mad_sad_glad": "Fâché / Triste / Content",
+      "four_ls": "Les 4 L",
+      "what_went_well": "Ce qui a bien marché"
+    },
+    "retroColumn": {
+      "Start": "Commencer",
+      "Stop": "Arrêter",
+      "Continue": "Continuer",
+      "Mad": "Fâché",
+      "Sad": "Triste",
+      "Glad": "Content",
+      "Liked": "Aimé",
+      "Learned": "Appris",
+      "Lacked": "Manqué",
+      "Longed for": "Souhaité",
+      "Went well": "A bien marché",
+      "To improve": "À améliorer",
+      "Action items": "Actions",
+      "Notes": "Notes"
+    }
   }
 }

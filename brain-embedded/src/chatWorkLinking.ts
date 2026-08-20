@@ -61,6 +61,11 @@ const CREATE_TOOL_KIND: Readonly<Record<string, string>> = {
   builtin_specs_create: 'spec',
   builtin_portfolios_create: 'portfolio',
   builtin_initiatives_create: 'initiative',
+  // Team ceremonies. A retro or an estimation session the Brain sets up FROM a
+  // conversation is that conversation's outcome, so it links like any other item it
+  // creates — without this the chat that arranged the ceremony kept no trace of it.
+  builtin_retro_create: 'retro',
+  builtin_poker_create_session: 'poker',
 };
 
 /** A work item a create tool just produced, in the shape `builtin_chats_link_ticket`
