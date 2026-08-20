@@ -953,9 +953,34 @@ export async function invoiceByToken(db: Db, token: string): Promise<{ tenantId:
   const clean = token.trim();
   if (!clean) return null;
   const tokenHash = await hashShareToken(clean);
+  // Only the two columns that IDENTIFY the row. The projection itself is
+  // {@link invoiceDocument}, shared with the tenant's own read and with the PDF —
+  // one document, three doors, so the paper a customer receives cannot describe
+  // different figures from the paper the founder downloads.
+  const [row] = await db
+    .select({ tenantId: invoices.tenantId, reference: invoices.reference })
+    .from(invoices)
+    .where(acrossTenants(invoices, 'share_token', eq(invoices.documentTokenHash, tokenHash)))
+    .limit(1);
+  if (!row) return null;
+
+  const document = await invoiceDocument(db, row.tenantId, row.reference);
+  return document ? { tenantId: row.tenantId, document } : null;
+}
+
+/**
+ * THE document projection — what an invoice IS, to anybody entitled to read it.
+ *
+ * One function rather than one per caller, because the three readers are the
+ * customer's page, the customer's PDF and the founder's own copy, and an invoice
+ * whose three renderings disagree about the outstanding amount is worse than one
+ * that has no PDF at all. Every rule that could drift lives here: what counts as
+ * outstanding, when a payment link may still be offered, and how the ageing is
+ * derived.
+ */
+export async function invoiceDocument(db: Db, tenantId: number, reference: string): Promise<PublicInvoiceDocument | null> {
   const [row] = await db
     .select({
-      tenantId: invoices.tenantId,
       reference: invoices.reference,
       customerName: invoices.customerName,
       currency: invoices.currency,
@@ -968,7 +993,7 @@ export async function invoiceByToken(db: Db, token: string): Promise<{ tenantId:
       paymentLinkUrl: invoices.paymentLinkUrl,
     })
     .from(invoices)
-    .where(acrossTenants(invoices, 'share_token', eq(invoices.documentTokenHash, tokenHash)))
+    .where(scopedToTenant(invoices, tenantId, eq(invoices.reference, reference.trim().slice(0, 64))))
     .limit(1);
   if (!row) return null;
 
@@ -980,7 +1005,7 @@ export async function invoiceByToken(db: Db, token: string): Promise<{ tenantId:
       amount: invoiceLineItems.amount,
     })
     .from(invoiceLineItems)
-    .where(scopedToTenant(invoiceLineItems, row.tenantId, and(
+    .where(scopedToTenant(invoiceLineItems, tenantId, and(
       eq(invoiceLineItems.documentKind, 'invoice'),
       eq(invoiceLineItems.invoiceRef, row.reference),
     )))
@@ -990,29 +1015,26 @@ export async function invoiceByToken(db: Db, token: string): Promise<{ tenantId:
   const amount = Number(row.amount);
   const paidAmount = Number(row.paidAmount);
   return {
-    tenantId: row.tenantId,
-    document: {
-      reference: row.reference,
-      customerName: row.customerName,
-      currency: row.currency,
-      status: row.status,
-      amount,
-      paidAmount,
-      outstanding: Math.max(0, amount - paidAmount),
-      issuedAtISO: row.issuedAt ? row.issuedAt.toISOString() : null,
-      dueAtISO: row.dueAt ? row.dueAt.toISOString() : null,
-      ageingDays: ageingDays(row.dueAt),
-      notes: row.notes,
-      // Only offered while there is something to pay. A paid invoice still
-      // rendering a live checkout button is how a customer pays twice.
-      paymentLinkUrl: amount - paidAmount > 0 ? row.paymentLinkUrl : null,
-      lines: lines.map((line) => ({
-        description: line.description,
-        quantity: Number(line.quantity),
-        unitAmount: Number(line.unitAmount),
-        amount: Number(line.amount),
-      })),
-    },
+    reference: row.reference,
+    customerName: row.customerName,
+    currency: row.currency,
+    status: row.status,
+    amount,
+    paidAmount,
+    outstanding: Math.max(0, amount - paidAmount),
+    issuedAtISO: row.issuedAt ? row.issuedAt.toISOString() : null,
+    dueAtISO: row.dueAt ? row.dueAt.toISOString() : null,
+    ageingDays: ageingDays(row.dueAt),
+    notes: row.notes,
+    // Only offered while there is something to pay. A paid invoice still
+    // rendering a live checkout button is how a customer pays twice.
+    paymentLinkUrl: amount - paidAmount > 0 ? row.paymentLinkUrl : null,
+    lines: lines.map((line) => ({
+      description: line.description,
+      quantity: Number(line.quantity),
+      unitAmount: Number(line.unitAmount),
+      amount: Number(line.amount),
+    })),
   };
 }
 

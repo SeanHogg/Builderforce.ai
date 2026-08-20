@@ -51,7 +51,7 @@ const STATUS_COLORS: Record<string, { bg: string; fg: string }> = {
 type Tab = 'work' | 'saved' | 'proposals' | 'engagements' | 'alerts';
 
 export default function MarketplaceGigsSection({ search }: { search: string }) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('freelancer');
   const tm = useTranslations('milestones');
   const { isAuthenticated } = useAuth();

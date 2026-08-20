@@ -32,7 +32,7 @@ export function CronJobsContent({
   className,
   style,
 }: CronJobsContentProps) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const [jobs, setJobs] = useState<CronJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

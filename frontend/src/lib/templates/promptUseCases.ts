@@ -45,6 +45,29 @@ export function cSuiteCanvasOwner(useCase: PromptUseCase) {
 export type ExecutiveCanvasWorkflow = {
   evidence: 'domain' | 'canvas' | 'web';
   operation: 'summarize' | 'analyze' | 'upsert' | 'update' | 'delete' | 'append' | 'rename' | 'research';
+  /**
+   * Tools that MUST have run before this use case may author its output.
+   *
+   * ── WHY A COMPLETION SENTENCE WAS NOT ENOUGH ───────────────────────────────
+   * Every entry below states a `completion`, and for the domain-evidence intents that
+   * is sufficient: the rows only exist behind a domain read, so a turn that skips the
+   * tool has nothing to write and says so. The CANVAS-evidence intents have the
+   * opposite property, and the career set is where it bites. A résumé and a job
+   * posting are both already in the model's context, so "report the match score" is a
+   * sentence a language model can answer plausibly and unreproducibly — a number that
+   * moves when you ask twice, which is the exact failure `careerToolCatalog.ts` was
+   * written to end by making every reading a measurement over the documents.
+   *
+   * So the requirement is DATA on the workflow and enforced at the authoring boundary
+   * rather than described in a prompt: the canvas refuses to create the use case's own
+   * output kinds until the named tool has actually been called this turn, and the
+   * refusal names the tool. A model that reasons its way to a score still cannot write
+   * it onto a card.
+   *
+   * Empty/absent means the completion sentence governs alone, which is right for the
+   * intents whose evidence cannot be fabricated.
+   */
+  requiredTools?: readonly string[];
   /** Terms used to select relevant entities from the owning domain's live
    * catalog. They are hints, not table names: unmatched terms fall back to the
    * domain summary, object registry and metrics instead of inventing schema. */
@@ -62,6 +85,23 @@ const executiveWorkflow = (
   completion: string,
   confirmTarget = false,
 ): ExecutiveCanvasWorkflow => ({ evidence, operation, entityTerms, outputs, completion, ...(confirmTarget ? { confirmTarget: true } : {}) });
+
+/**
+ * The same workflow, with the tools its answer must be MEASURED by.
+ *
+ * A separate constructor rather than a ninth positional argument: `executiveWorkflow`
+ * already takes six, the flag on the end is the one nobody reads correctly, and the
+ * forty intents that need no tool must stay one short call. See
+ * `ExecutiveCanvasWorkflow.requiredTools` for why the requirement exists at all.
+ */
+const measuredWorkflow = (
+  evidence: ExecutiveCanvasWorkflow['evidence'],
+  operation: ExecutiveCanvasWorkflow['operation'],
+  entityTerms: readonly string[],
+  outputs: readonly string[],
+  completion: string,
+  requiredTools: readonly string[],
+): ExecutiveCanvasWorkflow => ({ evidence, operation, entityTerms, outputs, completion, requiredTools });
 
 /** Execution contracts for the 48 extracted intents. The contract says what to
  * read, what existing Canvas kinds may constitute the result, and what must be
@@ -119,19 +159,62 @@ export const C_SUITE_CANVAS_WORKFLOWS: Readonly<Record<string, ExecutiveCanvasWo
   // owning DOMAIN to read -- the resume, the postings and the money are all on the
   // board or supplied in the turn -- and pointing them at `domain` evidence would make
   // each intent fail on a tenant that has no hiring data because it is one person.
-  'career.runway.snapshot': executiveWorkflow('canvas', 'analyze', ['runway', 'savings', 'expenses'], ['runway'], 'The card leads with WEEKS, states its currency, and every figure it shows came from the person rather than an assumption.'),
-  'career.job.assess': executiveWorkflow('canvas', 'analyze', ['job', 'posting', 'resume'], ['job'], 'The posting is on the board with its stated compensation, its requirements in the wording the posting used, a measured match score, and the missing skills named honestly.'),
-  'career.resume.tailor': executiveWorkflow('canvas', 'upsert', ['resume', 'job', 'tailor'], ['resume'], 'A NEW resume variant exists carrying `tailoredFor`, and every move it applied quotes the existing line it changed. No skill was added that the person did not confirm.'),
-  'career.cover_letter.draft': executiveWorkflow('canvas', 'upsert', ['coverLetter', 'job', 'resume'], ['coverLetter'], 'The letter names the posting it answers, its opening sentence would break if the employer name were swapped, and every claim in the evidence rows has a proof beside it.'),
+  'career.runway.snapshot': measuredWorkflow('canvas', 'analyze', ['runway', 'savings', 'expenses'], ['runway'], 'The card leads with WEEKS, states its currency, and every figure it shows came from the person rather than an assumption.', ['builtin_hr_runway']),
+  'career.job.assess': measuredWorkflow('canvas', 'analyze', ['job', 'posting', 'resume'], ['job'], 'The posting is on the board with its stated compensation, its requirements in the wording the posting used, a measured match score, and the missing skills named honestly.', ['builtin_recruiter_match_job']),
+  'career.resume.tailor': measuredWorkflow('canvas', 'upsert', ['resume', 'job', 'tailor'], ['resume'], 'A NEW resume variant exists carrying `tailoredFor`, and every move it applied quotes the existing line it changed. No skill was added that the person did not confirm.', ['builtin_recruiter_tailor_resume']),
+  'career.cover_letter.draft': measuredWorkflow('canvas', 'upsert', ['coverLetter', 'job', 'resume'], ['coverLetter'], 'The letter names the posting it answers, its opening sentence would break if the employer name were swapped, and every claim in the evidence rows has a proof beside it.', ['builtin_recruiter_match_job']),
+  // NO required tool, deliberately: tracking an application records what the PERSON
+  // did — where they sent it, which variant went, when to chase. There is no
+  // measurement to fabricate, so a gate here would only stand between somebody and
+  // writing down a fact about their own week.
   'career.application.track': executiveWorkflow('canvas', 'upsert', ['jobApplication', 'proposal', 'followUp'], ['jobApplication'], 'The application carries its stage, the resume variant that went, and a follow-up date. Nothing claims it was submitted unless it was.'),
-  'career.pipeline.review': executiveWorkflow('canvas', 'analyze', ['applicationPipeline', 'jobApplication', 'proposal'], ['applicationPipeline'], 'The pipeline names ONE bottleneck -- volume, replies, or interview conversion -- with the rate behind it, and every count is derived from the applications rather than typed.'),
-  'career.interview.prepare': executiveWorkflow('canvas', 'upsert', ['interviewPrep', 'job', 'resume'], ['interviewPrep'], 'Every question carries the rubric it is scored against and the gap it targets, and the answer column is left for the person to write.'),
-  'career.offer.compare': executiveWorkflow('canvas', 'analyze', ['offer', 'runway', 'compensation'], ['jobApplication', 'runway'], 'Each offer is broken into components and compared in WEEKS OF RUNWAY, so a bigger number arriving after the balance hits zero is visibly worth less.'),
+  'career.pipeline.review': measuredWorkflow('canvas', 'analyze', ['applicationPipeline', 'jobApplication', 'proposal'], ['applicationPipeline'], 'The pipeline names ONE bottleneck -- volume, replies, or interview conversion -- with the rate behind it, and every count is derived from the applications rather than typed.', ['builtin_proposals_mine']),
+  'career.interview.prepare': measuredWorkflow('canvas', 'upsert', ['interviewPrep', 'job', 'resume'], ['interviewPrep'], 'Every question carries the rubric it is scored against and the gap it targets, and the answer column is left for the person to write.', ['builtin_recruiter_interview_questions']),
+  'career.offer.compare': measuredWorkflow('canvas', 'analyze', ['offer', 'runway', 'compensation'], ['jobApplication', 'runway'], 'Each offer is broken into components and compared in WEEKS OF RUNWAY, so a bigger number arriving after the balance hits zero is visibly worth less.', ['builtin_hr_compare_work_options']),
   'scratchpad.create_deck': executiveWorkflow('canvas', 'upsert', ['document', 'slides'], ['slides'], 'A fully authored ordered slide narrative exists rather than an empty deck shell.'),
 };
 
 export function cSuiteCanvasWorkflow(useCase: PromptUseCase): ExecutiveCanvasWorkflow | null {
   return useCase.id ? C_SUITE_CANVAS_WORKFLOWS[useCase.id] ?? null : null;
+}
+
+/**
+ * The tools this use case's answer must be measured by, or an empty list.
+ *
+ * Read by BOTH the contract the preparation tool returns and the refusal at the
+ * authoring boundary — one lookup, so a requirement cannot be advertised and not
+ * enforced, or enforced and never advertised.
+ */
+export function executiveRequiredTools(useCase: PromptUseCase | null | undefined): readonly string[] {
+  const workflow = useCase ? cSuiteCanvasWorkflow(useCase) : null;
+  return workflow?.requiredTools ?? [];
+}
+
+/**
+ * Which required tools have NOT run yet.
+ *
+ * Compared on the ADVERTISED name (`builtin_hr_runway`) because that is what the trace
+ * carries and what the model must type — the same contract
+ * [[prompt-tool-name-contract]] states for every prompt that names a tool. Matching is
+ * suffix-tolerant on the namespace separator so a gateway that prefixes its own server
+ * id does not silently make every requirement unsatisfiable: the failure mode of a
+ * strict compare here is a turn that can never author anything, which is worse than a
+ * turn that occasionally accepts a near-match.
+ */
+export function missingRequiredTools(
+  required: readonly string[],
+  called: Iterable<string>,
+): readonly string[] {
+  const ran = new Set<string>();
+  for (const name of called) {
+    const trimmed = String(name ?? '').trim();
+    if (!trimmed) continue;
+    ran.add(trimmed);
+    // `server.builtin_hr_runway` and `builtin_hr_runway` are one call.
+    const tail = trimmed.split(/[.:/]/).pop();
+    if (tail) ran.add(tail);
+  }
+  return required.filter((tool) => !ran.has(tool));
 }
 
 export function executiveCanvasPrompt(useCase: PromptUseCase): string | null {

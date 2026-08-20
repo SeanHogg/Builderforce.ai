@@ -339,7 +339,7 @@ function currentMonth(): string {
 }
 
 function AuditSection({ t }: { t: ReturnType<typeof useTranslations> }) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const [period, setPeriod] = useState(currentMonth());
   const [report, setReport] = useState<AuditReport | null>(null);
   const [error, setError] = useState<string | null>(null);

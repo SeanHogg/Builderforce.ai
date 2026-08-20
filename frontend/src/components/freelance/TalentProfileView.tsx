@@ -26,7 +26,7 @@ const card: React.CSSProperties = {
  *  been, work won vs. bids in flight, and lifetime earnings. Rendered on the public
  *  detail page and the editor Preview (both pass a profile carrying `stats`). */
 function TalentStats({ stats }: { stats: FreelancerStats }) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('talent');
   const num = (n: number) => fmt.number(n);
   const money = (cents: number, cur: string) => `${cur} ${fmt.number((cents / 100), { maximumFractionDigits: 0 })}`;

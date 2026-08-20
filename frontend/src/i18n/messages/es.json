@@ -3112,7 +3112,10 @@
     "dueDateLabel": "Fecha límite",
     "dueDateHint": "Establece una fecha límite del proyecto. Déjalo vacío para usar la última fecha de vencimiento de las tareas.",
     "deadline": "Fecha límite",
-    "deadlineDerived": "(según tareas)"
+    "deadlineDerived": "(según tareas)",
+    "start": "Inicio",
+    "startDateLabel": "Fecha de inicio",
+    "startDateHint": "Establece una fecha de inicio del proyecto. Déjalo vacío para usar la fecha de inicio de tarea más temprana."
   },
   "spine": {
     "loading": "Cargando el eje de planificación…",
@@ -17134,7 +17137,6 @@
     "versionHistory": "Historial de versiones",
     "versionHistoryHint": "Restaurar crea una nueva revisión",
     "closeHistory": "Cerrar el historial",
-    "historyLocalOnly": "Esta sesión está almacenada en este dispositivo. El historial de versiones del servidor comienza después de guardarla.",
     "nameCheckpoint": "+ Nombrar el punto de control actual",
     "revisionLabel": "Revisión {revision}",
     "revisionMeta": "Revisión {revision} · {at}",
@@ -20369,7 +20371,6 @@
     "noticeInvoiceChased": "{reference} reclamada — enviada a {to}.",
     "noticeInvoiceChaseNoRecipient": "Reclamación de {reference} registrada, pero la tarjeta no tiene correo del cliente al que enviarla.",
     "noticeInvoiceActionFailed": "No se ha podido hacer. No se ha enviado nada.",
-    "noticePayRunSync": "Pide a Brain que sincronice las nóminas: las lee de tu proveedor de nóminas conectado.",
     "stickyShapeEllipse": "Elipse",
     "stickyShapeRhombus": "Rombo",
     "stickyShapeTriangle": "Triángulo",
@@ -20491,7 +20492,26 @@
         "note": "Nota"
       }
     },
-    "agentModel": "Modelo del agente"
+    "agentModel": "Modelo del agente",
+    "presentSequence": "Presentación",
+    "presentPrevious": "Marco anterior",
+    "presentNext": "Marco siguiente",
+    "presentPosition": "{index} de {total}",
+    "presentationOrder": "Orden de presentación",
+    "presentationOrderHint": "Déjalo vacío para recorrer el tablero de arriba abajo",
+    "noticePayRunNeedsAccount": "Releer una nómina llama a tu proveedor de nóminas conectado, así que necesita un espacio de trabajo guardado.",
+    "noticePayRunNoReference": "Esta tarjeta no tiene referencia del proveedor, así que no hay nada que releer. Pide a Brain que sincronice las nóminas: así es como llegan al tablero las reales.",
+    "noticePayRunNoProvider": "No hay ningún proveedor de nóminas conectado. Conecta Gusto, Rippling, ADP o Deel, o registra la nómina a mano desde el resumen de tu gestoría.",
+    "noticePayRunNotFound": "Tu proveedor de nóminas ya no devuelve una nómina {reference}. No se ha cambiado nada en la tarjeta.",
+    "noticePayRunSynced": "Nómina releída desde {source}.",
+    "noticePayRunFailed": "No se ha podido releer la nómina. No se ha cambiado nada en la tarjeta.",
+    "versionHistoryLocalHint": "Se guarda en este navegador hasta que guardes el tablero en una cuenta",
+    "checkpointNameLabel": "Nombre del punto de control",
+    "checkpointNamePlaceholder": "Antes de la reescritura",
+    "checkpointMeta": "{count} objetos · {at}",
+    "noCheckpoints": "Aún no hay puntos de control. Crea uno antes de un cambio grande y podrás volver a él.",
+    "noticeCheckpointRestored": "Se restauró «{label}»",
+    "noticeCheckpointStorageFull": "Este navegador no tiene espacio para guardar un punto de control de este tablero. Guárdalo en una cuenta para conservar su historial."
   },
   "canvasCommands": {
     "cleanLayout": "Ordenar el diseño del lienzo",
@@ -23375,7 +23395,8 @@
     "payNow": "Pagar {amount}",
     "confirming": "Confirmando tu pago…",
     "payByTransfer": "Esta factura se paga por transferencia bancaria. Responde al mensaje que te envió este enlace si necesitas los datos de la cuenta.",
-    "settled": "Esta factura está saldada. Gracias."
+    "settled": "Esta factura está saldada. Gracias.",
+    "downloadPdf": "Descargar PDF"
   },
   "taskStatus": {
     "backlog": "Pendientes",
@@ -23474,5 +23495,53 @@
       "yours": "Tu calendario propuesto",
       "explainer": "¿No estás de acuerdo con los entregables publicados? Propón los tuyos. Si aceptan tu propuesta, este es el calendario que se financia."
     }
+  },
+  "agentHostChannels": {
+    "loading": "Cargando canales…",
+    "heading": "Canales ({count})",
+    "addChannel": "+ Añadir canal",
+    "addChannelConfirm": "Añadir canal",
+    "adding": "Añadiendo…",
+    "cancel": "Cancelar",
+    "newChannel": "Nueva integración de canal",
+    "platformLabel": "Plataforma",
+    "nameLabel": "Nombre del canal",
+    "namePlaceholder": "Nombre del canal (p. ej. #general, mi-webhook)",
+    "configLabel": "Credenciales",
+    "configWebhook": "URL del webhook (https://…)",
+    "configSlack": "Token del bot de Slack o URL del webhook",
+    "configGeneric": "Token, URL de webhook o configuración JSON",
+    "configSealedHint": "Se guarda cifrado y no se vuelve a mostrar. Déjalo vacío para conservar las credenciales actuales.",
+    "configured": "Credenciales guardadas",
+    "notConfigured": "Sin credenciales",
+    "hostStatus": "El host informa: {status}",
+    "enabled": "Activado",
+    "disabled": "Desactivado",
+    "working": "…",
+    "delete": "Eliminar",
+    "empty": "No hay canales configurados. Añade uno para enviar los mensajes de este host a una plataforma externa.",
+    "addFailed": "No se pudo añadir ese canal.",
+    "updateFailed": "No se pudo actualizar ese canal.",
+    "deleteFailed": "No se pudo eliminar ese canal."
+  },
+  "schedule": {
+    "status": {
+      "overdue": "Vencido",
+      "soon": "Vence pronto",
+      "upcoming": "Próximo",
+      "none": "Sin fecha límite"
+    },
+    "today": "Hoy",
+    "prevMonth": "Mes anterior",
+    "nextMonth": "Mes siguiente",
+    "noDeadline": "Sin fecha límite:",
+    "unscheduled": "Sin planificar:",
+    "moreItems": "+{n} más",
+    "ganttEmpty": "Todavía no hay {noun}s planificados. Añade fechas de inicio o de vencimiento para verlos en la línea de tiempo.",
+    "dragHintGantt": "Arrastra una barra para moverla; arrastra sus bordes para cambiar el inicio o la fecha límite.",
+    "dragHintCalendar": "Arrastra un elemento a otro día para replanificarlo.",
+    "barAriaEditable": "{label} — arrastra para replanificar, o pulsa Intro para abrir",
+    "spanAriaEditable": "{label} — arrastra a otro día para replanificar, o pulsa Intro para abrir",
+    "rescheduleFailed": "No se pudieron guardar las nuevas fechas."
   }
 }

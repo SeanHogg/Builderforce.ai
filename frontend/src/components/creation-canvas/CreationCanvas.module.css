@@ -531,6 +531,42 @@
 /* Centred on the OPEN board, not on the viewport:with Brain docked to one edge a
    plain 50% puts the actions for the thing you just selected underneath it. Same
    arithmetic as the composer, which centres on the board the dock leaves behind. */
+/* --- The presentation control ---------------------------------------------
+   The ONE piece of chrome present mode adds rather than hides, so it is the one
+   thing on screen competing with the board for a room's attention: it sits at the
+   BOTTOM centre, out of the reading path, and stays small.
+
+   Every colour is a token, because a presentation is the surface most likely to be
+   thrown at a projector in whichever theme the presenter happens to be running.
+   Fluid rather than fixed-width — a frame title is as long as somebody made it, so
+   the title truncates and the controls never wrap off a narrow screen. */
+.presentBar {
+  position:absolute; z-index:14; bottom:18px; left:50%; transform:translateX(-50%);
+  display:flex; align-items:center; gap:4px;
+  max-width:min(92vw, 640px); padding:5px;
+  border:1px solid var(--canvas-line); border-radius:var(--radius-lg);
+  background:var(--canvas-panel); color:var(--canvas-ink);
+  box-shadow:0 10px 30px var(--canvas-shadow, rgba(60,48,36,.16));
+}
+.presentBar button {
+  flex:none; min-width:34px; min-height:34px;
+  border:0; border-radius:var(--radius-sm); padding:6px 10px;
+  background:transparent; color:var(--canvas-ink); font:600 13px var(--font-sans); cursor:pointer;
+}
+.presentBar button:hover:not(:disabled),
+.presentBar button:focus-visible { background:var(--canvas-hover); }
+.presentBar button:disabled { opacity:.35; cursor:not-allowed; }
+.presentPosition {
+  display:grid; gap:1px; min-width:0; padding:0 8px; text-align:center;
+}
+.presentPosition b { color:var(--canvas-ink); font-size:11px; font-variant-numeric:tabular-nums; white-space:nowrap; }
+/* The title is the only unbounded string here, so it is the only one that truncates. */
+.presentPosition small {
+  overflow:hidden; color:var(--canvas-muted); font-size:10px;
+  text-overflow:ellipsis; white-space:nowrap;
+}
+.presentExit { color:var(--canvas-muted)!important; font-size:10px!important; }
+
 .selectionToolbar { position:absolute; z-index:13; top:14px; left:calc(50% + (var(--brain-dock-left, 0px) - var(--brain-dock-right, 0px)) / 2); transform:translateX(-50%); display:flex; align-items:center; gap:4px; padding:5px; border:1px solid var(--canvas-line); border-radius:var(--radius-lg); background:rgba(255,255,255,.98); box-shadow:0 9px 28px rgba(60,48,36,.13); }
 .selectionToolbar span { padding:0 7px; color:var(--canvas-muted); font-size:10px; white-space:nowrap; }
 .selectionToolbar button { border:0; border-radius:var(--radius-sm); padding:6px 8px; background:transparent; color:var(--canvas-ink); font:600 10px var(--font-sans); cursor:pointer; }
@@ -605,6 +641,22 @@
 .outcomeEmpty strong { font-size:12px; }.outcomeEmpty p { margin:0; padding:0!important; font-size:10px; line-height:1.5; }
 .outcomeMetricsPanel > footer { display:grid; gap:3px; margin-top:auto; padding:11px 13px; border-top:1px solid var(--canvas-line); background:var(--canvas-panel-muted); color:var(--canvas-muted); font-size:8px; }
 .outcomeMetricsPanel > footer span { color:var(--canvas-ink); font-weight:650; }
+/* The checkpoint namer, INLINE in the panel rather than a native prompt — see
+   `createCheckpoint`. Inline so the person can see the list they are adding to
+   while they name the entry, which a modal cannot show. Grid rather than flex so
+   the field takes the slack and the button stays its own width at any panel size. */
+.checkpointForm { display:grid; grid-template-columns:1fr auto; gap:6px; padding:10px 8px 4px; }
+.checkpointForm input {
+  min-width:0; padding:7px 8px;
+  border:1px solid var(--canvas-line); border-radius:var(--radius-sm);
+  background:var(--canvas-panel-muted); color:var(--canvas-ink);
+  font:500 10px var(--font-sans);
+}
+.checkpointForm input::placeholder { color:var(--canvas-muted); }
+.checkpointForm input:focus-visible { outline:2px solid var(--canvas-accent); outline-offset:1px; }
+.checkpointForm button { white-space:nowrap; }
+.checkpointForm button:disabled { opacity:.45; cursor:not-allowed; }
+
 .historyPanel > p,.historyPanel > div > p { padding:14px; color:var(--canvas-muted); font-size:10px; line-height:1.5; }.historyPanel > div { display:grid; padding:8px; gap:6px; }.historyPanel > div > button { display:grid; gap:3px; padding:9px; border:1px solid var(--canvas-line); border-radius:var(--radius-md); background:#fbfdff; color:var(--canvas-ink); text-align:left; cursor:pointer; }.historyPanel > div > button b { font-size:10px; }.historyPanel > div > button span { color:var(--canvas-muted); font-size:8px; }
 .changeSetPanel { position:absolute; z-index:15; top:var(--canvas-top-chrome-space); right:calc(310px + var(--brain-dock-right, 0px)); width:330px; border:1px solid #cfc5f0; border-radius:var(--radius-lg); background:rgba(255,255,255,.99); box-shadow:0 16px 48px rgba(58,40,112,.18); color:var(--canvas-ink); overflow:hidden; }
 .changeSetPanel header { display:flex; justify-content:space-between; padding:13px; border-bottom:1px solid #e6e0f5; background:#faf8ff; }.changeSetPanel header div { display:grid; gap:3px; }.changeSetPanel header strong { font-size:12px; }.changeSetPanel header small { color:#796d99; font-size:9px; }.changeSetPanel header button { border:0; background:transparent; color:var(--canvas-muted); font-size:17px; cursor:pointer; }
@@ -2855,6 +2907,7 @@
    Artifact previews (for example the website mockup) keep their authored colors so
    dark mode does not alter what the user is designing. */
 .selectionToolbar,
+.presentBar,
 .realtimeStatus,
 .historyPanel,
 .historyPanel header,
@@ -2910,6 +2963,7 @@
 .paletteGrid button,
 .templateMenu > button,
 .historyPanel > div > button,
+.checkpointForm input,
 .inspector input,
 .inspector textarea,
 .inspector select,
@@ -2935,6 +2989,7 @@
 .evermindBrain { background:radial-gradient(circle at 35% 40%,rgba(226,129,194,.22),transparent 34%),radial-gradient(circle at 70% 48%,rgba(123,91,231,.21),transparent 35%),var(--canvas-panel-muted); }
 .evermindEmpty,.evermindBrain > em,.evermindLegend { color:var(--canvas-muted); }
 .selectionToolbar button:hover,
+.presentBar button:hover:not(:disabled),
 .paletteSectionToggle:hover,
 .paletteSectionToggle:focus-visible,
 .paletteGrid button:hover,

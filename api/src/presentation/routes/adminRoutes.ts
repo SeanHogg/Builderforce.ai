@@ -23,6 +23,7 @@ import { reportCaughtError } from '../../application/observability/caughtErrorRe
 import { Hono } from 'hono';
 import { and, desc, eq, gt, ilike, inArray, isNull, or, sql } from 'drizzle-orm';
 import { resolveAppBaseUrl, type Env, type HonoEnv } from '../../env';
+import { screenshotConfigured } from '../../application/web/webScreenshot';
 import { credentialSecret } from '../../application/integrations/credentialCrypto';
 import { superAdminMiddleware } from '../middleware/superAdminMiddleware';
 import { buildDatabase, buildTransactionalDatabase, type Db } from '../../infrastructure/database/connection';
@@ -1959,9 +1960,10 @@ export function createAdminRoutes(): Hono<HonoEnv> {
           cloudRunner: Boolean(c.env.CLOUD_RUNNER),
           cloudflareAi: Boolean(c.env.CLOUDFLARE_AI_API_TOKEN && c.env.CLOUDFLARE_ACCOUNT_ID),
           // Live-page capture (a redesign's "before" screenshot). Reported here because
-          // its absence is an OPERATOR fact the canvas relays to users verbatim — see
-          // application/web/webScreenshot.ts.
-          browserCapture: Boolean((c.env.CLOUDFLARE_BROWSER_API_TOKEN ?? c.env.CLOUDFLARE_AI_API_TOKEN) && c.env.CLOUDFLARE_ACCOUNT_ID),
+          // its absence is an OPERATOR fact the canvas relays to users verbatim. Asks the
+          // service rather than restating its token list — a health report claiming
+          // "configured" while a capture reports "unconfigured" is worse than no report.
+          browserCapture: screenshotConfigured(c.env as Env),
         },
       },
       runtime: {

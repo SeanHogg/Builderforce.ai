@@ -8,7 +8,7 @@ import { useFormat } from "@/i18n/useFormat";
 const PAGE_SIZE = 50;
 
 function Stat({ label, value }: { label: string; value: number }) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   return (
     <div style={{ flex: '1 1 150px', padding: '12px 14px', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', background: 'var(--surface)' }}>
       <div className="text-muted" style={{ fontSize: 12 }}>{label}</div>

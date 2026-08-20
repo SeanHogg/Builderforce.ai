@@ -266,7 +266,7 @@ function LaborCostPanel({ days }: { days: number }) {
 const TIER_COLOR: Record<PerformerTier, string> = { high: OK, solid: 'var(--accent)', watch: DANGER };
 
 function CoachingNotes({ member }: { member: PerformerRow }) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('widgets');
   const [notes, setNotes] = useState<CoachingNote[] | null>(null);
   const [draft, setDraft] = useState('');

@@ -32,7 +32,7 @@ import { useFormat } from "@/i18n/useFormat";
 type Status = 'loading' | 'ready' | 'invalid' | 'booked';
 
 export function BookingClient({ token }: { token: string }) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('booking');
   const locale = useLocale();
 

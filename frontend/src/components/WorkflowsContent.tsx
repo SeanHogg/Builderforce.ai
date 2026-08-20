@@ -108,7 +108,7 @@ function WorkflowDefCard({
   onDelete: (d: WorkflowDefinitionSummary) => void;
   running: boolean;
 }) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('workflowsContent');
   const tc = useTranslations('common');
   return (
@@ -158,7 +158,7 @@ function WorkflowDefCard({
 }
 
 export function WorkflowsContent({ projectId }: WorkflowsContentProps) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const router = useRouter();
   const confirm = useConfirm();
   const tc = useTranslations('common');

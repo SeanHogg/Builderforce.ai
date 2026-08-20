@@ -38,7 +38,7 @@ function BarFill({ value, max, color }: { value: number; max: number; color: str
 }
 
 export function AgentHostUsageContent({ agentHostId }: AgentHostUsageContentProps) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const [snapshots, setSnapshots] = useState<UsageSnapshot[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

@@ -3112,7 +3112,10 @@
     "dueDateLabel": "截止日期",
     "dueDateHint": "设置项目截止日期。留空则使用最晚的任务截止日期。",
     "deadline": "截止时间",
-    "deadlineDerived": "（来自任务）"
+    "deadlineDerived": "（来自任务）",
+    "start": "开始",
+    "startDateLabel": "开始日期",
+    "startDateHint": "设置项目开始日期。留空则使用最早的任务开始日期。"
   },
   "spine": {
     "loading": "正在加载规划主线…",
@@ -17134,7 +17137,6 @@
     "versionHistory": "版本历史",
     "versionHistoryHint": "恢复会创建新的修订版本",
     "closeHistory": "关闭历史记录",
-    "historyLocalOnly": "此会话目前存储在本设备上。保存后才会开始服务器版本历史。",
     "nameCheckpoint": "+ 命名当前检查点",
     "revisionLabel": "修订版 {revision}",
     "revisionMeta": "修订版 {revision} · {at}",
@@ -20369,7 +20371,6 @@
     "noticeInvoiceChased": "已催收 {reference}——发送至 {to}。",
     "noticeInvoiceChaseNoRecipient": "已记录 {reference} 的催收，但卡片上没有客户邮箱可发送。",
     "noticeInvoiceActionFailed": "操作未能完成，未发送任何内容。",
-    "noticePayRunSync": "请让 Brain 同步工资单——它会从您连接的薪资服务商读取。",
     "stickyShapeEllipse": "椭圆",
     "stickyShapeRhombus": "菱形",
     "stickyShapeTriangle": "三角形",
@@ -20491,7 +20492,26 @@
         "note": "说明"
       }
     },
-    "agentModel": "智能体模型"
+    "agentModel": "智能体模型",
+    "presentSequence": "演示",
+    "presentPrevious": "上一帧",
+    "presentNext": "下一帧",
+    "presentPosition": "第 {index} / {total}",
+    "presentationOrder": "演示顺序",
+    "presentationOrderHint": "留空则按从上到下的顺序演示",
+    "noticePayRunNeedsAccount": "重新读取工资单需要调用您连接的薪资服务商，因此需要已保存的工作区。",
+    "noticePayRunNoReference": "此卡片没有服务商参考编号，因此无从重新读取。请让 Brain 同步工资单——那才是把真实工资单放上看板的方式。",
+    "noticePayRunNoProvider": "尚未连接薪资服务商。请连接 Gusto、Rippling、ADP 或 Deel，或根据薪资代理机构的对账单手动录入。",
+    "noticePayRunNotFound": "您的薪资服务商已不再返回工资单 {reference}。卡片内容未作任何更改。",
+    "noticePayRunSynced": "已从 {source} 重新读取工资单。",
+    "noticePayRunFailed": "无法重新读取工资单。卡片内容未作任何更改。",
+    "versionHistoryLocalHint": "在保存到账户之前，仅保留在此浏览器中",
+    "checkpointNameLabel": "检查点名称",
+    "checkpointNamePlaceholder": "重写之前",
+    "checkpointMeta": "{count} 个对象 · {at}",
+    "noCheckpoints": "还没有检查点。在做重大改动前先命名一个，之后就能回到这里。",
+    "noticeCheckpointRestored": "已恢复“{label}”",
+    "noticeCheckpointStorageFull": "此浏览器已无空间保存该画板的检查点。请保存到账户以保留历史记录。"
   },
   "canvasCommands": {
     "cleanLayout": "整理画布布局",
@@ -23375,7 +23395,8 @@
     "payNow": "支付 {amount}",
     "confirming": "正在确认您的付款……",
     "payByTransfer": "此发票通过银行转账支付。如需账户信息，请回复发送此链接的邮件。",
-    "settled": "此发票已结清，谢谢。"
+    "settled": "此发票已结清，谢谢。",
+    "downloadPdf": "下载 PDF"
   },
   "taskStatus": {
     "backlog": "待办池",
@@ -23474,5 +23495,53 @@
       "yours": "你提议的付款计划",
       "explainer": "不认同已发布的交付物？提出你自己的方案。若你的投标被接受，将按此计划托管付款。"
     }
+  },
+  "agentHostChannels": {
+    "loading": "正在加载频道…",
+    "heading": "频道（{count}）",
+    "addChannel": "+ 添加频道",
+    "addChannelConfirm": "添加频道",
+    "adding": "正在添加…",
+    "cancel": "取消",
+    "newChannel": "新建频道集成",
+    "platformLabel": "平台",
+    "nameLabel": "频道名称",
+    "namePlaceholder": "频道名称（例如 #general、my-webhook）",
+    "configLabel": "凭据",
+    "configWebhook": "Webhook 网址（https://…）",
+    "configSlack": "Slack 机器人令牌或 Webhook 网址",
+    "configGeneric": "令牌、Webhook 网址或 JSON 配置",
+    "configSealedHint": "加密存储，且不会再次显示。留空则保留当前凭据。",
+    "configured": "已存储凭据",
+    "notConfigured": "无凭据",
+    "hostStatus": "主机报告：{status}",
+    "enabled": "已启用",
+    "disabled": "已停用",
+    "working": "…",
+    "delete": "删除",
+    "empty": "尚未配置任何频道。添加一个，即可将此主机的消息路由到外部平台。",
+    "addFailed": "无法添加该频道。",
+    "updateFailed": "无法更新该频道。",
+    "deleteFailed": "无法删除该频道。"
+  },
+  "schedule": {
+    "status": {
+      "overdue": "已逾期",
+      "soon": "即将到期",
+      "upcoming": "计划中",
+      "none": "无截止日期"
+    },
+    "today": "今天",
+    "prevMonth": "上个月",
+    "nextMonth": "下个月",
+    "noDeadline": "未设置截止日期：",
+    "unscheduled": "未排期：",
+    "moreItems": "还有 {n} 项",
+    "ganttEmpty": "尚无已排期的{noun}。添加开始日期或截止日期后即可在时间线上显示。",
+    "dragHintGantt": "拖动条形可整体移动；拖动两端可调整开始日期或截止日期。",
+    "dragHintCalendar": "将条目拖到其他日期即可重新排期。",
+    "barAriaEditable": "{label} — 拖动可重新排期，按 Enter 键可打开",
+    "spanAriaEditable": "{label} — 拖到其他日期可重新排期，按 Enter 键可打开",
+    "rescheduleFailed": "无法保存新的日期。"
   }
 }

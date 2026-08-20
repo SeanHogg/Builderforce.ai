@@ -516,7 +516,10 @@ const BASE_MUTABLE_FIELDS = {
   knowledge: ['content', 'markdown', 'sources'],
   file: ['content', 'fileName', 'mimeType', 'url', 'fileSize', 'summary'],
   url: ['content', 'url', 'sources', 'viewport', 'pageTitle'],
-  frame: ['content', 'framePurpose', 'frameColor', 'frameBorder'],
+  // `presentationOrder` is authorable so a model asked to "set up a walkthrough" can
+  // number the frames rather than describing the order it would like — the sequence is
+  // derived from this field and from nothing else editable.
+  frame: ['content', 'framePurpose', 'frameColor', 'frameBorder', 'presentationOrder'],
   // `stickyShape` records what the object was on the board it came FROM — a Miro
   // `shape` imports as a sticky with its geometry remembered, so a re-export can put
   // the rectangle back and a reader can see it was never a note. It is authorable

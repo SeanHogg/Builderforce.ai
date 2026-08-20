@@ -115,7 +115,7 @@ export function DashboardCreationLauncher() {
 }
 
 export function DashboardCreationSessions() {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('creationCanvas');
   const router = useRouter();
   const searchParams = useSearchParams();

@@ -19,7 +19,7 @@ interface Props {
 }
 
 export function TenantImageCreditsEditor({ tenantId, value, onChange }: Props) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('admin');
   return (
     <TenantIntegerOverrideEditor

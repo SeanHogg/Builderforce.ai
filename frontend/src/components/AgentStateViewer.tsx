@@ -27,7 +27,7 @@ function stateHeatmap(data: number[], count: number): number[] {
 }
 
 export function AgentStateViewer({ projectId, agentId }: AgentStateViewerProps) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('agentState');
   const confirm = useConfirm();
   const [state, setState] = useState<MambaAgentState | null>(null);

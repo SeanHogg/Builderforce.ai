@@ -195,7 +195,7 @@ function isGenuineToolCall(ev: ExecutionTraceToolEvent): boolean {
 }
 
 export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task: Task; agentHosts: AgentHost[]; onTaskChanged?: () => void }) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('agentExecution');
   const confirm = useConfirm();
   const [executions, setExecutions] = useState<Execution[]>([]);

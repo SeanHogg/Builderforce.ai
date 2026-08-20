@@ -151,7 +151,7 @@ Public copy describes evidence available today; stronger promises become roadmap
 | 12 | [🖥️ VS Code Extension](#12--vs-code-extension) | 10 |
 | 13 | [🏢 Segments, Multi-tenant, Embed & Governance](#13--segments-multi-tenant-embed--governance) | 10 |
 | 14 | [🖥️ Frontend, i18n, Theme & Marketing/SEO](#14--frontend-i18n-theme--marketingseo) | 41 |
-| 15 | [🛠️ Platform — DB, CI/CD, Migrations, Cost & Tech-debt](#15--platform--db-cicd-migrations-cost--tech-debt) | 29 |
+| 15 | [🛠️ Platform — DB, CI/CD, Migrations, Cost & Tech-debt](#15--platform--db-cicd-migrations-cost--tech-debt) | 28 |
 
 ---
 
@@ -206,44 +206,26 @@ Two seams convert lane contention from a merge-order problem into a non-problem,
 as items (**W0-1** in group 10, **W0-2** in group 14). **W0-3 is done** — the lane map is in the manifest
 and machine-enforced. Neither W0-1 nor W0-2 has landed, and until they do, five lanes is the ceiling.
 
-### Wave 1 · Canvas → sell what you made — **CLOSED 2026-08-16**
+### Waves 1 and 2 · Sell what you made, then sell it to a business — **shipped**
 
-> **The wave's acceptance test passed.** A person describes a thing on a board; converts it to a project
-> in one click; stages it and is told honestly whether it is fit to sell; publishes it at their own
-> address with their own landing page in front of it; a stranger buys it with **no second signup and no
-> second invoice**; and the creator sees the money, the take rate, and their distance from the threshold.
->
-> All five lanes (W1A site delivery · W1B listing & stage · W1C money · W1D creator surfaces ·
-> W1E app-user loop) shipped and their integration PR merged. The lane-by-lane record, the declared
-> cross-lane seams (`resolveSiteVisitor` / `entitledToListing`, `siteBilling`, the `httpCheck`
-> extraction) and the mount queue are in **[DONE.md](./DONE.md)**.
->
-> The operator decisions this wave was built on — *the project IS the app*, *two shop windows one
-> product*, *no choice of host or database*, *sell the Vercel-marketplace way at 0% under a lifetime
-> threshold* — are recorded at the head of [group 10](#10--marketplace-talent-freelance-knowledge--canvas)
-> and are **not reopened**.
->
-> **Parked inside the wave, deliberately, and still parked:** the Stage *sandbox* (install the snapshot
-> into a throwaway tenant and drive it) stays blocked on an infrastructure decision — a disposable
-> tenant needs a lifecycle and a cost per stage-press. The platform states the limit as
-> `stage.sandboxLimit`, a standing `warn` that `declaredLimits` carries onto the buyer's page.
+> Both waves' acceptance tests passed and their full lane-by-lane record — site delivery, listing &
+> stage, money, creator surfaces, the app-user loop, the `contract` object, the priced deal on the
+> board, the prospect-facing live share and tenant merchant accounts — is in **[DONE.md](./DONE.md)**.
+> The operator decisions they were built on (*the project IS the app*, *two shop windows one product*,
+> *no choice of host or database*, *0% under a lifetime threshold*) are recorded at the head of
+> [group 10](#10--marketplace-talent-freelance-knowledge--canvas) and are **not reopened**.
 
-### Wave 2 · Sell it to a business (open — Wave 1's acceptance test has passed)
-
-*This wave has shipped.* The `contract` object and `application/signature/signatureEngine.ts` landed
-2026-08-15; **the priced deal on the board** (`quote`) and **the prospect-facing live share** landed
-2026-08-19 with the whole sell-motion vocabulary — see DONE.md, "The canvas could build anything and
-sell none of it". **Tenant merchant accounts** (FO-C4) closed it on 2026-08-19: a `connections` row
-with `capability = 'merchant'`, a payment link minted against the tenant's own connected account on
-every issued invoice, and a webhook landing on the same `ledger_entries` unique reference
-`listingCommerce` already uses — so the money settles to the seller and a replayed webhook collides in
-the database. Group 10's founder-ops section lists what is left elsewhere.
+- **The Stage *sandbox* is parked, and is the only thing either wave left open.** Installing a listing's
+  snapshot into a throwaway tenant and driving it needs a disposable tenant with a lifecycle and a cost
+  per stage-press. **Blocker: an infrastructure decision** on what that tenant is and who pays for it.
+  Until then the platform states the limit honestly as `stage.sandboxLimit`, a standing `warn` that
+  `declaredLimits` carries onto the buyer's page. Unblocks: a buyer driving the thing before they buy it.
 
 ### Wave 3 · Run the business behind the product
 
-The founder-ops build order (`FO-A`/`FO-B` foundations → `FO-C` money → `FO-D` ownership, `FO-E` raising,
-`FO-G` legal, with `FO-F` independent) already exists in group 10 and is unchanged by this plan — it is
-the same technique one wave earlier. Groups 1–9 and 11–15 keep the T1–T10 track map; they are not
+Both founder-ops foundations and four of its seven tracks have shipped, so what is left of this wave is
+the six items group 10 still lists (raising, legal, the two signature consumers) — no longer a sequence,
+because nothing is behind a foundation any more. Groups 1–9 and 11–15 keep the T1–T10 track map; they are not
 sequenced into waves because nothing in them gates the sell motion.
 
 ---
@@ -856,155 +838,69 @@ sequenced into waves because nothing in them gates the sell motion.
 > for the same jobs. The founder vocabulary — the 21 kinds in `FOUNDER_OBJECT_KINDS` — is genuinely
 > strong at holding an ANALYSIS. Every item below is the same defect class: an act that ends at a card.*
 >
-> **Two of the original ten are closed** (see DONE.md): date-bearing triggers with a server sweep, and
-> the `/integrations` ledger overclaim. The rest are broken out below in BUILD ORDER, because they are
-> not eight independent features — six of them are downstream of two foundations.
-
-#### Build order, and why
-
-```
-FO-A  the counterparty          ─┬─→  FO-C money  ──→  FO-D ownership
-FO-B  collection & signature    ─┘    FO-E raising ──→  FO-G legal
-
-FO-F  one pipeline — independent of all of it
-```
-
-**FO-A and FO-B are the foundations and nothing downstream is worth starting first.** Every money,
-raising and legal item either needs to name a counterparty (FO-A) or needs a human outside the
-workspace to agree to something (FO-B). Building any of them first means inventing a private answer to
-one of those two questions that the next item then has to unpick. The two foundations are independent
-of each other and can run in parallel.
-
-**Neither foundation invents a table**, which is why they are first rather than merely urgent.
-`party_roles` (kernel) already carries `role: 'customer' | 'vendor' | 'investor' | 'partner' | …` with
-one row per (tenant, party kind, party ref, role) and a unique index proving it — so the counterparty
-EXISTS and the canvas simply cannot see it. And `packages/creation-canvas-contract/src/people.ts`
-already declares the entire form and signature contract, argued distinction by distinction, with zero
-implementations. Both foundations are wiring, not modelling.
-
-
-
-
-
----
+> **Both foundations and four of the seven tracks have since shipped** — the counterparty (FO-A), the
+> collection and signature primitives (FO-B1/FO-B2), the whole money track (FO-C), ownership (FO-D) and
+> the single pipeline (FO-F), across migrations 0469, 0925, 0926 and 0927. Their record is in
+> **[DONE.md](./DONE.md)**; what is left is below.
 
 #### What is left, and what still gates it
 
-**The ten unblocked items are CLOSED** — migration 0469, 2026-08-15, see
-[DONE.md](./DONE.md): FO-A1, FO-B1, FO-B2, FO-C1, FO-C3, FO-C6, FO-E3, FO-F1, FO-G1 and
-FO-D5's matching half. **FO-A2 and FO-A3 are CLOSED too** — 2026-08-16, Track 1, see
-[DONE.md](./DONE.md): the counterparty resolver, the four bound fields, and
-`account.history` (open invoices and open bills; a contract's renewal reads off the
-`contract` object itself, and support load was evaluated and left out — see the
-entry for why). **The whole FO-C money track is CLOSED** — 2026-08-19, migration 0926: FO-C2's
-three receivable acts, FO-C4's per-tenant merchant account, FO-C5's collections ladder and the
-pay-run residual of FO-C6. **FO-D5's paperwork half, FO-E1, FO-E2, FO-E4 and FO-F2 are CLOSED too** — 2026-08-19,
-migration 0925, see [DONE.md](./DONE.md): the document-template registry and the four founding
-documents, the raise as a pipeline FAMILY over `deals.kind='investment'`, the data room's three
-safety columns enforced at the one place a token resolves, the operator's answer to FO-E4 (one
-table — the raise is a projection, not a second domain), the mirroring paragraph deleted from the
-canvas system prompt, and a deal you can drag with a pointer.
-**FO-D1..FO-D4 are CLOSED** (2026-08-19, migration 0927 — see [DONE.md](./DONE.md)).
-What remains: **FO-B3** now has both primitives to route through, and FO-G2 plus FO-G3's
-commercial half are unblocked now that Track 1 has landed.
+Nine items across the three headings below. **Nothing is sequenced behind anything else any more** —
+the two foundations everything downstream waited on have both landed, so the build-order argument that
+used to sit here is finished work and lives in [DONE.md](./DONE.md).
 
-**The tighter constraint is still file collision, not logical dependency.** The remaining
-items edit the same coordination files, so dispatching them at once produces conflicts even
-where none depends on another's behaviour:
+| Item | Heading | State |
+|---|---|---|
+| **FO-B3** — `jobPosting` applications | FO-B | **Blocked on a decision** — see its entry |
+| **FO-B4** — e-signature vendor adapter | FO-B | Open, unblocked |
+| **FO-E5** — the `funding_rounds` header and its stored total | FO-E | **Blocked on a decision** — see its entry |
+| A data room cannot hold a legal FILE | FO-E | Open, unblocked |
+| A watermarked BINARY is not actually stamped | FO-E | Open, unblocked |
+| `legalEntity` / `ipAsset` / `matter` have no canvas kind | FO-G | Open, unblocked |
+| `policy.acknowledge`'s return leg is never written back | FO-G | Open, unblocked |
+| **FO-G2** — contract obligations bound to invoices | FO-G | Open, unblocked |
+| **FO-G3** — the commercial half of the template library | FO-G | Open, unblocked |
+
+**The remaining constraint is file collision, not logical dependency.** These items still edit the same
+coordination files, so dispatching them together produces conflicts even where none depends on
+another's behaviour. Per the isolation-track rule at the foot of this file, shared coordination files
+are not file-disjoint and must be serialized and rebased before merge:
 
 | File | Contended by |
 |---|---|
-| `packages/creation-canvas-contract/src/index.ts` (`FOUNDER_OBJECT_KINDS`) | FO-E1 |
-| `frontend/src/lib/founderObjects.ts` | FO-C2, FO-E1, FO-G2 |
+| `frontend/src/lib/founderObjects.ts` | FO-G2, the three legal kinds |
 | `frontend/src/i18n/messages/{en,zh,es,fr,de}.json` | every item with a surface |
 | `frontend/src/components/creation-canvas/CreationCanvas.tsx` (tool registry) | every item with a tool |
 | `frontend/src/lib/canvasFounderOpsTools.ts` | the founder-ops tool family added by 0469 |
-| `api/migrations/` | FO-E1 — draw from the owning track's reserved band |
-
-Per the isolation-track rule at the foot of this file, shared coordination files are not
-file-disjoint and must be serialized and rebased before merge:
-
-**Track 1 — the counterparty, serialized:** FO-A2 → FO-A3. **CLOSED 2026-08-16** — see
-  DONE.md. Everything else rebases onto it now.
-**Track 2 — collection & signature consumers:** FO-B3 → FO-B4, over the primitives 0469
-  landed. **FO-B3 mostly CLOSED 2026-08-16** — see DONE.md; `jobPosting` applications is blocked
-  on a decision (see FO-B3's own entry). FO-B4 unaffected.
-**Track 3 — money:** closed 2026-08-19 (FO-C2, FO-C4, FO-C5 and the pay-run residual).
-**Track 4 — the disjoint singles:** CLOSED 2026-08-19 — FO-F2 (the prompt deletion) and
-  FO-E2 (the data room, over FO-B2) both landed with migration 0925.
-
-FO-G2/FO-G3 should not start until Tracks 1–3 land.
-
-#### FO-A · The counterparty — one object every commercial reference points at
-
-> FO-A1 landed 2026-08-15 (0469): the `account` kind, `parties.ts` and `canvas_sync_account`.
-> **FO-A2 and FO-A3 landed 2026-08-16 (Track 1)**: `resolveCounterpartyAccount` /
-> `counterpartyAccountField` join `invoice.customer`, `bill.vendor`, `contract.counterparty`
-> and `placement.client` to an `account` by `partyRef`, live and read-time-fallback-safe for
-> a board saved before the join existed; and `account.history` projects the account's real
-> open invoices and open bills, read-through cached and invalidated on the bill acts. See
-> [DONE.md](./DONE.md) for what "live contract" and "support load" turned out to need instead.
+| `api/migrations/` | draw from the owning track's reserved band |
 
 #### FO-B · Collection & signature — the two primitives the contract already declares
 
-> `people.ts` calls `form` "the single largest 'Idea → Real' break the canvas had: it could author
-> anything and collect nothing, so every flow that needed an answer from a person terminated in a
-> document and finished its real work somewhere else". **Both primitives landed 2026-08-15 (0469)** —
-> the collection half on `question_sets` + `responses` (which already WERE the store; what was missing
-> was publication) plus `form_recipients`, and the signature half as `signature_requests` +
-> `signature_parties` with a public signer and a reminder sweep. **Four of the five waiting
-> consumers landed 2026-08-16** — see FO-B3 below and [DONE.md](./DONE.md).
+> Both primitives and four of their five waiting consumers landed (0469, then 2026-08-16) — see
+> [DONE.md](./DONE.md). `signature_requests` + `signature_parties` with a public signer and a reminder
+> sweep is the engine every item below maps onto.
 
-- **FO-B3 — Four of the five waiting consumers now route through FO-B1/FO-B2.** *(landed
-  2026-08-16, Track 2.)* `contract.sign`, `policy.acknowledge` (its `roster` and
-  `acknowledgementRate` are now written by the round rather than declared and derived from
-  nothing), `offer.send`/`offer.sign`, and `dataRoom.share`/`nda_required` are real handlers in
-  `CreationCanvas.tsx` over `createSignatureRequest`/`signatureProgress` — each stays GATED in
-  `canvasApprovalGate` (`offer.sign` deliberately excluded: it only re-reads a request `send`
-  already created). `contract.sign` resolves its recipient through the FO-A2 join — a linked
-  `account`'s own contact — rather than a typed email; a contract with no linked account or no
-  contact email sends nothing rather than inventing one. See [DONE.md](./DONE.md).
-  **`jobPosting` applications is the one left, and it is blocked**: `applicantCount`/`distribution`
-  are documented as "read from the hiring domain", but no canvas `jobPosting` object carries the
-  numeric `job_postings.id` a real `job_applications` count would join on — there is no
-  `canvas_sync_job_posting` equivalent of FO-A1's `canvas_sync_account` that creates or resolves
-  that backend row in the first place. Building the handler without it would mean matching by
-  title, which is exactly the string-matching defect FO-A1/FO-A2 exist to remove. Needed to clear
-  it: a decision on whether a canvas `jobPosting` should sync to/from a real `job_postings` row
-  (its own foundation, FO-A1-shaped) or applications stay off-canvas and are read through a
-  different surface. Unblocks: the offer→employee handover `people.ts` names as the seam between
-  the Recruiter and HR seats — already true for the four that landed.
+- **FO-B3 — `jobPosting` applications is the one consumer that never routed through the signature
+  primitives, and it is blocked.** *(narrowed 2026-08-19 — the other four landed 2026-08-16; see
+  [DONE.md](./DONE.md).)* `applicantCount`/`distribution` are documented as "read from the hiring
+  domain", but no canvas `jobPosting` object carries the numeric `job_postings.id` a real
+  `job_applications` count would join on — there is no `canvas_sync_job_posting` equivalent of FO-A1's
+  `canvas_sync_account` that creates or resolves that backend row in the first place. Building the
+  handler without it would mean matching by title, which is exactly the string-matching defect
+  FO-A1/FO-A2 exist to remove. **Blocker: a decision** on whether a canvas `jobPosting` should sync
+  to/from a real `job_postings` row (its own foundation, FO-A1-shaped) or whether applications stay
+  off-canvas and are read through a different surface. Unblocks: the offer→employee handover
+  `people.ts` names as the seam between the Recruiter and HR seats.
 - **FO-B4 — An e-signature VENDOR adapter (DocuSign / Dropbox Sign).** Only worth building after FO-B2:
   a vendor adapter with no internal engine has nothing to map onto, and would become the second answer
   to "is it signed". Slots into the connector platform as manifest DATA per migration 0410, the same
   argument the HRMS entry in §9 makes. Unblocks: customers whose legal team requires a named provider.
 
-#### FO-C · Money — the founder cannot bill anyone, and cannot be paid
+#### FO-E · Raising — the residuals of the raise and the data room
 
-> **CLOSED 2026-08-19.** FO-C1/FO-C3/FO-C6 landed 2026-08-15 (0469); FO-C2, FO-C4, FO-C5 and the
-> pay-run residual landed 2026-08-19 (0926) — the receivable's three acts with a document the
-> customer can open, per-tenant merchant accounts so money settles to the tenant rather than to us,
-> a collections ladder whose rungs are unique in the database, and a `payRun` kind a connector
-> hydrates. See [DONE.md](./DONE.md). Nothing outstanding under this heading.
-
-
-#### FO-D · Ownership — the cap table is a projection now
-
-> **FO-D1, FO-D2, FO-D3 and FO-D4 landed 2026-08-19 (migration 0927)** — `share_classes`,
-> `equity_grants` (terms, no quantity), `convertible_instruments` and the append-only
-> `equity_events` ledger the cap table is FOLDED from; vesting computed by one shared
-> function both the API and the card call; a cliff date a `trigger` can watch; and a round
-> modeller that converts every outstanding SAFE and note on its own cap and discount. See
-> [DONE.md](./DONE.md). What is left below is the paperwork half.
-
-
-
-#### FO-E · Raising — four cards and an unenforced data room
-
-> **FO-E1, FO-E2 and FO-E4 closed 2026-08-19 (0925)** — the raise is the sales board read through a
-> different pipeline FAMILY (`deals.kind='investment'`), and the data room's three safety columns are
-> enforced at the one place a token resolves. **FO-E4 was answered by the operator: one table, the raise
-> is a projection** — no second domain, no `raise_*` tables. See [DONE.md](./DONE.md).
+> The raise is the sales board read through a different pipeline FAMILY (`deals.kind='investment'`),
+> and the data room's three safety columns are enforced at the one place a token resolves — both landed
+> 2026-08-19 (0925); see [DONE.md](./DONE.md). The three items below are what that pass left.
 
 - **FO-E5 — QUESTION, not a task: `funding_rounds` still has no writer, and one of its columns is a
   stored total.** *(new 2026-08-19, the residual of FO-E1.)* The raise is now projected from the
@@ -1036,25 +932,10 @@ FO-G2/FO-G3 should not start until Tracks 1–3 land.
   stamped copy is ever stored. **Not blocked.** Unblocks: `watermark` meaning the same thing for the file
   format a data room is mostly made of.
 
-#### FO-F · One pipeline — independent of everything above
-
-> **FO-F1 landed 2026-08-15 (0469)**: `application/revenue/pipelineProjection.ts` reads the deals into
-> the exact shape the card already renders, and `canvas_move_deal` writes the deal and rewrites the
-> board from the same response — one call, no mirroring step to forget.
-
-> **FO-F2 and the drag both landed 2026-08-19 (0925)**: the mirroring paragraph is gone from the canvas
-> system prompt, replaced by a tenant-gated block that names the projection tools; and a deal is now
-> dragged with a pointer on both boards, through the same one-call `moveDeal` the tool uses. See
-> [DONE.md](./DONE.md).
-
 #### FO-G · Legal — a company's first ninety days are canvas cards
 
-> **FO-G1 landed 2026-08-15 (0469)**: the seventeenth seat — `legal`, owned by Counsel — with entity
-> formation, jurisdiction registrations, IP and matters, plus the rollup that makes its two declared
-> metrics real. See [DONE.md](./DONE.md).
->
-> **Secure legal FILES landed 2026-08-16**: `legalDocument` — an encrypted, shareable, signable file
-> behind the legal seat's records. See [DONE.md](./DONE.md).
+> The seventeenth seat — `legal`, owned by Counsel — and `legalDocument`, an encrypted, shareable,
+> signable file behind its records, both landed (0469, then 2026-08-16); see [DONE.md](./DONE.md).
 
 - **`legalEntity`, `ipAsset` and `matter` still have no canvas kind.** *(residual of FO-G1, narrowed
   2026-08-16 — the FILE half of this gap is now closed by `legalDocument`, see DONE.md.)*
@@ -1110,7 +991,18 @@ FO-G2/FO-G3 should not start until Tracks 1–3 land.
 - **`routes/candidates.ts` (858 lines) and the ATS pipeline it drives are not ported.** *(hired.video port, T2)* Migration 0471 gave `candidate_resumes` and `party_roles` their first writer (`application/hiring/candidateIntake.ts`, on apply), so a candidate record now EXISTS — but nothing reads it into a pipeline: `job_pipeline_entries`, `interview_kits`, `scorecard_attributes`, `hiring_decisions` and `offer_letters` (all seeded by 0419) still have no route, no UI and no writer. Unblocks: an employer being able to screen and advance the candidates the marketplace already admits.
 - **hired.video’s job SOURCING half is unported: scraper, JD refresh and job analytics.** *(hired.video port, T2)* `services/job/scraper.ts` (258), `routes/jobscraper.ts`, `routes/job-analytics.ts` (126), `services/job/salary-popularity.ts` and `time-to-hire.ts` ingest postings from external boards and report on them. 0471 ported the job-SEEKER half (saved jobs as a `saved` proposal state, alerts as `saved_searches` scope=’listing’, deterministic JD extract + match at `POST /api/jobs/extract`), and deliberately left sourcing alone because scraping third-party boards is a policy decision, not just an engineering one. Unblocks: a jobs surface fed by more than what this platform’s own employers post.
 - **Upwork-parity gap audit (freelance marketplace).** In-platform messaging + two-sided reputation + JSS/Top-Rated badges are done. Remaining vs Upwork, ranked by leverage:
-  1. **Fixed-price contracts + milestones + escrow (P0) — CLOSED 2026-08-19 except the payout stub.** `engagement_milestones` (migration 0924), `application/marketplace/escrow.ts` (the transition table, the funded-before-work gate, the ledger contract) and `application/marketplace/milestones.ts` (the only writer) are in, with 44 tests. Money moves as `ledger_entries` rows — `hold` on fund, `payout` on release, `refund` on cancel — idempotent on the unique `escrow:<milestoneId>:<action>` reference, so a replay collides in Postgres rather than in a check somebody remembered to write. `POST /api/engagements/:id/milestones`, `POST /api/engagements/milestones/:id/:action` (client) and `POST /api/engagements/mine/milestones/:id/submit` (freelancer) are live and split by AUTHORITY — the client holds a tenant JWT and the freelancer a web JWT, which is what makes “only the freelancer may submit” structural. **Both UI halves and the counter-offer landed 2026-08-19** — a client funds, accepts, rejects, releases and cancels from the Workforce → Talent team tab, a freelancer delivers from their Milestones tab, and a bidder proposes (and revises) their own schedule on the bid form, which the accept path binds in preference to the posting's. See [DONE.md](./DONE.md). What remains: the money movement still rides the env-gated payout stub (`PAYOUT_WEBHOOK_URL`) — partial by nature, and a release deliberately still succeeds without it, because the ledger entry is the platform's own record and refusing would strand every self-hosted install.
+  1. **Fixed-price contracts + milestones + escrow (P0) — the money movement still rides the env-gated
+     payout stub.** *(narrowed 2026-08-19 — everything else in this clause is closed; see
+     [DONE.md](./DONE.md) for the data model, the state machine, the funded-before-work gate, both UI
+     halves and the bidder's counter-proposed schedule.)* `ledger_entries` records every escrow move —
+     `hold` on fund, `payout` on release, `refund` on cancel — idempotent on the unique
+     `escrow:<milestoneId>:<action>` reference, so the platform's own books are correct. What is not
+     wired is the leg that moves real money out: `createPayout` is behind `PAYOUT_WEBHOOK_URL`, and a
+     release deliberately still succeeds without it, because refusing would strand every self-hosted
+     install. **Partial by nature**, and the honest fix is the hired.video payout stack this register
+     already names as the port direction (`PayoutLedgerService`, `PayoutOnboardingService`,
+     `ReleaseWorker`, plus Tremendous and Helcim-ACH adapters). Unblocks: a released milestone reaching
+     a freelancer's bank rather than only the ledger.
   2. **Richer job posting + proposal fields (P1).** *(narrowed 2026-08-19 — the hourly-vs-fixed clause was wrong and is removed: `job_postings.engagement_type` (`fixed_bid|hourly|fte`, migration 0293) has always carried it, read by `gigMarketplaceRoutes`, the `jobs.create` MCP tool and the canvas publish path. Adding the `job_type` column this audit asked for would have been one fact in two places.)* Jobs still lack budget/experience level, project length, screening questions, and attachments; proposals lack screening answers and attachments (**proposed milestones landed 2026-08-19** — see [DONE.md](./DONE.md)). Discipline is a coarse 9-value enum vs Upwork's deep category tree.
   3. **Client-side talent ops (P1).** No saved-talent/shortlist, no invite-a-specific-freelancer-to-a-job, and no recommendation feed. **Job alerts are done** — they are `saved_searches` rows with `scope='listing'`, and the daily `job-alerts` sweep now evaluates them (see DONE.md, 2026-08-19). Needs a `saved_talent` join, a job-invite row, and a cached match query.
   4. **Financial completeness (P2).** No platform/service-fee model, no withdrawal-method management, no earnings/transaction-history report surface, no tax forms (1099/W-8BEN/W-9).
@@ -1469,9 +1361,7 @@ FO-G2/FO-G3 should not start until Tracks 1–3 land.
   would destroy that work — the third time this exact collision is recorded in this register. Needed to
   clear it: that session commits or stops. Unblocks: one owner per vocabulary, and every wave after this
   one running its lanes without a hand-merged JSON. **(W0)**
-- **Date/number formatting bypasses next-intl at 180 call sites** *(architecture review 2026-07-26)* — `frontend/src` has **314** `toLocaleDateString`/`toLocaleString`/`toLocaleTimeString` calls: **157** pass **no locale argument** (so they render in the *browser/OS* language, not the locale the user picked — a zh user on an en-US machine sees English dates inside a Chinese UI) and **10** hardcode `'en-US'` (`adminShared.tsx`, `ArticleCard`, `BlogPostClient`, `RfpDetailClient`, `tools/[id]/page.tsx`). Only 1 `Intl.NumberFormat` and 16 `Intl.DateTimeFormat` instances exist, none locale-bound. Fix: a `useFormat()` hook (+ `getFormat()` server variant) that reads the active next-intl locale and exposes `date`/`dateTime`/`number`/`currency`/`relative`, then codemod the 180 sites. Unblocks: locale-correct dates/numbers, which no amount of catalog translation reaches. Related: the `taskStatusLabel` item below.
-- **RSC is effectively unused and i18n coverage is ~58%** *(architecture review 2026-07-26)* — **854 of 1,069** `.tsx` components carry `'use client'` (86%), so the App Router ships a SPA and the server-component data path is unavailable to almost every screen; **384 of 660** use `useTranslations`/`getTranslations`, leaving ~276 components with hardcoded English (consistent with the ~330 figure above, measured differently). No fix proposed as a single item — this is the size of the i18n backlog above plus a note that any "move this fetch to the server" plan is blocked until the client boundary is pushed down.
----
+- **Locale-correct formatting is done for components; 88 calls remain in hook-free module scope** *(narrowed 2026-08-19 — the primitive shipped and 245 of 333 call sites migrated, see [DONE.md](./DONE.md))* — `frontend/src/i18n/format.ts` is now the one place a value becomes a human string, with `useFormat()` (client) and `getFormat()` (server) binding it to the active locale, and a ts-morph codemod moved every call that sits inside a React component or hook. What is left is **88 calls in 56 files that are NOT in a component**: module-scope helpers where a hook cannot run. Each needs the same treatment `metricFormat.ts` already documents for its translator and `BrainPanel.formatTime` now uses — take the `Formatter` as a parameter and thread it from the caller that has the hook. The biggest are `adminShared.fmtDate`/`fmtDateTime` (**107 call sites** across the admin surface), `lib/canvasFileImport.ts` (12 — and these may not want locale formatting at all, since they serialize imported spreadsheet cells rather than display them), `lib/lifecycleDiagnostics.ts` (4), `components/insights/format.ts` (3) and `dashboard/metricFormat.ts` (2). **14 of the 88 still hardcode `'en-US'`** — English for *everyone*, including a user who explicitly chose German — and those are the ones worth doing first: `adminShared.tsx`, `metricFormat.ts`, `UserDetailDrawer`, `RfpDetailClient`, `RfpContent`, `askWidget`, `MeetingsCalendar`, `canvasApprovalGate.ts`, `canvasEquityTools.ts`, `canvasFounderOpsTools.ts`. **Not blocked — deliberately not attempted in that pass:** a signature change rippling through 107 call sites, made in a working tree another session was concurrently rewriting, is how `CreationCanvas.tsx` ended up carrying two sessions' edits in one file during the same pass. Do it against a quiet tree. Unblocks: the last of the locale-incorrect dates and numbers.
 
 ## 15 · 🛠️ Platform — DB, CI/CD, Migrations, Cost & Tech-debt
 
@@ -1504,12 +1394,10 @@ FO-G2/FO-G3 should not start until Tracks 1–3 land.
 
 > The eight DDD/SOLID/DRY items shipped in full — see [DONE.md](./DONE.md). These are what that pass FOUND and deliberately did not fix.
 
-- **The layering ratchet is at 126 files and IS falling (144 → 126).** `npm run check:layering` stops NEW `presentation → infrastructure` imports, but 144 route/middleware modules still query the database directly (843 selects / 210 inserts / 251 updates inline across the route layer). The baseline only shrinks when someone touching a route moves its queries into an application service. Worst offenders by count: `adminRoutes` (56 selects, 111 handlers, 132 KB), `agentHostRoutes`, `qaRoutes`, `knowledgeRoutes`. Unblocks: a domain layer that is load-bearing rather than a 46-file island — 390 files still import the Drizzle schema directly, and only 24 use a domain entity.
-- **505 unscoped tenant queries remain baselined, across 149 files** *(re-measured 2026-08-18; was 522 across 152).* `npm run check:tenant-scope` freezes them; each is a statement against a tenant-owned table with no tenant predicate in the statement. MOST are safe (a parent row was verified first, e.g. timecard entries filtered by an already-owner-checked `timecardId`) but they have not been audited one by one, and the guard cannot tell "verified via parent" from "forgot". Fix: walk the baseline file by file, convert the genuinely-scoped ones to `scopedToTenant`, and confirm the parent check on the rest. Unblocks: retiring the baseline entirely, at which point the guard becomes a wall instead of a ratchet.
-- **11 of 40 permissions are enforced; the other 29 are advisory.** `ENFORCED_PERMISSIONS` covers apikey/audit/billing/approval/member. `project:*`, `task:*`, `workflow:*`, `agentHost:*`, `report:*`, `marketplace:*` and the `system:*` triple are still gated by the role ladder alone, so an override on them changes the admin table and nothing else (the UI now says so). Fix: add `requirePermission` to each route group and extend the set — `permissionEnforcement.test.ts` enforces that the two move together. Unblocks: per-user permission overrides that mean something on the surfaces operators most want them for.
+- **The layering ratchet is at 126 files and IS falling** *(guard re-run 2026-08-19)*. `npm run check:layering` stops NEW `presentation → infrastructure` imports; **110** non-test presentation modules still import the schema directly and hold **286 selects / 108 inserts / 84 updates** inline in the route layer *(re-measured 2026-08-19 — the previous figures of 144 modules and 843/210/251 were stale by a wide margin; the direction is down)*. The baseline only shrinks when someone touching a route moves its queries into an application service. Worst offenders by count: `adminRoutes`, `agentHostRoutes`, `qaRoutes`, `knowledgeRoutes`. Unblocks: a domain layer that is load-bearing rather than an island — **541** files import the Drizzle schema directly while **44** import a domain entity class (up from 24, so the layer is being adopted rather than abandoned).
+- **410 unscoped tenant queries remain baselined, across 135 files** *(re-measured 2026-08-19; was 505 across 149 on 08-18 and 522 across 152 before that — the ratchet is working).* `npm run check:tenant-scope` freezes them; each is a statement against a tenant-owned table with no tenant predicate in the statement. MOST are safe (a parent row was verified first, e.g. timecard entries filtered by an already-owner-checked `timecardId`) but they have not been audited one by one, and the guard cannot tell "verified via parent" from "forgot". Fix: walk the baseline file by file, convert the genuinely-scoped ones to `scopedToTenant`, and confirm the parent check on the rest. Unblocks: retiring the baseline entirely, at which point the guard becomes a wall instead of a ratchet.
+- **11 of 38 permissions are enforced; the other 27 are advisory** *(counted from `PERMISSIONS` + `ENFORCED_PERMISSIONS`, 2026-08-19).* `ENFORCED_PERMISSIONS` covers apikey/audit/billing/approval/member. `project:*`, `task:*`, `workflow:*`, `agentHost:*`, `report:*`, `marketplace:*` and the `system:*` triple are still gated by the role ladder alone, so an override on them changes the admin table and nothing else (the UI now says so). Fix: add `requirePermission` to each route group and extend the set — `permissionEnforcement.test.ts` enforces that the two move together. Unblocks: per-user permission overrides that mean something on the surfaces operators most want them for.
 - **`tasks` carries no `tenant_id`, so the tenant-scope guard cannot cover the busiest table.** Tenancy is inherited through `projects.tenantId`, which is why `taskProjectIfInTenant` exists — but a query that joins `tasks` without reaching `projects` is invisible to the guard. Options: denormalise `tenant_id` onto `tasks` (a migration + backfill + trigger, matching what `segment_id` already does), or teach the guard to follow the `projectId` FK. The first is mechanical and makes every future query checkable; the second leaves the invariant implicit.
-
-- **Deferred residual — ONE item remains, and it is genuinely blocked.** *Rotate the leaked credentials* (Cloudflare API token reg #9, NVIDIA API key reg #37 — both transcript-only leaks, verified absent from every tracked file; plus the `api/.dev.vars` Neon password, whose blob was purged from history but which must still be treated as compromised). Tracked in the gitignored `SECURITY-FINDINGS.local.md`; see [[security-findings-not-in-source-control]]. **Blocker:** issuing replacement keys requires the live Cloudflare, NVIDIA and Neon consoles, followed by `wrangler secret put` — there is no code change that rotates a secret, so this cannot be closed from the repo. Everything else in this bullet closed on 2026-08-19; see [DONE.md](./DONE.md).
 
 ---
 

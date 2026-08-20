@@ -72,7 +72,7 @@ export function DomainSurface({
   onOpenObject?: (objectId: string) => void;
   locale?: string;
 }) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('kernel.surface');
   const tDomain = useTranslations('kernel.roster');
   const [summary, setSummary] = useState<DomainSummary | null>(null);

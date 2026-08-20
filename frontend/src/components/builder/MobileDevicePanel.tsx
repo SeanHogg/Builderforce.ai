@@ -28,7 +28,7 @@ interface MobileDevicePanelProps {
 }
 
 export function MobileDevicePanel({ open, onClose, projectId, onGoToPublish }: MobileDevicePanelProps) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('ide');
   const [site, setSite] = useState<SiteInfo | null>(null);
   const [loading, setLoading] = useState(false);

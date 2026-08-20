@@ -94,7 +94,7 @@ function Variance({ v }: { v: number | undefined }) {
 }
 
 export function AllocationLens() {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('insights');
   const [days, setDays] = useState(30);
   const [period, setPeriod] = useState(currentMonth());

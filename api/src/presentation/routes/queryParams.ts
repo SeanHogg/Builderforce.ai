@@ -34,3 +34,32 @@ export function positiveIntParam(raw: unknown): number | undefined {
 export function positiveIntOrNull(raw: unknown): number | null {
   return positiveIntParam(raw) ?? null;
 }
+
+/**
+ * A tri-state optional DATE field on a PATCH body.
+ *
+ * A partial update has three distinct meanings for a nullable date column and
+ * they must not collapse into two:
+ *
+ *   - `undefined` (key absent)   → leave the stored value UNCHANGED
+ *   - `null`                     → CLEAR the stored value
+ *   - a parseable string/number  → set it
+ *
+ * An UNPARSEABLE string returns `undefined` — "leave it alone" — deliberately,
+ * rather than writing an `Invalid Date` that Postgres would reject or store as
+ * junk. A caller that needs to reject bad input instead should validate before
+ * calling; every caller here would rather ignore a malformed date than fail an
+ * otherwise-valid update.
+ *
+ * Lives here because `projects.due_date` and `projects.start_date` need exactly
+ * the same three-way read, and two copies of a tri-state parse is how one of
+ * them ends up unable to clear its column.
+ */
+export function nullableDateParam(raw: unknown): Date | null | undefined {
+  if (raw === null) return null;
+  if (typeof raw === 'number' || (typeof raw === 'string' && raw.trim())) {
+    const parsed = new Date(raw);
+    return Number.isNaN(parsed.getTime()) ? undefined : parsed;
+  }
+  return undefined;
+}

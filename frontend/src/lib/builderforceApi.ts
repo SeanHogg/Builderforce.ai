@@ -4321,8 +4321,16 @@ export interface AgentHostChannel {
   agentHostId: number;
   platform: ChannelPlatform;
   name: string;
-  config: string | null; // JSON config (webhook URL, token, etc.)
+  /** Whether a sealed config or a connected account backs this channel. The token
+   *  or webhook URL itself is NEVER sent to a client — only the fact that one is
+   *  stored, so the panel can say "configured" without holding the credential. */
+  configured: boolean;
+  connectionId: string | null;
   enabled: boolean;
+  /** What the HOST last reported about the adapter; null until it reports. */
+  lastStatus: string | null;
+  lastError: string | null;
+  lastSeenAt: string | null;
   createdAt: string;
   updatedAt: string;
 }

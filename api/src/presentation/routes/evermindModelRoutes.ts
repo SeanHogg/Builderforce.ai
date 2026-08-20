@@ -34,7 +34,7 @@ import {
 import {
   normalizeEvermindTools,
   resolveEvermindToolChoice,
-  TOOL_CHOICE_MIN_MARGIN,
+  evermindToolChoiceMinMargin,
 } from '../../application/llm/evermindToolCall';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 
@@ -235,7 +235,10 @@ export function createEvermindModelRoutes(db: Db): Hono<HonoEnv> {
           // Unlike the gateway, the bench REPORTS the margin instead of refusing on it:
           // an operator testing a head needs to see how close to the bar it landed.
           toolChoiceMargin: Number.isFinite(planned.margin) ? planned.margin : null,
-          toolChoiceMinMargin: TOOL_CHOICE_MIN_MARGIN,
+          // The bar ACTUALLY in force, not the shipped constant — a bench that
+          // reports a different threshold from the gateway is how an operator
+          // concludes a head is fine and then watches production refuse it.
+          toolChoiceMinMargin: evermindToolChoiceMinMargin(c.env as { EVERMIND_TOOL_CHOICE_MIN_MARGIN?: string }),
         });
       }
       const gen = await evermindGenerate(c.env.UPLOADS, ref, messages, genOpts);

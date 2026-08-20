@@ -22,7 +22,7 @@ const btnSubtle: React.CSSProperties = {
  * the workspace's data when the caller is actually entitled.
  */
 export function DataDrivenPanel({ toolId, projectId }: { toolId: string; projectId?: number | null }) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('tools');
   const { allowed } = usePermission('tools.runDataDriven');
   const [result, setResult] = useState<ToolResult | null>(null);

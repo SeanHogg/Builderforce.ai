@@ -31,7 +31,7 @@ function compact(n: number): string {
 }
 
 export function AllowanceBanner() {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('brain.allowance');
   const snapshot = useConsumption();
   const [dismissed, setDismissed] = useState('');

@@ -46,7 +46,7 @@ function FileIcon({ path }: { path: string }) {
 }
 
 export function AgentHostWorkspaceContent({ agentHostId }: AgentHostWorkspaceContentProps) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const [directories, setDirectories] = useState<AgentHostDirectory[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

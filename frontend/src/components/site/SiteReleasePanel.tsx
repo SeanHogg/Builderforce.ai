@@ -46,7 +46,7 @@ function formatBytes(bytes: number): string {
 }
 
 export function SiteReleasePanel({ projectId, onBuild }: SiteReleasePanelProps) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('ide');
   const [releases, setReleases] = useState<SiteRelease[]>([]);
   const [busy, setBusy] = useState<string | null>(null);

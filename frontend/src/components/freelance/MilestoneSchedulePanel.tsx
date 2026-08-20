@@ -135,7 +135,7 @@ interface RowsProps {
 }
 
 function MilestoneRows({ milestones, busy, onAction, onRemove, showContext }: RowsProps) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('milestones');
   const confirm = useConfirm();
   const [noteFor, setNoteFor] = useState<{ id: string; action: MilestoneAction } | null>(null);

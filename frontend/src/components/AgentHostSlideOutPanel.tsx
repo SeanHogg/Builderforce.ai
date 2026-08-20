@@ -106,7 +106,7 @@ export function AgentHostSlideOutPanel({
   onDeleted,
   initialTab = 'details',
 }: AgentHostSlideOutPanelProps) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const confirm = useConfirm();
   const tc = useTranslations('common');
   const t = useTranslations('agentHostPanel');

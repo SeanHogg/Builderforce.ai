@@ -130,20 +130,43 @@ const SHOT_CACHE_KV_TTL_SECONDS = 6 * 60 * 60;
 const SHOT_CACHE_L1_TTL_MS = 10 * 60 * 1000;
 
 /**
- * Credentials for the renderer.
+ * Tokens that may carry the `Browser Rendering:Edit` scope, most specific first.
  *
- * Browser Rendering is a separate scope from Workers AI, so a deployment may hold one
- * and not the other — hence its own secret, falling back to the AI token because a
- * single account-wide token with both scopes is the common setup and requiring two
- * copies of the same string would be a configuration trap.
+ * Three rather than one because the scope is a PROPERTY of a token, not a product a
+ * deployment buys, and this account already illustrated every case: a dedicated browser
+ * token (none yet), a broad account token (`CLOUDFLARE_ACCOUNT_API_TOKEN` — deployed as a
+ * Worker secret since before this module existed and, until now, read by nothing in the
+ * repo), and a Workers AI token (`cfut_*`, scoped to Workers AI and therefore the least
+ * likely to work). Ordering them means an operator who already holds a sufficiently broad
+ * token needs no new one, and an operator who mints a dedicated one has it preferred.
+ *
+ * Declared as DATA so a fourth token is one entry, and so {@link screenshotConfigured}
+ * and this function cannot disagree about what counts as configured — the admin health
+ * report saying "configured" while a capture reports "unconfigured" is the exact
+ * contradiction that sends a user hunting for a problem that is not there.
  */
+const RENDER_TOKEN_KEYS = [
+  'CLOUDFLARE_BROWSER_API_TOKEN',
+  'CLOUDFLARE_ACCOUNT_API_TOKEN',
+  'CLOUDFLARE_AI_API_TOKEN',
+] as const satisfies readonly (keyof Env)[];
+
+/** Whether this deployment could take a capture at all. ONE answer, shared with the
+ *  operator health report — see {@link RENDER_TOKEN_KEYS}. */
+export function screenshotConfigured(env: Env | undefined): boolean {
+  return !!env?.CLOUDFLARE_ACCOUNT_ID?.trim()
+    && RENDER_TOKEN_KEYS.some((key) => !!(env?.[key] as string | undefined)?.trim());
+}
+
 function renderCredentials(env: Env | undefined): { accountId: string; token: string } {
   const accountId = env?.CLOUDFLARE_ACCOUNT_ID?.trim();
-  const token = (env?.CLOUDFLARE_BROWSER_API_TOKEN ?? env?.CLOUDFLARE_AI_API_TOKEN)?.trim();
+  const token = RENDER_TOKEN_KEYS
+    .map((key) => (env?.[key] as string | undefined)?.trim())
+    .find((value) => !!value);
   if (!accountId || !token) {
     throw new ScreenshotUnavailableError(
       'unconfigured',
-      'Live page capture is not configured on this deployment: it needs CLOUDFLARE_ACCOUNT_ID and a Browser Rendering token (CLOUDFLARE_BROWSER_API_TOKEN).',
+      'Live page capture is not configured on this deployment: it needs CLOUDFLARE_ACCOUNT_ID and a token carrying the Browser Rendering scope (CLOUDFLARE_BROWSER_API_TOKEN).',
     );
   }
   return { accountId, token };

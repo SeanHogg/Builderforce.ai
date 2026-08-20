@@ -63,7 +63,7 @@ function MemberList({ objectId, emptyLabel }: { objectId: string; emptyLabel: st
 }
 
 function RevisionList({ objectId, emptyLabel, locale }: { objectId: string; emptyLabel: string; locale: string }) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const [rows, setRows] = useState<Revision[] | null>(null);
   useEffect(() => {
     void getObjectRevisions(objectId).then(setRows).catch(() => setRows([]));

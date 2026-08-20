@@ -606,7 +606,7 @@ function AcknowledgeBanner({
   t: ReturnType<typeof useTranslations>;
   onAck: () => void;
 }) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const [busy, setBusy] = useState(false);
   const current = doc.myAcknowledgement?.current;
   async function ack() {
@@ -1060,7 +1060,7 @@ function ListingControl({ docId, t }: { docId: string; t: ReturnType<typeof useT
 }
 
 function VersionHistory({ docId, t }: { docId: string; t: ReturnType<typeof useTranslations> }) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const [versions, setVersions] = useState<DocVersion[]>([]);
   const [open, setOpen] = useState(false);
 

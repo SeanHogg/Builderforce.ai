@@ -41,7 +41,7 @@ const cardStyle: React.CSSProperties = {
 };
 
 export default function OutcomeMetricsPanel() {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('admin.outcomes');
   const m = useTranslations('outcomeMetrics') as unknown as OutcomeTranslator;
   const [days, setDays] = useState(30);

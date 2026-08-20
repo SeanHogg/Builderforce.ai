@@ -50,7 +50,7 @@ function renderStack(stack: unknown): string {
  * "Fix with agent" dispatch (manager+ via RoleGate quality.fix).
  */
 export function ErrorGroupDetail({ groupId, onClose, onChanged }: { groupId: string; onClose: () => void; onChanged: () => void }) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('quality');
   const [detail, setDetail] = useState<Detail | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -176,7 +176,7 @@ export function ErrorGroupDetail({ groupId, onClose, onChanged }: { groupId: str
 }
 
 function Metric({ label, value }: { label: string; value: number | string }) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   return (
     <div style={{ background: 'var(--bg-deep)', borderRadius: 'var(--radius-md)', padding: 10 }}>
       <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>{typeof value === 'number' ? fmt.number(value) : value}</div>

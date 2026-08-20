@@ -17,7 +17,7 @@ interface Props {
 }
 
 export function TenantTokenLimitOverrideEditor({ tenantId, value, onChange }: Props) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('admin');
   return (
     <TenantIntegerOverrideEditor

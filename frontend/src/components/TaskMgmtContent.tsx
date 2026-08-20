@@ -66,6 +66,7 @@ import { PublishToMarketplaceModal } from './PublishToMarketplaceModal';
 import { getTicketPosting, unpublishTicket, type TicketPosting } from '@/lib/freelancerApi';
 import { ViewToggle } from './ViewToggle';
 import { CeremonyStage, type CeremonyMode } from './ceremony/CeremonyStage';
+import type { ReschedulePatch } from '@/lib/schedule';
 import { ScheduleCalendar } from './ScheduleCalendar';
 import { ScheduleGantt } from './ScheduleGantt';
 import {
@@ -183,6 +184,7 @@ export function TaskMgmtContent({
   const tCommon = useTranslations('common');
   const tTask = useTranslations('taskMgmt');
   const tGigs = useTranslations('gigs');
+  const tSchedule = useTranslations('schedule');
   // Global project scope (present in the app shell, absent in embed/standalone).
   // When present it is the single project picker — the board's own project filter
   // is hidden and the TopBar tenant→project selector drives scope instead.
@@ -802,6 +804,25 @@ export function TaskMgmtContent({
       setError(e instanceof Error ? e.message : tTask('errDelete'));
     }
   };
+
+  /**
+   * Persist a ticket dragged on the Gantt / Calendar.
+   *
+   * Writes through `tasksApi.update` exactly as the drawer's date editors do, so
+   * a drag and a typed date go down one path and land in one place. The patch
+   * itself is computed by the shared `shiftSchedule` rule inside the view, so a
+   * ticket dragged on the timeline and a project dragged on the same timeline
+   * move by the same arithmetic.
+   */
+  const rescheduleTask = useCallback(async (task: Task, patch: ReschedulePatch) => {
+    try {
+      const updated = await tasksApi.update(task.id, patch);
+      setTasks((prev) => prev.map((i) => (i.id === updated.id ? updated : i)));
+      setDrawerTask((cur) => (cur && cur.id === updated.id ? updated : cur));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : tSchedule('rescheduleFailed'));
+    }
+  }, [tSchedule]);
 
   // Persist a single edited field from the drawer's inline editors. Patches the
   // open task, syncs the list + drawer, and closes the active editor on success.
@@ -1546,9 +1567,16 @@ export function TaskMgmtContent({
           })}
         </div>
       ) : view === 'calendar' ? (
-        <ScheduleCalendar items={filtered} getLabel={titleOf} onSelect={(t) => openTask(t)} />
+        <ScheduleCalendar items={filtered} getLabel={titleOf} onSelect={(t) => openTask(t)} onReschedule={rescheduleTask} />
       ) : view === 'gantt' ? (
-        <ScheduleGantt items={filtered} getLabel={titleOf} onSelect={(t) => openTask(t)} noun="task" />
+        <ScheduleGantt
+          items={filtered}
+          getLabel={titleOf}
+          onSelect={(t) => openTask(t)}
+          columnLabel={tSchedule('columnTask')}
+          emptyMessage={tSchedule('emptyTasks')}
+          onReschedule={rescheduleTask}
+        />
       ) : (
         <div style={cardStyle}>
           {filtered.length === 0 ? (

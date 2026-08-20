@@ -14,7 +14,7 @@ import { useFormat } from "@/i18n/useFormat";
  * new fetch code and the list stays in sync with what /brainstorm shows.
  */
 export function DashboardIdeasTab({ limit }: { limit?: number }) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('dashboard');
   const { currentProjectId } = useProjectScope();
   const chats = useBrainChats({ filterProjectId: currentProjectId != null ? String(currentProjectId) : null });

@@ -23,7 +23,7 @@ export function BuilderProjectCard({
   onDetails: (p: IdeProject) => void;
   onDelete: (p: IdeProject) => void;
 }) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('ide');
   const m = useModalityCopy()(ideProject.modality);
 

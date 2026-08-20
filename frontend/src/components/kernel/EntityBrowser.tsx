@@ -122,7 +122,7 @@ function FieldInput({
 }
 
 export function EntityBrowser({ scope, locale = 'en' }: { scope: EntityScope; locale?: string }) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('kernel.entities');
   const [entities, setEntities] = useState<EntityDescriptor[] | null>(null);
   const [active, setActive] = useState<string | null>(null);

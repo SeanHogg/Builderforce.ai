@@ -26,6 +26,8 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
+
+import { useFormat } from '@/i18n/useFormat';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { Button } from '@/components/ui';
 import { useRealtimeRoom } from '@/lib/embed/useRealtimeRoom';
@@ -83,6 +85,7 @@ export function MessageHubButton({ className }: { className?: string }) {
 }
 
 export function MessageHubPanel({ meId }: { meId: string | null }) {
+  const fmt = useFormat();
   const hub = useOptionalMessageHub();
   const t = useTranslations('messages');
   const [messages, setMessages] = useState<DirectMessage[]>([]);
@@ -256,7 +259,7 @@ export function MessageHubPanel({ meId }: { meId: string | null }) {
                   }}
                 >
                   <div style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', marginBottom: 3 }}>
-                    {message.mine ? t('you') : (message.authorName || t('them'))} · {new Date(message.createdAtISO).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    {message.mine ? t('you') : (message.authorName || t('them'))} · {fmt.time(message.createdAtISO)}
                   </div>
                   <div style={{ fontSize: 'var(--font-size-body)', color: 'var(--text-primary)', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', lineHeight: 1.5 }}>
                     {message.body}

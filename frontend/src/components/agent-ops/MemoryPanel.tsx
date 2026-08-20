@@ -23,7 +23,7 @@ import { useFormat } from "@/i18n/useFormat";
  * never another project's.
  */
 export function MemoryPanel() {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('agentOps');
   const confirm = useConfirm();
   const { currentProjectId } = useProjectScope();

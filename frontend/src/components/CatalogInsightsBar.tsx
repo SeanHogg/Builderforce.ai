@@ -73,7 +73,7 @@ function isAnalyticsKind(entity: string): entity is CatalogAnalyticsKind {
 }
 
 export function CatalogInsightsBar({ entity, items, primaryMetric, secondaryMetric, groupKind, showTrend, bars, extraStats }: CatalogInsightsBarProps) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('catalogInsights');
   const ta = useTranslations('catalogAnalytics');
 

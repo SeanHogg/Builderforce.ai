@@ -35,7 +35,7 @@ interface Props {
 /** Right-hand inspector for the selected node — edits its label and the typed
  *  config fields declared in the node-kind catalog. */
 export function NodeConfigPanel({ node, onChange, onDelete, triggerInfo }: Props) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('evermindBuild');
   const meta = NODE_KIND_MAP[node.data.kind];
   const config = node.data.config ?? {};

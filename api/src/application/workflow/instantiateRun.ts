@@ -140,6 +140,19 @@ export async function persistCompiledRun(
         const input = {
           kind: s.kind,
           config: s.config,
+          // Labeled edges, re-keyed from node ids to the TASK ids this run just
+          // minted, so the executor can prune a branch arm without re-reading the
+          // definition. Present only when the author drew a labeled edge, which
+          // keeps every existing run byte-identical.
+          ...(s.edgeLabels
+            ? {
+                depLabels: Object.fromEntries(
+                  Object.entries(s.edgeLabels)
+                    .map(([nodeId, label]) => [nodeToTaskId.get(nodeId), label])
+                    .filter(([taskId]) => !!taskId) as Array<[string, string]>,
+                ),
+              }
+            : {}),
           ...(isTrigger && params.triggerPayload !== undefined
             ? { payload: params.triggerPayload }
             : {}),

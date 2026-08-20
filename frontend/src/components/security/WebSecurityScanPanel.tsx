@@ -60,7 +60,7 @@ function ScoreGauge({ score, label }: { score: number; label: string }) {
 }
 
 export function WebSecurityScanPanel() {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('security');
   const [target, setTarget] = useState('');
   const [savedTarget, setSavedTarget] = useState<string | null>(null);

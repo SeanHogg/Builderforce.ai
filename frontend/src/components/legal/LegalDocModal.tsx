@@ -28,7 +28,7 @@ interface LegalDocModalProps {
  * including read-only detail views like this one, is a slide-out side panel.
  */
 export default function LegalDocModal({ type, legal, onClose, zIndex }: LegalDocModalProps) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('legal');
 
   const doc = type === 'terms' ? legal?.terms : legal?.privacy;

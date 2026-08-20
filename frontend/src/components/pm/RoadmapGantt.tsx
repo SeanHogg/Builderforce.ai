@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import type { TrackerRow } from '@/lib/builderforceApi';
 import { ScheduleGantt } from '@/components/ScheduleGantt';
-import type { Schedulable } from '@/lib/schedule';
+import type { ReschedulePatch, Schedulable } from '@/lib/schedule';
 import { usePmScope } from '@/lib/pm/scope';
 import { usePmData } from '@/lib/pm/usePmData';
 import { roadmapClient } from '@/lib/pm/roadmap';
@@ -40,6 +40,20 @@ export function RoadmapGantt() {
     [data],
   );
 
+  /**
+   * Persist a dragged roadmap bar.
+   *
+   * A roadmap item carries only `targetDate`, so `shiftSchedule` leaves the patch's
+   * `startDate` null and only the deadline moves — which is exactly right: a
+   * roadmap item has a target, not a window, and a drag must not invent a start
+   * the roadmap does not model.
+   */
+  const reschedule = async (bar: RoadmapBar, patch: ReschedulePatch) => {
+    if (!patch.dueDate) return;
+    await roadmapClient.update(bar.id, { targetDate: patch.dueDate });
+    reload();
+  };
+
   if (error) return <PmError message={error} />;
   if (!data) return <PmEmpty message="Loading roadmap…" />;
   if (!data.length) return <PmEmpty message="No roadmap items yet." />;
@@ -50,7 +64,9 @@ export function RoadmapGantt() {
         items={bars}
         getLabel={(b) => b.title}
         onSelect={(b) => setEditing(data.find((r) => String(r.id) === b.id) ?? null)}
-        noun="roadmap item"
+        columnLabel={t('columnRoadmapItem')}
+        emptyMessage={t('emptyRoadmapItems')}
+        onReschedule={reschedule}
       />
       <RoadmapItemPanel
         open={editing !== undefined}

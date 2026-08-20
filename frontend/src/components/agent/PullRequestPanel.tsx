@@ -88,7 +88,7 @@ function BuildStatus({ status, error, phase, showValidating }: {
 }
 
 export function PullRequestPanel({ taskId, onMerged }: { taskId: number; onMerged?: () => void }) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const [data, setData] = useState<TaskPullRequest | null>(null);
   const [loading, setLoading] = useState(true);
   const [method, setMethod] = useState<MergeMethod>('squash');

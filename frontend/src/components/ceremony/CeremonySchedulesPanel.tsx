@@ -78,7 +78,7 @@ const fromSchedule = (s: CeremonySchedule): FormState => ({
 });
 
 export function CeremonySchedulesPanel({ projectId }: { projectId: number }) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('ceremonySchedules');
   const tc = useTranslations('common');
   const confirm = useConfirm();

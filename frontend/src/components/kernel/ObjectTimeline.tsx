@@ -61,7 +61,7 @@ export function ObjectTimeline({
   limit?: number;
   locale?: string;
 }) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('kernel.timeline');
   const [rows, setRows] = useState<ActivityEntry[] | null>(null);
   const [failed, setFailed] = useState(false);

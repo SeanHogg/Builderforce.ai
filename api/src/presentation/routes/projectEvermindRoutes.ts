@@ -262,6 +262,11 @@ const pid = (c: Context): number => Number(c.req.param('projectId'));
 
 // ── JWT front door (web UI + internal JWT callers) ───────────────────────────
 
+/** Wall-clock budget for one test-bench generation. Well inside a Worker's CPU
+ *  allowance, so an over-long run returns a flagged partial rather than being killed
+ *  mid-request with a 5xx the operator cannot interpret. */
+const PROBE_DEADLINE_MS = 8000;
+
 export function createProjectEvermindRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
@@ -461,6 +466,11 @@ export function createProjectEvermindRoutes(db: Db): Hono<HonoEnv> {
       ...(typeof body.maxTokens === 'number' ? { maxTokens: Math.min(Math.max(16, body.maxTokens), 512) } : {}),
       ...(typeof body.temperature === 'number' ? { temperature: Math.min(Math.max(0, body.temperature), 2) } : {}),
       ...(typeof body.seed === 'number' ? { seed: body.seed } : {}),
+      // Generation is synchronous CPU on THIS request. The token clamp above bounds
+      // how much work is asked for, but not how long it takes — a large head on a
+      // slow isolate could approach the Worker CPU limit and die with no message and
+      // no output. The budget turns that into a partial answer flagged `truncated`.
+      deadlineMs: PROBE_DEADLINE_MS,
     };
 
     try {
@@ -476,6 +486,9 @@ export function createProjectEvermindRoutes(db: Db): Hono<HonoEnv> {
       return c.json({
         version: head.version, projectId: effectiveId, mode: 'prompt' as const,
         ready: sample.coherent, passRate: sample.coherent ? 1 : 0, samples: [sample], usage: sample.usage,
+        // A run cut short by the budget is reported as such: an incoherent verdict on
+        // a half-finished generation says something about the CLOCK, not the model.
+        truncated: sample.truncated, elapsedMs: sample.elapsedMs,
       });
     } catch (err) {
       // A broken/absent artifact is an operator-visible condition, not a 500 mystery.

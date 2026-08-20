@@ -152,6 +152,9 @@ export const projects = pgTable('projects', {
   // list endpoint then falls back to the derived max-task-due-date so the
   // calendar/Gantt still plot a deadline when tasks carry due dates.
   dueDate:         timestamp('due_date'),
+  // Explicit, PM-set project START (0942) — the writable other end of the bar the
+  // Gantt drags. NULL = derived from the project's tasks, mirroring `dueDate`.
+  startDate:       timestamp('start_date'),
   /** The external website this project is configured to security-scan (migration
    *  0357). Set once, re-scanned on demand; NULL = no target configured yet. */
   securityTargetUrl: varchar('security_target_url', { length: 2048 }),

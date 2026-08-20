@@ -34,7 +34,7 @@ const sectionTitle: React.CSSProperties = {
 };
 
 export default function AccountSecurityPanel() {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('security');
 
   const [mySessions, setMySessions] = useState<MySession[]>([]);

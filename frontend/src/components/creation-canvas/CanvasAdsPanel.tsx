@@ -51,7 +51,7 @@ export interface CanvasAdsPanelProps {
 }
 
 export function CanvasAdsPanel({ onClose }: CanvasAdsPanelProps) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('canvas.ads');
   const locale = useLocale();
 

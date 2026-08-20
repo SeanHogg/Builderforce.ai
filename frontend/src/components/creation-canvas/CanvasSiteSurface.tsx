@@ -124,7 +124,7 @@ const SCHEMES = ['light', 'dark'] as const;
 type SiteScheme = (typeof SCHEMES)[number];
 
 export function CanvasSiteSurface({ data, onExit, onEdit }: CanvasSiteSurfaceProps) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('creationCanvas');
   const [viewport, setViewport] = useState<CanvasViewport>(canvasViewport(data.viewport));
   const [reading, setReading] = useState<SiteReading>('preview');

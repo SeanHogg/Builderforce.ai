@@ -21,6 +21,9 @@ vi.mock('@/lib/builderforceApi', () => {
     isAwaitingApprovalExecution: vi.fn().mockReturnValue(false),
     boardsApi: {
       list: vi.fn().mockResolvedValue([]),
+      // `useBoardConfig` reads the boards and the workspace's cloud-run allowance
+      // from ONE request (DISP-R3), so the board view calls this and not `list`.
+      listWithAllowance: vi.fn().mockResolvedValue({ boards: [], cloudRunAllowance: null }),
       swimlanes: { list: vi.fn().mockResolvedValue([]) },
       agents: { list: vi.fn().mockResolvedValue([]) },
     },
@@ -51,7 +54,10 @@ describe('TaskMgmtContent', () => {
     const boardBtn = getByText(/board/i);
     fireEvent.click(boardBtn);
     await waitFor(() => {
-      expect(getByText('Backlog')).toBeTruthy();
+      // Assert on what the shared status resolver renders, not on the English
+      // constant it replaced — `useTaskStatusLabel()` reads the `taskStatus.*`
+      // catalog, which the global next-intl mock echoes back as its key.
+      expect(getByText('taskStatus.backlog')).toBeTruthy();
     });
   });
 
@@ -76,7 +82,7 @@ describe('TaskMgmtContent', () => {
     const headerCb = getAllByRole('checkbox')[0];
     fireEvent.click(headerCb);
     // select first row status dropdown appears when clicking status cell
-    const statusSpan = getAllByText('To Do')[0];
+    const statusSpan = getAllByText('taskStatus.todo')[0];
     fireEvent.click(statusSpan);
     // should transform into select element
     await waitFor(() => {

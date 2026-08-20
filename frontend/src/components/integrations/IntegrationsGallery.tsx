@@ -258,7 +258,7 @@ export function IntegrationsGallery({ search = '', viewMode = 'card' }: { search
 
 // ── Connections tab: workspace-wide list of this provider's connections ───────
 function ConnectionsTab({ provider, onChanged, t }: { provider: string; t: ReturnType<typeof useTranslations>; onChanged: () => void }) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const confirm = useConfirm();
   const [rows, setRows] = useState<BoardConnection[] | null>(null);
   const [syncing, setSyncing] = useState<string | null>(null);
@@ -309,7 +309,7 @@ function ConnectionsTab({ provider, onChanged, t }: { provider: string; t: Retur
 interface SyncLog { id: number; status: string; itemsProcessed: number; itemsErrored: number; errorMessage: string | null; durationMs: number | null; startedAt: string }
 
 function ActivityTab({ credentials, t }: { credentials: IntegrationCredential[]; t: ReturnType<typeof useTranslations> }) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const [logs, setLogs] = useState<Record<string, SyncLog[]>>({});
   const [testing, setTesting] = useState<string | null>(null);
   const [results, setResults] = useState<Record<string, { ok: boolean; message: string }>>({});

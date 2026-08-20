@@ -4,6 +4,7 @@ import { modelSupportsTools } from './registry';
 import { VendorFatalError } from './types';
 import { buildEvermindFixtureStore as fixtureStore } from '../__fixtures__/evermindModel';
 import { isServableText } from '../textCoherence';
+import { evermindToolChoiceMinMargin, TOOL_CHOICE_MIN_MARGIN } from '../evermindToolCall';
 
 /** Controls what the (mocked) runtime generates, so the vendor's OWN contracts —
  *  tool refusal and the coherence gate — can be asserted without depending on what a
@@ -175,5 +176,58 @@ describe('evermind vendor module', () => {
     await expect(
       evermindModule.call({ apiKey: 'local', model: 'evermind-models/9/x', messages: [{ role: 'user', content: 'x' }] }),
     ).rejects.toThrow(/not bound/);
+  });
+});
+
+describe('evermind — streaming parity and a tunable confidence bar', () => {
+  it('exposes callStream, so a streaming turn is not silently served by another model', async () => {
+    // Streaming dispatch SKIPS vendors without `callStream`. Without this the project
+    // Evermind pin meant one model on a non-streaming surface and a DIFFERENT model on
+    // a streaming one — the pin quietly not applying is worse than it failing.
+    expect(typeof evermindModule.callStream).toBe('function');
+  });
+
+  it('replays a completed call as SSE carrying BOTH the content and the usage chunk', async () => {
+    const res = await evermindModule.callStream!({
+      apiKey: 'local',
+      model: 'evermind-models/9/vendor-fixture',
+      messages: [{ role: 'user', content: 'hello' }],
+      uploads: store(),
+    }).then((r) => ({ ok: true as const, r }), (e: unknown) => ({ ok: false as const, e }));
+
+    // A degenerate fixture head may legitimately be refused by the coherence gate;
+    // what must NOT happen is the stream path behaving differently from `call`.
+    if (!res.ok) {
+      expect(res.e).toBeInstanceOf(VendorFatalError);
+      return;
+    }
+    const body = await res.r.response.text();
+    expect(res.r.response.headers.get('content-type')).toContain('text/event-stream');
+    // Usage rides its own trailing chunk, exactly as OpenAI's include_usage does —
+    // the client only learns token counts from a chunk's `usage`.
+    expect(body).toContain('"usage"');
+    expect(body.trimEnd().endsWith('data: [DONE]')).toBe(true);
+  }, 30000);
+});
+
+describe('evermindToolChoiceMinMargin', () => {
+  it('defaults to the shipped placeholder', () => {
+    expect(evermindToolChoiceMinMargin()).toBe(TOOL_CHOICE_MIN_MARGIN);
+    expect(evermindToolChoiceMinMargin({})).toBe(TOOL_CHOICE_MIN_MARGIN);
+  });
+
+  it('honours a numeric override, so the bar can be calibrated without a deploy', () => {
+    expect(evermindToolChoiceMinMargin({ EVERMIND_TOOL_CHOICE_MIN_MARGIN: '0.35' })).toBe(0.35);
+    // Zero is a legitimate setting: it disables the gate deliberately, which is a
+    // different thing from disabling it by accident.
+    expect(evermindToolChoiceMinMargin({ EVERMIND_TOOL_CHOICE_MIN_MARGIN: '0' })).toBe(0);
+  });
+
+  it('ignores garbage rather than obeying it', () => {
+    // A bar of NaN compares false against every margin and would silently turn the
+    // confidence gate OFF — the one failure mode a misconfiguration must not cause.
+    expect(evermindToolChoiceMinMargin({ EVERMIND_TOOL_CHOICE_MIN_MARGIN: 'soon' })).toBe(TOOL_CHOICE_MIN_MARGIN);
+    expect(evermindToolChoiceMinMargin({ EVERMIND_TOOL_CHOICE_MIN_MARGIN: '-1' })).toBe(TOOL_CHOICE_MIN_MARGIN);
+    expect(evermindToolChoiceMinMargin({ EVERMIND_TOOL_CHOICE_MIN_MARGIN: '' })).toBe(TOOL_CHOICE_MIN_MARGIN);
   });
 });

@@ -138,7 +138,7 @@ function KindBadge({ kind }: { kind: 'human' | 'agent' }) {
  * (checkbox-select members → merge), so this surface is activity-only.
  */
 export function ContributorsView() {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('contributors');
   const [data, setData] = useState<ActivityCalendar | null>(null);
   const [loading, setLoading] = useState(true);

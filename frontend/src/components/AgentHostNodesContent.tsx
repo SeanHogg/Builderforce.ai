@@ -18,7 +18,7 @@ const cardStyle: React.CSSProperties = {
 };
 
 export function AgentHostNodesContent({ agentHostId }: AgentHostNodesContentProps) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const confirm = useConfirm();
   const tc = useTranslations('common');
   const t = useTranslations('agentHostNodes');

@@ -100,7 +100,7 @@ const cardStyle: React.CSSProperties = {
 };
 
 export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const { tenant, tenantToken } = useAuth();
   const confirm = useConfirm();
   const tWf = useTranslations('workforce');

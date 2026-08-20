@@ -39,7 +39,7 @@ type Tab = 'public' | 'mine';
 const PAGE_SIZE = 12;
 
 export default function PromptsPage() {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('promptsPage');
   const tCommon = useTranslations('common');
   const isAuthed = !!getStoredUser();

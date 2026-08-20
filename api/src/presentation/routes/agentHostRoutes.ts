@@ -47,6 +47,16 @@ import { openDispatchPullRequest } from '../../application/repos/openDispatchPul
 import { openTaskPullRequest } from '../../application/repos/openTaskPullRequest';
 import { GIT_PROXY_SUBPATHS, handleGitProxyRequest } from './gitProxyHandler';
 import { hostOrTenantAuth } from '../middleware/hostOrTenantAuth';
+import {
+  ChannelError,
+  createChannel,
+  deleteChannel,
+  listChannels,
+  recordChannelStatus,
+  updateChannel,
+  type CreateChannelInput,
+  type UpdateChannelInput,
+} from '../../application/agentHost/agentHostChannels';
 import { agentDispatches } from '../../infrastructure/database/schema';
 import { taskInTenant } from '../../infrastructure/database/tenantScope';
 import { isAgentHostOnline } from '../../domain/agentHost/onlineStatus';
@@ -1145,9 +1155,57 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     return c.body(null, 204);
   });
 
-  // GET /api/agent-hosts/:id/channels – list connected channels for this agentHost (stub)
+  // ---- CHANNELS: where this host speaks -----------------------------------
+  // Backed by `agent_host_channels` (migration 0942). This used to answer a
+  // hardcoded `{ channels: [] }` while the panel shipped a full CRUD surface
+  // against it, so the list was permanently empty and the writes 404'd.
+  //
+  // A channel's config is a SECRET (a bot token, a webhook URL). It is sealed by
+  // the application port and never projected back — the read model says only
+  // whether one is present.
   router.get('/:id/channels', authMiddleware as never, async (c) => {
-    return c.json({ channels: [] });
+    const channels = await listChannels(
+      db, c.env as Env, c.get('tenantId') as number, Number(c.req.param('id')),
+    );
+    return c.json({ channels });
+  });
+
+  router.post('/:id/channels', authMiddleware as never, async (c) => {
+    const body = await c.req.json<CreateChannelInput>().catch(() => null);
+    if (!body) return c.json({ error: 'A JSON body is required' }, 400);
+    try {
+      const channel = await createChannel(
+        db, c.env as Env, c.get('tenantId') as number, Number(c.req.param('id')), body,
+        (c.get('segmentId') as string | undefined) ?? null,
+      );
+      return c.json(channel, 201);
+    } catch (error) {
+      if (error instanceof ChannelError) return c.json({ error: error.message }, error.status);
+      throw error;
+    }
+  });
+
+  router.patch('/:id/channels/:channelId', authMiddleware as never, async (c) => {
+    const body = await c.req.json<UpdateChannelInput>().catch(() => null);
+    if (!body) return c.json({ error: 'A JSON body is required' }, 400);
+    try {
+      const channel = await updateChannel(
+        db, c.env as Env, c.get('tenantId') as number,
+        Number(c.req.param('id')), c.req.param('channelId'), body,
+      );
+      return c.json(channel);
+    } catch (error) {
+      if (error instanceof ChannelError) return c.json({ error: error.message }, error.status);
+      throw error;
+    }
+  });
+
+  router.delete('/:id/channels/:channelId', authMiddleware as never, async (c) => {
+    await deleteChannel(
+      db, c.env as Env, c.get('tenantId') as number,
+      Number(c.req.param('id')), c.req.param('channelId'),
+    );
+    return c.body(null, 204);
   });
 
   // -------------------------------------------------------------------------
@@ -1617,6 +1675,38 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
       path,
       change,
       agent,
+    });
+    return c.json({ ok: true });
+  });
+
+  // -------------------------------------------------------------------------
+  // POST /api/agent-hosts/:id/channel-status   (host key auth)
+  //
+  // The host's own verdict on a channel it brought up. Reported rather than asked
+  // for, because "credentials are stored" and "the adapter actually connected" are
+  // different facts and only the host knows the second — a registry that showed a
+  // channel as configured while it failed to authenticate is worse than one that
+  // shows nothing.
+  //
+  // Tenant comes from the VERIFIED HOST KEY, never from the body, so a host key for
+  // one workspace cannot stamp a status onto another's channel.
+  // -------------------------------------------------------------------------
+  router.post('/:id/channel-status', async (c) => {
+    const agentHostId = Number(c.req.param('id'));
+    const agentHost = await verifyAgentHostApiKey(agentHostId, extractAgentHostKey(c));
+    if (!agentHost) return c.text('Unauthorized', 401);
+
+    type StatusBody = { platform?: string; name?: string; status?: string; error?: string | null };
+    const body = await c.req.json<StatusBody>().catch((): StatusBody => ({}));
+    const name = typeof body.name === 'string' ? body.name.trim() : '';
+    if (!body.platform || !name || !body.status) {
+      return c.json({ error: 'platform, name and status are required' }, 400);
+    }
+    await recordChannelStatus(db, c.env as Env, agentHost.tenantId, agentHostId, {
+      platform: body.platform,
+      name,
+      status: body.status,
+      error: body.error ?? null,
     });
     return c.json({ ok: true });
   });

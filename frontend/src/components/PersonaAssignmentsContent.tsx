@@ -16,7 +16,7 @@ export interface PersonaAssignmentsContentProps {
 }
 
 export function PersonaAssignmentsContent({ scope, scopeId, className, style }: PersonaAssignmentsContentProps) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const [assigned, setAssigned] = useState<ArtifactAssignment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

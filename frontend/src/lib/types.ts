@@ -90,8 +90,12 @@ export interface Project {
   initiativeId?: string | null;
   /** From list endpoint: primary assigned Workforce agent (agentHost) for this project */
   assignedAgentHost?: { id: number; name: string } | null;
-  /** From list endpoint: earliest task start date (falls back to earliest due date). ISO string. Drives the calendar/Gantt timeline. */
+  /** From list endpoint: the EFFECTIVE project start (ISO) — the PM's explicit start
+   *  date when set, else the derived earliest-task start. Drives calendar/Gantt. */
   startDate?: string | null;
+  /** From list endpoint: the PM's EXPLICIT project start only (ISO), or null when the
+   *  start is auto-derived from tasks. Seeds the details start-date editor. */
+  projectStartDate?: string | null;
   /** From list endpoint: the EFFECTIVE project deadline (ISO) — the PM's explicit
    *  due date when set, else the derived latest-task due date. Drives calendar/Gantt. */
   dueDate?: string | null;

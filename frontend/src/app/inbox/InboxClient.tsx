@@ -27,7 +27,7 @@ const EMPTY_RULE: MailboxAutomationRuleInput = {
 };
 
 export function InboxClient() {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('inboxApp');
   const [connections, setConnections] = useState<MailboxConnection[]>([]);
   const [connectionId, setConnectionId] = useState<number | null>(null);
@@ -194,7 +194,7 @@ export function InboxClient() {
         <div className={styles.listToolbar}><h2>{t(`folder.${folder}`)}</h2><span className={styles.meta}>{t('messageCount', { count: messages.length })}</span></div>
         {loading ? <div className={styles.empty}>{t('loading')}</div> : messages.length === 0 ? <div className={styles.empty}>{t('empty')}</div> : <ul className={styles.messageList}>
           {messages.map((message) => <li key={message.id}><button className={styles.message} data-active={selected?.id === message.id} data-unread={message.unread} onClick={() => void openMessage(message)}>
-            <div className={styles.row}><span className={styles.sender}>{message.fromName || message.from}</span><time className={styles.date}>{new Date(message.receivedAtISO).toLocaleDateString([], { month: 'short', day: 'numeric' })}</time></div>
+            <div className={styles.row}><span className={styles.sender}>{message.fromName || message.from}</span><time className={styles.date}>{fmt.dateWith(message.receivedAtISO, { month: 'short', day: 'numeric' })}</time></div>
             <div className={styles.subject}>{message.subject || t('noSubject')}</div><div className={styles.snippet}>{message.hasAttachments ? '📎 ' : ''}{message.snippet}</div>
           </button></li>)}
         </ul>}

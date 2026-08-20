@@ -14,22 +14,6 @@
  * tests exist because the next person to add a fourth flow will copy this shape,
  * and the shape is the part that must not drift.
  */
-/**
- * THE ACKNOWLEDGEMENT CONTRACT, WHICH IS EASY TO GET BACKWARDS.
- *
- * Three paid flows now settle through one helper, and the temptation in each was
- * to answer a failure with a 500 so the processor retries. That is wrong twice
- * over, and both mistakes are silent:
- *
- *   · the COMMON "failure" is the redirect having already recorded the purchase,
- *     so retrying asks the processor to redeliver a completed sale forever;
- *   · an event whose signed metadata is incomplete cannot be settled by
- *     redelivering the same event, so retrying it is a loop with no exit.
- *
- * So every path here answers `received: true`, and only `processed` varies. These
- * tests exist because the next person to add a fourth flow will copy this shape,
- * and the shape is the part that must not drift.
- */
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 const mocks = vi.hoisted(() => ({

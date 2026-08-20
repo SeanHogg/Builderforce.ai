@@ -130,7 +130,7 @@ function CollectorPanel({
   setError: (s: string | null) => void;
   t: ReturnType<typeof useTranslations>;
 }) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const confirm = useConfirm();
   const isTenant = collector.projectId == null;
   const [testing, setTesting] = useState(false);

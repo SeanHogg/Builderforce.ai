@@ -67,7 +67,7 @@ export interface ManagerTodayDigestProps {
 }
 
 export function ManagerTodayDigest({ projectId }: ManagerTodayDigestProps) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('manager.today');
   // Decision labels are REUSED from the activity feed's catalog rather than duplicated —
   // one translation per manager decision class for the whole surface.

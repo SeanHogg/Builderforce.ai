@@ -38,7 +38,7 @@ import { agentHostDirectoryStatusEnum, agentHostStatusEnum, agentTypeEnum, artif
 import { monitors, pullRequests, qaCredentials, qaTargets, qaTests } from './delivery';
 import { approvals } from './governance';
 import { segments, tenants, users } from './identity';
-import { integrationCredentials } from './platform';
+import { connectorConnections, integrationCredentials } from './platform';
 import {
   boards,
   projectAgents,
@@ -1056,6 +1056,53 @@ export const cronJobs = pgTable('cron_jobs', {
   updatedAt:   timestamp('updated_at').notNull().defaultNow(),
 });
 
+
+
+// ---------------------------------------------------------------------------
+// Agent-host messaging channels (migration 0942)
+//
+// The registry behind `GET /api/agent-hosts/:id/channels`, which answered a
+// hardcoded `{ channels: [] }` while a full CRUD surface shipped against it.
+//
+// NOT a `connector_connections` row: a connection is an ACCOUNT ("our production
+// Slack"), a channel is a routing TARGET inside one ("#general") bound to the host
+// that runs the adapter. One account carries many targets, so folding them together
+// would put a repeating group in a row read on every listing. `connectionId` points
+// at the account when the tenant has connected one, which keeps the credential in
+// one place instead of pasted per channel.
+// ---------------------------------------------------------------------------
+
+export const agentHostChannels = pgTable('agent_host_channels', {
+  id:           uuid('id').primaryKey().defaultRandom(),
+  tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:    uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  agentHostId:  integer('agent_host_id').notNull().references(() => agentHosts.id, { onDelete: 'cascade' }),
+  /** A KIND column, not a table per platform: 'slack' | 'telegram' | 'webhook' | … */
+  platform:     varchar('platform', { length: 32 }).notNull(),
+  /** The target on that platform — '#general', a chat id, a webhook name. */
+  name:         varchar('name', { length: 255 }).notNull(),
+  /** The credentialed account this target belongs to; NULL = it carries its own
+   *  sealed config below. */
+  connectionId: uuid('connection_id').references(() => connectorConnections.id, { onDelete: 'set null' }),
+  /** Sealed with the shared per-tenant AES-GCM credential crypto. NEVER a bare
+   *  secret, and never returned to a client — the read model exposes only whether
+   *  a config is present. */
+  configEnc:    text('config_enc'),
+  configIv:     varchar('config_iv', { length: 64 }),
+  enabled:      boolean('enabled').notNull().default(true),
+  /** Reported by the host when it brings the adapter up; NULL until it does. */
+  lastStatus:   varchar('last_status', { length: 32 }),
+  lastError:    text('last_error'),
+  lastSeenAt:   timestamp('last_seen_at'),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+  updatedAt:    timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  // Re-adding '#general' to the same platform on the same host is the SAME
+  // channel, and the database is what says so rather than a check someone
+  // remembered to write.
+  uniqueIndex('uq_agent_host_channels_target').on(t.agentHostId, t.platform, t.name),
+  index('idx_agent_host_channels_tenant').on(t.tenantId, t.agentHostId, t.enabled),
+]);
 
 // Cloud agent memory — durable key→fact store backing the shared `memory` capability
 // (memory_recall / memory_remember) for Worker/DO agents, scoped per tenant. The

@@ -295,7 +295,7 @@ function VerdictCard({
   abandoning: boolean;
   t: ReturnType<typeof useTranslations>;
 }) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const { verdict, verdictMetric, decidedAt } = realization;
 
   if (!verdict) {

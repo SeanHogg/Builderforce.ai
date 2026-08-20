@@ -94,6 +94,9 @@ const CONTEXT_FIELDS = [
   // the panel read off it are what let Brain reason about the page a user is
   // looking at rather than only knowing its address.
   'pageTitle', 'frameable',
+  // Where a frame sits in the walkthrough. Readable so a model asked to reorder a
+  // presentation can see the numbering it is changing rather than guessing at it.
+  'presentationOrder',
   'instructions', 'parameters', 'assignee', 'agentName', 'agentRef', 'priority', 'acceptanceCriteria', 'taskKey',
   'criteria', 'testPrompt', 'testExpected', 'testResponse', 'testStatus', 'testResults', 'passRate', 'runCount', 'lastRunAt',
   'prdTitle', 'prdStatus', 'prdSummary', 'prdCount', 'requirements',

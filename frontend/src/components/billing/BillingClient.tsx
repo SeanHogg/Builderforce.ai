@@ -65,7 +65,7 @@ const rowStyle: React.CSSProperties = {
 export type BillingView = 'account' | 'payouts' | 'getPaid';
 
 export default function BillingClient({ view = 'account' }: { view?: BillingView }) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('billing');
   const locale = useLocale();
   const tenant = getStoredTenant();

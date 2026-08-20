@@ -5,6 +5,7 @@ import {
   captureWebScreenshot,
   isScreenshotViewport,
   readProviderError,
+  screenshotConfigured,
   screenshotViewportSize,
 } from './webScreenshot';
 import type { Env } from '../../env';
@@ -82,12 +83,33 @@ describe('captureWebScreenshot configuration', () => {
       .rejects.toMatchObject({ reason: 'unconfigured' });
   });
 
-  it('falls back to the Workers AI token when no browser-specific one is bound', async () => {
-    const fetchSpy = stubRenderer(() => imageResponse());
-    const env = { CLOUDFLARE_ACCOUNT_ID: 'acct', CLOUDFLARE_AI_API_TOKEN: 'shared' } as unknown as Env;
-    await captureWebScreenshot(env, 'https://example.com');
-    const [, init] = renderCall(fetchSpy);
-    expect((init.headers as Record<string, string>).authorization).toBe('Bearer shared');
+  it('prefers the most specific token and falls back through the broader ones', async () => {
+    // The scope is a property of a TOKEN, not a product a deployment buys: an operator
+    // holding only a broad account token must not be told capture is unconfigured, and an
+    // operator who minted a dedicated one must have it preferred.
+    const cases: Array<[Record<string, string>, string]> = [
+      [{ CLOUDFLARE_BROWSER_API_TOKEN: 'browser', CLOUDFLARE_ACCOUNT_API_TOKEN: 'acct', CLOUDFLARE_AI_API_TOKEN: 'ai' }, 'browser'],
+      [{ CLOUDFLARE_ACCOUNT_API_TOKEN: 'acct', CLOUDFLARE_AI_API_TOKEN: 'ai' }, 'acct'],
+      [{ CLOUDFLARE_AI_API_TOKEN: 'ai' }, 'ai'],
+    ];
+    for (const [tokens, expected] of cases) {
+      const fetchSpy = stubRenderer(() => imageResponse());
+      await captureWebScreenshot({ CLOUDFLARE_ACCOUNT_ID: 'acct', ...tokens } as unknown as Env, 'https://example.com');
+      const [, init] = renderCall(fetchSpy);
+      expect((init.headers as Record<string, string>).authorization, expected).toBe(`Bearer ${expected}`);
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('agrees with the operator health report about what counts as configured', () => {
+    // A report claiming "configured" while a capture reports "unconfigured" sends an
+    // operator hunting for a problem that is not there — so both read one list.
+    expect(screenshotConfigured(undefined)).toBe(false);
+    expect(screenshotConfigured({ CLOUDFLARE_ACCOUNT_ID: 'acct' } as unknown as Env)).toBe(false);
+    expect(screenshotConfigured({ CLOUDFLARE_AI_API_TOKEN: 'ai' } as unknown as Env)).toBe(false);
+    for (const key of ['CLOUDFLARE_BROWSER_API_TOKEN', 'CLOUDFLARE_ACCOUNT_API_TOKEN', 'CLOUDFLARE_AI_API_TOKEN']) {
+      expect(screenshotConfigured({ CLOUDFLARE_ACCOUNT_ID: 'acct', [key]: 'x' } as unknown as Env), key).toBe(true);
+    }
   });
 });
 

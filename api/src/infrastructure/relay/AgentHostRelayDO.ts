@@ -421,6 +421,17 @@ export class AgentHostRelayDO implements DurableObject {
         return;
       }
 
+      // --- channel.status — the host's verdict on a channel it brought up ---
+      if (msg.type === "channel.status") {
+        void this.persistChannelStatus(msg as {
+          platform?: string;
+          name?: string;
+          status?: string;
+          error?: string | null;
+        });
+        return;
+      }
+
       // --- P2-4: tool.audit — persist tool call record ---
       if (msg.type === "tool.audit") {
         void this.persistToolAuditEvent(msg as {
@@ -618,6 +629,23 @@ export class AgentHostRelayDO implements DurableObject {
   }) {
     if (msg.taskId == null || !msg.path) return;
     await this.callApi("/file-change", msg, "persistFileChange");
+  }
+
+  /**
+   * The host says a channel connected, failed to authenticate, or dropped.
+   *
+   * Dropped rather than forwarded when it names no channel: the registry matches
+   * on `(platform, name)`, so a frame missing either cannot address a row and
+   * posting it would be a round-trip that updates nothing.
+   */
+  private async persistChannelStatus(msg: {
+    platform?: string;
+    name?: string;
+    status?: string;
+    error?: string | null;
+  }) {
+    if (!msg.platform || !msg.name || !msg.status) return;
+    await this.callApi("/channel-status", msg, "persistChannelStatus");
   }
 
   // ---------------------------------------------------------------------------

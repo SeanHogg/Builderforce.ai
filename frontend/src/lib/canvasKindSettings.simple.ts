@@ -139,6 +139,12 @@ registerKindSettings({
     { name: 'framePurpose', control: 'text', section: 'basic', labelKey: 'purpose', surface: 'full', fallbackKey: 'arrangeObjectsHere' },
     { name: 'frameColor', control: 'color', section: 'basic', labelKey: 'fillColor', surface: 'full', defaultColor: AUTHORED_FRAME_FILL },
     { name: 'frameBorder', control: 'color', section: 'basic', labelKey: 'borderColor', surface: 'full', defaultColor: AUTHORED_FRAME_BORDER },
+    // WHERE THIS FRAME COMES IN A PRESENTATION. Empty is the normal case and means
+    // "wherever the board reads": `presentationSequence` walks unnumbered frames in
+    // reading order, so a person only reaches for this when they want a different
+    // one. Advanced rather than basic for exactly that reason — it is the field you
+    // go looking for, not one you have to answer to make a frame.
+    { name: 'presentationOrder', control: 'number', section: 'advanced', labelKey: 'presentationOrder', surface: 'full', min: 1, fallbackKey: 'presentationOrderHint' },
   ],
   actions: [{ name: 'savePreset', labelKey: 'saveReusableFrame', style: 'primary', handler: 'saveFramePreset' }],
 });

@@ -346,6 +346,7 @@ function CreativeStudioBody({ data }: { data: CreationNodeData }) {
  */
 function InboxBody({ data }: { data: CreationNodeData }) {
   const t = useTranslations('creationCanvas.node');
+  const fmt = useFormat();
   const messages = Array.isArray(data.messages) ? data.messages : [];
   const account = textValue(data.accountEmail);
   const fetchedAt = typeof data.fetchedAt === 'string' ? new Date(data.fetchedAt) : null;
@@ -358,7 +359,7 @@ function InboxBody({ data }: { data: CreationNodeData }) {
     <div className={styles.inboxMeta}>
       <span title={account}>{account}</span>
       {unread > 0 && <b className={styles.inboxUnreadBadge}>{t('inboxUnread', { count: unread })}</b>}
-      {fetchedAt && <small>{t('inboxReadAt', { time: fetchedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) })}</small>}
+      {fetchedAt && <small>{t('inboxReadAt', { time: fmt.time(fetchedAt) })}</small>}
     </div>
     {messages.length === 0
       ? <p className={styles.taskEmpty}>{t('inboxEmpty')}</p>
@@ -370,7 +371,7 @@ function InboxBody({ data }: { data: CreationNodeData }) {
             <div className={styles.inboxRowTop}>
               <b>{String(message.fromName || message.from || t('inboxUnknownSender'))}</b>
               <small>{message.receivedAtISO
-                ? new Date(String(message.receivedAtISO)).toLocaleDateString([], { month: 'short', day: 'numeric' })
+                ? fmt.dateWith(String(message.receivedAtISO), { month: 'short', day: 'numeric' })
                 : ''}</small>
             </div>
             <span className={styles.inboxSubject}>{String(message.subject || t('inboxNoSubject'))}</span>
@@ -476,6 +477,7 @@ function compactCount(value: unknown): string {
  */
 function SocialFeedBody({ data }: { data: CreationNodeData }) {
   const t = useTranslations('creationCanvas.node');
+  const fmt = useFormat();
   const posts = Array.isArray(data.posts) ? data.posts : [];
   const engagement = asRecord(data.engagement, {});
   const top = asRecord(data.topPost, {});
@@ -488,7 +490,7 @@ function SocialFeedBody({ data }: { data: CreationNodeData }) {
   return <div className={styles.inboxBody}>
     <div className={styles.inboxMeta}>
       <span title={accounts.join(', ')}>{accounts.join(' · ') || t('socialAllAccounts')}</span>
-      {fetchedAt && <small>{t('inboxReadAt', { time: fetchedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) })}</small>}
+      {fetchedAt && <small>{t('inboxReadAt', { time: fmt.time(fetchedAt) })}</small>}
     </div>
     <div className={styles.campaignStats}>
       <span><small>{t('socialLikes')}</small><b>{compactCount(engagement.likes)}</b></span>
@@ -505,7 +507,7 @@ function SocialFeedBody({ data }: { data: CreationNodeData }) {
             <div className={styles.inboxRowTop}>
               <b><span className={styles.socialGlyph} aria-hidden>{networkGlyph(post.network)}</span>{String(post.authorName || post.accountName || '')}</b>
               <small>{post.publishedAtISO
-                ? new Date(String(post.publishedAtISO)).toLocaleDateString([], { month: 'short', day: 'numeric' })
+                ? fmt.dateWith(String(post.publishedAtISO), { month: 'short', day: 'numeric' })
                 : ''}</small>
             </div>
             <p>{String(post.text || '')}</p>
@@ -528,7 +530,7 @@ function SocialFeedBody({ data }: { data: CreationNodeData }) {
 /** One pinned post. Unlike the feed tile this does NOT change — that is the reason
  *  it exists — so it shows the full text and its engagement at the time it was read. */
 function SocialPostBody({ data }: { data: CreationNodeData }) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('creationCanvas.node');
   const metrics = asRecord(data.metrics, {});
   const permalink = textValue(data.permalink);
@@ -560,7 +562,7 @@ function SocialPostBody({ data }: { data: CreationNodeData }) {
  * its own outcome, because "3 of 5 published" without saying WHICH three is unusable.
  */
 function SocialCampaignBody({ data }: { data: CreationNodeData }) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('creationCanvas.node');
   const posts = Array.isArray(data.posts) ? data.posts : [];
   // Blockers arrive as CODES so they can be read in the viewer's language. A legacy
@@ -1012,12 +1014,13 @@ function BuildBody({ data }: { data: CreationNodeData }) {
  */
 function DashboardBody({ data, onEdit }: { data: CreationNodeData; onEdit?: (patch: Partial<CreationNodeData>) => void }) {
   const t = useTranslations('creationCanvas.node');
+  const fmt = useFormat();
   const [editing, setEditing] = useState(false);
   const widgets = useMemo(() => readDashboardWidgets(data as Record<string, unknown>), [data]);
   const dateRange = optionLabel(data.dateRange, { '30d': t('last30Days'), '7d': t('last7Days'), qtd: t('quarterToDate') }, t('last30Days'));
   return (
     <>
-      {data.kind === 'dashboard' && <div className={styles.widgetContext}><span><small>{t('dateRange')}</small><b>{dateRange}</b></span>{typeof data.fetchedAt === 'string' && <span><small>{t('refreshed')}</small><b>{new Date(data.fetchedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</b></span>}</div>}
+      {data.kind === 'dashboard' && <div className={styles.widgetContext}><span><small>{t('dateRange')}</small><b>{dateRange}</b></span>{typeof data.fetchedAt === 'string' && <span><small>{t('refreshed')}</small><b>{fmt.time(data.fetchedAt)}</b></span>}</div>}
       {widgets.length > 0
         ? <DashboardWidgetGrid widgets={widgets} />
         : <p className={styles.dwEmpty}>{onEdit ? t('dashboardEmptyEditable') : t('dashboardEmpty')}</p>}
@@ -1079,7 +1082,7 @@ function MapBody({ data, onEdit, onReveal }: {
   /** Put the reader in front of another object — the dataset this map came from. */
   onReveal?: (nodeId: string) => void;
 }) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('creationCanvas.node');
   const points = useMemo(() => sanitizeMapPoints(data.mapPoints), [data.mapPoints]);
   const region = useMemo(() => sanitizeGeoBounds(data.mapRegion), [data.mapRegion]);
@@ -1284,7 +1287,7 @@ const DATA_GRID_VISIBLE_COLUMNS = 10;
  * object, so the canvas holds a working sheet rather than a picture of one.
  */
 function DataGridBody({ data, onEdit }: { data: CreationNodeData; onEdit?: (patch: Partial<CreationNodeData>) => void }) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('creationCanvas.node');
   // A card re-renders on selection, drag, and every neighbouring edit. Normalizing
   // an imported workbook's rows is O(rows × columns) per sheet, so doing it inline
@@ -1920,6 +1923,7 @@ function CanvasToolBody({ id, data, onEditData }: { id: string; data: CreationNo
 
 function EvermindBody({ data }: { data: CreationNodeData }) {
   const t = useTranslations('creationCanvas.node');
+  const fmt = useFormat();
   const version = typeof data.evermindVersion === 'number' ? data.evermindVersion : 0;
   const contributions = typeof data.contributions === 'number' ? data.contributions : 0;
   const loss = typeof data.trainingLoss === 'number' ? data.trainingLoss : null;
@@ -1953,7 +1957,7 @@ function EvermindBody({ data }: { data: CreationNodeData }) {
   const inference = data.inferenceEnabled === true;
   const notYet = t('notYet');
   const lastLearned = typeof data.lastLearnedAt === 'string' && !Number.isNaN(Date.parse(data.lastLearnedAt))
-    ? new Date(data.lastLearnedAt).toLocaleDateString([], { month: 'short', day: 'numeric' })
+    ? fmt.dateWith(data.lastLearnedAt, { month: 'short', day: 'numeric' })
     : notYet;
   const nextAction = evermindNextAction({
     seeded: data.evermindSeeded === true || version > 0,
@@ -2022,7 +2026,7 @@ function EvermindRegion({ x, y, r, className, label, count, small = false }: { x
 }
 
 function ProjectComparisonBody({ data }: { data: CreationNodeData }) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('creationCanvas.node');
   const projects = Array.isArray(data.projects) ? data.projects as Array<Record<string, unknown>> : [];
   const scored = projects.filter((project) => project.qualityScore != null && Number.isFinite(Number(project.qualityScore)));

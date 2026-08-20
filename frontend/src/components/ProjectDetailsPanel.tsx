@@ -129,6 +129,46 @@ const cardStyle: React.CSSProperties = {
   padding: 16,
 };
 
+/**
+ * One labelled `<input type="date">` for a project's explicit schedule dates.
+ *
+ * Both ends of a project's window are edited identically — an empty value clears
+ * the explicit date and falls back to the task-derived one — so they are one
+ * component rather than two copies that could drift on styling or on the
+ * clearing rule. `colorScheme` is set so the native picker chrome follows the
+ * active theme in both light and dark.
+ */
+function ScheduleDateField({ id, label, hint, value, onChange }: {
+  id: string;
+  label: string;
+  hint: string;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div style={{ marginBottom: 10 }}>
+      <label htmlFor={id} style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>{label}</label>
+      <input
+        id={id}
+        type="date"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        style={{
+          width: '100%',
+          padding: '8px 10px',
+          fontSize: 13,
+          border: '1px solid var(--border-subtle)',
+          borderRadius: 'var(--radius-md)',
+          background: 'var(--bg-deep)',
+          color: 'var(--text-primary)',
+          colorScheme: 'light dark',
+        }}
+      />
+      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>{hint}</div>
+    </div>
+  );
+}
+
 export function ProjectDetailsPanel({
   project,
   open,
@@ -145,6 +185,7 @@ export function ProjectDetailsPanel({
   const [editDescription, setEditDescription] = useState(project.description ?? '');
   const [editKey, setEditKey] = useState(project.key ?? '');
   const [editStatus, setEditStatus] = useState(project.status ?? 'active');
+  const [editStartDate, setEditStartDate] = useState(toDateInputValue(project.projectStartDate));
   const [editDueDate, setEditDueDate] = useState(toDateInputValue(project.projectDueDate));
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -189,8 +230,9 @@ export function ProjectDetailsPanel({
     setEditDescription(project.description ?? '');
     setEditKey(project.key ?? '');
     setEditStatus(project.status ?? 'active');
+    setEditStartDate(toDateInputValue(project.projectStartDate));
     setEditDueDate(toDateInputValue(project.projectDueDate));
-  }, [project.id, project.name, project.description, project.key, project.status, project.projectDueDate]);
+  }, [project.id, project.name, project.description, project.key, project.status, project.projectStartDate, project.projectDueDate]);
 
   if (!open) return null;
 
@@ -207,8 +249,10 @@ export function ProjectDetailsPanel({
         description: editDescription.trim() || undefined,
         key: editKey.trim() || undefined,
         status: editStatus,
-        // Empty input clears the explicit deadline (null) so it reverts to the
-        // derived task-based deadline; a date sets it explicitly.
+        // Empty input clears the explicit date (null) so it reverts to the derived
+        // task-based one; a date sets it explicitly. Both ends behave identically —
+        // that symmetry is what lets the Gantt drag either edge of the bar.
+        startDate: editStartDate ? new Date(editStartDate).toISOString() : null,
         dueDate: editDueDate ? new Date(editDueDate).toISOString() : null,
       });
       onProjectUpdate?.(updated);
@@ -436,6 +480,7 @@ export function ProjectDetailsPanel({
                       setEditDescription(project.description ?? '');
                       setEditKey(project.key ?? '');
                       setEditStatus(project.status ?? 'active');
+                      setEditStartDate(toDateInputValue(project.projectStartDate));
                       setEditDueDate(toDateInputValue(project.projectDueDate));
                     }}
                     aria-label={t('editAria')}
@@ -528,26 +573,20 @@ export function ProjectDetailsPanel({
                       ))}
                     </Select>
                   </div>
-                  <div style={{ marginBottom: 10 }}>
-                    <label htmlFor="edit-due-date" style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>{t('dueDateLabel')}</label>
-                    <input
-                      id="edit-due-date"
-                      type="date"
-                      value={editDueDate}
-                      onChange={(e) => setEditDueDate(e.target.value)}
-                      style={{
-                        width: '100%',
-                        padding: '8px 10px',
-                        fontSize: 13,
-                        border: '1px solid var(--border-subtle)',
-                        borderRadius: 'var(--radius-md)',
-                        background: 'var(--bg-deep)',
-                        color: 'var(--text-primary)',
-                        colorScheme: 'light dark',
-                      }}
-                    />
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>{t('dueDateHint')}</div>
-                  </div>
+                  <ScheduleDateField
+                    id="edit-start-date"
+                    label={t('startDateLabel')}
+                    hint={t('startDateHint')}
+                    value={editStartDate}
+                    onChange={setEditStartDate}
+                  />
+                  <ScheduleDateField
+                    id="edit-due-date"
+                    label={t('dueDateLabel')}
+                    hint={t('dueDateHint')}
+                    value={editDueDate}
+                    onChange={setEditDueDate}
+                  />
                   <div style={{ marginBottom: 14 }}>
                     <label htmlFor="edit-description" style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>{t('descriptionLabel')}</label>
                     <textarea
@@ -635,6 +674,15 @@ export function ProjectDetailsPanel({
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
                     <span style={{ color: 'var(--text-muted)' }}>{t('template')}</span>
                     <span>{project.template ?? '—'}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                    <span style={{ color: 'var(--text-muted)' }}>{t('start')}</span>
+                    <span>
+                      {formatDeadline(project.startDate)}
+                      {project.startDate && !project.projectStartDate && (
+                        <span style={{ color: 'var(--text-muted)', marginLeft: 6 }}>{t('deadlineDerived')}</span>
+                      )}
+                    </span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
                     <span style={{ color: 'var(--text-muted)' }}>{t('deadline')}</span>

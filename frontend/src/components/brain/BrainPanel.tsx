@@ -11,6 +11,9 @@
 import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
+
+import type { Formatter } from '@/i18n/format';
+import { useFormat } from '@/i18n/useFormat';
 import Link from 'next/link';
 import { BrainTimeline, Avatar, PendingQuestionBanner, selectPendingAskUser, askUserAnchorId } from '@seanhogg/builderforce-brain-ui';
 import '@seanhogg/builderforce-brain-ui/styles.css';
@@ -95,11 +98,18 @@ import { usePersonalityBlock, getSessionPsychometric } from '@/lib/usePersonalit
 import { fetchLimbicBlock } from '@/lib/personalityApi';
 import { accountBrainPreferencesApi } from '@/lib/accountBrainPreferencesApi';
 
-function formatTime(ts: string) {
+/**
+ * Clock time for a message sent today, calendar date for anything older.
+ *
+ * Takes the formatter rather than reaching for one: this is module scope, where a
+ * hook cannot run, and the alternative — `toLocaleTimeString()` with no locale —
+ * is the browser's language rather than the reader's.
+ */
+function formatTime(fmt: Formatter, ts: string) {
   const d = new Date(ts);
   const now = new Date();
-  if (d.toDateString() === now.toDateString()) return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  if (d.toDateString() === now.toDateString()) return fmt.time(d);
+  return fmt.dateWith(d, { month: 'short', day: 'numeric' });
 }
 
 /** localStorage key for the per-chat "use project memory" toggle. */
@@ -187,6 +197,7 @@ export function BrainPanel({
   capabilitySurface = 'brainstorm',
   onClose,
 }: BrainPanelProps) {
+  const fmt = useFormat();
   const isPage = variant === 'page';
   const tTimeline = useTranslations('brain.timeline');
   const tCommon = useTranslations('common');
@@ -1317,7 +1328,7 @@ export function BrainPanel({
                   {projectName(chat.projectId)}
                 </span>
               )}
-              {formatTime(chat.updatedAt)}
+              {formatTime(fmt, chat.updatedAt)}
               <AttentionDot state={attn.chats[chat.id]?.state} />
               {/* Unread badge — new messages (execution milestones, teammate/agent
                   turns) in a chat you're not viewing. The OPEN chat is read, so it

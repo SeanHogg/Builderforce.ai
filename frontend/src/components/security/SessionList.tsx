@@ -37,7 +37,7 @@ interface SessionListProps {
  * one-by-one-only revoke UIs on both Settings and Security so neither drifts.
  */
 export function SessionList({ sessions, onRevoke }: SessionListProps) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('security');
   const confirm = useConfirm();
   const [selected, setSelected] = useState<Set<string>>(new Set());

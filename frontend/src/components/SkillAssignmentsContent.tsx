@@ -26,7 +26,7 @@ type MergedSkill = {
 };
 
 export function SkillAssignmentsContent({ scope, scopeId, className, style }: SkillAssignmentsContentProps) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const [assigned, setAssigned] = useState<ArtifactAssignment[]>([]);
   const [catalog, setCatalog] = useState<MergedSkill[]>([]);
   const [loading, setLoading] = useState(true);

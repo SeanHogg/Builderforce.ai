@@ -25,7 +25,7 @@ export interface PromptVersionDiffProps {
 }
 
 export function PromptVersionDiff({ promptId, open, onClose }: PromptVersionDiffProps) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('promptHistory');
   const [versions, setVersions] = useState<PromptVersion[] | null>(null);
   const [error, setError] = useState<string | null>(null);

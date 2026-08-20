@@ -60,7 +60,7 @@ export interface ManagerStallCensusProps {
 }
 
 export function ManagerStallCensus({ projectId }: ManagerStallCensusProps) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('manager.census');
   // Cause labels are REUSED from the register's catalog rather than duplicated — one
   // translation per stall cause for the whole surface.

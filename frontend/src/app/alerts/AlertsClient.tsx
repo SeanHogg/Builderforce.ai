@@ -62,7 +62,7 @@ const EMPTY_DRAFT: DraftRule = {
 };
 
 export function AlertsClient() {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('alerts');
   const [busy, setBusy] = useState(false);
   const [draft, setDraft] = useState<DraftRule>(EMPTY_DRAFT);

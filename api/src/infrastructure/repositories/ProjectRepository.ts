@@ -75,6 +75,7 @@ export class ProjectRepository implements IProjectRepository {
         origin:          plain.origin ?? undefined,
         initiativeId:    plain.initiativeId ?? undefined,
         dueDate:         plain.dueDate ?? undefined,
+        startDate:       plain.startDate ?? undefined,
       })
       .returning();
     if (!inserted) throw new Error('Insert returned no rows');
@@ -108,6 +109,9 @@ export class ProjectRepository implements IProjectRepository {
         // Written directly too: null must persist so a PM can CLEAR the explicit
         // deadline (falling back to the derived task-based one).
         dueDate:         plain.dueDate,
+        // Same rule as dueDate: null must persist so an explicit start can be
+        // CLEARED back to the task-derived one.
+        startDate:       plain.startDate,
         updatedAt:       plain.updatedAt,
       })
       .where(eq(projectsTable.id, plain.id))
@@ -150,6 +154,7 @@ function toDomain(row: Row): Project {
     origin:          row.origin ?? null,
     initiativeId:    row.initiativeId ?? null,
     dueDate:         row.dueDate ?? null,
+    startDate:       row.startDate ?? null,
     createdAt:       row.createdAt,
     updatedAt:       row.updatedAt,
   });

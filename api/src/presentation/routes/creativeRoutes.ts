@@ -109,6 +109,37 @@ function stripFence(text: string): string {
 const RESUME_IMPORT_EXTENSIONS = new Set(['pdf', 'doc', 'docx', 'rtf', 'txt', 'md', 'markdown', 'json', 'png', 'jpg', 'jpeg', 'webp']);
 const RESUME_IMPORT_MAX_BYTES = 20 * 1024 * 1024;
 const ATTACHMENT_UPLOAD_MAX_BYTES = 20 * 1024 * 1024;
+/**
+ * What `/attachments/read` will look at.
+ *
+ * PDFs and photographs, and nothing else, because those are the two shapes that have a
+ * PAGE with no text layer. An Office file, a CSV or a Markdown file is parsed
+ * deterministically in the browser and always will be — sending one to a model would
+ * spend tokens to produce a worse answer than the parser already gives for free.
+ */
+const ATTACHMENT_READ_EXTENSIONS = new Set(['pdf', 'png', 'jpg', 'jpeg', 'webp', 'heic', 'tif', 'tiff']);
+
+/**
+ * The read instruction.
+ *
+ * It asks for the page as it IS, not for a summary, because the caller is turning the
+ * answer into a `document` object somebody will read and edit — a summary would silently
+ * destroy the contract clause they dropped it to find. The refusal instruction matters as
+ * much: a model that guesses at an illegible scan produces a document that looks
+ * authoritative and says something nobody wrote.
+ */
+const ATTACHMENT_READ_PROMPT = `Transcribe this document into Markdown, exactly as it appears.
+
+Rules:
+- Reproduce ALL the text. Do not summarise, shorten, paraphrase or comment.
+- Keep the structure: headings as headings, lists as lists, tables as Markdown tables.
+- Keep the reading order of a multi-column page: finish a column before starting the next.
+- Transcribe headers, footers and page numbers only when they carry meaning (a document
+  reference, a clause number); drop pure decoration.
+- Where text is genuinely illegible, write [illegible] rather than guessing. A plausible
+  invention is far worse than a gap a reader can see.
+- Return the Markdown only. No preamble, no explanation, no code fence around the whole
+  answer.`;
 
 /** One R2 write, scoped to the caller's tenant and user, for every route that needs to
  * keep a file's bytes past the request that received them. */
@@ -326,6 +357,120 @@ export function createCreativeRoutes(): Hono<HonoEnv> {
     );
     if (!sourceFileKey) return c.json({ error: 'File storage is not configured' }, 503);
     return c.json({ sourceFileKey });
+  });
+
+  /**
+   * READ A RETAINED ATTACHMENT THAT HAS NO TEXT LAYER.
+   *
+   * ── THE DOOR THAT EXISTED AND NOBODY WALKED THROUGH ──────────────────────────
+   * `office/pdf.ts` extracts a PDF's own text and refuses anything it cannot decode
+   * above a legibility threshold — correctly, because a page of mojibake pasted onto the
+   * board as a document is worse than an attachment card that says it could not be read.
+   * Two cases fail that gate and can never pass it: a page that is a photograph of a page
+   * (no text layer to decode) and an `/Encrypt`ed file (refused outright).
+   *
+   * Both already RETAIN their bytes — `/attachments/upload` puts them in R2 and hands
+   * back a `sourceFileKey` — so the escalation door has been open the whole time and
+   * nothing read through it. A scanned contract dropped on the canvas stayed an
+   * attachment card forever.
+   *
+   * This is the read. It hands the retained file to the multimodal pool with an `ocr`
+   * use case (`poolRouting.ts` already floats the OCR-capable models up on that signal —
+   * see its `hasOcr` check) and returns MARKDOWN, which is what the canvas turns into a
+   * `document` object.
+   *
+   * ── WHY IT IS A SEPARATE CALL AND NOT PART OF THE DROP ───────────────────────
+   * It costs tokens and it is slow, and the overwhelming majority of dropped PDFs have a
+   * perfectly good text layer that `office/pdf.ts` reads for free in the browser. Running
+   * a model over every drop would bill every tenant for the common case in order to serve
+   * the rare one. So the drop stays local and free, and a card that could not be read
+   * offers this.
+   *
+   * ── WHY THE OUTPUT IS MARKDOWN AND NOT JSON ──────────────────────────────────
+   * `/resume/import` asks for structured JSON because it knows what a résumé IS. This
+   * route knows nothing about the document — it might be a contract, a scanned invoice,
+   * a lecture handout — so imposing a schema would be inventing one. Markdown preserves
+   * the headings, lists and tables a reader needs and is exactly what the canvas
+   * `document` kind already holds.
+   */
+  router.post('/attachments/read', async (c) => {
+    type ReadBody = { sourceFileKey?: unknown; fileName?: unknown; dataUrl?: unknown };
+    const body = await c.req.json<ReadBody>().catch(() => ({} as ReadBody));
+    const sourceFileKey = String(body.sourceFileKey ?? '').trim();
+    const inlineDataUrl = String(body.dataUrl ?? '').trim();
+    const suppliedName = String(body.fileName ?? '').trim();
+
+    let bytes: ArrayBuffer;
+    let fileName: string;
+    let mimeType: string;
+
+    if (sourceFileKey) {
+      // The same tenant-prefix check `/resume/import` makes, and for the same reason: a
+      // key is a guessable string, and reading somebody else's retained contract is the
+      // one failure this route absolutely must not have.
+      if (!sourceFileKey.startsWith(`${c.get('tenantId')}/`)) return c.json({ error: 'Attachment does not belong to this workspace' }, 403);
+      if (!c.env.UPLOADS) return c.json({ error: 'File storage is not configured' }, 503);
+      const stored = await c.env.UPLOADS.get(sourceFileKey);
+      if (!stored) return c.json({ error: 'Attachment could not be found' }, 404);
+      bytes = await stored.arrayBuffer();
+      fileName = suppliedName || sourceFileKey.split('/').pop() || 'attachment';
+      mimeType = stored.httpMetadata?.contentType || 'application/octet-stream';
+    } else if (/^data:[^;]+;base64,/.test(inlineDataUrl)) {
+      // A guest board keeps its attachment inline; this is the same escalation path
+      // `/resume/import` offers once a tenant exists to bill the read to.
+      const [, declaredType, base64] = /^data:([^;]+);base64,(.+)$/s.exec(inlineDataUrl) ?? [];
+      mimeType = declaredType || 'application/octet-stream';
+      const binary = atob(base64 ?? '');
+      const decoded = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i += 1) decoded[i] = binary.charCodeAt(i);
+      bytes = decoded.buffer;
+      fileName = suppliedName || 'attachment';
+    } else {
+      return c.json({ error: 'sourceFileKey or dataUrl is required' }, 400);
+    }
+
+    const extension = (fileName.split('.').pop() ?? '').toLowerCase();
+    if (!ATTACHMENT_READ_EXTENSIONS.has(extension)) {
+      return c.json({ error: `A ${extension || 'file'} has no page to read. This reads scanned or encrypted PDFs and photographed pages.` }, 415);
+    }
+    if (!bytes.byteLength || bytes.byteLength > ATTACHMENT_UPLOAD_MAX_BYTES) {
+      return c.json({ error: 'Files must be between 1 byte and 20MB' }, 413);
+    }
+
+    const dataUrl = `data:${mimeType};base64,${bytesBase64(bytes)}`;
+    const content = extension === 'pdf'
+      ? [{ type: 'text', text: ATTACHMENT_READ_PROMPT }, { type: 'file', file: { filename: fileName, file_data: dataUrl } }]
+      : [{ type: 'text', text: ATTACHMENT_READ_PROMPT }, { type: 'image_url', image_url: { url: dataUrl } }];
+
+    try {
+      const { proxy } = await tenantProxyForPlan(c.env, c.get('tenantId'));
+      const result = await proxy.complete({
+        messages: [{ role: 'user', content } as never],
+        temperature: 0,
+        max_tokens: 8000,
+        // The slug `poolRouting.hasOcr` matches on. Without it the request routes to
+        // whatever the general pool offers, which is how an OCR job lands on a model
+        // that cannot see.
+        useCase: 'attachment_ocr',
+      });
+      if (result.response.status >= 400) return c.json({ error: 'Reading this file is unavailable right now', sourceFileKey: sourceFileKey || null }, 502);
+      const choice = await readProxyChoice(result);
+      const markdown = String(choice.content ?? '').trim();
+      // An empty read is reported as one rather than returned as an empty document: a
+      // blank `document` card on the board asserts that the page said nothing.
+      if (!markdown) return c.json({ error: 'Nothing legible could be read from this file', sourceFileKey: sourceFileKey || null }, 422);
+      return c.json({
+        markdown,
+        fileName,
+        sourceFileKey: sourceFileKey || null,
+        // Read off the envelope rather than a field on the choice: `ProxyChoice` carries
+        // the message, not the routing, and inventing a shape here would be a second
+        // answer to "which model ran this".
+        model: typeof choice.body?.model === 'string' ? choice.body.model : null,
+      });
+    } catch (error) {
+      return c.json({ error: error instanceof Error ? error.message : 'Reading this file failed', sourceFileKey: sourceFileKey || null }, 502);
+    }
   });
 
   /**

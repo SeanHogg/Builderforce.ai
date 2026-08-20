@@ -138,7 +138,7 @@ function Chip({
 }
 
 export function ProjectConnectionsStrip({ connections, onManage, max = 3 }: ProjectConnectionsStripProps) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('projectConnections');
   if (!connections || connections.length === 0) return null;
 

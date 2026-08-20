@@ -142,7 +142,7 @@ function SubmissionCard({ submission: s, showTenant, busy, onDecide }: {
   busy: boolean;
   onDecide: (s: FeedbackSubmission, decision: 'approved' | 'declined') => void;
 }) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('feedback');
   const [expanded, setExpanded] = useState(false);
   const pending = s.status === 'new';

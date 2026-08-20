@@ -57,7 +57,7 @@ const btnSubtle: React.CSSProperties = {
 };
 
 export function BoardConnectionsManager({ projectId, heading }: { projectId: number; heading?: string | null }) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const confirm = useConfirm();
   const tc = useTranslations('common');
   const t = useTranslations('boardConnections');

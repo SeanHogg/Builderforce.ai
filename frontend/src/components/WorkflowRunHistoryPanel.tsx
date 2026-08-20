@@ -88,7 +88,7 @@ function UsageSummary({ usage, loading }: { usage: WorkflowUsageSummary | null; 
 }
 
 export function WorkflowRunHistoryPanel({ definitionId, definitionName, initialRunId = null }: Props) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('workflowsContent');
 
   const [usage, setUsage] = useState<WorkflowUsageSummary | null>(null);

@@ -435,7 +435,7 @@ function UsageStrip({
    *  knows whose money paid; a provider credential does not). */
   children?: React.ReactNode;
 }) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   return (
     <div style={{ fontSize: 11.5, color: 'var(--text-muted)', lineHeight: 1.5 }}>
       {t('diagnostic.usage', {

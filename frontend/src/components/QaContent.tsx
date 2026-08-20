@@ -99,7 +99,7 @@ const inputStyle: React.CSSProperties = {
 };
 
 export function QaContent() {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectId, setProjectId] = useState<number | null>(null);
   const [flows, setFlows] = useState<QaFlow[]>([]);
@@ -298,7 +298,7 @@ function AgenticTesterSection({ projectId, heatZones, explorations, busy, onRun 
   busy: string | null;
   onRun: (key: string, fn: () => Promise<unknown>) => Promise<void>;
 }) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const [budget, setBudget] = useState(20);
   const [openId, setOpenId] = useState<string | null>(null);
 
@@ -548,7 +548,7 @@ function SchedulesSection({ projectId, schedules, credentials, busy, onRun }: {
   projectId: number; schedules: QaSchedule[]; credentials: QaCredential[]; busy: string | null;
   onRun: (key: string, fn: () => Promise<unknown>) => Promise<void>;
 }) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const [cron, setCron] = useState('0 8 * * *');
   const [credentialId, setCredentialId] = useState('');
 

@@ -55,7 +55,7 @@ function EventTypeBadge({ type }: { type: string }) {
 }
 
 export default function AuditLogsContent() {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const [events, setEvents] = useState<AuditEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

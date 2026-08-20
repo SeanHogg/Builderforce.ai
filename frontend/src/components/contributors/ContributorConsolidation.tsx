@@ -28,7 +28,7 @@ const btn = (primary = false): React.CSSProperties => ({
   color: primary ? 'var(--text-on-accent)' : 'var(--text-secondary)',
 });
 export function ContributorConsolidation() {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('contributorMerge');
   const tc = useTranslations('common');
   const REASON_LABEL: Record<DuplicateGroup['reason'], string> = {

@@ -39,7 +39,7 @@ export function MemberStatsStrip({
   scorecard?: MemberScorecard;
   engagement?: MemberEngagement;
 }) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('workforce.stats');
 
   // Activity (contribution events) comes from the engagement signals — the same

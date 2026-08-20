@@ -240,7 +240,23 @@ export function localCreationSnapshot(
 }
 
 export function removeLocalCreationSession(sessionId: string): void {
-  localStorage.removeItem(creationStorageKey(sessionId));
+  const key = creationStorageKey(sessionId);
+  localStorage.removeItem(key);
+  /**
+   * Every SIDECAR keyed off this board goes with it — the checkpoint stack today
+   * (`creationCheckpoints.ts`), whatever is stored beside a board next.
+   *
+   * Swept by prefix rather than by an explicit list of stores, for two reasons. A
+   * sidecar that outlives its board is a permanent leak against the same tiny quota the
+   * checkpoint store already has to shed against, and it would resurface attached to a
+   * board it is not about if an id were ever reused. The alternative — importing each
+   * store here to call its own clear — is also a cycle, since a store keyed off a board
+   * has to import `creationStorageKey` from this module.
+   */
+  const prefix = `${key}:`;
+  for (const stored of Object.keys(localStorage)) {
+    if (stored.startsWith(prefix)) localStorage.removeItem(stored);
+  }
   writeIndex(readIndex().filter((entry) => entry.sessionId !== sessionId));
 }
 

@@ -36,6 +36,7 @@
 import { and, eq, inArray } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { boardSyncOutbox, externalTicketLinks } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { ChangeSet } from './providers';
 
 export interface EnqueueResult {
@@ -100,7 +101,10 @@ export async function enqueueBoardPush(
           nextAttemptAt: new Date(),
           lastError: null,
         })
-        .where(eq(boardSyncOutbox.id, existing.id));
+        // Scoped even though `existing` came from a tenant-filtered select: the
+        // guard cannot see that provenance, and neither can the next refactor
+        // that changes where the row is read from.
+        .where(scopedToTenant(boardSyncOutbox, args.tenantId, eq(boardSyncOutbox.id, existing.id)));
       merged += 1;
       queued += 1;
       continue;

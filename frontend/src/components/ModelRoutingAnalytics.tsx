@@ -34,7 +34,7 @@ function fmtUsd(millicents: number): string {
 }
 
 export function ModelRoutingAnalytics() {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const [scope, setScope] = useState<Scope>('tenant');
   const [data, setData] = useState<ModelAnalyticsResponse | null>(null);
   const [loading, setLoading] = useState(true);

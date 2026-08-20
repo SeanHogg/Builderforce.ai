@@ -31,7 +31,7 @@ export function ObjectComments({
   limit?: number;
   locale?: string;
 }) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('kernel.comments');
   const [rows, setRows] = useState<Annotation[] | null>(null);
   const [draft, setDraft] = useState('');

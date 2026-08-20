@@ -99,6 +99,55 @@ export interface EvermindToolDecoder {
  */
 export const TOOL_CHOICE_MIN_MARGIN = 0.02;
 
+/**
+ * The margin bar actually in force, honouring `EVERMIND_TOOL_CHOICE_MIN_MARGIN`.
+ *
+ * ONE resolver, shared by the serve-time gate and the Studio bench, so the bench can
+ * never report a bar the gateway is not applying — the two disagreeing is how an
+ * operator concludes a head is fine and then watches it get refused in production.
+ *
+ * The default is an analytic placeholder and is documented as one. Making it an env
+ * knob is what lets it be CALIBRATED: read the logged margins off real heads, find
+ * the separation between correct and incorrect choices, set the number — without
+ * shipping a deploy to try each candidate value.
+ */
+export function evermindToolChoiceMinMargin(env?: { EVERMIND_TOOL_CHOICE_MIN_MARGIN?: string }): number {
+  const text = env?.EVERMIND_TOOL_CHOICE_MIN_MARGIN?.trim();
+  // Empty is ABSENT, checked before the numeric parse: `Number('')` is 0, not NaN, so
+  // a declared-but-unset variable — the normal shape of a secret nobody filled in —
+  // would otherwise set the bar to zero and silently turn the confidence gate off.
+  if (!text) return TOOL_CHOICE_MIN_MARGIN;
+  const raw = Number(text);
+  // A non-numeric or negative override is ignored rather than obeyed: a bar of NaN
+  // compares false against everything, which is the same silent disabling.
+  return Number.isFinite(raw) && raw >= 0 ? raw : TOOL_CHOICE_MIN_MARGIN;
+}
+
+/**
+ * Emit one structured line per tool decision, accepted or refused.
+ *
+ * Calibration needs the DISTRIBUTION, and the distribution needs every decision —
+ * including the ones that passed. Logging only refusals would show exactly the half
+ * of the data that cannot tell you whether the bar is too high.
+ */
+export function logToolChoiceMargin(fields: {
+  margin: number;
+  bar: number;
+  tool: string | null;
+  candidates: number;
+  refused: boolean;
+}): void {
+  // Structured single line — greppable in Workers logs as `evermind.tool_choice`.
+  console.log(JSON.stringify({
+    event: 'evermind.tool_choice',
+    margin: Number.isFinite(fields.margin) ? Number(fields.margin.toFixed(6)) : null,
+    bar: fields.bar,
+    tool: fields.tool,
+    candidates: fields.candidates,
+    refused: fields.refused,
+  }));
+}
+
 /** Hard caps so a hostile or recursive schema cannot spin the decoder. */
 const MAX_SCHEMA_DEPTH = 4;
 const MAX_ARRAY_ITEMS = 4;

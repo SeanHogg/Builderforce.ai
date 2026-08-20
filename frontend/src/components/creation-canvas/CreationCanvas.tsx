@@ -138,6 +138,8 @@ import { captureCanvasScreenshot, resolveCanvasImage, type CanvasImageAsset, typ
 import { evaluateModel, fetchProjects, publishSite } from '@/lib/api';
 import { computeProjectHealth } from '@/lib/projectHealth';
 import { createCloudAgent, updateAgent } from '@/lib/api';
+import { presentationSequence, presentationStepAt, presentationViewport, stepPresentation } from '@/lib/canvasPresentation';
+import { localCheckpointSummaries, readLocalCheckpoint, saveLocalCheckpoint, type LocalCheckpointSummary } from '@/lib/creationCheckpoints';
 import { CREATION_OBJECT_REGISTRY, CREATION_PALETTE_GROUPS, createDefaultCreationData, creationObjectDefinition, creationObjectMutableFields, creationPaletteGroupsFor, emptyShellProblem, sanitizeCreationObjectPatch, type CreationObjectGroup } from './creationObjectRegistry';
 import { CREATION_TEMPLATES, type CreationTemplate } from './creationTemplates';
 import { describeMailboxFilter, mailboxApi, resolveMailboxConnection, type MailboxFilter } from '@/lib/mailboxApi';
@@ -214,7 +216,7 @@ import { useChromeSpace } from './useChromeSpace';
 import {
   fileToDataUrl, importCanvasFile, type AttachmentBytesStrategy, type ImportTranslator,
 } from '@/lib/canvasFileImport';
-import { uploadAttachmentSource } from '@/lib/canvasAttachmentUploadApi';
+import { readAttachmentSource, uploadAttachmentSource } from '@/lib/canvasAttachmentUploadApi';
 import { importResumeFromAttachment } from '@/lib/resumeImportApi';
 import { aiContextGate, boardInventory, findInInventory, scopeNote } from '@/lib/canvasContextSnapshot';
 import { objectMayCross, partitionForBoundary, withheldNotice } from '@/lib/canvasConfidentiality';
@@ -255,8 +257,7 @@ import {
   cSuiteCanvasOwner,
   cSuiteCanvasWorkflow,
   executiveUseCaseFromPrompt,
-  resolveExecutiveUseCaseId,
-} from '@/lib/templates/promptUseCases';
+  resolveExecutiveUseCaseId, executiveRequiredTools, missingRequiredTools,} from '@/lib/templates/promptUseCases';
 import { applyTemplateEntry } from '@/lib/templates/apply';
 import { useTemplateCatalog } from '@/lib/templates/useTemplateCatalog';
 import { matchesTemplateQuery } from '@/lib/templates/contract';
@@ -289,14 +290,14 @@ import { generateFixture } from '@/lib/canvasTestData';
 import * as qaApi from '@/lib/qa/api';
 import { canvasBuildBinding, canvasBuildModality, canvasBuildPatch, createCanvasBuild } from '@/lib/canvasBuild';
 import { canvasBuildActions, type BoundCanvasBuild } from '@/lib/canvasBuildTools';
-import { canvasFounderOpsActions, pipelineFieldsFrom, type CanvasFounderOpsContext } from '@/lib/canvasFounderOpsTools';
+import { canvasFounderOpsActions, payRunFieldsFrom, pipelineFieldsFrom, type CanvasFounderOpsContext } from '@/lib/canvasFounderOpsTools';
 import { canvasDataRoomActions } from '@/lib/canvasDataRoomTools';
 import { canvasDocumentTemplateActions } from '@/lib/canvasDocumentTemplateTools';
 import { canvasEquityActions } from '@/lib/canvasEquityTools';
 import { canvasLegalDocumentActions } from '@/lib/canvasLegalDocumentTools';
 import { canvasSellMotionActions } from '@/lib/canvasSellMotionTools';
 import { canvasSignatureActions } from '@/lib/canvasSignatureTools';
-import { chaseInvoice, draftInvoice, issueInvoice, moveDeal as moveDealOnBoard, recordInvoicePayment, sendInvestorUpdate } from '@/lib/founderOpsApi';
+import { chaseInvoice, draftInvoice, issueInvoice, moveDeal as moveDealOnBoard, recordInvoicePayment, listPayRuns, payRunLines, sendInvestorUpdate, syncPayRuns } from '@/lib/founderOpsApi';
 import { notifyWorkspaceFilesChanged } from '@/lib/workspaceFileEvents';
 import { canvasWebPageUrl, normalizeWebPageUrl, webPageHost } from '@/lib/canvasWebPage';
 import { CANVAS_VIEWPORTS, canvasViewport, websiteBeforePatch } from '@builderforce/creation-canvas-contract';
@@ -973,7 +974,7 @@ export function projectEvermindNodePatch(head: ProjectEvermindHead, activity: Pr
 }
 
 function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen = false, initialBuildOpen = false, initialBuildChatId, initialBuildTicket, initialPrompt, initialPresent = false, initialModelComparisonIds = [], stageActive = true }: { sessionId: string; persistence: 'local' | 'server'; initialFocusId?: string | null; initialShareOpen?: boolean; initialBuildOpen?: boolean; initialBuildChatId?: number | null; initialBuildTicket?: { kind: string; ref: string } | null; initialPrompt?: string | null; initialPresent?: boolean; initialModelComparisonIds?: readonly string[]; stageActive?: boolean }) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('creationCanvas');
   /** The shared metric vocabulary — labels, units and comparisons, identical to
    *  the superadmin Value outcomes panel. See `lib/outcomeMetrics.ts`. */
@@ -1602,8 +1603,29 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setShareOpen(false);
     if (step === 1) setPaletteOpen(true);
   }, []);
+  /**
+   * Where the presentation is standing, as an INDEX rather than a node id.
+   *
+   * An id would be the obvious choice and is wrong for the case that actually happens:
+   * a collaborator deletes the frame you are on mid-presentation, and an id-based
+   * cursor then points at nothing while an index simply lands on the frame that took
+   * its place. `presentationStepAt` clamps, so the control never blanks.
+   */
+  const [presentStep, setPresentStep] = useState(0);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [history, setHistory] = useState<CreationSnapshotSummary[]>([]);
+  /**
+   * The same two verbs for a board with no server — see `creationCheckpoints.ts`.
+   *
+   * A SECOND list rather than a mapped one: a server revision is a monotonic number the
+   * API restores by, and a local checkpoint is an id in this browser. Coercing them into
+   * one shape would mean one of the two restore paths taking an identifier that means
+   * nothing to it, which is the kind of collapse that reads as tidy and fails silently.
+   * The PANEL is one panel; the stores are two, because they genuinely are.
+   */
+  const [localCheckpoints, setLocalCheckpoints] = useState<LocalCheckpointSummary[]>([]);
+  /** The checkpoint name being typed, inline. See `createCheckpoint` for why it is not a prompt. */
+  const [checkpointName, setCheckpointName] = useState('');
   const [timeline, setTimeline] = useState<CanvasTimelineMessage[]>([]);
   const [brainTrace, setBrainTrace] = useState<BrainTraceEvent[]>([]);
   const [memoryEnabled, setMemoryEnabled] = useState(true);
@@ -1812,6 +1834,20 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * mistypes the one argument it was given.
    */
   const inFlightUseCaseId = useRef<string | null>(null);
+  /**
+   * Every tool this turn actually CALLED, by its advertised name.
+   *
+   * A ref rather than state: it is read inside tool handlers that run mid-turn, and a
+   * re-render per tool call would rebuild the whole action list underneath the loop
+   * that is walking it. Cleared at the start of every turn beside `brainTrace`, which
+   * is the other per-turn record and must not disagree with it about which turn it is.
+   *
+   * This is what makes `ExecutiveCanvasWorkflow.requiredTools` an enforcement rather
+   * than a sentence: a completion condition a model can satisfy by reasoning is not a
+   * contract, and the career intents are the set where reasoning produces a confident,
+   * unreproducible number.
+   */
+  const turnToolCalls = useRef<Set<string>>(new Set());
   /** Set by the turn runner when the string it returned is a RUNTIME NOTICE rather
    *  than an answer Brain produced — read once when the turn settles so the notice is
    *  shown to the user without entering the transcript the next turn is built from. */
@@ -2959,6 +2995,72 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * the other one.
    */
   const threeDControls = useCanvas3DControls();
+  /**
+   * The ordered walk through this board's frames.
+   *
+   * Derived from the nodes rather than stored — see `canvasPresentation.ts` for why a
+   * stored list is the wrong shape for a board several people are editing. Memoised on
+   * the nodes, so adding a frame mid-presentation extends the sequence with no
+   * bookkeeping anywhere.
+   */
+  const presentationSteps = useMemo(() => presentationSequence(nodes.map((node) => {
+    const dimensions = canvasNodeDimensions(node);
+    return {
+      id: node.id,
+      position: node.position,
+      width: dimensions.width,
+      height: dimensions.height,
+      data: { kind: node.data.kind, title: node.data.title, presentationOrder: node.data.presentationOrder, hidden: node.data.placementHidden },
+      hidden: node.hidden === true,
+    };
+  })), [nodes]);
+
+  /**
+   * Move the presentation, and everyone following, to one step.
+   *
+   * The follower half is FREE and is the reason this writes a viewport rather than
+   * calling `fitView`: the presence channel already carries `viewport` on every pan and
+   * zoom, and `followedViewport` already applies it. So moving the presenter's camera
+   * moves every follower's, and the sequence needed no new transport at all — which is
+   * exactly why these three were the Miro items worth chasing.
+   */
+  const goToPresentationStep = useCallback((index: number) => {
+    const step = presentationStepAt(presentationSteps, index);
+    if (!step) return;
+    setPresentStep(step.index - 1);
+    const wrapper = flowWrapRef.current;
+    const screen = wrapper
+      ? { width: wrapper.clientWidth, height: wrapper.clientHeight }
+      : { width: typeof window === 'undefined' ? 1_280 : window.innerWidth, height: typeof window === 'undefined' ? 720 : window.innerHeight };
+    void flowRef.current?.setViewport(presentationViewport(step.bounds, screen), { duration: 420 });
+  }, [presentationSteps]);
+
+  /**
+   * Step relative, clamped. Wrapping past the last frame in front of a room reads as a
+   * crash, which is the whole argument in `stepPresentation`.
+   */
+  const movePresentation = useCallback((delta: number) => {
+    const next = stepPresentation(presentStep, delta, presentationSteps.length);
+    if (next === null) return;
+    goToPresentationStep(next);
+  }, [goToPresentationStep, presentStep, presentationSteps.length]);
+
+  /**
+   * Opening present mode opens ON the sequence.
+   *
+   * Without this, entering present mode leaves the camera wherever the presenter
+   * happened to be — which is the behaviour that made the mode feel unfinished: the
+   * chrome vanishes and nothing else happens.
+   */
+  useEffect(() => {
+    if (!presentMode || !presentationSteps.length) return;
+    goToPresentationStep(presentStep);
+    // Deliberately NOT depending on `presentStep`: this fires on ENTERING the mode, and
+    // re-running it on every step would fight the step handler that just moved the
+    // camera.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [presentMode, presentationSteps.length]);
+
   const focusSelection = useCallback(() => {
     const ids = selectionIds(); if (!ids.length) return;
     if (threeDControls) { threeDControls.focusObjects(ids); return; }
@@ -2977,6 +3079,17 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'd') { event.preventDefault(); duplicateSelection(); return; }
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'c') { event.preventDefault(); copySelection(); return; }
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'v') { event.preventDefault(); pasteSelection(); return; }
+      // PRESENTING TAKES THE ARROW KEYS. Nudging a selected object one pixel is the
+      // right binding on a board being edited and the wrong one in front of a room,
+      // where → means "next". Escape leaves the mode rather than clearing a selection,
+      // for the same reason: it is what every presentation tool does.
+      if (presentModeRef.current && presentationSteps.length > 0) {
+        if (event.key === 'ArrowRight' || event.key === 'ArrowDown' || event.key === 'PageDown' || event.key === ' ') { event.preventDefault(); movePresentation(1); return; }
+        if (event.key === 'ArrowLeft' || event.key === 'ArrowUp' || event.key === 'PageUp') { event.preventDefault(); movePresentation(-1); return; }
+        if (event.key === 'Home') { event.preventDefault(); goToPresentationStep(0); return; }
+        if (event.key === 'End') { event.preventDefault(); goToPresentationStep(presentationSteps.length - 1); return; }
+        if (event.key === 'Escape') { event.preventDefault(); setPresentMode(false); return; }
+      }
       if (event.key === 'Escape') { setSelectedId(null); setSelectedIds([]); setNodes((current) => current.map((node) => ({ ...node, selected: false }))); return; }
       if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key) && ids.size && canEdit) {
         event.preventDefault(); const step = event.shiftKey ? 10 : 1; const dx = event.key === 'ArrowLeft' ? -step : event.key === 'ArrowRight' ? step : 0; const dy = event.key === 'ArrowUp' ? -step : event.key === 'ArrowDown' ? step : 0;
@@ -2984,7 +3097,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       }
     };
     window.addEventListener('keydown', keyboard); return () => window.removeEventListener('keydown', keyboard);
-  }, [canEdit, copySelection, duplicateSelection, pasteSelection, redo, selectionIds, setEdges, setNodes, undo]);
+  }, [canEdit, copySelection, duplicateSelection, goToPresentationStep, movePresentation, pasteSelection, presentationSteps.length, redo, selectionIds, setEdges, setNodes, setPresentMode, undo]);
 
   const visualizeDataset = useCallback(() => {
     if (!selectedNode || selectedNode.data.kind !== 'dataset') return;
@@ -4508,6 +4621,41 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     return node;
   };
 
+  /**
+   * The measurement gate: refuse to author a use case's OWN output until the tool that
+   * measures it has run.
+   *
+   * ── WHY IT LIVES AT THE AUTHORING BOUNDARY ──────────────────────────────────────
+   * The requirement could have been checked in `canvas_prepare_executive_use_case`,
+   * and that would enforce nothing: preparation runs FIRST, before any tool has been
+   * called, so the only honest answer there is to describe the requirement. It could
+   * have been checked when the turn ends, which is worse — the card is already on the
+   * board by then and the only remaining move is to delete somebody's work.
+   *
+   * So it is checked where the fabricated number would actually land. `career.job.assess`
+   * declares `builtin_recruiter_match_job`; until that has run this turn, `canvas_add_object`
+   * refuses `kind: 'job'` and names the tool. A model that reasoned its way to "82% match"
+   * cannot write it onto a card, and the refusal tells it exactly how to get a real one.
+   *
+   * SCOPED to the use case's declared outputs, deliberately. A turn running
+   * `career.job.assess` may still add a `note`, a `document` or a `task` freely — the gate
+   * exists to stop an unmeasured ANSWER, not to stop the board being used while a
+   * measurement is pending.
+   */
+  const measurementGate = useCallback((kind: CreationObjectKind): { error: string } | null => {
+    const useCase = C_SUITE_CANVAS_USE_CASES.find((candidate) => candidate.id === inFlightUseCaseId.current);
+    if (!useCase) return null;
+    const required = executiveRequiredTools(useCase);
+    if (!required.length) return null;
+    const workflow = cSuiteCanvasWorkflow(useCase);
+    if (!workflow?.outputs.includes(kind)) return null;
+    const missing = missingRequiredTools(required, turnToolCalls.current);
+    if (!missing.length) return null;
+    return {
+      error: `\`${kind}\` is the answer to ${useCase.id}, and that answer must be MEASURED. Call ${missing.join(' and ')} first, then author this object from what it returns. Do not infer the numbers from the documents already in context — a score produced that way changes every time it is asked for, which is the reason this tool exists.`,
+    };
+  }, []);
+
   const canvasActions = useMemo<BrainAction[]>(() => ([{
     name: 'canvas_prepare_executive_use_case',
     description: 'Prepare one of the 48 migrated executive use cases for execution on this Canvas. Call this first when the prompt contains a legacy dotted use-case id. It returns the exact operation, completion condition, permitted existing Canvas outputs, and live evidence from the already-owning Builderforce domains. It never creates schema or mutates canonical domain data.',
@@ -4551,6 +4699,14 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         completion: workflow.completion,
         confirmTarget: workflow.confirmTarget === true,
         noNewTables: true,
+        // ADVERTISED AND ENFORCED, from the same declaration. `canvas_add_object` and
+        // `canvas_update_object` refuse this use case's own output kinds until these
+        // have run, so the list below is what the turn must do rather than what it
+        // ought to — see `ExecutiveCanvasWorkflow.requiredTools`.
+        ...(workflow.requiredTools?.length ? {
+          requiredTools: workflow.requiredTools,
+          requiredToolsNote: `Call ${workflow.requiredTools.join(' and ')} BEFORE authoring the output. The canvas refuses to create ${workflow.outputs.join('/')} until it has run — every number on the card must be a measurement it returned, never one you inferred from the documents in context.`,
+        } : {}),
       };
       if (workflow.evidence === 'web') return {
         contract,
@@ -5114,6 +5270,98 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         instruction: thin
           ? 'The résumé is on the board, but few sections were recognised. Say which ones came through and offer to fill the rest from what the person tells you — do NOT invent employers, dates or skills, and do not retype the document.'
           : 'The résumé is on the board, fully structured. Report what came through in one short line and offer the next step — restyling with canvas_render_resume_variants, or screening against a posting. Do NOT retype any of its content.',
+      };
+    },
+  }, {
+    /**
+     * READ A SCAN INTO THE BOARD.
+     *
+     * The general case of `canvas_import_resume`'s escalation, which had exactly one
+     * destination: a résumé. Everything else a person drops that the browser cannot read —
+     * a scanned contract, a photographed invoice, an encrypted PDF, a page of a lecture
+     * handout — stayed an attachment card saying its text could not be extracted, with its
+     * bytes sitting in R2 behind a door nothing opened.
+     *
+     * The bytes have been retained since `uploadAttachmentSource` shipped. This is the
+     * read. It produces a `document`, which is what the canvas already uses for markdown
+     * a person edits, exports and asks questions of.
+     */
+    name: 'canvas_read_attachment',
+    description: 'Read a dropped file the browser could not extract text from — a SCANNED or photographed page, or an encrypted PDF — and put it on the canvas as an editable document. Use this when an attachment card says its text could not be extracted, or when someone asks you to read, transcribe or open a scan. It transcribes the page as it is, so the document that lands is the source, not a summary. It costs a model call and needs a signed-in, saved session. Do NOT use it on a file whose text the canvas already holds.',
+    parameters: {
+      type: 'object', additionalProperties: false,
+      properties: {
+        objectId: { type: 'string', description: 'The attachment object to read. Omit when exactly one unreadable attachment is on the canvas.' },
+        title: { type: 'string', description: 'Title for the resulting document. Defaults to the file name.' },
+      },
+    },
+    mutates: () => true,
+    run: async (raw: unknown) => {
+      if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
+      const args = raw as { objectId?: string; title?: string };
+      const staged = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
+      const all = [...nodes, ...staged];
+      // An attachment whose bytes were retained and whose text was never extracted. Both
+      // halves matter: a file with a `canvasDocument` was already read for free in the
+      // browser, and re-reading it through a model would spend tokens to produce a worse
+      // copy of something the board already holds.
+      const readable = all.filter((node) => node.data.kind === 'file'
+        && !canvasDocument(node.data)
+        && (typeof node.data.sourceFileKey === 'string' || typeof node.data.sourceDataUrl === 'string'));
+      const source = args.objectId ? all.find((node) => node.id === args.objectId) : readable.length === 1 ? readable[0] : undefined;
+      if (!source) {
+        return { error: readable.length
+          ? `Specify which attachment to read. Unread attachments on this canvas: ${readable.map((node) => `${node.id} (${node.data.title})`).join(', ')}`
+          : 'Nothing on this canvas is an unread attachment. A file whose text the board already holds does not need this — read it directly.' };
+      }
+      if (canvasDocument(source.data)) {
+        return { error: `Object ${source.id} already carries readable text — read it directly rather than re-reading the file.` };
+      }
+
+      const sourceFileKey = typeof source.data.sourceFileKey === 'string' ? source.data.sourceFileKey : undefined;
+      const sourceDataUrl = typeof source.data.sourceDataUrl === 'string' ? source.data.sourceDataUrl : undefined;
+      if (!sourceFileKey && !sourceDataUrl) {
+        return { error: `Object ${source.id} kept no bytes, so there is nothing left to read. Ask for the file again.` };
+      }
+      if (persistence !== 'server') {
+        return { error: `Reading a scan takes a model call billed to a workspace, which needs a signed-in, saved Creation Canvas session — ask the person to sign in, then try again.` };
+      }
+
+      const fileName = typeof source.data.fileName === 'string' ? source.data.fileName : String(source.data.title || 'attachment');
+      let read: Awaited<ReturnType<typeof readAttachmentSource>>;
+      try {
+        read = await readAttachmentSource({ fileName, ...(sourceFileKey ? { sourceFileKey } : {}), ...(sourceDataUrl ? { dataUrl: sourceDataUrl } : {}) });
+      } catch (error) {
+        return { error: `Reading the file failed: ${error instanceof Error ? error.message : String(error)}` };
+      }
+
+      const narrowViewport = typeof window !== 'undefined' && window.innerWidth <= 760;
+      const node = newNode('document', nextCanvasObjectPosition(all, { x: source.position.x + 460, y: source.position.y }, narrowViewport, 'document'));
+      node.data = {
+        ...node.data,
+        title: String(args.title ?? '').trim() || fileName.replace(/\.[^.]+$/, '') || String(source.data.title || 'Document'),
+        markdown: read.markdown,
+        content: read.markdown,
+        // The provenance travels with the document: a transcription is a READING of a
+        // source, and a reader who cannot get back to the page it came from cannot check
+        // it. `[illegible]` markers are only honest if the original is still reachable.
+        sources: [{ title: fileName, url: '' }],
+        status: 'Transcribed',
+      };
+      node.style = { width: 560, height: 620 };
+      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: `Read ${fileName}`, node });
+
+      const illegible = (read.markdown.match(/\[illegible\]/gi) ?? []).length;
+      return {
+        ok: true, proposed: true,
+        objectId: node.id,
+        readFrom: source.id,
+        characters: read.markdown.length,
+        illegible,
+        model: read.model,
+        instruction: illegible
+          ? `The page is on the board as a document, with ${illegible} passage(s) the model could not make out, marked [illegible]. Say so — the person may have a better copy. Do NOT guess at what they said.`
+          : 'The page is on the board as an editable document. Say what it appears to be in one line and offer the next step. Do NOT retype its contents.',
       };
     },
   }, {
@@ -7736,6 +7984,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const args = raw as { kind?: CreationObjectKind; title?: string; subtitle?: string; status?: string; fields?: unknown; x?: number; y?: number; width?: number; height?: number };
       const allowed = new Set(CREATION_OBJECT_REGISTRY.map((definition) => definition.kind));
       if (!args.kind || !allowed.has(args.kind)) return { error: 'Unsupported canvas object kind' };
+      const unmeasured = measurementGate(args.kind);
+      if (unmeasured) return unmeasured;
       const updateTarget = duplicateAddUpdateTarget(prompt, args.kind, nodes, effectiveSelectedIds);
       if (updateTarget) return { error: `This is a correction to selected ${args.kind} ${updateTarget.id}. Call canvas_update_object for that object instead of creating a duplicate.` };
       const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
@@ -7805,6 +8055,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const args = raw as { objectId?: string; fields?: unknown };
       const target = nodes.find((node) => node.id === args.objectId) || proposalBuffer.current.find((change): change is Extract<ProposedCanvasChange, { type: 'object.add' }> => change.type === 'object.add' && change.node.id === args.objectId)?.node;
       if (!args.objectId || !target) return { error: 'Object not found' };
+      // The same gate the add path applies, for the same reason: filling a `job` card's
+      // match score in a second call is the identical unmeasured claim as creating it
+      // with one, and a gate on only one of the two doors is a gate on neither.
+      const unmeasuredUpdate = measurementGate(target.data.kind);
+      if (unmeasuredUpdate) return unmeasuredUpdate;
       let patch = sanitizeCreationObjectPatch(target.data.kind, args.fields);
       if (!Object.keys(patch).length) return { error: `No supported fields supplied. Mutable fields: ${creationObjectDefinition(target.data.kind).mutableFields.join(', ')}` };
       if (target.data.kind === 'resume') {
@@ -8572,6 +8827,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     if (process.env.NODE_ENV !== 'test') {
       proposalBuffer.current = [];
       turnUnanswered.current = null;
+      turnToolCalls.current = new Set();
       setBrainTrace([]);
       setNodes((current) => current.map((node) => node.data.kind === 'chat' ? { ...node, data: { ...node.data, trace: [] } } : node));
       setProposedChanges([]);
@@ -8727,6 +8983,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
                 ? safeTraceJson(event.result) || event.category
                 : event.category,
             });
+            if (event.category === 'tool' && event.label) turnToolCalls.current.add(event.label);
             setBrainTrace((current) => [...current, event]);
           },
           conversation: groupConversation,
@@ -9906,6 +10163,49 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   }, [persistence, setNodes, t]);
 
   /**
+   * `payRun.sync` — re-read this card's run from the provider that ran it.
+   *
+   * ── WHY IT SHARES THE TOOL'S PROJECTION ─────────────────────────────────────
+   * `payRunFieldsFrom` is exported by `canvasFounderOpsTools.ts` and called here,
+   * so the card a person refreshes and the card Brain authors are the same card.
+   * A second local mapping of `totalCost` → the board is how one of them starts
+   * showing gross where the other shows total cost, which is a different number by
+   * roughly the employer's tax bill.
+   *
+   * ── WHY IT REFUSES RATHER THAN GUESSES ──────────────────────────────────────
+   * The card is matched on the provider's own `externalRef`. A card authored by
+   * hand has none, and the honest answer there is to say so — inventing a match on
+   * the date or the amount would silently overwrite one month's payroll with
+   * another's.
+   */
+  const syncPayRunCard = useCallback(async (objectId: string) => {
+    const target = nodesRef.current.find((node) => node.id === objectId && node.data.kind === 'payRun');
+    if (!target) return;
+    if (persistence !== 'server') { setNotice(t('noticePayRunNeedsAccount')); return; }
+
+    const externalRef = typeof target.data.externalRef === 'string' ? target.data.externalRef.trim() : '';
+    if (!externalRef) { setNotice(t('noticePayRunNoReference')); return; }
+
+    try {
+      const hydration = await syncPayRuns({});
+      if (hydration.error) { setNotice(hydration.error); return; }
+      if (!hydration.source) { setNotice(t('noticePayRunNoProvider')); return; }
+
+      const run = (await listPayRuns()).find((candidate) => candidate.externalRef === externalRef);
+      if (!run) { setNotice(t('noticePayRunNotFound', { reference: externalRef })); return; }
+
+      const lines = await payRunLines(run.reference).catch(() => []);
+      const fields = payRunFieldsFrom(run, lines);
+      setNodes((current) => current.map((node) => (
+        node.id === objectId ? { ...node, data: { ...node.data, ...fields } } : node
+      )));
+      setNotice(t('noticePayRunSynced', { source: run.source }));
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : t('noticePayRunFailed'));
+    }
+  }, [persistence, setNodes, t]);
+
+  /**
    * `assignment.distribute` — fan the task into one `submission` per roster row.
    *
    * Idempotent by construction: a learner who already has a submission for this
@@ -10159,9 +10459,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     else if (target.data.kind === 'invoice' && ['issue', 'record-payment', 'chase'].includes(pending.action)) {
       void runInvoiceAction(target.id, pending.action);
     }
-    // A `payRun` refreshes itself through the canvas tool that hydrates it, so
-    // there is exactly one path from a provider's records to this card.
-    else if (target.data.kind === 'payRun' && pending.action === 'sync') setNotice(t('noticePayRunSync'));
+    // A `payRun` re-reads itself from the provider that ran it, through the SAME
+    // projection the hydrating tool uses — so there is exactly one path from a
+    // provider's records to this card, whichever end asks for it.
+    else if (target.data.kind === 'payRun' && pending.action === 'sync') void syncPayRunCard(target.id);
     else if (target.data.kind === 'assignment' && pending.action === 'distribute') distributeAssignment(target.id);
     else if (target.data.kind === 'cohort' && pending.action === 'import') void importCohortRosterFromLti(target.id);
     else if (target.data.kind === 'gradebook' && pending.action === 'compute') computeGradebook(target.id);
@@ -10178,14 +10479,28 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       setNotice(t('noticeNoDeliveryAdapter', { action: pending.action, kind: creationObjectDefinition(target.data.kind).label }));
     }
     finish();
-  }, [compareProjects, compileWorkflow, computeGradebook, convertObjectToDiagram, deliverMockup, distributeAssignment, evaluateEvermind, evaluateReleaseGate, expandMockupSet, expandProject, exportArtifact, generateVideo, importCohortRosterFromLti, importReferencesFromDocument, markSubmission, nodes, openBuild, openEvermindTraining, pendingBrainActions, persistence, plotDataset, profileDataset, publishWebsite, runCreativeAction, runInvoiceAction, runWorkflow, selectedId, sendUpdateToInvestors, setEdges, setNodes, startStandup, t, validateCurriculumMap, visualizeDataset]);
+  }, [compareProjects, compileWorkflow, computeGradebook, convertObjectToDiagram, deliverMockup, distributeAssignment, evaluateEvermind, evaluateReleaseGate, expandMockupSet, expandProject, exportArtifact, generateVideo, importCohortRosterFromLti, importReferencesFromDocument, markSubmission, nodes, openBuild, openEvermindTraining, pendingBrainActions, persistence, plotDataset, profileDataset, publishWebsite, runCreativeAction, runInvoiceAction, runWorkflow, selectedId, sendUpdateToInvestors, syncPayRunCard, setEdges, setNodes, startStandup, t, validateCurriculumMap, visualizeDataset]);
 
   const openHistory = useCallback(() => {
     setHistoryOpen(true);
-    if (persistence !== 'server') return;
+    // A LOCAL board has a history too, now. It used to be told to sign in — on the one
+    // surface where an agent is most likely to have just rewritten half the board.
+    if (persistence !== 'server') { setLocalCheckpoints(localCheckpointSummaries(sessionId)); return; }
     void creationSessionsApi.history.list(sessionId).then((result) => setHistory(result.snapshots))
       .catch((error) => setNotice(error instanceof Error ? error.message : t('noticeLoadHistoryFailed')));
   }, [persistence, sessionId]);
+
+  const restoreLocalCheckpoint = useCallback((checkpointId: string) => {
+    if (!canEdit) return;
+    const checkpoint = readLocalCheckpoint(sessionId, checkpointId);
+    // A checkpoint can genuinely vanish — another tab trimmed the stack under the quota
+    // rule — so this reports rather than throwing on a null the panel just listed.
+    if (!checkpoint) { setNotice(t('noticeRestoreRevisionFailed')); setLocalCheckpoints(localCheckpointSummaries(sessionId)); return; }
+    setNodes(checkpoint.nodes);
+    setEdges(checkpoint.edges);
+    setHistoryOpen(false);
+    setNotice(t('noticeCheckpointRestored', { label: checkpoint.label }));
+  }, [canEdit, sessionId, setEdges, setNodes, t]);
 
   const restoreRevision = useCallback((targetRevision: number) => {
     if (!canEdit || persistence !== 'server') return;
@@ -10199,14 +10514,37 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     }).catch((error) => setNotice(error instanceof Error ? error.message : t('noticeRestoreRevisionFailed')));
   }, [canEdit, persistence, sessionId, setEdges, setNodes]);
 
+  /**
+   * Name a checkpoint.
+   *
+   * The name comes from an INPUT IN THE PANEL rather than from `window.prompt`, which is
+   * what this was. Two things were wrong with the prompt and only one of them is style:
+   * it was a native dialog on a product whose own convention forbids them, and its label
+   * was the hardcoded English string `'Name this checkpoint'` sitting in a component
+   * whose every other string goes through `useTranslations` — so four of the five
+   * supported locales were shown an English prompt at the moment they were asked to
+   * name something. An inline field also lets a person SEE the list they are adding to
+   * while they name the entry, which a modal cannot.
+   */
   const createCheckpoint = useCallback(() => {
-    if (persistence !== 'server' || !canEdit) return;
-    const label = window.prompt('Name this checkpoint')?.trim(); if (!label) return;
+    const label = checkpointName.trim();
+    if (!canEdit || !label) return;
+    if (persistence !== 'server') {
+      const saved = saveLocalCheckpoint(sessionId, label, { nodes, edges });
+      // `null` means not even one checkpoint fit — the honest signal that this board
+      // cannot be checkpointed on this device, rather than a silent no-op.
+      if (!saved) { setNotice(t('noticeCheckpointStorageFull')); return; }
+      setLocalCheckpoints(saved);
+      setCheckpointName('');
+      setNotice(t('noticeCheckpointSaved', { label }));
+      return;
+    }
     void creationSessionsApi.history.checkpoint(sessionId, label).then(() => {
+      setCheckpointName('');
       setNotice(t('noticeCheckpointSaved', { label }));
       return creationSessionsApi.history.list(sessionId);
     }).then((result) => setHistory(result.snapshots)).catch((error) => setNotice(error instanceof Error ? error.message : t('noticeSaveCheckpointFailed')));
-  }, [canEdit, persistence, sessionId]);
+  }, [canEdit, checkpointName, edges, nodes, persistence, sessionId, t]);
 
   const exportSession = useCallback(() => {
     const filename = `${safeDownloadName(title)}.builderforce-canvas.json`;
@@ -11349,6 +11687,32 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           /></label>
           <button type="button" className={styles.drawingDone} onClick={() => setDrawing(null)}>{t('stopDrawing')}</button>
         </div>}
+        {/* THE PRESENTATION CONTROL — the only chrome present mode ADDS rather than hides.
+            It self-gates on there being a sequence at all: a board with no frames has
+            nothing to walk, and present mode there behaves exactly as it always has.
+            The presenter's camera is the transport (see `goToPresentationStep`), so
+            every follower moves with these buttons for free. */}
+        {presentMode && presentationSteps.length > 0 && <div className={styles.presentBar} aria-label={t('presentSequence')}>
+          <button
+            type="button"
+            onClick={() => movePresentation(-1)}
+            disabled={presentStep <= 0}
+            aria-label={t('presentPrevious')}
+          ><span aria-hidden>‹</span></button>
+          <span className={styles.presentPosition}>
+            <b>{t('presentPosition', { index: presentStep + 1, total: presentationSteps.length })}</b>
+            {presentationStepAt(presentationSteps, presentStep)?.title
+              ? <small>{presentationStepAt(presentationSteps, presentStep)?.title}</small>
+              : null}
+          </span>
+          <button
+            type="button"
+            onClick={() => movePresentation(1)}
+            disabled={presentStep >= presentationSteps.length - 1}
+            aria-label={t('presentNext')}
+          ><span aria-hidden>›</span></button>
+          <button type="button" className={styles.presentExit} onClick={() => setPresentMode(false)}>{t('exitPresentation')}</button>
+        </div>}
         {/* Both of these are chrome ABOUT the objects on this canvas — what is selected,
             and how many there are. They gate on whether the objects are on screen at
             all, not on which surface is drawn: the 3D space shows them and keeps both,
@@ -11666,7 +12030,54 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           </div>
         </section>}
 
-        {historyOpen && <aside className={styles.historyPanel}><header><div><strong>{t('versionHistory')}</strong><small>{t('versionHistoryHint')}</small></div><button onClick={() => setHistoryOpen(false)} aria-label={t('closeHistory')}>×</button></header>{persistence === 'local' ? <p>{t('historyLocalOnly')}</p> : <><button className={styles.primaryButton} onClick={createCheckpoint} disabled={!canEdit}>{t('nameCheckpoint')}</button><div>{history.length ? history.map((snapshot) => <button key={snapshot.revision} onClick={() => restoreRevision(snapshot.revision)} disabled={!canEdit}><b>{snapshot.label || t('revisionLabel', { revision: snapshot.revision })}</b><span>{t('revisionMeta', { revision: snapshot.revision, at: fmt.dateTime(snapshot.createdAt) })}</span></button>) : <p>{t('noRevisions')}</p>}</div></>}</aside>}
+        {/* ONE history panel over TWO stores. A saved board restores a server revision;
+            a local one restores a checkpoint held in this browser (`creationCheckpoints.ts`).
+            The verbs, the layout and the empty state are shared — only the row source
+            and the identifier differ, which is exactly as much as genuinely differs. */}
+        {historyOpen && <aside className={styles.historyPanel}>
+          <header>
+            <div>
+              <strong>{t('versionHistory')}</strong>
+              <small>{persistence === 'server' ? t('versionHistoryHint') : t('versionHistoryLocalHint')}</small>
+            </div>
+            <button onClick={() => setHistoryOpen(false)} aria-label={t('closeHistory')}>×</button>
+          </header>
+          <form
+            className={styles.checkpointForm}
+            onSubmit={(event) => { event.preventDefault(); createCheckpoint(); }}
+          >
+            {/* `aria-label` rather than a visually-hidden <label>: this stylesheet has no
+                sr-only utility, and inventing one for a single field is a second way to
+                hide text that the next person has to discover. The placeholder is a
+                HINT and is never the accessible name — a placeholder disappears the
+                moment somebody types, which is precisely when they might ask what the
+                field was for. */}
+            <input
+              aria-label={t('checkpointNameLabel')}
+              value={checkpointName}
+              onChange={(event) => setCheckpointName(event.target.value)}
+              placeholder={t('checkpointNamePlaceholder')}
+              maxLength={120}
+              disabled={!canEdit}
+            />
+            <button type="submit" className={styles.primaryButton} disabled={!canEdit || !checkpointName.trim()}>{t('nameCheckpoint')}</button>
+          </form>
+          <div>
+            {persistence === 'server'
+              ? (history.length
+                ? history.map((snapshot) => <button key={snapshot.revision} onClick={() => restoreRevision(snapshot.revision)} disabled={!canEdit}>
+                  <b>{snapshot.label || t('revisionLabel', { revision: snapshot.revision })}</b>
+                  <span>{t('revisionMeta', { revision: snapshot.revision, at: fmt.dateTime(snapshot.createdAt) })}</span>
+                </button>)
+                : <p>{t('noRevisions')}</p>)
+              : (localCheckpoints.length
+                ? localCheckpoints.map((checkpoint) => <button key={checkpoint.id} onClick={() => restoreLocalCheckpoint(checkpoint.id)} disabled={!canEdit}>
+                  <b>{checkpoint.label}</b>
+                  <span>{t('checkpointMeta', { count: checkpoint.objectCount, at: fmt.dateTime(checkpoint.at) })}</span>
+                </button>)
+                : <p>{t('noCheckpoints')}</p>)}
+          </div>
+        </aside>}
         {outcomeMetricsOpen && <aside className={`${styles.historyPanel} ${styles.outcomeMetricsPanel}`} aria-label={t('sessionOutcomeMetrics')}>
           <header><div><strong>{t('ideaToDelivery')}</strong><small>{outcomeMetrics ? t('sessionVsTenant', { count: outcomeMetrics.sampleSize }) : t('valueGenerated')}</small></div><button onClick={() => setOutcomeMetricsOpen(false)} aria-label={t('closeOutcomeMetrics')}>×</button></header>
           {persistence === 'local' ? <div className={styles.outcomeEmpty}><span aria-hidden><Icon source="↗" size="1em" /></span><strong>{t('saveForBaseline')}</strong><p>{t('saveForBaselineHint')}</p><button className={styles.primaryButton} onClick={() => requireAccount('metrics', t('gateMetricsTitle'), t('gateMetricsBody'))}>{t('saveAndMeasure')}</button></div> : outcomeMetricsLoading ? <p role="status">{t('calculatingValue')}</p> : outcomeMetricsError ? <div className={styles.outcomeEmpty}><strong>{t('metricsUnavailable')}</strong><p>{outcomeMetricsError}</p><button className={styles.secondaryButton} onClick={openOutcomeMetrics}>{t('retry')}</button></div> : outcomeMetrics ? <div className={styles.outcomeMetricList}>
@@ -11825,7 +12236,7 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
   onResumeShare: (nodeId: string, kind: 'view' | 'embed') => Promise<void>;
   onResumeSharesList: (nodeId: string) => Promise<CanvasResumeShare[]>;
   onResumeShareRevoke: (nodeId: string, shareId: string) => Promise<void>; }) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('creationCanvas');
   const kind = node.data.kind;
   const onWebsiteChange = (patch: Partial<CreationNodeData>) => onChange(patchWebsiteHero(node.data, patch));
@@ -12311,7 +12722,7 @@ function TaskInspectorSection({
   data, onChange, taskId, taskAgents, taskAgentValue, taskAssignees, taskCost, statusGuidance, normalizedTaskStatus,
   prdStatus, prdTitle, prdSummary, actionStatus, setActionStatus, persistTaskPatch, persistence,
 }: KindSectionProps) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('creationCanvas');
   return <>
     <div className={styles.taskInspectorGrid}>
@@ -12506,7 +12917,7 @@ function DatasetPlotAction({ data, onPlot }: { data: CreationNodeData; onPlot: (
  * same profile Brain reads before it queries.
  */
 function DatasetProfileSummary({ data }: { data: CreationNodeData }) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('creationCanvas');
   const profile = Array.isArray(data.profile) ? data.profile as Array<Record<string, unknown>> : [];
   const rowCount = Number(data.rowCount) || (Array.isArray(data.rows) ? data.rows.length : 0);
@@ -12851,7 +13262,7 @@ function EvermindInspector({ node, persistence, onAttach, onExpand, onTrain }: {
 }
 
 function ActivityInspector({ sessionId, objectId, data, persistence, role, members }: { sessionId: string; objectId: string; data: CreationNodeData; persistence: 'local' | 'server'; role: CreationSessionSummary['role']; members: Array<{ userId: string; displayName: string | null; role: string }> }) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('creationCanvas');
   const [comments, setComments] = useState<CreationSessionComment[]>([]);
   const [activity, setActivity] = useState<CreationSessionActivity[]>([]);

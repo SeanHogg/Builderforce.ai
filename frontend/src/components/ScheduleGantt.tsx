@@ -1,14 +1,19 @@
 'use client';
 
 import { useMemo } from 'react';
+import { useTranslations } from 'next-intl';
 import {
   DEADLINE_COLORS,
+  daysBetween,
   formatShort,
   parseDate,
   scheduledItems,
+  shiftSchedule,
   startOfDay,
+  type ReschedulePatch,
   type Schedulable,
 } from '@/lib/schedule';
+import { useScheduleDrag } from '@/lib/useScheduleDrag';
 import { ScheduleLegend } from './ScheduleLegend';
 
 /**
@@ -16,24 +21,42 @@ import { ScheduleLegend } from './ScheduleLegend';
  * {@link Schedulable} item (a project, a task, …). Bars are colored by deadline
  * status; a "today" marker and month axis give context. Items with no dates are
  * listed below so they are not silently dropped. Reused by Projects and Tasks.
+ *
+ * When `onReschedule` is supplied the bars become DRAGGABLE: the body slides the
+ * whole window, and the two edge grips move one end each. Without it the view
+ * stays exactly as read-only as it was — a caller with no write path passes
+ * nothing and gets no grips, rather than grips that silently fail.
  */
 interface ScheduleGanttProps<T extends Schedulable & { id: string | number }> {
   items: T[];
   /** Human label for an item (e.g. project name, task title). */
   getLabel: (item: T) => string;
   onSelect: (item: T) => void;
-  /** Lowercase noun for the row-column header and empty state (e.g. "project", "task"). */
-  noun?: string;
+  /**
+   * Header for the name column and the full empty-state sentence, both already
+   * LOCALIZED by the caller.
+   *
+   * These used to be one English `noun` prop that this component capitalized and
+   * pluralized with `+ 's'`. That is only ever correct in English: "1 projet"
+   * pluralizes as "projets", "Aufgabe" as "Aufgaben", and Chinese does not
+   * pluralize at all — so the empty state read "No scheduled tâches yet" the
+   * moment the surrounding page was translated. Grammar belongs in the catalog,
+   * next to the sentence it inflects, not in a shared component's string maths.
+   */
+  columnLabel: string;
+  emptyMessage: string;
+  /** Persist a dragged bar's new dates. Omit for a read-only timeline. */
+  onReschedule?: (item: T, patch: ReschedulePatch) => void;
 }
 
 const PX_PER_DAY = 26;
 const NAME_COL = 200;
 const ROW_H = 38;
+const BAR_H = 20;
+/** Width of each resize grip. Wide enough to hit with a finger, narrow enough
+ *  that a short bar still has a draggable middle. */
+const GRIP_W = 8;
 const DAY_MS = 86_400_000;
-
-function daysBetween(a: Date, b: Date): number {
-  return Math.round((startOfDay(b).getTime() - startOfDay(a).getTime()) / DAY_MS);
-}
 
 /** Month segments [{ label, days }] covering [start, end] inclusive, for the axis. */
 function monthSegments(start: Date, end: Date): Array<{ label: string; days: number }> {
@@ -55,10 +78,24 @@ export function ScheduleGantt<T extends Schedulable & { id: string | number }>({
   items,
   getLabel,
   onSelect,
-  noun = 'item',
+  columnLabel,
+  emptyMessage,
+  onReschedule,
 }: ScheduleGanttProps<T>) {
+  const t = useTranslations('schedule');
   const scheduled = useMemo(() => scheduledItems(items), [items]);
   const undated = items.filter((p) => !parseDate(p.dueDate) && !parseDate(p.startDate));
+
+  const editable = Boolean(onReschedule);
+  const { drag, begin, consumedClick } = useScheduleDrag<T>({
+    enabled: editable,
+    // One Gantt column IS one day, so horizontal travel converts directly.
+    deltaFor: (origin, current) => Math.round((current.x - origin.x) / PX_PER_DAY),
+    commit: (item, mode, deltaDays) => {
+      const patch = shiftSchedule(item, mode, deltaDays);
+      if (patch) onReschedule?.(item, patch);
+    },
+  });
 
   const range = useMemo(() => {
     if (scheduled.length === 0) return null;
@@ -74,12 +111,10 @@ export function ScheduleGantt<T extends Schedulable & { id: string | number }>({
     return { start, end };
   }, [scheduled]);
 
-  const colHeader = noun.charAt(0).toUpperCase() + noun.slice(1);
-
   if (!range) {
     return (
       <div style={{ padding: 32, textAlign: 'center', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', color: 'var(--text-secondary)' }}>
-        No scheduled {noun}s yet. Add start or due dates to see them on the timeline.
+        {emptyMessage}
       </div>
     );
   }
@@ -91,9 +126,34 @@ export function ScheduleGantt<T extends Schedulable & { id: string | number }>({
   const todayOffset = daysBetween(range.start, today);
   const todayInRange = todayOffset >= 0 && todayOffset < totalDays;
 
+  /** The in-flight day shift for this item's left edge / width, mid-drag. */
+  const previewFor = (id: string | number): { offset: number; width: number } => {
+    if (!drag || drag.item.id !== id) return { offset: 0, width: 0 };
+    if (drag.mode === 'move') return { offset: drag.deltaDays, width: 0 };
+    if (drag.mode === 'start') return { offset: drag.deltaDays, width: -drag.deltaDays };
+    return { offset: 0, width: drag.deltaDays };
+  };
+
+  const gripStyle = (side: 'left' | 'right'): React.CSSProperties => ({
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    [side]: 0,
+    width: GRIP_W,
+    cursor: 'ew-resize',
+    // A faint inset rule so the grips read as handles in both themes without a
+    // hardcoded colour — the bar underneath is already status-coloured, and
+    // --text-on-accent is the token guaranteed to contrast against it.
+    borderLeft: side === 'right' ? '1px solid var(--text-on-accent)' : undefined,
+    borderRight: side === 'left' ? '1px solid var(--text-on-accent)' : undefined,
+    opacity: 0.55,
+    touchAction: 'none',
+  });
+
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
+        {editable && <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{t('dragHintGantt')}</span>}
         <ScheduleLegend />
       </div>
 
@@ -103,7 +163,7 @@ export function ScheduleGantt<T extends Schedulable & { id: string | number }>({
             {/* Axis header */}
             <div style={{ display: 'flex', borderBottom: '1px solid var(--border-subtle)' }}>
               <div style={{ width: NAME_COL, flexShrink: 0, padding: '8px 12px', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4, color: 'var(--text-muted)' }}>
-                {colHeader}
+                {columnLabel}
               </div>
               <div style={{ position: 'relative', width: timelineWidth, display: 'flex' }}>
                 {segments.map((seg, i) => (
@@ -145,10 +205,15 @@ export function ScheduleGantt<T extends Schedulable & { id: string | number }>({
                 />
               )}
               {scheduled.map(({ item, schedule }) => {
-                const offset = daysBetween(range.start, schedule.start!);
-                const duration = Math.max(1, daysBetween(schedule.start!, schedule.end!) + 1);
+                const preview = previewFor(item.id);
+                const offset = daysBetween(range.start, schedule.start!) + preview.offset;
+                const duration = Math.max(
+                  1,
+                  daysBetween(schedule.start!, schedule.end!) + 1 + preview.width,
+                );
                 const color = DEADLINE_COLORS[schedule.status];
                 const label = getLabel(item);
+                const dragging = drag?.item.id === item.id;
                 return (
                   <div key={item.id} style={{ display: 'flex', height: ROW_H, borderBottom: '1px solid var(--border-subtle)' }}>
                     <button
@@ -174,34 +239,56 @@ export function ScheduleGantt<T extends Schedulable & { id: string | number }>({
                       {label}
                     </button>
                     <div style={{ position: 'relative', width: timelineWidth }}>
-                      <button
-                        type="button"
-                        onClick={() => onSelect(item)}
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        aria-label={editable ? t('barAriaEditable', { label }) : label}
+                        onPointerDown={(e) => begin(e, item, 'move')}
+                        onClick={() => { if (!consumedClick()) onSelect(item); }}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(item); } }}
                         title={`${formatShort(schedule.start!)} → ${formatShort(schedule.end!)}`}
                         style={{
                           position: 'absolute',
-                          top: (ROW_H - 20) / 2,
+                          top: (ROW_H - BAR_H) / 2,
                           left: offset * PX_PER_DAY,
                           width: duration * PX_PER_DAY,
-                          height: 20,
+                          height: BAR_H,
                           background: color,
-                          opacity: 0.9,
+                          opacity: dragging ? 0.65 : 0.9,
                           border: 'none',
                           borderRadius: 'var(--radius-sm)',
-                          cursor: 'pointer',
+                          cursor: editable ? (dragging ? 'grabbing' : 'grab') : 'pointer',
                           display: 'flex',
                           alignItems: 'center',
-                          padding: '0 8px',
+                          padding: editable ? `0 ${GRIP_W + 2}px` : '0 8px',
                           fontSize: '0.7rem',
                           fontWeight: 600,
                           color: 'var(--text-on-accent)',
                           overflow: 'hidden',
                           whiteSpace: 'nowrap',
                           zIndex: 2,
+                          // Without this a touch drag scrolls the timeline instead
+                          // of moving the bar.
+                          touchAction: editable ? 'none' : undefined,
+                          userSelect: 'none',
                         }}
                       >
+                        {editable && schedule.start && (
+                          <span
+                            aria-hidden
+                            onPointerDown={(e) => begin(e, item, 'start')}
+                            style={gripStyle('left')}
+                          />
+                        )}
                         {formatShort(schedule.end!)}
-                      </button>
+                        {editable && schedule.end && (
+                          <span
+                            aria-hidden
+                            onPointerDown={(e) => begin(e, item, 'end')}
+                            style={gripStyle('right')}
+                          />
+                        )}
+                      </div>
                     </div>
                   </div>
                 );
@@ -213,7 +300,7 @@ export function ScheduleGantt<T extends Schedulable & { id: string | number }>({
 
       {undated.length > 0 && (
         <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Unscheduled:</span>
+          <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>{t('unscheduled')}</span>
           {undated.map((item) => (
             <button
               key={item.id}

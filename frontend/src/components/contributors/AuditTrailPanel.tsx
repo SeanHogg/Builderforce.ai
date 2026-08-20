@@ -107,7 +107,7 @@ function useRelativeTime() {
 }
 
 export function AuditTrailPanel() {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('audit');
   const rel = useRelativeTime();
   const [events, setEvents] = useState<ActivityLogEvent[]>([]);

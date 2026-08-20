@@ -584,7 +584,7 @@ export default function BulkImport({ initialMappedValues, fieldMap, onCancel }: 
 // ── Sub-components ─────────────────────────────────────────────
 
 function StatCard({ label, value, tone }: { label: string; value: number; tone: 'success' | 'error' | 'neutral' }) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const color = tone === 'success' ? 'var(--accent)' : tone === 'error' ? 'var(--coral-bright)' : 'var(--text-primary)';
   return (
     <div style={{

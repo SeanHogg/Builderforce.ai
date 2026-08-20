@@ -52,7 +52,7 @@ export function ChangeRow({
   onOpen: () => void;
   openLabel: string;
 }) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   return (
     <button
       type="button"

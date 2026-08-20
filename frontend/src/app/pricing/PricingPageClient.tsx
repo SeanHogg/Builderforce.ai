@@ -81,7 +81,7 @@ function PlanCta({ plan, effectivePlan, onUpgrade, isAnon, label, href, compact 
 }
 
 export default function PricingPageClient() {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('pricing');
   const locale = useLocale();
   const tierT = useTranslations('planBadge.tier');

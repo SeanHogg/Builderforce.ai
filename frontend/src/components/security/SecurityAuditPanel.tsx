@@ -40,7 +40,7 @@ function SeverityChip({ severity, count }: { severity: string; count: number }) 
 }
 
 export function SecurityAuditPanel() {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('security');
   const [audits, setAudits] = useState<SecurityAudit[]>([]);
   const [loading, setLoading] = useState(true);

@@ -22,6 +22,7 @@ import { describe, expect, it } from 'vitest';
 import { COLLECTION_LADDER, nextRung } from './collectionsLadder';
 import { ageingDays, denominationFor } from './receivables';
 import { normalisePayRuns, payRunReference } from './payRuns';
+import { invoiceBlocks } from './invoicePdf';
 
 describe('the collections ladder', () => {
   it('is ordered and has no duplicate step, which is what the unique index keys on', () => {
@@ -139,5 +140,65 @@ describe('pay-run normalisation', () => {
 
   it('derives a stable reference, so re-reading the same run finds its own lines', () => {
     expect(payRunReference('gusto', 'p-1')).toBe('gusto:p-1');
+  });
+});
+
+describe('the invoice document', () => {
+  const issuer = { name: 'Northwind Ltd', accent: '#111111', secondary: '#222222' };
+  const base = {
+    reference: 'INV-1042',
+    customerName: 'Acme Holdings',
+    currency: 'USD',
+    status: 'issued',
+    amount: 1200,
+    paidAmount: 0,
+    outstanding: 1200,
+    issuedAtISO: '2026-08-01T00:00:00.000Z',
+    dueAtISO: '2026-08-31T00:00:00.000Z',
+    ageingDays: 0,
+    notes: null,
+    paymentLinkUrl: null,
+    lines: [] as Array<{ description: string; quantity: number; unitAmount: number; amount: number }>,
+  };
+  const cells = (blocks: ReturnType<typeof invoiceBlocks>): string[] =>
+    blocks.flatMap((block) => (block.kind === 'table' ? block.rows.flat() : block.kind === 'paragraph' ? [block.text] : []));
+
+  it('names both parties, because a document that says who owes without saying who to is not one', () => {
+    const text = cells(invoiceBlocks(base, issuer));
+    expect(text).toContain('Northwind Ltd');
+    expect(text).toContain('Acme Holdings');
+  });
+
+  it('prints the AGREED total even with no lines — the schema says `amount` is what was asserted', () => {
+    expect(cells(invoiceBlocks(base, issuer))).toContain('$1,200.00');
+  });
+
+  it('omits a "Paid" line while nothing has landed', () => {
+    // "Paid $0.00" on a fresh invoice invites the reader to wonder what went wrong.
+    expect(cells(invoiceBlocks(base, issuer))).not.toContain('Paid');
+  });
+
+  it('shows what is still owed on a part-paid invoice, not just the gross', () => {
+    const text = cells(invoiceBlocks({ ...base, paidAmount: 500, outstanding: 700 }, issuer));
+    expect(text).toContain('$500.00');
+    expect(text).toContain('$700.00');
+  });
+
+  it('offers the payment link only while there is something to pay', () => {
+    const open = cells(invoiceBlocks({ ...base, paymentLinkUrl: 'https://pay.example/x' }, issuer));
+    expect(open.some((line) => line.includes('https://pay.example/x'))).toBe(true);
+
+    // A settled invoice rendering a live checkout link is how a customer pays twice.
+    const settled = cells(invoiceBlocks({ ...base, paidAmount: 1200, outstanding: 0, paymentLinkUrl: 'https://pay.example/x' }, issuer));
+    expect(settled.some((line) => line.includes('https://pay.example/x'))).toBe(false);
+    expect(settled.some((line) => line.includes('settled'))).toBe(true);
+  });
+
+  it('formats money the same way for every reader — the FILE is not localised', () => {
+    // Two people opening one invoice in two countries quote the figures to each
+    // other; a copy reading "1.234,56" beside one reading "1,234.56" is, to them,
+    // a different invoice.
+    const text = cells(invoiceBlocks({ ...base, amount: 1234.56, outstanding: 1234.56 }, issuer));
+    expect(text).toContain('$1,234.56');
   });
 });

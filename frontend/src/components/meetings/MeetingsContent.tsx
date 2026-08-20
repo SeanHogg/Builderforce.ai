@@ -38,7 +38,7 @@ export default function MeetingsContent({
   embedded?: boolean;
   basePath?: string;
 } = {}) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('meetings');
   const router = useRouter();
   const params = useSearchParams();

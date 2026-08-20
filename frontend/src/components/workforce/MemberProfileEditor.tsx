@@ -50,7 +50,7 @@ function textToStrings(s: string): string[] {
 export function MemberProfileEditor({ kind, refId, name, tasks, onClose, onSaved }: {
   kind: MemberKind; refId: string; name: string; tasks?: MemberProfileTask[]; onClose: () => void; onSaved?: () => void;
 }) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('memberProfile');
   const statusLabel = useTaskStatusLabel();
   const tw = useTranslations('workforce');

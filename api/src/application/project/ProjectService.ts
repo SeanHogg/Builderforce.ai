@@ -42,6 +42,8 @@ export interface UpdateProjectDto {
   modality?: string | null;
   /** Explicit project deadline (0255). null clears it (falls back to the derived task deadline). */
   dueDate?: Date | null;
+  /** Explicit project start (0942). null clears it (falls back to the derived task start). */
+  startDate?: Date | null;
 }
 
 /**
@@ -183,6 +185,7 @@ export class ProjectService {
       governance: dto.governance,
       modality: dto.modality,
       dueDate: dto.dueDate,
+      startDate: dto.startDate,
     });
 
     // Detect a Project Key change from the DTO: the domain `update` treats an

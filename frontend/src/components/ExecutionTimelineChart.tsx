@@ -95,7 +95,7 @@ function layout(tracks: ExecutionTrack[]): { laid: LaidOutTrack[]; bands: AgentB
 }
 
 export function ExecutionTimelineChart({ tracks, colorForKey }: ExecutionTimelineChartProps) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
   const axisRef = useRef<SVGGElement | null>(null);

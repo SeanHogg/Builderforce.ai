@@ -28,7 +28,7 @@ export function CanvasLegalDocumentUpload({ objectId, data, onEdit }: {
   data: CreationNodeData;
   onEdit?: (patch: Partial<CreationNodeData>) => void;
 }) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('creationCanvas.legalUpload');
   const input = useRef<HTMLInputElement>(null);
   const [category, setCategory] = useState<LegalDocumentCategory>(

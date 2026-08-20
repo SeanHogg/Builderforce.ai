@@ -31,13 +31,6 @@ export const DEADLINE_COLORS: Record<DeadlineStatus, string> = {
   none: 'var(--text-muted)',
 };
 
-export const DEADLINE_LABELS: Record<DeadlineStatus, string> = {
-  overdue: 'Overdue',
-  soon: 'Due soon',
-  upcoming: 'Upcoming',
-  none: 'No deadline',
-};
-
 /** "Due soon" window, in days, ahead of today. */
 const SOON_WINDOW_DAYS = 7;
 
@@ -87,6 +80,97 @@ export function scheduledItems<T extends Schedulable>(
     .map((item) => ({ item, schedule: getSchedule(item, now) }))
     .filter((s) => s.schedule.start && s.schedule.end)
     .sort((a, b) => a.schedule.end!.getTime() - b.schedule.end!.getTime());
+}
+
+const DAY_MS = 86_400_000;
+
+/** Whole calendar days from `a` to `b` (negative when `b` is earlier). Both ends
+ *  are normalised to local midnight first, so a DST transition inside the range
+ *  cannot turn a 3-day gap into 2.96 and round to 2. */
+export function daysBetween(a: Date, b: Date): number {
+  return Math.round((startOfDay(b).getTime() - startOfDay(a).getTime()) / DAY_MS);
+}
+
+/** `d` moved by `n` whole calendar days, preserving the clock time. Built from
+ *  the date parts rather than `+ n * DAY_MS` so a shift across a DST boundary
+ *  lands on the same wall-clock hour instead of drifting by one. */
+export function addDays(d: Date, n: number): Date {
+  const out = new Date(d);
+  out.setDate(out.getDate() + n);
+  return out;
+}
+
+// ── Rescheduling ─────────────────────────────────────────────────────────────
+
+/**
+ * Which end of the bar a drag is moving.
+ *
+ * `move` slides the whole window; `start` and `end` resize one edge. The three
+ * are one vocabulary shared by the Gantt (bar body vs. its two grips) and the
+ * Calendar (a span dropped on a new day is always a `move`), so a reschedule
+ * means the same thing whichever view produced it.
+ */
+export type RescheduleMode = 'move' | 'start' | 'end';
+
+/** The dates a reschedule wants written. Fields the item never had stay null. */
+export interface ReschedulePatch {
+  startDate: string | null;
+  dueDate: string | null;
+}
+
+/**
+ * The ONE rule for what dragging a scheduled item by `deltaDays` means.
+ *
+ * Pure, so both views compute the same patch and it is unit-testable without a
+ * DOM. It exists as a function rather than inline arithmetic in each component
+ * because the interesting cases are all edge cases and they must agree:
+ *
+ *   - An item with only a due date (a roadmap item, an undated-start task) keeps
+ *     its start null. Materialising a start out of a drag would silently invent a
+ *     schedule the user never entered.
+ *   - Resizing past the other edge COLLAPSES to a single day rather than
+ *     inverting the window — an end before its start is not a shorter task, it is
+ *     a corrupt row, and Gantt bars render it as a negative width.
+ *   - A no-op drag returns null so the caller issues no write at all. Round-trips
+ *     that change nothing still bust caches and re-render boards.
+ *
+ * ISO strings are returned (not Dates) because that is what every write path on
+ * the other side takes — the task PATCH, the project PATCH, the tracker PATCH.
+ */
+export function shiftSchedule(
+  item: Schedulable,
+  mode: RescheduleMode,
+  deltaDays: number,
+): ReschedulePatch | null {
+  if (!Number.isFinite(deltaDays) || deltaDays === 0) return null;
+
+  const start = parseDate(item.startDate);
+  const end = parseDate(item.dueDate);
+  if (!start && !end) return null;
+
+  let nextStart = start;
+  let nextEnd = end;
+
+  if (mode === 'move') {
+    if (start) nextStart = addDays(start, deltaDays);
+    if (end) nextEnd = addDays(end, deltaDays);
+  } else if (mode === 'start') {
+    if (!start) return null;
+    nextStart = addDays(start, deltaDays);
+    // Collapse rather than invert: a dragged start may meet the deadline, never pass it.
+    if (nextEnd && nextStart > nextEnd) nextStart = nextEnd;
+  } else {
+    if (!end) return null;
+    nextEnd = addDays(end, deltaDays);
+    if (nextStart && nextEnd < nextStart) nextEnd = nextStart;
+  }
+
+  const startIso = nextStart ? nextStart.toISOString() : null;
+  const dueIso = nextEnd ? nextEnd.toISOString() : null;
+  const unchanged =
+    startIso === (start ? start.toISOString() : null) &&
+    dueIso === (end ? end.toISOString() : null);
+  return unchanged ? null : { startDate: startIso, dueDate: dueIso };
 }
 
 const FMT_SHORT = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' });

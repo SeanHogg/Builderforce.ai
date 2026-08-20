@@ -20,7 +20,7 @@ import { useFormat } from "@/i18n/useFormat";
  * responsive (the label collapses under a narrow viewport, the dot always shows).
  */
 export function ManagerStatusIndicator() {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('managerStatus');
   const format = useFormatter();
   // Tenant-wide (no projectId) — the manager may be scoped to one project OR the

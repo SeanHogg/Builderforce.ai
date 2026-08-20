@@ -59,7 +59,7 @@ export function AppStatement({ title, statement, detail, badge, children }: AppS
  * at 360px without anybody writing a media query for it.
  */
 export function AppCounts({ items }: { items: Array<{ label: string; value: number }> }) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   return (
     <div className={styles.counts}>
       {items.map((item) => (

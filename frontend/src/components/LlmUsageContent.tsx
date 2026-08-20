@@ -31,7 +31,7 @@ const KIND_META: Record<UsageByKind['kind'], { label: string; color: string }> =
 };
 
 export function LlmUsageContent() {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('llmUsage');
   const [usage, setUsage] = useState<LlmUsageStats | null>(null);
   const [health, setHealth] = useState<LlmHealthResponse | null>(null);

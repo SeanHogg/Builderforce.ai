@@ -20,7 +20,7 @@ function stateColor(state: string): React.CSSProperties {
  * the unified Knowledge home (it used to be its own tab).
  */
 export function MyTrainingSection() {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('knowledge');
   const [mine, setMine] = useState<TrainingItem[]>([]);
   const [loadedMine, setLoadedMine] = useState(false);

@@ -160,7 +160,7 @@ export function ModelPoolBadges({
   keyPrefix: string;
   models: ReadonlyArray<LlmModelStatus>;
 }) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('admin');
   if (models.length === 0) return null;
   return (

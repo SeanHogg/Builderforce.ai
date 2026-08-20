@@ -24,7 +24,7 @@ type HandledFilter = 'all' | 'unhandled' | 'handled';
 
 /** Compact stat tile — the answer, above the evidence. */
 function Tile({ label, value, tone }: { label: string; value: number; tone?: 'danger' }) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   return (
     <div
       style={{
@@ -51,7 +51,7 @@ function Tile({ label, value, tone }: { label: string; value: number; tone?: 'da
 }
 
 export default function ErrorsPanel() {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('admin');
 
   const [page, setPage] = useState<AdminErrorPage | null>(null);

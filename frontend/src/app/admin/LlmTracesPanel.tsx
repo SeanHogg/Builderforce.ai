@@ -111,7 +111,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 export function LlmTracesPanel() {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('admin');
   const [query, setQuery] = useState('');
   const [traces, setTraces] = useState<TraceSummary[]>([]);

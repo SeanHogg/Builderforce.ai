@@ -29,6 +29,10 @@ import { PAYROLL_CONNECTORS } from './payroll';
 // The whiteboard a team is leaving. Read-shaped, because the point of connecting
 // one is to bring its boards across once — see the file's own note.
 import { WHITEBOARD_CONNECTORS } from './whiteboard';
+// The customer's OWN people. Read-only by decision, not omission — an HRMS is the
+// system of record for somebody's employment, and `hiring.ts` is the outbound
+// half. See the file's own header on why one vendor can appear in both.
+import { HRMS_CONNECTORS } from './hrms';
 
 const ALL: readonly ConnectorManifest[] = [
   ...COMMUNICATION_CONNECTORS,
@@ -44,6 +48,7 @@ const ALL: readonly ConnectorManifest[] = [
   ...HIRING_CONNECTORS,
   ...PAYROLL_CONNECTORS,
   ...WHITEBOARD_CONNECTORS,
+  ...HRMS_CONNECTORS,
 ];
 
 /** Built-in manifests, keyed for O(1) resolution. */

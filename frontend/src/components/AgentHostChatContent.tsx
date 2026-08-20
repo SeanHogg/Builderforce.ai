@@ -33,7 +33,7 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export function AgentHostChatContent({ agentHostId, agentHostName }: AgentHostChatContentProps) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const [messages, setMessages] = useState<ChatEntry[]>([]);
   const [input, setInput] = useState('');
   const [connStatus, setConnStatus] = useState<'connecting' | 'connected' | 'offline' | 'error'>('connecting');

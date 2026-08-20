@@ -207,6 +207,11 @@ export async function assessEvermindCoherence(
  *  chosen prompt, plus the same serve-time verdict the gateway applies to it. */
 export interface EvermindProbeResult extends EvermindCoherenceSample {
   usage: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
+  /** True when the wall-clock budget stopped generation early — an incoherent verdict
+   *  on a truncated sample is a statement about the clock, not about the model. */
+  truncated: boolean;
+  /** How long the generation took, so a slow head is visible before it times out. */
+  elapsedMs: number;
 }
 
 /**
@@ -238,6 +243,8 @@ export async function probeEvermindGeneration(
     failure: verdict.failure,
     detail: verdict.detail,
     usage: gen.usage,
+    truncated: gen.truncated,
+    elapsedMs: gen.elapsedMs,
   };
 }
 
@@ -538,7 +545,10 @@ export async function exportEvermindArtifact(
  * SDK deserializes against.
  */
 export function buildEvermindCompletion(
-  gen: EvermindGeneration,
+  // Only the text and the token counts shape a completion — deliberately NOT the
+  // whole EvermindGeneration, so a caller that has just those (the tool planner, the
+  // Studio bench) does not have to invent a `truncated`/`elapsedMs` it never measured.
+  gen: Pick<EvermindGeneration, 'content' | 'usage'>,
   model: string,
   now: number = Date.now(),
   call?: { name: string; arguments: Record<string, unknown> } | null,

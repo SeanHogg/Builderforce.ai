@@ -28,7 +28,7 @@ import { useCopyToClipboard } from '@/lib/useCopyToClipboard';
 import { useFormat } from "@/i18n/useFormat";
 
 export default function UsagePanel() {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('admin');
   const [usageDays, setUsageDays] = useState(30);
   const [llmUsage, setLlmUsage] = useState<LlmUsageStats | null>(null);

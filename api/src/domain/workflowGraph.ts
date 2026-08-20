@@ -124,6 +124,20 @@ export interface WorkflowDefEdge {
   id: string;
   source: string;   // source node id
   target: string;   // target node id
+  /**
+   * Which OUTLET of the source this edge leaves from.
+   *
+   * A `branch` node evaluates a condition and tags its payload `$branch: true|false`;
+   * a `router` tags `$route: <name>`. Until this existed, both sides of a branch ran
+   * and each downstream node had to self-gate on the tag — so a canvas that plainly
+   * read "if paid → charge, else → email" charged AND emailed, and the only way to
+   * stop it was to hand-author a `filter` on every arm.
+   *
+   * `'true'` / `'false'` for a branch, the route name for a router. Absent = an
+   * unconditional edge, which is every edge that exists today: an unlabeled edge is
+   * never pruned, so nothing that already runs changes behaviour.
+   */
+  label?: string;
 }
 
 export interface WorkflowDefinition {
@@ -140,6 +154,12 @@ export interface CompiledStep {
   description: string;          // task text
   config: Record<string, unknown>;
   dependsOnNodeIds: string[];   // upstream node ids (resolved from edges)
+  /**
+   * Upstream node id → the outlet label its edge carries, for the labeled edges
+   * only. Absent keys are unconditional dependencies. The executor prunes a task
+   * whose labeled dependency took a different outlet.
+   */
+  edgeLabels?: Record<string, string>;
 }
 
 export const EMPTY_DEFINITION: WorkflowDefinition = { nodes: [], edges: [] };
@@ -159,7 +179,7 @@ export function definitionToYaml(def: WorkflowDefinition): string {
       position: n.position,
       config: n.config ?? {},
     })),
-    edges: def.edges.map((e) => ({ id: e.id, source: e.source, target: e.target })),
+    edges: def.edges.map((e) => ({ id: e.id, source: e.source, target: e.target, ...(e.label ? { label: e.label } : {}) })),
   });
 }
 
@@ -191,6 +211,9 @@ export function yamlToDefinition(text: string): WorkflowDefinition {
       id: typeof o.id === 'string' && o.id ? o.id : `e${i + 1}`,
       source: String(o.source ?? ''),
       target: String(o.target ?? ''),
+      // `label` on a hand-authored YAML edge is what makes "if paid → charge,
+      // else → email" expressible without a filter node on every arm.
+      ...(typeof o.label === 'string' && o.label ? { label: o.label } : {}),
     };
   }).filter((e) => e.source && e.target);
 
@@ -373,7 +396,17 @@ export function compileDefinition(def: WorkflowDefinition): CompiledStep[] {
   // residual nodes (validateDefinition rejects true cycles upstream).
   const inDeg = new Map<string, number>(def.nodes.map((n) => [n.id, incoming.get(n.id)!.length]));
   const out = new Map<string, string[]>(def.nodes.map((n) => [n.id, []]));
-  for (const e of def.edges) out.get(e.source)?.push(e.target);
+  // target node id → (source node id → outlet label). Only labeled edges land
+  // here; an unlabeled edge is unconditional and must stay invisible to pruning.
+  const labels = new Map<string, Map<string, string>>();
+  for (const e of def.edges) {
+    out.get(e.source)?.push(e.target);
+    if (typeof e.label === 'string' && e.label) {
+      const forTarget = labels.get(e.target) ?? new Map<string, string>();
+      forTarget.set(e.source, e.label);
+      labels.set(e.target, forTarget);
+    }
+  }
   const queue = [...inDeg.entries()].filter(([, d]) => d === 0).map(([id]) => id);
   const ordered: string[] = [];
   while (queue.length) {
@@ -396,6 +429,7 @@ export function compileDefinition(def: WorkflowDefinition): CompiledStep[] {
       description: taskTextForNode(node),
       config: node.config ?? {},
       dependsOnNodeIds: incoming.get(node.id) ?? [],
+      ...(labels.get(node.id)?.size ? { edgeLabels: Object.fromEntries(labels.get(node.id)!) } : {}),
     } satisfies CompiledStep;
   });
 }

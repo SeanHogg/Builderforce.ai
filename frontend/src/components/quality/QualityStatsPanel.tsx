@@ -18,7 +18,7 @@ import { useFormat } from "@/i18n/useFormat";
  * separately by the reusable Errors allowance meter.
  */
 export function QualityStatsPanel({ projectId, days = 30 }: { projectId?: number | null; days?: number }) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('quality');
   const [stats, setStats] = useState<QualityStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -139,7 +139,7 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 }
 
 function Stat({ label, value, accent, suffix }: { label: string; value: number; accent?: string; suffix?: string }) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   return (
     <div style={card}>
       <div style={{ fontSize: 22, fontWeight: 700, color: accent ?? 'var(--text-primary)' }}>

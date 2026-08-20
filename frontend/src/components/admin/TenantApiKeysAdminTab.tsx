@@ -24,7 +24,7 @@ import { useFormat } from "@/i18n/useFormat";
  * so the parent doesn't pass a `canShow` prop, the component decides.
  */
 export function TenantApiKeysAdminTab({ active }: { active: boolean }) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('admin');
   const confirm = useConfirm();
   const [tenants, setTenants] = useState<AdminTenant[]>([]);

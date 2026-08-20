@@ -3112,7 +3112,10 @@
     "dueDateLabel": "Due date",
     "dueDateHint": "Set a project deadline. Leave empty to use the latest task due date.",
     "deadline": "Deadline",
-    "deadlineDerived": "(from tasks)"
+    "deadlineDerived": "(from tasks)",
+    "start": "Start",
+    "startDateLabel": "Start date",
+    "startDateHint": "Set a project start. Leave empty to use the earliest task start."
   },
   "spine": {
     "loading": "Loading the planning spine…",
@@ -17134,7 +17137,6 @@
     "versionHistory": "Version history",
     "versionHistoryHint": "Restore creates a new revision",
     "closeHistory": "Close history",
-    "historyLocalOnly": "This session is currently stored on this device. Server version history begins after you save it.",
     "nameCheckpoint": "+ Name current checkpoint",
     "revisionLabel": "Revision {revision}",
     "revisionMeta": "Revision {revision} · {at}",
@@ -20369,7 +20371,6 @@
     "noticeInvoiceChased": "{reference} chased — sent to {to}.",
     "noticeInvoiceChaseNoRecipient": "{reference} chase recorded, but there is no customer email on the card to send it to.",
     "noticeInvoiceActionFailed": "That could not be done. Nothing was sent.",
-    "noticePayRunSync": "Ask Brain to sync pay runs — it reads them back from your connected payroll provider.",
     "stickyShapeEllipse": "Ellipse",
     "stickyShapeRhombus": "Diamond",
     "stickyShapeTriangle": "Triangle",
@@ -20491,7 +20492,26 @@
         "note": "Note"
       }
     },
-    "agentModel": "Agent model"
+    "agentModel": "Agent model",
+    "presentSequence": "Presentation",
+    "presentPrevious": "Previous frame",
+    "presentNext": "Next frame",
+    "presentPosition": "{index} of {total}",
+    "presentationOrder": "Presentation order",
+    "presentationOrderHint": "Leave empty to walk this board top to bottom",
+    "noticePayRunNeedsAccount": "Reading a pay run back calls your connected payroll provider, so it needs a saved workspace.",
+    "noticePayRunNoReference": "This card has no provider reference, so there is nothing to re-read. Ask Brain to sync pay runs — that is what puts real runs on the board.",
+    "noticePayRunNoProvider": "No payroll provider is connected. Connect Gusto, Rippling, ADP or Deel, or record the run by hand from your bureau’s statement.",
+    "noticePayRunNotFound": "Your payroll provider no longer returns a run {reference}. Nothing on the card was changed.",
+    "noticePayRunSynced": "Pay run re-read from {source}.",
+    "noticePayRunFailed": "The pay run could not be re-read. Nothing on the card was changed.",
+    "versionHistoryLocalHint": "Kept in this browser until you save the board to an account",
+    "checkpointNameLabel": "Checkpoint name",
+    "checkpointNamePlaceholder": "Before the rewrite",
+    "checkpointMeta": "{count} objects · {at}",
+    "noCheckpoints": "No checkpoints yet. Name one before a big change and you can come back to it.",
+    "noticeCheckpointRestored": "Restored “{label}”",
+    "noticeCheckpointStorageFull": "This browser has no room left to store a checkpoint of this board. Save it to an account to keep its history."
   },
   "canvasCommands": {
     "cleanLayout": "Clean up canvas layout",
@@ -23375,7 +23395,8 @@
     "payNow": "Pay {amount}",
     "confirming": "Confirming your payment…",
     "payByTransfer": "This invoice is paid by bank transfer. Reply to the message that sent you this link if you need the account details.",
-    "settled": "This invoice is settled. Thank you."
+    "settled": "This invoice is settled. Thank you.",
+    "downloadPdf": "Download PDF"
   },
   "taskStatus": {
     "backlog": "Backlog",
@@ -23474,5 +23495,53 @@
       "yours": "Your proposed schedule",
       "explainer": "Disagree with the published deliverables? Propose your own. If your bid is accepted, this is the schedule that gets funded."
     }
+  },
+  "agentHostChannels": {
+    "loading": "Loading channels…",
+    "heading": "Channels ({count})",
+    "addChannel": "+ Add channel",
+    "addChannelConfirm": "Add channel",
+    "adding": "Adding…",
+    "cancel": "Cancel",
+    "newChannel": "New channel integration",
+    "platformLabel": "Platform",
+    "nameLabel": "Channel name",
+    "namePlaceholder": "Channel name (e.g. #general, my-webhook)",
+    "configLabel": "Credentials",
+    "configWebhook": "Webhook URL (https://…)",
+    "configSlack": "Slack bot token or webhook URL",
+    "configGeneric": "Token, webhook URL or JSON config",
+    "configSealedHint": "Stored encrypted and never shown again. Leave blank to keep the current credentials.",
+    "configured": "Credentials stored",
+    "notConfigured": "No credentials",
+    "hostStatus": "Host reports: {status}",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "working": "…",
+    "delete": "Delete",
+    "empty": "No channels configured. Add one to route this host’s messages to an external platform.",
+    "addFailed": "Could not add that channel.",
+    "updateFailed": "Could not update that channel.",
+    "deleteFailed": "Could not delete that channel."
+  },
+  "schedule": {
+    "status": {
+      "overdue": "Overdue",
+      "soon": "Due soon",
+      "upcoming": "Upcoming",
+      "none": "No deadline"
+    },
+    "today": "Today",
+    "prevMonth": "Previous month",
+    "nextMonth": "Next month",
+    "noDeadline": "No deadline set:",
+    "unscheduled": "Unscheduled:",
+    "moreItems": "+{n} more",
+    "ganttEmpty": "No scheduled {noun}s yet. Add start or due dates to see them on the timeline.",
+    "dragHintGantt": "Drag a bar to move it; drag its edges to change the start or the deadline.",
+    "dragHintCalendar": "Drag an item onto another day to reschedule it.",
+    "barAriaEditable": "{label} — drag to reschedule, or press Enter to open",
+    "spanAriaEditable": "{label} — drag to another day to reschedule, or press Enter to open",
+    "rescheduleFailed": "Could not save the new dates."
   }
 }

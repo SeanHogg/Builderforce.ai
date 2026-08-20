@@ -267,7 +267,7 @@ const mRec = (v: unknown): Record<string, unknown> =>
   v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
 
 function BuildMetrics({ metrics }: { metrics: Record<string, unknown> }) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('evermindBuild');
   const loss = mNumArray(metrics.trainingHistory);
   const videoLoss = mNumArray(metrics.videoTrainingHistory);

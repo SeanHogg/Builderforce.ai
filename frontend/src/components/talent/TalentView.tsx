@@ -56,7 +56,7 @@ function ScoreChip({ score }: { score: number }) {
 type Tab = 'team' | 'jobs' | 'timecards' | 'invoices';
 
 export function TalentView() {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('hires');
   const confirm = useConfirm();
   const td = useTranslations('freelancer');

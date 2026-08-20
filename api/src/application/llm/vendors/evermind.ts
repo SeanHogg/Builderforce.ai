@@ -36,6 +36,7 @@ import {
   type AiModelTier,
   type VendorCallParams,
   type VendorCallResult,
+  type VendorStreamResult,
   type VendorModule,
 } from './types';
 import { evermindGenerate, evermindGenerateWithTools, buildEvermindCompletion } from '../evermindRuntime';
@@ -43,8 +44,10 @@ import { isServableText } from '../textCoherence';
 import {
   normalizeEvermindTools,
   resolveEvermindToolChoice,
-  TOOL_CHOICE_MIN_MARGIN,
+  evermindToolChoiceMinMargin,
+  logToolChoiceMargin,
 } from '../evermindToolCall';
+import { pseudoStreamFromCall } from './pseudoStream';
 
 /**
  * Coherence gate on the RAW PIN. This vendor used to return whatever the head
@@ -123,12 +126,18 @@ export const evermindModule: VendorModule = {
         // runner-up across the whole plan (tool vote AND every scored argument); at
         // ~0 the head has no preference and is guessing. 400 so a soft pin cascades
         // and a hard pin surfaces the reason, matching the coherence gate below.
-        if (planned.margin < TOOL_CHOICE_MIN_MARGIN) {
+        const bar = params.toolChoiceMinMargin ?? evermindToolChoiceMinMargin();
+        const refused = planned.margin < bar;
+        // Log EVERY decision, not just the refusals — the bar can only be calibrated
+        // against the separation between the margins that were right and the ones
+        // that were wrong, and refusals alone are half that picture.
+        logToolChoiceMargin({ margin: planned.margin, bar, tool: planned.call.name, candidates: tools.length, refused });
+        if (refused) {
           throw new VendorFatalError(
             'evermind',
             400,
             `Evermind refused a guessed tool call: it ranked "${planned.call.name}" no higher than the alternatives `
-            + `(margin ${planned.margin.toFixed(4)} < ${TOOL_CHOICE_MIN_MARGIN}). This head is not trained enough to choose `
+            + `(margin ${planned.margin.toFixed(4)} < ${bar}). This head is not trained enough to choose `
             + 'tools reliably — run tool-driven work on a tool-capable model (the project Evermind still learns from the run).',
           );
         }
@@ -161,5 +170,20 @@ export const evermindModule: VendorModule = {
       content: gen.content,
       usage: gen.usage,
     };
+  },
+
+  /**
+   * Streaming turns reach Evermind too.
+   *
+   * Streaming dispatch SKIPS any vendor without `callStream`, so before this a
+   * streaming surface silently served a different model than the one pinned to the
+   * project — and the pin behaved differently depending on whether the caller asked
+   * for a stream. The generation is synchronous CPU with no token-by-token channel to
+   * expose, so the honest shape is the completed call replayed through the SAME
+   * `pseudoStream` adapter the Responses vendors use, rather than a hand-rolled
+   * replay that would drop `usage` and `model` the way those did.
+   */
+  async callStream(params: VendorCallParams): Promise<VendorStreamResult> {
+    return pseudoStreamFromCall(await evermindModule.call(params), params);
   },
 };

@@ -42,6 +42,17 @@ const SECRET_KEYS = [
   'OLLAMA_API_KEY',
   'GOOGLE_API_KEY',
   'CLAUDE_API_KEY',
+  // The Cloudflare account trio. Absent from this list until 2026-08-19, which made the
+  // documented `.env` + `npm run secrets:from-env` path silently skip them — an operator
+  // who added a Browser Rendering token the same way as every other key got no error and
+  // no secret, and the capability then reported itself unconfigured with nothing to
+  // explain why. `CLOUDFLARE_ACCOUNT_ID` is a secret rather than a wrangler.toml var so
+  // the account id is not committed; the two tokens are Workers AI and Browser Rendering,
+  // which are separate scopes a deployment may hold independently.
+  'CLOUDFLARE_ACCOUNT_ID',
+  'CLOUDFLARE_AI_API_TOKEN',
+  'CLOUDFLARE_ACCOUNT_API_TOKEN',
+  'CLOUDFLARE_BROWSER_API_TOKEN',
   'TOGETHER_API_KEY',
   'UNSPLASH_ACCESS_KEY',
   'PEXELS_API_KEY',

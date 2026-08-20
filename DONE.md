@@ -1,3 +1,44 @@
+## ✅ RESOLVED 2026-08-19 — Roadmap hygiene: the delivered founder-ops tracks and the shipped waves are out of ROADMAP.md
+
+ROADMAP.md had accumulated a large body of finished work presented as if it were still a plan. Every
+block below was fully delivered, its record already in this file, and it has been deleted from the
+roadmap rather than left sitting there as a completion notice.
+
+**Deleted outright** (nothing outstanding beneath any of them):
+- **`#### FO-A · The counterparty`** — FO-A1, FO-A2 and FO-A3 all landed (0469, then Track 1 on
+  2026-08-16).
+- **`#### FO-C · Money`** — the heading's own blockquote already read "Nothing outstanding under this
+  heading" after 0926 closed FO-C2/FO-C4/FO-C5 and the pay-run residual.
+- **`#### FO-D · Ownership`** — FO-D1..FO-D4 landed with 0927 and FO-D5's paperwork half with 0925. Its
+  blockquote ended "What is left below is the paperwork half" and **nothing was below it**; that
+  dangling claim is corrected by the deletion.
+- **`#### FO-F · One pipeline`** — the projection (0469), the prompt deletion and the pointer drag
+  (0925).
+- **The whole "Build order, and why" argument** — FO-A and FO-B were the two foundations everything was
+  sequenced behind, and both have shipped, so the dependency diagram and the four track assignments
+  (Tracks 1, 3 and 4 were all marked CLOSED in place) described a sequence that no longer exists.
+- **Wave 1 and Wave 2** of the delivery plan, collapsed into one "shipped" pointer at DONE.md, keeping
+  the one genuinely parked item — the Stage sandbox, blocked on an infrastructure decision.
+
+**Rewritten to lead with what is still OPEN** (their headlines read as completion notices, which is how
+a closed item hides inside an open one):
+- **FO-B3** was titled "Four of the five waiting consumers now route through FO-B1/FO-B2" — a
+  completion notice with one blocked residual buried in it. Now titled for the `jobPosting` half and
+  its blocker.
+- The **Upwork-parity P0 item** now leads with the env-gated payout stub, the only part of it still
+  open, and names the hired.video payout stack as the intended fix.
+- The **FO-B / FO-E / FO-G blockquotes** were trimmed to the context their remaining items actually
+  need; **`#### FO-E · Raising — four cards and an unenforced data room`** was renamed, because the
+  data room has been enforced since 0925.
+
+**Also repaired:** Wave 3 still described the founder-ops build order as current and cited four
+headings that no longer exist. The "what is left" section is now a nine-row table naming every open
+item, its heading and whether it is blocked — replacing four paragraphs that were mostly a list of
+what had already closed.
+
+Net: ROADMAP.md −179 / +69 lines. No outstanding item was removed; every deletion is recorded above
+or in the dated sections below.
+
 ## ✅ RESOLVED 2026-08-19 — The publish blocker was stale: every package the residual named is already on the registry
 
 The "Deferred residuals" bullet claimed two studio packages needed (re)publishing and that

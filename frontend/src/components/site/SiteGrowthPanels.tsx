@@ -246,7 +246,7 @@ export function SiteDomainPanel({ projectId }: { projectId: number }) {
 // ---------------------------------------------------------------------------
 
 export function SiteFormsPanel({ projectId }: { projectId: number }) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('site.forms');
   const [collections, setCollections] = useState<SiteCollection[] | null>(null);
   const [openId, setOpenId] = useState<number | null>(null);
@@ -484,7 +484,7 @@ export function SiteTrafficPanel({ projectId }: { projectId: number }) {
 }
 
 function Stat({ label: name, value }: { label: string; value: number }) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   return (
     <div style={{
       border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: 10,

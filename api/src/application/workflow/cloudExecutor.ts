@@ -118,6 +118,15 @@ export interface NodeInput {
    *  (NOT the newline-joined `inputText` every other kind reads). Populated by
    *  `advanceCloudWorkflow`, never persisted on the task's own stored input. */
   depOutputs?: string[];
+  /**
+   * Dependency task id → the outlet label its edge carries (0 or more entries).
+   *
+   * Written by `instantiateRun` from the definition's labeled edges. A dependency
+   * listed here is CONDITIONAL: this task runs only if that upstream node took
+   * this outlet. Absent = unconditional, which is every edge authored before
+   * labels existed, so nothing that already runs changes behaviour.
+   */
+  depLabels?: Record<string, string>;
 }
 
 /** Tenant + run context a node needs to touch state beyond its own payload —
@@ -188,7 +197,13 @@ function parseInput(raw: string | null): NodeInput {
   if (!raw) return { kind: 'unknown', config: {} };
   try {
     const v = JSON.parse(raw) as Partial<NodeInput>;
-    return { kind: String(v.kind ?? 'unknown'), config: (v.config as Record<string, unknown>) ?? {}, payload: v.payload, triggerSource: v.triggerSource };
+    return {
+      kind: String(v.kind ?? 'unknown'),
+      config: (v.config as Record<string, unknown>) ?? {},
+      payload: v.payload,
+      triggerSource: v.triggerSource,
+      ...(v.depLabels && typeof v.depLabels === 'object' ? { depLabels: v.depLabels as Record<string, string> } : {}),
+    };
   } catch {
     return { kind: 'unknown', config: {} };
   }
@@ -807,6 +822,53 @@ export async function executeCloudNode(
  * A task with no dependencies → `run` (roots start immediately).
  */
 export type DepDisposition = 'run' | 'wait' | 'fail' | 'cancel';
+/**
+ * Which OUTLET a completed node took, read back out of its own output.
+ *
+ * `branch` tags its payload `$branch: true|false` and `router` tags
+ * `$route: <name>`; both already did so, and both were readable only by a
+ * downstream `filter` the author had to remember to add. This is the same tag,
+ * read by the ENGINE, which is what turns a labeled edge into a real fork.
+ *
+ * Returns null for a node that tagged nothing — a plain step whose edge somebody
+ * labelled anyway. Null never prunes: inventing an outlet for a node that has
+ * none would silently delete half a workflow that used to run.
+ */
+export function outletTaken(output: string): string | null {
+  if (!output) return null;
+  try {
+    const parsed = JSON.parse(output) as Record<string, unknown> | null;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+    if (typeof parsed.$route === 'string') return parsed.$route;
+    if (typeof parsed.$branch === 'boolean') return parsed.$branch ? 'true' : 'false';
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Should this task be pruned because a LABELED dependency took a different outlet?
+ *
+ * Only labeled dependencies are consulted, and only completed ones: an unlabeled
+ * edge is unconditional and a dependency that has not finished is handled by
+ * `dispositionFromDeps` first. A labeled dep whose node emitted no outlet tag is
+ * treated as a match — the alternative is deleting a path because somebody
+ * labelled an edge leaving a node that does not branch.
+ */
+export function prunedByEdgeLabel(
+  depLabels: Record<string, string> | undefined,
+  deps: Array<{ id: string; status: string; output: string }>,
+): boolean {
+  if (!depLabels) return false;
+  return deps.some((dep) => {
+    const expected = depLabels[dep.id];
+    if (!expected || dep.status !== 'completed') return false;
+    const taken = outletTaken(dep.output);
+    return taken != null && taken !== expected;
+  });
+}
+
 export function dispositionFromDeps(depStatuses: string[]): DepDisposition {
   if (depStatuses.some((s) => s === 'failed')) return 'fail';
   if (depStatuses.some((s) => s === 'cancelled')) return 'cancel';

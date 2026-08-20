@@ -3112,7 +3112,10 @@
     "dueDateLabel": "Fälligkeitsdatum",
     "dueDateHint": "Lege eine Projektfrist fest. Leer lassen, um das späteste Aufgaben-Fälligkeitsdatum zu verwenden.",
     "deadline": "Frist",
-    "deadlineDerived": "(aus Aufgaben)"
+    "deadlineDerived": "(aus Aufgaben)",
+    "start": "Start",
+    "startDateLabel": "Startdatum",
+    "startDateHint": "Lege einen Projektstart fest. Leer lassen, um das früheste Aufgaben-Startdatum zu verwenden."
   },
   "spine": {
     "loading": "Planungsachse wird geladen…",
@@ -17134,7 +17137,6 @@
     "versionHistory": "Versionsverlauf",
     "versionHistoryHint": "Wiederherstellen erzeugt eine neue Revision",
     "closeHistory": "Verlauf schließen",
-    "historyLocalOnly": "Diese Sitzung liegt auf diesem Gerät. Der Server-Versionsverlauf beginnt nach dem Speichern.",
     "nameCheckpoint": "+ Aktuellen Prüfpunkt benennen",
     "revisionLabel": "Revision {revision}",
     "revisionMeta": "Revision {revision} · {at}",
@@ -20369,7 +20371,6 @@
     "noticeInvoiceChased": "{reference} gemahnt – an {to} gesendet.",
     "noticeInvoiceChaseNoRecipient": "Mahnung zu {reference} erfasst, aber auf der Karte steht keine Kunden-E-Mail, an die sie gehen könnte.",
     "noticeInvoiceActionFailed": "Das war nicht möglich. Es wurde nichts gesendet.",
-    "noticePayRunSync": "Bitten Sie Brain, die Lohnläufe zu synchronisieren – sie werden vom verbundenen Lohnanbieter zurückgelesen.",
     "stickyShapeEllipse": "Ellipse",
     "stickyShapeRhombus": "Raute",
     "stickyShapeTriangle": "Dreieck",
@@ -20491,7 +20492,26 @@
         "note": "Hinweis"
       }
     },
-    "agentModel": "Agentenmodell"
+    "agentModel": "Agentenmodell",
+    "presentSequence": "Präsentation",
+    "presentPrevious": "Vorheriger Rahmen",
+    "presentNext": "Nächster Rahmen",
+    "presentPosition": "{index} von {total}",
+    "presentationOrder": "Präsentationsreihenfolge",
+    "presentationOrderHint": "Leer lassen, um das Board von oben nach unten zu durchlaufen",
+    "noticePayRunNeedsAccount": "Einen Lohnlauf zurückzulesen ruft Ihren verbundenen Lohnanbieter auf und braucht daher einen gespeicherten Arbeitsbereich.",
+    "noticePayRunNoReference": "Diese Karte trägt keine Anbieterreferenz, es gibt also nichts zurückzulesen. Bitten Sie Brain, die Lohnläufe zu synchronisieren – so kommen die echten aufs Board.",
+    "noticePayRunNoProvider": "Es ist kein Lohnanbieter verbunden. Verbinden Sie Gusto, Rippling, ADP oder Deel, oder erfassen Sie den Lauf von Hand aus der Abrechnung Ihres Lohnbüros.",
+    "noticePayRunNotFound": "Ihr Lohnanbieter liefert keinen Lauf {reference} mehr. An der Karte wurde nichts geändert.",
+    "noticePayRunSynced": "Lohnlauf von {source} zurückgelesen.",
+    "noticePayRunFailed": "Der Lohnlauf konnte nicht zurückgelesen werden. An der Karte wurde nichts geändert.",
+    "versionHistoryLocalHint": "Bleibt in diesem Browser, bis Sie das Board in einem Konto speichern",
+    "checkpointNameLabel": "Name des Prüfpunkts",
+    "checkpointNamePlaceholder": "Vor der Überarbeitung",
+    "checkpointMeta": "{count} Objekte · {at}",
+    "noCheckpoints": "Noch keine Prüfpunkte. Legen Sie vor einer großen Änderung einen an, dann können Sie dorthin zurück.",
+    "noticeCheckpointRestored": "„{label}“ wiederhergestellt",
+    "noticeCheckpointStorageFull": "In diesem Browser ist kein Platz mehr für einen Prüfpunkt dieses Boards. Speichern Sie es in einem Konto, um den Verlauf zu behalten."
   },
   "canvasCommands": {
     "cleanLayout": "Leinwand-Layout aufräumen",
@@ -23375,7 +23395,8 @@
     "payNow": "{amount} bezahlen",
     "confirming": "Ihre Zahlung wird bestätigt …",
     "payByTransfer": "Diese Rechnung wird per Banküberweisung bezahlt. Antworten Sie auf die Nachricht mit diesem Link, wenn Sie die Kontodaten benötigen.",
-    "settled": "Diese Rechnung ist beglichen. Vielen Dank."
+    "settled": "Diese Rechnung ist beglichen. Vielen Dank.",
+    "downloadPdf": "PDF herunterladen"
   },
   "taskStatus": {
     "backlog": "Backlog",
@@ -23474,5 +23495,53 @@
       "yours": "Dein vorgeschlagener Zahlungsplan",
       "explainer": "Du bist mit den veröffentlichten Liefergegenständen nicht einverstanden? Schlage eigene vor. Wird dein Angebot angenommen, wird dieser Plan finanziert."
     }
+  },
+  "agentHostChannels": {
+    "loading": "Kanäle werden geladen…",
+    "heading": "Kanäle ({count})",
+    "addChannel": "+ Kanal hinzufügen",
+    "addChannelConfirm": "Kanal hinzufügen",
+    "adding": "Wird hinzugefügt…",
+    "cancel": "Abbrechen",
+    "newChannel": "Neue Kanal-Integration",
+    "platformLabel": "Plattform",
+    "nameLabel": "Kanalname",
+    "namePlaceholder": "Kanalname (z. B. #general, mein-webhook)",
+    "configLabel": "Zugangsdaten",
+    "configWebhook": "Webhook-URL (https://…)",
+    "configSlack": "Slack-Bot-Token oder Webhook-URL",
+    "configGeneric": "Token, Webhook-URL oder JSON-Konfiguration",
+    "configSealedHint": "Wird verschlüsselt gespeichert und nie wieder angezeigt. Leer lassen, um die aktuellen Zugangsdaten zu behalten.",
+    "configured": "Zugangsdaten gespeichert",
+    "notConfigured": "Keine Zugangsdaten",
+    "hostStatus": "Host meldet: {status}",
+    "enabled": "Aktiviert",
+    "disabled": "Deaktiviert",
+    "working": "…",
+    "delete": "Löschen",
+    "empty": "Keine Kanäle konfiguriert. Füge einen hinzu, um die Nachrichten dieses Hosts an eine externe Plattform zu leiten.",
+    "addFailed": "Dieser Kanal konnte nicht hinzugefügt werden.",
+    "updateFailed": "Dieser Kanal konnte nicht aktualisiert werden.",
+    "deleteFailed": "Dieser Kanal konnte nicht gelöscht werden."
+  },
+  "schedule": {
+    "status": {
+      "overdue": "Überfällig",
+      "soon": "Bald fällig",
+      "upcoming": "Anstehend",
+      "none": "Keine Frist"
+    },
+    "today": "Heute",
+    "prevMonth": "Vorheriger Monat",
+    "nextMonth": "Nächster Monat",
+    "noDeadline": "Keine Frist gesetzt:",
+    "unscheduled": "Nicht geplant:",
+    "moreItems": "+{n} weitere",
+    "ganttEmpty": "Noch keine geplanten {noun}s. Füge Start- oder Fälligkeitsdaten hinzu, um sie auf der Zeitachse zu sehen.",
+    "dragHintGantt": "Ziehe einen Balken, um ihn zu verschieben; ziehe die Ränder, um Start oder Frist zu ändern.",
+    "dragHintCalendar": "Ziehe einen Eintrag auf einen anderen Tag, um ihn neu zu planen.",
+    "barAriaEditable": "{label} — zum Neuplanen ziehen oder mit Enter öffnen",
+    "spanAriaEditable": "{label} — auf einen anderen Tag ziehen zum Neuplanen oder mit Enter öffnen",
+    "rescheduleFailed": "Die neuen Daten konnten nicht gespeichert werden."
   }
 }

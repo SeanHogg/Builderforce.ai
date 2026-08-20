@@ -44,7 +44,7 @@ function currentMonth(): string {
 }
 
 export function FinanceLens() {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('insights');
   const [period, setPeriod] = useState(currentMonth());
   const [busy, setBusy] = useState(false);

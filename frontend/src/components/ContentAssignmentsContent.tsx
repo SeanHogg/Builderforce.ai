@@ -34,7 +34,7 @@ function loadLocalBlocks(tenantId: string): LocalBlock[] {
 }
 
 export function ContentAssignmentsContent({ scope, scopeId, tenantId, className, style }: ContentAssignmentsContentProps) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const [assigned, setAssigned] = useState<ArtifactAssignment[]>([]);
   const [localBlocks, setLocalBlocks] = useState<LocalBlock[]>([]);
   const [loading, setLoading] = useState(true);

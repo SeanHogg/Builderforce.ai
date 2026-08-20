@@ -160,7 +160,7 @@ function SeatRow({
 }
 
 function TeamSpendInner() {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('settings');
   const tenant = getStoredTenant();
   const { allowed } = usePermission('billing.spendLimits');

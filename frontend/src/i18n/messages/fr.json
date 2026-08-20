@@ -3112,7 +3112,10 @@
     "dueDateLabel": "Date d’échéance",
     "dueDateHint": "Définissez une échéance de projet. Laissez vide pour utiliser la dernière date d’échéance des tâches.",
     "deadline": "Échéance",
-    "deadlineDerived": "(d’après les tâches)"
+    "deadlineDerived": "(d’après les tâches)",
+    "start": "Début",
+    "startDateLabel": "Date de début",
+    "startDateHint": "Définissez une date de début de projet. Laissez vide pour utiliser la date de début de tâche la plus ancienne."
   },
   "spine": {
     "loading": "Chargement de la colonne de planification…",
@@ -17134,7 +17137,6 @@
     "versionHistory": "Historique des versions",
     "versionHistoryHint": "La restauration crée une nouvelle révision",
     "closeHistory": "Fermer l’historique",
-    "historyLocalOnly": "Cette session est stockée sur cet appareil. L’historique de versions serveur commence après l’enregistrement.",
     "nameCheckpoint": "+ Nommer le point de contrôle actuel",
     "revisionLabel": "Révision {revision}",
     "revisionMeta": "Révision {revision} · {at}",
@@ -20369,7 +20371,6 @@
     "noticeInvoiceChased": "{reference} relancée — envoyée à {to}.",
     "noticeInvoiceChaseNoRecipient": "Relance de {reference} enregistrée, mais la carte ne porte aucune adresse e-mail client à qui l’envoyer.",
     "noticeInvoiceActionFailed": "Cela n’a pas pu être fait. Rien n’a été envoyé.",
-    "noticePayRunSync": "Demandez à Brain de synchroniser les paies : il les relit depuis votre prestataire de paie connecté.",
     "stickyShapeEllipse": "Ellipse",
     "stickyShapeRhombus": "Losange",
     "stickyShapeTriangle": "Triangle",
@@ -20491,7 +20492,26 @@
         "note": "Note"
       }
     },
-    "agentModel": "Modèle de l’agent"
+    "agentModel": "Modèle de l’agent",
+    "presentSequence": "Présentation",
+    "presentPrevious": "Cadre précédent",
+    "presentNext": "Cadre suivant",
+    "presentPosition": "{index} sur {total}",
+    "presentationOrder": "Ordre de présentation",
+    "presentationOrderHint": "Laissez vide pour parcourir le tableau de haut en bas",
+    "noticePayRunNeedsAccount": "Relire une paie appelle votre prestataire de paie connecté : il faut donc un espace de travail enregistré.",
+    "noticePayRunNoReference": "Cette carte ne porte aucune référence prestataire, il n’y a donc rien à relire. Demandez à Brain de synchroniser les paies — c’est ainsi que les vraies arrivent sur le tableau.",
+    "noticePayRunNoProvider": "Aucun prestataire de paie n’est connecté. Connectez Gusto, Rippling, ADP ou Deel, ou saisissez la paie à la main depuis le relevé de votre cabinet.",
+    "noticePayRunNotFound": "Votre prestataire de paie ne renvoie plus de paie {reference}. Rien n’a été modifié sur la carte.",
+    "noticePayRunSynced": "Paie relue depuis {source}.",
+    "noticePayRunFailed": "La paie n’a pas pu être relue. Rien n’a été modifié sur la carte.",
+    "versionHistoryLocalHint": "Conservé dans ce navigateur jusqu’à ce que vous enregistriez le tableau sur un compte",
+    "checkpointNameLabel": "Nom du point de restauration",
+    "checkpointNamePlaceholder": "Avant la réécriture",
+    "checkpointMeta": "{count} objets · {at}",
+    "noCheckpoints": "Aucun point de restauration. Créez-en un avant une grosse modification pour pouvoir y revenir.",
+    "noticeCheckpointRestored": "« {label} » restauré",
+    "noticeCheckpointStorageFull": "Ce navigateur n’a plus de place pour enregistrer un point de restauration de ce tableau. Enregistrez-le sur un compte pour conserver son historique."
   },
   "canvasCommands": {
     "cleanLayout": "Réorganiser la toile",
@@ -23375,7 +23395,8 @@
     "payNow": "Payer {amount}",
     "confirming": "Confirmation de votre paiement…",
     "payByTransfer": "Cette facture se règle par virement bancaire. Répondez au message qui vous a envoyé ce lien si vous avez besoin des coordonnées bancaires.",
-    "settled": "Cette facture est réglée. Merci."
+    "settled": "Cette facture est réglée. Merci.",
+    "downloadPdf": "Télécharger le PDF"
   },
   "taskStatus": {
     "backlog": "Backlog",
@@ -23474,5 +23495,53 @@
       "yours": "Votre échéancier proposé",
       "explainer": "Pas d’accord avec les livrables publiés ? Proposez les vôtres. Si votre offre est retenue, c’est cet échéancier qui sera financé."
     }
+  },
+  "agentHostChannels": {
+    "loading": "Chargement des canaux…",
+    "heading": "Canaux ({count})",
+    "addChannel": "+ Ajouter un canal",
+    "addChannelConfirm": "Ajouter le canal",
+    "adding": "Ajout…",
+    "cancel": "Annuler",
+    "newChannel": "Nouvelle intégration de canal",
+    "platformLabel": "Plateforme",
+    "nameLabel": "Nom du canal",
+    "namePlaceholder": "Nom du canal (par ex. #general, mon-webhook)",
+    "configLabel": "Identifiants",
+    "configWebhook": "URL du webhook (https://…)",
+    "configSlack": "Jeton du bot Slack ou URL du webhook",
+    "configGeneric": "Jeton, URL de webhook ou configuration JSON",
+    "configSealedHint": "Stocké chiffré et jamais réaffiché. Laissez vide pour conserver les identifiants actuels.",
+    "configured": "Identifiants enregistrés",
+    "notConfigured": "Aucun identifiant",
+    "hostStatus": "L’hôte signale : {status}",
+    "enabled": "Activé",
+    "disabled": "Désactivé",
+    "working": "…",
+    "delete": "Supprimer",
+    "empty": "Aucun canal configuré. Ajoutez-en un pour acheminer les messages de cet hôte vers une plateforme externe.",
+    "addFailed": "Impossible d’ajouter ce canal.",
+    "updateFailed": "Impossible de mettre à jour ce canal.",
+    "deleteFailed": "Impossible de supprimer ce canal."
+  },
+  "schedule": {
+    "status": {
+      "overdue": "En retard",
+      "soon": "Échéance proche",
+      "upcoming": "À venir",
+      "none": "Aucune échéance"
+    },
+    "today": "Aujourd’hui",
+    "prevMonth": "Mois précédent",
+    "nextMonth": "Mois suivant",
+    "noDeadline": "Aucune échéance définie :",
+    "unscheduled": "Non planifié :",
+    "moreItems": "+{n} de plus",
+    "ganttEmpty": "Aucun {noun} planifié pour le moment. Ajoutez une date de début ou d’échéance pour l’afficher sur la chronologie.",
+    "dragHintGantt": "Faites glisser une barre pour la déplacer ; faites glisser ses bords pour changer le début ou l’échéance.",
+    "dragHintCalendar": "Faites glisser un élément sur un autre jour pour le replanifier.",
+    "barAriaEditable": "{label} — faites glisser pour replanifier, ou appuyez sur Entrée pour ouvrir",
+    "spanAriaEditable": "{label} — faites glisser sur un autre jour pour replanifier, ou appuyez sur Entrée pour ouvrir",
+    "rescheduleFailed": "Impossible d’enregistrer les nouvelles dates."
   }
 }

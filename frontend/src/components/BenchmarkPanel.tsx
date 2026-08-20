@@ -82,7 +82,7 @@ function underfit(result: Scorecard): boolean {
 }
 
 export function BenchmarkPanel({ initialCorpus }: BenchmarkPanelProps) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('benchmark');
   const [mode, setMode] = useState<Mode>('train');
   const [corpus, setCorpus] = useState((initialCorpus ?? '').trim() || SAMPLE_CORPUS);

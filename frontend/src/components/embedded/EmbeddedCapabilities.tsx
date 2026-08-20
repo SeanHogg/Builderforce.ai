@@ -20,7 +20,7 @@ type Tab = (typeof TABS)[number];
 type Filter = 'all' | EmbeddedCapabilityCategory;
 
 export function EmbeddedCapabilities() {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('embedded');
   const { isAuthenticated, tenant, tenantToken } = useAuth();
   const [tab, setTab] = useState<Tab>('features');

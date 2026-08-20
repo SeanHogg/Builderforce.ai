@@ -18,7 +18,7 @@ const cardStyle: React.CSSProperties = {
 };
 
 export function AgentHostSessionsContent({ agentHostId }: AgentHostSessionsContentProps) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

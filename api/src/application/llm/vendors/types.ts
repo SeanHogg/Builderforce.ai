@@ -235,6 +235,11 @@ export interface VendorCallParams {
    *  it can load a published `.evermind` model. Undefined for all HTTP vendors
    *  (they reach their backend over the network, not R2). */
   uploads?: import('../evermindRuntime').ArtifactStore;
+  /** The tool-choice confidence bar in force for this request, already resolved from
+   *  the environment by dispatch. Threaded rather than read here because vendors are
+   *  deliberately env-free — the same reason `uploads` is passed in. Absent ⇒ the
+   *  vendor's shipped default. */
+  toolChoiceMinMargin?: number;
   /** Perform this vendor's HTTP call from somewhere OTHER than the Worker — see
    *  {@link VendorEgress}. Only ever attached to vendors that declare
    *  {@link VendorModule.requiresLocalEgress}; every other vendor calls `fetch`

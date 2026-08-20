@@ -16,7 +16,7 @@ const cardStyle: React.CSSProperties = {
 };
 
 export function AgentHostConfigContent({ agentHostId }: AgentHostConfigContentProps) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const [raw, setRaw] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);

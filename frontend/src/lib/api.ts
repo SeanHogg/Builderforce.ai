@@ -97,7 +97,7 @@ export async function createProject(data: {
 
 export async function updateProject(
   id: number | string,
-  data: Partial<Pick<Project, 'name' | 'description' | 'template' | 'key' | 'status' | 'governance' | 'modality' | 'dueDate'>>
+  data: Partial<Pick<Project, 'name' | 'description' | 'template' | 'key' | 'status' | 'governance' | 'modality' | 'startDate' | 'dueDate'>>
 ): Promise<Project> {
   // PATCH, always. The worker's PUT variant dropped `dueDate` — a save that
   // reported success and changed nothing — and it is retired.

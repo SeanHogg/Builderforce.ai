@@ -119,7 +119,7 @@ type HumanVerdict = (typeof HUMAN_VERDICTS)[number];
 const NEEDS_REASON = new Set<HumanVerdict>(['waived']);
 
 export function AccountabilityTab({ taskId }: { taskId: number }) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('accountability');
   const canManage = usePermission('manager.manage').allowed;
 

@@ -16,6 +16,7 @@ import { ProjectStatus, TenantRole } from '../../domain/shared/types';
 import { isAgentHostOnline } from '../../domain/agentHost/onlineStatus';
 import type { Db } from '../../infrastructure/database/connection';
 import { agentHostProjects, agentHosts, objectiveLinks, objectives, projectInsightEvents, projects, sourceControlIntegrations, specs, tasks, tenants, workflows } from '../../infrastructure/database/schema';
+import { nullableDateParam } from './queryParams';
 import { relayToRoom } from './realtimeRelay';
 import { buildPlanLimitsGuard } from '../middleware/planLimitsGuard';
 import { projectRoomName } from '../../infrastructure/relay/broadcastRoom';
@@ -520,12 +521,17 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
         linkedGoalCount: goalCountByProject.get(project.id) ?? 0,
         initiativeId: project.initiativeId ?? null,
         assignedAgentHost: assignedAgentHostByProject.get(project.id) ?? null,
-        startDate: dateRangeByProject.get(project.id)?.startDate ?? null,
+        // Effective START drives the calendar/Gantt exactly as the deadline does:
+        // the PM's explicit project start (0942) when set, else the derived
+        // earliest-task-start. Before 0942 only the derived half existed, which is
+        // what made the Gantt bar unmovable at its left edge.
+        startDate: toIso(project.startDate) ?? dateRangeByProject.get(project.id)?.startDate ?? null,
         // Effective deadline drives the calendar/Gantt: the PM's explicit project
         // due date (0255) when set, else the derived latest-task-due-date.
         dueDate: toIso(project.dueDate) ?? dateRangeByProject.get(project.id)?.dueDate ?? null,
-        // The explicit value alone, so the details editor can distinguish "set by a
-        // PM" from "auto-derived from tasks" and seed its date input correctly.
+        // The explicit values alone, so the details editor and the Gantt drag can
+        // distinguish "set by a PM" from "auto-derived from tasks".
+        projectStartDate: toIso(project.startDate),
         projectDueDate: toIso(project.dueDate),
       };
     });
@@ -779,18 +785,16 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
       modality?: string | null;
       /** Explicit project deadline as an ISO/date string, or null to clear it. */
       dueDate?: string | null;
+      /** Explicit project start as an ISO/date string, or null to clear it. This is
+       *  what the Gantt writes when a bar's left edge is dragged. */
+      startDate?: string | null;
     }>();
 
-    // Parse the explicit deadline: a non-empty string → Date, explicit null → clear,
-    // omitted (undefined) → leave unchanged. An unparseable string is treated as
-    // "leave unchanged" rather than silently writing an Invalid Date.
-    let dueDate: Date | null | undefined;
-    if (body.dueDate === null) {
-      dueDate = null;
-    } else if (typeof body.dueDate === 'string' && body.dueDate.trim()) {
-      const parsed = new Date(body.dueDate);
-      dueDate = Number.isNaN(parsed.getTime()) ? undefined : parsed;
-    }
+    // Both project dates read the same tri-state rule (set / clear / leave alone)
+    // via the shared parser, so the Gantt can move either end of a bar and neither
+    // end can develop its own idea of what `null` means.
+    const dueDate = nullableDateParam(body.dueDate);
+    const startDate = nullableDateParam(body.startDate);
 
     const existing = await projectService.getProject(rawId, tenantId);
     const assignment = await resolveSourceControlAssignment(
@@ -814,6 +818,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
     const project = await projectService.updateProject(existing.id, {
       ...body,
       dueDate,
+      startDate,
       sourceControlIntegrationId: assignment.value.sourceControlIntegrationId,
       sourceControlProvider: assignment.value.sourceControlProvider,
       sourceControlRepoFullName: assignment.value.sourceControlRepoFullName,

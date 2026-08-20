@@ -80,7 +80,7 @@ function ResumeDocumentStyles() {
 }
 
 function ImportReview({ file, stage, onImport, onCancel }: { file: File; stage: ImportStage; onImport: () => void; onCancel: () => void }) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('creationCanvas.resumeEditor');
   const busy = stage !== 'review' && stage !== 'ready';
   const progress = stage === 'uploading' ? 25 : stage === 'extracting' ? 50 : stage === 'ocr' || stage === 'structuring' ? 80 : stage === 'ready' ? 100 : 0;
@@ -138,7 +138,7 @@ function localJsonResume(source: string): { document: unknown; sourceFileKey: st
  *                 card to avoid — two live views of the same thing, open at once.
  */
 export function CanvasResumeEditor({ data, onEdit, onTailor, onDetach, shareActions, variant = 'full' }: { data: CreationNodeData; onEdit?: (patch: Partial<CreationNodeData>) => void; onTailor?: (prompt: string) => void; onDetach?: (data: Partial<CreationNodeData>) => void; shareActions?: ResumeShareActions; variant?: 'full' | 'card' | 'inspector' }) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('creationCanvas.resumeEditor');
   const tImport = useTranslations('creationCanvas.import');
   const translateImport = tImport as unknown as ImportTranslator;

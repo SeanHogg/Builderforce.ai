@@ -68,7 +68,7 @@ export interface ManagerStallRegisterProps {
 }
 
 export function ManagerStallRegister({ projectId }: ManagerStallRegisterProps) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('manager.stalls');
   const format = useFormatter();
   const [data, setData] = useState<StallRegister | null>(null);

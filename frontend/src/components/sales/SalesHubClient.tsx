@@ -90,7 +90,7 @@ function ShareLink({ label, value, hint }: { label: string; value: string | null
 }
 
 export default function SalesHubClient() {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('salesHub');
   const locale = useLocale();
   const router = useRouter();

@@ -30,7 +30,7 @@ const selectStyle: React.CSSProperties = {
  * flagging the variance so the two surfaces cross-check instead of diverging.
  */
 export function RdReconciliationLens() {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('insights.emp');
   const thisYear = new Date().getUTCFullYear();
   const [fy, setFy] = useState(thisYear);

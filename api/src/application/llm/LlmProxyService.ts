@@ -350,6 +350,9 @@ export interface ProxyEnv extends VendorEnv {
    *  vendor dispatch so the `evermind` vendor can load + run a tenant's own model.
    *  Absent in environments without R2 (the evermind vendor then errors cleanly). */
   UPLOADS?: R2Bucket;
+  /** Tool-choice confidence bar override, resolved here and threaded to the vendor
+   *  (vendors are env-free by design). See `evermindToolChoiceMinMargin`. */
+  EVERMIND_TOOL_CHOICE_MIN_MARGIN?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -1269,6 +1272,7 @@ export class LlmProxyService {
       // Thread the R2 artifact store so the `evermind` vendor can load a
       // published model. Harmless for every other (HTTP) vendor — they ignore it.
       ...(this.env.UPLOADS ? { uploads: this.env.UPLOADS } : {}),
+      toolChoiceMinMargin: evermindToolChoiceMinMargin(this.env),
       // Local egress for the one class of vendor whose upstream refuses OUR machine
       // rather than our key (Kimi Code). `dispatchInternal` hands it only to a module
       // that declares `requiresLocalEgress`, so this is inert for every other vendor.
@@ -1830,6 +1834,7 @@ function classificationFromFailovers(failovers: ReadonlyArray<FailoverEvent>): s
 // it from the gateway keep working.
 export type { EffectivePlan } from '../../domain/tenant/effectivePlan';
 import type { EffectivePlan } from '../../domain/tenant/effectivePlan';
+import { evermindToolChoiceMinMargin } from './evermindToolCall';
 
 /**
  * Resolve the (productName, modelPool, vendorCallTimeoutMs) triple for a

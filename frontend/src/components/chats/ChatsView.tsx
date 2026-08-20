@@ -19,7 +19,7 @@ const cardStyle: React.CSSProperties = {
  * dropped into the Workforce tab strip or any other shell.
  */
 export function ChatsView() {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const [sessions, setSessions] = useState<SessionWithName[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

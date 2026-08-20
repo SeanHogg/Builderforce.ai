@@ -485,7 +485,7 @@ function ReleaseRow({
   onStage?: () => void;
   onRevert?: () => void;
 }) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('creationCanvas.releases');
   const when = release.takenAtISO ? new Date(release.takenAtISO) : null;
 

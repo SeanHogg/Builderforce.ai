@@ -61,7 +61,7 @@ const DEFAULT_MAMBA_PROVIDER_CONFIG: MambaProviderConfig = {
 };
 
 export function AITrainingPanel({ projectId, onLog, onJobCompleted, initialDataMode = 'workspace', workspaceEnabled = true, onLocalArtifactCompleted, onModelPublished }: AITrainingPanelProps) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('aiTraining');
   const [tab, setTab] = useState<PanelTab>('configure');
   const [trainingMode, setTrainingMode] = useState<TrainingMode>('behavior');

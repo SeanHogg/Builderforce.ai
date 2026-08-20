@@ -35,7 +35,7 @@ export function ObjectShareSheet({
   objectId?: string;
   locale?: string;
 }) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('kernel.share');
   const [rows, setRows] = useState<ShareLink[] | null>(null);
   const [scope, setScope] = useState<ShareLink['scope']>('view');

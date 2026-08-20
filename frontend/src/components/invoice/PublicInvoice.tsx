@@ -33,7 +33,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
-import { apiRequest } from '@/lib/apiClient';
+import { apiRequest, getApiBaseUrl } from '@/lib/apiClient';
 import styles from '../signature/SignerConsole.module.css';
 import { useFormat } from "@/i18n/useFormat";
 
@@ -60,7 +60,7 @@ interface PublicInvoiceDocument {
  * second source for the same fact.
  */
 export function PublicInvoice() {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('publicInvoice');
   const locale = useLocale();
   const [invoice, setInvoice] = useState<PublicInvoiceDocument | null>(null);
@@ -199,15 +199,26 @@ export function PublicInvoice() {
 
         {settled ? (
           <p className={styles.notice}>{t('settled')}</p>
-        ) : invoice.paymentLinkUrl ? (
-          <a href={invoice.paymentLinkUrl} className={styles.payLink}>
-            {settling ? t('confirming') : t('payNow', { amount: money(invoice.outstanding, invoice.currency) })}
-          </a>
-        ) : (
+        ) : invoice.paymentLinkUrl ? null : (
           // No merchant account on the issuing workspace. Saying so plainly beats
           // an absent button, which reads as a page that is broken.
           <p className={styles.notice}>{t('payByTransfer')}</p>
         )}
+
+        <div className={styles.invoiceActions}>
+          {!settled && invoice.paymentLinkUrl && (
+            <a href={invoice.paymentLinkUrl} className={styles.payLink}>
+              {settling ? t('confirming') : t('payNow', { amount: money(invoice.outstanding, invoice.currency) })}
+            </a>
+          )}
+          {/* Offered whatever the state, including settled: a paid invoice is the
+              one a customer's accounts department most often comes back for.
+              Server-rendered bytes rather than a print dialog — see
+              `application/finance/invoicePdf.ts` for why that distinction matters. */}
+          <a href={`${getApiBaseUrl()}/api/public/invoices/pdf?t=${encodeURIComponent(token)}`} className={styles.downloadLink}>
+            {t('downloadPdf')}
+          </a>
+        </div>
       </div>
     </main>
   );

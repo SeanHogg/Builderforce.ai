@@ -129,7 +129,7 @@ export interface ManagerContentProps {
 }
 
 export function ManagerContent({ projectId }: ManagerContentProps) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('manager');
   const format = useFormatter();
   const { allowed: canManage } = usePermission('manager.manage');
@@ -1002,7 +1002,7 @@ function Notice({ title, body, muted, retryLabel, onRetry }: {
 }
 
 function StatTile({ label, value, tone }: { label: string; value: number; tone?: 'warn' }) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   return (
     <div style={{ ...panelStyle, padding: 14 }}>
       <div style={{ fontSize: '1.6rem', fontWeight: 800, color: tone === 'warn' ? 'var(--warning-text)' : 'var(--text-primary)' }}>
@@ -1029,7 +1029,7 @@ function BusinessValueBar({ value, rationale, noRationale }: { value: number | n
 function BacklogRow({ item, assignee, unassignedLabel, priorityLabel, bvTooltip }: {
   item: ManagerBacklogItem; assignee: string; unassignedLabel: string; priorityLabel: string; bvTooltip: string;
 }) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const unassigned = item.assignedUserId == null && item.assignedAgentRef == null && item.assignedAgentHostId == null;
   return (
     <tr style={trStyle}>

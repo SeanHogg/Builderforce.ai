@@ -85,7 +85,7 @@ const VERDICT_COLOR: Record<string, string> = {
 };
 
 export default function ProjectBackendPanel({ projectId }: { projectId: number }) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('challenges.backend');
 
   const [view, setView] = useState<ProjectBackendView | null>(null);

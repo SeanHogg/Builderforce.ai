@@ -14,7 +14,10 @@
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.0.2",
-    "hono": "^4.4.0"
+    "hono": "^4.4.0",
+    "lib0": "^0.2.94",
+    "y-protocols": "^1.0.6",
+    "yjs": "^13.6.18"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20240718.0",

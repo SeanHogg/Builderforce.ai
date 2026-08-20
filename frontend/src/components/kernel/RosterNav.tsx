@@ -74,7 +74,7 @@ export function RosterNav({
   reachedRung?: number;
   locale?: string;
 }) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('kernel.roster');
   const shell = useRef<HTMLElement | null>(null);
   const [rows, setRows] = useState<DomainSummary[] | null>(null);

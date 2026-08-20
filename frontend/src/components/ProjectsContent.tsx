@@ -10,7 +10,8 @@ import type { Project } from '@/lib/types';
 import type { ProjectDiagnosticSummary } from '@/lib/tools';
 import type { AgentHost } from '@/lib/builderforceApi';
 import { toolsApi } from '@/lib/builderforceApi';
-import { fetchProjects, createProject, deleteProject } from '@/lib/api';
+import { fetchProjects, createProject, deleteProject, updateProject } from '@/lib/api';
+import type { ReschedulePatch } from '@/lib/schedule';
 import { fetchProjectConnections, type ProjectConnection } from '@/lib/projectConnections';
 import { trackActivity } from '@/lib/activity/tracker';
 import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
@@ -53,6 +54,7 @@ export interface ProjectsContentProps {
  */
 export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContentProps = {}) {
   const t = useTranslations('projectsContent');
+  const tSchedule = useTranslations('schedule');
   const router = useRouter();
   const searchParams = useSearchParams();
   // Global project scope (present in the app shell): when a single project is
@@ -191,6 +193,49 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
     setDetailsInitialTab(tab);
     setDetailsProject(project);
   };
+
+  /**
+   * Fold a project PATCH response back into the list row.
+   *
+   * The PATCH response carries only the editable domain fields, so it must be
+   * MERGED over the list row rather than replacing it — otherwise the derived
+   * list-only fields (task/health counts, workflowCount, delivery signals) would
+   * be wiped until a reload, blanking the card's health visuals.
+   *
+   * Both project dates need the same two-line treatment and get it here rather
+   * than at each call site: the response's `startDate`/`dueDate` are the EXPLICIT
+   * values, so they become `projectStartDate`/`projectDueDate`, while the
+   * EFFECTIVE date falls back to the previously-resolved (possibly task-derived)
+   * one when the explicit value is cleared. Shared by the details panel and the
+   * Gantt/Calendar drag, which is precisely why it is one function: a reschedule
+   * that merged differently from an edit would leave two rows on the same board
+   * disagreeing about which date is derived.
+   */
+  const mergeProjectPatch = useCallback((prev: Project, updated: Project): Project => ({
+    ...prev,
+    ...updated,
+    assignedAgentHost: prev.assignedAgentHost,
+    projectStartDate: updated.startDate ?? null,
+    startDate: updated.startDate ?? prev.startDate ?? null,
+    projectDueDate: updated.dueDate ?? null,
+    dueDate: updated.dueDate ?? prev.dueDate ?? null,
+  }), []);
+
+  const applyProjectPatch = useCallback((updated: Project) => {
+    setProjects((prev) => prev.map((p) => (p.id === updated.id ? mergeProjectPatch(p, updated) : p)));
+    setDetailsProject((p) => (p && p.id === updated.id ? mergeProjectPatch(p, updated) : p));
+  }, [mergeProjectPatch]);
+
+  /** Persist a bar dragged on the Gantt / a span dragged on the Calendar. */
+  const rescheduleProject = useCallback(async (project: Project, patch: ReschedulePatch) => {
+    try {
+      const updated = await updateProject(project.publicId ?? project.id, patch);
+      applyProjectPatch(updated);
+    } catch (err) {
+      console.error(err);
+      setError(tSchedule('rescheduleFailed'));
+    }
+  }, [applyProjectPatch, tSchedule]);
 
   // Single delete path shared by the card / table / details-panel actions:
   // remove locally, close the panel if it was open, clear the global scope if it
@@ -385,13 +430,21 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
           items={visibleProjects}
           getLabel={(p) => p.name}
           onSelect={(p) => openDetails(p)}
+          onReschedule={rescheduleProject}
           getAccentColor={(p) => {
             const h = computeProjectHealth(p);
             return h.hasData ? h.color : undefined;
           }}
         />
       ) : viewMode === 'gantt' ? (
-        <ScheduleGantt items={visibleProjects} getLabel={(p) => p.name} onSelect={(p) => openDetails(p)} noun="project" />
+        <ScheduleGantt
+          items={visibleProjects}
+          getLabel={(p) => p.name}
+          onSelect={(p) => openDetails(p)}
+          columnLabel={tSchedule('columnProject')}
+          emptyMessage={tSchedule('emptyProjects')}
+          onReschedule={rescheduleProject}
+        />
       ) : (
         <ProjectTable
           projects={visibleProjects}
@@ -414,23 +467,7 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
           initialTab={detailsInitialTab}
           initialAuditId={detailsInitialAudit}
           onClose={() => { setDetailsProject(null); setDetailsInitialAudit(null); }}
-          onProjectUpdate={(updated) => {
-            // The PATCH response carries only the editable domain fields, so MERGE
-            // it over the list row instead of replacing it — otherwise the derived
-            // list-only fields (task/health counts, startDate, workflowCount) would
-            // be wiped until a reload, blanking the card's health visuals. `dueDate`
-            // is the EXPLICIT value here: keep it as projectDueDate and fall back to
-            // the previously-resolved (possibly derived) deadline when cleared.
-            const merge = (p: Project): Project => ({
-              ...p,
-              ...updated,
-              assignedAgentHost: p.assignedAgentHost,
-              projectDueDate: updated.dueDate ?? null,
-              dueDate: updated.dueDate ?? p.dueDate ?? null,
-            });
-            setProjects((prev) => prev.map((p) => (p.id === updated.id ? merge(p) : p)));
-            setDetailsProject((p) => (p && p.id === updated.id ? merge(p) : p));
-          }}
+          onProjectUpdate={applyProjectPatch}
           onDelete={removeProject}
         />
       )}

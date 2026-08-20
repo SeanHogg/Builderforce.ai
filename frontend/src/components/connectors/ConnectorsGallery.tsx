@@ -481,7 +481,7 @@ function ActionsTab({ detail }: { detail: ConnectorDetail }) {
 // ── Activity tab: the audit trail ────────────────────────────────────────────
 
 function ActivityTab({ connectorKey }: { connectorKey: string }) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('connectors');
   const [logs, setLogs] = useState<ConnectorCallLog[] | null>(null);
 

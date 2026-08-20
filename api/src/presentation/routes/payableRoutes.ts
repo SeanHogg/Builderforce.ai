@@ -52,6 +52,7 @@ import {
   upsertInvoiceDraft,
 } from '../../application/finance/receivables';
 import { describeLadder } from '../../application/finance/collectionsLadder';
+import { renderInvoicePdf } from '../../application/finance/invoicePdf';
 import {
   MerchantError,
   disconnectMerchant,
@@ -91,6 +92,33 @@ const handle = async (run: () => Promise<Response>): Promise<Response> => {
     throw error;
   }
 };
+
+/**
+ * ONE PDF response, shared by the tenant's door and the customer's.
+ *
+ * The two routes differ only in how they establish WHICH invoice — a session and a
+ * reference on one, a token on the other. Everything after that is the same file
+ * with the same headers, and writing it twice is how a customer's copy comes to be
+ * served `inline` while the founder's downloads, or one of them loses the
+ * `Content-Disposition` filename and saves as `pdf`.
+ *
+ * `inline` and not `attachment`: the customer arrived from a link and expects to
+ * SEE the invoice; their browser's own viewer offers the save. The filename still
+ * rides along for when they take it.
+ */
+const pdfResponse = (rendered: { bytes: Uint8Array; filename: string }): Response =>
+  new Response(rendered.bytes as unknown as BodyInit, {
+    headers: {
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `inline; filename="${rendered.filename}"`,
+      // Never cached by a shared cache: the outstanding amount changes the moment a
+      // payment lands, and an intermediary holding yesterday's copy would show a
+      // customer a balance they have already settled.
+      'Cache-Control': 'private, no-store',
+    },
+  });
+
+const NO_SUCH_INVOICE = () => Response.json({ error: 'No invoice with that reference in this workspace.' }, { status: 404 });
 
 export function createPayableRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -244,6 +272,18 @@ export function createPayableRoutes(db: Db): Hono<HonoEnv> {
   router.get('/invoices/:reference/collection', (c) => handle(async () =>
     Response.json({ log: await collectionLog(db, tenant(c), c.req.param('reference')) })));
 
+  /**
+   * The founder's own copy of the document their customer received.
+   *
+   * Same bytes, same renderer, same projection — which is the point: a support
+   * conversation about "what does my invoice say" is unanswerable if the two sides
+   * are looking at two files.
+   */
+  router.get('/invoices/:reference/pdf', (c) => handle(async () => {
+    const rendered = await renderInvoicePdf(db, tenant(c), c.req.param('reference'));
+    return rendered ? pdfResponse(rendered) : NO_SUCH_INVOICE();
+  }));
+
   /** Everything open, with each one's ageing already computed. */
   router.get('/receivables', (c) => handle(async () =>
     Response.json({ receivables: await openReceivables(db, tenant(c)) })));
@@ -352,6 +392,20 @@ export function createPublicInvoiceRoutes(db: Db): Hono<HonoEnv> {
     const resolved = await invoiceByToken(db, c.req.query('t') ?? '');
     if (!resolved) return Response.json({ error: 'That invoice link is not valid. Ask for a fresh one.' }, { status: 404 });
     return Response.json({ invoice: resolved.document });
+  }));
+
+  /**
+   * The document as a FILE.
+   *
+   * The token resolves the row exactly as the JSON read does, so this cannot be
+   * used to render an invoice whose reference somebody guessed. See
+   * `invoicePdf.ts` for why "print this page" was not an acceptable answer.
+   */
+  router.get('/pdf', (c) => handle(async () => {
+    const resolved = await invoiceByToken(db, c.req.query('t') ?? '');
+    if (!resolved) return Response.json({ error: 'That invoice link is not valid. Ask for a fresh one.' }, { status: 404 });
+    const rendered = await renderInvoicePdf(db, resolved.tenantId, resolved.document.reference);
+    return rendered ? pdfResponse(rendered) : NO_SUCH_INVOICE();
   }));
 
   /**

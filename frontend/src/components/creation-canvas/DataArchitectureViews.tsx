@@ -62,7 +62,7 @@ function asArray(value: unknown): unknown[] {
  * cannot throw on a shape nobody anticipated.
  */
 function useDetailFormatter() {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('creationCanvas.node');
   return (detail: Record<string, string | number> | undefined): string => {
     if (!detail) return '';

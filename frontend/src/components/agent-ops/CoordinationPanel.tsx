@@ -18,7 +18,7 @@ import { useFormat } from "@/i18n/useFormat";
  * the question an operator actually has.
  */
 export function CoordinationPanel() {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('agentOps');
   const confirm = useConfirm();
   const [taskInput, setTaskInput] = useState('');

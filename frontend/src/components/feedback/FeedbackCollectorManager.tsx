@@ -122,7 +122,7 @@ function CollectorPanel({ collector, createdKey, projName, onChanged, setError }
   onChanged: () => void;
   setError: (s: string | null) => void;
 }) {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('feedback');
   const confirm = useConfirm();
   const [limit, setLimit] = useState(String(collector.dailyLimit));

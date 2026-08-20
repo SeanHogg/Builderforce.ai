@@ -25,7 +25,7 @@ import { useFormat } from "@/i18n/useFormat";
  * present the same three states.
  */
 export function PlanBadge() {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('planBadge');
   const snapshot = useConsumption();
   if (!snapshot) return null;

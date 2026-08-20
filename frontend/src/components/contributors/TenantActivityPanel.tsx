@@ -39,7 +39,7 @@ function Spark({ daily, ariaLabel }: { daily: TenantActivityRollup['daily']; ari
 }
 
 export function TenantActivityPanel() {
-    const fmt = useFormat();
+  const fmt = useFormat();
   const t = useTranslations('contributors');
   const [days, setDays] = useState(30);
   const [data, setData] = useState<TenantActivityRollup | null>(null);

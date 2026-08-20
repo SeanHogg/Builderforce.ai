@@ -20,6 +20,15 @@ export interface Env {
    *  Brain before signing up (metered per visitor + IP, tiny cap). Set to the
    *  string "false" to hard-disable anonymous gateway traffic; any other value
    *  (or unset) leaves it ON. Toggle via `wrangler secret put GUEST_BRAIN_ENABLED`. */
+  /** Overrides {@link TOOL_CHOICE_MIN_MARGIN} — the separation an Evermind head must
+   *  show between its winning tool candidate and the runner-up before its call is
+   *  trusted. Tunable WITHOUT a deploy because the shipped default is an analytic
+   *  placeholder: it was chosen to catch a head with no preference at all (margins
+   *  ~1e-3) without demanding confidence a small model never shows, but no real
+   *  head's margin distribution had been measured when it was picked. Set it from the
+   *  observed separation between correct and incorrect choices (every decision is
+   *  logged with its margin — see `evermind.tool_choice` log lines). */
+  EVERMIND_TOOL_CHOICE_MIN_MARGIN?: string;
   GUEST_BRAIN_ENABLED?: string;
   /** Kill switch for the sales-cycle demo accounts (seeded persona tenants entered
    *  from the marketing shell — migration 0360). Set to the string "false" to
@@ -75,6 +84,12 @@ export interface Env {
    *  a Worker SECRET (not committed config) so the id isn't exposed in the repo.
    *  Set via `wrangler secret put CLOUDFLARE_ACCOUNT_ID`. */
   CLOUDFLARE_ACCOUNT_ID?: string;
+  /** Broad Cloudflare ACCOUNT API token. Deployed as a Worker secret since before any
+   *  code read it — declared here as of 2026-08-19 so the value an operator already
+   *  provisioned is reachable. Used as the middle fallback for live-page capture: an
+   *  account-scoped token commonly carries `Browser Rendering:Edit`, where a Workers AI
+   *  token does not. Set via `wrangler secret put CLOUDFLARE_ACCOUNT_API_TOKEN`. */
+  CLOUDFLARE_ACCOUNT_API_TOKEN?: string;
   /** Cloudflare Browser Rendering token — scoped `Browser Rendering:Edit`. Powers the
    *  live-page CAPTURE behind `/api/creative/screenshot` (a redesign's "before" shot).
    *  Falls back to {@link CLOUDFLARE_AI_API_TOKEN} when a single account-wide token
