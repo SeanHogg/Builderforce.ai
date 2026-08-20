@@ -17,8 +17,9 @@ import {
   AdsProviderError, ask, count, fromCents, list, mapObjective, rec, requireField, text, toCents, toDay, toISO, unmapObjective,
 } from '../adsNormalize';
 import {
-  ageWindow, mapTargetingValues, requireTargetingSupport,
+  ageFromBuckets, bucketedAgeKeys, mapTargetingValues, readNativeValues, requireTargetingSupport,
   type AdDevice, type AdGender, type AdPlacement, type AdTargeting, type AdTargetingDimension,
+  type AgeBucket,
 } from '../adTargeting';
 import {
   type AdCall, type AdCreativeRemote, type AdInsightRow, type AdObjective, type AdSetRemote,
@@ -97,7 +98,7 @@ const TARGETING_DIMENSIONS: readonly AdTargetingDimension[] = ['geo', 'age', 'ge
  * X sells no audience under 18, so a window starting at `AD_MIN_AGE` does not align and
  * is refused with the boundaries that do work — rather than quietly buying 18+.
  */
-const AGE_BUCKETS: ReadonlyArray<{ readonly key: string; readonly min: number; readonly max: number }> = [
+const AGE_BUCKETS: readonly AgeBucket[] = [
   { key: 'AGE_18_24', min: 18, max: 24 },
   { key: 'AGE_25_34', min: 25, max: 34 },
   { key: 'AGE_35_44', min: 35, max: 44 },
@@ -105,24 +106,6 @@ const AGE_BUCKETS: ReadonlyArray<{ readonly key: string; readonly min: number; r
   { key: 'AGE_55_64', min: 55, max: 64 },
   { key: 'AGE_OVER_65', min: 65, max: 65 },
 ];
-
-/** An age window → the X buckets that are exactly it, or a refusal. Same contract as
- *  every other bucketed network: never rounded outwards. */
-function ageBuckets(targeting: AdTargeting): string[] {
-  const { min, max } = ageWindow(targeting);
-  const first = AGE_BUCKETS.findIndex((bucket) => bucket.min === min);
-  const last = AGE_BUCKETS.findIndex((bucket) => bucket.max === max);
-  if (first === -1 || last === -1 || first > last) {
-    throw new AdsProviderError(
-      `X sells age in fixed buckets, so it cannot target exactly ${min}-${max}. `
-      + `Use a window starting on one of ${AGE_BUCKETS.map((b) => b.min).join(', ')} and `
-      + `ending on one of ${AGE_BUCKETS.map((b) => b.max).join(', ')} — it will not be rounded outwards.`,
-      400,
-      false,
-    );
-  }
-  return AGE_BUCKETS.slice(first, last + 1).map((bucket) => bucket.key);
-}
 
 /**
  * Country codes → the location targeting VALUES X requires.
@@ -165,7 +148,7 @@ async function criteriaFor(call: AdCall, targeting: AdTargeting): Promise<Target
     }
   }
   if (targeting.ageMin != null || targeting.ageMax != null) {
-    for (const bucket of ageBuckets(targeting)) {
+    for (const bucket of bucketedAgeKeys(xAdsProvider, AGE_BUCKETS, targeting)) {
       criteria.push({ targeting_type: 'AGE', targeting_value: bucket });
     }
   }
@@ -185,10 +168,10 @@ function readXTargeting(rows: readonly Record<string, unknown>[], placements: re
   } = {};
 
   const ages = rows.filter((row) => text(row.targeting_type).toUpperCase() === 'AGE').map((row) => text(row.targeting_value));
-  const known = AGE_BUCKETS.filter((bucket) => ages.includes(bucket.key));
-  if (known.length) {
-    targeting.ageMin = Math.min(...known.map((b) => b.min));
-    targeting.ageMax = Math.max(...known.map((b) => b.max));
+  const window = ageFromBuckets(AGE_BUCKETS, ages);
+  if (window) {
+    targeting.ageMin = window.min;
+    targeting.ageMax = window.max;
   }
 
   const genders = rows
@@ -201,14 +184,7 @@ function readXTargeting(rows: readonly Record<string, unknown>[], placements: re
   // path performs no reverse lookup — so geography travels in `nativeTargeting` instead
   // of being reported as a country this adapter did not actually confirm.
 
-  const byNative = new Map(
-    Object.entries(PLACEMENTS)
-      .filter((entry): entry is [AdPlacement, string] => entry[1] != null)
-      .map(([ours, theirs]) => [theirs, ours]),
-  );
-  const mapped = placements
-    .map((value) => byNative.get(value.toUpperCase()))
-    .filter((value): value is AdPlacement => value != null);
+  const mapped = readNativeValues(PLACEMENTS, placements);
   if (mapped.length) targeting.placements = mapped;
 
   return targeting;

@@ -1,3 +1,236 @@
+## ✅ RESOLVED 2026-08-20 — A register audit against the code, not against its own last edition
+
+**Roadmap items closed:** 74, across every group but 2, 11 and 12. The commit that landed that morning
+(`46512f992` — 578 files, 47 migrations) closed most of them without editing `ROADMAP.md`, which is why this
+entry exists: the register had gone stale in the direction that matters least — describing as open a large
+amount of work that was already done — and a register nobody trusts is not a register.
+
+Every claim below was checked against the code, not against the previous edition. Where a bullet was
+partially closed it was NARROWED in place rather than deleted, and where the previous edition was wrong the
+correction is stated as a correction.
+
+---
+
+### 1 · Cloud agent runtime — the human-in-the-loop surface is now symmetric
+
+**Pause/resume is complete on BOTH cloud surfaces.** The entry said the container surface had no `ask_human`
+op and that `resumePausedExecution` woke only `CLOUD_RUNNER`, deferred because "a one-shot container process
+isn't checkpoint-resumable the way the alarm-ticked DO is". It is resumable, by a different mechanism, and
+that mechanism is now built: `api/container/server.mjs` treats `ask_human` as the one tool that ENDS the
+process — it posts an `ask_human` op and exits clean WITHOUT a terminal op, so the execution row stays live —
+and `runtime/executionResume.resumeContainerRun` seeds a fresh container with the paused conversation. It
+probes container health BEFORE flipping the row to `running`, for the reason dispatch already does: the DO's
+`/run` acks 202 even when the image cannot boot, so a 202 is not evidence anything started, and without the
+probe a dead container would swallow the resume and the orphan reaper would destroy an answered question that
+was perfectly resumable.
+
+The three polish clauses went with it: the chip's `resume` glyph continues the run rather than starting a new
+one (`rerunAffordance` decides, and the two glyphs mean genuinely different things), Output "Send" on a
+`paused` run answers the question and resumes, and a paused ticket is parked where a human sees it —
+`resolveNeedsAttentionLane` honours the board's `needs_attention_lane` pointer ONLY when a swimlane with that
+key actually exists, because a lane key with no lane behind it is an unroutable status, and falls back to
+`blocked`, which every seeded board has and which already reads as "a human has to do something".
+
+**Also closed here:** the `buildStatus` badge now renders on the task card (`TaskBadges`) and on the newest
+execution chip, from the same `BuildStatusBadge` component, so a red build reads identically wherever it
+appears; `AgentHostRelayDO.emitLog` takes an `executionId`, so relay log streaming can be execution-scoped;
+`BrainService` mints a `traceId` and calls `logTrace`; the `qa:cloud-agents` script exists.
+
+**Two lane-dispatch clauses closed, and they are the interesting half.** `laneCoordinatorEntry` decides WHEN a
+board drag must be driven by the `SwimlaneCoordinator` instead of the one-agent executor, and the decision is
+deliberately conservative — a lane the simple executor expresses exactly (one staffed agent, default policy,
+no action) keeps the cheap path, so nothing that already worked changes shape. More than one staffed agent IS
+a stage; a browser dispatch is CLAIMED by a pull worker and can never be pushed; a non-default success policy
+only means something across a set. And `laneAgentHost.resolveLaneAgentHostId` turns `(runtime, target)` into
+an `agentHostId`, which is what stops an operator who deliberately pinned a lane to their own machine getting
+a cloud run — it never throws, degrading pin → tenant default → cloud, which is the behaviour that existed
+before it.
+
+### 3 · LLM gateway — the failover log can finally answer whose failure it was
+
+`llm_failover_log` had carried `(model, error_code, created_at)` since 0004, which is enough for the admin
+page's per-model rollup and nothing else. Migration **0946** adds `tenant_id` (nullable — guest gateway
+traffic has no tenant and backfilling one would be a lie), `kind` (the failure class the dispatcher already
+computed, so an expired credential and a saturated free tier stop being the same row), and `request_id` (every
+attempt in one cascade shares it, so "this request failed over four times" is a `GROUP BY` rather than a guess
+from adjacent timestamps). `providerAuthAlerts` now reconstructs an alert from history when KV has forgotten
+it — which was the actual defect, because a KV eviction silently forgot that a tenant's credential was broken
+and the next request went straight back to leading with the dead account.
+
+Alongside it: per-seat spend now pre-blocks in `tenantTokenAvailability` rather than only 429-ing at the
+gateway after a run has spawned; `llm_usage_log.byo_credential_id` makes usage attributable to a KEY across
+rotations, which is what made `normalizeByoProvider` stop being lossy (subscription-vs-key is recoverable from
+the credential row's `auth_type`, and overloading one denormalized string to carry both would have lost the
+account identity the moment a key rotated); `premium_daily_cap` gives paid plans the ceiling only the free
+plan had; card revocation is wired (`payment_method.detached`, `past_due`) with a staleness window; the
+container's ten-minute entitlement cache is invalidated by a per-tenant version token bumped on
+`card.validated`, because the key is per-EXECUTION and a webhook cannot enumerate those — bumping the token
+orphans them all in one write, which is exactly the enumeration KV cannot do; `pickCloudModel` takes
+`isSuperadmin`; both cron sweeps and the Evermind teacher share ONE predicate,
+`tenantMayRunAutonomously`, which lets a BYO tenant past the platform pool budget; the container surface has a
+`web_search` op; and both test-infra failures are gone (a stubbed plan gate in `insightsRoutes.test.ts`, a
+vite alias for `@builderforce/agent-tools`).
+
+### 5–6 · The autonomy ledger stops describing problems it can now name
+
+**Board de-duplication — the constraint 0111 could never install.** 0111 added `UNIQUE(project_id)` on
+`boards` and skipped itself when duplicates existed, printing a NOTICE that said to de-dupe by hand and
+re-run. Nobody did, for three weeks, while `findCanonicalBoard` picked one board and every lane, gate,
+requirement and agent assignment on the losers sat in the UI as dead config. Migration **1081** merges them
+using EXACTLY the ordering `findCanonicalBoard` uses, so it cannot change which board is authoritative — it
+only deletes the ones that already had no effect — and handles child rows per table rather than by cascade,
+because two lanes with one key on one board violates `UNIQUE(board_id, key)` from 0064.
+
+**Manager pass outcomes are structured.** `finalizeManagerRunTask` rendered the whole `ManagerRunSummary` into
+`tasks.description` and the frontend regex-parsed that sentence back apart to detect the manager's single most
+load-bearing failure — a pass that COMPLETES and changes nothing. A UI string was being used as a wire format.
+Migration **1082** gives it a `manager_runs` row keyed by `run_task_id`, with the counters in one `summary`
+jsonb rather than twenty columns: the set grows with each new stage (six were added in four passes) and a
+migration per counter is exactly the friction that would push the next one back into prose.
+
+**A skipped sweep says why.** A stale `last_run_at` meant any of four mutually exclusive things and they were
+indistinguishable from the payload. Migration **1083** records the DECISION on every visit including the ones
+that decline — `last_sweep_decision` / `last_sweep_reason` / `last_sweep_at` — so the absence of a run is
+itself recorded, on the config row beside the `last_run_at` that answers the adjacent question.
+
+**Lane staffing is one table again.** `agent_assignments` was introduced by 0082 as the single source
+superseding the fragmented notions, and the swimlane half never moved: `scope = 'swimlane'` was a documented
+value with zero rows while 14 modules and 82 references hardcoded the second table. Migration **1085** folds it
+in, carrying the stage-only columns scope-qualified rather than dropping them — `runtime`/`target` is the
+operator's backplane choice, which is precisely the data a previous fix had to restore when the drag path
+ignored it. Rows with a null `agent_ref` are dropped rather than migrated: a lane assignment naming no agent
+could never be dispatched, so it was a half-written row and not a configuration.
+
+**Creation attribution hangs off the ACT, not off the caller remembering.** 722 of 821 tickets had no
+`task.created` row, so the lifecycle ledger's whole origin axis reported on 12% of the fleet. Six writers
+existed and adding a call to each would have left the seventh to be forgotten the same way, so
+`activity/taskCreated.ts` is invoked from `TaskService.createTask` and `decomposeEpic` through a
+composition-root hook — the funnel all six already pass through — with board-sync, which inserts directly, the
+one explicit caller. Two invariants the ad-hoc emitters broke are now enforced: `target_type` is always
+`'task'` (the MCP writer wrote `'tasks'`, 103 rows against 8, so the ledger read one and silently missed the
+other), and at most one creation row per ticket, which is what makes it safe for a new writer to call without
+checking whether some other layer already did.
+
+**Parked lanes.** `computeCompletion` ranked a ticket by its lane's `position`, and the default board puts
+`Blocked` at position 7 of 9 — so the most stuck ticket on the board reported as roughly 87% complete.
+Migration **1080** adds `swimlanes.is_parking`, seeded from exactly the key set `nextLane.ts` already
+hardcoded, so it changes no behaviour on an existing board and only makes the existing rule editable — and
+extends it to the tenant's own "Waiting on Legal" lane, which a key set could never match.
+
+**And the rest:** `verdictCompliance.ts` computes the reviewer MISS RATE per agent, not merely per tenant,
+because "reviews are 40% unanswered" is a symptom and "this model answers 4% of the time while that one
+answers 96%" is a decision; `syncStates` drops an ownerless `in_progress` slot back to `unstaffed`;
+`assignTicketOwner` runs in the remediation stage; the required-role roster shows on the ticket card
+(`TaskBadges`); auto-attested credit is badged and is its own gap kind; and `seedLaneStaffingFromWorkforce`
+runs on board creation.
+
+### 9–10 · Connectors, marketplace and the canvas
+
+**SOAP is a transport, not a second subsystem.** The register said Microsoft Advertising "cannot be added as
+manifest data" because its Campaign Management service is SOAP. That was a reason to build a feature.
+Everything a `ConnectorManifest` says is transport-agnostic; only "serialize as JSON" and "parse as JSON" were
+REST-shaped, so `connectors/soapEnvelope.ts` supplies the other pair and `connectorRuntime` keeps its single
+SSRF guard, single credential unsealing and single audit write. The parser is hand-written and deliberately
+not general-purpose — there is no XML parser in this API and no `DOMParser` on Workers, and an npm XML
+dependency bought for ninety lines of a response we already size-cap is a supply-chain cost with no return.
+
+**Inbound mail became a cause.** Migration **1095** adds `mailbox_watches`: Gmail's `users.watch` (7 days,
+notification carries only a `historyId`) and Graph's `POST /subscriptions` (~3 days, and a HANDSHAKE — Graph
+calls back with `?validationToken=` and refuses the subscription unless it is echoed) are different enough
+that the row carries where the subscription is, when it dies, and where we had got to, as three genuinely
+different facts.
+
+**Also closed:** Developer Portal Phase 3's remainder — directory search/categories/ranking, publisher install
+analytics, and the dynamic sandbox-tenant and agentic governance-agent review stages (migration **1094**,
+with `reviewStages.ts` as an explicit composition root rather than an import side effect, because a
+side-effect import is the one a reader deletes as unused and a bundler may drop — and the failure mode of
+dropping it is a review pipeline that silently runs one stage and approves everything); FO-B4's e-signature
+vendor adapters (DocuSign, Dropbox Sign, as manifest DATA per 0410); WebAuthn/passkeys end to end (**0988** +
+`PasskeyService` + `/api/auth/passkey*` + both surfaces); the Upwork-parity richer-posting fields and
+client-side talent ops (**0985** — note `budget_total_cents` is a NEW column with a unit-bearing name and not
+a reinterpretation of the existing rate BAND, because 600000 is a reasonable project and an absurd hourly
+rate); escrow mediation (**0986**, which gave the writer-less `gig_disputes` from 0425 an escrow-milestone
+subject rather than standing up a second dispute table); the accounting adapters behind the ledger port
+(**1091**); the public canvas API + webhooks + third-party widget registry (**1100**/**1101** — the webhook
+primitive was GENERALISED in place rather than duplicated, and `entry_origin` is derived server-side because a
+security predicate recomputed in three places will one day be computed differently in one of them); the canvas
+`brandKit` and `audience` kinds with the `brandKitRef` binding; `CanvasCalendarSurface`; the workflow
+builder's config-field and integration-catalog localization; and a published site's own end-user identity
+(`site_users` + `site_user_sessions`, sign-in by one-time code so the generated app never holds a reusable
+secret).
+
+### 14 · Frontend — the thirteenth cache, and the guard that stops a fourteenth
+
+`getOrSetClientCached` / `invalidateClientCache` now live in `infrastructure/http/readThrough.ts` and **all
+thirteen** hand-rolled module-level caches were migrated onto it in the same slice, which is the part that
+matters: extracting a primitive without migrating the duplicates leaves fourteen caches, not one.
+`scripts/check-api-transport.mjs` fails a new hand-rolled Map+TTL. Alongside it: `useRequireAuth` replaced the
+copy-pasted signed-out guard that dropped the deep link on six pages; `middleware.ts` returns a real 404 for
+an unknown root-level slug instead of the `[burnrateDomain]` catch-all's 200-with-a-404-body;
+`AgentExecutionControl.test.tsx` is deterministic; `nodeKinds.ts` is localized and its superseded model
+placeholder is gone; migration **1062** stopped the project's "Agents" list and its roster describing the same
+fact differently; and five marketing routes gained their own catalogs.
+
+---
+
+### The five type errors this audit found, and fixed
+
+The register's 2026-08-19 entry said `frontend tsgo` was red on two strict-index errors in
+`model-provider.test.ts` and blocked on a concurrent session. Both are gone. A clean re-run — after building
+the linked `brain-embedded` package, whose stale `dist` accounted for six further errors that were not source
+defects at all — surfaced five that arrived with the 2026-08-20 commit:
+
+- **A gated workflow reported that it had started.** Migration 1092 made `approvalMode: 'required'` a real
+  gate: `POST /:id/run` answers 202 with a pending approval INSTEAD of a run. Both callers still destructured
+  `{ workflowId }` off the union, so the UI said "Started a run of X" and opened a history panel on
+  `undefined` — the exact failure the gate exists to prevent, since it claims work began that a human has not
+  allowed. Both now narrow on `status === 'pending'` and say so, in all five locales.
+- **`MarketingObjectKind` was missing from `creationObjectRegistry`'s exhaustiveness `Exclude`.** That
+  annotation's own comment says it exists so "a kind added to the contract and to neither half below fails to
+  compile here rather than rendering as an empty card". It could not compile at all, so it protected nothing.
+- **A dead seam beside a duplicated constant.** `RuntimeSurfaceSelect` — which hard-disables the GitHub
+  Actions surface on a project whose repo cannot run it, resolves its own readiness rather than taking a
+  drilled `canX`, and carries the short reason in the option's own text because a screen reader announces the
+  option and never the prose beside it — had **zero** consumers. `CloudAgentFormFields` still had its own
+  `RUNTIME_SURFACE_KEYS` and a `<Select>` that offered the surface unconditionally, importing a component that
+  had been renamed out from under it. Wiring the form onto the picker deletes the duplicate, retires the dead
+  seam, and closes the register's "warns rather than hard-disabling" entry as a side effect. Its stale test
+  moved with it and now asserts against the themed combobox's real DOM (`role="option"` / `aria-disabled`)
+  rather than a native `<option>` the primitive does not render.
+- **Settings → Logs → Audit redirected to its own URL.** `app/logs/page.tsx` became a `redirect()` when
+  logging was consolidated into Settings, and `SettingsLogs` kept importing it as the audit component. It now
+  renders `AuditTrailPanel` — the tenant-wide activity/audit trail the Performance tab already shows. One
+  audit surface, two mounts; rebuilding a second one here is what let the first rot unnoticed.
+- **`cloudAgentForm.surfaceUnavailableOption` did not exist in any catalog**, so the disabled option would
+  have rendered its raw key. Added in all five, along with corrected reason copy — the old text said runs
+  "will fall back to the durable cloud executor", which stopped being true the moment the option was disabled.
+
+Two catalog defects came with them and are fixed: `widgets.title.autoVerdictMissRate` and
+`autoVerdictByAgent` were each written as a per-locale `{en, zh, es, fr, de}` MAP inside every catalog — the
+ad-hoc per-locale map the standing rule names explicitly — so `t()` returned an object and both widget titles
+rendered as the raw key in every language; and the new `brandKit` / `audience` canvas kinds had no
+`creationCanvas.object.*` label in any of the five files. Both are flattened/added and `messages.test.ts` is
+green at 74/74. The two GUARD gaps they exposed — no leaf-type assertion, and the kind-label assertion living
+in a different package from the contract that declares the kinds — are logged in group 14 rather than closed.
+
+### The design-scale ratchet's colour and radius legs
+
+`literalHexFiles` is back to its baseline of 0 and `offScaleRadii` to 1. `AITrainingPanel`'s
+`var(--token, #hex)` fallbacks were dropped for the four tokens that are declared under both themes — a
+literal fallback is only reachable if the stylesheet failed to load, and when it is reached it paints a
+dark-only value into a light theme. `UnreadBadge` was drawing a pill with `borderRadius: size`, which happens
+to be round only while the height matches, and `WhyChainChart`'s 3px hairline used a literal `2`; both are
+`var(--radius-full)`, which IS on the scale. The two genuine exemptions were added WITH their reasons, which
+is what that list is for: the blog's résumé MINIATURE renders the same printed sheet `canvasResumeRenderer`
+emits — already exempt on these grounds — at 104px wide, where `#fff` is the paper and 1px is the document's
+proportion; and `CreationCanvas.module.css`'s `[data-sticky-shape]` rules DRAW eight geometries, so 22px is
+what makes a `round` sticky round. Snapping those to the chrome's radius scale would change the shape the
+author picked. The `offScaleFontSizes` leg is still red at 3,826 against 3,767 and is recorded in group 15
+with its worst offenders, because moving 59 sizes onto the type ramp is a visual change on surfaces somebody
+has to look at.
+
+---
+
 ## ✅ RESOLVED 2026-08-19 — Every seat's numbers are real, the deep pass reports back, and a branch finally branches
 
 **Roadmap items closed:** *`DOMAIN_MANIFEST` declares 45 charted metric keys and only three have a writer*,

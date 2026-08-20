@@ -156,6 +156,7 @@ const linkedinAds: ConnectorManifest = {
     { key: 'list_ad_accounts', label: 'List ad accounts', description: 'List the LinkedIn sponsored accounts this token can spend on.', method: 'GET', path: '/adAccounts', mutates: false, resultPath: 'elements', params: { q: q('Finder name', { default: 'search' }), count: qn('Page size'), start: qn('Page offset') } },
     { key: 'list_campaign_groups', label: 'List campaign groups', description: 'Read the campaign groups that hold budget on the account.', method: 'GET', path: '/adAccounts/{account_id}/adCampaignGroups', mutates: false, required: ['account_id'], resultPath: 'elements', params: { account_id: p('Numeric sponsored account id'), q: q('Finder name', { default: 'search' }), count: qn('Page size') } },
     { key: 'create_campaign_group', label: 'Create campaign group', description: 'Create the campaign group a LinkedIn campaign must belong to.', method: 'POST', path: '/adAccounts/{account_id}/adCampaignGroups', mutates: true, required: ['account_id', 'name'], params: { account_id: p('Numeric sponsored account id'), name: b('Campaign group name'), status: b('ACTIVE, PAUSED or DRAFT', { default: 'DRAFT' }), account: b('Account URN, e.g. urn:li:sponsoredAccount:512345678'), totalBudget: bo('Budget object with currencyCode and amount'), runSchedule: bo('Start and end times in epoch milliseconds') } },
+    { key: 'update_campaign_group', label: 'Update campaign group', description: 'Rename, re-budget, pause or resume a LinkedIn campaign group.', method: 'POST', path: '/adAccounts/{account_id}/adCampaignGroups/{campaign_group_id}', mutates: true, required: ['account_id', 'campaign_group_id', 'patch'], headers: { 'X-RestLi-Method': 'PARTIAL_UPDATE' }, params: { account_id: p('Numeric sponsored account id'), campaign_group_id: p('Numeric campaign group id'), patch: bo('Patch document, e.g. {"$set":{"status":"PAUSED"}}') } },
     { key: 'list_campaigns', label: 'List campaigns', description: 'Read LinkedIn campaigns with their budgets, bids and status.', method: 'GET', path: '/adAccounts/{account_id}/adCampaigns', mutates: false, required: ['account_id'], resultPath: 'elements', params: { account_id: p('Numeric sponsored account id'), q: q('Finder name', { default: 'search' }), search: q('URL-encoded search criteria'), count: qn('Page size'), start: qn('Page offset') } },
     { key: 'create_campaign', label: 'Create campaign', description: 'Create a LinkedIn campaign. Spends once it is ACTIVE and has creatives.', method: 'POST', path: '/adAccounts/{account_id}/adCampaigns', mutates: true, required: ['account_id', 'name'], params: {
       account_id: p('Numeric sponsored account id'), name: b('Campaign name'), campaignGroup: b('Campaign group URN'), account: b('Account URN, e.g. urn:li:sponsoredAccount:512345678'), type: b('SPONSORED_UPDATES, TEXT_AD, SPONSORED_INMAILS or DYNAMIC'), objectiveType: b('BRAND_AWARENESS, WEBSITE_VISITS, LEAD_GENERATION, WEBSITE_CONVERSIONS and similar'), status: b('ACTIVE, PAUSED or DRAFT', { default: 'DRAFT' }), costType: b('CPM, CPC or CPV'), dailyBudget: bo('Amount object with currencyCode and amount as a decimal string'), totalBudget: bo('Amount object with currencyCode and amount as a decimal string'), unitCost: bo('Bid amount object'), locale: bo('Campaign locale, e.g. {"country":"US","language":"en"}'), targetingCriteria: bo('Include/exclude facet tree'), runSchedule: bo('Start and end times in epoch milliseconds'),
@@ -354,6 +355,17 @@ const snapchatAds: ConnectorManifest = {
 /** The Campaign Management v13 contract namespace, on every envelope. */
 const MS_ADS_NS = 'https://bingads.microsoft.com/CampaignManagement/v13';
 
+/**
+ * Reporting is a DIFFERENT SERVICE on a different host with its own contract namespace.
+ *
+ * Microsoft splits campaign management and reporting across two subdomains that share
+ * one set of credentials and one account. The per-action `baseUrl` (see
+ * `ConnectorAction.baseUrl`) is what lets both live in this one manifest, rather than
+ * forcing an operator to connect Microsoft Advertising twice.
+ */
+const MS_REPORTING_NS = 'https://bingads.microsoft.com/Reporting/v13';
+const MS_REPORTING_BASE = 'https://reporting.api.bingads.microsoft.com/Api/Advertiser/Reporting/v13';
+
 /** The four `<Header>` elements every Campaign Management call carries. */
 const MS_ADS_SOAP_HEADER: Readonly<Record<string, string>> = {
   AuthenticationToken: '{{auth.token}}',
@@ -381,6 +393,28 @@ const msAdsAction = (
   soap: { action: operation, namespace: MS_ADS_NS, operation: `${operation}Request`, version: '1.1', header: MS_ADS_SOAP_HEADER },
   // The response wrapper is always `<OperationResponse>`; unwrapping it here keeps
   // every adapter reading the operation's own fields rather than the envelope's.
+  resultPath: `${operation}Response`,
+});
+
+/** One Reporting operation. Same credentials and envelope; different service. */
+const msReportAction = (
+  key: string,
+  operation: string,
+  label: string,
+  description: string,
+  params: ConnectorManifest['actions'][number]['params'],
+): ConnectorManifest['actions'][number] => ({
+  key,
+  label,
+  description,
+  method: 'POST',
+  baseUrl: MS_REPORTING_BASE,
+  path: '/ReportingService.svc',
+  // Submitting a report READS delivery — it changes nothing an operator could regret,
+  // so it must not sit behind the mutation confirm gate every write shares.
+  mutates: false,
+  params,
+  soap: { action: operation, namespace: MS_REPORTING_NS, operation: `${operation}Request`, version: '1.1', header: MS_ADS_SOAP_HEADER },
   resultPath: `${operation}Response`,
 });
 
@@ -435,6 +469,35 @@ const microsoftAds: ConnectorManifest = {
     msAdsAction('get_ad_group_criterions', 'GetAdGroupCriterionsByIds', 'List targeting criteria', 'Read the age, gender and device criteria on a Microsoft Advertising ad group.', false, {
       AdGroupId: bn('Parent ad group id'), CriterionIds: bo('Typed array wrapper of criterion ids, omit for all'), CriterionType: b('Targets, Audience or a specific criterion type'),
     }),
+    /*
+     * ── REPORTING IS ASYNCHRONOUS ────────────────────────────────────────────
+     * Microsoft does not answer "what did this cost" in one call. A report is
+     * SUBMITTED, then POLLED until it is generated, and the result arrives as a URL to
+     * a zipped CSV. All three steps are declared here so the adapter composes them
+     * rather than reaching outside the connector runtime — the download included, which
+     * is why `download_report` exists: fetching a vendor-supplied URL by hand would
+     * bypass the SSRF guard, the credential seal and the audit-log row that every other
+     * call in this system goes through.
+     */
+    msReportAction('submit_report', 'SubmitGenerateReport', 'Submit a report', 'Ask Microsoft Advertising to generate a spend and performance report. Returns a report request id to poll.', {
+      ReportRequest: bo('A typed report request — CampaignPerformanceReportRequest with its Format, Aggregation, Columns, Scope and Time'),
+    }),
+    msReportAction('poll_report', 'PollGenerateReport', 'Poll a report', 'Check whether a submitted Microsoft Advertising report is ready, and get its download URL.', {
+      ReportRequestId: b('The id returned by SubmitGenerateReport'),
+    }),
+    {
+      key: 'download_report',
+      label: 'Download a report',
+      description: 'Fetch the generated Microsoft Advertising report archive from the URL PollGenerateReport returned.',
+      method: 'GET',
+      // The report lives on a storage host Microsoft names at poll time, so the WHOLE url
+      // arrives per call as an `in: 'url'` param — guarded by the runtime's SSRF check on
+      // the resolved url, exactly as every other call is. `path` is unused in that case,
+      // and declared empty rather than left implying a join that never happens.
+      path: '',
+      mutates: false,
+      params: { report_url: { type: 'string', in: 'url', description: 'The absolute ReportDownloadUrl from PollGenerateReport' } },
+    },
   ],
 };
 

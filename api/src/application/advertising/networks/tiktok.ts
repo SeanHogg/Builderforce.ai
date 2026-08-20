@@ -15,8 +15,9 @@ import {
   AdsProviderError, ask, count, fromCents, list, mapObjective, rec, requireField, text, toCents, toDay, toISO, unmapObjective,
 } from '../adsNormalize';
 import {
-  ageWindow, mapTargetingValues, requireTargetingSupport,
+  ageFromBuckets, bucketedAgeKeys, mapTargetingValues, readNativeValues, requireTargetingSupport,
   type AdDevice, type AdGender, type AdPlacement, type AdTargeting, type AdTargetingDimension,
+  type AgeBucket,
 } from '../adTargeting';
 import {
   type AdCall, type AdCallResult, type AdCreativeRemote, type AdInsightRow, type AdObjective,
@@ -123,7 +124,7 @@ const TARGETING_DIMENSIONS: readonly AdTargetingDimension[] = ['geo', 'age', 'ge
  * TikTok's age BUCKETS, in order, as [inclusive min, inclusive max] in this port's terms.
  * The top bucket is "55 and over", which is `AD_MAX_AGE` here.
  */
-const AGE_BUCKETS: ReadonlyArray<{ readonly key: string; readonly min: number; readonly max: number }> = [
+const AGE_BUCKETS: readonly AgeBucket[] = [
   { key: 'AGE_13_17', min: 13, max: 17 },
   { key: 'AGE_18_24', min: 18, max: 24 },
   { key: 'AGE_25_34', min: 25, max: 34 },
@@ -131,37 +132,6 @@ const AGE_BUCKETS: ReadonlyArray<{ readonly key: string; readonly min: number; r
   { key: 'AGE_45_54', min: 45, max: 54 },
   { key: 'AGE_55_100', min: 55, max: 65 },
 ];
-
-/**
- * An age WINDOW → the TikTok buckets that are exactly it.
- *
- * TikTok cannot express "20 to 30". The tempting move is to send every bucket that
- * OVERLAPS, which silently buys 18-34 — a wider and more expensive audience than the one
- * asked for, invisible in every report afterwards. So a window that does not land on
- * bucket boundaries is refused, and the message names the boundaries that do work.
- */
-function ageGroups(targeting: AdTargeting): string[] {
-  const { min, max } = ageWindow(targeting);
-  const first = AGE_BUCKETS.findIndex((bucket) => bucket.min === min);
-  const last = AGE_BUCKETS.findIndex((bucket) => bucket.max === max);
-  if (first === -1 || last === -1 || first > last) {
-    throw new AdsProviderError(
-      `TikTok sells age in fixed buckets, so it cannot target exactly ${min}-${max}. `
-      + `Use a window starting on one of ${AGE_BUCKETS.map((b) => b.min).join(', ')} and `
-      + `ending on one of ${AGE_BUCKETS.map((b) => b.max).join(', ')} — it will not be rounded outwards.`,
-      400,
-      false,
-    );
-  }
-  return AGE_BUCKETS.slice(first, last + 1).map((bucket) => bucket.key);
-}
-
-/** The buckets TikTok reports back → the window they cover. */
-function ageFromGroups(groups: readonly string[]): { min: number; max: number } | null {
-  const known = AGE_BUCKETS.filter((bucket) => groups.includes(bucket.key));
-  if (known.length === 0) return null;
-  return { min: Math.min(...known.map((b) => b.min)), max: Math.max(...known.map((b) => b.max)) };
-}
 
 /**
  * Country codes → the numeric location ids TikTok requires.
@@ -246,7 +216,9 @@ async function targetingFields(
   if (targeting.countries?.length) {
     fields.location_ids = await resolveLocationIds(call, advertiserId, targeting.countries);
   }
-  if (targeting.ageMin != null || targeting.ageMax != null) fields.age_groups = ageGroups(targeting);
+  if (targeting.ageMin != null || targeting.ageMax != null) {
+    fields.age_groups = bucketedAgeKeys(tiktokAdsProvider, AGE_BUCKETS, targeting);
+  }
   if (targeting.genders?.length) {
     // TikTok takes ONE gender, not a list. `parseTargeting` already drops "both", which
     // is the unrestricted default rather than a constraint, so a list here is a single.
@@ -272,7 +244,7 @@ function readTiktokTargeting(row: Record<string, unknown>): AdTargeting {
 
   // `location_ids` are numeric and mean nothing without a lookup this read path does not
   // perform, so geography travels in `nativeTargeting` rather than being guessed at.
-  const window = ageFromGroups(list(row.age_groups).map(text));
+  const window = ageFromBuckets(AGE_BUCKETS, list(row.age_groups).map(text));
   if (window) {
     targeting.ageMin = window.min;
     targeting.ageMax = window.max;
@@ -281,14 +253,7 @@ function readTiktokTargeting(row: Record<string, unknown>): AdTargeting {
   if (gender === 'GENDER_MALE') targeting.genders = ['male'];
   if (gender === 'GENDER_FEMALE') targeting.genders = ['female'];
 
-  const byNative = new Map(
-    Object.entries(PLACEMENTS)
-      .filter((entry): entry is [AdPlacement, string] => entry[1] != null)
-      .map(([ours, theirs]) => [theirs, ours]),
-  );
-  const placements = list(row.placements)
-    .map((value) => byNative.get(text(value)))
-    .filter((value): value is AdPlacement => value != null);
+  const placements = readNativeValues(PLACEMENTS, list(row.placements).map(text));
   if (placements.length) targeting.placements = placements;
 
   return targeting;

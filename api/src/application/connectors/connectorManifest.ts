@@ -62,7 +62,21 @@ export const CONNECTOR_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] as co
 export type ConnectorMethod = (typeof CONNECTOR_METHODS)[number];
 
 /** Where a validated input value is placed on the outbound HTTP request. */
-export const CONNECTOR_PARAM_LOCATIONS = ['path', 'query', 'body', 'header'] as const;
+/**
+ * Where a value goes on the request.
+ *
+ * `url` is the odd one and deliberately narrow: the value IS the whole request URL,
+ * because the VENDOR supplied it at runtime. Microsoft Advertising answers a report poll
+ * with a storage URL on a host it picks; Google and Meta hand back media and export links
+ * the same way. A `path` param cannot carry one — path values are percent-encoded and
+ * appended to a base, which turns an absolute URL into nonsense — and the alternative,
+ * letting an adapter reach past the connector runtime and call `fetch` itself, would step
+ * around the SSRF guard, the sealed credentials and the audit-log row that every other
+ * call in this system goes through. So the URL comes in as a declared parameter and is
+ * guarded exactly like any other: `connectorRuntime` runs `assertSafeUrl` and re-resolves
+ * the hostname on the RESOLVED url, whoever chose it.
+ */
+export const CONNECTOR_PARAM_LOCATIONS = ['path', 'query', 'body', 'header', 'url'] as const;
 export type ConnectorParamLocation = (typeof CONNECTOR_PARAM_LOCATIONS)[number];
 
 export const CONNECTOR_PARAM_TYPES = ['string', 'number', 'integer', 'boolean', 'object', 'array'] as const;
@@ -121,6 +135,27 @@ export interface ConnectorAction {
   method: ConnectorMethod;
   /** Path appended to baseUrl. `{placeholders}` are filled from `in: 'path'` params. */
   path: string;
+  /**
+   * A different HOST for this one action.
+   *
+   * Most vendors serve every operation from one origin, which is what `baseUrl` is for.
+   * Some split a service across subdomains — Microsoft Advertising answers campaign
+   * management on `campaign.api.bingads.microsoft.com` and reporting on
+   * `reporting.api.bingads.microsoft.com`, with the same credentials, the same envelope
+   * and the same account. Without this, that vendor needs a SECOND connector manifest:
+   * a second connection for the operator to make, a second set of credentials to keep in
+   * step, and an adapter that cannot reach half its own API because an `AdCall` is bound
+   * to one connector.
+   *
+   * Validated exactly as {@link ConnectorManifest.baseUrl} is, at author time and again
+   * against the resolved hostname before every call — this widens what a manifest may
+   * SAY, never what the runtime will dial.
+   *
+   * A connection's own `baseUrlOverride` still wins: an operator pointing a connector at
+   * a self-hosted instance is moving every service together, and having one action
+   * silently keep dialling the vendor would defeat the override.
+   */
+  baseUrl?: string;
   /**
    * Whether the action changes state in the external system. Drives the same
    * confirm gate every other tool source uses — see `McpToolEntry.mutates`.
@@ -264,8 +299,15 @@ function validateAction(raw: unknown, index: number, errors: string[]): Connecto
     return null;
   }
   const path = String(raw.path ?? '');
-  if (!path.startsWith('/')) {
-    errors.push(`${where}.path: must start with "/"`);
+  // An action whose URL arrives whole at runtime (`in: 'url'`) has no path to join, and
+  // an empty string is how it says so — see CONNECTOR_PARAM_LOCATIONS. Every other action
+  // must name a rooted path, because the alternative silently concatenates onto the host.
+  const urlSupplied = isPlainObject(raw.params)
+    && Object.values(raw.params).some((param) => isPlainObject(param) && param.in === 'url');
+  if (urlSupplied ? path !== '' : !path.startsWith('/')) {
+    errors.push(urlSupplied
+      ? `${where}.path: must be empty when a param declares in: 'url'`
+      : `${where}.path: must start with "/"`);
     return null;
   }
   if (typeof raw.mutates !== 'boolean') {
@@ -314,6 +356,20 @@ function validateAction(raw: unknown, index: number, errors: string[]): Connecto
     if (!params[r]) errors.push(`${where}.required: "${r}" is not a declared param`);
   }
 
+  // The same shape check `baseUrl` gets on the manifest — see ConnectorAction.baseUrl.
+  // The runtime's SSRF guard on the RESOLVED url is still the authoritative one; this is
+  // the early, friendlier failure, and it refuses a per-action host that is not https.
+  const actionBaseUrl = raw.baseUrl == null ? null : String(raw.baseUrl).trim().replace(/\/$/, '');
+  if (actionBaseUrl) {
+    try {
+      assertSafeUrl(actionBaseUrl.replace(TEMPLATE_RE, 'placeholder'), { allowHttp: false });
+    } catch (e) {
+      errors.push(`${where}.baseUrl: ${e instanceof Error ? e.message : 'invalid'}`);
+    }
+  } else if (raw.baseUrl != null) {
+    errors.push(`${where}.baseUrl: must be a non-empty URL when present`);
+  }
+
   const soap = validateSoap(raw.soap, where, errors);
   // A SOAP operation is a POST of a document. Declaring it on a GET would produce a
   // request with an envelope no service ever sees, which fails as an unhelpful 404.
@@ -333,6 +389,7 @@ function validateAction(raw: unknown, index: number, errors: string[]): Connecto
       ? { headers: Object.fromEntries(Object.entries(raw.headers).map(([k, v]) => [k, String(v)])) }
       : {}),
     ...(raw.bodyFormat === 'form' ? { bodyFormat: 'form' as const } : {}),
+    ...(actionBaseUrl ? { baseUrl: actionBaseUrl } : {}),
     ...(soap ? { soap } : {}),
     ...(typeof raw.resultPath === 'string' ? { resultPath: raw.resultPath } : {}),
   };

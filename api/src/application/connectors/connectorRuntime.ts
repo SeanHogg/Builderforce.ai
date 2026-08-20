@@ -172,7 +172,10 @@ export function buildConnectorRequest(args: {
 }): BuiltRequest {
   const { manifest, action, input, auth } = args;
 
-  const base = (args.baseUrlOverride?.trim() || manifest.baseUrl).replace(/\/$/, '');
+  // Precedence: the CONNECTION's override, then this action's own host, then the
+  // manifest's. See ConnectorAction.baseUrl for why an action may name a different host
+  // and why an operator's override still outranks it.
+  const base = (args.baseUrlOverride?.trim() || action.baseUrl || manifest.baseUrl).replace(/\/$/, '');
   let path = action.path;
   const query = new URLSearchParams();
   const headers: Record<string, string> = { Accept: 'application/json', ...(manifest.defaultHeaders ?? {}), ...(action.headers ?? {}) };
@@ -181,6 +184,8 @@ export function buildConnectorRequest(args: {
     : {};
   /** Set when a param declares `bodyPath: '$'` — the body IS that value. */
   let bodyOverride: unknown;
+  /** Set when a param declares `in: 'url'` — the request URL IS that value. */
+  let urlOverride: string | undefined;
 
   for (const [name, param] of Object.entries(action.params)) {
     // A default may itself be a `{{auth.x}}` template (Trello's api key rides as a
@@ -194,6 +199,12 @@ export function buildConnectorRequest(args: {
     switch (param.in) {
       case 'path':
         path = path.split(`{${wire}}`).join(encodeURIComponent(String(value)));
+        break;
+      case 'url':
+        // The whole URL, supplied by the vendor at runtime — NOT encoded and NOT joined
+        // to a base. It is guarded below by the same `assertSafeUrl` + hostname
+        // re-resolution every other url gets. See CONNECTOR_PARAM_LOCATIONS.
+        urlOverride = String(value);
         break;
       case 'query':
         // An object-typed query param SPREADS — the generic HTTP connector's
@@ -279,7 +290,9 @@ export function buildConnectorRequest(args: {
   }
 
   const qs = query.toString();
-  const url = `${fillTemplate(base, auth)}${fillTemplate(path, auth)}${qs ? `?${qs}` : ''}`;
+  const url = urlOverride
+    ? `${urlOverride}${qs ? `${urlOverride.includes('?') ? '&' : '?'}${qs}` : ''}`
+    : `${fillTemplate(base, auth)}${fillTemplate(path, auth)}${qs ? `?${qs}` : ''}`;
 
   return {
     url,

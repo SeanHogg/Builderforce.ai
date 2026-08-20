@@ -335,8 +335,9 @@ export {
   AD_TARGETING_DIMENSIONS, AD_PLACEMENTS, AD_DEVICES, AD_GENDERS, AD_MIN_AGE, AD_MAX_AGE,
   EMPTY_TARGETING, isAdTargetingDimension, targetingDimensionsUsed, isUntargeted,
   requireTargetingSupport, mapTargetingValues, ageWindow, parseTargeting, readTargeting,
+  bucketedAgeKeys, ageFromBuckets, invertNativeTable, readNativeValues,
   type AdTargeting, type AdTargetingDimension, type AdPlacement, type AdDevice, type AdGender,
-  type ParseTargetingResult,
+  type AgeBucket, type ParseTargetingResult,
 } from './adTargeting';
 
 // ---------------------------------------------------------------------------

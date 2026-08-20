@@ -14,8 +14,9 @@ import {
   AdsProviderError, ask, count, fromCents, list, mapObjective, rec, requireField, text, toCents, toDay, toISO, unmapObjective,
 } from '../adsNormalize';
 import {
-  ageWindow, mapTargetingValues, requireTargetingSupport,
+  ageFromBuckets, bucketedAgeKeys, mapTargetingValues, readNativeValues, requireTargetingSupport,
   type AdDevice, type AdGender, type AdPlacement, type AdTargeting, type AdTargetingDimension,
+  type AgeBucket,
 } from '../adTargeting';
 import {
   type AdCreativeRemote, type AdInsightRow, type AdObjective, type AdSetRemote,
@@ -80,7 +81,7 @@ const TARGETING_DIMENSIONS: readonly AdTargetingDimension[] = ['geo', 'age', 'ge
 
 /** Pinterest's contiguous age BUCKETS, as [inclusive min, inclusive max] in our terms.
  *  The top bucket is "65 and over", which is `AD_MAX_AGE` here. */
-const AGE_BUCKETS: ReadonlyArray<{ readonly key: string; readonly min: number; readonly max: number }> = [
+const AGE_BUCKETS: readonly AgeBucket[] = [
   { key: '18-24', min: 18, max: 24 },
   { key: '25-34', min: 25, max: 34 },
   { key: '35-44', min: 35, max: 44 },
@@ -90,24 +91,6 @@ const AGE_BUCKETS: ReadonlyArray<{ readonly key: string; readonly min: number; r
   { key: '65+', min: 65, max: 65 },
 ];
 
-/** An age window → the Pinterest buckets that are exactly it, or a refusal naming the
- *  boundaries. Never rounded outwards — see the note in `adTargeting`. */
-function ageBuckets(targeting: AdTargeting): string[] {
-  const { min, max } = ageWindow(targeting);
-  const first = AGE_BUCKETS.findIndex((bucket) => bucket.min === min);
-  const last = AGE_BUCKETS.findIndex((bucket) => bucket.max === max);
-  if (first === -1 || last === -1 || first > last) {
-    throw new AdsProviderError(
-      `Pinterest sells age in fixed buckets, so it cannot target exactly ${min}-${max}. `
-      + `Use a window starting on one of ${AGE_BUCKETS.map((b) => b.min).join(', ')} and `
-      + `ending on one of ${AGE_BUCKETS.map((b) => b.max).join(', ')} — it will not be rounded outwards.`,
-      400,
-      false,
-    );
-  }
-  return AGE_BUCKETS.slice(first, last + 1).map((bucket) => bucket.key);
-}
-
 /** Our spec → Pinterest's `targeting_spec`. Every key is a LIST on Pinterest, including
  *  the ones that hold a single value. */
 function targetingSpec(targeting: AdTargeting): Record<string, unknown> {
@@ -115,7 +98,9 @@ function targetingSpec(targeting: AdTargeting): Record<string, unknown> {
   const spec: Record<string, unknown> = {};
   // Pinterest takes ISO country codes directly in `LOCATION`, with no id lookup.
   if (targeting.countries?.length) spec.LOCATION = [...targeting.countries];
-  if (targeting.ageMin != null || targeting.ageMax != null) spec.AGE_BUCKET = ageBuckets(targeting);
+  if (targeting.ageMin != null || targeting.ageMax != null) {
+    spec.AGE_BUCKET = bucketedAgeKeys(pinterestAdsProvider, AGE_BUCKETS, targeting);
+  }
   if (targeting.genders?.length) {
     spec.GENDER = mapTargetingValues(pinterestAdsProvider, 'gender', GENDERS, targeting.genders);
   }
@@ -136,11 +121,10 @@ function readPinterestTargeting(raw: unknown): AdTargeting {
   const countries = list(spec.LOCATION).map(text).filter((value) => /^[A-Za-z]{2}$/.test(value));
   if (countries.length) targeting.countries = countries.map((value) => value.toUpperCase());
 
-  const ages = list(spec.AGE_BUCKET).map(text);
-  const known = AGE_BUCKETS.filter((bucket) => ages.includes(bucket.key));
-  if (known.length) {
-    targeting.ageMin = Math.min(...known.map((b) => b.min));
-    targeting.ageMax = Math.max(...known.map((b) => b.max));
+  const window = ageFromBuckets(AGE_BUCKETS, list(spec.AGE_BUCKET).map(text));
+  if (window) {
+    targeting.ageMin = window.min;
+    targeting.ageMax = window.max;
   }
 
   const genders = list(spec.GENDER)
@@ -148,14 +132,7 @@ function readPinterestTargeting(raw: unknown): AdTargeting {
     .filter((value): value is AdGender => value === 'male' || value === 'female');
   if (genders.length) targeting.genders = genders;
 
-  const byNative = new Map(
-    Object.entries(PLACEMENTS)
-      .filter((entry): entry is [AdPlacement, string] => entry[1] != null)
-      .map(([ours, theirs]) => [theirs, ours]),
-  );
-  const placements = list(spec.PLACEMENT_TRAFFIC_TYPE)
-    .map((value) => byNative.get(text(value).toUpperCase()))
-    .filter((value): value is AdPlacement => value != null);
+  const placements = readNativeValues(PLACEMENTS, list(spec.PLACEMENT_TRAFFIC_TYPE).map(text));
   if (placements.length) targeting.placements = placements;
 
   return targeting;

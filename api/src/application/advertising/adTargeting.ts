@@ -176,6 +176,115 @@ export function ageWindow(targeting: AdTargeting): { min: number; max: number } 
   };
 }
 
+// ---------------------------------------------------------------------------
+// Shared mechanics — the parts every adapter was writing out longhand
+// ---------------------------------------------------------------------------
+
+/**
+ * One age bucket a network sells, with the real ages it covers.
+ *
+ * Six of the nine networks price age in FIXED BUCKETS rather than as a free window, and
+ * every one of them names them differently (`AGE_18_24`, `18-24`, `AGE_RANGE_18_24`).
+ * The NAMES are the network's business; the arithmetic over them is not, and it was
+ * being retyped per adapter — four copies, one of which had quietly grown a different
+ * rule than the other three.
+ */
+export interface AgeBucket {
+  /** The network's own name for this bucket — the value that goes on the wire. */
+  readonly key: string;
+  readonly min: number;
+  /** Inclusive top. A bucket that is open at the top uses {@link AD_MAX_AGE}. */
+  readonly max: number;
+}
+
+/**
+ * An age WINDOW → the buckets that are EXACTLY it, or a refusal naming the boundaries.
+ *
+ * This is the whole argument of this module applied to one dimension. A network that
+ * sells 18-24 and 25-34 cannot express "20 to 30". The tempting move — send every bucket
+ * that OVERLAPS — silently buys 18-34: a wider and more expensive audience than the one
+ * asked for, invisible in every report afterwards, and indistinguishable from the
+ * campaign simply performing poorly.
+ *
+ * So the window must LAND on bucket boundaries, and the refusal says which ones do.
+ * Buckets are assumed contiguous and ascending, which is how every network's set is
+ * declared; the slice between the matched ends is therefore the exact cover.
+ */
+export function bucketedAgeKeys(
+  provider: { label: string },
+  buckets: readonly AgeBucket[],
+  targeting: AdTargeting,
+): string[] {
+  const { min, max } = ageWindow(targeting);
+  const first = buckets.findIndex((bucket) => bucket.min === min);
+  const last = buckets.findIndex((bucket) => bucket.max === max);
+  if (first === -1 || last === -1 || first > last) {
+    throw new AdsProviderError(
+      `${provider.label} sells age in fixed buckets, so it cannot target exactly ${min}-${max}. `
+      + `Use a window starting on one of ${buckets.map((b) => b.min).join(', ')} and `
+      + `ending on one of ${buckets.map((b) => b.max).join(', ')} — it will not be rounded outwards.`,
+      400,
+      false,
+    );
+  }
+  return buckets.slice(first, last + 1).map((bucket) => bucket.key);
+}
+
+/**
+ * The buckets a network reports back → the window they cover.
+ *
+ * The READ counterpart, and deliberately forgiving where the write path is strict: a
+ * campaign built in the network's own console may use buckets this port would refuse to
+ * write, and reporting the window they add up to is better than reporting no age
+ * targeting on an audience that is in fact narrowed. Null when none are recognised.
+ */
+export function ageFromBuckets(
+  buckets: readonly AgeBucket[],
+  keys: readonly string[],
+): { min: number; max: number } | null {
+  const known = buckets.filter((bucket) => keys.includes(bucket.key));
+  if (known.length === 0) return null;
+  return {
+    min: Math.min(...known.map((bucket) => bucket.min)),
+    max: Math.min(AD_MAX_AGE, Math.max(...known.map((bucket) => bucket.max))),
+  };
+}
+
+/**
+ * A mapping table read BACKWARDS — the network's value → our word.
+ *
+ * Every adapter that maps a dimension onto a native enum with {@link mapTargetingValues}
+ * also has to read it back, and each was building the same inverted Map by hand. Entries
+ * the network cannot express are declared `undefined` and dropped here, so a table is
+ * written once, in one direction, and used in both.
+ */
+export function invertNativeTable<T extends string>(
+  table: Readonly<Record<T, string | undefined>>,
+): Map<string, T> {
+  return new Map(
+    (Object.entries(table) as Array<[T, string | undefined]>)
+      .filter((entry): entry is [T, string] => entry[1] != null)
+      .map(([ours, theirs]) => [theirs.toUpperCase(), ours]),
+  );
+}
+
+/**
+ * The network's reported values → our vocabulary, dropping anything unrecognised.
+ *
+ * The read-path partner of {@link mapTargetingValues}: that one REFUSES an unmappable
+ * value because it is about to spend money on it, this one DISCARDS it because it is
+ * only describing what already exists. Same table, opposite postures, both deliberate.
+ */
+export function readNativeValues<T extends string>(
+  table: Readonly<Record<T, string | undefined>>,
+  values: readonly string[],
+): T[] {
+  const byNative = invertNativeTable(table);
+  return values
+    .map((value) => byNative.get(value.toUpperCase()))
+    .filter((value): value is T => value != null);
+}
+
 export type ParseTargetingResult =
   | { ok: true; targeting: AdTargeting }
   | { ok: false; error: string };

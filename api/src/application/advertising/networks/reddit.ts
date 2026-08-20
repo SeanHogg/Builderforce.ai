@@ -13,7 +13,7 @@ import {
   AdsProviderError, ask, count, fromCents, list, mapObjective, rec, requireField, text, toCents, toDay, toISO, unmapObjective,
 } from '../adsNormalize';
 import {
-  mapTargetingValues, requireTargetingSupport,
+  mapTargetingValues, readNativeValues, requireTargetingSupport,
   type AdDevice, type AdGender, type AdPlacement, type AdTargeting, type AdTargetingDimension,
 } from '../adTargeting';
 import {
@@ -104,14 +104,7 @@ function readRedditTargeting(raw: unknown): AdTargeting {
   const interests = list(spec.interests).map(text).filter(Boolean);
   if (interests.length) targeting.interests = interests;
 
-  const byNative = new Map(
-    Object.entries(DEVICES)
-      .filter((entry): entry is [AdDevice, string] => entry[1] != null)
-      .map(([ours, theirs]) => [theirs, ours]),
-  );
-  const devices = list(spec.devices)
-    .map((value) => byNative.get(text(value).toUpperCase()))
-    .filter((value): value is AdDevice => value != null);
+  const devices = readNativeValues(DEVICES, list(spec.devices).map(text));
   if (devices.length) targeting.devices = devices;
 
   return targeting;

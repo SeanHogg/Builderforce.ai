@@ -18,8 +18,8 @@ import {
   AdsProviderError, ask, count, fromCents, list, mapObjective, rec, requireField, text, toCents, toDay, unmapObjective,
 } from '../adsNormalize';
 import {
-  ageWindow, mapTargetingValues, requireTargetingSupport,
-  type AdGender, type AdTargeting, type AdTargetingDimension,
+  AD_MAX_AGE, ageFromBuckets, bucketedAgeKeys, mapTargetingValues, requireTargetingSupport,
+  type AdGender, type AdTargeting, type AdTargetingDimension, type AgeBucket,
 } from '../adTargeting';
 import {
   type AdCall, type AdCreativeRemote, type AdInsightRow, type AdObjective, type AdSetRemote,
@@ -118,15 +118,15 @@ async function search(call: Parameters<AdsProvider['identity']>[0], customer: st
  */
 const TARGETING_DIMENSIONS: readonly AdTargetingDimension[] = ['geo', 'age', 'gender', 'interests'];
 
-/** Google's age buckets, with the real ages they cover — the window is turned into
- *  exclusions by comparing against these, never by string matching. */
-const AGE_BUCKETS: ReadonlyArray<{ type: string; min: number; max: number }> = [
-  { type: 'AGE_RANGE_18_24', min: 18, max: 24 },
-  { type: 'AGE_RANGE_25_34', min: 25, max: 34 },
-  { type: 'AGE_RANGE_35_44', min: 35, max: 44 },
-  { type: 'AGE_RANGE_45_54', min: 45, max: 54 },
-  { type: 'AGE_RANGE_55_64', min: 55, max: 64 },
-  { type: 'AGE_RANGE_65_UP', min: 65, max: 200 },
+/** Google's age buckets, with the real ages they cover. The top bucket is open-ended;
+ *  it is declared as `AD_MAX_AGE` so it lines up with the shared bucket arithmetic. */
+const AGE_BUCKETS: readonly AgeBucket[] = [
+  { key: 'AGE_RANGE_18_24', min: 18, max: 24 },
+  { key: 'AGE_RANGE_25_34', min: 25, max: 34 },
+  { key: 'AGE_RANGE_35_44', min: 35, max: 44 },
+  { key: 'AGE_RANGE_45_54', min: 45, max: 54 },
+  { key: 'AGE_RANGE_55_64', min: 55, max: 64 },
+  { key: 'AGE_RANGE_65_UP', min: 65, max: AD_MAX_AGE },
 ];
 
 const GENDER_TYPES: Readonly<Record<AdGender, string>> = {
@@ -134,12 +134,19 @@ const GENDER_TYPES: Readonly<Record<AdGender, string>> = {
   female: 'FEMALE',
 };
 
-/** The buckets that do NOT overlap the requested window — the ones Google must exclude. */
+/**
+ * The buckets Google must EXCLUDE to leave exactly the requested window.
+ *
+ * Google targets age by exclusion, so the included set is computed first — through the
+ * same {@link bucketedAgeKeys} every other bucketed network uses — and everything else
+ * is excluded. It previously excluded only the buckets that did not OVERLAP the window,
+ * which meant a request for 20-30 excluded nothing and bought 18-34: the silent widening
+ * this module exists to prevent, in the one adapter that had its own copy of the
+ * arithmetic. An unalignable window is now refused by name here too.
+ */
 function excludedAgeTypes(targeting: AdTargeting): string[] {
-  const window = ageWindow(targeting);
-  return AGE_BUCKETS
-    .filter((bucket) => bucket.max < window.min || bucket.min > window.max)
-    .map((bucket) => bucket.type);
+  const included = new Set(bucketedAgeKeys(googleAdsProvider, AGE_BUCKETS, targeting));
+  return AGE_BUCKETS.filter((bucket) => !included.has(bucket.key)).map((bucket) => bucket.key);
 }
 
 /**
@@ -372,10 +379,13 @@ export const googleAdsProvider: AdsProvider = {
       // Exclusions back into a window: whatever was NOT excluded is what is targeted.
       const excludedAges = excludedAgesByGroup.get(id);
       if (excludedAges?.size) {
-        const included = AGE_BUCKETS.filter((bucket) => !excludedAges.has(bucket.type));
-        if (included.length) {
-          targeting.ageMin = Math.min(...included.map((bucket) => bucket.min));
-          targeting.ageMax = Math.min(65, Math.max(...included.map((bucket) => bucket.max)));
+        const window = ageFromBuckets(
+          AGE_BUCKETS,
+          AGE_BUCKETS.filter((bucket) => !excludedAges.has(bucket.key)).map((bucket) => bucket.key),
+        );
+        if (window) {
+          targeting.ageMin = window.min;
+          targeting.ageMax = window.max;
         }
       }
       const excludedGenders = excludedGendersByGroup.get(id);
