@@ -307,6 +307,9 @@ export const ACCOUNT_REQUIRED_CANVAS_TOOLS = [
   // thread. `canvas_open_deal` is the one that makes a firm an OBJECT rather than a
   // string in a cell, which is what `fundingRound.investors` never was.
   'canvas_sync_funding_round',
+  // The round's PLAN, as a record. `funding_rounds` had no writer at all until
+  // 0937, so a target and a valuation were board JSON beside an empty table.
+  'canvas_plan_funding_round',
   'canvas_open_deal',
   'canvas_log_deal_touch',
   // ── The data room, actually sent (FO-E2) ─────────────────────────────────────
@@ -316,6 +319,9 @@ export const ACCOUNT_REQUIRED_CANVAS_TOOLS = [
   'canvas_sync_data_room',
   'canvas_share_data_room',
   'canvas_revoke_data_room_share',
+  // A room holds TWO shapes: a diligence obligation and an encrypted legal file
+  // filed into it (0937). This is how the second one gets there — and how it leaves.
+  'canvas_file_document_in_data_room',
   // The founders' agreement and its siblings, drafted from the one template registry
   // (FO-D5). Account-required because it renders a real workspace's formation
   // paperwork and lands it on a `contract` card that is then SENT for signature.
