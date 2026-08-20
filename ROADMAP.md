@@ -135,26 +135,26 @@ follows is what closing them surfaced.*
 
 ## Consolidated Gap Register — grouped index
 
-*Counts re-derived from the body on 2026-08-19. One entry = one top-level `- ` bullet, which is the grain the register is written in; a bullet can be compound, so this is a guide rather than a ticket count. 0 open entries.*
+*Counts re-derived from the body on 2026-08-19. One entry = one top-level `- ` bullet, which is the grain the register is written in; a bullet can be compound, so this is a guide rather than a ticket count. 334 open entries.*
 
 | # | Group | Open items |
 |---|-------|-----------|
 | 0 | [PRD 20 · Consolidated data model](#0--prd-20--consolidated-data-model--what-is-still-open) | 11 |
 | 1 | [☁️ Cloud Agent Runtime & PR Loop](#1--cloud-agent-runtime--pr-loop) | 22 |
-| 2 | [⚙️ On-Prem Runtime, Engine & Tooling](#2--on-prem-runtime-engine--tooling) | 6 |
-| 3 | [🔀 LLM Gateway, Routing & Cost](#3--llm-gateway-routing--cost) | 32 |
-| 4 | [🧠 Evermind / SSM](#4--evermind--ssm) | 14 |
-| 5 | [🧠 Brain & Chat](#5--brain--chat) | 17 |
-| 6 | [👥 Workforce, Boards, Kanban & Ceremonies](#6--workforce-boards-kanban--ceremonies) | 31 |
+| 2 | [⚙️ On-Prem Runtime, Engine & Tooling](#2--on-prem-runtime-engine--tooling) | 8 |
+| 3 | [🔀 LLM Gateway, Routing & Cost](#3--llm-gateway-routing--cost) | 33 |
+| 4 | [🧠 Evermind / SSM](#4--evermind--ssm) | 22 |
+| 5 | [🧠 Brain & Chat](#5--brain--chat) | 16 |
+| 6 | [👥 Workforce, Boards, Kanban & Ceremonies](#6--workforce-boards-kanban--ceremonies) | 30 |
 | 7 | [📊 Insights, Analytics & Audits](#7--insights-analytics--audits) | 21 |
 | 8 | [🚨 Reliability — Incidents & Monitoring](#8--reliability--incidents--monitoring) | 3 |
-| 9 | [🔌 Integrations, Connectors & Workflows](#9--integrations-connectors--workflows) | 36 |
-| 10 | [🛍️ Marketplace, Talent, Freelance, Knowledge & Canvas](#10--marketplace-talent-freelance-knowledge--canvas) | 72 |
+| 9 | [🔌 Integrations, Connectors & Workflows](#9--integrations-connectors--workflows) | 34 |
+| 10 | [🛍️ Marketplace, Talent, Freelance, Knowledge & Canvas](#10--marketplace-talent-freelance-knowledge--canvas) | 54 |
 | 11 | [🎬 Studio (Video/Voice), QA & Mobile](#11--studio-videovoice-qa--mobile) | 8 |
-| 12 | [🖥️ VS Code Extension](#12--vs-code-extension) | 10 |
+| 12 | [🖥️ VS Code Extension](#12--vs-code-extension) | 6 |
 | 13 | [🏢 Segments, Multi-tenant, Embed & Governance](#13--segments-multi-tenant-embed--governance) | 10 |
-| 14 | [🖥️ Frontend, i18n, Theme & Marketing/SEO](#14--frontend-i18n-theme--marketingseo) | 41 |
-| 15 | [🛠️ Platform — DB, CI/CD, Migrations, Cost & Tech-debt](#15--platform--db-cicd-migrations-cost--tech-debt) | 28 |
+| 14 | [🖥️ Frontend, i18n, Theme & Marketing/SEO](#14--frontend-i18n-theme--marketingseo) | 39 |
+| 15 | [🛠️ Platform — DB, CI/CD, Migrations, Cost & Tech-debt](#15--platform--db-cicd-migrations-cost--tech-debt) | 17 |
 
 ---
 
