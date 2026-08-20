@@ -23,6 +23,7 @@ import { useTranslations } from 'next-intl';
 import Link from 'next/link';
 import { allowanceState } from '@seanhogg/builderforce-brain-embedded';
 import { useConsumption } from '@/lib/useConsumption';
+import { useFormat } from "@/i18n/useFormat";
 
 /** Compact number for banner copy ("1.2M", "48K"). */
 function compact(n: number): string {
@@ -30,6 +31,7 @@ function compact(n: number): string {
 }
 
 export function AllowanceBanner() {
+    const fmt = useFormat();
   const t = useTranslations('brain.allowance');
   const snapshot = useConsumption();
   const [dismissed, setDismissed] = useState('');
@@ -43,7 +45,7 @@ export function AllowanceBanner() {
   const key = `${state}:${snapshot.period.resetsAt}:${meter.limit}`;
   if (dismissed === key) return null;
 
-  const resets = new Date(snapshot.period.resetsAt).toLocaleDateString();
+  const resets = fmt.date(snapshot.period.resetsAt);
   const exhausted = state === 'exhausted';
 
   return (

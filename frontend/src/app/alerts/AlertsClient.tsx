@@ -18,6 +18,7 @@ import {
   type AlertComparator,
   type AlertScopeKind,
 } from '@/lib/builderforceApi';
+import { useFormat } from "@/i18n/useFormat";
 
 const METRICS: AlertMetric[] = [
   'token_spend_usd',
@@ -61,6 +62,7 @@ const EMPTY_DRAFT: DraftRule = {
 };
 
 export function AlertsClient() {
+    const fmt = useFormat();
   const t = useTranslations('alerts');
   const [busy, setBusy] = useState(false);
   const [draft, setDraft] = useState<DraftRule>(EMPTY_DRAFT);
@@ -98,7 +100,7 @@ export function AlertsClient() {
       const r = await alertsApi.testRule(id);
       setTested((prev) => ({
         ...prev,
-        [id]: r.observedValue == null ? t('test.na') : t('test.observed', { value: fmt(r.observedValue) }),
+        [id]: r.observedValue == null ? t('test.na') : t('test.observed', { value: fmt.number(r.observedValue, { maximumFractionDigits: 2 }) }),
       }));
     } catch {
       setTested((prev) => ({ ...prev, [id]: t('test.failed') }));
@@ -189,7 +191,7 @@ export function AlertsClient() {
                         <tr key={a.id} style={trStyle}>
                           <td style={tdStyle}>{a.name}</td>
                           <td style={tdMutedStyle}>{metricLabel(a.metric)}</td>
-                          <td style={tdMutedStyle}>{comparatorLabel(a.comparator)} {fmt(a.threshold)}</td>
+                          <td style={tdMutedStyle}>{comparatorLabel(a.comparator)} {fmt.number(a.threshold, { maximumFractionDigits: 2 })}</td>
                           <td style={tdMutedStyle}>{t('days', { n: a.windowDays })}</td>
                           <td style={tdMutedStyle}>{t(`scope.${a.scopeKind}`)}</td>
                           <td style={tdMutedStyle}>
@@ -238,7 +240,7 @@ export function AlertsClient() {
                     <tbody>
                       {events.data.events.map((ev) => (
                         <tr key={ev.id} style={trStyle}>
-                          <td style={tdMutedStyle}>{new Date(ev.createdAt).toLocaleString()}</td>
+                          <td style={tdMutedStyle}>{fmt.dateTime(ev.createdAt)}</td>
                           <td style={tdMutedStyle}>{metricLabel(ev.metric)}</td>
                           <td style={tdStyle}>{ev.message}</td>
                           <td style={tdMutedStyle}>{t(`eventStatus.${ev.status}`)}</td>
@@ -276,6 +278,3 @@ const checkLabel: React.CSSProperties = {
   display: 'flex', alignItems: 'center', gap: 6, fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)',
 };
 
-function fmt(n: number): string {
-  return Number.isInteger(n) ? String(n) : n.toFixed(2);
-}

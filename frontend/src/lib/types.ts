@@ -1,4 +1,5 @@
 import type { DeliverySignals } from '@/lib/deliveryVerdict';
+import type { ColumnClassification, DatasetUsePolicy } from '@builderforce/creation-canvas-contract';
 
 // ---------------------------------------------------------------------------
 // Authentication & Multi-tenant
@@ -207,6 +208,18 @@ export interface Dataset {
   r2_key: string;
   example_count: number;
   status: 'pending' | 'generating' | 'ready' | 'error';
+  /**
+   * GOVERNANCE (0936). What the corpus is ALLOWED to be, carried so a surface can say
+   * whether training is permitted BEFORE somebody presses the button rather than after the
+   * 403. Null on every generated corpus — synthetic instruction pairs hold nobody's
+   * personal data — and on every row that predates the migration.
+   */
+  classifications?: ColumnClassification[] | null;
+  use_policy?: DatasetUsePolicy | null;
+  /** The canvas session and object this corpus was promoted from, so a refusal can name
+   *  the CARD to go and fix rather than an opaque dataset id. */
+  source_session_id?: string | null;
+  source_object_id?: string | null;
   created_at: string;
   updated_at: string;
 }

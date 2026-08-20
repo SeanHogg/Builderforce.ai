@@ -221,6 +221,48 @@ function readMarker(detail: string, field: string): string | null {
   return new RegExp(`"${field}":"([^"]*)"`).exec(detail)?.[1] ?? null;
 }
 
+/**
+ * Action types whose `detail` is READ BACK by code, not just displayed.
+ *
+ * ── WHY THIS REGISTRY EXISTS ─────────────────────────────────────────────────────
+ * `manager_actions` measured 593 MB holding ~24 MB of real data, and the driver is the
+ * every-5-minute cross-tenant sweep writing a `detail` blob — up to 4000 characters —
+ * on rows nothing ever reads. Dropping it for cron feed rows is the fix.
+ *
+ * The obvious rule ("drop `detail` whenever `run_task_id IS NULL`") is WRONG and would
+ * have been a silent correctness bug: `merge_blocked` is written by the cron pass with a
+ * null `run_task_id`, and the PR loop's ceiling counts blocked reports with
+ * `detail NOT LIKE '%"reason":"conflict_exhausted"%'` (ManagerService). Drop that
+ * payload and every historical block reads as still-terminal, which withholds merge
+ * authority on a backlog that should have revived.
+ *
+ * So retention is declared per action type here, rather than inferred from a column that
+ * only correlates with it. Add a type to this set the moment anything starts PARSING its
+ * detail — {@link managerActionJournal.test.ts} pins the one case that exists.
+ */
+const DETAIL_READING_ACTIONS: ReadonlySet<string> = new Set([
+  // ManagerService's PR-loop ceiling greps this row's detail for `conflict_exhausted`.
+  'merge_blocked',
+]);
+
+/**
+ * Whether this row's `detail` payload is worth storing.
+ *
+ * Retained when ANY of:
+ *  • it is a STATE row — the fingerprint markers in `detail` ARE the dedupe contract
+ *    ({@link recordManagerActionOnChange}); drop them and every state re-journals
+ *    on every pass, which is the bloat this module already exists to prevent;
+ *  • something parses this action type's detail ({@link DETAIL_READING_ACTIONS});
+ *  • it belongs to a MANUAL run (`runTaskId` set) — a human asked for that pass and is
+ *    entitled to the full record of it. These are rare and bounded, unlike the sweep.
+ *
+ * Otherwise the row is a cron FEED row: its `summary` (kept, capped at 500) is what the
+ * feed shows, and the JSON blob under it is decoration nobody reads.
+ */
+export function retainsDetail(a: ManagerActionInput, isState: boolean): boolean {
+  return isState || DETAIL_READING_ACTIONS.has(a.actionType) || a.runTaskId != null;
+}
+
 function rowFor(a: ManagerActionInput, state?: { stateKey: string; fingerprint: string }) {
   return {
     tenantId: a.tenantId,
@@ -230,7 +272,7 @@ function rowFor(a: ManagerActionInput, state?: { stateKey: string; fingerprint: 
     runTaskId: a.runTaskId ?? null,
     actionType: a.actionType,
     summary: a.summary.slice(0, 500),
-    detail: serializeDetail(a.detail, state),
+    detail: retainsDetail(a, state != null) ? serializeDetail(a.detail, state) : null,
   };
 }
 

@@ -10,6 +10,7 @@ import {
   type AdminErrorPage,
 } from '@/lib/adminApi';
 import { AdminError, AdminLoading, errText, fmtDateTime } from '@/components/admin/adminShared';
+import { useFormat } from "@/i18n/useFormat";
 
 const PAGE_SIZE = 50;
 
@@ -23,6 +24,7 @@ type HandledFilter = 'all' | 'unhandled' | 'handled';
 
 /** Compact stat tile — the answer, above the evidence. */
 function Tile({ label, value, tone }: { label: string; value: number; tone?: 'danger' }) {
+    const fmt = useFormat();
   return (
     <div
       style={{
@@ -42,13 +44,14 @@ function Tile({ label, value, tone }: { label: string; value: number; tone?: 'da
           color: tone === 'danger' && value > 0 ? 'var(--danger)' : 'var(--text-primary)',
         }}
       >
-        {value.toLocaleString()}
+        {fmt.number(value)}
       </div>
     </div>
   );
 }
 
 export default function ErrorsPanel() {
+    const fmt = useFormat();
   const t = useTranslations('admin');
 
   const [page, setPage] = useState<AdminErrorPage | null>(null);
@@ -209,9 +212,9 @@ export default function ErrorsPanel() {
                   >
                     <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12, wordBreak: 'break-all' }}>{g.source ?? '—'}</td>
                     <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{g.operation ?? '—'}</td>
-                    <td style={{ textAlign: 'right', fontWeight: 600 }}>{g.count.toLocaleString()}</td>
+                    <td style={{ textAlign: 'right', fontWeight: 600 }}>{fmt.number(g.count)}</td>
                     <td style={{ textAlign: 'right', color: g.unhandledCount > 0 ? 'var(--danger)' : undefined }}>
-                      {g.unhandledCount.toLocaleString()}
+                      {fmt.number(g.unhandledCount)}
                     </td>
                     <td style={{ textAlign: 'right' }}>{g.tenantCount}</td>
                     <td className="text-muted" style={{ whiteSpace: 'nowrap', fontSize: 12 }}>{fmtDateTime(g.lastSeen)}</td>

@@ -54,6 +54,7 @@ import {
   type QaTarget,
   type QaTest,
 } from '@/lib/qa/api';
+import { useFormat } from "@/i18n/useFormat";
 
 // Authenticated nav routes worth smoke-testing the Builderforce app itself
 // (self-test crawl seed when no project is selected).
@@ -98,6 +99,7 @@ const inputStyle: React.CSSProperties = {
 };
 
 export function QaContent() {
+    const fmt = useFormat();
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectId, setProjectId] = useState<number | null>(null);
   const [flows, setFlows] = useState<QaFlow[]>([]);
@@ -277,7 +279,7 @@ export function QaContent() {
                 <Td><span style={{ color: STATUS_COLOR[r.status] ?? 'var(--text-secondary)', fontWeight: 700 }}>{r.status}</span></Td>
                 <Td>{r.passedSteps != null && r.totalSteps != null ? `${r.passedSteps}/${r.totalSteps}` : '—'}</Td>
                 <Td>{r.durationMs != null ? `${(r.durationMs / 1000).toFixed(1)}s` : '—'}</Td>
-                <Td>{new Date(r.createdAt).toLocaleString()}</Td>
+                <Td>{fmt.dateTime(r.createdAt)}</Td>
               </tr>
             ))}
           </Table>
@@ -296,6 +298,7 @@ function AgenticTesterSection({ projectId, heatZones, explorations, busy, onRun 
   busy: string | null;
   onRun: (key: string, fn: () => Promise<unknown>) => Promise<void>;
 }) {
+    const fmt = useFormat();
   const [budget, setBudget] = useState(20);
   const [openId, setOpenId] = useState<string | null>(null);
 
@@ -354,7 +357,7 @@ function AgenticTesterSection({ projectId, heatZones, explorations, busy, onRun 
         <Table head={['When', 'Status', 'Zones', 'Findings', 'Summary', '']}>
           {explorations.map((ex) => (
             <tr key={ex.id}>
-              <Td>{new Date(ex.createdAt).toLocaleString()}</Td>
+              <Td>{fmt.dateTime(ex.createdAt)}</Td>
               <Td><span style={{ color: STATUS_COLOR[ex.status] ?? 'var(--text-secondary)', fontWeight: 700 }}>{ex.status}</span></Td>
               <Td>{ex.zonesExplored != null ? `${ex.zonesExplored}/${ex.zonesPlanned}` : ex.zonesPlanned}</Td>
               <Td>{ex.findingsCount}</Td>
@@ -545,6 +548,7 @@ function SchedulesSection({ projectId, schedules, credentials, busy, onRun }: {
   projectId: number; schedules: QaSchedule[]; credentials: QaCredential[]; busy: string | null;
   onRun: (key: string, fn: () => Promise<unknown>) => Promise<void>;
 }) {
+    const fmt = useFormat();
   const [cron, setCron] = useState('0 8 * * *');
   const [credentialId, setCredentialId] = useState('');
 
@@ -579,7 +583,7 @@ function SchedulesSection({ projectId, schedules, credentials, busy, onRun }: {
                   {s.enabled ? 'On' : 'Off'}
                 </button>
               </Td>
-              <Td>{s.nextRunAt ? new Date(s.nextRunAt).toLocaleString() : '—'}</Td>
+              <Td>{s.nextRunAt ? fmt.dateTime(s.nextRunAt) : '—'}</Td>
               <Td>{s.lastStatus ?? '—'}</Td>
               <Td><button type="button" style={btnStyle(busy != null)} disabled={busy != null} onClick={() => onRun(`sched-del-${s.id}`, () => deleteSchedule(s.id))}>Delete</button></Td>
             </tr>

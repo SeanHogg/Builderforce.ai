@@ -9,6 +9,7 @@ import {
   type ProjectBackendRequestRow,
   type ProjectBackendView,
 } from '@/lib/builderforceApi';
+import { useFormat } from "@/i18n/useFormat";
 
 /**
  * The operating surface for a project's server-side half.
@@ -84,6 +85,7 @@ const VERDICT_COLOR: Record<string, string> = {
 };
 
 export default function ProjectBackendPanel({ projectId }: { projectId: number }) {
+    const fmt = useFormat();
   const t = useTranslations('challenges.backend');
 
   const [view, setView] = useState<ProjectBackendView | null>(null);
@@ -450,7 +452,7 @@ export default function ProjectBackendPanel({ projectId }: { projectId: number }
                 {requests.map((r) => (
                   <tr key={r.id}>
                     <td style={{ padding: '6px 8px', borderBottom: '1px solid var(--border-subtle)', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
-                      {r.createdAt ? new Date(r.createdAt).toLocaleTimeString() : '—'}
+                      {r.createdAt ? fmt.time(r.createdAt) : '—'}
                     </td>
                     <td style={{ padding: '6px 8px', borderBottom: '1px solid var(--border-subtle)', color: 'var(--text-primary)' }}>
                       {r.method} {r.route}

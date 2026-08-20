@@ -11,6 +11,7 @@ import { llmUsageLog, tenantApiKeys } from '../../infrastructure/database/schema
 import { generateApiKey, hashSecret } from '../../infrastructure/auth/HashService';
 import { invalidateKeyCache } from '../../infrastructure/auth/keyResolutionCache';
 import { acrossTenants } from '../../infrastructure/database/tenantScope';
+import { coerceJsonObject, coerceStringArrayOrNull } from '../../domain/shared/jsonColumn';
 import {
   deserializeScopes as sharedDeserializeScopes,
   hasScope as sharedHasScope,
@@ -112,20 +113,17 @@ export interface MintTenantApiKeyInput {
   scopes?: string[] | null;
 }
 
-function serializeOrigins(origins: string[] | null | undefined): string | null {
+/** NULL rather than `[]` for an empty allowlist: the column's absence means
+ *  "server-only key", which is a different rule from "an allowlist that permits
+ *  nothing". The column is `jsonb`, so the array goes in as an array — it was
+ *  previously JSON.stringify'd into a jsonb column, which round-tripped back as a
+ *  parsed array that `JSON.parse` then choked on (see coerceStringArrayOrNull). */
+function serializeOrigins(origins: string[] | null | undefined): string[] | null {
   if (!origins || origins.length === 0) return null;
-  return JSON.stringify(origins);
+  return origins;
 }
 
-function deserializeOrigins(value: string | null | undefined): string[] | null {
-  if (!value) return null;
-  try {
-    const parsed = JSON.parse(value);
-    return Array.isArray(parsed) ? parsed.filter((s) => typeof s === 'string') : null;
-  } catch {
-    return null;
-  }
-}
+const deserializeOrigins = coerceStringArrayOrNull;
 
 /** Mint a new bfk_* key for a tenant. Returns the raw key once; only the hash is stored. */
 export async function mintTenantApiKey(
@@ -543,9 +541,13 @@ export async function queryTenantApiKeyUsage(
   };
 }
 
-function parseMetadata(value: string | null): Record<string, unknown> | null {
-  if (!value) return null;
-  try { return JSON.parse(value) as Record<string, unknown>; } catch { return null; }
+/** `llm_usage_log.metadata` is a `jsonb` column typed as a record, so the driver hands
+ *  it back already parsed — the same round-trip `deserializeOrigins` above was fixed
+ *  for. Routed through the ONE shared coercer rather than a second private JSON.parse,
+ *  which is what choked on rows written since the column became jsonb. Null in, null
+ *  out: an absent metadata blob is not an empty one. */
+function parseMetadata(value: unknown): Record<string, unknown> | null {
+  return value == null ? null : coerceJsonObject(value);
 }
 
 /**

@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { useConsumption, invalidateConsumption } from '@/lib/useConsumption';
+import { useFormat } from "@/i18n/useFormat";
 
 /**
  * The account-tier chip: which plan funds this workspace, and — on a metered plan
@@ -24,6 +25,7 @@ import { useConsumption, invalidateConsumption } from '@/lib/useConsumption';
  * present the same three states.
  */
 export function PlanBadge() {
+    const fmt = useFormat();
   const t = useTranslations('planBadge');
   const snapshot = useConsumption();
   if (!snapshot) return null;
@@ -93,7 +95,7 @@ export function PlanBadge() {
             textOverflow: 'ellipsis',
           }}
         >
-          {exhausted ? t('noTokens') : t('tokensLeft', { count: remaining.toLocaleString() })}
+          {exhausted ? t('noTokens') : t('tokensLeft', { count: fmt.number(remaining) })}
         </span>
       )}
       {isFree && (

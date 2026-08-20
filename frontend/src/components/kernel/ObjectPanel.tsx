@@ -30,6 +30,7 @@ import {
 import { ObjectTimeline } from './ObjectTimeline';
 import { ObjectComments } from './ObjectComments';
 import { ObjectShareSheet } from './ObjectShareSheet';
+import { useFormat } from "@/i18n/useFormat";
 
 const TABS = ['activity', 'comments', 'members', 'shares', 'revisions'] as const;
 type Tab = (typeof TABS)[number];
@@ -62,6 +63,7 @@ function MemberList({ objectId, emptyLabel }: { objectId: string; emptyLabel: st
 }
 
 function RevisionList({ objectId, emptyLabel, locale }: { objectId: string; emptyLabel: string; locale: string }) {
+    const fmt = useFormat();
   const [rows, setRows] = useState<Revision[] | null>(null);
   useEffect(() => {
     void getObjectRevisions(objectId).then(setRows).catch(() => setRows([]));
@@ -76,7 +78,7 @@ function RevisionList({ objectId, emptyLabel, locale }: { objectId: string; empt
           <span className="text-sm truncate" style={{ color: 'var(--text-secondary)' }}>{r.label ?? r.summary ?? ''}</span>
           <span className="flex-1" />
           <time dateTime={r.createdAt} className="text-xs tabular-nums" style={{ color: 'var(--text-muted)' }}>
-            {new Date(r.createdAt).toLocaleDateString(locale)}
+            {fmt.date(r.createdAt)}
           </time>
         </li>
       ))}

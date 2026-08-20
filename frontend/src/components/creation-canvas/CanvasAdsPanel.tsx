@@ -34,6 +34,7 @@ import {
   type AdObjective,
 } from '@/lib/adsApi';
 import { authFieldsFor, connectorsApi, type ConnectorAuthField } from '@/lib/connectorsApi';
+import { useFormat } from "@/i18n/useFormat";
 
 /** One glyph per network. Brand marks, so they stay literal — and the record is
  *  exhaustive by TYPE, so a ninth network fails to compile here rather than rendering
@@ -50,6 +51,7 @@ export interface CanvasAdsPanelProps {
 }
 
 export function CanvasAdsPanel({ onClose }: CanvasAdsPanelProps) {
+    const fmt = useFormat();
   const t = useTranslations('canvas.ads');
   const locale = useLocale();
 
@@ -399,9 +401,9 @@ export function CanvasAdsPanel({ onClose }: CanvasAdsPanelProps) {
           <p className={styles.driveEmpty}>{t('window', { since: insights.window.since, until: insights.window.until })}</p>
           <dl className={styles.socialStats}>
             <div><dt>{t('spend')}</dt><dd>{formatMoney(totals?.spendCents ?? 0, currency, locale)}</dd></div>
-            <div><dt>{t('impressions')}</dt><dd>{(totals?.impressions ?? 0).toLocaleString(locale)}</dd></div>
-            <div><dt>{t('clicks')}</dt><dd>{(totals?.clicks ?? 0).toLocaleString(locale)}</dd></div>
-            <div><dt>{t('conversions')}</dt><dd>{(totals?.conversions ?? 0).toLocaleString(locale)}</dd></div>
+            <div><dt>{t('impressions')}</dt><dd>{fmt.number((totals?.impressions ?? 0))}</dd></div>
+            <div><dt>{t('clicks')}</dt><dd>{fmt.number((totals?.clicks ?? 0))}</dd></div>
+            <div><dt>{t('conversions')}</dt><dd>{fmt.number((totals?.conversions ?? 0))}</dd></div>
             {/* A null rate means the denominator was zero — shown as an em dash rather
                 than 0, because "no clicks yet" and "free per click" are different. */}
             <div><dt>{t('costPerClick')}</dt><dd>{formatMoney(totals?.costPerClickCents, currency, locale)}</dd></div>
@@ -417,8 +419,8 @@ export function CanvasAdsPanel({ onClose }: CanvasAdsPanelProps) {
                 <small>{t('insightRow', {
                   date: row.date,
                   spend: formatMoney(row.spendCents, row.currency, locale),
-                  clicks: row.clicks.toLocaleString(locale),
-                  conversions: row.conversions.toLocaleString(locale),
+                  clicks: fmt.number(row.clicks),
+                  conversions: fmt.number(row.conversions),
                 })}</small>
               </span>
             </div>)}

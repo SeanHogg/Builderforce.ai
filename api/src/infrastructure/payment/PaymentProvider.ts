@@ -142,7 +142,16 @@ export interface WebhookEvent {
      * and lands on a `ledger_entries` row whose unique reference makes the second
      * arrival a no-op rather than a second payment.
      */
-    | 'invoice.paid';
+    | 'invoice.paid'
+    /**
+     * A KNOWLEDGE listing was paid for.
+     *
+     * Same event, same reason, third flow: a buyer who pays and closes the tab
+     * has been charged, and without this they hold nothing. The handler is
+     * idempotent against the redirect — both end at the same purchase row, which
+     * the unique index on `(listing, tenant)` makes one.
+     */
+    | 'knowledge.purchased';
 
   /** Use this to look up the tenant */
   externalCustomerId: string;
@@ -169,7 +178,7 @@ export interface WebhookEvent {
   discountRedemptionId?: string;
   /** Signed checkout/subscription metadata identifying the attributed referral. */
   salesReferralId?: string;
-  purchaseKind?: 'business_phone' | 'marketplace_listing';
+  purchaseKind?: 'business_phone' | 'marketplace_listing' | 'knowledge_listing';
   activationCents?: number;
   monthlyCents?: number;
   cartId?: string;
@@ -177,6 +186,8 @@ export interface WebhookEvent {
   checkoutSessionId?: string;
   /** `listing.purchased` — who bought it, from the session's signed metadata. */
   buyerRef?: string;
+  /** `knowledge.purchased` — the buying USER, from the session's signed metadata. */
+  buyerUserId?: string;
   /** `invoice.paid` — which receivable, from the session's signed metadata. */
   invoiceRef?: string;
 

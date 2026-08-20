@@ -141,90 +141,18 @@ export const MODEL_TASKS = ['classification', 'regression', 'generation', 'embed
 export type ModelTask = typeof MODEL_TASKS[number];
 
 // ---------------------------------------------------------------------------
-// The data-use gate
+// The data-use gate — MOVED
 // ---------------------------------------------------------------------------
-
-/**
- * The lawful basis a dataset is held under, in GDPR Article 6 terms.
- *
- * ── WHY THIS IS ON THE CONTRACT AND NOT IN A COMPLIANCE PAGE ────────────────────
- * `canvas_classify_dataset` already scanned for PII and `dataContract` already carried
- * governance tags — and both stopped at DESCRIPTION. Nothing bound a classification to
- * a USE, so nothing prevented a dataset classified as personal data from becoming the
- * corpus of a fine-tune or the body of an export. The product already models the right
- * idea one kind over: `battlecard.doNotSay` is a restriction that travels WITH the
- * object. This is the same move for personal data, and it has to live in the contract
- * because the gate that reads it runs on both the client and the API.
- */
-export const LAWFUL_BASES = ['consent', 'contract', 'legal-obligation', 'vital-interests', 'public-task', 'legitimate-interests'] as const;
-export type LawfulBasis = typeof LAWFUL_BASES[number];
-
-/** What a dataset may be USED for. A corpus whose purposes exclude the use is refused. */
-export const DATA_PURPOSES = ['analysis', 'training', 'evaluation', 'export', 'sharing'] as const;
-export type DataPurpose = typeof DATA_PURPOSES[number];
-
-/** The governance envelope a dataset carries, and the gate reads. */
-export interface DataUsePolicy {
-  purposes?: readonly DataPurpose[];
-  lawfulBasis?: LawfulBasis;
-  /** Days the rows may be retained. `0` or absent means no declared limit. */
-  retentionDays?: number;
-  /** ISO instant the rows were collected — the clock retention is measured from. */
-  collectedAt?: string;
-}
-
-/** A refusal, or `null` when the use is permitted. Rendered to the user AND returned
- *  to the model, so the reason has to be a sentence rather than a code. */
-export interface DataUseRefusal {
-  reason: 'purpose-not-permitted' | 'retention-expired' | 'no-lawful-basis';
-  /** The purpose that was attempted. */
-  purpose: DataPurpose;
-  message: string;
-}
-
-/**
- * May these rows be used this way?
- *
- * ── THE DEFAULT IS PERMISSIVE, AND THAT IS DELIBERATE ───────────────────────────
- * A dataset with NO declared policy is allowed, because the overwhelming majority of
- * canvas datasets are a CSV of quarterly revenue that no consent regime touches, and a
- * default-deny would train every user to declare a policy they had not thought about
- * purely to make the button work — which produces worse governance than none, because
- * the declarations would all be lies.
- *
- * The gate bites exactly when someone HAS said something: a dataset whose purposes are
- * declared and exclude `training` cannot be a fine-tune corpus, and one whose retention
- * has run out cannot be used for anything. A classification without a policy is a
- * description, which is what it always was; a policy is a restriction, which is new.
- */
-export function checkDataUse(policy: DataUsePolicy | null | undefined, purpose: DataPurpose, nowMs: number): DataUseRefusal | null {
-  if (!policy) return null;
-  if (policy.purposes?.length && !policy.purposes.includes(purpose)) {
-    return {
-      reason: 'purpose-not-permitted',
-      purpose,
-      message: `This dataset declares the permitted purposes ${policy.purposes.join(', ')}, and "${purpose}" is not one of them. Change the declared purposes on the dataset if that is wrong — it is a governance statement someone made about these rows, not a technical limit.`,
-    };
-  }
-  if (policy.retentionDays && policy.retentionDays > 0 && policy.collectedAt) {
-    const collected = Date.parse(policy.collectedAt);
-    if (Number.isFinite(collected) && nowMs - collected > policy.retentionDays * 86_400_000) {
-      return {
-        reason: 'retention-expired',
-        purpose,
-        message: `These rows declare a ${policy.retentionDays}-day retention window that expired on ${new Date(collected + policy.retentionDays * 86_400_000).toISOString().slice(0, 10)}. They cannot be used for "${purpose}" until they are re-collected or the window is changed.`,
-      };
-    }
-  }
-  // A lawful basis is required only for the uses that PROCESS the rows into something
-  // that leaves the board. Analysis of data already sitting in front of the user is
-  // not the moment to ask, and asking there is how a consent prompt becomes furniture.
-  if (!policy.lawfulBasis && (purpose === 'training' || purpose === 'sharing')) {
-    return {
-      reason: 'no-lawful-basis',
-      purpose,
-      message: `This dataset carries a governance policy but no lawful basis, and "${purpose}" is a use that needs one recorded. Set a lawful basis on the dataset — consent, contract, legitimate interests or another Article 6 basis — before using these rows this way.`,
-    };
-  }
-  return null;
-}
+//
+// `LAWFUL_BASES`, `DATA_PURPOSES`, `DataUsePolicy` and `checkDataUse` were declared here
+// and, independently, in the canvas governance module — two gates over one question, with
+// two spellings of the Article 6 bases and two vocabularies for the same five purposes. A
+// dataset governed through one was ungoverned at the other, and the second gate read a
+// field (`usePolicy`) that no writer in the product has ever produced.
+//
+// They are now one, in `./dataGovernance`, which this package re-exports. The names this
+// module used are kept there as aliases (`DATA_PURPOSES`, `DataPurpose`, `DataUsePolicy`)
+// so no call site had to be renamed to be corrected. `checkDataUse` is gone rather than
+// aliased: its signature could not see the column classifications, which is exactly the
+// input that decides whether training may proceed — a gate that cannot see the PII is the
+// gate that let a fine-tune through. Callers ask `evaluateDatasetUse` instead.

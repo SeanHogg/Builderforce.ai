@@ -6,6 +6,7 @@ import { Select } from '@/components/Select';
 import { tasksApi, type Task, type TaskPriority, type WorkItemKind } from '@/lib/builderforceApi';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { useConfirm } from '@/components/ConfirmProvider';
+import { useTaskStatusLabel } from '@/lib/taskStatusLabel';
 
 /**
  * Create/edit an Epic in a slide-out side panel. Shared by the Epics tree view
@@ -39,6 +40,7 @@ const fieldStyle: React.CSSProperties = {
 
 export function EpicPanel({ open, epic, projectId, onClose, onSaved }: EpicPanelProps) {
   const t = useTranslations('pm');
+  const statusLabel = useTaskStatusLabel();
   const confirm = useConfirm();
   const isEdit = epic != null;
   const [title, setTitle] = useState(epic?.title ?? '');
@@ -130,7 +132,7 @@ export function EpicPanel({ open, epic, projectId, onClose, onSaved }: EpicPanel
             <div>
               <label style={labelStyle} htmlFor="epic-status">{t('colStatus')}</label>
               <Select id="epic-status" value={status} onChange={(e) => setStatus(e.target.value)} style={fieldStyle}>
-                {STATUSES.map((s) => <option key={s} value={s}>{t(`epicStatus.${s}`)}</option>)}
+                {STATUSES.map((s) => <option key={s} value={s}>{statusLabel(s)}</option>)}
               </Select>
             </div>
           )}

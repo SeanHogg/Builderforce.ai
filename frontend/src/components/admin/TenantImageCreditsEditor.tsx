@@ -3,6 +3,7 @@
 import { useTranslations } from 'next-intl';
 import { adminApi } from '@/lib/adminApi';
 import { TenantIntegerOverrideEditor } from './TenantIntegerOverrideEditor';
+import { useFormat } from "@/i18n/useFormat";
 
 /**
  * Superadmin override for a tenant's daily image-generation credit budget
@@ -18,6 +19,7 @@ interface Props {
 }
 
 export function TenantImageCreditsEditor({ tenantId, value, onChange }: Props) {
+    const fmt = useFormat();
   const t = useTranslations('admin');
   return (
     <TenantIntegerOverrideEditor
@@ -30,7 +32,7 @@ export function TenantImageCreditsEditor({ tenantId, value, onChange }: Props) {
         summary: (v) =>
           v === null ? t('tenants.imageCredits.summaryPlanDefault')
           : v === -1 ? t('tenants.imageCredits.summaryUnlimited')
-          : t('tenants.imageCredits.summaryCustom', { value: v.toLocaleString() }),
+          : t('tenants.imageCredits.summaryCustom', { value: fmt.number(v) }),
         toInput: (stored) => String(stored),
         fromInput: (input) => {
           const n = Number(input);

@@ -10,6 +10,7 @@ import { integrationForConfig, integrationIcon } from './integrations';
 import { ConnectorNodeFields } from './ConnectorNodeFields';
 import type { WorkflowTriggerInfo } from '@/lib/builderforceApi';
 import { Icon } from '@/components/ui/Icon';
+import { useFormat } from "@/i18n/useFormat";
 
 const inputStyle: React.CSSProperties = {
   width: '100%',
@@ -34,6 +35,7 @@ interface Props {
 /** Right-hand inspector for the selected node — edits its label and the typed
  *  config fields declared in the node-kind catalog. */
 export function NodeConfigPanel({ node, onChange, onDelete, triggerInfo }: Props) {
+    const fmt = useFormat();
   const t = useTranslations('evermindBuild');
   const meta = NODE_KIND_MAP[node.data.kind];
   const config = node.data.config ?? {};
@@ -201,13 +203,13 @@ export function NodeConfigPanel({ node, onChange, onDelete, triggerInfo }: Props
           )}
           {triggerInfo.nextRunAt && (
             <div style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)' }}>
-              Next run: {new Date(triggerInfo.nextRunAt).toLocaleString()}
+              Next run: {fmt.dateTime(triggerInfo.nextRunAt)}
             </div>
           )}
           {triggerInfo.lastStatus && (
             <div style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)' }}>
               Last: {triggerInfo.lastStatus}
-              {triggerInfo.lastRunAt ? ` · ${new Date(triggerInfo.lastRunAt).toLocaleString()}` : ''}
+              {triggerInfo.lastRunAt ? ` · ${fmt.dateTime(triggerInfo.lastRunAt)}` : ''}
             </div>
           )}
         </div>

@@ -18,6 +18,7 @@ import { AgentHostConfigContent } from './AgentHostConfigContent';
 import { AgentHostNodesContent } from './AgentHostNodesContent';
 import { useTranslations } from 'next-intl';
 import { useConfirm } from '@/components/ConfirmProvider';
+import { useFormat } from "@/i18n/useFormat";
 
 export type AgentHostPanelTab =
   | 'details'
@@ -105,6 +106,7 @@ export function AgentHostSlideOutPanel({
   onDeleted,
   initialTab = 'details',
 }: AgentHostSlideOutPanelProps) {
+    const fmt = useFormat();
   const confirm = useConfirm();
   const tc = useTranslations('common');
   const t = useTranslations('agentHostPanel');
@@ -364,9 +366,9 @@ export function AgentHostSlideOutPanel({
                     { label: t('fieldName'), value: agentHost.name },
                     { label: t('fieldSlug'), value: slug, mono: true },
                     { label: t('fieldStatus'), value: statusLabel },
-                    { label: t('fieldLastSeen'), value: agentHost.lastSeenAt ? new Date(agentHost.lastSeenAt).toLocaleString() : '—' },
-                    { label: t('fieldConnectedAt'), value: agentHost.connectedAt ? new Date(agentHost.connectedAt).toLocaleString() : '—' },
-                    { label: t('fieldCreated'), value: agentHost.createdAt ? new Date(agentHost.createdAt).toLocaleString() : '—' },
+                    { label: t('fieldLastSeen'), value: agentHost.lastSeenAt ? fmt.dateTime(agentHost.lastSeenAt) : '—' },
+                    { label: t('fieldConnectedAt'), value: agentHost.connectedAt ? fmt.dateTime(agentHost.connectedAt) : '—' },
+                    { label: t('fieldCreated'), value: agentHost.createdAt ? fmt.dateTime(agentHost.createdAt) : '—' },
                   ].filter(r => r.value).map(({ label, value, mono }) => (
                     <div key={label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
                       <span style={{ color: 'var(--text-muted)' }}>{label}</span>

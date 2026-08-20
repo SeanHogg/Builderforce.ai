@@ -25,6 +25,7 @@ import { seedProjectEvermindFromArtifact } from '@/lib/projectEvermindApi';
 import { buildSparkline } from '@/lib/sparkline';
 import { downloadBlob } from '@/lib/download';
 import { Icon } from '@/components/ui/Icon';
+import { useFormat } from "@/i18n/useFormat";
 
 interface Props {
   open: boolean;
@@ -266,6 +267,7 @@ const mRec = (v: unknown): Record<string, unknown> =>
   v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
 
 function BuildMetrics({ metrics }: { metrics: Record<string, unknown> }) {
+    const fmt = useFormat();
   const t = useTranslations('evermindBuild');
   const loss = mNumArray(metrics.trainingHistory);
   const videoLoss = mNumArray(metrics.videoTrainingHistory);
@@ -282,8 +284,8 @@ function BuildMetrics({ metrics }: { metrics: Record<string, unknown> }) {
   const top1 = mNum(bench.top1Accuracy); if (top1 != null) tiles.push({ label: t('mTop1'), value: `${(top1 * 100).toFixed(0)}%` });
   const topk = mNum(bench.topKAccuracy); if (topk != null) tiles.push({ label: t('mTopK', { k: mNum(bench.topK) ?? 5 }), value: `${(topk * 100).toFixed(0)}%` });
   const pass1 = mNum(code.pass1); if (pass1 != null) tiles.push({ label: t('mPass1'), value: `${(pass1 * 100).toFixed(0)}%` });
-  const words = mNum(ds.words); if (words != null) tiles.push({ label: t('mWords'), value: words.toLocaleString() });
-  const seqs = mNum(ds.sequences); if (seqs != null) tiles.push({ label: t('mSequences'), value: seqs.toLocaleString() });
+  const words = mNum(ds.words); if (words != null) tiles.push({ label: t('mWords'), value: fmt.number(words) });
+  const seqs = mNum(ds.sequences); if (seqs != null) tiles.push({ label: t('mSequences'), value: fmt.number(seqs) });
   const dup = mNum(ds.duplicateRatio); if (dup != null) tiles.push({ label: t('mDuplicate'), value: `${(dup * 100).toFixed(0)}%` });
   if (videoMSE != null) tiles.push({ label: t('mVideoMse'), value: videoMSE.toFixed(4) });
 

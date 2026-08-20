@@ -21,7 +21,7 @@
  * updates zero rows, without a transaction — which matters because the platform runs on
  * neon-http, where there are none.
  */
-import { and, asc, eq, inArray } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNotNull, isNull } from 'drizzle-orm';
 import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
@@ -29,10 +29,12 @@ import {
   engagementMilestones,
   freelancerEngagements,
   ledgerEntries,
+  tenants,
 } from '../../infrastructure/database/schema';
 import { notify } from '../notifications/notify';
 import { createPayout, isPayoutsConfigured } from '../integrations/payments';
 import {
+  availableEscrowActions,
   escrowLedgerReference,
   escrowMovement,
   evaluateEscrow,
@@ -54,6 +56,10 @@ export interface Milestone {
   tenantId: number;
   jobId: string | null;
   engagementId: string | null;
+  /** Set when this row is one BIDDER's counter-proposed deliverable rather than the
+   *  posting's own published schedule. Null once it is the posting's or the
+   *  engagement's. */
+  proposalId: string | null;
   freelancerUserId: string | null;
   title: string;
   description: string | null;
@@ -76,6 +82,7 @@ const columns = {
   tenantId: engagementMilestones.tenantId,
   jobId: engagementMilestones.jobId,
   engagementId: engagementMilestones.engagementId,
+  proposalId: engagementMilestones.proposalId,
   freelancerUserId: engagementMilestones.freelancerUserId,
   title: engagementMilestones.title,
   description: engagementMilestones.description,
@@ -104,8 +111,36 @@ const STAMP_COLUMN: Readonly<Partial<Record<MilestoneStatus, 'fundedAt' | 'submi
   cancelled: 'cancelledAt',
 };
 
+/**
+ * A milestone as a SURFACE reads it: the row, plus every move the asking party may make
+ * on it right now.
+ *
+ * `actions` is projected by the server rather than re-derived by each client, and that
+ * is the point. The machine that decides the moves lives in `escrow.ts`, on the server,
+ * and a second copy of it in the browser (and a third in the VS Code webview, and a
+ * fourth in whatever renders next) would be four places for the rule to drift — the
+ * exact duplication the register's DRY rule forbids. The surface renders the buttons it
+ * is handed, so it CANNOT offer a move the machine would refuse, and it needs to know
+ * nothing about who may do what to get that guarantee.
+ */
+export interface ScheduledMilestone extends Milestone {
+  actions: MilestoneAction[];
+}
+
+/** The worker's own line: the schedule row plus the context that says WHOSE work it is.
+ *  Both are joined in the one read rather than resolved per row on the surface. */
+export interface WorkerMilestone extends ScheduledMilestone {
+  engagementTitle: string | null;
+  clientName: string | null;
+}
+
+/** Project the machine's verdict onto a schedule, once, for the party that asked. */
+function withActions(rows: Milestone[], party: EscrowParty): ScheduledMilestone[] {
+  return rows.map((row) => ({ ...row, actions: availableEscrowActions(row.status, party) }));
+}
+
 export interface MilestoneScheduleView {
-  milestones: Milestone[];
+  milestones: ScheduledMilestone[];
   summary: EscrowSummary;
   /** Whether work may start — the funded-before-work gate, resolved for this schedule. */
   gate: WorkGateVerdict;
@@ -133,7 +168,7 @@ export async function readEngagementSchedule(db: Db, tenantId: number, engagemen
       .limit(1),
   ]);
   return {
-    milestones: rows,
+    milestones: withActions(rows, 'client'),
     summary: summariseEscrow(rows),
     gate: evaluateWorkGate(engagement?.engagementType ?? null, rows),
   };
@@ -148,9 +183,113 @@ export async function readEngagementSchedule(db: Db, tenantId: number, engagemen
  */
 export async function readJobSchedule(db: Db, tenantId: number, jobId: string): Promise<Milestone[]> {
   const rows = await db.select(columns).from(engagementMilestones)
-    .where(scopedToTenant(engagementMilestones, tenantId, eq(engagementMilestones.jobId, jobId)))
+    // The POSTING's own schedule only. Bidders may now counter-propose one, and those
+    // rows also carry this `job_id` — returning them here would show an employer every
+    // rival's private counter-offer as if it were their own published terms, and would
+    // make the schedule a candidate reads before bidding depend on who else has bid.
+    .where(scopedToTenant(engagementMilestones, tenantId,
+      eq(engagementMilestones.jobId, jobId),
+      isNull(engagementMilestones.proposalId),
+    ))
     .orderBy(asc(engagementMilestones.sequence), asc(engagementMilestones.createdAt));
   return rows as Milestone[];
+}
+
+/**
+ * The schedule one BIDDER proposed — the counter-offer half of the negotiation.
+ *
+ * A freelancer who disagrees with the published terms could previously only say so in
+ * their cover note, which put the actual agreement in prose that nothing could fund,
+ * release or reconcile. `engagement_milestones.proposal_id` existed for exactly this and
+ * had no writer; these rows are that writer's output. They are drafts on the JOB until
+ * the bid is accepted, at which point `bindScheduleToEngagement` stamps them onto the
+ * engagement in preference to the posting's — so the schedule that gets funded is the
+ * one that was actually agreed.
+ */
+export async function readProposalSchedule(db: Db, tenantId: number, proposalId: string): Promise<Milestone[]> {
+  const rows = await db.select(columns).from(engagementMilestones)
+    .where(scopedToTenant(engagementMilestones, tenantId, eq(engagementMilestones.proposalId, proposalId)))
+    .orderBy(asc(engagementMilestones.sequence), asc(engagementMilestones.createdAt));
+  return rows as Milestone[];
+}
+
+/**
+ * Every bidder's proposed schedule for one posting, grouped by proposal.
+ *
+ * ONE query rather than one per proposal: the employer's bid list renders each
+ * counter-offer inline, and a read per row is the N+1 the performance rule names by
+ * name. Served by `idx_engagement_milestones_job`.
+ */
+export async function readProposalSchedules(
+  db: Db, tenantId: number, jobId: string,
+): Promise<Record<string, Milestone[]>> {
+  const rows = await db.select(columns).from(engagementMilestones)
+    .where(scopedToTenant(engagementMilestones, tenantId,
+      eq(engagementMilestones.jobId, jobId),
+      isNotNull(engagementMilestones.proposalId),
+    ))
+    .orderBy(asc(engagementMilestones.sequence), asc(engagementMilestones.createdAt));
+  const byProposal: Record<string, Milestone[]> = {};
+  for (const row of rows as Milestone[]) {
+    if (!row.proposalId) continue;
+    (byProposal[row.proposalId] ??= []).push(row);
+  }
+  return byProposal;
+}
+
+/** One line of a proposed schedule, as a bidder types it. */
+export interface ProposedMilestoneInput {
+  title: string;
+  description?: string | null;
+  amountCents: number;
+  dueAt?: Date | null;
+}
+
+/**
+ * Replace a bid's proposed schedule with what the bidder just submitted.
+ *
+ * REPLACE rather than append, because bidding is an upsert: re-submitting a proposal
+ * revises it, and appending would leave the previous revision's deliverables in the
+ * same schedule as the new one — a bid that says two different things about the same
+ * work. Only ever touches `draft` rows scoped to this proposal, so a schedule that has
+ * been accepted and funded can never be rewritten from the bidding surface.
+ */
+export async function replaceProposalSchedule(
+  db: Db,
+  input: {
+    tenantId: number;
+    jobId: string;
+    proposalId: string;
+    freelancerUserId: string;
+    currency?: string;
+    lines: readonly ProposedMilestoneInput[];
+  },
+): Promise<Milestone[]> {
+  await db.delete(engagementMilestones).where(and(
+    eq(engagementMilestones.tenantId, input.tenantId),
+    eq(engagementMilestones.proposalId, input.proposalId),
+    eq(engagementMilestones.status, 'draft'),
+    // A bound row is the engagement's schedule, not the bid's, and is out of scope for
+    // a resubmission regardless of status.
+    isNull(engagementMilestones.engagementId),
+  ));
+  const created: Milestone[] = [];
+  for (const [index, line] of input.lines.entries()) {
+    created.push(await createMilestone(db, {
+      tenantId: input.tenantId,
+      jobId: input.jobId,
+      proposalId: input.proposalId,
+      freelancerUserId: input.freelancerUserId,
+      title: line.title,
+      description: line.description ?? null,
+      amountCents: line.amountCents,
+      currency: input.currency,
+      sequence: index,
+      dueAt: line.dueAt ?? null,
+      createdByUserId: input.freelancerUserId,
+    }));
+  }
+  return created;
 }
 
 export interface CreateMilestoneInput {
@@ -192,11 +331,33 @@ export async function createMilestone(db: Db, input: CreateMilestoneInput): Prom
 }
 
 /**
- * Carry a bid's proposed schedule onto the engagement that accepted it.
+ * Bind the AGREED schedule to the engagement that was just created.
  *
- * Stamps rather than copies, deliberately: the client agreed to THESE rows, and a copy
- * is a second schedule that can differ from the one that was bid. Also stamps the
- * freelancer, which is what makes a later release pay whoever was engaged at the time.
+ * There are two candidate schedules and they are not equal in authority:
+ *
+ *   1. the schedule the ACCEPTED BID proposed, and
+ *   2. the schedule the POSTING published.
+ *
+ * The bid wins whenever it has one. Accepting a proposal is the employer agreeing to
+ * THAT bid — including its deliverables and their amounts — so binding the posting's
+ * terms over the top would fund an agreement neither side made, and would silently
+ * discard the counter-offer at the exact moment it was accepted. When the accepted bid
+ * proposed nothing, the posting's published schedule is what both sides were working
+ * from and it binds unchanged.
+ *
+ * When the bid wins, the posting's own drafts are CANCELLED rather than left lying
+ * around: an engagement with two unbound schedules attached to its job is two answers to
+ * "what did we agree", and `cancelled` is exactly what the machine means by a draft that
+ * was called off before any money existed.
+ *
+ * Rival bids' proposed rows are deliberately untouched. They stay scoped to their own
+ * (declined) proposal, where they remain the record of what that bidder offered, and no
+ * read surface mixes them into either the posting's schedule or the engagement's.
+ *
+ * Stamps rather than copies, in both branches: the client agreed to THESE rows, and a
+ * copy is a second schedule that can differ from the one that was agreed. Also stamps
+ * the freelancer, which is what makes a later release pay whoever was engaged at the
+ * time.
  */
 export async function bindScheduleToEngagement(
   // Structural rather than `Db`, so the accept path can pass its TRANSACTION. Binding
@@ -206,23 +367,36 @@ export async function bindScheduleToEngagement(
   // — accepting a proposal is a one-shot, concurrency-gated move.
   db: Pick<Db, 'update'>,
   input: { tenantId: number; jobId: string; engagementId: string; freelancerUserId: string; proposalId?: string | null },
-): Promise<number> {
-  const rows = await db.update(engagementMilestones)
-    .set({
-      engagementId: input.engagementId,
-      freelancerUserId: input.freelancerUserId,
-      updatedAt: new Date(),
-    })
-    .where(and(
-      eq(engagementMilestones.tenantId, input.tenantId),
-      eq(engagementMilestones.jobId, input.jobId),
-      // Only the schedule that has not been bound yet, and only what is still a draft:
-      // re-running an accept must not reopen work that has already been transacted.
-      eq(engagementMilestones.status, 'draft'),
-      ...(input.proposalId ? [eq(engagementMilestones.proposalId, input.proposalId)] : []),
-    ))
+): Promise<{ bound: number; source: 'proposal' | 'posting' | 'none' }> {
+  const stamp = {
+    engagementId: input.engagementId,
+    freelancerUserId: input.freelancerUserId,
+    updatedAt: new Date(),
+  };
+  // Only what is still a draft, in both branches: re-running an accept must not reopen
+  // work that has already been transacted.
+  const scope = and(
+    eq(engagementMilestones.tenantId, input.tenantId),
+    eq(engagementMilestones.jobId, input.jobId),
+    eq(engagementMilestones.status, 'draft'),
+  );
+
+  if (input.proposalId) {
+    const bound = await db.update(engagementMilestones).set(stamp)
+      .where(and(scope, eq(engagementMilestones.proposalId, input.proposalId)))
+      .returning({ id: engagementMilestones.id });
+    if (bound.length > 0) {
+      await db.update(engagementMilestones)
+        .set({ status: 'cancelled', cancelledAt: new Date(), updatedAt: new Date() })
+        .where(and(scope, isNull(engagementMilestones.proposalId)));
+      return { bound: bound.length, source: 'proposal' };
+    }
+  }
+
+  const bound = await db.update(engagementMilestones).set(stamp)
+    .where(and(scope, isNull(engagementMilestones.proposalId)))
     .returning({ id: engagementMilestones.id });
-  return rows.length;
+  return { bound: bound.length, source: bound.length > 0 ? 'posting' : 'none' };
 }
 
 export type MilestoneMoveResult =
@@ -435,12 +609,34 @@ export async function milestoneTenantForFreelancer(db: Db, milestoneId: string, 
  * safety of `subject_own_rows` is that the predicate names one authenticated person,
  * which is a strictly narrower filter than a tenant would be.
  */
-export async function readFreelancerMilestones(db: Db, userId: string): Promise<Milestone[]> {
-  const rows = await db.select(columns).from(engagementMilestones)
-    .where(acrossTenants(engagementMilestones, 'subject_own_rows', eq(engagementMilestones.freelancerUserId, userId)))
+export async function readFreelancerMilestones(db: Db, userId: string): Promise<WorkerMilestone[]> {
+  const rows = await db.select({
+    ...columns,
+    // Joined rather than fetched per row: without them every line reads "Milestone 1"
+    // with no way to tell which client or which job it belongs to, and resolving that on
+    // the surface would be one request per milestone — the N+1 the performance rule
+    // names. Both are LEFT joins because neither is guaranteed by the schema.
+    engagementTitle: freelancerEngagements.title,
+    clientName: tenants.name,
+  }).from(engagementMilestones)
+    .leftJoin(freelancerEngagements, eq(freelancerEngagements.id, engagementMilestones.engagementId))
+    .leftJoin(tenants, eq(tenants.id, engagementMilestones.tenantId))
+    .where(acrossTenants(engagementMilestones, 'subject_own_rows',
+      eq(engagementMilestones.freelancerUserId, userId),
+      // ENGAGED work only. A bidder's own counter-proposed schedule also carries their
+      // user id — it has to, so they can read back what they offered — but a bid is not
+      // money anybody owes them, and listing it here would inflate "what am I owed" by
+      // every open proposal.
+      isNotNull(engagementMilestones.engagementId),
+    ))
     .orderBy(asc(engagementMilestones.sequence), asc(engagementMilestones.createdAt))
     .limit(500);
-  return rows as Milestone[];
+  return rows.map((row) => ({
+    ...(row as Milestone),
+    actions: availableEscrowActions((row as Milestone).status, 'freelancer'),
+    engagementTitle: row.engagementTitle ?? null,
+    clientName: row.clientName ?? null,
+  }));
 }
 
 /** Delete a draft milestone. Only ever a draft: once money has moved, the row is a

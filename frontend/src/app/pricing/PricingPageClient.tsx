@@ -21,6 +21,7 @@ import { NAV_GROUPS } from '@/lib/navGroups';
 import { isNavigationFeatureId } from '@/lib/navigationFeatures';
 import { useCart } from '@/lib/CartContext';
 import { calculateSubscriptionLine } from '@/lib/subscriptionCart';
+import { useFormat } from "@/i18n/useFormat";
 
 // The subscription shape and its two calls live in `lib/billingApi` — `/billing`
 // reads exactly the same three things, and a second copy of the fetch here is
@@ -80,6 +81,7 @@ function PlanCta({ plan, effectivePlan, onUpgrade, isAnon, label, href, compact 
 }
 
 export default function PricingPageClient() {
+    const fmt = useFormat();
   const t = useTranslations('pricing');
   const locale = useLocale();
   const tierT = useTranslations('planBadge.tier');
@@ -304,7 +306,7 @@ export default function PricingPageClient() {
                   {sub.billingUpdatedAt && (
                     <div className={styles.accountDetail}>
                       <span>{t('fieldLastUpdated')}</span>
-                      <span>{new Date(sub.billingUpdatedAt).toLocaleDateString()}</span>
+                      <span>{fmt.date(sub.billingUpdatedAt)}</span>
                     </div>
                   )}
                 </div>

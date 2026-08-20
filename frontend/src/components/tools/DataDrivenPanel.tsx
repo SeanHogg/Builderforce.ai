@@ -7,6 +7,7 @@ import { usePermission } from '@/lib/rbac';
 import { toolsApi } from '@/lib/builderforceApi';
 import { ToolResultView } from '@/components/tools/ToolResultView';
 import type { ToolResult, SavedToolRun } from '@/lib/tools';
+import { useFormat } from "@/i18n/useFormat";
 
 const card: React.CSSProperties = { background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 18 };
 const btnSubtle: React.CSSProperties = {
@@ -21,6 +22,7 @@ const btnSubtle: React.CSSProperties = {
  * the workspace's data when the caller is actually entitled.
  */
 export function DataDrivenPanel({ toolId, projectId }: { toolId: string; projectId?: number | null }) {
+    const fmt = useFormat();
   const t = useTranslations('tools');
   const { allowed } = usePermission('tools.runDataDriven');
   const [result, setResult] = useState<ToolResult | null>(null);
@@ -81,7 +83,7 @@ export function DataDrivenPanel({ toolId, projectId }: { toolId: string; project
               {history.map((h) => (
                 <div key={h.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 'var(--font-size-small)', padding: '6px 0', borderBottom: '1px solid var(--border-subtle)' }}>
                   <span style={{ color: 'var(--text-secondary)' }}>
-                    {new Date(h.createdAt).toLocaleDateString()} · {h.kind === 'data' ? t('modeData') : t('modeSelf')}
+                    {fmt.date(h.createdAt)} · {h.kind === 'data' ? t('modeData') : t('modeSelf')}
                   </span>
                   <span style={{ fontWeight: 700, color: 'var(--text-strong)' }}>
                     {h.result?.score != null ? `${h.result.score.toFixed(1)} / 5` : '—'}

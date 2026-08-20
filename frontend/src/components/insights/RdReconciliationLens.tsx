@@ -7,6 +7,7 @@ import { usePmData } from '@/lib/pm/usePmData';
 import { PmCard, PmEmpty, PmError, StatCard } from '@/components/pm/pmShared';
 import { Select } from '@/components/Select';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
+import { useFormat } from "@/i18n/useFormat";
 
 const usd = (v: number | null | undefined): string =>
   v == null ? '—' : `$${Math.round(v).toLocaleString()}`;
@@ -29,6 +30,7 @@ const selectStyle: React.CSSProperties = {
  * flagging the variance so the two surfaces cross-check instead of diverging.
  */
 export function RdReconciliationLens() {
+    const fmt = useFormat();
   const t = useTranslations('insights.emp');
   const thisYear = new Date().getUTCFullYear();
   const [fy, setFy] = useState(thisYear);
@@ -65,7 +67,7 @@ export function RdReconciliationLens() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
         <StatCard label={t('recon.derivedBase')} value={usd(data.derived.baseUsd)} sub={t('recon.derivedSub')} />
         <StatCard label={t('recon.reportedActual')} value={usd(data.reported.actualUsd)} sub={t('recon.reportedSub')} />
-        <StatCard label={t('recon.derivedLabor')} value={usd(data.derived.laborUsd)} sub={`${Math.round(data.derived.qualifiedHours).toLocaleString()}h · $${data.derived.blendedRate}/h`} />
+        <StatCard label={t('recon.derivedLabor')} value={usd(data.derived.laborUsd)} sub={`${fmt.number(Math.round(data.derived.qualifiedHours))}h · $${data.derived.blendedRate}/h`} />
         <StatCard label={t('recon.derivedAiSpend')} value={usd(data.derived.aiSpendUsd)} />
         <StatCard label={t('recon.reportedPlan')} value={usd(data.reported.planUsd)} />
         <StatCard label={t('recon.rdToRevenue')} value={data.reported.rdToRevenuePct == null ? '—' : `${data.reported.rdToRevenuePct.toFixed(0)}%`} />

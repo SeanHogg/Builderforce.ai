@@ -12,6 +12,7 @@ import {
   type SecurityAudit,
   type SecurityAuditFinding,
 } from '@/lib/builderforceApi';
+import { useFormat } from "@/i18n/useFormat";
 
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
@@ -39,6 +40,7 @@ function SeverityChip({ severity, count }: { severity: string; count: number }) 
 }
 
 export function SecurityAuditPanel() {
+    const fmt = useFormat();
   const t = useTranslations('security');
   const [audits, setAudits] = useState<SecurityAudit[]>([]);
   const [loading, setLoading] = useState(true);
@@ -130,7 +132,7 @@ export function SecurityAuditPanel() {
                       {Object.entries(sev).map(([s, c]) => <SeverityChip key={s} severity={s} count={c} />)}
                     </span>
                     <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-muted)' }}>
-                      {new Date(a.startedAt).toLocaleString()}
+                      {fmt.dateTime(a.startedAt)}
                     </span>
                     <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{isOpen ? '▲' : '▼'}</span>
                   </div>

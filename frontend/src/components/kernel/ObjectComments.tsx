@@ -17,6 +17,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { addObjectAnnotation, getObjectAnnotations, type Annotation } from '@/lib/kernel/kernelApi';
+import { useFormat } from "@/i18n/useFormat";
 
 export function ObjectComments({
   objectId,
@@ -30,6 +31,7 @@ export function ObjectComments({
   limit?: number;
   locale?: string;
 }) {
+    const fmt = useFormat();
   const t = useTranslations('kernel.comments');
   const [rows, setRows] = useState<Annotation[] | null>(null);
   const [draft, setDraft] = useState('');
@@ -115,7 +117,7 @@ export function ObjectComments({
                   className="text-xs tabular-nums"
                   style={{ color: 'var(--text-muted)' }}
                 >
-                  {new Date(row.createdAt).toLocaleString(locale)}
+                  {fmt.dateTime(row.createdAt)}
                 </time>
                 {row.resolvedAt ? (
                   <span

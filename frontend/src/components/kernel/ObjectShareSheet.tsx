@@ -24,6 +24,7 @@ import {
   revokeObjectShare,
   type ShareLink,
 } from '@/lib/kernel/kernelApi';
+import { useFormat } from "@/i18n/useFormat";
 
 const SCOPES: ShareLink['scope'][] = ['view', 'comment', 'edit'];
 
@@ -34,6 +35,7 @@ export function ObjectShareSheet({
   objectId?: string;
   locale?: string;
 }) {
+    const fmt = useFormat();
   const t = useTranslations('kernel.share');
   const [rows, setRows] = useState<ShareLink[] | null>(null);
   const [scope, setScope] = useState<ShareLink['scope']>('view');
@@ -152,7 +154,7 @@ export function ObjectShareSheet({
               </span>
               <span className="text-xs tabular-nums" style={{ color: 'var(--text-muted)' }}>
                 {t('uses', { count: row.useCount })}
-                {row.expiresAt ? ` · ${t('expires', { date: new Date(row.expiresAt).toLocaleDateString(locale) })}` : ''}
+                {row.expiresAt ? ` · ${t('expires', { date: fmt.date(row.expiresAt) })}` : ''}
               </span>
               <span className="flex-1" />
               <button

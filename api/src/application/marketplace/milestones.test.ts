@@ -31,7 +31,10 @@ vi.mock('../integrations/payments', () => ({
   isPayoutsConfigured: (...args: unknown[]) => isPayoutsConfigured(...args),
 }));
 
-const { moveMilestone, deleteDraftMilestone, bindScheduleToEngagement, readJobSchedule } = await import('./milestones');
+const {
+  moveMilestone, deleteDraftMilestone, bindScheduleToEngagement, readJobSchedule,
+  readProposalSchedules, replaceProposalSchedule, readEngagementSchedule, readFreelancerMilestones,
+} = await import('./milestones');
 
 const env = {} as unknown as Env;
 
@@ -280,14 +283,14 @@ describe('moveMilestone — concurrency', () => {
 });
 
 describe('bindScheduleToEngagement — the accept path', () => {
-  it('stamps the job\'s drafts onto the engagement and the freelancer, scoped to the tenant', async () => {
+  it("stamps the posting's drafts onto the engagement and the freelancer, scoped to the tenant", async () => {
     const db = fakeDb([[{ id: 'm-1' }, { id: 'm-2' }]]);
 
     const bound = await bindScheduleToEngagement(db as unknown as Db, {
       tenantId: 7, jobId: 'j-1', engagementId: 'e-1', freelancerUserId: 'user-f',
     });
 
-    expect(bound).toBe(2);
+    expect(bound).toEqual({ bound: 2, source: 'posting' });
     const update = db.calls.find((call) => call.kind === 'update');
     expect(update?.payload).toMatchObject({ engagementId: 'e-1', freelancerUserId: 'user-f' });
     // Tenant AND job in the predicate: a bare job id on a tenant-owned table is the
@@ -312,7 +315,140 @@ describe('bindScheduleToEngagement — the accept path', () => {
 
     expect(await bindScheduleToEngagement(db as unknown as Db, {
       tenantId: 7, jobId: 'j-1', engagementId: 'e-1', freelancerUserId: 'user-f',
-    })).toBe(0);
+    })).toEqual({ bound: 0, source: 'none' });
+  });
+
+  // ── The counter-offer wins. This is the whole point of proposal-scoped rows: the
+  //    employer accepted THAT bid, so THAT bid's deliverables are what gets funded.
+  it("binds the ACCEPTED bid's own schedule in preference to the posting's", async () => {
+    const db = fakeDb([[{ id: 'pm-1' }, { id: 'pm-2' }], []]);
+
+    const result = await bindScheduleToEngagement(db as unknown as Db, {
+      tenantId: 7, jobId: 'j-1', engagementId: 'e-1', freelancerUserId: 'user-f', proposalId: 'p-9',
+    });
+
+    expect(result).toEqual({ bound: 2, source: 'proposal' });
+    expect(boundValues(db.calls[0]?.where)).toContain('p-9');
+  });
+
+  it("cancels the posting's superseded drafts so the engagement has ONE agreed schedule", async () => {
+    const db = fakeDb([[{ id: 'pm-1' }], []]);
+
+    await bindScheduleToEngagement(db as unknown as Db, {
+      tenantId: 7, jobId: 'j-1', engagementId: 'e-1', freelancerUserId: 'user-f', proposalId: 'p-9',
+    });
+
+    expect(db.calls).toHaveLength(2);
+    expect(db.calls[1]?.payload).toMatchObject({ status: 'cancelled' });
+    // And it must NOT name the proposal — the rows being retired are the posting's own.
+    expect(boundValues(db.calls[1]?.where)).not.toContain('p-9');
+  });
+
+  it('falls back to the posting when the accepted bid proposed no schedule of its own', async () => {
+    const db = fakeDb([[], [{ id: 'm-1' }]]);
+
+    const result = await bindScheduleToEngagement(db as unknown as Db, {
+      tenantId: 7, jobId: 'j-1', engagementId: 'e-1', freelancerUserId: 'user-f', proposalId: 'p-9',
+    });
+
+    expect(result).toEqual({ bound: 1, source: 'posting' });
+    // The fallback statement must not still be scoped to the proposal, or an accepted
+    // bid with no counter-offer would bind nothing and lose the published schedule.
+    expect(boundValues(db.calls[1]?.where)).not.toContain('p-9');
+    // And nothing is cancelled when nothing was superseded.
+    expect(db.calls.some((call) => (call.payload as { status?: string } | undefined)?.status === 'cancelled')).toBe(false);
+  });
+});
+
+describe('the counter-proposed schedule', () => {
+  it("replaces the bid's previous lines rather than appending to them", async () => {
+    // delete, then one insert per line.
+    const db = fakeDb([[], [{ id: 'x1' }], [{ id: 'x2' }]]);
+
+    await replaceProposalSchedule(db as unknown as Db, {
+      tenantId: 7, jobId: 'j-1', proposalId: 'p-9', freelancerUserId: 'user-f',
+      lines: [
+        { title: 'Discovery', amountCents: 100_000 },
+        { title: 'Build', amountCents: 400_000 },
+      ],
+    });
+
+    expect(db.calls[0]?.kind).toBe('delete');
+    const where = boundValues(db.calls[0]?.where);
+    expect(where).toContain('p-9');
+    // Only drafts: an accepted, funded schedule can never be rewritten from the
+    // bidding surface.
+    expect(where).toContain('draft');
+    expect(db.calls.filter((call) => call.kind === 'insert')).toHaveLength(2);
+  });
+
+  it('numbers the lines in the order the bidder typed them', async () => {
+    const db = fakeDb([[], [{ id: 'x1' }], [{ id: 'x2' }]]);
+
+    await replaceProposalSchedule(db as unknown as Db, {
+      tenantId: 7, jobId: 'j-1', proposalId: 'p-9', freelancerUserId: 'user-f',
+      lines: [{ title: 'A', amountCents: 1 }, { title: 'B', amountCents: 2 }],
+    });
+
+    const inserts = db.calls.filter((call) => call.kind === 'insert');
+    expect((inserts[0]?.payload as { sequence: number }).sequence).toBe(0);
+    expect((inserts[1]?.payload as { sequence: number }).sequence).toBe(1);
+    expect((inserts[0]?.payload as { proposalId: string }).proposalId).toBe('p-9');
+  });
+
+  it("groups every bidder's schedule in ONE read rather than one read per bid", async () => {
+    const db = fakeDb([[
+      milestone({ id: 'a1', proposalId: 'p-1', jobId: 'j-1', engagementId: null }),
+      milestone({ id: 'a2', proposalId: 'p-1', jobId: 'j-1', engagementId: null }),
+      milestone({ id: 'b1', proposalId: 'p-2', jobId: 'j-1', engagementId: null }),
+    ]]);
+
+    const grouped = await readProposalSchedules(db as unknown as Db, 7, 'j-1');
+
+    expect(db.calls).toHaveLength(1);
+    expect(grouped['p-1']).toHaveLength(2);
+    expect(grouped['p-2']).toHaveLength(1);
+  });
+});
+
+describe('the actions a surface is handed', () => {
+  it("projects the CLIENT's legal moves onto an engagement schedule", async () => {
+    const db = fakeDb([
+      [milestone({ status: 'submitted' })],
+      [{ engagementType: 'fixed_bid' }],
+    ]);
+
+    const view = await readEngagementSchedule(db as unknown as Db, 7, 'e-1');
+
+    // The client may accept or reject what they were given — and may NOT submit it.
+    expect(view.milestones[0]?.actions).toEqual(expect.arrayContaining(['approve', 'reject']));
+    expect(view.milestones[0]?.actions).not.toContain('submit');
+  });
+
+  it("projects the FREELANCER's legal moves onto their own list", async () => {
+    const db = fakeDb([[milestone({ status: 'funded', engagementTitle: 'Redesign', clientName: 'Acme' })]]);
+
+    const rows = await readFreelancerMilestones(db as unknown as Db, 'user-f');
+
+    expect(rows[0]?.actions).toEqual(['submit']);
+    // The context that says whose work it is, joined in the same read rather than
+    // fetched per row.
+    expect(rows[0]?.engagementTitle).toBe('Redesign');
+    expect(rows[0]?.clientName).toBe('Acme');
+  });
+
+  it('never offers the client a move on work that is out with the freelancer', async () => {
+    const db = fakeDb([
+      [milestone({ status: 'funded' })],
+      [{ engagementType: 'fixed_bid' }],
+    ]);
+
+    const view = await readEngagementSchedule(db as unknown as Db, 7, 'e-1');
+
+    // Funded work is the freelancer's move; there is nothing to approve yet.
+    expect(view.milestones[0]?.actions).not.toContain('approve');
+    // Cancelling a funded milestone IS legal — it refunds the hold.
+    expect(view.milestones[0]?.actions).toContain('cancel');
   });
 });
 
@@ -325,6 +461,17 @@ describe('readJobSchedule', () => {
     const where = boundValues(db.calls[0]?.where);
     expect(where).toContain(7);
     expect(where).toContain('j-1');
+  });
+
+  it("reads ONE statement — the posting's schedule, never a rival bidder's counter-offer", async () => {
+    const db = fakeDb([[]]);
+
+    await readJobSchedule(db as unknown as Db, 7, 'j-1');
+
+    // The proposal predicate is an IS NULL and binds no literal, so what is asserted
+    // here is that the read did not fan out per proposal.
+    expect(db.calls).toHaveLength(1);
+    expect(db.calls[0]?.chain).toContain('where');
   });
 });
 

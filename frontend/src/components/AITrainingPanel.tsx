@@ -27,6 +27,7 @@ import { benchmarkPublishedModel, listEvermindModels, publishEvermindModel, roll
 import { MambaEngine } from '@/lib/mamba-engine';
 import { MambaModelProvider, type MambaProviderConfig } from '@/lib/model-provider';
 import type { HuggingFaceTokenizerSpec } from '@seanhogg/builderforce-memory-engine';
+import { useFormat } from "@/i18n/useFormat";
 
 interface AITrainingPanelProps {
   projectId: string | number;
@@ -60,6 +61,7 @@ const DEFAULT_MAMBA_PROVIDER_CONFIG: MambaProviderConfig = {
 };
 
 export function AITrainingPanel({ projectId, onLog, onJobCompleted, initialDataMode = 'workspace', workspaceEnabled = true, onLocalArtifactCompleted, onModelPublished }: AITrainingPanelProps) {
+    const fmt = useFormat();
   const t = useTranslations('aiTraining');
   const [tab, setTab] = useState<PanelTab>('configure');
   const [trainingMode, setTrainingMode] = useState<TrainingMode>('behavior');
@@ -220,7 +222,7 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted, initialDataM
             setPublishName(`${selectedModel?.name ?? config.baseModel} Adapter`);
             if (dataMode === 'local-only') {
               downloadBlob(new Blob([artifact.bytes], { type: 'application/x-safetensors' }), artifact.filename);
-              appendLog(`Downloaded ${artifact.filename}; ${artifact.trainableParams.toLocaleString()} trainable parameters.`);
+              appendLog(`Downloaded ${artifact.filename}; ${fmt.number(artifact.trainableParams)} trainable parameters.`);
               onLocalArtifactCompleted?.({ filename: artifact.filename, trainableParams: artifact.trainableParams });
             }
           },
@@ -819,7 +821,7 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted, initialDataM
             {completedArtifact && (
               <div className="rounded border border-emerald-800 bg-emerald-950/30 p-2 space-y-2">
                 <div className="text-xs text-emerald-300">
-                  Runnable package ready · {(completedArtifact.evermindPackage.byteLength / 1024).toFixed(1)} KB · {completedArtifact.trainableParams.toLocaleString()} adapter parameters
+                  Runnable package ready · {(completedArtifact.evermindPackage.byteLength / 1024).toFixed(1)} KB · {fmt.number(completedArtifact.trainableParams)} adapter parameters
                 </div>
                 <input
                   value={publishName}

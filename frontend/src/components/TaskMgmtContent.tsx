@@ -70,9 +70,9 @@ import { ScheduleCalendar } from './ScheduleCalendar';
 import { ScheduleGantt } from './ScheduleGantt';
 import {
   TASK_STATUSES as BOARD_STATUSES,
-  taskStatusLabel,
   taskStatusBadgeClass,
 } from '@/lib/taskStatus';
+import { useTaskStatusLabel } from '@/lib/taskStatusLabel';
 import { TASK_PRIORITIES, taskPriorityBadgeClass } from '@/lib/taskPriority';
 import { WorkspaceAllowanceBanner } from '@/components/board/WorkspaceAllowanceBanner';
 
@@ -177,6 +177,7 @@ export function TaskMgmtContent({
   compact = false,
 }: TaskMgmtContentProps) {
   const tApproval = useTranslations('boardConfig');
+  const statusLabel = useTaskStatusLabel();
   const confirm = useConfirm();
   const tBoard = useTranslations('board');
   const tCommon = useTranslations('common');
@@ -581,7 +582,7 @@ export function TaskMgmtContent({
   // default status columns so the board still works out of the box.
   const boardColumns = useMemo<BoardColumn[]>(() => {
     const defaults = (): BoardColumn[] =>
-      BOARD_STATUSES.map((s) => ({ id: s, status: s, label: taskStatusLabel(s), agents: [] }));
+      BOARD_STATUSES.map((s) => ({ id: s, status: s, label: statusLabel(s), agents: [] }));
     if (lanes.length === 0) return defaults();
 
     const cols: BoardColumn[] = [];
@@ -595,12 +596,12 @@ export function TaskMgmtContent({
     // is deleted, or a legacy/custom status) so no task is ever hidden.
     for (const t of tasks) {
       if (!covered.has(t.status)) {
-        cols.push({ id: `orphan:${t.status}`, status: t.status, label: taskStatusLabel(t.status), agents: [] });
+        cols.push({ id: `orphan:${t.status}`, status: t.status, label: statusLabel(t.status), agents: [] });
         covered.add(t.status);
       }
     }
     return cols.length > 0 ? cols : defaults();
-  }, [lanes, agentsByLane, tasks]);
+  }, [lanes, agentsByLane, tasks, statusLabel]);
 
   // Order tickets within a lane by the AI Manager's computed backlog rank (rank 1 =
   // highest value × urgency), nulls last, so every lane shows the most-important work
@@ -620,7 +621,7 @@ export function TaskMgmtContent({
   const statusChoices = boardColumns.map((c) => ({ value: c.status, label: c.label }));
   // Label for a task's status: prefer its column's name, else a humanized label.
   const columnLabel = (status: string) =>
-    boardColumns.find((c) => c.status === status)?.label ?? taskStatusLabel(status);
+    boardColumns.find((c) => c.status === status)?.label ?? statusLabel(status);
 
   // Standup pivot: group the (filtered) tasks by assignee so each teammate/agent
   // is a row and the board columns become the stage cells. A task with no

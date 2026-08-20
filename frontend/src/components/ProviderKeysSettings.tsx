@@ -24,6 +24,7 @@ import {
   type ProviderDiagnostic,
   type LlmProvider,
 } from '@/lib/builderforceApi';
+import { useFormat } from "@/i18n/useFormat";
 
 /**
  * BYO (bring-your-own-provider) credentials. A workspace owner connects their OWN
@@ -434,14 +435,15 @@ function UsageStrip({
    *  knows whose money paid; a provider credential does not). */
   children?: React.ReactNode;
 }) {
+    const fmt = useFormat();
   return (
     <div style={{ fontSize: 11.5, color: 'var(--text-muted)', lineHeight: 1.5 }}>
       {t('diagnostic.usage', {
         days,
-        requests: requests.toLocaleString(),
-        tokens: tokens.toLocaleString(),
+        requests: fmt.number(requests),
+        tokens: fmt.number(tokens),
       })}
-      {lastUsedAt ? t('diagnostic.lastUsed', { when: new Date(lastUsedAt).toLocaleString() }) : ''}
+      {lastUsedAt ? t('diagnostic.lastUsed', { when: fmt.dateTime(lastUsedAt) }) : ''}
       {children}
     </div>
   );

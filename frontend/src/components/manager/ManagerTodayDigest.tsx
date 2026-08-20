@@ -10,6 +10,7 @@ import { buildPeriodDelta } from '@/components/dashboard/metricFormat';
 import { managerApi, type ManagerDailyDigest, type DigestContributor } from '@/lib/builderforceApi';
 import { isManagerActionType } from '@/lib/managerActions';
 import { ticketHref } from '@/lib/ticketHref';
+import { useFormat } from "@/i18n/useFormat";
 
 /**
  * TODAY — the answer to "what did you and the team accomplish today?"
@@ -66,6 +67,7 @@ export interface ManagerTodayDigestProps {
 }
 
 export function ManagerTodayDigest({ projectId }: ManagerTodayDigestProps) {
+    const fmt = useFormat();
   const t = useTranslations('manager.today');
   // Decision labels are REUSED from the activity feed's catalog rather than duplicated —
   // one translation per manager decision class for the whole surface.
@@ -101,7 +103,7 @@ export function ManagerTodayDigest({ projectId }: ManagerTodayDigestProps) {
     try {
       return format.relativeTime(new Date(iso), new Date());
     } catch {
-      return new Date(iso).toLocaleString();
+      return fmt.dateTime(iso);
     }
   }, [format]);
 
@@ -209,24 +211,24 @@ export function ManagerTodayDigest({ projectId }: ManagerTodayDigestProps) {
       }}>
         <InsightStat
           label={t('stat.shipped')}
-          value={team.shipped.today.toLocaleString()}
+          value={fmt.number(team.shipped.today)}
           sub={t('stat.shippedSub', { opened: team.opened.today })}
           delta={buildPeriodDelta(team.shipped.today, team.shipped.yesterday, true)}
         />
         <InsightStat
           label={t('stat.merged')}
-          value={team.prs.merged.today.toLocaleString()}
+          value={fmt.number(team.prs.merged.today)}
           sub={t('stat.mergedSub', { opened: team.prs.opened })}
           delta={buildPeriodDelta(team.prs.merged.today, team.prs.merged.yesterday, true)}
         />
         <InsightStat
           label={t('stat.runs')}
-          value={team.runs.completed.toLocaleString()}
+          value={fmt.number(team.runs.completed)}
           sub={t('stat.runsSub', { failed: team.runs.failed })}
         />
         <InsightStat
           label={t('stat.moves')}
-          value={team.laneMoves.forward.toLocaleString()}
+          value={fmt.number(team.laneMoves.forward)}
           // An UNATTRIBUTED hop gets its own clause instead of being folded into
           // "by agents" — claiming agent credit for a move no agent can be named for is
           // what let the contributor table show every agent at zero while this line said
@@ -242,7 +244,7 @@ export function ManagerTodayDigest({ projectId }: ManagerTodayDigestProps) {
         />
         <InsightStat
           label={t('stat.decisions')}
-          value={manager.decisions.today.toLocaleString()}
+          value={fmt.number(manager.decisions.today)}
           sub={t('stat.decisionsSub', { passes: manager.passes })}
           delta={buildPeriodDelta(manager.decisions.today, manager.decisions.yesterday, null)}
         />

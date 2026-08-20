@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CREATION_OBJECT_REGISTRY, CREATION_PALETTE_GROUPS, availableCreationObjects, createDefaultCreationData, creationObjectAiContext, creationObjectDefinition, creationObjectMutableFields, creationObjectName, emptyShellProblem, sanitizeCreationObjectPatch, TITLE_IS_CONTENT_KINDS } from './creationObjectRegistry';
+import { CREATION_OBJECT_REGISTRY, CREATION_PALETTE_GROUPS, availableCreationObjects, createDefaultCreationData, creationPaletteGroupsFor, creationObjectAiContext, creationObjectDefinition, creationObjectMutableFields, creationObjectName, emptyShellProblem, sanitizeCreationObjectPatch, TITLE_IS_CONTENT_KINDS } from './creationObjectRegistry';
 import { CREATION_CONNECTION_KINDS, CREATION_OBJECT_KINDS } from '@builderforce/creation-canvas-contract';
 
 describe('creation object registry', () => {
@@ -138,6 +138,28 @@ describe('creation object registry', () => {
     expect(base).toContain('workflow');
     expect(base).not.toContain('evermind');
     expect(availableCreationObjects(new Set(['evermind'])).map((definition) => definition.kind)).toContain('evermind');
+  });
+
+  it('makes the PALETTE ask the capability question, not just the registry', () => {
+    // The defect this covers: `availableCreationObjects` existed, filtered correctly, and
+    // was called by nothing but this file — so the palette rendered from the raw group
+    // list and a card marked as needing an entitlement was placeable by anybody. If the
+    // palette ever stops consulting the gate, this fails rather than going quietly inert.
+    const kindsIn = (capabilities: ReadonlySet<string>) =>
+      creationPaletteGroupsFor(true, capabilities).flatMap((group) => group.items.map((item) => item.kind));
+    expect(kindsIn(new Set())).not.toContain('evermind');
+    expect(kindsIn(new Set(['evermind']))).toContain('evermind');
+    // And it hides nothing else: an entitlement gate that costs the palette its
+    // unentitled kinds would be worse than none.
+    expect(kindsIn(new Set()).length).toBe(kindsIn(new Set(['evermind'])).length - 1);
+  });
+
+  it('drops a group whose only kinds are unentitled rather than drawing an empty heading', () => {
+    // A heading over an empty list reads as a loading failure — the same rule the guest
+    // palette already followed.
+    for (const group of creationPaletteGroupsFor(true, new Set())) {
+      expect(group.items.length, group.group).toBeGreaterThan(0);
+    }
   });
 
   it('binds every creative widget to the provider-neutral built-in MCP contract', () => {

@@ -19,6 +19,7 @@ import { RadarChart } from '@/components/charts/RadarChart';
 import { colorAt } from '@/components/charts/chartColors';
 import { InsightStat } from '@/components/dashboard/InsightStat';
 import { hrs, int, pct, usd } from '@/components/insights/format';
+import { useFormat } from "@/i18n/useFormat";
 
 /**
  * Team analytics — the extended member / EMP metrics lenses (EMP-12..19) on one
@@ -265,6 +266,7 @@ function LaborCostPanel({ days }: { days: number }) {
 const TIER_COLOR: Record<PerformerTier, string> = { high: OK, solid: 'var(--accent)', watch: DANGER };
 
 function CoachingNotes({ member }: { member: PerformerRow }) {
+    const fmt = useFormat();
   const t = useTranslations('widgets');
   const [notes, setNotes] = useState<CoachingNote[] | null>(null);
   const [draft, setDraft] = useState('');
@@ -292,7 +294,7 @@ function CoachingNotes({ member }: { member: PerformerRow }) {
           {notes.map((n) => (
             <li key={n.id} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 12 }}>
               <span style={{ flex: 1 }}>{n.note}</span>
-              <span style={{ color: 'var(--muted)', whiteSpace: 'nowrap' }}>{new Date(n.createdAt).toLocaleDateString()}</span>
+              <span style={{ color: 'var(--muted)', whiteSpace: 'nowrap' }}>{fmt.date(n.createdAt)}</span>
               <button onClick={() => remove(n.id)} style={{ background: 'none', border: 'none', color: DANGER, cursor: 'pointer', fontSize: 11 }}>{t('emp.deleteNote')}</button>
             </li>
           ))}

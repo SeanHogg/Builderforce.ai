@@ -7,6 +7,7 @@ import { ProfileAvatar } from '@/components/profile/ProfileIdentityCard';
 import { ResumeDocumentView } from '@/components/resume/ResumeDocumentView';
 import type { FreelancerProfile, FreelancerStats } from '@/lib/freelancerApi';
 import { formatCents } from '@/lib/canvasMoney';
+import { useFormat } from "@/i18n/useFormat";
 
 /**
  * Presentational render of a for-hire profile — the SINGLE source of truth for how a
@@ -25,9 +26,10 @@ const card: React.CSSProperties = {
  *  been, work won vs. bids in flight, and lifetime earnings. Rendered on the public
  *  detail page and the editor Preview (both pass a profile carrying `stats`). */
 function TalentStats({ stats }: { stats: FreelancerStats }) {
+    const fmt = useFormat();
   const t = useTranslations('talent');
-  const num = (n: number) => n.toLocaleString();
-  const money = (cents: number, cur: string) => `${cur} ${(cents / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+  const num = (n: number) => fmt.number(n);
+  const money = (cents: number, cur: string) => `${cur} ${fmt.number((cents / 100), { maximumFractionDigits: 0 })}`;
 
   const tiles: { key: string; value: string; label: string; sub: string; accent: string }[] = [
     { key: 'aiUsage', value: num(stats.aiActions), label: t('stats.aiUsage'), sub: t('stats.aiUsageSub'), accent: 'var(--cyan-bright, var(--cyan-bright))' },

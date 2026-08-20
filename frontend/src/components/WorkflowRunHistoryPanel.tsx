@@ -25,6 +25,7 @@ import {
 import { WorkflowDagView } from './WorkflowDagView';
 import { TrendChart } from './charts/TrendChart';
 import { StatusPill, STATUS_COLORS, cardStyle, subtleBtn } from './workflowRunUi';
+import { useFormat } from "@/i18n/useFormat";
 
 interface Props {
   definitionId: string;
@@ -87,6 +88,7 @@ function UsageSummary({ usage, loading }: { usage: WorkflowUsageSummary | null; 
 }
 
 export function WorkflowRunHistoryPanel({ definitionId, definitionName, initialRunId = null }: Props) {
+    const fmt = useFormat();
   const t = useTranslations('workflowsContent');
 
   const [usage, setUsage] = useState<WorkflowUsageSummary | null>(null);
@@ -237,7 +239,7 @@ export function WorkflowRunHistoryPanel({ definitionId, definitionName, initialR
                 {r.description ?? t('runLabel', { id: r.id.slice(0, 8) })}
               </span>
               <StatusPill status={r.status} />
-              <span style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{new Date(r.createdAt).toLocaleString()}</span>
+              <span style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{fmt.dateTime(r.createdAt)}</span>
             </button>
           ))}
         </div>

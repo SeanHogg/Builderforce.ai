@@ -224,7 +224,7 @@ export const tenantApiKeys = pgTable('tenant_api_keys', {
   /** Origin allowlist for browser use. NULL = server-only (any request with an `Origin` header is rejected).
    *  Array of exact origins or single `'*'` for any-origin escape hatch.
    *  Stored as JSONB on the wire; stringified on insert (drizzle treats `text` here for portability). */
-  allowedOrigins:   text('allowed_origins'),
+  allowedOrigins:   jsonb('allowed_origins').$type<string[]>(),
   /** JSON array of endpoint scopes (e.g. ["ingest:feedback"]). NULL / empty =
    *  unrestricted full-tenant key (legacy LLM-gateway keys); non-empty = the key
    *  is limited to exactly these scopes. See migration 0070. */
@@ -778,7 +778,7 @@ export const adminImpersonationSessions = pgTable('admin_impersonation_sessions'
   endedAt:         timestamp('ended_at', { withTimezone: true }),
   expiresAt:       timestamp('expires_at', { withTimezone: true }).notNull(),
   endReason:       varchar('end_reason', { length: 32 }),  // MANUAL | EXPIRED | ADMIN_LOGOUT
-  pagesVisited:    text('pages_visited').notNull().default('[]'),  // JSON array
+  pagesVisited:    jsonb('pages_visited').$type<{ path: string; ts: string }[]>().notNull().default([]),
   writeBlockCount: integer('write_block_count').notNull().default(0),
   ipAddress:       varchar('ip_address', { length: 64 }),
   userAgent:       text('user_agent'),
@@ -821,7 +821,7 @@ export const tenantCustomRoles = pgTable('tenant_custom_roles', {
   name:        varchar('name', { length: 64 }).notNull(),
   description: text('description'),
   baseRole:    varchar('base_role', { length: 32 }).notNull(),
-  permissions: text('permissions').notNull().default('[]'),  // JSON array
+  permissions: jsonb('permissions').$type<string[]>().notNull().default([]),
   createdBy:   varchar('created_by', { length: 36 }).notNull().references(() => users.id),
   createdAt:   timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt:   timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -835,7 +835,7 @@ export const platformModules = pgTable('platform_modules', {
   slug:        varchar('slug', { length: 128 }).notNull().unique(),
   description: text('description'),
   baseRole:    varchar('base_role', { length: 64 }),
-  permissions: text('permissions').notNull().default('[]'),  // JSON array
+  permissions: jsonb('permissions').$type<string[]>().notNull().default([]),
   isBuiltin:   boolean('is_builtin').notNull().default(false),
   createdBy:   varchar('created_by', { length: 36 }).references(() => users.id),
   createdAt:   timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

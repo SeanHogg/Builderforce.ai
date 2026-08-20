@@ -18,6 +18,7 @@ import {
 } from '@/lib/builderforceApi';
 import { ErrorConsumptionCard } from './ErrorConsumptionCard';
 import { useCopyToClipboard } from '@/lib/useCopyToClipboard';
+import { useFormat } from "@/i18n/useFormat";
 
 const ingestBase = `${AUTH_API_URL}/api/quality-ingest`;
 
@@ -129,6 +130,7 @@ function CollectorPanel({
   setError: (s: string | null) => void;
   t: ReturnType<typeof useTranslations>;
 }) {
+    const fmt = useFormat();
   const confirm = useConfirm();
   const isTenant = collector.projectId == null;
   const [testing, setTesting] = useState(false);
@@ -185,7 +187,7 @@ function CollectorPanel({
             {collector.name}
             <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--text-muted)' }}>
               {isTenant ? t('setup.tenantScope') : projName(collector.projectId!)} · {collector.enabled ? t('setup.enabled') : t('setup.paused')}
-              {collector.lastEventAt ? ` · ${t('setup.lastEvent')} ${new Date(collector.lastEventAt).toLocaleString()}` : ''}
+              {collector.lastEventAt ? ` · ${t('setup.lastEvent')} ${fmt.dateTime(collector.lastEventAt)}` : ''}
             </span>
           </span>
           <RoleGate capability="quality.manageSources">
@@ -216,7 +218,7 @@ function CollectorPanel({
             }}
           >
             <strong>{t('setup.unmapped.title', { count: collector.unmappedEventCount })}</strong>
-            {collector.lastUnmappedAt ? ` · ${t('setup.unmapped.lastAt', { at: new Date(collector.lastUnmappedAt).toLocaleString() })}` : ''}
+            {collector.lastUnmappedAt ? ` · ${t('setup.unmapped.lastAt', { at: fmt.dateTime(collector.lastUnmappedAt) })}` : ''}
             <div style={{ color: 'var(--text-muted)', marginTop: 4 }}>
               {isTenant ? t('setup.unmapped.fixTenant') : t('setup.unmapped.fixProject')}
             </div>
@@ -227,7 +229,7 @@ function CollectorPanel({
             which is the only moment the operator can redeploy without loss. */}
         {graceOpen && (
           <div role="status" style={{ marginTop: 10, fontSize: 12, color: 'var(--text-muted)' }}>
-            {t('setup.rotate.graceOpen', { at: new Date(graceOpen).toLocaleString() })}
+            {t('setup.rotate.graceOpen', { at: fmt.dateTime(graceOpen) })}
             <RoleGate capability="quality.manageSources">
               <button type="button" style={{ ...btnSubtle, marginLeft: 8 }} disabled={rotating} onClick={() => rotate(0)}>
                 {t('setup.rotate.revokeNow')}

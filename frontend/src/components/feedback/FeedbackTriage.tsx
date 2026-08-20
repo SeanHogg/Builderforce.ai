@@ -20,6 +20,7 @@ import {
   FEEDBACK_KINDS, FEEDBACK_STATUSES, isGated,
   type FeedbackKind, type FeedbackQueue, type FeedbackStatus, type FeedbackSubmission,
 } from '@/lib/feedbackApi';
+import { useFormat } from "@/i18n/useFormat";
 
 const card: React.CSSProperties = {
   background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 16,
@@ -141,6 +142,7 @@ function SubmissionCard({ submission: s, showTenant, busy, onDecide }: {
   busy: boolean;
   onDecide: (s: FeedbackSubmission, decision: 'approved' | 'declined') => void;
 }) {
+    const fmt = useFormat();
   const t = useTranslations('feedback');
   const [expanded, setExpanded] = useState(false);
   const pending = s.status === 'new';
@@ -167,7 +169,7 @@ function SubmissionCard({ submission: s, showTenant, busy, onDecide }: {
       <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
         {showTenant && s.tenantName && <span>{s.tenantName}</span>}
         {s.projectName && <span>{s.projectName}</span>}
-        <span>{new Date(s.createdAt).toLocaleString()}</span>
+        <span>{fmt.dateTime(s.createdAt)}</span>
         {s.submitterName || s.submitterEmail ? <span>{s.submitterName ?? s.submitterEmail}</span> : null}
         {s.appVersion && <span>{s.appVersion}</span>}
         {s.taskKey && <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>{s.taskKey}</span>}

@@ -8,6 +8,7 @@
  *   POST /api/auth/tenant-token      → { token: string }
  */
 
+import { LOCALE_HEADER, readLocaleCookie } from '@/i18n/config';
 import type { AuthUser, Tenant } from './types';
 import type { PsychometricProfile } from './psychometric';
 
@@ -373,12 +374,35 @@ export async function getTenantToken(
 // ---------------------------------------------------------------------------
 
 /**
+ * The active-locale header, or nothing when no locale has been pinned yet.
+ *
+ * `apiClient` stamps this on everything that goes through it; the handful of
+ * hand-written `fetch` calls in this file are outside that path, so they share
+ * this one builder rather than each re-deriving the cookie.
+ */
+function localeHeader(): Record<string, string> {
+  const locale = readLocaleCookie();
+  return locale ? { [LOCALE_HEADER]: locale } : {};
+}
+
+/**
  * Returns the OAuth initiate URL for a given provider.
  * Redirect the browser to this URL to start the OAuth flow.
+ *
+ * The active locale rides as a query parameter because nothing else can carry it.
+ * This is a top-level NAVIGATION to a different origin: `apiClient`'s
+ * `X-Builderforce-Locale` header does not apply to a navigation, and `NEXT_LOCALE`
+ * is set without a domain attribute so it is not sent to `api.builderforce.ai`
+ * either. The API signs it into the OAuth state envelope so it survives the hop to
+ * the provider and back — without it an OAuth signup could only ever be filed
+ * under the OS language, which is the account's locale until the user happens to
+ * visit Settings.
  */
 export function getOAuthUrl(provider: string, redirect = '/dashboard', linkToken?: string): string {
   const params = new URLSearchParams({ redirect });
   if (linkToken) params.set('link_token', linkToken);
+  const locale = readLocaleCookie();
+  if (locale) params.set('locale', locale);
   return `${AUTH_API_URL}/api/auth/oauth/${provider}?${params.toString()}`;
 }
 
@@ -389,7 +413,11 @@ export function getOAuthUrl(provider: string, redirect = '/dashboard', linkToken
 export async function requestMagicLink(email: string, redirect = '/dashboard'): Promise<void> {
   const res = await fetch(`${AUTH_API_URL}/api/auth/magic-link`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    // Same locale problem as `getOAuthUrl`, different mechanism: this IS a fetch,
+    // so it can carry the header `apiClient` stamps — it just never did, because
+    // it is written by hand rather than going through the client. Without it the
+    // sign-in email is written in the OS language, not the chosen one.
+    headers: { 'Content-Type': 'application/json', ...localeHeader() },
     body: JSON.stringify({ email, redirect }),
   });
   if (!res.ok) {

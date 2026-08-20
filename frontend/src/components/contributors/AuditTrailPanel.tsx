@@ -4,6 +4,7 @@ import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { activityApi, type ActivityActorType, type ActivityLogEvent } from '@/lib/builderforceApi';
+import { useFormat } from "@/i18n/useFormat";
 
 /**
  * Unified activity / audit trail — the tenant-wide, append-only stream of "who did
@@ -106,6 +107,7 @@ function useRelativeTime() {
 }
 
 export function AuditTrailPanel() {
+    const fmt = useFormat();
   const t = useTranslations('audit');
   const rel = useRelativeTime();
   const [events, setEvents] = useState<ActivityLogEvent[]>([]);
@@ -239,7 +241,7 @@ export function AuditTrailPanel() {
                     }}>
                       {verbLabel(e.verb)}
                     </span>
-                    <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--muted)', whiteSpace: 'nowrap' }} title={new Date(e.occurredAt).toLocaleString()}>
+                    <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--muted)', whiteSpace: 'nowrap' }} title={fmt.dateTime(e.occurredAt)}>
                       {rel(e.occurredAt)}
                     </span>
                   </div>

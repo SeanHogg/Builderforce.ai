@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react';
 import { colorAt } from './chartColors';
+import { useFormat } from "@/i18n/useFormat";
 
 /**
  * Reusable horizontal bar chart — the project's category-ranking primitive (no
@@ -40,12 +41,14 @@ const rowStyle: CSSProperties = { display: 'flex', alignItems: 'center', gap: 10
 
 export function BarChart({
   data,
-  formatValue = (v) => Math.round(v).toLocaleString(),
+  formatValue,
   monochrome = false,
   maxRows,
   labelWidth = 96,
   ariaLabel,
 }: BarChartProps) {
+  const fmt = useFormat();
+  const value = formatValue ?? ((v: number) => fmt.number(Math.round(v)));
   const rows = maxRows ? data.slice(0, maxRows) : data;
   const hidden = maxRows ? Math.max(0, data.length - maxRows) : 0;
   // Scale against the largest of primary/secondary so a comparison track never clips.
@@ -85,7 +88,7 @@ export function BarChart({
               />
             </div>
             <span style={{ width: 64, flexShrink: 0, textAlign: 'right', fontWeight: 700 }}>
-              {formatValue(d.value)}
+              {value(d.value)}
             </span>
           </div>
         );

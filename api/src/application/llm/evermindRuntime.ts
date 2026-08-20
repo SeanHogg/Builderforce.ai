@@ -50,11 +50,25 @@ export interface EvermindGenerateOptions {
   maxTokens?: number;
   temperature?: number;
   seed?: number;
+  /**
+   * Wall-clock budget for the generation loop, in ms.
+   *
+   * Evermind generation is SYNCHRONOUS CPU on the request path, so without this a
+   * large head on a slow isolate simply runs until the Worker CPU limit kills the
+   * request — a 5xx with no useful message and no partial answer. With it, the loop
+   * stops at the budget and says so.
+   */
+  deadlineMs?: number;
 }
 
 export interface EvermindGeneration {
   content: string;
   usage: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
+  /** True when the wall-clock budget stopped generation before `maxTokens` or a stop
+   *  token did — the text is a real partial answer, not a complete one. */
+  truncated: boolean;
+  /** How long the generation loop actually took. */
+  elapsedMs: number;
 }
 
 interface LoadedModel {
@@ -227,7 +241,27 @@ export async function probeEvermindGeneration(
   };
 }
 
-/** Run generation for a published Evermind model and return text + token usage. */
+/**
+ * Tokens generated between wall-clock checks.
+ *
+ * The deadline is enforced BETWEEN slices rather than between tokens because the
+ * engine's `generate()` is one synchronous loop with no per-token hook. Slicing
+ * costs nothing: `forward()` already recomputes the whole sequence for every token,
+ * so re-entering it with `prompt + producedSoFar` is exactly the work the next token
+ * was going to do anyway. Small enough that the overshoot past the deadline is one
+ * slice, large enough that the re-encode is noise.
+ */
+const GENERATE_SLICE_TOKENS = 16;
+/** Default wall-clock budget for one generation. Comfortably inside a Worker's CPU
+ *  allowance, so the caller gets a partial answer plus `truncated` rather than a
+ *  killed request. */
+const DEFAULT_GENERATE_DEADLINE_MS = 8000;
+
+/** Run generation for a published Evermind model and return text + token usage.
+ *
+ *  Deterministic for a given (prompt, seed, maxTokens): each slice derives its seed
+ *  from the base seed and its index, so two operators running the same probe see the
+ *  same text — the property the test bench actually promises. */
 export async function evermindGenerate(
   store: ArtifactStore,
   ref: string,
@@ -236,14 +270,42 @@ export async function evermindGenerate(
 ): Promise<EvermindGeneration> {
   const { lm, tok } = await loadEvermindModel(store, ref);
   const prompt = messagesToPrompt(messages);
-  const content = lm.generateText(prompt, tok, {
-    maxNewTokens: opts.maxTokens ?? 256,
-    temperature: opts.temperature ?? 0.7,
-    ...(opts.seed != null ? { seed: opts.seed } : {}),
-  });
+  const maxTokens = opts.maxTokens ?? 256;
+  const temperature = opts.temperature ?? 0.7;
+  const baseSeed = opts.seed;
+  const deadlineMs = opts.deadlineMs ?? DEFAULT_GENERATE_DEADLINE_MS;
+
+  const started = Date.now();
+  let content = '';
+  let truncated = false;
+  let produced = 0;
+  let slice = 0;
+  while (produced < maxTokens) {
+    const want = Math.min(GENERATE_SLICE_TOKENS, maxTokens - produced);
+    const chunk = lm.generateText(`${prompt}${content}`, tok, {
+      maxNewTokens: want,
+      temperature,
+      ...(baseSeed != null ? { seed: baseSeed + slice } : {}),
+    });
+    slice++;
+    // An empty slice means the model stopped producing; continuing would spin.
+    if (!chunk) break;
+    content += chunk;
+    produced += want;
+    if (Date.now() - started >= deadlineMs) {
+      truncated = produced < maxTokens;
+      break;
+    }
+  }
+
   const prompt_tokens = tok.encode(prompt).length;
   const completion_tokens = content ? tok.encode(content).length : 0;
-  return { content, usage: { prompt_tokens, completion_tokens, total_tokens: prompt_tokens + completion_tokens } };
+  return {
+    content,
+    usage: { prompt_tokens, completion_tokens, total_tokens: prompt_tokens + completion_tokens },
+    truncated,
+    elapsedMs: Date.now() - started,
+  };
 }
 
 // ── Tool calling ─────────────────────────────────────────────────────────────

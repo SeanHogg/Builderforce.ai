@@ -4,6 +4,7 @@ import { Icon } from '@/components/ui/Icon';
 import Link from 'next/link';
 import { useTranslations, useFormatter } from 'next-intl';
 import { useAttention } from '@/lib/useAttention';
+import { useFormat } from "@/i18n/useFormat";
 
 /**
  * Global, ambient "AI Manager" indicator for the TopBar. The manager runs in the
@@ -19,6 +20,7 @@ import { useAttention } from '@/lib/useAttention';
  * responsive (the label collapses under a narrow viewport, the dot always shows).
  */
 export function ManagerStatusIndicator() {
+    const fmt = useFormat();
   const t = useTranslations('managerStatus');
   const format = useFormatter();
   // Tenant-wide (no projectId) — the manager may be scoped to one project OR the
@@ -33,7 +35,7 @@ export function ManagerStatusIndicator() {
   try {
     when = format.relativeTime(new Date(manager.lastRunAt), new Date());
   } catch {
-    when = new Date(manager.lastRunAt).toLocaleString();
+    when = fmt.dateTime(manager.lastRunAt);
   }
   const label = active ? t('active') : t('lastManaged', { when });
 

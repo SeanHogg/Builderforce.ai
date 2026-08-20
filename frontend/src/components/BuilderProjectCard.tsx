@@ -4,6 +4,7 @@ import { useTranslations } from 'next-intl';
 import { useModalityCopy } from '@/lib/useModalityCopy';
 import type { IdeProject } from '@/lib/types';
 import { Icon } from '@/components/ui/Icon';
+import { useFormat } from "@/i18n/useFormat";
 
 /**
  * Card for a single Canvas build (backed by the legacy `IdeProject` record).
@@ -22,6 +23,7 @@ export function BuilderProjectCard({
   onDetails: (p: IdeProject) => void;
   onDelete: (p: IdeProject) => void;
 }) {
+    const fmt = useFormat();
   const t = useTranslations('ide');
   const m = useModalityCopy()(ideProject.modality);
 
@@ -90,7 +92,7 @@ export function BuilderProjectCard({
 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 2 }}>
         <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-          {new Date(ideProject.updatedAt).toLocaleDateString()}
+          {fmt.date(ideProject.updatedAt)}
         </span>
         <button
           type="button"

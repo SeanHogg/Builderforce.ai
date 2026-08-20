@@ -148,7 +148,8 @@ import { trackActivity } from '@/lib/activity/tracker';
 import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import { analyzeDependencies, appendCanvasVideoSource, canvasGameToolRedirect, canvasImageToolRedirect, canvasToolRequiresAccount, canvasVideoDuration, canvasVideoSourcesFrom, canvasVideoTimelineFrom, findingFingerprint, normalizeQaSteps, CANVAS_GAME_ACCOUNT_GATE, CANVAS_GAME_TOOL, CANVAS_IMAGE_ACCOUNT_GATE, CANVAS_IMAGE_TOOL, CANVAS_QA_ACCOUNT_GATE, CANVAS_SCREENSHOT_ACCOUNT_GATE, CANVAS_SCREENSHOT_TOOL, CANVAS_SOCIAL_ACCOUNT_GATE, CREATION_CONNECTION_KINDS, CREATIVE_CAPABILITIES, DATA_PURPOSES, GAME_PLATFORMS, isGamePlatform, LAWFUL_BASES, QA_FINDING_TYPES, QA_SEVERITIES, QA_STEP_ACTIONS, type CanvasVideoSource, type CreationConnectionKind, type DataPurpose, type DataUsePolicy, type DependencyAnalysis, type LawfulBasis, type QaFindingSeverity, type QaFindingType } from '@builderforce/creation-canvas-contract';
-import { getStoredTenantToken } from '@/lib/auth';
+import { getStoredTenant, getStoredTenantToken } from '@/lib/auth';
+import { useCanvasCapabilities } from '@/lib/canvasCapabilitiesApi';
 import { claimLocalDraft } from '@/lib/pendingWork';
 import { downloadBlob, downloadJson, downloadText, toCsv } from '@/lib/download';
 import { OfficeExportUnavailableError, exportCsv, exportDocx, exportPdf, exportPptx, exportXlsx } from '@/lib/exportApi';
@@ -169,7 +170,7 @@ import { trainingRunFields } from '@/lib/canvasTrainingRun';
 import { compareRuns } from '@/lib/canvasRunComparison';
 import { sampleRows } from '@/lib/canvasLabelSet';
 import { forecastSeries, seriesFromDataset } from '@/lib/canvasForecast';
-import { fetchTrainingJob, fetchTrainingLogs, importCanvasDataset, listTrainingJobs } from '@/lib/api';
+import { fetchTrainingJob, fetchTrainingLogs, listTrainingJobs } from '@/lib/api';
 import {
   DATA_MODEL_CARDINALITIES,
   DATA_MODEL_TYPES,
@@ -329,6 +330,7 @@ import { executeModelComparison } from '@/lib/modelComparison';
 import { normalizeModelComparisonIds } from '@/lib/modelComparisonRequest';
 import { authoredWebsiteProblem, patchWebsiteHero, websiteHeroFrom, websiteThemeFrom } from './websiteWysiwyg';
 import { builtinAgentSurfaceHref, type BuiltinAgentSurfaceIntent } from '@/lib/team/builtinAgentSurface';
+import { useFormat } from "@/i18n/useFormat";
 
 const Canvas3DView = dynamic(
   () => import('@/components/canvas/Canvas3DView')
@@ -971,6 +973,7 @@ export function projectEvermindNodePatch(head: ProjectEvermindHead, activity: Pr
 }
 
 function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen = false, initialBuildOpen = false, initialBuildChatId, initialBuildTicket, initialPrompt, initialPresent = false, initialModelComparisonIds = [], stageActive = true }: { sessionId: string; persistence: 'local' | 'server'; initialFocusId?: string | null; initialShareOpen?: boolean; initialBuildOpen?: boolean; initialBuildChatId?: number | null; initialBuildTicket?: { kind: string; ref: string } | null; initialPrompt?: string | null; initialPresent?: boolean; initialModelComparisonIds?: readonly string[]; stageActive?: boolean }) {
+    const fmt = useFormat();
   const t = useTranslations('creationCanvas');
   /** The shared metric vocabulary — labels, units and comparisons, identical to
    *  the superadmin Value outcomes panel. See `lib/outcomeMetrics.ts`. */
@@ -1673,7 +1676,24 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   // — the VS Code webview, the embed, and the component tests.
   const [hasAccount, setHasAccount] = useState(false);
   const [claimingDraft, setClaimingDraft] = useState(false);
-  useEffect(() => { setHasAccount(!!getStoredTenantToken()); }, []);
+  // The workspace this browser will authenticate AS, read from the same store for the
+  // same reasons the token above is: the canvas mounts in surfaces with no AuthProvider.
+  // It is the key the entitlement set is resolved against.
+  const [tenantId, setTenantId] = useState<number | string | null>(null);
+  useEffect(() => {
+    setHasAccount(!!getStoredTenantToken());
+    setTenantId(getStoredTenant()?.id ?? null);
+  }, []);
+  /**
+   * ENTITLEMENT for the object palette, resolved by the server.
+   *
+   * The registry has always stamped a `capability` onto the kinds that need one and
+   * `availableCreationObjects` has always filtered by it — and nothing called it, so the
+   * palette rendered from the raw group list and a card marked as needing an entitlement
+   * was placeable by anybody. This is the call that was missing. A guest board resolves to
+   * the empty set, which is correct: it has no workspace to be entitled through.
+   */
+  const canvasCapabilities = useCanvasCapabilities(tenantId);
   const requireAccount = useCallback((action: string, title: string, description: string) => {
     setAccountGate({ action, title, description });
     trackActivity('creation_account_gate_shown', { sessionId, metadata: { clientSurface: canvasSurface(), action } });
@@ -2774,7 +2794,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const columns = Array.isArray(imported?.data.columns) ? imported.data.columns as string[] : [];
       const rows = Array.isArray(imported?.data.rows) ? imported.data.rows as TabularSource['rows'] : [];
       if (!columns.length) throw new Error(t('datasetNoColumns'));
-      if (rows.length > datasetRowLimit) throw new Error(t('datasetRowLimit', { limit: datasetRowLimit.toLocaleString() }));
+      if (rows.length > datasetRowLimit) throw new Error(t('datasetRowLimit', { limit: fmt.number(datasetRowLimit) }));
       const { title: _title, ...fields } = imported!.data;
       // Adopt the imported file's name, but only over the palette's placeholder.
       // A card the user has already named is theirs and survives the import;
@@ -2799,8 +2819,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         } }
         : node)));
       setNotice(governance.piiColumns
-        ? t('datasetImportedWithPii', { name: file.name, rows: rows.length.toLocaleString(), columns: columns.length, pii: governance.piiColumns })
-        : t('datasetImported', { name: file.name, rows: rows.length.toLocaleString(), columns: columns.length }));
+        ? t('datasetImportedWithPii', { name: file.name, rows: fmt.number(rows.length), columns: columns.length, pii: governance.piiColumns })
+        : t('datasetImported', { name: file.name, rows: fmt.number(rows.length), columns: columns.length }));
     } catch (error) {
       setNotice(error instanceof Error ? error.message : t('datasetImportFailed'));
     }
@@ -3000,7 +3020,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       chartLabels: (result.groups ?? []).map((group) => group.key),
       chartValues: (result.groups ?? []).map((group) => Number(group[valueKey] ?? group.count)),
       kpis: [
-        { label: t('kpiTotalRows'), value: result.totalRows.toLocaleString() },
+        { label: t('kpiTotalRows'), value: fmt.number(result.totalRows) },
         { label: t('kpiGroups', { category: category.name }), value: String(result.groups?.length ?? 0) },
       ],
       sourceDatasetId: selectedNode.id,
@@ -3063,7 +3083,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     if (!source.columns.length || !source.rows.length) { setNotice(t('datasetImportBeforeProfiling')); return; }
     const profile = profileTabular(source);
     setNodes((current) => current.map((node) => node.id === nodeId
-      ? { ...node, data: { ...node.data, profile, rowCount: source.rows.length, columns: source.columns, summary: t('datasetProfileSummary', { rows: source.rows.length.toLocaleString(), columns: source.columns.length, complete: profile.filter((column) => !column.empty).length }) } }
+      ? { ...node, data: { ...node.data, profile, rowCount: source.rows.length, columns: source.columns, summary: t('datasetProfileSummary', { rows: fmt.number(source.rows.length), columns: source.columns.length, complete: profile.filter((column) => !column.empty).length }) } }
       : node));
     setNotice(t('datasetProfiled', { columns: profile.length }));
   }, [nodes, setNodes, t]);
@@ -4802,10 +4822,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const delta = points.length > 1 ? latest.value - first.value : null;
       const fields: Record<string, unknown> = {
         status: t('founderMetricLive'),
-        value: latest.value.toLocaleString(),
+        value: fmt.number(latest.value),
         binding,
         ...(match.unit ? { unit: match.unit } : {}),
-        ...(delta != null ? { trend: `${delta >= 0 ? '+' : ''}${delta.toLocaleString()} vs ${days}d ago` } : {}),
+        ...(delta != null ? { trend: `${delta >= 0 ? '+' : ''}${fmt.number(delta)} vs ${days}d ago` } : {}),
         series: points.map((point) => ({ at: point.at, value: point.value })),
         fetchedAt: new Date().toISOString(),
       };
@@ -5615,14 +5635,14 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         ? {
           title, columns: result.columns, rows: result.rows.slice(0, MAX_MATERIALIZED_ROWS), rowCount: result.matchedRows,
           sampleRows: result.rows.slice(0, 8), ...(highlightRules.length ? { highlightRules } : {}),
-          status: `${result.matchedRows.toLocaleString()} of ${result.totalRows.toLocaleString()} rows`,
-          summary: `${result.matchedRows.toLocaleString()} matching rows of ${result.totalRows.toLocaleString()} in ${target.data.title}.`,
+          status: `${fmt.number(result.matchedRows)} of ${fmt.number(result.totalRows)} rows`,
+          summary: `${fmt.number(result.matchedRows)} matching rows of ${fmt.number(result.totalRows)} in ${target.data.title}.`,
           sourceDatasetId: target.id,
         }
         : materializeAs === 'kpi'
           ? {
             title, value: String(Object.values(result.aggregates ?? { count: result.matchedRows })[0] ?? result.matchedRows),
-            status: 'Live', summary: `Computed from ${result.totalRows.toLocaleString()} rows in ${target.data.title}.`, sourceDatasetId: target.id,
+            status: 'Live', summary: `Computed from ${fmt.number(result.totalRows)} rows in ${target.data.title}.`, sourceDatasetId: target.id,
           }
           : materializeAs === 'map'
             // Same builder the Dataset inspector's "Plot on a map" uses — see
@@ -5631,8 +5651,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             // MultiPolygon flattening are shared so the two paths cannot drift.
             ? mapObjectFields({
               title,
-              status: `${mapPoints.length.toLocaleString()} plotted`,
-              summary: `${mapPoints.length.toLocaleString()} of ${result.matchedRows.toLocaleString()} matching rows in ${target.data.title} have coordinates and are plotted.`,
+              status: `${fmt.number(mapPoints.length)} plotted`,
+              summary: `${fmt.number(mapPoints.length)} of ${fmt.number(result.matchedRows)} matching rows in ${target.data.title} have coordinates and are plotted.`,
               points: mapPoints,
               columns: geoColumns ?? { latitude: null, longitude: null, label: null, value: null },
               sourceDatasetId: target.id,
@@ -5660,9 +5680,9 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             // of an empty column. Dropping the chip is right; printing "null"
             // beside three real numbers reads as a value that was measured.
             kpis: Object.entries(result.aggregates ?? {})
-              .flatMap(([label, value]) => value == null ? [] : [{ label, value: value.toLocaleString() }])
+              .flatMap(([label, value]) => value == null ? [] : [{ label, value: fmt.number(value) }])
               .slice(0, 4),
-            summary: `Computed from ${result.totalRows.toLocaleString()} rows in ${target.data.title}.`,
+            summary: `Computed from ${fmt.number(result.totalRows)} rows in ${target.data.title}.`,
             sourceDatasetId: target.id,
           };
       // Spread AFTER the branch so every materialized kind carries it — the map
@@ -5931,8 +5951,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       node.data = { ...node.data, ...sanitizeCreationObjectPatch('table', {
         title, columns: result.columns, rows: result.rows.slice(0, MAX_MATERIALIZED_ROWS), rowCount: result.rowCount,
         sampleRows: result.rows.slice(0, 8),
-        status: `${result.rowCount.toLocaleString()} joined rows`,
-        summary: `${result.type} join on ${keys.map((key) => `${key.left} = ${key.right}`).join(', ')}. ${result.matchedLeft.toLocaleString()} of ${leftSource.rows.length.toLocaleString()} left rows matched; ${result.unmatchedLeft.toLocaleString()} did not.`,
+        status: `${fmt.number(result.rowCount)} joined rows`,
+        summary: `${result.type} join on ${keys.map((key) => `${key.left} = ${key.right}`).join(', ')}. ${fmt.number(result.matchedLeft)} of ${fmt.number(leftSource.rows.length)} left rows matched; ${fmt.number(result.unmatchedLeft)} did not.`,
         ...lineagePatch([left.id, right.id], { engine: 'join', join: spec, rowsIn: leftSource.rows.length + rightSource.rows.length, rowsOut: result.rowCount }, { columns: result.columns }),
       }) };
       node.style = { width: 720, height: 460 };
@@ -6071,7 +6091,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const fields = sanitizeCreationObjectPatch('dataContract', {
         title, dataContract: stored, violations, verdict, sourceDatasetId: dataset.id,
         status: verdict === 'pass' ? 'Honoured' : verdict === 'fail' ? `${violations.filter((violation) => violation.severity === 'error').length} breaches` : `${violations.length} warnings`,
-        summary: `${contract.columns.length} declared columns over ${source.rows.length.toLocaleString()} rows.`,
+        summary: `${contract.columns.length} declared columns over ${fmt.number(source.rows.length)} rows.`,
         ...(fetchedAt ? { fetchedAt } : {}),
       });
       if (existing) {
@@ -6150,7 +6170,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const fields = sanitizeCreationObjectPatch('dataQuality', {
         title, checks, results, verdict: verdict.status, score: verdict.score, sourceDatasetId: dataset.id, lastRunAt,
         status: verdict.status === 'pass' ? `${verdict.passed} passing` : `${verdict.failed} failing`,
-        summary: `${verdict.passed} passed, ${verdict.warned} warned, ${verdict.failed} failed, ${verdict.skipped} skipped over ${source.rows.length.toLocaleString()} rows.`,
+        summary: `${verdict.passed} passed, ${verdict.warned} warned, ${verdict.failed} failed, ${verdict.skipped} skipped over ${fmt.number(source.rows.length)} rows.`,
       });
       if (existing) {
         proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.update', label: `Re-run quality on ${dataset.data.title}`, objectId: existing.id, patch: fields });
@@ -6218,7 +6238,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         title: definition.name, definition, sourceObjectId: dataset.id,
         value: value.value, ...(series ? { series: series.labels.map((label, index) => ({ at: label, value: series.values[index] ?? 0 })) } : {}),
         status: formatMetricValue(value.value, definition),
-        summary: `${definition.aggregate.op}${definition.aggregate.column ? ` of ${definition.aggregate.column}` : ''} over ${value.matchedRows.toLocaleString()} of ${value.totalRows.toLocaleString()} rows in ${dataset.data.title}.`,
+        summary: `${definition.aggregate.op}${definition.aggregate.column ? ` of ${definition.aggregate.column}` : ''} over ${fmt.number(value.matchedRows)} of ${fmt.number(value.totalRows)} rows in ${dataset.data.title}.`,
         ...lineagePatch([dataset.id], { engine: 'metric', query: { aggregate: [definition.aggregate], ...(definition.filter ? { filter: definition.filter } : {}) }, rowsIn: value.totalRows, rowsOut: 1 }, { producedAt }),
       });
       const existing = all.find((node) => node.data.kind === 'metric' && normalizeMetricDefinition(node.data.definition)?.id === definition.id);
@@ -6258,7 +6278,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           ...(definition.target != null ? { target: formatMetricValue(definition.target, definition) } : {}),
           ...(definition.unit ? { unit: definition.unit } : {}),
           metricId: definition.id, sourceDatasetId: dataset.id, status: 'Live',
-          summary: `Defined by “${definition.name}” · computed from ${value.totalRows.toLocaleString()} rows.`,
+          summary: `Defined by “${definition.name}” · computed from ${fmt.number(value.totalRows)} rows.`,
           ...lineagePatch([dataset.id], { engine: 'metric' }, { producedAt }),
         }
         : {
@@ -6266,7 +6286,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           xAxisLabel: series!.dimension, yAxisLabel: definition.aggregate.column ?? definition.aggregate.op,
           chartLabels: series!.labels, chartValues: series!.values,
           metricId: definition.id, sourceDatasetId: dataset.id,
-          summary: `Defined by “${definition.name}” · computed from ${value.totalRows.toLocaleString()} rows.`,
+          summary: `Defined by “${definition.name}” · computed from ${fmt.number(value.totalRows)} rows.`,
           ...lineagePatch([dataset.id], { engine: 'metric' }, { producedAt }),
         }) };
       proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: `Add ${materializeAs} “${definition.name}”`, node: artifact });
@@ -6402,7 +6422,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         status: failures.length ? `${failures.length} of ${cells.length} failed` : `${cells.length} cell${cells.length === 1 ? '' : 's'} ran`,
         summary: failures.length
           ? `${failures.length} of ${cells.length} cells failed: ${failures.map((output) => output.error).join(' · ').slice(0, 300)}`
-          : `Ran ${cells.length} cell${cells.length === 1 ? '' : 's'} over ${source.rows.length.toLocaleString()} rows of ${String(target.data.title)}.`,
+          : `Ran ${cells.length} cell${cells.length === 1 ? '' : 's'} over ${fmt.number(source.rows.length)} rows of ${String(target.data.title)}.`,
       });
       const node = newNode('notebook', nextCanvasObjectPosition(all, {}, typeof window !== 'undefined' && window.innerWidth <= 760, 'notebook'));
       node.data = { ...node.data, ...fields };
@@ -6593,7 +6613,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         samples,
         labels: [],
         status: `0 of ${samples.length} labelled`,
-        summary: `${samples.length} rows sampled from ${source.rows.length.toLocaleString()} for review. Nothing is labelled yet, so this set cannot score anything.`,
+        summary: `${samples.length} rows sampled from ${fmt.number(source.rows.length)} for review. Nothing is labelled yet, so this set cannot score anything.`,
       });
       const node = newNode('labelSet', nextCanvasObjectPosition(all, {}, typeof window !== 'undefined' && window.innerWidth <= 760, 'labelSet'));
       node.data = { ...node.data, ...fields };
@@ -6695,96 +6715,6 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       });
       proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.update', label: 'Declare data use', objectId: target.id, patch });
       return { ok: true, proposed: true, objectId: target.id, dataUse };
-    },
-  }, {
-    /**
-     * THE CANVAS → FINE-TUNE DOOR, and the half the governance gate had been missing.
-     *
-     * A classification that cannot travel is a classification that cannot refuse. Until
-     * this existed, the only way to make a training corpus was `POST /datasets/generate`,
-     * which synthesises instruction pairs from a prompt — nothing personal, nothing to
-     * classify — so every corpus the platform could build was, correctly, ungoverned. The
-     * corpora that NEED a policy are made of real rows somebody uploaded and then
-     * classified on this board, and there was no path that carried the classification
-     * across. This is that path: the rows, the tags and the policy in ONE call, because a
-     * corpus created in one request and classified in a second is a corpus somebody can
-     * train on in between.
-     *
-     * The column mapping is required rather than guessed. A fine-tune corpus is
-     * {instruction, input, output} and a canvas dataset is an arbitrary table; picking the
-     * columns by name would quietly train a model on the wrong two, which is the class of
-     * mistake that only surfaces after the weights exist.
-     */
-    name: 'canvas_promote_dataset_to_corpus',
-    description: 'Turn a dataset on this canvas into a fine-tune training corpus in a project, carrying its column classifications and its declared data-use policy with it. Use this when asked to train, fine-tune or build an adapter on data that is already on the board. The rows are mapped to instruction/output pairs by the columns you name. If the dataset declares a policy that does not permit training, or holds personal data with no lawful basis, the training run is refused later by the server — so set the policy with canvas_set_data_use first rather than after.',
-    parameters: {
-      type: 'object', additionalProperties: false, required: ['datasetId', 'instructionColumn', 'outputColumn'],
-      properties: {
-        datasetId: { type: 'string', description: 'Canvas id of the dataset object to promote.' },
-        instructionColumn: { type: 'string', description: 'Column holding the prompt/instruction for each example.' },
-        outputColumn: { type: 'string', description: 'Column holding the ideal answer for each example.' },
-        inputColumn: { type: 'string', description: 'Optional column holding extra context for each example.' },
-        projectId: { type: 'number', description: 'Project to file the corpus under. Omit when exactly one project object is on the canvas.' },
-        name: { type: 'string', description: 'Name for the corpus. Defaults to the dataset title.' },
-      },
-    },
-    run: async (raw: unknown) => {
-      const args = raw as { datasetId?: string; instructionColumn?: string; outputColumn?: string; inputColumn?: string; projectId?: number; name?: string };
-      if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
-      const target = nodes.find((node) => node.id === args.datasetId);
-      if (!target) return { error: `No object with id ${args.datasetId} is on this canvas.` };
-      const source = tabularFromObject(target.data as Record<string, unknown>);
-      if (!source.rows.length) return { error: `${String(target.data.title)} has no imported rows. Import the data before promoting it — a corpus of nothing cannot train anything.` };
-
-      const missing = [args.instructionColumn, args.outputColumn, args.inputColumn]
-        .filter((column): column is string => !!column)
-        .filter((column) => !source.columns.includes(column));
-      if (missing.length) return { error: `That dataset has no column named ${missing.join(' or ')}. Its columns are: ${source.columns.join(', ')}.` };
-
-      // Refuse HERE as well as at the server, and for a different reason: the server gate
-      // is what makes the rule true, and this one is what makes it legible — a refusal at
-      // the moment of promotion names the card to fix, where a 403 on a later training
-      // press names a dataset id.
-      const gate = evaluateDatasetUse(
-        'training',
-        normalizeClassifications((target.data as { classifications?: unknown }).classifications),
-        normalizeUsePolicy((target.data as { dataUse?: DataUsePolicy }).dataUse),
-      );
-      if (!gate.allowed) return { error: gate.reason };
-
-      const projectNode = nodes.find((node) => node.data.kind === 'project' && canvasProjectId(node.data) != null);
-      const projectId = args.projectId ?? (projectNode ? canvasProjectId(projectNode.data) : null);
-      if (projectId == null) return { error: 'No project to file this corpus under. Put the project on the canvas, or name its id.' };
-
-      const cell = (row: Record<string, unknown>, column: string | undefined): string =>
-        column ? String((row as Record<string, unknown>)[column] ?? '').trim() : '';
-      const examples = source.rows
-        .map((row) => ({
-          instruction: cell(row as Record<string, unknown>, args.instructionColumn),
-          input: cell(row as Record<string, unknown>, args.inputColumn),
-          output: cell(row as Record<string, unknown>, args.outputColumn),
-        }))
-        .filter((example) => example.instruction && example.output);
-      if (!examples.length) return { error: 'Every row was empty in the instruction or the output column, so there is nothing to train on.' };
-
-      try {
-        const dataset = await importCanvasDataset({
-          projectId,
-          name: args.name?.trim() || String(target.data.title || 'Canvas corpus'),
-          examples,
-          classifications: normalizeClassifications((target.data as { classifications?: unknown }).classifications),
-          usePolicy: normalizeUsePolicy((target.data as { dataUse?: DataUsePolicy }).dataUse),
-          sourceSessionId: sessionId ?? undefined,
-          sourceObjectId: target.id,
-        });
-        return {
-          ok: true,
-          corpus: { id: dataset.id, exampleCount: dataset.example_count, projectId },
-          skipped: source.rows.length - examples.length,
-        };
-      } catch (error) {
-        return { error: error instanceof Error ? error.message : 'That dataset could not be promoted to a training corpus.' };
-      }
     },
   }, {
     name: 'canvas_list_data_sources',
@@ -7120,7 +7050,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         ...node.data,
         title: message.subject,
         subtitle: message.fromName ? `${message.fromName} <${message.from}>` : message.from,
-        status: new Date(message.receivedAtISO).toLocaleString(),
+        status: fmt.dateTime(message.receivedAtISO),
         messageId: message.id,
         connectionId,
         accountEmail: source.data.accountEmail,
@@ -11678,7 +11608,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         {!presentMode && paletteOpen && <aside id="canvas-object-palette" data-testid="canvas-palette" className={styles.palette}>
           <div className={styles.paletteHeader}><strong>{t('addToCanvas')}</strong><button onClick={() => setPaletteOpen(false)} aria-label={t('closePalette')}>×</button></div>
           <div className={styles.paletteSearchWrap}><span aria-hidden><Icon source="⌕" size="1em" /></span><input ref={paletteSearchRef} data-testid="canvas-palette-search" className={styles.search} aria-label={t('searchObjectTypes')} value={paletteSearch} onChange={(event) => setPaletteSearch(event.target.value)} placeholder={t('searchObjectTypes')} />{paletteSearch && <button type="button" aria-label={t('clearSearch')} onClick={() => setPaletteSearch('')}>×</button>}</div>
-          <div className={styles.paletteSections}>{creationPaletteGroupsFor(persistence === 'server').map((group) => ({ ...group, items: group.items.filter((item) => `${t(`object.${item.kind}`)} ${t(`group.${item.group}`)} ${item.group} ${item.kind}`.toLowerCase().includes(paletteSearch.trim().toLowerCase())) })).filter((group) => group.items.length).map((group) => {
+          <div className={styles.paletteSections}>{creationPaletteGroupsFor(persistence === 'server', canvasCapabilities).map((group) => ({ ...group, items: group.items.filter((item) => `${t(`object.${item.kind}`)} ${t(`group.${item.group}`)} ${item.group} ${item.kind}`.toLowerCase().includes(paletteSearch.trim().toLowerCase())) })).filter((group) => group.items.length).map((group) => {
             const collapsed = !paletteSearch.trim() && collapsedPaletteGroups.has(group.group);
             const regionId = `canvas-palette-${group.group.toLowerCase()}`;
             return <section key={group.group} className={styles.paletteSection}>
@@ -11736,7 +11666,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           </div>
         </section>}
 
-        {historyOpen && <aside className={styles.historyPanel}><header><div><strong>{t('versionHistory')}</strong><small>{t('versionHistoryHint')}</small></div><button onClick={() => setHistoryOpen(false)} aria-label={t('closeHistory')}>×</button></header>{persistence === 'local' ? <p>{t('historyLocalOnly')}</p> : <><button className={styles.primaryButton} onClick={createCheckpoint} disabled={!canEdit}>{t('nameCheckpoint')}</button><div>{history.length ? history.map((snapshot) => <button key={snapshot.revision} onClick={() => restoreRevision(snapshot.revision)} disabled={!canEdit}><b>{snapshot.label || t('revisionLabel', { revision: snapshot.revision })}</b><span>{t('revisionMeta', { revision: snapshot.revision, at: new Date(snapshot.createdAt).toLocaleString() })}</span></button>) : <p>{t('noRevisions')}</p>}</div></>}</aside>}
+        {historyOpen && <aside className={styles.historyPanel}><header><div><strong>{t('versionHistory')}</strong><small>{t('versionHistoryHint')}</small></div><button onClick={() => setHistoryOpen(false)} aria-label={t('closeHistory')}>×</button></header>{persistence === 'local' ? <p>{t('historyLocalOnly')}</p> : <><button className={styles.primaryButton} onClick={createCheckpoint} disabled={!canEdit}>{t('nameCheckpoint')}</button><div>{history.length ? history.map((snapshot) => <button key={snapshot.revision} onClick={() => restoreRevision(snapshot.revision)} disabled={!canEdit}><b>{snapshot.label || t('revisionLabel', { revision: snapshot.revision })}</b><span>{t('revisionMeta', { revision: snapshot.revision, at: fmt.dateTime(snapshot.createdAt) })}</span></button>) : <p>{t('noRevisions')}</p>}</div></>}</aside>}
         {outcomeMetricsOpen && <aside className={`${styles.historyPanel} ${styles.outcomeMetricsPanel}`} aria-label={t('sessionOutcomeMetrics')}>
           <header><div><strong>{t('ideaToDelivery')}</strong><small>{outcomeMetrics ? t('sessionVsTenant', { count: outcomeMetrics.sampleSize }) : t('valueGenerated')}</small></div><button onClick={() => setOutcomeMetricsOpen(false)} aria-label={t('closeOutcomeMetrics')}>×</button></header>
           {persistence === 'local' ? <div className={styles.outcomeEmpty}><span aria-hidden><Icon source="↗" size="1em" /></span><strong>{t('saveForBaseline')}</strong><p>{t('saveForBaselineHint')}</p><button className={styles.primaryButton} onClick={() => requireAccount('metrics', t('gateMetricsTitle'), t('gateMetricsBody'))}>{t('saveAndMeasure')}</button></div> : outcomeMetricsLoading ? <p role="status">{t('calculatingValue')}</p> : outcomeMetricsError ? <div className={styles.outcomeEmpty}><strong>{t('metricsUnavailable')}</strong><p>{outcomeMetricsError}</p><button className={styles.secondaryButton} onClick={openOutcomeMetrics}>{t('retry')}</button></div> : outcomeMetrics ? <div className={styles.outcomeMetricList}>
@@ -11770,7 +11700,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           </div> : null}
           <footer><span>{t('correlationCoverage')}</span><small>{t('aggregatesScoped')}</small></footer>
         </aside>}
-        {conversationOpen && <aside className={styles.historyPanel} aria-label={t('sessionConversation')}><header><div><strong>{t('sessionConversation')}</strong><small>{t('sessionConversationHint')}</small></div><span className={styles.panelHeaderActions}><CopyButton compact label={t('copyDiagnostics')} ariaLabel={t('copyChatDiagnostics')} getText={buildDiagnostics} /><button onClick={() => setConversationOpen(false)} aria-label={t('closeConversation')}>×</button></span></header><div>{timeline.length ? timeline.map((message) => <article key={message.clientMessageId} style={{ padding: '9px 10px', borderBottom: '1px solid var(--border-subtle)' }}><strong style={{ textTransform: 'capitalize' }}>{message.metadata?.authoredBy?.name || (message.messageRole === 'assistant' ? 'Brain' : message.messageRole)}</strong><p style={{ margin: '4px 0', whiteSpace: 'pre-wrap' }}>{message.body}</p><small>{new Date(message.createdAt).toLocaleString()}</small></article>) : <p>{t('brainEmpty')}</p>}</div></aside>}
+        {conversationOpen && <aside className={styles.historyPanel} aria-label={t('sessionConversation')}><header><div><strong>{t('sessionConversation')}</strong><small>{t('sessionConversationHint')}</small></div><span className={styles.panelHeaderActions}><CopyButton compact label={t('copyDiagnostics')} ariaLabel={t('copyChatDiagnostics')} getText={buildDiagnostics} /><button onClick={() => setConversationOpen(false)} aria-label={t('closeConversation')}>×</button></span></header><div>{timeline.length ? timeline.map((message) => <article key={message.clientMessageId} style={{ padding: '9px 10px', borderBottom: '1px solid var(--border-subtle)' }}><strong style={{ textTransform: 'capitalize' }}>{message.metadata?.authoredBy?.name || (message.messageRole === 'assistant' ? 'Brain' : message.messageRole)}</strong><p style={{ margin: '4px 0', whiteSpace: 'pre-wrap' }}>{message.body}</p><small>{fmt.dateTime(message.createdAt)}</small></article>) : <p>{t('brainEmpty')}</p>}</div></aside>}
         {diagnosticsOpen && <aside className={`${styles.historyPanel} ${styles.diagnosticsPanel}`} aria-label={t('canvasDiagnostics')}><header><div><strong>{t('diagnostics')}</strong><small>{t('diagnosticsHint')}</small></div><button onClick={() => setDiagnosticsOpen(false)} aria-label={t('closeDiagnostics')}>×</button></header><div className={styles.diagnosticsSummary}><dl><div><dt>{t('diagSession')}</dt><dd>{t('diagSessionValue', { persistence, revision: revision.current })}</dd></div><div><dt>{t('diagRealtime')}</dt><dd>{realtimeState}</dd></div><div><dt>{t('diagCanvas')}</dt><dd>{t('diagCanvasValue', { objects: nodes.length, connections: edges.length })}</dd></div><div><dt>{t('brain')}</dt><dd>{t('diagBrainValue', { state: thinking ? t('diagResponding') : t('diagReady'), actions: canvasActions.length })}</dd></div><div><dt>{t('diagScope')}</dt><dd>{resolvedScopeMode}</dd></div><div><dt>{t('diagAccess')}</dt><dd>{sessionRole}</dd></div></dl><CopyButton label={t('copyDiagnostics')} ariaLabel={t('copyCanvasDiagnostics')} getText={buildDiagnostics} /></div></aside>}
 
         {!!proposedChanges.length && <aside className={styles.changeSetPanel}><header><div><strong>{t('reviewBrainChanges')}</strong><small>{t('reviewBrainChangesHint')}</small></div><button onClick={rejectProposedChanges} aria-label={t('closeChangeSet')}>×</button></header><div>{proposedChanges.map((change) => <label key={change.id}><input type="checkbox" checked={acceptedProposalIds.has(change.id)} onChange={() => setAcceptedProposalIds((current) => { const next = new Set(current); if (next.has(change.id)) next.delete(change.id); else next.add(change.id); return next; })} /><span><b>{change.label}</b><small>{change.type.replace('.', ' ')}</small></span></label>)}</div><footer><button className={styles.secondaryButton} onClick={rejectProposedChanges}>{t('rejectAll')}</button><button className={styles.secondaryButton} disabled={!acceptedProposalIds.size} onClick={applyAndEnableAutoApply} title={t('applyAutoApplyHint')}>{t('applyAutoApply')}</button><button className={styles.primaryButton} disabled={!acceptedProposalIds.size} onClick={applyProposedChanges}>{t('applySelected', { count: acceptedProposalIds.size })}</button></footer></aside>}
@@ -11895,6 +11825,7 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
   onResumeShare: (nodeId: string, kind: 'view' | 'embed') => Promise<void>;
   onResumeSharesList: (nodeId: string) => Promise<CanvasResumeShare[]>;
   onResumeShareRevoke: (nodeId: string, shareId: string) => Promise<void>; }) {
+    const fmt = useFormat();
   const t = useTranslations('creationCanvas');
   const kind = node.data.kind;
   const onWebsiteChange = (patch: Partial<CreationNodeData>) => onChange(patchWebsiteHero(node.data, patch));
@@ -12130,7 +12061,7 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
         <CanvasExportActions data={node.data} onExport={(action) => void runArtifactAction(action)} className={styles.panelActions} />
         {actionStatus && <small role="status" className={styles.inspectorHint}>{actionStatus}</small>}
       </section>}
-      {tab === 'details' && deliverables.length > 0 && <section aria-label={t('deliverables')} style={{ display: 'grid', gap: 8, paddingTop: 12, borderTop: '1px solid var(--border-subtle)' }}><strong style={{ fontSize: 'var(--font-size-small)' }}>{t('deliveredOutputs')}</strong>{deliverables.slice(0, 6).map((deliverable) => <div key={deliverable.id} style={{ display: 'grid', gap: 2, fontSize: 'var(--font-size-small)' }}><span><b>{deliverable.artifactKind}</b> · {deliverable.status}</span><small>{deliverable.provider || 'Builderforce'} · {new Date(deliverable.completedAt || deliverable.createdAt).toLocaleString()}</small>{deliverable.url && !deliverable.url.startsWith('data:') && <a href={deliverable.url} target="_blank" rel="noreferrer">{t('openDeliverable')}</a>}{deliverable.error && <small style={{ color: 'var(--error-text)' }}>{deliverable.error}</small>}</div>)}</section>}
+      {tab === 'details' && deliverables.length > 0 && <section aria-label={t('deliverables')} style={{ display: 'grid', gap: 8, paddingTop: 12, borderTop: '1px solid var(--border-subtle)' }}><strong style={{ fontSize: 'var(--font-size-small)' }}>{t('deliveredOutputs')}</strong>{deliverables.slice(0, 6).map((deliverable) => <div key={deliverable.id} style={{ display: 'grid', gap: 2, fontSize: 'var(--font-size-small)' }}><span><b>{deliverable.artifactKind}</b> · {deliverable.status}</span><small>{deliverable.provider || 'Builderforce'} · {fmt.dateTime(deliverable.completedAt || deliverable.createdAt)}</small>{deliverable.url && !deliverable.url.startsWith('data:') && <a href={deliverable.url} target="_blank" rel="noreferrer">{t('openDeliverable')}</a>}{deliverable.error && <small style={{ color: 'var(--error-text)' }}>{deliverable.error}</small>}</div>)}</section>}
     </div>
     <footer><span>{t('resourceRole', { role })}</span><code>{node.data.resourceId || `session:${node.id}`}</code><button className={styles.fullButton} disabled={!editable} onClick={() => kind === 'task' ? setActionStatus(t('taskDetailsSaved')) : onChange({ status: 'Saved' })}>{kind === 'task' ? t('saveTaskDetails') : t('saveChanges')}</button></footer>
   </aside>;
@@ -12380,6 +12311,7 @@ function TaskInspectorSection({
   data, onChange, taskId, taskAgents, taskAgentValue, taskAssignees, taskCost, statusGuidance, normalizedTaskStatus,
   prdStatus, prdTitle, prdSummary, actionStatus, setActionStatus, persistTaskPatch, persistence,
 }: KindSectionProps) {
+    const fmt = useFormat();
   const t = useTranslations('creationCanvas');
   return <>
     <div className={styles.taskInspectorGrid}>
@@ -12430,7 +12362,7 @@ function TaskInspectorSection({
     {taskCost && taskCost.requests > 0 && <section className={styles.taskPrdSummary} aria-label={t('costToBuild')}>
       <div><span>{t('costToBuild')}</span></div>
       <strong>{taskCost.estimatedCostUsd < 0.01 ? t('costUnderOneCent') : `$${taskCost.estimatedCostUsd.toFixed(2)}`}</strong>
-      <p>{t('costRunsAndTokens', { requests: taskCost.requests, tokens: taskCost.totalTokens.toLocaleString() })}</p>
+      <p>{t('costRunsAndTokens', { requests: taskCost.requests, tokens: fmt.number(taskCost.totalTokens) })}</p>
     </section>}
     {actionStatus && <small role="status" className={styles.inspectorHint}>{actionStatus}</small>}
   </>;
@@ -12574,12 +12506,13 @@ function DatasetPlotAction({ data, onPlot }: { data: CreationNodeData; onPlot: (
  * same profile Brain reads before it queries.
  */
 function DatasetProfileSummary({ data }: { data: CreationNodeData }) {
+    const fmt = useFormat();
   const t = useTranslations('creationCanvas');
   const profile = Array.isArray(data.profile) ? data.profile as Array<Record<string, unknown>> : [];
   const rowCount = Number(data.rowCount) || (Array.isArray(data.rows) ? data.rows.length : 0);
   if (!profile.length) return <p className={styles.inspectorHint}>{rowCount ? t('datasetProfilePending') : t('datasetProfileEmpty')}</p>;
   return <section className={styles.datasetProfile} aria-label={t('datasetProfileLabel')}>
-    <div className={styles.datasetProfileHead}><strong>{t('datasetProfileLabel')}</strong><span>{t('dataGridShape', { rows: rowCount.toLocaleString(), columns: profile.length })}</span></div>
+    <div className={styles.datasetProfileHead}><strong>{t('datasetProfileLabel')}</strong><span>{t('dataGridShape', { rows: fmt.number(rowCount), columns: profile.length })}</span></div>
     <div className={styles.datasetProfileList}>
       {profile.slice(0, 40).map((column, index) => {
         const filled = Number(column.filled) || 0;
@@ -12918,6 +12851,7 @@ function EvermindInspector({ node, persistence, onAttach, onExpand, onTrain }: {
 }
 
 function ActivityInspector({ sessionId, objectId, data, persistence, role, members }: { sessionId: string; objectId: string; data: CreationNodeData; persistence: 'local' | 'server'; role: CreationSessionSummary['role']; members: Array<{ userId: string; displayName: string | null; role: string }> }) {
+    const fmt = useFormat();
   const t = useTranslations('creationCanvas');
   const [comments, setComments] = useState<CreationSessionComment[]>([]);
   const [activity, setActivity] = useState<CreationSessionActivity[]>([]);
@@ -12979,7 +12913,7 @@ function ActivityInspector({ sessionId, objectId, data, persistence, role, membe
     {status && <p className={styles.inspectorHint}>{status}</p>}
     <section className={styles.commentList} aria-label={t('objectComments')}>
       {comments.map((comment) => <article key={comment.id} className={comment.resolvedAt ? styles.commentResolved : ''}>
-        <header><b>{comment.authorName || t('collaborator')}</b><time>{new Date(comment.createdAt).toLocaleString()}</time></header>
+        <header><b>{comment.authorName || t('collaborator')}</b><time>{fmt.dateTime(comment.createdAt)}</time></header>
         <p>{comment.body}</p>
         {comment.anchor?.kind === 'resume-field' && <small className={styles.commentAnchor}>{t('resumeCommentAnchor', { section: t(`resumeCommentSection_${comment.anchor.section}`), field: comment.anchor.field || t('resumeCommentWholeSection') })}</small>}
         {canComment && <button onClick={() => resolve(comment)}>{comment.resolvedAt ? t('reopen') : t('resolve')}</button>}
@@ -12987,7 +12921,7 @@ function ActivityInspector({ sessionId, objectId, data, persistence, role, membe
     </section>
     <section className={styles.activityList} aria-label={t('objectActivity')}>
       <h4>{t('recentActivity')}</h4>
-      {activity.filter((item) => item.kind === 'event').map((item) => <div key={item.id}><span>•</span><p><b>{item.actorName || 'BuilderForce'}</b>{` ${item.type.replaceAll('.', ' ')}`}</p><time>{new Date(item.createdAt).toLocaleString()}</time></div>)}
+      {activity.filter((item) => item.kind === 'event').map((item) => <div key={item.id}><span>•</span><p><b>{item.actorName || 'BuilderForce'}</b>{` ${item.type.replaceAll('.', ' ')}`}</p><time>{fmt.dateTime(item.createdAt)}</time></div>)}
     </section>
   </div>;
 }

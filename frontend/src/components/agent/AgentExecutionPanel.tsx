@@ -32,6 +32,7 @@ import { useExecutionStream, type ExecutionFileChange } from './useExecutionStre
 import { ObservabilityContent } from '../ObservabilityContent';
 import { TaskChangesPanel } from './TaskChangesPanel';
 import { PullRequestPanel } from './PullRequestPanel';
+import { useFormat } from "@/i18n/useFormat";
 
 /**
  * Live execution view for a task. Queued runs stream their status, output
@@ -194,6 +195,7 @@ function isGenuineToolCall(ev: ExecutionTraceToolEvent): boolean {
 }
 
 export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task: Task; agentHosts: AgentHost[]; onTaskChanged?: () => void }) {
+    const fmt = useFormat();
   const t = useTranslations('agentExecution');
   const confirm = useConfirm();
   const [executions, setExecutions] = useState<Execution[]>([]);
@@ -667,7 +669,7 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
         {taskCost && taskCost.requests > 0 && (
           <span
             style={{ fontSize: 12, color: 'var(--text-muted)' }}
-            title={t('ticketSpendTooltip', { tokens: taskCost.totalTokens.toLocaleString(), requests: taskCost.requests })}
+            title={t('ticketSpendTooltip', { tokens: fmt.number(taskCost.totalTokens), requests: taskCost.requests })}
           >
             {t('spentOnTicket', { amount: taskCost.estimatedCostUsd < 0.01 ? '<$0.01' : `$${taskCost.estimatedCostUsd.toFixed(2)}` })}
           </span>

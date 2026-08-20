@@ -24,6 +24,7 @@ import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/rea
 import { invalidateJwtMembershipCache } from '../../infrastructure/auth/keyResolutionCache';
 import { isAgentHostOnline } from '../../domain/agentHost/onlineStatus';
 import { buildPlanLimitsGuard, seatCapacityForTenant } from '../middleware/planLimitsGuard';
+import { resolveCanvasCapabilities } from '../middleware/featureGate';
 import { canAddSeat } from '../../domain/tenant/PlanLimits';
 import { trialDaysRemaining } from '../../domain/tenant/effectivePlan';
 import { buildPaymentProvider } from '../../infrastructure/payment';
@@ -388,6 +389,32 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     const [row] = await db.select({ settings: tenants.settings }).from(tenants).where(eq(tenants.id, id)).limit(1);
     if (!row) return c.json({ error: 'Workspace not found' }, 404);
     return c.json({ enabled: readNavigationFeatures(row.settings) });
+  });
+
+  /**
+   * The CANVAS CAPABILITIES this caller holds.
+   *
+   * Sits beside navigation-features because it answers the same shape of question — what
+   * does this workspace get — and differs in who decides: navigation features are a
+   * workspace PREFERENCE any member may edit, and these are an ENTITLEMENT nobody in the
+   * workspace can grant themselves. Hence no PUT.
+   *
+   * Cached read-through for a minute: it is on the canvas load path and it changes only
+   * when a plan does. Keyed by user as well as tenant because a superadmin bypasses every
+   * gate, and serving their set to a member would hand out the entitlement.
+   */
+  router.get('/:id/canvas-capabilities', async (c) => {
+    const id = Number(c.req.param('id'));
+    const denied = forbidCrossTenant(c, id);
+    if (denied) return denied;
+    const userId = c.get('userId') as string | undefined;
+    const capabilities = await getOrSetCached(
+      c.env as Env,
+      `canvas-capabilities:v1:${id}:${userId ?? 'anon'}`,
+      () => resolveCanvasCapabilities(c.env as Env, id, userId),
+      { kvTtlSeconds: 60, l1TtlMs: 30_000 },
+    );
+    return c.json({ capabilities });
   });
 
   router.put('/:id/navigation-features', async (c) => {

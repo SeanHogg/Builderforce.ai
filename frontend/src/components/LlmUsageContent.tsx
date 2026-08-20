@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import { llmApi, dashboardApi, type LlmUsageStats, type LlmModelStatus, type LlmHealthResponse, type DashboardUsage, type UsageByKind } from '@/lib/builderforceApi';
+import { useFormat } from "@/i18n/useFormat";
 
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
@@ -30,6 +31,7 @@ const KIND_META: Record<UsageByKind['kind'], { label: string; color: string }> =
 };
 
 export function LlmUsageContent() {
+    const fmt = useFormat();
   const t = useTranslations('llmUsage');
   const [usage, setUsage] = useState<LlmUsageStats | null>(null);
   const [health, setHealth] = useState<LlmHealthResponse | null>(null);
@@ -151,7 +153,7 @@ export function LlmUsageContent() {
                   )}
                   {!m.available && m.cooldownUntil && (
                     <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
-                      cooldown until {new Date(m.cooldownUntil).toLocaleTimeString()}
+                      cooldown until {fmt.time(m.cooldownUntil)}
                     </span>
                   )}
                   <span
@@ -172,7 +174,7 @@ export function LlmUsageContent() {
             </div>
 
             <div style={{ marginTop: 10, fontSize: 11, color: 'var(--text-muted)' }}>
-              As of {new Date(health.timestamp).toLocaleString()} ·{' '}
+              As of {fmt.dateTime(health.timestamp)} ·{' '}
               {models.length > 0 ? `${models.length} models available` : ''}
             </div>
           </>

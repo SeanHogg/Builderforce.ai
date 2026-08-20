@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react';
+import { useFormat } from "@/i18n/useFormat";
 
 /**
  * Reusable SVG donut/ring chart — the project's first general-purpose chart
@@ -44,10 +45,12 @@ export function DonutChart({
   thickness = 26,
   centerValue,
   centerLabel,
-  formatValue = (v) => (Math.round(v * 10) / 10).toLocaleString(),
+  formatValue,
   legend = true,
   ariaLabel,
 }: DonutChartProps) {
+  const fmt = useFormat();
+  const value = formatValue ?? ((v: number) => fmt.number(Math.round(v * 10) / 10));
   const total = segments.reduce((s, x) => s + Math.max(0, x.value), 0);
   const r = (size - thickness) / 2;
   const c = 2 * Math.PI * r;
@@ -112,7 +115,7 @@ export function DonutChart({
               <div key={s.key} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 'var(--font-size-small)' }}>
                 <span style={{ width: 10, height: 10, borderRadius: 'var(--radius-sm)', background: s.color, flexShrink: 0 }} />
                 <span style={{ flex: 1, color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.label}</span>
-                <span style={{ fontWeight: 700 }}>{formatValue(s.value)}</span>
+                <span style={{ fontWeight: 700 }}>{value(s.value)}</span>
                 <span style={{ color: 'var(--text-muted)', minWidth: 38, textAlign: 'right' }}>{Math.round(frac * 100)}%</span>
               </div>
             );

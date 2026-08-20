@@ -33,6 +33,7 @@ import {
 import { normalizeDataContract, type ContractViolation } from '@/lib/canvasDataGovernance';
 import { dataQualityVerdict, type DataQualityResult } from '@/lib/canvasDataQuality';
 import { normalizeMetricDefinition, formatMetricValue } from '@/lib/canvasMetrics';
+import { useFormat } from "@/i18n/useFormat";
 
 /** Shared verdict strip. One component so a red ERD, a red contract, a red quality
  *  suite and a red test run cannot look like four different severities of the same
@@ -61,6 +62,7 @@ function asArray(value: unknown): unknown[] {
  * cannot throw on a shape nobody anticipated.
  */
 function useDetailFormatter() {
+    const fmt = useFormat();
   const t = useTranslations('creationCanvas.node');
   return (detail: Record<string, string | number> | undefined): string => {
     if (!detail) return '';
@@ -69,7 +71,7 @@ function useDetailFormatter() {
       .slice(0, 5)
       .map(([key, value]) => {
         const label = t.has(`detailKey_${key}`) ? t(`detailKey_${key}`) : key;
-        return `${label}: ${typeof value === 'number' ? value.toLocaleString() : value}`;
+        return `${label}: ${typeof value === 'number' ? fmt.number(value) : value}`;
       })
       .join(' · ');
   };

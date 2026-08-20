@@ -129,3 +129,79 @@ describe('signalPendingWork', () => {
     await expect(signalPendingWork(envWith())).resolves.toBeUndefined();
   });
 });
+
+/**
+ * The next-due gate. The work-pending signal only covers WRITE-driven work; a schedule
+ * that merely comes due signals nothing, so before this branch a 09:00 report could
+ * only fire on the floor sweep and ran up to a full floor interval late.
+ */
+describe('evaluateCronGate — dynamic next-due', () => {
+  const FLOOR = FLOOR_INTERVAL_MS;
+
+  it('runs when a schedule has come due, even though nothing signalled and the floor is not', async () => {
+    const now = 10 * FLOOR;
+    const { kv } = fakeKv({
+      'cron:last-floor-sweep': String(now - 60_000), // floor NOT due
+      'cron:next-due': String(now - 1_000),          // a schedule just came due
+    });
+    const decision = await evaluateCronGate(envWith(kv), now);
+    expect(decision).toMatchObject({ run: true, reason: 'due', floorDue: false });
+  });
+
+  it('stays idle while the next due time is still in the future', async () => {
+    const now = 10 * FLOOR;
+    const { kv } = fakeKv({
+      'cron:last-floor-sweep': String(now - 60_000),
+      'cron:next-due': String(now + 120_000),
+    });
+    const decision = await evaluateCronGate(envWith(kv), now);
+    expect(decision).toMatchObject({ run: false, reason: 'idle' });
+    expect(decision.nextDueMs).toBe(now + 120_000);
+  });
+
+  /**
+   * The bound that protects autosuspend. A row whose sweep never re-arms it (the sweep
+   * switched off in cron controls, a generator erroring past its retries) stays due
+   * forever — unbounded, this branch would then open on EVERY tick and quietly undo the
+   * whole point of the gate.
+   */
+  it('ignores a due time older than one floor interval so a stuck schedule cannot pin the gate open', async () => {
+    const now = 10 * FLOOR;
+    const { kv } = fakeKv({
+      'cron:last-floor-sweep': String(now - 60_000), // floor NOT due
+      'cron:next-due': String(now - FLOOR - 1),      // stuck: due, but long past
+    });
+    const decision = await evaluateCronGate(envWith(kv), now);
+    expect(decision).toMatchObject({ run: false, reason: 'idle' });
+  });
+
+  /** A stuck schedule still RUNS — just on the floor, exactly as it did pre-gate. */
+  it('still runs a long-overdue schedule once the floor comes due', async () => {
+    const now = 10 * FLOOR;
+    const { kv } = fakeKv({
+      'cron:last-floor-sweep': String(now - FLOOR - 1), // floor IS due
+      'cron:next-due': String(now - FLOOR - 1),
+    });
+    const decision = await evaluateCronGate(envWith(kv), now);
+    expect(decision).toMatchObject({ run: true, reason: 'floor' });
+  });
+
+  /** "Nothing armed" and "never published" must both degrade to floor-only behaviour. */
+  it.each([['none'], ['not-a-number'], ['0']])('treats %s as no known due time', async (raw) => {
+    const now = 10 * FLOOR;
+    const { kv } = fakeKv({ 'cron:last-floor-sweep': String(now - 60_000), 'cron:next-due': raw });
+    const decision = await evaluateCronGate(envWith(kv), now);
+    expect(decision).toMatchObject({ run: false, reason: 'idle', nextDueMs: null });
+  });
+
+  /** A signal outranks a due time — both mean "run", but the reason must stay honest. */
+  it('reports the signal as the reason when both a signal and a due time are present', async () => {
+    const now = 10 * FLOOR;
+    const { kv } = fakeKv({
+      'cron:work-pending': '1',
+      'cron:last-floor-sweep': String(now - 60_000),
+      'cron:next-due': String(now - 1_000),
+    });
+    expect(await evaluateCronGate(envWith(kv), now)).toMatchObject({ run: true, reason: 'signal' });
+  });
+});

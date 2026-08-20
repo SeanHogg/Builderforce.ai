@@ -22,8 +22,10 @@ import {
   listMyTimecards, type Timecard,
 } from '@/lib/freelancerTimecardsApi';
 import { formatCents } from '@/lib/canvasMoney';
+import { MyMilestonesPanel } from '@/components/freelance/MilestoneSchedulePanel';
+import { listMyMilestones, type MilestoneRow } from '@/lib/milestonesApi';
 
-const FREELANCER_TABS = ['work', 'timecards'] as const;
+const FREELANCER_TABS = ['work', 'timecards', 'milestones'] as const;
 type FreelancerTab = (typeof FREELANCER_TABS)[number];
 
 const money = (cents: number, cur = 'USD') => formatCents(cents, { currency: cur });
@@ -68,6 +70,10 @@ export default function FreelancerDashboardPage() {
   const [timecards, setTimecards] = useState<Timecard[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [today, setToday] = useState<{ signalCount: number; minutes: number; byKind: Record<string, number> } | null>(null);
+  // Fixed-price work. Loaded here rather than only inside the panel because the tab
+  // badge and the escrow tile both need the count, and a second fetch for the same
+  // rows would be one round-trip spent twice.
+  const [milestones, setMilestones] = useState<MilestoneRow[]>([]);
   const [loading, setLoading] = useState(true);
 
   const tabParam = searchParams.get('tab');
@@ -77,6 +83,15 @@ export default function FreelancerDashboardPage() {
   const selectTab = (key: FreelancerTab) =>
     router.replace(key === 'work' ? '/freelancer/dashboard' : `/freelancer/dashboard?tab=${key}`, { scroll: false });
 
+  // What fixed-price work owes this person right now: approved-but-unreleased is the
+  // money most at risk, and `funded` is work they are authorised to start. Both are
+  // derived from the rows already fetched — never a stored total.
+  const escrowCents = milestones
+    .filter((m) => m.status === 'funded' || m.status === 'submitted' || m.status === 'approved')
+    .reduce((sum, m) => sum + m.amountCents, 0);
+  // Trend on the instant the money was actually put up, which is the event a worker
+  // watches — a milestone written down changes nothing until it is funded.
+
   useEffect(() => {
     let alive = true;
     setLoading(true);
@@ -85,12 +100,14 @@ export default function FreelancerDashboardPage() {
       listMyTimecards().catch(() => [] as Timecard[]),
       listMyInvoices().catch(() => [] as Invoice[]),
       getTodayActivity().catch(() => null),
-    ]).then(([engs, tcs, invs, act]) => {
+      listMyMilestones().then((r) => r.milestones).catch(() => [] as MilestoneRow[]),
+    ]).then(([engs, tcs, invs, act, ms]) => {
       if (!alive) return;
       setEngagements(Array.isArray(engs) ? engs : []);
       setTimecards(Array.isArray(tcs) ? tcs : []);
       setInvoices(Array.isArray(invs) ? invs : []);
       setToday(act);
+      setMilestones(Array.isArray(ms) ? ms : []);
     }).finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
   }, []);
@@ -112,6 +129,10 @@ export default function FreelancerDashboardPage() {
   const paidSeries = useMemo(
     () => cumulativeDailyTotals(paidInvoices.map((i) => ({ ts: i.paidAt, value: (i.amountCents || 0) / 100 }))),
     [paidInvoices],
+  );
+  const escrowSeries = useMemo(
+    () => cumulativeDailyTotals(milestones.map((m) => ({ ts: m.fundedAt, value: m.amountCents / 100 }))),
+    [milestones],
   );
   const pendingSeries = useMemo(
     () => cumulativeDailyTotals(pendingInvoices.map((i) => ({ ts: i.issuedAt, value: (i.amountCents || 0) / 100 }))),
@@ -200,11 +221,29 @@ export default function FreelancerDashboardPage() {
           </div>
         )}
 
+        {/* Fixed-price money in escrow. Rendered only when there IS fixed-price work,
+            because an hourly-only worker has no escrow and a permanent zero tile would
+            read as a broken number rather than an absent concept. */}
+        {!loading && milestones.length > 0 && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3" style={{ marginBottom: 32 }}>
+            <InsightStat
+              label={t('metric.escrowHeld')}
+              value={money(escrowCents, milestones[0]?.currency ?? currency)}
+              sub={t('metric.escrowMilestones', { count: milestones.length })}
+              series={escrowSeries}
+              delta={buildInsightDelta(escrowSeries, true)}
+              href="/freelancer/dashboard?tab=milestones"
+              color={escrowCents > 0 ? 'var(--cyan-bright, var(--cyan-bright))' : 'var(--text-muted)'}
+            />
+          </div>
+        )}
+
         {/* Tabs — My Work / My Timecards */}
         <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--border-subtle)', marginBottom: 24, overflowX: 'auto' }}>
           {([
             { key: 'work', label: t('tabs.work'), count: engagements.length },
             { key: 'timecards', label: t('tabs.timecards'), count: timecards.length },
+            { key: 'milestones', label: t('tabs.milestones'), count: milestones.length },
           ] as const).map(({ key, label, count }) => {
             const active = activeTab === key;
             return (
@@ -256,6 +295,10 @@ export default function FreelancerDashboardPage() {
             </div>
           )
         )}
+
+        {/* Fixed-price milestones — the escrow schedule, and the one move that is
+            the worker's to make. The panel owns its own read and its own actions. */}
+        {!loading && activeTab === 'milestones' && <MyMilestonesPanel />}
 
         {/* My Timecards */}
         {!loading && activeTab === 'timecards' && (

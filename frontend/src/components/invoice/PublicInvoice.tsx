@@ -35,6 +35,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { apiRequest } from '@/lib/apiClient';
 import styles from '../signature/SignerConsole.module.css';
+import { useFormat } from "@/i18n/useFormat";
 
 interface PublicInvoiceDocument {
   reference: string;
@@ -59,6 +60,7 @@ interface PublicInvoiceDocument {
  * second source for the same fact.
  */
 export function PublicInvoice() {
+    const fmt = useFormat();
   const t = useTranslations('publicInvoice');
   const locale = useLocale();
   const [invoice, setInvoice] = useState<PublicInvoiceDocument | null>(null);
@@ -112,7 +114,7 @@ export function PublicInvoice() {
 
   const money = (value: number, currency: string): string => {
     try {
-      return value.toLocaleString(locale, { style: 'currency', currency });
+      return fmt.number(value, { style: 'currency', currency });
     } catch {
       return `${value.toFixed(2)} ${currency}`;
     }

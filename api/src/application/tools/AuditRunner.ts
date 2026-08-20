@@ -25,13 +25,14 @@ import type { Env } from '../../env';
 import { TaskType, TaskStatus } from '../../domain/shared/types';
 import { projectRepositories, socControls, objectives, keyResults, projects, tasks } from '../../infrastructure/database/schema';
 import { resolveRepoCredential, isResolveError } from '../repos/resolveRepoCredential';
-import { listRepoFiles } from '../repos/readRepoContents';
+import { listRepoFiles, readRepoFile } from '../repos/readRepoContents';
 import { notify } from '../notifications/notify';
 import type { ToolService, SavedToolRun } from './ToolService';
 import type { TaskService } from '../task/TaskService';
 import { getSystemAudit } from './systemAudits';
-import type { AuditScanContext, ScannedRepo } from './auditScanners';
+import { privacyContentSignals, selectPrivacyProbeFiles, type AuditScanContext, type ScannedRepo } from './auditScanners';
 import { isControlImplemented } from '../governance/controlStatus';
+import { advertisedName } from '../llm/toolNaming';
 
 export interface RunAuditArgs {
   tenantId: number;
@@ -137,6 +138,27 @@ export function signalsFromPaths(paths: string[]): Omit<ScannedRepo, 'provider' 
 /** Statuses in the governance SOC 2 tracker that count as "implemented". */
 
 
+/**
+ * The sentence that closes the loop.
+ *
+ * Every remediation ticket carries it, because the deep pass reporting back is
+ * not optional polish — without the call, the diagnostic keeps showing the
+ * path-signal first pass forever and everything the agent read is lost. Stating
+ * the audit id and the project id in the brief removes the two things an agent
+ * would otherwise have to guess, and `advertisedName` is used rather than a
+ * hardcoded string so a rename of the tool cannot leave this instruction naming
+ * something the session does not have (see [[prompt-tool-name-contract]]).
+ */
+function deepPassBriefing(auditId: string, projectId: number): string {
+  return (
+    `**When you finish, report what you found.** Call \`${advertisedName('audits.report_findings')}\` `
+    + `with \`projectId: ${projectId}\`, \`auditId: "${auditId}"\` and every finding — title, severity `
+    + `(critical|high|medium|low|info), location and recommendation. That is what re-scores this diagnostic `
+    + `from the code you actually read; without it the report stays at the first-pass estimate derived from `
+    + `file paths. Report a clean pass too: it records that somebody looked.`
+  );
+}
+
 export class AuditRunner {
   constructor(
     private readonly db: Db,
@@ -169,7 +191,20 @@ export class AuditRunner {
           ref: resolved.repo.defaultBranch ?? meta.defaultBranch,
         });
         if (!list.ok) return { ...meta, read: false, ...emptySignals() };
-        return { ...meta, read: true, ...signalsFromPaths(list.paths) };
+        const readCtx = {
+          provider: resolved.repo.provider,
+          host: resolved.repo.host,
+          owner: resolved.repo.owner,
+          repo: resolved.repo.repo,
+          token: resolved.token,
+          ref: resolved.repo.defaultBranch ?? meta.defaultBranch,
+        };
+        return {
+          ...meta,
+          read: true,
+          ...signalsFromPaths(list.paths),
+          verifiedPrivacy: await this.verifyPrivacyContent(readCtx, list.paths),
+        };
       } catch {
         return { ...meta, read: false, ...emptySignals() };
       }
@@ -186,6 +221,34 @@ export class AuditRunner {
       governance,
       planning,
     };
+  }
+
+  /**
+   * Open the handful of files that decide whether a privacy control WORKS.
+   *
+   * The privacy scan used to establish GDPR/CCPA/CAN-SPAM controls from file
+   * paths alone, so a route that exists but does not gate trackers or does not
+   * truly delete scored exactly like one that does. These reads are what turn a
+   * filename into evidence.
+   *
+   * Budgeted at `PRIVACY_PROBE_FILE_BUDGET` reads per repo and one candidate per
+   * signal first, so a repo with fifty unsubscribe templates cannot spend the
+   * whole allowance proving one control. Every failure degrades to the previous
+   * path-only reading rather than to a false negative — `verifiedFrac` treats an
+   * unopened file and a disproved one differently on purpose.
+   */
+  private async verifyPrivacyContent(
+    ctx: Parameters<typeof readRepoFile>[0],
+    paths: string[],
+  ): Promise<ScannedRepo['verifiedPrivacy']> {
+    const candidates = selectPrivacyProbeFiles(paths);
+    if (!candidates.length) return undefined;
+    const files: Array<{ path: string; content: string }> = [];
+    for (const path of candidates) {
+      const read = await readRepoFile(ctx, path).catch(() => null);
+      if (read?.ok) files.push({ path, content: read.content });
+    }
+    return files.length ? privacyContentSignals(files) : undefined;
   }
 
   private async governanceSignal(tenantId: number) {
@@ -264,7 +327,8 @@ export class AuditRunner {
             description:
               `${rec.detail}\n\n` +
               `Filed by the ${audit.name} diagnostic against ${ctx.projectName} (${result.headline}). ` +
-              `Fix this gap and open a remediation PR.`,
+              `Fix this gap and open a remediation PR.\n\n` +
+              deepPassBriefing(audit.id, args.projectId),
             taskType: TaskType.TASK,
             persona: audit.agentWorkflow,
           }, args.tenantId);
@@ -281,7 +345,8 @@ export class AuditRunner {
             `First-pass automated report: ${result.headline}.\n` +
             (result.recommendations.length
               ? `Top gaps:\n${result.recommendations.slice(0, 5).map((r) => `- ${r.title}: ${r.detail}`).join('\n')}`
-              : 'No automated gaps flagged — verify manually.'),
+              : 'No automated gaps flagged — verify manually.') +
+            `\n\n${deepPassBriefing(audit.id, args.projectId)}`,
           taskType: TaskType.TASK,
           persona: audit.agentWorkflow,
         }, args.tenantId);

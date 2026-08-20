@@ -31,6 +31,7 @@ import {
   type AppPackageTarget,
   type SiteRelease,
 } from '@/lib/api';
+import { useFormat } from "@/i18n/useFormat";
 
 interface SiteReleasePanelProps {
   projectId: number;
@@ -45,6 +46,7 @@ function formatBytes(bytes: number): string {
 }
 
 export function SiteReleasePanel({ projectId, onBuild }: SiteReleasePanelProps) {
+    const fmt = useFormat();
   const t = useTranslations('ide');
   const [releases, setReleases] = useState<SiteRelease[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
@@ -112,7 +114,7 @@ export function SiteReleasePanel({ projectId, onBuild }: SiteReleasePanelProps) 
               {release.versionToken.slice(0, 8)}
             </span>
             <span style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', flex: 1, minWidth: 0 }}>
-              {release.publishedAt ? new Date(release.publishedAt).toLocaleString() : '—'}
+              {release.publishedAt ? fmt.dateTime(release.publishedAt) : '—'}
               {' · '}{formatBytes(release.totalBytes)}
               {' · '}{release.source}
             </span>

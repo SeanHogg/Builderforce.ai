@@ -7,6 +7,7 @@ import type {
   ProjectConnectionHealth,
   ProjectConnectionReason,
 } from '@/lib/projectConnections';
+import { useFormat } from "@/i18n/useFormat";
 
 /**
  * ProjectConnectionsStrip — the SINGLE surface for "what is this project wired
@@ -137,6 +138,7 @@ function Chip({
 }
 
 export function ProjectConnectionsStrip({ connections, onManage, max = 3 }: ProjectConnectionsStripProps) {
+    const fmt = useFormat();
   const t = useTranslations('projectConnections');
   if (!connections || connections.length === 0) return null;
 
@@ -154,7 +156,7 @@ export function ProjectConnectionsStrip({ connections, onManage, max = 3 }: Proj
       {shown.map((c) => {
         const tone = HEALTH_TONE[c.health];
         const status = healthText(c.health, c.reason);
-        const syncedTitle = c.lastSyncedAt ? ` · ${t('lastSynced', { date: new Date(c.lastSyncedAt).toLocaleString() })}` : '';
+        const syncedTitle = c.lastSyncedAt ? ` · ${t('lastSynced', { date: fmt.dateTime(c.lastSyncedAt) })}` : '';
         const prs = c.openPullRequests;
         const prHref = pullsUrl(c.url, c.provider);
         return (
@@ -185,11 +187,11 @@ export function ProjectConnectionsStrip({ connections, onManage, max = 3 }: Proj
                 title={`${t('buildTitle', {
                   status: t(`build.${c.buildStatus}`),
                   branch: c.buildBranch ?? '—',
-                  date: c.buildAt ? new Date(c.buildAt).toLocaleString() : '—',
+                  date: c.buildAt ? fmt.dateTime(c.buildAt) : '—',
                 })}${
                   // The verdict comes from a scheduled sweep, not from this page load.
                   // Naming when it was read is what stops a stale green reading as live.
-                  c.buildProbedAt ? ` · ${t('buildChecked', { date: new Date(c.buildProbedAt).toLocaleString() })}` : ''
+                  c.buildProbedAt ? ` · ${t('buildChecked', { date: fmt.dateTime(c.buildProbedAt) })}` : ''
                 }`}
                 ariaLabel={t('buildAria', { status: t(`build.${c.buildStatus}`), branch: c.buildBranch ?? '—' })}
               >

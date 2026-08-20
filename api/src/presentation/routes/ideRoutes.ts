@@ -64,6 +64,10 @@ import { listSiteReleases, restoreSiteRelease } from '../../application/ide/site
 import { APP_PACKAGE_TARGETS, isAppPackageTarget, packageAppTarget } from '../../application/ide/packageApp';
 import { publishStaticSite, assetsFromFormData } from '../../application/ide/publishStaticSite';
 import { validateLoRASafetensors } from '../../domain/training/loraArtifact';
+// The dataset-use gate. Training is the one use that cannot be undone, so the boundary
+// that dispatches it is the boundary that has to ask. See its own header.
+import { evaluateTrainingDataset, trainingGateBody } from '../../application/finetune/trainingDatasetGate';
+import { normalizeClassifications, normalizeUsePolicy } from '@builderforce/creation-canvas-contract';
 import { wildcardPath } from './wildcardPath';
 
 function generateId(): string {
@@ -83,6 +87,11 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
  * Timestamp columns stay typed so JSON serialization uses the API-wide ISO-8601
  * UTC contract; only bigint values that cannot safely be JSON numbers stay text.
  */
+/** Ceiling on one promoted corpus. Well above any board a person assembles by hand and
+ *  well below a payload that would time the Worker out mid-write; `POST /datasets/generate`
+ *  caps itself at 200 for the same reason. */
+const MAX_IMPORTED_EXAMPLES = 5_000;
+
 const datasetRow = {
   id: ideDatasets.id,
   project_id: ideDatasets.projectId,
@@ -92,6 +101,12 @@ const datasetRow = {
   r2_key: ideDatasets.r2Key,
   example_count: ideDatasets.exampleCount,
   status: ideDatasets.status,
+  // GOVERNANCE (0936). Served so the IDE surface can show what a corpus is allowed to be
+  // BEFORE somebody presses train, rather than discovering it in a 403.
+  classifications: ideDatasets.classifications,
+  use_policy: ideDatasets.usePolicy,
+  source_session_id: ideDatasets.sourceSessionId,
+  source_object_id: ideDatasets.sourceObjectId,
   created_at: ideDatasets.createdAt,
   updated_at: ideDatasets.updatedAt,
 };
@@ -704,6 +719,77 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     });
   });
 
+  /**
+   * PROMOTE A CANVAS DATASET INTO A FINE-TUNE CORPUS, governance and all.
+   *
+   * The half of the gate that had no producer. `POST /datasets/generate` synthesises
+   * instruction pairs from a prompt — nobody's personal data, nothing to classify — so
+   * every corpus the platform could make was, correctly, unclassified. The corpora that
+   * NEED a policy are the ones made of real rows a person uploaded and then classified on
+   * the board, and there was no path that carried one across: the classification stayed on
+   * the canvas object and the training row never learned it existed.
+   *
+   * So this route takes the rows AND the classification AND the policy AND the canvas
+   * object they came from, in one call, because splitting them is how a corpus ends up
+   * created and classified in two steps with a train dispatched in between. Both governance
+   * documents go through the contract's normalizers, so a malformed tag is DROPPED rather
+   * than trusted — an unreadable `pii` silently read as `none` would turn a refusal into a
+   * permission.
+   */
+  router.post('/datasets/import', async (c) => {
+    const db = buildDatabase(c.env);
+    const tenantId = c.get('tenantId') as number;
+    const body = await c.req.json<{
+      projectId: string | number;
+      name: string;
+      capabilityPrompt?: string;
+      /** The corpus itself: {instruction, input?, output} rows, as the trainer expects. */
+      examples: Array<{ instruction?: string; input?: string; output?: string }>;
+      classifications?: unknown;
+      usePolicy?: unknown;
+      sourceSessionId?: string;
+      sourceObjectId?: string;
+    }>();
+    if (body.projectId == null || !body.name || !Array.isArray(body.examples)) {
+      return c.json({ error: 'projectId, name and examples are required' }, 400);
+    }
+    const projectId = typeof body.projectId === 'number' ? body.projectId : parseProjectIdInt(String(body.projectId));
+    if (!(await projectInTenant(db, tenantId, projectId))) return c.json({ error: 'Project not found' }, 404);
+
+    const examples = body.examples
+      .filter((row) => row && typeof row.instruction === 'string' && typeof row.output === 'string')
+      .slice(0, MAX_IMPORTED_EXAMPLES)
+      .map((row) => ({ instruction: row.instruction!, input: row.input ?? '', output: row.output! }));
+    if (!examples.length) return c.json({ error: 'No usable examples: each row needs an instruction and an output' }, 400);
+
+    const id = generateId();
+    const r2Key = `datasets/${String(projectId)}/${id}.jsonl`;
+    const bucket = r2(c);
+    if (!bucket) return c.json({ error: 'Object storage is not configured' }, 503);
+    await bucket.put(IDE_PREFIX + r2Key, examples.map((row) => JSON.stringify(row)).join('\n'), {
+      httpMetadata: { contentType: 'application/jsonl' },
+    });
+
+    await db.insert(ideDatasets).values({
+      id,
+      projectId,
+      name: body.name,
+      // A promoted corpus has no capability prompt — it was not generated FROM one. The
+      // column is NOT NULL, so it records what the corpus IS instead of inventing a prompt
+      // nobody wrote.
+      capabilityPrompt: body.capabilityPrompt?.trim() || `Imported from the canvas: ${body.name}`,
+      r2Key,
+      exampleCount: examples.length,
+      status: 'ready',
+      classifications: normalizeClassifications(body.classifications),
+      usePolicy: normalizeUsePolicy(body.usePolicy) ?? undefined,
+      sourceSessionId: body.sourceSessionId ?? null,
+      sourceObjectId: body.sourceObjectId ?? null,
+    });
+    const [dataset] = await db.select(datasetRow).from(ideDatasets).where(eq(ideDatasets.id, id));
+    return c.json(dataset!, 201);
+  });
+
   router.post('/datasets/generate', async (c) => {
     const db = buildDatabase(c.env);
     const tenantId = c.get('tenantId') as number;
@@ -830,6 +916,14 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     if (body.projectId == null || !body.baseModel) return c.json({ error: 'projectId and baseModel are required' }, 400);
     const projectId = typeof body.projectId === 'number' ? body.projectId : parseProjectIdInt(String(body.projectId));
     if (!(await projectInTenant(db, tenantId, projectId))) return c.json({ error: 'Project not found' }, 404);
+    // THE GOVERNANCE GATE, before the job row exists rather than before the run starts:
+    // a queued job is already a decision somebody has to reverse, and a refusal recorded
+    // as a failed run reads as an outage instead of a policy answer.
+    if (body.datasetId) {
+      const verdict = await evaluateTrainingDataset(db as never, body.datasetId);
+      if (verdict.notFound) return c.json({ error: 'Dataset not found' }, 404);
+      if (!verdict.allowed) return c.json(trainingGateBody(verdict), 403);
+    }
     const id = generateId();
     await db.insert(ideTrainingJobs).values({
       id,

@@ -6,6 +6,7 @@ import { RoleGate } from '@/components/RoleGate';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { getTicketCoordination, releaseLease, type TicketCoordination } from '@/lib/agentOpsApi';
 import { button, card, chip, emptyState, input, mono, muted, sectionTitle, table, tableScroll, td, th } from './agentOpsStyles';
+import { useFormat } from "@/i18n/useFormat";
 
 /**
  * Coordination — what several agents working ONE ticket are doing to each other.
@@ -17,6 +18,7 @@ import { button, card, chip, emptyState, input, mono, muted, sectionTitle, table
  * the question an operator actually has.
  */
 export function CoordinationPanel() {
+    const fmt = useFormat();
   const t = useTranslations('agentOps');
   const confirm = useConfirm();
   const [taskInput, setTaskInput] = useState('');
@@ -135,7 +137,7 @@ export function CoordinationPanel() {
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'baseline' }}>
                       <strong style={{ fontSize: '0.85rem', color: 'var(--text-primary)' }}>{n.key}</strong>
                       <span style={chip('accent')}>{n.author}</span>
-                      <span style={muted}>{new Date(n.updatedAt).toLocaleString()}</span>
+                      <span style={muted}>{fmt.dateTime(n.updatedAt)}</span>
                     </div>
                     <p style={{ ...muted, marginTop: 4, color: 'var(--text-primary)' }}>{n.content}</p>
                   </li>

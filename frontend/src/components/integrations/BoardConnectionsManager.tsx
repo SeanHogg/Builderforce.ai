@@ -13,6 +13,7 @@ import {
   type IntegrationProvider,
 } from '@/lib/builderforceApi';
 import { PROVIDER_META } from './IntegrationCredentialsManager';
+import { useFormat } from "@/i18n/useFormat";
 
 /**
  * Manage external board connections (project-management, ITSM, and incident
@@ -56,6 +57,7 @@ const btnSubtle: React.CSSProperties = {
 };
 
 export function BoardConnectionsManager({ projectId, heading }: { projectId: number; heading?: string | null }) {
+    const fmt = useFormat();
   const confirm = useConfirm();
   const tc = useTranslations('common');
   const t = useTranslations('boardConnections');
@@ -157,7 +159,7 @@ export function BoardConnectionsManager({ projectId, heading }: { projectId: num
                 <span style={{ fontSize: 13, color: 'var(--text-primary)', flex: 1 }}>
                   {conn.externalBoardId || t('boardFallback')} · {credName(conn.credentialId) ?? t('noKey')}
                   <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--text-muted)' }}>
-                    {conn.status}{conn.lastPolledAt ? ` · ${t('lastPolled', { time: new Date(conn.lastPolledAt).toLocaleString() })}` : ''}
+                    {conn.status}{conn.lastPolledAt ? ` · ${t('lastPolled', { time: fmt.dateTime(conn.lastPolledAt) })}` : ''}
                   </span>
                   {syncMsg[conn.id] && !syncMsg[conn.id].error && (
                     <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--text-muted)' }}>· {syncMsg[conn.id].text}</span>

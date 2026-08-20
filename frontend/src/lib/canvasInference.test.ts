@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { checkDataUse } from '@builderforce/creation-canvas-contract';
 import { meanInterval, normalCdf, proportionInterval, scoreExperiment, twoProportionTest } from './canvasInference';
 
 describe('canvasInference', () => {
@@ -79,45 +78,5 @@ describe('canvasInference', () => {
     // Dropping the arm that got no traffic is how a broken split looks like a clean run.
     expect(scored[2].rate).toBeNull();
     expect(scored[2].variant).toBe('broken');
-  });
-});
-
-describe('checkDataUse', () => {
-  const now = Date.parse('2026-08-13T00:00:00Z');
-
-  it('permits everything when no policy was declared', () => {
-    // Default-deny would train everyone to declare a policy they had not thought about.
-    expect(checkDataUse(null, 'training', now)).toBeNull();
-    expect(checkDataUse({}, 'export', now)).toBeNull();
-  });
-
-  it('refuses a purpose the dataset excludes', () => {
-    const refusal = checkDataUse({ purposes: ['analysis'], lawfulBasis: 'consent' }, 'training', now);
-    expect(refusal?.reason).toBe('purpose-not-permitted');
-    expect(refusal?.message).toContain('training');
-  });
-
-  it('refuses rows whose retention window has closed', () => {
-    const refusal = checkDataUse(
-      { purposes: ['analysis'], retentionDays: 30, collectedAt: '2026-01-01T00:00:00Z' },
-      'analysis',
-      now,
-    );
-    expect(refusal?.reason).toBe('retention-expired');
-  });
-
-  it('requires a lawful basis only for uses that take the rows somewhere', () => {
-    const policy = { purposes: ['analysis', 'training', 'sharing'] as const, retentionDays: 0 };
-    expect(checkDataUse(policy, 'analysis', now)).toBeNull();
-    expect(checkDataUse(policy, 'training', now)?.reason).toBe('no-lawful-basis');
-    expect(checkDataUse(policy, 'sharing', now)?.reason).toBe('no-lawful-basis');
-  });
-
-  it('permits a declared, in-window, lawfully-based training use', () => {
-    expect(checkDataUse(
-      { purposes: ['training'], lawfulBasis: 'legitimate-interests', retentionDays: 365, collectedAt: '2026-08-01T00:00:00Z' },
-      'training',
-      now,
-    )).toBeNull();
   });
 });

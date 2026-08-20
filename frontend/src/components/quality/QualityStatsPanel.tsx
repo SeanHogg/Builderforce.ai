@@ -7,6 +7,7 @@ import { TrendChart } from '@/components/charts/TrendChart';
 import { DonutChart } from '@/components/charts/DonutChart';
 import { BarChart } from '@/components/charts/BarChart';
 import { levelColor, statusColor, sourceColor } from './qualityColors';
+import { useFormat } from "@/i18n/useFormat";
 
 /**
  * Data-driven Quality overview — the "what have we collected, and what is it
@@ -17,6 +18,7 @@ import { levelColor, statusColor, sourceColor } from './qualityColors';
  * separately by the reusable Errors allowance meter.
  */
 export function QualityStatsPanel({ projectId, days = 30 }: { projectId?: number | null; days?: number }) {
+    const fmt = useFormat();
   const t = useTranslations('quality');
   const [stats, setStats] = useState<QualityStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -111,7 +113,7 @@ export function QualityStatsPanel({ projectId, days = 30 }: { projectId?: number
             <DonutChart
               segments={sourceSegments}
               size={150}
-              centerValue={sourceTotal.toLocaleString()}
+              centerValue={fmt.number(sourceTotal)}
               centerLabel={t('stats.events')}
               ariaLabel={t('stats.bySource')}
             />
@@ -137,10 +139,11 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 }
 
 function Stat({ label, value, accent, suffix }: { label: string; value: number; accent?: string; suffix?: string }) {
+    const fmt = useFormat();
   return (
     <div style={card}>
       <div style={{ fontSize: 22, fontWeight: 700, color: accent ?? 'var(--text-primary)' }}>
-        {value.toLocaleString()}{suffix ?? ''}
+        {fmt.number(value)}{suffix ?? ''}
       </div>
       <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{label}</div>
     </div>

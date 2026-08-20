@@ -6,7 +6,7 @@ import es from './messages/es.json';
 import fr from './messages/fr.json';
 import de from './messages/de.json';
 import { LOCALES, DEFAULT_LOCALE, type Locale } from './config';
-import { STALL_CAUSES } from '@/lib/builderforceApi';
+import { STALL_CAUSES, PROVIDER_PROBE_STATES } from '@/lib/builderforceApi';
 import { CAMPAIGN_BLOCKERS } from '@/lib/growthApi';
 import { CREATION_OBJECT_REGISTRY } from '@/components/creation-canvas/creationObjectRegistry';
 import { CREATION_TEMPLATES } from '@/components/creation-canvas/creationTemplates';
@@ -135,6 +135,22 @@ describe('message catalogs', () => {
     const t = createTranslator({ locale, messages: CATALOGS[locale] });
     const missing = STALL_CAUSES.filter((cause) => {
       const key = `manager.stalls.cause.${cause}`;
+      return t(key as never) === key;
+    });
+    expect(missing).toEqual([]);
+  });
+
+  /**
+   * Every provider-key status resolves through `stateLabel`, whose miss-fallback is the
+   * raw key with underscores swapped for spaces — so an unlabelled status does not throw
+   * or render a visible `dotted.key`, it renders plausible-looking ENGLISH ("lookup
+   * failed") in all five locales. That is why this needs a test and not just review:
+   * the failure mode is invisible in en and indistinguishable from real copy elsewhere.
+   */
+  it.each(LOCALES)('%s labels every provider probe status', (locale) => {
+    const t = createTranslator({ locale, messages: CATALOGS[locale] });
+    const missing = PROVIDER_PROBE_STATES.filter((state) => {
+      const key = `providerKeys.diagnostic.state.${state}`;
       return t(key as never) === key;
     });
     expect(missing).toEqual([]);

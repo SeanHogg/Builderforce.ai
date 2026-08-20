@@ -4,6 +4,7 @@ import { TenantPlan } from '../../domain/shared/types';
 import { resolveIsSuperadmin } from '../../infrastructure/auth/superadminFlag';
 import { resolveTenantPlan } from '../routes/llmRoutes';
 import {
+  CANVAS_CAPABILITY_FEATURES,
   evaluateFeatureEntitlement,
   evaluateFrontierAccess,
   evaluatePremiumModelAccess,
@@ -77,6 +78,34 @@ export async function tenantHasFeature(
   feature: PlanFeature,
 ): Promise<boolean> {
   return (await resolveFeatureEntitlement(env, tenantId, userId, feature)).entitled;
+}
+
+/**
+ * The CANVAS CAPABILITIES this caller holds — the set the object palette filters by.
+ *
+ * One plan read for the whole set rather than one per capability: `resolveTenantPlan` and
+ * `resolveIsSuperadmin` are the expensive halves and the verdict is pure, so asking N
+ * times would be N round trips for one answer. The palette is on the canvas load path.
+ *
+ * Returns ids, not features: `availableCreationObjects` filters on the capability id the
+ * registry stamped onto a kind, and translating in the browser would put the map in two
+ * places. See `CANVAS_CAPABILITY_FEATURES` for why the map is short.
+ */
+export async function resolveCanvasCapabilities(
+  env: Env,
+  tenantId: number,
+  userId: string | undefined | null,
+): Promise<string[]> {
+  const [access, isSuperadmin] = await Promise.all([
+    resolveTenantPlan(env, tenantId),
+    resolveIsSuperadmin(env, userId),
+  ]);
+  const effectivePlan = toTenantPlan(access.effectivePlan);
+  return Object.entries(CANVAS_CAPABILITY_FEATURES)
+    .filter(([, feature]) => evaluateFeatureEntitlement({
+      feature, effectivePlan, premiumOverride: access.premiumOverride, isSuperadmin,
+    }).entitled)
+    .map(([capability]) => capability);
 }
 
 // ---------------------------------------------------------------------------

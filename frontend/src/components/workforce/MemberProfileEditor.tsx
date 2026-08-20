@@ -6,7 +6,9 @@ import { Select } from '@/components/Select';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { membersApi, type MemberKind, type MemberProfile } from '@/lib/builderforceApi';
 import { MemberTimeChart } from './MemberTimeChart';
-import { taskStatusBadgeClass, taskStatusLabel } from '@/lib/taskStatus';
+import { taskStatusBadgeClass } from '@/lib/taskStatus';
+import { useTaskStatusLabel } from '@/lib/taskStatusLabel';
+import { useFormat } from "@/i18n/useFormat";
 
 export interface MemberProfileTask {
   id: number;
@@ -48,7 +50,9 @@ function textToStrings(s: string): string[] {
 export function MemberProfileEditor({ kind, refId, name, tasks, onClose, onSaved }: {
   kind: MemberKind; refId: string; name: string; tasks?: MemberProfileTask[]; onClose: () => void; onSaved?: () => void;
 }) {
+    const fmt = useFormat();
   const t = useTranslations('memberProfile');
+  const statusLabel = useTaskStatusLabel();
   const tw = useTranslations('workforce');
   const tc = useTranslations('common');
   const [loading, setLoading] = useState(true);
@@ -84,7 +88,7 @@ export function MemberProfileEditor({ kind, refId, name, tasks, onClose, onSaved
     try {
       const r = await membersApi.calendarSync(kind, refId);
       if (r.ok) {
-        const until = r.availabilityUntil ? t('syncedUntil', { time: new Date(r.availabilityUntil).toLocaleString() }) : '';
+        const until = r.availabilityUntil ? t('syncedUntil', { time: fmt.dateTime(r.availabilityUntil) }) : '';
         setCalMsg(t('syncedMsg', { status: r.availabilityStatus ?? '', until, count: r.ptoCount ?? 0 }));
         const fresh = await membersApi.getProfile(kind, refId);
         if (fresh.profile) setP(fresh.profile);
@@ -150,7 +154,7 @@ export function MemberProfileEditor({ kind, refId, name, tasks, onClose, onSaved
                 <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{task.title}</div>
                 <div style={{ marginTop: 3, fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{task.key ?? `#${task.id}`}</div>
               </div>
-              <span className={taskStatusBadgeClass(task.status)} style={{ flexShrink: 0 }}>{taskStatusLabel(task.status)}</span>
+              <span className={taskStatusBadgeClass(task.status)} style={{ flexShrink: 0 }}>{statusLabel(task.status)}</span>
             </div>
           )) : (
             <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>{t('noTasks')}</div>

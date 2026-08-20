@@ -8,6 +8,7 @@ import { reportCaughtError } from '../../application/observability/caughtErrorRe
  */
 
 import { Hono } from 'hono';
+import type { Context } from 'hono';
 import type { Env, HonoEnv } from '../../env';
 import type { TenantService } from '../../application/tenant/TenantService';
 import type { PaymentProvider } from '../../infrastructure/payment/PaymentProvider';
@@ -17,11 +18,68 @@ import {
 } from '../../application/tenant/cardValidationService';
 import { markDiscountRedeemed } from '../../application/tenant/discountCodeService';
 import { buildDatabase } from '../../infrastructure/database/connection';
+import type { Db } from '../../infrastructure/database/connection';
 import { recordReferralConversion } from '../../application/sales/recordReferralConversion';
 import { recordBusinessPhoneEvent } from '../../application/tenant/businessPhoneSubscription';
 import { completeListingCheckout } from '../../application/marketplace/listingCommerce';
 import { settleInvoiceCheckout } from '../../application/finance/receivables';
+import { completeKnowledgeCheckout } from '../../application/knowledge/knowledgeCommerce';
 import { fireEventTriggers } from '../../application/workflow/eventTriggers';
+
+/**
+ * SETTLE A ONE-OFF PURCHASE THAT ARRIVED BY WEBHOOK.
+ *
+ * Three flows — a creation listing, a knowledge listing and a tenant's own
+ * invoice — reach this file for the same reason: the redirect back from the
+ * hosted page is the NORMAL way a payment is recorded, and it cannot be the only
+ * way, because a buyer who pays and then closes the tab has been charged. Each
+ * one was written out longhand with the same three moves, which is three places
+ * for the acknowledgement contract to drift.
+ *
+ * That contract is the part worth stating once:
+ *
+ *   · INCOMPLETE METADATA is not an error. An event whose signed metadata does
+ *     not name everything the settlement needs cannot be settled by retrying it,
+ *     so it is acknowledged as unprocessed rather than 500'd into a retry loop.
+ *   · A THROW IS ACKNOWLEDGED TOO. The common cause is that the redirect already
+ *     recorded this purchase and the settlement is idempotently refusing the
+ *     second arrival — which happens about half the time, and is success, not
+ *     failure. Returning 500 there would have the processor retry a purchase that
+ *     is already complete, forever.
+ *   · THE PROCESSOR IS ALWAYS TOLD "received". Nothing here is a reason to make
+ *     it redeliver.
+ *
+ * `complete` returns `null` when the event does not carry what it needs, and
+ * otherwise whether the settlement actually applied.
+ */
+async function settleOneOff(
+  c: Context<HonoEnv>,
+  spec: {
+    /** Names this settlement in the error record. */
+    operation: string;
+    /** Names it in the log line a human reads. */
+    noun: string;
+    complete: (db: Db, env: Env) => Promise<boolean | null>;
+  },
+): Promise<Response> {
+  const env = c.env as Env;
+  try {
+    const applied = await spec.complete(buildDatabase(env), env);
+    if (applied === null) {
+      console.warn(`[webhook] ${spec.noun} with incomplete metadata; ignoring`);
+      return c.json({ received: true, processed: false });
+    }
+    return c.json({ received: true, processed: applied });
+  } catch (err) {
+    reportCaughtError(err, {
+      source: 'presentation/routes/webhookRoutes.ts',
+      operation: spec.operation,
+      level: 'warning',
+      context: { logMessage: `[webhook] ${spec.noun} did not apply:`, details: err },
+    });
+    return c.json({ received: true, processed: false });
+  }
+}
 
 export function createWebhookRoutes(
   tenantService: TenantService,
@@ -130,30 +188,45 @@ export function createWebhookRoutes(
      * rather than a second sale.
      */
     if (event.type === 'listing.purchased') {
-      if (!event.checkoutSessionId || !event.buyerRef || !event.tenantId) {
-        console.warn('[webhook] listing purchase with incomplete metadata; ignoring');
-        return c.json({ received: true, processed: false });
-      }
-      try {
-        await completeListingCheckout(buildDatabase(c.env as Env), c.env as Env, {
-          tenantId: event.tenantId,
-          buyerRef: event.buyerRef,
-          buyerEmail: event.billingEmail ?? null,
-          checkoutSessionId: event.checkoutSessionId,
-        });
-        return c.json({ received: true, processed: true });
-      } catch (err) {
-        // A buyer who already collected via the redirect is the COMMON case here,
-        // not a fault: the grant is idempotent and this arrives second about half
-        // the time. Acknowledge so the processor stops retrying, and record it.
-        reportCaughtError(err, {
-          source: 'presentation/routes/webhookRoutes.ts',
-          operation: 'listingPurchase',
-          level: 'warning',
-          context: { logMessage: '[webhook] listing grant did not apply:', details: err },
-        });
-        return c.json({ received: true, processed: false });
-      }
+      return settleOneOff(c, {
+        operation: 'listingPurchase',
+        noun: 'listing purchase',
+        complete: async (db, env) => {
+          if (!event.checkoutSessionId || !event.buyerRef || !event.tenantId) return null;
+          await completeListingCheckout(db, env, {
+            tenantId: event.tenantId,
+            buyerRef: event.buyerRef,
+            buyerEmail: event.billingEmail ?? null,
+            checkoutSessionId: event.checkoutSessionId,
+          });
+          return true;
+        },
+      });
+    }
+
+    /**
+     * A KNOWLEDGE listing was paid for — the third flow through the same door.
+     *
+     * Without this, knowledge would be the one paid product on the platform where
+     * closing the tab after paying loses the purchase. `completeKnowledgeCheckout`
+     * re-reads the session from the processor and lands on the same purchase row
+     * the redirect would; the unique index on `(listing, tenant)` makes the second
+     * arrival a no-op rather than a second charge.
+     */
+    if (event.type === 'knowledge.purchased') {
+      return settleOneOff(c, {
+        operation: 'knowledgePurchase',
+        noun: 'knowledge purchase',
+        complete: async (db, env) => {
+          if (!event.checkoutSessionId || !event.buyerUserId || !event.tenantId) return null;
+          await completeKnowledgeCheckout(db, env, {
+            tenantId: event.tenantId,
+            buyerUserId: event.buyerUserId,
+            checkoutSessionId: event.checkoutSessionId,
+          });
+          return true;
+        },
+      });
     }
 
     /**
@@ -168,30 +241,19 @@ export function createWebhookRoutes(
      * arrival a no-op rather than a second payment.
      */
     if (event.type === 'invoice.paid') {
-      if (!event.checkoutSessionId || !event.invoiceRef || !event.tenantId) {
-        console.warn('[webhook] invoice payment with incomplete metadata; ignoring');
-        return c.json({ received: true, processed: false });
-      }
-      try {
-        const settled = await settleInvoiceCheckout(buildDatabase(c.env as Env), c.env as Env, {
-          tenantId: event.tenantId,
-          invoiceRef: event.invoiceRef,
-          checkoutSessionId: event.checkoutSessionId,
-        });
-        return c.json({ received: true, processed: settled.applied });
-      } catch (err) {
-        // A payment the redirect already recorded is the COMMON case here, not a
-        // fault — and `applied: false` is the answer for that one, so anything
-        // reaching this branch is a genuine problem. Acknowledge anyway so the
-        // processor stops retrying, and record it.
-        reportCaughtError(err, {
-          source: 'presentation/routes/webhookRoutes.ts',
-          operation: 'invoicePaid',
-          level: 'warning',
-          context: { logMessage: '[webhook] invoice payment did not apply:', details: err },
-        });
-        return c.json({ received: true, processed: false });
-      }
+      return settleOneOff(c, {
+        operation: 'invoicePaid',
+        noun: 'invoice payment',
+        complete: async (db, env) => {
+          if (!event.checkoutSessionId || !event.invoiceRef || !event.tenantId) return null;
+          const settled = await settleInvoiceCheckout(db, env, {
+            tenantId: event.tenantId,
+            invoiceRef: event.invoiceRef,
+            checkoutSessionId: event.checkoutSessionId,
+          });
+          return settled.applied;
+        },
+      });
     }
 
     try {

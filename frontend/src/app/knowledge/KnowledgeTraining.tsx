@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl';
 import { RoleGate } from '@/components/RoleGate';
 import { knowledgeApi, type TrainingItem, type TenantCompliance } from '@/lib/knowledgeApi';
 import { badge } from './knowledgeStyles';
+import { useFormat } from "@/i18n/useFormat";
 
 function stateColor(state: string): React.CSSProperties {
   if (state === 'completed' || state === 'acknowledged')
@@ -19,6 +20,7 @@ function stateColor(state: string): React.CSSProperties {
  * the unified Knowledge home (it used to be its own tab).
  */
 export function MyTrainingSection() {
+    const fmt = useFormat();
   const t = useTranslations('knowledge');
   const [mine, setMine] = useState<TrainingItem[]>([]);
   const [loadedMine, setLoadedMine] = useState(false);
@@ -60,7 +62,7 @@ export function MyTrainingSection() {
               <div style={{ fontWeight: 600 }}>{item.title}</div>
               {item.dueAt && (
                 <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                  {t('due')}: {new Date(item.dueAt).toLocaleDateString()}
+                  {t('due')}: {fmt.date(item.dueAt)}
                 </div>
               )}
             </div>

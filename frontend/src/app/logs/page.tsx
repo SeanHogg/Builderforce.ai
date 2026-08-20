@@ -6,6 +6,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { auditApi, type AuditEvent } from '@/lib/builderforceApi';
 import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
 import PageContainer from '@/components/PageContainer';
+import { useFormat } from "@/i18n/useFormat";
 
 const EVENT_TYPE_COLORS: Record<string, string> = {
   user_registered: 'var(--cyan-bright, var(--cyan-bright))',
@@ -54,6 +55,7 @@ function EventTypeBadge({ type }: { type: string }) {
 }
 
 export default function AuditLogsContent() {
+    const fmt = useFormat();
   const [events, setEvents] = useState<AuditEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -226,7 +228,7 @@ export default function AuditLogsContent() {
                   {ev.userId ? `user ${ev.userId.slice(0, 8)}…` : 'system'}
                 </span>
                 <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>
-                  {new Date(ev.createdAt).toLocaleString()}
+                  {fmt.dateTime(ev.createdAt)}
                 </span>
                 <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>
                   {isExpanded ? '▲' : '▼'}
@@ -303,7 +305,7 @@ export default function AuditLogsContent() {
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                   <EventTypeBadge type={ev.eventType} />
                   <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>
-                    {new Date(ev.createdAt).toLocaleString()}
+                    {fmt.dateTime(ev.createdAt)}
                   </span>
                 </div>
 

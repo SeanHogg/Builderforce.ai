@@ -43,6 +43,7 @@ import {
   type Permission,
 } from '../../domain/permissions/permissionRegistry';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import { coerceStringArray } from '../../domain/shared/jsonColumn';
 
 /** Role-override sets are platform-global; a member's set is per (tenant, user, role). */
 const roleCacheKey = (role: string) => `perms:role:${role}`;
@@ -52,18 +53,6 @@ const memberCacheKey = (tenantId: number, userId: string, role: string) =>
 const TTL_SECONDS = 900;
 
 /** `platform_modules.permissions` is free-form JSON; keep only string entries. */
-function coercePermissions(value: unknown): string[] {
-  if (Array.isArray(value)) return value.filter((v): v is string => typeof v === 'string');
-  if (typeof value === 'string') {
-    try {
-      const parsed = JSON.parse(value);
-      return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === 'string') : [];
-    } catch {
-      return [];
-    }
-  }
-  return [];
-}
 
 /**
  * A role's permission set after the platform-global `role_permission_overrides`
@@ -113,7 +102,7 @@ export async function effectivePermissionsFor(
 
     return resolveEffectivePermissions({
       rolePermissions,
-      modulePermissions: assignedModules.flatMap((m) => coercePermissions(m.permissions)),
+      modulePermissions: assignedModules.flatMap((m) => coerceStringArray(m.permissions)),
       userGrants: overrides.filter((o) => o.granted).map((o) => o.permission),
       userRevocations: overrides.filter((o) => !o.granted).map((o) => o.permission),
     });

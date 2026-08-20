@@ -18,6 +18,7 @@ import {
   type ConnectorSummary,
 } from '@/lib/connectorsApi';
 import { getStoredTenant } from '@/lib/auth';
+import { useFormat } from "@/i18n/useFormat";
 
 /**
  * Connector catalog — the breadth surface.
@@ -480,6 +481,7 @@ function ActionsTab({ detail }: { detail: ConnectorDetail }) {
 // ── Activity tab: the audit trail ────────────────────────────────────────────
 
 function ActivityTab({ connectorKey }: { connectorKey: string }) {
+    const fmt = useFormat();
   const t = useTranslations('connectors');
   const [logs, setLogs] = useState<ConnectorCallLog[] | null>(null);
 
@@ -499,7 +501,7 @@ function ActivityTab({ connectorKey }: { connectorKey: string }) {
           <span style={{ color: l.ok ? 'var(--success)' : 'var(--danger)' }}><Icon name="activity" size={12} /> {l.statusCode ?? '—'}</span>
           <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{l.actionKey}</span>
           <span>{t(`activity.actor.${l.actorKind === 'user' || l.actorKind === 'test' ? l.actorKind : 'agent'}`)}</span>
-          <span>{new Date(l.createdAt).toLocaleString()}</span>
+          <span>{fmt.dateTime(l.createdAt)}</span>
           {l.durationMs != null && <span>{l.durationMs}ms</span>}
           {l.error && <span style={{ color: 'var(--danger)', flexBasis: '100%', wordBreak: 'break-word' }}>{l.error}</span>}
         </div>

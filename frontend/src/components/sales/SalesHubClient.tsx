@@ -47,6 +47,7 @@ import {
 } from '@/lib/salesApi';
 import type { PayoutBalance, PayoutRecord } from '@/lib/payoutsApi';
 import { formatCents } from '@/lib/canvasMoney';
+import { useFormat } from "@/i18n/useFormat";
 
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
@@ -89,6 +90,7 @@ function ShareLink({ label, value, hint }: { label: string; value: string | null
 }
 
 export default function SalesHubClient() {
+    const fmt = useFormat();
   const t = useTranslations('salesHub');
   const locale = useLocale();
   const router = useRouter();
@@ -107,7 +109,7 @@ export default function SalesHubClient() {
     [locale],
   );
   const date = useCallback(
-    (iso: string) => new Date(iso).toLocaleDateString(locale, { year: 'numeric', month: 'short', day: 'numeric' }),
+    (iso: string) => fmt.dateWith(iso, { year: 'numeric', month: 'short', day: 'numeric' }),
     [locale],
   );
 

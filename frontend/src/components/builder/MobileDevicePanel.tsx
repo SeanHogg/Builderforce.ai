@@ -17,6 +17,7 @@ import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { QrCode } from './QrCode';
 import { fetchSite, type SiteInfo } from '@/lib/api';
 import { useCopyToClipboard } from '@/lib/useCopyToClipboard';
+import { useFormat } from "@/i18n/useFormat";
 
 interface MobileDevicePanelProps {
   open: boolean;
@@ -27,6 +28,7 @@ interface MobileDevicePanelProps {
 }
 
 export function MobileDevicePanel({ open, onClose, projectId, onGoToPublish }: MobileDevicePanelProps) {
+    const fmt = useFormat();
   const t = useTranslations('ide');
   const [site, setSite] = useState<SiteInfo | null>(null);
   const [loading, setLoading] = useState(false);
@@ -103,7 +105,7 @@ export function MobileDevicePanel({ open, onClose, projectId, onGoToPublish }: M
 
             {site.publishedAt && (
               <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)' }}>
-                {t('device.lastPublished', { when: new Date(site.publishedAt).toLocaleString() })}
+                {t('device.lastPublished', { when: fmt.dateTime(site.publishedAt) })}
               </p>
             )}
             <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>

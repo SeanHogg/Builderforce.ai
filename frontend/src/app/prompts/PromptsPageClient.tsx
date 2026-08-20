@@ -24,6 +24,7 @@ import { SlideOutPanel } from '@/components/SlideOutPanel';
 import type { PromptAnalysis } from '@/lib/builderforceApi';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 import { copyTextToClipboard } from '@/lib/useCopyToClipboard';
+import { useFormat } from "@/i18n/useFormat";
 
 const card: React.CSSProperties = {
   background: 'var(--bg-base)',
@@ -38,6 +39,7 @@ type Tab = 'public' | 'mine';
 const PAGE_SIZE = 12;
 
 export default function PromptsPage() {
+    const fmt = useFormat();
   const t = useTranslations('promptsPage');
   const tCommon = useTranslations('common');
   const isAuthed = !!getStoredUser();
@@ -274,7 +276,7 @@ export default function PromptsPage() {
                       </span>
                     </td>
                     <td style={tdMutedStyle}>{p.category ?? '—'}</td>
-                    <td style={tdMutedStyle}>{p.usageCount.toLocaleString()}</td>
+                    <td style={tdMutedStyle}>{fmt.number(p.usageCount)}</td>
                     <td style={tdMutedStyle}>{p.starCount}</td>
                     <td style={tdMutedStyle}>{p.authorName ?? '—'}</td>
                     <td style={tdStyle}>

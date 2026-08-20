@@ -23,7 +23,6 @@ import {
   knowledgeTrainingAssignments,
   knowledgeDocumentCollaborators,
   marketplaceKnowledge,
-  knowledgeListingPurchases,
   tenantMembers,
   users,
 } from '../../infrastructure/database/schema';
@@ -37,6 +36,12 @@ import {
   parseListingTags,
   browsePublicListings,
 } from '../../application/knowledge/knowledgeMarket';
+import {
+  completeKnowledgeCheckout,
+  holdsKnowledgePurchase,
+  startKnowledgeCheckout,
+} from '../../application/knowledge/knowledgeCommerce';
+import { ListingError } from '../../application/marketplace/creationListings';
 import { ideProxy, newTraceId } from '../../application/llm/LlmProxyService';
 import { tenantProxyForPlan } from '../../application/llm/tenantProxy';
 import { logTrace } from '../../application/llm/traceLogger';
@@ -1149,28 +1154,57 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
   });
 
   // ---- CHECKOUT A PAID LISTING (records a purchase that unlocks install) ----
-  // Free listings need no checkout. PAID listings need one-off Stripe settlement
-  // (Checkout in `payment` mode), which is not wired yet — so this reports
-  // `requiresConfig` and never records a purchase. It previously recorded one
-  // immediately whenever PAYMENT_PROVIDER was unset, which handed paid listings out
-  // for free on every deploy that hadn't configured payments.
+  // Free listings need no checkout. A PAID one goes to the processor's hosted page
+  // and comes back through `/checkout/complete`, which re-reads the session FROM
+  // the processor before recording anything — the same one-off settlement the
+  // creation marketplace uses, through the same verified-checkout primitive.
   router.post('/listings/:listingId/checkout', requireRole(TenantRole.DEVELOPER), async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const userId = c.get('userId') as string;
     const listingId = c.req.param('listingId');
     const [listing] = await db.select().from(marketplaceKnowledge).where(eq(marketplaceKnowledge.id, listingId));
     if (!listing) return c.json({ error: 'Listing not found' }, 404);
     if (listing.priceCents <= 0) return c.json({ free: true });
+    if (await holdsKnowledgePurchase(db, tenantId, listingId)) return c.json({ purchased: true });
 
-    const [existing] = await db
-      .select({ id: knowledgeListingPurchases.id })
-      .from(knowledgeListingPurchases)
-      .where(and(eq(knowledgeListingPurchases.listingId, listingId), eq(knowledgeListingPurchases.tenantId, tenantId)));
-    if (existing) return c.json({ purchased: true });
+    const body = await c.req
+      .json<{ returnUrl?: string; buyerEmail?: string }>()
+      .catch(() => ({} as { returnUrl?: string; buyerEmail?: string }));
+    // The buyer comes back to the page they left, so the return url is theirs to
+    // name — but only its origin and path are used, and the processor substitutes
+    // the session id, so it cannot be turned into an open redirect carrying data.
+    const returnUrl = body.returnUrl ?? new URL(c.req.url).origin + '/knowledge';
+    try {
+      const { checkoutUrl } = await startKnowledgeCheckout(db, c.env as Env, {
+        tenantId,
+        buyerUserId: c.get('userId') as string,
+        // Only prefills the processor's own email field; it collects one either way.
+        buyerEmail: typeof body.buyerEmail === 'string' ? body.buyerEmail : null,
+        listingId,
+        returnUrl,
+      });
+      return c.json({ checkoutUrl });
+    } catch (error) {
+      if (error instanceof ListingError) return c.json({ error: error.message }, error.status);
+      throw error;
+    }
+  });
 
-    // Return a handled result (not an error) so the client shows a clear message
-    // rather than granting a paid item for free.
-    return c.json({ requiresConfig: true });
+  // ---- COMPLETE A PAID CHECKOUT (the processor's redirect lands here) -------
+  router.post('/listings/:listingId/checkout/complete', requireRole(TenantRole.DEVELOPER), async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const body = await c.req.json<{ checkoutSessionId?: string }>().catch(() => ({ checkoutSessionId: undefined }));
+    if (!body.checkoutSessionId) return c.json({ error: 'checkoutSessionId is required' }, 400);
+    try {
+      const purchase = await completeKnowledgeCheckout(db, c.env as Env, {
+        tenantId,
+        buyerUserId: c.get('userId') as string,
+        checkoutSessionId: body.checkoutSessionId,
+      });
+      return c.json({ purchased: true, purchase });
+    } catch (error) {
+      if (error instanceof ListingError) return c.json({ error: error.message }, error.status);
+      throw error;
+    }
   });
 
   // ---- INSTALL A LISTING (copy into the caller's tenant) ---------------
@@ -1185,13 +1219,11 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
     if (listing.visibility !== 'public' && listing.tenantId !== tenantId) {
       return c.json({ error: 'Forbidden' }, 403);
     }
-    // Paid listings require a recorded purchase for this tenant before installing.
-    if (listing.priceCents > 0) {
-      const [purchase] = await db
-        .select({ id: knowledgeListingPurchases.id })
-        .from(knowledgeListingPurchases)
-        .where(and(eq(knowledgeListingPurchases.listingId, listingId), eq(knowledgeListingPurchases.tenantId, tenantId)));
-      if (!purchase) {
+    // Paid listings require a recorded purchase for this tenant before installing —
+    // except in the workspace that PUBLISHED it, which owns the document already and
+    // which checkout correctly refuses to sell it to.
+    if (listing.priceCents > 0 && listing.tenantId !== tenantId) {
+      if (!(await holdsKnowledgePurchase(db, tenantId, listingId))) {
         return c.json({ error: 'Purchase required', checkoutRequired: true, priceCents: listing.priceCents }, 402);
       }
     }

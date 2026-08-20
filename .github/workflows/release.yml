@@ -348,6 +348,13 @@ jobs:
   deploy-api:
     name: Deploy API
     runs-on: ubuntu-latest
+    # Binds the job to the `production` GitHub Environment so a required-reviewer rule
+    # (or a wait timer, or a branch restriction) can gate the migration + worker deploy
+    # WITHOUT another change to this file. Until protection rules are configured on that
+    # environment the job runs exactly as before — GitHub creates it implicitly on first
+    # use with no rules, and repository-level secrets stay readable — so this is the
+    # enabling half of the gate, and the operator owns the policy half.
+    environment: production
     steps:
       - uses: actions/checkout@v7
 
@@ -395,6 +402,9 @@ jobs:
   deploy-frontend:
     name: Deploy frontend
     runs-on: ubuntu-latest
+    # Same production gate as deploy-api — see the note there. Gating only the API would
+    # let a reviewed backend ship behind an unreviewed frontend.
+    environment: production
     steps:
       - uses: actions/checkout@v7
 

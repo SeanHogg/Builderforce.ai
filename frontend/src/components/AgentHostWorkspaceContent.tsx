@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { workspaceApi, type AgentHostDirectory, type AgentHostDirectoryFile } from '@/lib/builderforceApi';
+import { useFormat } from "@/i18n/useFormat";
 
 interface AgentHostWorkspaceContentProps {
   agentHostId: number;
@@ -45,6 +46,7 @@ function FileIcon({ path }: { path: string }) {
 }
 
 export function AgentHostWorkspaceContent({ agentHostId }: AgentHostWorkspaceContentProps) {
+    const fmt = useFormat();
   const [directories, setDirectories] = useState<AgentHostDirectory[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -132,7 +134,7 @@ export function AgentHostWorkspaceContent({ agentHostId }: AgentHostWorkspaceCon
             <div style={{ fontSize: 11, color: STATUS_COLORS[selectedDir.status], marginTop: 2 }}>
               {selectedDir.status}
               {selectedDir.lastSyncedAt
-                ? ` · synced ${new Date(selectedDir.lastSyncedAt).toLocaleString()}`
+                ? ` · synced ${fmt.dateTime(selectedDir.lastSyncedAt)}`
                 : ''}
             </div>
           </div>
@@ -228,7 +230,7 @@ export function AgentHostWorkspaceContent({ agentHostId }: AgentHostWorkspaceCon
               </div>
               {dir.lastSyncedAt && (
                 <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>
-                  Last synced: {new Date(dir.lastSyncedAt).toLocaleString()}
+                  Last synced: {fmt.dateTime(dir.lastSyncedAt)}
                 </div>
               )}
             </div>

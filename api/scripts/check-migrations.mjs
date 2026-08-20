@@ -338,11 +338,18 @@ function resolveTargetType(table, column) {
 }
 
 const fkTypeMismatches = [];
+const fkUnresolvedTargets = [];
 for (const fk of migFks) {
   const target = resolveTargetType(fk.refTable, fk.refColumn);
   // Still unresolved → the referenced table is declared somewhere neither pass can
-  // see. Silence beats a false failure that blocks every deploy.
-  if (!target) continue;
+  // see. Silence beats a false failure that blocks every deploy, so this NEVER
+  // fails the build — but it is reported, because the same shape is produced by a
+  // genuine typo (`REFERENCES userz(id)`), which otherwise surfaces only as a red
+  // deploy. Warning, not gate: see the report below.
+  if (!target) {
+    fkUnresolvedTargets.push(fk);
+    continue;
+  }
   if (!fkTypesCompatible(fk.type, target.type)) {
     fkTypeMismatches.push({ ...fk, targetType: target.type, targetFile: target.source });
   }
@@ -360,6 +367,48 @@ if (fkTypeMismatches.length > 0) {
       '   integer column fed a VARCHAR user id stores NULL forever).',
   );
   failed = true;
+}
+
+if (fkUnresolvedTargets.length > 0) {
+  // NON-FATAL by design. `resolveTargetType` returning null means neither the
+  // migrations nor the Drizzle schema declares the referenced column — which is
+  // produced by exactly two situations that this pass cannot tell apart: a table
+  // that legitimately predates the tracked migration set and never got a pgTable
+  // (silence is correct), and a misspelling (`REFERENCES userz(id)`), which is a
+  // guaranteed red deploy. Failing would block every deploy on the first kind, so
+  // the typo is surfaced as a warning the reader can act on instead.
+  const byTarget = new Map();
+  for (const fk of fkUnresolvedTargets) {
+    const key = `${fk.refTable}.${fk.refColumn}`;
+    if (!byTarget.has(key)) byTarget.set(key, []);
+    byTarget.get(key).push(fk);
+  }
+  console.warn(
+    `\n⚠️  Foreign key target not declared anywhere (${byTarget.size} distinct, not a failure):\n`,
+  );
+  for (const [target, group] of [...byTarget].sort()) {
+    const [refTable, refColumn] = target.split('.');
+    const knownTable = migColumns.has(refTable) || drizzleTypes.has(refTable);
+    const near = knownTable
+      ? [...(migColumns.get(refTable)?.keys() ?? []), ...(drizzleTypes.get(refTable)?.keys() ?? [])]
+          .filter((c) => c.includes(refColumn) || refColumn.includes(c))
+      : [...new Set([...migColumns.keys(), ...drizzleTypes.keys()])].filter(
+          (t) => t.includes(refTable) || refTable.includes(t),
+        );
+    const hint = near.length
+      ? ` — did you mean ${[...new Set(near)].slice(0, 4).map((n) => (knownTable ? `${refTable}.${n}` : n)).join(', ')}?`
+      : knownTable
+        ? ` — table '${refTable}' is known but declares no column '${refColumn}'.`
+        : ` — no table '${refTable}' is declared in the migrations or the schema.`;
+    console.warn(`   ${target}${hint}`);
+    for (const fk of group.slice(0, 3)) console.warn(`      referenced by ${fk.file}: ${fk.table}.${fk.column}`);
+    if (group.length > 3) console.warn(`      … and ${group.length - 3} more`);
+  }
+  console.warn(
+    '\n   A target that is genuinely a legacy/baseline table is expected here; give it\n' +
+      '   a pgTable in src/infrastructure/database/schema/ to silence it. A target that\n' +
+      '   is a TYPO will fail db:migrate — fix it before it ships.\n',
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -611,6 +660,132 @@ if (unknownRefs.length > 0) {
       '   everything src/infrastructure/database/schema/ declares, so a column that\n' +
       '   merely moved or was dropped later still resolves. A name reported here was\n' +
       '   never declared anywhere.\n',
+  );
+  failed = true;
+}
+
+// ---------------------------------------------------------------------------
+// FIFTH GUARD — column TYPE drift between the Drizzle schema and the migrations.
+//
+// The FK guard catches the subset of type drift Postgres REFUSES outright. This
+// catches the rest, which is worse because nothing rejects it: a column declared
+// `jsonb()` in schema/*.ts and `TEXT` in the migration typechecks, migrates, and
+// then hands the application a STRING everywhere it expects an object — the
+// `platform_modules.permissions` case named in check-schema-drift.mjs's own
+// header. `check-schema-drift.mjs` only asks whether the column EXISTS.
+//
+// Compared by type FAMILY, not by exact spelling. `VARCHAR(255)` vs `text` is a
+// width/spelling difference with identical runtime behaviour and would drown the
+// real findings; `text` vs `jsonb`, `integer` vs `varchar`, `boolean` vs
+// `integer` change what the application receives. Only the second kind is a
+// finding.
+//
+// Existing mismatches are grandfathered in
+// migrations/.schema-type-drift-allowlist.txt — each is a real defect that needs
+// a migration to pay down, but failing the build on the historical set would
+// block every deploy today. A stale entry (one that no longer drifts) is
+// reported so the list shrinks as the debt is paid.
+// ---------------------------------------------------------------------------
+
+/** The behavioural family of a Postgres/Drizzle type. Two types in the same
+ *  family hand the application the same JavaScript shape; two in different
+ *  families do not, which is the entire point of this guard. */
+function typeFamily(type) {
+  if (!type) return null;
+  const t = type.toLowerCase();
+  if (['varchar', 'text', 'char', 'character', 'character varying', 'bpchar', 'citext'].includes(t)) return 'string';
+  if (['integer', 'bigint', 'smallint'].includes(t)) return 'integer';
+  if (['real', 'double precision', 'numeric', 'decimal', 'money'].includes(t)) return 'number';
+  if (t === 'boolean') return 'boolean';
+  if (t === 'uuid') return 'uuid';
+  if (['json', 'jsonb'].includes(t)) return 'json';
+  if (t.startsWith('timestamp') || t === 'date' || t.startsWith('time') || t === 'interval') return 'temporal';
+  if (['bytea', 'blob'].includes(t)) return 'binary';
+  if (t.endsWith('[]')) return 'array';
+  return null; // unknown → never judged
+}
+
+/**
+ * table -> column -> type, as the MIGRATIONS finally leave it. The base type comes
+ * from CREATE TABLE / ADD COLUMN (already collected), then every
+ * `ALTER TABLE t ALTER COLUMN c [SET DATA] TYPE x` overrides it — without that
+ * override a column that was legitimately migrated to a new type would report as
+ * drift against the schema that correctly followed it.
+ */
+function buildMigrationTypes() {
+  const types = new Map();
+  for (const [table, cols] of collectMigrationColumns(allSqlTexts).columns) {
+    types.set(table, new Map([...cols].map(([c, v]) => [c, v.type])));
+  }
+  const alterTypeRe =
+    /alter\s+table\s+(?:if\s+exists\s+)?["']?(\w+)["']?\s+alter\s+column\s+["']?(\w+)["']?\s+(?:set\s+data\s+)?type\s+([\s\S]*?)(?=\s+using\b|,|;)/gi;
+  for (const { text } of allSqlTexts) {
+    for (const m of text.replace(/--[^\n]*/g, '').matchAll(alterTypeRe)) {
+      const table = m[1].toLowerCase();
+      const column = m[2].toLowerCase();
+      const type = canonicalSqlType(m[3]);
+      if (!type) continue;
+      if (!types.has(table)) types.set(table, new Map());
+      types.get(table).set(column, type);
+    }
+  }
+  return types;
+}
+
+const migrationTypes = buildMigrationTypes();
+const driftAllowlistFile = resolve(migrationsDir, '.schema-type-drift-allowlist.txt');
+const driftAllowlist = existsSync(driftAllowlistFile)
+  ? new Set(
+      readFileSync(driftAllowlistFile, 'utf8')
+        .split('\n')
+        .map((l) => l.split('#')[0].trim())
+        .filter(Boolean),
+    )
+  : new Set();
+
+const typeDrift = [];
+const seenDriftKeys = new Set();
+for (const [table, cols] of drizzleTypes) {
+  const migCols = migrationTypes.get(table);
+  if (!migCols) continue; // table declared only in the schema — check-schema-drift's job
+  for (const [column, { type: schemaType, builder }] of cols) {
+    const sqlType = migCols.get(column);
+    if (!sqlType || !schemaType) continue; // one side unknown → never judged
+    const schemaFamily = typeFamily(schemaType);
+    const sqlFamily = typeFamily(sqlType);
+    if (!schemaFamily || !sqlFamily || schemaFamily === sqlFamily) continue;
+    const key = `${table}.${column}`;
+    seenDriftKeys.add(key);
+    if (driftAllowlist.has(key)) continue;
+    typeDrift.push({ table, column, schemaType, sqlType, builder });
+  }
+}
+const staleDriftAllowlist = [...driftAllowlist].filter((k) => !seenDriftKeys.has(k));
+
+if (typeDrift.length > 0) {
+  console.error(
+    `\n❌  Column type drift between the Drizzle schema and the migrations (${typeDrift.length}):\n`,
+  );
+  for (const d of typeDrift) {
+    console.error(
+      `   ${d.table}.${d.column}: schema declares ${d.builder}() → ${d.schemaType.toUpperCase()}, the migration declares ${d.sqlType.toUpperCase()}`,
+    );
+  }
+  console.error(
+    '\n   These are different behavioural families, so the application receives a\n' +
+      '   different shape than the schema says it does (a jsonb column declared text()\n' +
+      "   hands back a string, and every `.field` read on it is undefined). Fix the\n" +
+      '   Drizzle column, or write a migration that ALTERs the SQL column to match.\n' +
+      '   Width/spelling differences (VARCHAR vs TEXT, INTEGER vs BIGINT) are NOT\n' +
+      '   reported. If a mismatch is historical and cannot be migrated yet, add\n' +
+      '   `table.column` to migrations/.schema-type-drift-allowlist.txt with a note.\n',
+  );
+  failed = true;
+}
+
+if (staleDriftAllowlist.length > 0) {
+  console.error(
+    `\n⚠️  Stale schema-type-drift allowlist entries (no longer drift, remove them): ${staleDriftAllowlist.sort().join(', ')}`,
   );
   failed = true;
 }

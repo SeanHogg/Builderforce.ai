@@ -154,6 +154,12 @@ export function EvermindAnalyzer({ t, disabled, onAnalyze, onApply, onRepaired, 
 
       {analysis && findings.length === 0 && <p style={italic}>{t.analyzeClean(analysis.analyzed)}</p>}
 
+      {/* A pass that reviewed only part of the history must say so — "nothing looks
+          wrong" about the newest 120 of 812 memories is not a clean model. */}
+      {analysis?.truncated && typeof analysis.total === 'number' && (
+        <p style={italic}>{t.analyzeCoverage(analysis.analyzed, analysis.total)}</p>
+      )}
+
       {analysis && findings.length > 0 && (
         <>
           <p style={{ margin: 0, fontSize: '0.74rem', color: C.text2 }}>

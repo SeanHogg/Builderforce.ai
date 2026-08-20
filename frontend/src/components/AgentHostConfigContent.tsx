@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { agentHostConfigApi } from '@/lib/builderforceApi';
+import { useFormat } from "@/i18n/useFormat";
 
 interface AgentHostConfigContentProps {
   agentHostId: number;
@@ -15,6 +16,7 @@ const cardStyle: React.CSSProperties = {
 };
 
 export function AgentHostConfigContent({ agentHostId }: AgentHostConfigContentProps) {
+    const fmt = useFormat();
   const [raw, setRaw] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -160,7 +162,7 @@ export function AgentHostConfigContent({ agentHostId }: AgentHostConfigContentPr
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12, justifyContent: 'flex-end' }}>
           {savedAt && (
             <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-              Saved {savedAt.toLocaleTimeString()}
+              Saved {fmt.time(savedAt)}
             </span>
           )}
           <button

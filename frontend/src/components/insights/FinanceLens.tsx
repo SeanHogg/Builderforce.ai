@@ -13,6 +13,7 @@ import { TrendChart } from '@/components/charts/TrendChart';
 import { BarChart } from '@/components/charts/BarChart';
 import { KpiGrid } from './LensShell';
 import { usd } from './format';
+import { useFormat } from "@/i18n/useFormat";
 
 /**
  * Resolve the compact scope-picker value ('tenant' | 'project:<id>' |
@@ -43,6 +44,7 @@ function currentMonth(): string {
 }
 
 export function FinanceLens() {
+    const fmt = useFormat();
   const t = useTranslations('insights');
   const [period, setPeriod] = useState(currentMonth());
   const [busy, setBusy] = useState(false);
@@ -82,7 +84,7 @@ export function FinanceLens() {
         <StatCard label={t('fin.forecast')} value={usd(data.totals.forecastUsd)} sub={t('fin.forecastSub')} />
         <StatCard label={t('fin.costPerPr')} value={usd(data.totals.costPerMergedPrUsd)} sub={t('fin.mergedRuns', { n: data.totals.mergedRuns })} />
         <StatCard label={t('fin.paidOverflow')} value={usd(data.totals.paidOverflowUsd)} sub={t('fin.paidOverflowSub')} />
-        <StatCard label={t('fin.cacheRead')} value={data.totals.cacheReadTokens.toLocaleString()} sub={t('fin.cacheReadSub')} />
+        <StatCard label={t('fin.cacheRead')} value={fmt.number(data.totals.cacheReadTokens)} sub={t('fin.cacheReadSub')} />
       </KpiGrid>
 
       <PmCard title={t('fin.spendOverTime')}>

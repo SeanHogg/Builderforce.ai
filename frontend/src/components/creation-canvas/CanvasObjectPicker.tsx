@@ -4,6 +4,7 @@ import { useTranslations } from 'next-intl';
 import { SearchPicker, type SearchPickerSection } from '@/components/ui/SearchPicker';
 import type { CreationObjectGroup, CreationObjectKind } from './types';
 import { useAuth } from '@/lib/AuthContext';
+import { useCanvasCapabilities } from '@/lib/canvasCapabilitiesApi';
 import { creationPaletteGroupsFor } from './creationObjectRegistry';
 import styles from './CreationCanvas.module.css';
 
@@ -60,11 +61,15 @@ export function CanvasObjectPicker({ anchor, group, fromNodeId, onPick, onClose 
   // board has no access control, so it does not advertise the restricted-by-default
   // kinds. `authReady` guards the first hydrated frame, where `isAuthenticated` is
   // unavoidably false for everyone and would briefly hide those kinds from a member.
-  const { isAuthenticated, authReady } = useAuth();
+  const { isAuthenticated, authReady, tenant } = useAuth();
   const signedIn = !authReady || isAuthenticated;
+  // ENTITLEMENT, resolved by the server. The picker asks the same question the palette
+  // does through the same accessor, so the two cannot advertise different catalogues —
+  // and neither offers a card the API would refuse to let this workspace place.
+  const capabilities = useCanvasCapabilities(tenant?.id ?? null);
 
   const sections = useMemo<SearchPickerSection<CreationObjectKind>[]>(
-    () => creationPaletteGroupsFor(signedIn).map((entry) => ({
+    () => creationPaletteGroupsFor(signedIn, capabilities).map((entry) => ({
       key: entry.group,
       label: t(`group.${entry.group}` as 'group.Build'),
       items: entry.items.map((item) => ({
@@ -74,7 +79,7 @@ export function CanvasObjectPicker({ anchor, group, fromNodeId, onPick, onClose 
         description: t(`objectDescription.${item.kind}` as 'objectDescription.note'),
       })),
     })),
-    [t, signedIn],
+    [t, signedIn, capabilities],
   );
 
   return (

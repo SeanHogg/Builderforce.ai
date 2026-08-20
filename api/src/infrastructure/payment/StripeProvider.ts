@@ -693,6 +693,24 @@ export class StripeProvider implements PaymentProvider {
           };
         }
 
+        // A KNOWLEDGE listing sale. Branched here with the other two `mode: 'payment'`
+        // purchases and for the same structural reason: the subscription mapping
+        // below would otherwise read a plan activation out of a one-off sale.
+        if (meta['purchaseKind'] === 'knowledge_listing') {
+          const buyerTenantId = Number(meta['buyerTenantId']);
+          return {
+            type: 'knowledge.purchased',
+            purchaseKind: 'knowledge_listing',
+            checkoutSessionId: obj['id'] as string,
+            buyerUserId: meta['buyerUserId'],
+            ...(Number.isInteger(buyerTenantId) && buyerTenantId > 0 ? { tenantId: buyerTenantId } : {}),
+            externalCustomerId: customer ?? '',
+            externalSubscriptionId: '',
+            billingEmail: (obj['customer_email'] as string | undefined) ?? customerDetails?.['email'],
+            raw: event,
+          };
+        }
+
         // A TENANT's own invoice, paid by THEIR customer (FO-C4). Branched with the
         // marketplace sale and for the same structural reason: it is `mode: 'payment'`
         // with no subscription, so the plan mapping below would otherwise read a

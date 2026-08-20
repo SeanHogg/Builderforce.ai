@@ -1,7 +1,10 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
+
 import type { Task } from '@/lib/builderforceApi';
-import { taskStatusBadgeClass, taskStatusLabel } from '@/lib/taskStatus';
+import { taskStatusBadgeClass } from '@/lib/taskStatus';
+import { useTaskStatusLabel } from '@/lib/taskStatusLabel';
 
 /**
  * Assigned-work affordance below a seat: a briefcase with the member's total
@@ -9,6 +12,8 @@ import { taskStatusBadgeClass, taskStatusLabel } from '@/lib/taskStatus';
  * assigned-items panel. Returns null when the member has nothing assigned.
  */
 export function BriefcaseBadge({ tasks, onClick }: { tasks: Task[]; onClick?: () => void }) {
+  const t = useTranslations('ceremony.briefcase');
+  const statusLabel = useTaskStatusLabel();
   if (tasks.length === 0) return null;
   // Distinct statuses present, for the dot row (capped so it never overflows).
   const statuses = Array.from(new Set(tasks.map((t) => t.status))).slice(0, 5);
@@ -16,7 +21,7 @@ export function BriefcaseBadge({ tasks, onClick }: { tasks: Task[]; onClick?: ()
     <button
       type="button"
       onClick={onClick}
-      title={`${tasks.length} assigned — open work`}
+      title={t('open', { count: tasks.length })}
       style={{
         display: 'inline-flex',
         alignItems: 'center',
@@ -41,7 +46,7 @@ export function BriefcaseBadge({ tasks, onClick }: { tasks: Task[]; onClick?: ()
           <span
             key={s}
             className={taskStatusBadgeClass(s)}
-            title={taskStatusLabel(s)}
+            title={statusLabel(s)}
             style={{ width: 6, height: 6, borderRadius: '50%', padding: 0, display: 'inline-block' }}
           />
         ))}

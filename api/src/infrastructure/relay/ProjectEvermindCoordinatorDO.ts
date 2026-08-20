@@ -63,18 +63,39 @@ const ADAPT_WINDOW_TOKENS = 64;
 /** Max text-path adaptations (fits) run in ONE alarm — bounds the DO's per-alarm
  *  CPU; any beyond this stay queued and fold into the next debounced merge. */
 const MAX_FITS_PER_ALARM = 8;
-/** How many recent merged contributions to retain for inspection (ring buffer). The
- *  raw run text is otherwise consumed + dropped at merge time, so this is the ONLY
- *  window into "what the model recently learned" the Evermind console can show. */
-const RECENT_MAX = 24;
+/** Default page size for the inspection surface — how many memories the console
+ *  shows without asking for more. NOT a retention cap: every merged contribution is
+ *  kept durably under its own `mem:` key (see {@link memKey}). It was a retention
+ *  cap until 2026-08-19, which meant knowledge older than the last 24 merges could
+ *  not be reviewed, corrected or forgotten — it was still in the weights and still
+ *  recallable, just invisible to the audit. */
+const RECENT_PAGE_MAX = 24;
+/** Hard ceiling on ONE page, so a caller cannot ask the DO to materialise the whole
+ *  history in a single response. The analyzer pages through instead. */
+const RECENT_PAGE_LIMIT = 200;
+/**
+ * How many of the most recent memories RECALL scans.
+ *
+ * Recall is a per-turn hot path that pays one cosine comparison per memory, so it is
+ * deliberately bounded where the AUDIT is not — an unbounded scan would put the
+ * Worker's CPU budget at the mercy of how long the project has been learning. The
+ * bound is on recall alone; nothing is deleted, and the analyzer still walks
+ * everything.
+ */
+const RECALL_SCAN_MAX = 256;
+/** How many memories ONE reindex call re-embeds. Reindexing runs a forward pass per
+ *  memory, so a project with thousands would blow the request's CPU budget; the
+ *  handler returns a cursor and `remaining` so the caller continues where it left
+ *  off rather than silently doing part of the job. */
+const REINDEX_BATCH_MAX = 64;
 /** Chars of the task prompt kept per recent entry — enough for the console's
  *  "view detail" to show the whole task, not a truncated teaser. */
 const RECENT_PROMPT_CHARS = 800;
 /** Chars of the learned run/exemplar text kept per recent entry — generous enough
- *  that "view detail" is meaningful. The ring is ONE Durable Object storage value
- *  (128 KiB hard cap), so RECENT_MAX × (RECENT_PROMPT_CHARS + RECENT_TEXT_CHARS) +
- *  the per-entry embedding must stay well under that: 24 × (800 + 2000) ≈ 67 KB of
- *  text + ~16 KB of embeddings, comfortably within budget. */
+ *  that "view detail" is meaningful. Each memory is now its OWN storage value, so
+ *  the 128 KiB per-value cap applies per memory (800 + 2000 chars + one packed
+ *  embedding ≈ 3.5 KB) rather than to the whole history — which is what let the
+ *  retention cap go. */
 const RECENT_TEXT_CHARS = 2000;
 /** How many per-merge training points to retain for the Knowledge Map's training
  *  readout (a small sparkline of loss + weight movement across recent versions). */
@@ -234,7 +255,26 @@ interface EvalPoint {
 const PENDING_KEY = 'pending';
 const META_KEY = 'meta';
 const SEQ_KEY = 'seq';
+/** LEGACY single-value ring. Retained only so {@link ProjectEvermindCoordinatorDO.migrateLegacyRing}
+ *  can fold it into the per-memory keys on first touch; never written again. */
 const RECENT_KEY = 'recent';
+/** Prefix for the per-memory durable keys — ONE storage value per memory, which is
+ *  what lifts the 24-entry cap: the old ring was a single value under a 128 KiB
+ *  limit, so retention was bounded by the value size rather than by any product
+ *  requirement. */
+const MEM_PREFIX = 'mem:';
+/** Denormalised count of `mem:` keys. Justified: DO storage has no key-only list, so
+ *  counting otherwise means materialising every memory; and the DO is the SINGLE
+ *  writer, so the counter cannot drift behind a concurrent writer. Recomputed
+ *  whenever a read finds it absent (which is also how it is seeded at migration). */
+const MEM_COUNT_KEY = 'memCount';
+
+/** Zero-padded so lexicographic key order is numeric id order is chronological order
+ *  — which is what lets `storage.list({ reverse: true })` page newest-first without
+ *  loading anything it is not returning. 12 digits covers any plausible id. */
+function memKey(id: number): string {
+  return `${MEM_PREFIX}${String(id).padStart(12, '0')}`;
+}
 const TRAINING_KEY = 'training';
 /** Held-out taught examples (rolling) used by the automatic regression check. */
 const EVAL_KEY = 'eval';
@@ -265,13 +305,126 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
     if (request.method === 'POST' && url.pathname.endsWith('/learn-text')) return this.handleLearnText(request);
     if (request.method === 'POST' && url.pathname.endsWith('/learn')) return this.handleLearn(request);
     if (request.method === 'POST' && url.pathname.endsWith('/flush')) return this.handleFlush();
-    if (request.method === 'GET' && url.pathname.endsWith('/recent')) return this.handleRecent();
+    if (request.method === 'GET' && url.pathname.endsWith('/recent')) return this.handleRecent(request);
     if (request.method === 'POST' && url.pathname.endsWith('/recall')) return this.handleRecall(request);
-    if (request.method === 'POST' && url.pathname.endsWith('/reindex')) return this.handleReindex();
+    if (request.method === 'POST' && url.pathname.endsWith('/reindex')) return this.handleReindex(request);
     if (request.method === 'POST' && url.pathname.endsWith('/discard-pending')) return this.handleDiscardPending();
     if (request.method === 'POST' && url.pathname.endsWith('/forget')) return this.handleForget(request);
     if (request.method === 'GET' && url.pathname.endsWith('/head')) return this.handleHead();
     return new Response('not found', { status: 404 });
+  }
+
+  // -------------------------------------------------------------------------
+  // Memory store — the ONE place memories are read and written.
+  //
+  // Every handler (inspect, recall, reindex, forget, merge) goes through these, so
+  // the storage layout is decided once. Before 2026-08-19 each handler did its own
+  // `storage.get(RECENT_KEY)` / `slice(0, RECENT_MAX)`, which is why lifting the cap
+  // meant touching five call sites that had to agree.
+  // -------------------------------------------------------------------------
+
+  /**
+   * Fold the legacy single-value ring into per-memory keys, once.
+   *
+   * The old layout was one `recent` array under DO storage's 128 KiB per-value cap,
+   * which is what forced RECENT_MAX = 24. Migrating lazily on first touch means no
+   * live storage migration and no deploy ordering to get right: whichever handler
+   * runs first pays it, every later call sees the key gone. Idempotent.
+   */
+  private async migrateLegacyRing(): Promise<void> {
+    const legacy = await this.state.storage.get<RecentEntry[]>(RECENT_KEY);
+    if (!legacy) return;
+    if (legacy.length > 0) {
+      const batch: Record<string, RecentEntry> = {};
+      // A legacy entry written before ids were stamped falls back to `at`, matching
+      // what getProjectEvermindActivity already does for the console. The derived id
+      // is written INTO the entry as well as into its key — a memory whose id lives
+      // only in the key cannot be targeted by /forget or highlighted on a recall.
+      for (const e of legacy) {
+        const id = typeof e.id === 'number' ? e.id : e.at;
+        batch[memKey(id)] = { ...e, id };
+      }
+      await this.state.storage.put(batch);
+    }
+    await this.state.storage.delete(RECENT_KEY);
+    await this.recountMemories();
+  }
+
+  /** Recompute and persist the memory count. Only called when the counter is absent
+   *  or after a migration — the incremental paths maintain it. */
+  private async recountMemories(): Promise<number> {
+    const all = await this.state.storage.list<RecentEntry>({ prefix: MEM_PREFIX });
+    await this.state.storage.put(MEM_COUNT_KEY, all.size);
+    return all.size;
+  }
+
+  /** How many memories exist. Cheap: a single counter read, seeded on demand. */
+  private async countMemories(): Promise<number> {
+    const n = await this.state.storage.get<number>(MEM_COUNT_KEY);
+    return typeof n === 'number' ? n : this.recountMemories();
+  }
+
+  /**
+   * Memories newest-first.
+   *
+   * `before` is an exclusive cursor (an id): the page continues strictly below it, so
+   * a caller pages the whole history by feeding back the last id it saw. `limit`
+   * bounds what is materialised — this never loads more than one page.
+   */
+  private async readMemories(opts: { limit: number; before?: number } = { limit: RECENT_PAGE_MAX }): Promise<RecentEntry[]> {
+    return (await this.readMemoryPage(opts)).entries;
+  }
+
+  /**
+   * One page plus the answer to "is there another?".
+   *
+   * Reads limit + 1 and discards the extra, which is what makes the cursor exact: a
+   * final page that happens to be exactly `limit` long is NOT reported as having more
+   * (the caller would otherwise make one guaranteed-empty extra round trip, and a
+   * cursor that lies about the end of the history is the kind of thing a paging
+   * consumer builds a loop around).
+   */
+  private async readMemoryPage(opts: { limit: number; before?: number }): Promise<{ entries: RecentEntry[]; hasMore: boolean }> {
+    await this.migrateLegacyRing();
+    const limit = Math.max(1, opts.limit);
+    const listOpts: DurableObjectListOptions = {
+      prefix: MEM_PREFIX,
+      reverse: true,
+      limit: limit + 1,
+    };
+    // In a reverse listing `end` is the EXCLUSIVE upper bound, so this yields the
+    // memories strictly older than the cursor.
+    if (typeof opts.before === 'number') listOpts.end = memKey(opts.before);
+    const page = await this.state.storage.list<RecentEntry>(listOpts);
+    const all = [...page.values()];
+    return { entries: all.slice(0, limit), hasMore: all.length > limit };
+  }
+
+  /** Persist memories under their own keys, and keep the counter honest. */
+  private async writeMemories(entries: RecentEntry[]): Promise<void> {
+    if (entries.length === 0) return;
+    await this.migrateLegacyRing();
+    const existing = await this.countMemories();
+    const batch: Record<string, RecentEntry> = {};
+    let added = 0;
+    for (const e of entries) {
+      const key = memKey(e.id);
+      // A re-merge of the same contribution id overwrites rather than double-counts.
+      if (!(key in batch) && (await this.state.storage.get<RecentEntry>(key)) === undefined) added++;
+      batch[key] = e;
+    }
+    await this.state.storage.put(batch);
+    await this.state.storage.put(MEM_COUNT_KEY, existing + added);
+  }
+
+  /** Remove memories by id. Returns how many actually existed. */
+  private async deleteMemories(ids: number[]): Promise<number> {
+    if (ids.length === 0) return 0;
+    await this.migrateLegacyRing();
+    const removed = await this.state.storage.delete(ids.map(memKey));
+    const n = typeof removed === 'number' ? removed : 0;
+    if (n > 0) await this.state.storage.put(MEM_COUNT_KEY, Math.max(0, (await this.countMemories()) - n));
+    return n;
   }
 
   private json(body: unknown, status = 200): Response {
@@ -292,17 +445,30 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
    * Read-only and cheap — no merge is triggered. The route in front of this caches
    * the payload behind the head version token, so a busy poll doesn't hit the DO.
    */
-  private async handleRecent(): Promise<Response> {
+  private async handleRecent(request: Request): Promise<Response> {
+    const url = new URL(request.url);
+    const askedLimit = Number(url.searchParams.get('limit'));
+    const limit = Number.isFinite(askedLimit) && askedLimit > 0
+      ? Math.min(askedLimit, RECENT_PAGE_LIMIT)
+      : RECENT_PAGE_MAX;
+    const askedBefore = Number(url.searchParams.get('before'));
+    const before = Number.isFinite(askedBefore) && askedBefore > 0 ? askedBefore : undefined;
+
     const pending = (await this.state.storage.get<PendingEntry[]>(PENDING_KEY)) ?? [];
-    const recent = (await this.state.storage.get<RecentEntry[]>(RECENT_KEY)) ?? [];
+    const { entries: recent, hasMore } = await this.readMemoryPage({ limit, ...(before !== undefined ? { before } : {}) });
+    const total = await this.countMemories();
     const training = (await this.state.storage.get<TrainingPoint[]>(TRAINING_KEY)) ?? [];
     const evalPoints = (await this.state.storage.get<EvalPoint[]>(EVAL_POINTS_KEY)) ?? [];
     // Strip the packed embedding — it's a recall-only internal, never part of the
     // inspection payload the console polls (keeps that read small).
     const lean = recent.map(({ emb, ...rest }) => rest);
+    // `nextBefore` is the cursor for the following page, or null at the end of the
+    // history. The analyzer pages on this; the console ignores it and shows page one.
+    const last = recent[recent.length - 1];
+    const nextBefore = hasMore && last ? last.id : null;
     // `eval` = the LATEST regression check (the ▲/▼ the chip reads); null until the
     // first merge that had a held-out set to score.
-    return this.json({ pending: pending.length, recent: lean, training, eval: evalPoints[0] ?? null });
+    return this.json({ pending: pending.length, recent: lean, training, eval: evalPoints[0] ?? null, total, nextBefore });
   }
 
   /**
@@ -320,7 +486,9 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
     const query = typeof body?.query === 'string' ? body.query.trim() : '';
     if (!query) return this.json({ matches: [], method: 'unavailable' });
 
-    const recent = (await this.state.storage.get<RecentEntry[]>(RECENT_KEY)) ?? [];
+    // Bounded to the most recent window — see RECALL_SCAN_MAX. The audit is not
+    // bounded; recall is, because it pays a cosine per memory on every turn.
+    const recent = await this.readMemories({ limit: RECALL_SCAN_MAX });
     const textEntries = recent.filter((e) => e.kind === 'text' && (e.text || e.prompt));
     if (textEntries.length === 0) return this.json({ matches: [], method: 'embedding' });
 
@@ -378,11 +546,19 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
    * on the single writer (so it can't race a merge). Idempotent and safe to re-run: it
    * writes the same ring back with fresh vectors.
    */
-  private async handleReindex(): Promise<Response> {
+  private async handleReindex(request: Request): Promise<Response> {
     const meta = await this.state.storage.get<CoordMeta>(META_KEY);
     if (!meta) return this.json({ ok: false, error: 'this Evermind has no coordinator state yet' }, 409);
-    const recent = (await this.state.storage.get<RecentEntry[]>(RECENT_KEY)) ?? [];
-    if (recent.length === 0) return this.json({ ok: true, reindexed: 0, skipped: 0, version: 0 });
+
+    // ONE batch per call. Each memory costs a forward pass, so re-embedding a long
+    // history in a single request would exceed the Worker CPU budget and 5xx with
+    // nothing done. The caller resumes from `nextBefore` until `remaining` is 0 —
+    // partial progress is reported rather than presented as a completed reindex.
+    const url = new URL(request.url);
+    const askedBefore = Number(url.searchParams.get('before'));
+    const before = Number.isFinite(askedBefore) && askedBefore > 0 ? askedBefore : undefined;
+    const { entries: batch, hasMore } = await this.readMemoryPage({ limit: REINDEX_BATCH_MAX, ...(before !== undefined ? { before } : {}) });
+    if (batch.length === 0) return this.json({ ok: true, reindexed: 0, skipped: 0, done: true, nextBefore: null, total: await this.countMemories(), version: 0 });
 
     const model = await this.loadEmbeddingModel(meta);
     if (!model) return this.json({ ok: false, error: 'model not available for reindexing (unseeded or artifact storage unbound)' }, 503);
@@ -390,7 +566,7 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
 
     let reindexed = 0;
     let skipped = 0;
-    const next = recent.map((e) => {
+    const next = batch.map((e) => {
       const source = `${e.prompt ?? ''} ${e.text ?? ''}`.trim();
       if (e.kind !== 'text' || !source) { skipped++; return e; }
       const vec = embedTokens(model.lm, model.tok.encode(source).slice(0, EMBED_MAX_TOKENS));
@@ -398,8 +574,15 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
       reindexed++;
       return { ...e, emb: packVec(vec) };
     });
-    await this.state.storage.put(RECENT_KEY, next);
-    return this.json({ ok: true, reindexed, skipped, version: head.version });
+    await this.writeMemories(next);
+
+    const last = batch[batch.length - 1];
+    const nextBefore = hasMore && last ? last.id : null;
+    // `total` (not a computed "remaining") because counting what is strictly older
+    // than the cursor would mean listing it — the caller has `total` and knows how
+    // many batches it has run, which is the same progress figure without the scan.
+    const total = await this.countMemories();
+    return this.json({ ok: true, reindexed, skipped, done: nextBefore === null, nextBefore, total, version: head.version });
   }
 
   /**
@@ -428,12 +611,9 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
     const body = (await request.json().catch(() => null)) as { ids?: unknown } | null;
     const ids = Array.isArray(body?.ids) ? body.ids.filter((n): n is number => typeof n === 'number') : [];
     if (ids.length === 0) return this.json({ ok: false, error: 'ids[] is required' }, 400);
-    const recent = (await this.state.storage.get<RecentEntry[]>(RECENT_KEY)) ?? [];
-    const drop = new Set(ids);
-    const next = recent.filter((e) => !drop.has(e.id));
-    const forgotten = recent.length - next.length;
-    if (forgotten > 0) await this.state.storage.put(RECENT_KEY, next);
-    return this.json({ ok: true, forgotten, remaining: next.length });
+    const forgotten = await this.deleteMemories(ids);
+    const remaining = await this.countMemories();
+    return this.json({ ok: true, forgotten, remaining });
   }
 
   /**
@@ -451,12 +631,10 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
     return this.json({ ok: true, merged, version: newVersion ?? head.version, pending: pending.length });
   }
 
-  /** Append merged contributions to the inspection ring, newest first, capped. */
+  /** Persist merged contributions as durable per-memory rows. No cap: what the model
+   *  learned stays auditable for as long as it is in the weights. */
   private async recordRecent(entries: RecentEntry[]): Promise<void> {
-    if (entries.length === 0) return;
-    const current = (await this.state.storage.get<RecentEntry[]>(RECENT_KEY)) ?? [];
-    const next = [...entries, ...current].slice(0, RECENT_MAX);
-    await this.state.storage.put(RECENT_KEY, next);
+    await this.writeMemories(entries);
   }
 
   /** Append one per-merge training point to the ring, newest first, capped. */

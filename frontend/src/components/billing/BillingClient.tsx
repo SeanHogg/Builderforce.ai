@@ -44,6 +44,7 @@ import { cardValidationApi, type CardValidationState } from '@/lib/builderforceA
 import { payoutsApi, type PayoutRecord } from '@/lib/payoutsApi';
 import { useLocale } from 'next-intl';
 import { formatCents } from '@/lib/canvasMoney';
+import { useFormat } from "@/i18n/useFormat";
 
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
@@ -64,6 +65,7 @@ const rowStyle: React.CSSProperties = {
 export type BillingView = 'account' | 'payouts' | 'getPaid';
 
 export default function BillingClient({ view = 'account' }: { view?: BillingView }) {
+    const fmt = useFormat();
   const t = useTranslations('billing');
   const locale = useLocale();
   const tenant = getStoredTenant();
@@ -85,7 +87,7 @@ export default function BillingClient({ view = 'account' }: { view?: BillingView
     [locale],
   );
   const date = useCallback(
-    (iso: string) => new Date(iso).toLocaleDateString(locale, { year: 'numeric', month: 'short', day: 'numeric' }),
+    (iso: string) => fmt.dateWith(iso, { year: 'numeric', month: 'short', day: 'numeric' }),
     [locale],
   );
 
@@ -238,7 +240,7 @@ export default function BillingClient({ view = 'account' }: { view?: BillingView
                     <td style={{ padding: '8px 10px 8px 0', whiteSpace: 'nowrap' }}>{invoice.reference}</td>
                     <td style={{ padding: '8px 10px 8px 0' }}>{invoice.customerName}</td>
                     <td style={{ padding: '8px 10px 8px 0', color: 'var(--text-primary)', fontWeight: 600, whiteSpace: 'nowrap' }}>
-                      {invoice.outstanding.toLocaleString(locale, { style: 'currency', currency: invoice.currency })}
+                      {fmt.number(invoice.outstanding, { style: 'currency', currency: invoice.currency })}
                     </td>
                     <td style={{ padding: '8px 10px 8px 0', whiteSpace: 'nowrap' }}>{invoice.dueAtISO ? date(invoice.dueAtISO) : t('none')}</td>
                     {/* Overdue is the only state worth colouring: a current invoice

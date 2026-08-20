@@ -28,6 +28,7 @@ import {
   type WebsiteStructuralEdit,
 } from './websiteWysiwyg';
 import type { CreationNodeData } from './types';
+import { useFormat } from "@/i18n/useFormat";
 
 /**
  * A site at a width you choose — the site runtime.
@@ -123,6 +124,7 @@ const SCHEMES = ['light', 'dark'] as const;
 type SiteScheme = (typeof SCHEMES)[number];
 
 export function CanvasSiteSurface({ data, onExit, onEdit }: CanvasSiteSurfaceProps) {
+    const fmt = useFormat();
   const t = useTranslations('creationCanvas');
   const [viewport, setViewport] = useState<CanvasViewport>(canvasViewport(data.viewport));
   const [reading, setReading] = useState<SiteReading>('preview');
@@ -307,7 +309,7 @@ export function CanvasSiteSurface({ data, onExit, onEdit }: CanvasSiteSurfacePro
                 <figcaption>
                   <strong>{t('surface.site.before')}</strong>
                   <a href={before.url} target="_blank" rel="noreferrer noopener">{before.url}</a>
-                  {before.capturedAt && <time dateTime={before.capturedAt}>{new Date(before.capturedAt).toLocaleDateString()}</time>}
+                  {before.capturedAt && <time dateTime={before.capturedAt}>{fmt.date(before.capturedAt)}</time>}
                 </figcaption>
                 {/* A plain <img> and not a frame: this is a dated photograph, and framing
                     the live page instead would make the comparison erase itself the day

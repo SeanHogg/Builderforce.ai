@@ -40,6 +40,27 @@ export const PLAN_FEATURE_LABEL: Record<PlanFeature, string> = {
   seatCostControls: 'per-seat cost controls',
   voiceCloning: 'voice cloning',
   advancedInsights: 'advanced insights (forecasting & exec lenses)',
+  evermindTraining: 'training your own model',
+};
+
+/**
+ * CANVAS CAPABILITY → the plan feature that unlocks it.
+ *
+ * ── THE GATE THIS MAKES REAL ─────────────────────────────────────────────────────
+ * `creationObjectRegistry` stamps a `capability` onto the object kinds that need an
+ * entitlement, and `availableCreationObjects(capabilities)` filters the palette by it —
+ * except the palette never called it. Verified by grep across frontend, api and packages:
+ * the only caller was its own unit test. So the whole chain was inert, and a card marked
+ * as needing an entitlement was placeable by anybody.
+ *
+ * This map is the missing half. It is deliberately SHORT: five of the six capabilities the
+ * registry declared (`integrations`, `agents`, `models`, `voice`, `video`) named a product
+ * AREA rather than an entitlement — which is what the palette `group` already says — so
+ * they were removed rather than assigned a plan feature nobody had decided on. Adding one
+ * back is adding a line here and a line there, and it now means something.
+ */
+export const CANVAS_CAPABILITY_FEATURES: Readonly<Record<string, PlanFeature>> = {
+  evermind: 'evermindTraining',
 };
 
 /** Plans in ascending order of entitlement. */

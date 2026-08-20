@@ -4,6 +4,7 @@ import { Select } from '@/components/Select';
 
 import { useState, useEffect } from 'react';
 import { chatSessionsApi, agentHosts, dispatchApi, type ChatSession, type ChatMessage, type AgentHost } from '@/lib/builderforceApi';
+import { useFormat } from "@/i18n/useFormat";
 
 interface AgentHostSessionsContentProps {
   agentHostId: number;
@@ -17,6 +18,7 @@ const cardStyle: React.CSSProperties = {
 };
 
 export function AgentHostSessionsContent({ agentHostId }: AgentHostSessionsContentProps) {
+    const fmt = useFormat();
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -126,7 +128,7 @@ export function AgentHostSessionsContent({ agentHostId }: AgentHostSessionsConte
               {selectedSession.sessionKey}
             </div>
             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
-              {new Date(selectedSession.startedAt).toLocaleString()} · {selectedSession.msgCount} messages
+              {fmt.dateTime(selectedSession.startedAt)} · {selectedSession.msgCount} messages
             </div>
           </div>
           {agentHostList.length > 0 && (
@@ -266,7 +268,7 @@ export function AgentHostSessionsContent({ agentHostId }: AgentHostSessionsConte
                   {msg.content}
                 </div>
                 <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2, paddingInline: 4 }}>
-                  {msg.role} · {new Date(msg.createdAt).toLocaleTimeString()}
+                  {msg.role} · {fmt.time(msg.createdAt)}
                 </div>
               </div>
             ))}
@@ -317,8 +319,8 @@ export function AgentHostSessionsContent({ agentHostId }: AgentHostSessionsConte
                 {session.sessionKey}
               </div>
               <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
-                {new Date(session.startedAt).toLocaleString()}
-                {session.endedAt ? ` → ${new Date(session.endedAt).toLocaleString()}` : ' (active)'}
+                {fmt.dateTime(session.startedAt)}
+                {session.endedAt ? ` → ${fmt.dateTime(session.endedAt)}` : ' (active)'}
               </div>
             </div>
             <div

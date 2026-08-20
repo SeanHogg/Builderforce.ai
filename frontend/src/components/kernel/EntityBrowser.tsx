@@ -40,6 +40,7 @@ import {
   type EntityRow,
   type EntityScope,
 } from '@/lib/kernel/kernelApi';
+import { useFormat } from "@/i18n/useFormat";
 
 const PAGE_SIZE = 25;
 /** Enough columns to identify a row, few enough to stay readable on a phone.
@@ -121,6 +122,7 @@ function FieldInput({
 }
 
 export function EntityBrowser({ scope, locale = 'en' }: { scope: EntityScope; locale?: string }) {
+    const fmt = useFormat();
   const t = useTranslations('kernel.entities');
   const [entities, setEntities] = useState<EntityDescriptor[] | null>(null);
   const [active, setActive] = useState<string | null>(null);
@@ -279,7 +281,7 @@ export function EntityBrowser({ scope, locale = 'en' }: { scope: EntityScope; lo
             >
               {e.name}
               <span className="ml-1.5 tabular-nums" style={{ opacity: 0.75 }}>
-                {e.count.toLocaleString(locale)}
+                {fmt.number(e.count)}
               </span>
             </button>
           );
@@ -486,9 +488,9 @@ export function EntityBrowser({ scope, locale = 'en' }: { scope: EntityScope; lo
           </button>
           <span className="tabular-nums">
             {t('range', {
-              from: (page.total === 0 ? 0 : offset + 1).toLocaleString(locale),
-              to: Math.min(offset + PAGE_SIZE, page.total).toLocaleString(locale),
-              total: page.total.toLocaleString(locale),
+              from: fmt.number((page.total === 0 ? 0 : offset + 1)),
+              to: fmt.number(Math.min(offset + PAGE_SIZE, page.total)),
+              total: fmt.number(page.total),
             })}
           </span>
           <button

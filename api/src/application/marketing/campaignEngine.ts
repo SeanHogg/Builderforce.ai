@@ -47,9 +47,15 @@ import {
   type DnsLookupDeps,
 } from '../shared/dnsVerification';
 import {
+  DEFAULT_TRANSPORT,
+  isCampaignChannel,
   isCampaignTransport,
+  isE164,
+  isOptOutFailure,
   resolveCampaignSender,
+  transportSuitsChannel,
   TransportError,
+  type CampaignChannel,
   type CampaignTransport,
 } from './campaignTransports';
 import { defaultLogoUrl, getTemplate, resolveAssetOrigin } from './templateLibrary';
@@ -126,6 +132,10 @@ export async function createAudience(
 export interface AudienceMemberInput {
   email: string;
   name?: string;
+  /** E.164 mobile number, for SMS campaigns. Anything that is not E.164 is
+   *  DROPPED rather than stored: a number Twilio cannot dial is not a number,
+   *  and keeping it would make an audience look messageable when it is not. */
+  phone?: string | null;
   source?: string;
   attributes?: Record<string, unknown>;
 }
@@ -164,11 +174,16 @@ export async function addAudienceMembers(
     // that touches the same key twice in one statement.
     if (seen.has(email)) continue;
     seen.add(email);
+    const phone = (member.phone ?? '').trim();
     rows.push({
       audienceId,
       tenantId,
       email,
       name: (member.name ?? '').slice(0, 255),
+      // A number that is not E.164 is dropped rather than stored — see the field
+      // doc. `undefined` (not null) so an import that omits the column cannot
+      // wipe a number the audience already holds.
+      ...(isE164(phone) ? { phone } : {}),
       source: (member.source ?? 'manual').slice(0, 32),
       attributes: member.attributes ?? {},
     });
@@ -180,7 +195,14 @@ export async function addAudienceMembers(
     .values(rows)
     .onConflictDoUpdate({
       target: [marketingAudienceMembers.audienceId, marketingAudienceMembers.email],
-      set: { name: sql`excluded.name`, updatedAt: sql`NOW()` },
+      set: {
+        name: sql`excluded.name`,
+        // COALESCE, not overwrite: re-importing a list without phone numbers must
+        // not delete the ones already there. `phone_status` is untouched for the
+        // same reason `status` is — an import must never undo an opt-out.
+        phone: sql`COALESCE(excluded.phone, ${marketingAudienceMembers.phone})`,
+        updatedAt: sql`NOW()`,
+      },
     })
     // `xmax = 0` is true only for a freshly-inserted row, so this distinguishes
     // a real add from an update without a second round-trip.
@@ -397,6 +419,12 @@ export function trackingUrls(ctx: RenderContext) {
   };
 }
 
+/** Where Twilio reports this message's delivery state. Same token, same router,
+ *  same "one token resolves to one send" property the other three rely on. */
+export function smsStatusUrl(ctx: RenderContext): string {
+  return `${ctx.trackingOrigin.replace(/\/+$/, '')}/api/campaign-track/sms-status/${ctx.trackToken}`;
+}
+
 /** Escape a string for safe interpolation into HTML. */
 function escapeHtml(value: string): string {
   return value
@@ -419,27 +447,94 @@ function escapeHtml(value: string): string {
  * Pure — no I/O — so the link rewriting (the part with real injection risk) is
  * directly unit-testable.
  */
-export function renderCampaignEmail(
-  bodyHtml: string,
-  ctx: RenderContext,
-  recipient: { email: string; name?: string; attributes?: Record<string, unknown> },
-): string {
-  const urls = trackingUrls(ctx);
+export interface CampaignRecipient {
+  email: string;
+  name?: string;
+  attributes?: Record<string, unknown>;
+}
 
-  let merged = String(bodyHtml ?? '')
-    .replace(/\{\{\s*name\s*\}\}/g, escapeHtml(recipient.name || ''))
-    .replace(/\{\{\s*email\s*\}\}/g, escapeHtml(recipient.email))
-    .replace(/\{\{\s*logo\s*\}\}/g, escapeHtml(ctx.logoUrl ?? ''))
-    .replace(/\{\{\s*unsubscribe\s*\}\}/g, urls.unsubscribe);
+/**
+ * Substitute `{{field}}` placeholders — the ONE implementation, shared by the
+ * HTML and the SMS renderer.
+ *
+ * `escape` is a parameter rather than a constant because the two channels differ
+ * on exactly this point and on nothing else. HTML must escape: recipient
+ * attributes are attacker-controlled in the ordinary case (anyone can type
+ * `<script>` into a signup form), so unescaped interpolation would be a stored
+ * XSS in the campaign preview. A text message has no markup to inject into, and
+ * escaping there would deliver a literal `&amp;` to a phone.
+ */
+function substituteMergeFields(
+  body: string,
+  recipient: CampaignRecipient,
+  fixed: { logo: string; unsubscribe: string },
+  escape: (value: string) => string,
+): string {
+  const merged = String(body ?? '')
+    .replace(/\{\{\s*name\s*\}\}/g, escape(recipient.name || ''))
+    .replace(/\{\{\s*email\s*\}\}/g, escape(recipient.email))
+    .replace(/\{\{\s*logo\s*\}\}/g, escape(fixed.logo))
+    .replace(/\{\{\s*unsubscribe\s*\}\}/g, fixed.unsubscribe);
 
   // Audience attributes fill the template's own merge fields. An UNMATCHED field
   // resolves to empty rather than being left as `{{company}}` — mailing 4,000
   // people a literal placeholder is worse than mailing them a gap, and the
   // composer already warns the author which fields their audience is missing.
-  merged = merged.replace(/\{\{\s*([a-zA-Z][a-zA-Z0-9_]{0,63})\s*\}\}/g, (_whole, field: string) => {
+  return merged.replace(/\{\{\s*([a-zA-Z][a-zA-Z0-9_]{0,63})\s*\}\}/g, (_whole, field: string) => {
     const value = recipient.attributes?.[field];
-    return value == null ? '' : escapeHtml(String(value));
+    return value == null ? '' : escape(String(value));
   });
+}
+
+/** The longest body an author can store. Twilio concatenates beyond one segment
+ *  and bills per segment, so this is a spend ceiling as much as a length one —
+ *  roughly ten segments, which is already far past what anybody should text. */
+export const SMS_BODY_MAX_CHARS = 1_600;
+
+/** The opt-out sentence every campaign text carries. Wording, not decoration:
+ *  US A2P registration requires a visible opt-out on campaign traffic, and STOP
+ *  is the keyword carriers act on. */
+export const SMS_OPT_OUT_NOTICE = 'Reply STOP to opt out.';
+
+/**
+ * Render the text message actually sent to one recipient.
+ *
+ * Pure, and deliberately NOT the email renderer with the tags stripped. Three of
+ * the four things `renderCampaignEmail` does are meaningless here: there is no
+ * link to rewrite through a click tracker, no pixel to append, and no HTML
+ * footer. The fourth — a working way out — still applies, and is appended HERE
+ * rather than left to the author for exactly the reason the email footer is.
+ */
+export function renderCampaignSms(bodyText: string, recipient: CampaignRecipient): string {
+  const merged = substituteMergeFields(
+    bodyText,
+    recipient,
+    // `{{logo}}` has nothing to resolve to in a text message, and `{{unsubscribe}}`
+    // is not a URL — the way out of an SMS is the keyword, not a link.
+    { logo: '', unsubscribe: SMS_OPT_OUT_NOTICE },
+    (value) => value,
+  ).trim();
+
+  // Appended only when the author has not already said it, so a body that ends
+  // "...or reply stop" does not get a second, redundant sentence — and a body
+  // that says nothing cannot be sent without one.
+  const withNotice = /\bSTOP\b/i.test(merged) ? merged : `${merged} ${SMS_OPT_OUT_NOTICE}`.trim();
+  return withNotice.slice(0, SMS_BODY_MAX_CHARS);
+}
+
+export function renderCampaignEmail(
+  bodyHtml: string,
+  ctx: RenderContext,
+  recipient: CampaignRecipient,
+): string {
+  const urls = trackingUrls(ctx);
+
+  const merged = substituteMergeFields(
+    bodyHtml,
+    recipient,
+    { logo: ctx.logoUrl ?? '', unsubscribe: urls.unsubscribe },
+    escapeHtml,
+  );
 
   // Rewrite only http(s) hrefs. mailto:, tel: and anchors are left alone, and
   // the tracker's own links are skipped so a second render cannot double-wrap.
@@ -470,7 +565,9 @@ export interface CampaignView {
   name: string;
   subject: string;
   bodyHtml: string;
+  bodyText: string;
   status: string;
+  channel: string;
   audienceId: number;
   senderIdentityId: number | null;
   transport: string;
@@ -478,6 +575,8 @@ export interface CampaignView {
   connectorConnectionId: string | null;
   templateId: number | null;
   fromName: string;
+  fromNumber: string | null;
+  scheduledAt: Date | null;
   projectId: number | null;
   recipients: number;
   sent: number;
@@ -495,7 +594,9 @@ const CAMPAIGN_COLUMNS = {
   name: marketingCampaigns.name,
   subject: marketingCampaigns.subject,
   bodyHtml: marketingCampaigns.bodyHtml,
+  bodyText: marketingCampaigns.bodyText,
   status: marketingCampaigns.status,
+  channel: marketingCampaigns.channel,
   audienceId: marketingCampaigns.audienceId,
   senderIdentityId: marketingCampaigns.senderIdentityId,
   transport: marketingCampaigns.transport,
@@ -503,6 +604,8 @@ const CAMPAIGN_COLUMNS = {
   connectorConnectionId: marketingCampaigns.connectorConnectionId,
   templateId: marketingCampaigns.templateId,
   fromName: marketingCampaigns.fromName,
+  fromNumber: marketingCampaigns.fromNumber,
+  scheduledAt: marketingCampaigns.scheduledAt,
   projectId: marketingCampaigns.projectId,
   recipients: marketingCampaigns.recipients,
   sent: marketingCampaigns.sent,
@@ -531,10 +634,12 @@ export async function createCampaign(
   db: Db,
   tenantId: number,
   input: {
-    name: string; audienceId: number; subject?: string; bodyHtml?: string;
+    name: string; audienceId: number; subject?: string; bodyHtml?: string; bodyText?: string;
     senderIdentityId?: number | null; projectId?: number | null; sessionId?: string | null;
+    channel?: CampaignChannel;
     transport?: CampaignTransport; mailboxConnectionId?: number | null;
     connectorConnectionId?: string | null; templateId?: number | null; fromName?: string;
+    fromNumber?: string | null; scheduledAt?: Date | null;
   },
 ): Promise<CampaignResult> {
   const [audience] = await db
@@ -543,6 +648,15 @@ export async function createCampaign(
     .where(and(eq(marketingAudiences.id, input.audienceId), eq(marketingAudiences.tenantId, tenantId)))
     .limit(1);
   if (!audience) return { ok: false, status: 400, error: 'Pick an audience that belongs to this workspace.' };
+
+  // The channel decides which transports are even legal, so it is resolved before
+  // the transport rather than validated against it afterwards — a caller that
+  // names neither gets a platform email, which is what every existing caller means.
+  const channel: CampaignChannel = input.channel ?? 'email';
+  const transport: CampaignTransport = input.transport ?? DEFAULT_TRANSPORT[channel];
+  if (!transportSuitsChannel(channel, transport)) {
+    return { ok: false, status: 400, error: `A ${channel} campaign cannot send through ${transport}.` };
+  }
 
   // A template supplies the subject and body the author did not type. COPIED in
   // rather than referenced at send time: editing a template must not silently
@@ -562,16 +676,20 @@ export async function createCampaign(
       tenantId,
       audienceId: input.audienceId,
       senderIdentityId: input.senderIdentityId ?? null,
-      transport: input.transport ?? 'platform',
+      channel,
+      transport,
       mailboxConnectionId: input.mailboxConnectionId ?? null,
       connectorConnectionId: input.connectorConnectionId ?? null,
       templateId: input.templateId ?? null,
       fromName: (input.fromName ?? '').slice(0, 255),
+      fromNumber: (input.fromNumber ?? '').trim() || null,
+      scheduledAt: input.scheduledAt ?? null,
       projectId: input.projectId ?? null,
       sessionId: input.sessionId ?? null,
       name: input.name.trim().slice(0, 255) || 'Campaign',
       subject,
       bodyHtml,
+      bodyText: (input.bodyText ?? '').slice(0, SMS_BODY_MAX_CHARS),
     })
     .returning(CAMPAIGN_COLUMNS);
   return { ok: true, campaign: row! };
@@ -582,22 +700,53 @@ export async function updateCampaign(
   tenantId: number,
   campaignId: number,
   patch: {
-    name?: string; subject?: string; bodyHtml?: string; senderIdentityId?: number | null;
+    name?: string; subject?: string; bodyHtml?: string; bodyText?: string;
+    senderIdentityId?: number | null; channel?: CampaignChannel;
     audienceId?: number; transport?: CampaignTransport; mailboxConnectionId?: number | null;
     connectorConnectionId?: string | null; templateId?: number | null; fromName?: string;
+    fromNumber?: string | null; scheduledAt?: Date | null;
   },
 ): Promise<CampaignResult> {
   const set: Record<string, unknown> = { updatedAt: sql`NOW()` };
   if (typeof patch.name === 'string') set.name = patch.name.trim().slice(0, 255);
   if (typeof patch.subject === 'string') set.subject = patch.subject.slice(0, 500);
   if (typeof patch.bodyHtml === 'string') set.bodyHtml = patch.bodyHtml;
+  if (typeof patch.bodyText === 'string') set.bodyText = patch.bodyText.slice(0, SMS_BODY_MAX_CHARS);
   if (patch.senderIdentityId !== undefined) set.senderIdentityId = patch.senderIdentityId;
   if (typeof patch.audienceId === 'number') set.audienceId = patch.audienceId;
+  if (isCampaignChannel(patch.channel)) set.channel = patch.channel;
   if (isCampaignTransport(patch.transport)) set.transport = patch.transport;
   if (patch.mailboxConnectionId !== undefined) set.mailboxConnectionId = patch.mailboxConnectionId;
   if (patch.connectorConnectionId !== undefined) set.connectorConnectionId = patch.connectorConnectionId;
   if (patch.templateId !== undefined) set.templateId = patch.templateId;
   if (typeof patch.fromName === 'string') set.fromName = patch.fromName.slice(0, 255);
+  if (patch.fromNumber !== undefined) set.fromNumber = (patch.fromNumber ?? '').trim() || null;
+  if (patch.scheduledAt !== undefined) set.scheduledAt = patch.scheduledAt;
+
+  // Channel and transport are set by two different calls, so a patch that moves
+  // only ONE of them can leave a row no transport can serve. Validating the
+  // MERGED pair — which costs a read on an edit, and edits are rare while sends
+  // are not — is what stops that row existing at all, rather than being caught
+  // later by a send that refuses.
+  if (set.channel !== undefined || set.transport !== undefined) {
+    const [current] = await db
+      .select({ channel: marketingCampaigns.channel, transport: marketingCampaigns.transport })
+      .from(marketingCampaigns)
+      .where(and(eq(marketingCampaigns.id, campaignId), eq(marketingCampaigns.tenantId, tenantId)))
+      .limit(1);
+    if (!current) return { ok: false, status: 404, error: 'Campaign not found.' };
+    const channel = (set.channel as CampaignChannel | undefined)
+      ?? (isCampaignChannel(current.channel) ? current.channel : 'email');
+    // A channel change with no transport change moves the transport with it —
+    // asking the caller to restate the only legal value would be ceremony.
+    const transport = (set.transport as CampaignTransport | undefined)
+      ?? (set.channel !== undefined ? DEFAULT_TRANSPORT[channel]
+        : isCampaignTransport(current.transport) ? current.transport : DEFAULT_TRANSPORT[channel]);
+    if (!transportSuitsChannel(channel, transport)) {
+      return { ok: false, status: 400, error: `A ${channel} campaign cannot send through ${transport}.` };
+    }
+    set.transport = transport;
+  }
 
   const [row] = await db
     .update(marketingCampaigns)
@@ -616,7 +765,12 @@ export async function updateCampaign(
 }
 
 export type StartResult =
-  | { ok: true; campaign: CampaignView; queued: number; suppressed: number }
+  | {
+      ok: true; campaign: CampaignView; queued: number; suppressed: number;
+      /** Members this CHANNEL cannot reach — no mobile number, or a carrier STOP.
+       *  Always 0 for email, where the address is the audience's own key. */
+      unreachable: number;
+    }
   | { ok: false; status: 400 | 404 | 409; error: string };
 
 /**
@@ -634,11 +788,14 @@ async function loadTransportBinding(db: Db, tenantId: number, campaignId: number
       status: marketingCampaigns.status,
       subject: marketingCampaigns.subject,
       bodyHtml: marketingCampaigns.bodyHtml,
+      bodyText: marketingCampaigns.bodyText,
+      channel: marketingCampaigns.channel,
       audienceId: marketingCampaigns.audienceId,
       transport: marketingCampaigns.transport,
       mailboxConnectionId: marketingCampaigns.mailboxConnectionId,
       connectorConnectionId: marketingCampaigns.connectorConnectionId,
       fromName: marketingCampaigns.fromName,
+      fromNumber: marketingCampaigns.fromNumber,
       senderIdentityId: marketingCampaigns.senderIdentityId,
       senderFromEmail: marketingSenderIdentities.fromEmail,
       senderFromName: marketingSenderIdentities.fromName,
@@ -658,14 +815,30 @@ async function loadTransportBinding(db: Db, tenantId: number, campaignId: number
     ...row,
     binding: {
       transport: row.transport,
+      channel: row.channel,
       senderIdentity: row.senderFromEmail
         ? { fromEmail: row.senderFromEmail, fromName: row.senderFromName ?? '', status: row.senderStatus ?? '' }
         : null,
       mailboxConnectionId: row.mailboxConnectionId,
       connectorConnectionId: row.connectorConnectionId,
       fromName: row.fromName,
+      fromNumber: row.fromNumber,
     },
   };
+}
+
+/**
+ * What a campaign of this channel must have before it can start.
+ *
+ * ONE predicate, called by `startCampaign` — so "an SMS campaign needs a body"
+ * cannot be enforced by the REST route and forgotten by the scheduled sweep,
+ * which is exactly the class of bug a second scheduling entry point introduces.
+ */
+function contentProblem(channel: CampaignChannel, campaign: { subject: string; bodyText: string }): string | null {
+  if (channel === 'sms') {
+    return campaign.bodyText.trim() ? null : 'Write the text message before sending.';
+  }
+  return campaign.subject.trim() ? null : 'Add a subject line before sending.';
 }
 
 /**
@@ -687,9 +860,9 @@ export async function startCampaign(
   if (campaign.status !== 'draft') {
     return { ok: false, status: 409, error: `This campaign is already ${campaign.status}.` };
   }
-  if (!campaign.subject.trim()) {
-    return { ok: false, status: 400, error: 'Add a subject line before sending.' };
-  }
+  const channel: CampaignChannel = isCampaignChannel(campaign.channel) ? campaign.channel : 'email';
+  const missing = contentProblem(channel, campaign);
+  if (missing) return { ok: false, status: 400, error: missing };
 
   // Whichever transport this campaign uses, it must resolve NOW — the whole
   // point of the pre-flight is that a started campaign is safe to finish.
@@ -697,7 +870,11 @@ export async function startCampaign(
   if (!resolved.ok) return { ok: false, status: 400, error: resolved.error };
 
   const members = await db
-    .select({ email: marketingAudienceMembers.email })
+    .select({
+      email: marketingAudienceMembers.email,
+      phone: marketingAudienceMembers.phone,
+      phoneStatus: marketingAudienceMembers.phoneStatus,
+    })
     .from(marketingAudienceMembers)
     .where(and(
       eq(marketingAudienceMembers.audienceId, campaign.audienceId),
@@ -708,19 +885,40 @@ export async function startCampaign(
     return { ok: false, status: 400, error: 'This audience has no subscribed members.' };
   }
 
-  const emails = members.map((m) => m.email);
-  const blocked = await suppressedSubset(db, tenantId, emails);
-  const deliverable = emails.filter((e) => !blocked.has(e));
+  // An SMS can only reach a member who HAS a number and has not texted STOP.
+  // Reported as `unreachable` rather than folded into `suppressed`: "we have no
+  // number for them" and "they asked us to stop" are different facts, and a list
+  // owner can act on the first one.
+  const reachable = channel === 'sms'
+    ? members.filter((m) => isE164(m.phone) && m.phoneStatus === 'subscribed')
+    : members;
+  if (reachable.length === 0) {
+    return {
+      ok: false,
+      status: 400,
+      error: 'No member of this audience has a mobile number we can text.',
+    };
+  }
+
+  // The tenant-wide suppression list is a DO-NOT-CONTACT list, so it blocks both
+  // channels. A carrier STOP is narrower and only sets `phone_status` — it is a
+  // withdrawal of SMS consent specifically, and treating it as an email opt-out
+  // would silently unsubscribe somebody from a newsletter they still want.
+  const blocked = await suppressedSubset(db, tenantId, reachable.map((m) => m.email));
+  const deliverable = reachable.filter((m) => !blocked.has(m.email));
   if (deliverable.length === 0) {
     return { ok: false, status: 400, error: 'Every member of this audience has unsubscribed.' };
   }
 
   await db
     .insert(marketingCampaignSends)
-    .values(deliverable.map((email) => ({
+    .values(deliverable.map((member) => ({
       campaignId,
       tenantId,
-      email,
+      email: member.email,
+      // Stamped at materialisation, not read at send time: the ledger has to
+      // describe the number this campaign actually messaged.
+      phone: channel === 'sms' ? member.phone : null,
       status: 'queued',
       trackToken: newChallengeToken(),
     })))
@@ -739,7 +937,13 @@ export async function startCampaign(
     .where(and(eq(marketingCampaigns.id, campaignId), eq(marketingCampaigns.tenantId, tenantId)))
     .returning(CAMPAIGN_COLUMNS);
 
-  return { ok: true, campaign: updated!, queued: deliverable.length, suppressed: blocked.size };
+  return {
+    ok: true,
+    campaign: updated!,
+    queued: deliverable.length,
+    suppressed: blocked.size,
+    unreachable: members.length - reachable.length,
+  };
 }
 
 export interface BatchResult {
@@ -804,6 +1008,7 @@ export async function runCampaignBatch(
     .select({
       id: marketingCampaignSends.id,
       email: marketingCampaignSends.email,
+      phone: marketingCampaignSends.phone,
       trackToken: marketingCampaignSends.trackToken,
       attempts: marketingCampaignSends.attempts,
       // Joined so merge fields resolve without a query per recipient — the N+1
@@ -849,25 +1054,58 @@ export async function runCampaignBatch(
       trackToken: row.trackToken,
       logoUrl,
     };
-    const html = renderCampaignEmail(campaign.bodyHtml, ctx, {
+    const recipient = {
       email: row.email,
       name: row.name ?? undefined,
       attributes: (row.attributes as Record<string, unknown> | null) ?? undefined,
-    });
+    };
+    // The CHANNEL picks the address and the body; everything around it — the
+    // claim, the attempt ceiling, the requeue rule — is identical either way.
+    const isSms = sender.channel === 'sms';
+    const html = isSms ? '' : renderCampaignEmail(campaign.bodyHtml, ctx, recipient);
+    const text = isSms ? renderCampaignSms(campaign.bodyText, recipient) : undefined;
+    const to = isSms ? (row.phone ?? '') : row.email;
     try {
-      await sender.send({
-        to: row.email,
+      // Materialisation only queues members with a usable number, so an empty
+      // one here means the row was written before this campaign became an SMS.
+      // Terminal by construction: no retry can invent a phone number.
+      if (!to) throw new TransportError('No mobile number for this recipient.', false);
+      const receipt = await sender.send({
+        to,
         subject: campaign.subject,
         html,
+        ...(text !== undefined ? { text } : {}),
         unsubscribeUrl: trackingUrls(ctx).unsubscribe,
+        // Twilio only reports delivery to a URL supplied at send time, and the
+        // send's own track token is already unguessable and resolves to exactly
+        // one row — so no second identifier has to be minted for the callback.
+        ...(isSms ? { statusCallbackUrl: smsStatusUrl(ctx) } : {}),
       });
       await db
         .update(marketingCampaignSends)
-        .set({ status: 'sent', sentAt: sql`NOW()`, error: null })
+        .set({
+          status: 'sent',
+          sentAt: sql`NOW()`,
+          error: null,
+          ...(receipt.externalId ? { externalMessageId: receipt.externalId } : {}),
+        })
         .where(and(eq(marketingCampaignSends.id, row.id), eq(marketingCampaignSends.tenantId, tenantId)));
       sent += 1;
     } catch (error) {
       const message = error instanceof Error ? error.message : 'send failed';
+      // A carrier STOP is a CONSENT withdrawal, not a delivery failure: without
+      // this the same person is texted again by the next campaign, and the one
+      // after that, because nothing recorded that they asked us not to.
+      if (isSms && isOptOutFailure(message)) {
+        await db
+          .update(marketingAudienceMembers)
+          .set({ phoneStatus: 'unsubscribed', updatedAt: sql`NOW()` })
+          .where(and(
+            eq(marketingAudienceMembers.tenantId, tenantId),
+            eq(marketingAudienceMembers.audienceId, campaign.audienceId),
+            eq(marketingAudienceMembers.email, row.email),
+          ));
+      }
       // A retryable failure goes BACK to `queued` so the next sweep picks it up;
       // only a terminal one becomes a `failed` row. Burning a recipient on a
       // transient 429 is how a campaign silently under-delivers — and the
@@ -1015,6 +1253,169 @@ export async function recordUnsubscribe(db: Db, trackToken: string): Promise<str
   return send.email;
 }
 
+// ---------------------------------------------------------------------------
+// SMS delivery status — the other half of "did it arrive"
+// ---------------------------------------------------------------------------
+
+/** Twilio's message lifecycle, as it reports it. `delivered` and the two failure
+ *  states are TERMINAL; the rest are progress. */
+export const SMS_TERMINAL_FAILURES: readonly string[] = ['undelivered', 'failed'];
+
+/**
+ * Record what the carrier says happened to one message.
+ *
+ * The counters are CORRECTED here, not merely annotated. `runCampaignBatch`
+ * increments `sent` when the message is handed over, which is the only thing it
+ * can know at the time; when the carrier later says it never arrived, a campaign
+ * report that still claims it was sent is simply wrong. Moving the send to
+ * `failed` and swapping one counter for the other keeps a single set of numbers
+ * that mean "reached a person" — rather than a second, quieter set that only a
+ * reader who knew to look would find.
+ *
+ * Idempotent by construction: the correction is guarded on the row still being
+ * `sent`, so Twilio's habit of retrying a callback cannot double-count. Progress
+ * states (`queued`, `sending`, `sent`) only stamp `delivery_status`.
+ */
+export async function recordSmsDeliveryStatus(
+  db: Db,
+  trackToken: string,
+  status: string,
+  detail: { messageSid?: string | null; errorCode?: string | null } = {},
+): Promise<boolean> {
+  const normalized = status.trim().toLowerCase().slice(0, 24);
+  if (!normalized) return false;
+  const delivered = normalized === 'delivered';
+
+  const [send] = await db
+    .update(marketingCampaignSends)
+    .set({
+      deliveryStatus: normalized,
+      ...(delivered ? { deliveredAt: sql`NOW()` } : {}),
+      ...(detail.messageSid ? { externalMessageId: detail.messageSid.slice(0, 64) } : {}),
+    })
+    .where(eq(marketingCampaignSends.trackToken, trackToken))
+    .returning({
+      id: marketingCampaignSends.id,
+      campaignId: marketingCampaignSends.campaignId,
+      tenantId: marketingCampaignSends.tenantId,
+      email: marketingCampaignSends.email,
+      status: marketingCampaignSends.status,
+    });
+  if (!send) return false;
+
+  if (!SMS_TERMINAL_FAILURES.includes(normalized)) return true;
+
+  const reason = detail.errorCode ? `Twilio ${normalized} (${detail.errorCode})` : `Twilio ${normalized}`;
+  const corrected = await db
+    .update(marketingCampaignSends)
+    .set({ status: 'failed', error: reason.slice(0, 1_000) })
+    .where(and(
+      eq(marketingCampaignSends.id, send.id),
+      eq(marketingCampaignSends.tenantId, send.tenantId),
+      // Only a send WE counted as sent needs correcting, and only once.
+      eq(marketingCampaignSends.status, 'sent'),
+    ))
+    .returning({ id: marketingCampaignSends.id });
+  if (corrected.length > 0) {
+    await db
+      .update(marketingCampaigns)
+      .set({
+        sent: sql`GREATEST(${marketingCampaigns.sent} - 1, 0)`,
+        failed: sql`${marketingCampaigns.failed} + 1`,
+        updatedAt: sql`NOW()`,
+      })
+      .where(and(eq(marketingCampaigns.id, send.campaignId), eq(marketingCampaigns.tenantId, send.tenantId)));
+  }
+
+  // A carrier STOP arrives here as well as on the send call, because a message
+  // accepted at hand-over can still be rejected downstream.
+  if (detail.errorCode && isOptOutFailure(detail.errorCode)) {
+    await db
+      .update(marketingAudienceMembers)
+      .set({ phoneStatus: 'unsubscribed', updatedAt: sql`NOW()` })
+      .where(and(
+        eq(marketingAudienceMembers.tenantId, send.tenantId),
+        eq(marketingAudienceMembers.email, send.email),
+      ));
+  }
+  return true;
+}
+
+export type SmsCallbackVerification = { ok: true } | { ok: false; reason: string };
+
+/**
+ * Decide whether a Twilio status callback is genuinely from Twilio.
+ *
+ * The auth token a callback is signed with belongs to the TENANT's own Twilio
+ * connection, so verification starts from the token in the URL: send → campaign
+ * → connection → credentials. There is no platform-wide secret to check against
+ * and there should not be one, because the callback is generated by the tenant's
+ * account, not ours.
+ *
+ * Two cases resolve to "accept without checking a signature", and both are
+ * deliberate:
+ *
+ *   • an UNKNOWN token — there is no send to record against, so the recorder
+ *     no-ops and the route answers 204. Refusing would turn a deleted campaign
+ *     into a permanent Twilio retry loop.
+ *   • a connection authenticated with an API KEY (`SK…`) rather than the Account
+ *     SID — Twilio signs with the Auth Token and nothing else, so the signature
+ *     is genuinely uncheckable. The unguessable per-send token remains the
+ *     access model, exactly as it is for the open pixel and the unsubscribe
+ *     link, and the worst a forgery achieves is one wrong delivery state.
+ */
+export async function verifyCampaignSmsCallback(
+  db: Db,
+  env: Env,
+  args: {
+    trackToken: string;
+    url: string;
+    signature: string | null;
+    formParams: Array<[string, string]>;
+  },
+): Promise<SmsCallbackVerification> {
+  const [send] = await db
+    .select({ campaignId: marketingCampaignSends.campaignId, tenantId: marketingCampaignSends.tenantId })
+    .from(marketingCampaignSends)
+    .where(eq(marketingCampaignSends.trackToken, args.trackToken))
+    .limit(1);
+  if (!send) return { ok: true };
+
+  const [campaign] = await db
+    .select({
+      channel: marketingCampaigns.channel,
+      connectorConnectionId: marketingCampaigns.connectorConnectionId,
+    })
+    .from(marketingCampaigns)
+    .where(and(
+      eq(marketingCampaigns.id, send.campaignId),
+      eq(marketingCampaigns.tenantId, send.tenantId),
+    ))
+    .limit(1);
+  if (!campaign) return { ok: true };
+  if (campaign.channel !== 'sms') return { ok: false, reason: 'that campaign is not an SMS campaign' };
+  if (!campaign.connectorConnectionId) return { ok: false, reason: 'that campaign has no Twilio connection' };
+
+  const { loadConnection } = await import('../connectors/connectorRuntime');
+  const connection = await loadConnection(db, env, send.tenantId, campaign.connectorConnectionId);
+  const username = connection.auth.username ?? '';
+  const authToken = connection.auth.password ?? '';
+  // Only an Account SID pairs with the Auth Token; an `SK…` API key pairs with a
+  // secret Twilio never signs with. See the header.
+  if (!username.startsWith('AC') || !authToken) return { ok: true };
+
+  const { verifyTwilioSignature } = await import('../backend/webhookVerification');
+  const result = await verifyTwilioSignature({
+    url: args.url,
+    signature: args.signature,
+    authToken,
+    formParams: args.formParams,
+    rawBody: '',
+    isForm: true,
+  });
+  return result.ok ? { ok: true } : { ok: false, reason: result.reason };
+}
+
 /** Campaigns still mid-send, for the cron sweep to advance. Bounded. */
 export async function campaignsInFlight(db: Db, limit = 10): Promise<Array<{ id: number; tenantId: number }>> {
   return db
@@ -1036,8 +1437,11 @@ export async function campaignsInFlight(db: Db, limit = 10): Promise<Array<{ id:
 export async function runCampaignSendSweep(
   env: Env,
   db: Db,
-  opts: { maxCampaigns?: number } = {},
-): Promise<{ campaigns: number; sent: number; failed: number }> {
+  opts: { maxCampaigns?: number; maxDue?: number } = {},
+): Promise<{ campaigns: number; sent: number; failed: number; started: number }> {
+  // Due-first, so a campaign scheduled for now begins on the SAME tick it became
+  // due rather than waiting a second one.
+  const started = await startDueCampaigns(env, db, opts.maxDue);
   const inFlight = await campaignsInFlight(db, opts.maxCampaigns ?? 5);
   const trackingOrigin = resolveTrackingOrigin(env);
   let sent = 0;
@@ -1047,5 +1451,68 @@ export async function runCampaignSendSweep(
     sent += batch.sent;
     failed += batch.failed;
   }
-  return { campaigns: inFlight.length, sent, failed };
+  return { campaigns: inFlight.length, sent, failed, started: started.started };
+}
+
+// ---------------------------------------------------------------------------
+// Scheduled sends
+// ---------------------------------------------------------------------------
+
+export interface DueSweepResult {
+  /** Campaigns that moved from `draft` to `sending` on this tick. */
+  started: number;
+  /** Due campaigns that REFUSED to start, with the reason. Reported rather than
+   *  swallowed: "it was scheduled and never went" with no explanation anywhere is
+   *  the failure this whole path exists to avoid. */
+  refused: Array<{ campaignId: number; tenantId: number; error: string }>;
+}
+
+/**
+ * Start every campaign whose scheduled time has arrived.
+ *
+ * `marketing_campaigns.scheduled_at` shipped in 0412 and nothing ever read it:
+ * the sweep only advanced campaigns already in `sending`, so a draft with a
+ * future time silently never left. This is the step that was missing.
+ *
+ * It calls `startCampaign` rather than flipping the status itself, which is the
+ * whole design. Every precondition — a resolvable sender, a body, a non-empty
+ * audience, suppression applied — is re-checked AT THE MOMENT IT STARTS, not
+ * when it was scheduled. A mailbox grant revoked between Friday and Tuesday, an
+ * audience emptied, a sender identity that lapsed: each of those must stop the
+ * send, and a sweep that only wrote `status = 'sending'` would have started it
+ * anyway and discovered the problem one batch later, against a real audience.
+ *
+ * A refusal leaves the campaign in `draft` with its `scheduled_at` intact, so a
+ * fixed precondition means it goes on the next tick with no re-scheduling.
+ * Bounded per tick so one tenant's backlog cannot consume the sweep.
+ */
+export async function startDueCampaigns(env: Env, db: Db, limit = 5): Promise<DueSweepResult> {
+  const due = await db
+    .select({ id: marketingCampaigns.id, tenantId: marketingCampaigns.tenantId })
+    .from(marketingCampaigns)
+    .where(and(
+      eq(marketingCampaigns.status, 'draft'),
+      sql`${marketingCampaigns.scheduledAt} IS NOT NULL`,
+      sql`${marketingCampaigns.scheduledAt} <= NOW()`,
+    ))
+    // Oldest scheduled time first: a campaign that has been due longest goes
+    // first, so a backlog drains in the order it was promised.
+    .orderBy(asc(marketingCampaigns.scheduledAt))
+    .limit(Math.min(Math.max(1, limit), 25));
+
+  let started = 0;
+  const refused: DueSweepResult['refused'] = [];
+  for (const campaign of due) {
+    const result = await startCampaign(env, db, campaign.tenantId, campaign.id);
+    if (result.ok) {
+      started += 1;
+      continue;
+    }
+    refused.push({ campaignId: campaign.id, tenantId: campaign.tenantId, error: result.error });
+    reportCaughtError(new Error(result.error), {
+      source: 'application/marketing/campaignEngine.ts',
+      operation: `startDueCampaigns:${campaign.id}`,
+    });
+  }
+  return { started, refused };
 }

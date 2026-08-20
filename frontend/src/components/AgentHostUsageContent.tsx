@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { usageApi, type UsageSnapshot } from '@/lib/builderforceApi';
+import { useFormat } from "@/i18n/useFormat";
 
 interface AgentHostUsageContentProps {
   agentHostId: number;
@@ -37,6 +38,7 @@ function BarFill({ value, max, color }: { value: number; max: number; color: str
 }
 
 export function AgentHostUsageContent({ agentHostId }: AgentHostUsageContentProps) {
+    const fmt = useFormat();
   const [snapshots, setSnapshots] = useState<UsageSnapshot[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -105,7 +107,7 @@ export function AgentHostUsageContent({ agentHostId }: AgentHostUsageContentProp
                   {snap.sessionKey ?? '—'}
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                  {new Date(snap.ts).toLocaleString()}
+                  {fmt.dateTime(snap.ts)}
                 </div>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 12 }}>

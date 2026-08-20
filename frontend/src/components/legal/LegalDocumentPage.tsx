@@ -2,6 +2,7 @@ import { getTranslations } from 'next-intl/server';
 import { CompliancePage } from './CompliancePage';
 import { LegalDocPreview } from '@/components/admin/LegalDocPreview';
 import { fetchLegalCurrent, legalDocHref, legalDocTitleKey, type LegalDocType } from '@/lib/legalDocs';
+import { useFormat } from "@/i18n/useFormat";
 
 /**
  * The public page for a published legal instrument (Terms, Privacy).
@@ -19,13 +20,14 @@ import { fetchLegalCurrent, legalDocHref, legalDocTitleKey, type LegalDocType } 
  * freshness the instrument does not have.
  */
 export async function LegalDocumentPage({ type }: { type: LegalDocType }) {
+    const fmt = useFormat();
   const t = await getTranslations('legal');
   const legal = await fetchLegalCurrent();
   const doc = legal?.[type] ?? null;
 
   const title = doc?.title?.trim() || t(legalDocTitleKey(type));
   const published = doc?.publishedAt
-    ? new Date(doc.publishedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+    ? fmt.dateWith(doc.publishedAt, { year: 'numeric', month: 'long', day: 'numeric' })
     : null;
 
   return (

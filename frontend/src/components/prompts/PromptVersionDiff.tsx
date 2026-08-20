@@ -6,6 +6,7 @@ import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { Select } from '@/components/Select';
 import { promptLibraryApi, type PromptVersion } from '@/lib/builderforceApi';
 import { diffLines, diffStat, sideBySide, type DiffRow } from '@/lib/textDiff';
+import { useFormat } from "@/i18n/useFormat";
 
 /**
  * PromptVersionDiff — version history + line diff for a prompt, in the canonical
@@ -24,6 +25,7 @@ export interface PromptVersionDiffProps {
 }
 
 export function PromptVersionDiff({ promptId, open, onClose }: PromptVersionDiffProps) {
+    const fmt = useFormat();
   const t = useTranslations('promptHistory');
   const [versions, setVersions] = useState<PromptVersion[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -112,7 +114,7 @@ export function PromptVersionDiff({ promptId, open, onClose }: PromptVersionDiff
                 {[...versions].reverse().map((v) => (
                   <div key={v.version} style={{ display: 'flex', gap: 10, fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>
                     <span style={{ fontWeight: 700, color: 'var(--text-primary)', minWidth: 44 }}>{t('versionN', { n: v.version })}</span>
-                    <span style={{ whiteSpace: 'nowrap' }}>{new Date(v.createdAt).toLocaleDateString()}</span>
+                    <span style={{ whiteSpace: 'nowrap' }}>{fmt.date(v.createdAt)}</span>
                     {v.notes && <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{v.notes}</span>}
                   </div>
                 ))}

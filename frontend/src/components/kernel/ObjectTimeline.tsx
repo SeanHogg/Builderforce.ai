@@ -22,6 +22,7 @@ import {
   type ActivityEntry,
   type Domain,
 } from '@/lib/kernel/kernelApi';
+import { useFormat } from "@/i18n/useFormat";
 
 /** Actor kind → the token that colours its glyph. One map, so the timeline, the
  *  roster and the board agree on what "an agent did this" looks like. */
@@ -60,6 +61,7 @@ export function ObjectTimeline({
   limit?: number;
   locale?: string;
 }) {
+    const fmt = useFormat();
   const t = useTranslations('kernel.timeline');
   const [rows, setRows] = useState<ActivityEntry[] | null>(null);
   const [failed, setFailed] = useState(false);
@@ -134,7 +136,7 @@ export function ObjectTimeline({
             dateTime={row.occurredAt}
             className="text-xs shrink-0 tabular-nums"
             style={{ color: 'var(--text-muted)' }}
-            title={new Date(row.occurredAt).toLocaleString(locale)}
+            title={fmt.dateTime(row.occurredAt)}
           >
             {relativeTime(row.occurredAt, locale)}
           </time>

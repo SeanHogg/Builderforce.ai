@@ -9,6 +9,7 @@ import { ticketHref } from '@/lib/ticketHref';
 import {
   tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle,
 } from '@/components/dataTableStyles';
+import { useFormat } from "@/i18n/useFormat";
 
 /**
  * The AI Manager's STUCK-TICKET REGISTER.
@@ -67,6 +68,7 @@ export interface ManagerStallRegisterProps {
 }
 
 export function ManagerStallRegister({ projectId }: ManagerStallRegisterProps) {
+    const fmt = useFormat();
   const t = useTranslations('manager.stalls');
   const format = useFormatter();
   const [data, setData] = useState<StallRegister | null>(null);
@@ -92,7 +94,7 @@ export function ManagerStallRegister({ projectId }: ManagerStallRegisterProps) {
     try {
       return format.relativeTime(new Date(iso), new Date());
     } catch {
-      return new Date(iso).toLocaleString();
+      return fmt.dateTime(iso);
     }
   }, [format]);
 
@@ -158,13 +160,13 @@ export function ManagerStallRegister({ projectId }: ManagerStallRegisterProps) {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
             <div style={{ ...panelStyle, padding: 14 }}>
               <div style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--text-primary)' }}>
-                {(data?.working ?? 0).toLocaleString()}
+                {fmt.number((data?.working ?? 0))}
               </div>
               <div style={{ ...mutedStyle, marginTop: 2 }}>{t('stat.working')}</div>
             </div>
             <div style={{ ...panelStyle, padding: 14 }}>
               <div style={{ fontSize: '1.6rem', fontWeight: 800, color: (data?.escalated ?? 0) > 0 ? 'var(--warning-text)' : 'var(--text-primary)' }}>
-                {(data?.escalated ?? 0).toLocaleString()}
+                {fmt.number((data?.escalated ?? 0))}
               </div>
               <div style={{ ...mutedStyle, marginTop: 2 }}>{t('stat.escalated')}</div>
             </div>

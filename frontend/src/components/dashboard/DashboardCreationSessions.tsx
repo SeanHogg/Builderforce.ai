@@ -13,6 +13,7 @@ import styles from './DashboardCreationSessions.module.css';
 import { Icon } from '@/components/ui/Icon';
 import { ViewToggle } from '@/components/ViewToggle';
 import { SessionManagementControls, type SessionMenuAction } from '@/components/creation-sessions/SessionManagementControls';
+import { useFormat } from "@/i18n/useFormat";
 
 /**
  * A session tile is coloured by the KIND of object it holds, and the board's
@@ -114,6 +115,7 @@ export function DashboardCreationLauncher() {
 }
 
 export function DashboardCreationSessions() {
+    const fmt = useFormat();
   const t = useTranslations('creationCanvas');
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -243,7 +245,7 @@ export function DashboardCreationSessions() {
       </div>
       <div style={{ padding: libraryView === 'table' ? '11px 14px' : 14 }}><strong style={{ display: 'block', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{session.pinned && <Icon name="sparkles" size={14} />} {session.title}{session.unread ? ` · ${t('unreadBadge')}` : ''}</strong>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 8 }}>{(session.preview?.kinds ?? []).slice(0, 5).map((kind) => <small key={kind} style={{ border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: '2px 6px' }}>{kind}</small>)}{(session.projectIds ?? []).map((id) => <small key={id} style={{ borderRadius: 'var(--radius-lg)', padding: '2px 6px', background: 'var(--surface-sunken)' }}>{t('projectBadge', { id })}</small>)}</div>
-        <span style={{ display: 'flex', justifyContent: 'space-between', marginTop: 9, color: 'var(--text-secondary)', fontSize: 12 }}><span>{t('sessionObjectsPeople', { objects: session.preview?.objectCount ?? 0, people: session.collaboratorCount ?? 1 })}{running ? ` · ${t('sessionRunning', { count: running })}` : ''}</span><span>{new Date(session.lastActivityAt).toLocaleDateString()}</span></span>
+        <span style={{ display: 'flex', justifyContent: 'space-between', marginTop: 9, color: 'var(--text-secondary)', fontSize: 12 }}><span>{t('sessionObjectsPeople', { objects: session.preview?.objectCount ?? 0, people: session.collaboratorCount ?? 1 })}{running ? ` · ${t('sessionRunning', { count: running })}` : ''}</span><span>{fmt.date(session.lastActivityAt)}</span></span>
         {session.folder && <small style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)', marginTop: 7, color: 'var(--text-muted)' }}><Icon name="folder" size={13} /> {session.folder}</small>}
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10 }}>
           <SessionManagementControls

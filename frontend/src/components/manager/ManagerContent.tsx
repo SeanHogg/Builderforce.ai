@@ -50,6 +50,7 @@ import {
   tdStyle,
   tdMutedStyle,
 } from '@/components/dataTableStyles';
+import { useFormat } from "@/i18n/useFormat";
 
 /**
  * AI Manager — the per-project backlog manager surface. It reads the manager
@@ -128,6 +129,7 @@ export interface ManagerContentProps {
 }
 
 export function ManagerContent({ projectId }: ManagerContentProps) {
+    const fmt = useFormat();
   const t = useTranslations('manager');
   const format = useFormatter();
   const { allowed: canManage } = usePermission('manager.manage');
@@ -164,7 +166,7 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
       try {
         return format.relativeTime(new Date(iso), new Date());
       } catch {
-        return new Date(iso).toLocaleString();
+        return fmt.dateTime(iso);
       }
     },
     [format],
@@ -1000,10 +1002,11 @@ function Notice({ title, body, muted, retryLabel, onRetry }: {
 }
 
 function StatTile({ label, value, tone }: { label: string; value: number; tone?: 'warn' }) {
+    const fmt = useFormat();
   return (
     <div style={{ ...panelStyle, padding: 14 }}>
       <div style={{ fontSize: '1.6rem', fontWeight: 800, color: tone === 'warn' ? 'var(--warning-text)' : 'var(--text-primary)' }}>
-        {value.toLocaleString()}
+        {fmt.number(value)}
       </div>
       <div style={{ ...mutedStyle, marginTop: 2 }}>{label}</div>
     </div>
@@ -1026,6 +1029,7 @@ function BusinessValueBar({ value, rationale, noRationale }: { value: number | n
 function BacklogRow({ item, assignee, unassignedLabel, priorityLabel, bvTooltip }: {
   item: ManagerBacklogItem; assignee: string; unassignedLabel: string; priorityLabel: string; bvTooltip: string;
 }) {
+    const fmt = useFormat();
   const unassigned = item.assignedUserId == null && item.assignedAgentRef == null && item.assignedAgentHostId == null;
   return (
     <tr style={trStyle}>
@@ -1043,7 +1047,7 @@ function BacklogRow({ item, assignee, unassignedLabel, priorityLabel, bvTooltip 
         <BusinessValueBar value={item.businessValue} rationale={item.businessValueRationale} noRationale={bvTooltip} />
       </td>
       <td style={{ ...tdMutedStyle, whiteSpace: 'nowrap' }}>
-        {item.dueDate ? new Date(item.dueDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '—'}
+        {item.dueDate ? fmt.dateWith(item.dueDate, { month: 'short', day: 'numeric' }) : '—'}
       </td>
       <td style={{ ...tdMutedStyle }}>{unassigned ? unassignedLabel : assignee}</td>
     </tr>

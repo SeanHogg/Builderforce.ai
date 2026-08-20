@@ -892,6 +892,11 @@ export interface ProjectEvermindActivity {
   training: ProjectEvermindTrainingPoint[];
   /** The latest pre/post regression check, or null until a merge had a held-out set. */
   eval: ProjectEvermindEvalPoint | null;
+  /** How many memories the coordinator holds IN TOTAL — `recent` is one page of them.
+   *  Lets a surface say "24 of 812" instead of implying 24 is all there is. */
+  total: number;
+  /** Cursor for the next (older) page, or null at the end of the history. */
+  nextBefore: number | null;
 }
 
 /**
@@ -900,16 +905,22 @@ export interface ProjectEvermindActivity {
  * an empty snapshot when the coordinator binding is unset or the DO has no state
  * yet, so a caller can always render the panel.
  */
+const EMPTY_ACTIVITY: ProjectEvermindActivity = { pending: 0, recent: [], training: [], eval: null, total: 0, nextBefore: null };
+
 export async function getProjectEvermindActivity(
   env: Env,
   tenantId: number,
   projectId: number,
+  page: { limit?: number; before?: number } = {},
 ): Promise<ProjectEvermindActivity> {
   const stub = coordinatorStub(env, tenantId, projectId);
-  if (!stub) return { pending: 0, recent: [], training: [], eval: null };
+  if (!stub) return EMPTY_ACTIVITY;
   try {
-    const res = await stub.fetch('https://coordinator/recent');
-    if (!res.ok) return { pending: 0, recent: [], training: [], eval: null };
+    const url = new URL('https://coordinator/recent');
+    if (page.limit !== undefined) url.searchParams.set('limit', String(page.limit));
+    if (page.before !== undefined) url.searchParams.set('before', String(page.before));
+    const res = await stub.fetch(url.toString());
+    if (!res.ok) return EMPTY_ACTIVITY;
     const body = (await res.json().catch(() => ({}))) as Partial<ProjectEvermindActivity>;
     // Backfill a stable id for legacy ring entries written before ids were stamped,
     // so every entry the console sees can be targeted (Validate highlight / detail).
@@ -920,9 +931,51 @@ export async function getProjectEvermindActivity(
     // empty/null so an older project simply shows no training readout / no delta yet.
     const training = Array.isArray(body.training) ? body.training : [];
     const evalPoint = body.eval && typeof body.eval.delta === 'number' ? body.eval : null;
-    return { pending: typeof body.pending === 'number' ? body.pending : 0, recent, training, eval: evalPoint };
+    return {
+      pending: typeof body.pending === 'number' ? body.pending : 0,
+      recent,
+      training,
+      eval: evalPoint,
+      // A coordinator that predates paging reports neither; `recent.length` is then
+      // the whole truth it has, and no cursor means "do not ask for another page".
+      total: typeof body.total === 'number' ? body.total : recent.length,
+      nextBefore: typeof body.nextBefore === 'number' ? body.nextBefore : null,
+    };
   } catch {
-    return { pending: 0, recent: [], training: [], eval: null };
+    return EMPTY_ACTIVITY;
+  }
+}
+
+/**
+ * Walk a project's ENTIRE learned-memory history, newest first, in coordinator-sized
+ * pages, up to `max`.
+ *
+ * The audit surface reads this rather than `getProjectEvermindContributions().recent`,
+ * which is one page. Deliberately NOT cached: it is an operator action on an unbounded
+ * keyspace (a cache key would have to carry the cursor and would be evicted before it
+ * was ever re-read), and the cached single-page snapshot is what the console already
+ * polls.
+ */
+export async function listProjectEvermindMemories(
+  env: Env,
+  tenantId: number,
+  projectId: number,
+  opts: { max: number; pageSize?: number } = { max: 200 },
+): Promise<{ memories: ProjectEvermindRecentEntry[]; total: number; truncated: boolean }> {
+  const pageSize = Math.max(1, Math.min(opts.pageSize ?? 100, 200));
+  const memories: ProjectEvermindRecentEntry[] = [];
+  let before: number | undefined;
+  let total = 0;
+  for (;;) {
+    const page = await getProjectEvermindActivity(env, tenantId, projectId, {
+      limit: pageSize,
+      ...(before !== undefined ? { before } : {}),
+    });
+    total = page.total;
+    memories.push(...page.recent);
+    if (page.nextBefore === null || page.recent.length === 0) return { memories, total, truncated: false };
+    if (memories.length >= opts.max) return { memories: memories.slice(0, opts.max), total, truncated: true };
+    before = page.nextBefore;
   }
 }
 

@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl';
 import type { MambaAgentState, MambaStateSnapshot } from '@/lib/types';
 import { MambaEngine } from '@/lib/mamba-engine';
 import { useConfirm } from '@/components/ConfirmProvider';
+import { useFormat } from "@/i18n/useFormat";
 
 interface AgentStateViewerProps {
   projectId: string | number;
@@ -26,6 +27,7 @@ function stateHeatmap(data: number[], count: number): number[] {
 }
 
 export function AgentStateViewer({ projectId, agentId }: AgentStateViewerProps) {
+    const fmt = useFormat();
   const t = useTranslations('agentState');
   const confirm = useConfirm();
   const [state, setState] = useState<MambaAgentState | null>(null);
@@ -207,7 +209,7 @@ export function AgentStateViewer({ projectId, agentId }: AgentStateViewerProps) 
 
             {/* Updated at */}
             <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-              {t('updated', { date: new Date(state.updatedAt).toLocaleString() })}
+              {t('updated', { date: fmt.dateTime(state.updatedAt) })}
             </div>
 
             {/* Interaction history */}

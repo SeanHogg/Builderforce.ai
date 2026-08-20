@@ -14,6 +14,7 @@ import type { Env } from '../../env';
 
 const mocks = vi.hoisted(() => ({
   contributions: vi.fn(),
+  listMemories: vi.fn(),
   head: vi.fn(),
   learnText: vi.fn(),
   forget: vi.fn(),
@@ -25,6 +26,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('./projectEvermind', () => ({
   getProjectEvermindContributions: mocks.contributions,
+  listProjectEvermindMemories: mocks.listMemories,
   getProjectEvermindHead: mocks.head,
   dispatchProjectEvermindLearnText: mocks.learnText,
   forgetProjectEvermindMemories: mocks.forget,
@@ -65,6 +67,14 @@ beforeEach(() => {
   mocks.flush.mockResolvedValue({ ok: true, status: 200, body: { merged: 1, version: 4 } });
   mocks.complete.mockResolvedValue({ response: { status: 200 }, resolvedModel: 'claude-opus-5' });
   mocks.readProxyChoice.mockResolvedValue({ content: '{"findings":[]}' });
+  // The analyzer walks the DURABLE memory history, not the console's first page.
+  // Default it to whatever the test set as `recent`, so every existing case keeps
+  // expressing its fixture the same way; the paging cases override this directly.
+  mocks.listMemories.mockImplementation(async () => {
+    const snapshot = (await mocks.contributions()) as { recent?: unknown } | undefined;
+    const memories = Array.isArray(snapshot?.recent) ? snapshot.recent : [];
+    return { memories, total: memories.length, truncated: false };
+  });
 });
 
 describe('analyzeProjectEvermindKnowledge — local coherence screen', () => {
@@ -90,6 +100,57 @@ describe('analyzeProjectEvermindKnowledge — local coherence screen', () => {
     expect(out.analyzed).toBe(0);
     expect(out.findings).toHaveLength(0);
     expect(mocks.complete).not.toHaveBeenCalled();
+  });
+});
+
+describe('analyzeProjectEvermindKnowledge — audits the whole history, not one page', () => {
+  it('reviews memories far beyond the console page, and batches the frontier calls', async () => {
+    // 60 memories: three REVIEW_BATCH_SIZE(24) batches. Before the durable per-memory
+    // store the audit could only ever see 24 — everything older was in the weights,
+    // recallable, and invisible to review.
+    const many = Array.from({ length: 60 }, (_, i) => memory(i + 1));
+    mocks.contributions.mockResolvedValue(contributions([]));
+    mocks.listMemories.mockResolvedValue({ memories: many, total: 60, truncated: false });
+
+    const out = await analyzeProjectEvermindKnowledge(env, db, 7, 42);
+
+    expect(out.analyzed).toBe(60);
+    expect(out.total).toBe(60);
+    expect(out.truncated).toBe(false);
+    // Three batches, not one oversized prompt that the vendor would truncate — a
+    // truncated prompt drops memories from the audit silently, which is the exact
+    // failure mode this whole change exists to remove.
+    expect(mocks.complete).toHaveBeenCalledTimes(3);
+  });
+
+  it('says so when it reviewed only part of the history', async () => {
+    const page = Array.from({ length: 24 }, (_, i) => memory(i + 1));
+    mocks.contributions.mockResolvedValue(contributions([]));
+    mocks.listMemories.mockResolvedValue({ memories: page, total: 812, truncated: true });
+
+    const out = await analyzeProjectEvermindKnowledge(env, db, 7, 42);
+
+    // "nothing looks wrong" about 24 of 812 memories is not a clean model, and the
+    // caller has to be able to tell the difference.
+    expect(out.analyzed).toBe(24);
+    expect(out.total).toBe(812);
+    expect(out.truncated).toBe(true);
+  });
+
+  it('reports partial grading when a review batch fails, instead of reading as clean', async () => {
+    const many = Array.from({ length: 48 }, (_, i) => memory(i + 1));
+    mocks.contributions.mockResolvedValue(contributions([]));
+    mocks.listMemories.mockResolvedValue({ memories: many, total: 48, truncated: false });
+    // First batch errors, second succeeds.
+    mocks.complete
+      .mockRejectedValueOnce(new Error('upstream 529'))
+      .mockResolvedValue({ response: { status: 200 }, resolvedModel: 'claude-opus-5' });
+
+    const out = await analyzeProjectEvermindKnowledge(env, db, 7, 42);
+
+    expect(out.warning).toBeDefined();
+    expect(out.warning).toContain('1 of 2');
+    expect(out.warning).toContain('upstream 529');
   });
 });
 

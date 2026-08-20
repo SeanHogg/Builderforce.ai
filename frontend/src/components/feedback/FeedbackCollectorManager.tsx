@@ -18,6 +18,7 @@ import { AUTH_API_URL } from '@/lib/auth';
 import { useProjectScope } from '@/lib/ProjectScopeContext';
 import { feedbackApi, type FeedbackCollector, type CreateFeedbackCollectorResult } from '@/lib/feedbackApi';
 import { useCopyToClipboard } from '@/lib/useCopyToClipboard';
+import { useFormat } from "@/i18n/useFormat";
 
 const ingestBase = `${AUTH_API_URL}/api/feedback-ingest`;
 
@@ -121,6 +122,7 @@ function CollectorPanel({ collector, createdKey, projName, onChanged, setError }
   onChanged: () => void;
   setError: (s: string | null) => void;
 }) {
+    const fmt = useFormat();
   const t = useTranslations('feedback');
   const confirm = useConfirm();
   const [limit, setLimit] = useState(String(collector.dailyLimit));
@@ -156,7 +158,7 @@ function CollectorPanel({ collector, createdKey, projName, onChanged, setError }
             <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--text-muted)', fontWeight: 400 }}>
               {projName(collector.projectId)} · {collector.enabled ? t('setup.enabled') : t('setup.paused')}
               {collector.lastSubmissionAt
-                ? ` · ${t('setup.lastSubmission')} ${new Date(collector.lastSubmissionAt).toLocaleString()}`
+                ? ` · ${t('setup.lastSubmission')} ${fmt.dateTime(collector.lastSubmissionAt)}`
                 : ''}
             </span>
           </span>

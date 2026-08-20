@@ -18,6 +18,7 @@ import {
   type MySession, type MyAdminAccessSession,
 } from '@/lib/builderforceApi';
 import { SessionList } from '@/components/security/SessionList';
+import { useFormat } from "@/i18n/useFormat";
 
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
@@ -33,6 +34,7 @@ const sectionTitle: React.CSSProperties = {
 };
 
 export default function AccountSecurityPanel() {
+    const fmt = useFormat();
   const t = useTranslations('security');
 
   const [mySessions, setMySessions] = useState<MySession[]>([]);
@@ -109,7 +111,7 @@ export default function AccountSecurityPanel() {
                       </span>
                     </div>
                     <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>
-                      {new Date(s.startedAt).toLocaleString()}
+                      {fmt.dateTime(s.startedAt)}
                       {' · '}{t('duration')}: {durStr}
                       {s.writeBlockCount > 0 && (
                         <span style={{ color: 'var(--warning-text, var(--warning))', marginLeft: 6 }}>({t('writeBlocked', { count: s.writeBlockCount })})</span>

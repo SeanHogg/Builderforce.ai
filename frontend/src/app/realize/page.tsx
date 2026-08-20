@@ -18,6 +18,7 @@ import {
   type RealizationRecommendation,
   type RealizationTargetSummary,
 } from '@/lib/builderforceApi';
+import { useFormat } from "@/i18n/useFormat";
 
 /**
  * Realize — idea in, something a person can open out.
@@ -294,6 +295,7 @@ function VerdictCard({
   abandoning: boolean;
   t: ReturnType<typeof useTranslations>;
 }) {
+    const fmt = useFormat();
   const { verdict, verdictMetric, decidedAt } = realization;
 
   if (!verdict) {
@@ -336,7 +338,7 @@ function VerdictCard({
         </span>
         {decidedAt && (
           <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-            {t('decidedOn', { date: new Date(decidedAt).toLocaleDateString() })}
+            {t('decidedOn', { date: fmt.date(decidedAt) })}
           </span>
         )}
       </div>

@@ -4,6 +4,7 @@ import type { CSSProperties } from 'react';
 import { useTranslations } from 'next-intl';
 import type { MemberScorecard, MemberEngagement } from '@/lib/builderforceApi';
 import { fmtScore, scoreColor, ENGAGEMENT_LEVEL_COLOR } from './workforceFormat';
+import { useFormat } from "@/i18n/useFormat";
 
 /**
  * Compact per-member stats strip shared by every Workforce directory card. Folds
@@ -38,6 +39,7 @@ export function MemberStatsStrip({
   scorecard?: MemberScorecard;
   engagement?: MemberEngagement;
 }) {
+    const fmt = useFormat();
   const t = useTranslations('workforce.stats');
 
   // Activity (contribution events) comes from the engagement signals — the same
@@ -75,7 +77,7 @@ export function MemberStatsStrip({
       {activity != null && (
         <StatChip
           label={t('activity')}
-          value={activity.toLocaleString()}
+          value={fmt.number(activity)}
           title={t('activityTip')}
         />
       )}

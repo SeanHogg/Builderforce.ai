@@ -26,6 +26,7 @@ import {
   type SiteRecord,
   type SiteTrafficSummary,
 } from '@/lib/growthApi';
+import { useFormat } from "@/i18n/useFormat";
 
 // ---------------------------------------------------------------------------
 // Shared chrome
@@ -245,6 +246,7 @@ export function SiteDomainPanel({ projectId }: { projectId: number }) {
 // ---------------------------------------------------------------------------
 
 export function SiteFormsPanel({ projectId }: { projectId: number }) {
+    const fmt = useFormat();
   const t = useTranslations('site.forms');
   const [collections, setCollections] = useState<SiteCollection[] | null>(null);
   const [openId, setOpenId] = useState<number | null>(null);
@@ -356,7 +358,7 @@ export function SiteFormsPanel({ projectId }: { projectId: number }) {
                       {records.map((record) => (
                         <tr key={record.id} style={{ borderTop: '1px solid var(--border)' }}>
                           <td style={{ padding: 6, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
-                            {new Date(record.createdAt).toLocaleString()}
+                            {fmt.dateTime(record.createdAt)}
                           </td>
                           <td style={{ padding: 6, color: 'var(--text-primary, var(--bg-elevated))' }}>{record.email ?? '—'}</td>
                           <td style={{ padding: 6, color: 'var(--text-primary, var(--bg-elevated))' }}>
@@ -482,6 +484,7 @@ export function SiteTrafficPanel({ projectId }: { projectId: number }) {
 }
 
 function Stat({ label: name, value }: { label: string; value: number }) {
+    const fmt = useFormat();
   return (
     <div style={{
       border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: 10,
@@ -489,7 +492,7 @@ function Stat({ label: name, value }: { label: string; value: number }) {
     }}>
       <div style={label}>{name}</div>
       <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary, var(--bg-elevated))' }}>
-        {value.toLocaleString()}
+        {fmt.number(value)}
       </div>
     </div>
   );

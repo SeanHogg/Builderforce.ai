@@ -18,6 +18,7 @@ import { WorkflowRunHistoryPanel } from './WorkflowRunHistoryPanel';
 import { ViewToggle, type ViewMode } from './ViewToggle';
 import { tableWrapStyle, tableStyle } from './dataTableStyles';
 import { cardStyle, subtleBtn, StatusPill } from './workflowRunUi';
+import { useFormat } from "@/i18n/useFormat";
 
 interface WorkflowsContentProps {
   projectId?: number | null;
@@ -107,6 +108,7 @@ function WorkflowDefCard({
   onDelete: (d: WorkflowDefinitionSummary) => void;
   running: boolean;
 }) {
+    const fmt = useFormat();
   const t = useTranslations('workflowsContent');
   const tc = useTranslations('common');
   return (
@@ -134,7 +136,7 @@ function WorkflowDefCard({
 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 'auto' }}>
         <RunStats def={def} />
-        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('updated', { date: new Date(def.updatedAt).toLocaleDateString() })}</span>
+        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('updated', { date: fmt.date(def.updatedAt) })}</span>
       </div>
 
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -156,6 +158,7 @@ function WorkflowDefCard({
 }
 
 export function WorkflowsContent({ projectId }: WorkflowsContentProps) {
+    const fmt = useFormat();
   const router = useRouter();
   const confirm = useConfirm();
   const tc = useTranslations('common');
@@ -346,7 +349,7 @@ export function WorkflowsContent({ projectId }: WorkflowsContentProps) {
                       <RunStats def={d} />
                     )}
                   </td>
-                  <td style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>{new Date(d.updatedAt).toLocaleDateString()}</td>
+                  <td style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>{fmt.date(d.updatedAt)}</td>
                   <td style={{ padding: '12px 16px' }}>
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                       <button type="button" onClick={() => openDef(d)} style={subtleBtn}>{t('open')}</button>

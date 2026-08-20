@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { cronApi, type CronJob } from '@/lib/builderforceApi';
+import { useFormat } from "@/i18n/useFormat";
 
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
@@ -31,6 +32,7 @@ export function CronJobsContent({
   className,
   style,
 }: CronJobsContentProps) {
+    const fmt = useFormat();
   const [jobs, setJobs] = useState<CronJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -214,7 +216,7 @@ export function CronJobsContent({
                 <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{job.lastStatus}</span>
               )}
               {job.lastRunAt && (
-                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Last: {new Date(job.lastRunAt).toLocaleString()}</span>
+                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Last: {fmt.dateTime(job.lastRunAt)}</span>
               )}
               <button
                 type="button"

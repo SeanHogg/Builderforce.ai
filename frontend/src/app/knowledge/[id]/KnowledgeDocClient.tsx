@@ -34,6 +34,7 @@ import {
   label,
   statusColorStyle,
 } from '../knowledgeStyles';
+import { useFormat } from "@/i18n/useFormat";
 
 const DOC_TYPES: DocType[] = ['sop', 'process', 'doc', 'postmortem', 'known_error'];
 
@@ -605,6 +606,7 @@ function AcknowledgeBanner({
   t: ReturnType<typeof useTranslations>;
   onAck: () => void;
 }) {
+    const fmt = useFormat();
   const [busy, setBusy] = useState(false);
   const current = doc.myAcknowledgement?.current;
   async function ack() {
@@ -635,7 +637,7 @@ function AcknowledgeBanner({
           <span>
             <Icon name="check" size={14} /> {t('youAcknowledged')}
             {doc.myAcknowledgement?.acknowledgedAt &&
-              ` — ${new Date(doc.myAcknowledgement.acknowledgedAt).toLocaleDateString()}`}
+              ` — ${fmt.date(doc.myAcknowledgement.acknowledgedAt)}`}
           </span>
         ) : (
           <span>{doc.requiresAck ? t('ackRequiredPrompt') : t('ackPrompt')}</span>
@@ -1058,6 +1060,7 @@ function ListingControl({ docId, t }: { docId: string; t: ReturnType<typeof useT
 }
 
 function VersionHistory({ docId, t }: { docId: string; t: ReturnType<typeof useTranslations> }) {
+    const fmt = useFormat();
   const [versions, setVersions] = useState<DocVersion[]>([]);
   const [open, setOpen] = useState(false);
 
@@ -1087,7 +1090,7 @@ function VersionHistory({ docId, t }: { docId: string; t: ReturnType<typeof useT
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
                 <strong>v{v.versionNumber}</strong>
                 <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                  {new Date(v.createdAt).toLocaleString()}
+                  {fmt.dateTime(v.createdAt)}
                 </span>
               </div>
               {v.changeNote && <div style={{ fontSize: 13, marginTop: 4 }}>{v.changeNote}</div>}

@@ -4,6 +4,7 @@ import { useTranslations } from 'next-intl';
 import type { CreationNodeData } from './types';
 import styles from './CreationCanvas.module.css';
 import { LEGAL_DOCUMENT_CATEGORIES, uploadLegalDocumentFile, type LegalDocumentCategory } from '@/lib/legalDocumentApi';
+import { useFormat } from "@/i18n/useFormat";
 
 /** Mirrors the backend's own bound (`legalDocumentStore.ts`'s `MAX_BYTES`), so an
  *  oversized file is refused HERE rather than after a full upload attempt. */
@@ -27,6 +28,7 @@ export function CanvasLegalDocumentUpload({ objectId, data, onEdit }: {
   data: CreationNodeData;
   onEdit?: (patch: Partial<CreationNodeData>) => void;
 }) {
+    const fmt = useFormat();
   const t = useTranslations('creationCanvas.legalUpload');
   const input = useRef<HTMLInputElement>(null);
   const [category, setCategory] = useState<LegalDocumentCategory>(
@@ -86,7 +88,7 @@ export function CanvasLegalDocumentUpload({ objectId, data, onEdit }: {
       </button>
       {hasFile && (
         <small>
-          {t('currentFile', { kb: Math.max(1, Math.ceil(Number(data.byteSize ?? 0) / 1024)).toLocaleString() })}
+          {t('currentFile', { kb: fmt.number(Math.max(1, Math.ceil(Number(data.byteSize ?? 0) / 1024))) })}
         </small>
       )}
       {error && <p role="alert" className={styles.legalUploadError}>{error}</p>}

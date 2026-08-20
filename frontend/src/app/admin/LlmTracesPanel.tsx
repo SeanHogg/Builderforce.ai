@@ -13,6 +13,7 @@ import { useTranslations } from 'next-intl';
 import { useCallback, useEffect, useState } from 'react';
 import { adminApi } from '@/lib/adminApi';
 import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
+import { useFormat } from "@/i18n/useFormat";
 
 interface Attempt {
   model: string;
@@ -110,6 +111,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 export function LlmTracesPanel() {
+    const fmt = useFormat();
   const t = useTranslations('admin');
   const [query, setQuery] = useState('');
   const [traces, setTraces] = useState<TraceSummary[]>([]);
@@ -217,7 +219,7 @@ export function LlmTracesPanel() {
                   }}
                 >
                   <td style={{ padding: '7px 10px', color: muted, whiteSpace: 'nowrap' }}>
-                    {t.createdAt ? new Date(t.createdAt).toLocaleString() : '—'}
+                    {t.createdAt ? fmt.dateTime(t.createdAt) : '—'}
                   </td>
                   <td style={{ padding: '7px 10px', fontFamily: 'monospace', fontSize: 'var(--font-size-eyebrow)' }}>
                     {t.traceId.replace(/^llm-/, '').slice(0, 8)}…
@@ -264,7 +266,7 @@ export function LlmTracesPanel() {
                 </div>
                 <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-primary)', wordBreak: 'break-word' }}>{tr.resolvedModel ?? '—'}</div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 'var(--font-size-small)', color: muted }}>
-                  <span>{tr.createdAt ? new Date(tr.createdAt).toLocaleString() : '—'}</span>
+                  <span>{tr.createdAt ? fmt.dateTime(tr.createdAt) : '—'}</span>
                   <span>{t('traces.msValue', { value: tr.durationMs })}</span>
                 </div>
               </div>

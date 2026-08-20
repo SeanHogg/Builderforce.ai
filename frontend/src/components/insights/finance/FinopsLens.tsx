@@ -30,6 +30,7 @@ import {
   type SocControlStatus,
   type AuditReport,
 } from '@/lib/finopsApi';
+import { useFormat } from "@/i18n/useFormat";
 
 // 'finops.manage' is added to the RBAC capability map by the orchestrator-owned
 // rbac.ts merge; cast keeps this client typesafe until that lands.
@@ -338,6 +339,7 @@ function currentMonth(): string {
 }
 
 function AuditSection({ t }: { t: ReturnType<typeof useTranslations> }) {
+    const fmt = useFormat();
   const [period, setPeriod] = useState(currentMonth());
   const [report, setReport] = useState<AuditReport | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -403,7 +405,7 @@ function AuditSection({ t }: { t: ReturnType<typeof useTranslations> }) {
             <h3 style={{ margin: '0 0 8px' }}>{t('audit.controls')}</h3>
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
               <StatCard label={t('soc.coverage')} value={pct(report.socControls.coveragePct)} hint={t('soc.implementedOfTotal', { a: report.socControls.implemented, b: report.socControls.total })} />
-              <StatCard label={t('audit.evidenceEvents')} value={report.compliance.totalEvents.toLocaleString()} hint={t('audit.sensitive', { n: report.compliance.sensitiveEvents })} />
+              <StatCard label={t('audit.evidenceEvents')} value={fmt.number(report.compliance.totalEvents)} hint={t('audit.sensitive', { n: report.compliance.sensitiveEvents })} />
             </div>
           </div>
         </>

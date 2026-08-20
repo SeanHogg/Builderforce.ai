@@ -14,6 +14,7 @@ import { Icon } from '@/components/ui/Icon';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { LlmModelStatus } from '@/lib/adminApi';
+import { useFormat } from "@/i18n/useFormat";
 
 /** Normalize any thrown value to a display string. */
 export function errText(e: unknown): string {
@@ -159,6 +160,7 @@ export function ModelPoolBadges({
   keyPrefix: string;
   models: ReadonlyArray<LlmModelStatus>;
 }) {
+    const fmt = useFormat();
   const t = useTranslations('admin');
   if (models.length === 0) return null;
   return (
@@ -175,7 +177,7 @@ export function ModelPoolBadges({
               background: m.available ? 'var(--success-bg)' : 'var(--error-bg)',
               color: m.available ? 'var(--success-text)' : 'var(--error-text)',
             }}
-            title={m.cooldownUntil ? t('common.cooldownUntil', { time: new Date(m.cooldownUntil).toLocaleString() }) : m.available ? t('common.available') : t('common.unavailable')}
+            title={m.cooldownUntil ? t('common.cooldownUntil', { time: fmt.dateTime(m.cooldownUntil) }) : m.available ? t('common.available') : t('common.unavailable')}
           >
             {m.preferred ? <Icon source="★" size="1em" /> : ''}{m.model}
             {m.cooldownUntil && !m.available ? ` (${t('common.cooldown')})` : ''}

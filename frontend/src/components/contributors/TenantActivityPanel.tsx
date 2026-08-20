@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { analyticsApi, type TenantActivityRollup } from '@/lib/builderforceApi';
+import { useFormat } from "@/i18n/useFormat";
 
 /**
  * Owner-facing cross-project activity rollup — the whole tenant's activity from
@@ -38,6 +39,7 @@ function Spark({ daily, ariaLabel }: { daily: TenantActivityRollup['daily']; ari
 }
 
 export function TenantActivityPanel() {
+    const fmt = useFormat();
   const t = useTranslations('contributors');
   const [days, setDays] = useState(30);
   const [data, setData] = useState<TenantActivityRollup | null>(null);
@@ -71,10 +73,10 @@ export function TenantActivityPanel() {
       {data && (
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12, marginBottom: 12 }}>
-            <Stat label={t('tenant.events', { days: data.windowDays })} value={data.totalEvents.toLocaleString()} />
-            <Stat label={t('tenant.activeContributors')} value={data.activeContributors.toLocaleString()} />
-            <Stat label={t('tenant.linesAdded')} value={data.totals.linesAdded.toLocaleString()} accent="var(--success)" />
-            <Stat label={t('tenant.linesRemoved')} value={data.totals.linesRemoved.toLocaleString()} accent="var(--error)" />
+            <Stat label={t('tenant.events', { days: data.windowDays })} value={fmt.number(data.totalEvents)} />
+            <Stat label={t('tenant.activeContributors')} value={fmt.number(data.activeContributors)} />
+            <Stat label={t('tenant.linesAdded')} value={fmt.number(data.totals.linesAdded)} accent="var(--success)" />
+            <Stat label={t('tenant.linesRemoved')} value={fmt.number(data.totals.linesRemoved)} accent="var(--error)" />
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12 }}>
@@ -88,7 +90,7 @@ export function TenantActivityPanel() {
                 Object.entries(data.byType).sort((a, b) => b[1] - a[1]).map(([k, v]) => (
                   <div key={k} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '2px 0' }}>
                     <span style={{ color: 'var(--text-secondary)' }}>{typeLabel(k)}</span>
-                    <span style={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{v.toLocaleString()}</span>
+                    <span style={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{fmt.number(v)}</span>
                   </div>
                 ))}
             </div>
@@ -98,7 +100,7 @@ export function TenantActivityPanel() {
                 data.byRepository.slice(0, 8).map((r) => (
                   <div key={r.repository} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '2px 0', gap: 8 }}>
                     <span style={{ color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.repository}</span>
-                    <span style={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{r.count.toLocaleString()}</span>
+                    <span style={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{fmt.number(r.count)}</span>
                   </div>
                 ))}
             </div>
@@ -108,7 +110,7 @@ export function TenantActivityPanel() {
                 data.byProject.slice(0, 8).map((p) => (
                   <div key={p.projectId} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '2px 0', gap: 8 }}>
                     <span style={{ color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.projectName}</span>
-                    <span style={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{p.count.toLocaleString()}</span>
+                    <span style={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{fmt.number(p.count)}</span>
                   </div>
                 ))}
             </div>

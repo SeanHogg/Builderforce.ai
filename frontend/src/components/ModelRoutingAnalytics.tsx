@@ -9,6 +9,7 @@
 
 import { useEffect, useState } from 'react';
 import { llmApi, type ModelAnalyticsResponse } from '@/lib/builderforceApi';
+import { useFormat } from "@/i18n/useFormat";
 
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
@@ -33,6 +34,7 @@ function fmtUsd(millicents: number): string {
 }
 
 export function ModelRoutingAnalytics() {
+    const fmt = useFormat();
   const [scope, setScope] = useState<Scope>('tenant');
   const [data, setData] = useState<ModelAnalyticsResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -132,7 +134,7 @@ export function ModelRoutingAnalytics() {
           ))}
           {data.updatedAt && (
             <p style={{ margin: 0, fontSize: 12, color: 'var(--text-secondary)' }}>
-              Updated {new Date(data.updatedAt).toLocaleString()} · scope {data.scope}
+              Updated {fmt.dateTime(data.updatedAt)} · scope {data.scope}
             </p>
           )}
         </div>

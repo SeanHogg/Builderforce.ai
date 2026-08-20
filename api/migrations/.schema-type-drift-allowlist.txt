@@ -1,0 +1,6 @@
+# Columns whose Drizzle type and migration type are in different behavioural
+# families and cannot be reconciled yet. One `table.column` per line; add a note.
+#
+# EMPTY BY DESIGN - the six drifts the guard found on its first run (2026-08-19)
+# were all fixed rather than grandfathered. See DONE.md. If you are adding an
+# entry here, prefer correcting the Drizzle column or writing an ALTER.

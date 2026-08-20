@@ -10,6 +10,7 @@ import {
   type PullRequestDetail,
 } from '@/lib/builderforceApi';
 import { getMergeBlockReason } from './pullRequestMergeState';
+import { useFormat } from "@/i18n/useFormat";
 
 /**
  * In-product Pull Request review for a task's run. Shows the recorded PR + its
@@ -87,6 +88,7 @@ function BuildStatus({ status, error, phase, showValidating }: {
 }
 
 export function PullRequestPanel({ taskId, onMerged }: { taskId: number; onMerged?: () => void }) {
+    const fmt = useFormat();
   const [data, setData] = useState<TaskPullRequest | null>(null);
   const [loading, setLoading] = useState(true);
   const [method, setMethod] = useState<MergeMethod>('squash');
@@ -225,7 +227,7 @@ export function PullRequestPanel({ taskId, onMerged }: { taskId: number; onMerge
       {isMerged && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <div style={{ fontSize: 13, color: 'var(--success)' }}>
-            ✓ Merged{pr.mergedAt ? ` ${new Date(pr.mergedAt).toLocaleString()}` : ''}.
+            ✓ Merged{pr.mergedAt ? ` ${fmt.dateTime(pr.mergedAt)}` : ''}.
           </div>
           {/* Post-merge deploy-branch build validation (status + reason + auto-fix). */}
           <BuildStatus status={pr.buildStatus} error={pr.buildError} phase="post-merge" showValidating />

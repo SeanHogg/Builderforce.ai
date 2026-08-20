@@ -11,7 +11,7 @@ import {
   type TicketAutonomyVerdict,
   type TicketLifecycle,
 } from '@/lib/builderforceApi';
-import { taskStatusLabel } from '@/lib/taskStatus';
+import { useTaskStatusLabel } from '@/lib/taskStatusLabel';
 import { CopyButton } from '@/components/CopyButton';
 import { buildLifecycleDiagnosticsReport } from '@/lib/lifecycleDiagnostics';
 import { captureDiagnosticsContext } from '@/lib/diagnosticsCapture';
@@ -121,7 +121,7 @@ export function TicketLifecyclePanel({ taskId, onClose }: TicketLifecyclePanelPr
   // here would only let them drift.
   const tActor = useTranslations('audit.actor');
   const tReason = useTranslations('board.triage.reason');
-  const tLane = useTranslations('pm.epicStatus');
+  const laneLabel = useTaskStatusLabel();
   const locale = useLocale();
   // next-intl types a COMPUTED message key as `never`, which also collapses the
   // `values` argument to `undefined`. The verdict copy is addressed by the key that
@@ -158,15 +158,6 @@ export function TicketLifecyclePanel({ taskId, onClose }: TicketLifecyclePanelPr
     return Number.isNaN(d.getTime()) ? iso : fmt.format(d);
   }, [fmt]);
 
-  // Custom swimlanes carry keys outside the canonical status enum, so fall back to
-  // the humanized key rather than showing a raw `some_custom_lane`.
-  const laneLabel = useCallback(
-    (key: string | null | undefined): string => {
-      if (!key) return '—';
-      return tLane.has(key as never) ? tLane(key as never) : taskStatusLabel(key);
-    },
-    [tLane],
-  );
   const actorLabel = useCallback(
     (kind: LifecycleEvent['actorKind']): string => (tActor.has(kind as never) ? tActor(kind as never) : kind),
     [tActor],

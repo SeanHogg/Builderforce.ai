@@ -44,6 +44,7 @@ import {
   siteUsers,
 } from '../../infrastructure/database/schema';
 import { buildPaymentProvider } from '../../infrastructure/payment';
+import { assertCovers, verifyPaidCheckout } from '../finance/verifiedCheckout';
 import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { registerObject } from '../kernel/ObjectRegistry';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
@@ -273,21 +274,22 @@ export async function completeSiteSubscription(
     checkoutSessionId: string;
   },
 ): Promise<SiteSubscriptionView> {
-  if (!env.STRIPE_SECRET_KEY) {
-    throw new ListingError('Payments are not configured on this deployment', 400);
-  }
-  const session = await buildPaymentProvider(env).retrieveCheckoutSession(input.checkoutSessionId);
-  if (!session) throw new ListingError('That checkout could not be found', 404);
-  if (session.paymentStatus !== 'paid') throw new ListingError('That checkout has not been paid', 400);
-  if (session.metadata.purchaseKind !== PURCHASE_KIND) {
-    throw new ListingError('That checkout was not for an app subscription', 400);
-  }
-  // WITHOUT THIS, one person's paid session subscribes whoever pastes its id.
-  if (session.metadata.siteId !== String(input.siteId)
-    || session.metadata.siteUserId !== String(input.siteUserId)) {
-    throw new ListingError('That checkout belongs to someone else', 403);
-  }
-  const slug = session.metadata.listingSlug;
+  // The owner check here is the site USER, not a tenant: without it, one person's
+  // paid session subscribes whoever pastes its id.
+  const verified = await verifyPaidCheckout(env, {
+    checkoutSessionId: input.checkoutSessionId,
+    purchaseKind: PURCHASE_KIND,
+    owner: { siteId: input.siteId, siteUserId: input.siteUserId },
+    messages: {
+      notConfigured: 'Payments are not configured on this deployment',
+      notFound: 'That checkout could not be found',
+      notPaid: 'That checkout has not been paid',
+      wrongKind: 'That checkout was not for an app subscription',
+      notYours: 'That checkout belongs to someone else',
+    },
+    refuse: (message, status) => new ListingError(message, status),
+  });
+  const slug = verified.metadata.listingSlug;
   if (!slug) throw new ListingError('That checkout names no listing', 400);
 
   const [listing] = await db
@@ -301,9 +303,8 @@ export async function completeSiteSubscription(
   // The amount the processor actually captured must cover what is being granted,
   // or a subscriber could open checkout at $1 and complete it after the seller
   // raised the price.
-  if (session.amountTotalCents < priceCents) {
-    throw new ListingError('The payment does not cover this subscription', 400);
-  }
+  assertCovers(verified, priceCents, 'The payment does not cover this subscription',
+    (message, status) => new ListingError(message, status));
 
   const sellerRef = listing.publisherRef
     ?? (listing.body as { seller?: { userId?: string } } | null)?.seller?.userId
@@ -336,13 +337,13 @@ export async function completeSiteSubscription(
       tenantId: sellerTenantId,
       orderNumber,
       buyerRef: `site_user:${input.siteUserId}`,
-      buyerEmail: session.customerEmail,
+      buyerEmail: verified.customerEmail,
       currency: listing.currency ?? 'USD',
       subtotalCents: priceCents,
       totalCents: priceCents,
       status: 'paid',
       provider: 'stripe',
-      providerRef: session.subscriptionId ?? session.id,
+      providerRef: verified.session.subscriptionId ?? verified.session.id,
       fulfilledAt: new Date(),
     })
     .returning();
@@ -380,7 +381,7 @@ export async function completeSiteSubscription(
       status: 'active',
       priceCents,
       currency: listing.currency ?? 'USD',
-      providerRef: session.subscriptionId,
+      providerRef: verified.session.subscriptionId,
       snapshotId: heldSnapshotId,
       currentPeriodEnd: null,
     })
@@ -394,7 +395,7 @@ export async function completeSiteSubscription(
         cancelledAt: null,
         catalogItemId: listing.id,
         priceCents,
-        providerRef: session.subscriptionId,
+        providerRef: verified.session.subscriptionId,
         snapshotId: heldSnapshotId,
         updatedAt: new Date(),
       },

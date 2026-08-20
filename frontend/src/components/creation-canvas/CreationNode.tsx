@@ -94,6 +94,7 @@ import { allSpecObjectSpecs } from '@/lib/specObjects';
 // without a second list of them anywhere.
 import '@/lib/academicObjects';
 import { formatCents } from '@/lib/canvasMoney';
+import { useFormat } from "@/i18n/useFormat";
 
 export type CreationFlowNode = Node<CreationNodeData, 'creation'>;
 
@@ -527,6 +528,7 @@ function SocialFeedBody({ data }: { data: CreationNodeData }) {
 /** One pinned post. Unlike the feed tile this does NOT change — that is the reason
  *  it exists — so it shows the full text and its engagement at the time it was read. */
 function SocialPostBody({ data }: { data: CreationNodeData }) {
+    const fmt = useFormat();
   const t = useTranslations('creationCanvas.node');
   const metrics = asRecord(data.metrics, {});
   const permalink = textValue(data.permalink);
@@ -534,7 +536,7 @@ function SocialPostBody({ data }: { data: CreationNodeData }) {
   return <div className={styles.taskBody}>
     <div className={styles.taskFacts}>
       <span><small>{t('socialAccount')}</small><b>{`${networkGlyph(data.network)} ${textValue(data.accountName, '—')}`}</b></span>
-      <span><small>{t('socialPublished')}</small><b>{data.publishedAt ? new Date(String(data.publishedAt)).toLocaleDateString() : '—'}</b></span>
+      <span><small>{t('socialPublished')}</small><b>{data.publishedAt ? fmt.date(String(data.publishedAt)) : '—'}</b></span>
     </div>
     {thumbnail && <img className={styles.socialMedia} src={thumbnail} alt="" />}
     <div className={styles.taskContext}>
@@ -558,6 +560,7 @@ function SocialPostBody({ data }: { data: CreationNodeData }) {
  * its own outcome, because "3 of 5 published" without saying WHICH three is unusable.
  */
 function SocialCampaignBody({ data }: { data: CreationNodeData }) {
+    const fmt = useFormat();
   const t = useTranslations('creationCanvas.node');
   const posts = Array.isArray(data.posts) ? data.posts : [];
   // Blockers arrive as CODES so they can be read in the viewer's language. A legacy
@@ -581,7 +584,7 @@ function SocialCampaignBody({ data }: { data: CreationNodeData }) {
     <div className={styles.campaignStats}>
       <span><small>{t('socialPublishedCount')}</small><b>{stat(data.publishedCount)}/{stat(data.targets ?? posts.length)}</b></span>
       <span><small>{t('campaignFailed')}</small><b>{stat(data.failedCount)}</b></span>
-      <span><small>{t('socialScheduled')}</small><b>{scheduledAt ? new Date(scheduledAt).toLocaleDateString() : '—'}</b></span>
+      <span><small>{t('socialScheduled')}</small><b>{scheduledAt ? fmt.date(scheduledAt) : '—'}</b></span>
     </div>
     {textValue(data.body) && <div className={styles.taskContext}><small>{t('socialCopy')}</small><p>{String(data.body)}</p></div>}
     {posts.length > 0 && <ul className={styles.socialTargets}>
@@ -1076,6 +1079,7 @@ function MapBody({ data, onEdit, onReveal }: {
   /** Put the reader in front of another object — the dataset this map came from. */
   onReveal?: (nodeId: string) => void;
 }) {
+    const fmt = useFormat();
   const t = useTranslations('creationCanvas.node');
   const points = useMemo(() => sanitizeMapPoints(data.mapPoints), [data.mapPoints]);
   const region = useMemo(() => sanitizeGeoBounds(data.mapRegion), [data.mapRegion]);
@@ -1139,7 +1143,7 @@ function MapBody({ data, onEdit, onReveal }: {
   const selected = projection.points.find((point) => point.label === selectedLabel) ?? null;
   const ariaLabel = t('mapAria', {
     count: projection.points.length,
-    places: projection.points.slice(0, 12).map((point) => point.value != null ? `${point.label} (${point.value.toLocaleString()})` : point.label).join(', '),
+    places: projection.points.slice(0, 12).map((point) => point.value != null ? `${point.label} (${fmt.number(point.value)})` : point.label).join(', '),
   });
 
   /** Pointer position as a 0..1 fraction of the surface, for pointer-anchored zoom. */
@@ -1152,7 +1156,7 @@ function MapBody({ data, onEdit, onReveal }: {
   return (
     <div className={styles.mapBody}>
       <div className={styles.widgetContext}>
-        <span><small>{t('mapPlaces')}</small><b>{projection.points.length.toLocaleString()}</b></span>
+        <span><small>{t('mapPlaces')}</small><b>{fmt.number(projection.points.length)}</b></span>
         {typeof data.mapRegionName === 'string' && data.mapRegionName.trim() && <span><small>{t('mapRegion')}</small><b>{data.mapRegionName}</b></span>}
         {valueLabel && valued.length > 0 && <span><small>{t('mapSizedBy')}</small><b>{valueLabel}</b></span>}
       </div>
@@ -1224,7 +1228,7 @@ function MapBody({ data, onEdit, onReveal }: {
                 },
               } : {})}
             >
-              <title>{point.value != null ? `${point.label} — ${point.value.toLocaleString()}${valueLabel ? ` ${valueLabel}` : ''}` : point.label}</title>
+              <title>{point.value != null ? `${point.label} — ${fmt.number(point.value)}${valueLabel ? ` ${valueLabel}` : ''}` : point.label}</title>
             </circle>
           ))}
         </g>
@@ -1243,7 +1247,7 @@ function MapBody({ data, onEdit, onReveal }: {
 
       {selected && <div className={`${styles.mapSelection} nodrag`}>
         <b>{selected.label}</b>
-        {selected.value != null && <span>{selected.value.toLocaleString()}{valueLabel ? ` ${valueLabel}` : ''}</span>}
+        {selected.value != null && <span>{fmt.number(selected.value)}{valueLabel ? ` ${valueLabel}` : ''}</span>}
         <span>{t('mapAt', { lat: selected.lat.toFixed(3), lng: selected.lng.toFixed(3) })}</span>
         {sourceId && onReveal && (
           <button type="button" onClick={(event) => { event.stopPropagation(); onReveal(sourceId); }}>{t('mapOpenSource')}</button>
@@ -1280,6 +1284,7 @@ const DATA_GRID_VISIBLE_COLUMNS = 10;
  * object, so the canvas holds a working sheet rather than a picture of one.
  */
 function DataGridBody({ data, onEdit }: { data: CreationNodeData; onEdit?: (patch: Partial<CreationNodeData>) => void }) {
+    const fmt = useFormat();
   const t = useTranslations('creationCanvas.node');
   // A card re-renders on selection, drag, and every neighbouring edit. Normalizing
   // an imported workbook's rows is O(rows × columns) per sheet, so doing it inline
@@ -1401,7 +1406,7 @@ function DataGridBody({ data, onEdit }: { data: CreationNodeData; onEdit?: (patc
       {source.columns.length > columns.length ? ` · ${t('columnsHidden', { hidden: source.columns.length - columns.length })}` : ''}
     </p>
     {!!Object.keys(toneCounts).length && <div className={styles.dataGridTones}>
-      {Object.entries(toneCounts).map(([tone, count]) => <span key={tone} data-tone={tone}><i />{t(`tone_${tone}` as 'tone_success')}<b>{count.toLocaleString()}</b></span>)}
+      {Object.entries(toneCounts).map(([tone, count]) => <span key={tone} data-tone={tone}><i />{t(`tone_${tone}` as 'tone_success')}<b>{fmt.number(count)}</b></span>)}
     </div>}
     {/* A formula that failed is reported on the card rather than only inside the cell:
         one `#REF!` in a 500-row sheet is invisible, and every total downstream of it is
@@ -2017,6 +2022,7 @@ function EvermindRegion({ x, y, r, className, label, count, small = false }: { x
 }
 
 function ProjectComparisonBody({ data }: { data: CreationNodeData }) {
+    const fmt = useFormat();
   const t = useTranslations('creationCanvas.node');
   const projects = Array.isArray(data.projects) ? data.projects as Array<Record<string, unknown>> : [];
   const scored = projects.filter((project) => project.qualityScore != null && Number.isFinite(Number(project.qualityScore)));
@@ -2045,7 +2051,7 @@ function ProjectComparisonBody({ data }: { data: CreationNodeData }) {
       {projects.map((project, index) => <section key={`${index}-diagnostics`}><header><b>{String(project.name)}</b><span>{t('gapsCount', { count: Number(project.gapCount || 0) })}</span></header>{Array.isArray(project.diagnostics) && project.diagnostics.length ? project.diagnostics.slice(0, 5).map((raw, diagnosticIndex) => { const diagnostic = asRecord(raw, {}); return <div key={`${String(diagnostic.toolId)}-${diagnosticIndex}`}><span><Icon source={String(diagnostic.icon || 'apps')} size={14} /> {String(diagnostic.name || t('diagnostic'))}</span><b data-tone={scoreTone(diagnostic.score)}>{diagnostic.score == null ? '—' : Math.round(Number(diagnostic.score))}</b><small>{t('gapsCount', { count: Number(diagnostic.gapCount || 0) })}</small></div>; }) : <p>{t('noDiagnosticsRun')}</p>}</section>)}
     </div>
     <section className={styles.qualityRecommendations} aria-label={t('prioritizedRecommendations')}><header><b>{t('recommendedNextActions')}</b><span>{t('lowestScoringFirst')}</span></header>{recommendations.length ? recommendations.map((recommendation, index) => <article key={`${recommendation.project}-${String(recommendation.title)}-${index}`}><i>{index + 1}</i><div><b>{String(recommendation.title || t('reviewDiagnosticFinding'))}</b><p>{String(recommendation.detail || recommendation.diagnostic || '')}</p></div><span>{recommendation.project}<small>{String(recommendation.diagnostic || '')}</small></span></article>) : <p>{t('runQualityDiagnostics')}</p>}</section>
-    <small>{t('freshness', { at: typeof data.fetchedAt === 'string' ? new Date(data.fetchedAt).toLocaleString() : t('draft') })}</small>
+    <small>{t('freshness', { at: typeof data.fetchedAt === 'string' ? fmt.dateTime(data.fetchedAt) : t('draft') })}</small>
   </div>;
 }
 
@@ -2674,17 +2680,6 @@ export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenD
   // PERSON chose and the board stores, which is why they arrive as inline style and
   // not as a theme token — see `authoredColors.ts`.
   const stickyStyle = data.kind === 'sticky' ? { background: String(data.stickyColor || STICKY_COLORS[0]) } : undefined;
-  // THE GEOMETRY, DRAWN — the reason `stickyShape` has been written since the Miro
-  // importer shipped. An imported ellipse arrived as a sticky that REMEMBERED it was an
-  // ellipse and was still drawn as a square card, so a migrated diagram looked like a
-  // wall of notes and the field was a fact nothing acted on.
-  //
-  // It is an ATTRIBUTE and a stylesheet rather than a render branch for the same reason
-  // the sticky's own chrome is hidden in CSS: the card keeps ONE structure, and a shape
-  // is a treatment of that structure, not a different component. Anything the importer
-  // wrote that this stylesheet has no rule for still lands as the square card it does
-  // today — an unknown geometry must degrade to a legible note, never to nothing.
-  const stickyShape = data.kind === 'sticky' && typeof data.stickyShape === 'string' && data.stickyShape ? data.stickyShape : undefined;
   const cardStyle = { ...frameStyle, ...stickyStyle, ...authoredSize };
   // `data-testid` is per KIND, not per instance: a test asks for "the testCase card",
   // and an id built from the node's uuid would change every run. The instance is
@@ -2791,7 +2786,7 @@ export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenD
   );
 
   return (
-    <article style={cardStyle} data-testid={`canvas-node-${data.kind}`} data-node-id={id} data-node-kind={data.kind} data-sticky-shape={stickyShape} data-viewport={data.viewport} data-density={density} className={`${styles.node} ${styles[`node_${data.kind}`]} ${selected ? styles.selected : ''} ${isWide ? styles.wideNode : ''}`}>
+    <article style={cardStyle} data-testid={`canvas-node-${data.kind}`} data-node-id={id} data-node-kind={data.kind} data-viewport={data.viewport} data-density={density} className={`${styles.node} ${styles[`node_${data.kind}`]} ${selected ? styles.selected : ''} ${isWide ? styles.wideNode : ''}`}>
       <NodeResizer isVisible={selected} minWidth={240} minHeight={130} lineClassName={styles.resizeLine} handleClassName={styles.resizeHandle} />
       <Handle type="target" position={Position.Left} className={styles.handle} />
       <header className={styles.nodeHeader}>

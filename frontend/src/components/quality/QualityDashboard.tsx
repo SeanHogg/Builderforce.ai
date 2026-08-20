@@ -14,6 +14,7 @@ import { ErrorGroupDetail } from './ErrorGroupDetail';
 import { QualityStatsPanel } from './QualityStatsPanel';
 import { ErrorConsumptionCard } from './ErrorConsumptionCard';
 import { LEVELS, STATUSES, LEVEL_COLOR, STATUS_COLOR } from './qualityColors';
+import { useFormat } from "@/i18n/useFormat";
 
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 16,
@@ -37,6 +38,7 @@ function Badge({ text, color }: { text: string; color: string }) {
  * a Card|List toggle. A row opens the detail drawer where a fix is dispatched.
  */
 export function QualityDashboard() {
+  const fmt = useFormat();
   const t = useTranslations('quality');
   const tCommon = useTranslations('common');
   const { currentProjectId } = useProjectScope();
@@ -104,7 +106,6 @@ export function QualityDashboard() {
     );
   }, [currentProjectId, status, level]);
 
-  const fmt = (iso: string) => new Date(iso).toLocaleString();
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }} data-tour="demo-quality">
@@ -163,7 +164,7 @@ export function QualityDashboard() {
                   <td style={tdStyle}><Badge text={t(`status.${g.status}`)} color={STATUS_COLOR[g.status] ?? 'var(--text-muted)'} /></td>
                   <td style={tdStyle}>{g.eventCount}</td>
                   <td style={tdStyle}>{g.userCount}</td>
-                  <td style={tdStyle}>{fmt(g.lastSeen)}</td>
+                  <td style={tdStyle}>{fmt.dateTime(g.lastSeen)}</td>
                 </tr>
               ))}
             </tbody>
@@ -181,7 +182,7 @@ export function QualityDashboard() {
               <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                 {t('card.meta', { events: g.eventCount, users: g.userCount })}
               </div>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>{fmt(g.lastSeen)}</div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>{fmt.dateTime(g.lastSeen)}</div>
             </button>
           ))}
         </div>

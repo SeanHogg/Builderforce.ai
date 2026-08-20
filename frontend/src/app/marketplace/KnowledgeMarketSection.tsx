@@ -36,6 +36,39 @@ export function KnowledgeMarketSection({ search = '' }: { search?: string }) {
     knowledgeApi.publicListings().then(setListings).catch(() => setListings([]));
   }, []);
 
+  // THE RETURN LEG. The processor sends the buyer back here with the session it
+  // minted; nothing has been granted yet, and the server re-reads that session
+  // from the processor before it records anything. Completing then installing is
+  // the same two steps `acquire` takes for a free listing — the purchase is what
+  // unlocks the install, not the redirect.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const checkout = params.get('checkout');
+    if (!checkout) return;
+    // Clear it first, so a refresh cannot re-run a completed purchase.
+    const clean = new URL(window.location.href);
+    clean.searchParams.delete('checkout');
+    clean.searchParams.delete('listing');
+    window.history.replaceState({}, '', clean.toString());
+
+    if (checkout === 'cancelled') {
+      setError(t('checkoutCancelled'));
+      return;
+    }
+    const listingId = params.get('listing');
+    if (!listingId) return;
+
+    setInstalling(listingId);
+    knowledgeApi
+      .completeCheckout(listingId, checkout)
+      .then(() => knowledgeApi.installListing(listingId))
+      .then(({ documentId }) => router.push(`/knowledge/${documentId}`))
+      .catch(() => {
+        setError(t('checkoutFailed'));
+        setInstalling(null);
+      });
+  }, [router, t]);
+
   // The feed is one bounded page of listings, so the shared search box filters
   // it here rather than costing a round-trip per keystroke.
   const q = search.trim().toLowerCase();
@@ -56,18 +89,28 @@ export function KnowledgeMarketSection({ search = '' }: { search?: string }) {
     setError(null);
     try {
       if (listing.priceCents > 0) {
-        const res = await knowledgeApi.checkoutListing(listing.id);
-        if (res.requiresConfig) {
+        const res = await knowledgeApi.checkoutListing(listing.id, window.location.href);
+        // A listing already owned, or one that turned out to be free, installs
+        // straight away. Anything else needs paying for first, and the buyer
+        // comes back to the effect above.
+        if (res.checkoutUrl) {
+          window.location.assign(res.checkoutUrl);
+          return;
+        }
+        if (!res.purchased && !res.free) {
           setError(t('checkoutUnavailable'));
           setInstalling(null);
           return;
         }
-        // res.purchased (paid, recorded) or res.free — both allow install below.
       }
       const { documentId } = await knowledgeApi.installListing(listing.id);
       router.push(`/knowledge/${documentId}`);
-    } catch {
-      setError(t('installFailed'));
+    } catch (err) {
+      // The server's own refusal says something the generic message cannot —
+      // "you already own this" is not "couldn't add this". Fall back only when
+      // there is nothing better to say.
+      const message = err instanceof Error && err.message ? err.message : t('installFailed');
+      setError(message);
       setInstalling(null);
     }
   }

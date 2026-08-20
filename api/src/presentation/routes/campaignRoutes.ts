@@ -28,16 +28,18 @@ import {
   listSenders,
   recordClick,
   recordOpen,
+  recordSmsDeliveryStatus,
   recordUnsubscribe,
   resolveTrackingOrigin,
   runCampaignBatch,
   startCampaign,
   suppressEmails,
   updateCampaign,
+  verifyCampaignSmsCallback,
   verifySender,
   TRACKING_PIXEL,
 } from '../../application/marketing/campaignEngine';
-import { isCampaignTransport } from '../../application/marketing/campaignTransports';
+import { isCampaignChannel, isCampaignTransport } from '../../application/marketing/campaignTransports';
 import {
   createAsset,
   createAssetFromSource,
@@ -56,6 +58,22 @@ import {
   maxAssetBytes,
 } from '../../application/marketing/templateLibrary';
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
+
+/**
+ * Sentinel for "the caller sent a send time and it was not a date".
+ *
+ * A distinct value rather than `null`, because `null` already MEANS something
+ * here — un-schedule this campaign — and collapsing the two would turn a typo'd
+ * timestamp into a silent cancellation of the schedule the author set.
+ */
+const INVALID_DATE = Symbol('invalid-date');
+
+function parseScheduledAt(value: unknown): Date | null | typeof INVALID_DATE {
+  if (value === null || value === undefined || value === '') return null;
+  if (typeof value !== 'string') return INVALID_DATE;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? INVALID_DATE : parsed;
+}
 
 export function createGrowthRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -81,7 +99,8 @@ export function createGrowthRoutes(db: Db): Hono<HonoEnv> {
   router.post('/audiences/:id/members', manager, async (c) => {
     const audienceId = Number(c.req.param('id'));
     if (!Number.isInteger(audienceId)) return c.json({ error: 'Invalid audience id.' }, 400);
-    const body = await c.req.json<{ members?: Array<{ email: string; name?: string }> }>().catch(() => ({}) as never);
+    const body = await c.req.json<{ members?: Array<{ email: string; name?: string; phone?: string }> }>()
+      .catch(() => ({}) as never);
     const members = Array.isArray(body.members) ? body.members.slice(0, 5_000) : [];
     if (members.length === 0) return c.json({ error: 'Add at least one email address.' }, 400);
     const result = await addAudienceMembers(db, c.get('tenantId') as number, audienceId,
@@ -129,30 +148,42 @@ export function createGrowthRoutes(db: Db): Hono<HonoEnv> {
 
   router.post('/campaigns', manager, async (c) => {
     const body = await c.req.json<{
-      name?: string; audienceId?: number; subject?: string; bodyHtml?: string;
+      name?: string; audienceId?: number; subject?: string; bodyHtml?: string; bodyText?: string;
       senderIdentityId?: number; projectId?: number; sessionId?: string;
-      transport?: string; mailboxConnectionId?: number; connectorConnectionId?: string;
-      templateId?: number; fromName?: string;
+      channel?: string; transport?: string; mailboxConnectionId?: number; connectorConnectionId?: string;
+      templateId?: number; fromName?: string; fromNumber?: string; scheduledAt?: string;
     }>().catch(() => ({}) as never);
     if (!body.name?.trim()) return c.json({ error: 'Name the campaign.' }, 400);
     if (!Number.isInteger(body.audienceId)) return c.json({ error: 'Pick an audience.' }, 400);
-    // An unrecognised transport is rejected rather than silently defaulted: the
-    // caller asked to send through something specific, and quietly using the
-    // platform sender instead would deliver from the wrong identity.
+    // An unrecognised channel or transport is rejected rather than silently
+    // defaulted: the caller asked to send something specific through something
+    // specific, and quietly picking for them delivers the wrong thing from the
+    // wrong identity. The channel/transport COMBINATION is checked by
+    // `createCampaign`, which owns that rule for every caller.
+    if (body.channel !== undefined && !isCampaignChannel(body.channel)) {
+      return c.json({ error: 'Unknown channel.' }, 400);
+    }
     if (body.transport !== undefined && !isCampaignTransport(body.transport)) {
       return c.json({ error: 'Unknown transport.' }, 400);
     }
+    const scheduledAt = parseScheduledAt(body.scheduledAt);
+    if (scheduledAt === INVALID_DATE) return c.json({ error: 'That send time is not a valid date.' }, 400);
+
     const result = await createCampaign(db, c.get('tenantId') as number, {
       name: body.name,
       audienceId: Number(body.audienceId),
       subject: body.subject,
       bodyHtml: body.bodyHtml,
+      bodyText: body.bodyText,
       senderIdentityId: body.senderIdentityId ?? null,
-      transport: body.transport,
+      ...(isCampaignChannel(body.channel) ? { channel: body.channel } : {}),
+      ...(isCampaignTransport(body.transport) ? { transport: body.transport } : {}),
       mailboxConnectionId: body.mailboxConnectionId ?? null,
       connectorConnectionId: body.connectorConnectionId ?? null,
       templateId: body.templateId ?? null,
       fromName: body.fromName,
+      fromNumber: body.fromNumber ?? null,
+      scheduledAt,
       projectId: body.projectId ?? null,
       sessionId: body.sessionId ?? null,
     });
@@ -163,12 +194,27 @@ export function createGrowthRoutes(db: Db): Hono<HonoEnv> {
   router.patch('/campaigns/:id', manager, async (c) => {
     const campaignId = Number(c.req.param('id'));
     if (!Number.isInteger(campaignId)) return c.json({ error: 'Invalid campaign id.' }, 400);
-    const body = await c.req.json<Record<string, never>>().catch(() => ({}) as never);
-    const transport = (body as { transport?: unknown }).transport;
+    const body = await c.req.json<Record<string, unknown>>().catch(() => ({}) as never);
+    const { channel, transport, scheduledAt: rawScheduledAt, ...rest } = body;
+    if (channel !== undefined && !isCampaignChannel(channel)) {
+      return c.json({ error: 'Unknown channel.' }, 400);
+    }
     if (transport !== undefined && !isCampaignTransport(transport)) {
       return c.json({ error: 'Unknown transport.' }, 400);
     }
-    const result = await updateCampaign(db, c.get('tenantId') as number, campaignId, body);
+    // `scheduledAt` crosses the wire as an ISO string and the column is a
+    // timestamp, so it is converted HERE rather than handed to the service as a
+    // string it would silently store wrong. An explicit `null` clears the
+    // schedule, which is how a campaign is un-scheduled.
+    const scheduledAt = rawScheduledAt === undefined ? undefined : parseScheduledAt(rawScheduledAt);
+    if (scheduledAt === INVALID_DATE) return c.json({ error: 'That send time is not a valid date.' }, 400);
+
+    const result = await updateCampaign(db, c.get('tenantId') as number, campaignId, {
+      ...rest,
+      ...(isCampaignChannel(channel) ? { channel } : {}),
+      ...(isCampaignTransport(transport) ? { transport } : {}),
+      ...(scheduledAt !== undefined ? { scheduledAt } : {}),
+    });
     if (!result.ok) return c.json({ error: result.error }, result.status);
     return c.json(result.campaign);
   });
@@ -408,6 +454,70 @@ export function createCampaignTrackRoutes(db: Db): Hono<HonoEnv> {
       ? `${escapeHtml(email)} has been unsubscribed. You will not receive further emails.`
       : 'This unsubscribe link is no longer valid.';
     return c.html(unsubscribePage(message));
+  });
+
+  /**
+   * Twilio's delivery-status callback for one SMS.
+   *
+   * ── WHY IT LIVES ON THIS ROUTER ─────────────────────────────────────────
+   * It is the same shape as the three above: a carrier — not a person, not a
+   * session — addressing exactly one send by its unguessable token. Putting it
+   * behind `authMiddleware` would mean Twilio could never call it, and minting a
+   * second identifier for it would be a second thing to keep unique when the
+   * track token already is.
+   *
+   * ── ANSWERS 204 EVEN WHEN THE TOKEN IS UNKNOWN ─────────────────────────
+   * Twilio retries a callback that does not return 2xx, so a 404 for a send that
+   * was deleted would become a retry loop that never converges. The token is the
+   * only addressing there is, and a wrong one simply has nothing to record.
+   *
+   * ── SIGNATURE ───────────────────────────────────────────────────────────
+   * Verified when the connection's credentials are an Account SID + Auth Token,
+   * which is the only pair Twilio signs with. A connection using an API key
+   * (`SK…`) genuinely cannot be verified — Twilio does not sign with API key
+   * secrets — and falls back to the unguessable token, which is the same access
+   * model the open pixel and the unsubscribe link already run on. What a forged
+   * callback could do is bounded to the worst case of "one message's delivery
+   * state is wrong", which is why the fallback is acceptable rather than a hole.
+   */
+  router.post('/sms-status/:token', async (c) => {
+    const form = await c.req.formData().catch(() => null);
+    if (!form) return c.body(null, 204);
+    const params: Array<[string, string]> = [];
+    for (const [key, value] of form.entries()) {
+      if (typeof value === 'string') params.push([key, value]);
+    }
+    const read = (key: string) => params.find(([k]) => k === key)?.[1] ?? '';
+
+    const status = read('MessageStatus') || read('SmsStatus');
+    if (!status) return c.body(null, 204);
+
+    const verified = await verifyCampaignSmsCallback(db, c.env as Env, {
+      trackToken: c.req.param('token'),
+      url: c.req.url,
+      signature: c.req.header('x-twilio-signature') ?? null,
+      formParams: params,
+    }).catch(() => ({ ok: false as const, reason: 'verification failed' }));
+    if (!verified.ok) {
+      // A signature that is PRESENT and WRONG is a forgery attempt, not a
+      // configuration gap — refused loudly rather than recorded.
+      reportCaughtError(new Error(`Twilio status callback rejected: ${verified.reason}`), {
+        source: 'presentation/routes/campaignRoutes.ts',
+        operation: 'smsStatusCallback',
+      });
+      return c.body(null, 403);
+    }
+
+    await recordSmsDeliveryStatus(db, c.req.param('token'), status, {
+      messageSid: read('MessageSid') || read('SmsSid') || null,
+      errorCode: read('ErrorCode') || null,
+    }).catch((error) => {
+      reportCaughtError(error, {
+        source: 'presentation/routes/campaignRoutes.ts',
+        operation: 'recordSmsDeliveryStatus',
+      });
+    });
+    return c.body(null, 204);
   });
 
   return router;

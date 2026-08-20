@@ -72,6 +72,7 @@ import {
   btnSubtle,
   type CloudAgentFormState,
 } from './CloudAgentFormFields';
+import { useFormat } from "@/i18n/useFormat";
 
 /**
  * Workforce → the unified directory of everyone in the workspace: human members,
@@ -99,6 +100,7 @@ const cardStyle: React.CSSProperties = {
 };
 
 export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
+    const fmt = useFormat();
   const { tenant, tenantToken } = useAuth();
   const confirm = useConfirm();
   const tWf = useTranslations('workforce');
@@ -503,7 +505,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
           {hosts.map((host) => {
             const connected = !!host.online;
             const isDefault = defaultAgentHostId != null && host.id === defaultAgentHostId;
-            const lastSeen = host.lastSeenAt ? new Date(host.lastSeenAt).toLocaleString() : '—';
+            const lastSeen = host.lastSeenAt ? fmt.dateTime(host.lastSeenAt) : '—';
             return (
               <div
                 key={`host-${host.id}`}
@@ -534,7 +536,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
           {/* VS Code editor connections — read-only presence cards (no mgmt panel) */}
           {vscodeConns.map((conn) => {
             const online = isVscodeConnectionOnline(conn);
-            const lastSeen = conn.lastSeenAt ? new Date(conn.lastSeenAt).toLocaleString() : '—';
+            const lastSeen = conn.lastSeenAt ? fmt.dateTime(conn.lastSeenAt) : '—';
             return (
               <div key={`vscode-${conn.id}`} className="card" style={cardStyle}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>

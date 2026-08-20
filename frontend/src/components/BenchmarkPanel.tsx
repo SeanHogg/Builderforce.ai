@@ -27,6 +27,7 @@ import {
   benchmarkPublishedModel,
   type PublishedEvermindModel,
 } from '@/lib/studioModelsApi';
+import { useFormat } from "@/i18n/useFormat";
 
 interface BenchmarkPanelProps {
   /** Optional initial corpus (e.g. text pulled from a project dataset). */
@@ -81,6 +82,7 @@ function underfit(result: Scorecard): boolean {
 }
 
 export function BenchmarkPanel({ initialCorpus }: BenchmarkPanelProps) {
+    const fmt = useFormat();
   const t = useTranslations('benchmark');
   const [mode, setMode] = useState<Mode>('train');
   const [corpus, setCorpus] = useState((initialCorpus ?? '').trim() || SAMPLE_CORPUS);
@@ -329,8 +331,8 @@ export function BenchmarkPanel({ initialCorpus }: BenchmarkPanelProps) {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 10 }}>
             {tile(t('metric.perplexity'), result.perplexity.toFixed(2), t('metric.lowerBetter'))}
             {tile(t('metric.bitsPerToken'), result.bitsPerToken.toFixed(2), t('metric.lowerBetter'))}
-            {tile(t('metric.throughput'), Math.round(result.tokensPerSecond ?? 0).toLocaleString(), t('unit.tokPerSec'))}
-            {tile(t('metric.vocab'), result.vocabSize.toLocaleString())}
+            {tile(t('metric.throughput'), fmt.number(Math.round(result.tokensPerSecond ?? 0)), t('unit.tokPerSec'))}
+            {tile(t('metric.vocab'), fmt.number(result.vocabSize))}
           </div>
 
           {/* Accuracy bars */}

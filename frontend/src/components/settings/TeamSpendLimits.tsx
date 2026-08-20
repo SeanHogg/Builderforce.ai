@@ -26,6 +26,7 @@ import {
   type SeatSpend,
   type SeatCapMode,
 } from '@/lib/spendLimits';
+import { useFormat } from "@/i18n/useFormat";
 
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
@@ -159,6 +160,7 @@ function SeatRow({
 }
 
 function TeamSpendInner() {
+    const fmt = useFormat();
   const t = useTranslations('settings');
   const tenant = getStoredTenant();
   const { allowed } = usePermission('billing.spendLimits');
@@ -259,7 +261,7 @@ function TeamSpendInner() {
           <div style={cardStyle}>
             <div style={sectionTitle}>{t('spendSeatsTitle')}</div>
             <p style={helpText}>
-              {t('spendResetsOn', { date: new Date(overview.periodResetsAt).toLocaleDateString() })}
+              {t('spendResetsOn', { date: fmt.date(overview.periodResetsAt) })}
             </p>
             {overview.seats.length === 0 ? (
               <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('spendNoSeats')}</div>

@@ -21,7 +21,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
 
 import { and, eq, desc, getTableColumns, inArray, isNotNull, sql, type SQL } from 'drizzle-orm';
 import { type ToolSchema } from '@builderforce/agent-tools';
-import { CREATIVE_CAPABILITIES } from '@builderforce/creation-canvas-contract';
+import { CREATIVE_CAPABILITIES, creativeOutputFormats, creativeOutputProfile } from '@builderforce/creation-canvas-contract';
 import { advertisedName } from './toolNaming';
 import { CAREER_TOOLS } from './careerToolCatalog';
 import { buildTransactionalDatabase, type Db } from '../../infrastructure/database/connection';
@@ -449,8 +449,11 @@ const CATALOG: BuiltinTool[] = [
       const capability = CREATIVE_CAPABILITIES.find((entry) => entry.kind === kind);
       if (!capability) throw new Error(`Unsupported creative kind '${kind}'.`);
       const requestedOutput = str(a.outputFormat).trim();
-      if (requestedOutput && !capability.outputs.some((output) => output.toLowerCase() === requestedOutput.toLowerCase())) {
-        throw new Error(`Unsupported ${kind} output '${requestedOutput}'. Supported outputs: ${capability.outputs.join(', ')}.`);
+      // Resolved through the PROFILE rather than a label list, so an accepted format also
+      // yields the extension and mime the artifact will carry — see `CreativeOutputProfile`.
+      const formats = creativeOutputFormats(kind);
+      if (requestedOutput && !creativeOutputProfile(kind, requestedOutput)) {
+        throw new Error(`Unsupported ${kind} output '${requestedOutput}'. Supported outputs: ${formats.join(', ')}.`);
       }
       return {
         manifestVersion: 1,
@@ -462,7 +465,7 @@ const CATALOG: BuiltinTool[] = [
         title: str(a.title).trim().slice(0, 200),
         brief: str(a.brief).trim().slice(0, 40_000),
         templateId: str(a.templateId).trim() || null,
-        outputFormat: requestedOutput || capability.outputs[0],
+        outputFormat: requestedOutput || formats[0],
         status: 'Draft',
       };
     },
@@ -492,6 +495,61 @@ const CATALOG: BuiltinTool[] = [
       '/api/tools/audits/privacy-compliance-audit/run',
       { projectId: num(a.projectId) },
     ),
+  },
+  {
+    tool: 'audits.report_findings',
+    mutates: true,
+    description:
+      'Report what a SYSTEM AUDIT deep pass actually found in the code, and re-score its report. '
+      + 'Call this at the END of a SOC 2 / Quality / PM Vision / Privacy audit workflow, once per run, with every finding. '
+      + 'Without it the diagnostic keeps showing the instant first-pass score derived from file paths alone, and everything the deep read discovered is lost. '
+      + 'auditId is the diagnostic id from the ticket that briefed you (e.g. "soc2-readiness-audit"). '
+      + 'severity: critical|high|medium|low|info — it decides how far the score moves, and `info` moves it not at all, so record an observation rather than withholding it. '
+      + 'Findings can only LOWER a score: a clean pass is still worth reporting (it records that somebody looked) but never raises the number.',
+    parameters: obj({
+      projectId: N,
+      auditId: S,
+      findings: {
+        type: 'array',
+        items: obj({
+          title: S,
+          detail: S,
+          severity: { type: 'string', enum: ['critical', 'high', 'medium', 'low', 'info'] },
+          location: S,
+          recommendation: S,
+        }, ['title']),
+      },
+    }, ['projectId', 'auditId', 'findings']),
+    run: async (ctx, a) => {
+      if (!ctx.env) throw new Error('Recording audit findings requires the platform environment.');
+      // Dynamic import for the same reason `session.current_model` uses one: the
+      // tools layer reaches back into this module through the diagnostics routes.
+      const { applyAuditFindings } = await import('../tools/auditDeepPass');
+      const { ToolService } = await import('../tools/ToolService');
+      const raw = Array.isArray(a.findings) ? a.findings : [];
+      const run = await applyAuditFindings(ctx.db, new ToolService(ctx.db), ctx.env, {
+        tenantId: ctx.tenantId,
+        projectId: num(a.projectId),
+        auditId: str(a.auditId),
+        findings: raw.map((f) => {
+          const row = f as Record<string, unknown>;
+          return {
+            title: str(row.title),
+            detail: row.detail != null ? str(row.detail) : null,
+            severity: row.severity != null ? (str(row.severity) as 'critical' | 'high' | 'medium' | 'low' | 'info') : undefined,
+            location: row.location != null ? str(row.location) : null,
+            recommendation: row.recommendation != null ? str(row.recommendation) : null,
+          };
+        }),
+        createdBy: ctx.userId ?? null,
+      });
+      if (!run) {
+        throw new Error(
+          'No first-pass report exists for that audit on that project — run the audit before reporting its findings, and check the auditId matches the ticket.',
+        );
+      }
+      return { recorded: raw.length, headline: run.result.headline, score: run.result.score };
+    },
   },
   // ---- Session ----
   {
@@ -2443,10 +2501,17 @@ const CATALOG: BuiltinTool[] = [
   // ---- CONNECTED MAILBOXES + EMAIL MARKETING -------------------------------
   //
   // What "show me my inbox and email that list" needs the model to be able to do.
-  // Five reads and three writes, split along the line that matters: reading a
-  // mailbox and drafting a campaign are safe to do speculatively, whereas
-  // `campaign.send` reaches thousands of real strangers and is the one call here
-  // that cannot be taken back.
+  // Five reads and four writes, split along the line that matters: reading a
+  // mailbox, drafting a campaign and SCHEDULING one are safe to do
+  // speculatively, whereas `campaign.send` reaches thousands of real strangers
+  // and is the one call here that cannot be taken back.
+  //
+  // `campaign.schedule` sits on the safe side of that line deliberately, and it
+  // is the interesting case: it is a WRITE that arranges a send, so the instinct
+  // is to gate it like one. It is not gated, because scheduling decides nothing
+  // — `startDueCampaigns` re-runs every precondition at the moment the campaign
+  // actually starts, and refuses there. A scheduled campaign that should not go
+  // does not go.
   //
   // Two design notes that are load-bearing rather than stylistic:
   //
@@ -2601,35 +2666,50 @@ const CATALOG: BuiltinTool[] = [
   },
   {
     tool: 'campaign.create', mutates: true,
-    description: 'Draft a marketing campaign against an audience. Creating it does NOT send it — the draft is reviewable and editable until campaign.send. Choose `transport`: "platform" (default) sends from a DNS-verified sender identity through Builderforce; "mailbox" sends from a connected Microsoft 365 / Gmail account (pass `mailboxConnectionId`); "sendgrid" sends through the workspace\'s Twilio SendGrid connection (pass `connectorConnectionId` AND a verified `senderIdentityId`, because SendGrid enforces its own sender verification). Pass `templateId` to inherit that template\'s subject and body, which are COPIED in — editing the template afterwards will not change this campaign.',
+    description: 'Draft a marketing campaign against an audience. Creating it does NOT send it — the draft is reviewable and editable until campaign.send. Choose `channel`: "email" (default) or "sms". For EMAIL, choose `transport`: "platform" (default) sends from a DNS-verified sender identity through Builderforce; "mailbox" sends from a connected Microsoft 365 / Gmail account (pass `mailboxConnectionId`); "sendgrid" sends through the workspace\'s Twilio SendGrid connection (pass `connectorConnectionId` AND a verified `senderIdentityId`, because SendGrid enforces its own sender verification). For SMS the transport is always "twilio": pass `connectorConnectionId` (the workspace\'s Twilio connection), `fromNumber` (your Twilio number in E.164, e.g. +14155551234) and `bodyText` instead of `bodyHtml` — an SMS reaches only the audience members who have a mobile number on file and have not replied STOP, and every message automatically carries "Reply STOP to opt out." Pass `templateId` to inherit that template\'s subject and body, which are COPIED in — editing the template afterwards will not change this campaign. Pass `scheduledAt` (ISO 8601) to have it send itself at that time instead of waiting for campaign.send.',
     parameters: obj({
-      name: S, audienceId: N, subject: S, bodyHtml: S, templateId: N,
-      transport: S, senderIdentityId: N, mailboxConnectionId: N, connectorConnectionId: S,
-      fromName: S, projectId: N,
+      name: S, audienceId: N, subject: S, bodyHtml: S, bodyText: S, templateId: N,
+      channel: S, transport: S, senderIdentityId: N, mailboxConnectionId: N, connectorConnectionId: S,
+      fromName: S, fromNumber: S, scheduledAt: S, projectId: N,
     }, ['name', 'audienceId']),
     run: (ctx, a) => replayRoute(ctx, 'POST', '/api/growth/campaigns', {
       name: str(a.name),
       audienceId: num(a.audienceId),
       ...(a.subject != null ? { subject: str(a.subject) } : {}),
       ...(a.bodyHtml != null ? { bodyHtml: str(a.bodyHtml) } : {}),
+      ...(a.bodyText != null ? { bodyText: str(a.bodyText) } : {}),
       ...(a.templateId != null ? { templateId: num(a.templateId) } : {}),
+      ...(a.channel != null ? { channel: str(a.channel) } : {}),
       ...(a.transport != null ? { transport: str(a.transport) } : {}),
       ...(a.senderIdentityId != null ? { senderIdentityId: num(a.senderIdentityId) } : {}),
       ...(a.mailboxConnectionId != null ? { mailboxConnectionId: num(a.mailboxConnectionId) } : {}),
       ...(a.connectorConnectionId != null ? { connectorConnectionId: str(a.connectorConnectionId) } : {}),
       ...(a.fromName != null ? { fromName: str(a.fromName) } : {}),
+      ...(a.fromNumber != null ? { fromNumber: str(a.fromNumber) } : {}),
+      ...(a.scheduledAt != null ? { scheduledAt: str(a.scheduledAt) } : {}),
       ...(a.projectId != null ? { projectId: num(a.projectId) } : {}),
     }),
   },
   {
+    tool: 'campaign.schedule', mutates: true,
+    description: 'Schedule a DRAFT campaign to send itself at a given time, or clear its schedule by passing `scheduledAt: null`. Scheduling is not sending: every precondition — a resolvable sender, a body, a non-empty audience, suppression — is re-checked at the moment it actually starts, so a campaign scheduled for Tuesday that loses its mailbox connection on Monday refuses to send rather than failing halfway through the audience. Prefer this to calling campaign.send at a chosen time; nothing has to stay awake for it.',
+    parameters: obj({ campaignId: N, scheduledAt: S }, ['campaignId']),
+    run: (ctx, a) => replayRoute(ctx, 'PATCH', `/api/growth/campaigns/${num(a.campaignId)}`, {
+      // Explicit null clears the schedule — `str()` would turn it into "", which
+      // the route also reads as "clear", but passing the null through keeps the
+      // tool's contract and the route's the same shape.
+      scheduledAt: a.scheduledAt == null ? null : str(a.scheduledAt),
+    }),
+  },
+  {
     tool: 'campaign.send', mutates: true,
-    description: 'SEND a draft campaign to its whole audience. THIS REACHES REAL PEOPLE AND CANNOT BE UNDONE — confirm with the user before calling it, and never call it speculatively or to "test" a campaign. Suppressed addresses are excluded and every message carries a working one-click unsubscribe. Returns what was queued, what was suppressed, and the first batch\'s result; a large audience finishes on the background sweep.',
+    description: 'SEND a draft campaign to its whole audience NOW. THIS REACHES REAL PEOPLE AND CANNOT BE UNDONE — confirm with the user before calling it, and never call it speculatively or to "test" a campaign. Suppressed addresses are excluded; an email carries a working one-click unsubscribe and an SMS carries the STOP notice. Returns what was queued, what was suppressed, how many the channel could not reach (`unreachable` — members with no mobile number, or who replied STOP), and the first batch\'s result; a large audience finishes on the background sweep.',
     parameters: obj({ campaignId: N }, ['campaignId']),
     run: (ctx, a) => replayRoute(ctx, 'POST', `/api/growth/campaigns/${num(a.campaignId)}/send`),
   },
   {
     tool: 'campaign.list', mutates: false,
-    description: 'List this workspace\'s marketing campaigns with their status and delivery counters (recipients, sent, failed, suppressed, opened, clicked). The counters are maintained by the send engine, so they are what actually happened rather than what was intended.',
+    description: 'List this workspace\'s marketing campaigns with their channel, status, schedule and delivery counters (recipients, sent, failed, suppressed, opened, clicked). The counters are maintained by the send engine, so they are what actually happened rather than what was intended — and for SMS they are corrected when the carrier reports back, so a message handed over but never delivered counts as failed rather than sent.',
     parameters: obj({}),
     run: (ctx) => replayRoute(ctx, 'GET', '/api/growth/campaigns'),
   },

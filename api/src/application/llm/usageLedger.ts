@@ -146,6 +146,38 @@ export function normalizeByoProvider(vendor: string): string {
  *                        gateway-default bucket) — paired with executionId.
  *   • (all null)       → a web/SDK/browser call, i.e. not agent-attributed.
  */
+/** The chat mode a conversation can be in. Mirrors `brain_chats.mode` (0409);
+ *  anything else is recorded as no mode rather than guessed at. */
+const CHAT_MODES = new Set(['chat', 'work']);
+
+/**
+ * Chat attribution lifted out of the caller-supplied metadata blob.
+ *
+ * Producers put `{ chatId, mode }` in metadata (brain-embedded's `brainRunStore`
+ * writes it); the ledger promotes it to real columns so a per-chat or per-mode
+ * spend report is an indexed read. Deliberately forgiving: a metadata blob with
+ * no chat, a non-numeric chatId, or an unrecognised mode yields nulls, which is
+ * exactly what the old JSON scan produced — the difference is that a row WITH a
+ * chat can no longer be missed because its metadata was shaped unexpectedly.
+ */
+function readChatAttribution(metadata: Record<string, unknown> | null | undefined): {
+  chatId: number | null;
+  chatMode: 'chat' | 'work' | null;
+} {
+  if (!metadata || typeof metadata !== 'object') return { chatId: null, chatMode: null };
+  const rawId = (metadata as { chatId?: unknown }).chatId;
+  const parsedId =
+    typeof rawId === 'number' ? rawId
+    : typeof rawId === 'string' && /^[0-9]+$/.test(rawId) ? Number(rawId)
+    : null;
+  const rawMode = (metadata as { mode?: unknown }).mode;
+  const mode = typeof rawMode === 'string' && CHAT_MODES.has(rawMode) ? (rawMode as 'chat' | 'work') : null;
+  return {
+    chatId: parsedId !== null && Number.isSafeInteger(parsedId) && parsedId > 0 ? parsedId : null,
+    chatMode: mode,
+  };
+}
+
 export interface UsageAttribution {
   agentHostId?: number | null;
   cloudAgentRef?: string | null;
@@ -303,6 +335,11 @@ export async function recordUsageRow(db: Db, env: Env, row: RecordUsageRow): Pro
     const metadata = row.premiumSurcharge
       ? { ...(row.metadata ?? {}), premiumSurchargeMillicents: PREMIUM_REQUEST_SURCHARGE_MILLICENTS }
       : row.metadata;
+    // Chat attribution is promoted OUT of metadata into real columns (0934) so
+    // per-chat/per-mode spend is an indexed read rather than a JSON scan that
+    // silently drops every row whose metadata is absent or not an object. It stays
+    // in metadata as well — the SDK's billing trace-back contract reads it there.
+    const chatAttribution = readChatAttribution(metadata);
 
     await usageDb.insert(llmUsageLog).values({
       tenantId:            row.tenantId,
@@ -316,7 +353,9 @@ export async function recordUsageRow(db: Db, env: Env, row: RecordUsageRow): Pro
       cacheCreationTokens: usage.cacheCreationTokens ?? 0,
       retries:             row.retries ?? 0,
       streamed:            row.streamed ?? false,
-      metadata:            metadata ? JSON.stringify(metadata) : null,
+      metadata:            metadata ?? null,
+      chatId:              chatAttribution.chatId,
+      chatMode:            chatAttribution.chatMode,
       idempotencyKey:      row.idempotencyKey ?? null,
       useCase:             row.useCase ?? null,
       tenantApiKeyId:      row.tenantApiKeyId ?? null,

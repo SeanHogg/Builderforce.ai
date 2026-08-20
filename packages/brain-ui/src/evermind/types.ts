@@ -221,6 +221,12 @@ export interface EvermindKnowledgeAnalysis {
   /** The frontier model that graded, or null when only the local screen ran. */
   model: string | null;
   findings: EvermindKnowledgeFinding[];
+  /** How many memories the model holds in total. Differs from `analyzed` once the
+   *  project has learned more than one pass reviews. Absent from an older API. */
+  total?: number;
+  /** True when there is more history than this pass looked at — the summary says so
+   *  rather than implying the whole model was audited. */
+  truncated?: boolean;
   /** Present when the frontier review could not run — local findings still returned. */
   warning?: string;
 }
@@ -229,7 +235,11 @@ export interface EvermindKnowledgeAnalysis {
 export interface EvermindKnowledgeRepair {
   /** Memories re-taught with corrected knowledge. */
   corrected: number;
-  /** Memories dropped from the recall ring. */
+  /** Memories dropped from the recall index — they can no longer be retrieved or
+   *  ground a reply. NOT "unlearned": the residual influence a memory already had on
+   *  the weights is superseded the normal write-through way, by teaching the
+   *  correction, and for an `unusable`/`redundant` finding there IS no correction to
+   *  teach. The strings below say this rather than claiming more than happened. */
   forgotten: number;
   /** Contributions merged by the closing flush. */
   merged: number;
@@ -485,6 +495,8 @@ export interface EvermindConsoleLabels {
   analyzeApplyCta: (count: number) => string;
   analyzeApplying: string;
   analyzeApplied: (corrected: number, forgotten: number, version: number) => string;
+  /** Coverage line shown when the audit reviewed only part of the history. */
+  analyzeCoverage: (analyzed: number, total: number) => string;
   analyzeSkipped: (count: number) => string;
   // Tabs — the console's four working surfaces (state stays outside the strip).
   tabsLabel: string;
@@ -673,7 +685,9 @@ export const DEFAULT_EVERMIND_LABELS: EvermindConsoleLabels = {
   analyzeApplyCta: (count) => `Fix ${count} selected`,
   analyzeApplying: 'Fixing…',
   analyzeApplied: (corrected, forgotten, version) =>
-    `Fixed: ${corrected} corrected, ${forgotten} forgotten. Model is now at v${version}.`,
+    `${corrected} corrected and re-taught, ${forgotten} removed from recall (already-learned influence is superseded by the correction, not erased). Model is now at v${version}.`,
+  analyzeCoverage: (analyzed, total) =>
+    `Reviewed the ${analyzed} most recent of ${total} memories — run again to continue through the rest.`,
   analyzeSkipped: (count) => `${count} could not be applied.`,
   tabsLabel: 'Evermind controls',
   tabTeach: 'Teach',

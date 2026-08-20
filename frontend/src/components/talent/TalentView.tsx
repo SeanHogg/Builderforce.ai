@@ -20,8 +20,12 @@ import {
   listEmployerTimecards, approveTimecard, rejectTimecard, getTimecardReview, type Timecard, type TimecardEntry,
 } from '@/lib/freelancerTimecardsApi';
 import { useConfirm } from '@/components/ConfirmProvider';
+import {
+  JobSchedulePanel, MilestoneLinesPreview, MilestoneSchedulePanel,
+} from '@/components/freelance/MilestoneSchedulePanel';
 import { Select } from '@/components/Select';
 import { formatCents } from '@/lib/canvasMoney';
+import { useFormat } from "@/i18n/useFormat";
 
 const card: React.CSSProperties = { background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 18 };
 const input: React.CSSProperties = { background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: '8px 12px', fontSize: 13, outline: 'none', width: '100%' };
@@ -52,10 +56,12 @@ function ScoreChip({ score }: { score: number }) {
 type Tab = 'team' | 'jobs' | 'timecards' | 'invoices';
 
 export function TalentView() {
+    const fmt = useFormat();
   const t = useTranslations('hires');
   const confirm = useConfirm();
   const td = useTranslations('freelancer');
   const tg = useTranslations('gigs');
+  const tm = useTranslations('milestones');
   // getStoredTenant() JSON.parses localStorage and returns a NEW object every
   // call — memoize it so `load` (and its effect) keep a stable identity and
   // don't re-fire on every render (which otherwise loops via setState).
@@ -82,6 +88,11 @@ export function TalentView() {
   const [declineMsg, setDeclineMsg] = useState('');
   // Per-engagement deliverables review.
   const [openDeliv, setOpenDeliv] = useState<string | null>(null);
+  // The fixed-price schedule, on an engagement (escrow) and on a posting (drafts).
+  // Two separate disclosures rather than one shared id, because they live on
+  // different tabs and closing one must not close the other.
+  const [openSchedule, setOpenSchedule] = useState<string | null>(null);
+  const [openJobSchedule, setOpenJobSchedule] = useState<string | null>(null);
   const [deliverables, setDeliverables] = useState<Record<string, Deliverable[]>>({});
   const [delivScores, setDelivScores] = useState<Record<string, number>>({});
 
@@ -214,11 +225,17 @@ export function TalentView() {
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                     <MessagesButton side="employer" variant="inline" context={{ freelancerUserId: e.freelancerUserId, engagementId: e.id, title: e.title ?? undefined }} />
                     <button type="button" style={btn('ghost')} onClick={() => toggleDeliverables(e.id)}>{openDeliv === e.id ? t('hide') : tg('deliverables.heading')}</button>
+                    <button type="button" style={btn('ghost')} onClick={() => setOpenSchedule(openSchedule === e.id ? null : e.id)}>{openSchedule === e.id ? t('hide') : tm('heading')}</button>
                     <button type="button" style={btn('ghost')} onClick={() => { setRateFor(rateFor === e.id ? null : e.id); setReviewForm({ rating: 5, comment: '', wouldWorkAgain: true }); }}>{t('rate')}</button>
                     <button type="button" style={btn('danger')} disabled={busy === e.id}
                       onClick={async () => { if (await confirm(t('terminateConfirm'))) void act(e.id, () => terminateEngagement(e.id)); }}>{busy === e.id ? '…' : t('terminate')}</button>
                   </div>
                 </div>
+                {openSchedule === e.id && (
+                  <div style={{ marginTop: 12, borderTop: '1px solid var(--border-subtle)', paddingTop: 12 }}>
+                    <MilestoneSchedulePanel engagementId={e.id} />
+                  </div>
+                )}
                 {openDeliv === e.id && (
                   <div style={{ marginTop: 12, borderTop: '1px solid var(--border-subtle)', paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
                     {(deliverables[e.id] ?? []).length === 0 ? <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{tg('deliverables.empty')}</div> : (deliverables[e.id] ?? []).map((d) => {
@@ -314,9 +331,17 @@ export function TalentView() {
                     </div>
                     <div style={{ display: 'flex', gap: 8 }}>
                       <button type="button" style={btn('ghost')} onClick={() => toggleProposals(j.id)}>{openJob === j.id ? t('hide') : t('job.viewProposals')}</button>
+                      {j.engagementType === 'fixed_bid' && (
+                        <button type="button" style={btn('ghost')} onClick={() => setOpenJobSchedule(openJobSchedule === j.id ? null : j.id)}>{openJobSchedule === j.id ? t('hide') : tm('heading')}</button>
+                      )}
                       {j.status === 'open' && <button type="button" style={btn('ghost')} disabled={busy === `close:${j.id}`} onClick={() => act(`close:${j.id}`, () => updateJob(j.id, { status: 'closed' }))}>{t('job.close')}</button>}
                     </div>
                   </div>
+                  {openJobSchedule === j.id && (
+                    <div style={{ marginTop: 12, borderTop: '1px solid var(--border-subtle)', paddingTop: 12 }}>
+                      <JobSchedulePanel jobId={j.id} />
+                    </div>
+                  )}
                   {openJob === j.id && (
                     <div style={{ marginTop: 12, borderTop: '1px solid var(--border-subtle)', paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
                       {(proposals[j.id] ?? []).length === 0 ? <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('job.noProposals')}</div> : (proposals[j.id] ?? []).map((p) => {
@@ -333,6 +358,15 @@ export function TalentView() {
                                 {p.status === 'shortlisted' && statusPill(p.status, tg(isFte ? 'candidate.shortlisted' : 'proposal.shortlisted'))}
                               </div>
                               {p.coverNote && <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{p.coverNote}</div>}
+                              {/* What this bidder counter-proposed. Accepting the bid binds
+                                  THIS schedule in preference to the posting's — so it has to
+                                  be readable before the accept button is pressed. */}
+                              {(p.milestones?.length ?? 0) > 0 && (
+                                <div style={{ marginTop: 8, padding: '8px 10px', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)' }}>
+                                  <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: 4 }}>{tm('proposed.heading')}</div>
+                                  <MilestoneLinesPreview milestones={p.milestones ?? []} />
+                                </div>
+                              )}
                               {p.status === 'declined' && p.declineReason && <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2, fontStyle: 'italic' }}>{p.declineReason}</div>}
                             </div>
                             {actionable ? (
@@ -416,7 +450,7 @@ export function TalentView() {
               <div key={inv.id} style={{ ...card, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                 <div>
                   <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{inv.freelancerName ?? ''} · {money(inv.amountCents, inv.currency)}</div>
-                  <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{inv.issuedAt ? new Date(inv.issuedAt).toLocaleDateString() : ''}</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{inv.issuedAt ? fmt.date(inv.issuedAt) : ''}</div>
                 </div>
                 <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
                   <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 'var(--radius-sm)', background: inv.status === 'paid' ? 'rgba(34,197,94,0.14)' : 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', color: inv.status === 'paid' ? 'rgba(34,197,94,0.95)' : 'var(--text-secondary)' }}>{t(`invoice.status.${inv.status}`)}</span>

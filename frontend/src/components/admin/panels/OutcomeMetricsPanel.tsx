@@ -31,6 +31,7 @@ import {
   outcomeMetricLabel,
   type OutcomeTranslator,
 } from '@/lib/outcomeMetrics';
+import { useFormat } from "@/i18n/useFormat";
 
 const cardStyle: React.CSSProperties = {
   padding: 16,
@@ -40,6 +41,7 @@ const cardStyle: React.CSSProperties = {
 };
 
 export default function OutcomeMetricsPanel() {
+    const fmt = useFormat();
   const t = useTranslations('admin.outcomes');
   const m = useTranslations('outcomeMetrics') as unknown as OutcomeTranslator;
   const [days, setDays] = useState(30);
@@ -66,14 +68,14 @@ export default function OutcomeMetricsPanel() {
     const lines = [
       `# ${t('briefTitle')}`,
       '',
-      t('briefPeriod', { start: new Date(data.period.start).toLocaleDateString(), end: new Date(data.period.end).toLocaleDateString() }),
+      t('briefPeriod', { start: fmt.date(data.period.start), end: fmt.date(data.period.end) }),
       t('briefCohort', { sessions: fmtNum(data.sampleSize), delivered: fmtNum(data.deliveredSessions), graded: fmtNum(data.gradedSessions ?? 0) }),
       '',
       ...data.metrics.map((metric) =>
         `- ${outcomeMetricLabel(m, metric)}: ${formatOutcomeMetric(m, metric.current, metric.unit)} (${t('briefPrior')}: ${formatOutcomeMetric(m, metric.baseline, metric.unit)})`),
       '',
       t('briefFooter', {
-        generated: new Date(data.generatedAt).toLocaleString(),
+        generated: fmt.dateTime(data.generatedAt),
         cohort: data.privacy.minimumExternalCohort,
         version: data.definitionVersion ?? '—',
       }),

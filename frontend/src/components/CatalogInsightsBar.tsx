@@ -8,6 +8,7 @@ import { BarChart } from '@/components/charts/BarChart';
 import { TrendChart } from '@/components/charts/TrendChart';
 import { colorAt } from '@/components/charts/chartColors';
 import { catalogAnalyticsApi, type CatalogAnalytics, type CatalogAnalyticsKind } from '@/lib/builderforceApi';
+import { useFormat } from "@/i18n/useFormat";
 
 /**
  * CatalogInsightsBar — the shared, data-driven summary strip for the marketplace
@@ -72,6 +73,7 @@ function isAnalyticsKind(entity: string): entity is CatalogAnalyticsKind {
 }
 
 export function CatalogInsightsBar({ entity, items, primaryMetric, secondaryMetric, groupKind, showTrend, bars, extraStats }: CatalogInsightsBarProps) {
+    const fmt = useFormat();
   const t = useTranslations('catalogInsights');
   const ta = useTranslations('catalogAnalytics');
 
@@ -143,9 +145,9 @@ export function CatalogInsightsBar({ entity, items, primaryMetric, secondaryMetr
       }}
     >
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12 }}>
-        <InsightStat label={t(`total.${entity}`)} value={model.total.toLocaleString()} />
-        {primaryMetric && <InsightStat label={t(`metric.${primaryMetric}`)} value={model.sumPrimary.toLocaleString()} color={colorAt(1)} />}
-        {primaryMetric && secondaryMetric && <InsightStat label={t(`metric.${secondaryMetric}`)} value={model.sumSecondary.toLocaleString()} color={colorAt(6)} />}
+        <InsightStat label={t(`total.${entity}`)} value={fmt.number(model.total)} />
+        {primaryMetric && <InsightStat label={t(`metric.${primaryMetric}`)} value={fmt.number(model.sumPrimary)} color={colorAt(1)} />}
+        {primaryMetric && secondaryMetric && <InsightStat label={t(`metric.${secondaryMetric}`)} value={fmt.number(model.sumSecondary)} color={colorAt(6)} />}
         {extraStats?.map((stat, idx) => (
           <InsightStat key={stat.key} label={stat.label} value={stat.value} color={colorAt(idx + 2)} />
         ))}
@@ -157,9 +159,9 @@ export function CatalogInsightsBar({ entity, items, primaryMetric, secondaryMetr
           <DonutChart
             segments={model.segments}
             size={150}
-            centerValue={model.total.toLocaleString()}
+            centerValue={fmt.number(model.total)}
             centerLabel={t(`total.${entity}`)}
-            formatValue={(v) => Math.round(v).toLocaleString()}
+            formatValue={(v) => fmt.number(Math.round(v))}
             ariaLabel={t(`by.${groupKind}`)}
           />
         </div>

@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react';
+import { useFormat } from "@/i18n/useFormat";
 
 /**
  * Reusable 100%-stacked horizontal bar — the project's PART-TO-WHOLE primitive
@@ -76,11 +77,13 @@ const legendRow: CSSProperties = { display: 'flex', alignItems: 'center', gap: 8
 export function StackedBar({
   segments,
   height = 20,
-  formatValue = (v) => Math.round(v).toLocaleString(),
+  formatValue,
   legend = true,
   minLabelShare = 0.16,
   ariaLabel,
 }: StackedBarProps) {
+  const fmt = useFormat();
+  const value = formatValue ?? ((v: number) => fmt.number(Math.round(v)));
   const total = segments.reduce((s, x) => s + Math.max(0, x.value), 0);
   const drawn = segments.filter((s) => s.value > 0);
   const thickness = Math.min(24, height);
@@ -103,7 +106,7 @@ export function StackedBar({
           return (
             <div
               key={s.key}
-              title={`${s.label}: ${formatValue(s.value)} (${Math.round(frac * 100)}%)`}
+              title={`${s.label}: ${value(s.value)} (${Math.round(frac * 100)}%)`}
               style={{
                 flex: `${frac} 0 0`, minWidth: 2, background: s.color,
                 // 4px rounded OUTER ends; interior joins stay square (the gap separates).
@@ -129,7 +132,7 @@ export function StackedBar({
             <span key={s.key} style={legendRow}>
               <span style={{ width: 10, height: 10, borderRadius: 'var(--radius-sm)', background: s.color, flexShrink: 0 }} />
               <span style={{ color: 'var(--text-secondary)' }}>{s.label}</span>
-              <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{formatValue(s.value)}</span>
+              <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{value(s.value)}</span>
             </span>
           ))}
         </div>

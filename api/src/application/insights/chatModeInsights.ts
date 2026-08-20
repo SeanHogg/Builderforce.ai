@@ -59,10 +59,12 @@ export interface ChatModeUsage {
  *
  * ONE statement for the chat side rather than a query per mode: the mode set is small
  * but the cost/ticket sub-aggregates are not, and fanning out per mode would be an N+1
- * over the hottest tables in the schema. `llm_usage_log` is joined on the chat id
- * carried in its `metadata` JSON (there is no chat_id column — see the gap register),
- * so a turn written before 0409 contributes its cost to whatever mode its chat now
- * reports, which is the honest reading of a retroactive column.
+ * over the hottest tables in the schema. `llm_usage_log` is joined on its real
+ * `chat_id` column (0934, backfilled from the metadata JSON it used to be scanned
+ * out of), so the join is indexed and a row can no longer be dropped for having an
+ * unexpected metadata shape. Cost is grouped by the chat's CURRENT mode, so a turn
+ * written before 0409 contributes to whatever mode its chat now reports — the
+ * honest reading of a retroactive column.
  */
 export async function computeChatModeUsage(db: Db, tenantId: number, days: number): Promise<ChatModeUsage> {
   const since = sql`now() - (${days}::text || ' days')::interval`;
@@ -80,15 +82,13 @@ export async function computeChatModeUsage(db: Db, tenantId: number, days: numbe
          AND c.created_at >= ${since}
     ),
     spend AS (
-      SELECT (u.metadata::jsonb ->> 'chatId')::integer AS chat_id,
-             sum(coalesce(u.total_tokens, 0))          AS tokens,
-             sum(coalesce(u.cost_usd_millicents, 0))   AS cost
+      SELECT u.chat_id                               AS chat_id,
+             sum(coalesce(u.total_tokens, 0))        AS tokens,
+             sum(coalesce(u.cost_usd_millicents, 0)) AS cost
         FROM llm_usage_log u
        WHERE u.tenant_id = ${tenantId}
          AND u.created_at >= ${since}
-         AND u.metadata IS NOT NULL
-         AND u.metadata ~ '^\\s*\\{'
-         AND u.metadata::jsonb ->> 'chatId' ~ '^[0-9]+$'
+         AND u.chat_id IS NOT NULL
        GROUP BY 1
     ),
     per_chat AS (

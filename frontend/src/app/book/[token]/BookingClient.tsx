@@ -27,10 +27,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { bookingApi, type BookingView, type OfferedSlot } from '@/lib/hiringApi';
+import { useFormat } from "@/i18n/useFormat";
 
 type Status = 'loading' | 'ready' | 'invalid' | 'booked';
 
 export function BookingClient({ token }: { token: string }) {
+    const fmt = useFormat();
   const t = useTranslations('booking');
   const locale = useLocale();
 
@@ -75,9 +77,9 @@ export function BookingClient({ token }: { token: string }) {
     }
   }
 
-  const formatSlot = (slot: OfferedSlot) => new Date(slot.startISO).toLocaleString(locale, {
-    weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: timezone,
-  });
+  const formatSlot = (slot: OfferedSlot) => fmt.dateWith(slot.startISO, {
+      weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: timezone,
+    });
 
   const slots = view?.slots ?? [];
 
@@ -108,7 +110,7 @@ export function BookingClient({ token }: { token: string }) {
             <p style={body()}>{t('bookedDetail')}</p>
             {view?.bookedAt && (
               <p style={{ ...body(), fontWeight: 600 }}>
-                {new Date(view.bookedAt).toLocaleString(locale, { dateStyle: 'full', timeStyle: 'short', timeZone: timezone })}
+                {fmt.dateWith(view.bookedAt, { dateStyle: 'full', timeStyle: 'short', timeZone: timezone })}
               </p>
             )}
           </section>

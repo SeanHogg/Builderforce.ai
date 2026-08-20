@@ -37,6 +37,7 @@ import {
 import { EntityBrowser } from './EntityBrowser';
 import { MetricChart } from './MetricChart';
 import { ObjectTimeline } from './ObjectTimeline';
+import { useFormat } from "@/i18n/useFormat";
 
 function StatTile({ label, value }: { label: string; value: string }) {
   return (
@@ -71,6 +72,7 @@ export function DomainSurface({
   onOpenObject?: (objectId: string) => void;
   locale?: string;
 }) {
+    const fmt = useFormat();
   const t = useTranslations('kernel.surface');
   const tDomain = useTranslations('kernel.roster');
   const [summary, setSummary] = useState<DomainSummary | null>(null);
@@ -112,7 +114,7 @@ export function DomainSurface({
         <StatTile label={t('stat.recentEvents')} value={summary ? String(summary.recentEventCount) : '—'} />
         <StatTile
           label={t('stat.lastActivity')}
-          value={summary?.lastActivityAt ? new Date(summary.lastActivityAt).toLocaleDateString(locale) : '—'}
+          value={summary?.lastActivityAt ? fmt.date(summary.lastActivityAt) : '—'}
         />
       </div>
 

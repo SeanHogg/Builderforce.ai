@@ -7,6 +7,7 @@ import { useConfirm } from '@/components/ConfirmProvider';
 import { useProjectScope } from '@/lib/ProjectScopeContext';
 import { forgetMemory, isMemoryLapsed, listMemories, purgeExpiredMemories, type GovernedMemory } from '@/lib/agentOpsApi';
 import { button, card, cardGrid, chip, emptyState, mono, muted, sectionTitle, table, tableScroll, td, th } from './agentOpsStyles';
+import { useFormat } from "@/i18n/useFormat";
 
 /**
  * Memory governance — the answer to "what do our agents believe, why, and for how
@@ -22,6 +23,7 @@ import { button, card, cardGrid, chip, emptyState, mono, muted, sectionTitle, ta
  * never another project's.
  */
 export function MemoryPanel() {
+    const fmt = useFormat();
   const t = useTranslations('agentOps');
   const confirm = useConfirm();
   const { currentProjectId } = useProjectScope();
@@ -134,7 +136,7 @@ export function MemoryPanel() {
                           <span style={muted}>{t('memory.durable')}</span>
                         ) : (
                           <span style={chip(lapsed ? 'warn' : 'good')}>
-                            {lapsed ? t('memory.lapsed') : new Date(r.expiresAt).toLocaleDateString()}
+                            {lapsed ? t('memory.lapsed') : fmt.date(r.expiresAt)}
                           </span>
                         )}
                       </td>

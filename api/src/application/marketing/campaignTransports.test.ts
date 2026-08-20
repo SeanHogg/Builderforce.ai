@@ -1,5 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
-import { isCampaignTransport, resolveCampaignSender, TransportError } from './campaignTransports';
+import {
+  isCampaignChannel,
+  isCampaignTransport,
+  isE164,
+  isOptOutFailure,
+  resolveCampaignSender,
+  transportSuitsChannel,
+  TransportError,
+} from './campaignTransports';
 import { fakeDb } from '../../../test/fakeDb';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
@@ -22,20 +30,70 @@ const verifiedIdentity = { fromEmail: 'hi@acme.test', fromName: 'Acme', status: 
 
 const binding = (over: Partial<Parameters<typeof resolveCampaignSender>[3]> = {}) => ({
   transport: 'platform',
+  channel: 'email',
   senderIdentity: verifiedIdentity,
   mailboxConnectionId: null,
   connectorConnectionId: null,
   fromName: '',
+  fromNumber: null,
   ...over,
 });
 
 describe('isCampaignTransport', () => {
-  it('accepts only the three real transports', () => {
+  it('accepts only the four real transports', () => {
     expect(isCampaignTransport('platform')).toBe(true);
     expect(isCampaignTransport('mailbox')).toBe(true);
     expect(isCampaignTransport('sendgrid')).toBe(true);
+    expect(isCampaignTransport('twilio')).toBe(true);
     expect(isCampaignTransport('smtp')).toBe(false);
     expect(isCampaignTransport(undefined)).toBe(false);
+  });
+});
+
+describe('channel / transport compatibility', () => {
+  it('accepts only the two real channels', () => {
+    expect(isCampaignChannel('email')).toBe(true);
+    expect(isCampaignChannel('sms')).toBe(true);
+    expect(isCampaignChannel('whatsapp')).toBe(false);
+    expect(isCampaignChannel(undefined)).toBe(false);
+  });
+
+  it('keeps the email transports off the SMS channel and vice versa', () => {
+    // The pairing is DATA, and this is what stops each caller re-deriving it —
+    // "it let me pick SendGrid for a text message" in one surface and not another.
+    expect(transportSuitsChannel('email', 'platform')).toBe(true);
+    expect(transportSuitsChannel('email', 'sendgrid')).toBe(true);
+    expect(transportSuitsChannel('email', 'twilio')).toBe(false);
+    expect(transportSuitsChannel('sms', 'twilio')).toBe(true);
+    expect(transportSuitsChannel('sms', 'platform')).toBe(false);
+    expect(transportSuitsChannel('sms', 'sendgrid')).toBe(false);
+  });
+});
+
+describe('isE164', () => {
+  it('accepts a real mobile number', () => {
+    expect(isE164('+14155551234')).toBe(true);
+    expect(isE164(' +442071838750 ')).toBe(true);
+  });
+
+  it('rejects everything Twilio would reject, rather than storing it', () => {
+    expect(isE164('4155551234')).toBe(false);      // no country code
+    expect(isE164('+0155551234')).toBe(false);     // leading zero after +
+    expect(isE164('+1 415 555 1234')).toBe(false); // spaces
+    expect(isE164('+1415555')).toBe(false);        // too short
+    expect(isE164('')).toBe(false);
+    expect(isE164(null)).toBe(false);
+  });
+});
+
+describe('isOptOutFailure', () => {
+  it('recognises the carrier STOP code wherever it appears in the message', () => {
+    // The code arrives two ways — inline in a send error and as `ErrorCode` on the
+    // status webhook — and both have to reach the same conclusion, or a person who
+    // texted STOP is messaged again by the next campaign.
+    expect(isOptOutFailure('Twilio returned 400: 21610 The message From/To pair is blocked')).toBe(true);
+    expect(isOptOutFailure('21610')).toBe(true);
+    expect(isOptOutFailure('Twilio returned 429: 20429 Too Many Requests')).toBe(false);
   });
 });
 
@@ -207,5 +265,93 @@ describe('TransportError', () => {
     // without this flag it could only do one or the other.
     expect(new TransportError('429', true).retryable).toBe(true);
     expect(new TransportError('bad key', false).retryable).toBe(false);
+  });
+});
+
+describe('resolveCampaignSender — twilio (SMS)', () => {
+  const smsBinding = binding({
+    channel: 'sms', transport: 'twilio', senderIdentity: null,
+    connectorConnectionId: 'conn-t', fromNumber: '+14155551234',
+  });
+  const twilioConnection = { id: 'conn-t', name: 'Main line', connectorKey: 'twilio', enabled: true };
+
+  it('resolves an enabled Twilio connection and labels itself with the number', async () => {
+    const result = await resolveCampaignSender(
+      fakeDb([[twilioConnection]]) as unknown as Db, env, 7, smsBinding,
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.sender.transport).toBe('twilio');
+    expect(result.sender.channel).toBe('sms');
+    // The FROM of a text message is the number, not a display name — there is no
+    // second field for a phone to show.
+    expect(result.sender.fromLabel).toBe('+14155551234');
+  });
+
+  it('needs NO sender identity — DNS ownership is an email concept', async () => {
+    const result = await resolveCampaignSender(
+      fakeDb([[twilioConnection]]) as unknown as Db, env, 7, smsBinding,
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  it('refuses when no Twilio connection is chosen', async () => {
+    const result = await resolveCampaignSender(
+      fakeDb() as unknown as Db, env, 7, { ...smsBinding, connectorConnectionId: null },
+    );
+    expect(result).toMatchObject({ ok: false });
+    expect((result as { error: string }).error).toContain('Twilio connection');
+  });
+
+  it('refuses a missing FROM number before a single message exists', async () => {
+    const result = await resolveCampaignSender(
+      fakeDb() as unknown as Db, env, 7, { ...smsBinding, fromNumber: null },
+    );
+    expect(result).toMatchObject({ ok: false });
+    expect((result as { error: string }).error).toContain('number this campaign sends from');
+  });
+
+  it('refuses a FROM that is not E.164, naming it — it would fail every message identically', async () => {
+    const result = await resolveCampaignSender(
+      fakeDb() as unknown as Db, env, 7, { ...smsBinding, fromNumber: '415-555-1234' },
+    );
+    expect(result).toMatchObject({ ok: false });
+    expect((result as { error: string }).error).toContain('415-555-1234');
+    expect((result as { error: string }).error).toContain('E.164');
+  });
+
+  it('refuses a connection that belongs to a different connector', async () => {
+    const result = await resolveCampaignSender(
+      fakeDb([[{ ...twilioConnection, connectorKey: 'sendgrid' }]]) as unknown as Db, env, 7, smsBinding,
+    );
+    expect(result).toMatchObject({ ok: false });
+    expect((result as { error: string }).error).toContain('not a Twilio connection');
+  });
+
+  it('refuses a disabled connection, naming it', async () => {
+    const result = await resolveCampaignSender(
+      fakeDb([[{ ...twilioConnection, enabled: false }]]) as unknown as Db, env, 7, smsBinding,
+    );
+    expect(result).toMatchObject({ ok: false });
+    expect((result as { error: string }).error).toContain('Main line');
+  });
+
+  it('refuses an SMS campaign bound to an EMAIL transport before it can send anything', async () => {
+    // The two columns are set by different calls, so a drifted row is reachable;
+    // the send loop has no branch for it and must never be handed one.
+    const result = await resolveCampaignSender(
+      fakeDb() as unknown as Db, env, 7,
+      { ...smsBinding, transport: 'sendgrid' },
+    );
+    expect(result).toMatchObject({ ok: false });
+    expect((result as { error: string }).error).toContain('cannot send through sendgrid');
+  });
+
+  it('refuses an EMAIL campaign bound to twilio, the same way round', async () => {
+    const result = await resolveCampaignSender(
+      fakeDb() as unknown as Db, env, 7, binding({ transport: 'twilio' }),
+    );
+    expect(result).toMatchObject({ ok: false });
+    expect((result as { error: string }).error).toContain('cannot send through twilio');
   });
 });

@@ -53,7 +53,10 @@
     {
       "id": "T2",
       "name": "App UI & Brain",
-      "migrationBand": [180, 189],
+      "migrationBand": [
+        180,
+        189
+      ],
       "owns": [
         "frontend/src/app/**",
         "frontend/src/components/**",
@@ -87,19 +90,16 @@
         "frontend/src/components/workflow-builder/**",
         "frontend/src/components/LlmStudioPanel*",
         "frontend/src/components/ide/Voice*",
-        "frontend/src/components/QaContent.tsx",
-        "frontend/src/components/site-editor/**",
-        "frontend/src/components/creation-canvas/CanvasReleasesPanel.*",
-        "frontend/src/components/commerce/**",
-        "frontend/src/components/apps/**",
-        "frontend/src/app/marketplace/listing/**",
-        "packages/creation-canvas-contract/src/marketplaceListings.ts"
+        "frontend/src/components/QaContent.tsx"
       ]
     },
     {
       "id": "T3",
       "name": "Gateway & LLM",
-      "migrationBand": [130, 139],
+      "migrationBand": [
+        130,
+        139
+      ],
       "owns": [
         "api/src/application/llm/**",
         "api/src/infrastructure/cache/**",
@@ -110,7 +110,10 @@
     {
       "id": "T4",
       "name": "Cloud Runtime & PR loop",
-      "migrationBand": [140, 149],
+      "migrationBand": [
+        140,
+        149
+      ],
       "owns": [
         "api/src/application/runtime/**",
         "api/src/application/repos/**",
@@ -140,7 +143,10 @@
     {
       "id": "T6",
       "name": "Studio & Voice",
-      "migrationBand": [150, 159],
+      "migrationBand": [
+        150,
+        159
+      ],
       "owns": [
         "studio/**",
         "studio-embedded/**",
@@ -157,7 +163,10 @@
     {
       "id": "T7",
       "name": "Tenant · Embed · Governance",
-      "migrationBand": [160, 169],
+      "migrationBand": [
+        160,
+        169
+      ],
       "owns": [
         "builderforce-embedded/**",
         "frontend/src/app/embed/**",
@@ -180,7 +189,10 @@
     {
       "id": "T8",
       "name": "Workflows · Boards",
-      "migrationBand": [170, 179],
+      "migrationBand": [
+        170,
+        179
+      ],
       "owns": [
         "api/src/application/workflow/**",
         "api/src/application/boardsync/**",
@@ -198,7 +210,10 @@
       "id": "T9",
       "name": "Platform · DB · CI",
       "steward": true,
-      "migrationBand": [190, 899],
+      "migrationBand": [
+        190,
+        null
+      ],
       "owns": [
         "api/migrations/**",
         "api/scripts/**",
@@ -224,73 +239,6 @@
         "api/src/application/qa/**",
         "api/src/presentation/routes/qaRoutes.ts",
         "frontend/src/components/QaContent.tsx"
-      ],
-      "excludes": []
-    },
-    {
-      "id": "W1A",
-      "name": "Wave 1 · Site delivery",
-      "migrationBand": null,
-      "owns": [
-        "api/src/application/ide/siteServer.*",
-        "api/src/application/ide/publishStaticSite.*",
-        "api/src/application/ide/siteReleases.*",
-        "api/src/application/ide/siteHosting.*",
-        "api/src/application/ide/customDomain.*",
-        "frontend/src/lib/visualEditor.*",
-        "frontend/src/components/site-editor/**"
-      ],
-      "excludes": []
-    },
-    {
-      "id": "W1B",
-      "name": "Wave 1 · Listing & Stage",
-      "migrationBand": [900, 909],
-      "owns": [
-        "api/src/application/marketplace/creationListings.*",
-        "api/src/application/marketplace/creationReleases.*",
-        "api/src/application/marketplace/stageChecks.*",
-        "packages/creation-canvas-contract/src/marketplaceListings.ts",
-        "frontend/src/components/creation-canvas/CanvasReleasesPanel.*",
-        "frontend/src/app/marketplace/listing/**",
-        "frontend/src/lib/creationListings.*",
-        "frontend/src/lib/creationReleases.*"
-      ],
-      "excludes": [],
-      "$comment": "`frontend/src/lib/creationReleases.*` added 2026-08-16: it is the typed client for `application/marketplace/creationReleases.ts` and is read by `CanvasReleasesPanel.tsx`, both of which W1B already owned, and it belonged to NO track — so the lane's own vertical slice could not be finished. Not a boundary move; a gap."
-    },
-    {
-      "id": "W1C",
-      "name": "Wave 1 · Money",
-      "migrationBand": [910, 919],
-      "owns": [
-        "api/src/application/marketplace/listingCommerce.*",
-        "api/src/application/marketplace/takeRate.*",
-        "api/src/application/marketplace/siteSubscriptions.*",
-        "api/src/application/marketplace/siteBilling.*",
-        "api/src/application/ide/siteAuth.*",
-        "api/src/presentation/routes/creationListingRoutes.ts",
-        "api/src/infrastructure/payment/**",
-        "frontend/src/components/commerce/**"
-      ],
-      "excludes": []
-    },
-    {
-      "id": "W1D",
-      "name": "Wave 1 · Creator surfaces",
-      "migrationBand": null,
-      "owns": [
-        "frontend/src/components/apps/**",
-        "frontend/src/lib/embeddedApps.*"
-      ],
-      "excludes": []
-    },
-    {
-      "id": "W1E",
-      "name": "Wave 1 · App-user loop",
-      "migrationBand": [920, 929],
-      "owns": [
-        "api/src/application/ide/siteData.*"
       ],
       "excludes": []
     }

@@ -66,6 +66,7 @@ import {
   LaunchStage,
 } from '@/lib/creationListings.launch';
 import styles from './CreationCanvas.module.css';
+import { useFormat } from "@/i18n/useFormat";
 
 export interface CanvasReleasesPanelProps {
   open: boolean;
@@ -484,6 +485,7 @@ function ReleaseRow({
   onStage?: () => void;
   onRevert?: () => void;
 }) {
+    const fmt = useFormat();
   const t = useTranslations('creationCanvas.releases');
   const when = release.takenAtISO ? new Date(release.takenAtISO) : null;
 
@@ -493,7 +495,7 @@ function ReleaseRow({
         <span className={styles.releaseVersion}>v{release.version}</span>
         <span className={styles.releaseState} data-state={release.state}>{t(`state.${release.state}`)}</span>
         <span className={styles.releaseWhen}>
-          {when ? when.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : t('now')}
+          {when ? fmt.dateWith(when, { month: 'short', day: 'numeric' }) : t('now')}
         </span>
       </div>
       <p className={styles.releaseNote}>

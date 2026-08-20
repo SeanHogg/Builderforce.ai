@@ -25,8 +25,10 @@ import { Select } from '@/components/Select';
 import { llmChat } from '@/lib/builderforceApi';
 import { errText, fmtDateTime, fmtNum, AdminError, AdminLoading } from '../adminShared';
 import { useCopyToClipboard } from '@/lib/useCopyToClipboard';
+import { useFormat } from "@/i18n/useFormat";
 
 export default function UsagePanel() {
+    const fmt = useFormat();
   const t = useTranslations('admin');
   const [usageDays, setUsageDays] = useState(30);
   const [llmUsage, setLlmUsage] = useState<LlmUsageStats | null>(null);
@@ -404,8 +406,8 @@ export default function UsagePanel() {
         const hours = retryAfter != null ? Math.ceil(retryAfter / 3600) : null;
         setUsageAiError(
           t('usage.dailyTokenLimit', {
-            used: used?.toLocaleString() ?? '?',
-            limit: limit?.toLocaleString() ?? '?',
+            used: fmt.number(used) ?? '?',
+            limit: fmt.number(limit) ?? '?',
           }) +
           (hours != null ? t('usage.dailyTokenLimitReset', { hours }) : '')
         );

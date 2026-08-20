@@ -16,6 +16,7 @@ import { AllowedOriginsBadge } from '@/components/AllowedOriginsBadge';
 import { TenantApiKeyEditor } from '@/components/TenantApiKeyEditor';
 import { TenantApiKeyUsageDrawer } from '@/components/TenantApiKeyUsageDrawer';
 import { useConfirm } from '@/components/ConfirmProvider';
+import { useFormat } from "@/i18n/useFormat";
 
 /**
  * Superadmin tab for minting / listing / revoking tenant `bfk_*` keys
@@ -23,6 +24,7 @@ import { useConfirm } from '@/components/ConfirmProvider';
  * so the parent doesn't pass a `canShow` prop, the component decides.
  */
 export function TenantApiKeysAdminTab({ active }: { active: boolean }) {
+    const fmt = useFormat();
   const t = useTranslations('admin');
   const confirm = useConfirm();
   const [tenants, setTenants] = useState<AdminTenant[]>([]);
@@ -122,7 +124,7 @@ export function TenantApiKeysAdminTab({ active }: { active: boolean }) {
     }
   };
 
-  const fmtDate = (iso: string | null | undefined) => iso ? new Date(iso).toLocaleString() : '—';
+  const fmtDate = (iso: string | null | undefined) => iso ? fmt.dateTime(iso) : '—';
 
   return (
     <div>

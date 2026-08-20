@@ -14,6 +14,7 @@ import { select } from 'd3-selection';
 import { axisBottom } from 'd3-axis';
 import { zoom, zoomIdentity, type ZoomTransform } from 'd3-zoom';
 import { observeResizeOnAnimationFrame } from '../lib/observeResize';
+import { useFormat } from "@/i18n/useFormat";
 
 export interface ExecutionTrack {
   label: string;
@@ -94,6 +95,7 @@ function layout(tracks: ExecutionTrack[]): { laid: LaidOutTrack[]; bands: AgentB
 }
 
 export function ExecutionTimelineChart({ tracks, colorForKey }: ExecutionTimelineChartProps) {
+    const fmt = useFormat();
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
   const axisRef = useRef<SVGGElement | null>(null);
@@ -202,7 +204,7 @@ export function ExecutionTimelineChart({ tracks, colorForKey }: ExecutionTimelin
                     <title>
                       {t.agentName}: {t.label}
                       {'\n'}
-                      {new Date(t.startMs).toLocaleTimeString()} → {new Date(t.endMs).toLocaleTimeString()} ({fmtDuration(Math.max(t.endMs - t.startMs, 0))})
+                      {fmt.time(t.startMs)} → {fmt.time(t.endMs)} ({fmtDuration(Math.max(t.endMs - t.startMs, 0))})
                       {'\n'}status: {t.status}
                       {t.detail ? `\n${t.detail}` : ''}
                     </title>

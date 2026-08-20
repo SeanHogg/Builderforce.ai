@@ -194,7 +194,7 @@ export const adminAuditLog = pgTable('admin_audit_log', {
   actorId:      varchar('actor_id', { length: 36 }).references(() => users.id),
   targetUserId: varchar('target_user_id', { length: 36 }).references(() => users.id),
   tenantId:     integer('tenant_id').references(() => tenants.id),
-  metadata:     text('metadata').notNull().default('{}'),  // JSON object
+  metadata:     jsonb('metadata').$type<Record<string, unknown>>().notNull().default({}),
   ipAddress:    varchar('ip_address', { length: 64 }),
   createdAt:    timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });

@@ -246,13 +246,21 @@ export const knowledgeApi = {
   publicListings: () =>
     apiRequest<{ listings: KnowledgeListing[] }>(`/api/knowledge-market/listings`).then((r) => r.listings),
 
-  /** Purchase a paid listing (records the purchase that unlocks install). Free
-   *  listings return `{ free: true }`; hosted-card deployments not yet configured
-   *  return `{ requiresConfig: true }`. */
-  checkoutListing: (id: string) =>
-    apiRequest<{ purchased?: boolean; free?: boolean; requiresConfig?: boolean }>(
+  /** Begin buying a paid listing. Free listings answer `{ free: true }` and one
+   *  already owned answers `{ purchased: true }`; anything else hands back the
+   *  processor's hosted page to send the buyer to. Nothing is granted until
+   *  {@link completeCheckout} verifies the session came back paid. */
+  checkoutListing: (id: string, returnUrl: string) =>
+    apiRequest<{ purchased?: boolean; free?: boolean; checkoutUrl?: string }>(
       `${BASE}/listings/${id}/checkout`,
-      { method: 'POST' },
+      { method: 'POST', ...jsonBody({ returnUrl }) },
+    ),
+
+  /** Finish a purchase after the processor redirects back with a session id. */
+  completeCheckout: (id: string, checkoutSessionId: string) =>
+    apiRequest<{ purchased: boolean }>(
+      `${BASE}/listings/${id}/checkout/complete`,
+      { method: 'POST', ...jsonBody({ checkoutSessionId }) },
     ),
 
   docListing: (id: string) =>

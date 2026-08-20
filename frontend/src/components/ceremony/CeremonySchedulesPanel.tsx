@@ -14,6 +14,7 @@ import {
 import {
   ceremonySchedulesApi, type CeremonySchedule, type CeremonyScheduleInput,
 } from '@/lib/builderforceApi';
+import { useFormat } from "@/i18n/useFormat";
 
 /**
  * Ceremony cadence management — the UI for `ceremony_schedules` (migration 0349).
@@ -77,6 +78,7 @@ const fromSchedule = (s: CeremonySchedule): FormState => ({
 });
 
 export function CeremonySchedulesPanel({ projectId }: { projectId: number }) {
+    const fmt = useFormat();
   const t = useTranslations('ceremonySchedules');
   const tc = useTranslations('common');
   const confirm = useConfirm();
@@ -158,7 +160,7 @@ export function CeremonySchedulesPanel({ projectId }: { projectId: number }) {
 
   const fmtDate = useCallback((iso: string | null) => {
     if (!iso) return '—';
-    try { return new Date(iso).toLocaleString(); } catch { return iso; }
+    try { return fmt.dateTime(iso); } catch { return iso; }
   }, []);
 
   /** Describe a cron with a friendly label when it matches a known preset. */

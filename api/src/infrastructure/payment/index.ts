@@ -33,6 +33,7 @@ export type {
   CheckoutSessionResult,
   CardValidationSessionOpts,
   CardValidationSessionResult,
+  RetrievedCheckoutSession,
   WebhookEvent,
 } from './PaymentProvider';
 

@@ -154,6 +154,7 @@ import { evaluateCronGate, signalPendingWork } from '../../application/runtime/c
 import { createTickDispatchBudget } from '../../application/runtime/tickDispatchBudget';
 import { API_VERSION } from '../../version';
 import { getPricingDraft, publishPricing, savePricingDraft } from '../../application/tenant/pricingConfiguration';
+import { coerceStringArray } from '../../domain/shared/jsonColumn';
 
 /**
  * Coerce a `platform_modules.permissions` value into `string[]`.
@@ -165,9 +166,6 @@ import { getPricingDraft, publishPricing, savePricingDraft } from '../../applica
  * (e.g. `"billing:read"`) and throw. This helper handles array, string,
  * and null inputs uniformly so every read site stays one-liner safe.
  */
-function coercePermissions(value: unknown): string[] {
-  return parseJsonArray<string>(value);
-}
 
 /** Persist one health-probe run. Shared by the manual route and the cron handler.
  *  `modelsJson` is a JSONB column ([1449]) — pass the JS array; Drizzle encodes it. */
@@ -3311,7 +3309,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     return c.json({
       modules: rows.map((m) => ({
         ...m,
-        permissions: coercePermissions(m.permissions),
+        permissions: coerceStringArray(m.permissions),
         createdAt: m.createdAt?.toISOString() ?? null,
         updatedAt: m.updatedAt?.toISOString() ?? null,
       })),
@@ -3338,13 +3336,16 @@ export function createAdminRoutes(): Hono<HonoEnv> {
         slug,
         description: body.description?.trim() ?? null,
         baseRole: body.baseRole ?? null,
-        permissions: JSON.stringify(body.permissions ?? []),
+        // `platform_modules.permissions` is a jsonb column typed `string[]` — the array
+        // goes in as an array. Stringifying it stored a JSON string INSIDE the jsonb,
+        // which read back as a string that every permission check then failed to match.
+        permissions: body.permissions ?? [],
         isBuiltin: false,
         createdBy: actorId,
       })
       .returning();
     await writeAudit(db, 'MODULE_ASSIGNED', actorId, { metadata: { moduleId: mod!.id, name: mod!.name } });
-    return c.json({ module: { ...mod, permissions: coercePermissions(mod!.permissions) } }, 201);
+    return c.json({ module: { ...mod, permissions: coerceStringArray(mod!.permissions) } }, 201);
   });
 
   // PATCH /api/admin/modules/:id
@@ -3359,13 +3360,13 @@ export function createAdminRoutes(): Hono<HonoEnv> {
         ...(body.name && { name: body.name.trim() }),
         ...(body.description !== undefined && { description: body.description }),
         ...(body.baseRole !== undefined && { baseRole: body.baseRole }),
-        ...(body.permissions !== undefined && { permissions: JSON.stringify(body.permissions) }),
+        ...(body.permissions !== undefined && { permissions: body.permissions }),
         updatedAt: new Date(),
       })
       .where(eq(platformModules.id, id))
       .returning();
     if (!mod) return c.json({ error: 'Module not found' }, 404);
-    return c.json({ module: { ...mod, permissions: coercePermissions(mod.permissions) } });
+    return c.json({ module: { ...mod, permissions: coerceStringArray(mod.permissions) } });
   });
 
   // DELETE /api/admin/modules/:id
@@ -3591,7 +3592,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       .from(tenantMemberModules)
       .innerJoin(platformModules, eq(tenantMemberModules.moduleId, platformModules.id))
       .where(and(eq(tenantMemberModules.tenantId, tenantId), eq(tenantMemberModules.userId, targetId)));
-    const modulePerms = assignedModules.flatMap((m) => coercePermissions(m.permissions));
+    const modulePerms = assignedModules.flatMap((m) => coerceStringArray(m.permissions));
 
     // Per-user overrides
     const userOverrides = await db.select().from(userPermissionOverrides).where(and(eq(userPermissionOverrides.tenantId, tenantId), eq(userPermissionOverrides.userId, targetId)));

@@ -30,7 +30,7 @@ export async function writeAdminAudit(
     actorId:      actorId ?? null,
     targetUserId: opts.targetUserId ?? null,
     tenantId:     opts.tenantId ?? null,
-    metadata:     JSON.stringify(opts.metadata ?? {}),
+    metadata:     opts.metadata ?? {},
     ipAddress:    opts.ipAddress ?? null,
   });
 }

@@ -58,6 +58,7 @@ import type { Env } from '../../env';
 import { resolveAppBaseUrl } from '../../env';
 import { invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { buildPaymentProvider } from '../../infrastructure/payment';
+import { verifyPaidCheckout } from './verifiedCheckout';
 import { hashShareToken, mintShareToken } from '../security/shareToken';
 import { deliverShareInvitations } from '../security/shareInvitationMailer';
 import { recordActivity } from '../activity/activityLog';
@@ -680,18 +681,24 @@ export async function settleInvoiceCheckout(
   env: Env,
   input: { tenantId: number; invoiceRef: string; checkoutSessionId: string },
 ): Promise<RecordPaymentResult> {
-  const session = await buildPaymentProvider(env).retrieveCheckoutSession(input.checkoutSessionId);
-  if (!session) throw new ReceivableError('That payment could not be found at the processor.', 404);
-  if (session.paymentStatus !== 'paid') throw new ReceivableError('That payment has not completed.', 400);
-  if (session.metadata.purchaseKind !== 'tenant_invoice') throw new ReceivableError('That payment was not for an invoice.', 400);
-  if (session.metadata.invoiceRef !== input.invoiceRef || session.metadata.invoiceTenantId !== String(input.tenantId)) {
-    throw new ReceivableError('That payment belongs to a different invoice.', 403);
-  }
+  const verified = await verifyPaidCheckout(env, {
+    checkoutSessionId: input.checkoutSessionId,
+    purchaseKind: 'tenant_invoice',
+    owner: { invoiceRef: input.invoiceRef, invoiceTenantId: input.tenantId },
+    messages: {
+      notConfigured: 'Card payments are not configured on this deployment.',
+      notFound: 'That payment could not be found at the processor.',
+      notPaid: 'That payment has not completed.',
+      wrongKind: 'That payment was not for an invoice.',
+      notYours: 'That payment belongs to a different invoice.',
+    },
+    refuse: (message, status) => new ReceivableError(message, status),
+  });
 
   return recordInvoicePayment(db, env, input.tenantId, {
     reference: input.invoiceRef,
-    amount: session.amountTotalCents / 100,
-    externalRef: session.paymentIntentId ?? session.id,
+    amount: verified.amountCents / 100,
+    externalRef: verified.paymentRef,
     method: 'card',
     memo: `Card payment for invoice ${input.invoiceRef}`,
     actorRef: 'system',

@@ -19,6 +19,7 @@ import {
 } from '@/lib/builderforceApi';
 import { getStoredTenant } from '@/lib/auth';
 import { useConsumption } from '@/lib/useConsumption';
+import { useFormat } from "@/i18n/useFormat";
 
 /**
  * Integrations gallery — the workspace-level home for every external system.
@@ -257,6 +258,7 @@ export function IntegrationsGallery({ search = '', viewMode = 'card' }: { search
 
 // ── Connections tab: workspace-wide list of this provider's connections ───────
 function ConnectionsTab({ provider, onChanged, t }: { provider: string; t: ReturnType<typeof useTranslations>; onChanged: () => void }) {
+    const fmt = useFormat();
   const confirm = useConfirm();
   const [rows, setRows] = useState<BoardConnection[] | null>(null);
   const [syncing, setSyncing] = useState<string | null>(null);
@@ -291,7 +293,7 @@ function ConnectionsTab({ provider, onChanged, t }: { provider: string; t: Retur
           </span>
           <span style={{ fontSize: 11, color: c.status === 'active' ? 'var(--success)' : 'var(--text-muted)' }}>● {c.status}</span>
           <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-            {c.lastPolledAt ? t('connections.lastPolled', { time: new Date(c.lastPolledAt).toLocaleString() }) : t('connections.neverPolled')}
+            {c.lastPolledAt ? t('connections.lastPolled', { time: fmt.dateTime(c.lastPolledAt) }) : t('connections.neverPolled')}
           </span>
           <button type="button" style={btnSubtle} disabled={syncing === c.id} onClick={() => syncNow(c.id)}>
             {syncing === c.id ? t('connections.syncing') : t('connections.syncNow')}
@@ -307,6 +309,7 @@ function ConnectionsTab({ provider, onChanged, t }: { provider: string; t: Retur
 interface SyncLog { id: number; status: string; itemsProcessed: number; itemsErrored: number; errorMessage: string | null; durationMs: number | null; startedAt: string }
 
 function ActivityTab({ credentials, t }: { credentials: IntegrationCredential[]; t: ReturnType<typeof useTranslations> }) {
+    const fmt = useFormat();
   const [logs, setLogs] = useState<Record<string, SyncLog[]>>({});
   const [testing, setTesting] = useState<string | null>(null);
   const [results, setResults] = useState<Record<string, { ok: boolean; message: string }>>({});
@@ -349,7 +352,7 @@ function ActivityTab({ credentials, t }: { credentials: IntegrationCredential[];
                 {(logs[c.id] ?? []).map((l) => (
                   <div key={l.id} style={{ display: 'flex', gap: 10, fontSize: 11, color: 'var(--text-secondary)', flexWrap: 'wrap' }}>
                     <span style={{ color: l.status === 'success' ? 'var(--success)' : 'var(--danger)' }}>● {l.status}</span>
-                    <span>{new Date(l.startedAt).toLocaleString()}</span>
+                    <span>{fmt.dateTime(l.startedAt)}</span>
                     <span>{t('activity.processed', { count: l.itemsProcessed })}</span>
                     {l.itemsErrored > 0 && <span style={{ color: 'var(--danger)' }}>{t('activity.errored', { count: l.itemsErrored })}</span>}
                   </div>

@@ -172,7 +172,10 @@ describe('recordCloudUsage → usage_snapshots AND llm_usage_log', () => {
       projectId: 3,
     });
     // engine marker lets a query distinguish cloud spend from web/SDK spend.
-    expect(JSON.parse(usage[0]!.metadata as string)).toMatchObject({
+    // `metadata` is a jsonb column typed as a record — the ledger writes the object
+    // itself. It used to be JSON.stringify'd into jsonb, which stored a JSON STRING
+    // inside the jsonb and made every reader parse a value that was already parsed.
+    expect(usage[0]!.metadata).toMatchObject({
       engine: 'cloud',
       executionId: 42,
       taskId: 7,

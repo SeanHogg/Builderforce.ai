@@ -62,6 +62,7 @@ import {
   getCachedBuilderInsightsSnapshot,
 } from '../../application/insights/builderInsights';
 import { originAllowed, deserializeScopes } from '../../application/llm/tenantApiKeyService';
+import { coerceStringArrayOrNull } from '../../domain/shared/jsonColumn';
 import { callGatewayMcpTool, listGatewayMcpTools } from '../../application/llm/mcpGateway';
 import {
   setTenantProviderKey,
@@ -707,16 +708,11 @@ async function loadTenantApiKeyByHash(env: HonoEnv['Bindings'], keyHash: string)
     .where(eq(tenantApiKeys.keyHash, keyHash))
     .limit(1);
   if (!r || r.revokedAt) return { ok: false, reason: 'Invalid or revoked tenant API key' };
-  // Pre-parse allowedOrigins + scopes so a cache hit doesn't have to.
-  let allowlist: string[] | null = null;
-  if (r.allowedOrigins) {
-    try {
-      const parsed = JSON.parse(r.allowedOrigins);
-      if (Array.isArray(parsed)) allowlist = parsed.filter((s) => typeof s === 'string');
-    } catch (error) { /* malformed → server-only */ 
-      reportCaughtError(error, { source: "presentation/routes/llmRoutes.ts", operation: "loadTenantApiKeyByHash" });
-    }
-  }
+  // Pre-resolve allowedOrigins + scopes so a cache hit doesn't have to. `allowed_origins`
+  // is a jsonb column typed `string[]`, so it arrives parsed — routed through the ONE
+  // shared coercer (which tolerates both the parsed array and a legacy stringified row)
+  // rather than a second private JSON.parse that only handled the legacy shape.
+  const allowlist: string[] | null = coerceStringArrayOrNull(r.allowedOrigins);
   return { ok: true, payload: { id: r.id, tenantId: r.tenantId, allowedOrigins: allowlist, scopes: deserializeScopes(r.scopes), isSuperadmin: r.creatorIsSuperadmin === true } };
 }
 

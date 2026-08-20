@@ -4,6 +4,7 @@ import { useTranslations } from 'next-intl';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { LegalDocPreview } from '@/components/admin/LegalDocPreview';
 import type { LegalCurrent, LegalDocType } from '@/lib/legalDocs';
+import { useFormat } from "@/i18n/useFormat";
 
 export type { LegalDocType } from '@/lib/legalDocs';
 
@@ -27,6 +28,7 @@ interface LegalDocModalProps {
  * including read-only detail views like this one, is a slide-out side panel.
  */
 export default function LegalDocModal({ type, legal, onClose, zIndex }: LegalDocModalProps) {
+    const fmt = useFormat();
   const t = useTranslations('legal');
 
   const doc = type === 'terms' ? legal?.terms : legal?.privacy;
@@ -43,7 +45,7 @@ export default function LegalDocModal({ type, legal, onClose, zIndex }: LegalDoc
       <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
         {doc?.publishedAt && (
           <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-            {t('published', { date: new Date(doc.publishedAt).toLocaleString() })}
+            {t('published', { date: fmt.dateTime(doc.publishedAt) })}
           </p>
         )}
 

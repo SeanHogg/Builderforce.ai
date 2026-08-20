@@ -6,6 +6,7 @@ import {
   type ArtifactAssignment,
 } from '@/lib/builderforceApi';
 import { contentStorageKey } from '@/lib/marketplaceData';
+import { useFormat } from "@/i18n/useFormat";
 
 export interface ContentAssignmentsContentProps {
   scope: 'tenant' | 'host' | 'project' | 'task' | 'agent';
@@ -33,6 +34,7 @@ function loadLocalBlocks(tenantId: string): LocalBlock[] {
 }
 
 export function ContentAssignmentsContent({ scope, scopeId, tenantId, className, style }: ContentAssignmentsContentProps) {
+    const fmt = useFormat();
   const [assigned, setAssigned] = useState<ArtifactAssignment[]>([]);
   const [localBlocks, setLocalBlocks] = useState<LocalBlock[]>([]);
   const [loading, setLoading] = useState(true);
@@ -195,7 +197,7 @@ export function ContentAssignmentsContent({ scope, scopeId, tenantId, className,
             >
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)' }}>{resolveName(a.artifactSlug)}</div>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Assigned {new Date(a.assignedAt).toLocaleDateString()}</div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Assigned {fmt.date(a.assignedAt)}</div>
               </div>
               <button
                 type="button"

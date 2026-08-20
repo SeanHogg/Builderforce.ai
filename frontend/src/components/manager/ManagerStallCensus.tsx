@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { BarChart, type BarDatum } from '@/components/charts/BarChart';
 import { managerApi, type StallCensusResponse } from '@/lib/builderforceApi';
 import { ticketHref } from '@/lib/ticketHref';
+import { useFormat } from "@/i18n/useFormat";
 
 /**
  * The AI Manager's STALL CENSUS and the systemic findings it raised from it.
@@ -59,6 +60,7 @@ export interface ManagerStallCensusProps {
 }
 
 export function ManagerStallCensus({ projectId }: ManagerStallCensusProps) {
+    const fmt = useFormat();
   const t = useTranslations('manager.census');
   // Cause labels are REUSED from the register's catalog rather than duplicated — one
   // translation per stall cause for the whole surface.
@@ -87,7 +89,7 @@ export function ManagerStallCensus({ projectId }: ManagerStallCensusProps) {
     try {
       return format.relativeTime(new Date(iso), new Date());
     } catch {
-      return new Date(iso).toLocaleString();
+      return fmt.dateTime(iso);
     }
   }, [format]);
 

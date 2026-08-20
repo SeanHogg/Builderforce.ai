@@ -13,12 +13,14 @@ import { capabilitySnippet, EMBEDDED_CAPABILITIES, unifiedEmbedSnippet, type Emb
 import { useCopyToClipboard } from '@/lib/useCopyToClipboard';
 import { usePublishReferenceChrome, usePublishReferenceSelect, useReferenceRailActive } from '@/lib/referenceChrome';
 import styles from './EmbeddedCapabilities.module.css';
+import { useFormat } from "@/i18n/useFormat";
 
 const TABS = ['features', 'install', 'consent', 'surfaces'] as const;
 type Tab = (typeof TABS)[number];
 type Filter = 'all' | EmbeddedCapabilityCategory;
 
 export function EmbeddedCapabilities() {
+    const fmt = useFormat();
   const t = useTranslations('embedded');
   const { isAuthenticated, tenant, tenantToken } = useAuth();
   const [tab, setTab] = useState<Tab>('features');
@@ -170,7 +172,7 @@ export function EmbeddedCapabilities() {
     {tab === 'consent' && <section className={styles.panel}>
       <h2>{t('consent.title')}</h2><p className={styles.panelIntro}>{t('consent.description')}</p>
       <div className={styles.consentList}>
-        {config?.customerConsentLog.map((event, index) => <div className={styles.consentRow} key={`${event.feature}-${event.at}-${index}`}><strong>{t(`features.${event.feature}.name`)}</strong><span>{t(`consent.actions.${event.action}`)}</span><span>{new Date(event.at).toLocaleString()}</span><span>{event.by}</span></div>)}
+        {config?.customerConsentLog.map((event, index) => <div className={styles.consentRow} key={`${event.feature}-${event.at}-${index}`}><strong>{t(`features.${event.feature}.name`)}</strong><span>{t(`consent.actions.${event.action}`)}</span><span>{fmt.dateTime(event.at)}</span><span>{event.by}</span></div>)}
         {config?.customerConsentLog.length === 0 && <div className={styles.empty}>{t('consent.empty')}</div>}
       </div>
     </section>}

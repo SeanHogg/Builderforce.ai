@@ -31,21 +31,35 @@ import { assessTextCoherence } from './textCoherence';
 import {
   getProjectEvermindContributions,
   getProjectEvermindHead,
+  listProjectEvermindMemories,
   dispatchProjectEvermindLearnText,
   forgetProjectEvermindMemories,
   flushProjectEvermind,
   type ProjectEvermindRecentEntry,
 } from './projectEvermind';
 
-/** How many learned memories one analysis pass reviews. The inspection ring holds 24,
- *  so this covers it whole while bounding the frontier prompt. */
-export const ANALYZE_MAX_MEMORIES = 24;
+/**
+ * How many learned memories one analysis pass reviews.
+ *
+ * This was 24 because that was the whole inspection ring — everything older was
+ * invisible to the audit while still being in the weights and still recallable. The
+ * coordinator now stores every memory durably under its own key, so the audit walks
+ * the real history and this is a per-PASS budget (frontier prompt size + review cost),
+ * not a horizon. A project with more memories than this is audited over several
+ * passes, oldest-unreviewed continuing from `before`.
+ */
+export const ANALYZE_MAX_MEMORIES = 120;
 /** Chars of each memory sent for review — enough to judge, capped for cost. */
 const MEMORY_EXCERPT_CHARS = 900;
 /** Chars of a memory echoed back in the finding for display. */
 const DISPLAY_EXCERPT_CHARS = 400;
-/** Output ceiling for the review call (verdicts + corrections for up to 24 memories). */
+/** Output ceiling for the review call (verdicts + corrections for one pass's memories). */
 const ANALYZE_MAX_OUTPUT_TOKENS = 4096;
+/** How many memories go to the frontier auditor in ONE call. The local coherence
+ *  screen runs over the whole pass for free; only what survives it is batched here,
+ *  so a long history costs several review calls rather than one oversized prompt
+ *  that would be truncated (silently dropping memories from the audit). */
+const REVIEW_BATCH_SIZE = 24;
 
 /**
  * What is wrong with a learned memory.
@@ -90,6 +104,12 @@ export interface KnowledgeAnalysis {
   /** The frontier model that graded, or null when only the local screen ran. */
   model: string | null;
   findings: KnowledgeFinding[];
+  /** How many memories the project holds in total. `analyzed` is what THIS pass
+   *  reviewed; the two differ once a project has learned more than one pass's budget. */
+  total: number;
+  /** True when there is more history than this pass reviewed, so a reader is not
+   *  told "clean" about a model whose older knowledge was never looked at. */
+  truncated: boolean;
   /** Present when the frontier review could not run — the local screen's findings are
    *  still returned, so the pass degrades rather than failing. */
   warning?: string;
@@ -175,9 +195,22 @@ export async function analyzeProjectEvermindKnowledge(
 ): Promise<KnowledgeAnalysis> {
   const contrib = await getProjectEvermindContributions(env, db, tenantId, projectId);
   const limit = Math.min(Math.max(1, opts.limit ?? ANALYZE_MAX_MEMORIES), ANALYZE_MAX_MEMORIES);
+  // Walk the REAL history, not the console's first page. `contrib.recent` is one page
+  // (24 memories); auditing that alone left everything older unreviewable and
+  // unforgettable while it was still in the weights.
+  const history = await listProjectEvermindMemories(env, tenantId, projectId, { max: limit });
   // Only TEXT contributions carry inspectable knowledge; a weight delta has no text to audit.
-  const memories = contrib.recent.filter((e) => e.kind === 'text' && memoryText(e).length > 0).slice(0, limit);
-  const base: KnowledgeAnalysis = { version: contrib.version, analyzed: memories.length, model: null, findings: [] };
+  const memories = history.memories.filter((e) => e.kind === 'text' && memoryText(e).length > 0);
+  const base: KnowledgeAnalysis = {
+    version: contrib.version,
+    analyzed: memories.length,
+    model: null,
+    findings: [],
+    total: history.total,
+    // True when the project holds more memories than one pass reviews — the caller
+    // says so rather than implying the whole model was audited.
+    truncated: history.truncated,
+  };
   if (memories.length === 0) return base;
 
   // 1) Local screen — free, deterministic, and works with no frontier access at all.
@@ -201,76 +234,100 @@ export async function analyzeProjectEvermindKnowledge(
   }
   if (forReview.length === 0) return { ...base, findings };
 
-  // 2) Frontier review. The pinned teacher is the natural auditor (it is the model the
-  // manager already trusts to TEACH this project); unpinned, we leave `model` unset so
-  // the gateway's premium cascade picks — an audit is worth running either way.
+  // 2) Frontier review, in batches. `forReview` can now be the whole history rather
+  // than one 24-entry page, and a single prompt carrying all of it would be truncated
+  // upstream — which drops memories from the audit SILENTLY, the exact failure this
+  // work exists to remove. One call per batch; a failing batch degrades that batch
+  // only, and the local screen's findings always stand.
   const teacher = await resolveEvermindTeacherModel(env, db, tenantId, contrib.teacherModel);
   const creds = await resolveTenantLlmCredentials(env, tenantId).catch(() => null);
-  const items = forReview.map((m) => ({
-    id: m.id,
-    task: excerpt(m.prompt ?? '', 300) || null,
-    learned: excerpt(memoryText(m), MEMORY_EXCERPT_CHARS),
-  }));
+  const proxy = llmProxyForPlan(env, 'pro', true, {
+    ...(creds?.anthropicOAuthToken ? { anthropicOAuthToken: creds.anthropicOAuthToken } : {}),
+    ...(creds && Object.values(creds.vendorKeys).some(Boolean) ? { tenantVendorKeys: creds.vendorKeys } : {}),
+  });
 
-  try {
-    const result = await llmProxyForPlan(env, 'pro', true, {
-      ...(creds?.anthropicOAuthToken ? { anthropicOAuthToken: creds.anthropicOAuthToken } : {}),
-      ...(creds && Object.values(creds.vendorKeys).some(Boolean) ? { tenantVendorKeys: creds.vendorKeys } : {}),
-    }).complete(
-      {
-        ...(teacher.model ? { model: teacher.model } : {}),
-        messages: [
-          { role: 'system', content: ANALYZER_SYSTEM },
-          {
-            role: 'user',
-            content: `Project #${projectId} — Evermind v${contrib.version}. Audit these ${items.length} learned memories:\n\n`
-              + JSON.stringify(items, null, 1),
-          },
-        ],
-        temperature: 0.1,
-        max_tokens: ANALYZE_MAX_OUTPUT_TOKENS,
-        response_format: { type: 'json_object' },
-        useCase: 'task_execution',
-      } as never,
-      undefined,
-      undefined,
-      opts.signal,
-    );
-    if (result.response.status >= 400) {
-      return { ...base, findings, warning: `The review model returned HTTP ${result.response.status}; only the local coherence screen ran.` };
-    }
-    const { content } = await readProxyChoice(result);
-    const parsed = parseAnalyzerJson(content);
-    if (!parsed || !Array.isArray(parsed.findings)) {
-      return { ...base, findings, warning: 'The review model did not return usable JSON; only the local coherence screen ran.' };
-    }
+  let resolvedModel: string | null = null;
+  const warnings: string[] = [];
+  for (let i = 0; i < forReview.length; i += REVIEW_BATCH_SIZE) {
+    const batch = forReview.slice(i, i + REVIEW_BATCH_SIZE);
+    const items = batch.map((m) => ({
+      id: m.id,
+      task: excerpt(m.prompt ?? '', 300) || null,
+      learned: excerpt(memoryText(m), MEMORY_EXCERPT_CHARS),
+    }));
+    try {
+      const result = await proxy.complete(
+        {
+          ...(teacher.model ? { model: teacher.model } : {}),
+          messages: [
+            { role: 'system', content: ANALYZER_SYSTEM },
+            {
+              role: 'user',
+              content: `Project #${projectId} — Evermind v${contrib.version}. Audit these ${items.length} learned memories:
 
-    const byId = new Map(forReview.map((m) => [m.id, m]));
-    for (const raw of parsed.findings) {
-      if (!raw || typeof raw !== 'object') continue;
-      const r = raw as Record<string, unknown>;
-      const id = typeof r['id'] === 'number' ? r['id'] : NaN;
-      const memory = byId.get(id);
-      const verdict = toVerdict(r['verdict']);
-      if (!memory || !verdict || verdict === 'ok') continue;
-      const correction = typeof r['correction'] === 'string' ? r['correction'].trim() : '';
-      findings.push({
-        id,
-        verdict,
-        issue: typeof r['issue'] === 'string' && r['issue'].trim() ? r['issue'].trim() : 'Flagged by the knowledge review.',
-        ...(memory.prompt ? { prompt: memory.prompt } : {}),
-        excerpt: excerpt(memoryText(memory)),
-        // A correction only makes sense for knowledge that has a right answer; the
-        // model is told this, and it is enforced here so a stray correction on an
-        // `unusable` row can't be re-taught.
-        ...(correction && (verdict === 'incorrect' || verdict === 'outdated') ? { correction } : {}),
-        source: 'frontier',
-      });
+`
+                + JSON.stringify(items, null, 1),
+            },
+          ],
+          temperature: 0.1,
+          max_tokens: ANALYZE_MAX_OUTPUT_TOKENS,
+          response_format: { type: 'json_object' },
+          useCase: 'task_execution',
+        } as never,
+        undefined,
+        undefined,
+        opts.signal,
+      );
+      if (result.response.status >= 400) {
+        warnings.push(`HTTP ${result.response.status}`);
+        continue;
+      }
+      const { content } = await readProxyChoice(result);
+      const parsed = parseAnalyzerJson(content);
+      if (!parsed || !Array.isArray(parsed.findings)) {
+        warnings.push('unusable JSON');
+        continue;
+      }
+      resolvedModel = result.resolvedModel || teacher.model || resolvedModel;
+
+      const byId = new Map(batch.map((m) => [m.id, m]));
+      for (const raw of parsed.findings) {
+        if (!raw || typeof raw !== 'object') continue;
+        const r = raw as Record<string, unknown>;
+        const id = typeof r['id'] === 'number' ? r['id'] : NaN;
+        const memory = byId.get(id);
+        const verdict = toVerdict(r['verdict']);
+        if (!memory || !verdict || verdict === 'ok') continue;
+        const correction = typeof r['correction'] === 'string' ? r['correction'].trim() : '';
+        findings.push({
+          id,
+          verdict,
+          issue: typeof r['issue'] === 'string' && r['issue'].trim() ? r['issue'].trim() : 'Flagged by the knowledge review.',
+          ...(memory.prompt ? { prompt: memory.prompt } : {}),
+          excerpt: excerpt(memoryText(memory)),
+          // A correction only makes sense for knowledge that has a right answer; the
+          // model is told this, and it is enforced here so a stray correction on an
+          // `unusable` row can't be re-taught.
+          ...(correction && (verdict === 'incorrect' || verdict === 'outdated') ? { correction } : {}),
+          source: 'frontier',
+        });
+      }
+    } catch (err) {
+      warnings.push(err instanceof Error ? err.message : String(err));
     }
-    return { ...base, model: result.resolvedModel || teacher.model || null, findings };
-  } catch (err) {
-    return { ...base, findings, warning: `The review model could not be reached (${err instanceof Error ? err.message : String(err)}); only the local coherence screen ran.` };
   }
+
+  const reviewed = Math.max(0, forReview.length - warnings.length * REVIEW_BATCH_SIZE);
+  return {
+    ...base,
+    model: resolvedModel,
+    findings,
+    // Name how much of the pass the frontier actually graded — a partial review must
+    // not read as a clean bill of health for the batches that never ran.
+    ...(warnings.length > 0
+      ? { warning: `${warnings.length} of ${Math.ceil(forReview.length / REVIEW_BATCH_SIZE)} review batches did not complete (${[...new Set(warnings)].slice(0, 3).join('; ')}); ~${reviewed} of ${forReview.length} memories were graded by the model, the rest only by the local coherence screen.` }
+      : {}),
+  };
 }
 
 /**

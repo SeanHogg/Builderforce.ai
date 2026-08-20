@@ -265,7 +265,10 @@ async function meterSynthesis(
       promptTokens: 0,
       completionTokens: 0,
       totalTokens: 0,
-      metadata: JSON.stringify({ cloneId, durationMs }),
+      // jsonb column typed as a record — the object goes in as an object. Stringifying
+      // it stored a JSON string inside the jsonb, which every metadata reader then
+      // received as a string rather than the record it declares.
+      metadata: { cloneId, durationMs },
       costUsdMillicents,
     });
   } catch (error) {

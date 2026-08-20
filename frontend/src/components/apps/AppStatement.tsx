@@ -16,6 +16,7 @@
  */
 
 import styles from './appPanels.module.css';
+import { useFormat } from "@/i18n/useFormat";
 
 export type StatementTone = 'ok' | 'pending' | 'muted';
 
@@ -58,11 +59,12 @@ export function AppStatement({ title, statement, detail, badge, children }: AppS
  * at 360px without anybody writing a media query for it.
  */
 export function AppCounts({ items }: { items: Array<{ label: string; value: number }> }) {
+    const fmt = useFormat();
   return (
     <div className={styles.counts}>
       {items.map((item) => (
         <div key={item.label} className={styles.count}>
-          <div className={styles.countValue}>{item.value.toLocaleString()}</div>
+          <div className={styles.countValue}>{fmt.number(item.value)}</div>
           <div className={styles.countLabel}>{item.label}</div>
         </div>
       ))}

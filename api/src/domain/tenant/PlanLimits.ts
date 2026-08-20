@@ -122,6 +122,17 @@ export interface PlanLimits {
   /** Whether the premium exec insight lenses (forecasting/anomalies + the
    *  CTO/CFO/PMO analytical lenses) are available. Any paid plan. */
   advancedInsights: boolean;
+  /**
+   * Whether the workspace may teach and run its OWN model — the `evermind` canvas kind
+   * and the adapter studio behind it. Any paid plan.
+   *
+   * It is the first CANVAS OBJECT gated by a plan feature, and it exists because the
+   * registry had already marked it as needing an entitlement and nothing asked: the
+   * `capability` field was stamped onto six kinds, read by one function, and that
+   * function was called by nothing but its own unit test. See
+   * `CANVAS_CAPABILITY_FEATURES` below for the map the palette now resolves through.
+   */
+  evermindTraining: boolean;
 }
 
 export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
@@ -154,6 +165,7 @@ export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
     seatCostControls: false,
     voiceCloning: false,
     advancedInsights: false,
+    evermindTraining: false,
   },
   [TenantPlan.PRO]: {
     maxCreationSessions: 500,
@@ -184,6 +196,7 @@ export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
     seatCostControls: false,
     voiceCloning: true,
     advancedInsights: true,
+    evermindTraining: true,
   },
   [TenantPlan.TEAMS]: {
     maxCreationSessions: -1,
@@ -214,6 +227,7 @@ export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
     seatCostControls: true,
     voiceCloning: true,
     advancedInsights: true,
+    evermindTraining: true,
   },
 };
 

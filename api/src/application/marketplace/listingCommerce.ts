@@ -46,6 +46,7 @@ import { acrossTenants } from '../../infrastructure/database/tenantScope';
 import { registerObject } from '../kernel/ObjectRegistry';
 import { fireEventTriggers } from '../workflow/eventTriggers';
 import { PayoutAccountService } from '../payouts/PayoutAccountService';
+import { verifyPaidCheckout } from '../finance/verifiedCheckout';
 import { ListingError, invalidateListingCaches, recordInstall } from './creationListings';
 import { chargeAllHostedAppMaintenance, sellerMaintenanceCostCents } from './appMaintenanceCost';
 
@@ -501,32 +502,31 @@ export async function completeListingCheckout(
   env: Env,
   input: { tenantId: number; buyerRef: string; buyerEmail?: string | null; checkoutSessionId: string },
 ): Promise<AcquisitionResult> {
-  if (!env.STRIPE_SECRET_KEY) {
-    throw new ListingError('Payments are not configured on this deployment', 400);
-  }
-  const session = await buildPaymentProvider(env).retrieveCheckoutSession(input.checkoutSessionId);
-  if (!session) throw new ListingError('That checkout could not be found', 404);
-  if (session.paymentStatus !== 'paid') {
-    throw new ListingError('That checkout has not been paid', 400);
-  }
-  if (session.metadata.purchaseKind !== 'marketplace_listing') {
-    throw new ListingError('That checkout was not for a listing', 400);
-  }
-  if (session.metadata.buyerRef !== input.buyerRef
-    || session.metadata.buyerTenantId !== String(input.tenantId)) {
-    throw new ListingError('That checkout belongs to someone else', 403);
-  }
-  const slug = session.metadata.listingSlug;
+  const verified = await verifyPaidCheckout(env, {
+    checkoutSessionId: input.checkoutSessionId,
+    purchaseKind: 'marketplace_listing',
+    owner: { buyerRef: input.buyerRef, buyerTenantId: input.tenantId },
+    messages: {
+      notConfigured: 'Payments are not configured on this deployment',
+      notFound: 'That checkout could not be found',
+      notPaid: 'That checkout has not been paid',
+      wrongKind: 'That checkout was not for a listing',
+      notYours: 'That checkout belongs to someone else',
+    },
+    refuse: (message, status) => new ListingError(message, status),
+  });
+
+  const slug = verified.metadata.listingSlug;
   if (!slug) throw new ListingError('That checkout names no listing', 400);
 
   return grantListing(db, env, {
     tenantId: input.tenantId,
     buyerRef: input.buyerRef,
-    buyerEmail: input.buyerEmail ?? session.customerEmail,
+    buyerEmail: input.buyerEmail ?? verified.customerEmail,
     slug,
     verifiedPayment: {
-      paymentIntentId: session.paymentIntentId ?? session.id,
-      amountCents: session.amountTotalCents,
+      paymentIntentId: verified.paymentRef,
+      amountCents: verified.amountCents,
     },
   });
 }

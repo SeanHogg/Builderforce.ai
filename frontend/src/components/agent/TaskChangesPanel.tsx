@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { runtimeApi, type TaskFileChange } from '@/lib/builderforceApi';
 import { FileChangeViewer } from './FileChangeViewer';
+import { useFormat } from "@/i18n/useFormat";
 
 /** The three kinds of file change an agent records (create / modify / delete). */
 export type FileChangeKind = 'created' | 'modified' | 'deleted';
@@ -51,6 +52,7 @@ export function ChangeRow({
   onOpen: () => void;
   openLabel: string;
 }) {
+    const fmt = useFormat();
   return (
     <button
       type="button"
@@ -73,7 +75,7 @@ export function ChangeRow({
               ? `${executionId != null ? ' · ' : ''}${modelUsage.map((u) => `${u.model} · ${u.byo ? `BYO key/account${u.provider ? ` (${u.provider})` : ''}` : 'BuilderForce-managed key'}`).join(', ')}`
               : models?.length ? `${executionId != null ? ' · ' : ''}${models.join(', ')} · key source unavailable` : ''}
           </span>
-          {createdAt && <time dateTime={createdAt}>{new Date(createdAt).toLocaleString()}</time>}
+          {createdAt && <time dateTime={createdAt}>{fmt.dateTime(createdAt)}</time>}
         </span>
       )}
     </button>

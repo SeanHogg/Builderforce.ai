@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { useBrainChats } from '@/lib/brain';
 import { useProjectScope } from '@/lib/ProjectScopeContext';
+import { useFormat } from "@/i18n/useFormat";
 
 /**
  * Ideas / Brainstorm dashboard tab — a compact list of the tenant's Brain chats
@@ -13,6 +14,7 @@ import { useProjectScope } from '@/lib/ProjectScopeContext';
  * new fetch code and the list stays in sync with what /brainstorm shows.
  */
 export function DashboardIdeasTab({ limit }: { limit?: number }) {
+    const fmt = useFormat();
   const t = useTranslations('dashboard');
   const { currentProjectId } = useProjectScope();
   const chats = useBrainChats({ filterProjectId: currentProjectId != null ? String(currentProjectId) : null });
@@ -76,7 +78,7 @@ export function DashboardIdeasTab({ limit }: { limit?: number }) {
             {c.title || t('ideas.untitled')}
           </span>
           <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-            {new Date(c.updatedAt).toLocaleDateString()}
+            {fmt.date(c.updatedAt)}
           </span>
         </Link>
       ))}

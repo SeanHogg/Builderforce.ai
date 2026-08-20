@@ -5,11 +5,12 @@ import { useTranslations } from 'next-intl';
 import { kanbanApi } from '@/lib/builderforceApi';
 import { slotKey, type AccountabilityGap, type AccountabilityReport, type ManifestParticipant, type JobRole } from '@/lib/kanban';
 import { usePermission } from '@/lib/rbac';
-import { taskStatusLabel } from '@/lib/taskStatus';
+import { useTaskStatusLabel } from '@/lib/taskStatusLabel';
 import { Select } from '@/components/Select';
 import {
   tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle,
 } from '@/components/dataTableStyles';
+import { useFormat } from "@/i18n/useFormat";
 
 /**
  * "Sign-off & Accountability" tab of the ticket detail — the operator's headline
@@ -70,6 +71,7 @@ const GAP_TONE = {
  */
 function GapList({ gaps, tone, title }: { gaps: AccountabilityGap[]; tone: keyof typeof GAP_TONE; title: string }) {
   const t = useTranslations('accountability');
+  const statusLabel = useTaskStatusLabel();
   if (gaps.length === 0) return null;
   const c = GAP_TONE[tone];
   const tr = (key: string, values?: Record<string, string>) => (t.has(key as never) ? t(key as never, values as never) : key);
@@ -81,7 +83,7 @@ function GapList({ gaps, tone, title }: { gaps: AccountabilityGap[]; tone: keyof
           <li key={`${g.stageKey ?? ''}:${g.roleKey}:${g.kind}:${i}`} style={{ fontSize: 12, color: c.fg }}>
             <strong>{g.roleName}</strong>
             {g.responsibility ? ` · ${tr(`responsibility.${g.responsibility}`)}` : ''}
-            {g.stageKey ? ` · ${taskStatusLabel(g.stageKey)}` : ''}
+            {g.stageKey ? ` · ${statusLabel(g.stageKey)}` : ''}
             {' — '}
             {tr(gapLabelKey(g))}: {tr(gapDetailKey(g), g.reason ? { reason: g.reason } : undefined)}
           </li>
@@ -117,6 +119,7 @@ type HumanVerdict = (typeof HUMAN_VERDICTS)[number];
 const NEEDS_REASON = new Set<HumanVerdict>(['waived']);
 
 export function AccountabilityTab({ taskId }: { taskId: number }) {
+    const fmt = useFormat();
   const t = useTranslations('accountability');
   const canManage = usePermission('manager.manage').allowed;
 
@@ -253,7 +256,7 @@ export function AccountabilityTab({ taskId }: { taskId: number }) {
                       <td style={tdStyle}>{so?.memberName ?? p.assigneeName ?? <span style={{ color: 'var(--text-muted)' }}>{t('unassigned')}</span>}</td>
                       <td style={tdStyle}><StateChip state={p.state} label={stateLabel(p.state)} /></td>
                       <td style={tdStyle}>{so ? verdictLabel(so.verdict) : <span style={{ color: 'var(--text-muted)' }}>—</span>}</td>
-                      <td style={tdMutedStyle}>{so ? new Date(so.createdAt).toLocaleString() : '—'}</td>
+                      <td style={tdMutedStyle}>{so ? fmt.dateTime(so.createdAt) : '—'}</td>
                       <td style={tdMutedStyle}>{so?.summary ?? so?.waiveReason ?? '—'}</td>
                       <td style={tdStyle}><ContributionLinks p={p} contribution={so?.contribution} /></td>
                       <td style={tdStyle}>

@@ -3408,11 +3408,42 @@ export interface ProviderKeySummary {
    * provider account's plan/quota meter; that remains authoritative in its own console. */
   usage?: { periodDays: number; requests: number; tokens: number; lastUsedAt: string | null };
 }
+/**
+ * Every `status` the provider-key surfaces can render, across all three shapes that
+ * feed them: the health grid ({@link ProviderDiagnostic}), the BYO probe
+ * ({@link ProviderConnectionTestResult}) and the OpenRouter connection probe
+ * ({@link OpenRouterConnectionTestResult}). All three resolve their label from the
+ * SAME `providerKeys.diagnostic.state.*` namespace, so they share one registry.
+ *
+ * This is a runtime registry, not only a union, so the message-catalog test can prove
+ * every status the server may return has a label in all five locales. Without it the
+ * API's reason union grew twice (`other-workspace`, `lookup_failed`) with no catalog
+ * entry, and `stateLabel`'s raw-key fallback rendered them as untranslated English to
+ * every zh/es/fr/de operator — a silent regression no type or test could see.
+ */
+export const PROVIDER_PROBE_STATES = [
+  // Healthy / transient
+  'ready', 'capacity', 'unavailable', 'upstream_error',
+  // Nothing to judge
+  'not_connected', 'not_found', 'no_test_model',
+  // A credential row exists but could not be resolved — mirrors the API's
+  // `ByoUnresolvedReason`. Each sends the owner somewhere different.
+  'revoked', 'expired', 'undecryptable', 'unsupported-auth', 'other-workspace',
+  /** The lookup itself failed (e.g. a DB outage), NOT the credential. Transient and
+   *  explicitly not the owner's fault — distinct from `undecryptable`, which sends
+   *  them to re-save a credential that was never the problem. */
+  'lookup_failed',
+  // Resolved but rejected downstream
+  'needs_attention', 'key_unresolved', 'failed',
+] as const;
+
+export type ProviderProbeState = (typeof PROVIDER_PROBE_STATES)[number];
+
 export interface ProviderDiagnostic {
   provider: LlmProvider;
   configured: boolean;
   usable: boolean;
-  status: 'ready' | 'capacity' | 'needs_attention' | 'not_connected' | 'revoked' | 'expired' | 'undecryptable' | 'unavailable';
+  status: ProviderProbeState;
   usage: { periodDays: number; requests: number; tokens: number; lastUsedAt: string | null };
   /** Present when this account was rejected on a recent call — see {@link ProviderAuthAlert}. */
   authAlert?: ProviderAuthAlert;
@@ -3439,7 +3470,7 @@ export interface ProbeDiagnostic {
 
 export interface ProviderConnectionTestResult {
   ok: boolean;
-  status: string;
+  status: ProviderProbeState;
   model?: string;
   testedAt?: string;
   error?: string;
@@ -3506,7 +3537,7 @@ export interface OpenRouterConnectionTestResult {
    *  models (it no longer decrypts, or a higher-priority connection already claims them).
    *  `upstream_error` = the key WORKED and the model provider then errored — an outage on
    *  that model, not a broken registration. */
-  status: 'ready' | 'not_found' | 'no_test_model' | 'key_unresolved' | 'upstream_error' | 'failed';
+  status: ProviderProbeState;
   /** The bare OpenRouter id the probe pinned. */
   model?: string;
   /** Selected ids skipped because OpenRouter reported a model/account limiter. The

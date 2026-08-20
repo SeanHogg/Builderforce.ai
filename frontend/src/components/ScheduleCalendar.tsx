@@ -10,6 +10,7 @@ import {
   type Schedulable,
 } from '@/lib/schedule';
 import { ScheduleLegend } from './ScheduleLegend';
+import { useFormat } from "@/i18n/useFormat";
 
 /**
  * Month calendar of deadlines, generic over any {@link Schedulable} item (a
@@ -51,6 +52,7 @@ export function ScheduleCalendar<T extends Schedulable & { id: string | number }
   onSelect,
   getAccentColor,
 }: ScheduleCalendarProps<T>) {
+    const fmt = useFormat();
   const today = startOfDay(new Date());
   const [viewMonth, setViewMonth] = useState<Date>(new Date(today.getFullYear(), today.getMonth(), 1));
 
@@ -155,7 +157,7 @@ export function ScheduleCalendar<T extends Schedulable & { id: string | number }
                         key={item.id}
                         type="button"
                         onClick={() => onSelect(item)}
-                        title={`${label} — due ${day.toLocaleDateString()}`}
+                        title={`${label} — due ${fmt.date(day)}`}
                         style={{
                           display: 'flex',
                           alignItems: 'center',

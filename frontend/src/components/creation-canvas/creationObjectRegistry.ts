@@ -261,8 +261,27 @@ const DATA_ARCHITECTURE_REGISTRY = DATA_ARCHITECTURE_SPECS.map((spec) => ({
   createData: (): CreationNodeData => dataArchitectureSeed(spec),
 })) satisfies readonly BaseCreationObjectDefinition[];
 
+/**
+ * The object kinds that need an ENTITLEMENT, and the capability that grants it.
+ *
+ * ── WHY THIS LIST SHRANK FROM SIX TO ONE ─────────────────────────────────────────
+ * It used to carry `mcp: integrations`, `agent: agents`, `llm: models`, `voice: voice`
+ * and `video: video` alongside `evermind`. Not one of them was an entitlement: they named
+ * the product AREA a kind belongs to, which is exactly what the palette `group` already
+ * says, and no plan feature had ever been decided for any of them. They were also, like
+ * `evermind`, enforcing nothing — `availableCreationObjects` was the only reader and its
+ * only caller was its own unit test, so the palette rendered straight from
+ * `CREATION_PALETTE_GROUPS` and a card marked as needing an entitlement was placeable by
+ * anybody.
+ *
+ * So five labels were deleted rather than assigned a plan feature nobody had chosen, and
+ * the one that IS an entitlement is now wired: `evermindTraining` in `PLAN_LIMITS`, mapped
+ * by `CANVAS_CAPABILITY_FEATURES` in the API domain, resolved per caller by
+ * `GET /api/tenants/:id/canvas-capabilities`, and read by `creationPaletteGroupsFor`.
+ * Adding a kind back is a line here and a line there, and it now means something.
+ */
 const CAPABILITIES: Partial<Record<CreationObjectKind, string>> = {
-  evermind: 'evermind', mcp: 'integrations', agent: 'agents', llm: 'models', voice: 'voice', video: 'video',
+  evermind: 'evermind',
 };
 const ACTIONS: Partial<Record<CreationObjectKind, readonly string[]>> = {
   workflow: ['edit', 'build', 'run'], website: ['edit', 'preview', 'publish'], prototype: ['edit', 'preview'],
@@ -889,12 +908,22 @@ export type CreationPaletteGroup = typeof CREATION_PALETTE_GROUPS[number];
  * Empty groups are dropped, so the guest never sees a category heading with nothing under
  * it — a heading over an empty list reads as a loading failure.
  */
-export function creationPaletteGroupsFor(signedIn: boolean): readonly CreationPaletteGroup[] {
-  if (signedIn) return CREATION_PALETTE_GROUPS;
+/** No entitlements. A single frozen instance so a caller with nothing resolved yet — a
+ *  guest board, or the first render before the fetch lands — allocates nothing. */
+const EMPTY_CAPABILITIES: ReadonlySet<string> = Object.freeze(new Set<string>()) as ReadonlySet<string>;
+
+export function creationPaletteGroupsFor(
+  signedIn: boolean,
+  capabilities: ReadonlySet<string> = EMPTY_CAPABILITIES,
+): readonly CreationPaletteGroup[] {
+  // ONE predicate, asked once. The guest rule and the entitlement rule used to be asked in
+  // two places — this function filtered on confidentiality and `availableCreationObjects`
+  // filtered on capability — and the second was called by nothing, so a card marked as
+  // needing an entitlement was placeable by anybody. Both questions now go through the same
+  // function, which is what stops them diverging again.
+  const allowed = new Set(availableCreationObjects(capabilities, { signedIn }).map((definition) => definition.kind));
   return CREATION_PALETTE_GROUPS
-    .map((entry) => ({
-      ...entry,
-      items: entry.items.filter((item) => defaultConfidentialityForKind(item.kind) !== 'restricted'),
-    }))
+    .map((entry) => ({ ...entry, items: entry.items.filter((item) => allowed.has(item.kind)) }))
     .filter((entry) => entry.items.length > 0);
 }
+

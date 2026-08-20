@@ -17,6 +17,7 @@ import {
   type ParsedFileResult,
   type RowValidationError,
 } from '@/lib/importHelpers';
+import { useFormat } from "@/i18n/useFormat";
 
 /**
  * Bulk Import Component
@@ -583,6 +584,7 @@ export default function BulkImport({ initialMappedValues, fieldMap, onCancel }: 
 // ── Sub-components ─────────────────────────────────────────────
 
 function StatCard({ label, value, tone }: { label: string; value: number; tone: 'success' | 'error' | 'neutral' }) {
+    const fmt = useFormat();
   const color = tone === 'success' ? 'var(--accent)' : tone === 'error' ? 'var(--coral-bright)' : 'var(--text-primary)';
   return (
     <div style={{
@@ -592,7 +594,7 @@ function StatCard({ label, value, tone }: { label: string; value: number; tone: 
       border: '1px solid var(--border-subtle)',
       textAlign: 'center',
     }}>
-      <div style={{ fontSize: 28, fontWeight: 700, color }}>{value.toLocaleString()}</div>
+      <div style={{ fontSize: 28, fontWeight: 700, color }}>{fmt.number(value)}</div>
       <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</div>
     </div>
   );

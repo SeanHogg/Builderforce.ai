@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { AgentHostGateway } from '@/lib/agentHostGateway';
 import { agentHosts, dispatchApi } from '@/lib/builderforceApi';
+import { useFormat } from "@/i18n/useFormat";
 
 interface ChatEntry {
   id: string;
@@ -32,6 +33,7 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export function AgentHostChatContent({ agentHostId, agentHostName }: AgentHostChatContentProps) {
+    const fmt = useFormat();
   const [messages, setMessages] = useState<ChatEntry[]>([]);
   const [input, setInput] = useState('');
   const [connStatus, setConnStatus] = useState<'connecting' | 'connected' | 'offline' | 'error'>('connecting');
@@ -226,7 +228,7 @@ export function AgentHostChatContent({ agentHostId, agentHostName }: AgentHostCh
             </div>
             <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 3, paddingInline: 4 }}>
               {msg.role === 'user' ? 'You' : agentHostName ?? 'AgentHost'} ·{' '}
-              {new Date(msg.ts).toLocaleTimeString()}
+              {fmt.time(msg.ts)}
             </div>
           </div>
         ))}

@@ -11,6 +11,7 @@ import {
 import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 import { TenantActivityPanel } from './TenantActivityPanel';
+import { useFormat } from "@/i18n/useFormat";
 
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
@@ -137,6 +138,7 @@ function KindBadge({ kind }: { kind: 'human' | 'agent' }) {
  * (checkbox-select members → merge), so this surface is activity-only.
  */
 export function ContributorsView() {
+    const fmt = useFormat();
   const t = useTranslations('contributors');
   const [data, setData] = useState<ActivityCalendar | null>(null);
   const [loading, setLoading] = useState(true);
@@ -206,7 +208,7 @@ export function ContributorsView() {
         <>
           {/* Summary stats */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12, marginBottom: 20 }}>
-            <Stat label={t('stat.contributions')} value={totalContributions.toLocaleString()} />
+            <Stat label={t('stat.contributions')} value={fmt.number(totalContributions)} />
             <Stat label={t('stat.teamMembers')} value={String(data.contributors.length)} />
             <Stat label={t('stat.humans')} value={String(humans.length)} accent="var(--emerald-bright)" />
             <Stat label={t('stat.agents')} value={String(agents.length)} accent="var(--violet-bright)" />
@@ -254,7 +256,7 @@ export function ContributorsView() {
                     <KindBadge kind={c.kind} />
                     <span style={{ flex: 1 }} />
                     {c.jobTitle && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{c.jobTitle}</span>}
-                    <span style={{ fontSize: 13, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{c.total.toLocaleString()}</span>
+                    <span style={{ fontSize: 13, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{fmt.number(c.total)}</span>
                   </button>
                 ))}
               </div>
@@ -285,7 +287,7 @@ export function ContributorsView() {
                         <td style={{ ...tdStyle, fontWeight: 600 }}>{c.displayName}</td>
                         <td style={tdStyle}><KindBadge kind={c.kind} /></td>
                         <td style={tdMutedStyle}>{c.jobTitle ?? '—'}</td>
-                        <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{c.total.toLocaleString()}</td>
+                        <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{fmt.number(c.total)}</td>
                       </tr>
                     ))}
                   </tbody>

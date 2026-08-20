@@ -3,14 +3,19 @@ import {
   addAudienceMembers,
   createSender,
   recordClick,
+  recordSmsDeliveryStatus,
   renderCampaignEmail,
+  renderCampaignSms,
   resolveTrackingOrigin,
   runCampaignBatch,
+  smsStatusUrl,
   startCampaign,
+  startDueCampaigns,
   suppressedSubset,
   trackingUrls,
   updateCampaign,
   verifySender,
+  SMS_OPT_OUT_NOTICE,
   TRACKING_PIXEL,
 } from './campaignEngine';
 import { fakeDb, fakeFetch } from '../../../test/fakeDb';
@@ -211,11 +216,24 @@ describe('verifySender', () => {
  * rather than arriving as a second query.
  */
 const draftRow = {
-  id: 1, status: 'draft', subject: 'Hello', bodyHtml: '<p>Hi</p>', audienceId: 11,
-  transport: 'platform', mailboxConnectionId: null, connectorConnectionId: null,
-  fromName: '', senderIdentityId: 5,
+  id: 1, status: 'draft', subject: 'Hello', bodyHtml: '<p>Hi</p>', bodyText: '', audienceId: 11,
+  channel: 'email', transport: 'platform', mailboxConnectionId: null, connectorConnectionId: null,
+  fromName: '', fromNumber: null, senderIdentityId: 5,
   senderFromEmail: 'hi@acme.com', senderFromName: 'Acme', senderStatus: 'verified',
 };
+
+/** The SMS twin: same campaign, different channel. Deliberately carries NO sender
+ *  identity, because DNS ownership is an email concept and requiring one here
+ *  would be the bug this fixture exists to catch. */
+const smsDraftRow = {
+  ...draftRow,
+  channel: 'sms', transport: 'twilio', subject: '', bodyText: 'Doors open at 7.',
+  connectorConnectionId: 'conn-t', fromNumber: '+14155551234',
+  senderIdentityId: null, senderFromEmail: null, senderFromName: null, senderStatus: null,
+};
+
+/** What the connector-connection lookup returns for that Twilio connection. */
+const twilioConnectionRow = [{ id: 'conn-t', name: 'Main line', connectorKey: 'twilio', enabled: true }];
 
 describe('startCampaign — the gates that protect real people', () => {
   const env = {} as Env;

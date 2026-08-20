@@ -17,6 +17,7 @@ import { Select } from '@/components/Select';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 import { KpiGrid } from './LensShell';
 import { usd, pct, hrs } from './format';
+import { useFormat } from "@/i18n/useFormat";
 
 const ALL_CATEGORIES: AllocationCategory[] = ['innovation', 'ktlo', 'support', 'tech_debt', 'other'];
 const CAP_STATUSES: CapitalizationStatus[] = ['capitalized', 'not_capitalized', 'uncategorized'];
@@ -93,6 +94,7 @@ function Variance({ v }: { v: number | undefined }) {
 }
 
 export function AllocationLens() {
+    const fmt = useFormat();
   const t = useTranslations('insights');
   const [days, setDays] = useState(30);
   const [period, setPeriod] = useState(currentMonth());
@@ -239,7 +241,7 @@ export function AllocationLens() {
         title={t('alloc.historyTitle')}
         action={history ? (
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>{t('alloc.dataAsOf', { d: new Date(history.dataAsOf).toLocaleString() })}</span>
+            <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>{t('alloc.dataAsOf', { d: fmt.dateTime(history.dataAsOf) })}</span>
             {/* The report is what finance hands an auditor; until now it could only
                 be read on screen. Honours the project scope currently applied. */}
             <button

@@ -24,6 +24,7 @@ import { usePmData } from '@/lib/pm/usePmData';
 import { PmEmpty, PmError } from './pmShared';
 import { Select } from '@/components/Select';
 import { useConfirm } from '@/components/ConfirmProvider';
+import { useTaskStatusLabel } from '@/lib/taskStatusLabel';
 
 /**
  * Task dependency / epic-flow graph. Nodes are tasks; solid edges are precedence
@@ -109,6 +110,7 @@ function cycleEdgeKeys(deps: DependencyEdge[]): Set<string> {
 /** The dependency graph for ONE project. `readOnly` hides the editor (rollup use). */
 function OneProjectDependencyGraph({ projectId, readOnly }: { projectId: number; readOnly?: boolean }) {
   const t = useTranslations('pm');
+  const statusLabel = useTaskStatusLabel();
   // The app's own confirmation, not the browser's: `window.confirm` is blocked in
   // embeds, unstyled, and untranslatable.
   const confirm = useConfirm();
@@ -202,7 +204,7 @@ function OneProjectDependencyGraph({ projectId, readOnly }: { projectId: number;
       accent: STATUS_COLOR[task.status] ?? STATUS_COLOR.backlog!,
       depthOffset: canvas3dDepthOffset(node),
     };
-  }, [t, taskById]);
+  }, [statusLabel, taskById]);
   const moveThreeD = useCallback(
     (moves: readonly Canvas3DMove[]) => setNodes((current) => applyCanvas3DMoves(current, moves)),
     [setNodes],

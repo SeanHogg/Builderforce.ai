@@ -12,6 +12,7 @@ import { ScheduleMeetingPanel } from './ScheduleMeetingPanel';
 import { MeetingRoom } from './MeetingRoom';
 import { MeetingNotes } from './MeetingNotes';
 import { TeamChatButton } from '@/components/brain/TeamChatButton';
+import { useFormat } from "@/i18n/useFormat";
 
 function KindBadge({ label }: { label: string }) {
   return (
@@ -37,6 +38,7 @@ export default function MeetingsContent({
   embedded?: boolean;
   basePath?: string;
 } = {}) {
+    const fmt = useFormat();
   const t = useTranslations('meetings');
   const router = useRouter();
   const params = useSearchParams();
@@ -97,7 +99,7 @@ export default function MeetingsContent({
 
   function whenLabel(iso: string | null): string {
     if (!iso) return t('anytime');
-    try { return new Date(iso).toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); }
+    try { return fmt.dateWith(iso, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); }
     catch { return iso; }
   }
 

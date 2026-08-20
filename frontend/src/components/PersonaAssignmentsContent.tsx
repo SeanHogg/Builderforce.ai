@@ -6,6 +6,7 @@ import {
   type ArtifactAssignment,
 } from '@/lib/builderforceApi';
 import { BUILTIN_PERSONAS, type Persona } from '@/lib/marketplaceData';
+import { useFormat } from "@/i18n/useFormat";
 
 export interface PersonaAssignmentsContentProps {
   scope: 'tenant' | 'host' | 'project' | 'task' | 'agent';
@@ -15,6 +16,7 @@ export interface PersonaAssignmentsContentProps {
 }
 
 export function PersonaAssignmentsContent({ scope, scopeId, className, style }: PersonaAssignmentsContentProps) {
+    const fmt = useFormat();
   const [assigned, setAssigned] = useState<ArtifactAssignment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -169,7 +171,7 @@ export function PersonaAssignmentsContent({ scope, scopeId, className, style }: 
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)' }}>{info?.name ?? a.artifactSlug}</div>
                   {info?.description && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{info.description}</div>}
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Assigned {new Date(a.assignedAt).toLocaleDateString()}</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Assigned {fmt.date(a.assignedAt)}</div>
                 </div>
                 <button
                   type="button"

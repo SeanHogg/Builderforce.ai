@@ -14,6 +14,7 @@ import {
   type WebScanFinding,
   type WebScanRunResult,
 } from '@/lib/builderforceApi';
+import { useFormat } from "@/i18n/useFormat";
 
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
@@ -59,6 +60,7 @@ function ScoreGauge({ score, label }: { score: number; label: string }) {
 }
 
 export function WebSecurityScanPanel() {
+    const fmt = useFormat();
   const t = useTranslations('security');
   const [target, setTarget] = useState('');
   const [savedTarget, setSavedTarget] = useState<string | null>(null);
@@ -259,7 +261,7 @@ export function WebSecurityScanPanel() {
                       <span key={k} style={{ fontSize: 10, fontWeight: 700, color: SEVERITY_COLOR[k] }}>{sev[k]} {sevLabel(k)}</span>
                     ))}
                   </span>
-                  <span style={{ marginLeft: 'auto', color: 'var(--text-muted)', flexShrink: 0 }}>{new Date(s.startedAt).toLocaleString()}</span>
+                  <span style={{ marginLeft: 'auto', color: 'var(--text-muted)', flexShrink: 0 }}>{fmt.dateTime(s.startedAt)}</span>
                 </div>
               );
             })}

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { chatSessionsApi, type ChatSession, type ChatMessage } from '@/lib/builderforceApi';
+import { useFormat } from "@/i18n/useFormat";
 
 type SessionWithName = ChatSession & { agentHostName?: string };
 
@@ -18,6 +19,7 @@ const cardStyle: React.CSSProperties = {
  * dropped into the Workforce tab strip or any other shell.
  */
 export function ChatsView() {
+    const fmt = useFormat();
   const [sessions, setSessions] = useState<SessionWithName[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -111,7 +113,7 @@ export function ChatsView() {
                   <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {s.agentHostName ?? `agentHost ${s.agentHostId}`}
                   </span>
-                  <span>{s.lastMsgAt ? new Date(s.lastMsgAt).toLocaleString() : '—'}</span>
+                  <span>{s.lastMsgAt ? fmt.dateTime(s.lastMsgAt) : '—'}</span>
                 </div>
               </button>
             ))}
@@ -128,7 +130,7 @@ export function ChatsView() {
                 <div style={{ flexShrink: 0, marginBottom: 12, paddingBottom: 12, borderBottom: '1px solid var(--border-subtle)' }}>
                   <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 600 }}>{selected.sessionKey}</span>
                   <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 8 }}>
-                    {selected.agentHostName ?? `agentHost ${selected.agentHostId}`} · {selected.startedAt ? new Date(selected.startedAt).toLocaleString() : '—'}
+                    {selected.agentHostName ?? `agentHost ${selected.agentHostId}`} · {selected.startedAt ? fmt.dateTime(selected.startedAt) : '—'}
                   </span>
                 </div>
                 <div style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 10 }}>

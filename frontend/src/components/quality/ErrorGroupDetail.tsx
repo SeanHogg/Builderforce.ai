@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl';
 import { RoleGate } from '@/components/RoleGate';
 import { TrendChart } from '@/components/charts/TrendChart';
 import { qualityApi, type ErrorGroupDetail as Detail } from '@/lib/builderforceApi';
+import { useFormat } from "@/i18n/useFormat";
 
 const overlay: React.CSSProperties = {
   position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000,
@@ -49,6 +50,7 @@ function renderStack(stack: unknown): string {
  * "Fix with agent" dispatch (manager+ via RoleGate quality.fix).
  */
 export function ErrorGroupDetail({ groupId, onClose, onChanged }: { groupId: string; onClose: () => void; onChanged: () => void }) {
+    const fmt = useFormat();
   const t = useTranslations('quality');
   const [detail, setDetail] = useState<Detail | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -121,7 +123,7 @@ export function ErrorGroupDetail({ groupId, onClose, onChanged }: { groupId: str
               <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>{t('detail.trend')}</div>
               {trend.length > 0 ? (
                 <TrendChart
-                  labels={trend.map((d) => new Date(d.day).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }))}
+                  labels={trend.map((d) => fmt.dateWith(d.day, { month: 'short', day: 'numeric' }))}
                   series={[{ key: 'events', label: t('detail.events'), values: trend.map((d) => d.count), color: 'var(--coral-bright)' }]}
                   height={120}
                   area
@@ -174,9 +176,10 @@ export function ErrorGroupDetail({ groupId, onClose, onChanged }: { groupId: str
 }
 
 function Metric({ label, value }: { label: string; value: number | string }) {
+    const fmt = useFormat();
   return (
     <div style={{ background: 'var(--bg-deep)', borderRadius: 'var(--radius-md)', padding: 10 }}>
-      <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>{typeof value === 'number' ? value.toLocaleString() : value}</div>
+      <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>{typeof value === 'number' ? fmt.number(value) : value}</div>
       <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{label}</div>
     </div>
   );

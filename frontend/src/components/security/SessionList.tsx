@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useConfirm } from '@/components/ConfirmProvider';
+import { useFormat } from "@/i18n/useFormat";
 
 /**
  * Unified shape for a revocable session, satisfied by both the current user's
@@ -36,6 +37,7 @@ interface SessionListProps {
  * one-by-one-only revoke UIs on both Settings and Security so neither drifts.
  */
 export function SessionList({ sessions, onRevoke }: SessionListProps) {
+    const fmt = useFormat();
   const t = useTranslations('security');
   const confirm = useConfirm();
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -157,8 +159,8 @@ export function SessionList({ sessions, onRevoke }: SessionListProps) {
                 <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
                   {s.ipAddress && `${s.ipAddress} · `}
                   {s.lastSeenAt
-                    ? t('lastActive', { time: new Date(s.lastSeenAt).toLocaleString() })
-                    : t('created', { time: new Date(s.createdAt).toLocaleString() })}
+                    ? t('lastActive', { time: fmt.dateTime(s.lastSeenAt) })
+                    : t('created', { time: fmt.dateTime(s.createdAt) })}
                   {!s.isActive && s.revokedAt && ` · ${t('revoked')}`}
                 </div>
               </div>

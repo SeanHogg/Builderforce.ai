@@ -53,6 +53,7 @@ import { sanitizePsychometricProfile } from '../../application/persona/psychomet
 import { provisionForHireProfile } from '../../application/freelance/provisionForHire';
 import { invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { assigneeProfilesCacheKey } from '../../application/kanban/assigneeProfiles';
+import { coerceJsonArray } from '../../domain/shared/jsonColumn';
 
 /** Parse a stored psychometric JSON column into an object (null when unset/invalid). */
 function parsePsychometric(raw: string | null | undefined): unknown {
@@ -1343,7 +1344,7 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
     return c.json({
       sessions: rows.map((r) => ({
         ...r,
-        pagesVisited: (() => { try { return JSON.parse(r.pagesVisited as string); } catch { return []; } })(),
+        pagesVisited: coerceJsonArray(r.pagesVisited),
         startedAt: r.startedAt?.toISOString(),
         endedAt: r.endedAt?.toISOString() ?? null,
       })),

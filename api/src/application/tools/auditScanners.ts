@@ -15,7 +15,10 @@ import type { ToolResult, ToolMetric, ToolRecommendation } from './toolTypes';
 
 const LEVEL_NAMES = ['Initial', 'Managed', 'Defined', 'Quantitatively Managed', 'Optimizing'];
 export const clampAuditLevel = (n: number): number => Math.max(1, Math.min(5, Math.round(n)));
-const levelName = (n: number): string => LEVEL_NAMES[clampAuditLevel(n) - 1]!;
+/** The 1–5 maturity name for a score. Exported because the deep pass re-labels a
+ *  result it re-scored, and a second copy of this list is how a report ends up
+ *  saying "Defined" beside a number that means "Managed". */
+export const levelName = (n: number): string => LEVEL_NAMES[clampAuditLevel(n) - 1]!;
 /** Round a 0–1 coverage fraction onto the 1–5 scale. */
 const fracToScore = (frac: number): number => Math.round((1 + Math.max(0, Math.min(1, frac)) * 4) * 10) / 10;
 
@@ -84,6 +87,139 @@ export interface ScannedRepo {
   hasTransferSafeguards: boolean;
   /** Accessibility statement, WCAG audit/config, or automated accessibility checks. */
   hasAccessibilityEvidence: boolean;
+  /**
+   * What reading the FILES proved, for the five controls a path cannot establish.
+   *
+   * A key is present only when a candidate file was actually opened for it, so
+   * `false` means "inspected and the proof was not there" and ABSENT means
+   * "nobody looked" — two different facts that the score treats differently.
+   */
+  verifiedPrivacy?: Partial<Record<PrivacyContentSignal, boolean>>;
+}
+
+/**
+ * The five privacy signals a FILE PATH cannot actually establish.
+ *
+ * A route called `/privacy/delete-account` that flips a `deleted` boolean, a
+ * consent banner that renders after the analytics tag has already loaded, an
+ * unsubscribe handler that answers 200 and writes nothing — each of these scores
+ * identically to a working implementation when the evidence is the path alone.
+ * That is the whole defect: the audit reported a control as PRESENT because
+ * somebody named a file after it.
+ *
+ * These five were chosen because they are the ones where the gap between "exists"
+ * and "works" is both common and legally consequential, and because each has a
+ * proof that is visible in the source without executing it.
+ */
+export type PrivacyContentSignal =
+  | 'cookieConsentGatesTrackers'
+  | 'deletionRemovesData'
+  | 'exportProducesData'
+  | 'unsubscribeSuppresses'
+  | 'retentionPurges';
+
+export const PRIVACY_CONTENT_SIGNALS: readonly PrivacyContentSignal[] = [
+  'cookieConsentGatesTrackers', 'deletionRemovesData', 'exportProducesData',
+  'unsubscribeSuppresses', 'retentionPurges',
+];
+
+/**
+ * What to read, and what counts as proof.
+ *
+ * `candidates` selects the files worth opening out of a repo's tree; `proof` is
+ * what their content must contain. Both are deliberately broad — this decides
+ * whether a control is CONFIRMED, and a miss degrades to the old path-only
+ * reading rather than to a false negative, so the cost of being generous is a
+ * score that stays where it already was.
+ */
+export const PRIVACY_CONTENT_PROBES: ReadonlyArray<{
+  signal: PrivacyContentSignal;
+  candidates: RegExp;
+  proof: RegExp;
+}> = [
+  {
+    signal: 'cookieConsentGatesTrackers',
+    candidates: /(cookie[-_]?(consent|banner)|consent[-_]?(banner|manager|gate|mode)|gdpr[-_]?consent|cookiebot|onetrust|osano|klaro)/i,
+    // Proof that consent DECIDES something: a consent-mode update, a gate on
+    // loading a tag, or a stored denied/granted state a tracker reads.
+    proof: /(consent['"\]\s*,\s*['"]update|gtag\(\s*['"]consent|analytics_storage|ad_storage|denied|granted|hasConsent|consentGiven|if\s*\([^)]*consent[^)]*\)[\s\S]{0,200}(script|gtag|fbq|analytics|track))/i,
+  },
+  {
+    signal: 'deletionRemovesData',
+    candidates: /(delete[-_]?account|account[-_]?deletion|erasure|gdpr[-_]?delete|data[-_]?deletion|forget[-_]?me|right[-_]?to[-_]?(be[-_]?forgotten|erasure))/i,
+    // Proof that it DELETES: a destructive statement or an ORM delete. A status
+    // flag alone is a soft delete, which is exactly what erasure is not.
+    proof: /(DELETE\s+FROM|\.delete\s*\(|deleteMany|destroy\s*\(|drop\s*\(|anonymi[sz]e|scrub|purge)/i,
+  },
+  {
+    signal: 'exportProducesData',
+    candidates: /(data[-_]?export|export[-_]?data|download[-_]?(my[-_]?)?data|dsar|data[-_]?portability|export[-_]?account)/i,
+    // Proof that it hands back a FILE of records: a download disposition, a
+    // serialisation, or an archive — not a page that says a copy will be emailed.
+    proof: /(content-disposition|attachment;\s*filename|application\/(json|zip|csv)|JSON\.stringify|createReadStream|toCsv|new\s+Blob|Response\s*\([^)]*json)/i,
+  },
+  {
+    signal: 'unsubscribeSuppresses',
+    candidates: /(unsubscribe|opt[-_]?out|list[-_]?unsubscribe|email[-_]?preferences|manage[-_]?subscription)/i,
+    // Proof that the answer is DURABLE: a suppression list write or a status
+    // change, rather than a confirmation page and nothing behind it.
+    proof: /(suppress|unsubscribed|opt[-_]?out(ed)?\s*[:=]|status\s*[:=]\s*['"](unsubscribed|opted_out)|INSERT\s+INTO\s+\w*suppress|List-Unsubscribe)/i,
+  },
+  {
+    signal: 'retentionPurges',
+    candidates: /(retention|purge|data[-_]?ttl|expire[-_]?(records|data)|prune[-_]?(logs|data)|cleanup[-_]?(job|cron))/i,
+    // Proof that the schedule ACTS: a delete bounded by an age comparison.
+    proof: /((DELETE\s+FROM|\.delete\s*\(|deleteMany)[\s\S]{0,300}(older|interval|cutoff|retention|before|lt\s*\(|<\s*now)|cutoff[\s\S]{0,200}(DELETE|\.delete\s*\())/i,
+  },
+];
+
+/** How many files a single repo may be opened for. A privacy pass must not turn
+ *  into a full source download: five reads answer all five probes when the repo
+ *  is organised at all, and the pass degrades to path-only when it is not. */
+export const PRIVACY_PROBE_FILE_BUDGET = 8;
+
+/**
+ * Choose which files to open, from a repo's path list. PURE, so the selection is
+ * testable without a git connection.
+ *
+ * One candidate per signal first, so a repo with fifty unsubscribe templates
+ * cannot spend the whole budget proving one control and leave the other four
+ * unverified — the failure mode a naive `filter().slice()` would have.
+ */
+export function selectPrivacyProbeFiles(paths: readonly string[]): string[] {
+  const chosen: string[] = [];
+  const source = paths.filter((p) => /\.(ts|tsx|js|jsx|mjs|cjs|py|rb|go|java|php|sql|html|vue|svelte)$/i.test(p));
+  for (const probe of PRIVACY_CONTENT_PROBES) {
+    const hit = source.find((p) => probe.candidates.test(p) && !chosen.includes(p));
+    if (hit) chosen.push(hit);
+  }
+  // Spend whatever is left on second candidates, worst-covered signal first.
+  for (const probe of PRIVACY_CONTENT_PROBES) {
+    if (chosen.length >= PRIVACY_PROBE_FILE_BUDGET) break;
+    const hit = source.find((p) => probe.candidates.test(p) && !chosen.includes(p));
+    if (hit) chosen.push(hit);
+  }
+  return chosen.slice(0, PRIVACY_PROBE_FILE_BUDGET);
+}
+
+/**
+ * Decide, from file CONTENT, which controls are actually implemented. PURE.
+ *
+ * A signal is present in the result only when at least one candidate file was
+ * read for it — the difference between "inspected and disproved" and "not
+ * inspected" is load-bearing in the score, and collapsing them to `false` would
+ * penalise every repo the reader could not open.
+ */
+export function privacyContentSignals(
+  files: ReadonlyArray<{ path: string; content: string }>,
+): Partial<Record<PrivacyContentSignal, boolean>> {
+  const out: Partial<Record<PrivacyContentSignal, boolean>> = {};
+  for (const probe of PRIVACY_CONTENT_PROBES) {
+    const relevant = files.filter((f) => probe.candidates.test(f.path));
+    if (!relevant.length) continue;
+    out[probe.signal] = relevant.some((f) => probe.proof.test(f.content));
+  }
+  return out;
 }
 
 export interface GovernanceSignal {
@@ -113,6 +249,38 @@ function repoFrac(repos: ScannedRepo[], pick: (r: ScannedRepo) => boolean): numb
   const readable = repos.filter((r) => r.read);
   if (readable.length === 0) return 0;
   return readable.filter(pick).length / readable.length;
+}
+
+/**
+ * Grade a control whose implementation was actually READ, on four levels:
+ *
+ *   0.0  no path at all — nothing claims to do this
+ *   0.6  a path, but nobody opened it. The old, path-only reading, DISCOUNTED:
+ *        a filename is weak evidence and used to score as certainty.
+ *   0.3  opened, and the proof was not there. A route named `/delete-account`
+ *        that flips a boolean is worse than an unknown, because it is a claim
+ *        the file does not support.
+ *   1.0  opened, and the proof is in the source.
+ *
+ * The gap between 0.6 and 0.3 is the whole point of reading the files. Note that
+ * an unreadable repo lands on 0.6 rather than 0.3 — being unable to look is not
+ * evidence of a failure, and penalising it would score a private repo as
+ * non-compliant for being private.
+ */
+function verifiedFrac(
+  repos: ScannedRepo[],
+  hasPath: (r: ScannedRepo) => boolean,
+  signal: PrivacyContentSignal,
+): number {
+  const readable = repos.filter((r) => r.read);
+  if (readable.length === 0) return 0;
+  const total = readable.reduce((sum, r) => {
+    if (!hasPath(r)) return sum;
+    const verdict = r.verifiedPrivacy?.[signal];
+    if (verdict === undefined) return sum + 0.6;
+    return sum + (verdict ? 1 : 0.3);
+  }, 0);
+  return total / readable.length;
 }
 
 function emptyResult(headline: string, summary: string): ToolResult {
@@ -297,14 +465,22 @@ export function privacyScan(ctx: AuditScanContext): ToolResult {
   }
 
   // Each legal pillar → observable repo signals (0–1 coverage across scanned repos).
+  //
+  // Five of them are graded by `verifiedFrac` rather than `repoFrac`, because a
+  // FILE PATH cannot establish them: a consent banner that renders after the
+  // analytics tag has loaded, a `/delete-account` route that flips a boolean, an
+  // unsubscribe handler that answers 200 and writes nothing — each scored as a
+  // fully implemented control while the evidence was the filename. Those five are
+  // now read, and a path whose content does not back it up scores BELOW one
+  // nobody could open.
   const hasPrivacyPolicy = repoFrac(readable, (r) => r.hasPrivacyPolicy);
-  const hasCookieConsent = repoFrac(readable, (r) => r.hasCookieConsent);
+  const hasCookieConsent = verifiedFrac(readable, (r) => r.hasCookieConsent, 'cookieConsentGatesTrackers');
   const hasCookiePolicy = repoFrac(readable, (r) => r.hasCookiePolicy);
-  const hasDataExport = repoFrac(readable, (r) => r.hasDataExport);
-  const hasDataDeletion = repoFrac(readable, (r) => r.hasDataDeletion);
-  const hasUnsubscribe = repoFrac(readable, (r) => r.hasUnsubscribe);
+  const hasDataExport = verifiedFrac(readable, (r) => r.hasDataExport, 'exportProducesData');
+  const hasDataDeletion = verifiedFrac(readable, (r) => r.hasDataDeletion, 'deletionRemovesData');
+  const hasUnsubscribe = verifiedFrac(readable, (r) => r.hasUnsubscribe, 'unsubscribeSuppresses');
   const hasTerms = repoFrac(readable, (r) => r.hasTermsOfService);
-  const hasRetention = repoFrac(readable, (r) => r.hasRetentionPolicy);
+  const hasRetention = verifiedFrac(readable, (r) => r.hasRetentionPolicy, 'retentionPurges');
   const hasRightsWorkflow = repoFrac(readable, (r) => r.hasRightsRequestWorkflow);
   const hasUniversalOptOut = repoFrac(readable, (r) => r.hasUniversalOptOut);
   const hasDpa = repoFrac(readable, (r) => r.hasDpa);

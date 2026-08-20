@@ -37,6 +37,7 @@ import {
   type DomainSummary,
   type ObjectRef,
 } from '@/lib/kernel/kernelApi';
+import { useFormat } from "@/i18n/useFormat";
 
 /** Width below which the rail collapses whether or not the user asked. */
 const RAIL_BREAKPOINT = 640;
@@ -73,6 +74,7 @@ export function RosterNav({
   reachedRung?: number;
   locale?: string;
 }) {
+    const fmt = useFormat();
   const t = useTranslations('kernel.roster');
   const shell = useRef<HTMLElement | null>(null);
   const [rows, setRows] = useState<DomainSummary[] | null>(null);
@@ -217,7 +219,7 @@ export function RosterNav({
                   onClick={() => onOpenObject?.(r.id)}
                   className="flex items-center gap-2 w-[calc(100%-12px)] mx-1.5 my-px px-1.5 py-1.5 rounded-md text-left"
                   style={{ background: 'transparent', color: 'var(--text-secondary)', border: '1px solid transparent' }}
-                  title={new Date(r.updatedAt).toLocaleString(locale)}
+                  title={fmt.dateTime(r.updatedAt)}
                 >
                   <span className="flex-1 min-w-0 truncate text-[0.78rem]">{r.title ?? r.kind}</span>
                 </button>

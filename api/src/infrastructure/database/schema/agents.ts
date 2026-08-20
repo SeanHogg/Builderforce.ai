@@ -50,6 +50,7 @@ import {
   swimlanes,
   tasks,
 } from './delivery';
+import type { ColumnClassification, DatasetUsePolicy } from '@builderforce/creation-canvas-contract';
 
 // ═══ from runtime.ts ═══
 /**
@@ -1698,7 +1699,13 @@ export const llmUsageLog = pgTable('llm_usage_log', {
   retries:          integer('retries').notNull().default(0),
   streamed:         boolean('streamed').notNull().default(false),
   /** Caller-supplied metadata for billing trace-back ({ toolRunId, sessionId, userId, … }). */
-  metadata:         text('metadata'),  // JSONB on the wire; stringified on insert.
+  metadata:         jsonb('metadata').$type<Record<string, unknown>>(),
+  /** Brain conversation this turn belongs to, and the mode that conversation was
+   *  in when it ran (0934). Both also ride in `metadata` — the SDK's billing
+   *  trace-back contract reads it there — but per-chat and per-mode spend is a
+   *  product report, so it gets indexed columns rather than a JSON scan. */
+  chatId:           integer('chat_id'),
+  chatMode:         varchar('chat_mode', { length: 16 }).$type<'chat' | 'work'>(),
   /** SDK-supplied Idempotency-Key — gateway will use this to dedupe retries (TTL TBD). */
   idempotencyKey:   varchar('idempotency_key', { length: 128 }),
   /** Opaque telemetry slug from `body.useCase`. Free-form; tenant taxonomy. */
@@ -2149,6 +2156,17 @@ export const ideDatasets = pgTable('ide_datasets', {
   r2Key:            text('r2_key').notNull().default(''),
   exampleCount:     integer('example_count').notNull().default(0),
   status:           text('status').notNull().default('pending'),
+  // GOVERNANCE (0936). What the corpus is ALLOWED to be, so `POST /training` can refuse a
+  // use the classification forbids — the one path where the mistake cannot be undone,
+  // because weights cannot be un-trained. Shapes are owned by
+  // `@builderforce/creation-canvas-contract/dataGovernance`; NULL means "nobody
+  // classified this", which the gate reads exactly as it reads today's rows.
+  classifications:  jsonb('classifications').$type<ColumnClassification[]>(),
+  usePolicy:        jsonb('use_policy').$type<DatasetUsePolicy>(),
+  /** The canvas object and session this corpus was promoted from, so a refusal can name
+   *  the CARD a person has to fix rather than an opaque dataset id. */
+  sourceSessionId:  text('source_session_id'),
+  sourceObjectId:   text('source_object_id'),
   createdAt:        timestamp('created_at').notNull().defaultNow(),
   updatedAt:        timestamp('updated_at').notNull().defaultNow(),
 }, (t) => ({

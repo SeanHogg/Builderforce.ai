@@ -9,6 +9,7 @@ import {
   contributorsApi, tasksApi,
   type ContributorRow, type DuplicateGroup, type MergePreview, type MergeRecord,
 } from '@/lib/builderforceApi';
+import { useFormat } from "@/i18n/useFormat";
 
 /**
  * Contributor consolidation — merge duplicate human profiles that activity
@@ -27,6 +28,7 @@ const btn = (primary = false): React.CSSProperties => ({
   color: primary ? 'var(--text-on-accent)' : 'var(--text-secondary)',
 });
 export function ContributorConsolidation() {
+    const fmt = useFormat();
   const t = useTranslations('contributorMerge');
   const tc = useTranslations('common');
   const REASON_LABEL: Record<DuplicateGroup['reason'], string> = {
@@ -185,7 +187,7 @@ export function ContributorConsolidation() {
               <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13 }}>
                 <span style={{ flex: 1, color: 'var(--text-secondary)' }}>
                   {byId.get(m.sourceContributorId ?? -1)?.displayName ?? `#${m.sourceContributorId}`} → {byId.get(m.targetContributorId ?? -1)?.displayName ?? `#${m.targetContributorId}`}
-                  <span style={{ color: 'var(--text-muted)' }}> · {t('eventsCount', { count: m.movedActivityCount })} · {new Date(m.mergedAt).toLocaleDateString()}</span>
+                  <span style={{ color: 'var(--text-muted)' }}> · {t('eventsCount', { count: m.movedActivityCount })} · {fmt.date(m.mergedAt)}</span>
                 </span>
                 {m.status === 'reverted'
                   ? <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('reverted')}</span>

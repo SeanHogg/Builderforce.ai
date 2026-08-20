@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { agentHostNodesApi, type AgentHostNode } from '@/lib/builderforceApi';
 import { useTranslations } from 'next-intl';
 import { useConfirm } from '@/components/ConfirmProvider';
+import { useFormat } from "@/i18n/useFormat";
 
 interface AgentHostNodesContentProps {
   agentHostId: number;
@@ -17,6 +18,7 @@ const cardStyle: React.CSSProperties = {
 };
 
 export function AgentHostNodesContent({ agentHostId }: AgentHostNodesContentProps) {
+    const fmt = useFormat();
   const confirm = useConfirm();
   const tc = useTranslations('common');
   const t = useTranslations('agentHostNodes');
@@ -152,7 +154,7 @@ export function AgentHostNodesContent({ agentHostId }: AgentHostNodesContentProp
                   </div>
                 )}
                 <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
-                  {node.lastSeenAt ? t('lastSeen', { time: new Date(node.lastSeenAt).toLocaleString() }) : t('neverConnected')}
+                  {node.lastSeenAt ? t('lastSeen', { time: fmt.dateTime(node.lastSeenAt) }) : t('neverConnected')}
                 </div>
               </div>
               <button

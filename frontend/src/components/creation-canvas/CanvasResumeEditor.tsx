@@ -39,6 +39,7 @@ import { compareResumeDocuments, mergeResumeAsNewVersion, type ResumeDiffSection
 import { analyzeResumeAgainstJob, resumeFieldRewritePrompt, resumeTailorPrompt, type ResumeAiField } from '@/lib/canvasResumeAts';
 import { applyResumeBulletConsolidation, suggestResumeBulletConsolidation } from '@/lib/canvasResumeConsolidate';
 import type { CanvasResumeShare } from '@/lib/builderforceApi';
+import { useFormat } from "@/i18n/useFormat";
 
 type ResumeView = 'edit' | 'preview' | 'compare';
 type ImportStage = 'review' | 'uploading' | 'extracting' | 'ocr' | 'structuring' | 'ready';
@@ -79,13 +80,14 @@ function ResumeDocumentStyles() {
 }
 
 function ImportReview({ file, stage, onImport, onCancel }: { file: File; stage: ImportStage; onImport: () => void; onCancel: () => void }) {
+    const fmt = useFormat();
   const t = useTranslations('creationCanvas.resumeEditor');
   const busy = stage !== 'review' && stage !== 'ready';
   const progress = stage === 'uploading' ? 25 : stage === 'extracting' ? 50 : stage === 'ocr' || stage === 'structuring' ? 80 : stage === 'ready' ? 100 : 0;
   const extension = file.name.split('.').pop()?.toUpperCase() || t('fileTypeUnknown');
   return <section className={styles.resumeImportReview} aria-live="polite">
     <span className={styles.resumeFileIcon} aria-hidden>{extension.slice(0, 4)}</span>
-    <div><strong>{file.name}</strong><small>{extension} · {Math.max(1, Math.ceil(file.size / 1024)).toLocaleString()} KB</small>
+    <div><strong>{file.name}</strong><small>{extension} · {fmt.number(Math.max(1, Math.ceil(file.size / 1024)))} KB</small>
       {busy && <><progress max="100" value={progress} /><small>{t(`importStage_${stage}`)}</small></>}
     </div>
     <div><button type="button" disabled={busy} onClick={onImport}>{t('confirmImport')}</button><button type="button" disabled={busy} onClick={onCancel}>{t('cancelImport')}</button></div>
@@ -136,6 +138,7 @@ function localJsonResume(source: string): { document: unknown; sourceFileKey: st
  *                 card to avoid — two live views of the same thing, open at once.
  */
 export function CanvasResumeEditor({ data, onEdit, onTailor, onDetach, shareActions, variant = 'full' }: { data: CreationNodeData; onEdit?: (patch: Partial<CreationNodeData>) => void; onTailor?: (prompt: string) => void; onDetach?: (data: Partial<CreationNodeData>) => void; shareActions?: ResumeShareActions; variant?: 'full' | 'card' | 'inspector' }) {
+    const fmt = useFormat();
   const t = useTranslations('creationCanvas.resumeEditor');
   const tImport = useTranslations('creationCanvas.import');
   const translateImport = tImport as unknown as ImportTranslator;
@@ -328,7 +331,7 @@ export function CanvasResumeEditor({ data, onEdit, onTailor, onDetach, shareActi
       <p>{t('sharePublicOnly')}</p>
       <div><button type="button" disabled={sharing} onClick={() => { setSharing(true); void shareActions?.create('view').finally(() => setSharing(false)); }}>{t('copyPublicLink')}</button>
       <button type="button" disabled={sharing} onClick={() => { setSharing(true); void shareActions?.create('embed').finally(() => setSharing(false)); }}>{t('copyEmbedLink')}</button></div>
-      {shares.length ? <ul>{shares.map((share) => <li key={share.id}><span>{t('shareUseCount', { count: share.useCount })}{share.expiresAt ? ` · ${t('shareExpires', { date: new Date(share.expiresAt).toLocaleDateString() })}` : ''}</span><button type="button" onClick={() => { void shareActions?.revoke(share.id).then(() => setShares((rows) => rows.filter((row) => row.id !== share.id))); }}>{t('revokeShare')}</button></li>)}</ul> : <p>{t('noActiveShares')}</p>}
+      {shares.length ? <ul>{shares.map((share) => <li key={share.id}><span>{t('shareUseCount', { count: share.useCount })}{share.expiresAt ? ` · ${t('shareExpires', { date: fmt.date(share.expiresAt) })}` : ''}</span><button type="button" onClick={() => { void shareActions?.revoke(share.id).then(() => setShares((rows) => rows.filter((row) => row.id !== share.id))); }}>{t('revokeShare')}</button></li>)}</ul> : <p>{t('noActiveShares')}</p>}
     </section>}
     <div className={styles.resumeVersionCreator}>
       <input value={newTitle} placeholder={t('versionNamePlaceholder')} aria-label={t('versionName')} onChange={(event) => setNewTitle(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') createVersion(); }} />
