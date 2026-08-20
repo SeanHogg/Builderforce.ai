@@ -21,6 +21,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { webhookSubscriptions, webhookDeliveries } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 
 export const WEBHOOK_EVENTS = [
   'workitem.released',
@@ -147,10 +148,7 @@ export async function emitWebhookEvent(db: Db, input: EmitInput, deps: EmitDeps 
       events: webhookSubscriptions.events,
     })
     .from(webhookSubscriptions)
-    .where(and(
-      eq(webhookSubscriptions.segmentId, input.segmentId),
-      eq(webhookSubscriptions.active, true),
-    ));
+    .where(and(eq(webhookSubscriptions.segmentId, input.segmentId), eq(webhookSubscriptions.active, true)));
 
   const targets = subs.filter((s) => parseEvents(s.events).includes(input.eventType));
   if (targets.length === 0) return 0;
@@ -252,10 +250,7 @@ export async function runWebhookRetrySweep(env: Env, nowMs: number = Date.now(),
     })
     .from(webhookDeliveries)
     .innerJoin(webhookSubscriptions, eq(webhookDeliveries.subscriptionId, webhookSubscriptions.id))
-    .where(and(
-      isNotNull(webhookDeliveries.nextRetryAt),
-      lte(webhookDeliveries.nextRetryAt, now),
-    ))
+    .where(and(isNotNull(webhookDeliveries.nextRetryAt), lte(webhookDeliveries.nextRetryAt, now)))
     .limit(WEBHOOK_SWEEP_BATCH);
 
   let attempted = 0;

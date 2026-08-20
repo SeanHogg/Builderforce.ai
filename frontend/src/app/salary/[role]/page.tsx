@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { getTranslations } from 'next-intl/server';
+import { getLocale, getTranslations } from 'next-intl/server';
 import PageContainer from '@/components/PageContainer';
 import RelatedArticles from '@/components/blog/RelatedArticles';
 import { CityTable, SeniorityTable } from '@/components/salary/SalaryTables';
@@ -35,6 +35,7 @@ export default async function SalaryRolePage({ params }: { params: Promise<{ rol
   if (!data) notFound();
   const { guide } = data;
   const t = await getTranslations('salary');
+  const locale = await getLocale();
 
   return (
     <PageContainer width="readable" style={{ padding: '48px 24px 80px', display: 'flex', flexDirection: 'column', gap: 28 }}>
@@ -60,6 +61,7 @@ export default async function SalaryRolePage({ params }: { params: Promise<{ rol
           {t('role.byCity')}
         </h2>
         <CityTable
+          locale={locale}
           rows={guide.cities}
           currency={guide.currency}
           roleSlug={guide.role.slug}
@@ -75,6 +77,7 @@ export default async function SalaryRolePage({ params }: { params: Promise<{ rol
           {t('role.bySeniority')}
         </h2>
         <SeniorityTable
+          locale={locale}
           rows={guide.seniorities}
           currency={guide.currency}
           labels={{

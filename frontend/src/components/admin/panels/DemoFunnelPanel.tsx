@@ -9,12 +9,14 @@
 import { useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 import { adminApi, type AdminDemoFunnel } from '@/lib/adminApi';
-import { AdminError, AdminLoading, AdminPanelHeader, fmtDateTime, fmtNum, useAdminData } from '@/components/admin/adminShared';
+import { AdminError, AdminLoading, AdminPanelHeader, useAdminData } from '@/components/admin/adminShared';
+import { useAdminFormat } from '@/components/admin/adminShared';
 
 const STAGES = ['demo_start', 'page_view', 'convert_prompt_shown', 'convert_clicked', 'book_demo_opened', 'lead_submitted', 'exit_prompt_shown', 'demo_exit'] as const;
 const PERSONAS = ['ai-team', 'insights', 'pmo', 'talent', 'governance'] as const;
 
 export default function DemoFunnelPanel() {
+  const { fmtDateTime, fmtNum } = useAdminFormat();
   const t = useTranslations('admin.demoFunnel');
   const { data, loading, error, reload } = useAdminData<AdminDemoFunnel>(() => adminApi.demoFunnel());
 

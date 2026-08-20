@@ -4,12 +4,14 @@ import { Icon } from '@/components/ui/Icon';
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { adminApi } from '@/lib/adminApi';
-import { fmtDateTime, useAdminData, AdminError, AdminLoading } from '@/components/admin/adminShared';
+import { useAdminData, AdminError, AdminLoading } from '@/components/admin/adminShared';
+import { useAdminFormat } from '@/components/admin/adminShared';
 import { LegalDocPreview } from '@/components/admin/LegalDocPreview';
 import { LegalEditorDrawer, type LegalEditorContext } from '@/components/admin/LegalEditorDrawer';
 import { LegalHistoryDrawer, type LegalHistoryContext } from '@/components/admin/LegalHistoryDrawer';
 
 export default function LegalPanel() {
+  const { fmtDateTime } = useAdminFormat();
   const t = useTranslations('admin');
   const { data: legalCurrent, loading, error, reload } = useAdminData(() => adminApi.legalCurrent(), []);
   const [legalEditor, setLegalEditor] = useState<LegalEditorContext | null>(null);

@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import type { Formatter } from '@/i18n/format';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { Select } from '@/components/Select';
@@ -10,6 +11,7 @@ import { rfpApi, type RfpRequestListRow, type RfpRequestInput, type BrandPalette
 import { BrandPaletteEditor } from './BrandPaletteEditor';
 import { fetchProjects } from '@/lib/api';
 import type { Project } from '@/lib/types';
+import { useFormat } from "@/i18n/useFormat";
 
 /**
  * RfpContent — the RFP/RFQ Response surface, rendered as a tab UNDER Projects
@@ -54,12 +56,13 @@ const EMPTY: RfpRequestInput = {
   marginPct: 0.25, marketingPct: 0.12, contingencyPct: 0.1, dueDate: null,
 };
 
-function money(cents: number | null | undefined): string {
+function money(fmt: Formatter, cents: number | null | undefined): string {
   if (cents == null) return '—';
-  return `$${Math.round(cents / 100).toLocaleString('en-US')}`;
+  return fmt.money(Math.round(cents / 100));
 }
 
 export default function RfpContent() {
+  const fmt = useFormat();
   const t = useTranslations('rfpPage');
   const router = useRouter();
   const role = useRole();
@@ -176,7 +179,7 @@ export default function RfpContent() {
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
                   <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>
-                    {r.latestResponse ? t('quoted', { price: money(r.latestResponse.quotedPriceUsdCents) }) : t('notGenerated')}
+                    {r.latestResponse ? t('quoted', { price: money(fmt, r.latestResponse.quotedPriceUsdCents) }) : t('notGenerated')}
                   </span>
                   {r.latestResponse?.scanRefreshed && (
                     <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--accent)' }}>{t('scanFresh')}</span>

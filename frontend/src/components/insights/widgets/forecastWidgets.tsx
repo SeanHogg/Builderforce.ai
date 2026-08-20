@@ -18,18 +18,25 @@ import { WidgetStat as Stat, WidgetMuted as Muted, useSourceState } from '@/comp
 import type { WidgetCardProps, WidgetDef, WidgetDrill } from '@/lib/widgets/types';
 import { TrendChart, type TrendSeries } from '@/components/charts/TrendChart';
 import { forecastApi, type ForecastInsights, type ForecastMetric, type ForecastUnit } from '@/lib/forecastApi';
-import { usd } from '../format';
+import { useInsightFormat, type InsightFormatters } from '../format';
 
 const FORECAST_DRILL: WidgetDrill = { kind: 'panel', hub: 'finance', panel: 'forecast' };
 // Reuses the finance capability (forecast is the finance-adjacent premium lens).
 // A dedicated `insights.forecast` capability can be added later — see integration note.
 const FORECAST_CAP = 'insights.finance' as const;
 
-function fmt(unit: ForecastUnit): (v: number) => string {
-  if (unit === 'usd') return (v) => usd(v);
+/**
+ * A value formatter for the metric's native unit.
+ *
+ * Takes the lens formatters rather than importing them: `usd` and the grouped
+ * fallback are bound to the reader's locale now, and this is module scope, where
+ * a hook cannot run.
+ */
+function unitFormatter(f: InsightFormatters, unit: ForecastUnit): (v: number) => string {
+  if (unit === 'usd') return (v) => f.usd(v);
   if (unit === 'pct') return (v) => `${Math.round(v * 10) / 10}%`;
   if (unit === 'hours') return (v) => `${Math.round(v * 10) / 10}h`;
-  return (v) => Math.round(v).toLocaleString();
+  return (v) => f.int(v);
 }
 
 /** One shared, deduped read of the forecast collector per metric+window. */
@@ -42,21 +49,24 @@ function useForecast(metric: ForecastMetric, days: number) {
 // ── Widget bodies ──────────────────────────────────────────────────────────────
 
 function CostProjectionCard({ days }: WidgetCardProps) {
+  const insight = useInsightFormat();
   const { data, state, t } = useForecast('cost', days);
   if (!data) return state;
-  return <Stat value={fmt(data.unit)(data.projection)} sub={t('forecast.projection')} />;
+  return <Stat value={unitFormatter(insight, data.unit)(data.projection)} sub={t('forecast.projection')} />;
 }
 
 function CycleProjectionCard({ days }: WidgetCardProps) {
+  const insight = useInsightFormat();
   const { data, state, t } = useForecast('cycle_time', days);
   if (!data) return state;
-  return <Stat value={fmt(data.unit)(data.projection)} sub={t('forecast.metric.cycle_time')} />;
+  return <Stat value={unitFormatter(insight, data.unit)(data.projection)} sub={t('forecast.metric.cycle_time')} />;
 }
 
 function CfrProjectionCard({ days }: WidgetCardProps) {
+  const insight = useInsightFormat();
   const { data, state, t } = useForecast('cfr', days);
   if (!data) return state;
-  return <Stat value={fmt(data.unit)(data.projection)} sub={t('forecast.metric.cfr')} />;
+  return <Stat value={unitFormatter(insight, data.unit)(data.projection)} sub={t('forecast.metric.cfr')} />;
 }
 
 function AnomaliesCard({ days }: WidgetCardProps) {
@@ -68,6 +78,7 @@ function AnomaliesCard({ days }: WidgetCardProps) {
 
 /** Cost history + dashed projection as a single trend (the headline forecast tile). */
 function CostForecastTrendCard({ days }: WidgetCardProps) {
+  const insight = useInsightFormat();
   const { data, state, t } = useForecast('cost', days);
   if (!data) return state;
   if (data.history.length === 0) return <Muted>{t('forecast.noData')}</Muted>;
@@ -80,7 +91,7 @@ function CostForecastTrendCard({ days }: WidgetCardProps) {
     { key: 'history', label: t('forecast.history'), values: [...data.history.map((p) => p.value), ...Array(fcastLen).fill(0)], color: 'var(--accent)' },
     { key: 'forecast', label: t('forecast.projected'), values: [...Array(Math.max(0, histLen - 1)).fill(0), ...(histLen > 0 ? [lastHist] : []), ...data.forecast.map((p) => p.value)], color: 'var(--text-muted)' },
   ];
-  return <TrendChart labels={labels} series={series} formatValue={fmt(data.unit)} ariaLabel={t('forecast.title')} />;
+  return <TrendChart labels={labels} series={series} formatValue={unitFormatter(insight, data.unit)} ariaLabel={t('forecast.title')} />;
 }
 
 // ── Registry ─────────────────────────────────────────────────────────────────

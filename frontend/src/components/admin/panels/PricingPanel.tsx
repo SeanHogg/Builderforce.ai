@@ -3,10 +3,12 @@
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { adminApi, type AdminPricingDocument } from '@/lib/adminApi';
-import { AdminError, AdminLoading, errText, fmtDateTime } from '@/components/admin/adminShared';
+import { AdminError, AdminLoading, errText } from '@/components/admin/adminShared';
+import { useAdminFormat } from '@/components/admin/adminShared';
 import { invalidatePublicPricingRequest } from '@/lib/publicPricing';
 
 export default function PricingPanel() {
+  const { fmtDateTime } = useAdminFormat();
   const t = useTranslations('admin.pricing');
   const [draft, setDraft] = useState<AdminPricingDocument | null>(null);
   const [publishedAt, setPublishedAt] = useState('');

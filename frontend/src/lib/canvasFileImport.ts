@@ -146,7 +146,7 @@ async function bytes(file: File): Promise<Uint8Array> {
 }
 
 function shapeLabel(t: ImportTranslator, source: TabularSource): string {
-  return t('datasetShape', { rows: source.rows.length.toLocaleString(), columns: source.columns.length });
+  return t('datasetShape', { rows: source.rows.length, columns: source.columns.length });
 }
 
 /** Plain text laid out as markdown paragraphs, so an extracted PDF or RTF body
@@ -226,7 +226,7 @@ function workbookObjects(file: File, sheets: WorkbookSheet[], t: ImportTranslato
       ...datasetObjectData(file.name, source, {
         mimeType: file.type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         subtitle: rest.length
-          ? t('workbookShape', { sheets: sheets.length, rows: first.rows.length.toLocaleString(), columns: first.columns.length })
+          ? t('workbookShape', { sheets: sheets.length, rows: first.rows.length, columns: first.columns.length })
           : shapeLabel(t, source),
         status: t('statusImported'),
       }),
@@ -348,7 +348,7 @@ function attachmentObject(
     data: {
       title: file.name,
       fileName: file.name,
-      subtitle: `${file.type || t('fileGeneric')} · ${Math.max(1, Math.round(file.size / 1024)).toLocaleString()} KB`,
+      subtitle: t('fileMeta', { type: file.type || t('fileGeneric'), kb: Math.max(1, Math.round(file.size / 1024)) }),
       status: t('statusAttached'),
       mimeType: file.type || 'application/octet-stream',
       fileSize: file.size,
@@ -380,13 +380,13 @@ function noticeFor(objects: ImportedCanvasObject[], file: File, t: ImportTransla
     const sheets = Array.isArray(data.sheets) ? data.sheets.length : 1;
     return sheets > 1
       ? t('noticeWorkbook', { name: file.name, sheets })
-      : t('noticeDataset', { name: file.name, rows: Number(data.rowCount ?? 0).toLocaleString(), columns: Array.isArray(data.columns) ? data.columns.length : 0 });
+      : t('noticeDataset', { name: file.name, rows: Number(data.rowCount ?? 0), columns: Array.isArray(data.columns) ? data.columns.length : 0 });
   }
   if (kind === 'resume') return t('noticeResume', { name: file.name });
   if (kind === 'slides') return t('noticeDeck', { name: file.name, slides: Array.isArray(data.items) ? data.items.length : 0 });
   if (kind === 'document') return t('noticeDocument', { name: file.name, pages: Number(data.pageCount ?? 1) });
   if (kind === 'image') return t('noticeImage', { name: file.name });
-  if (kind === 'model3d') return t('noticeModel', { name: file.name, facets: Number(data.facetCount ?? 0).toLocaleString() });
+  if (kind === 'model3d') return t('noticeModel', { name: file.name, facets: Number(data.facetCount ?? 0) });
   if (kind === 'cad') return t('noticeDrawing', { name: file.name });
   if (kind === 'diagram') {
     const notation = diagramNotation(typeof data.diagramFormat === 'string' ? data.diagramFormat : null);
@@ -450,7 +450,7 @@ async function deriveObjects(file: File, t: ImportTranslator, retainAttachmentBy
       data: {
         title: file.name,
         fileName: file.name,
-        subtitle: `${file.type || t('fileGeneric')} · ${Math.max(1, Math.round(file.size / 1024)).toLocaleString()} KB`,
+        subtitle: t('fileMeta', { type: file.type || t('fileGeneric'), kb: Math.max(1, Math.round(file.size / 1024)) }),
         status: t('statusAttached'),
         mimeType: file.type || 'image/png',
         fileSize: file.size,
@@ -475,7 +475,7 @@ async function deriveObjects(file: File, t: ImportTranslator, retainAttachmentBy
           title: fileStem(file.name),
           fileName: file.name,
           status: t('statusImported'),
-          subtitle: t('meshShape', { facets: triangles.length.toLocaleString(), format: meshFormat.toUpperCase() }),
+          subtitle: t('meshShape', { facets: triangles.length, format: meshFormat.toUpperCase() }),
           mimeType: file.type || 'model/stl',
           fileSize: file.size,
           facetCount: triangles.length,
@@ -526,7 +526,7 @@ async function deriveObjects(file: File, t: ImportTranslator, retainAttachmentBy
           sourceFormat: 'DOCX',
           outputFormat: 'DOCX',
           ...(pages > 1 ? { pageCount: pages } : {}),
-          subtitle: t('documentShape', { words: read.markdown.split(/\s+/).length.toLocaleString() }),
+          subtitle: t('documentShape', { words: read.markdown.split(/\s+/).length }),
         })];
       }
     }
@@ -568,7 +568,7 @@ async function deriveObjects(file: File, t: ImportTranslator, retainAttachmentBy
       if (text) {
         return [documentObject(file, textToMarkdown(text), t, {
           sourceFormat: 'RTF',
-          subtitle: t('documentShape', { words: text.split(/\s+/).length.toLocaleString() }),
+          subtitle: t('documentShape', { words: text.split(/\s+/).length }),
         })];
       }
     }
@@ -643,7 +643,7 @@ async function deriveObjects(file: File, t: ImportTranslator, retainAttachmentBy
     // nothing said so. The parse ceiling above is the real bound.
     return [documentObject(file, textToMarkdown(source), t, {
       sourceFormat: extension.toUpperCase() || 'TXT',
-      subtitle: t('documentShape', { words: source.split(/\s+/).length.toLocaleString() }),
+      subtitle: t('documentShape', { words: source.split(/\s+/).length }),
     })];
   }
   /**
@@ -673,7 +673,7 @@ async function deriveObjects(file: File, t: ImportTranslator, retainAttachmentBy
         outputFormat: 'HTML',
         sourceHtml: source.slice(0, MAX_PARSEABLE_BYTES),
         ...(htmlDocumentTitle(source) ? { documentTitle: htmlDocumentTitle(source)! } : {}),
-        subtitle: t('documentShape', { words: markdown.split(/\s+/).length.toLocaleString() }),
+        subtitle: t('documentShape', { words: markdown.split(/\s+/).length }),
       })];
     }
   }
@@ -692,7 +692,7 @@ async function deriveObjects(file: File, t: ImportTranslator, retainAttachmentBy
         mimeType: file.type || 'text/plain',
         fileSize: file.size,
         status: t('statusImported'),
-        subtitle: t('codeShape', { lines: text.split('\n').length.toLocaleString() }),
+        subtitle: t('codeShape', { lines: text.split('\n').length }),
       },
     }];
   }

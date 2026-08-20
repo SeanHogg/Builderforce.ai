@@ -23,7 +23,7 @@ import type { WidgetCardProps, WidgetDef, WidgetDrill } from '@/lib/widgets/type
 import { DonutChart } from '@/components/charts/DonutChart';
 import { BarChart } from '@/components/charts/BarChart';
 import { colorAt } from '@/components/charts/chartColors';
-import { usd, int, compactTokens } from '../format';
+import { useInsightFormat } from '../format';
 import { useLlmUsage, useLlmBySource } from '../insightsSources';
 
 /** Drill back into the full LLM-Usage report (the AI Insights slide-out). */
@@ -63,6 +63,7 @@ function isByoFundedOnly(rows: ReadonlyArray<{ totalTokens: number; estimatedCos
 // ── Widget bodies (the WidgetCard owns the frame/title/pin) ─────────────────────
 
 function LlmTokensCard(_props: WidgetCardProps) {
+  const { compactTokens } = useInsightFormat();
   const { data, state, t } = useUsageBody();
   if (!data) return state;
   return (
@@ -83,12 +84,14 @@ function LlmTokensCard(_props: WidgetCardProps) {
 }
 
 function LlmRequestsCard(_props: WidgetCardProps) {
+  const { int } = useInsightFormat();
   const { data, state, t } = useUsageBody();
   if (!data) return state;
   return <Stat value={int(data.totalRequests)} sub={t('llmUsage.requestsSub')} />;
 }
 
 function LlmByModelCard(_props: WidgetCardProps) {
+  const { compactTokens } = useInsightFormat();
   const { data, state, t } = useUsageBody();
   if (!data) return state;
   const models = (data.byModel ?? []).filter((m) => m.tokens > 0);
@@ -101,6 +104,7 @@ function LlmByModelCard(_props: WidgetCardProps) {
 }
 
 function LlmSpendCard(_props: WidgetCardProps) {
+  const { usd } = useInsightFormat();
   const { data, state, t } = useSourceBody();
   if (!data) return state;
   return <Stat value={usd(data.totals.estimatedCostUsd)} sub={t('llmUsage.spendSub')} />;
@@ -114,6 +118,7 @@ const SOURCE_LABEL_KEY: Record<'cloud' | 'on-prem' | 'web', string> = {
 };
 
 function LlmBySourceCard(_props: WidgetCardProps) {
+  const { usd } = useInsightFormat();
   const { data, state, t } = useSourceBody();
   if (!data) return state;
   const segments = data.byKind
@@ -134,6 +139,7 @@ function LlmBySourceCard(_props: WidgetCardProps) {
 }
 
 function LlmByProjectCard(_props: WidgetCardProps) {
+  const { usd } = useInsightFormat();
   const { data, state, t } = useSourceBody();
   if (!data) return state;
   const rows = data.perProject

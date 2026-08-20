@@ -21,6 +21,18 @@ export interface SearchPickerItem<K extends string> {
   icon: string;
   label: string;
   description: string;
+  /**
+   * Shown, named, and refused.
+   *
+   * A catalog entry this caller may not choose is DISABLED rather than dropped, which is
+   * the rule the rest of the product follows (`<RoleGate>` disables and never hides).
+   * Hiding it means nobody can discover the capability, and a person who cannot see the
+   * row cannot understand why the documentation mentions it — an absence is a smaller
+   * product, where a refusal is a boundary. `lockedReason` becomes the tooltip, so the
+   * row says WHY rather than merely being grey.
+   */
+  locked?: boolean;
+  lockedReason?: string;
 }
 
 export interface SearchPickerSection<K extends string> {
@@ -151,6 +163,9 @@ export function SearchPicker<K extends string>({
               key={`${item.sectionKey}-${item.kind}`}
               type="button"
               data-testid={`${testIdPrefix}-${item.kind}`}
+              data-locked={item.locked ? 'true' : undefined}
+              disabled={item.locked}
+              {...(item.locked && item.lockedReason ? { title: item.lockedReason } : {})}
               onClick={() => onPick(item.kind)}
             >
               <span className={classNames.icon} aria-hidden><Icon source={item.icon} size={18} /></span>

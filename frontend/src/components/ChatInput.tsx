@@ -475,12 +475,12 @@ export function ChatInput({
   // can never promise a budget the request does not send.
   const describeEffort = useCallback((level: BrainEffort) => {
     const { maxTokens, thinkingBudgetTokens } = effortProfile(level);
-    const base = t(`effortDesc_${level}`, { answer: maxTokens.toLocaleString() });
-    return thinking ? `${base} ${t('effortDescThinking', { thinking: thinkingBudgetTokens.toLocaleString() })}` : base;
+    const base = t(`effortDesc_${level}`, { answer: maxTokens });
+    return thinking ? `${base} ${t('effortDescThinking', { thinking: thinkingBudgetTokens })}` : base;
   }, [t, thinking]);
   const describeThinking = useCallback(
     (on: boolean) => (on
-      ? t('thinkingOnDesc', { budget: effortProfile(effort ?? 'balanced').thinkingBudgetTokens.toLocaleString() })
+      ? t('thinkingOnDesc', { budget: effortProfile(effort ?? 'balanced').thinkingBudgetTokens })
       : t('thinkingOffDesc')),
     [t, effort],
   );

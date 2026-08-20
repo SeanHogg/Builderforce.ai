@@ -47,6 +47,7 @@ import { composeStructured } from '../../application/game';
 import { ROBLOX_RESPONSE_SCHEMA, ROBLOX_SYSTEM_PROMPT, rbxlxFromSpec, readRobloxSpec } from '../../application/game/robloxPlace';
 import { findStockImages } from '../../application/creative/stockImageSearch';
 import {
+  SCREENSHOT_REASON_STATUS,
   ScreenshotUnavailableError,
   captureWebScreenshotCached,
   isScreenshotViewport,
@@ -237,8 +238,9 @@ export function createCreativeRoutes(): Hono<HonoEnv> {
     } catch (error) {
       if (error instanceof ScreenshotUnavailableError) {
         // 503 for "this deployment cannot", 502 for "that page would not" — different
-        // answers to the operator's monitoring and to the user reading the reply.
-        return c.json({ error: error.message, reason: error.reason }, error.reason === 'unconfigured' ? 503 : 502);
+        // answers to the operator's monitoring and to the user reading the reply. The
+        // mapping lives with the reasons so a new one must decide its own status.
+        return c.json({ error: error.message, reason: error.reason }, SCREENSHOT_REASON_STATUS[error.reason]);
       }
       // An SSRF refusal or a malformed URL — the caller's input, not the renderer.
       return c.json({ error: error instanceof Error ? error.message : 'The page could not be captured', reason: 'rejected' }, 400);

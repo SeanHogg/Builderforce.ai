@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import type { Formatter } from '@/i18n/format';
 import { useTranslations } from 'next-intl';
 import { Select } from '@/components/Select';
 import {
@@ -15,6 +16,7 @@ import { useProjectScope } from '@/lib/ProjectScopeContext';
 import { PmCard, PmEmpty, PmError } from '@/components/pm/pmShared';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 import { DaysWindowSelect } from './LensShell';
+import { useFormat } from "@/i18n/useFormat";
 
 /**
  * Label a cohort id. The catalogues carry a name for every SEEDED cohort, but the
@@ -44,10 +46,10 @@ function ordinal(n: number | null): string {
 }
 
 /** Render a metric value with its unit (units are short tokens like '%', 'h', '/wk'). */
-function fmtValue(m: BenchmarkMetric): string {
+function fmtValue(fmt: Formatter, m: BenchmarkMetric): string {
   if (m.value == null) return '—';
   const v = m.value;
-  const rounded = Math.abs(v) >= 100 ? Math.round(v).toLocaleString() : v.toFixed(1);
+  const rounded = Math.abs(v) >= 100 ? fmt.number(Math.round(v)) : v.toFixed(1);
   const u = m.unit;
   if (!u) return rounded;
   if (u === '$') return `$${rounded}`;
@@ -55,9 +57,9 @@ function fmtValue(m: BenchmarkMetric): string {
   return `${rounded}${u}`;
 }
 
-function fmtBench(value: number | null, unit: string | null): string {
+function fmtBench(fmt: Formatter, value: number | null, unit: string | null): string {
   if (value == null) return '—';
-  const rounded = Math.abs(value) >= 100 ? Math.round(value).toLocaleString() : value.toFixed(1);
+  const rounded = Math.abs(value) >= 100 ? fmt.number(Math.round(value)) : value.toFixed(1);
   if (!unit) return rounded;
   if (unit === '$') return `$${rounded}`;
   if (unit === '%') return `${rounded}%`;
@@ -96,6 +98,7 @@ const selectStyle: React.CSSProperties = {
  * cohort distribution (percentile + rating + cohort p50/p90).
  */
 export function BenchmarkingLens() {
+  const fmt = useFormat();
   const t = useTranslations('insights');
   const { currentProjectId } = useProjectScope();
   const [days, setDays] = useState(30);
@@ -184,11 +187,11 @@ export function BenchmarkingLens() {
               {data.metrics.map((m) => (
                 <tr key={m.metric} style={trStyle}>
                   <td style={tdStyle}>{t(`benchmarking.metrics.${m.metric}`)}</td>
-                  <td style={tdStyle}>{fmtValue(m)}</td>
+                  <td style={tdStyle}>{fmtValue(fmt, m)}</td>
                   <td style={tdMutedStyle}>{ordinal(m.percentile)}</td>
                   <td style={tdMutedStyle}><RatingBadge rating={m.rating} /></td>
-                  <td style={tdMutedStyle}>{fmtBench(m.p50, m.unit)}</td>
-                  <td style={tdMutedStyle}>{fmtBench(m.p90, m.unit)}</td>
+                  <td style={tdMutedStyle}>{fmtBench(fmt, m.p50, m.unit)}</td>
+                  <td style={tdMutedStyle}>{fmtBench(fmt, m.p90, m.unit)}</td>
                 </tr>
               ))}
             </tbody>

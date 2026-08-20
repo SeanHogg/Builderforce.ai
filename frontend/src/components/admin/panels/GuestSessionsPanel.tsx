@@ -36,17 +36,8 @@ import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { CopyButton } from '@/components/CopyButton';
 import { captureDiagnosticsContext } from '@/lib/diagnosticsCapture';
 import { buildGuestSessionReport } from '@/lib/guestSessionDiagnostics';
-import {
-  AdminError,
-  AdminLoading,
-  AdminPanelHeader,
-  SortableTh,
-  errText,
-  fmtDateTime,
-  fmtNum,
-  useAdminData,
-  useTableSort,
-} from '@/components/admin/adminShared';
+import { AdminError, AdminLoading, AdminPanelHeader, SortableTh, errText, useAdminData, useTableSort } from '@/components/admin/adminShared';
+import { useAdminFormat } from '@/components/admin/adminShared';
 import { BroadcastComposer } from './BroadcastComposer';
 
 /** One headline number. Five of these are the panel's answer row, and the same
@@ -154,6 +145,7 @@ const SESSION_COMPARATORS: Record<SessionSortKey, (a: AdminGuestSession, b: Admi
 const INITIAL_SORT = { key: 'lastSeen', direction: 'desc' } as const;
 
 export default function GuestSessionsPanel() {
+  const { fmtDateTime, fmtNum } = useAdminFormat();
   const t = useTranslations('admin.sessions');
   const tCommon = useTranslations('common');
   const { data, loading, error, reload } = useAdminData<AdminGuestSessionsPage>(() => adminApi.guestSessions());

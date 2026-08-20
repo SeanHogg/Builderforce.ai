@@ -17,7 +17,8 @@ import {
   type AdminReleaseNoteCategory,
   type ReleaseDigestResult,
 } from '@/lib/adminApi';
-import { errText, fmtDateTime, AdminError, AdminLoading } from '@/components/admin/adminShared';
+import { errText, AdminError, AdminLoading } from '@/components/admin/adminShared';
+import { useAdminFormat } from '@/components/admin/adminShared';
 import { Select } from '@/components/Select';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { RELEASE_NOTE_STAGES, toStage, type ReleaseNoteStage } from '@/lib/releaseNotesApi';
@@ -43,6 +44,7 @@ function toDateInput(iso: string | null): string {
 }
 
 export default function ReleaseNotesPanel() {
+  const { fmtDateTime } = useAdminFormat();
   const t = useTranslations('admin');
   const tCat = useTranslations('whatsNew');
   const confirm = useConfirm();

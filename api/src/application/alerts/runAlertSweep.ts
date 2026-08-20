@@ -16,6 +16,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { and, eq } from 'drizzle-orm';
 import { buildDatabase, type Db } from '../../infrastructure/database/connection';
 import { alerts, alertEvents, type AlertMetric } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { evaluateMetric } from './metricEvaluators';
 import {
   sendSlackNotification,

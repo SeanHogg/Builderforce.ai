@@ -20,9 +20,8 @@ import { BarChart, type BarDatum } from '@/components/charts/BarChart';
 import { DonutChart } from '@/components/charts/DonutChart';
 import { colorAt } from '@/components/charts/chartColors';
 import { workforcePlanApi, type WorkforcePlan, type WorkforcePlanMember } from '@/lib/personaCadenceApi';
+import { useFormat } from "@/i18n/useFormat";
 
-const int = (n: number) => Math.round(n).toLocaleString();
-const usd = (n: number) => `$${Math.round(n).toLocaleString()}`;
 const pct = (n: number) => `${Math.round(n * 100)}%`;
 
 const HUMAN_COLOR = colorAt(1);
@@ -49,6 +48,7 @@ function memberBars(members: WorkforcePlanMember[], color: string): BarDatum[] {
 }
 
 export function WorkforcePlanView() {
+  const fmt = useFormat();
   const t = useTranslations('workforcePlan');
   const [plan, setPlan] = useState<WorkforcePlan | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -77,10 +77,10 @@ export function WorkforcePlanView() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
       {/* ── Headline KPIs ── */}
       <div style={grid}>
-        <InsightStat label={t('members')} value={int(totals.memberCount)} sub={t('membersSub', { human: humans.length, agent: agents.length })} />
-        <InsightStat label={t('inFlight')} value={int(totals.totalOpenWip)} sub={t('inFlightSub')} color={colorAt(0)} />
-        <InsightStat label={t('capacityGap')} value={int(totals.capacityGapWip)} sub={t('capacityGapSub')} color={colorAt(2)} />
-        <InsightStat label={t('weeklyCost')} value={usd(totals.totalWeeklyCostUsd)} sub={t('weeklyCostSub')} color={colorAt(5)} />
+        <InsightStat label={t('members')} value={fmt.number(totals.memberCount)} sub={t('membersSub', { human: humans.length, agent: agents.length })} />
+        <InsightStat label={t('inFlight')} value={fmt.number(totals.totalOpenWip)} sub={t('inFlightSub')} color={colorAt(0)} />
+        <InsightStat label={t('capacityGap')} value={fmt.number(totals.capacityGapWip)} sub={t('capacityGapSub')} color={colorAt(2)} />
+        <InsightStat label={t('weeklyCost')} value={fmt.money(totals.totalWeeklyCostUsd)} sub={t('weeklyCostSub')} color={colorAt(5)} />
         <InsightStat label={t('agentShare')} value={pct(totals.agentWipShare)} sub={t('agentShareSub')} color={AGENT_COLOR} />
       </div>
 
@@ -93,9 +93,9 @@ export function WorkforcePlanView() {
           ) : (
             <DonutChart
               segments={costSegments}
-              centerValue={usd(totals.totalWeeklyCostUsd)}
+              centerValue={fmt.money(totals.totalWeeklyCostUsd)}
               centerLabel={t('perWeek')}
-              formatValue={(v) => usd(v)}
+              formatValue={(v) => fmt.money(v)}
               ariaLabel={t('hireVsAgent')}
             />
           )}
@@ -107,7 +107,7 @@ export function WorkforcePlanView() {
           {humans.length === 0 ? (
             <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('noHumans')}</div>
           ) : (
-            <BarChart data={memberBars(humans, HUMAN_COLOR)} formatValue={int} ariaLabel={t('humanCapacity')} />
+            <BarChart data={memberBars(humans, HUMAN_COLOR)} formatValue={fmt.number} ariaLabel={t('humanCapacity')} />
           )}
           <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 10 }}>{t('barLegend')}</div>
         </div>
@@ -118,7 +118,7 @@ export function WorkforcePlanView() {
           {agents.length === 0 ? (
             <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('noAgents')}</div>
           ) : (
-            <BarChart data={memberBars(agents, AGENT_COLOR)} formatValue={int} ariaLabel={t('agentCapacity')} />
+            <BarChart data={memberBars(agents, AGENT_COLOR)} formatValue={fmt.number} ariaLabel={t('agentCapacity')} />
           )}
           <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 10 }}>{t('barLegend')}</div>
         </div>

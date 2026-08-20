@@ -17,6 +17,25 @@ export interface ToolSummary {
   kind: ToolKind;
   /** True when the tool also has a telemetry-derived "from your data" mode. */
   hasDataDriven?: boolean;
+  /** True when the scorecard can be re-lensed into a maturity FRAMEWORK's domains
+   *  (COBIT, ITIL). Decided server-side from the framework registry. */
+  supportsMaturityFrameworks?: boolean;
+}
+
+/**
+ * A maturity framework the scorecard can be reported under, from
+ * `GET /api/tools/maturity-frameworks`.
+ *
+ * A LENS, never a second questionnaire: the signals, the score and the plan are
+ * identical under every framework — only the grouping and the names of the
+ * scorecard rows change, so a CIO can hand the same measurement to an audit
+ * committee in the taxonomy that committee already uses.
+ */
+export interface MaturityFrameworkSummary {
+  id: string;
+  name: string;
+  tagline: string;
+  domains: Array<{ key: string; name: string; description: string; practices: string[] }>;
 }
 
 export interface CalculatorInput {
@@ -78,7 +97,15 @@ export interface RemediationSummary {
   prUrl: string | null;
 }
 
-export interface ToolMetric { label: string; value: string; hint?: string; tier?: number }
+export interface ToolMetric {
+  label: string;
+  value: string;
+  hint?: string;
+  tier?: number;
+  /** Stable identity of the row (a section key, a framework domain key) — set by
+   *  the server so a scorecard can be regrouped without matching on its label. */
+  key?: string;
+}
 export interface ToolRecommendation {
   title: string;
   detail: string;

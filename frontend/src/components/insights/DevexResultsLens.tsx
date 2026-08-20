@@ -10,7 +10,8 @@ import {
 import { usePmData } from '@/lib/pm/usePmData';
 import { PmCard, PmEmpty, PmError, StatCard } from '@/components/pm/pmShared';
 import { DaysWindowSelect, KpiGrid } from './LensShell';
-import { pct, score2, int } from './format';
+import { pct, score2 } from './format';
+import { useInsightFormat } from './format';
 import { useProjectScope } from '@/lib/ProjectScopeContext';
 import {
   DevexIndexCard, TopicTable, SegmentHeatmap, ParticipationChart,
@@ -34,6 +35,7 @@ function loadPercentile(): BenchmarkPercentile {
  * percentile is a persisted view preference (localStorage).
  */
 export function DevexResultsLens() {
+  const { int } = useInsightFormat();
   const t = useTranslations('insights');
   const [days, setDays] = useState(90);
   const [percentile, setPercentile] = useState<BenchmarkPercentile>(75);

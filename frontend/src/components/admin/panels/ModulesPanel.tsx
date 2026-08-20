@@ -3,10 +3,12 @@
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { adminApi } from '@/lib/adminApi';
-import { errText, fmtDate, useAdminData, AdminError, AdminLoading } from '@/components/admin/adminShared';
+import { errText, useAdminData, AdminError, AdminLoading } from '@/components/admin/adminShared';
+import { useAdminFormat } from '@/components/admin/adminShared';
 import { useConfirm } from '@/components/ConfirmProvider';
 
 export default function ModulesPanel() {
+  const { fmtDate } = useAdminFormat();
   const t = useTranslations('admin');
   const confirm = useConfirm();
   const { data, loading, error, reload, setData, setError } = useAdminData(() => adminApi.modules(), []);

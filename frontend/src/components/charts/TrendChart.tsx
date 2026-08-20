@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useFormat } from '@/i18n/useFormat';
+import type { Formatter } from '@/i18n/format';
 import { colorAt } from './chartColors';
 import { observeResizeOnAnimationFrame } from '../../lib/observeResize';
 
@@ -35,21 +37,24 @@ export interface TrendChartProps {
 
 const M = { top: 12, right: 16, bottom: 26, left: 48 };
 
-function compact(n: number): string {
+function compact(fmt: Formatter, n: number): string {
   const abs = Math.abs(n);
   if (abs >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (abs >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
-  return Math.round(n).toLocaleString();
+  return fmt.number(Math.round(n));
 }
 
 export function TrendChart({
   labels,
   series,
   height = 200,
-  formatValue = compact,
+  formatValue,
   area = false,
   ariaLabel,
 }: TrendChartProps) {
+  const fmt = useFormat();
+  // A default PARAMETER is evaluated outside the body, so it cannot see the hook.
+  const value = formatValue ?? ((n: number) => compact(fmt, n));
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const [width, setWidth] = useState(640);
 
@@ -95,7 +100,7 @@ export function TrendChart({
             <g key={i}>
               <line x1={0} x2={innerW} y1={y(t)} y2={y(t)} stroke="var(--border-subtle)" strokeWidth={1} />
               <text x={-8} y={y(t) + 4} fontSize={10} textAnchor="end" fill="var(--text-muted)">
-                {formatValue(t)}
+                {value(t)}
               </text>
             </g>
           ))}
@@ -123,7 +128,7 @@ export function TrendChart({
                 <polyline points={pts} fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
                 {s.values.map((v, i) => (
                   <circle key={i} cx={x(i)} cy={y(v)} r={i === n - 1 ? 3.5 : 2} fill={color}>
-                    <title>{`${s.label} · ${labels[i]}: ${formatValue(v)}`}</title>
+                    <title>{`${s.label} · ${labels[i]}: ${value(v)}`}</title>
                   </circle>
                 ))}
               </g>

@@ -15,6 +15,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { and, asc, eq, isNull, lte, or } from 'drizzle-orm';
 import { buildDatabase, type Db } from '../../infrastructure/database/connection';
 import { qaExplorations, qaSchedules, qaTargets } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { QaHeatmapService } from './QaHeatmapService';
 import { buildExplorationPlan } from './qaTypes';
 import { dispatchQaRunner } from './dispatchQaRunner';

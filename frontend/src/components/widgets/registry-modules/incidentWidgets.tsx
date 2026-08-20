@@ -23,7 +23,7 @@ import { formatRecency } from '@/components/dashboard/metricFormat';
 import type { WidgetCardProps, WidgetDef, WidgetDrill } from '@/lib/widgets/types';
 import { DonutChart } from '@/components/charts/DonutChart';
 import { colorAt } from '@/components/charts/chartColors';
-import { int } from '@/components/insights/format';
+import { useInsightFormat } from '@/components/insights/format';
 
 // ── Shared, deduped source (one fetch regardless of pins) ───────────────────────
 
@@ -61,6 +61,7 @@ function fmtMinutes(m: number | null): string {
 
 /** Open-vs-total incidents with recency + an "all clear" / "N open" nudge. */
 function IncidentStatusCard(_props: WidgetCardProps) {
+  const { int } = useInsightFormat();
   const t = useTranslations('widgets');
   const dt = useTranslations('dashboard');
   const { data, error } = useMonitoringReport();
@@ -83,6 +84,7 @@ function IncidentStatusCard(_props: WidgetCardProps) {
 
 /** Severity mix donut (sev1..sev4) over the window. */
 function IncidentSeverityCard(_props: WidgetCardProps) {
+  const { int } = useInsightFormat();
   const t = useTranslations('widgets');
   const { data, error } = useMonitoringReport();
   if (error) return <Muted>{error}</Muted>;
@@ -105,6 +107,7 @@ function IncidentSeverityCard(_props: WidgetCardProps) {
 
 /** By-affected-system donut — which systems are burning (top 6). */
 function IncidentSystemCard(_props: WidgetCardProps) {
+  const { int } = useInsightFormat();
   const t = useTranslations('widgets');
   const { data, error } = useMonitoringReport();
   if (error) return <Muted>{error}</Muted>;

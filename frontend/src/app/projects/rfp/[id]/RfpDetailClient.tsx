@@ -10,6 +10,7 @@ import {
   rfpApi, type RfpRequestRow, type RfpResponseRow, type RfpResponseBody, type RfpCostModel, type RfpPhase,
   type RfpRegisterEntry, type RfpRegisterRollup, type RfpDeepFreshness,
 } from '@/lib/builderforceApi';
+import { useFormat } from "@/i18n/useFormat";
 
 /**
  * RfpDetailClient — the response workspace for one RFP request. Generates a proposal
@@ -39,7 +40,6 @@ const COST_COLORS: Record<string, string> = {
   build: 'var(--indigo-bright)', agentic: 'var(--sky-bright)', marketing: 'var(--teal-bright)', contingency: 'var(--warning)', margin: 'var(--success)',
 };
 
-const usd = (n: number) => `$${Math.round(n).toLocaleString('en-US')}`;
 
 export default function RfpDetailClient() {
   const t = useTranslations('rfpPage');
@@ -296,6 +296,7 @@ function CapabilitySection({ body, t }: { body: RfpResponseBody; t: T }) {
 }
 
 function CostSection({ cost, t }: { cost: RfpCostModel; t: T }) {
+  const fmt = useFormat();
   const max = Math.max(cost.quotedPriceUsd, 1);
   return (
     <div style={card}>
@@ -303,7 +304,7 @@ function CostSection({ cost, t }: { cost: RfpCostModel; t: T }) {
         <h2 style={h2}>{t('sec.economics')}</h2>
         <div style={{ textAlign: 'right' }}>
           <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5, color: 'var(--text-muted)' }}>{t('quotedPrice')}</div>
-          <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--text-primary)' }}>{usd(cost.quotedPriceUsd)}</div>
+          <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--text-primary)' }}>{fmt.money(cost.quotedPriceUsd)}</div>
         </div>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
@@ -313,7 +314,7 @@ function CostSection({ cost, t }: { cost: RfpCostModel; t: T }) {
             <div style={{ flex: 1, background: 'var(--bg-elevated)', borderRadius: 'var(--radius-sm)', height: 18, overflow: 'hidden', minWidth: 60 }}>
               <div style={{ width: `${Math.max((li.amountUsd / max) * 100, 1)}%`, background: COST_COLORS[li.category] ?? 'var(--accent)', height: '100%' }} />
             </div>
-            <span style={{ minWidth: 90, textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 600, color: 'var(--text-primary)' }}>{usd(li.amountUsd)}</span>
+            <span style={{ minWidth: 90, textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 600, color: 'var(--text-primary)' }}>{fmt.money(li.amountUsd)}</span>
           </div>
         ))}
       </div>

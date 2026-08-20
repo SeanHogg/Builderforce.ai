@@ -2,14 +2,8 @@
 
 import { useTranslations } from 'next-intl';
 import { adminApi, type AdminCreationSession } from '@/lib/adminApi';
-import {
-  AdminError,
-  AdminLoading,
-  AdminPanelHeader,
-  fmtDateTime,
-  fmtNum,
-  useAdminData,
-} from '@/components/admin/adminShared';
+import { AdminError, AdminLoading, AdminPanelHeader, useAdminData } from '@/components/admin/adminShared';
+import { useAdminFormat } from '@/components/admin/adminShared';
 
 function inviteState(invite: AdminCreationSession['invitations'][number]): 'revoked' | 'accepted' | 'expired' | 'pending' {
   if (invite.revokedAt) return 'revoked';
@@ -19,6 +13,7 @@ function inviteState(invite: AdminCreationSession['invitations'][number]): 'revo
 }
 
 export default function CreationSessionsPanel() {
+  const { fmtDateTime, fmtNum } = useAdminFormat();
   const t = useTranslations('admin.creationSessions');
   const { data, loading, error, reload } = useAdminData<AdminCreationSession[]>(() => adminApi.creationSessions());
   const sessions = data ?? [];

@@ -14,6 +14,7 @@
  */
 import { and, asc, eq } from 'drizzle-orm';
 import { swimlanes, swimlaneAgentAssignments, swimlaneRequirements, tasks } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { getTenantTokenAvailability } from '../llm/tenantTokenAvailability';

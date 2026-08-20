@@ -17,6 +17,7 @@
 import { eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { tasks } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { emitWebhookEvent, type EmitDeps } from './webhookService';
 
 export interface ReleaseWorkItemInput {

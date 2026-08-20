@@ -24,6 +24,7 @@ import {
   studioVoiceClones,
   studioVoiceovers,
 } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import {
   isTtsProviderConfigured,

@@ -18,7 +18,8 @@ import { BarChart, type BarDatum } from '@/components/charts/BarChart';
 import { RadarChart } from '@/components/charts/RadarChart';
 import { colorAt } from '@/components/charts/chartColors';
 import { InsightStat } from '@/components/dashboard/InsightStat';
-import { hrs, int, pct, usd } from '@/components/insights/format';
+import { hrs, pct } from '@/components/insights/format';
+import { useInsightFormat } from '@/components/insights/format';
 import { useFormat } from "@/i18n/useFormat";
 
 /**
@@ -55,6 +56,7 @@ function ScrollTable({ children }: { children: React.ReactNode }) {
 
 // ── EMP-12 — over-allocation ─────────────────────────────────────────────────
 function AllocationPanel() {
+  const { int } = useInsightFormat();
   const t = useTranslations('widgets');
   const [data, setData] = useState<AllocationHealthResult | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -103,6 +105,7 @@ function AllocationPanel() {
 
 // ── EMP-14 — collaboration ───────────────────────────────────────────────────
 function CollaborationPanel({ days }: { days: number }) {
+  const { int } = useInsightFormat();
   const t = useTranslations('widgets');
   const [data, setData] = useState<CollaborationResult | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -164,6 +167,7 @@ function CollaborationPanel({ days }: { days: number }) {
 
 // ── EMP-17 — documentation activity ──────────────────────────────────────────
 function DocActivityPanel({ days }: { days: number }) {
+  const { int } = useInsightFormat();
   const t = useTranslations('widgets');
   const [data, setData] = useState<DocActivityResult | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -205,6 +209,7 @@ function DocActivityPanel({ days }: { days: number }) {
 
 // ── EMP-19 — labour cost ─────────────────────────────────────────────────────
 function LaborCostPanel({ days }: { days: number }) {
+  const { usd } = useInsightFormat();
   const t = useTranslations('widgets');
   const [data, setData] = useState<LaborCostResult | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -317,6 +322,7 @@ function CoachingNotes({ member }: { member: PerformerRow }) {
 }
 
 function PerformersPanel({ days }: { days: number }) {
+  const { int } = useInsightFormat();
   const t = useTranslations('widgets');
   const [data, setData] = useState<PerformerTiersResult | null>(null);
   const [err, setErr] = useState<string | null>(null);

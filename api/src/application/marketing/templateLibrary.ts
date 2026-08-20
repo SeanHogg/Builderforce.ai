@@ -27,6 +27,7 @@ import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { marketingAssets, marketingTemplates } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { newChallengeToken } from '../shared/dnsVerification';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { assertSafeUrl, BlockedUrlError, resolveAndAssertPublic } from '../../infrastructure/net/ssrfGuard';

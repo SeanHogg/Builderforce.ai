@@ -1,12 +1,14 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import type { Formatter } from '@/i18n/format';
 import { useTranslations } from 'next-intl';
 import { adminApi, type AdminPlatformRollup } from '@/lib/adminApi';
 import { InsightStat } from '@/components/dashboard/InsightStat';
 import { TrendChart } from '@/components/charts/TrendChart';
 import { colorAt } from '@/components/charts/chartColors';
 import { errText } from '../adminShared';
+import { useFormat } from "@/i18n/useFormat";
 
 /**
  * Superadmin Health/Usage historical trends — platform-wide user + workspace
@@ -17,10 +19,10 @@ import { errText } from '../adminShared';
  */
 
 const WINDOWS = [7, 30, 90] as const;
-const compactInt = (n: number) => (Math.abs(n) >= 1000 ? `${(n / 1000).toFixed(1)}K` : Math.round(n).toLocaleString());
-const usd = (n: number) => `$${Math.round(n).toLocaleString()}`;
+const compactInt = (fmt: Formatter, n: number) => (Math.abs(n) >= 1000 ? `${(n / 1000).toFixed(1)}K` : fmt.number(Math.round(n)));
 
 export function PlatformTrends() {
+  const fmt = useFormat();
   const t = useTranslations('admin');
   const [days, setDays] = useState<number>(30);
   const [data, setData] = useState<AdminPlatformRollup | null>(null);
@@ -63,11 +65,11 @@ export function PlatformTrends() {
       ) : (
         <>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3" style={{ marginBottom: 16 }}>
-            <InsightStat label={t('health.newUsers')} value={compactInt(data.totals.newUsers)} series={data.series.newUsers.map((p) => p.value)} color={colorAt(0)} style={{ minWidth: 0 }} />
-            <InsightStat label={t('health.newWorkspaces')} value={compactInt(data.totals.newTenants)} series={data.series.newTenants.map((p) => p.value)} color={colorAt(1)} style={{ minWidth: 0 }} />
-            <InsightStat label={t('health.llmTokens')} value={compactInt(data.totals.tokens)} series={data.series.tokens.map((p) => p.value)} color={colorAt(2)} style={{ minWidth: 0 }} />
-            <InsightStat label={t('health.llmSpend')} value={usd(data.totals.spendUsd)} series={data.series.spendUsd.map((p) => p.value)} color={colorAt(3)} style={{ minWidth: 0 }} />
-            <InsightStat label={t('health.errorVolume')} value={compactInt(data.totals.errorEvents)} series={data.series.errorEvents.map((p) => p.value)} color="rgba(239,68,68,0.85)" style={{ minWidth: 0 }} />
+            <InsightStat label={t('health.newUsers')} value={compactInt(fmt, data.totals.newUsers)} series={data.series.newUsers.map((p) => p.value)} color={colorAt(0)} style={{ minWidth: 0 }} />
+            <InsightStat label={t('health.newWorkspaces')} value={compactInt(fmt, data.totals.newTenants)} series={data.series.newTenants.map((p) => p.value)} color={colorAt(1)} style={{ minWidth: 0 }} />
+            <InsightStat label={t('health.llmTokens')} value={compactInt(fmt, data.totals.tokens)} series={data.series.tokens.map((p) => p.value)} color={colorAt(2)} style={{ minWidth: 0 }} />
+            <InsightStat label={t('health.llmSpend')} value={fmt.money(data.totals.spendUsd)} series={data.series.spendUsd.map((p) => p.value)} color={colorAt(3)} style={{ minWidth: 0 }} />
+            <InsightStat label={t('health.errorVolume')} value={compactInt(fmt, data.totals.errorEvents)} series={data.series.errorEvents.map((p) => p.value)} color="rgba(239,68,68,0.85)" style={{ minWidth: 0 }} />
           </div>
           <TrendChart
             labels={labels}
@@ -77,7 +79,7 @@ export function PlatformTrends() {
               { key: 'errors', label: t('health.errorVolume'), values: data.series.errorEvents.map((p) => p.value), color: 'rgba(239,68,68,0.85)' },
             ]}
             height={200}
-            formatValue={(v) => compactInt(v)}
+            formatValue={(v) => compactInt(fmt, v)}
             ariaLabel={t('health.trends')}
           />
         </>

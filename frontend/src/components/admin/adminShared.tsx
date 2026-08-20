@@ -21,16 +21,34 @@ export function errText(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
-export function fmtDate(d: string): string {
-  return new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+/**
+ * The admin surface's date/number formatters, bound to the ACTIVE locale.
+ *
+ * These were three free functions, and two of them hardcoded `'en-US'` — English
+ * for every reader, including one who had explicitly chosen German. Binding them
+ * to a locale means they cannot be free functions any more; they are handed out
+ * by this hook instead, which keeps their names and signatures so **none of the
+ * ~107 call sites across the admin panels changed**:
+ *
+ *   const { fmtDate, fmtNum } = useAdminFormat();
+ *   <td>{fmtDate(row.createdAt)}</td>        // unchanged
+ */
+export interface AdminFormatters {
+  /** `19 Aug 2026` */
+  fmtDate(d: string): string;
+  /** `19 Aug, 14:05` */
+  fmtDateTime(d: string): string;
+  /** Grouped decimal; accepts the strings the admin API returns for big counters. */
+  fmtNum(n: number | string): string;
 }
 
-export function fmtDateTime(d: string): string {
-  return new Date(d).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-}
-
-export function fmtNum(n: number | string): string {
-  return Number(n).toLocaleString();
+export function useAdminFormat(): AdminFormatters {
+  const fmt = useFormat();
+  return useMemo<AdminFormatters>(() => ({
+    fmtDate: (d) => fmt.dateWith(d, { year: 'numeric', month: 'short', day: 'numeric' }),
+    fmtDateTime: (d) => fmt.dateWith(d, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
+    fmtNum: (n) => fmt.number(Number(n)),
+  }), [fmt]);
 }
 
 /**

@@ -4,9 +4,11 @@ import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { adminApi, type AdminTenant, type AdminDiscountCode, type AdminError as AdminErrorRow } from '@/lib/adminApi';
-import { AdminError, AdminLoading, composeMailto, errText, fmtDateTime } from '@/components/admin/adminShared';
+import { AdminError, AdminLoading, composeMailto, errText } from '@/components/admin/adminShared';
+import { useAdminFormat } from '@/components/admin/adminShared';
 
 export default function BillingPanel() {
+  const { fmtDateTime } = useAdminFormat();
   const t = useTranslations('admin');
   const router = useRouter();
 

@@ -12,6 +12,8 @@
  * serve verbatim to logged-out visitors.
  */
 
+import { DEFAULT_TOOL_LOCALE, resultCopy, type ResultCopy } from './resultCopy';
+
 export type ToolCategory = 'delivery' | 'finops' | 'governance' | 'quality' | 'career';
 export type ToolKind = 'calculator' | 'questionnaire' | 'quiz' | 'analyzer';
 
@@ -24,6 +26,17 @@ export interface ToolMetric {
   hint?: string;
   /** 1..5 tier for a colored meter (optional). */
   tier?: number;
+  /**
+   * Stable identity of what this row measures — a questionnaire section key, a
+   * quiz dimension id — independent of its display label.
+   *
+   * It exists so a result can be RE-GROUPED without re-scoring: the maturity
+   * framework lens (COBIT / ITIL) folds these rows into a different taxonomy, and
+   * matching on the human label would have meant a lens that broke the moment a
+   * section was renamed or translated. Optional, because a metric that is a
+   * one-off figure ("Window", "Agent LLM calls") has nothing stable to identify.
+   */
+  key?: string;
 }
 
 export interface ToolRecommendation {
@@ -199,6 +212,10 @@ export interface ToolSummary {
   /** True when the tool also has a telemetry-derived ("from your data") mode.
    *  Set by ToolService from the data-provider registry, not the definition. */
   hasDataDriven?: boolean;
+  /** True when the scorecard can be re-lensed into a maturity FRAMEWORK's domains
+   *  (COBIT, ITIL). Set by ToolService from the framework registry — a tool no
+   *  framework maps gets no toggle, and adding one is a registry entry. */
+  supportsMaturityFrameworks?: boolean;
 }
 
 /** Public, client-safe full definition (no compute fn). */
@@ -227,8 +244,6 @@ export function toDefinition(t: Tool): ToolDefinition {
 
 // ── Shared questionnaire scorer (CMMI-style averaging → bands + plan) ──────────
 
-const LEVEL_NAMES = ['Initial', 'Managed', 'Defined', 'Quantitatively Managed', 'Optimizing'];
-
 export function clampLevel(n: number): number {
   return Math.max(1, Math.min(5, Math.round(n)));
 }
@@ -237,25 +252,38 @@ export function clampLevel(n: number): number {
  * Score a questionnaire: each section is the rounded mean of its 1..5 answers;
  * the overall is the mean of rated sections; the plan targets each section's
  * level+1 (lowest first). Shared by every questionnaire tool.
+ *
+ * `copy` is the RESULT CHROME — the band names and the "Level 3 — Defined" /
+ * "Software Delivery — to Level 4" wrappers. It is a parameter rather than a
+ * module constant because a result is read in the reader's language, and the
+ * chrome was the half of it that could not come from the tool: run this over a
+ * localized tool (see `toolMessages.localizeTool`) and the section names and
+ * actions arrive translated, while these wrappers would still have said "Level".
+ * Defaults to English so every existing caller is unchanged.
  */
-export function scoreQuestionnaire(tool: QuestionnaireTool, answers: Record<string, number>): ToolResult {
+export function scoreQuestionnaire(
+  tool: QuestionnaireTool,
+  answers: Record<string, number>,
+  copy: ResultCopy = resultCopy(DEFAULT_TOOL_LOCALE),
+): ToolResult {
   const metrics: ToolMetric[] = [];
   const plan: Array<{ name: string; from: number; action: string }> = [];
   const levels: number[] = [];
+  const bandName = (lvl: number) => copy.levelNames[clampLevel(lvl) - 1]!;
 
   for (const section of tool.sections) {
     const vals = section.questions
       .map((q) => answers[q.id])
       .filter((v): v is number => typeof v === 'number' && v >= 1 && v <= 5);
     if (vals.length === 0) {
-      metrics.push({ label: section.name, value: 'Not assessed' });
+      metrics.push({ key: section.key, label: section.name, value: copy.notAssessed });
       continue;
     }
     const lvl = clampLevel(vals.reduce((s, v) => s + v, 0) / vals.length);
     levels.push(lvl);
-    metrics.push({ label: section.name, value: `Level ${lvl} — ${LEVEL_NAMES[lvl - 1]}`, tier: lvl });
+    metrics.push({ key: section.key, label: section.name, value: copy.levelValue(lvl, bandName(lvl)), tier: lvl });
     if (lvl < 5) {
-      plan.push({ name: section.name, from: lvl, action: section.recommendations[lvl + 1] ?? 'Continue improving this area.' });
+      plan.push({ name: section.name, from: lvl, action: section.recommendations[lvl + 1] ?? copy.keepImproving });
     }
   }
 
@@ -263,12 +291,12 @@ export function scoreQuestionnaire(tool: QuestionnaireTool, answers: Record<stri
   plan.sort((a, b) => a.from - b.from);
 
   return {
-    headline: overall != null ? `Level ${overall} — ${LEVEL_NAMES[clampLevel(overall) - 1]}` : 'Not enough answers yet',
-    summary: overall != null ? undefined : 'Answer the questions to see your rating and plan.',
+    headline: overall != null ? copy.levelValue(overall, bandName(overall)) : copy.notEnoughAnswers,
+    summary: overall != null ? undefined : copy.answerPrompt,
     score: overall,
-    scoreLabel: overall != null ? LEVEL_NAMES[clampLevel(overall) - 1] : null,
+    scoreLabel: overall != null ? bandName(overall) : null,
     metrics,
-    recommendations: plan.map((p) => ({ title: `${p.name} — to Level ${p.from + 1}`, detail: p.action })),
+    recommendations: plan.map((p) => ({ title: copy.planTitle(p.name, p.from + 1), detail: p.action })),
   };
 }
 
@@ -281,10 +309,14 @@ export function scoreQuestionnaire(tool: QuestionnaireTool, answers: Record<stri
  * state (the text of its next-level option) — lowest dimension first. Shared by
  * every quiz tool.
  */
-export function scoreQuiz(tool: QuizTool, answers: Record<string, number>): ToolResult {
+export function scoreQuiz(
+  tool: QuizTool,
+  answers: Record<string, number>,
+  copy: ResultCopy = resultCopy(DEFAULT_TOOL_LOCALE),
+): ToolResult {
   const maxLevel = tool.levels.reduce((m, l) => Math.max(m, l.level), 1);
   const levelDef = (lvl: number): QuizLevel | undefined => tool.levels.find((l) => l.level === lvl);
-  const levelName = (lvl: number): string => levelDef(lvl)?.name ?? `Level ${lvl}`;
+  const levelName = (lvl: number): string => levelDef(lvl)?.name ?? String(lvl);
   const clamp = (n: number): number => Math.max(1, Math.min(maxLevel, Math.round(n)));
 
   const metrics: ToolMetric[] = [];
@@ -295,11 +327,11 @@ export function scoreQuiz(tool: QuizTool, answers: Record<string, number>): Tool
     const raw = answers[q.id];
     const lvl = typeof raw === 'number' && raw >= 1 ? clamp(raw) : null;
     if (lvl == null) {
-      metrics.push({ label: q.dimension, value: 'Not answered' });
+      metrics.push({ key: q.id, label: q.dimension, value: copy.notAnswered });
       continue;
     }
     picked.push(lvl);
-    metrics.push({ label: q.dimension, value: `Level ${lvl} — ${levelName(lvl)}`, tier: lvl });
+    metrics.push({ key: q.id, label: q.dimension, value: copy.levelValue(lvl, levelName(lvl)), tier: lvl });
     if (lvl < maxLevel) {
       weak.push({ dimension: q.dimension, level: lvl, next: q.options.find((o) => o.level === lvl + 1) });
     }
@@ -307,8 +339,8 @@ export function scoreQuiz(tool: QuizTool, answers: Record<string, number>): Tool
 
   if (picked.length === 0) {
     return {
-      headline: 'Not enough answers yet',
-      summary: 'Answer each dimension to see your level and what to do next.',
+      headline: copy.notEnoughAnswers,
+      summary: copy.answerPrompt,
       score: null,
       scoreLabel: null,
       metrics,
@@ -322,18 +354,18 @@ export function scoreQuiz(tool: QuizTool, answers: Record<string, number>): Tool
 
   const recommendations: ToolRecommendation[] = [];
   if (band < maxLevel && matched?.advance) {
-    recommendations.push({ title: `Reach Level ${band + 1} — ${levelName(band + 1)}`, detail: matched.advance });
+    recommendations.push({ title: copy.reachLevel(band + 1, levelName(band + 1)), detail: matched.advance });
   }
   weak.sort((a, b) => a.level - b.level);
   for (const w of weak) {
     recommendations.push({
-      title: `${w.dimension} — to Level ${w.level + 1}`,
-      detail: w.next ? `Aim for: ${w.next.text}` : 'Keep maturing this dimension.',
+      title: copy.planTitle(w.dimension, w.level + 1),
+      detail: w.next ? copy.aimFor(w.next.text) : copy.keepMaturing,
     });
   }
 
   return {
-    headline: `Level ${band} — ${levelName(band)}`,
+    headline: copy.levelValue(band, levelName(band)),
     summary: matched?.summary,
     score: overall,
     scoreLabel: levelName(band),

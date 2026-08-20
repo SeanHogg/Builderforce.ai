@@ -1,5 +1,3 @@
-'use client';
-
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { RescheduleMode } from './schedule';
 
@@ -47,6 +45,10 @@ export interface UseScheduleDragOptions<T> {
  * The hook owns only the arithmetic and the lifecycle; each view keeps its own
  * rendering of the in-flight preview, because a ghosted Gantt bar and a ghosted
  * calendar span do not look alike.
+ *
+ * No `'use client'` of its own: a hook is only ever reachable from a component
+ * that already declared one, so the directive would add a file to the client
+ * boundary count without moving the boundary.
  */
 export function useScheduleDrag<T>({ deltaFor, commit, enabled = true }: UseScheduleDragOptions<T>) {
   const [drag, setDrag] = useState<ScheduleDragState<T> | null>(null);

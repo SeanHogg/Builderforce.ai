@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { getTranslations } from 'next-intl/server';
+import { getLocale, getTranslations } from 'next-intl/server';
 import PageContainer from '@/components/PageContainer';
 import RelatedArticles from '@/components/blog/RelatedArticles';
 import { CityTable, SeniorityTable } from '@/components/salary/SalaryTables';
@@ -40,6 +40,7 @@ export default async function SalaryCityPage(
   if (!data) notFound();
   const { guide } = data;
   const t = await getTranslations('salary');
+  const locale = await getLocale();
   const band = guide.analysis.band;
 
   return (
@@ -90,6 +91,7 @@ export default async function SalaryCityPage(
           {t('role.bySeniority')}
         </h2>
         <SeniorityTable
+          locale={locale}
           rows={guide.seniorities}
           currency={guide.currency}
           labels={{
@@ -118,6 +120,7 @@ export default async function SalaryCityPage(
           {t('city.elsewhere', { role: guide.role.title })}
         </h2>
         <CityTable
+          locale={locale}
           rows={guide.otherCities}
           currency={guide.currency}
           roleSlug={guide.role.slug}

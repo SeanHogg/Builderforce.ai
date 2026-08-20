@@ -12,6 +12,7 @@
  * would be a second thing to keep true.
  */
 import { publicApiGet } from '@/lib/publicApi';
+import { DEFAULT_LOCALE } from '@/i18n/config';
 
 export interface SalaryRole { slug: string; title: string; discipline: string; family: string }
 export interface SalaryCity { slug: string; name: string; query: string; region: string }
@@ -73,7 +74,7 @@ export const getSalaryCityGuide = (role: string, city: string) =>
  * Whole-currency money. `Intl` with no fraction digits, because a salary band
  * shown to the cent reads as a precision the model does not have.
  */
-export function money(amount: number, currency: string, locale = 'en-US'): string {
+export function money(amount: number, currency: string, locale: string = DEFAULT_LOCALE): string {
   try {
     return new Intl.NumberFormat(locale, {
       style: 'currency', currency, maximumFractionDigits: 0, minimumFractionDigits: 0,

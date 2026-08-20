@@ -30,7 +30,8 @@ import { BarChart } from '@/components/charts/BarChart';
 import { TrendChart } from '@/components/charts/TrendChart';
 import { colorAt } from '@/components/charts/chartColors';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
-import { usd, pct, score2, int } from '../format';
+import { pct, score2 } from '../format';
+import { useInsightFormat, type InsightFormatters } from '../format';
 import { useEngineering } from '../insightsSources';
 
 // ── Shared, deduped sources (one request per source+window) ────────────────────
@@ -71,36 +72,42 @@ function useEng(days: number) {
 // ── Finance widget bodies ──────────────────────────────────────────────────────
 
 function SpendCard(_: WidgetCardProps) {
+  const { usd } = useInsightFormat();
   const { data, state, t } = useFin();
   if (!data) return state;
   return <Stat value={usd(data.totals.spendUsd)} sub={data.periodMonth} />;
 }
 
 function ForecastCard(_: WidgetCardProps) {
+  const { usd } = useInsightFormat();
   const { data, state, t } = useFin();
   if (!data) return state;
   return <Stat value={usd(data.totals.forecastUsd)} sub={t('fin.forecastSub')} />;
 }
 
 function CostPerPrCard(_: WidgetCardProps) {
+  const { usd } = useInsightFormat();
   const { data, state, t } = useFin();
   if (!data) return state;
   return <Stat value={usd(data.totals.costPerMergedPrUsd)} sub={t('fin.mergedRuns', { n: data.totals.mergedRuns })} />;
 }
 
 function PaidOverflowCard(_: WidgetCardProps) {
+  const { usd } = useInsightFormat();
   const { data, state, t } = useFin();
   if (!data) return state;
   return <Stat value={usd(data.totals.paidOverflowUsd)} sub={t('fin.paidOverflowSub')} />;
 }
 
 function CacheReadCard(_: WidgetCardProps) {
+  const { int } = useInsightFormat();
   const { data, state, t } = useFin();
   if (!data) return state;
   return <Stat value={int(data.totals.cacheReadTokens)} sub={t('fin.cacheReadSub')} />;
 }
 
 function SpendTrendCard({ days }: WidgetCardProps) {
+  const { usd } = useInsightFormat();
   const { data, state, t } = useFin();
   if (!data) return state;
   // Honour the dashboard's shared window: show the last `days` days of the
@@ -119,6 +126,7 @@ function SpendTrendCard({ days }: WidgetCardProps) {
 }
 
 function BudgetVarianceCard(_: WidgetCardProps) {
+  const { usd } = useInsightFormat();
   const { data, state, t } = useFin();
   if (!data) return state;
   if (data.budgets.length === 0) return <Muted>{t('fin.noBudgets')}</Muted>;
@@ -140,6 +148,7 @@ function BudgetVarianceCard(_: WidgetCardProps) {
 }
 
 function ByProjectCard(_: WidgetCardProps) {
+  const { usd } = useInsightFormat();
   const { data, state, t } = useFin();
   if (!data) return state;
   if (data.byProject.length === 0) return <Muted>{t('fin.noSpend')}</Muted>;
@@ -181,13 +190,14 @@ function DegradedCard({ days }: WidgetCardProps) {
 }
 
 function EngCostCard({ days }: WidgetCardProps) {
+  const { usd } = useInsightFormat();
   const { data, state, t } = useEng(days);
   if (!data) return state;
   return <Stat value={usd(data.totals.costUsd)} sub={t('eng.costSub')} />;
 }
 
 /** Shared effectiveness ranking table (approach / model / action-type). */
-function effectivenessTable(rows: EffectivenessBucket[], label: string, t: ReturnType<typeof useTranslations>): React.ReactNode {
+function effectivenessTable(f: InsightFormatters, rows: EffectivenessBucket[], label: string, t: ReturnType<typeof useTranslations>): React.ReactNode {
   if (rows.length === 0) return <Muted>{t('eng.noRuns')}</Muted>;
   return (
     <div style={tableWrapStyle}>
@@ -205,10 +215,10 @@ function effectivenessTable(rows: EffectivenessBucket[], label: string, t: Retur
           {rows.map((b) => (
             <tr key={b.key} style={trStyle}>
               <td style={tdStyle}>{b.key}</td>
-              <td style={tdMutedStyle}>{int(b.runs)}</td>
+              <td style={tdMutedStyle}>{f.int(b.runs)}</td>
               <td style={tdMutedStyle}>{score2(b.avgScore)}</td>
               <td style={tdMutedStyle}>{pct(b.mergedRatePct)}</td>
-              <td style={tdMutedStyle}>{usd(b.costUsd)}</td>
+              <td style={tdMutedStyle}>{f.usd(b.costUsd)}</td>
             </tr>
           ))}
         </tbody>
@@ -218,21 +228,24 @@ function effectivenessTable(rows: EffectivenessBucket[], label: string, t: Retur
 }
 
 function ByApproachCard({ days }: WidgetCardProps) {
+  const insight = useInsightFormat();
   const { data, state, t } = useEng(days);
   if (!data) return state;
-  return effectivenessTable(data.byApproach, t('eng.approach'), t);
+  return effectivenessTable(insight, data.byApproach, t('eng.approach'), t);
 }
 
 function ByModelCard({ days }: WidgetCardProps) {
+  const insight = useInsightFormat();
   const { data, state, t } = useEng(days);
   if (!data) return state;
-  return effectivenessTable(data.byModel, t('eng.model'), t);
+  return effectivenessTable(insight, data.byModel, t('eng.model'), t);
 }
 
 function ByActionTypeCard({ days }: WidgetCardProps) {
+  const insight = useInsightFormat();
   const { data, state, t } = useEng(days);
   if (!data) return state;
-  return effectivenessTable(data.byActionType, t('eng.workType'), t);
+  return effectivenessTable(insight, data.byActionType, t('eng.workType'), t);
 }
 
 // ── Registry ─────────────────────────────────────────────────────────────────

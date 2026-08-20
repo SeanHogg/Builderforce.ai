@@ -39,6 +39,9 @@ const SLOT_MIN = 30;
 function localPartsInTz(instantMs: number, timezone: string | undefined): { day: number; minutes: number } {
   if (timezone) {
     try {
+      // `'en-US'` is deliberate and must NOT follow the reader: the weekday parts
+      // are KEYS into the DAYS map below, not text anyone sees. A localized
+      // formatter would emit 'Mo' / '週一' and every lookup would miss.
       const parts = new Intl.DateTimeFormat('en-US', {
         timeZone: timezone, weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false,
       }).formatToParts(new Date(instantMs));

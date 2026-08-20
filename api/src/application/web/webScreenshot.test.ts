@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
+  SCREENSHOT_REASON_STATUS,
   ScreenshotUnavailableError,
   bytesToBase64,
   captureWebScreenshot,
@@ -101,6 +102,16 @@ describe('captureWebScreenshot configuration', () => {
     }
   });
 
+  it('files a credential problem under the operator, not under a flaky page', () => {
+    // Both reasons mean "capture is unavailable on this deployment until someone acts".
+    // A 502 would file a token-scope refusal under third-party flakiness and it would
+    // never reach the person holding the Cloudflare dashboard.
+    expect(SCREENSHOT_REASON_STATUS.unconfigured).toBe(503);
+    expect(SCREENSHOT_REASON_STATUS.unauthorized).toBe(503);
+    expect(SCREENSHOT_REASON_STATUS.provider).toBe(502);
+    expect(SCREENSHOT_REASON_STATUS['too-large']).toBe(502);
+  });
+
   it('agrees with the operator health report about what counts as configured', () => {
     // A report claiming "configured" while a capture reports "unconfigured" sends an
     // operator hunting for a problem that is not there — so both read one list.
@@ -153,6 +164,41 @@ describe('captureWebScreenshot rendering', () => {
     ));
     await expect(captureWebScreenshot(CREDENTIALS, 'https://example.com'))
       .rejects.toThrow(/not enabled/);
+  });
+
+  it('names a token-scope refusal as its own reason, not as a page problem', async () => {
+    // The failure a freshly-configured deployment hits FIRST. Folded into `provider` it
+    // reads as "that page would not render" and sends an operator to debug the SITE,
+    // when the fix is one permission on the token.
+    stubRenderer(() => new Response(
+      JSON.stringify({ success: false, errors: [{ code: 10000, message: 'Authentication error' }] }),
+      { status: 403, headers: { 'content-type': 'application/json' } },
+    ));
+    const error = await captureWebScreenshot(CREDENTIALS, 'https://example.com').catch((e: unknown) => e);
+    expect(error).toMatchObject({ reason: 'unauthorized' });
+    // Names the permission AND keeps Cloudflare's own words — the operator needs both.
+    expect((error as Error).message).toContain('Browser Rendering');
+    expect((error as Error).message).toContain('Authentication error');
+  });
+
+  it('classifies a scope refusal the same way when it arrives as a 200 envelope', async () => {
+    stubRenderer(() => new Response(
+      JSON.stringify({ success: false, errors: [{ message: 'Invalid API Token' }] }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    ));
+    await expect(captureWebScreenshot(CREDENTIALS, 'https://example.com'))
+      .rejects.toMatchObject({ reason: 'unauthorized' });
+  });
+
+  it('still calls a genuine page failure a page failure', async () => {
+    // The classifier must not swallow everything: a timeout is retryable and a scope
+    // problem is not, so telling them apart is the whole point.
+    stubRenderer(() => new Response(
+      JSON.stringify({ success: false, errors: [{ message: 'Navigation timeout of 30000 ms exceeded' }] }),
+      { status: 500, headers: { 'content-type': 'application/json' } },
+    ));
+    await expect(captureWebScreenshot(CREDENTIALS, 'https://example.com'))
+      .rejects.toMatchObject({ reason: 'provider' });
   });
 
   it('refuses a capture too large to live in a canvas object, and says so', async () => {

@@ -25,12 +25,7 @@ import {
   type PersonalityEvent,
   type ReinforcementResponse,
 } from '@/lib/api';
-
-function formatWhen(at: string | null): string {
-  if (!at) return '';
-  const d = new Date(at);
-  return Number.isNaN(d.valueOf()) ? '' : d.toLocaleString();
-}
+import { useFormat } from "@/i18n/useFormat";
 
 export default function PersonalityUsagePanel({
   agentId,
@@ -43,6 +38,7 @@ export default function PersonalityUsagePanel({
   /** Called after a successful apply so the parent can refresh the profile view. */
   onApplied?: () => void;
 }) {
+  const fmt = useFormat();
   const t = useTranslations('personalityUsage');
   const { catalog } = usePsychometricCatalog();
 
@@ -239,7 +235,7 @@ export default function PersonalityUsagePanel({
                     </span>
                   )}
                   <span style={{ marginLeft: 'auto', fontSize: 'var(--font-size-eyebrow)', color: 'var(--muted)', whiteSpace: 'nowrap' }}>
-                    {formatWhen(ev.at)}
+                    {fmt.dateTime(ev.at)}
                   </span>
                 </div>
                 <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 4 }}>
@@ -274,7 +270,7 @@ export default function PersonalityUsagePanel({
                 <span style={{ color: 'var(--text-secondary)' }}>
                   {Object.entries(h.deltas).map(([dim, d]) => `${dimName(dim)} ${d > 0 ? '+' : ''}${d}`).join(', ')}
                 </span>
-                <span style={{ marginLeft: 'auto', color: 'var(--muted)' }}>{formatWhen(h.decidedAt ?? h.proposedAt)}</span>
+                <span style={{ marginLeft: 'auto', color: 'var(--muted)' }}>{fmt.dateTime(h.decidedAt ?? h.proposedAt)}</span>
               </div>
             ))}
           </div>

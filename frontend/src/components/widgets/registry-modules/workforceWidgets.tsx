@@ -35,7 +35,8 @@ import { DonutChart } from '@/components/charts/DonutChart';
 import { BarChart, type BarDatum } from '@/components/charts/BarChart';
 import { GaugeChart } from '@/components/charts/GaugeChart';
 import { colorAt } from '@/components/charts/chartColors';
-import { int, score2 } from '@/components/insights/format';
+import { score2 } from '@/components/insights/format';
+import { useInsightFormat } from '@/components/insights/format';
 
 /** Performance cards read the manager-only member scorecard + DORA rollup, which
  *  the API enforces at MANAGER+; gate the widgets with the DORA/engineering
@@ -88,6 +89,7 @@ function topBars<T>(items: T[], value: (t: T) => number, label: (t: T) => string
 
 /** Online vs offline hosts + total agents — agent utilization at a glance. */
 function AgentsOnlineCard(_props: WidgetCardProps) {
+  const { int } = useInsightFormat();
   const t = useTranslations('widgets');
   const { data, error } = useAgents();
   if (error) return <Muted>{error}</Muted>;
@@ -116,6 +118,7 @@ function AgentsOnlineCard(_props: WidgetCardProps) {
 
 /** Team sizes — team-shape clarity + the most-recent-touch recency badge. */
 function TeamsSizeCard(_props: WidgetCardProps) {
+  const { int } = useInsightFormat();
   const t = useTranslations('widgets');
   const dt = useTranslations('dashboard');
   const { data, error } = useTeams();
@@ -178,6 +181,7 @@ function PerformanceByDisciplineCard(_props: WidgetCardProps) {
 
 /** Top members by completed work over the window. */
 function PerformanceTopMembersCard(_props: WidgetCardProps) {
+  const { int } = useInsightFormat();
   const t = useTranslations('widgets');
   const { data, error } = usePerformance();
   if (error) return <Muted>{error}</Muted>;

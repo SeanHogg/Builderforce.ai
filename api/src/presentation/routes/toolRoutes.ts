@@ -7,6 +7,9 @@ import type { ToolService } from '../../application/tools/ToolService';
 import type { AuditRunner } from '../../application/tools/AuditRunner';
 import type { RuntimeService } from '../../application/runtime/RuntimeService';
 import { listSystemAudits } from '../../application/tools/systemAudits';
+import { isMaturityFrameworkId, listMaturityFrameworks, type MaturityFrameworkId } from '../../application/tools/maturityFrameworks';
+import { toolLocaleFromHeaders, type ToolLocale } from '../../application/tools/toolMessages';
+import { headerHints } from '../../application/email/emailLocaleResolver';
 import { maybeAutoRunOnLaneEntry } from './taskRoutes';
 
 /**
@@ -26,6 +29,27 @@ import { maybeAutoRunOnLaneEntry } from './taskRoutes';
  *  without letting one request burn the isolate's CPU budget. */
 const MAX_DOCUMENT_CHARS = 40_000;
 
+/** The requested maturity lens, or undefined for the default. Narrowed here so
+ *  both the public compute and the data-driven route read the parameter the same
+ *  way — one spelling of "which framework", not two. */
+function frameworkParam(raw: string | undefined): MaturityFrameworkId | undefined {
+  return isMaturityFrameworkId(raw) ? raw : undefined;
+}
+
+/**
+ * The language a tool's content is served in.
+ *
+ * Read from the request rather than from the account, and through the SAME
+ * `localeFromHeaders` chain email uses — the explicit `X-Builderforce-Locale`
+ * header the app stamps, then the NEXT_LOCALE cookie, then `Accept-Language`.
+ * The account is deliberately not consulted here: these endpoints are PUBLIC,
+ * the free logged-out diagnostics are the platform's front door, and a visitor
+ * with no account still has a language.
+ */
+function toolLocale(req: { header(name: string): string | undefined }): ToolLocale {
+  return toolLocaleFromHeaders(headerHints(req));
+}
+
 export function createToolRoutes(
   toolService: ToolService,
   auditRunner: AuditRunner,
@@ -35,7 +59,7 @@ export function createToolRoutes(
   const router = new Hono<HonoEnv>();
 
   // Public definitions need no cache (static in-memory data, no DB round-trip).
-  router.get('/', (c) => c.json({ tools: toolService.list() }));
+  router.get('/', (c) => c.json({ tools: toolService.list(toolLocale(c.req)) }));
 
   // ── System audits (SOC 2, Architecture, Quality, PM Vision) — the onboarding
   //    "run an audit → get a report" surface. Registered before `/:id` so the
@@ -43,6 +67,12 @@ export function createToolRoutes(
 
   // List the audit types (public — powers the onboarding wizard + marketing).
   router.get('/audits', (c) => c.json({ audits: listSystemAudits() }));
+
+  // The maturity FRAMEWORKS a scorecard can be reported under (CMMI practices,
+  // COBIT domains, ITIL value chain). Public and static in-memory data — no cache
+  // needed and no DB round-trip — and registered before `/:id` so the static
+  // segment wins over the param. Powers the framework toggle on the diagnostic.
+  router.get('/maturity-frameworks', (c) => c.json({ frameworks: listMaturityFrameworks() }));
 
   // Run an audit against a project: scores a report (deterministic), records it
   // as a project diagnostic, notifies the user, and files the agent remediation
@@ -91,14 +121,17 @@ export function createToolRoutes(
   });
 
   router.get('/:id', (c) => {
-    const def = toolService.getDefinition(c.req.param('id'));
+    const def = toolService.getDefinition(c.req.param('id'), toolLocale(c.req));
     return def ? c.json({ tool: def }) : c.json({ error: 'Unknown tool' }, 404);
   });
 
   // Public free compute — no tenant data, pure scoring.
   router.post('/:id/compute', async (c) => {
     const body = await c.req.json<{ input?: Record<string, number> }>().catch(() => ({ input: {} }));
-    const result = toolService.compute(c.req.param('id'), body.input ?? {});
+    // `framework` re-lenses a maturity scorecard (COBIT / ITIL). An unknown value
+    // degrades to the default lens rather than 400-ing: it changes how one result
+    // is GROUPED, and refusing to score at all over a bad grouping helps nobody.
+    const result = toolService.compute(c.req.param('id'), body.input ?? {}, frameworkParam(c.req.query('framework')), toolLocale(c.req));
     return result ? c.json({ result }) : c.json({ error: 'Unknown tool' }, 404);
   });
 
@@ -122,7 +155,7 @@ export function createToolRoutes(
     for (const [key, value] of Object.entries(body.input ?? {})) {
       if (typeof value === 'string') input[key] = value.slice(0, MAX_DOCUMENT_CHARS);
     }
-    const result = toolService.analyze(c.req.param('id'), input);
+    const result = toolService.analyze(c.req.param('id'), input, toolLocale(c.req));
     return result ? c.json({ result }) : c.json({ error: 'Unknown tool' }, 404);
   });
 
@@ -132,8 +165,9 @@ export function createToolRoutes(
     const tenantId = c.get('tenantId') as number;
     const days = Math.min(Math.max(Number(c.req.query('days') ?? 90), 7), 365);
     const projectId = c.req.query('projectId') ? Number(c.req.query('projectId')) : null;
-    const result = await toolService.getDataDriven(c.env as Env, tenantId, c.req.param('id'), days, projectId);
-    return result ? c.json({ result, days }) : c.json({ error: 'No data-driven mode for this tool' }, 404);
+    const framework = frameworkParam(c.req.query('framework'));
+    const result = await toolService.getDataDriven(c.env as Env, tenantId, c.req.param('id'), days, projectId, framework);
+    return result ? c.json({ result, days, framework }) : c.json({ error: 'No data-driven mode for this tool' }, 404);
   });
 
   // Save a run — recomputed server-side, persisted to the workspace (or project).

@@ -19,15 +19,8 @@ import { useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { adminApi, type AdminBroadcast, type AdminBroadcastPage } from '@/lib/adminApi';
 import { useConfirm } from '@/components/ConfirmProvider';
-import {
-  AdminError,
-  AdminLoading,
-  AdminPanelHeader,
-  errText,
-  fmtDateTime,
-  fmtNum,
-  useAdminData,
-} from '@/components/admin/adminShared';
+import { AdminError, AdminLoading, AdminPanelHeader, errText, useAdminData } from '@/components/admin/adminShared';
+import { useAdminFormat } from '@/components/admin/adminShared';
 import { BroadcastComposer } from './BroadcastComposer';
 
 const STATUS_BADGE: Record<AdminBroadcast['status'], string> = {
@@ -56,6 +49,7 @@ function Stat({ label, value, hint }: { label: string; value: string; hint?: str
 }
 
 export default function BroadcastsPanel() {
+  const { fmtDateTime, fmtNum } = useAdminFormat();
   const t = useTranslations('admin.broadcasts');
   const confirm = useConfirm();
   const { data, loading, error, reload } = useAdminData<AdminBroadcastPage>(() => adminApi.broadcasts());

@@ -15,6 +15,7 @@ import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
 import { ProviderKeysSettings } from '@/components/ProviderKeysSettings';
 import PageContainer from '@/components/PageContainer';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
+import { useFormat } from "@/i18n/useFormat";
 
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
@@ -52,10 +53,6 @@ const buttonDanger: React.CSSProperties = {
   cursor: 'pointer',
 };
 
-function fmtDate(iso: string | null | undefined): string {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleString();
-}
 
 export type ApiKeysContentProps = {
   embedded?: boolean;
@@ -65,6 +62,7 @@ export type ApiKeysContentProps = {
 };
 
 export function ApiKeysContent({ embedded = false, showProviderKeys = true, search = '', externalViewMode }: ApiKeysContentProps = {}) {
+  const fmt = useFormat();
   const t = useTranslations('apiKeys');
   const router = useRouter();
   const confirm = useConfirm();
@@ -276,8 +274,8 @@ export function ApiKeysContent({ embedded = false, showProviderKeys = true, sear
                         )}
                       </div>
                       <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
-                        {t('createdLastUsed', { created: fmtDate(k.createdAt), lastUsed: fmtDate(k.lastUsedAt) })}
-                        {revoked && t('revokedOnSuffix', { revoked: fmtDate(k.revokedAt) })}
+                        {t('createdLastUsed', { created: fmt.dateTime(k.createdAt), lastUsed: fmt.dateTime(k.lastUsedAt) })}
+                        {revoked && t('revokedOnSuffix', { revoked: fmt.dateTime(k.revokedAt) })}
                       </div>
                     </div>
                     {!isEditing && (
@@ -361,10 +359,10 @@ export function ApiKeysContent({ embedded = false, showProviderKeys = true, sear
                           </div>
                         </td>
                         <td style={tdMutedStyle}>
-                          {revoked ? t('revokedOn', { revoked: fmtDate(k.revokedAt) }) : t('active')}
+                          {revoked ? t('revokedOn', { revoked: fmt.dateTime(k.revokedAt) }) : t('active')}
                         </td>
-                        <td style={tdMutedStyle}>{fmtDate(k.createdAt)}</td>
-                        <td style={tdMutedStyle}>{fmtDate(k.lastUsedAt)}</td>
+                        <td style={tdMutedStyle}>{fmt.dateTime(k.createdAt)}</td>
+                        <td style={tdMutedStyle}>{fmt.dateTime(k.lastUsedAt)}</td>
                         <td style={tdStyle}>
                           {!isEditing && (
                             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>

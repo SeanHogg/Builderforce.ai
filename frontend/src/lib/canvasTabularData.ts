@@ -388,16 +388,6 @@ export function aggregateLabel(aggregate: TabularAggregate): string {
   return `${aggregate.op}_${aggregate.column ?? 'value'}`;
 }
 
-/**
- * Render an aggregate for display, where `null` means UNDEFINED and not zero.
- *
- * One helper rather than a `?? 0` at each call site, because the coalescing default
- * is what turns "this group had one observation so it has no standard deviation"
- * into a card reading "0" — a statement about the data that the data never made.
- */
-export function formatAggregateValue(value: number | null | undefined): string {
-  return value == null ? '—' : value.toLocaleString();
-}
 
 /**
  * Evaluate one aggregate over a row set.

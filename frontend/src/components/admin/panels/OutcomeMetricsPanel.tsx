@@ -20,7 +20,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { adminApi, type AdminOutcomeMetric, type AdminTenant } from '@/lib/adminApi';
 import { copyTextToClipboard } from '@/lib/useCopyToClipboard';
-import { AdminError, AdminLoading, AdminPanelHeader, fmtNum, useAdminData } from '@/components/admin/adminShared';
+import { AdminError, AdminLoading, AdminPanelHeader, useAdminData } from '@/components/admin/adminShared';
+import { useAdminFormat } from '@/components/admin/adminShared';
 import {
   compareOutcomeMetric,
   formatOutcomeMetric,
@@ -41,6 +42,7 @@ const cardStyle: React.CSSProperties = {
 };
 
 export default function OutcomeMetricsPanel() {
+  const { fmtNum } = useAdminFormat();
   const fmt = useFormat();
   const t = useTranslations('admin.outcomes');
   const m = useTranslations('outcomeMetrics') as unknown as OutcomeTranslator;
@@ -197,6 +199,7 @@ function BreakdownTable({ title, nameLabel, rows, t }: {
   t: ReturnType<typeof useTranslations>;
   rows: Array<{ id: number; name: string; sessions: number; deliveries: number; graded: number }>;
 }) {
+  const { fmtNum } = useAdminFormat();
   return <section>
     <h3 style={{ margin: '0 0 8px', fontSize: 'var(--font-size-card-title)' }}>{title}</h3>
     <div className="table-wrap">

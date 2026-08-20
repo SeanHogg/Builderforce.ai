@@ -16,6 +16,7 @@
 
 import { eq } from 'drizzle-orm';
 import { workflowTriggers } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import {
   extractTriggers,
   triggerNeedsToken,

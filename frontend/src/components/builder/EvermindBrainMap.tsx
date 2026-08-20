@@ -40,6 +40,7 @@ import type {
 import { recentForRegion, type EvermindRegionKey } from '@/lib/evermindRegions';
 import { buildSparkline } from '@/lib/sparkline';
 import { useEvermindValidation } from './EvermindValidationContext';
+import { useFormat } from "@/i18n/useFormat";
 
 /* ── Geometry (SVG user units; the viewBox scales to the container) ──────────── */
 const VB_W = 860;
@@ -480,7 +481,6 @@ function RegressionBadge({ evalPoint }: { evalPoint: ProjectEvermindEvalPoint | 
    points exist, so an un-taught project isn't cluttered with empty gauges. */
 
 const fmtLoss = (n: number) => n.toFixed(3);
-const fmtInt = (n: number) => n.toLocaleString();
 /** Compact magnitude for the L2 weight movement (kept readable across scales). */
 const fmtNorm = (n: number) => (n === 0 ? '0' : n >= 0.01 ? n.toFixed(3) : n.toExponential(1));
 
@@ -494,6 +494,7 @@ function MiniStat({ label, value }: { label: string; value: string }) {
 }
 
 function TrainingReadout({ training }: { training: ProjectEvermindTrainingPoint[] }) {
+  const fmt = useFormat();
   const t = useTranslations('evermindBrain');
   const view = useMemo(() => {
     if (training.length === 0) return null;
@@ -518,7 +519,7 @@ function TrainingReadout({ training }: { training: ProjectEvermindTrainingPoint[
       <div className="ev-training-body">
         <div className="ev-training-stats">
           <MiniStat label={t('trainLoss')} value={latestLoss != null ? fmtLoss(latestLoss) : '—'} />
-          <MiniStat label={t('trainMoved')} value={fmtInt(latest.moved)} />
+          <MiniStat label={t('trainMoved')} value={fmt.number(latest.moved)} />
           <MiniStat label={t('trainMagnitude')} value={fmtNorm(latest.deltaNorm)} />
         </div>
         {spark && (

@@ -24,7 +24,7 @@ import {
   JobSchedulePanel, MilestoneLinesPreview, MilestoneSchedulePanel,
 } from '@/components/freelance/MilestoneSchedulePanel';
 import { Select } from '@/components/Select';
-import { formatCents } from '@/lib/canvasMoney';
+import { useMoneyFormat } from '@/lib/useMoneyFormat';
 import { useFormat } from "@/i18n/useFormat";
 
 const card: React.CSSProperties = { background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 18 };
@@ -36,7 +36,6 @@ const btn = (v: 'primary' | 'ghost' | 'danger'): React.CSSProperties => ({
   color: v === 'primary' ? 'var(--text-on-accent)' : v === 'danger' ? 'var(--error)' : 'var(--text-primary)',
 });
 const fmtHrs = (m: number) => `${(m / 60).toFixed(1)}h`;
-const money = (c: number, cur: string) => formatCents(c, { currency: cur });
 const DISCIPLINES = ['developer', 'dba', 'designer', 'devops', 'qa', 'pm', 'data', 'security', 'other'] as const;
 const POSTING_TYPES: PostingType[] = ['project_bid', 'design', 'fte'];
 const ENGAGEMENT_TYPES: EngagementType[] = ['fixed_bid', 'hourly', 'fte'];
@@ -56,6 +55,7 @@ function ScoreChip({ score }: { score: number }) {
 type Tab = 'team' | 'jobs' | 'timecards' | 'invoices';
 
 export function TalentView() {
+  const { formatCents } = useMoneyFormat();
   const fmt = useFormat();
   const t = useTranslations('hires');
   const confirm = useConfirm();
@@ -410,7 +410,7 @@ export function TalentView() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                   <div>
                     <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{tc.freelancerName ?? ''}</div>
-                    <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{tc.periodStart} – {tc.periodEnd} · {fmtHrs(tc.billableMinutes)} · {money(tc.amountCents, tc.currency)}</div>
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{tc.periodStart} – {tc.periodEnd} · {fmtHrs(tc.billableMinutes)} · {formatCents(tc.amountCents, { currency: tc.currency })}</div>
                   </div>
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                     <button type="button" style={btn('ghost')} onClick={() => toggleReview(tc.id)}>{openCard === tc.id ? t('hide') : t('review')}</button>
@@ -449,7 +449,7 @@ export function TalentView() {
             {invoices.map((inv) => (
               <div key={inv.id} style={{ ...card, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                 <div>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{inv.freelancerName ?? ''} · {money(inv.amountCents, inv.currency)}</div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{inv.freelancerName ?? ''} · {formatCents(inv.amountCents, { currency: inv.currency })}</div>
                   <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{inv.issuedAt ? fmt.date(inv.issuedAt) : ''}</div>
                 </div>
                 <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>

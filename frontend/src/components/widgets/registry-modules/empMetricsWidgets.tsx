@@ -26,7 +26,8 @@ import type { WidgetCardProps, WidgetDef, WidgetDrill } from '@/lib/widgets/type
 import { BarChart, type BarDatum } from '@/components/charts/BarChart';
 import { DonutChart } from '@/components/charts/DonutChart';
 import { colorAt } from '@/components/charts/chartColors';
-import { int, pct, usd } from '@/components/insights/format';
+import { pct } from '@/components/insights/format';
+import { useInsightFormat } from '@/components/insights/format';
 
 const METRICS_CAP = 'insights.engineering' as const;
 const DANGER = 'var(--danger)';
@@ -66,6 +67,7 @@ function OverAllocatedCard(_p: WidgetCardProps) {
 
 // ── EMP-14 — collaboration score ────────────────────────────────────────────────
 function CollabScoreCard(_p: WidgetCardProps) {
+  const { int } = useInsightFormat();
   const t = useTranslations('widgets');
   const { data, error } = useCollaboration();
   if (error) return <Muted>{error}</Muted>;
@@ -77,6 +79,7 @@ function CollabScoreCard(_p: WidgetCardProps) {
 
 // ── EMP-17 — top documentation contributors ──────────────────────────────────────
 function DocAuthorsCard(_p: WidgetCardProps) {
+  const { int } = useInsightFormat();
   const t = useTranslations('widgets');
   const { data, error } = useDocs();
   if (error) return <Muted>{error}</Muted>;
@@ -88,6 +91,7 @@ function DocAuthorsCard(_p: WidgetCardProps) {
 
 // ── EMP-19 — labour cost by project ──────────────────────────────────────────────
 function LaborByProjectCard(_p: WidgetCardProps) {
+  const { usd } = useInsightFormat();
   const t = useTranslations('widgets');
   const { data, error } = useLabor();
   if (error) return <Muted>{error}</Muted>;
@@ -99,6 +103,7 @@ function LaborByProjectCard(_p: WidgetCardProps) {
 
 // ── EMP-16 — performer tiers (donut) ─────────────────────────────────────────────
 function PerformerTiersCard(_p: WidgetCardProps) {
+  const { int } = useInsightFormat();
   const t = useTranslations('widgets');
   const { data, error } = useTiers();
   if (error) return <Muted>{error}</Muted>;

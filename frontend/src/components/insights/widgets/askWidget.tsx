@@ -20,6 +20,7 @@ import { useTranslations } from 'next-intl';
 import { WidgetMuted as Muted } from '@/components/widgets/widgetBody';
 import type { WidgetDef } from '@/lib/widgets/types';
 import { dashboardsApi, type QueryAnswer } from '@/lib/dashboardsApi';
+import { useInsightFormat, type InsightFormatters } from '../format';
 
 const inputStyle: React.CSSProperties = {
   flex: '1 1 220px', minWidth: 0, padding: '8px 10px', borderRadius: 'var(--radius-md)',
@@ -33,10 +34,10 @@ const btnStyle: React.CSSProperties = {
 };
 
 /** Format an answer for display. One place decides, so the unit never drifts. */
-function formatAnswer(answer: QueryAnswer): string {
+function formatAnswer(f: InsightFormatters, answer: QueryAnswer): string {
   const { value, unit } = answer;
   if (value == null) return '—';
-  if (unit === 'USD') return `$${Math.round(value).toLocaleString('en-US')}`;
+  if (unit === 'USD') return f.usd(Math.round(value));
   const rounded = Math.round(value * 100) / 100;
   if (unit === '%') return `${rounded}%`;
   if (unit === '/day') return `${rounded}/day`;
@@ -45,6 +46,7 @@ function formatAnswer(answer: QueryAnswer): string {
 }
 
 function AskCard() {
+  const insight = useInsightFormat();
   const t = useTranslations('dashboards');
   const [question, setQuestion] = useState('');
   const [answer, setAnswer] = useState<QueryAnswer | null>(null);
@@ -95,7 +97,7 @@ function AskCard() {
               {t('ask.notUnderstood')}
             </div>
           )}
-          <div style={{ fontSize: 'var(--font-size-section)', fontWeight: 700, color: 'var(--text-primary)' }}>{formatAnswer(answer)}</div>
+          <div style={{ fontSize: 'var(--font-size-section)', fontWeight: 700, color: 'var(--text-primary)' }}>{formatAnswer(insight, answer)}</div>
           <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)', marginTop: 4 }}>{answer.explanation}</div>
           <div style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', marginTop: 4 }}>
             {t('ask.matched')}: <code>{answer.matchedMetric}</code>

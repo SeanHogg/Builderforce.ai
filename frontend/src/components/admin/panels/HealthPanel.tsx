@@ -4,18 +4,13 @@ import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { adminApi, type AdminHealth, type ImpersonationSession } from '@/lib/adminApi';
-import {
-  AdminError,
-  AdminLoading,
-  ModelPoolBadges,
-  errText,
-  fmtDateTime,
-  fmtNum,
-} from '../adminShared';
+import { AdminError, AdminLoading, ModelPoolBadges, errText } from '../adminShared';
+import { useAdminFormat } from '../adminShared';
 import { PlatformTrends } from './PlatformTrends';
 import { SystemHealthSection } from './SystemHealthSection';
 
 export default function HealthPanel() {
+  const { fmtDateTime, fmtNum } = useAdminFormat();
   const t = useTranslations('admin');
   const router = useRouter();
   const [health, setHealth] = useState<AdminHealth | null>(null);

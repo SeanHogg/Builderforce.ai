@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { adminApi, type LlmRatingBucket, type LlmRatingSummary } from '@/lib/adminApi';
-import { AdminError, AdminLoading, AdminPanelHeader, fmtNum, useAdminData } from '@/components/admin/adminShared';
+import { AdminError, AdminLoading, AdminPanelHeader, useAdminData } from '@/components/admin/adminShared';
+import { useAdminFormat } from '@/components/admin/adminShared';
 
 /**
  * WHICH MODEL IS ACTUALLY GOOD AT WHICH KIND OF WORK — read off what humans said.
@@ -67,6 +68,7 @@ function bucketLabel(bucket: Pick<LlmRatingBucket, 'actionType' | 'toolName'>, n
 }
 
 export default function LlmRatingsPanel() {
+  const { fmtNum } = useAdminFormat();
   const t = useTranslations('admin.llmRatings');
   const [days, setDays] = useState(30);
   const { data, loading, error, reload } = useAdminData<LlmRatingSummary>(

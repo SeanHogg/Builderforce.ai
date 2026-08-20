@@ -2,6 +2,7 @@
 // already declares the client boundary, so the directive would be redundant — and the
 // architecture ratchet counts every one of them for a reason.
 import { useTranslations } from 'next-intl';
+import type { Formatter } from '@/i18n/format';
 import {
   EMPTY_SPEC_BOARD, specFieldValue, specObjectNamespace, specObjectSpec,
   type SpecDeriveBoard, type SpecField,
@@ -20,6 +21,7 @@ import {
 } from '@/lib/academic/citations';
 import type { CreationNodeData } from './types';
 import styles from './CreationCanvas.module.css';
+import { useFormat } from "@/i18n/useFormat";
 
 /**
  * ONE node body for every spec-declared object kind — founder, academic, and whatever
@@ -102,9 +104,9 @@ function meterValue(value: unknown): number | null {
   return Number.isFinite(numeric) ? Math.max(0, Math.min(100, numeric)) : null;
 }
 
-function statText(value: unknown): string {
+function statText(fmt: Formatter, value: unknown): string {
   if (value == null) return '';
-  if (typeof value === 'number') return value.toLocaleString();
+  if (typeof value === 'number') return fmt.number(value);
   return String(value).trim();
 }
 
@@ -120,19 +122,19 @@ interface MatrixData {
   rows: Array<{ label: string; cells: string[] }>;
 }
 
-function matrixValue(value: unknown): MatrixData | null {
+function matrixValue(fmt: Formatter, value: unknown): MatrixData | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const record = value as Record<string, unknown>;
   const columns = Array.isArray(record.columns)
-    ? record.columns.map((column) => statText(column)).slice(0, 14)
+    ? record.columns.map((column) => statText(fmt, column)).slice(0, 14)
     : [];
   const rawRows = Array.isArray(record.rows) ? record.rows : [];
   const rows = rawRows.slice(0, 12).flatMap((raw) => {
     if (!raw || typeof raw !== 'object') return [];
     const row = raw as Record<string, unknown>;
-    const label = statText(row.label ?? row.criterion ?? row.title);
+    const label = statText(fmt, row.label ?? row.criterion ?? row.title);
     if (!label) return [];
-    const cells = Array.isArray(row.cells) ? row.cells.slice(0, 14).map((cell) => statText(cell)) : [];
+    const cells = Array.isArray(row.cells) ? row.cells.slice(0, 14).map((cell) => statText(fmt, cell)) : [];
     return [{ label, cells }];
   });
   return columns.length || rows.length ? { columns, rows } : null;
@@ -140,22 +142,22 @@ function matrixValue(value: unknown): MatrixData | null {
 
 /** A `bars` distribution. Zero-valued entries are KEPT: "nobody got a distinction"
  *  is the most informative bar on the chart, and dropping it hides it. */
-function barValues(value: unknown): Array<{ label: string; value: number }> {
+function barValues(fmt: Formatter, value: unknown): Array<{ label: string; value: number }> {
   if (!Array.isArray(value)) return [];
   return value.slice(0, 14).flatMap((raw) => {
     if (!raw || typeof raw !== 'object') return [];
     const row = raw as Record<string, unknown>;
-    const label = statText(row.label ?? row.choice ?? row.grade);
+    const label = statText(fmt, row.label ?? row.choice ?? row.grade);
     const numeric = Number(row.value ?? row.count ?? 0);
     return label ? [{ label, value: Number.isFinite(numeric) ? numeric : 0 }] : [];
   });
 }
 
 /** How many entries a RESTRICTED field holds — the only thing about it that renders. */
-function restrictedCount(value: unknown): number {
+function restrictedCount(fmt: Formatter, value: unknown): number {
   if (Array.isArray(value)) return value.length;
   if (value && typeof value === 'object') return Object.keys(value as object).length;
-  return statText(value) ? 1 : 0;
+  return statText(fmt, value) ? 1 : 0;
 }
 
 /**
@@ -172,8 +174,8 @@ const AGE_FIELDS: ReadonlySet<string> = new Set([
 
 /** Relative staleness for an instant field, so a live object shows its age rather than
  *  an ISO string the reader has to date-difference in their head. */
-function staleness(value: unknown, t: ReturnType<typeof useTranslations>): string | null {
-  const text = statText(value);
+function staleness(fmt: Formatter, value: unknown, t: ReturnType<typeof useTranslations>): string | null {
+  const text = statText(fmt, value);
   if (!text) return null;
   const at = Date.parse(text);
   if (!Number.isFinite(at)) return null;
@@ -211,6 +213,7 @@ function FieldSection({ field, data, board, t }: {
   board: SpecDeriveBoard;
   t: ReturnType<typeof useTranslations>;
 }) {
+  const fmt = useFormat();
   const raw = specFieldValue(field, data, board);
   const label = t(`field.${field.label}`);
 
@@ -222,7 +225,7 @@ function FieldSection({ field, data, board, t }: {
   // receives it at all (`specFieldNames()` excludes it), so this is the only surface that
   // acknowledges it exists. See `SpecField.restricted`.
   if (field.restricted) {
-    const count = restrictedCount(raw);
+    const count = restrictedCount(fmt, raw);
     return count > 0
       ? <div className={styles.founderVerdict}><small>{label}</small><strong>{t('restrictedHeld', { count })}</strong></div>
       : null;
@@ -230,15 +233,15 @@ function FieldSection({ field, data, board, t }: {
 
   switch (field.render) {
     case 'stat': {
-      const text = statText(raw);
+      const text = statText(fmt, raw);
       if (!text) return null;
       // An instant field is only ever interesting as an age.
-      const age = AGE_FIELDS.has(field.name) ? staleness(raw, t) : null;
+      const age = AGE_FIELDS.has(field.name) ? staleness(fmt, raw, t) : null;
       return <span className={styles.founderStat}><small>{label}</small><b>{age ?? text}</b></span>;
     }
 
     case 'text': {
-      const text = statText(raw);
+      const text = statText(fmt, raw);
       return text ? <p className={styles.founderText}><small>{label}</small>{text}</p> : null;
     }
 
@@ -293,12 +296,12 @@ function FieldSection({ field, data, board, t }: {
     }
 
     case 'verdict': {
-      const text = statText(raw);
+      const text = statText(fmt, raw);
       return text ? <div className={styles.founderVerdict}><small>{label}</small><strong>{text}</strong></div> : null;
     }
 
     case 'matrix': {
-      const matrix = matrixValue(raw);
+      const matrix = matrixValue(fmt, raw);
       if (!matrix || !matrix.rows.length) return null;
       return (
         <div className={styles.founderTableWrap}>
@@ -328,7 +331,7 @@ function FieldSection({ field, data, board, t }: {
     }
 
     case 'bars': {
-      const bars = barValues(raw);
+      const bars = barValues(fmt, raw);
       if (!bars.length) return null;
       const peak = Math.max(1, ...bars.map((bar) => bar.value));
       const total = bars.reduce((sum, bar) => sum + bar.value, 0);
@@ -396,16 +399,16 @@ function FieldSection({ field, data, board, t }: {
  * keep in step, so the checks live here and the sections read the same predicate shape:
  * a section is present exactly when this says its value is non-empty.
  */
-function sectionHasContent(field: SpecField, data: CreationNodeData, board: SpecDeriveBoard): boolean {
+function sectionHasContent(fmt: Formatter, field: SpecField, data: CreationNodeData, board: SpecDeriveBoard): boolean {
   const value = specFieldValue(field, data, board);
   // Restricted first, matching `FieldSection`: the section exists when the data was
   // collected, whatever style the field declared for values nobody here will see.
-  if (field.restricted) return restrictedCount(value) > 0;
+  if (field.restricted) return restrictedCount(fmt, value) > 0;
   switch (field.render) {
     case 'stat':
     case 'text':
     case 'verdict':
-      return statText(value).length > 0;
+      return statText(fmt, value).length > 0;
     case 'chips':
       return chipValues(value).length > 0;
     case 'list':
@@ -415,9 +418,9 @@ function sectionHasContent(field: SpecField, data: CreationNodeData, board: Spec
     case 'meter':
       return meterValue(value) != null;
     case 'matrix':
-      return (matrixValue(value)?.rows.length ?? 0) > 0;
+      return (matrixValue(fmt, value)?.rows.length ?? 0) > 0;
     case 'bars':
-      return barValues(value).length > 0;
+      return barValues(fmt, value).length > 0;
     case 'math':
       return !renderTex(value, data.altText).empty;
     // A reference renders from the whole object rather than from one stored field, so
@@ -435,6 +438,7 @@ function sectionHasContent(field: SpecField, data: CreationNodeData, board: Spec
  * kinds whose specs actually declare such a derivation — see `specKindReadsBoard`.
  */
 export function SpecObjectBody({ data, board = EMPTY_SPEC_BOARD }: { data: CreationNodeData; board?: SpecDeriveBoard }) {
+  const fmt = useFormat();
   const namespace = specObjectNamespace(data.kind);
   const spec = specObjectSpec(data.kind);
   // `useTranslations` must be called unconditionally, so the namespace falls back
@@ -443,7 +447,7 @@ export function SpecObjectBody({ data, board = EMPTY_SPEC_BOARD }: { data: Creat
   if (!spec || !namespace) return null;
 
   const sections = spec.fields
-    .filter((field) => sectionHasContent(field, data, board))
+    .filter((field) => sectionHasContent(fmt, field, data, board))
     .map((field) => ({ field, node: <FieldSection key={field.name} field={field} data={data} board={board} t={t} /> }));
 
   if (!sections.length) {

@@ -6,6 +6,7 @@ import type { EmulationJwtPayload } from '../../infrastructure/auth/JwtService';
 import { ForbiddenError, UnauthorizedError } from '../../domain/shared/errors';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import { adminImpersonationSessions } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { updateCaughtErrorContext } from '../../application/observability/caughtErrorReporter';
 
 // ---------------------------------------------------------------------------

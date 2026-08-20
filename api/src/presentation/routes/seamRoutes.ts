@@ -19,6 +19,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import { authenticateServiceToken } from '../middleware/serviceTokenAuth';
 import { respondToAccessError } from './llmRoutes';
 import { customerFeedback, webhookSubscriptions } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { isWebhookEvent, WEBHOOK_EVENTS } from '../../application/seams/webhookService';
 import { generateApiKey } from '../../infrastructure/auth/HashService';
 

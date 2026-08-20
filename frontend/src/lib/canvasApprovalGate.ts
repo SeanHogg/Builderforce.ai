@@ -32,6 +32,9 @@
  * decides. `canvasScopePolicy.ts` draws the same line for the same reason.
  */
 
+import { DEFAULT_LOCALE } from '@/i18n/config';
+import { formatterFor } from '@/i18n/format';
+
 /** What an act needs before it takes effect. */
 export type ApprovalMode =
   /** Anyone who can edit the board may do it. The default for reversible work. */
@@ -194,15 +197,26 @@ export interface ProvenanceEntry {
 
 const MAX_SUMMARY = 160;
 
+/**
+ * Pinned to the default locale, NOT the reader's.
+ *
+ * Everything below writes PERSISTED canvas object data — English prose a tool
+ * result and the next turn both read. A number that groups one way for a German
+ * reader and another for an English one would make the stored value depend on
+ * who happened to be looking at the board when it was computed.
+ */
+const fmt = formatterFor(DEFAULT_LOCALE);
+
+
 /** A value as it will read in a ledger a year from now. */
 export function describeValue(value: unknown): string {
   if (value == null || value === '') return '—';
-  if (typeof value === 'number') return value.toLocaleString('en-US');
+  if (typeof value === 'number') return fmt.number(value);
   if (typeof value === 'boolean') return value ? 'yes' : 'no';
   if (Array.isArray(value)) return `${value.length} row${value.length === 1 ? '' : 's'}`;
   if (typeof value === 'object') {
     const record = value as Record<string, unknown>;
-    if (typeof record.amount === 'number') return `${record.amount.toLocaleString('en-US')}${record.currency ? ` ${record.currency}` : ''}`;
+    if (typeof record.amount === 'number') return `${fmt.number(record.amount)}${record.currency ? ` ${record.currency}` : ''}`;
     return `${Object.keys(record).length} field${Object.keys(record).length === 1 ? '' : 's'}`;
   }
   const text = String(value).trim();

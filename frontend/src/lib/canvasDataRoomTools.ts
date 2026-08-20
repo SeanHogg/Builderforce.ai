@@ -38,6 +38,7 @@ import {
   dataRoomShares,
   listDataRooms,
   revokeDataRoomShare,
+  setLegalDocumentDataRoom,
   shareDataRoom,
   type DataRoomAnalytics,
   type DataRoomShareSummary,
@@ -79,7 +80,12 @@ export function dataRoomFieldsFrom(
       status: document.available ? document.status : 'missing',
       owner: '',
       required: document.required ? 'yes' : 'no',
+      // Which of the two shapes this row is — an outstanding obligation, or an
+      // encrypted legal file that has actually been filed into the room.
+      source: document.source,
+      documentId: document.documentId,
     })),
+    unstampable: room.unstampable,
     shares: shares.slice(0, MAX_ROWS).map((share) => ({
       recipient: share.recipientName ?? share.recipientEmail ?? '',
       email: share.recipientEmail ?? '',
@@ -100,7 +106,9 @@ export function dataRoomFieldsFrom(
       + `${analytics?.opens ?? room.opens} open${(analytics?.opens ?? room.opens) === 1 ? '' : 's'} and `
       + `${analytics?.documentViews ?? room.documentViews} document view${(analytics?.documentViews ?? room.documentViews) === 1 ? '' : 's'} recorded. `
       + `${room.ndaRequired ? 'An NDA is required before the room opens.' : 'No NDA is required.'} `
-      + `${room.watermark ? 'Documents are watermarked, so no link can carry a download.' : 'Downloads are permitted.'} `
+      + `${room.watermark
+        ? `Documents are watermarked — every page a firm opens is stamped with their address and the time${room.unstampable > 0 ? `, except ${room.unstampable} whose format cannot carry a stamp and are served view-only` : ''}.`
+        : 'Downloads are permitted.'} `
       + 'This card is a view of the room, not a second copy of it — share it with canvas_share_data_room rather than editing the rows.',
   };
 }
@@ -268,6 +276,52 @@ export function canvasDataRoomActions(ctx: CanvasFounderOpsContext): BrainAction
           instruction: result.ndaState === 'pending'
             ? 'Give the user the link and tell them the recipient must sign the NDA that was just emailed before it opens. The link cannot be read back later — it exists only in this result.'
             : 'Give the user the link. It cannot be read back later — it exists only in this result.',
+        };
+      },
+    },
+    {
+      name: 'canvas_file_document_in_data_room',
+      description:
+        'Put an encrypted legal file — a formation certificate, an executed IP assignment, a signed contract — INTO a data room, so a firm holding a room link can read it alongside the diligence checklist. Pass the `documentId` from the `legalDocument` card (canvas_legal_document_sync puts it there). Pass no dataRoomId to take it back OUT, which stops it resolving through every link into that room immediately. This does not copy the file: the same sealed artifact is simply readable through the room.',
+      parameters: {
+        type: 'object', required: ['documentId'], additionalProperties: false,
+        properties: {
+          documentId: { type: 'string', description: 'The documentId on the legalDocument card (a uuid).' },
+          dataRoomId: { type: 'number', description: 'The room to file it in. Omit to remove it from every room.' },
+          name: { type: 'string', description: 'Name the room instead of passing its id, when there is more than one.' },
+          objectId: { type: 'string', description: 'The dataRoom card to refresh afterwards.' },
+        },
+      },
+      mutates: () => true,
+      run: async (raw: unknown) => {
+        const blocked = guard();
+        if (blocked) return blocked;
+        const args = raw as { documentId?: string; dataRoomId?: number; name?: string; objectId?: string };
+        if (!args.documentId?.trim()) return { error: 'Pass the documentId from the legal document card. Call canvas_legal_document_sync first if the card has none.' };
+
+        const removing = args.dataRoomId == null && !args.name;
+        const { room, object } = removing ? { room: null, object: null } : await resolveRoom(args);
+        if (!removing && !room) return { error: 'No data room in this workspace matches. Call canvas_sync_data_room first.' };
+
+        await setLegalDocumentDataRoom(args.documentId.trim(), room ? room.id : null);
+
+        if (room && object) {
+          const [shares, analytics] = await Promise.all([
+            dataRoomShares(room.id).catch(() => [] as DataRoomShareSummary[]),
+            dataRoomAnalytics(room.id).catch(() => null),
+          ]);
+          // Redrawn from the room, so the card cannot claim a document the record
+          // does not have — the same direction every projection here runs in.
+          const refreshed = (await listDataRooms()).find((candidate) => candidate.id === room.id) ?? room;
+          ctx.updateObject(object.id, dataRoomFieldsFrom(refreshed, shares, analytics), 'Document filed in the room');
+        }
+
+        return {
+          ok: true, proposed: true,
+          dataRoomId: room?.id ?? null, boardUpdated: Boolean(room && object),
+          instruction: removing
+            ? 'The file is out of every data room and stops opening through room links immediately. Say so plainly.'
+            : 'The file is readable through this room\'s links now. Anyone already holding one can open it — say so, because it is a change to what they can see.',
         };
       },
     },

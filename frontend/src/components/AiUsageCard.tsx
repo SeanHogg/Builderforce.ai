@@ -6,7 +6,7 @@ import { useConsumption } from '@/lib/useConsumption';
 import { InsightStat } from '@/components/dashboard/InsightStat';
 import { buildInsightDelta } from '@/components/dashboard/metricFormat';
 import { colorAt } from '@/components/charts/chartColors';
-import { compactTokens } from '@/components/insights/format';
+import { useInsightFormat } from '@/components/insights/format';
 
 /**
  * Dashboard AI-usage card — month-to-date AI token consumption with a daily
@@ -19,6 +19,7 @@ import { compactTokens } from '@/components/insights/format';
  */
 
 export function AiUsageCard({ style }: { style?: CSSProperties } = {}) {
+  const { compactTokens } = useInsightFormat();
   const t = useTranslations('aiUsageCard');
   const snapshot = useConsumption();
   const meter = snapshot?.meters.find((m) => m.key === 'ai_tokens');

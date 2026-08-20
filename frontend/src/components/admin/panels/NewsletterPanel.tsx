@@ -8,10 +8,12 @@ import {
   type AdminNewsletterTemplate,
   type AdminNewsletterEvent,
 } from '@/lib/adminApi';
-import { errText, fmtDate, fmtDateTime, fmtNum, AdminError, AdminLoading } from '@/components/admin/adminShared';
+import { errText, AdminError, AdminLoading } from '@/components/admin/adminShared';
+import { useAdminFormat } from '@/components/admin/adminShared';
 import { Select } from '@/components/Select';
 
 export default function NewsletterPanel() {
+  const { fmtDate, fmtDateTime, fmtNum } = useAdminFormat();
   const t = useTranslations('admin');
   const [newsletterStatusFilter, setNewsletterStatusFilter] = useState<'all' | 'subscribed' | 'unsubscribed' | 'suppressed'>('subscribed');
   const [newsletterSearch, setNewsletterSearch] = useState('');

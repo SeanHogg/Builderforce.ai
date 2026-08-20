@@ -3,20 +3,17 @@
 import { useEffect, useState } from 'react';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { tasksApi, type Task } from '@/lib/builderforceApi';
+import { useFormat } from "@/i18n/useFormat";
 
 export interface TicketDetailsPanelProps {
   taskId: number | null;
   onClose: () => void;
 }
 
-function formatDate(value: string | null | undefined): string {
-  if (!value) return '—';
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
-}
 
 /** Reusable, read-only ticket drill-down for contextual links outside the board. */
 export function TicketDetailsPanel({ taskId, onClose }: TicketDetailsPanelProps) {
+  const fmt = useFormat();
   const [task, setTask] = useState<Task | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -42,9 +39,9 @@ export function TicketDetailsPanel({ taskId, onClose }: TicketDetailsPanelProps)
     ['Status', task.status],
     ['Priority', task.priority],
     ['Type', task.taskType],
-    ['Created', formatDate(task.createdAt)],
-    ['Updated', formatDate(task.updatedAt)],
-    ['Due', formatDate(task.dueDate)],
+    ['Created', fmt.dateTime(task.createdAt)],
+    ['Updated', fmt.dateTime(task.updatedAt)],
+    ['Due', fmt.dateTime(task.dueDate)],
   ] : [];
 
   return (

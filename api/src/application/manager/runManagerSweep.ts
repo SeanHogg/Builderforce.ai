@@ -21,6 +21,7 @@ import { and, asc, eq, exists, inArray, sql } from 'drizzle-orm';
 import { buildDatabase, type Db } from '../../infrastructure/database/connection';
 import { buildRuntimeService } from '../../buildRuntimeService';
 import { tasks, projects, boards, projectManagerConfigs, pullRequests } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { TaskStatus, NON_TERMINAL_TASK_STATUSES } from '../../domain/shared/types';
 import { getTenantTokenAvailability } from '../llm/tenantTokenAvailability';
 import { runManagerForProject } from './ManagerService';

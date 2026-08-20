@@ -38,6 +38,7 @@ import {
   type IncidentWorkflowRun,
   type WorkflowDefinitionSummary,
 } from '@/lib/builderforceApi';
+import { useFormat } from "@/i18n/useFormat";
 
 const card: React.CSSProperties = {
   background: 'var(--bg-base)',
@@ -62,11 +63,6 @@ const STATUS_BADGE: Record<IncidentStatus, string> = {
 const ROTATION_KINDS: RotationKind[] = ['manual', 'daily', 'weekly'];
 const TARGET_KINDS: EscalationTargetKind[] = ['oncall_rotation', 'user', 'contact', 'team_chat'];
 
-function fmt(dt: string | null | undefined): string {
-  if (!dt) return '—';
-  const d = new Date(dt);
-  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleString();
-}
 
 /** Split a free-text RCA field into discrete causes — one per line / semicolon. */
 function splitCauses(s: string | null | undefined): string[] {
@@ -145,6 +141,7 @@ function EmptyCard({ msg }: { msg: string }) {
 /* ─────────────────────────── Incidents ─────────────────────────── */
 
 function IncidentsSection({ t, tc, canManage }: SectionProps) {
+  const fmt = useFormat();
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [activeOnly, setActiveOnly] = useState(true);
   const [loading, setLoading] = useState(true);
@@ -200,7 +197,7 @@ function IncidentsSection({ t, tc, canManage }: SectionProps) {
                 </div>
                 <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 12, color: 'var(--text-muted)' }}>
                   <span>{t('colSystem')}: {inc.affectedSystem || '—'}</span>
-                  <span>{t('colStarted')}: {fmt(inc.startedAt)}</span>
+                  <span>{t('colStarted')}: {fmt.dateTime(inc.startedAt)}</span>
                   <span>{t('escalationLevel', { level: inc.escalationLevel })}</span>
                 </div>
               </button>
@@ -309,6 +306,7 @@ function CreateIncidentPanel({ t, tc, canManage, open, onClose, onCreated }: Sec
 }
 
 function IncidentDetailPanel({ t, tc, canManage, incidentId, onClose, onChanged }: SectionProps & { incidentId: string; onClose: () => void; onChanged: () => void }) {
+  const fmt = useFormat();
   const [incident, setIncident] = useState<Incident | null>(null);
   const [timeline, setTimeline] = useState<IncidentEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -357,9 +355,9 @@ function IncidentDetailPanel({ t, tc, canManage, incidentId, onClose, onChanged 
             <div style={{ ...card, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
               <DetailRow label={t('colSystem')} value={incident.affectedSystem || '—'} />
               <DetailRow label={t('colSource')} value={incident.source || '—'} />
-              <DetailRow label={t('startedAt')} value={fmt(incident.startedAt)} />
-              <DetailRow label={t('acknowledgedAt')} value={fmt(incident.acknowledgedAt)} />
-              <DetailRow label={t('resolvedAt')} value={fmt(incident.resolvedAt)} />
+              <DetailRow label={t('startedAt')} value={fmt.dateTime(incident.startedAt)} />
+              <DetailRow label={t('acknowledgedAt')} value={fmt.dateTime(incident.acknowledgedAt)} />
+              <DetailRow label={t('resolvedAt')} value={fmt.dateTime(incident.resolvedAt)} />
               <DetailRow label={t('impact')} value={incident.impact || '—'} />
               <DetailRow label={t('rootCause')} value={incident.rootCause || '—'} />
             </div>
@@ -428,7 +426,7 @@ function IncidentDetailPanel({ t, tc, canManage, incidentId, onClose, onChanged 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {timeline.map((ev) => (
                     <div key={ev.id} style={{ display: 'flex', gap: 10, fontSize: 13, borderLeft: '2px solid var(--border-subtle)', paddingLeft: 10 }}>
-                      <span style={{ color: 'var(--text-muted)', fontSize: 11, whiteSpace: 'nowrap' }}>{fmt(ev.createdAt)}</span>
+                      <span style={{ color: 'var(--text-muted)', fontSize: 11, whiteSpace: 'nowrap' }}>{fmt.dateTime(ev.createdAt)}</span>
                       <span style={{ color: 'var(--text-primary)' }}>
                         <strong style={{ fontWeight: 600 }}>{ev.kind}</strong>
                         {ev.message ? ` — ${ev.message}` : ''}
@@ -691,6 +689,7 @@ function RcaSection({ t, tc, canManage, incident, onPublished }: SectionProps & 
 /* ─────────────────── Runbooks — custom workflows on an incident ─────────────────── */
 
 function WorkflowRunsSection({ t, tc, canManage, incidentId }: SectionProps & { incidentId: string }) {
+  const fmt = useFormat();
   const [defs, setDefs] = useState<WorkflowDefinitionSummary[]>([]);
   const [runs, setRuns] = useState<IncidentWorkflowRun[]>([]);
   const [selectedDef, setSelectedDef] = useState('');
@@ -752,7 +751,7 @@ function WorkflowRunsSection({ t, tc, canManage, incidentId }: SectionProps & { 
                 <Link key={r.id} href="/workflows" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', textDecoration: 'none', fontSize: 12 }}>
                   <span className="badge-muted">{r.status}</span>
                   <span style={{ fontWeight: 600, color: 'var(--text-primary)', flex: 1, minWidth: 0 }}>{r.definitionName || r.description || r.id}</span>
-                  <span style={{ color: 'var(--text-muted)' }}>{fmt(r.createdAt)}</span>
+                  <span style={{ color: 'var(--text-muted)' }}>{fmt.dateTime(r.createdAt)}</span>
                 </Link>
               ))}
             </div>

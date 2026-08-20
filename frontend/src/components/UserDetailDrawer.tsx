@@ -1,6 +1,7 @@
 'use client';
 
 import { Select } from '@/components/Select';
+import type { Formatter } from '@/i18n/format';
 
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
@@ -12,6 +13,7 @@ import {
   type ImpersonationSession,
 } from '@/lib/adminApi';
 import { useConfirm } from '@/components/ConfirmProvider';
+import { useFormat } from "@/i18n/useFormat";
 
 type DrawerTab = 'profile' | 'permissions' | 'sessions' | 'security' | 'access';
 
@@ -22,11 +24,12 @@ interface Props {
   onStartImpersonate: (user: AdminUser) => void;
 }
 
-function fmtDateTime(d: string) {
-  return new Date(d).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+function fmtDateTime(fmt: Formatter, d: string) {
+  return fmt.dateWith(d, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
 export default function UserDetailDrawer({ user, tenants, onClose, onStartImpersonate }: Props) {
+  const fmt = useFormat();
   const t = useTranslations('admin');
   const confirm = useConfirm();
   const [tab, setTab] = useState<DrawerTab>('profile');
@@ -231,7 +234,7 @@ export default function UserDetailDrawer({ user, tenants, onClose, onStartImpers
                   </div>
                   <div className="user-drawer__field">
                     <span className="user-drawer__field-label">{t('users.drawer.fieldMemberSince')}</span>
-                    <span>{fmtDateTime(user.createdAt)}</span>
+                    <span>{fmtDateTime(fmt, user.createdAt)}</span>
                   </div>
 
                   <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
@@ -330,7 +333,7 @@ export default function UserDetailDrawer({ user, tenants, onClose, onStartImpers
                           <tr key={s.id}>
                             <td style={{ fontFamily: 'monospace', fontSize: 10 }}>{s.id.slice(0, 8)}…</td>
                             <td>{s.ipAddress ?? '—'}</td>
-                            <td>{fmtDateTime(s.lastSeenAt)}</td>
+                            <td>{fmtDateTime(fmt, s.lastSeenAt)}</td>
                             <td>
                               <span style={{ color: s.isActive ? 'var(--success)' : 'var(--text-muted)' }}>
                                 {s.isActive ? t('users.drawer.statusActive') : t('users.drawer.statusRevoked')}
@@ -366,7 +369,7 @@ export default function UserDetailDrawer({ user, tenants, onClose, onStartImpers
                       {secDetails.mfa.enabledAt && (
                         <div className="user-drawer__field">
                           <span className="user-drawer__field-label">{t('users.drawer.fieldMfaEnabledAt')}</span>
-                          <span>{fmtDateTime(secDetails.mfa.enabledAt)}</span>
+                          <span>{fmtDateTime(fmt, secDetails.mfa.enabledAt)}</span>
                         </div>
                       )}
                       <div className="user-drawer__field">
@@ -425,7 +428,7 @@ export default function UserDetailDrawer({ user, tenants, onClose, onStartImpers
                               <td>{s.adminUserId.slice(0, 8)}…</td>
                               <td>{s.tenantName}</td>
                               <td>{s.roleOverride}</td>
-                              <td>{fmtDateTime(s.startedAt)}</td>
+                              <td>{fmtDateTime(fmt, s.startedAt)}</td>
                               <td>{dur != null ? `${Math.floor(dur / 60)}m ${dur % 60}s` : t('users.drawer.durationActive')}</td>
                             </tr>
                           );

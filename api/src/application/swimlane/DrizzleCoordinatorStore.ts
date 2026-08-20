@@ -16,6 +16,7 @@ import {
   agentDispatches,
   tenants,
 } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { Db } from '../../infrastructure/database/connection';
 import { freezeDispatchAgentDefinition } from '../agentIdentity/agentRunIdentity';
 import type {

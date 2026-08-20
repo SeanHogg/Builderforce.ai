@@ -22,7 +22,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useConfirm } from '@/components/ConfirmProvider';
-import { formatCents } from '@/lib/canvasMoney';
+import { useMoneyFormat } from '@/lib/useMoneyFormat';
 import {
   addEngagementMilestone, addJobMilestone, deleteMilestone, getEngagementSchedule, getJobSchedule,
   listMyMilestones, runMilestoneAction, isTransacted,
@@ -65,7 +65,6 @@ const NEEDS_NOTE: ReadonlySet<MilestoneAction> = new Set<MilestoneAction>(['reje
 /** The moves that ask first, because they end something or move money out. */
 const NEEDS_CONFIRM: ReadonlySet<MilestoneAction> = new Set<MilestoneAction>(['cancel', 'release', 'fund']);
 
-const money = (cents: number, currency = 'USD') => formatCents(cents, { currency });
 
 function StatusPill({ status }: { status: MilestoneStatus }) {
   const t = useTranslations('milestones');
@@ -81,6 +80,7 @@ function StatusPill({ status }: { status: MilestoneStatus }) {
 
 /** The five numbers, as tiles that wrap rather than overflow on a phone. */
 function EscrowSummaryTiles({ summary, currency }: { summary: EscrowSummary; currency: string }) {
+  const { formatCents } = useMoneyFormat();
   const t = useTranslations('milestones');
   const tiles: Array<{ key: keyof EscrowSummary; tone: string }> = [
     { key: 'agreedCents', tone: 'var(--text-primary)' },
@@ -97,7 +97,7 @@ function EscrowSummaryTiles({ summary, currency }: { summary: EscrowSummary; cur
             {t(`summary.${key}`)}
           </div>
           <div style={{ fontSize: 'var(--font-size-body)', fontWeight: 700, color: tone, marginTop: 4 }}>
-            {money(summary[key], currency)}
+            {formatCents(summary[key], { currency: currency })}
           </div>
         </div>
       ))}
@@ -135,6 +135,7 @@ interface RowsProps {
 }
 
 function MilestoneRows({ milestones, busy, onAction, onRemove, showContext }: RowsProps) {
+  const { formatCents } = useMoneyFormat();
   const fmt = useFormat();
   const t = useTranslations('milestones');
   const confirm = useConfirm();
@@ -149,7 +150,7 @@ function MilestoneRows({ milestones, busy, onAction, onRemove, showContext }: Ro
     }
     if (NEEDS_CONFIRM.has(action)) {
       const agreed = await confirm({
-        message: t(`confirm.${action}`, { amount: money(row.amountCents, row.currency) }),
+        message: t(`confirm.${action}`, { amount: formatCents(row.amountCents, { currency: row.currency }) }),
         destructive: action === 'cancel',
       });
       if (!agreed) return;
@@ -195,7 +196,7 @@ function MilestoneRows({ milestones, busy, onAction, onRemove, showContext }: Ro
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               <span style={{ fontSize: 'var(--font-size-body)', fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
-                {money(row.amountCents, row.currency)}
+                {formatCents(row.amountCents, { currency: row.currency })}
               </span>
               {(row.actions ?? []).map((action) => (
                 <button key={action} type="button" disabled={busy === `${row.id}:${action}`}
@@ -243,6 +244,7 @@ export function MilestoneLinesEditor({
   currency?: string;
   max?: number;
 }) {
+  const { formatCents } = useMoneyFormat();
   const t = useTranslations('milestones');
   const total = useMemo(() => lines.reduce((sum, line) => sum + (line.amountCents || 0), 0), [lines]);
 
@@ -269,7 +271,7 @@ export function MilestoneLinesEditor({
         </button>
         {lines.length > 0 && (
           <span style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>
-            {t('editor.total', { amount: money(total, currency) })}
+            {t('editor.total', { amount: formatCents(total, { currency: currency }) })}
           </span>
         )}
       </div>
@@ -280,6 +282,7 @@ export function MilestoneLinesEditor({
 /** A schedule nobody can act on here — the posting's published terms, or a rival's
  *  counter-offer as the employer reads it before deciding. */
 export function MilestoneLinesPreview({ milestones, emptyLabel }: { milestones: MilestoneRow[]; emptyLabel?: string }) {
+  const { formatCents } = useMoneyFormat();
   const t = useTranslations('milestones');
   const total = milestones.reduce((sum, row) => sum + row.amountCents, 0);
   if (milestones.length === 0) {
@@ -292,12 +295,12 @@ export function MilestoneLinesPreview({ milestones, emptyLabel }: { milestones: 
           <span style={{ color: 'var(--text-secondary)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {index + 1}. {row.title}
           </span>
-          <span style={{ color: 'var(--text-primary)', fontWeight: 600, whiteSpace: 'nowrap' }}>{money(row.amountCents, row.currency)}</span>
+          <span style={{ color: 'var(--text-primary)', fontWeight: 600, whiteSpace: 'nowrap' }}>{formatCents(row.amountCents, { currency: row.currency })}</span>
         </div>
       ))}
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 'var(--font-size-small)', borderTop: '1px solid var(--border-subtle)', paddingTop: 4 }}>
         <span style={{ color: 'var(--text-muted)' }}>{t('editor.totalLabel')}</span>
-        <span style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{money(total, milestones[0]?.currency)}</span>
+        <span style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{formatCents(total, { currency: milestones[0]?.currency })}</span>
       </div>
     </div>
   );

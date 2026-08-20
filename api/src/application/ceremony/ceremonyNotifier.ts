@@ -26,6 +26,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { resolveAppBaseUrl } from '../../env';
 import { ceremonyParticipants, ceremonySessions } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { notify } from '../notifications/notify';
 import { sendSlackNotification } from '../approval/approvalNotifier';
 import { isHumanSeat } from './ceremonyAttendance';

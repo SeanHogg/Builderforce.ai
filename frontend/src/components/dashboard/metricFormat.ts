@@ -6,14 +6,22 @@
  * call site (the library ships no hardcoded English).
  */
 
-/** Format a numeric metric value with its unit suffix (the dashboard convention). */
-export function formatMetricValue(value: number | null | undefined, unit = ''): string {
+import type { Formatter } from '@/i18n/format';
+
+/**
+ * Format a numeric metric value with its unit suffix (the dashboard convention).
+ *
+ * Takes the formatter for the same reason the recency label takes a translator:
+ * this module stays hook-free so server and client widgets share it. The two
+ * grouped branches used to hardcode `'en-US'`.
+ */
+export function formatMetricValue(fmt: Formatter, value: number | null | undefined, unit = ''): string {
   if (value == null || Number.isNaN(value)) return '—';
   const n = value;
   const rounded = Math.abs(n) >= 100 ? Math.round(n) : Math.round(n * 100) / 100;
   switch (unit) {
     case 'USD':
-      return `$${rounded.toLocaleString('en-US')}`;
+      return fmt.money(rounded);
     case '%':
       return `${rounded}%`;
     case '/day':
@@ -23,7 +31,7 @@ export function formatMetricValue(value: number | null | undefined, unit = ''): 
     case 'score':
       return `${rounded}`;
     default:
-      return rounded.toLocaleString('en-US');
+      return fmt.number(rounded);
   }
 }
 

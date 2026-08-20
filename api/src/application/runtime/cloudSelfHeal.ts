@@ -29,6 +29,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { and, eq, ne } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { executions, pullRequests, tasks, toolAuditEvents } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { Env } from '../../env';
 import { markReaperRequeued, wasReaperRequeued, parseCloudAgentRef } from './cloudDispatch';
 

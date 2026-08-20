@@ -30,6 +30,7 @@ import { toolsApi } from '@/lib/builderforceApi';
 import { ToolResultView } from '@/components/tools/ToolResultView';
 import { AnalyzerRunner } from '@/components/tools/AnalyzerRunner';
 import { DataDrivenPanel } from '@/components/tools/DataDrivenPanel';
+import { MaturityFrameworkToggle } from '@/components/tools/MaturityFrameworkToggle';
 import { trackToolRun } from '@/lib/marketingApi';
 import { defaultInput, answersComplete, type ToolDefinition, type ToolResult } from '@/lib/tools';
 import { getStoredUser, getStoredTenantToken } from '@/lib/auth';
@@ -88,6 +89,9 @@ export default function ToolRunner({
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [saveMsg, setSaveMsg] = useState('');
   const [mode, setMode] = useState<'self' | 'data'>('self');
+  // The maturity lens, shared by both modes. 'cmmi' is the diagnostic's own
+  // vocabulary and the server's default, so leaving it alone costs nothing.
+  const [framework, setFramework] = useState('cmmi');
 
   const hasWorkspace = !!getStoredTenantToken();
   const isAuthed = !!getStoredUser();
@@ -123,7 +127,7 @@ export default function ToolRunner({
     if (!def) return;
     setComputing(true); setError(null);
     try {
-      const res = await toolsApi.compute(toolId, input);
+      const res = await toolsApi.compute(toolId, input, framework);
       setResult(res);
       onRunComplete?.(input, res);
       // Track anonymous runs as marketing leads so a returning visitor can re-see
@@ -193,8 +197,15 @@ export default function ToolRunner({
         </div>
       )}
 
+      {/* The vocabulary the scorecard is reported in — above the mode toggle,
+          because it applies to BOTH modes and switching mode must not silently
+          change taxonomy under the reader. */}
+      {def.supportsMaturityFrameworks && (
+        <MaturityFrameworkToggle value={framework} onChange={setFramework} />
+      )}
+
       {mode === 'data' && def.hasDataDriven ? (
-        <DataDrivenPanel toolId={toolId} projectId={projectId} />
+        <DataDrivenPanel toolId={toolId} projectId={projectId} framework={framework} />
       ) : (
       <>
       {/* Inputs */}

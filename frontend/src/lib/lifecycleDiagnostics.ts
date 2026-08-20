@@ -54,6 +54,15 @@ import {
   type DiagnosticsContext,
 } from './diagnosticsReport';
 import { formatDuration } from './duration';
+import { DEFAULT_LOCALE } from '@/i18n/config';
+import { formatterFor } from '@/i18n/format';
+
+/**
+ * Pinned to the default locale, NOT the reader's: this report is pasted into a
+ * tracker and compared against another one, so a number that groups by whoever
+ * copied it is a diff nobody asked for.
+ */
+const report = formatterFor(DEFAULT_LOCALE);
 
 /**
  * How many event rows the chain of custody prints, as a head + tail window.
@@ -176,8 +185,11 @@ function formatGate(gate: LifecycleGateSnapshot): string[] {
       ? `budget available (${t.effectivePlan} plan)`
       : `EXHAUSTED — ${t.reason ?? 'blocked'} on the ${t.effectivePlan} plan. `
         + `Autonomy is paused for EVERY ticket in this workspace until it resets or the plan is upgraded.`));
-    out.push(line('  tokensToday', `${t.usageToday.toLocaleString()} / ${t.dailyLimit > 0 ? t.dailyLimit.toLocaleString() : 'unlimited'}`));
-    out.push(line('  tokensThisMonth', `${t.usageMonth.toLocaleString()} / ${t.monthlyLimit > 0 ? t.monthlyLimit.toLocaleString() : 'unlimited'}`));
+    // Pinned to the default locale, NOT the reader's: this report is pasted into a
+    // tracker and compared against another one. A number that groups differently
+    // depending on who copied it is a diff nobody asked for.
+    out.push(line('  tokensToday', `${report.number(t.usageToday)} / ${t.dailyLimit > 0 ? report.number(t.dailyLimit) : 'unlimited'}`));
+    out.push(line('  tokensThisMonth', `${report.number(t.usageMonth)} / ${t.monthlyLimit > 0 ? report.number(t.monthlyLimit) : 'unlimited'}`));
   } else {
     out.push(line('workspaceTokens', '(not consulted — an earlier gate decided; this is NOT a statement that budget remains)'));
   }

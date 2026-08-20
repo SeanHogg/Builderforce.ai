@@ -29,14 +29,13 @@ import { computeDora, computeProjectDeliveryMetrics } from '../metrics/workforce
 import { MILLICENTS_PER_USD } from '../../domain/shared/money';
 import { notSystemTask } from '../task/taskScope';
 import { getTool, money, tierName } from './toolDefinitions';
+import { DEFAULT_TOOL_LOCALE, resultCopy, type ResultCopy } from './resultCopy';
 import type { QuestionnaireTool, ToolResult, ToolMetric, ToolRecommendation } from './toolTypes';
 
 /** A data provider derives a tool's result from real telemetry. When `projectId`
  *  is supplied the result is scoped to that project (sections that cannot be
  *  attributed to a project fall back to "insufficient data"). */
 export type ToolDataProvider = (db: Db, tenantId: number, days: number, projectId?: number | null) => Promise<ToolResult>;
-
-const LEVEL_NAMES = ['Initial', 'Managed', 'Defined', 'Quantitatively Managed', 'Optimizing'];
 
 // ── Pure scoring: aggregated telemetry → per-practice levels → ToolResult ──────
 
@@ -89,10 +88,20 @@ function agenticLevel(d: MaturityDataInputs['agenticOps']): number | null {
   return 2;
 }
 
-/** Pure: map aggregated telemetry to a ToolResult, reusing the agentic-maturity
- *  tool's section names + recommendations so self and data modes never drift. */
-export function scoreAgenticMaturityData(inp: MaturityDataInputs): ToolResult {
-  const tool = getTool('agentic-maturity') as QuestionnaireTool;
+/**
+ * Pure: map aggregated telemetry to a ToolResult, reusing the agentic-maturity
+ * tool's section names + recommendations so self and data modes never drift.
+ *
+ * `tool` is injected (defaulting to the registry's own) precisely so the caller
+ * can hand in the LOCALIZED tool — the section names and advancement actions in
+ * this result come from the tool itself, so translating the tool translates the
+ * telemetry result, with no second catalog. `copy` covers the chrome around them.
+ */
+export function scoreAgenticMaturityData(
+  inp: MaturityDataInputs,
+  copy: ResultCopy = resultCopy(DEFAULT_TOOL_LOCALE),
+  tool: QuestionnaireTool = getTool('agentic-maturity') as QuestionnaireTool,
+): ToolResult {
   const levelByKey: Record<string, number | null> = {
     delivery: deliveryLevel(inp.delivery),
     devops: devopsLevel(inp.devops),
@@ -109,13 +118,13 @@ export function scoreAgenticMaturityData(inp: MaturityDataInputs): ToolResult {
   for (const section of tool.sections) {
     const lvl = levelByKey[section.key] ?? null;
     if (lvl == null) {
-      metrics.push({ label: section.name, value: section.key === 'governance' ? 'Self-assessment only' : 'Insufficient data' });
+      metrics.push({ key: section.key, label: section.name, value: section.key === 'governance' ? copy.selfAssessmentOnly : copy.insufficientData });
       continue;
     }
     levels.push(lvl);
-    metrics.push({ label: section.name, value: `Level ${lvl} — ${LEVEL_NAMES[lvl - 1]}`, tier: lvl });
+    metrics.push({ key: section.key, label: section.name, value: copy.levelValue(lvl, copy.levelNames[lvl - 1]!), tier: lvl });
     if (lvl < 5) {
-      recommendations.push({ title: `${section.name} — to Level ${lvl + 1}`, detail: section.recommendations[lvl + 1] ?? 'Continue improving this practice.' });
+      recommendations.push({ title: copy.planTitle(section.name, lvl + 1), detail: section.recommendations[lvl + 1] ?? copy.keepImproving });
     }
   }
 
@@ -125,16 +134,14 @@ export function scoreAgenticMaturityData(inp: MaturityDataInputs): ToolResult {
     .map((s) => ({ s, lvl: levelByKey[s.key] }))
     .filter((x): x is { s: typeof x.s; lvl: number } => typeof x.lvl === 'number' && x.lvl < 5)
     .sort((a, b) => a.lvl - b.lvl)
-    .map((x) => ({ title: `${x.s.name} — to Level ${x.lvl + 1}`, detail: x.s.recommendations[x.lvl + 1] ?? 'Continue improving this practice.' }));
+    .map((x) => ({ title: copy.planTitle(x.s.name, x.lvl + 1), detail: x.s.recommendations[x.lvl + 1] ?? copy.keepImproving }));
 
   const overall = levels.length ? Math.round((levels.reduce((s, v) => s + v, 0) / levels.length) * 10) / 10 : null;
-  const overallName = overall != null ? LEVEL_NAMES[Math.max(1, Math.min(5, Math.round(overall))) - 1] : null;
+  const overallName = overall != null ? copy.levelNames[Math.max(1, Math.min(5, Math.round(overall))) - 1]! : null;
 
   return {
-    headline: overall != null ? `Level ${overall} — ${overallName}` : 'Not enough telemetry yet',
-    summary: overall != null
-      ? 'Scored objectively from your last delivery window — DORA, cycle time, rework, and agent outcomes.'
-      : 'Run some work (deploys, tasks, agent runs) and check back, or use the self-assessment.',
+    headline: overall != null ? copy.levelValue(overall, overallName!) : copy.notEnoughTelemetry,
+    summary: overall != null ? copy.scoredFromTelemetry : copy.telemetryPrompt,
     score: overall,
     scoreLabel: overallName,
     metrics,
@@ -226,6 +233,9 @@ const agenticMaturityProvider: ToolDataProvider = async (db, tenantId, days, pro
  * ledger (ticket_audits). Backs the Manager AI agent's ticket-coverage diagnostic.
  */
 const ticketRoleCoverageProvider: ToolDataProvider = async (db, tenantId, _days, projectId) => {
+  // This provider's bespoke prose is still authored in English; the band naming is
+  // taken from the shared chrome so it cannot drift from every other scorer's.
+  const english = resultCopy(DEFAULT_TOOL_LOCALE);
   const forProject = projectId != null;
   const [agg] = await db
     .select({
@@ -255,10 +265,10 @@ const ticketRoleCoverageProvider: ToolDataProvider = async (db, tenantId, _days,
   const level = passRate >= 0.95 ? 5 : passRate >= 0.85 ? 4 : passRate >= 0.6 ? 3 : passRate >= 0.3 ? 2 : 1;
 
   return {
-    headline: `Level ${level} — ${LEVEL_NAMES[level - 1]}`,
+    headline: english.levelValue(level, english.levelNames[level - 1]!),
     summary: `${Math.round(passRate * 100)}% of tickets with required checks passed their audit${flagged ? ` — ${flagged} flagged for review.` : '.'}`,
     score: level,
-    scoreLabel: LEVEL_NAMES[level - 1],
+    scoreLabel: english.levelNames[level - 1]!,
     metrics: [
       { label: 'Tickets audited', value: String(withReqs) },
       { label: 'Passing coverage', value: `${Math.round(passRate * 100)}%`, tier: level },

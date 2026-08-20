@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { adminApi, type AdminSystemHealth } from '@/lib/adminApi';
-import { errText, fmtDateTime, fmtNum } from '../adminShared';
+import { errText } from '../adminShared';
+import { useAdminFormat } from '../adminShared';
 
 const bytes = (n: number) => {
   if (n < 1024) return `${n} B`;
@@ -13,6 +14,7 @@ const bytes = (n: number) => {
 };
 
 export function SystemHealthSection() {
+  const { fmtDateTime, fmtNum } = useAdminFormat();
   const [health, setHealth] = useState<AdminSystemHealth | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState('');

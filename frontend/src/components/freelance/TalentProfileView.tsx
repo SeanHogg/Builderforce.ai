@@ -6,7 +6,7 @@ import { TrustBadge } from '@/components/freelance/TrustBadge';
 import { ProfileAvatar } from '@/components/profile/ProfileIdentityCard';
 import { ResumeDocumentView } from '@/components/resume/ResumeDocumentView';
 import type { FreelancerProfile, FreelancerStats } from '@/lib/freelancerApi';
-import { formatCents } from '@/lib/canvasMoney';
+import { useMoneyFormat } from '@/lib/useMoneyFormat';
 import { useFormat } from "@/i18n/useFormat";
 
 /**
@@ -67,6 +67,7 @@ export interface TalentProfileViewProps {
 }
 
 export function TalentProfileView({ profile, actions, resumeEmptyNote }: TalentProfileViewProps) {
+  const { formatCents } = useMoneyFormat();
   const t = useTranslations('talent');
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>

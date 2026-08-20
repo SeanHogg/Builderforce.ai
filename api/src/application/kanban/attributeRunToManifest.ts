@@ -17,6 +17,7 @@ import { and, asc, desc, eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { pullRequests, swimlaneRequirements, swimlanes, tasks } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { TicketParticipantsService } from './ticketParticipants';
 import { attestCompletedRoleRun } from './attestRoleRun';
 import { findCanonicalBoard } from '../swimlane/canonicalBoard';

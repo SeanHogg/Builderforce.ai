@@ -8,7 +8,7 @@ import { PmCard, PmEmpty } from '@/components/pm/pmShared';
 import { KpiGrid } from './LensShell';
 import { StatCard } from '@/components/pm/pmShared';
 import { UpgradeGate } from './UpgradeGate';
-import { usd } from './format';
+import { useInsightFormat, type InsightFormatters } from './format';
 import { forecastApi, type ForecastInsights, type ForecastMetric, type ForecastUnit } from '@/lib/forecastApi';
 
 /**
@@ -30,14 +30,22 @@ const selectStyle: React.CSSProperties = {
 };
 
 /** Format a value in the metric's native unit. */
-function fmt(unit: ForecastUnit): (v: number) => string {
-  if (unit === 'usd') return (v) => usd(v);
+/**
+ * A value formatter for the metric's native unit.
+ *
+ * Takes the lens formatters rather than importing them: `usd` and the grouped
+ * fallback are bound to the reader's locale now, and this is module scope, where
+ * a hook cannot run.
+ */
+function unitFormatter(f: InsightFormatters, unit: ForecastUnit): (v: number) => string {
+  if (unit === 'usd') return (v) => f.usd(v);
   if (unit === 'pct') return (v) => `${Math.round(v * 10) / 10}%`;
   if (unit === 'hours') return (v) => `${Math.round(v * 10) / 10}h`;
-  return (v) => Math.round(v).toLocaleString();
+  return (v) => f.int(v);
 }
 
 export function ForecastPanel({ initialMetric = 'cost', initialDays = 90 }: { initialMetric?: ForecastMetric; initialDays?: number }) {
+  const insight = useInsightFormat();
   const t = useTranslations('insights');
   const [metric, setMetric] = useState<ForecastMetric>(initialMetric);
   const [days, setDays] = useState(initialDays);
@@ -90,7 +98,7 @@ export function ForecastPanel({ initialMetric = 'cost', initialDays = 90 }: { in
   if (loading && !data) return <PmCard title={t('forecast.title')} action={header}><PmEmpty message={t('loading')} /></PmCard>;
   if (!data) return <PmCard title={t('forecast.title')} action={header}><PmEmpty message={t('forecast.noData')} /></PmCard>;
 
-  const format = fmt(data.unit);
+  const format = unitFormatter(insight, data.unit);
   const openAnomalies = data.anomalies.filter((a) => !a.acknowledged);
 
   // Build a shared x axis: history days followed by forecast days. The history

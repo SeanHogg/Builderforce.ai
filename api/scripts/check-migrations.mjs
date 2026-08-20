@@ -790,6 +790,242 @@ if (staleDriftAllowlist.length > 0) {
   failed = true;
 }
 
+// ---------------------------------------------------------------------------
+// SIXTH GUARD — SEED DATA that cannot satisfy its own foreign key.
+//
+// The third guard closes "the constraint cannot be BUILT". This closes the other
+// half of the deploy-killing pair: a constraint that builds perfectly and then
+// REFUSES the very rows a later migration inserts.
+//
+// The case that shipped it: `0242_deck_templates_and_decks.sql` declared
+// `tenant_id INTEGER NOT NULL DEFAULT 0 REFERENCES tenants(id)`, and
+// `0243_seed_builtin_deck_templates.sql` seeded the two built-in board decks at
+// the sentinel `tenant_id = 0`. `tenants.id` is a SERIAL, and a serial never
+// issues 0 — so Postgres answered `Key (tenant_id)=(0) is not present in table
+// "tenants"`, aborted db:migrate mid-file, and blocked EVERY API deploy until
+// somebody read the failure and dropped the constraint by hand. Nothing static
+// caught it: the FK is type-correct, the column exists, the INSERT is valid SQL,
+// and no test executes a migration. The first signal was a red deploy.
+//
+// The 0-tenant sentinel is not a mistake — a GLOBAL row owned by no tenant is a
+// real pattern here (built-in templates, platform-wide defaults) — which is
+// exactly why this has to be caught statically: the fix is to NOT put an FK on
+// that column, and that decision belongs at the moment the table is written, not
+// at the moment the deploy is red.
+//
+// WHAT IT ASSERTS. A literal 0 (or negative) INSERTed into a column whose foreign
+// key points at a SERIAL / IDENTITY key can never resolve, on any database, ever.
+//
+// CONSERVATIVE BY CONSTRUCTION — this guard blocks deploys, so every ambiguity
+// resolves to SILENCE rather than to a finding:
+//   - only NUMERIC literals are judged. An expression, a subquery, a parameter or
+//     a cast is skipped, because its value is not knowable from the text;
+//   - a POSITIVE literal is never judged. Whether row 42 exists is a question
+//     about data, and this guard reads only DDL;
+//   - the FK must be one this pass actually saw declared, pointing at a column
+//     this pass actually saw declared as auto-numbered;
+//   - an INSERT is read only when its column list is explicit. `INSERT INTO t
+//     VALUES (…)` binds positionally against a shape that may have changed since,
+//     and guessing it wrong reports a phantom;
+//   - a DROP CONSTRAINT earlier in the run clears the finding. That is what makes
+//     0243 pass today: it drops `deck_templates_tenant_id_fkey` in the same
+//     transaction, immediately before the seed — which is the documented fix, so
+//     a guard that still failed on it would be telling people to undo it;
+//   - a `DEFAULT 0` on an FK column is NOT flagged on its own. A default is not a
+//     write — nothing fails until an insert omits the column — and flagging it
+//     would fail the build on 0242, whose hazard 0243 already removed. The
+//     guidance below names it, because that is where the next one comes from.
+// ---------------------------------------------------------------------------
+
+/** Split a definition list on TOP-LEVEL commas, so `NUMERIC(10,2)` stays one
+ *  clause and a multi-column `ALTER TABLE … ADD COLUMN a …, ADD COLUMN b …` does
+ *  not read as one enormous clause — which is exactly how `0075`'s `tenant_id`
+ *  came to look like it carried the NEXT column's `DEFAULT 0`. */
+function splitSeedClauses(body) {
+  const out = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < body.length; i++) {
+    const ch = body[i];
+    if (ch === '(') depth++;
+    else if (ch === ')') depth--;
+    else if (ch === ',' && depth === 0) { out.push(body.slice(start, i)); start = i + 1; }
+  }
+  out.push(body.slice(start));
+  return out.map((s) => s.trim()).filter(Boolean);
+}
+
+/** Split `(a, b), (c, d)` into `[[a,b],[c,d]]`, respecting nesting. Literals are
+ *  already blanked, so a comma inside a seeded JSON string cannot split a tuple. */
+function splitValueTuples(body) {
+  const tuples = [];
+  let depth = 0;
+  let current = null;
+  let start = 0;
+  for (let i = 0; i < body.length; i++) {
+    const ch = body[i];
+    if (ch === '(') {
+      if (depth === 0) { current = []; start = i + 1; }
+      depth++;
+    } else if (ch === ')') {
+      depth--;
+      if (depth === 0 && current) { current.push(body.slice(start, i)); tuples.push(current); current = null; }
+    } else if (ch === ',' && depth === 1 && current) {
+      current.push(body.slice(start, i));
+      start = i + 1;
+    }
+  }
+  return tuples;
+}
+
+/** The `REFERENCES t(c)` a column clause carries, or null. */
+function readColumnReference(clause) {
+  const colM = /^["']?(\w+)["']?\s+([\s\S]+)$/.exec(clause.trim());
+  if (!colM) return null;
+  const ref = /references\s+["']?(\w+)["']?\s*\(\s*["']?(\w+)["']?\s*\)/i.exec(colM[2]);
+  if (!ref) return null;
+  return { column: colM[1].toLowerCase(), refTable: ref[1].toLowerCase(), refColumn: ref[2].toLowerCase() };
+}
+
+/** Columns declared `SERIAL`/`BIGSERIAL`/`SMALLSERIAL` or `GENERATED … AS
+ *  IDENTITY` — the ones whose values start at 1 and can never be 0 or negative. */
+function collectAutoNumberedColumns(sqlFiles) {
+  const auto = new Set(); // 'table.column'
+  for (const { text } of sqlFiles) {
+    const sql = blankLiterals(text.replace(/--[^\n]*/g, ''));
+    const createRe = /create\s+table\s+(?:if\s+not\s+exists\s+)?["']?(\w+)["']?\s*\(([\s\S]*?)\n\s*\)\s*;/gi;
+    let m;
+    while ((m = createRe.exec(sql)) !== null) {
+      const table = m[1].toLowerCase();
+      for (const clause of splitSeedClauses(m[2])) {
+        const colM = /^["']?(\w+)["']?\s+([\s\S]+)$/.exec(clause);
+        if (!colM) continue;
+        if (/^\s*(?:big|small)?serial\b/i.test(colM[2]) || /generated\s+(?:always|by\s+default)\s+as\s+identity/i.test(colM[2])) {
+          auto.add(`${table}.${colM[1].toLowerCase()}`);
+        }
+      }
+    }
+  }
+  return auto;
+}
+
+const autoNumbered = collectAutoNumberedColumns(allSqlTexts);
+// The Drizzle schema is the declaration of record for baseline tables no
+// migration creates — `tenants.id` among them, which is the whole case.
+for (const [table, cols] of drizzleTypes) {
+  for (const [column, meta] of cols) {
+    if (meta?.builder === 'serial' || meta?.builder === 'bigserial') autoNumbered.add(`${table}.${column}`);
+  }
+}
+
+/**
+ * The three events that decide whether a sentinel write is fatal — a FK
+ * appearing, a FK being dropped, and a value being written — in the order
+ * `scripts/migrate.mjs` actually applies them, so "the constraint was dropped
+ * first" is answered the way Postgres answers it.
+ */
+const seedEvents = [];
+for (const { file, text } of allSqlTexts) {
+  const sql = blankLiterals(text.replace(/--[^\n]*/g, ''));
+  let m;
+
+  const createRe = /create\s+table\s+(?:if\s+not\s+exists\s+)?["']?(\w+)["']?\s*\(([\s\S]*?)\n\s*\)\s*;/gi;
+  while ((m = createRe.exec(sql)) !== null) {
+    const table = m[1].toLowerCase();
+    for (const clause of splitSeedClauses(m[2])) {
+      const ref = readColumnReference(clause);
+      if (ref) seedEvents.push({ at: m.index, file, kind: 'fk-add', table, ...ref });
+    }
+  }
+
+  const alterRe = /alter\s+table\s+(?:if\s+exists\s+)?["']?(\w+)["']?\s+([\s\S]*?);/gi;
+  while ((m = alterRe.exec(sql)) !== null) {
+    const table = m[1].toLowerCase();
+    const at = m.index;
+    for (const clause of splitSeedClauses(m[2])) {
+      const addCol = /^add\s+column\s+(?:if\s+not\s+exists\s+)?([\s\S]+)$/i.exec(clause);
+      if (addCol) {
+        const ref = readColumnReference(addCol[1]);
+        if (ref) seedEvents.push({ at, file, kind: 'fk-add', table, ...ref });
+        continue;
+      }
+      const addFk = /^(?:add\s+constraint\s+["']?\w+["']?\s+)?(?:add\s+)?foreign\s+key\s*\(\s*["']?(\w+)["']?\s*\)\s*references\s+["']?(\w+)["']?\s*\(\s*["']?(\w+)["']?\s*\)/i.exec(clause);
+      if (addFk) {
+        seedEvents.push({ at, file, kind: 'fk-add', table, column: addFk[1].toLowerCase(), refTable: addFk[2].toLowerCase(), refColumn: addFk[3].toLowerCase() });
+        continue;
+      }
+      // A dropped constraint, split against the table the ALTER already named
+      // rather than by guessing where the name divides: `deck_templates_tenant_
+      // id_fkey` splits as (deck_templates, tenant_id), and a greedy regex reads
+      // it as (deck_templates_tenant, id) — a column that does not exist, so the
+      // drop silently fails to clear anything.
+      const drop = /^drop\s+constraint\s+(?:if\s+exists\s+)?["']?(\w+)["']?/i.exec(clause);
+      if (drop) {
+        const name = drop[1].toLowerCase();
+        if (name.startsWith(`${table}_`) && name.endsWith('_fkey')) {
+          seedEvents.push({ at, file, kind: 'fk-drop', table, column: name.slice(table.length + 1, -'_fkey'.length) });
+        }
+      }
+    }
+  }
+
+  // `INSERT INTO t (a, b) VALUES (…), (…)` — explicit column list only.
+  const insertRe = /insert\s+into\s+["']?(\w+)["']?\s*\(([^)]*)\)\s*values\s*([\s\S]*?);/gi;
+  while ((m = insertRe.exec(sql)) !== null) {
+    const table = m[1].toLowerCase();
+    const cols = m[2].split(',').map((c) => c.trim().replace(/["']/g, '').toLowerCase());
+    for (const tuple of splitValueTuples(m[3])) {
+      tuple.forEach((raw, i) => {
+        const column = cols[i];
+        if (!column || !/^-?\d+$/.test(raw.trim())) return;
+        seedEvents.push({ at: m.index, file, kind: 'write', table, column, value: Number(raw.trim()) });
+      });
+    }
+  }
+}
+
+/** Within one statement a constraint EXISTS before the row that has to satisfy
+ *  it, so equal offsets order adds first and writes last. Without this a column
+ *  declared and seeded in the same breath sorts arbitrarily. */
+const SEED_EVENT_RANK = { 'fk-add': 0, 'fk-drop': 1, write: 2 };
+seedEvents.sort((a, b) =>
+  (a.file < b.file ? -1 : a.file > b.file ? 1 : a.at - b.at || SEED_EVENT_RANK[a.kind] - SEED_EVENT_RANK[b.kind]));
+
+/** FKs live at this point in the run: 'table.column' -> { refTable, refColumn }. */
+const liveFks = new Map();
+const sentinelFkWrites = new Map(); // deduped: many rows repeat one mistake
+for (const e of seedEvents) {
+  const key = `${e.table}.${e.column}`;
+  if (e.kind === 'fk-add') { liveFks.set(key, { refTable: e.refTable, refColumn: e.refColumn }); continue; }
+  if (e.kind === 'fk-drop') { liveFks.delete(key); continue; }
+  if (e.value > 0) continue;                        // a real id — a data question, not ours
+  const fk = liveFks.get(key);
+  if (!fk || !autoNumbered.has(`${fk.refTable}.${fk.refColumn}`)) continue;
+  sentinelFkWrites.set(`${e.file}:${key}:${e.value}`, { ...e, ...fk });
+}
+
+if (sentinelFkWrites.size > 0) {
+  console.error(
+    '\n❌  Seed value can never satisfy its foreign key — Postgres will REJECT the row and abort db:migrate on deploy:\n',
+  );
+  for (const w of sentinelFkWrites.values()) {
+    console.error(
+      `   ${w.file}: INSERT ${w.table}.${w.column} = ${w.value} → ${w.refTable}.${w.refColumn}, ` +
+        'which is auto-numbered and starts at 1',
+    );
+  }
+  console.error(
+    '\n   A 0 / negative sentinel means "owned by no tenant" (a built-in, a platform\n' +
+      '   default) and is a legitimate pattern — but it is incompatible WITH a foreign\n' +
+      '   key, not merely awkward beside one. Either drop the constraint in the same\n' +
+      '   migration (ALTER TABLE … DROP CONSTRAINT <table>_<column>_fkey) and enforce\n' +
+      '   the scoping in the query layer, or seed the row against a real key instead.\n' +
+      '   The same hazard sits latent in `DEFAULT 0 … REFERENCES` on a column: nothing\n' +
+      '   fails until the first insert omits it, and then every deploy does.\n',
+  );
+  failed = true;
+}
+
 if (failed) process.exit(1);
 
 const allowed = [...collidingPrefixes].filter((p) => allowlist.has(p));

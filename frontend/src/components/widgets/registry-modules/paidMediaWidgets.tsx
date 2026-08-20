@@ -22,7 +22,7 @@ import type { WidgetCardProps, WidgetDef, WidgetDrill } from '@/lib/widgets/type
 import { BarChart, type BarDatum } from '@/components/charts/BarChart';
 import { TrendChart } from '@/components/charts/TrendChart';
 import { colorAt } from '@/components/charts/chartColors';
-import { int } from '@/components/insights/format';
+import { useInsightFormat } from '@/components/insights/format';
 
 /** ONE read of the ledger per window, shared by every widget below. */
 function useInsights(days: number) {
@@ -38,6 +38,7 @@ const DRILL: WidgetDrill = { kind: 'route', href: '/growth' };
 
 /** Total spend for the window, with what it bought underneath it. */
 function PaidSpendCard({ days }: WidgetCardProps) {
+  const { int } = useInsightFormat();
   const t = useTranslations('widgets');
   const locale = useLocale();
   const { data, error } = useInsights(days);
@@ -63,6 +64,7 @@ function PaidSpendCard({ days }: WidgetCardProps) {
  * would either crash or print an infinity, and "no results yet" is the real answer.
  */
 function CostPerResultCard({ days }: WidgetCardProps) {
+  const { int } = useInsightFormat();
   const t = useTranslations('widgets');
   const locale = useLocale();
   const { data, error } = useInsights(days);

@@ -8,6 +8,7 @@ import { useProjectScope } from '@/lib/ProjectScopeContext';
 import { PmCard, PmEmpty, PmError, StatCard } from '@/components/pm/pmShared';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 import { DaysWindowSelect, KpiGrid } from './LensShell';
+import { useFormat } from "@/i18n/useFormat";
 
 /**
  * SPACE metrics lens — the five-dimension developer-productivity framework that
@@ -16,7 +17,6 @@ import { DaysWindowSelect, KpiGrid } from './LensShell';
  */
 
 const fmtScore = (n: number | null): string => (n == null ? '—' : `${Math.round(n)}`);
-const fmtFig = (n: number | null): string => (n == null ? '—' : n.toLocaleString());
 
 /** camelCase / snake_case figure key → a readable label (figure keys are data-driven). */
 const humanize = (k: string): string =>
@@ -83,6 +83,7 @@ function DimTable({
   figures: Record<string, number | null>;
   t: ReturnType<typeof useTranslations>;
 }) {
+  const fmt = useFormat();
   const rows = Object.entries(figures);
   return (
     <PmCard title={`${t(`space.dim.${id}`)} — ${score == null ? t('space.noSignal') : `${Math.round(score)}/100`}`}>
@@ -101,7 +102,7 @@ function DimTable({
               {rows.map(([k, v]) => (
                 <tr key={k} style={trStyle}>
                   <td style={tdStyle}>{humanize(k)}</td>
-                  <td style={tdMutedStyle}>{fmtFig(v)}</td>
+                  <td style={tdMutedStyle}>{fmt.number(v)}</td>
                 </tr>
               ))}
             </tbody>

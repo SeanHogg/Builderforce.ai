@@ -3,9 +3,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { adminApi, type ImpersonationSession } from '@/lib/adminApi';
-import { AdminError, AdminLoading, errText, fmtDateTime } from '@/components/admin/adminShared';
+import { AdminError, AdminLoading, errText } from '@/components/admin/adminShared';
+import { useAdminFormat } from '@/components/admin/adminShared';
 
 export default function ImpersonationSessionsPanel() {
+  const { fmtDateTime } = useAdminFormat();
   const t = useTranslations('admin');
   const [impSessions, setImpSessions] = useState<ImpersonationSession[]>([]);
   const [impSessionsTotal, setImpSessionsTotal] = useState(0);

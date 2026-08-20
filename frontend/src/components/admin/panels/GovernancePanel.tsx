@@ -4,9 +4,11 @@ import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { adminApi } from '@/lib/adminApi';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
-import { errText, fmtDateTime, useAdminData, AdminError, AdminLoading } from '@/components/admin/adminShared';
+import { errText, useAdminData, AdminError, AdminLoading } from '@/components/admin/adminShared';
+import { useAdminFormat } from '@/components/admin/adminShared';
 
 export default function GovernancePanel() {
+  const { fmtDateTime } = useAdminFormat();
   const t = useTranslations('admin');
   const { data, loading, error, reload, setError } = useAdminData(() => adminApi.adminProjects(), []);
   const governanceProjects = data ?? [];

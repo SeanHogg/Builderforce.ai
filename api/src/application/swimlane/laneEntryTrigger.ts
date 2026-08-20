@@ -29,6 +29,7 @@ import { eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { tasks, projects } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { RuntimeService } from '../runtime/RuntimeService';
 import { buildRuntimeService } from '../../buildRuntimeService';
 import { dispatchCloudRunForTask } from '../../presentation/routes/runtimeRoutes';

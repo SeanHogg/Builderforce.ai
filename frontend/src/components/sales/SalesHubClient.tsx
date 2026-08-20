@@ -46,7 +46,7 @@ import {
   type SalesReportWindow,
 } from '@/lib/salesApi';
 import type { PayoutBalance, PayoutRecord } from '@/lib/payoutsApi';
-import { formatCents } from '@/lib/canvasMoney';
+import { useMoneyFormat } from '@/lib/useMoneyFormat';
 import { useFormat } from "@/i18n/useFormat";
 
 const cardStyle: React.CSSProperties = {
@@ -90,6 +90,7 @@ function ShareLink({ label, value, hint }: { label: string; value: string | null
 }
 
 export default function SalesHubClient() {
+  const { formatCents } = useMoneyFormat();
   const fmt = useFormat();
   const t = useTranslations('salesHub');
   const locale = useLocale();

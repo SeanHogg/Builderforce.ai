@@ -26,6 +26,8 @@
  */
 
 import type { BrainAction } from '@seanhogg/builderforce-brain-embedded';
+import { DEFAULT_LOCALE } from '@/i18n/config';
+import { formatterFor } from '@/i18n/format';
 import {
   ACCELERATION_KINDS,
   CONVERTIBLE_KINDS,
@@ -53,7 +55,17 @@ const MAX_GRANT_CARDS = 40;
 
 const NO_TENANT = 'This needs a signed-in, saved canvas session: ownership records live in the workspace, and an anonymous board has no workspace behind it. Say so in one sentence and author what this board can hold — never claim it ran.';
 
-const integer = (value: number): string => Math.round(value).toLocaleString('en-US');
+/**
+ * Pinned to the default locale, NOT the reader's.
+ *
+ * Everything below writes PERSISTED canvas object data — English prose summaries
+ * that a tool result and the next turn both read. A number that groups one way
+ * for a German reader and another for an English one would make the stored value
+ * depend on who happened to be looking at the board when it was computed.
+ */
+const fmt = formatterFor(DEFAULT_LOCALE);
+
+const integer = (value: number): string => fmt.number(Math.round(value));
 
 /** The `capTable` fields one projection writes. Every one is `derived` on the
  *  spec, so this function is the ONLY writer of them. */

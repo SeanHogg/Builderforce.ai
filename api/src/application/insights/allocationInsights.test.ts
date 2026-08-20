@@ -7,6 +7,7 @@ import {
   effectiveCostClass,
   capitalizationStatus,
   fteMonthsFromHours,
+  spendKey,
   WORKING_HOURS_PER_FTE_MONTH,
   type AllocationTaskRow,
 } from './allocationInsights';
@@ -194,14 +195,15 @@ describe('epic rollup', () => {
 });
 
 describe('summarizeAllocationHistory', () => {
-  it('buckets effort + cost by month and splits capitalized', () => {
-    const may = Date.UTC(2026, 4, 15);   // 2026-05
-    const jun = Date.UTC(2026, 5, 15);   // 2026-06 (current)
+  const may = Date.UTC(2026, 4, 15);   // 2026-05
+  const jun = Date.UTC(2026, 5, 15);   // 2026-06 (current)
+
+  it('buckets effort by as-of month and splits capitalized', () => {
     const rows: AllocationTaskRow[] = [
       row({ taskId: 1, actionType: 'frontend_ui', createdAt: new Date(may - 4 * H), completedAt: new Date(may) }),
       row({ taskId: 2, actionType: 'bugfix', createdAt: new Date(jun - 2 * H), completedAt: new Date(jun) }),
     ];
-    const cost = new Map<number, number>([[1, 100_000], [2, 200_000]]);
+    const cost = new Map([[spendKey(1, '2026-05'), 100_000], [spendKey(2, '2026-06'), 200_000]]);
     const h = summarizeAllocationHistory(rows, cost, 3, NOW);
     expect(h.months).toHaveLength(3);
     const current = h.months.find((m) => m.month === '2026-06')!;
@@ -212,6 +214,50 @@ describe('summarizeAllocationHistory', () => {
     expect(prev.capitalizedUsd).toBeCloseTo(1);
     expect(current.notCapitalizedUsd).toBeCloseTo(2);
     expect(current.capitalizedFteMonths).toBeCloseTo(0);
+  });
+
+  it('books spend in the month it was incurred, not the month the ticket closed', () => {
+    // One capitalized ticket opened in May, closed in June, with API spend in
+    // BOTH months. The old rule reported every dollar as June spend, so a finance
+    // team reconciling against the vendor invoice found the year agreed and every
+    // month in it did not.
+    const rows: AllocationTaskRow[] = [
+      row({ taskId: 1, actionType: 'frontend_ui', createdAt: new Date(may), completedAt: new Date(jun) }),
+    ];
+    const cost = new Map([[spendKey(1, '2026-05'), 300_000], [spendKey(1, '2026-06'), 100_000]]);
+    const h = summarizeAllocationHistory(rows, cost, 3, NOW);
+    const mayMonth = h.months.find((m) => m.month === '2026-05')!;
+    const junMonth = h.months.find((m) => m.month === '2026-06')!;
+
+    expect(mayMonth.capitalizedUsd).toBeCloseTo(3);
+    expect(junMonth.capitalizedUsd).toBeCloseTo(1);
+    // Effort is still an as-of reading — it has no per-day record to distribute —
+    // so the whole ticket's FTE-months land in the month it last moved.
+    expect(mayMonth.totalFteMonths).toBeCloseTo(0);
+    expect(junMonth.totalFteMonths).toBeGreaterThan(0);
+    expect(mayMonth.taskCount).toBe(0);
+    expect(junMonth.taskCount).toBe(1);
+  });
+
+  it('reports the measured share per month from real logged time', () => {
+    const rows: AllocationTaskRow[] = [
+      row({ taskId: 1, actionType: 'frontend_ui', createdAt: new Date(jun - 10 * H), completedAt: new Date(jun) }),
+      row({ taskId: 2, actionType: 'frontend_ui', createdAt: new Date(jun - 10 * H), completedAt: new Date(jun) }),
+    ];
+    // Task 1 has three recorded hours; task 2 has none and falls back to its
+    // ten-hour cycle time. The month is therefore 3/13 measured, and says so.
+    const logged = new Map<number, number>([[1, 180]]);
+    const h = summarizeAllocationHistory(rows, new Map(), 3, NOW, undefined, logged);
+    const junMonth = h.months.find((m) => m.month === '2026-06')!;
+
+    expect(junMonth.hours).toBeCloseTo(13);
+    expect(junMonth.loggedHours).toBeCloseTo(3);
+    expect(junMonth.measuredEffortPct).toBeCloseTo((3 / 13) * 100);
+  });
+
+  it('reports a zero measured share rather than NaN for an empty month', () => {
+    const h = summarizeAllocationHistory([], new Map(), 2, NOW);
+    for (const m of h.months) expect(m.measuredEffortPct).toBe(0);
   });
 });
 

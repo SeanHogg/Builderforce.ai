@@ -18,9 +18,11 @@ import { IntegrationCredentialsManager } from './integrations/IntegrationCredent
 import { BoardConnectionsManager } from './integrations/BoardConnectionsManager';
 import { ProjectDiagnosticsTab } from './ProjectDiagnosticsTab';
 import { ProjectInitiativeLink } from './pm/ProjectInitiativeLink';
+import { ScheduleDateField } from '@/components/ui/ScheduleDateField';
 import { ProjectHealthGauges } from './ProjectHealth';
 import { ProjectInspectionReport, ProjectInspectionSummary } from './ProjectInspection';
 import type { InspectionRecommendation } from '@/lib/projectInspection';
+import { useFormat } from "@/i18n/useFormat";
 
 /** ISO timestamp → `yyyy-mm-dd` for a native date input (empty string when unset). */
 const toDateInputValue = (iso?: string | null): string => {
@@ -29,12 +31,6 @@ const toDateInputValue = (iso?: string | null): string => {
   return Number.isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10);
 };
 
-/** Localized deadline label, or an em dash when there is no deadline at all. */
-const formatDeadline = (iso?: string | null): string => {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString();
-};
 
 export type ProjectPanelTab =
   | 'analytics'
@@ -129,46 +125,6 @@ const cardStyle: React.CSSProperties = {
   padding: 16,
 };
 
-/**
- * One labelled `<input type="date">` for a project's explicit schedule dates.
- *
- * Both ends of a project's window are edited identically — an empty value clears
- * the explicit date and falls back to the task-derived one — so they are one
- * component rather than two copies that could drift on styling or on the
- * clearing rule. `colorScheme` is set so the native picker chrome follows the
- * active theme in both light and dark.
- */
-function ScheduleDateField({ id, label, hint, value, onChange }: {
-  id: string;
-  label: string;
-  hint: string;
-  value: string;
-  onChange: (v: string) => void;
-}) {
-  return (
-    <div style={{ marginBottom: 10 }}>
-      <label htmlFor={id} style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>{label}</label>
-      <input
-        id={id}
-        type="date"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        style={{
-          width: '100%',
-          padding: '8px 10px',
-          fontSize: 13,
-          border: '1px solid var(--border-subtle)',
-          borderRadius: 'var(--radius-md)',
-          background: 'var(--bg-deep)',
-          color: 'var(--text-primary)',
-          colorScheme: 'light dark',
-        }}
-      />
-      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>{hint}</div>
-    </div>
-  );
-}
-
 export function ProjectDetailsPanel({
   project,
   open,
@@ -178,6 +134,7 @@ export function ProjectDetailsPanel({
   onProjectUpdate,
   onDelete,
 }: ProjectDetailsPanelProps) {
+  const fmt = useFormat();
   const t = useTranslations('projectDetails');
   const [activeTab, setActiveTab] = useState<ProjectPanelTab>(initialTab);
   const [editingProject, setEditingProject] = useState(false);
@@ -678,7 +635,7 @@ export function ProjectDetailsPanel({
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
                     <span style={{ color: 'var(--text-muted)' }}>{t('start')}</span>
                     <span>
-                      {formatDeadline(project.startDate)}
+                      {fmt.date(project.startDate)}
                       {project.startDate && !project.projectStartDate && (
                         <span style={{ color: 'var(--text-muted)', marginLeft: 6 }}>{t('deadlineDerived')}</span>
                       )}
@@ -687,7 +644,7 @@ export function ProjectDetailsPanel({
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
                     <span style={{ color: 'var(--text-muted)' }}>{t('deadline')}</span>
                     <span>
-                      {formatDeadline(project.dueDate)}
+                      {fmt.date(project.dueDate)}
                       {project.dueDate && !project.projectDueDate && (
                         <span style={{ color: 'var(--text-muted)', marginLeft: 6 }}>{t('deadlineDerived')}</span>
                       )}

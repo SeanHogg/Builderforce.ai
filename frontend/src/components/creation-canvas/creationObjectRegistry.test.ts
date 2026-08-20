@@ -145,21 +145,41 @@ describe('creation object registry', () => {
     // was called by nothing but this file — so the palette rendered from the raw group
     // list and a card marked as needing an entitlement was placeable by anybody. If the
     // palette ever stops consulting the gate, this fails rather than going quietly inert.
-    const kindsIn = (capabilities: ReadonlySet<string>) =>
-      creationPaletteGroupsFor(true, capabilities).flatMap((group) => group.items.map((item) => item.kind));
-    expect(kindsIn(new Set())).not.toContain('evermind');
-    expect(kindsIn(new Set(['evermind']))).toContain('evermind');
-    // And it hides nothing else: an entitlement gate that costs the palette its
-    // unentitled kinds would be worse than none.
-    expect(kindsIn(new Set()).length).toBe(kindsIn(new Set(['evermind'])).length - 1);
+    const itemFor = (capabilities: ReadonlySet<string>) =>
+      creationPaletteGroupsFor(true, capabilities).flatMap((group) => group.items).find((item) => item.kind === 'evermind');
+    // SHOWN and LOCKED, not hidden: `<RoleGate>`'s rule, applied to the palette. Hiding a
+    // paid feature means nobody can discover it.
+    expect(itemFor(new Set())?.locked).toBe(true);
+    expect(itemFor(new Set(['evermind']))?.locked).toBeUndefined();
   });
 
-  it('drops a group whose only kinds are unentitled rather than drawing an empty heading', () => {
-    // A heading over an empty list reads as a loading failure — the same rule the guest
-    // palette already followed.
+  it('keeps the palette the same size whether or not the caller is entitled', () => {
+    // An entitlement gate that costs the palette its unentitled kinds would be worse
+    // than none — and a heading over an emptied list reads as a loading failure.
+    const count = (capabilities: ReadonlySet<string>) =>
+      creationPaletteGroupsFor(true, capabilities).reduce((total, group) => total + group.items.length, 0);
+    expect(count(new Set())).toBe(count(new Set(['evermind'])));
     for (const group of creationPaletteGroupsFor(true, new Set())) {
       expect(group.items.length, group.group).toBeGreaterThan(0);
     }
+  });
+
+  it('locks nothing while the entitlement set is UNKNOWN', () => {
+    // `null` is a loading state, a guest board, or a failed fetch — none of which is a
+    // refusal. Greying out a card somebody pays for on a network blip is a worse failure
+    // than an unlocked row, and the API refuses on its own regardless.
+    const unknown = creationPaletteGroupsFor(true, null).flatMap((group) => group.items);
+    expect(unknown.some((item) => item.locked)).toBe(false);
+    expect(unknown.find((item) => item.kind === 'evermind')).toBeTruthy();
+  });
+
+  it('still HIDES a restricted kind from a guest, which is a different question', () => {
+    // A guest board has no tenant and no access control, so there is no upgrade that
+    // makes a Grievance case safe there — the board itself is the problem. Hidden, not
+    // locked.
+    const guest = creationPaletteGroupsFor(false, new Set()).flatMap((group) => group.items.map((item) => item.kind));
+    expect(guest).not.toContain('grievance');
+    expect(guest).toContain('workflow');
   });
 
   it('binds every creative widget to the provider-neutral built-in MCP contract', () => {

@@ -34,7 +34,7 @@ import { BarChart, type BarDatum } from '@/components/charts/BarChart';
 import { DonutChart } from '@/components/charts/DonutChart';
 import { GaugeChart } from '@/components/charts/GaugeChart';
 import { colorAt } from '@/components/charts/chartColors';
-import { int } from '@/components/insights/format';
+import { useInsightFormat } from '@/components/insights/format';
 
 // ── Shared, deduped catalog reads (one request per catalog) ────────────────────
 
@@ -92,6 +92,7 @@ function topBars<T>(items: T[], value: (t: T) => number, label: (t: T) => string
 // ── Skills (group: 'skills') ───────────────────────────────────────────────────
 
 function SkillsTopInstallsCard(_props: WidgetCardProps) {
+  const { int } = useInsightFormat();
   const t = useTranslations('widgets');
   const { data, error } = useSkills();
   if (error) return <Muted>{error}</Muted>;
@@ -102,6 +103,7 @@ function SkillsTopInstallsCard(_props: WidgetCardProps) {
 }
 
 function SkillsByCategoryCard(_props: WidgetCardProps) {
+  const { int } = useInsightFormat();
   const t = useTranslations('widgets');
   const { data, error } = useSkills();
   if (error) return <Muted>{error}</Muted>;
@@ -127,6 +129,7 @@ function SkillsByCategoryCard(_props: WidgetCardProps) {
 // ── Personas (group: 'personas') ───────────────────────────────────────────────
 
 function PersonasTopInstallsCard(_props: WidgetCardProps) {
+  const { int } = useInsightFormat();
   const t = useTranslations('widgets');
   const { data, error } = usePersonas();
   if (error) return <Muted>{error}</Muted>;
@@ -139,6 +142,7 @@ function PersonasTopInstallsCard(_props: WidgetCardProps) {
 // ── Prompts (group: 'prompts') ─────────────────────────────────────────────────
 
 function PromptsMostUsedCard(_props: WidgetCardProps) {
+  const { int } = useInsightFormat();
   const t = useTranslations('widgets');
   const { data, error } = usePrompts();
   if (error) return <Muted>{error}</Muted>;
@@ -149,6 +153,7 @@ function PromptsMostUsedCard(_props: WidgetCardProps) {
 }
 
 function PromptsTopRatedCard(_props: WidgetCardProps) {
+  const { int } = useInsightFormat();
   const t = useTranslations('widgets');
   const { data, error } = usePrompts();
   if (error) return <Muted>{error}</Muted>;
@@ -161,6 +166,7 @@ function PromptsTopRatedCard(_props: WidgetCardProps) {
 // ── Models (group: 'models') ───────────────────────────────────────────────────
 
 function ModelsByProviderCard(_props: WidgetCardProps) {
+  const { int } = useInsightFormat();
   const t = useTranslations('widgets');
   const { data, error } = useModels();
   if (error) return <Muted>{error}</Muted>;
@@ -189,6 +195,7 @@ function ModelsByProviderCard(_props: WidgetCardProps) {
 
 /** Top marketplace agents by cumulative hires. */
 function MarketplaceTopHiredCard(_props: WidgetCardProps) {
+  const { int } = useInsightFormat();
   const t = useTranslations('widgets');
   const { data, error } = useMarketplaceAgents();
   if (error) return <Muted>{error}</Muted>;
@@ -227,6 +234,7 @@ function MarketplaceTopEvalCard(_props: WidgetCardProps) {
 
 /** Diagnostics & tools split by category — catalog composition at a glance. */
 function ToolsByCategoryCard(_props: WidgetCardProps) {
+  const { int } = useInsightFormat();
   const t = useTranslations('widgets');
   const { data, error } = useTools();
   if (error) return <Muted>{error}</Muted>;

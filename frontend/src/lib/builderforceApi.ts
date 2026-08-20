@@ -41,7 +41,7 @@ async function webRequest<T>(path: string, opts: RequestOptions = {}): Promise<T
 
 import type {
   ToolSummary, ToolDefinition, ToolResult, SavedToolRun, ProjectScore, TenantDiagnosticsRollup,
-  SystemAuditSummary, AuditRunOutcome,
+  SystemAuditSummary, AuditRunOutcome, MaturityFrameworkSummary,
 } from './tools';
 
 export const toolsApi = {
@@ -53,9 +53,10 @@ export const toolsApi = {
   get: (id: string): Promise<ToolDefinition> =>
     webRequest<{ tool: ToolDefinition }>(`/api/tools/${encodeURIComponent(id)}`).then((r) => r.tool),
 
-  /** Public — free compute (no account). */
-  compute: (id: string, input: Record<string, number>): Promise<ToolResult> =>
-    webRequest<{ result: ToolResult }>(`/api/tools/${encodeURIComponent(id)}/compute`, {
+  /** Public — free compute (no account). `framework` re-lenses a maturity
+   *  scorecard into COBIT / ITIL domains; it never changes the score. */
+  compute: (id: string, input: Record<string, number>, framework?: string): Promise<ToolResult> =>
+    webRequest<{ result: ToolResult }>(`/api/tools/${encodeURIComponent(id)}/compute${framework ? `?framework=${encodeURIComponent(framework)}` : ''}`, {
       method: 'POST', body: JSON.stringify({ input }),
     }).then((r) => r.result),
 
@@ -74,12 +75,18 @@ export const toolsApi = {
     }).then((r) => r.run),
 
   /** Data-driven ("from your data") result, telemetry-derived (manager+). Optional
-   *  projectId scopes it to one project. */
-  dataDriven: (id: string, days = 90, projectId?: number | null): Promise<{ result: ToolResult; days: number }> => {
+   *  projectId scopes it to one project; `framework` re-lenses the scorecard into a
+   *  maturity framework's domains (the score and the plan are unaffected). */
+  dataDriven: (id: string, days = 90, projectId?: number | null, framework?: string): Promise<{ result: ToolResult; days: number }> => {
     const q = new URLSearchParams({ days: String(days) });
     if (projectId != null) q.set('projectId', String(projectId));
+    if (framework) q.set('framework', framework);
     return request<{ result: ToolResult; days: number }>(`/api/tools/${encodeURIComponent(id)}/data-driven?${q.toString()}`);
   },
+
+  /** The maturity frameworks a scorecard can be reported under (public). */
+  maturityFrameworks: (): Promise<MaturityFrameworkSummary[]> =>
+    request<{ frameworks: MaturityFrameworkSummary[] }>('/api/tools/maturity-frameworks').then((r) => r.frameworks ?? []),
 
   /** Save a data-driven snapshot (recomputed server-side; manager+). */
   saveData: (id: string, days = 90, projectId?: number | null): Promise<SavedToolRun> =>
@@ -7982,16 +7989,38 @@ export interface MemberAllocation {
 /** Cost-report capitalization status (Jellyfish "Capitalized / Not Capitalized / Uncategorized"). */
 export type CapitalizationStatus = 'capitalized' | 'not_capitalized' | 'uncategorized';
 export type CapitalizationSource = 'manual' | 'inherited' | 'derived';
-export interface StatusBucket { hours: number; fteMonths: number; costUsd: number; taskCount: number }
+export interface StatusBucket {
+  hours: number; fteMonths: number; costUsd: number; taskCount: number;
+  /** Effort priced at each member's OWN modelled rate; 0 when none is set. */
+  laborUsd: number;
+  /** Of `hours`, those belonging to a member with a modelled rate. */
+  ratedHours: number;
+  /** Of `hours`, those that came from RECORDED time rather than an estimate. */
+  loggedHours: number;
+}
 export interface EpicCapitalization {
   epicId: number; title: string; status: CapitalizationStatus; source: CapitalizationSource;
   hours: number; fteMonths: number; costUsd: number; taskCount: number; projectName: string | null;
+  laborUsd: number; ratedHours: number; loggedHours: number;
 }
 export interface AllocationInsights {
   windowDays: number;
   totals: {
     hours: number; taskCount: number; costUsd: number; capexUsd: number; opexUsd: number;
     capitalizablePct: number;
+    /** Effort priced at each member's own rate — what the PEOPLE cost, as distinct
+     *  from `costUsd`, which is compute spend. */
+    laborUsd: number;
+    ratedHours: number;
+    /**
+     * Of `hours`, how many came from RECORDED time rather than a cycle-time
+     * estimate, and that share as a percentage. The collector has reported this
+     * since real logged time was wired in; the client type omitted it, so the
+     * report could not say whether its capitalization figure was measured or
+     * modelled — the one thing that tells those two apart.
+     */
+    loggedHours: number;
+    measuredEffortPct: number;
     byStatus: Record<CapitalizationStatus, StatusBucket>;
   };
   byCategory: CategoryAllocation[];

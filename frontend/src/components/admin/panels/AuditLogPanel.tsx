@@ -4,9 +4,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { adminApi, type AuditLogEntry } from '@/lib/adminApi';
 import { downloadText } from '@/lib/download';
-import { AdminError, AdminLoading, errText, fmtDateTime } from '@/components/admin/adminShared';
+import { AdminError, AdminLoading, errText } from '@/components/admin/adminShared';
+import { useAdminFormat } from '@/components/admin/adminShared';
 
 export default function AuditLogPanel() {
+  const { fmtDateTime } = useAdminFormat();
   const t = useTranslations('admin');
   const [auditEntries, setAuditEntries] = useState<AuditLogEntry[]>([]);
   const [auditTotal, setAuditTotal] = useState(0);

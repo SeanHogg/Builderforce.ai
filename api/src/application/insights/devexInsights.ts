@@ -22,6 +22,7 @@
 import { and, eq, gte, inArray } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { devexCampaigns, devexResponses, devexSurveyTemplates } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import {
   ANONYMITY_THRESHOLD, DEVEX_SEGMENT_KINDS,
   type SurveyQuestion, type DevexDimension, type AnswerMap,

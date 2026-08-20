@@ -153,7 +153,7 @@ export function ScheduleGantt<T extends Schedulable & { id: string | number }>({
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
-        {editable && <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{t('dragHintGantt')}</span>}
+        {editable && <span style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{t('dragHintGantt')}</span>}
         <ScheduleLegend />
       </div>
 
@@ -162,7 +162,7 @@ export function ScheduleGantt<T extends Schedulable & { id: string | number }>({
           <div style={{ minWidth: NAME_COL + timelineWidth }}>
             {/* Axis header */}
             <div style={{ display: 'flex', borderBottom: '1px solid var(--border-subtle)' }}>
-              <div style={{ width: NAME_COL, flexShrink: 0, padding: '8px 12px', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4, color: 'var(--text-muted)' }}>
+              <div style={{ width: NAME_COL, flexShrink: 0, padding: '8px 12px', fontSize: 'var(--font-size-eyebrow)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4, color: 'var(--text-muted)' }}>
                 {columnLabel}
               </div>
               <div style={{ position: 'relative', width: timelineWidth, display: 'flex' }}>
@@ -173,7 +173,7 @@ export function ScheduleGantt<T extends Schedulable & { id: string | number }>({
                       width: seg.days * PX_PER_DAY,
                       flexShrink: 0,
                       padding: '8px 8px',
-                      fontSize: '0.72rem',
+                      fontSize: 'var(--font-size-eyebrow)',
                       fontWeight: 600,
                       color: 'var(--text-muted)',
                       borderLeft: i === 0 ? 'none' : '1px solid var(--border-subtle)',
@@ -225,7 +225,7 @@ export function ScheduleGantt<T extends Schedulable & { id: string | number }>({
                         flexShrink: 0,
                         textAlign: 'left',
                         padding: '0 12px',
-                        fontSize: '0.82rem',
+                        fontSize: 'var(--font-size-small)',
                         fontWeight: 600,
                         color: 'var(--text-primary)',
                         background: 'transparent',
@@ -261,7 +261,7 @@ export function ScheduleGantt<T extends Schedulable & { id: string | number }>({
                           display: 'flex',
                           alignItems: 'center',
                           padding: editable ? `0 ${GRIP_W + 2}px` : '0 8px',
-                          fontSize: '0.7rem',
+                          fontSize: 'var(--font-size-eyebrow)',
                           fontWeight: 600,
                           color: 'var(--text-on-accent)',
                           overflow: 'hidden',
@@ -300,7 +300,7 @@ export function ScheduleGantt<T extends Schedulable & { id: string | number }>({
 
       {undated.length > 0 && (
         <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>{t('unscheduled')}</span>
+          <span style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{t('unscheduled')}</span>
           {undated.map((item) => (
             <button
               key={item.id}
@@ -308,7 +308,7 @@ export function ScheduleGantt<T extends Schedulable & { id: string | number }>({
               onClick={() => onSelect(item)}
               style={{
                 padding: '3px 10px',
-                fontSize: '0.75rem',
+                fontSize: 'var(--font-size-small)',
                 fontWeight: 600,
                 color: 'var(--text-secondary)',
                 background: 'var(--bg-elevated)',

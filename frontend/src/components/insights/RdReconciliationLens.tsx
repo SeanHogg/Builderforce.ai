@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import type { Formatter } from '@/i18n/format';
 import { useTranslations } from 'next-intl';
 import { rdReconciliationApi, type RdReconciliation, type ReconFlag } from '@/lib/rdReconciliationApi';
 import { usePmData } from '@/lib/pm/usePmData';
@@ -9,8 +10,8 @@ import { Select } from '@/components/Select';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 import { useFormat } from "@/i18n/useFormat";
 
-const usd = (v: number | null | undefined): string =>
-  v == null ? '—' : `$${Math.round(v).toLocaleString()}`;
+const usd = (fmt: Formatter, v: number | null | undefined): string =>
+  v == null ? '—' : fmt.money(Math.round(v));
 
 const FLAG_COLOR: Record<ReconFlag, { bg: string; fg: string }> = {
   aligned: { bg: 'rgba(16,185,129,0.16)', fg: 'var(--emerald-bright)' },
@@ -59,17 +60,17 @@ export function RdReconciliationLens() {
           {t(`recon.flag.${flag}`)}
         </span>
         <span style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>
-          {t('recon.variance')}: {usd(data.variance.absUsd)}
+          {t('recon.variance')}: {usd(fmt, data.variance.absUsd)}
           {data.variance.pct != null && ` (${data.variance.pct > 0 ? '+' : ''}${data.variance.pct.toFixed(0)}%)`}
         </span>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
-        <StatCard label={t('recon.derivedBase')} value={usd(data.derived.baseUsd)} sub={t('recon.derivedSub')} />
-        <StatCard label={t('recon.reportedActual')} value={usd(data.reported.actualUsd)} sub={t('recon.reportedSub')} />
-        <StatCard label={t('recon.derivedLabor')} value={usd(data.derived.laborUsd)} sub={`${fmt.number(Math.round(data.derived.qualifiedHours))}h · $${data.derived.blendedRate}/h`} />
-        <StatCard label={t('recon.derivedAiSpend')} value={usd(data.derived.aiSpendUsd)} />
-        <StatCard label={t('recon.reportedPlan')} value={usd(data.reported.planUsd)} />
+        <StatCard label={t('recon.derivedBase')} value={usd(fmt, data.derived.baseUsd)} sub={t('recon.derivedSub')} />
+        <StatCard label={t('recon.reportedActual')} value={usd(fmt, data.reported.actualUsd)} sub={t('recon.reportedSub')} />
+        <StatCard label={t('recon.derivedLabor')} value={usd(fmt, data.derived.laborUsd)} sub={`${fmt.number(Math.round(data.derived.qualifiedHours))}h · $${data.derived.blendedRate}/h`} />
+        <StatCard label={t('recon.derivedAiSpend')} value={usd(fmt, data.derived.aiSpendUsd)} />
+        <StatCard label={t('recon.reportedPlan')} value={usd(fmt, data.reported.planUsd)} />
         <StatCard label={t('recon.rdToRevenue')} value={data.reported.rdToRevenuePct == null ? '—' : `${data.reported.rdToRevenuePct.toFixed(0)}%`} />
       </div>
 
@@ -90,9 +91,9 @@ export function RdReconciliationLens() {
                 {data.quarters.map((q) => (
                   <tr key={q.quarter} style={trStyle}>
                     <td style={tdStyle}>Q{q.quarter}</td>
-                    <td style={tdMutedStyle}>{usd(q.totalActualUsd)}</td>
-                    <td style={tdMutedStyle}>{usd(q.totalPlanUsd)}</td>
-                    <td style={tdMutedStyle}>{usd(q.revenueUsd)}</td>
+                    <td style={tdMutedStyle}>{usd(fmt, q.totalActualUsd)}</td>
+                    <td style={tdMutedStyle}>{usd(fmt, q.totalPlanUsd)}</td>
+                    <td style={tdMutedStyle}>{usd(fmt, q.revenueUsd)}</td>
                     <td style={tdMutedStyle}>{q.rdToRevenuePct == null ? '—' : `${q.rdToRevenuePct.toFixed(0)}%`}</td>
                   </tr>
                 ))}

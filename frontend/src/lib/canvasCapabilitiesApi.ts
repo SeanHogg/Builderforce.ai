@@ -11,11 +11,13 @@ import { apiRequest } from './apiClient';
  * would have allowed. So this fetches the ANSWER, not the inputs: no plan, no override
  * flag, no superadmin bit crosses the wire, only the capability ids that survived.
  *
- * ── AND WHY THE DEFAULT IS EMPTY ─────────────────────────────────────────────────
- * A guest board has no tenant and a first render has no answer yet. Both resolve to the
- * empty set, which hides the entitled kinds until the real answer lands. Defaulting the
- * other way would flash a card a person cannot place — and, worse, would make a failed
- * fetch look like a granted entitlement.
+ * ── AND WHY THE DEFAULT IS `null`, NOT AN EMPTY SET ─────────────────────────────
+ * An empty set is a STATEMENT — "asked, and entitled to nothing" — and the palette locks
+ * on it. `null` is the absence of an answer, and the palette locks nothing. The three
+ * cases that produce it are all absences: a guest board with no workspace, the first
+ * render before the fetch lands, and a fetch that failed. Treating any of them as "none"
+ * would grey out a card somebody is paying for on a network blip, which is a worse
+ * failure than an unlocked palette row — the API refuses on its own regardless.
  */
 export interface CanvasCapabilitiesResponse { capabilities: string[] }
 
@@ -24,29 +26,30 @@ export function getCanvasCapabilities(tenantId: string | number): Promise<Canvas
 }
 
 /**
- * The capability set for the current workspace, as a `Set` the palette filters by.
+ * The capability set for the current workspace, or `null` when it is not KNOWN.
  *
- * Returns a stable empty set while loading, when signed out, and on failure. The
- * `tenantId` is the dependency: switching workspace re-asks, because entitlement belongs
- * to the workspace and not to the person.
+ * ── UNKNOWN IS NOT NONE ─────────────────────────────────────────────────────────
+ * `null` while loading, on a guest board with no workspace to be entitled through, and on
+ * a failed read. The palette treats it as "lock nothing", which is deliberate in all
+ * three cases: a loading state is not a refusal, a guest has no plan to have been sold,
+ * and a network blip that greyed out a card somebody is paying for is a worse failure
+ * than an unlocked palette entry — the API refuses on its own regardless of what the
+ * palette drew, so this list is discovery, never the boundary.
+ *
+ * The `tenantId` is the dependency: switching workspace re-asks, because entitlement
+ * belongs to the workspace and not to the person.
  */
-export function useCanvasCapabilities(tenantId: string | number | null | undefined): ReadonlySet<string> {
-  const [capabilities, setCapabilities] = useState<ReadonlySet<string>>(EMPTY);
+export function useCanvasCapabilities(tenantId: string | number | null | undefined): ReadonlySet<string> | null {
+  const [capabilities, setCapabilities] = useState<ReadonlySet<string> | null>(null);
 
   useEffect(() => {
-    if (tenantId == null || tenantId === '') { setCapabilities(EMPTY); return; }
+    if (tenantId == null || tenantId === '') { setCapabilities(null); return; }
     let cancelled = false;
     getCanvasCapabilities(tenantId)
       .then((response) => { if (!cancelled) setCapabilities(new Set(response.capabilities ?? [])); })
-      // A failed read is NOT an entitlement. Falling back to the empty set means the
-      // worst a network problem can do is hide a card, never unlock one.
-      .catch(() => { if (!cancelled) setCapabilities(EMPTY); });
+      .catch(() => { if (!cancelled) setCapabilities(null); });
     return () => { cancelled = true; };
   }, [tenantId]);
 
   return capabilities;
 }
-
-/** One frozen instance, so a loading or signed-out render allocates nothing and does not
- *  re-render every consumer by handing them a new empty set each time. */
-const EMPTY: ReadonlySet<string> = Object.freeze(new Set<string>()) as ReadonlySet<string>;

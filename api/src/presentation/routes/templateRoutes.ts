@@ -76,7 +76,9 @@ export function createTemplateRoutes(db: Db): Hono<HonoEnv> {
     try {
       const [entries, connected] = await Promise.all([
         listTemplatesForTenant(db, tenantId, c.env as Env),
-        connectedConnectorKeys(db, tenantId),
+        // `env` so the connected-key read comes from the cache every connector
+        // write already invalidates, rather than scanning the table per request.
+        connectedConnectorKeys(db, tenantId, c.env as Env),
       ]);
       return c.json({
         templates: summarizeTemplates(entries, connected),
@@ -119,7 +121,7 @@ export function createTemplateRoutes(db: Db): Hono<HonoEnv> {
     try {
       const template = await resolveTemplate(db, tenantId, c.req.param('key'), c.env as Env);
       if (!template) return c.json({ error: 'Template not found' }, 404);
-      const connected = await connectedConnectorKeys(db, tenantId);
+      const connected = await connectedConnectorKeys(db, tenantId, c.env as Env);
       return c.json({
         template: {
           ...template.manifest,

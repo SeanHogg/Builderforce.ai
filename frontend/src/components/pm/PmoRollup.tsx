@@ -6,6 +6,7 @@ import { usePmData } from '@/lib/pm/usePmData';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 import { PmCard, PmEmpty, PmError, StatCard, ProgressBar } from './pmShared';
 import { DeckDownloadButton } from './DeckDownloadButton';
+import { useFormat } from "@/i18n/useFormat";
 
 /**
  * PMO rollup lens — composes the live /api/pmo/rollup for a portfolio,
@@ -13,7 +14,6 @@ import { DeckDownloadButton } from './DeckDownloadButton';
  * effectiveness, OKR attainment, and the dependency/critical-path view. Read-only;
  * the gate is the page's RoleGate. Fully localized.
  */
-const usd = (n: number) => `$${n.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
 const pct = (n: number | null | undefined) => (n == null ? '—' : `${n.toFixed(0)}%`);
 const hrs = (n: number | null | undefined) => (n == null ? '—' : `${n.toFixed(1)}h`);
 
@@ -23,6 +23,7 @@ const blockedPill: React.CSSProperties = {
 };
 
 export function PmoRollup({ scope }: { scope: { kind: PmoScopeKind; id: string } }) {
+  const fmt = useFormat();
   const t = useTranslations('pmo');
   const { data, error } = usePmData<PmoRollupData>(
     () => pmoApi.rollup(scope.kind, scope.id),
@@ -42,7 +43,7 @@ export function PmoRollup({ scope }: { scope: { kind: PmoScopeKind; id: string }
         <StatCard label={t('stat.completed')} value={String(data.delivery.completedCount)} sub={t('stat.openCount', { count: data.delivery.openCount })} />
         <StatCard label={t('stat.avgCycle')} value={hrs(data.delivery.avgCycleTimeHours)} sub={t('stat.startToDone')} />
         <StatCard label={t('stat.throughput')} value={t('stat.throughputValue', { count: data.delivery.throughputPerWeek })} sub={t('stat.last7days')} />
-        <StatCard label={t('stat.agentSpend')} value={usd(data.spend.agentLlmCostUsd)} sub={t('stat.attributedToScope')} />
+        <StatCard label={t('stat.agentSpend')} value={fmt.money(data.spend.agentLlmCostUsd)} sub={t('stat.attributedToScope')} />
         <StatCard label={t('stat.okrProgress')} value={pct(data.okr.avgProgress * 100)} sub={t('stat.objectivesCount', { count: data.okr.objectives.length })} />
         <StatCard label={t('stat.outcomeScore')} value={data.outcomes.runs ? data.outcomes.avgScore.toFixed(2) : '—'} sub={t('stat.scoredRuns', { count: data.outcomes.runs })} />
         <StatCard label={t('stat.mergeRate')} value={pct(data.outcomes.mergedRatePct)} sub={t('stat.ofScoredRuns')} />
@@ -127,7 +128,7 @@ export function PmoRollup({ scope }: { scope: { kind: PmoScopeKind; id: string }
                     <td style={tdMutedStyle}>{p.initiativeCount}</td>
                     <td style={tdMutedStyle}>{p.projectCount}</td>
                     <td style={tdMutedStyle}>{p.completedCount}</td>
-                    <td style={tdMutedStyle}>{usd(p.agentLlmCostUsd)}</td>
+                    <td style={tdMutedStyle}>{fmt.money(p.agentLlmCostUsd)}</td>
                     <td style={{ ...tdMutedStyle, minWidth: 140 }}><ProgressBar value={p.avgProgress} /></td>
                   </tr>
                 ))}
@@ -159,7 +160,7 @@ export function PmoRollup({ scope }: { scope: { kind: PmoScopeKind; id: string }
                     </td>
                     <td style={tdMutedStyle}>{i.projectCount}</td>
                     <td style={tdMutedStyle}>{i.completedCount}</td>
-                    <td style={tdMutedStyle}>{usd(i.agentLlmCostUsd)}</td>
+                    <td style={tdMutedStyle}>{fmt.money(i.agentLlmCostUsd)}</td>
                     <td style={{ ...tdMutedStyle, minWidth: 140 }}><ProgressBar value={i.avgProgress} /></td>
                   </tr>
                 ))}

@@ -77,6 +77,8 @@ export function CanvasObjectPicker({ anchor, group, fromNodeId, onPick, onClose 
         icon: item.icon,
         label: t(`object.${item.kind}` as 'object.note'),
         description: t(`objectDescription.${item.kind}` as 'objectDescription.note'),
+        // Shown and refused rather than dropped — see `SearchPickerItem.locked`.
+        ...(item.locked ? { locked: true, lockedReason: t('objectNeedsUpgrade') } : {}),
       })),
     })),
     [t, signedIn, capabilities],

@@ -888,7 +888,14 @@ export const CREATION_PALETTE_GROUPS = ([
 ] as const satisfies readonly CreationObjectGroup[])
   .map((group) => ({ group, items: CREATION_OBJECT_REGISTRY.filter((definition) => definition.group === group) }));
 
-export type CreationPaletteGroup = typeof CREATION_PALETTE_GROUPS[number];
+/** A palette entry, plus whether this caller may actually place it. `locked` is set only
+ *  by {@link creationPaletteGroupsFor}; the raw groups never carry it. */
+export type CreationPaletteItem = CreationObjectDefinition & { locked?: boolean };
+
+export interface CreationPaletteGroup {
+  group: CreationObjectGroup;
+  items: readonly CreationPaletteItem[];
+}
 
 /**
  * The palette a SIGNED-OUT board advertises.
@@ -911,22 +918,56 @@ export type CreationPaletteGroup = typeof CREATION_PALETTE_GROUPS[number];
  * Empty groups are dropped, so the guest never sees a category heading with nothing under
  * it — a heading over an empty list reads as a loading failure.
  */
-/** No entitlements. A single frozen instance so a caller with nothing resolved yet — a
- *  guest board, or the first render before the fetch lands — allocates nothing. */
-const EMPTY_CAPABILITIES: ReadonlySet<string> = Object.freeze(new Set<string>()) as ReadonlySet<string>;
+/**
+ * The palette for one caller.
+ *
+ * ── `capabilities` MAY BE NULL, AND THAT IS NOT "NONE" ──────────────────────────
+ * `null` means the entitlement set is UNKNOWN — a guest board with no workspace to be
+ * entitled through, the first render before the fetch lands, or a fetch that failed. An
+ * unknown answer must not lock: a loading state is not a refusal, and a network blip that
+ * greyed out a card somebody is paying for would be a worse failure than the one this
+ * gate closes. The palette is DISCOVERY; the API is the boundary, and it refuses on its
+ * own regardless of what this list drew.
+ *
+ * An empty SET is a different statement — "asked, and entitled to nothing" — and locks.
+ */
+/** The "not asked yet" answer: a set that contains everything, so an unresolved
+ *  entitlement locks nothing. See `creationPaletteGroupsFor` for why unknown is not none. */
+const ALL_CAPABILITIES: ReadonlySet<string> = Object.freeze({
+  has: () => true,
+} as unknown as Set<string>) as ReadonlySet<string>;
 
 export function creationPaletteGroupsFor(
   signedIn: boolean,
-  capabilities: ReadonlySet<string> = EMPTY_CAPABILITIES,
+  capabilities: ReadonlySet<string> | null = null,
 ): readonly CreationPaletteGroup[] {
   // ONE predicate, asked once. The guest rule and the entitlement rule used to be asked in
   // two places — this function filtered on confidentiality and `availableCreationObjects`
   // filtered on capability — and the second was called by nothing, so a card marked as
   // needing an entitlement was placeable by anybody. Both questions now go through the same
   // function, which is what stops them diverging again.
-  const allowed = new Set(availableCreationObjects(capabilities, { signedIn }).map((definition) => definition.kind));
+  const allowed = new Set(availableCreationObjects(capabilities ?? ALL_CAPABILITIES, { signedIn }).map((definition) => definition.kind));
   return CREATION_PALETTE_GROUPS
-    .map((entry) => ({ ...entry, items: entry.items.filter((item) => allowed.has(item.kind)) }))
+    .map((entry) => ({
+      ...entry,
+      items: entry.items.flatMap((item) => {
+        if (allowed.has(item.kind)) return [item];
+        // ── HIDE OR DISABLE, AND WHY IT IS BOTH ────────────────────────────────
+        // A GUEST kind is hidden. A guest board is stored on the device, belongs to no
+        // tenant and has no access control, so offering "Grievance case" invites somebody
+        // to type the most sensitive record the product models onto the least protected
+        // surface it has — and there is no upgrade that changes that, because the board
+        // itself is the problem.
+        //
+        // An ENTITLED kind is DISABLED, not hidden, which is the rule the rest of the
+        // product already follows (`<RoleGate>` disables and never hides). Hiding a paid
+        // feature means nobody can discover it, and a person who cannot see the card
+        // cannot understand why the documentation mentions it. The button is rendered,
+        // named, and refuses — which is a boundary, where an absence is just a smaller
+        // product.
+        return item.capability ? [{ ...item, locked: true as const }] : [];
+      }),
+    }))
     .filter((entry) => entry.items.length > 0);
 }
 

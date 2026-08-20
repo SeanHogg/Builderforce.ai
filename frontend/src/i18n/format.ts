@@ -56,7 +56,13 @@ export interface Formatter {
   /** Grouped decimal — `1,234.5` / `1.234,5` / `1 234,5`. */
   number(value: number | null | undefined, options?: Intl.NumberFormatOptions): string;
   /** Minor-unit-aware currency — pass MAJOR units (dollars, not cents). */
-  currency(value: number | null | undefined, currency?: string): string;
+  currency(value: number | null | undefined, currency?: string, options?: Intl.NumberFormatOptions): string;
+  /**
+   * A money figure for a dashboard: no trailing `.00` on a whole amount, at most
+   * two decimals otherwise. The shape a dozen hand-rolled `$${n.toLocaleString(…)}`
+   * helpers were each reaching for, stated once.
+   */
+  money(value: number | null | undefined, currency?: string): string;
   /** `0`–`1` as a percentage. */
   percent(value: number | null | undefined, fractionDigits?: number): string;
   /** `in 3 days` / `vor 2 Stunden`, relative to `now`. */
@@ -165,9 +171,18 @@ export function formatterFor(locale: Locale = DEFAULT_LOCALE): Formatter {
       if (value === null || value === undefined || !Number.isFinite(value)) return EMPTY_VALUE;
       return options ? numberWith(locale, options).format(value) : s.number.format(value);
     },
-    currency: (value, currency = 'USD') => {
+    currency: (value, currency = 'USD', options) => {
       if (value === null || value === undefined || !Number.isFinite(value)) return EMPTY_VALUE;
-      return numberWith(locale, { style: 'currency', currency }).format(value);
+      return numberWith(locale, { ...options, style: 'currency', currency }).format(value);
+    },
+    money: (value, currency = 'USD') => {
+      if (value === null || value === undefined || !Number.isFinite(value)) return EMPTY_VALUE;
+      return numberWith(locale, {
+        style: 'currency',
+        currency,
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 2,
+      }).format(value);
     },
     percent: (value, fractionDigits = 0) => {
       if (value === null || value === undefined || !Number.isFinite(value)) return EMPTY_VALUE;

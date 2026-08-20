@@ -7,7 +7,8 @@ import {
 import { usePmData } from '@/lib/pm/usePmData';
 import { PmEmpty, PmError, StatCard } from '@/components/pm/pmShared';
 import { KpiGrid } from './LensShell';
-import { pct, score2, int } from './format';
+import { pct, score2 } from './format';
+import { useInsightFormat } from './format';
 import { useProjectScope } from '@/lib/ProjectScopeContext';
 
 /**
@@ -22,6 +23,7 @@ import { useProjectScope } from '@/lib/ProjectScopeContext';
  */
 
 export function DevexResultsSummary({ days }: { days: number }) {
+  const { int } = useInsightFormat();
   const t = useTranslations('insights');
   const { currentProjectId } = useProjectScope();
   const { data, error } = usePmData<DevexInsights>(() => devexApi.insights(days, 75, currentProjectId), [days, currentProjectId]);
@@ -40,6 +42,7 @@ export function DevexResultsSummary({ days }: { days: number }) {
 }
 
 export function DevexSurveysSummary(_props: { days: number }) {
+  const { int } = useInsightFormat();
   const t = useTranslations('insights.devexhub');
   const { data: templates, error: tErr } = usePmData<DevexTemplate[]>(() => devexApi.templates.list(), []);
   const { data: campaigns, error: cErr } = usePmData<DevexCampaign[]>(() => devexApi.campaigns.list(), []);

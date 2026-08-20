@@ -3,6 +3,7 @@
 import { Select } from '@/components/Select';
 
 import { useEffect, useState } from 'react';
+import { useFormat } from "@/i18n/useFormat";
 
 /**
  * Per-key usage drawer — shared between the owner self-service flow
@@ -71,10 +72,9 @@ const summaryCell: React.CSSProperties = {
   border: '1px solid var(--border-subtle)',
 };
 
-const fmtNum = (n: number) => n.toLocaleString();
-const fmtDate = (iso: string) => new Date(iso).toLocaleString();
 
 export function TenantApiKeyUsageDrawer({ expanded, load }: Props) {
+  const fmt = useFormat();
   const [days, setDays] = useState(30);
   const [page, setPage] = useState(1);
   const [data, setData] = useState<UsageResult | null>(null);
@@ -121,15 +121,15 @@ export function TenantApiKeyUsageDrawer({ expanded, load }: Props) {
           <div style={summaryGrid}>
             <div style={summaryCell}>
               <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Requests</div>
-              <div style={{ fontSize: 22, fontWeight: 700, marginTop: 4 }}>{fmtNum(data.summary.total)}</div>
+              <div style={{ fontSize: 22, fontWeight: 700, marginTop: 4 }}>{fmt.number(data.summary.total)}</div>
             </div>
             <div style={summaryCell}>
               <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total tokens</div>
-              <div style={{ fontSize: 22, fontWeight: 700, marginTop: 4 }}>{fmtNum(data.summary.totalTokens)}</div>
+              <div style={{ fontSize: 22, fontWeight: 700, marginTop: 4 }}>{fmt.number(data.summary.totalTokens)}</div>
             </div>
             <div style={summaryCell}>
               <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Distinct models</div>
-              <div style={{ fontSize: 22, fontWeight: 700, marginTop: 4 }}>{fmtNum(data.summary.modelCount)}</div>
+              <div style={{ fontSize: 22, fontWeight: 700, marginTop: 4 }}>{fmt.number(data.summary.modelCount)}</div>
             </div>
           </div>
 
@@ -154,11 +154,11 @@ export function TenantApiKeyUsageDrawer({ expanded, load }: Props) {
                 <tbody>
                   {data.rows.map((r) => (
                     <tr key={r.id} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-                      <td style={{ padding: '6px 8px', whiteSpace: 'nowrap', color: 'var(--text-secondary)' }}>{fmtDate(r.createdAt)}</td>
+                      <td style={{ padding: '6px 8px', whiteSpace: 'nowrap', color: 'var(--text-secondary)' }}>{fmt.dateTime(r.createdAt)}</td>
                       <td style={{ padding: '6px 8px', fontFamily: 'var(--font-mono)' }}>{r.model}</td>
                       <td style={{ padding: '6px 8px' }}>{r.useCase ?? '—'}</td>
                       <td style={{ padding: '6px 8px', fontFamily: 'var(--font-mono)' }}>
-                        {fmtNum(r.promptTokens)} / {fmtNum(r.completionTokens)} / {fmtNum(r.totalTokens)}
+                        {fmt.number(r.promptTokens)} / {fmt.number(r.completionTokens)} / {fmt.number(r.totalTokens)}
                       </td>
                       <td style={{ padding: '6px 8px' }}>{r.retries}</td>
                       <td style={{ padding: '6px 8px' }}>{r.streamed ? '✓' : ''}</td>

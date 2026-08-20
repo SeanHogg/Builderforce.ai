@@ -15,7 +15,7 @@ import {
 import { JobAlertsPanel } from '@/components/freelance/JobAlertsPanel';
 import { MilestoneLinesEditor, MilestoneLinesPreview } from '@/components/freelance/MilestoneSchedulePanel';
 import type { MilestoneDraft, MilestoneRow } from '@/lib/milestonesApi';
-import { formatCents } from '@/lib/canvasMoney';
+import { useMoneyFormat } from '@/lib/useMoneyFormat';
 import { useFormat } from "@/i18n/useFormat";
 
 // The "Find work" surface (open jobs to bid on, my proposals, my engagements) is now
@@ -51,6 +51,7 @@ const STATUS_COLORS: Record<string, { bg: string; fg: string }> = {
 type Tab = 'work' | 'saved' | 'proposals' | 'engagements' | 'alerts';
 
 export default function MarketplaceGigsSection({ search }: { search: string }) {
+  const { formatCents } = useMoneyFormat();
   const fmt = useFormat();
   const t = useTranslations('freelancer');
   const tm = useTranslations('milestones');

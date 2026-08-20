@@ -221,7 +221,7 @@ export function ScheduleCalendar<T extends Schedulable & { id: string | number }
 
   const headerBtn: React.CSSProperties = {
     padding: '6px 12px',
-    fontSize: '0.8rem',
+    fontSize: 'var(--font-size-small)',
     fontWeight: 600,
     background: 'var(--bg-base)',
     color: 'var(--text-secondary)',
@@ -239,7 +239,7 @@ export function ScheduleCalendar<T extends Schedulable & { id: string | number }
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <button type="button" onClick={() => goMonth(-1)} style={headerBtn} aria-label={t('prevMonth')}>←</button>
-          <div style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-primary)', minWidth: 160, textAlign: 'center' }}>
+          <div style={{ fontSize: 'var(--font-size-card-title)', fontWeight: 700, color: 'var(--text-primary)', minWidth: 160, textAlign: 'center' }}>
             {monthLabel}
           </div>
           <button type="button" onClick={() => goMonth(1)} style={headerBtn} aria-label={t('nextMonth')}>→</button>
@@ -248,7 +248,7 @@ export function ScheduleCalendar<T extends Schedulable & { id: string | number }
           </button>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          {editable && <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{t('dragHintCalendar')}</span>}
+          {editable && <span style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{t('dragHintCalendar')}</span>}
           <ScheduleLegend />
         </div>
       </div>
@@ -260,7 +260,7 @@ export function ScheduleCalendar<T extends Schedulable & { id: string | number }
           <div style={{ minWidth: 672 }}>
             <div style={{ display: 'grid', gridTemplateColumns: `repeat(${COLS}, minmax(96px, 1fr))` }}>
               {weekdayLabels.map((wd, i) => (
-                <div key={i} style={{ padding: '8px 10px', fontSize: '0.72rem', fontWeight: 700, letterSpacing: 0.4, textTransform: 'uppercase', color: 'var(--text-muted)', borderBottom: '1px solid var(--border-subtle)' }}>
+                <div key={i} style={{ padding: '8px 10px', fontSize: 'var(--font-size-eyebrow)', fontWeight: 700, letterSpacing: 0.4, textTransform: 'uppercase', color: 'var(--text-muted)', borderBottom: '1px solid var(--border-subtle)' }}>
                   {wd}
                 </div>
               ))}
@@ -300,7 +300,7 @@ export function ScheduleCalendar<T extends Schedulable & { id: string | number }
                               justifyContent: 'center',
                               width: 22,
                               height: 22,
-                              fontSize: '0.78rem',
+                              fontSize: 'var(--font-size-small)',
                               fontWeight: isToday ? 700 : 500,
                               borderRadius: '50%',
                               color: isToday ? 'var(--text-on-accent)' : 'var(--text-secondary)',
@@ -311,7 +311,7 @@ export function ScheduleCalendar<T extends Schedulable & { id: string | number }
                             {day.getDate()}
                           </div>
                           {hidden > 0 && (
-                            <div style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--text-muted)' }}>
+                            <div style={{ fontSize: 'var(--font-size-eyebrow)', fontWeight: 600, color: 'var(--text-muted)' }}>
                               {t('moreItems', { n: hidden })}
                             </div>
                           )}
@@ -348,7 +348,7 @@ export function ScheduleCalendar<T extends Schedulable & { id: string | number }
                             alignItems: 'center',
                             gap: 5,
                             padding: '0 6px',
-                            fontSize: '0.72rem',
+                            fontSize: 'var(--font-size-eyebrow)',
                             fontWeight: 600,
                             color: 'var(--text-primary)',
                             background: 'var(--bg-base)',
@@ -390,7 +390,7 @@ export function ScheduleCalendar<T extends Schedulable & { id: string | number }
 
       {undated.length > 0 && (
         <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>{t('noDeadline')}</span>
+          <span style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{t('noDeadline')}</span>
           {undated.map((item) => {
             const accent = getAccentColor?.(item);
             return (
@@ -403,7 +403,7 @@ export function ScheduleCalendar<T extends Schedulable & { id: string | number }
                   alignItems: 'center',
                   gap: 6,
                   padding: '3px 10px',
-                  fontSize: '0.75rem',
+                  fontSize: 'var(--font-size-small)',
                   fontWeight: 600,
                   color: 'var(--text-secondary)',
                   background: 'var(--bg-elevated)',

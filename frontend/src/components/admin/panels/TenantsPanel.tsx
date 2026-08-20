@@ -6,7 +6,8 @@ import { useTranslations } from 'next-intl';
 import { adminApi, type AdminTenant, type AdminUser, type TenantMember } from '@/lib/adminApi';
 import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
 import { useEmulationLauncher } from '@/components/admin/EmulationLauncher';
-import { AdminError, AdminLoading, errText, fmtDate } from '@/components/admin/adminShared';
+import { AdminError, AdminLoading, errText } from '@/components/admin/adminShared';
+import { useAdminFormat } from '@/components/admin/adminShared';
 import { TenantTokenLimitOverrideEditor } from '@/components/admin/TenantTokenLimitOverrideEditor';
 import { TenantPaidOverflowCapEditor } from '@/components/admin/TenantPaidOverflowCapEditor';
 import { TenantImageCreditsEditor } from '@/components/admin/TenantImageCreditsEditor';
@@ -33,6 +34,7 @@ function adminUserFromMember(m: TenantMember): AdminUser {
 }
 
 export default function TenantsPanel() {
+  const { fmtDate } = useAdminFormat();
   const t = useTranslations('admin');
   const { startEmulation } = useEmulationLauncher();
 

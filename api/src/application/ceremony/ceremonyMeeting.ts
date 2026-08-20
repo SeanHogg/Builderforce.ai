@@ -30,6 +30,7 @@
 import { and, eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { ceremonyParticipants, ceremonySessions, meetings, meetingAttendees } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 
 /** Human-readable meeting titles per ceremony kind. Mirrors meetingRoutes' defaults. */
 const TITLES: Record<string, string> = { standup: 'Daily Standup', planning: 'Planning Session' };

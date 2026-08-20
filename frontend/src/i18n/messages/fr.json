@@ -20610,7 +20610,8 @@
     "llmMonthlyRequests": "Requêtes par mois",
     "llmCacheHitRate": "Taux de succès du cache",
     "llmLatencyP50Ms": "Latence p50 (ms)",
-    "llmLatencyP95Ms": "Latence p95 (ms)"
+    "llmLatencyP95Ms": "Latence p95 (ms)",
+    "objectNeedsUpgrade": "Passez à une offre payante pour ajouter cet élément."
   },
   "canvasCommands": {
     "cleanLayout": "Réorganiser la toile",

@@ -21,14 +21,13 @@ import {
 import {
   listMyTimecards, type Timecard,
 } from '@/lib/freelancerTimecardsApi';
-import { formatCents } from '@/lib/canvasMoney';
+import { useMoneyFormat } from '@/lib/useMoneyFormat';
 import { MyMilestonesPanel } from '@/components/freelance/MilestoneSchedulePanel';
 import { listMyMilestones, type MilestoneRow } from '@/lib/milestonesApi';
 
 const FREELANCER_TABS = ['work', 'timecards', 'milestones'] as const;
 type FreelancerTab = (typeof FREELANCER_TABS)[number];
 
-const money = (cents: number, cur = 'USD') => formatCents(cents, { currency: cur });
 const fmtHrs = (min: number) => `${(min / 60).toFixed(1)}h`;
 
 const ENGAGEMENT_TONE: Record<Engagement['status'], string> = {
@@ -57,6 +56,7 @@ const TIMECARD_TONE: Record<Timecard['status'], string> = {
  * fetch surface.
  */
 export default function FreelancerDashboardPage() {
+  const { formatCents } = useMoneyFormat();
   const t = useTranslations('freelancerDashboard');
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -202,7 +202,7 @@ export default function FreelancerDashboardPage() {
             />
             <InsightStat
               label={t('metric.paidEarnings')}
-              value={money(paidCents, currency)}
+              value={formatCents(paidCents, { currency: currency })}
               sub={t('metric.invoicesPaid', { count: paidInvoices.length })}
               series={paidSeries}
               delta={buildInsightDelta(paidSeries, true)}
@@ -211,7 +211,7 @@ export default function FreelancerDashboardPage() {
             />
             <InsightStat
               label={t('metric.pendingEarnings')}
-              value={money(pendingCents, currency)}
+              value={formatCents(pendingCents, { currency: currency })}
               sub={t('metric.invoicesPending', { count: pendingInvoices.length })}
               series={pendingSeries}
               delta={buildInsightDelta(pendingSeries, null)}
@@ -228,7 +228,7 @@ export default function FreelancerDashboardPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3" style={{ marginBottom: 32 }}>
             <InsightStat
               label={t('metric.escrowHeld')}
-              value={money(escrowCents, milestones[0]?.currency ?? currency)}
+              value={formatCents(escrowCents, { currency: milestones[0]?.currency ?? currency })}
               sub={t('metric.escrowMilestones', { count: milestones.length })}
               series={escrowSeries}
               delta={buildInsightDelta(escrowSeries, true)}
@@ -281,7 +281,7 @@ export default function FreelancerDashboardPage() {
                     <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{e.tenantName ?? '—'}</span>
                   </span>
                   {e.rateCents != null && (
-                    <span style={{ fontSize: 13, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>{money(e.rateCents, e.currency)}</span>
+                    <span style={{ fontSize: 13, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>{formatCents(e.rateCents, { currency: e.currency })}</span>
                   )}
                   {(e.status === 'active' || e.status === 'interviewing' || e.status === 'invited') && (
                     <MessagesButton side="freelancer" variant="inline" label="" context={{ engagementId: e.id, title: e.title ?? undefined }} />
@@ -319,7 +319,7 @@ export default function FreelancerDashboardPage() {
                     </span>
                     <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{tc.tenantName ?? '—'} · {fmtHrs(tc.billableMinutes)}</span>
                   </span>
-                  <span style={{ fontSize: 13, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>{money(tc.amountCents, tc.currency)}</span>
+                  <span style={{ fontSize: 13, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>{formatCents(tc.amountCents, { currency: tc.currency })}</span>
                   <span style={{ ...badgeStyle, color: TIMECARD_TONE[tc.status] }}>{t(`timecards.status.${tc.status}`)}</span>
                 </div>
               ))}

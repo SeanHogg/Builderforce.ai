@@ -4,10 +4,15 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { getOrSetCached, invalidateCached, projectScoreCacheKey, tenantRollupCacheKey } from '../../infrastructure/cache/readThroughCache';
 import { toolRuns, projects, tasks } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { deriveRemediation, type RemediationSummary, type RemediationTaskRow } from './remediationStatus';
 import { TOOLS, getTool } from './toolDefinitions';
 import { TOOL_DATA_PROVIDERS, hasDataProvider } from './toolDataProviders';
 import { toSummary, toDefinition, type ToolSummary, type ToolDefinition, type ToolResult } from './toolTypes';
+import { applyMaturityFramework, maturityFramework, supportsMaturityFrameworks, type MaturityFrameworkId } from './maturityFrameworks';
+import { localizeTool, DEFAULT_TOOL_LOCALE, type ToolLocale } from './toolMessages';
+import { resultCopy } from './resultCopy';
+import { scoreQuestionnaire, scoreQuiz } from './toolTypes';
 
 import { ARCHITECTURE_DIAGNOSTIC_ID, EXTERNAL_DIAGNOSTIC_NAMES, EXTERNAL_DIAGNOSTIC_ICONS } from './auditIds';
 
@@ -154,28 +159,52 @@ export class ToolService {
     return byProject;
   }
 
-  /** Public — list every free tool (client-safe summaries + data-mode flag). */
-  list(): ToolSummary[] {
-    return TOOLS.map((t) => ({ ...toSummary(t), hasDataDriven: hasDataProvider(t.id) }));
+  /** Public — list every free tool (client-safe summaries + data-mode flag), in
+   *  the caller's language. */
+  list(locale: ToolLocale = DEFAULT_TOOL_LOCALE): ToolSummary[] {
+    return TOOLS.map((tool) => {
+      const t = localizeTool(tool, locale);
+      return { ...toSummary(t), hasDataDriven: hasDataProvider(t.id), supportsMaturityFrameworks: supportsMaturityFrameworks(t) };
+    });
   }
 
-  /** Public — a tool's full definition (questions / inputs, no compute fn). */
-  getDefinition(id: string): ToolDefinition | null {
+  /** Public — a tool's full definition (questions / inputs, no compute fn), in
+   *  the caller's language. */
+  getDefinition(id: string, locale: ToolLocale = DEFAULT_TOOL_LOCALE): ToolDefinition | null {
     const tool = getTool(id);
     if (!tool) return null;
-    return { ...toDefinition(tool), hasDataDriven: hasDataProvider(id) };
+    const localized = localizeTool(tool, locale);
+    return { ...toDefinition(localized), hasDataDriven: hasDataProvider(id), supportsMaturityFrameworks: supportsMaturityFrameworks(localized) };
   }
 
   /**
    * Pure compute — runs the tool's scorer over the supplied input
    * (calculator values or questionnaire answers). No tenant data is read, so
    * this is safe to expose publicly for the free preview.
+   *
+   * `framework` re-lenses a maturity scorecard into COBIT / ITIL domains. It runs
+   * over the SAME scored result, so a self-assessment and its telemetry twin can
+   * never report different numbers under a lens.
    */
-  compute(id: string, input: Record<string, number>): ToolResult | null {
-    const tool = getTool(id);
-    if (!tool) return null;
-    if (tool.kind === 'analyzer') return null;
-    return tool.kind === 'calculator' ? tool.compute(input) : tool.score(input);
+  compute(
+    id: string,
+    input: Record<string, number>,
+    framework?: MaturityFrameworkId,
+    locale: ToolLocale = DEFAULT_TOOL_LOCALE,
+  ): ToolResult | null {
+    const source = getTool(id);
+    if (!source || source.kind === 'analyzer') return null;
+    const tool = localizeTool(source, locale);
+    // The shared scorers are called DIRECTLY rather than through `tool.score()`,
+    // because that method closes over the registry's English `this`. Running them
+    // over the localized tool is what makes a questionnaire's RESULT translated
+    // — its section names and advancement actions come from the tool itself, so
+    // there is no second catalog to keep in step with the first.
+    const copy = resultCopy(locale);
+    const result = tool.kind === 'calculator' ? tool.compute(input)
+      : tool.kind === 'questionnaire' ? scoreQuestionnaire(tool, input, copy)
+      : scoreQuiz(tool, input, copy);
+    return applyMaturityFramework(result, maturityFramework(framework));
   }
 
   /**
@@ -186,9 +215,14 @@ export class ToolService {
    * they picked from choices we wrote. Equally pure, so equally safe to expose
    * publicly for the free preview.
    */
-  analyze(id: string, input: Record<string, string>): ToolResult | null {
+  analyze(id: string, input: Record<string, string>, locale: ToolLocale = DEFAULT_TOOL_LOCALE): ToolResult | null {
     const tool = getTool(id);
     if (!tool || tool.kind !== 'analyzer') return null;
+    // The analyzer's FIELDS are localized like every other definition (they are
+    // served through `getDefinition`); the prose its `analyze()` composes is
+    // still authored in English. That is the one remaining gap and it is logged
+    // in the Gap Register — the seam is here, only the copy is outstanding.
+    void locale;
     return tool.analyze(input);
   }
 
@@ -197,12 +231,20 @@ export class ToolService {
     return hasDataProvider(id);
   }
 
-  /** Data-driven result from this workspace's telemetry, cached. Null if no provider.
-   *  When projectId is set the result is scoped to that project. */
-  async getDataDriven(env: Env, tenantId: number, id: string, days: number, projectId?: number | null): Promise<ToolResult | null> {
+  /**
+   * Data-driven result from this workspace's telemetry, cached. Null if no provider.
+   * When projectId is set the result is scoped to that project.
+   *
+   * `framework` re-lenses the scorecard into COBIT / ITIL domains. It is applied
+   * AFTER the cache read on purpose: the lens is a pure projection of one scored
+   * result, so three framework views share one computation instead of tripling
+   * the cache keyspace and the telemetry aggregation behind it.
+   */
+  async getDataDriven(env: Env, tenantId: number, id: string, days: number, projectId?: number | null, framework?: MaturityFrameworkId): Promise<ToolResult | null> {
     const provider = TOOL_DATA_PROVIDERS[id];
     if (!provider) return null;
-    return getOrSetCached(env, dataKey(tenantId, id, days, projectId), () => provider(this.db, tenantId, days, projectId ?? null), { kvTtlSeconds: 300 });
+    const result = await getOrSetCached(env, dataKey(tenantId, id, days, projectId), () => provider(this.db, tenantId, days, projectId ?? null), { kvTtlSeconds: 300 });
+    return applyMaturityFramework(result, maturityFramework(framework));
   }
 
   /**

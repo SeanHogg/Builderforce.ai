@@ -5,7 +5,8 @@ import { type BenchmarkRating } from '@/lib/benchmarkingApi';
 import { autonomousHopShare, shareOfCreated } from '@/lib/autonomyApi';
 import { PmEmpty, PmError, StatCard } from '@/components/pm/pmShared';
 import { KpiGrid } from './LensShell';
-import { hrs, pct, days as dDays, int } from './format';
+import { hrs, pct, days as dDays } from './format';
+import { useInsightFormat } from './format';
 import {
   useLifecycle, useBottlenecks, useDora, useSpace, useBenchmarking, useAutonomy, useFunnel,
 } from './insightsSources';
@@ -42,6 +43,7 @@ function ordinal(n: number | null): string {
 
 /** Delivery — scoped end-to-end cycle time (the Life Cycle Explorer rollup). */
 export function DeliverySummary({ days }: { days: number }) {
+  const { int } = useInsightFormat();
   const t = useTranslations('insights');
   const { data, error } = useLifecycle(days);
 
@@ -58,6 +60,7 @@ export function DeliverySummary({ days }: { days: number }) {
 
 /** Bottlenecks — slowest stage, rework rate and currently-stuck WIP. */
 export function BottleneckSummary({ days }: { days: number }) {
+  const { int } = useInsightFormat();
   const t = useTranslations('insights');
   const { data, error } = useBottlenecks(days);
 
@@ -118,6 +121,7 @@ export function SpaceSummary({ days }: { days: number }) {
 
 /** Industry benchmarking — average percentile + how many metrics rate elite/high. */
 export function BenchmarkingSummary({ days }: { days: number }) {
+  const { int } = useInsightFormat();
   const t = useTranslations('insights');
   const { data, error } = useBenchmarking(days);
 
@@ -143,6 +147,7 @@ export function BenchmarkingSummary({ days }: { days: number }) {
  * collector the full lens reads, so the card and the report always agree.
  */
 export function AutonomySummary({ days }: { days: number }) {
+  const { int } = useInsightFormat();
   const t = useTranslations('insights');
   const { data, error } = useAutonomy(days);
 

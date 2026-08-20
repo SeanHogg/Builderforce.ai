@@ -16,6 +16,7 @@ import { reportCaughtError } from '../../application/observability/caughtErrorRe
 import { eq } from 'drizzle-orm';
 import { buildDatabase, type Db } from '../database/connection';
 import { executions } from '../database/schema';
+import { scopedToTenant } from '../database/tenantScope';
 import { prepareCloudRun, runCloudToolLoop, markCloudExecutionRunning, initialCloudLimbicState, evolveCloudLimbicState, recordLimbicState, type CloudLoopState } from '../../application/runtime/cloudAgentEngine';
 import { loadPersonaSetpoints } from '../../application/artifact/capabilityContext';
 import { buildLimbicBlock, type LimbicState, type AgentExecParams } from '@builderforce/agent-tools';

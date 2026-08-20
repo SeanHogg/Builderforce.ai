@@ -15,6 +15,7 @@
  */
 import { and, eq, isNull, lt, or, sql, ne, inArray } from 'drizzle-orm';
 import { tasks, projects, ideAgents, executions } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { dispatchCloudRunForTask } from '../../presentation/routes/runtimeRoutes';
 import { buildRuntimeService } from '../../buildRuntimeService';
 import { buildDatabase } from '../../infrastructure/database/connection';

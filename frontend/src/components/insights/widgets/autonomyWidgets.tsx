@@ -41,7 +41,8 @@ import { colorAt } from '@/components/charts/chartColors';
 import {
   tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle,
 } from '@/components/dataTableStyles';
-import { int, pct } from '../format';
+import { pct } from '../format';
+import { useInsightFormat } from '../format';
 import { useAutonomy } from '../insightsSources';
 
 /**
@@ -128,6 +129,7 @@ function OriginChip({ origin, label }: { origin: TicketOrigin; label: string }) 
  * implying full coverage. Exported for the lens header too.
  */
 export function AutonomyCoverage({ data }: { data: AutonomySummary }) {
+  const { int } = useInsightFormat();
   const t = useTranslations('insights');
   const warn = data.truncated;
   return (
@@ -172,6 +174,7 @@ function TruncationFlag({ data }: { data: AutonomySummary }) {
  * second axis. Exact counts live in the table-view widget.
  */
 function OriginFunnel({ stats, labels }: { stats: AutonomyOriginStats; labels: Labels }) {
+  const { int } = useInsightFormat();
   const { t, originLabel, stageLabel } = labels;
   const color = ORIGIN_COLOR[stats.origin];
   const bars = AUTONOMY_STAGES.map((stage) => ({
@@ -224,6 +227,7 @@ function OriginFunnelCard({ days }: WidgetCardProps) {
 
 /** Table view of the same funnel — exact counts + the end-to-end conversion. */
 function FunnelTableCard({ days }: WidgetCardProps) {
+  const { int } = useInsightFormat();
   const { data, state, t, originLabel, stageLabel } = useAuto(days);
   if (!data) return state;
   const rows = rowsWithTotals(data);
@@ -273,6 +277,7 @@ function FunnelTableCard({ days }: WidgetCardProps) {
  * board that only moves when a person drags a card shows up as a neutral bar.
  */
 function HopSplitCard({ days }: WidgetCardProps) {
+  const { int } = useInsightFormat();
   const { data, state, t, originLabel } = useAuto(days);
   if (!data) return state;
   const rows = rowsWithTotals(data).filter((r) => r.stats.autonomousHops + r.stats.humanHops > 0);
@@ -330,6 +335,7 @@ function HopSplitCard({ days }: WidgetCardProps) {
  * yet — so a newly-added server gate is still explained, never blank.
  */
 function StallGatesCard({ days }: WidgetCardProps) {
+  const { int } = useInsightFormat();
   const { data, state, t } = useAuto(days);
   const tb = useTranslations('board.triage');
   if (!data) return state;
@@ -370,6 +376,7 @@ function StallGatesCard({ days }: WidgetCardProps) {
 // ── Who opens the work ────────────────────────────────────────────────────────
 
 function OriginMixCard({ days }: WidgetCardProps) {
+  const { int } = useInsightFormat();
   const { data, state, t, originLabel } = useAuto(days);
   if (!data) return state;
   const origins = orderedOrigins(data);
@@ -390,6 +397,7 @@ function OriginMixCard({ days }: WidgetCardProps) {
 // ── Headline stats ────────────────────────────────────────────────────────────
 
 function FullyAutonomousCard({ days }: WidgetCardProps) {
+  const { int } = useInsightFormat();
   const { data, state, t } = useAuto(days);
   if (!data) return state;
   const s = data.totals;
@@ -402,6 +410,7 @@ function FullyAutonomousCard({ days }: WidgetCardProps) {
 }
 
 function DispatchRateCard({ days }: WidgetCardProps) {
+  const { int } = useInsightFormat();
   const { data, state, t } = useAuto(days);
   if (!data) return state;
   const s = data.totals;
@@ -414,6 +423,7 @@ function DispatchRateCard({ days }: WidgetCardProps) {
 }
 
 function HopShareCard({ days }: WidgetCardProps) {
+  const { int } = useInsightFormat();
   const { data, state, t } = useAuto(days);
   if (!data) return state;
   const s = data.totals;
@@ -427,6 +437,7 @@ function HopShareCard({ days }: WidgetCardProps) {
 }
 
 function StalledCard({ days }: WidgetCardProps) {
+  const { int } = useInsightFormat();
   const { data, state, t } = useAuto(days);
   if (!data) return state;
   const s = data.totals;
@@ -436,6 +447,7 @@ function StalledCard({ days }: WidgetCardProps) {
 }
 
 function NeverStartedCard({ days }: WidgetCardProps) {
+  const { int } = useInsightFormat();
   const { data, state, t } = useAuto(days);
   if (!data) return state;
   const s = data.totals;

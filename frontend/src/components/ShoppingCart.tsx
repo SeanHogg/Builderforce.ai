@@ -14,7 +14,7 @@ import {
   setMarketplaceToken,
   type MarketplacePurchase,
 } from '@/lib/builderforceApi';
-import { formatCents } from '@/lib/canvasMoney';
+import { useMoneyFormat } from '@/lib/useMoneyFormat';
 
 function formatPrice(item: CartItem, locale: string, freeLabel: string, useLabel: string): string {
   if (item.price === 0) return freeLabel;
@@ -53,6 +53,7 @@ function TypeBadge({ type }: { type: CartItem['type'] }) {
 }
 
 export default function ShoppingCart() {
+  const { formatCents } = useMoneyFormat();
   const { items, count, subtotal, removeItem, clearCart, isOpen, closeCart } = useCart();
   const { isAuthenticated, tenant, user, webToken } = useAuth();
   const t = useTranslations('shoppingCart');

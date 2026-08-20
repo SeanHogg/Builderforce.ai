@@ -6,7 +6,7 @@ import { DaysWindowSelect } from './LensShell';
 import { WidgetGrid } from '@/components/widgets/WidgetGrid';
 import { CHAT_MODE_WIDGET_IDS, useChatModes } from './widgets/chatModeWidgets';
 import { rowFor, executionRate } from '@/lib/chatModeApi';
-import { int } from './format';
+import { useInsightFormat } from './format';
 
 /**
  * LENS — "Conversations vs Executions": how much of what people start here is a
@@ -23,6 +23,7 @@ import { int } from './format';
  * because the question is about how the product is being used, not about one board.
  */
 export function ChatModeLens() {
+  const { int } = useInsightFormat();
   const t = useTranslations('insights');
   const [days, setDays] = useState(30);
   // The SAME deduped read the cards use — the verdict costs no extra request.

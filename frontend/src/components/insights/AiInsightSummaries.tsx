@@ -6,7 +6,8 @@ import { type RecSeverity } from '@/lib/recommendationsApi';
 import { PmEmpty, PmError, StatCard } from '@/components/pm/pmShared';
 import { BarChart } from '@/components/charts/BarChart';
 import { KpiGrid } from './LensShell';
-import { usd, pct, score2, int, compactTokens } from './format';
+import { pct, score2 } from './format';
+import { useInsightFormat } from './format';
 import { useAiOverview, useLlmUsage, useLlmBySource } from './insightsSources';
 
 /**
@@ -42,6 +43,7 @@ const SEVERITY_COLOR: Record<RecSeverity, string> = {
  * nothing. Owns its own visibility — renders nothing when there is no usage.
  */
 export function ProviderConsumptionBreakdown({ providers }: { providers: ProviderConsumption[] }) {
+  const { usd, int, compactTokens } = useInsightFormat();
   const t = useTranslations('insights');
   if (providers.length === 0) return null;
 
@@ -92,6 +94,7 @@ export function ProviderConsumptionBreakdown({ providers }: { providers: Provide
 }
 
 export function AiImpactSummary({ days }: { days: number }) {
+  const { compactTokens } = useInsightFormat();
   const t = useTranslations('insights');
   const { data: overview, error } = useAiOverview(days);
   const data = overview?.aiImpact ?? null;
@@ -139,6 +142,7 @@ export function AiImpactSummary({ days }: { days: number }) {
 }
 
 export function LlmUsageSummary(_props: { days: number }) {
+  const { usd, int, compactTokens } = useInsightFormat();
   const t = useTranslations('insights');
   // Provider totals are visible to any member; the cost roll-up is a manager
   // surface, so its read is tolerated to fail (the spend KPI shows "—" then).
@@ -159,6 +163,7 @@ export function LlmUsageSummary(_props: { days: number }) {
 }
 
 export function EngineeringSummary({ days }: { days: number }) {
+  const { usd } = useInsightFormat();
   const t = useTranslations('insights');
   const { data: overview, error } = useAiOverview(days);
   const data = overview?.engineering ?? null;

@@ -33,6 +33,7 @@ import { buildDatabase, type Db } from '../../infrastructure/database/connection
 import { buildRuntimeService } from '../../buildRuntimeService';
 import { createTickDispatchBudget, MAX_TENANT_DISPATCHES_PER_TICK, tenantDispatchReserver, type TickDispatchBudget } from './tickDispatchBudget';
 import { executions, tasks, projects, boards, pullRequests, swimlanes, swimlaneAgentAssignments } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { RuntimeService } from './RuntimeService';
 import { TaskStatus } from '../../domain/shared/types';
 import { getTenantTokenAvailability } from '../llm/tenantTokenAvailability';
@@ -147,10 +148,7 @@ export function autonomousCandidatesQuery(db: Db, limit: number) {
       .from(swimlaneAgentAssignments)
       .innerJoin(swimlanes, eq(swimlanes.id, swimlaneAgentAssignments.swimlaneId))
       .innerJoin(boards, eq(boards.id, swimlanes.boardId))
-      .where(and(
-        eq(boards.projectId, tasks.projectId),
-        eq(swimlanes.key, tasks.status),
-      )),
+      .where(and(eq(boards.projectId, tasks.projectId), eq(swimlanes.key, tasks.status))),
   );
 
   // Open PR repairs are a SERIAL integration queue. Starting every failed PR's

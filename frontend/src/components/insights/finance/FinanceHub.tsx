@@ -22,7 +22,8 @@ import { getAuditReport, type AuditReport } from '@/lib/finopsApi';
 import { usePmData } from '@/lib/pm/usePmData';
 import { PmCard, PmEmpty, PmError, StatCard } from '@/components/pm/pmShared';
 import { KpiGrid } from '@/components/insights/LensShell';
-import { usd, pct, hrs, int } from '@/components/insights/format';
+import { pct, hrs } from '@/components/insights/format';
+import { useInsightFormat } from '@/components/insights/format';
 import { useFinancePanel } from './FinancePanelProvider';
 import { isFinancePanelId, type FinancePanelId } from './financePanels';
 
@@ -44,6 +45,7 @@ function DrillLink({ label, onClick }: { label: string; onClick: () => void }) {
 }
 
 export function FinanceHub({ initialDrill }: { initialDrill?: string }) {
+  const { usd, int } = useInsightFormat();
   const t = useTranslations('insights');
   const tf = useTranslations('finops');
   const { open } = useFinancePanel();

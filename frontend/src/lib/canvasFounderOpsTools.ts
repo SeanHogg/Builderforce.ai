@@ -34,9 +34,11 @@
  */
 
 import type { BrainAction } from '@seanhogg/builderforce-brain-embedded';
+import { DEFAULT_LOCALE } from '@/i18n/config';
+import { formatterFor } from '@/i18n/format';
 import { ACCOUNT_RELATIONSHIPS, partyRef } from '@builderforce/creation-canvas-contract';
 import { getEntityRows } from '@/lib/kernel/kernelApi';
-import { accountHistory, listPayRuns, logDealTouch, moveDeal, openDeal, payRunLines, readPipeline, syncPayRuns, type AccountHistory, type PayRunSummary, type ProjectedPipeline } from '@/lib/founderOpsApi';
+import { ROUND_INSTRUMENTS, ROUND_STATUSES, ROUND_TYPES, accountHistory, listPayRuns, logDealTouch, moveDeal, openDeal, payRunLines, planFundingRound, readPipeline, syncPayRuns, type AccountHistory, type PayRunSummary, type ProjectedPipeline } from '@/lib/founderOpsApi';
 
 /** What the canvas hands these tools so they can author onto the board. */
 export interface CanvasFounderOpsContext {
@@ -143,8 +145,17 @@ export const PIPELINE_OBJECT_KIND: Readonly<Record<string, string>> = {
   raise: 'fundingRound',
 };
 
-const usd = (cents: number): string =>
-  (cents / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+/**
+ * Pinned to the default locale, NOT the reader's.
+ *
+ * Everything below writes PERSISTED canvas object data — English prose summaries
+ * that a tool result and the next turn both read. A number that groups one way
+ * for a German reader and another for an English one would make the stored value
+ * depend on who happened to be looking at the board when it was computed.
+ */
+const fmt = formatterFor(DEFAULT_LOCALE);
+
+const usd = (cents: number): string => fmt.currency(cents / 100);
 
 /**
  * The canvas fields a projection writes — for EITHER board.
@@ -179,9 +190,20 @@ export function pipelineFieldsFrom(pipeline: ProjectedPipeline): Record<string, 
         + 'this card is a view of the deals, not a second copy of them, so edit it by moving a deal rather than by rewriting the rows.',
     };
   }
+  const round = pipeline.round;
   return {
     ...base,
-    status: `${pipeline.totals.open} in play`,
+    status: round ? `${round.status} · ${pipeline.totals.open} in play` : `${pipeline.totals.open} in play`,
+    // The PLAN, from `funding_rounds` — negotiated and typed, and now a record
+    // rather than four fields somebody entered on a card (0937). Absent keys are
+    // left alone rather than blanked, so a round nobody has planned yet keeps
+    // whatever the founder typed until they plan one.
+    ...(round?.roundType ? { roundType: round.roundType } : {}),
+    ...(round?.targetAmount != null ? { targetAmount: round.targetAmount } : {}),
+    ...(round?.postMoney != null || round?.preMoney != null
+      ? { valuation: round.postMoney ?? round.preMoney } : {}),
+    ...(round?.closeTargetAt ? { closeTarget: round.closeTargetAt.slice(0, 10) } : {}),
+    ...(round ? { roundStatus: round.status, instrument: round.instrument, leadInvestor: round.leadInvestor ?? '' } : {}),
     // The rows table the `fundingRound` card has always drawn — now DERIVED from
     // the same allocations the kanban draws rather than typed beside them.
     investors: pipeline.cards.map((card) => ({
@@ -201,6 +223,9 @@ export function pipelineFieldsFrom(pipeline: ProjectedPipeline): Record<string, 
     summary:
       `${pipeline.totals.won} closed for ${usd(pipeline.totals.wonValueCents)}, `
       + `${pipeline.totals.open} still in play worth ${usd(pipeline.totals.openValueCents)}. `
+      + (round?.targetAmount
+        ? `That is ${Math.round((pipeline.totals.wonValueCents / 100 / round.targetAmount) * 100)}% of the ${usd(round.targetAmount * 100)} target. `
+        : 'No target has been planned for this round — use canvas_plan_funding_round to record one. ')
       + `Projected from the investor allocations at ${pipeline.syncedAt.slice(0, 16).replace('T', ' ')} — `
       + 'this card is a view of the deals, not a second copy of them, so move a firm with canvas_move_deal and record a conversation with canvas_log_deal_touch rather than rewriting the rows.',
   };
@@ -217,7 +242,7 @@ export function pipelineFieldsFrom(pipeline: ProjectedPipeline): Record<string, 
  */
 export function payRunFieldsFrom(run: PayRunSummary, lines: Array<{ description: string; quantity: number; unitAmount: number; amount: number }>): Record<string, unknown> {
   const money = (value: number | null): string =>
-    value == null ? '' : value.toLocaleString('en-US', { style: 'currency', currency: run.currency });
+    value == null ? '' : fmt.currency(value, run.currency);
   return {
     title: `Pay run — ${run.paidAtISO ? run.paidAtISO.slice(0, 10) : run.externalRef}`,
     status: run.status,
@@ -505,6 +530,53 @@ export function canvasFounderOpsActions(ctx: CanvasFounderOpsContext): BrainActi
       },
       mutates: () => true,
       run: async (raw: unknown) => syncPipeline('raise', raw),
+    },
+    {
+      name: 'canvas_plan_funding_round',
+      description:
+        'Record what a funding round is TRYING to do — the instrument, how much is being raised, the valuation being asked for, the lead, and the date the founder intends to close. This is the round\'s PLAN and it is a real record, not a note on a card: every investor allocation joins to it by name. Use it whenever the user states a target, a valuation or a close date ("we are raising $2m at a $10m post"). It never records how much has been RAISED — that is derived from the allocations, and asserting it would produce two answers to the same question. Idempotent on the name, so changing the plan is the same call.',
+      parameters: {
+        type: 'object', required: ['name'], additionalProperties: false,
+        properties: {
+          name: { type: 'string', description: 'What the round is called — "Seed 2026". This is what allocations join to, so reuse it exactly when adding investors with canvas_open_deal.' },
+          roundType: { type: 'string', enum: [...ROUND_TYPES] },
+          instrument: { type: 'string', enum: [...ROUND_INSTRUMENTS], description: 'What the money buys. Defaults to equity.' },
+          targetAmount: { type: 'number', description: 'How much is being raised, as a plain number. Omit rather than guessing.' },
+          preMoney: { type: 'number', description: 'Pre-money valuation being asked for.' },
+          postMoney: { type: 'number', description: 'Post-money valuation.' },
+          currency: { type: 'string' },
+          leadInvestor: { type: 'string', description: 'The lead, once there is one. Never invent one.' },
+          closeTargetAt: { type: 'string', description: 'ISO date the founder intends to close on. Bind a `trigger` with comparator "due-within" to it so the runway conversation happens while there is still runway.' },
+          status: { type: 'string', enum: [...ROUND_STATUSES] },
+          objectId: { type: 'string', description: 'The fundingRound card to refresh from the result.' },
+        },
+      },
+      mutates: () => true,
+      run: async (raw: unknown) => {
+        const blocked = guard();
+        if (blocked) return blocked;
+        const args = raw as Record<string, unknown>;
+        const name = typeof args.name === 'string' ? args.name.trim() : '';
+        if (!name) return { error: 'Name the round — "Seed 2026". The name is what its investor allocations join to, so it cannot be invented later.' };
+
+        const result = await planFundingRound({
+          name,
+          ...(typeof args.roundType === 'string' ? { roundType: args.roundType } : {}),
+          ...(typeof args.instrument === 'string' ? { instrument: args.instrument } : {}),
+          ...(Number.isFinite(args.targetAmount) ? { targetAmount: Number(args.targetAmount) } : {}),
+          ...(Number.isFinite(args.preMoney) ? { preMoney: Number(args.preMoney) } : {}),
+          ...(Number.isFinite(args.postMoney) ? { postMoney: Number(args.postMoney) } : {}),
+          ...(typeof args.currency === 'string' ? { currency: args.currency } : {}),
+          ...(typeof args.leadInvestor === 'string' ? { leadInvestor: args.leadInvestor } : {}),
+          ...(typeof args.closeTargetAt === 'string' ? { closeTargetAt: args.closeTargetAt } : {}),
+          ...(typeof args.status === 'string' ? { status: args.status } : {}),
+        });
+        const boardUpdated = writeBoard(result.pipeline, typeof args.objectId === 'string' ? args.objectId : undefined, `Round planned — ${name}`);
+        return {
+          ok: true, proposed: true, round: result.round, boardUpdated, ...result.pipeline.totals,
+          instruction: 'The plan is recorded and the board was redrawn from the same response. Add investors to it with canvas_open_deal using this exact round name. Never state how much has been raised from the plan — read it from the allocations.',
+        };
+      },
     },
     {
       name: 'canvas_open_deal',

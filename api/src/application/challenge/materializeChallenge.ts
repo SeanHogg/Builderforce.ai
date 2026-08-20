@@ -25,6 +25,7 @@ import { and, eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { projects, tasks } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { buildProjectKey } from '../project/projectKey';
 import { formatTaskKey, nextProjectKeySeqBase } from '../task/taskKeys';
 import { writeWorkspaceFile } from '../ide/workspaceStore';

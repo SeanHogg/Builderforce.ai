@@ -9,7 +9,8 @@ import {
   type AdminErrorFilters,
   type AdminErrorPage,
 } from '@/lib/adminApi';
-import { AdminError, AdminLoading, errText, fmtDateTime } from '@/components/admin/adminShared';
+import { AdminError, AdminLoading, errText } from '@/components/admin/adminShared';
+import { useAdminFormat } from '@/components/admin/adminShared';
 import { useFormat } from "@/i18n/useFormat";
 
 const PAGE_SIZE = 50;
@@ -51,6 +52,7 @@ function Tile({ label, value, tone }: { label: string; value: number; tone?: 'da
 }
 
 export default function ErrorsPanel() {
+  const { fmtDateTime } = useAdminFormat();
   const fmt = useFormat();
   const t = useTranslations('admin');
 

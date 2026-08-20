@@ -6,7 +6,8 @@ import { insightsApi, type BottleneckInsights } from '@/lib/builderforceApi';
 import { usePmData } from '@/lib/pm/usePmData';
 import { PmEmpty, PmError, StatCard } from '@/components/pm/pmShared';
 import { DaysWindowSelect, KpiGrid } from './LensShell';
-import { hrs, int, pct } from './format';
+import { hrs, pct } from './format';
+import { useInsightFormat } from './format';
 import { useProjectScope } from '@/lib/ProjectScopeContext';
 
 /**
@@ -15,6 +16,7 @@ import { useProjectScope } from '@/lib/ProjectScopeContext';
  * loops, and the currently-aging WIP that needs unsticking now.
  */
 export function BottleneckLens() {
+  const { int } = useInsightFormat();
   const t = useTranslations('insights');
   const { currentProjectId } = useProjectScope();
   const [days, setDays] = useState(30);

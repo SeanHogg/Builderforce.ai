@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import type { CloudRunAllowance } from '@/lib/builderforceApi';
 
@@ -44,12 +45,12 @@ export function WorkspaceAllowanceBanner({ allowance }: { allowance: CloudRunAll
         {t('allowance.detail', { used: allowance.used, limit: allowance.limit, plan: allowance.plan })}
       </span>
       <span style={{ color: 'var(--text-muted)' }}>{t('allowance.onPremNote')}</span>
-      <a
+      <Link
         href="/pricing"
         style={{ marginLeft: 'auto', color: 'var(--link, var(--text-primary))', fontWeight: 600, whiteSpace: 'nowrap' }}
       >
         {t('allowance.upgrade')}
-      </a>
+      </Link>
     </div>
   );
 }

@@ -1,6 +1,7 @@
 'use client';
 
 import { Icon } from '@/components/ui/Icon';
+import type { Formatter } from '@/i18n/format';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
@@ -9,6 +10,7 @@ import {
   startEmployerConversation, startFreelancerConversation, fetchConversationAttachment,
   type ConversationSummary, type ConversationMessage, type MessagingSide,
 } from '@/lib/messagingApi';
+import { useFormat } from "@/i18n/useFormat";
 
 /**
  * In-platform messaging drawer — employer<->freelancer threads. ONE component both
@@ -29,10 +31,10 @@ export interface MessagesLaunchContext {
   title?: string;
 }
 
-const fmtTime = (iso: string | null) => {
+const fmtTime = (fmt: Formatter, iso: string | null) => {
   if (!iso) return '';
   const d = new Date(iso);
-  return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  return fmt.dateWith(d, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 };
 
 export function MessagesPanel({ open, onClose, side, context }: {
@@ -41,6 +43,7 @@ export function MessagesPanel({ open, onClose, side, context }: {
   side: MessagingSide;
   context?: MessagesLaunchContext | null;
 }) {
+  const fmt = useFormat();
   const t = useTranslations('messaging');
   const [items, setItems] = useState<ConversationSummary[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
@@ -177,7 +180,7 @@ export function MessagesPanel({ open, onClose, side, context }: {
                 style={{ textAlign: 'left', display: 'flex', flexDirection: 'column', gap: 2, padding: '10px 12px', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-subtle)', background: c.unread > 0 ? 'var(--bg-elevated)' : 'transparent', cursor: 'pointer' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
                   <span style={{ fontWeight: 700, fontSize: 'var(--font-size-small)', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{counterpartName(c)}</span>
-                  <span style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', flexShrink: 0 }}>{fmtTime(c.lastMessageAt)}</span>
+                  <span style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', flexShrink: 0 }}>{fmtTime(fmt, c.lastMessageAt)}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
                   <span style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -212,7 +215,7 @@ export function MessagesPanel({ open, onClose, side, context }: {
                         </button>
                       )}
                     </div>
-                    <span style={{ fontSize: 'var(--font-size-field-label)', color: 'var(--text-muted)' }}>{m.senderName ? `${m.senderName} · ` : ''}{fmtTime(m.createdAt)}</span>
+                    <span style={{ fontSize: 'var(--font-size-field-label)', color: 'var(--text-muted)' }}>{m.senderName ? `${m.senderName} · ` : ''}{fmtTime(fmt, m.createdAt)}</span>
                   </div>
                 );
               })}

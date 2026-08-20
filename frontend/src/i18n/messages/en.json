@@ -20610,7 +20610,8 @@
     "llmMonthlyRequests": "Requests per month",
     "llmCacheHitRate": "Cache hit rate",
     "llmLatencyP50Ms": "Latency p50 (ms)",
-    "llmLatencyP95Ms": "Latency p95 (ms)"
+    "llmLatencyP95Ms": "Latency p95 (ms)",
+    "objectNeedsUpgrade": "Upgrade to a paid plan to add this."
   },
   "canvasCommands": {
     "cleanLayout": "Clean up canvas layout",

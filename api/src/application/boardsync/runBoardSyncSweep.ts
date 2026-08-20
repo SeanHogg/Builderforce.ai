@@ -19,6 +19,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { and, eq } from 'drizzle-orm';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import { boardConnections } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { SyncEngine, type StoredConnection } from './SyncEngine';
 import { createDrizzleStore, loadConnectionCredentials } from './drizzleStore';
 import { createBoardProvider, isPermanentBoardProviderError } from './providers';

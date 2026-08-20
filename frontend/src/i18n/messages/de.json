@@ -20610,7 +20610,8 @@
     "llmMonthlyRequests": "Anfragen pro Monat",
     "llmCacheHitRate": "Cache-Trefferquote",
     "llmLatencyP50Ms": "Latenz p50 (ms)",
-    "llmLatencyP95Ms": "Latenz p95 (ms)"
+    "llmLatencyP95Ms": "Latenz p95 (ms)",
+    "objectNeedsUpgrade": "Für ein kostenpflichtiges Paket freischalten, um dies hinzuzufügen."
   },
   "canvasCommands": {
     "cleanLayout": "Leinwand-Layout aufräumen",

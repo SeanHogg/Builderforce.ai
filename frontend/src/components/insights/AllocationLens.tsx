@@ -4,8 +4,9 @@ import { useEffect, useState, type CSSProperties } from 'react';
 import { useTranslations } from 'next-intl';
 import {
   insightsApi,
+  CAPITALIZATION_EXPORT_FORMATS, DEFAULT_CAPITALIZATION_FORMAT,
   type AllocationInsights, type AllocationGoal, type AllocationCategory, type CategoryAllocation,
-  type AllocationHistory, type CapitalizationStatus, type EpicCapitalization,
+  type AllocationHistory, type CapitalizationExportFormat, type CapitalizationStatus, type EpicCapitalization,
 } from '@/lib/builderforceApi';
 import { fetchProjects } from '@/lib/api';
 import type { Project } from '@/lib/types';
@@ -16,7 +17,8 @@ import { COST_CLASS_COLORS, formatUsd } from '@/lib/pm/costClass';
 import { Select } from '@/components/Select';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 import { KpiGrid } from './LensShell';
-import { usd, pct, hrs } from './format';
+import { pct, hrs } from './format';
+import { useInsightFormat } from './format';
 import { useFormat } from "@/i18n/useFormat";
 
 const ALL_CATEGORIES: AllocationCategory[] = ['innovation', 'ktlo', 'support', 'tech_debt', 'other'];
@@ -94,6 +96,7 @@ function Variance({ v }: { v: number | undefined }) {
 }
 
 export function AllocationLens() {
+  const { usd } = useInsightFormat();
   const fmt = useFormat();
   const t = useTranslations('insights');
   const [days, setDays] = useState(30);
@@ -106,10 +109,11 @@ export function AllocationLens() {
   const [metric, setMetric] = useState<'fte' | 'cost'>('fte');
   const [epicFilter, setEpicFilter] = useState<'all' | CapitalizationStatus>('all');
   const [exporting, setExporting] = useState(false);
+  const [exportFormat, setExportFormat] = useState<CapitalizationExportFormat>(DEFAULT_CAPITALIZATION_FORMAT);
 
   const downloadReport = async () => {
     setExporting(true);
-    try { await insightsApi.capitalizationExport({ months: 12, projectId }); }
+    try { await insightsApi.capitalizationExport({ months: 12, projectId, format: exportFormat }); }
     catch { /* surfaced via the global API-error toast */ }
     finally { setExporting(false); }
   };
@@ -182,6 +186,16 @@ export function AllocationLens() {
         <StatCard label={t('alloc.capitalizable')} value={pct(data.totals.capitalizablePct)} sub={t('alloc.capitalizableSub')} />
         <StatCard label={t('alloc.capex')} value={usd(data.totals.capexUsd)} sub={t('alloc.capexSub')} />
         <StatCard label={t('alloc.opex')} value={usd(data.totals.opexUsd)} sub={t('alloc.opexSub')} />
+        {/* The figure that says what the four above it are MADE of. A
+            capitalization number derived from timesheets and one derived from
+            ticket open/close timestamps print identically; the collector has
+            reported the split for a while and nothing showed it, which left the
+            report looking equally authoritative in both cases. */}
+        <StatCard
+          label={t('alloc.measured')}
+          value={pct(data.totals.measuredEffortPct)}
+          sub={t('alloc.measuredSub', { logged: hrs(data.totals.loggedHours), total: hrs(data.totals.hours) })}
+        />
       </KpiGrid>
 
       {/* Donuts — capitalization split (FTE|Cost) + investment mix */}
@@ -244,6 +258,16 @@ export function AllocationLens() {
             <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>{t('alloc.dataAsOf', { d: fmt.dateTime(history.dataAsOf) })}</span>
             {/* The report is what finance hands an auditor; until now it could only
                 be read on screen. Honours the project scope currently applied. */}
+            <Select
+              value={exportFormat}
+              onChange={(e) => setExportFormat(e.target.value as CapitalizationExportFormat)}
+              aria-label={t('alloc.exportFormat')}
+              style={{ ...inputStyle, padding: '4px 8px', fontSize: 'var(--font-size-eyebrow)' }}
+            >
+              {CAPITALIZATION_EXPORT_FORMATS.map((f) => (
+                <option key={f} value={f}>{t(`alloc.format.${f}`)}</option>
+              ))}
+            </Select>
             <button
               type="button"
               onClick={() => { void downloadReport(); }}
@@ -254,7 +278,7 @@ export function AllocationLens() {
                 border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)',
               }}
             >
-              {exporting ? t('alloc.exporting') : t('alloc.exportCsv')}
+              {exporting ? t('alloc.exporting') : t('alloc.exportReport')}
             </button>
           </span>
         ) : undefined}
@@ -273,6 +297,7 @@ export function AllocationLens() {
                   <th style={thStyle}>{t('alloc.capFteMonths')}</th>
                   <th style={thStyle}>{t('alloc.capCost')}</th>
                   <th style={thStyle}>{t('alloc.totalCost')}</th>
+                  <th style={thStyle}>{t('alloc.measured')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -290,6 +315,9 @@ export function AllocationLens() {
                     </td>
                     <td style={tdMutedStyle}>{usd(m.capitalizedUsd)}</td>
                     <td style={tdMutedStyle}>{usd(m.totalUsd)}</td>
+                    <td style={tdMutedStyle} title={t('alloc.measuredSub', { logged: hrs(m.loggedHours), total: hrs(m.hours) })}>
+                      {pct(m.measuredEffortPct)}
+                    </td>
                   </tr>
                 ))}
               </tbody>

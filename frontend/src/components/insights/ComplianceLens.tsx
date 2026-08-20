@@ -9,7 +9,7 @@ import { usePmData } from '@/lib/pm/usePmData';
 import { PmCard, PmEmpty, PmError, StatCard, StatusPill } from '@/components/pm/pmShared';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 import { DaysWindowSelect, KpiGrid } from './LensShell';
-import { int } from './format';
+import { useInsightFormat } from './format';
 
 const btnStyle: React.CSSProperties = {
   padding: '7px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',
@@ -18,6 +18,7 @@ const btnStyle: React.CSSProperties = {
 
 /** LENS #6 — compliance/audit over tool_audit_events + evidence-pack export. */
 export function ComplianceLens() {
+  const { int } = useInsightFormat();
   const t = useTranslations('insights');
   const [days, setDays] = useState(30);
   const [exporting, setExporting] = useState(false);

@@ -19,6 +19,7 @@ import {
   type SnapshotCadence,
 } from '@/lib/personaCadenceApi';
 import { Select } from '@/components/Select';
+import { useFormat } from "@/i18n/useFormat";
 
 const card: React.CSSProperties = {
   background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 20,
@@ -32,11 +33,9 @@ const btn: React.CSSProperties = {
   background: 'var(--bg-elevated)', color: 'var(--text-primary)', cursor: 'pointer', fontWeight: 600, fontSize: '0.82rem',
 };
 
-function fmt(iso: string): string {
-  return new Date(iso).toLocaleString();
-}
 
 export function LensSnapshotsPanel() {
+  const fmt = useFormat();
   const t = useTranslations('lensSnapshots');
 
   const [snapshots, setSnapshots] = useState<LensSnapshotMeta[]>([]);
@@ -140,7 +139,7 @@ export function LensSnapshotsPanel() {
                 }}>{s.period}</span>
                 <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{cadenceLabel(s.cadence)}</span>
                 <span style={{ flex: 1 }} />
-                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('generatedAt', { at: fmt(s.generatedAt) })}</span>
+                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('generatedAt', { at: fmt.dateTime(s.generatedAt) })}</span>
                 <button type="button" style={{ ...btn, padding: '4px 10px', fontSize: 11 }} onClick={() => void openSnapshot(s.id)}>
                   {openId === s.id ? t('hide') : t('view')}
                 </button>

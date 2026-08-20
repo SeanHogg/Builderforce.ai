@@ -37,7 +37,7 @@ import type { WidgetCardProps, WidgetDef, WidgetDrill } from '@/lib/widgets/type
 import { DonutChart } from '@/components/charts/DonutChart';
 import { TrendChart } from '@/components/charts/TrendChart';
 import { colorAt } from '@/components/charts/chartColors';
-import { int } from '@/components/insights/format';
+import { useInsightFormat } from '@/components/insights/format';
 
 // ── Shared helpers ─────────────────────────────────────────────────────────────
 
@@ -104,6 +104,7 @@ function useCeremonyRollup(days: number) {
 
 /** Alert firings per day over the window — the volume trend the surface lacked. */
 function AlertFiresTrendCard({ days }: WidgetCardProps) {
+  const { int } = useInsightFormat();
   const t = useTranslations('widgets');
   const { data, error } = useAlertEvents();
   if (error) return <Muted>{error}</Muted>;
@@ -124,6 +125,7 @@ function AlertFiresTrendCard({ days }: WidgetCardProps) {
 
 /** Rule-health donut: enabled vs paused vs currently-firing rules. */
 function AlertRuleHealthCard(_props: WidgetCardProps) {
+  const { int } = useInsightFormat();
   const t = useTranslations('widgets');
   const { data, error } = useAlertRules();
   if (error) return <Muted>{error}</Muted>;
@@ -157,6 +159,7 @@ function AlertRuleHealthCard(_props: WidgetCardProps) {
 
 /** Event-volume trend from the tenant activity rollup's daily series. */
 function LogVolumeTrendCard({ days }: WidgetCardProps) {
+  const { int } = useInsightFormat();
   const t = useTranslations('widgets');
   const { data, error } = useActivityRollup(days);
   if (error) return <Muted>{error}</Muted>;
@@ -178,6 +181,7 @@ function LogVolumeTrendCard({ days }: WidgetCardProps) {
 
 /** Event-type mix donut (commit / review / deploy / …) from the rollup's byType. */
 function LogTypeMixCard({ days }: WidgetCardProps) {
+  const { int } = useInsightFormat();
   const t = useTranslations('widgets');
   const { data, error } = useActivityRollup(days);
   if (error) return <Muted>{error}</Muted>;
@@ -200,6 +204,7 @@ function LogTypeMixCard({ days }: WidgetCardProps) {
 
 /** Error-event volume per day over the window (from /api/quality/stats daily). */
 function QualityErrorVolumeCard(_props: WidgetCardProps) {
+  const { int } = useInsightFormat();
   const t = useTranslations('widgets');
   const { data, error } = useQualityStats(30);
   if (error) return <Muted>{error}</Muted>;
@@ -221,6 +226,7 @@ function QualityErrorVolumeCard(_props: WidgetCardProps) {
 
 /** Resolution mix donut: unresolved / resolved / ignored error groups. */
 function QualityResolutionCard(_props: WidgetCardProps) {
+  const { int } = useInsightFormat();
   const t = useTranslations('widgets');
   const { data, error } = useQualityStats(30);
   if (error) return <Muted>{error}</Muted>;
@@ -253,6 +259,7 @@ function QualityResolutionCard(_props: WidgetCardProps) {
 
 /** Connected integrations with the healthy (last-test-ok) share as the sub-line. */
 function IntegrationsConnectedCard(_props: WidgetCardProps) {
+  const { int } = useInsightFormat();
   const t = useTranslations('widgets');
   const dt = useTranslations('dashboard');
   const { data, error } = useIntegrations();
@@ -274,6 +281,7 @@ function IntegrationsConnectedCard(_props: WidgetCardProps) {
 
 /** By-provider mix donut — which tools the workspace is wired into. */
 function IntegrationsByProviderCard(_props: WidgetCardProps) {
+  const { int } = useInsightFormat();
   const t = useTranslations('widgets');
   const { data, error } = useIntegrations();
   if (error) return <Muted>{error}</Muted>;
@@ -316,6 +324,7 @@ function ContentCoverageCard(_props: WidgetCardProps) {
 
 /** Documents by kind donut (SOP / Process / Doc) with published vs draft split. */
 function ContentByKindCard(_props: WidgetCardProps) {
+  const { int } = useInsightFormat();
   const t = useTranslations('widgets');
   const { data, error } = useKnowledgeOverview();
   if (error) return <Muted>{error}</Muted>;
@@ -342,6 +351,7 @@ function ContentByKindCard(_props: WidgetCardProps) {
 
 /** Ceremonies-run cadence per day + completion-rate sub-line. */
 function CeremonyCadenceCard({ days }: WidgetCardProps) {
+  const { int } = useInsightFormat();
   const t = useTranslations('widgets');
   const { data, error } = useCeremonyRollup(days);
   if (error) return <Muted>{error}</Muted>;

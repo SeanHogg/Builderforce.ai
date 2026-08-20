@@ -54,14 +54,29 @@ function cellXml(reference: string, value: XlsxCell, style: number): string {
   return `<c ${attributes} t="inlineStr"><is><t xml:space="preserve">${esc(String(value))}</t></is></c>`;
 }
 
-const CONTENT_TYPES = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>`;
+/** Excel's own ceiling on sheets is memory-bound; this one keeps a single export
+ *  from turning into an unbounded render inside a Worker. */
+export const MAX_XLSX_SHEETS = 16;
+
+function contentTypes(sheetCount: number): string {
+  const overrides = Array.from({ length: sheetCount }, (_, i) =>
+    `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('');
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>${overrides}<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>`;
+}
 
 const ROOT_RELS = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`;
 
-const WORKBOOK_RELS = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`;
+/** One worksheet relationship per sheet, then styles LAST — the styles rId must
+ *  not collide with a sheet's, which is what makes this a function rather than a
+ *  constant with `rId2` hardcoded. */
+function workbookRels(sheetCount: number): string {
+  const sheets = Array.from({ length: sheetCount }, (_, i) =>
+    `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`).join('');
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${sheets}<Relationship Id="rId${sheetCount + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`;
+}
 
 /**
  * Two cell formats: body text, and the header band.
@@ -86,9 +101,64 @@ export interface XlsxSheet {
   title?: string;
 }
 
-/** Write a single-sheet workbook. Rows are positional against `columns`; a short
- * row leaves the trailing cells empty rather than shifting them left. */
-export function rowsToXlsx({ columns, rows, title }: XlsxSheet): Uint8Array {
+/**
+ * Write a workbook — one sheet per {@link XlsxSheet}.
+ *
+ * Rows are positional against `columns`; a short row leaves the trailing cells
+ * empty rather than shifting them left.
+ *
+ * Multi-sheet exists because a report is often two tables that only mean
+ * something together — the capitalization report's monthly series is the claim
+ * and its epic table is the evidence — and flattening those into one grid with a
+ * `section` column is what a CSV has to do, not what a spreadsheet should. Sheet
+ * names are normalized AND de-duplicated: Excel refuses a workbook with two
+ * sheets of the same name, and two callers passing the same title is a mistake
+ * that should produce "Report (2)", not a file nobody can open.
+ */
+export function sheetsToXlsx(sheets: readonly XlsxSheet[]): Uint8Array {
+  const limited = sheets.slice(0, MAX_XLSX_SHEETS);
+  if (limited.length === 0) return sheetsToXlsx([{ columns: [], rows: [] }]);
+
+  const usedNames = new Set<string>();
+  const names = limited.map((sheet, index) => {
+    const base = sheetName(sheet.title ?? `Sheet${index + 1}`);
+    let name = base;
+    for (let n = 2; usedNames.has(name.toLowerCase()); n++) {
+      // Trim before appending so the suffixed name still fits Excel's 31 chars.
+      const suffix = ` (${n})`;
+      name = `${base.slice(0, 31 - suffix.length)}${suffix}`;
+    }
+    usedNames.add(name.toLowerCase());
+    return name;
+  });
+
+  const parts: Record<string, Uint8Array> = {
+    '[Content_Types].xml': strToU8(contentTypes(limited.length)),
+    '_rels/.rels': strToU8(ROOT_RELS),
+    'xl/_rels/workbook.xml.rels': strToU8(workbookRels(limited.length)),
+    'xl/styles.xml': strToU8(STYLES),
+  };
+  limited.forEach((sheet, index) => {
+    parts[`xl/worksheets/sheet${index + 1}.xml`] = strToU8(worksheetXml(sheet));
+  });
+
+  const workbook = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${
+    names.map((name, index) => `<sheet name="${esc(name)}" sheetId="${index + 1}" r:id="rId${index + 1}"/>`).join('')
+  }</sheets></workbook>`;
+  parts['xl/workbook.xml'] = strToU8(workbook);
+
+  return zipSync(parts, { level: 6 });
+}
+
+/** Write a single-sheet workbook — the common case, kept as its own name so the
+ *  many callers that have exactly one table read as such. */
+export function rowsToXlsx(sheet: XlsxSheet): Uint8Array {
+  return sheetsToXlsx([sheet]);
+}
+
+/** The `xl/worksheets/sheetN.xml` part for one sheet. */
+function worksheetXml({ columns, rows }: XlsxSheet): string {
   const head = columns.slice(0, MAX_XLSX_COLUMNS).map((column) => String(column ?? ''));
   const body = rows.slice(0, MAX_XLSX_ROWS).map((row) => head.map((_column, index) => row[index] ?? null));
   const lastColumn = columnName(Math.max(0, head.length - 1));
@@ -104,18 +174,6 @@ export function rowsToXlsx({ columns, rows, title }: XlsxSheet): Uint8Array {
     ? `<cols>${head.map((header, index) => `<col min="${index + 1}" max="${index + 1}" width="${columnWidth(header, body.map((row) => row[index] ?? null))}" customWidth="1"/>`).join('')}</cols>`
     : '';
 
-  const sheet = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><dimension ref="A1:${lastColumn}${Math.max(1, lastRow)}"/><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><sheetFormatPr defaultRowHeight="15"/>${cols}<sheetData>${headerRow}${bodyRows}</sheetData>${head.length ? `<autoFilter ref="A1:${lastColumn}${Math.max(1, lastRow)}"/>` : ''}</worksheet>`;
-
-  const workbook = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="${esc(sheetName(title))}" sheetId="1" r:id="rId1"/></sheets></workbook>`;
-
-  return zipSync({
-    '[Content_Types].xml': strToU8(CONTENT_TYPES),
-    '_rels/.rels': strToU8(ROOT_RELS),
-    'xl/workbook.xml': strToU8(workbook),
-    'xl/_rels/workbook.xml.rels': strToU8(WORKBOOK_RELS),
-    'xl/styles.xml': strToU8(STYLES),
-    'xl/worksheets/sheet1.xml': strToU8(sheet),
-  }, { level: 6 });
 }

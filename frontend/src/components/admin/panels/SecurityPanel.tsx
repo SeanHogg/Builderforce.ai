@@ -20,9 +20,11 @@ import {
 } from '@/lib/adminApi';
 import { downloadText } from '@/lib/download';
 import { Select } from '@/components/Select';
-import { AdminError, errText, fmtDateTime } from '../adminShared';
+import { AdminError, errText } from '../adminShared';
+import { useAdminFormat } from '../adminShared';
 
 export default function SecurityPanel() {
+  const { fmtDateTime } = useAdminFormat();
   const t = useTranslations('admin');
   const [tenants, setTenants] = useState<AdminTenant[]>([]);
   const [securityTenantId, setSecurityTenantId] = useState<number | null>(null);

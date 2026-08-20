@@ -19,7 +19,7 @@
  * rows so it is unit-testable without a DB; the route caches it and merges goals.
  */
 
-import { and, eq, gte, inArray, isNotNull } from 'drizzle-orm';
+import { and, eq, gte, inArray, isNotNull, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import {
   agentHosts,
@@ -566,6 +566,21 @@ export interface AllocationHistoryMonth {
   uncategorizedUsd: number;
   totalUsd: number;
   taskCount: number;
+  /**
+   * Of the month's effort hours, how many came from RECORDED time
+   * (`time_entries`) rather than a cycle-time estimate, and that share as a
+   * percentage — the same disclosure `AllocationInsights.totals` carries.
+   *
+   * The monthly series used to omit it, so a row built entirely from timesheets
+   * and a row built entirely from ticket open/close guesses printed identically.
+   * A capitalization figure carried into an accounting system has to say which
+   * one it is, and it has to say it PER MONTH: the month a team started logging
+   * time is the month its numbers changed meaning, and a single workspace-level
+   * percentage hides exactly that.
+   */
+  loggedHours: number;
+  hours: number;
+  measuredEffortPct: number;
 }
 export interface AllocationHistory {
   months: AllocationHistoryMonth[];   // newest first
@@ -590,17 +605,59 @@ function recentMonthKeys(now: number, months: number): string[] {
 }
 
 /**
- * Pure: bucket task effort + cost into the month each task last moved
- * (completedAt, else updatedAt) and split by {@link capitalizationStatus}. Cost is
- * the task's total LLM spend over the range, attributed to that same month — a
- * faithful, single-fetch approximation for the report's monthly trend.
+ * Millicents of LLM spend keyed by `${taskId}:${'YYYY-MM'}` — the month the money
+ * was ACTUALLY spent, not the month the ticket was last touched. See
+ * {@link spendKey} and {@link summarizeAllocationHistory}.
+ */
+export type CostByTaskMonth = Map<string, number>;
+
+/** The one key format for {@link CostByTaskMonth}, so the writer and the reader
+ *  cannot disagree about it. */
+export function spendKey(taskId: number, month: string): string {
+  return `${taskId}:${month}`;
+}
+
+/**
+ * Pure: bucket task effort into the month each task last moved (completedAt, else
+ * updatedAt) and its LLM spend into the month that spend was actually incurred,
+ * both split by {@link capitalizationStatus}.
+ *
+ * ── WHY THE TWO HALVES ARE BUCKETED DIFFERENTLY ─────────────────────────────
+ * They answer different questions and only one of them has a real date.
+ *
+ * EFFORT has no per-day record to distribute — a task's hours are derived from
+ * its lifecycle (or from time entries in aggregate), so the honest thing is to
+ * attribute them to the month the task last moved. That is an "as-of" reading and
+ * it is labelled as one.
+ *
+ * COST does have a real date: every `llm_usage_log` row is stamped at the moment
+ * of the call. Attributing it to the task's as-of month was a genuine
+ * misstatement rather than an approximation — a ticket opened in March, worked
+ * through April and closed in June reported ALL of its March-to-June API spend as
+ * June spend. A finance team reconciling this report against the vendor invoice
+ * would find the totals agree for the year and disagree for every month in it,
+ * which is exactly the failure that makes a report unusable for accrual.
+ *
+ * So cost is now keyed by (task, real spend month) and lands where it was spent,
+ * while the task's capitalization STATUS still classifies it — a dollar spent in
+ * March on work later classified as capitalized is capitalized March spend.
+ * `taskCount` continues to count tasks in their as-of month; it is a count of
+ * work, not of money.
+ *
+ * `loggedByTask` is the second correction: without it this function called
+ * `taskEffortHours(r, now)` with no logged minutes, so the monthly FTE-months
+ * were a pure cycle-time estimate even on a workspace that had logged every hour
+ * — while the donut directly above the table used the real figure. Two numbers on
+ * one screen, derived from the same tasks, disagreeing.
  */
 export function summarizeAllocationHistory(
   rows: AllocationTaskRow[],
-  costByTask: Map<number, number>,
+  costByTaskMonth: CostByTaskMonth,
   months: number,
   now: number,
   lineage?: Map<number, 'capex' | 'opex'>,
+  /** task id → REAL minutes recorded against it in the window (`time_entries`). */
+  loggedByTask: Map<number, number> = new Map(),
 ): AllocationHistory {
   const keys = recentMonthKeys(now, months);
   const allowed = new Set(keys);
@@ -609,24 +666,43 @@ export function summarizeAllocationHistory(
     month: '', status: 'ready',
     capitalizedFteMonths: 0, totalFteMonths: 0,
     capitalizedUsd: 0, notCapitalizedUsd: 0, uncategorizedUsd: 0, totalUsd: 0, taskCount: 0,
+    loggedHours: 0, hours: 0, measuredEffortPct: 0,
   });
   const byMonth = new Map<string, AllocationHistoryMonth>(keys.map((k) => [k, { ...blank(), month: k, status: k === current ? 'in_progress' : 'ready' }]));
 
   for (const r of rows) {
-    const when = r.completedAt ?? r.updatedAt;
-    const key = monthKey(new Date(when));
-    if (!allowed.has(key)) continue;
-    const bucket = byMonth.get(key)!;
-    const hrs = taskEffortHours(r, now);
-    const costUsd = (costByTask.get(r.taskId) ?? 0) / MILLICENTS_PER_USD;
     const status = capitalizationStatus(r, lineage);
-    const fte = fteMonthsFromHours(hrs);
-    bucket.totalFteMonths += fte;
-    bucket.totalUsd += costUsd;
-    bucket.taskCount += 1;
-    if (status === 'capitalized') { bucket.capitalizedFteMonths += fte; bucket.capitalizedUsd += costUsd; }
-    else if (status === 'not_capitalized') bucket.notCapitalizedUsd += costUsd;
-    else bucket.uncategorizedUsd += costUsd;
+
+    // ── Effort → the task's as-of month ──
+    const when = r.completedAt ?? r.updatedAt;
+    const asOf = monthKey(new Date(when));
+    if (allowed.has(asOf)) {
+      const bucket = byMonth.get(asOf)!;
+      const loggedMinutes = loggedByTask.get(r.taskId) ?? 0;
+      const hrs = taskEffortHours(r, now, loggedMinutes);
+      const fte = fteMonthsFromHours(hrs);
+      bucket.totalFteMonths += fte;
+      bucket.taskCount += 1;
+      bucket.hours += hrs;
+      if (loggedMinutes > 0) bucket.loggedHours += hrs;
+      if (status === 'capitalized') bucket.capitalizedFteMonths += fte;
+    }
+
+    // ── Cost → the month each dollar was actually spent ──
+    for (const month of keys) {
+      const millicents = costByTaskMonth.get(spendKey(r.taskId, month));
+      if (!millicents) continue;
+      const bucket = byMonth.get(month)!;
+      const costUsd = millicents / MILLICENTS_PER_USD;
+      bucket.totalUsd += costUsd;
+      if (status === 'capitalized') bucket.capitalizedUsd += costUsd;
+      else if (status === 'not_capitalized') bucket.notCapitalizedUsd += costUsd;
+      else bucket.uncategorizedUsd += costUsd;
+    }
+  }
+
+  for (const m of byMonth.values()) {
+    m.measuredEffortPct = m.hours > 0 ? (m.loggedHours / m.hours) * 100 : 0;
   }
 
   return { months: keys.map((k) => byMonth.get(k)!).reverse(), dataAsOf: new Date(now).toISOString() };
@@ -694,22 +770,44 @@ export async function computeAllocationHistory(
     : rows;
 
   const taskIds = scoped.map((r) => r.taskId);
-  const costByTask = new Map<number, number>();
+  const costByTaskMonth: CostByTaskMonth = new Map();
   if (taskIds.length) {
+    // Aggregated in SQL by (task, spend month) rather than pulled row-by-row and
+    // summed here. Two reasons, and both matter: the report needs the month
+    // dimension it never had, and a busy workspace's raw `llm_usage_log` over
+    // twelve months is tens of thousands of rows to ship into the isolate for a
+    // sum Postgres will do in the index.
+    //
+    // `to_char(created_at, 'YYYY-MM')` reads the same month `monthKey()` does:
+    // the column is `timestamp` WITHOUT time zone, which Drizzle parses by
+    // appending `+0000`, so both sides are looking at UTC. Do not "fix" one of
+    // them to local time on its own.
     const costRows = await db
-      .select({ taskId: llmUsageLog.taskId, cost: llmUsageLog.costUsdMillicents })
+      .select({
+        taskId: llmUsageLog.taskId,
+        month: sql<string>`to_char(${llmUsageLog.createdAt}, 'YYYY-MM')`,
+        cost: sql<number>`sum(${llmUsageLog.costUsdMillicents})`,
+      })
       .from(llmUsageLog)
       .where(and(
         eq(llmUsageLog.tenantId, tenantId),
         isNotNull(llmUsageLog.taskId),
         inArray(llmUsageLog.taskId, taskIds),
         gte(llmUsageLog.createdAt, since),
-      ));
+      ))
+      .groupBy(llmUsageLog.taskId, sql`to_char(${llmUsageLog.createdAt}, 'YYYY-MM')`);
     for (const cr of costRows) {
-      if (cr.taskId != null) costByTask.set(cr.taskId, (costByTask.get(cr.taskId) ?? 0) + (cr.cost ?? 0));
+      if (cr.taskId == null) continue;
+      costByTaskMonth.set(spendKey(cr.taskId, cr.month), Number(cr.cost) || 0);
     }
   }
 
-  const lineage = opts.lineage ? await loadTaskCostClassMap(db, tenantId) : undefined;
-  return summarizeAllocationHistory(scoped, costByTask, months, now, lineage);
+  // Real recorded time over the same window, so the monthly FTE-months use the
+  // same effort rule as the donut above them (AIIMP-5) instead of falling back to
+  // a cycle-time estimate the live view had already stopped using.
+  const [loggedByTask, lineage] = await Promise.all([
+    loggedMinutesByTask(db, tenantId, taskIds, { from: isoDay(since), to: isoDay(new Date(now)) }),
+    opts.lineage ? loadTaskCostClassMap(db, tenantId) : Promise.resolve(undefined),
+  ]);
+  return summarizeAllocationHistory(scoped, costByTaskMonth, months, now, lineage, loggedByTask);
 }

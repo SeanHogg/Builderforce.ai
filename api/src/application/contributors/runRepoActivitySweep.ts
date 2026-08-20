@@ -20,6 +20,7 @@ import { buildDatabase } from '../../infrastructure/database/connection';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { projectRepositories } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { resolveRepoCredential, isResolveError } from '../repos/resolveRepoCredential';
 import { makeRepoFetch } from '../repos/sources/RepoSource';
 import { createActivitySource, POLLABLE_PROVIDERS } from './activitySourceFactory';
@@ -87,11 +88,7 @@ export async function runRepoActivitySweep(env: Env): Promise<RepoActivitySweepR
   const due = await db
     .select()
     .from(projectRepositories)
-    .where(and(
-      inArray(projectRepositories.provider, [...POLLABLE_PROVIDERS]),
-      sql`${projectRepositories.credentialId} is not null`,
-      or(isNull(projectRepositories.lastActivitySyncedAt), lt(projectRepositories.lastActivitySyncedAt, cutoff)),
-    ))
+    .where(and(inArray(projectRepositories.provider, [...POLLABLE_PROVIDERS]), sql`${projectRepositories.credentialId} is not null`, or(isNull(projectRepositories.lastActivitySyncedAt), lt(projectRepositories.lastActivitySyncedAt, cutoff))))
     // ORDER BY direction and null placement must be ONE sql fragment in the right
     // order (`asc nulls first`). Wrapping the fragment in drizzle's `asc()` appends
     // the direction AFTER the null clause — `... nulls first asc` — which Postgres

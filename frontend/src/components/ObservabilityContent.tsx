@@ -1,6 +1,7 @@
 'use client';
 
 import { Select } from '@/components/Select';
+import type { Formatter } from '@/i18n/format';
 
 import Link from 'next/link';
 import { useState, useEffect, useRef, useCallback } from 'react';
@@ -20,6 +21,7 @@ import { AgentHostGateway } from '@/lib/agentHostGateway';
 import { loadAgentPool, type PoolAgent } from '@/lib/agentPool';
 import { useCopyToClipboard } from '@/lib/useCopyToClipboard';
 import { ExecutionTimelineChart } from './ExecutionTimelineChart';
+import { useFormat } from "@/i18n/useFormat";
 
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
@@ -106,8 +108,8 @@ function truncate(s: unknown, n: number): string {
   return str.length > n ? str.slice(0, n) + '…' : str;
 }
 
-function fmtTime(ms: number): string {
-  return new Date(ms).toLocaleTimeString(undefined, {
+function fmtTime(fmt: Formatter, ms: number): string {
+  return fmt.dateWith(ms, {
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
@@ -180,6 +182,7 @@ export function ObservabilityContent({
   reportMaterials,
   reportTransaction,
 }: ObservabilityContentProps) {
+  const fmt = useFormat();
   const t = useTranslations('observability');
   const tc = useTranslations('common');
   // Scoped mode pins the directory to a single agent (a host OR a cloud agent)
@@ -863,8 +866,8 @@ export function ObservabilityContent({
                             <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)' }}>{track.label}</span>
                           </div>
                           <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
-                            {fmtTime(track.startMs)}
-                            {track.endMs > track.startMs ? ` → ${fmtTime(track.endMs)} (${fmtDuration(track.endMs - track.startMs)})` : ''}
+                            {fmtTime(fmt, track.startMs)}
+                            {track.endMs > track.startMs ? ` → ${fmtTime(fmt, track.endMs)} (${fmtDuration(track.endMs - track.startMs)})` : ''}
                           </div>
                           {track.detail && (
                             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4, fontFamily: 'var(--font-mono)' }}>{track.detail}</div>

@@ -231,7 +231,7 @@ export function createEvermindModelRoutes(db: Db): Hono<HonoEnv> {
       if (tools.length > 0 && choice.mode !== 'none') {
         const planned = await evermindGenerateWithTools(c.env.UPLOADS, ref, messages, tools, choice, genOpts);
         return c.json({
-          ...buildEvermindCompletion({ content: planned.content, usage: planned.usage }, tm.baseModel, Date.now(), planned.call),
+          ...buildEvermindCompletion({ content: planned.content, usage: planned.usage }, tm.baseModel, Date.now(), planned.calls),
           // Unlike the gateway, the bench REPORTS the margin instead of refusing on it:
           // an operator testing a head needs to see how close to the bar it landed.
           toolChoiceMargin: Number.isFinite(planned.margin) ? planned.margin : null,

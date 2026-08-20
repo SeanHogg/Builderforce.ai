@@ -12,7 +12,7 @@ import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, t
 import { TrendChart } from '@/components/charts/TrendChart';
 import { BarChart } from '@/components/charts/BarChart';
 import { KpiGrid } from './LensShell';
-import { usd } from './format';
+import { useInsightFormat } from './format';
 import { useFormat } from "@/i18n/useFormat";
 
 /**
@@ -44,6 +44,7 @@ function currentMonth(): string {
 }
 
 export function FinanceLens() {
+  const { usd } = useInsightFormat();
   const fmt = useFormat();
   const t = useTranslations('insights');
   const [period, setPeriod] = useState(currentMonth());

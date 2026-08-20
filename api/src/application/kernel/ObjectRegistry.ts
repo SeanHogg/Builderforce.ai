@@ -47,6 +47,7 @@ import {
   revisions,
   shareLinks,
 } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { sha256Hex } from '../../domain/shared/hash';
 import { fireEventTriggers } from '../workflow/eventTriggers';
 import type { Env } from '../../env';

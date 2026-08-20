@@ -31,7 +31,7 @@ import type { WidgetCardProps, WidgetDef, WidgetDrill } from '@/lib/widgets/type
 import { DonutChart } from '@/components/charts/DonutChart';
 import { BarChart, type BarDatum } from '@/components/charts/BarChart';
 import { colorAt } from '@/components/charts/chartColors';
-import { int } from '@/components/insights/format';
+import { useInsightFormat } from '@/components/insights/format';
 
 // ── Shared, deduped data sources (one fetch per source regardless of pins) ──────
 
@@ -71,6 +71,7 @@ const DONE_KEYS = new Set(['done', 'completed', 'closed']);
 const IN_PROGRESS_KEYS = new Set(['in_progress', 'in-progress', 'doing']);
 
 function TasksByStatusCard(_props: WidgetCardProps) {
+  const { int } = useInsightFormat();
   const t = useTranslations('widgets');
   const { data, error } = useTasks();
   if (error) return <Muted>{error}</Muted>;
@@ -98,6 +99,7 @@ function TasksByStatusCard(_props: WidgetCardProps) {
 
 /** WIP (in-progress count) with the board's most-recent-update recency badge. */
 function TasksWipCard(_props: WidgetCardProps) {
+  const { int } = useInsightFormat();
   const t = useTranslations('widgets');
   const dt = useTranslations('dashboard');
   const { data, error } = useTasks();
@@ -121,6 +123,7 @@ function TasksWipCard(_props: WidgetCardProps) {
 
 /** Which workflows have run the most — surfaces the busy vs dormant automations. */
 function WorkflowRunsCard(_props: WidgetCardProps) {
+  const { int } = useInsightFormat();
   const t = useTranslations('widgets');
   const { data, error } = useWorkflows();
   if (error) return <Muted>{error}</Muted>;
@@ -132,6 +135,7 @@ function WorkflowRunsCard(_props: WidgetCardProps) {
 
 /** Last-run outcome mix across all workflows — spot the failing/stale ones. */
 function WorkflowHealthCard(_props: WidgetCardProps) {
+  const { int } = useInsightFormat();
   const t = useTranslations('widgets');
   const { data, error } = useWorkflows();
   if (error) return <Muted>{error}</Muted>;
@@ -164,6 +168,7 @@ function WorkflowHealthCard(_props: WidgetCardProps) {
 
 /** Chats grouped by where they were created (brainstorm / ide / project). */
 function BrainChatsByOriginCard(_props: WidgetCardProps) {
+  const { int } = useInsightFormat();
   const t = useTranslations('widgets');
   const { data, error } = useBrainChats();
   if (error) return <Muted>{error}</Muted>;
@@ -190,6 +195,7 @@ function BrainChatsByOriginCard(_props: WidgetCardProps) {
 
 /** Total active threads with the most-recent-activity recency badge. */
 function BrainActivityCard(_props: WidgetCardProps) {
+  const { int } = useInsightFormat();
   const t = useTranslations('widgets');
   const dt = useTranslations('dashboard');
   const { data, error } = useBrainChats();

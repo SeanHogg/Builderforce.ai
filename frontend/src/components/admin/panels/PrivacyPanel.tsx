@@ -4,9 +4,11 @@ import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { adminApi, type AdminPrivacyRequest } from '@/lib/adminApi';
 import { Select } from '@/components/Select';
-import { AdminError, AdminLoading, errText, fmtDateTime } from '@/components/admin/adminShared';
+import { AdminError, AdminLoading, errText } from '@/components/admin/adminShared';
+import { useAdminFormat } from '@/components/admin/adminShared';
 
 export default function PrivacyPanel() {
+  const { fmtDateTime } = useAdminFormat();
   const t = useTranslations('admin');
   const [privacyRequests, setPrivacyRequests] = useState<AdminPrivacyRequest[]>([]);
   const [loading, setLoading] = useState(true);

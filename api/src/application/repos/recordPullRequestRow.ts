@@ -11,6 +11,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  */
 import { and, desc, eq, isNull, ne, sql } from 'drizzle-orm';
 import { deploymentEvents, pullRequests } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { Db } from '../../infrastructure/database/connection';
 
 /**

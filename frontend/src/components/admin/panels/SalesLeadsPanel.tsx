@@ -9,12 +9,14 @@ import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { adminApi, type AdminSalesLead, type SalesLeadStatus } from '@/lib/adminApi';
 import { DEMO_PERSONAS } from '@/lib/demoApi';
-import { AdminError, AdminLoading, AdminPanelHeader, composeMailto, errText, fmtDateTime, useAdminData } from '@/components/admin/adminShared';
+import { AdminError, AdminLoading, AdminPanelHeader, composeMailto, errText, useAdminData } from '@/components/admin/adminShared';
+import { useAdminFormat } from '@/components/admin/adminShared';
 
 const STATUSES: SalesLeadStatus[] = ['new', 'contacted', 'qualified', 'closed'];
 const isPersona = (v: string): boolean => (DEMO_PERSONAS as string[]).includes(v);
 
 export default function SalesLeadsPanel() {
+  const { fmtDateTime } = useAdminFormat();
   const t = useTranslations('admin.salesLeads');
   const [filter, setFilter] = useState<SalesLeadStatus | ''>('');
   const { data, loading, error, reload, setError } = useAdminData<AdminSalesLead[]>(

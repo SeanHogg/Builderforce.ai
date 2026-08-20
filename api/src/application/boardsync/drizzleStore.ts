@@ -16,6 +16,7 @@ import {
   integrationCredentials,
   tasks,
 } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { onTaskLandedInLane } from '../swimlane/laneEntryTrigger';

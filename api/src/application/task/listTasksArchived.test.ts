@@ -66,6 +66,7 @@ function makeProject(): Project {
     origin: null,
     initiativeId: null,
     dueDate: null,
+    startDate: null,
     createdAt: new Date(),
     updatedAt: new Date(),
   });

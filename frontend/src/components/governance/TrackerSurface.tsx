@@ -1,5 +1,10 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
+
+import type { Formatter } from '@/i18n/format';
+import { useFormat } from '@/i18n/useFormat';
+
 import { Select } from '@/components/Select';
 
 import { useEffect, useMemo, useState } from 'react';
@@ -29,17 +34,23 @@ export interface TrackerSurfaceProps {
   fields: TrackerField[];
 }
 
-function fmt(field: TrackerField, value: unknown): string {
+/**
+ * One tracker cell as text.
+ *
+ * Takes the formatter and the translator rather than reaching for either: this
+ * is module scope, where a hook cannot run. Before that it rendered dates in the
+ * browser's language and printed a literal "Yes"/"No" in every locale.
+ */
+function cellText(fmt: Formatter, t: (key: string) => string, field: TrackerField, value: unknown): string {
   if (value === null || value === undefined || value === '') return '—';
-  if (field.type === 'bool') return value ? 'Yes' : 'No';
-  if (field.type === 'date') {
-    const d = new Date(String(value));
-    return Number.isNaN(d.getTime()) ? String(value) : d.toLocaleDateString();
-  }
+  if (field.type === 'bool') return value ? t('yes') : t('no');
+  if (field.type === 'date') return fmt.date(String(value));
   return String(value);
 }
 
 export function TrackerSurface({ title, apiBase, fields }: TrackerSurfaceProps) {
+  const fmt = useFormat();
+  const tCommon = useTranslations('common');
   const api = useMemo(() => segmentTrackerClient(apiBase), [apiBase]);
   const listFields = fields.filter((f) => f.inList !== false && f.type !== 'textarea').slice(0, 5);
 
@@ -141,7 +152,7 @@ export function TrackerSurface({ title, apiBase, fields }: TrackerSurfaceProps) 
               <tr key={row.id}>
                 {listFields.map((f) => (
                   <td key={f.key} style={td}>
-                    {f.type === 'select' ? <span style={badge}>{fmt(f, row[f.key])}</span> : fmt(f, row[f.key])}
+                    {f.type === 'select' ? <span style={badge}>{cellText(fmt, tCommon, f, row[f.key])}</span> : cellText(fmt, tCommon, f, row[f.key])}
                   </td>
                 ))}
                 <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>

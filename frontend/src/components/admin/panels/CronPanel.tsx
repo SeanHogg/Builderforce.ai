@@ -26,7 +26,8 @@ import {
   type AdminCronState,
 } from '@/lib/adminApi';
 import { useConfirm } from '@/components/ConfirmProvider';
-import { AdminError, AdminLoading, AdminPanelHeader, errText, fmtDateTime, useAdminData } from '../adminShared';
+import { AdminError, AdminLoading, AdminPanelHeader, errText, useAdminData } from '../adminShared';
+import { useAdminFormat } from '../adminShared';
 
 const CADENCE_ORDER: readonly AdminCronCadence[] = ['frequent', 'daily', 'weekly-mon', 'weekly-fri'];
 
@@ -38,6 +39,7 @@ function fmtInterval(ms: number): string {
 }
 
 export default function CronPanel() {
+  const { fmtDateTime } = useAdminFormat();
   const t = useTranslations('admin.cron');
   const confirm = useConfirm();
   const { data, loading, error, reload, setError } = useAdminData<AdminCronState>(() => adminApi.cronState());

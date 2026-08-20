@@ -14,6 +14,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { and, eq, isNull, lte, or } from 'drizzle-orm';
 import { buildDatabase, type Db } from '../../infrastructure/database/connection';
 import { reportSchedules } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { sendReportEmail } from '../../infrastructure/email/EmailService';
 import { sendTransactionalEmail } from '../email/sendEmail';
 import type { Env } from '../../env';

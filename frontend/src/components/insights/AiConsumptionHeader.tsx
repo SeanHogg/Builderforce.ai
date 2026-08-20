@@ -5,7 +5,8 @@ import { useTranslations } from 'next-intl';
 import { useConsumption } from '@/lib/useConsumption';
 import { TrendChart } from '@/components/charts/TrendChart';
 import { colorAt } from '@/components/charts/chartColors';
-import { compactTokens, pct } from './format';
+import { pct } from './format';
+import { useInsightFormat } from './format';
 
 /**
  * AI consumption hero for the /insights/ai hub — the headline answer to "how many
@@ -24,6 +25,7 @@ import { compactTokens, pct } from './format';
  * headline onto any dashboard or canvas without it arriving in a second box.
  */
 export function AiConsumptionHeader() {
+  const { compactTokens } = useInsightFormat();
   const t = useTranslations('insights.aihub.consumption');
   const snapshot = useConsumption();
   const meter = snapshot?.meters.find((m) => m.key === 'ai_tokens');

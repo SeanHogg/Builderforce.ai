@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import type { Formatter } from '@/i18n/format';
 import { useTranslations } from 'next-intl';
 import { empInsightsApi, type CrossTeamBenchmarkResult, type CrossTeamMetricKey } from '@/lib/empInsightsApi';
 import { usePmData } from '@/lib/pm/usePmData';
@@ -9,6 +10,7 @@ import { PmCard, PmEmpty, PmError } from '@/components/pm/pmShared';
 import { BarChart, type BarDatum } from '@/components/charts/BarChart';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 import { DaysWindowSelect } from './LensShell';
+import { useFormat } from "@/i18n/useFormat";
 
 /** Colour a percentile: green (leading) → red (lagging). */
 function percentileColor(p: number | null): string {
@@ -21,9 +23,9 @@ function percentileColor(p: number | null): string {
 
 const METRIC_ORDER: CrossTeamMetricKey[] = ['throughput', 'avg_cycle_time_hours', 'rework_rate_pct', 'effectiveness'];
 
-function fmtMetric(metric: CrossTeamMetricKey, value: number | null): string {
+function fmtMetric(fmt: Formatter, metric: CrossTeamMetricKey, value: number | null): string {
   if (value == null) return '—';
-  if (metric === 'throughput') return Math.round(value).toLocaleString();
+  if (metric === 'throughput') return fmt.number(Math.round(value));
   if (metric === 'avg_cycle_time_hours') return `${value.toFixed(1)}h`;
   if (metric === 'rework_rate_pct') return `${value.toFixed(0)}%`;
   return value.toFixed(0); // effectiveness
@@ -35,6 +37,7 @@ function fmtMetric(metric: CrossTeamMetricKey, value: number | null): string {
  * leaderboard bar of overall standing plus a per-metric percentile table.
  */
 export function CrossTeamBenchmarkLens() {
+  const fmt = useFormat();
   const t = useTranslations('insights.emp');
   const { currentProjectId } = useProjectScope();
   const [days, setDays] = useState(30);
@@ -92,7 +95,7 @@ export function CrossTeamBenchmarkLens() {
                       const mv = byMetric.get(m);
                       return (
                         <td key={m} style={tdMutedStyle}>
-                          {fmtMetric(m, mv?.value ?? null)}
+                          {fmtMetric(fmt, m, mv?.value ?? null)}
                           {mv?.percentile != null && (
                             <span style={{ color: percentileColor(mv.percentile), fontWeight: 700, marginLeft: 6, fontSize: '0.74rem' }}>
                               {mv.percentile}%

@@ -14,11 +14,12 @@
  * for a new link that would behave identically. It says which, and says where the
  * signing request went.
  *
- * The WATERMARK is stated rather than implied. A watermarked room serves text
- * documents stamped with the reader's own address and the instant, and refuses to
- * hand over a download at all — so the banner says so, because a recipient who
- * believes they have a private copy and does not is the person this control exists
- * to inform.
+ * The WATERMARK is stated rather than implied. A watermarked room stamps every page
+ * a firm opens — a PDF diagonally and in the footer, a text document top and bottom
+ * — with the reader's own address and the instant. A format the stamp cannot reach
+ * at all is served view-only and SAYS so on its own row, because a recipient who
+ * believes they have a private copy and does not is exactly the person this control
+ * exists to inform.
  *
  * MISSING documents are listed. A diligence room that showed only the files that
  * exist would hide the gap it was built to close; a row that is not yet provided is
@@ -26,9 +27,9 @@
  * concluding a room is complete when it is not.
  *
  * The bytes are never fetched here. `dataRoomDocumentUrl(token, id)` is a plain
- * address the browser streams from, and the server's own `Content-Disposition` —
- * always `inline` for a watermarked room — is what actually enforces the
- * distinction the reader experiences.
+ * address the browser streams from, and the server's own `Content-Disposition` is
+ * what actually enforces the distinction the reader experiences — `attachment` for
+ * a copy that carries the stamp, `inline` for one that could not.
  */
 
 import { useEffect, useState } from 'react';
@@ -82,6 +83,20 @@ export function DataRoomShareViewer({ token }: { token: string }) {
 
   const { share } = state;
   const available = share.documents.filter((document) => document.available);
+  /**
+   * Whether THIS document can be saved to disk.
+   *
+   * A watermarked room used to refuse every download outright, because a PDF could
+   * not be stamped. Now that it can, a STAMPED copy is safe to hand over — it
+   * carries the reader's own address on every page. What still cannot be saved is a
+   * format the stamp cannot reach, and that is a per-document fact rather than a
+   * per-room one, which is why it is decided here and not once above.
+   *
+   * The server decides the same thing again from the same inputs; this only keeps
+   * the button from promising something the response would refuse.
+   */
+  const canSave = (document: { watermarkable: boolean }) =>
+    share.permission === 'download' && (!share.watermark || document.watermarkable);
 
   return (
     <main className={styles.page}>
@@ -106,7 +121,16 @@ export function DataRoomShareViewer({ token }: { token: string }) {
               <li key={document.documentId} className={styles.documentRow} data-available={document.available ? 'true' : 'false'}>
                 <span className={styles.documentName}>
                   <b>{document.label}</b>
-                  <small>{document.category}{document.required ? ` · ${t('required')}` : ''}</small>
+                  <small>
+                    {document.category}
+                    {document.required ? ` · ${t('required')}` : ''}
+                    {/* A watermarked room CAN stamp a PDF now, so the note only
+                        appears for the formats it genuinely cannot reach — and it
+                        appears on the row, where the reader is deciding whether to
+                        open it, rather than in a banner they have already scrolled
+                        past. */}
+                    {share.watermark && !document.watermarkable ? ` · ${t('viewOnly')}` : ''}
+                  </small>
                 </span>
                 {document.available ? (
                   <a
@@ -114,9 +138,9 @@ export function DataRoomShareViewer({ token }: { token: string }) {
                     href={dataRoomDocumentUrl(token, document.documentId)}
                     target="_blank"
                     rel="noopener noreferrer"
-                    {...(share.permission === 'download' && !share.watermark ? { download: document.label } : {})}
+                    {...(canSave(document) ? { download: document.label } : {})}
                   >
-                    {share.permission === 'download' && !share.watermark ? t('download') : t('open')}
+                    {canSave(document) ? t('download') : t('open')}
                   </a>
                 ) : (
                   <small className={styles.help}>{t('notProvided')}</small>
@@ -126,6 +150,13 @@ export function DataRoomShareViewer({ token }: { token: string }) {
           </ul>
           {share.documents.length === 0 && <p className={styles.help}>{t('empty')}</p>}
           <p className={styles.help}>{share.watermark ? t('viewHelpWatermarked') : share.permission === 'download' ? t('downloadHelp') : t('viewHelp')}</p>
+          {/* Named separately from the watermark banner because it is a different
+              fact: the room stamps, AND these particular files cannot be stamped, so
+              they open in a tab and never save. Saying it once, plainly, beats a
+              download button that silently returns an inline response. */}
+          {share.watermark && available.some((document) => !document.watermarkable) && (
+            <p className={styles.help}>{t('unstampableHelp', { count: available.filter((document) => !document.watermarkable).length })}</p>
+          )}
         </div>
       </div>
     </main>

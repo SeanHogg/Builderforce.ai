@@ -100,8 +100,33 @@ export interface WebScreenshotResult {
  * deployment) and `provider` is a RUNTIME fact (the page timed out, refused, or the
  * renderer errored). They read differently to a user and only one of them is worth
  * retrying, so they are different reasons rather than one generic failure.
+ *
+ * `unauthorized` is the third, and it is the one a deployment hits FIRST. A token being
+ * present and a token carrying `Browser Rendering:Edit` are different facts: the scope is
+ * a property of the token, invisible to this Worker (secrets are write-only, so nothing
+ * here can inspect what a token is allowed to do) and knowable only by being refused.
+ * Folded into `provider` it would read as "that page would not render" — sending an
+ * operator to debug the SITE when the fix is one checkbox on the token. So it is its own
+ * reason, and its message names the permission and where to add it.
  */
-export type ScreenshotUnavailableReason = 'unconfigured' | 'provider' | 'too-large';
+export type ScreenshotUnavailableReason = 'unconfigured' | 'unauthorized' | 'provider' | 'too-large';
+
+/**
+ * The HTTP status each reason answers with — declared HERE, beside the reasons, so a new
+ * reason cannot be added without deciding what it means to a caller and to monitoring.
+ *
+ * The split is WHOSE problem it is, not how it arrived. `unconfigured` and `unauthorized`
+ * are both this deployment's own credentials and both mean "capture is unavailable here
+ * until an operator acts" — 503. A page that timed out or a capture too large to hold are
+ * facts about the request — 502. Answering a token-scope refusal with 502 would file it
+ * under "flaky third-party site" and it would never reach the person who can fix it.
+ */
+export const SCREENSHOT_REASON_STATUS: Readonly<Record<ScreenshotUnavailableReason, 503 | 502>> = {
+  unconfigured: 503,
+  unauthorized: 503,
+  provider: 502,
+  'too-large': 502,
+};
 
 export class ScreenshotUnavailableError extends Error {
   readonly reason: ScreenshotUnavailableReason;
@@ -210,6 +235,23 @@ export async function readProviderError(response: Response): Promise<string> {
 }
 
 /**
+ * Turn one renderer refusal into the reason an operator can act on.
+ *
+ * ONE classifier for both failure paths (a non-2xx, and a 200 carrying a JSON error
+ * envelope) so a token-scope problem cannot read as a page problem on one path and a
+ * permission problem on the other.
+ */
+export function screenshotProviderError(status: number, detail: string): ScreenshotUnavailableError {
+  const unauthorized = status === 401 || status === 403
+    || /(unauthorized|authentication|not authorized|permission|forbidden|invalid api token)/i.test(detail);
+  if (!unauthorized) return new ScreenshotUnavailableError('provider', detail);
+  return new ScreenshotUnavailableError(
+    'unauthorized',
+    `Cloudflare refused the page-capture credentials — the token is set but is not permitted to render pages. Add the "Browser Rendering — Edit" permission to the token in the Cloudflare dashboard (Manage Account → API Tokens), scoped to this account, then re-put it as CLOUDFLARE_BROWSER_API_TOKEN. Cloudflare said: ${detail}`,
+  );
+}
+
+/**
  * Capture one live page. Throws {@link ScreenshotUnavailableError} with a relayable
  * reason; never returns a placeholder, because a placeholder presented as a "before"
  * is worse than no comparison at all.
@@ -261,11 +303,13 @@ export async function captureWebScreenshot(
     clearTimeout(timer);
   }
 
-  if (!response.ok) throw new ScreenshotUnavailableError('provider', await readProviderError(response));
+  if (!response.ok) throw screenshotProviderError(response.status, await readProviderError(response));
 
   const mimeType = (response.headers.get('content-type') ?? '').split(';')[0]?.trim() || 'image/jpeg';
-  // A 200 that is not an image is the renderer reporting a failure in a JSON envelope.
-  if (!mimeType.startsWith('image/')) throw new ScreenshotUnavailableError('provider', await readProviderError(response));
+  // A 200 that is not an image is the renderer reporting a failure in a JSON envelope —
+  // including, on some Cloudflare paths, an authorization refusal. Same classifier, so a
+  // scope problem reads identically whichever status it arrives under.
+  if (!mimeType.startsWith('image/')) throw screenshotProviderError(response.status, await readProviderError(response));
 
   const bytes = await response.arrayBuffer();
   if (!bytes.byteLength) throw new ScreenshotUnavailableError('provider', `${target.hostname} rendered an empty image.`);

@@ -51,7 +51,7 @@ import { importBoardRows, isImportDataset, IMPORT_DATASETS } from '../../applica
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { positiveIntParam } from './queryParams';
-import { capitalizationToCsv } from '../../application/metrics/metricsCsv';
+import { capitalizationToCsv, capitalizationToXlsx } from '../../application/metrics/capitalizationReport';
 
 const SHORT_TTL = { kvTtlSeconds: 60, l1TtlMs: 15_000 };
 
@@ -213,9 +213,16 @@ export function createInsightsRoutes(db: Db): Hono<HonoEnv> {
     ));
   });
 
-  // Capitalization report DOWNLOAD (csv | json). A point-in-time snapshot handed
-  // to finance or an auditor, so it is deliberately NOT cached — a download must
-  // be what the numbers are now, not what they were up to a TTL ago — and it
+  /** The download formats the capitalization report is served in. `xlsx` is the
+   *  one a finance reviewer works in (two sheets, real numbers); `csv` is the
+   *  interchange fallback; `json` is for a script. */
+  const EXPORT_FORMATS = ['csv', 'xlsx', 'json'] as const;
+  type ExportFormat = (typeof EXPORT_FORMATS)[number];
+  const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+  // Capitalization report DOWNLOAD (csv | xlsx | json). A point-in-time snapshot
+  // handed to finance or an auditor, so it is deliberately NOT cached — a download
+  // must be what the numbers are now, not what they were up to a TTL ago — and it
   // reuses the exact same two collectors the on-screen report renders from, so a
   // downloaded file can never disagree with the page it was downloaded from.
   router.get('/allocation/history/export', requireRole(TenantRole.MANAGER), requirePlanFeature(PREMIUM_INSIGHTS), async (c) => {
@@ -223,7 +230,10 @@ export function createInsightsRoutes(db: Db): Hono<HonoEnv> {
     const now = Date.now();
     const months = Math.min(24, Math.max(1, Number(c.req.query('months')) || 12));
     const projectId = positiveIntParam(c.req.query('projectId'));
-    const format = c.req.query('format') === 'json' ? 'json' : 'csv';
+    const requested = c.req.query('format');
+    const format: ExportFormat = (EXPORT_FORMATS as readonly string[]).includes(requested ?? '')
+      ? requested as ExportFormat
+      : 'csv';
 
     const [history, current] = await Promise.all([
       computeAllocationHistory(db, tenantId, months, now, { projectId }, { lineage: true }),
@@ -233,12 +243,20 @@ export function createInsightsRoutes(db: Db): Hono<HonoEnv> {
     if (format === 'json') {
       return c.json({ generatedAt: new Date(now).toISOString(), months, projectId: projectId ?? null, history, current });
     }
+
     const stamp = new Date(now).toISOString().slice(0, 10);
     const scopeTag = projectId == null ? '' : `-project-${projectId}`;
-    return new Response(capitalizationToCsv(history, current), {
+    const filename = `capitalization-${months}m${scopeTag}-${stamp}.${format}`;
+    const body: BodyInit = format === 'xlsx'
+      // `.slice()` detaches a plain ArrayBuffer from the fflate view — a Response
+      // built straight from a Uint8Array over a pooled buffer can serialise the
+      // whole pool.
+      ? capitalizationToXlsx(history, current).slice().buffer as ArrayBuffer
+      : capitalizationToCsv(history, current);
+    return new Response(body, {
       headers: {
-        'content-type': 'text/csv; charset=utf-8',
-        'content-disposition': `attachment; filename="capitalization-${months}m${scopeTag}-${stamp}.csv"`,
+        'content-type': format === 'xlsx' ? XLSX_MIME : 'text/csv; charset=utf-8',
+        'content-disposition': `attachment; filename="${filename}"`,
       },
     });
   });

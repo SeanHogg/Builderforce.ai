@@ -59,6 +59,7 @@ import { resolveTicketRepoContext } from '../../application/repos/commitFileAsPe
 import { resolveArtifacts } from '../../application/artifact/resolveArtifacts';
 import { CONTAINER_MAX_STEPS } from '../../application/runtime/cloudAgentTools';
 import { executions, projectRepositories } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { BUILDERFORCE_AGENT_OIDC_AUDIENCE } from '../../application/runtime/githubActionsWorkflow';
 import { renderAgentRunnerScript } from '../../application/runtime/githubActionsRunner';
 import type { RuntimeService } from '../../application/runtime/RuntimeService';

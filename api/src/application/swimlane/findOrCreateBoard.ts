@@ -1,6 +1,7 @@
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { eq } from 'drizzle-orm';
 import { boards, swimlanes } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { DEFAULT_SWIMLANES } from './defaultSwimlanes';
 import type { Db } from '../../infrastructure/database/connection';
 import { findCanonicalBoard } from './canonicalBoard';

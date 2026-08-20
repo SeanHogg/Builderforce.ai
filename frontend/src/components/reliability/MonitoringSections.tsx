@@ -39,6 +39,7 @@ import {
   type IncidentSeverity,
   type EscalationPolicy,
 } from '@/lib/builderforceApi';
+import { useFormat } from "@/i18n/useFormat";
 
 const card: React.CSSProperties = {
   background: 'var(--bg-base)',
@@ -74,11 +75,6 @@ const STATUS_COLOR: Record<MonitorStatus, { bg: string; fg: string }> = {
   unknown: { bg: 'var(--muted)', fg: 'var(--text-muted)' },
 };
 
-function fmt(dt: string | null | undefined): string {
-  if (!dt) return '—';
-  const d = new Date(dt);
-  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleString();
-}
 
 /** Read an image's natural width/height client-side before upload. */
 function readImageDims(file: File): Promise<{ width: number; height: number }> {
@@ -571,6 +567,7 @@ function MonitorPanel({
   t: T; tc: T; canManage: boolean; boardId: string; monitorId: string | null;
   draftPos: { posX: number; posY: number } | null; onClose: () => void; onChanged: () => void;
 }) {
+  const fmt = useFormat();
   const confirm = useConfirm();
   const isNew = monitorId === null;
 
@@ -873,7 +870,7 @@ function MonitorPanel({
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                       {events.map((ev) => (
                         <div key={ev.id} style={{ fontSize: 12, color: 'var(--text-secondary)', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                          <span style={{ color: 'var(--text-muted)' }}>{fmt(ev.createdAt)}</span>
+                          <span style={{ color: 'var(--text-muted)' }}>{fmt.dateTime(ev.createdAt)}</span>
                           <span style={{ fontWeight: 600 }}>{ev.kind}</span>
                           {ev.status && <span>{ev.status}</span>}
                           {ev.message && <span style={{ color: 'var(--text-muted)' }}>{ev.message}</span>}

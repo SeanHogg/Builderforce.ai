@@ -24,6 +24,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { and, eq, isNotNull, lt } from 'drizzle-orm';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import { ticketRuns, swimlaneTransitions } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 
 /** Default park-age cap before a stuck `awaiting_workflow` ticket is surfaced. */
 export const DEFAULT_PARK_AGE_TIMEOUT_MS = 6 * 60 * 60 * 1000; // 6h

@@ -1,6 +1,7 @@
 'use client';
 
 import { Icon } from '@/components/ui/Icon';
+import type { Formatter } from '@/i18n/format';
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { Project } from '@/lib/types';
@@ -17,6 +18,7 @@ import { ProjectDiagnosticsStrip } from './ProjectDiagnosticsStrip';
 import { ProjectConnectionsStrip } from './ProjectConnectionsStrip';
 import type { ProjectConnection } from '@/lib/projectConnections';
 import { creationSessionsApi } from '@/lib/builderforceApi';
+import { useFormat } from "@/i18n/useFormat";
 
 export interface ProjectCardProps {
   project: Project;
@@ -45,10 +47,10 @@ export interface ProjectCardProps {
   connections?: ProjectConnection[];
 }
 
-const createdDate = (project: Project): string => {
-  if (project.created_at) return new Date(project.created_at).toLocaleDateString();
+const createdDate = (fmt: Formatter, project: Project): string => {
+  if (project.created_at) return fmt.date(project.created_at);
   const createdAt = (project as { createdAt?: string }).createdAt;
-  return createdAt ? new Date(createdAt).toLocaleDateString() : '';
+  return createdAt ? fmt.date(createdAt) : '';
 };
 
 export function ProjectCard({
@@ -63,6 +65,7 @@ export function ProjectCard({
   diagnostics,
   connections,
 }: ProjectCardProps) {
+  const fmt = useFormat();
   const t = useTranslations('projectCard');
   const openProjectChat = useOpenProjectChat();
   const openBuilder = onOpenBuilder ?? ((p: Project) => { window.location.href = `/create/build/${p.publicId ?? p.id}`; });
@@ -386,7 +389,7 @@ export function ProjectCard({
           {t('viewWorkflows')}
         </button>
       </div>
-      <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>{createdDate(project)}</p>
+      <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>{createdDate(fmt, project)}</p>
     </div>
   );
 }

@@ -73,9 +73,11 @@ function Spread({ low, median, high, floor, ceiling }: {
   );
 }
 
-export function SeniorityTable({ rows, currency, labels }: {
+export function SeniorityTable({ rows, currency, locale, labels }: {
   rows: SalaryBandRow[];
   currency: string;
+  /** Resolved by the page — these are sync server components. */
+  locale: string;
   labels: { seniority: string; low: string; median: string; high: string; spread: string };
 }) {
   const floor = Math.min(...rows.map((r) => r.low));
@@ -96,9 +98,9 @@ export function SeniorityTable({ rows, currency, labels }: {
           {rows.map((row) => (
             <tr key={row.seniority}>
               <td style={{ ...td, color: 'var(--text-primary)', fontWeight: 600, textTransform: 'capitalize' }}>{row.seniority}</td>
-              <td style={td}>{money(row.low, currency)}</td>
-              <td style={{ ...td, color: 'var(--text-primary)', fontWeight: 700 }}>{money(row.median, currency)}</td>
-              <td style={td}>{money(row.high, currency)}</td>
+              <td style={td}>{money(row.low, currency, locale)}</td>
+              <td style={{ ...td, color: 'var(--text-primary)', fontWeight: 700 }}>{money(row.median, currency, locale)}</td>
+              <td style={td}>{money(row.high, currency, locale)}</td>
               <td style={td}><Spread {...row} floor={floor} ceiling={ceiling} /></td>
             </tr>
           ))}
@@ -108,9 +110,11 @@ export function SeniorityTable({ rows, currency, labels }: {
   );
 }
 
-export function CityTable({ rows, currency, roleSlug, labels }: {
+export function CityTable({ rows, currency, roleSlug, locale, labels }: {
   rows: SalaryCityRow[];
   currency: string;
+  /** Resolved by the page — these are sync server components. */
+  locale: string;
   roleSlug: string;
   labels: { city: string; low: string; median: string; high: string; spread: string; vsNational: string };
 }) {
@@ -140,9 +144,9 @@ export function CityTable({ rows, currency, roleSlug, labels }: {
                   {row.region}
                 </span>
               </td>
-              <td style={td}>{money(row.low, currency)}</td>
-              <td style={{ ...td, color: 'var(--text-primary)', fontWeight: 700 }}>{money(row.median, currency)}</td>
-              <td style={td}>{money(row.high, currency)}</td>
+              <td style={td}>{money(row.low, currency, locale)}</td>
+              <td style={{ ...td, color: 'var(--text-primary)', fontWeight: 700 }}>{money(row.median, currency, locale)}</td>
+              <td style={td}>{money(row.high, currency, locale)}</td>
               <td style={td}><Spread {...row} floor={floor} ceiling={ceiling} /></td>
               <td style={{ ...td, fontWeight: 700, color: VS_NATIONAL_COLOR[Math.sign(row.vsNational)] }}>
                 {signed(row.vsNational)}

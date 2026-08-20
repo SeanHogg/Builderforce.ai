@@ -14,6 +14,9 @@
  * how it did.
  */
 
+import { DEFAULT_LOCALE } from '@/i18n/config';
+import { formatterFor } from '@/i18n/format';
+
 import {
   SOCIAL_NETWORKS,
   topPerformingPost,
@@ -117,11 +120,21 @@ export function socialFeedPatch(read: SocialFeedRead): Record<string, unknown> {
 
 /** A pinned post's object data. Unlike the feed tile this keeps the FULL text —
  *  that is the reason to pin one. */
+/**
+ * Pinned to the default locale, NOT the reader's.
+ *
+ * Everything below writes PERSISTED canvas object data — English prose a tool
+ * result and the next turn both read. A number that groups one way for a German
+ * reader and another for an English one would make the stored value depend on
+ * who happened to be looking at the board when it was computed.
+ */
+const fmt = formatterFor(DEFAULT_LOCALE);
+
 export function socialPostNodeData(post: SocialFeedItem): Record<string, unknown> {
   return {
     title: post.text.trim().split('\n')[0]?.slice(0, 80) || `${post.network} post`,
     subtitle: post.authorName,
-    status: post.publishedAtISO ? new Date(post.publishedAtISO).toLocaleDateString() : 'Published',
+    status: post.publishedAtISO ? fmt.date(post.publishedAtISO) : 'Published',
     postId: post.id,
     connectionId: post.connectionId,
     network: post.network,

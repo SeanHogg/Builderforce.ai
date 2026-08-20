@@ -20610,7 +20610,8 @@
     "llmMonthlyRequests": "每月请求数",
     "llmCacheHitRate": "缓存命中率",
     "llmLatencyP50Ms": "延迟 p50（毫秒）",
-    "llmLatencyP95Ms": "延迟 p95（毫秒）"
+    "llmLatencyP95Ms": "延迟 p95（毫秒）",
+    "objectNeedsUpgrade": "升级到付费套餐后即可添加。"
   },
   "canvasCommands": {
     "cleanLayout": "整理画布布局",

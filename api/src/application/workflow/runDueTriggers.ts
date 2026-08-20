@@ -17,6 +17,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { and, eq, inArray, isNotNull, lte } from 'drizzle-orm';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import { workflowDefinitions, workflowTriggers } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { parseDefinition } from '../../domain/workflowGraph';
 import { nextCronTime } from '../../domain/workflowSchedule';
 import { configString, configPositiveInt } from '../../domain/workflowTriggers';

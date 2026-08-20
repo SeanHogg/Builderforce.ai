@@ -26,16 +26,18 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { Formatter } from '@/i18n/format';
 import { useTranslations } from 'next-intl';
 import {
   quoteTotals, readMapMilestones, readQuoteLines, readTrustAnswers,
 } from '@builderforce/creation-canvas-contract';
-import { formatCents } from '@/lib/canvasMoney';
+import { useMoneyFormat } from '@/lib/useMoneyFormat';
 import {
   acceptProspectQuote, declineProspectQuote, fetchProspectPacket, reportProspectEvent,
   requestProspectControl, type ProspectCard, type ProspectPacket,
 } from '@/lib/prospectShareApi';
 import styles from './ProspectDealView.module.css';
+import { useFormat } from "@/i18n/useFormat";
 
 /** Fields drawn as their own labelled block by the generic renderer. Anything not listed
  *  is skipped rather than dumped: a buyer page that renders every key a card happens to
@@ -46,9 +48,9 @@ const READABLE_FIELDS: readonly string[] = [
   'startsAt', 'heldAt', 'frameworks', 'activationCriteria', 'objections', 'documents',
 ];
 
-const text = (value: unknown): string => {
+const text = (fmt: Formatter, value: unknown): string => {
   if (value == null) return '';
-  if (typeof value === 'number') return value.toLocaleString();
+  if (typeof value === 'number') return fmt.number(value);
   if (Array.isArray(value)) {
     return value.map((entry) => {
       if (entry && typeof entry === 'object') {
@@ -128,6 +130,7 @@ function useDwell(token: string, card: ProspectCard) {
 }
 
 function QuoteLines({ data }: { data: Record<string, unknown> }) {
+  const { formatCents } = useMoneyFormat();
   const t = useTranslations('prospectDeal');
   const lines = useMemo(() => readQuoteLines(data.lines), [data.lines]);
   const totals = useMemo(
@@ -236,12 +239,13 @@ function MilestoneTable({ data }: { data: Record<string, unknown> }) {
 }
 
 function DealCard({ token, card, wide }: { token: string; card: ProspectCard; wide: boolean }) {
+  const fmt = useFormat();
   const t = useTranslations('prospectDeal');
   const fieldT = useTranslations('creationCanvas.sellMotion.field');
   const ref = useDwell(token, card);
 
   const fields = READABLE_FIELDS
-    .map((name) => ({ name, value: text(card.data[name]) }))
+    .map((name) => ({ name, value: text(fmt, card.data[name]) }))
     .filter((entry) => entry.value);
 
   return <article ref={ref as React.Ref<HTMLElement>} className={`${styles.card} ${wide ? styles.wide : ''}`}>
@@ -264,6 +268,7 @@ function DealCard({ token, card, wide }: { token: string; card: ProspectCard; wi
 }
 
 export function ProspectDealView({ token }: { token: string }) {
+  const { formatCents } = useMoneyFormat();
   const t = useTranslations('prospectDeal');
   const [packet, setPacket] = useState<ProspectPacket | null>(null);
   const [loading, setLoading] = useState(true);

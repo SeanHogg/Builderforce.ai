@@ -10,6 +10,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
+import type { Formatter } from '@/i18n/format';
 import { useTranslations } from 'next-intl';
 import { RoleGate } from '@/components/RoleGate';
 import { Select } from '@/components/Select';
@@ -38,9 +39,9 @@ export const FINOPS_CAP = 'finops.manage' as Capability;
 
 export type FinopsTab = 'rd' | 'soc' | 'audit';
 
-const usd = (n: number | null | undefined) =>
-  n == null ? '—' : n.toLocaleString(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
-const hrs = (n: number) => `${Math.round(n).toLocaleString()} h`;
+const usd = (fmt: Formatter, n: number | null | undefined) =>
+  n == null ? '—' : fmt.currency(n, 'USD', { maximumFractionDigits: 0 });
+const hrs = (fmt: Formatter, n: number) => `${fmt.number(Math.round(n))} h`;
 const pct = (n: number) => `${n.toFixed(0)}%`;
 
 const card: React.CSSProperties = {
@@ -101,6 +102,7 @@ export function FinopsLens({ initialTab = 'rd' }: { initialTab?: FinopsTab }) {
 // ── R&D Tax Credit ───────────────────────────────────────────────────────────
 
 function RdSection({ t, canManage }: { t: ReturnType<typeof useTranslations>; canManage: boolean }) {
+  const fmt = useFormat();
   const [config, setConfig] = useState<RdTaxCreditConfig | null>(null);
   const [report, setReport] = useState<RdTaxCreditReport | null>(null);
   const [rate, setRate] = useState('');
@@ -182,10 +184,10 @@ function RdSection({ t, canManage }: { t: ReturnType<typeof useTranslations>; ca
       </div>
 
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-        <StatCard label={t('rd.qualifiedHours')} value={hrs(report.qualifiedHours)} />
-        <StatCard label={t('rd.qualifiedLabor')} value={usd(report.qualifiedLaborUsd)} hint={`@ ${usd(report.blendedRate)}/h`} />
-        <StatCard label={t('rd.qualifiedAiSpend')} value={usd(report.qualifiedAiSpendUsd)} />
-        <StatCard label={t('rd.qualifiedBase')} value={usd(report.qualifiedBaseUsd)} hint={t('rd.form6765')} />
+        <StatCard label={t('rd.qualifiedHours')} value={hrs(fmt, report.qualifiedHours)} />
+        <StatCard label={t('rd.qualifiedLabor')} value={usd(fmt, report.qualifiedLaborUsd)} hint={`@ ${usd(fmt, report.blendedRate)}/h`} />
+        <StatCard label={t('rd.qualifiedAiSpend')} value={usd(fmt, report.qualifiedAiSpendUsd)} />
+        <StatCard label={t('rd.qualifiedBase')} value={usd(fmt, report.qualifiedBaseUsd)} hint={t('rd.form6765')} />
       </div>
 
       <div style={card}>
@@ -204,9 +206,9 @@ function RdSection({ t, canManage }: { t: ReturnType<typeof useTranslations>; ca
             {report.byCategory.map((r) => (
               <tr key={r.category} style={{ opacity: r.qualified ? 1 : 0.55 }}>
                 <td style={td}>{r.label}</td>
-                <td style={td}>{hrs(r.hours)}</td>
-                <td style={td}>{usd(r.laborUsd)}</td>
-                <td style={td}>{usd(r.aiSpendUsd)}</td>
+                <td style={td}>{hrs(fmt, r.hours)}</td>
+                <td style={td}>{usd(fmt, r.laborUsd)}</td>
+                <td style={td}>{usd(fmt, r.aiSpendUsd)}</td>
                 <td style={td}>{r.qualified ? '✓' : '—'}</td>
               </tr>
             ))}
@@ -386,18 +388,18 @@ function AuditSection({ t }: { t: ReturnType<typeof useTranslations> }) {
           <div style={card}>
             <h3 style={{ margin: '0 0 8px' }}>{t('audit.finance')}</h3>
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-              <StatCard label={t('audit.spend')} value={usd(report.finance.spendUsd)} />
-              <StatCard label={t('audit.forecast')} value={usd(report.finance.forecastUsd)} />
-              <StatCard label={t('audit.capex')} value={usd(report.allocation.capexUsd)} hint={pct(report.allocation.capitalizablePct)} />
-              <StatCard label={t('audit.opex')} value={usd(report.allocation.opexUsd)} />
+              <StatCard label={t('audit.spend')} value={usd(fmt, report.finance.spendUsd)} />
+              <StatCard label={t('audit.forecast')} value={usd(fmt, report.finance.forecastUsd)} />
+              <StatCard label={t('audit.capex')} value={usd(fmt, report.allocation.capexUsd)} hint={pct(report.allocation.capitalizablePct)} />
+              <StatCard label={t('audit.opex')} value={usd(fmt, report.allocation.opexUsd)} />
             </div>
           </div>
 
           <div style={card}>
             <h3 style={{ margin: '0 0 8px' }}>{t('audit.rd')}</h3>
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-              <StatCard label={t('rd.qualifiedHours')} value={hrs(report.rdTaxCredit.qualifiedHours)} />
-              <StatCard label={t('rd.qualifiedBase')} value={usd(report.rdTaxCredit.qualifiedBaseUsd)} />
+              <StatCard label={t('rd.qualifiedHours')} value={hrs(fmt, report.rdTaxCredit.qualifiedHours)} />
+              <StatCard label={t('rd.qualifiedBase')} value={usd(fmt, report.rdTaxCredit.qualifiedBaseUsd)} />
             </div>
           </div>
 

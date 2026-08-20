@@ -7,6 +7,7 @@ import { approvalsApi, agentHosts, type Approval, type ApprovalStatus, type Requ
 import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
 import { ApprovalResolveControl } from './ApprovalResolveControl';
 import { TicketDetailsPanel } from '@/components/task/TicketDetailsPanel';
+import { useFormat } from "@/i18n/useFormat";
 
 /**
  * Human-in-the-loop request queue — the portal side of the agent's `ask_human`
@@ -46,12 +47,6 @@ const KIND_LABEL: Record<RequestKind, string> = {
   feedback: 'Feedback',
 };
 
-function fmtDate(value?: string | null): string {
-  if (!value) return '-';
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return value;
-  return d.toLocaleString();
-}
 
 function statusClass(status: ApprovalStatus): string {
   switch (status) {
@@ -91,6 +86,7 @@ export function HumanRequestsView({
   compact = false,
   onPendingCountChange,
 }: HumanRequestsViewProps = {}) {
+  const fmt = useFormat();
   const [rows, setRows] = useState<Approval[]>([]);
   const [agentHostList, setAgentHostList] = useState<AgentHost[]>([]);
   const [loading, setLoading] = useState(true);
@@ -261,7 +257,7 @@ export function HumanRequestsView({
                         : <span className="text-muted">-</span>}
                     </td>
                     <td>{row.agentHostId != null ? agentHostNameById.get(row.agentHostId) ?? `#${row.agentHostId}` : '-'}</td>
-                    <td className="text-muted" style={{ whiteSpace: 'nowrap' }}>{fmtDate(row.createdAt)}</td>
+                    <td className="text-muted" style={{ whiteSpace: 'nowrap' }}>{fmt.dateTime(row.createdAt)}</td>
                     <td className="text-muted" style={{ maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis' }} title={resolutionText(row)}>
                       {row.status === 'pending' ? '-' : resolutionText(row)}
                     </td>
@@ -320,8 +316,8 @@ export function HumanRequestsView({
                   {[
                     { label: 'AgentHost', value: row.agentHostId != null ? agentHostNameById.get(row.agentHostId) ?? `#${row.agentHostId}` : '-' },
                     { label: 'Requested By', value: row.requestedBy ?? '-' },
-                    { label: 'Requested', value: fmtDate(row.createdAt) },
-                    { label: 'Expires', value: fmtDate(row.expiresAt) },
+                    { label: 'Requested', value: fmt.dateTime(row.createdAt) },
+                    { label: 'Expires', value: fmt.dateTime(row.expiresAt) },
                   ].map(({ label, value }) => (
                     <div key={label}>
                       <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 2 }}>{label}</div>

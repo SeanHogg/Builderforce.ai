@@ -19,12 +19,11 @@ import { BarChart, type BarDatum } from '@/components/charts/BarChart';
 import { colorAt } from '@/components/charts/chartColors';
 import type { WidgetCardProps, WidgetDef, WidgetDrill } from '@/lib/widgets/types';
 import { workforcePlanApi, type WorkforcePlan } from '@/lib/personaCadenceApi';
+import { useFormat } from "@/i18n/useFormat";
 
 const METRICS_CAP = 'insights.engineering' as const;
 const HUMAN_COLOR = colorAt(1);
 const AGENT_COLOR = colorAt(3);
-const int = (n: number) => Math.round(n).toLocaleString();
-const usd = (n: number) => `$${Math.round(n).toLocaleString()}`;
 
 function usePlan() {
   return useSharedSource<WorkforcePlan>('wf:plan', () => workforcePlanApi.get());
@@ -32,6 +31,7 @@ function usePlan() {
 
 /** Hire-vs-agent weekly-cost split donut. */
 function CostSplitCard(_props: WidgetCardProps) {
+  const fmt = useFormat();
   const t = useTranslations('widgets');
   const { data, error } = usePlan();
   if (error) return <Muted>{error}</Muted>;
@@ -44,9 +44,9 @@ function CostSplitCard(_props: WidgetCardProps) {
   return (
     <DonutChart
       segments={segments}
-      centerValue={usd(data.totals.totalWeeklyCostUsd)}
+      centerValue={fmt.money(data.totals.totalWeeklyCostUsd)}
       centerLabel={t('wfp.perWeek')}
-      formatValue={(v) => usd(v)}
+      formatValue={(v) => fmt.money(v)}
       ariaLabel={t('title.wfpCostSplit')}
     />
   );
@@ -54,6 +54,7 @@ function CostSplitCard(_props: WidgetCardProps) {
 
 /** Open WIP per member (top N), WIP ceiling as the faint comparison track. */
 function CapacityCard(_props: WidgetCardProps) {
+  const fmt = useFormat();
   const t = useTranslations('widgets');
   const { data, error } = usePlan();
   if (error) return <Muted>{error}</Muted>;
@@ -69,11 +70,12 @@ function CapacityCard(_props: WidgetCardProps) {
       color: m.overAllocated ? 'var(--coral-bright)' : (m.population === 'agent' ? AGENT_COLOR : HUMAN_COLOR),
     }));
   if (bars.length === 0) return <Muted>{t('wfp.empty')}</Muted>;
-  return <BarChart data={bars} formatValue={int} ariaLabel={t('title.wfpCapacity')} />;
+  return <BarChart data={bars} formatValue={fmt.number} ariaLabel={t('title.wfpCapacity')} />;
 }
 
 /** Allocatable capacity gap (unused WIP headroom) at a glance. */
 function GapCard(_props: WidgetCardProps) {
+  const fmt = useFormat();
   const t = useTranslations('widgets');
   const { data, error } = usePlan();
   if (error) return <Muted>{error}</Muted>;
@@ -81,7 +83,7 @@ function GapCard(_props: WidgetCardProps) {
   return (
     <InsightStat
       label={t('title.wfpGap')}
-      value={int(data.totals.capacityGapWip)}
+      value={fmt.number(data.totals.capacityGapWip)}
       sub={t('wfp.gapSub', { open: data.totals.totalOpenWip, max: data.totals.totalMaxWip })}
       href="/workforce/plan"
       color={colorAt(2)}

@@ -28,6 +28,7 @@ import type { Env } from '../../env';
 import {
   meetings, meetingTranscriptSegments, brainChatMessages, brainChats,
 } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { readProxyChoice } from '../llm/LlmProxyService';
 import { tenantProxyForPlan } from '../llm/tenantProxy';
 import { resolveWorkforceModel, WORKFORCE_MODEL_REF_PREFIX } from '../agent/agentPrompt';

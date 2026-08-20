@@ -6,7 +6,8 @@ import { adminApi, type AdminUser, type AdminTenant } from '@/lib/adminApi';
 import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
 import UserDetailDrawer from '@/components/UserDetailDrawer';
 import { useEmulationLauncher } from '@/components/admin/EmulationLauncher';
-import { AdminError, AdminLoading, errText, fmtDate } from '@/components/admin/adminShared';
+import { AdminError, AdminLoading, errText } from '@/components/admin/adminShared';
+import { useAdminFormat } from '@/components/admin/adminShared';
 
 /**
  * A user's workspace count, read as a verdict rather than a number.
@@ -39,6 +40,7 @@ function AccountTypeBadge({ accountType }: { accountType: AdminUser['accountType
 }
 
 export default function UsersPanel() {
+  const { fmtDate } = useAdminFormat();
   const t = useTranslations('admin');
   const { startEmulation } = useEmulationLauncher();
 

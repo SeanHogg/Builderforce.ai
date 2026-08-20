@@ -5,6 +5,7 @@ import { usePmScope } from '@/lib/pm/scope';
 import { usePmData } from '@/lib/pm/usePmData';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 import { PmCard, PmEmpty, PmError, StatCard } from './pmShared';
+import { useFormat } from "@/i18n/useFormat";
 
 /**
  * ROI dashboard — "$ spent → time & cost". Composes the live rollup
@@ -12,9 +13,9 @@ import { PmCard, PmEmpty, PmError, StatCard } from './pmShared';
  * budgets + per-project LLM cost + the cost model. In portfolio scope it adds a
  * per-project breakdown.
  */
-const usd = (n: number) => `$${n.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
 
 export function RoiDashboard() {
+  const fmt = useFormat();
   const { projectId, isPortfolio } = usePmScope();
   const { data, error } = usePmData<RoiRollup>(
     () => roiApi.rollup(projectId ?? undefined),
@@ -32,15 +33,15 @@ export function RoiDashboard() {
         <StatCard label="Completed" value={String(data.time.completedCount)} sub="tasks done" />
         <StatCard label="Avg cycle time" value={`${data.time.avgCycleTimeHours.toFixed(1)}h`} sub="start → done" />
         <StatCard label="Throughput" value={`${data.time.throughputPerWeek}/wk`} sub="completed last 7 days" />
-        <StatCard label="Agent LLM spend" value={usd(data.spend.agentLlmCostUsd)} sub="attributed to scope" />
-        <StatCard label="Sprint burn" value={usd(data.spend.sprintActualBurn)} sub={`of ${usd(data.spend.sprintRunwayBudget)} budget`} />
-        <StatCard label="Cost model" value={usd(data.spend.costModelTotal)} sub="segment total" />
+        <StatCard label="Agent LLM spend" value={fmt.money(data.spend.agentLlmCostUsd)} sub="attributed to scope" />
+        <StatCard label="Sprint burn" value={fmt.money(data.spend.sprintActualBurn)} sub={`of ${fmt.money(data.spend.sprintRunwayBudget)} budget`} />
+        <StatCard label="Cost model" value={fmt.money(data.spend.costModelTotal)} sub="segment total" />
       </div>
 
       <PmCard title="Spend summary">
         <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
-          Total tracked spend in scope: <strong style={{ color: 'var(--text-primary)' }}>{usd(totalSpend)}</strong>{' '}
-          ({usd(data.spend.agentLlmCostUsd)} agent LLM + {usd(data.spend.sprintActualBurn)} sprint burn).
+          Total tracked spend in scope: <strong style={{ color: 'var(--text-primary)' }}>{fmt.money(totalSpend)}</strong>{' '}
+          ({fmt.money(data.spend.agentLlmCostUsd)} agent LLM + {fmt.money(data.spend.sprintActualBurn)} sprint burn).
         </div>
       </PmCard>
 
@@ -60,7 +61,7 @@ export function RoiDashboard() {
                   <tr key={p.projectId} style={trStyle}>
                     <td style={tdStyle}>{p.projectName}</td>
                     <td style={tdMutedStyle}>{p.completedCount}</td>
-                    <td style={tdMutedStyle}>{usd(p.agentLlmCostUsd)}</td>
+                    <td style={tdMutedStyle}>{fmt.money(p.agentLlmCostUsd)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -83,7 +84,7 @@ export function RoiDashboard() {
                 {data.byTask.map((t) => (
                   <tr key={t.taskId} style={trStyle}>
                     <td style={tdStyle}>{t.taskKey ? `${t.taskKey} · ` : ''}{t.title}</td>
-                    <td style={tdMutedStyle}>{usd(t.agentLlmCostUsd)}</td>
+                    <td style={tdMutedStyle}>{fmt.money(t.agentLlmCostUsd)}</td>
                   </tr>
                 ))}
               </tbody>

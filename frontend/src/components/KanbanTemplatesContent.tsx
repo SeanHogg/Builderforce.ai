@@ -23,7 +23,7 @@ import { ROLE_DISCIPLINES, useRoles, type UseRoles } from '@/lib/useRoles';
 import type {
   Discipline, JobRole, KanbanTemplate, TemplateSummary, TemplateLane, LaneRequirement, RequirementKind, RequirementGate,
 } from '@/lib/kanban';
-import { formatCents } from '@/lib/canvasMoney';
+import { useMoneyFormat } from '@/lib/useMoneyFormat';
 
 type Tab = 'mine' | 'marketplace' | 'roles';
 
@@ -45,6 +45,7 @@ const input: React.CSSProperties = {
 };
 
 export function KanbanTemplatesContent() {
+  const { formatCents } = useMoneyFormat();
   const t = useTranslations('kanban');
   const canManage = usePermission('agents.create').allowed;
   const [tab, setTab] = useState<Tab>('mine');

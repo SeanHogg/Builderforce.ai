@@ -22,7 +22,7 @@ import type { Env } from '../../env';
 import { agentHosts, projects, workflowDefinitions } from '../../infrastructure/database/schema';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
-import { connectionCountsByConnector } from '../connectors/connectorService';
+import { connectedConnectorKeys as connectedKeys } from '../connectors/connectorTools';
 import { executeConnectorAction } from '../connectors/connectorRuntime';
 import {
   resolveGuidedPlan,
@@ -42,9 +42,23 @@ import type { TemplateManifest } from '../../domain/template/templateManifest';
  *  gets the first page and a search box, not a 4,000-row `<select>`. */
 const MAX_SOURCED_OPTIONS = 100;
 
-/** Connector keys with at least one ENABLED connection in this workspace. */
-export async function connectedConnectorKeys(db: Db, tenantId: number): Promise<Set<string>> {
-  return new Set((await connectionCountsByConnector(db, tenantId)).keys());
+/**
+ * Connector keys with at least one ENABLED connection in this workspace.
+ *
+ * Delegates to the canonical, read-through-cached reader in `connectorTools.ts`
+ * rather than counting rows itself. There used to be two functions of this name —
+ * one cached and invalidated by every connector write, one an uncached scan — and
+ * the templates gallery used the uncached one. That is the duplication the DRY
+ * rule forbids, and it had a visible cost: the "2 of 3 connected" number on a
+ * template card, which is the number that decides whether somebody starts, was a
+ * per-request scan of a table the platform already keeps a warm, correctly
+ * invalidated answer for.
+ *
+ * `env` is optional only because two callers still resolve it lazily; pass it,
+ * and the read is cached AND invalidated the moment somebody connects something.
+ */
+export async function connectedConnectorKeys(db: Db, tenantId: number, env?: Env): Promise<Set<string>> {
+  return new Set(await connectedKeys(db, tenantId, env));
 }
 
 /**
@@ -206,7 +220,7 @@ export async function loadSetupState(
   );
 
   const [connectedConnectors, resources] = await Promise.all([
-    connectedConnectorKeys(db, tenantId),
+    connectedConnectorKeys(db, tenantId, env),
     loadResources(db, tenantId, resourceKinds),
   ]);
 

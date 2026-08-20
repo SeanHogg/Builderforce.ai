@@ -1018,11 +1018,7 @@ export function createNotificationRoutes(): Hono<HonoEnv> {
       await db
         .update(freelancerNotifications)
         .set({ readAt: sql`NOW()` })
-        .where(and(
-          eq(freelancerNotifications.userId, userId),
-          inArray(freelancerNotifications.id, ids),
-          isNull(freelancerNotifications.readAt),
-        ));
+        .where(and(eq(freelancerNotifications.userId, userId), inArray(freelancerNotifications.id, ids), isNull(freelancerNotifications.readAt)));
     } else {
       await db
         .update(freelancerNotifications)

@@ -8,6 +8,7 @@ import {
 } from '@/lib/errors/apiErrorEvent';
 import { requestReportError } from '@/lib/reportError';
 import { copyTextToClipboard } from '@/lib/useCopyToClipboard';
+import { useFormat } from "@/i18n/useFormat";
 
 /* ------------------------------------------------------------------ */
 /*  Inline SVG icons (no lucide-react dependency)                     */
@@ -185,6 +186,7 @@ function Toast({
   onToggleExpand: (id: string) => void;
   onCopy: (entry: ToastEntry) => void;
 }) {
+  const fmt = useFormat();
   const t = useTranslations('globalError');
   const { id, event: ev, expanded, copied } = entry;
 
@@ -230,7 +232,7 @@ function Toast({
             flexShrink: 0,
           }}
         >
-          {formatTime(ev.timestamp)}
+          {fmt.time(ev.timestamp)}
         </span>
 
         {/* Action buttons */}
@@ -355,10 +357,3 @@ const iconBtnStyle: React.CSSProperties = {
   flexShrink: 0,
 };
 
-function formatTime(iso: string): string {
-  try {
-    return new Date(iso).toLocaleTimeString();
-  } catch {
-    return iso;
-  }
-}

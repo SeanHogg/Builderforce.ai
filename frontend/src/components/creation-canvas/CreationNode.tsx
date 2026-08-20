@@ -93,7 +93,7 @@ import { allSpecObjectSpecs } from '@/lib/specObjects';
 // kinds resolvable here — and in the palette, the AI contract and the empty-shell rule —
 // without a second list of them anywhere.
 import '@/lib/academicObjects';
-import { formatCents } from '@/lib/canvasMoney';
+import { useMoneyFormat } from '@/lib/useMoneyFormat';
 import { useFormat } from "@/i18n/useFormat";
 
 export type CreationFlowNode = Node<CreationNodeData, 'creation'>;
@@ -633,6 +633,7 @@ function SocialCampaignBody({ data }: { data: CreationNodeData }) {
  * drag on a card would pan the board rather than move the deal.
  */
 function PipelineBoardBody({ data, onMoveDeal }: { data: CreationNodeData; onMoveDeal?: (dealId: number, stage: string) => void }) {
+  const { formatCents } = useMoneyFormat();
   const t = useTranslations('creationCanvas.node');
   const model = useMemo(() => readPipelineModel(data as unknown as Record<string, unknown>), [data]);
   const stageLabel = (stage: string) => (t.has(`pipelineStage.${stage}`) ? t(`pipelineStage.${stage}`) : stage);

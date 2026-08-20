@@ -32,6 +32,7 @@ import {
   swimlanes,
   tasks,
 } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { QaFindingSeverity } from './qaTypes';
 import type { Env } from '../../env';
 import { onTaskLandedInLane } from '../swimlane/laneEntryTrigger';
@@ -197,12 +198,7 @@ export class QaFindingRouter {
       .select({ taskId: qaFindings.taskId })
       .from(qaFindings)
       .innerJoin(tasks, eq(tasks.id, qaFindings.taskId))
-      .where(and(
-        eq(qaFindings.projectId, projectId),
-        eq(qaFindings.fingerprint, fingerprint),
-        isNotNull(qaFindings.taskId),
-        sql`${tasks.status} <> ${TaskStatus.DONE}`,
-      ))
+      .where(and(eq(qaFindings.projectId, projectId), eq(qaFindings.fingerprint, fingerprint), isNotNull(qaFindings.taskId), sql`${tasks.status} <> ${TaskStatus.DONE}`))
       .orderBy(desc(qaFindings.createdAt))
       .limit(1);
     return row?.taskId ?? null;

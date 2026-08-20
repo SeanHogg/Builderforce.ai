@@ -20,6 +20,7 @@ import { eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { tasks } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { formatTaskKey, nextProjectKeySeqBase } from '../task/taskKeys';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { createWorkflowDefinition, coerceRunTarget } from '../workflow/definitionStore';

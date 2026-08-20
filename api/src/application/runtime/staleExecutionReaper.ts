@@ -28,6 +28,7 @@ import { and, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import type { Env } from '../../env';
 import { buildDatabase, type Db } from '../../infrastructure/database/connection';
 import { executions, pullRequests, tasks, toolAuditEvents } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { ChatTicketService, ticketKindForTaskType } from '../brain/ChatTicketService';
 import { cloudOrphanReason, cloudSilenceCeilingMs, PAUSED_DEADLINE_MS, PAUSED_ORPHAN_REASON } from './orphanReasons';
 import { markReaperRequeued, parseExecutor } from './cloudDispatch';
@@ -98,11 +99,7 @@ export async function reapStaleExecutions(env: Env, nowMs = Date.now()): Promise
       completedAt: sql`now()`,
       updatedAt: sql`now()`,
     })
-    .where(and(
-      eq(executions.status, 'running'),
-      isNotNull(executions.agentHostId),
-      sql`coalesce(${executions.startedAt}, ${executions.createdAt}) < ${runningCutoff}`,
-    ))
+    .where(and(eq(executions.status, 'running'), isNotNull(executions.agentHostId), sql`coalesce(${executions.startedAt}, ${executions.createdAt}) < ${runningCutoff}`))
     .returning(REAPED_RETURNING);
 
   // Hung CLOUD runs: the serverless background task was stopped at the ~30s wall
@@ -198,10 +195,7 @@ export async function reapStaleExecutions(env: Env, nowMs = Date.now()): Promise
       completedAt: sql`now()`,
       updatedAt: sql`now()`,
     })
-    .where(and(
-      inArray(executions.status, ['pending', 'submitted']),
-      sql`${executions.createdAt} < ${queuedCutoff}`,
-    ))
+    .where(and(inArray(executions.status, ['pending', 'submitted']), sql`${executions.createdAt} < ${queuedCutoff}`))
     .returning(REAPED_RETURNING);
 
   // Abandoned agent QUESTION: a run parked on `ask_human` that nobody answered
@@ -218,10 +212,7 @@ export async function reapStaleExecutions(env: Env, nowMs = Date.now()): Promise
       completedAt: sql`now()`,
       updatedAt: sql`now()`,
     })
-    .where(and(
-      eq(executions.status, 'paused'),
-      sql`coalesce(${executions.updatedAt}, ${executions.startedAt}, ${executions.createdAt}) < ${pausedCutoff}`,
-    ))
+    .where(and(eq(executions.status, 'paused'), sql`coalesce(${executions.updatedAt}, ${executions.startedAt}, ${executions.createdAt}) < ${pausedCutoff}`))
     .returning(REAPED_RETURNING);
 
   // Mirror each reaped failure onto the Observability Logs/Timeline (derived only

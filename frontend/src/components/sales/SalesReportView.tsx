@@ -24,7 +24,7 @@ import { useMemo } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { BarChart } from '@/components/charts/BarChart';
 import { SALES_REPORT_WINDOWS, type SalesReport, type SalesReportWindow } from '@/lib/salesApi';
-import { formatCents } from '@/lib/canvasMoney';
+import { useMoneyFormat } from '@/lib/useMoneyFormat';
 
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
@@ -48,6 +48,7 @@ export interface SalesReportViewProps {
 }
 
 export function SalesReportView({ report, window = 'month', onWindowChange, onSelectAssociate }: SalesReportViewProps) {
+  const { formatCents } = useMoneyFormat();
   const t = useTranslations('salesHub.report');
   const locale = useLocale();
 

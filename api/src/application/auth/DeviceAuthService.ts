@@ -1,6 +1,7 @@
 import { and, eq, lt, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { deviceAuthorizations, tenantMembers } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { hashSecret } from '../../infrastructure/auth/HashService';
 import { encryptSecretForStorage, decryptSecretFromStorage } from '../../infrastructure/auth/MfaService';
 import { mintTenantApiKey } from '../llm/tenantApiKeyService';

@@ -7,7 +7,8 @@ import { usePmData } from '@/lib/pm/usePmData';
 import { PmCard, PmEmpty, PmError, StatCard } from '@/components/pm/pmShared';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 import { DaysWindowSelect, KpiGrid } from './LensShell';
-import { usd, pct, score2 } from './format';
+import { pct, score2 } from './format';
+import { useInsightFormat } from './format';
 import { useProjectScope } from '@/lib/ProjectScopeContext';
 
 /**
@@ -15,6 +16,7 @@ import { useProjectScope } from '@/lib/ProjectScopeContext';
  * actually ships" ranking (action_type × model) that exists nowhere else.
  */
 export function EngineeringLens() {
+  const { usd } = useInsightFormat();
   const t = useTranslations('insights');
   const [days, setDays] = useState(30);
   const { currentProjectId } = useProjectScope();

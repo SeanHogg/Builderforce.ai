@@ -20610,7 +20610,8 @@
     "llmMonthlyRequests": "Solicitudes al mes",
     "llmCacheHitRate": "Tasa de aciertos de caché",
     "llmLatencyP50Ms": "Latencia p50 (ms)",
-    "llmLatencyP95Ms": "Latencia p95 (ms)"
+    "llmLatencyP95Ms": "Latencia p95 (ms)",
+    "objectNeedsUpgrade": "Cambia a un plan de pago para añadir esto."
   },
   "canvasCommands": {
     "cleanLayout": "Ordenar el diseño del lienzo",

@@ -1,6 +1,7 @@
 'use client';
 
 import { Icon } from '@/components/ui/Icon';
+import type { Formatter } from '@/i18n/format';
 import { Select } from '@/components/Select';
 
 import { useState, useEffect, useCallback, useMemo, useRef, Fragment, type CSSProperties } from 'react';
@@ -76,6 +77,7 @@ import {
 import { useTaskStatusLabel } from '@/lib/taskStatusLabel';
 import { TASK_PRIORITIES, taskPriorityBadgeClass } from '@/lib/taskPriority';
 import { WorkspaceAllowanceBanner } from '@/components/board/WorkspaceAllowanceBanner';
+import { useFormat } from "@/i18n/useFormat";
 
 type TaskView = 'board' | 'table' | 'calendar' | 'gantt';
 
@@ -99,9 +101,9 @@ export interface TaskMgmtContentProps {
   compact?: boolean;
 }
 
-function formatDate(d?: string | null): string {
+function formatDate(fmt: Formatter, d?: string | null): string {
   if (!d) return '';
-  return new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  return fmt.dateWith(d, { month: 'short', day: 'numeric' });
 }
 
 /**
@@ -177,6 +179,7 @@ export function TaskMgmtContent({
   projects: projectsProp,
   compact = false,
 }: TaskMgmtContentProps) {
+  const fmt = useFormat();
   const tApproval = useTranslations('boardConfig');
   const statusLabel = useTaskStatusLabel();
   const confirm = useConfirm();
@@ -1066,7 +1069,7 @@ export function TaskMgmtContent({
               PR#{task.githubPrNumber ?? '—'}
             </a>
           )}
-          {task.dueDate && <span style={{ marginLeft: 'auto' }}>{formatDate(task.dueDate)}</span>}
+          {task.dueDate && <span style={{ marginLeft: 'auto' }}>{formatDate(fmt, task.dueDate)}</span>}
         </div>
       </div>
     );
@@ -1739,7 +1742,7 @@ export function TaskMgmtContent({
                         )}
                       </td>
                       <td style={{ padding: '10px 12px', fontSize: 12, color: 'var(--text-muted)' }}>
-                        {formatDate(task.dueDate)}
+                        {formatDate(fmt, task.dueDate)}
                       </td>
                       <td style={{ padding: '10px 12px' }} onClick={(e) => e.stopPropagation()}>
                         <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
@@ -2515,7 +2518,7 @@ export function TaskMgmtContent({
                           borderBottom: '1px dashed var(--border-subtle)',
                         }}
                       >
-                        {formatDate(drawerTask.dueDate) || tTask('none')}
+                        {formatDate(fmt, drawerTask.dueDate) || tTask('none')}
                       </span>
                     )}
                   </div>
@@ -2598,7 +2601,7 @@ export function TaskMgmtContent({
                   )}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, minHeight: 28 }}>
                     <span style={{ color: 'var(--text-muted)' }}>{tTask('created')}</span>
-                    <span style={{ color: 'var(--text-primary)' }}>{formatDate(drawerTask.createdAt)}</span>
+                    <span style={{ color: 'var(--text-primary)' }}>{formatDate(fmt, drawerTask.createdAt)}</span>
                   </div>
                 </div>
               </div>

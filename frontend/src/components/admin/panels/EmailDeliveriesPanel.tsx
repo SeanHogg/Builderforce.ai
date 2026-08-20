@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { adminApi, type AdminEmailDeliveryFailurePage } from '@/lib/adminApi';
-import { AdminError, AdminLoading, errText, fmtDateTime } from '@/components/admin/adminShared';
+import { AdminError, AdminLoading, errText } from '@/components/admin/adminShared';
+import { useAdminFormat } from '@/components/admin/adminShared';
 import { useFormat } from "@/i18n/useFormat";
 
 const PAGE_SIZE = 50;
@@ -18,6 +19,7 @@ function Stat({ label, value }: { label: string; value: number }) {
 }
 
 export default function EmailDeliveriesPanel() {
+  const { fmtDateTime } = useAdminFormat();
   const [page, setPage] = useState<AdminEmailDeliveryFailurePage | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');

@@ -5,7 +5,7 @@ import { useTranslations } from 'next-intl';
 import { adminApi, type LegalDocVersion } from '@/lib/adminApi';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { LegalDocPreview } from '@/components/admin/LegalDocPreview';
-import { fmtDateTime } from '@/components/admin/adminShared';
+import { useAdminFormat } from '@/components/admin/adminShared';
 
 export interface LegalHistoryContext {
   docType: 'terms' | 'privacy';
@@ -22,6 +22,7 @@ interface LegalHistoryDrawerProps {
  * expand any entry to read its full document-scale content.
  */
 export function LegalHistoryDrawer({ context, onClose }: LegalHistoryDrawerProps) {
+  const { fmtDateTime } = useAdminFormat();
   const t = useTranslations('admin');
   const [versions, setVersions] = useState<LegalDocVersion[]>([]);
   const [loading, setLoading] = useState(false);

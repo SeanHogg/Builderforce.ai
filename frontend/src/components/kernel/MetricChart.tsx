@@ -23,6 +23,7 @@ import { useId } from 'react';
 import { useTranslations } from 'next-intl';
 import type { MetricSeries } from '@/lib/kernel/kernelApi';
 import { formatCents } from '@/lib/canvasMoney';
+import { useFormat } from '@/i18n/useFormat';
 
 /** Series index → token. Four hues, cycled — enough to tell three or four lines
  *  apart without inventing a palette that only reads in one theme. */
@@ -61,13 +62,18 @@ function formatValue(value: number, unit: string | null, locale: string): string
 export function MetricChart({
   series,
   height = 120,
-  locale = 'en',
+  locale,
 }: {
   series: MetricSeries[];
   height?: number;
+  /** Defaults to the reader's active locale. */
   locale?: string;
 }) {
   const t = useTranslations('kernel.chart');
+  const fmt = useFormat();
+  // The prop still wins when a caller pins a locale; otherwise follow the reader
+  // rather than the machine, which is what an omitted `locale` used to mean.
+  const activeLocale = locale ?? fmt.locale;
   const gradientId = useId();
   const live = series.filter((s) => s.points.length > 0);
 
@@ -97,7 +103,7 @@ export function MetricChart({
                 </span>
               </div>
               <p className="m-0 text-lg font-semibold tabular-nums" style={{ color: 'var(--text-primary)' }}>
-                {formatValue(last.value, s.unit, locale)}
+                {formatValue(last.value, s.unit, activeLocale)}
               </p>
               {delta !== null ? (
                 <p

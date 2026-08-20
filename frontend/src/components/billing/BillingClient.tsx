@@ -44,7 +44,7 @@ import { billingApi, type BillingSubscription } from '@/lib/billingApi';
 import { cardValidationApi, type CardValidationState } from '@/lib/builderforceApi';
 import { payoutsApi, type PayoutRecord } from '@/lib/payoutsApi';
 import { useLocale } from 'next-intl';
-import { formatCents } from '@/lib/canvasMoney';
+import { useMoneyFormat } from '@/lib/useMoneyFormat';
 import { useFormat } from "@/i18n/useFormat";
 
 const cardStyle: React.CSSProperties = {
@@ -66,6 +66,7 @@ const rowStyle: React.CSSProperties = {
 export type BillingView = 'account' | 'payouts' | 'getPaid';
 
 export default function BillingClient({ view = 'account' }: { view?: BillingView }) {
+  const { formatCents } = useMoneyFormat();
   const fmt = useFormat();
   const t = useTranslations('billing');
   const locale = useLocale();

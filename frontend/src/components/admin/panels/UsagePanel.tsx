@@ -23,11 +23,13 @@ import {
 } from '@/lib/adminApi';
 import { Select } from '@/components/Select';
 import { llmChat } from '@/lib/builderforceApi';
-import { errText, fmtDateTime, fmtNum, AdminError, AdminLoading } from '../adminShared';
+import { errText, AdminError, AdminLoading } from '../adminShared';
+import { useAdminFormat } from '../adminShared';
 import { useCopyToClipboard } from '@/lib/useCopyToClipboard';
 import { useFormat } from "@/i18n/useFormat";
 
 export default function UsagePanel() {
+  const { fmtDateTime, fmtNum } = useAdminFormat();
   const fmt = useFormat();
   const t = useTranslations('admin');
   const [usageDays, setUsageDays] = useState(30);

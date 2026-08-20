@@ -9,6 +9,7 @@ import { colorAt } from '@/components/charts/chartColors';
 import type { WidgetValue } from '@/lib/dashboardsApi';
 import { InsightStat, type InsightDelta } from './InsightStat';
 import { formatMetricValue, seriesDelta, deltaTone } from './metricFormat';
+import { useFormat } from "@/i18n/useFormat";
 
 /**
  * DashboardWidget — renders ONE resolved {@link WidgetValue} as its chosen
@@ -42,6 +43,7 @@ function TitledCard({ title, children }: { title: string; children: ReactNode })
 }
 
 export function DashboardWidget({ v }: { v: WidgetValue }) {
+  const fmt = useFormat();
   const t = useTranslations('dashboard');
 
   const title = v.title ?? v.label;
@@ -68,12 +70,12 @@ export function DashboardWidget({ v }: { v: WidgetValue }) {
             series={[{ key: v.metricKey ?? v.widgetKey ?? v.label, label: v.label, values, color }]}
             height={180}
             area
-            formatValue={(n) => formatMetricValue(n, v.unit)}
+            formatValue={(n) => formatMetricValue(fmt, n, v.unit)}
             ariaLabel={title}
           />
         </TitledCard>
       ) : (
-        <InsightStat label={title} value={formatMetricValue(v.value, v.unit)} sub={t('noTrend')} delta={delta} />
+        <InsightStat label={title} value={formatMetricValue(fmt, v.value, v.unit)} sub={t('noTrend')} delta={delta} />
       );
 
     case 'bar':
@@ -83,12 +85,12 @@ export function DashboardWidget({ v }: { v: WidgetValue }) {
             data={points.slice(-14).map((p) => ({ key: p.day, label: shortDay(p.day), value: p.value }))}
             monochrome
             labelWidth={48}
-            formatValue={(n) => formatMetricValue(n, v.unit)}
+            formatValue={(n) => formatMetricValue(fmt, n, v.unit)}
             ariaLabel={title}
           />
         </TitledCard>
       ) : (
-        <InsightStat label={title} value={formatMetricValue(v.value, v.unit)} sub={t('noTrend')} delta={delta} />
+        <InsightStat label={title} value={formatMetricValue(fmt, v.value, v.unit)} sub={t('noTrend')} delta={delta} />
       );
 
     case 'gauge': {
@@ -102,7 +104,7 @@ export function DashboardWidget({ v }: { v: WidgetValue }) {
               max={range.max}
               color={color}
               size={150}
-              centerValue={formatMetricValue(v.value, v.unit)}
+              centerValue={formatMetricValue(fmt, v.value, v.unit)}
               ariaLabel={title}
             />
           </div>
@@ -115,7 +117,7 @@ export function DashboardWidget({ v }: { v: WidgetValue }) {
       return (
         <InsightStat
           label={title}
-          value={formatMetricValue(v.value, v.unit)}
+          value={formatMetricValue(fmt, v.value, v.unit)}
           sub={t('window', { days: v.days })}
           series={values.length > 1 ? values : null}
           delta={delta}

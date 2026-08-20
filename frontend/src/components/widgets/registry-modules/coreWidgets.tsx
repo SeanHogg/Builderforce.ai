@@ -44,7 +44,7 @@ import type { WidgetCardProps, WidgetDef, WidgetDrill } from '@/lib/widgets/type
 import { DonutChart } from '@/components/charts/DonutChart';
 import { BarChart } from '@/components/charts/BarChart';
 import { colorAt } from '@/components/charts/chartColors';
-import { int } from '@/components/insights/format';
+import { useInsightFormat } from '@/components/insights/format';
 
 // ── Shared, deduped data sources (one fetch per source regardless of pins) ──────
 
@@ -84,6 +84,7 @@ function useOverviewBody() {
 // ── Dashboard-home widget bodies (group: 'overview') ───────────────────────────
 
 function ProjectsCard(_props: WidgetCardProps) {
+  const { int } = useInsightFormat();
   const { data, state, t } = useOverviewBody();
   if (!data) return state;
   const active = data.projects.filter((p) => p.status === 'active').length;
@@ -94,6 +95,7 @@ const TASK_DONE = 'done';
 const TASK_IN_PROGRESS = 'in_progress';
 
 function TasksCard(_props: WidgetCardProps) {
+  const { int } = useInsightFormat();
   const { data, state, t } = useOverviewBody();
   if (!data) return state;
   const total = data.tasks.length;
@@ -118,6 +120,7 @@ function TasksCard(_props: WidgetCardProps) {
 }
 
 function AgentsOnlineCard(_props: WidgetCardProps) {
+  const { int } = useInsightFormat();
   const { data, state, t } = useOverviewBody();
   if (!data) return state;
   const online = data.hosts.filter((h) => h.online).length;
@@ -137,6 +140,7 @@ function AgentsOnlineCard(_props: WidgetCardProps) {
 }
 
 function PendingApprovalsCard(_props: WidgetCardProps) {
+  const { int } = useInsightFormat();
   const { data, state, t } = useOverviewBody();
   if (!data) return state;
   const n = data.pendingApprovals;
@@ -147,6 +151,7 @@ function PendingApprovalsCard(_props: WidgetCardProps) {
 
 /** Canvas builds split by modality. */
 function IdeByModalityCard(_props: WidgetCardProps) {
+  const { int } = useInsightFormat();
   const t = useTranslations('widgets');
   const modalityCopy = useModalityCopy();
   const { data, error } = useSharedSource<IdeProject[]>('core:ide-projects', () => listIdeProjects());
@@ -173,6 +178,7 @@ function IdeByModalityCard(_props: WidgetCardProps) {
 
 /** Build count with the most-recently-touched recency badge (staleness signal). */
 function IdeRecencyCard(_props: WidgetCardProps) {
+  const { int } = useInsightFormat();
   const t = useTranslations('widgets');
   const dt = useTranslations('dashboard');
   const { data, error } = useSharedSource<IdeProject[]>('core:ide-projects', () => listIdeProjects());

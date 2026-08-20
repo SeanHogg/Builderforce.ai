@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
+import { formatterFor } from '@/i18n/format';
 import { formatMetricValue, seriesDelta, formatRecency, deltaTone } from './metricFormat';
+
+const en = formatterFor('en');
+const de = formatterFor('de');
 
 // ---------------------------------------------------------------------------
 // Pure Dashboard-library helpers — value formatting, trend-delta derivation,
@@ -8,16 +12,23 @@ import { formatMetricValue, seriesDelta, formatRecency, deltaTone } from './metr
 
 describe('formatMetricValue', () => {
   it('applies unit suffixes', () => {
-    expect(formatMetricValue(1240, 'USD')).toBe('$1,240');
-    expect(formatMetricValue(92, '%')).toBe('92%');
-    expect(formatMetricValue(3.2, '/day')).toBe('3.2/day');
-    expect(formatMetricValue(5, 'hours')).toBe('5h');
+    expect(formatMetricValue(en, 1240, 'USD')).toBe('$1,240');
+    expect(formatMetricValue(en, 92, '%')).toBe('92%');
+    expect(formatMetricValue(en, 3.2, '/day')).toBe('3.2/day');
+    expect(formatMetricValue(en, 5, 'hours')).toBe('5h');
+  });
+
+  it('groups and places the currency the way the READER expects, not the machine', () => {
+    // The whole point of threading the formatter: same value, two readers.
+    expect(formatMetricValue(en, 1240)).toBe('1,240');
+    expect(formatMetricValue(de, 1240)).toBe('1.240');
+    expect(formatMetricValue(de, 1240, 'USD')).toBe('1.240 $');
   });
 
   it('renders missing values as an em dash', () => {
-    expect(formatMetricValue(null)).toBe('—');
-    expect(formatMetricValue(undefined)).toBe('—');
-    expect(formatMetricValue(NaN)).toBe('—');
+    expect(formatMetricValue(en, null)).toBe('—');
+    expect(formatMetricValue(en, undefined)).toBe('—');
+    expect(formatMetricValue(en, NaN)).toBe('—');
   });
 });
 

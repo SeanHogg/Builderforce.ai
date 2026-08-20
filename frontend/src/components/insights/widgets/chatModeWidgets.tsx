@@ -38,7 +38,8 @@ import { colorAt } from '@/components/charts/chartColors';
 import {
   tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle,
 } from '@/components/dataTableStyles';
-import { int, pct, usd } from '../format';
+import { pct } from '../format';
+import { useInsightFormat, type InsightFormatters } from '../format';
 
 const CAP = 'insights.llmUsage' as const;
 const DRILL: WidgetDrill = { kind: 'route', href: '/insights/chat-modes' };
@@ -60,10 +61,11 @@ function useModeLabels() {
 }
 
 /** USD from the millicents the ledger stamps at write time. */
-const usdFromMillicents = (v: number): string => usd(v / 100_000);
+const usdFromMillicents = (f: InsightFormatters, v: number): string => f.usd(v / 100_000);
 
 /** The share of started conversations that were handed over as work. */
 function WorkShareCard({ days }: WidgetCardProps) {
+  const { int } = useInsightFormat();
   const { t, modeLabel } = useModeLabels();
   const { data, error } = useChatModes(days);
   if (error) return <Muted>{t('chatModes.loadFailed')}</Muted>;
@@ -83,6 +85,7 @@ function WorkShareCard({ days }: WidgetCardProps) {
  * run dispatched. A low number here is the failure the mode split exists to surface.
  */
 function ExecutionRateCard({ days }: WidgetCardProps) {
+  const { int } = useInsightFormat();
   const { t } = useModeLabels();
   const { data, error } = useChatModes(days);
   if (error) return <Muted>{t('chatModes.loadFailed')}</Muted>;
@@ -101,6 +104,7 @@ function ExecutionRateCard({ days }: WidgetCardProps) {
 
 /** What execution costs relative to conversation — the operating fact. */
 function CostShareCard({ days }: WidgetCardProps) {
+  const insight = useInsightFormat();
   const { t, modeLabel } = useModeLabels();
   const { data, error } = useChatModes(days);
   if (error) return <Muted>{t('chatModes.loadFailed')}</Muted>;
@@ -110,7 +114,7 @@ function CostShareCard({ days }: WidgetCardProps) {
     <Stat
       value={share == null ? '—' : pct(share * 100)}
       sub={t('chatModes.costShareSub', {
-        cost: usdFromMillicents(rowFor(data, 'work').costUsdMillicents),
+        cost: usdFromMillicents(insight, rowFor(data, 'work').costUsdMillicents),
         mode: modeLabel('work'),
       })}
     />
@@ -119,6 +123,7 @@ function CostShareCard({ days }: WidgetCardProps) {
 
 /** Conversations started, per mode. The volume read the two ratios sit on top of. */
 function ModeMixCard({ days }: WidgetCardProps) {
+  const { int } = useInsightFormat();
   const { t, modeLabel } = useModeLabels();
   const { data, error } = useChatModes(days);
   if (error) return <Muted>{t('chatModes.loadFailed')}</Muted>;
@@ -139,6 +144,7 @@ function ModeMixCard({ days }: WidgetCardProps) {
  * rather than something the reader has to subtract.
  */
 function DispatchFunnelCard({ days }: WidgetCardProps) {
+  const { int } = useInsightFormat();
   const { t, modeLabel } = useModeLabels();
   const { data, error } = useChatModes(days);
   if (error) return <Muted>{t('chatModes.loadFailed')}</Muted>;
@@ -159,6 +165,8 @@ function DispatchFunnelCard({ days }: WidgetCardProps) {
 
 /** The exact figures — what earns the low-contrast palette entries above. */
 function ModeTableCard({ days }: WidgetCardProps) {
+    const insight = useInsightFormat();
+  const { int } = useInsightFormat();
   const { t, modeLabel } = useModeLabels();
   const { data, error } = useChatModes(days);
   if (error) return <Muted>{t('chatModes.loadFailed')}</Muted>;
@@ -174,7 +182,7 @@ function ModeTableCard({ days }: WidgetCardProps) {
         <td style={tdStyle}>{int(row.ticketsLinked)}</td>
         <td style={tdStyle}>{int(row.ticketsDispatched)}</td>
         <td style={tdStyle}>{rate == null ? '—' : pct(rate * 100)}</td>
-        <td style={tdMutedStyle}>{usdFromMillicents(row.costUsdMillicents)}</td>
+        <td style={tdMutedStyle}>{usdFromMillicents(insight, row.costUsdMillicents)}</td>
       </tr>
     );
   };

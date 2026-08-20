@@ -19,6 +19,7 @@
 import { and, asc, eq, isNull } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { executionMessages } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 
 export type ExecutionMessageRole = 'user' | 'assistant';
 
@@ -67,11 +68,7 @@ export async function pullPendingSteering(db: Db, executionId: number): Promise<
     const rows = await db
       .select({ text: executionMessages.text })
       .from(executionMessages)
-      .where(and(
-        eq(executionMessages.executionId, executionId),
-        eq(executionMessages.role, 'user'),
-        isNull(executionMessages.consumedAt),
-      ))
+      .where(and(eq(executionMessages.executionId, executionId), eq(executionMessages.role, 'user'), isNull(executionMessages.consumedAt)))
       .orderBy(asc(executionMessages.createdAt));
     if (rows.length === 0) return [];
     // Stamp consumed before returning so a later tick can't re-deliver the same steer.

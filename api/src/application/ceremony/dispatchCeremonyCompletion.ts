@@ -24,6 +24,7 @@ import { and, asc, eq, isNotNull, ne, or } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { tasks } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { maybeAutoRunOnLaneEntry } from '../swimlane/laneEntryTrigger';
 import { buildRuntimeService } from '../../buildRuntimeService';
 
@@ -43,15 +44,13 @@ export async function dispatchCeremonyCompletion(
   const candidates = await db
     .select({ id: tasks.id, status: tasks.status })
     .from(tasks)
-    .where(
-      // `tasks` has no tenant_id — it is tenant-scoped through its project, and the caller
+    .where(and(// `tasks` has no tenant_id — it is tenant-scoped through its project, and the caller
       // has already verified this session (hence projectId) belongs to the tenant.
       and(
         eq(tasks.projectId, args.projectId),
         ne(tasks.status, 'done'),
         or(isNotNull(tasks.assignedAgentHostId), isNotNull(tasks.assignedAgentRef)),
-      ),
-    )
+      )))
     .orderBy(asc(tasks.id))
     .limit(MAX_DISPATCH_PER_CEREMONY * 2);
 

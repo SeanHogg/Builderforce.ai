@@ -23,7 +23,8 @@ import { TrendChart } from '@/components/charts/TrendChart';
 import { Sparkline } from '@/components/charts/Sparkline';
 import { colorAt } from '@/components/charts/chartColors';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
-import { usd, pct, score2, int } from '../format';
+import { pct, score2 } from '../format';
+import { useInsightFormat } from '../format';
 import { useAiImpact } from '../insightsSources';
 import { ProviderConsumptionBreakdown } from '../AiInsightSummaries';
 
@@ -91,6 +92,7 @@ const segBtn = (active: boolean): React.CSSProperties => ({
 });
 
 function UsageCard({ days }: WidgetCardProps) {
+  const { usd, int } = useInsightFormat();
   const { data, state, t } = useImpact(days);
   const [metric, setMetric] = useState<UsageMetric>('runs');
   if (!data) return state;
@@ -154,6 +156,7 @@ function MergeRateCard({ days }: WidgetCardProps) {
 }
 
 function ComparisonCard({ days }: WidgetCardProps) {
+  const { usd, int } = useInsightFormat();
   const { data, state, t } = useImpact(days);
   if (!data) return state;
   if (data.comparison.length === 0) return <Muted>{t('aiImpact.noRuns')}</Muted>;

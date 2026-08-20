@@ -395,10 +395,7 @@ export async function revokeTenantApiKeyByRawKey(
   const [row] = await db
     .update(tenantApiKeys)
     .set({ revokedAt: new Date() })
-    .where(and(
-      eq(tenantApiKeys.keyHash, keyHash),
-      isNull(tenantApiKeys.revokedAt),
-    ))
+    .where(and(eq(tenantApiKeys.keyHash, keyHash), isNull(tenantApiKeys.revokedAt)))
     .returning({ id: tenantApiKeys.id, keyHash: tenantApiKeys.keyHash });
   if (!row) return false;
 
