@@ -226,6 +226,11 @@ function configIssue(
  * structure the author did not write — which is the same argument this file
  * already makes against inventing fan-out. An else-arm needs a graph, which is
  * what the builder is for.
+ *
+ * Note that this applies to an EXPLICIT `kind: 'branch'` only. A step carrying a
+ * bare `condition` infers `filter`, and a filter that fails already drops its
+ * payload and cancels its whole downstream cone — so labelling its edge would put
+ * a second, redundant gate on the same test.
  */
 export function compileCanvasWorkflowSteps(
   rawSteps: unknown,

@@ -33,6 +33,15 @@ import { WHITEBOARD_CONNECTORS } from './whiteboard';
 // system of record for somebody's employment, and `hiring.ts` is the outbound
 // half. See the file's own header on why one vendor can appear in both.
 import { HRMS_CONNECTORS } from './hrms';
+// The bank account the money actually left, and the register that says who owns
+// the company. Reads only, and that is checkable: `mutates: true` appears nowhere
+// in banking.ts — see its header on why a credentialled agent is not pointed at a
+// payment-initiation API.
+import { BANKING_CONNECTORS } from './banking';
+// "Get it signed" for documents that were NOT authored here. A contract authored
+// on this platform still goes through the built-in signature engine — see the
+// file's header on why the two doors are different rather than interchangeable.
+import { ESIGNATURE_CONNECTORS } from './esignature';
 
 const ALL: readonly ConnectorManifest[] = [
   ...COMMUNICATION_CONNECTORS,
@@ -49,6 +58,8 @@ const ALL: readonly ConnectorManifest[] = [
   ...PAYROLL_CONNECTORS,
   ...WHITEBOARD_CONNECTORS,
   ...HRMS_CONNECTORS,
+  ...BANKING_CONNECTORS,
+  ...ESIGNATURE_CONNECTORS,
 ];
 
 /** Built-in manifests, keyed for O(1) resolution. */

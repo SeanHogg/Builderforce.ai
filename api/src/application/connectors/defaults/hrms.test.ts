@@ -61,7 +61,9 @@ describe('the HRMS / ATS catalog', () => {
     // reads like the customer's network is broken.
     for (const manifest of HRMS_CONNECTORS) {
       const referenced = [...manifest.baseUrl.matchAll(/\{\{\s*auth\.([a-zA-Z0-9_]+)\s*\}\}/g)].map((m) => m[1]);
-      const declared = new Set(manifest.auth.fields.map((f) => f.key));
+      // `auth.fields` is optional — a manifest may lean on the auth kind's default
+      // credential set — so an absent list is "declares nothing", not a crash.
+      const declared = new Set((manifest.auth.fields ?? []).map((f) => f.key));
       for (const key of referenced) {
         expect(declared.has(key!), `${manifest.key} interpolates auth.${key} but never asks for it`).toBe(true);
       }
