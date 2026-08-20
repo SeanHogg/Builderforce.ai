@@ -34,7 +34,7 @@
 import { count, eq, isNull } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
-import { artifacts, legalDocumentFiles, legalDocumentShares, signatureRequests } from '../../infrastructure/database/schema';
+import { artifacts, dataRooms, legalDocumentFiles, legalDocumentShares, signatureRequests } from '../../infrastructure/database/schema';
 import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { credentialSecret } from '../integrations/credentialCrypto';
 import { sealBytes } from '../security/fileCrypto';
@@ -77,6 +77,10 @@ export interface UploadLegalDocumentInput {
   entityId?: number | null;
   matterId?: number | null;
   ipId?: number | null;
+  /** Put this file IN a data room (0937). A legal document and a diligence
+   *  obligation are the two shapes a room holds, and this is how the first one
+   *  gets there — see `dataRoomSharing.roomDocumentsByRoom`. */
+  dataRoomId?: number | null;
   objectId?: string | null;
   filename: string;
   mime?: string | null;
@@ -143,6 +147,7 @@ export async function uploadLegalDocumentFile(
         entityId: input.entityId ?? null,
         matterId: input.matterId ?? null,
         ipId: input.ipId ?? null,
+        dataRoomId: input.dataRoomId ?? null,
         currentArtifactId: artifactId,
         updatedAt: new Date(),
       })
@@ -157,6 +162,7 @@ export async function uploadLegalDocumentFile(
         entityId: input.entityId ?? null,
         matterId: input.matterId ?? null,
         ipId: input.ipId ?? null,
+        dataRoomId: input.dataRoomId ?? null,
         title,
         category,
         currentArtifactId: artifactId,
@@ -363,6 +369,53 @@ export async function shareLegalDocumentFile(
   });
 
   return { shareId: row.id, token, permission, expiresAt: expiresAt ? expiresAt.toISOString() : null };
+}
+
+/**
+ * Put a legal file in a data room, or take it out.
+ *
+ * An ACT rather than an upload-time-only choice, because a formation certificate
+ * is uploaded once and then included in whichever room a given fund is given —
+ * and the file must stop resolving through links into a room the moment it leaves
+ * it, which is exactly what `readDataRoomDocument`'s membership predicate enforces.
+ *
+ * `null` removes it from every room. Passing a room that is not this tenant's is a
+ * 404 rather than a silent no-op: a caller that thinks it filed a document
+ * somewhere must not be told it succeeded.
+ */
+export async function setLegalDocumentDataRoom(
+  db: Db,
+  env: Env,
+  tenantId: number,
+  documentId: string,
+  dataRoomId: number | null,
+  actor: ActorIdentity,
+): Promise<void> {
+  if (dataRoomId != null) {
+    const [room] = await db
+      .select({ id: dataRooms.id })
+      .from(dataRooms)
+      .where(scopedToTenant(dataRooms, tenantId, eq(dataRooms.id, dataRoomId)))
+      .limit(1);
+    if (!room) throw new LegalDocumentError('No data room with that id in this workspace.', 404);
+  }
+
+  const [row] = await db
+    .update(legalDocumentFiles)
+    .set({ dataRoomId, updatedAt: new Date() })
+    .where(scopedToTenant(legalDocumentFiles, tenantId, eq(legalDocumentFiles.id, documentId)))
+    .returning({ id: legalDocumentFiles.id, title: legalDocumentFiles.title });
+  if (!row) throw new LegalDocumentError('No such legal document in this workspace.', 404);
+
+  await recordActivity(env, db, {
+    tenantId,
+    actor,
+    verb: dataRoomId == null ? 'legal_document.removed_from_data_room' : 'legal_document.added_to_data_room',
+    targetType: 'legal_document_file',
+    targetId: row.id,
+    targetLabel: row.title,
+    metadata: { dataRoomId },
+  });
 }
 
 export async function revokeLegalDocumentShare(

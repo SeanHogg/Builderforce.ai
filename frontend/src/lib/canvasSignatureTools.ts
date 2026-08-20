@@ -38,7 +38,8 @@ import type { BrainAction } from '@seanhogg/builderforce-brain-embedded';
 import { SIGNATURE_INTENTS } from '@builderforce/creation-canvas-contract';
 import { evaluateGate, readProvenance, type ApprovalMode } from '@/lib/canvasApprovalGate';
 import type { CanvasFounderOpsContext } from '@/lib/canvasFounderOpsTools';
-import { createSignatureRequest } from '@/lib/founderOpsApi';
+import { createSignatureRequest, signatureProgress } from '@/lib/founderOpsApi';
+import { signatureFieldsFrom, signatureSummary } from '@/lib/canvasSignatureProjection';
 import { allSpecObjectSpecs } from '@/lib/specObjects';
 // Registers every spec vocabulary as an import side effect, so `allSpecObjectSpecs()`
 // answers correctly even when this module is the first thing to import the spec
@@ -163,7 +164,49 @@ export function canvasSignatureActions(ctx: CanvasFounderOpsContext): BrainActio
         return {
           ok: true, proposed: true, objectId: object.id,
           requestId: result.requestId, invitations: result.invitations, approval: gate.reason,
-          instruction: 'Tell the user the signature request was sent, and to whom. Re-read the object later to see signatureState/signedAt — nothing updates them until the signer acts.',
+          instruction: 'Tell the user the signature request was sent, and to whom. Call canvas_sync_signature later to see who has actually answered — nothing on the card updates until you do.',
+        };
+      },
+    },
+    {
+      name: 'canvas_sync_signature',
+      description:
+        'Read a signature or acknowledgement request back onto the card that sent it — who has signed, who has declined, who has not answered, and when it completed. Call this whenever the user asks about the status of a contract, an offer or a policy acknowledgement ("has everyone signed the handbook", "did they sign yet"), and after any wait. For a `policy` it also rewrites the roster and the acknowledgement rate, which is the only way those two fields are ever written. Reads only — it never asks anybody to sign anything.',
+      parameters: {
+        type: 'object', required: ['objectId'], additionalProperties: false,
+        properties: {
+          objectId: { type: 'string', description: 'The card whose signatureRequestId should be re-read.' },
+        },
+      },
+      // A READ. Not gated and not a proposal in the approval sense — but it does
+      // write the card, so it stages a change like every other authoring tool.
+      mutates: () => true,
+      run: async (raw: unknown) => {
+        const blocked = guard();
+        if (blocked) return blocked;
+        const args = raw as { objectId?: string };
+        if (!args.objectId) return { error: 'objectId is required' };
+        const object = ctx.objects().find((candidate) => candidate.id === args.objectId);
+        if (!object) return { error: 'No object with that id on this board.' };
+
+        const requestId = Number(object.data.signatureRequestId);
+        if (!Number.isInteger(requestId) || requestId <= 0) {
+          return {
+            error: `${object.title || object.kind} has no signature request behind it yet. Send one with canvas_request_signature first — do not report a status for a document nobody has been asked to sign.`,
+          };
+        }
+
+        const progress = await signatureProgress(requestId);
+        const fields = signatureFieldsFrom(object.kind, progress);
+        ctx.updateObject(object.id, { ...fields, summary: signatureSummary(progress) }, `Signature status — ${progress.agreed}/${progress.total}`);
+
+        return {
+          ok: true, proposed: true, objectId: object.id,
+          status: progress.status, agreed: progress.agreed, total: progress.total, settled: progress.settled,
+          outstanding: progress.parties.filter((party) => party.status !== 'signed' && party.status !== 'acknowledged' && party.status !== 'declined')
+            .map((party) => ({ name: party.name, email: party.email })),
+          declined: progress.parties.filter((party) => party.status === 'declined').map((party) => ({ name: party.name, email: party.email })),
+          instruction: 'Report who is OUTSTANDING by name — that is the list somebody acts on. Never say a document is signed unless status is "completed".',
         };
       },
     },

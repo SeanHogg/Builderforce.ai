@@ -12,6 +12,11 @@ const FOUNDERS = [
   { name: 'Bo Lindqvist', email: 'bo@example.com', role: 'CEO', share: 45, contribution: 'Fundraising and the first ten customers' },
 ];
 
+/** ONE value set that satisfies EVERY template's required variables.
+ *
+ *  Deliberately one and not seven: the "renders every declared template" case below
+ *  is what catches a template added with a required variable nobody can supply, and
+ *  it can only catch that if adding a template means adding to this object. */
 const FULL = {
   companyName: 'Northwind Labs, Inc.',
   jurisdiction: 'Delaware',
@@ -19,6 +24,11 @@ const FULL = {
   vestingYears: 4,
   cliffMonths: 12,
   counterparty: 'Meridian Ventures',
+  // The commercial half's own required fields.
+  scope: 'Design and build the ingest pipeline described in the attached brief.',
+  title: 'Staff Engineer',
+  startDate: '2026-09-14',
+  salary: '$185,000 per year',
   parties: FOUNDERS,
 };
 
@@ -120,5 +130,55 @@ describe('the document templates', () => {
 
   it('gives the founders’ agreement first place, because it comes before everything else', () => {
     expect(DOCUMENT_TEMPLATES[0]?.key).toBe('founders-agreement');
+  });
+});
+
+describe('the commercial half (FO-G3)', () => {
+  it('binds a statement of work to the MSA rather than restating its terms', () => {
+    const document = renderDocumentTemplate('sow', FULL);
+    expect(document.body).toContain('Master Services Agreement');
+    expect(document.body).toContain('Design and build the ingest pipeline');
+    expect(document.contractType).toBe('sow');
+  });
+
+  it('refuses a statement of work with no scope, by name', () => {
+    // The clause a dispute turns on. A SOW rendered with an empty scope is the one
+    // document in this registry that would look most finished and mean least.
+    expect(() => renderDocumentTemplate('sow', { ...FULL, scope: '' })).toThrowError(/scope/);
+  });
+
+  it('states the MSA payment terms rather than leaving them to convention', () => {
+    expect(renderDocumentTemplate('msa', { ...FULL, paymentTermsDays: 45 }).body).toContain('45 days');
+    // And still says a number when nobody supplied one, because "as agreed" in a
+    // signed MSA is a future argument.
+    expect(renderDocumentTemplate('msa', FULL).body).toContain('30 days');
+  });
+
+  it('omits the equity section from an offer with no grant, and renumbers around it', () => {
+    // An offer letter that carries an empty "Equity" heading implies a grant that
+    // was never agreed — the one thing a candidate reads hardest.
+    const without = renderDocumentTemplate('offer-letter', FULL);
+    expect(without.body).not.toContain('## 3. Equity');
+    expect(without.body).toContain('## 3. Probation and notice');
+
+    const with_ = renderDocumentTemplate('offer-letter', { ...FULL, equity: '20,000 options vesting over four years' });
+    expect(with_.body).toContain('## 3. Equity');
+    expect(with_.body).toContain('## 4. Probation and notice');
+  });
+
+  it('writes a zero probation as a real answer rather than a default', () => {
+    const document = renderDocumentTemplate('offer-letter', { ...FULL, probationMonths: 0 });
+    expect(document.body).toContain('There is no probationary period');
+  });
+
+  it('sends the offer to the candidate the document names', () => {
+    const document = renderDocumentTemplate('offer-letter', {
+      ...FULL,
+      parties: [{ name: 'Rae Nakamura', email: 'rae@example.com', role: 'Staff Engineer', share: null, contribution: '' }],
+    });
+    expect(document.parties).toHaveLength(1);
+    expect(document.parties[0]?.email).toBe('rae@example.com');
+    expect(document.body).toContain('rae@example.com');
+    expect(document.category).toBe('employment');
   });
 });

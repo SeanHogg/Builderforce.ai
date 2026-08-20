@@ -10,6 +10,7 @@
  *   GET    /api/legal-documents/:id                 detail, derived status  any member
  *   GET    /api/legal-documents/:id/download        stream the file       any member
  *   POST   /api/legal-documents/:id/share           mint a share link     MANAGER
+ *   POST   /api/legal-documents/:id/data-room       put it in a room      MANAGER
  *   POST   /api/legal-documents/shares/:shareId/revoke  revoke it         MANAGER
  *   POST   /api/legal-documents/:id/request-signature   send for signature MANAGER
  *
@@ -30,6 +31,7 @@ import {
   requestLegalDocumentSignature,
   resolveLegalDocumentShare,
   revokeLegalDocumentShare,
+  setLegalDocumentDataRoom,
   shareLegalDocumentFile,
   uploadLegalDocumentFile,
 } from '../../application/legal/legalDocumentStore';
@@ -82,6 +84,7 @@ export function createLegalDocumentRoutes(db: Db): Hono<HonoEnv> {
       entityId: parseId(form.get('entityId')),
       matterId: parseId(form.get('matterId')),
       ipId: parseId(form.get('ipId')),
+      dataRoomId: parseId(form.get('dataRoomId')),
       objectId: typeof form.get('objectId') === 'string' ? (form.get('objectId') as string) : null,
       filename: file.name || 'document',
       mime: file.type || null,
@@ -104,6 +107,22 @@ export function createLegalDocumentRoutes(db: Db): Hono<HonoEnv> {
     const actor = await resolveActorFromContext(env, db, c);
     const file = await downloadLegalDocumentFile(db, env, tenantId, c.req.param('id'), actor);
     return fileResponse(file.bytes, file.filename, file.mime);
+  }));
+
+  /** Put this file in a data room, or take it out (0937). MANAGER, because it
+   *  changes what an external firm holding a room link can read. */
+  router.post('/:id/data-room', requireRole(TenantRole.MANAGER), (c) => handle(async () => {
+    const body = await c.req.json<{ dataRoomId?: unknown }>();
+    const raw = Number(body.dataRoomId);
+    await setLegalDocumentDataRoom(
+      db,
+      c.env as Env,
+      c.get('tenantId') as number,
+      c.req.param('id'),
+      Number.isInteger(raw) && raw > 0 ? raw : null,
+      await resolveActorFromContext(c.env as Env, db, c),
+    );
+    return Response.json({ ok: true });
   }));
 
   router.post('/:id/share', requireRole(TenantRole.MANAGER), (c) => handle(async () => {

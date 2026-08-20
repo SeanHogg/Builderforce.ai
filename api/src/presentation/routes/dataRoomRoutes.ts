@@ -34,12 +34,13 @@ import {
 } from '../../application/investor/dataRoomSharing';
 import { SignatureError } from '../../application/signature/signatureEngine';
 import { TemplateError } from '../../application/legal/documentTemplates';
+import { WatermarkError } from '../../application/security/documentWatermark';
 
 const handle = async (run: () => Promise<Response>): Promise<Response> => {
   try {
     return await run();
   } catch (error) {
-    if (error instanceof DataRoomError || error instanceof SignatureError || error instanceof TemplateError) {
+    if (error instanceof DataRoomError || error instanceof SignatureError || error instanceof TemplateError || error instanceof WatermarkError) {
       return Response.json({ error: error.message }, { status: error.status });
     }
     throw error;
@@ -129,7 +130,9 @@ export function createPublicDataRoomRoutes(db: Db): Hono<HonoEnv> {
   }));
 
   router.get('/:token/documents/:documentId', (c) => handle(async () => {
-    const file = await readDataRoomDocument(db, c.env as Env, c.req.param('token'), Number(c.req.param('documentId')));
+    // The id is PREFIXED (`dd:12` / `legal:<uuid>`) because a room holds two
+    // shapes and a recipient does not care which table a document came from.
+    const file = await readDataRoomDocument(db, c.env as Env, c.req.param('token'), c.req.param('documentId'));
     return new Response(file.bytes, {
       headers: {
         'content-type': file.mime,

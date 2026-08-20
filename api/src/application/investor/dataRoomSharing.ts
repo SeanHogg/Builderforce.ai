@@ -52,11 +52,13 @@ import {
   dataRooms,
   dueDiligenceChecklists,
   dueDiligenceDocuments,
+  legalDocumentFiles,
   signatureRequests,
 } from '../../infrastructure/database/schema';
 import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { recordActivity, SYSTEM_ACTOR, type ActorIdentity } from '../activity/activityLog';
 import { hashShareToken, mintShareToken, shareGrantState } from '../security/shareToken';
+import { WatermarkError, canWatermark, watermarkDocument } from '../security/documentWatermark';
 import { loadAndDecryptArtifact } from '../artifacts/artifactStore';
 import { sendTemplatedDocument } from '../legal/templateSigning';
 
@@ -79,9 +81,32 @@ export const DATA_ROOM_VERBS = {
 
 const TARGET_TYPE = 'data_room';
 
-/** Mime types a watermark can actually be stamped into. Anything else is served
- *  inline and unstamped, and says so. */
-const STAMPABLE = /^(text\/|application\/json|application\/xml)/i;
+/**
+ * A document's address INSIDE a room, and what kind of row it is.
+ *
+ * A room now holds two shapes: a diligence OBLIGATION (`due_diligence_documents`,
+ * an integer id) and a legal FILE (`legal_document_files`, a uuid). One namespace
+ * over both rather than two endpoints, because a recipient opening a data room
+ * does not care which table a document came from — and a prefixed id is what lets
+ * the analytics group over one column instead of two.
+ */
+export type DataRoomDocumentRef = { source: 'diligence'; id: number } | { source: 'legal'; id: string };
+
+export const dataRoomDocumentId = (ref: DataRoomDocumentRef): string =>
+  ref.source === 'legal' ? `legal:${ref.id}` : `dd:${ref.id}`;
+
+/** Parse one back. Null for anything that is not one of the two shapes, so a
+ *  hand-typed id is a 404 rather than a query with a NaN in it. */
+export function parseDataRoomDocumentId(raw: string): DataRoomDocumentRef | null {
+  const value = raw.trim();
+  if (value.startsWith('legal:')) {
+    const id = value.slice(6);
+    return /^[0-9a-f-]{36}$/i.test(id) ? { source: 'legal', id } : null;
+  }
+  const numeric = value.startsWith('dd:') ? value.slice(3) : value;
+  const id = Number(numeric);
+  return Number.isInteger(id) && id > 0 ? { source: 'diligence', id } : null;
+}
 
 // ---------------------------------------------------------------------------
 // Sharing
@@ -348,6 +373,9 @@ export interface DataRoomSummary {
    * complete one.
    */
   readiness: number;
+  /** How many PROVIDED documents this room's watermark cannot reach. Zero when the
+   *  room does not watermark. */
+  unstampable: number;
   activeShares: number;
   opens: number;
   documentViews: number;
@@ -379,23 +407,8 @@ export async function listDataRooms(db: Db, tenantId: number): Promise<DataRoomS
   if (!rooms.length) return [];
 
   const ids = rooms.map((room) => room.id);
-  const [documentRows, shareRows, accessRows] = await Promise.all([
-    db
-      .select({
-        dataRoomId: dueDiligenceChecklists.dataRoomId,
-        id: dueDiligenceDocuments.id,
-        label: dueDiligenceDocuments.label,
-        status: dueDiligenceDocuments.status,
-        required: dueDiligenceDocuments.required,
-        position: dueDiligenceDocuments.position,
-        artifactId: dueDiligenceDocuments.artifactId,
-        category: dueDiligenceChecklists.category,
-      })
-      .from(dueDiligenceDocuments)
-      .innerJoin(dueDiligenceChecklists, eq(dueDiligenceChecklists.id, dueDiligenceDocuments.checklistId))
-      .where(scopedToTenant(dueDiligenceDocuments, tenantId, inArray(dueDiligenceChecklists.dataRoomId, ids)))
-      .orderBy(desc(dueDiligenceDocuments.required), dueDiligenceDocuments.position)
-      .limit(1000),
+  const [documentsByRoom, shareRows, accessRows] = await Promise.all([
+    roomDocumentsByRoom(db, tenantId, ids),
     db
       .select({ dataRoomId: dataRoomShares.dataRoomId, revokedAt: dataRoomShares.revokedAt, expiresAt: dataRoomShares.expiresAt })
       .from(dataRoomShares)
@@ -413,23 +426,6 @@ export async function listDataRooms(db: Db, tenantId: number): Promise<DataRoomS
       ))
       .groupBy(activityLog.targetId, activityLog.verb),
   ]);
-
-  const documentsByRoom = new Map<number, DataRoomDocumentView[]>();
-  for (const row of documentRows) {
-    if (row.dataRoomId == null) continue;
-    const list = documentsByRoom.get(row.dataRoomId) ?? [];
-    list.push({
-      documentId: row.id,
-      label: row.label,
-      category: row.category,
-      status: row.status,
-      required: row.required,
-      available: Boolean(row.artifactId),
-      mime: null,
-      sizeBytes: null,
-    });
-    documentsByRoom.set(row.dataRoomId, list);
-  }
 
   const activeByRoom = new Map<number, number>();
   for (const row of shareRows) {
@@ -456,6 +452,11 @@ export async function listDataRooms(db: Db, tenantId: number): Promise<DataRoomS
       readiness: required.length
         ? Math.round((required.filter((document) => document.available).length / required.length) * 100)
         : 0,
+      // What a watermarked room CANNOT stamp — an image, an archive, a binary
+      // spreadsheet. Reported on the list rather than discovered when a fund tries
+      // to open one, because it is the difference between a control and a surprise:
+      // those documents can only ever be served view-only.
+      unstampable: room.watermark ? documents.filter((document) => document.available && !document.watermarkable).length : 0,
       activeShares: activeByRoom.get(room.id) ?? 0,
       opens: count(room.id, DATA_ROOM_VERBS.opened),
       documentViews: count(room.id, DATA_ROOM_VERBS.document),
@@ -468,7 +469,11 @@ export async function listDataRooms(db: Db, tenantId: number): Promise<DataRoomS
 // ---------------------------------------------------------------------------
 
 export interface DataRoomDocumentView {
-  documentId: number;
+  /** Prefixed — `dd:12` or `legal:<uuid>`. See {@link dataRoomDocumentId}. */
+  documentId: string;
+  /** Which table it came from. Surfaced so an owner's card can say "this room
+   *  holds four obligations and two executed files" rather than six of something. */
+  source: 'diligence' | 'legal';
   label: string;
   category: string;
   status: string;
@@ -478,6 +483,17 @@ export interface DataRoomDocumentView {
   available: boolean;
   mime: string | null;
   sizeBytes: number | null;
+  /**
+   * False when this file's format cannot carry the stamp at all (an image, an
+   * archive, a binary spreadsheet).
+   *
+   * Reported on the LIST rather than discovered at the moment somebody opens one,
+   * because it is a fact the room's owner needs BEFORE they share: in a
+   * watermarked room these are the documents that can only ever be served
+   * view-only, and knowing which they are is the difference between a control and
+   * a surprise.
+   */
+  watermarkable: boolean;
 }
 
 export interface ResolvedDataRoomShare {
@@ -599,28 +615,63 @@ export async function resolveDataRoomShare(db: Db, env: Env, token: string, opti
   };
 }
 
-/** The room's contents — the obligation AND whether the file behind it exists. */
-async function roomDocuments(db: Db, tenantId: number, dataRoomId: number): Promise<DataRoomDocumentView[]> {
-  const rows = await db
-    .select({
-      id: dueDiligenceDocuments.id,
-      label: dueDiligenceDocuments.label,
-      status: dueDiligenceDocuments.status,
-      required: dueDiligenceDocuments.required,
-      position: dueDiligenceDocuments.position,
-      artifactId: dueDiligenceDocuments.artifactId,
-      category: dueDiligenceChecklists.category,
-    })
-    .from(dueDiligenceDocuments)
-    .innerJoin(dueDiligenceChecklists, eq(dueDiligenceChecklists.id, dueDiligenceDocuments.checklistId))
-    .where(scopedToTenant(dueDiligenceDocuments, tenantId, eq(dueDiligenceChecklists.dataRoomId, dataRoomId)))
-    .orderBy(desc(dueDiligenceDocuments.required), dueDiligenceDocuments.position)
-    .limit(300);
+/**
+ * The contents of one room or of many — every diligence obligation AND every legal
+ * file in each.
+ *
+ * TWO shapes, deliberately, because they answer different questions and a fund
+ * asks both. An obligation says "we require a cap table" and may have no file
+ * behind it yet; a `legal_document_files` row IS the file — the formation
+ * certificate, the executed IP assignment — sealed at rest and placeable in a room
+ * by its `data_room_id` (0937).
+ *
+ * BATCHED over room ids on purpose: the room list and the single-room read want the
+ * identical rows, and writing the mapping twice is how a card and a share link come
+ * to disagree about what is in a room. THREE queries whatever the room count is —
+ * the obligations, the legal files, and one artifact read across both. A per-room
+ * or per-document fan-out is the N+1 that only appears once a workspace has a room
+ * per fund.
+ */
+async function roomDocumentsByRoom(
+  db: Db,
+  tenantId: number,
+  roomIds: readonly number[],
+): Promise<Map<number, DataRoomDocumentView[]>> {
+  const byRoom = new Map<number, DataRoomDocumentView[]>();
+  if (!roomIds.length) return byRoom;
 
-  // ONE read for every artifact rather than one per document — a diligence
-  // checklist routinely runs to fifty rows and a per-row lookup is the N+1 that
-  // only shows up once a real room is opened.
-  const artifactIds = rows.map((row) => row.artifactId).filter((id): id is string => !!id);
+  const [obligations, files] = await Promise.all([
+    db
+      .select({
+        roomId: dueDiligenceChecklists.dataRoomId,
+        id: dueDiligenceDocuments.id,
+        label: dueDiligenceDocuments.label,
+        status: dueDiligenceDocuments.status,
+        required: dueDiligenceDocuments.required,
+        position: dueDiligenceDocuments.position,
+        artifactId: dueDiligenceDocuments.artifactId,
+        category: dueDiligenceChecklists.category,
+      })
+      .from(dueDiligenceDocuments)
+      .innerJoin(dueDiligenceChecklists, eq(dueDiligenceChecklists.id, dueDiligenceDocuments.checklistId))
+      .where(scopedToTenant(dueDiligenceDocuments, tenantId, inArray(dueDiligenceChecklists.dataRoomId, [...roomIds])))
+      .orderBy(desc(dueDiligenceDocuments.required), dueDiligenceDocuments.position)
+      .limit(1000),
+    db
+      .select({
+        roomId: legalDocumentFiles.dataRoomId,
+        id: legalDocumentFiles.id,
+        label: legalDocumentFiles.title,
+        category: legalDocumentFiles.category,
+        artifactId: legalDocumentFiles.currentArtifactId,
+      })
+      .from(legalDocumentFiles)
+      .where(scopedToTenant(legalDocumentFiles, tenantId, inArray(legalDocumentFiles.dataRoomId, [...roomIds])))
+      .orderBy(desc(legalDocumentFiles.updatedAt))
+      .limit(500),
+  ]);
+
+  const artifactIds = [...obligations, ...files].map((row) => row.artifactId).filter((id): id is string => !!id);
   const meta = artifactIds.length
     ? await db
         .select({ id: artifacts.id, mime: artifacts.mime, sizeBytes: artifacts.byteSize })
@@ -629,19 +680,42 @@ async function roomDocuments(db: Db, tenantId: number, dataRoomId: number): Prom
     : [];
   const byId = new Map(meta.map((row) => [row.id, row]));
 
-  return rows.map((row) => {
+  const push = (
+    roomId: number | null,
+    ref: DataRoomDocumentRef,
+    row: { label: string; category: string | null; status?: string; required?: boolean; artifactId: string | null },
+  ) => {
+    if (roomId == null) return;
     const artifact = row.artifactId ? byId.get(row.artifactId) : undefined;
-    return {
-      documentId: row.id,
+    const list = byRoom.get(roomId) ?? [];
+    list.push({
+      documentId: dataRoomDocumentId(ref),
+      source: ref.source,
       label: row.label,
-      category: row.category,
-      status: row.status,
-      required: row.required,
+      category: row.category ?? 'other',
+      // A legal file that is IN the room is provided — there is no outstanding
+      // obligation behind it that could still be missing.
+      status: row.status ?? (artifact ? 'provided' : 'missing'),
+      required: row.required ?? false,
       available: Boolean(artifact),
       mime: artifact?.mime ?? null,
       sizeBytes: artifact?.sizeBytes ?? null,
-    };
-  });
+      watermarkable: canWatermark(artifact?.mime ?? null),
+    });
+    byRoom.set(roomId, list);
+  };
+
+  // Obligations first, and required ones above the rest, because the reason to
+  // open a diligence list is to find what is still missing.
+  for (const row of obligations) push(row.roomId, { source: 'diligence', id: row.id }, row);
+  for (const row of files) push(row.roomId, { source: 'legal', id: row.id }, row);
+  return byRoom;
+}
+
+/** One room's contents. A thin call of the batch above, so a card and a share link
+ *  can never be built from two different mappings of the same rows. */
+async function roomDocuments(db: Db, tenantId: number, dataRoomId: number): Promise<DataRoomDocumentView[]> {
+  return (await roomDocumentsByRoom(db, tenantId, [dataRoomId])).get(dataRoomId) ?? [];
 }
 
 export interface DataRoomFile {
@@ -661,12 +735,23 @@ export interface DataRoomFile {
  * Every enforcement the room's resolve applies is applied again here, because this
  * endpoint is reachable directly with the token and a check that only runs on the
  * page a recipient happens to load is not a check.
+ *
+ * ── THE WATERMARK IS NOW APPLIED TO THE BYTES ───────────────────────────────
+ * A PDF is stamped diagonally on every page with the reader and the instant, the
+ * same as a text document — the first pass could only do the text half, and served
+ * a PDF unstamped with the column downgraded to "no download". A format the stamp
+ * cannot reach at all (an image, an archive) is still served inline-only, which is
+ * the honest remaining control and is reported as `view-only` rather than implied.
+ *
+ * A PDF that cannot be parsed is REFUSED. Serving it unstamped from a room whose
+ * whole promise is the stamp would be the column lying at the one moment it
+ * matters.
  */
 export async function readDataRoomDocument(
   db: Db,
   env: Env,
   token: string,
-  documentId: number,
+  documentId: string,
 ): Promise<DataRoomFile> {
   const resolution = await resolveDataRoomShare(db, env, token, { log: false });
   if (resolution.outcome !== 'ok') {
@@ -679,21 +764,35 @@ export async function readDataRoomDocument(
   }
   const share = resolution.share;
 
-  const [document] = await db
-    .select({
-      id: dueDiligenceDocuments.id,
-      label: dueDiligenceDocuments.label,
-      artifactId: dueDiligenceDocuments.artifactId,
-    })
-    .from(dueDiligenceDocuments)
-    .innerJoin(dueDiligenceChecklists, eq(dueDiligenceChecklists.id, dueDiligenceDocuments.checklistId))
-    .where(scopedToTenant(
-      dueDiligenceDocuments,
-      share.tenantId,
-      eq(dueDiligenceDocuments.id, documentId),
-      eq(dueDiligenceChecklists.dataRoomId, share.dataRoomId),
-    ))
-    .limit(1);
+  const ref = parseDataRoomDocumentId(documentId);
+  if (!ref) throw new DataRoomError('That is not a document in this data room.', 404);
+
+  const document = ref.source === 'legal'
+    ? (await db
+        .select({ label: legalDocumentFiles.title, artifactId: legalDocumentFiles.currentArtifactId })
+        .from(legalDocumentFiles)
+        .where(scopedToTenant(
+          legalDocumentFiles,
+          share.tenantId,
+          eq(legalDocumentFiles.id, ref.id),
+          // The room membership is the access predicate, not just the id: a legal
+          // file that has been moved OUT of this room must stop resolving through
+          // links into it.
+          eq(legalDocumentFiles.dataRoomId, share.dataRoomId),
+        ))
+        .limit(1))[0]
+    : (await db
+        .select({ label: dueDiligenceDocuments.label, artifactId: dueDiligenceDocuments.artifactId })
+        .from(dueDiligenceDocuments)
+        .innerJoin(dueDiligenceChecklists, eq(dueDiligenceChecklists.id, dueDiligenceDocuments.checklistId))
+        .where(scopedToTenant(
+          dueDiligenceDocuments,
+          share.tenantId,
+          eq(dueDiligenceDocuments.id, ref.id),
+          eq(dueDiligenceChecklists.dataRoomId, share.dataRoomId),
+        ))
+        .limit(1))[0];
+
   if (!document?.artifactId) throw new DataRoomError('That document is not in this data room, or has not been provided yet.', 404);
 
   const artifact = await loadAndDecryptArtifact(db, env, share.tenantId, document.artifactId);
@@ -701,14 +800,10 @@ export async function readDataRoomDocument(
 
   let bytes = artifact.bytes;
   let stamped = false;
-  if (share.watermark && STAMPABLE.test(mime)) {
-    // A text document CAN be stamped, so it is — the recipient and the instant, on
-    // the document itself, which is what makes a leaked copy attributable.
-    const banner = `\n\n--- Confidential · shared with ${share.watermarkLabel} · ${share.roomName} ---\n`;
-    const decoder = new TextDecoder();
-    const encoder = new TextEncoder();
-    bytes = encoder.encode(`${banner.trimStart()}\n${decoder.decode(artifact.bytes)}${banner}`);
-    stamped = true;
+  if (share.watermark) {
+    const result = await watermarkDocument(bytes, mime, share.watermarkLabel ?? share.recipientEmail ?? 'recipient', share.roomName);
+    bytes = result.bytes;
+    stamped = result.outcome === 'stamped';
   }
 
   await recordActivity(env, db, {
@@ -720,7 +815,7 @@ export async function readDataRoomDocument(
     targetLabel: share.roomName,
     metadata: {
       shareId: share.shareId,
-      documentId: document.id,
+      documentId: dataRoomDocumentId(ref),
       label: document.label,
       recipientEmail: share.recipientEmail,
       stamped,
@@ -732,9 +827,10 @@ export async function readDataRoomDocument(
     mime,
     bytes,
     stamped,
-    // A watermarked room never offers "save as": the only way to read it is through
-    // the stamped view, which is the whole meaning of the column.
-    disposition: share.permission === 'download' && !share.watermark ? 'attachment' : 'inline',
+    // A watermarked room never offers "save as" for a format the stamp could not
+    // reach: inline is the only remaining control there. A STAMPED file is safe to
+    // hand over, because the copy carries the reader's name.
+    disposition: share.permission === 'download' && (!share.watermark || stamped) ? 'attachment' : 'inline',
   };
 }
 

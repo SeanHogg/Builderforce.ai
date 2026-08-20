@@ -729,8 +729,11 @@ export const FOUNDER_OBJECT_SPECS: readonly FounderObjectSpec[] = [
     defaultStatus: 'planning',
     actions: ['plan', 'track'],
     fields: [
-      { name: 'roundType', render: 'stat', label: 'roundType', hint: 'pre-seed | seed | series-a | bridge | safe.' },
-      { name: 'targetAmount', render: 'stat', label: 'targetAmount', hint: MONEY_HINT },
+      { name: 'roundType', render: 'stat', label: 'roundType', hint: 'pre-seed | seed | series-a | series-b | bridge | safe. Recorded on the round itself by canvas_plan_funding_round — this card shows it, and the record is what every allocation joins to.' },
+      { name: 'instrument', render: 'stat', label: 'instrument', hint: 'equity | safe | convertible-note | grant | debt. What the money actually buys, which is a different question from the round\'s name — a "seed" can be a SAFE.', bookkeeping: true },
+      { name: 'leadInvestor', render: 'stat', label: 'leadInvestor', hint: 'The firm leading the round, once one has committed. Never invent one — a round with no lead is the normal state for most of its life.', bookkeeping: true },
+      { name: 'roundStatus', render: 'stat', label: 'roundStatus', hint: 'open | closed | abandoned, from the round record. Distinct from this card\'s own `status`, which summarises the board.', bookkeeping: true },
+      { name: 'targetAmount', render: 'stat', label: 'targetAmount', hint: `${MONEY_HINT} What the round is RAISING — the plan. Recorded by canvas_plan_funding_round. What has actually closed is \`committed\`, derived from the allocations, and the two are deliberately different fields.` },
       { name: 'committed', render: 'stat', label: 'committed', hint: `${MONEY_HINT} Money actually CLOSED — never money promised. Written by canvas_sync_funding_round from the allocations that reached the closing stage; counting soft circles here is the single most common way a raise is misreported.`, bookkeeping: true },
       { name: 'valuation', render: 'stat', label: 'valuation', hint: MONEY_HINT },
       { name: 'closeTarget', render: 'stat', label: 'closeTarget', hint: 'ISO date you intend to close. Bind a `trigger` with comparator "due-within" so the runway conversation happens while there is still runway.', deadline: true },
@@ -801,8 +804,15 @@ export const FOUNDER_OBJECT_SPECS: readonly FounderObjectSpec[] = [
         name: 'documents',
         render: 'rows',
         label: 'documents',
-        columns: ['document', 'category', 'status', 'owner', 'required'],
-        hint: 'READ-ONLY. One row per required document: {document, category, status, owner, required}. Projected from the room\'s real diligence obligations by canvas_sync_data_room, INCLUDING the ones still missing (status "missing") — a data room that lists only what exists hides the gap it was built to close.',
+        columns: ['document', 'category', 'status', 'owner', 'required', 'source'],
+        hint: 'READ-ONLY. One row per document in the room: {document, category, status, owner, required, source}. Projected by canvas_sync_data_room from BOTH shapes a room holds — a diligence obligation (`source` "diligence", which may still be missing) and an encrypted legal file that has been filed into the room (`source` "legal"). The missing ones are listed too: a data room that shows only what exists hides the gap it was built to close. Put a legal file in the room with canvas_file_document_in_data_room.',
+        derived: true,
+      },
+      {
+        name: 'unstampable',
+        render: 'stat',
+        label: 'unstampable',
+        hint: 'READ-ONLY. How many PROVIDED documents this room\'s watermark cannot reach — an image, an archive, a binary spreadsheet. Zero when the room does not watermark. Reported here rather than discovered when a firm tries to open one, because those documents can only ever be served view-only and knowing which they are is the difference between a control and a surprise.',
         derived: true,
       },
       { name: 'ndaRequired', render: 'stat', label: 'ndaRequired', hint: 'true | false, read from the room itself. When true, a shared link resolves to "NDA pending" and opens NOTHING until the recipient signs the mutual NDA the share sends. Defaults to true — the safer default for diligence material.', derived: true },
@@ -969,7 +979,15 @@ export const FOUNDER_OBJECT_SPECS: readonly FounderObjectSpec[] = [
       CURRENCY_FIELD,
       { name: 'periodStart', render: 'stat', label: 'periodStart', hint: 'ISO date the pay period starts.' },
       { name: 'periodEnd', render: 'stat', label: 'periodEnd', hint: 'ISO date the pay period ends.' },
-      { name: 'paidAt', render: 'stat', label: 'paidAt', hint: 'ISO date the money actually left. This — not the period — is the month the cost belongs to, because a period straddling a month boundary would otherwise land its whole cost in the wrong one.', deadline: true },
+      // NOT a `deadline`, and the flag was here until 2026-08-19. Two things were wrong
+      // with it. The rule `SpecField.deadline` states is "mark a field only when passing
+      // it means somebody has missed something", and nothing is owed once a pay run has
+      // been paid — a countdown against it is an alert about money that already left. And
+      // the flag was inert anyway: `paidAt` is not in `DEADLINE_FIELD_NAMES`, so the
+      // server sweep could not resolve it, and a `trigger` bound here would have silently
+      // never fired — the exact failure the flag exists to prevent, which is why
+      // `canvasTriggers.test.ts` asserts the two lists agree.
+      { name: 'paidAt', render: 'stat', label: 'paidAt', hint: 'ISO date the money actually left. This — not the period — is the month the cost belongs to, because a period straddling a month boundary would otherwise land its whole cost in the wrong one.' },
       { name: 'grossAmount', render: 'stat', label: 'grossAmount', hint: `${EXACT_MONEY_HINT} Total gross pay before employer taxes.` },
       { name: 'employerTaxes', render: 'stat', label: 'employerTaxes', hint: `${EXACT_MONEY_HINT} What the employer owed on top of gross.` },
       { name: 'totalCost', render: 'stat', label: 'totalCost', hint: `${EXACT_MONEY_HINT} What the run cost the company in total. This is the number that is BURN — stored separately from gross plus taxes rather than derived from them, because a provider also bills benefits and its own fee and deriving the total would silently drop both.` },

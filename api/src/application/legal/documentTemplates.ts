@@ -15,7 +15,7 @@
  * forbids. So the NDA is an entry in this registry, and the data room renders it
  * the same way the co-founder flow renders a founders' agreement.
  *
- * ── WHY A REGISTRY OF DATA AND NOT FOUR FUNCTIONS ────────────────────────────
+ * ── WHY A REGISTRY OF DATA AND NOT SEVEN FUNCTIONS ───────────────────────────
  * A template is: a title, a category, a declared variable list and a renderer. That
  * makes "which templates exist" answerable by reading one array — which is what the
  * canvas tool advertises to the model, what the co-founder surface draws its form
@@ -100,9 +100,20 @@ const text = (values: TemplateValues, name: string, fallback = ''): string => {
   return fallback;
 };
 
+/**
+ * A numeric variable, or the template's own default.
+ *
+ * The empty case is the one that matters: `Number('')` is 0, not NaN, so a naive
+ * read returns ZERO for a variable nobody supplied — and a Master Services
+ * Agreement that says "payable within 0 days", or a vesting schedule with a
+ * 0-month cliff, is a document that looks deliberate and says something nobody
+ * agreed. An absent or blank value takes the fallback; an explicit 0 is honoured,
+ * because "no probationary period" is a real answer.
+ */
 const num = (values: TemplateValues, name: string, fallback: number): number => {
   const value = values[name];
-  const n = typeof value === 'number' ? value : Number(String(value ?? '').replace(/[^0-9.-]/g, ''));
+  if (value == null || (typeof value === 'string' && !value.trim())) return fallback;
+  const n = typeof value === 'number' ? value : Number(String(value).replace(/[^0-9.-]/g, ''));
   return Number.isFinite(n) ? n : fallback;
 };
 
@@ -493,6 +504,265 @@ const MUTUAL_NDA: DocumentTemplate = {
   },
 };
 
+// ---------------------------------------------------------------------------
+// The COMMERCIAL half (FO-G3) — the paperwork a company signs with somebody who
+// is not a founder
+// ---------------------------------------------------------------------------
+
+const COUNTERPARTY_VARIABLE: TemplateVariable = {
+  name: 'counterparty',
+  label: 'Counterparty',
+  kind: 'text',
+  required: true,
+  hint: 'The other side, by legal name. Use the `account` on the board where one exists, so the agreement and its invoices join to the same party rather than to two spellings.',
+};
+
+const SIGNERS_VARIABLE: TemplateVariable = {
+  name: 'parties',
+  label: 'Signatories',
+  kind: 'parties',
+  required: true,
+  hint: 'Who signs, on both sides: name, email, role. Real addresses only — these are the people the signature request goes to. Leave the holding blank; it is not an equity document.',
+};
+
+const MSA: DocumentTemplate = {
+  key: 'msa',
+  title: 'Master Services Agreement',
+  purpose: 'The standing terms every piece of work with this customer runs under, so each engagement is a statement of work and not a renegotiation.',
+  category: 'other',
+  contractType: 'msa',
+  intent: 'sign',
+  variables: [
+    COMPANY_VARIABLE,
+    COUNTERPARTY_VARIABLE,
+    SIGNERS_VARIABLE,
+    EFFECTIVE_VARIABLE,
+    JURISDICTION_VARIABLE,
+    { name: 'paymentTermsDays', label: 'Payment terms (days)', kind: 'number', required: false, hint: 'Days from invoice to payment. 30 is the convention; say it rather than assuming it.' },
+    { name: 'liabilityCap', label: 'Liability cap', kind: 'text', required: false, hint: 'What each side’s liability is limited to — "fees paid in the preceding 12 months". The clause a reviewer actually turns to.' },
+    { name: 'noticeDays', label: 'Termination notice (days)', kind: 'number', required: false, hint: 'Days of notice to end the agreement for convenience.' },
+  ],
+  render: (values) => {
+    const parties = templateParties(values);
+    const company = text(values, 'companyName', 'the Supplier');
+    const counterparty = text(values, 'counterparty', 'the Customer');
+    const days = num(values, 'paymentTermsDays', 30);
+    const notice = num(values, 'noticeDays', 30);
+    return [
+      `# Master Services Agreement — ${company} and ${counterparty}`,
+      '',
+      `**Effective date:** ${text(values, 'effectiveDate', '—')}  `,
+      `**Governing law:** ${text(values, 'jurisdiction', '—')}`,
+      '',
+      NOT_ADVICE,
+      '',
+      '## 1. What this covers',
+      '',
+      `This agreement sets the standing terms between ${company} and ${counterparty}. The WORK is described`
+      + ' in one or more statements of work, each of which incorporates these terms. Where a statement of'
+      + ' work conflicts with this agreement, the statement of work governs for that engagement only.',
+      '',
+      '## 2. Fees and payment',
+      '',
+      `Fees are set in each statement of work. Invoices are payable within **${days} days**. Undisputed`
+      + ' amounts unpaid after that may accrue interest at the statutory rate. A disputed amount must be'
+      + ' raised in writing before the due date, and the undisputed remainder paid on time.',
+      '',
+      '## 3. Intellectual property',
+      '',
+      `${counterparty} owns the deliverables described in a statement of work on payment in full.`
+      + ` ${company} retains everything it brought to the engagement and everything general it develops —`
+      + ' tools, methods, know-how and reusable components — and grants a perpetual, non-exclusive licence'
+      + ' to use those as embedded in the deliverables.',
+      '',
+      '## 4. Confidentiality',
+      '',
+      'Each party will keep the other’s non-public information confidential, use it only to perform this'
+      + ' agreement, and disclose it only to personnel and advisers who need it and are bound equivalently.'
+      + ' These duties survive termination.',
+      '',
+      '## 5. Warranties',
+      '',
+      `${company} will perform with reasonable skill and care and in accordance with the statement of work.`
+      + ' Except as stated here, neither party gives any other warranty, express or implied.',
+      '',
+      '## 6. Liability',
+      '',
+      text(values, 'liabilityCap',
+        'Each party’s total liability under this agreement is capped at the fees paid or payable in the'
+        + ' twelve months before the claim. Neither party is liable for indirect or consequential loss.'
+        + ' Nothing limits liability for death or personal injury caused by negligence, for fraud, or for'
+        + ' anything else that cannot lawfully be limited.'),
+      '',
+      '## 7. Term and termination',
+      '',
+      `Either party may end this agreement on **${notice} days’** written notice, or immediately for a`
+      + ' material breach that is not remedied within thirty days of notice. Statements of work already'
+      + ' running continue until completed or separately terminated, and work performed up to termination'
+      + ' is payable.',
+      '',
+      '## 8. General',
+      '',
+      `This agreement is governed by the law of ${text(values, 'jurisdiction', 'the stated jurisdiction')}.`
+      + ' Neither party may assign it without the other’s consent, except to a successor of its business.'
+      + ' It is the entire agreement on its subject and may be changed only in writing signed by both.',
+      '',
+      signatureBlock(parties),
+    ].join('\n');
+  },
+};
+
+const SOW: DocumentTemplate = {
+  key: 'sow',
+  title: 'Statement of Work',
+  purpose: 'One engagement: what is being delivered, by when, for how much, and what "done" means. Runs under an MSA where there is one.',
+  category: 'other',
+  contractType: 'sow',
+  intent: 'sign',
+  variables: [
+    COMPANY_VARIABLE,
+    COUNTERPARTY_VARIABLE,
+    SIGNERS_VARIABLE,
+    EFFECTIVE_VARIABLE,
+    { name: 'scope', label: 'Scope', kind: 'longText', required: true, hint: 'What is actually being built or done, in the terms the customer would use. The clause a dispute turns on — write what is IN and what is explicitly OUT.' },
+    { name: 'deliverables', label: 'Deliverables and acceptance', kind: 'longText', required: false, hint: 'One line per deliverable with what makes it accepted. "A working X" is not acceptance criteria; "passes the agreed test plan" is.' },
+    { name: 'fees', label: 'Fees', kind: 'text', required: false, hint: 'The amount and the shape — fixed price, day rate, or capped time and materials. Say which; "TBC" in a signed document is a future argument.' },
+    { name: 'timeline', label: 'Timeline', kind: 'text', required: false, hint: 'Start, key dates, end. A date nobody committed to should not be written here.' },
+  ],
+  render: (values) => {
+    const parties = templateParties(values);
+    const company = text(values, 'companyName', 'the Supplier');
+    const counterparty = text(values, 'counterparty', 'the Customer');
+    return [
+      `# Statement of Work — ${counterparty}`,
+      '',
+      `**Supplier:** ${company}  `,
+      `**Effective date:** ${text(values, 'effectiveDate', '—')}  `,
+      `**Fees:** ${text(values, 'fees', 'as agreed in writing before work starts')}  `,
+      `**Timeline:** ${text(values, 'timeline', 'as agreed in writing before work starts')}`,
+      '',
+      NOT_ADVICE,
+      '',
+      '## 1. Scope',
+      '',
+      text(values, 'scope'),
+      '',
+      '## 2. Deliverables and acceptance',
+      '',
+      text(values, 'deliverables',
+        'The deliverables are those described in the scope above. Each is accepted when it meets the'
+        + ' criteria agreed in writing, or ten working days after delivery if no written objection has been'
+        + ' raised. An objection must say what specifically does not meet the criteria.'),
+      '',
+      '## 3. Changes',
+      '',
+      'A change to the scope, the fees or the timeline takes effect only when both parties agree it in'
+      + ' writing. Work outside this scope is a new statement of work, not an extension of this one.',
+      '',
+      '## 4. Dependencies',
+      '',
+      `${counterparty} will provide the access, information, environments and decisions this work depends`
+      + ' on, within the timescales agreed. Where a dependency is late, the timeline moves by the delay.',
+      '',
+      '## 5. Terms',
+      '',
+      `This statement of work runs under the Master Services Agreement between ${company} and`
+      + ` ${counterparty} where one is in force. Where none is, the MSA terms attached to it apply to this`
+      + ' engagement alone.',
+      '',
+      signatureBlock(parties),
+    ].join('\n');
+  },
+};
+
+const OFFER_LETTER: DocumentTemplate = {
+  key: 'offer-letter',
+  title: 'Offer of Employment',
+  purpose: 'The offer a candidate signs. Renders from the `offer` card’s own fields, so what is sent is what the board already says.',
+  category: 'employment',
+  contractType: 'employment',
+  intent: 'sign',
+  variables: [
+    COMPANY_VARIABLE,
+    {
+      name: 'parties',
+      label: 'Candidate',
+      kind: 'parties',
+      required: true,
+      hint: 'ONE row: the candidate’s name, real email, and the role in `role`. Their real address — this is who the offer goes to.',
+    },
+    { name: 'title', label: 'Job title', kind: 'text', required: true, hint: 'The title on the offer. Take it from the `offer` card rather than re-typing it.' },
+    { name: 'startDate', label: 'Start date', kind: 'date', required: true, hint: 'ISO date they begin. Take it from the `offer` card’s startDate.' },
+    { name: 'salary', label: 'Salary', kind: 'text', required: true, hint: 'The amount and the currency and the period — "£85,000 per year". Take it from the `offer` card’s compensation fields; never round it.' },
+    { name: 'equity', label: 'Equity', kind: 'text', required: false, hint: 'The grant as agreed — number of options or a percentage, plus the vesting. Take it from the `offer` card’s equity field. Leave blank rather than implying a grant that was not agreed.' },
+    { name: 'location', label: 'Location / working pattern', kind: 'text', required: false, hint: 'Where they work and how often — "London, three days a week in the office", "fully remote (UK)".' },
+    { name: 'probationMonths', label: 'Probation (months)', kind: 'number', required: false, hint: 'Months of probation. Zero is a real answer and should be written as one.' },
+    { name: 'contingencies', label: 'Conditions', kind: 'longText', required: false, hint: 'What the offer is conditional on — right to work, references, background check. An unstated condition applied later is a withdrawn offer, not a condition.' },
+    JURISDICTION_VARIABLE,
+  ],
+  render: (values) => {
+    const parties = templateParties(values);
+    const candidate = parties[0];
+    const company = text(values, 'companyName', 'the Company');
+    const probation = num(values, 'probationMonths', 3);
+    return [
+      `# Offer of Employment — ${company}`,
+      '',
+      `**To:** ${candidate?.name ?? '—'}${candidate?.email ? ` (${candidate.email})` : ''}  `,
+      `**Role:** ${text(values, 'title', '—')}  `,
+      `**Start date:** ${text(values, 'startDate', '—')}  `,
+      `**Governing law:** ${text(values, 'jurisdiction', '—')}`,
+      '',
+      NOT_ADVICE,
+      '',
+      `## 1. The offer`,
+      '',
+      `${company} is pleased to offer you the role of **${text(values, 'title', '—')}**, starting on`
+      + ` **${text(values, 'startDate', '—')}**. ${text(values, 'location') ? `You will work ${text(values, 'location')}.` : ''}`,
+      '',
+      '## 2. Pay',
+      '',
+      `Your salary will be **${text(values, 'salary', '—')}**, paid in accordance with the Company’s normal`
+      + ' payroll, subject to deductions required by law. It will be reviewed at least annually; a review is'
+      + ' not a promise of an increase.',
+      '',
+      ...(text(values, 'equity') ? [
+        '## 3. Equity',
+        '',
+        `${text(values, 'equity')}`,
+        '',
+        'Any grant is subject to the Company’s plan rules and to board approval, and vests on the schedule'
+        + ' stated above. Nothing here grants shares by itself.',
+        '',
+      ] : []),
+      `## ${text(values, 'equity') ? '4' : '3'}. Probation and notice`,
+      '',
+      probation > 0
+        ? `Your first **${probation} month${probation === 1 ? '' : 's'}** are a probationary period, during`
+          + ' which either side may end the employment on one week’s notice. After that, the notice period'
+          + ' is as set out in your contract of employment.'
+        : 'There is no probationary period. Notice is as set out in your contract of employment.',
+      '',
+      `## ${text(values, 'equity') ? '5' : '4'}. Conditions`,
+      '',
+      text(values, 'contingencies',
+        'This offer is conditional on your right to work in the jurisdiction stated above and on'
+        + ' satisfactory references. If either is not met, the offer may be withdrawn.'),
+      '',
+      `## ${text(values, 'equity') ? '6' : '5'}. Confidentiality and intellectual property`,
+      '',
+      `You will keep ${company}’s confidential information confidential, and everything you create in`
+      + ' connection with your employment belongs to the Company. Your contract of employment sets these'
+      + ' out in full and prevails over this summary.',
+      '',
+      '## Acceptance',
+      '',
+      'Signing this offer records your acceptance of the terms above. It is not itself the contract of'
+      + ' employment, which will be provided separately and will govern your employment.',
+    ].join('\n');
+  },
+};
+
 /**
  * Every template, in the order a company needs them.
  *
@@ -504,6 +774,11 @@ export const DOCUMENT_TEMPLATES: readonly DocumentTemplate[] = [
   IP_ASSIGNMENT,
   FOUNDER_VESTING,
   MUTUAL_NDA,
+  // The commercial half (FO-G3): the paperwork a company signs with somebody who
+  // is not a founder. Each is one entry — no renderer registry, no branch.
+  MSA,
+  SOW,
+  OFFER_LETTER,
 ];
 
 const BY_KEY: ReadonlyMap<string, DocumentTemplate> = new Map(DOCUMENT_TEMPLATES.map((template) => [template.key, template]));
