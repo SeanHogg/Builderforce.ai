@@ -1,3 +1,63 @@
+## ✅ RESOLVED 2026-08-19 — The "different file fails every run" flake was the working tree being edited underneath the suite
+
+**Roadmap section closed:** *🎲 `api` full-suite vitest run is FLAKY — a different file fails each run* — deleted from
+[ROADMAP.md](./ROADMAP.md), including its **BLOCKER: not reproducible on demand**.
+
+### The blocker was wrong: it reproduces in ~25 seconds
+
+The entry had been chasing worker-pool contention and an unreset module-global, and could not proceed because catching
+it needed several full runs and the casualty moved each time. The decisive move was to reproduce it somewhere those
+theories cannot apply:
+
+`npm run check` — **24 pure-reader guards, no test framework, no worker pool, no module globals, ~25s** — failed a
+**DIFFERENT guard on each of three consecutive runs** (`check:tenant-scope`, then `check:schema`, then two green).
+Every one passed when run alone seconds later. Nothing in that suite can contend on a pool or leak a module global, so
+both standing theories were dead.
+
+### The cause
+
+**Another agent session was editing the same checkout while the suite read it.** Confirmed directly: `git status`
+changed across a 45-second window, ~150 files were modified/deleted that the measuring session never touched, and a
+regenerated `en.json` silently dropped catalog keys written minutes earlier.
+
+Controlled comparison, same commit, same machine:
+
+| Tree | Guards (24) | Full vitest suite |
+| --- | --- | --- |
+| Being edited concurrently | different guard failed each run | **2 failed** / 6,905 |
+| Pristine `git worktree` | **identical result 4/4 runs** | **6,830 passed, 0 failed** |
+
+The second row of the vitest column was an accident that made the point better than a designed experiment could: that
+run was started in the worktree and the worktree was then edited *while it ran* — and it produced exactly the signature
+the entry describes, 1–2 failures out of thousands.
+
+Many tests here read SOURCE off disk (`orderByNullPlacement` scans the schema modules, the manager tests build fixtures
+from source). A file rewritten mid-run is read half-written by whichever test reaches it first — which is precisely why
+the casualty moves and why the same assertion passes seconds later. **CI was never affected**: it always runs a clean
+checkout, so a red CI run always did mean a real regression.
+
+### What shipped
+
+- **`api/test/treeStability.ts`** — snapshots `git status --porcelain` around the run and, when the tree moved, prints
+  a loud explanation naming the exact paths that changed, plus the `git worktree` command to re-run cleanly. It
+  **never fails the run**: a false alarm blocking a legitimate red build would be worse than the flake it explains, and
+  the honest signal is "do not trust this result", not "this result is wrong".
+- **The baseline is taken in `vitest.config.ts`, not in the globalSetup.** Measured: Vitest runs `globalSetup` *after*
+  Vite boots and transforms — >25s into a run on this suite — by which point an edit made at t=12s is already baked
+  into the "before" snapshot and therefore invisible. The config module is the first thing evaluated, so it is the only
+  honest place to take it; it is handed over in `BF_TREE_BEFORE` because config and globalSetup share a process but no
+  module scope. Verified both ways: silent on a stable tree, fires and names the file on a mid-run edit.
+
+### Two real defects found while proving it
+
+- **`check:tracks` was permanently RED on every Windows checkout.** It compared the generated isolation-tracks table to
+  the committed one with a raw `!==`, but the repo checks out with `core.autocrlf=true`, so the committed file has CRLF
+  and the generator emits LF. The files were byte-identical in CONTENT. Worse than a plain false positive: the fix it
+  advised ("regenerate and commit") produced a diff `git` then showed as empty. Now compares content with line endings
+  normalized — this is what took the guard suite from a standing 23/24 to **24/24**.
+- **`api` typecheck was RED on `main`.** `ProjectProps` gained a required `startDate` (0942) and two fixtures were never
+  updated — `epicDecomposition.test.ts` and `listTasksArchived.test.ts` both failed `TS2741`. Fixed; `tsgo --noEmit`
+  is clean.
 ## ✅ RESOLVED 2026-08-19 — 253 unscoped tenant queries converted, and the reason the other 271 cannot be
 
 The tenant-scope baseline is **524 → 271 statements, 168 → 107 files.** More useful than the

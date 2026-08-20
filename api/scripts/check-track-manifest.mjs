@@ -152,9 +152,20 @@ lines.push('**Shared coordination files** (every track may edit; serialize chang
 lines.push('');
 const generated = lines.join('\n') + '\n';
 
+/**
+ * Compare CONTENT, not line endings.
+ *
+ * The repo is checked out with `core.autocrlf=true` on Windows, so the committed table
+ * arrives with CRLF terminators while this generator always emits LF. A raw `!==` therefore
+ * reported "out of sync" for a file that is byte-identical in content — permanently RED on
+ * every Windows checkout and green in CI, which is the worst split to debug because the
+ * fix it suggests (regenerate and commit) produces a diff git then shows as empty.
+ */
+const sameContent = (a, b) => a.split('\r\n').join('\n') === b.split('\r\n').join('\n');
+
 if (checkMode) {
   const current = existsSync(tableFile) ? readFileSync(tableFile, 'utf8') : '';
-  if (current !== generated) {
+  if (!sameContent(current, generated)) {
     console.error(
       `❌  ${tableFile} is out of sync with the manifest.\n` +
         '   Run `node api/scripts/check-track-manifest.mjs` and commit the result.',
