@@ -18,6 +18,7 @@ import type {
   ManagerDailyDigest,
   ManagerAction,
   ManagerOverview,
+  ManagerPassRecord,
   ManagerPolicy,
   ManagerRunTask,
   StallCensusResponse,
@@ -125,6 +126,25 @@ const stalls: StallRegister = {
   maxAttempts: 3,
 };
 
+/**
+ * The `manager_runs` rows behind the cards above.
+ *
+ * The counters used to be parsed out of the run card's PROSE summary, and this fixture
+ * carried only the cards — so when migration 1082 moved the counters onto
+ * `manager_runs.summary` (see `passCountersFrom`, which reads the RECORD), three
+ * assertions here started asking for findings that can no longer be raised from prose.
+ * The production reading is the right one: a card's sentence is written for a person and
+ * a counter is data. The fixture now supplies both, which is what the running product
+ * does.
+ */
+const passes: ManagerPassRecord[] = [
+  {
+    runTaskId: 701, ok: true, changed: true, shedStages: [],
+    summary: { scored: 0, ranked: 300, assigned: 0, prsConducted: 0, prsMerged: 0, dispatched: 0, audited: 40 },
+    at: iso(14 * DAY - 4 * MIN),
+  },
+];
+
 const overview: ManagerOverview = {
   config: {
     managerRef: null, enabled: true, prMergePolicy: 'on_green',
@@ -143,6 +163,7 @@ const overview: ManagerOverview = {
   backlog: [],
   actions,
   runTasks,
+  passes,
   autonomy: { tokenBlocked: false, reason: null, effectivePlan: 'free' },
   managerTypes: [],
   directives: [{
@@ -279,7 +300,16 @@ describe('managerFindings', () => {
   });
 
   it('names a pass that completes and changes NOTHING (the silent no-op)', () => {
-    const recent = { ...input, overview: { ...overview, runTasks: [freshPass(), ...runTasks] } };
+    const recent = {
+      ...input,
+      overview: {
+        ...overview,
+        runTasks: [freshPass(), ...runTasks],
+        // The record the FRESH card closed — same counters, five minutes old rather than
+        // fourteen days, which is the entire difference between the two findings.
+        passes: [{ ...passes[0]!, runTaskId: 999, at: iso(5 * MIN) }, ...passes],
+      },
+    };
     const f = managerFindings(recent, now).find((x) => x.code === 'ineffective_autoBusinessValue');
     expect(f?.severity).toBe('critical');
     expect(f?.text).toContain('reported scored 0');

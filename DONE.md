@@ -445,6 +445,32 @@ Localized in all five catalogs. Covered by `frontend/src/lib/hiringHandover.test
   everywhere the registry was not pulled in by accident. Listed, and `creationCanvas.marketing` written
   in all five languages.
 
+### The six red test files, closed
+
+The frontend suite was failing 14 tests across 6 files before this pass and passes clean after it. None
+of the six was caused by the work above; every one is a seam that had drifted and nothing had caught.
+
+- **`TicketContextStrip.test.tsx` (5)** — the strip's "no objective yet" branch loads the objective list
+  in a passive effect, and the mock of `@/lib/builderforceApi` had no `pmoApi`. That does not fail an
+  assertion: it throws OUT of the effect as an uncaught exception, reported against whichever test
+  happened to be running, which is why five cases failed for one missing key.
+- **`managerDiagnostics.test.ts` (3)** — migration 1082 moved a pass's counters off the run card's prose
+  summary and onto `manager_runs.summary`; `passCountersFrom` reads the RECORD, and the fixture supplied
+  only cards. So the two findings that depend on a counter (`ineffective_*`, `unverified_*`) could not be
+  raised at all. The fixture now carries both, which is what the running product does.
+- **`canvasSurfaces.test.tsx` (2)** — two pinned surface lists that the registry had grown past:
+  `facilitate` (a sixth object-scoped surface) and `calendar` (a fifth board surface). The same drift the
+  test's own comment records about `world`.
+- **`rootRoutes.test.ts` (2)** — `career`, `disputes`, `hiring` and `p` are directories under `src/app`
+  and were absent from `APP_ROUTE_SEGMENTS`, which is the table middleware answers a hard 404 from. An
+  undeclared route directory is not a test failure in production — it is a live page the middleware 404s.
+- **`founderObjects.test.ts` (1)** — `experiment.abTestKey`, `trafficAllocation` and `evidence` had no
+  catalog entry in any language, so each label rendered as its own key path. Written in all five.
+- **`operationsObjects.test.ts` (1)** — the list of per-industry kinds that must NOT exist named
+  `legalMatter`, which the LEGAL vocabulary legitimately declares for something else entirely (what is
+  being argued, with an adverse party and a filing deadline). The example is now `legalPracticeJob`, so
+  the assertion tests the duplication it is about rather than colliding with a real kind.
+
 ## ✅ RESOLVED 2026-08-20 — A document opened on the page runtime is now written at page size, and thirty messages that had been raw keys in all five languages are messages again
 
 Reported from the product: a document created on the canvas opens into an editor whose writing area is

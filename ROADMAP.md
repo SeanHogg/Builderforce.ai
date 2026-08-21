@@ -139,7 +139,7 @@ follows is what closing them surfaced.*
 
 *Counts re-derived from the body on 2026-08-20 (second pass — every number below was recounted from the
 body, not carried forward). One entry = one top-level `- ` bullet, which is the grain the register is written
-in; a bullet can be compound, so this is a guide rather than a ticket count. **247 open entries, up from 243** (the enterprise-layer pass added four; it closed none that were already listed) — the closed work of the 2026-08-20 code lives in [DONE.md](./DONE.md). This pass removed what was
+in; a bullet can be compound, so this is a guide rather than a ticket count. **244 open entries** (re-derived from the body 2026-08-20, evening — the table had group 10 at 35 against a body of 32) (the enterprise-layer pass added four; it closed none that were already listed) — the closed work of the 2026-08-20 code lives in [DONE.md](./DONE.md). This pass removed what was
 still sitting here after being finished: the `check:canvas-tools` guard and the five `frontend tsgo` errors
 (group 15), the reachable-vendor adapter family and the emptied mailbox-residuals heading (group 9), the
 Career-layer section whose every item had shipped, two closed Upwork-parity items, and two orphaned
@@ -156,7 +156,7 @@ paragraph tails left behind when their own bullets were deleted (group 10).*
 | 6 | [👥 Workforce, Boards, Kanban & Ceremonies](#6--workforce-boards-kanban--ceremonies) | 19 |
 | 7 | [📊 Insights, Analytics & Audits](#7--insights-analytics--audits) | 2 |
 | 9 | [🔌 Integrations, Connectors & Workflows](#9--integrations-connectors--workflows) | 23 |
-| 10 | [🛍️ Marketplace, Talent, Freelance, Knowledge & Canvas](#10--marketplace-talent-freelance-knowledge--canvas) | 35 |
+| 10 | [🛍️ Marketplace, Talent, Freelance, Knowledge & Canvas](#10--marketplace-talent-freelance-knowledge--canvas) | 32 |
 | 11 | [🎬 Studio (Video/Voice), QA & Mobile](#11--studio-videovoice-qa--mobile) | 8 |
 | 12 | [🖥️ VS Code Extension](#12--vs-code-extension) | 5 |
 | 13 | [🏢 Segments, Multi-tenant, Embed & Governance](#13--segments-multi-tenant-embed--governance) | 9 |
