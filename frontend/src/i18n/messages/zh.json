@@ -19324,6 +19324,7 @@
     "noticePrdNotSaved": "项目 PRD 未保存",
     "noticeQualityCardAdded": "已添加质量卡片 — 运行诊断以得出评分",
     "noticeSaveFailed": "保存失败",
+    "noticeSaveConflict": "其他人先保存了 — 重新打开画布即可看到他们的版本。",
     "noticeStandupFramePrepared": "站会框架已准备好",
     "noticeObjectLocked": "此对象正由其他协作者编辑",
     "noticeLensAlreadyExpanded": "此项目视图已展开",

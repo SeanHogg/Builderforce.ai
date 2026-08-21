@@ -21,7 +21,7 @@
 
 /** The narrow slice of a next-intl translator these notices need — the canvas
  *  translator seam under this module's historical name. Declared once in
- *  `domains/canvas/domain/canvasText.ts`, because this file and `canvasFileImport.ts`
+ *  `domains/canvas/domain/canvasText.ts`, because this file and `application/ImportCanvasFile.ts`
  *  had independently invented the identical type. */
 export type { CanvasTextTranslator as CanvasNoticeTranslator } from '@/domains/canvas/domain/canvasText';
 import type { CanvasTextTranslator as CanvasNoticeTranslator } from '@/domains/canvas/domain/canvasText';

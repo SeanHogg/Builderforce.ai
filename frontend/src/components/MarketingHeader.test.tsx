@@ -12,7 +12,7 @@ vi.mock('./HeaderCartButton', () => ({ HeaderCartButton: () => <span>Cart</span>
 vi.mock('@/app/ThemeProvider', () => ({ ThemeToggleButton: () => <span>Theme</span> }));
 
 const localWork = vi.hoisted(() => ({ sessions: [] as Array<{ sessionId: string }> }));
-vi.mock('@/lib/creationSessions', () => ({ listLocalCreationSessions: () => localWork.sessions }));
+vi.mock('@/domains/canvas/infrastructure/localCanvasStore', () => ({ listLocalCreationSessions: () => localWork.sessions }));
 
 const { default: MarketingHeader } = await import('./MarketingHeader');
 

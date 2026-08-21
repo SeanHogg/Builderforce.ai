@@ -52,7 +52,7 @@
 import type { Edge } from '@xyflow/react';
 import type { CreationFlowNode } from '@/components/creation-canvas/CreationNode';
 import type { CreationNodeData, CreationObjectKind } from '@/components/creation-canvas/types';
-import { STICKY_COLORS } from '@/components/creation-canvas/authoredColors';
+import { STICKY_COLORS } from '@/domains/canvas/domain/authoredColors';
 
 // ---------------------------------------------------------------------------
 // The Miro wire shapes

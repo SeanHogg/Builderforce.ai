@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
-import { importCanvasFile, type ImportTranslator } from './canvasFileImport';
-import { PAGE_BREAK_MARKER } from './officeFormats';
+import { importCanvasFile, type ImportTranslator } from './ImportCanvasFile';
+import { PAGE_BREAK_MARKER } from '@/lib/officeFormats';
 
 /** Every visible string comes from the catalog, so the tests assert on the key
  * rather than on English that a translator is free to change. */

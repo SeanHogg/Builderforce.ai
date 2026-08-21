@@ -9,7 +9,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { useDismissable } from '@/lib/useDismissable';
 import { creationSessionsApi, type CreationSessionSummary } from '@/lib/builderforceApi';
 import { fetchRecentCanvases, invalidateRecentCanvases, listPendingDrafts, readLastCanvas } from '@/lib/pendingWork';
-import type { LocalCreationEntry } from '@/lib/creationSessions';
+import type { LocalCreationEntry } from '@/domains/canvas/infrastructure/localCanvasStore';
 import { MenuDivider, MenuItemMeta, MenuScroll, MenuSectionLabel, MenuSurface, menuItemStyle } from './MenuSurface';
 
 /** How many recent canvases the menu offers before deferring to the library. */

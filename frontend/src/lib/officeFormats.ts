@@ -20,7 +20,7 @@
  * is now stated once in `office/container.ts` instead of being the reason the
  * four OOXML readers had to live in the same file as the PDF one.
  *
- * The export surface is unchanged, so every importer — `canvasFileImport`,
+ * The export surface is unchanged, so every importer — `ImportCanvasFile`,
  * `canvasDocuments`, `diagramVsdx`, `CreationCanvas` and the tests — is
  * untouched by the split.
  */

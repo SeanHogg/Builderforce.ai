@@ -12,7 +12,7 @@
  * canvas in jsdom.
  *
  * ── THE SHAPE, AND WHY IT IS THIS ONE ────────────────────────────────────────
- * Identical to `lib/canvasFileImport.ts`, which is already this layer's other use
+ * Identical to `ImportCanvasFile.ts`, which is this layer's other use
  * case and predates the folder: take what you need, return a DESCRIPTION of the
  * change, mutate nothing. The caller applies it. That is what makes every rule
  * here testable in milliseconds and what stops a second copy of "how a dataset

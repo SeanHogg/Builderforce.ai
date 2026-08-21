@@ -23,7 +23,7 @@ import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/AuthContext';
 import { creationSessionsApi, type CreationSessionSummary } from '@/lib/builderforceApi';
 import { fetchRecentCanvases, invalidateRecentCanvases, listPendingDrafts } from '@/lib/pendingWork';
-import type { LocalCreationEntry } from '@/lib/creationSessions';
+import type { LocalCreationEntry } from '@/domains/canvas/infrastructure/localCanvasStore';
 import { startGuestCreationSession } from '@/lib/guestPromptCapture';
 import { Button } from '@/components/ui';
 

@@ -32,7 +32,7 @@
 
 import type { Edge } from '@xyflow/react';
 import type { CreationFlowNode } from '@/components/creation-canvas/CreationNode';
-import { creationStorageKey } from './creationSessions';
+import { creationStorageKey } from '@/domains/canvas/infrastructure/localCanvasStore';
 
 /**
  * How many checkpoints a local board keeps.

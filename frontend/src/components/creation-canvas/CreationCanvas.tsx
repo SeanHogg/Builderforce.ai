@@ -93,8 +93,9 @@ import type { CreationNodeData, CreationObjectKind } from './types';
 import {
   associateBrainWithArtifacts,
   boardFromPersistedGraph,
-  mergeCollaboratorBoards,
   objectAtPoint,
+  persistedGraphFromBoard,
+  resolveObjectRef,
   type RejectedCanvasObject,
 } from '@/domains/canvas/domain/canvasBoard';
 import { duplicateAddUpdateTarget, selectionWithinBoard, shouldAcquireCanvasObjectLock } from '@/domains/canvas/domain/selection';
@@ -115,7 +116,20 @@ import {
   visualizeDataset as visualizeDatasetUseCase,
   type MaterializeResult,
 } from '@/domains/canvas/application/MaterializeDataset';
-import { AUTHORED_DRAWING_STROKE, AUTHORED_WEBSITE_ACCENT } from './authoredColors';
+import { CARD_ACTS } from '@/domains/canvas/application/cardActs';
+import { syncSocialCampaign as syncCampaignUseCase } from '@/domains/marketing/application/SyncSocialCampaign';
+import { socialCampaignGateway } from '@/domains/marketing/infrastructure/socialCampaignGateway';
+import { cardActFor, runCardAct } from '@/domains/canvas/application/CardAct';
+import {
+  boardSignature,
+  createCanvasNotices,
+  persistBoard,
+  saveAttemptKey,
+  type CanvasNotices,
+} from '@/domains/canvas/application/PersistCanvas';
+import { createSharedSession, serializeForRoom, type SharedSession } from '@/domains/canvas/application/ShareCanvasSession';
+import { createPresenceRelay, type PresenceRelay } from '@/domains/canvas/application/PresenceRelay';
+import { AUTHORED_DRAWING_STROKE, AUTHORED_WEBSITE_ACCENT } from '@/domains/canvas/domain/authoredColors';
 import { DiagramConvertPanel } from './DiagramConvertPanel';
 import styles from './CreationCanvas.module.css';
 import { agileMetricsApi, ceremonySessionsApi, creationSessionsApi, llmApi, pmoApi, runtimeApi, specsApi, tasksApi, taskSpecsApi, toolsApi, workflowDefinitions, type CanvasResumeShare, type CreationOutcomeMetric, type CreationOutcomeMetrics, type CreationSessionActivity, type CreationSessionComment, type CreationSessionDetail, type CreationSessionInvitation, type CreationSessionSummary, type CreationSnapshotSummary, type CreationTemplate as ServerCreationTemplate, type CreationTimelineMessage, type PmoScopeKind } from '@/lib/builderforceApi';
@@ -129,7 +143,9 @@ import {
   outcomeMetricLabel,
   type OutcomeTranslator,
 } from '@/lib/outcomeMetrics';
-import { creationGraphFromSnapshot, creationStorageKey, localCreationSnapshot, readLocalCreationSession, writeLocalCreationSession, type LocalCreationSnapshot } from '@/lib/creationSessions';
+import { creationStorageKey, localCreationSnapshot, parseLocalCreationSnapshot, readLocalCreationSession, writeLocalCreationSession, type LocalCreationSnapshot } from '@/domains/canvas/infrastructure/localCanvasStore';
+import { canvasSessionGateway } from '@/domains/canvas/infrastructure/canvasSessionGateway';
+import { createGuestRoomGateway } from '@/domains/canvas/infrastructure/guestRoomGateway';
 import { answersComplete, defaultInput, questionIds, type ToolResult } from '@/lib/tools';
 
 /**
@@ -148,22 +164,14 @@ import { useGuestRoom } from '@/lib/useGuestRoom';
 import { guestMediaTransport } from '@/lib/guestRoomApi';
 import { useCanvasLiveRoom } from '@/lib/live/useCanvasLiveRoom';
 import { GuestInviteLink } from '@/components/guest/GuestInviteLink';
-import {
-  createGuestRoom, leaveGuestRoom, fetchGuestRoomCanvas, pushGuestRoomCanvas,
-  getActiveGuestRoom, getGuestDisplayName, setGuestDisplayName,
-} from '@/lib/guestRoomApi';
+import { getActiveGuestRoom, getGuestDisplayName, setGuestDisplayName } from '@/lib/guestRoomApi';
 import { CanvasRunAbortedError, GuestAiUnavailableError, isCanvasRunAborted, runCreationCanvasAi, type CanvasAiCompletion } from '@/lib/creationCanvasAi';
 import { canvasNoticesFrom } from '@/lib/canvasNotices';
 import { canvasTranscriptForModel } from '@/lib/canvasTranscript';
 import { approvalGuidance, evaluateGate, readProvenance, type ApprovalMode } from '@/lib/canvasApprovalGate';
 import { sheetFormulaGuidance } from '@/lib/canvasSheet';
 import { deadlineBearingKinds, isSpecObjectKind, makeSpecDeriveBoard, specRefKey } from '@/lib/specObjects';
-import { learnersFromCohort } from '@/lib/academic/gradebook';
-import { statsOf, curriculumMapProblems, mappingRows } from '@/lib/academic/derivations';
-import { applyRubric, applyLatePolicy, hoursLate, parseLatePolicy, rubricFromNode, rubricProblems, type CriterionSelection } from '@/lib/academic/marking';
 import { parseRosterCsv, type RosterRow } from '@/lib/academic/roster';
-import { parseReferences, entryRowFromRecord } from '@/lib/academic/citations';
-import { pullLtiRoster, pushLtiScore } from '@/lib/ltiApi';
 import { FORMULA_FUNCTIONS } from '@/lib/canvasFormula';
 import type { BrainAction, BrainMessage, BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
 import '@seanhogg/builderforce-brain-ui/styles.css';
@@ -260,7 +268,7 @@ import { DEFAULT_DRAWING_PREFERENCES, readDrawingPreferences, writeDrawingPrefer
 import { useChromeSpace } from './useChromeSpace';
 import {
   fileToDataUrl, importCanvasFile, type AttachmentBytesStrategy, type ImportTranslator,
-} from '@/lib/canvasFileImport';
+} from '@/domains/canvas/application/ImportCanvasFile';
 import { readAttachmentSource, uploadAttachmentSource } from '@/lib/canvasAttachmentUploadApi';
 import { importResumeFromAttachment } from '@/lib/resumeImportApi';
 import { aiContextGate, boardInventory, findInInventory, scopeNote } from '@/lib/canvasContextSnapshot';
@@ -274,7 +282,7 @@ import {
 import { resumeDocumentFromText, resumeDocumentIsThin } from '@builderforce/creation-canvas-contract';
 // THE HANDOVER between the two hiring vocabularies — see `handover.ts`. Imported as a
 // pure mapping so this component performs the transition and does not define it.
-import { employeeHiredFrom, employmentHandoverBlocker, OFFER_TO_EMPLOYMENT_HANDOVER, planEmploymentHandover, type OnboardingStepKey } from '@builderforce/creation-canvas-contract';
+import { parseReferences, entryRowFromRecord } from '@/lib/academic/citations';
 import { renderedCanvasResume, resumeHtmlFile } from '@/lib/canvasResumeRenderer';
 import { useOptionalLiveSession } from '@/lib/live/LiveSessionContext';
 import { createCanvasJournal, describeGraphChange } from '@/lib/canvasActionJournal';
@@ -338,7 +346,7 @@ import { generateFixture } from '@/lib/canvasTestData';
 import * as qaApi from '@/lib/qa/api';
 import { canvasBuildBinding, canvasBuildModality, canvasBuildPatch, createCanvasBuild } from '@/lib/canvasBuild';
 import { canvasBuildActions, type BoundCanvasBuild } from '@/lib/canvasBuildTools';
-import { canvasFounderOpsActions, payRunFieldsFrom, pipelineFieldsFrom, type CanvasFounderOpsContext } from '@/lib/canvasFounderOpsTools';
+import { canvasFounderOpsActions, pipelineFieldsFrom, type CanvasFounderOpsContext } from '@/lib/canvasFounderOpsTools';
 import { canvasDataRoomActions } from '@/lib/canvasDataRoomTools';
 import { canvasDocumentTemplateActions } from '@/lib/canvasDocumentTemplateTools';
 import { canvasEquityActions } from '@/lib/canvasEquityTools';
@@ -346,7 +354,7 @@ import { canvasLegalDocumentActions } from '@/lib/canvasLegalDocumentTools';
 import { canvasLegalRecordActions } from '@/lib/canvasLegalRecordTools';
 import { canvasSellMotionActions } from '@/lib/canvasSellMotionTools';
 import { canvasSignatureActions } from '@/lib/canvasSignatureTools';
-import { chaseInvoice, draftInvoice, issueInvoice, moveDeal as moveDealOnBoard, recordInvoicePayment, listPayRuns, payRunLines, sendInvestorUpdate, syncPayRuns } from '@/lib/founderOpsApi';
+import { moveDeal as moveDealOnBoard } from '@/lib/founderOpsApi';
 import { notifyWorkspaceFilesChanged } from '@/lib/workspaceFileEvents';
 import { canvasWebPageUrl, normalizeWebPageUrl, webPageHost } from '@/lib/canvasWebPage';
 import { CANVAS_VIEWPORTS, canvasViewport, websiteBeforePatch } from '@builderforce/creation-canvas-contract';
@@ -417,12 +425,6 @@ const CanvasReleasesPanel = dynamic(
 );
 
 const DND_MIME = 'application/x-builderforce-creation-object';
-/**
- * How long an outcome message holds the pill's one status line before the routine
- * save state may take it back. Long enough to read a sentence; short enough that
- * "Saved on this device" is still the resting state a moment later.
- */
-const OUTCOME_HOLD_MS = 4_000;
 const COURSE_AUTHORING_CONTRACT = '{ version, language, audience, description, estimatedMinutes, passingScore, completedLessonIds: [], modules: [{ id, title, description, lessons: [{ id, title, objective, content, activity, durationMinutes }], assessment: { question, choices, answer, explanation } }] }';
 const COURSE_AUTHORING_SCHEMA = {
   type: 'object',
@@ -583,33 +585,6 @@ function safeTraceJson(value: unknown): string {
  */
 function specBoardOf(source: readonly CreationFlowNode[]) {
   return makeSpecDeriveBoard(source.map((node) => node.data as unknown as Record<string, unknown>));
-}
-
-/**
- * The node a cross-object reference names, or nothing.
- *
- * ── WHY IT IS NOT `SpecDeriveBoard.byRef` ────────────────────────────────────────
- * `byRef` answers the same question and returns the DATA, which is all a `derive` needs.
- * An act needs the NODE — its id, to write a back reference; its position, to place what
- * it creates beside it — and `CreationNodeData` deliberately does not carry the id (the
- * id belongs to the node, and duplicating it into the data is the one-fact-in-two-places
- * the vocabulary rules refuse one layer down).
- *
- * ID FIRST, then title, because the hints that document these refs say "by id or by its
- * exact title" and a board where somebody typed the title is the common case while a
- * board where a title happens to equal another card's id is not a case at all.
- * Normalised through `specRefKey` so this is the same matching rule `byRef` applies,
- * rather than a second spelling of it.
- */
-function resolveNodeRef(
-  all: readonly CreationFlowNode[],
-  kind: CreationObjectKind,
-  ref: unknown,
-): CreationFlowNode | undefined {
-  const key = specRefKey(ref);
-  if (!key) return undefined;
-  return all.find((node) => node.data.kind === kind && node.id.toLowerCase() === key)
-    ?? all.find((node) => node.data.kind === kind && specRefKey(node.data.title) === key);
 }
 
 const PALETTE_GROUP_ICONS: Record<CreationObjectGroup, string> = {
@@ -887,10 +862,6 @@ type LoadedBoard = { nodes: CreationFlowNode[]; edges: Edge[]; rejected: Rejecte
 function flowFromSession(detail: CreationSessionDetail): LoadedBoard {
   const { board, rejected } = boardFromPersistedGraph(detail);
   return { ...board, rejected };
-}
-
-function mergeCollaboratorGraph(local: { nodes: CreationFlowNode[]; edges: Edge[] }, remote: { nodes: CreationFlowNode[]; edges: Edge[] }) {
-  return mergeCollaboratorBoards(local, remote);
 }
 
 function flowFromSnapshotGraph(graph: { objects: Array<{ id: string; kind: string; resourceType?: string | null; resourceId?: string | null; canvasData: Record<string, unknown>; content: Record<string, unknown> }>; connections: Array<{ id: string; sourceObjectId: string; targetObjectId: string; kind?: string; label?: string | null; metadata?: Record<string, unknown> }> }): LoadedBoard {
@@ -1434,32 +1405,19 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const [modelSelection, setModelSelection] = useState<ChatModelSelection>({ mode: 'auto' });
   const { options: canvasModelOptions, identity: modelIdentity } = useChatModelOptions();
   const [notice, setNoticeText] = useState('Session saved');
-  /** When the last OUTCOME was announced — see {@link noteSaveState}. */
-  const lastOutcomeAt = useRef(0);
   /**
-   * Say what just happened.
+   * The pill's one status line, arbitrated by the use case rather than here.
    *
-   * The pill has one status line and two kinds of message compete for it: an
-   * OUTCOME ("Evaluation added to canvas", "Sketch added", an error) and the
-   * routine SAVE STATE ("Saving…", "Saved on this device"). Autosave is debounced
-   * 300ms behind the edit that triggered it, so every outcome used to be wiped by
-   * a save confirmation about a third of a second after it appeared — too fast to
-   * read, and the one message the person was waiting for.
+   * `outcome()` is what the user did; `saveState()` is routine save chatter that
+   * stays quiet while a fresher outcome is still on screen. The rule and the
+   * reason for it are in `application/PersistCanvas.ts` — what matters at this
+   * call site is that the two are DIFFERENT verbs, so a new message cannot pick
+   * the wrong one by picking the only one.
    */
-  const setNotice = useCallback((text: string) => {
-    lastOutcomeAt.current = Date.now();
-    setNoticeText(text);
-  }, []);
-  /**
-   * Report the save state, unless it would talk over a fresher outcome. A save
-   * that stays quiet is not a save that did not happen — the outcome message
-   * already told the person their change landed, and the next edit's save says so
-   * again once the outcome has had its moment.
-   */
-  const noteSaveState = useCallback((text: string) => {
-    if (Date.now() - lastOutcomeAt.current < OUTCOME_HOLD_MS) return;
-    setNoticeText(text);
-  }, []);
+  const notices = useRef<CanvasNotices | null>(null);
+  if (!notices.current) notices.current = createCanvasNotices(setNoticeText);
+  const setNotice = useCallback((text: string) => notices.current!.outcome(text), []);
+  const noteSaveState = useCallback((text: string) => notices.current!.saveState(text), []);
 
   /**
    * SHARED FREE SESSION (no account).
@@ -1487,21 +1445,25 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   }, [persistence]);
   const room = useGuestRoom(persistence === 'local' ? roomCode : null, { name: guestName.current });
   const inRoom = persistence === 'local' && !!roomCode;
-  /** Read inside callbacks that must not re-create when the room changes. */
-  const roomCodeRef = useRef<string | null>(null);
-  roomCodeRef.current = inRoom ? roomCode : null;
-  /** The snapshot most recently exchanged with the room — suppresses echo. */
-  const lastRoomSnapshot = useRef<string>('');
-  /**
-   * False until this device has read the room's board (or learned it has none).
-   *
-   * An invitee mounts on the DEFAULT starter board and the save debounce fires
-   * ~300ms later — before the first pull can land. Without this gate that empty
-   * starter board would be pushed over the host's real one, and joining a shared
-   * canvas would wipe it. Pushes are held until the pull settles.
-   */
-  const roomHydrated = useRef(false);
   const announceCanvas = room.announceCanvas;
+  /**
+   * This device's half of the shared session — which room, whether it has been
+   * read, and what was last exchanged with it. Three `useRef`s used to hold that
+   * here, along with the echo-suppression and hydration-gate rules that make a
+   * shared board work; both rules now live in `application/ShareCanvasSession.ts`
+   * where a test can reach them without mounting the canvas.
+   *
+   * The `announce` callback comes off the live room subscription, so it is fed to
+   * the gateway through a ref: the sync object is built once and must not be torn
+   * down and rebuilt every time the room re-renders, which would reset the
+   * hydration gate mid-session — the exact condition that wipes a host's board.
+   */
+  const announceRef = useRef(announceCanvas);
+  announceRef.current = announceCanvas;
+  const sharedRef = useRef<SharedSession<LocalCreationSnapshot> | null>(null);
+  if (!sharedRef.current) sharedRef.current = createSharedSession<LocalCreationSnapshot>(createGuestRoomGateway(() => announceRef.current()));
+  const shared = sharedRef.current;
+  useEffect(() => { shared.enter(inRoom ? roomCode : null); }, [inRoom, roomCode, shared]);
 
   /**
    * The ONE write for an account-less canvas: this device, and — when the session
@@ -1511,20 +1473,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    */
   const persistSnapshot = useCallback((snapshot: LocalCreationSnapshot) => {
     writeLocalCreationSession(sessionId, snapshot);
-    const code = roomCodeRef.current;
-    if (!code || !roomHydrated.current) return;
-    const serialized = JSON.stringify(snapshot);
-    // Don't push back what we just pulled — that is how two peers get into a
-    // permanent round-trip over a board neither of them is touching.
-    if (serialized === lastRoomSnapshot.current) return;
-    lastRoomSnapshot.current = serialized;
-    void pushGuestRoomCanvas(code, serialized).then((stored) => {
-      if (stored) announceCanvas();
-      // A board too big for the room's slot must say so out loud: everyone here
-      // would otherwise keep editing while late joiners load a stale board.
-      else setNotice(t('sharedBoardTooLarge'));
+    void shared.push(serializeForRoom(snapshot), t).then((outcome) => {
+      if (outcome && !outcome.stored) setNotice(outcome.notice);
     });
-  }, [sessionId, announceCanvas, t]);
+  }, [sessionId, shared, setNotice, t]);
   const [loadingSession, setLoadingSession] = useState(persistence === 'server');
   const [realtimeState, setRealtimeState] = useState<'local' | 'connecting' | 'online' | 'reconnecting' | 'offline'>(persistence === 'local' ? 'local' : 'connecting');
   const [members, setMembers] = useState<CreationSessionDetail['members']>([]);
@@ -1751,44 +1703,34 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const saveInFlight = useRef(false);
   const activePresenceInitialized = useRef(false);
   const activeMemberIds = useRef<Set<string>>(new Set());
-  const pendingSave = useRef<{ serialized: string; key: string } | null>(null);
+  const pendingSave = useRef<{ signature: string; key: string } | null>(null);
   const viewportRef = useRef({ x: 0, y: 0, zoom: 1 });
   const cursorRef = useRef<{ x: number; y: number } | null>(null);
   /** The live socket, when it is open — the channel pointer frames go out on. */
   const liveSocketRef = useRef<WebSocket | null>(null);
   /** Last outbound presence frame's timestamp + payload, for the send throttle. */
-  const presenceSentRef = useRef<{ atMs: number; pending: CanvasPresenceState | null; timer: number | null }>({ atMs: 0, pending: null, timer: null });
   /**
-   * Put this client's ephemeral state on the relay.
+   * This client's ephemeral state on the relay — cursor, viewport, selection,
+   * typing.
    *
-   * Throttled to {@link PRESENCE_SEND_INTERVAL_MS}, and the throttle COALESCES
-   * rather than drops: a move inside the window is remembered and flushed at the
-   * end of it. Dropping instead would leave the pointer stopped at wherever the
-   * last frame happened to land whenever someone moved fast and then stopped —
-   * which is exactly when a cursor is being watched.
-   *
-   * Silent when the socket is not open; the presence poll is the fallback and
-   * resumes carrying the cursor on its own (see the reconcile effect).
+   * The coalescing throttle that makes a fast drag look like a drag rather than a
+   * teleport lives in `application/PresenceRelay.ts`; what stays here is the
+   * TRANSPORT, which is this board's socket. Silence when it is not open is
+   * correct: the 8-second presence poll is the fallback and carries the cursor on
+   * its own (see the reconcile effect).
    */
-  const sendPresence = useCallback((state: CanvasPresenceState) => {
-    const socket = liveSocketRef.current;
-    if (!socket || socket.readyState !== WebSocket.OPEN) return;
-    const throttle = presenceSentRef.current;
-    const flush = (payload: CanvasPresenceState) => {
-      throttle.atMs = Date.now();
-      throttle.pending = null;
-      try { socket.send(JSON.stringify({ type: CANVAS_PRESENCE_FRAME, ...payload })); } catch { /* the socket is closing; the poll takes over */ }
-    };
-    const waited = Date.now() - throttle.atMs;
-    if (waited >= PRESENCE_SEND_INTERVAL_MS && throttle.timer == null) { flush(state); return; }
-    throttle.pending = { ...throttle.pending, ...state };
-    if (throttle.timer != null) return;
-    throttle.timer = window.setTimeout(() => {
-      throttle.timer = null;
-      const pending = throttle.pending;
-      if (pending) flush(pending);
-    }, Math.max(0, PRESENCE_SEND_INTERVAL_MS - waited));
-  }, []);
+  const presenceRef = useRef<PresenceRelay | null>(null);
+  if (!presenceRef.current) {
+    presenceRef.current = createPresenceRelay({
+      deliver: (state) => {
+        const socket = liveSocketRef.current;
+        if (!socket || socket.readyState !== WebSocket.OPEN) return false;
+        try { socket.send(JSON.stringify({ type: CANVAS_PRESENCE_FRAME, ...state })); return true; }
+        catch { return false; } // the socket is closing; the poll takes over
+      },
+    }, { intervalMs: PRESENCE_SEND_INTERVAL_MS });
+  }
+  const sendPresence = useCallback((state: CanvasPresenceState) => presenceRef.current!.send(state), []);
   const pendingViewport = useRef<{ x: number; y: number; zoom: number } | null>(null);
   const flowWrapRef = useRef<HTMLDivElement | null>(null);
   // The prompt's real height, published to the board as `--composer-space` — the
@@ -2083,21 +2025,15 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * Adopt the room's board. Used for the first load in a shared session and for
    * every peer edit after it.
    *
-   * Setting `lastSavedGraph`/`lastRoomSnapshot` BEFORE the state lands is the
-   * whole trick: both save debounces compare against them and bail, so applying a
+   * Recording the board as EXCHANGED and as SAVED before the state lands is the
+   * whole trick: both save debounces compare against those and bail, so applying a
    * peer's board cannot be mistaken for a local edit and pushed straight back —
-   * which is how a two-person session turns into an infinite sync loop.
+   * which is how a two-person session turns into an infinite sync loop. The echo
+   * half of that now belongs to `ShareCanvasSession`, which is where it is tested.
    */
-  const applyRoomSnapshot = useCallback((serialized: string) => {
-    let snapshot: LocalCreationSnapshot;
-    try {
-      snapshot = JSON.parse(serialized) as LocalCreationSnapshot;
-    } catch {
-      return; // a corrupt board is not worth wiping a good local one for
-    }
-    if (!Array.isArray(snapshot.nodes) || !Array.isArray(snapshot.edges)) return;
-    lastRoomSnapshot.current = serialized;
-    lastSavedGraph.current = JSON.stringify({ nodes: snapshot.nodes, edges: snapshot.edges });
+  const applyRoomSnapshot = useCallback((snapshot: LocalCreationSnapshot, serialized: string) => {
+    shared.noteExchanged(serialized);
+    lastSavedGraph.current = boardSignature(snapshot);
     setTitle(snapshot.title);
     setNodes(snapshot.nodes);
     setEdges(snapshot.edges);
@@ -2111,22 +2047,23 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     // The viewport is personal — following someone else's pan mid-edit is
     // disorienting, and each participant keeps their own place on the board.
     writeLocalCreationSession(sessionId, snapshot);
-  }, [sessionId, setEdges, setNodes]);
+  }, [sessionId, setEdges, setNodes, shared]);
 
   // Pull the shared board: once on entering a room (this is how a LATE joiner
-  // sees anything at all) and again whenever a peer announces a new one.
+  // sees anything at all) and again whenever a peer announces a new one. Whether
+  // the payload is adoptable — and opening the hydration gate either way, so a
+  // room with no board yet lets THIS device's board become the shared one — is
+  // the use case's decision, not this effect's.
   useEffect(() => {
-    if (persistence !== 'local' || !roomCode) { roomHydrated.current = false; return; }
+    if (persistence !== 'local' || !roomCode) return;
     let cancelled = false;
-    void fetchGuestRoomCanvas(roomCode).then((serialized) => {
-      if (cancelled) return;
-      // A room with no board yet (the host is mid-create) means THIS device's
-      // board becomes the shared one — so open the gate either way.
-      if (serialized) { applyRoomSnapshot(serialized); hydrated.current = true; }
-      roomHydrated.current = true;
+    void shared.pull(parseLocalCreationSnapshot).then((decision) => {
+      if (cancelled || !decision?.adopt) return;
+      applyRoomSnapshot(decision.snapshot, decision.board);
+      hydrated.current = true;
     });
     return () => { cancelled = true; };
-  }, [persistence, roomCode, room.canvasVersion, applyRoomSnapshot]);
+  }, [persistence, roomCode, room.canvasVersion, applyRoomSnapshot, shared]);
 
   /**
    * Turn this private board into a shared session. The board comes WITH it —
@@ -2138,31 +2075,18 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     const name = guestName.current.trim() || t('sharedDefaultHostName');
     setGuestDisplayName(name);
     guestName.current = name;
-    const state = await createGuestRoom(name, title, 'canvas');
-    if (typeof state === 'string') {
-      setNotice(state === 'unavailable' ? t('sharedUnavailable') : t('sharedEnded'));
-      setRoomBusy(false);
-      return;
-    }
     const snapshot = localCreationSnapshot(sessionId, { title, timeline: timeline.map((message) => ({ clientMessageId: message.clientMessageId, role: message.messageRole, body: message.body, metadata: message.metadata, createdAt: message.createdAt })), nodes, edges, viewport: viewportRef.current });
-    const serialized = JSON.stringify(snapshot);
-    lastRoomSnapshot.current = serialized;
-    // The host's board IS the room's board — no pull to wait for.
-    roomHydrated.current = true;
-    const stored = await pushGuestRoomCanvas(state.code, serialized);
-    setRoomCode(state.code);
+    const result = await shared.start({ hostName: name, title, board: serializeForRoom(snapshot) }, t);
+    if (result.started) setRoomCode(result.code);
     setRoomBusy(false);
-    setNotice(stored ? t('sharedStarted') : t('sharedBoardTooLarge'));
-  }, [edges, nodes, sessionId, t, timeline, title, viewportRef]);
+    setNotice(result.notice);
+  }, [edges, nodes, sessionId, setNotice, shared, t, timeline, title, viewportRef]);
 
   /** Stop sharing on THIS device. The board stays here; the room runs on for anyone else. */
   const leaveSharedSession = useCallback(async () => {
-    const code = roomCodeRef.current;
     setRoomCode(null);
-    lastRoomSnapshot.current = '';
-    if (code) await leaveGuestRoom(code);
-    setNotice(t('sharedLeft'));
-  }, [t]);
+    setNotice((await shared.stop(t)).notice);
+  }, [setNotice, shared, t]);
 
   const evermindBindingKey = useMemo(() => JSON.stringify(nodes.flatMap((node) => {
     const match = node.data.kind === 'evermind' && typeof node.data.resourceId === 'string'
@@ -2237,51 +2161,56 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setBuildFocus({ nodeId: target.id, storageProjectId: binding.storageProjectId });
   }, [initialBuildOpen, initialFocusId, nodes]);
 
+  /**
+   * AUTOSAVE. Debounced 300ms behind the edit that triggered it.
+   *
+   * What is left here is the SCHEDULING and the React state the result lands in.
+   * Everything that decides anything — has the board changed, is this retry the
+   * same write, is `Session changed` a failure or a collaborator having saved
+   * first — is `persistBoard` in `application/PersistCanvas.ts`, which is why the
+   * conflict merge finally has a test that does not mount a canvas.
+   */
   useEffect(() => {
     if (!hydrated.current || !canEdit) return;
     const handle = window.setTimeout(() => {
-      const serialized = JSON.stringify({ nodes, edges });
-      if (serialized === lastSavedGraph.current) return;
+      const board = { nodes, edges };
+      const signature = boardSignature(board);
+      if (signature === lastSavedGraph.current) return;
       if (persistence === 'local') {
         const snapshot = localCreationSnapshot(sessionId, { title, timeline: timeline.map((message) => ({ clientMessageId: message.clientMessageId, role: message.messageRole, body: message.body, metadata: message.metadata, createdAt: message.createdAt })), nodes, edges, viewport: viewportRef.current });
         persistSnapshot(snapshot);
-        lastSavedGraph.current = serialized;
+        lastSavedGraph.current = signature;
         noteSaveState(t('noticeSavedOnDevice'));
         return;
       }
       noteSaveState(t('noticeSavingChanges'));
       saveInFlight.current = true;
-      const graph = creationGraphFromSnapshot({ nodes, edges });
-      if (!pendingSave.current || pendingSave.current.serialized !== serialized) pendingSave.current = { serialized, key: crypto.randomUUID() };
-      const saveAttempt = pendingSave.current;
-      void creationSessionsApi.applyCommands(sessionId, revision.current, saveAttempt.key, [{ type: 'graph.replace', ...graph, viewport: viewportRef.current }]).then((saved) => {
-        revision.current = saved.revision;
-        lastSavedGraph.current = serialized;
-        setPersistedObjectIds(new Set(graph.objects.map((object) => object.id)));
-        if (pendingSave.current?.key === saveAttempt.key) pendingSave.current = null;
-        noteSaveState(t('noticeSessionSaved'));
-      }).catch(async (error) => {
-        if (error instanceof Error && error.message === 'Session changed') {
-          try {
-            const detail = await creationSessionsApi.get(sessionId);
-            const remote = flowFromSession(detail);
-            const merged = mergeCollaboratorGraph({ nodes, edges }, remote);
-            revision.current = detail.session.canvasRevision ?? detail.session.revision ?? revision.current;
-            lastSavedGraph.current = JSON.stringify(remote);
-            setNodes(merged.nodes);
-            setEdges(merged.edges);
-            setPersistedObjectIds(new Set(remote.nodes.map((node) => node.id)));
-            pendingSave.current = null;
-            setNotice(t('noticeConcurrentMerged'));
-            return;
-          } catch { /* Fall through to the original conflict message. */ }
-        }
-        setNotice(error instanceof Error ? error.message : t('noticeSaveFailed'));
-      })
-        .finally(() => { saveInFlight.current = false; });
+      // STABLE across retries of the same board, NEW for a different one — so a
+      // retry after a timeout is the same write and an edit made during it is not.
+      pendingSave.current = saveAttemptKey(pendingSave.current, signature);
+      const attempt = pendingSave.current;
+      void persistBoard(
+        { sessionId, board, viewport: viewportRef.current, expectedRevision: revision.current, idempotencyKey: attempt.key, signature },
+        canvasSessionGateway,
+        t,
+      ).then((result) => {
+        if (result.outcome === 'failed') { setNotice(result.notice); return; }
+        revision.current = result.revision;
+        lastSavedGraph.current = result.signature;
+        setPersistedObjectIds(new Set(result.objectIds));
+        if (pendingSave.current?.key === attempt.key) pendingSave.current = null;
+        if (result.outcome === 'saved') { noteSaveState(t('noticeSessionSaved')); return; }
+        setNodes(result.board.nodes);
+        setEdges(result.board.edges);
+        // A collaborator's board can carry a kind this build does not declare, and
+        // the merge is the moment it arrives. Saying so here is the same promise
+        // the initial load makes rather than a second, quieter rule for the same event.
+        if (result.rejected.length) setNotice(t('objectsRejected', { count: result.rejected.length, kinds: rejectedObjectKinds(result.rejected) }));
+        else setNotice(result.notice);
+      }).finally(() => { saveInFlight.current = false; });
     }, 300);
     return () => window.clearTimeout(handle);
-  }, [canEdit, edges, nodes, persistence, sessionId, storageKey, title]);
+  }, [canEdit, edges, nodes, noteSaveState, persistSnapshot, persistence, sessionId, setEdges, setNodes, setNotice, storageKey, t, timeline, title, viewportRef]);
 
   useEffect(() => {
     if (persistence !== 'local' || !hydrated.current) return;
@@ -2431,9 +2360,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       stopped = true;
       if (retryTimer != null) window.clearTimeout(retryTimer);
       liveSocketRef.current = null;
-      const throttle = presenceSentRef.current;
-      if (throttle.timer != null) { window.clearTimeout(throttle.timer); throttle.timer = null; }
-      throttle.pending = null;
+      // Drop the pending flush with the socket it was going to be written to.
+      presenceRef.current?.dispose();
       socket?.close();
     };
   }, [persistence, sessionId, setEdges, setNodes]);
@@ -2659,25 +2587,14 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * the tile. Everything else about a campaign object is a read-only reflection.
    */
   const syncSocialCampaign = useCallback(async (campaignId: number, nodeId: string, patch: Partial<CreationNodeData>) => {
-    try {
-      const { campaign } = await socialApi.updateCampaign(campaignId, {
-        ...(typeof patch.body === 'string' ? { body: patch.body } : {}),
-        ...(typeof patch.linkUrl === 'string' ? { linkUrl: patch.linkUrl } : {}),
-        ...(Array.isArray(patch.mediaUrls) ? { mediaUrls: patch.mediaUrls.map(String) } : {}),
-        ...(patch.variants && typeof patch.variants === 'object'
-          ? { variants: patch.variants as Partial<Record<SocialNetwork, string>> }
-          : {}),
-        ...(patch.scheduledAt !== undefined
-          ? { scheduledAt: patch.scheduledAt ? String(patch.scheduledAt) : null }
-          : {}),
-      });
-      setNodes((current) => current.map((node) => node.id === nodeId
-        ? { ...node, data: { ...node.data, ...socialCampaignNodeData(campaign) } as CreationNodeData }
-        : node));
-    } catch (error) {
-      setNotice(error instanceof Error ? error.message : tSocial('campaignUpdateFailed'));
-    }
-  }, [setNodes, tSocial]);
+    // WHICH fields of an edited card may be sent — and why an untouched
+    // `scheduledAt` must not be one of them — is the marketing context's rule.
+    const result = await syncCampaignUseCase(campaignId, patch, socialCampaignGateway, tSocial as CanvasTextTranslator);
+    if (!result.ok) { setNotice(result.notice); return; }
+    setNodes((current) => current.map((node) => node.id === nodeId
+      ? { ...node, data: { ...node.data, ...socialCampaignNodeData(result.campaign) } as CreationNodeData }
+      : node));
+  }, [setNodes, setNotice, tSocial]);
 
   /**
    * The board, read WITHOUT depending on it.
@@ -3356,7 +3273,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       ...patch,
       // An annotation names what it is ON. `annotatesId` is node DATA rather
       // than React Flow's `parentId` because only `data` survives the graph
-      // round trip (see creationGraphFromSnapshot) — a parent id would be
+      // round trip (see `persistedGraphFromBoard`) — a parent id would be
       // silently dropped on save and the mark would come back detached.
       ...(target ? { annotatesId: target.id, status: '' } : {}),
     };
@@ -3791,7 +3708,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     if (selectedNode?.data.kind !== 'frame') return;
     const preset: FramePreset = { id: crypto.randomUUID(), name: selectedNode.data.title, data: { ...selectedNode.data } };
     if (persistence === 'server') {
-      const graph = creationGraphFromSnapshot({ nodes: [{ ...selectedNode, id: crypto.randomUUID(), position: { x: 80, y: 80 } }], edges: [] });
+      const graph = persistedGraphFromBoard({ nodes: [{ ...selectedNode, id: crypto.randomUUID(), position: { x: 80, y: 80 } }], edges: [] });
       void creationSessionsApi.templates.create({ name: preset.name, description: 'Reusable Canvas frame', category: 'Frame', visibility: 'private', graph }).then(() => {
         setNotice(t('noticeFrameSavedAccount'));
         return creationSessionsApi.templates.list();
@@ -3850,7 +3767,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     const branchEdges = edges.filter((edge) => idMap.has(edge.source) && idMap.has(edge.target)).map((edge) => ({ ...edge, id: crypto.randomUUID(), source: idMap.get(edge.source)!, target: idMap.get(edge.target)! }));
     const parentOnly = new Set(merged.filter((node) => !consumedTargets.has(node.id)).map((node) => node.id));
     const retainedEdges = mergeReview.parentEdges.filter((edge) => parentOnly.has(edge.source) || parentOnly.has(edge.target));
-    const graph = creationGraphFromSnapshot({ nodes: merged, edges: [...retainedEdges, ...branchEdges] });
+    const graph = persistedGraphFromBoard({ nodes: merged, edges: [...retainedEdges, ...branchEdges] });
     setNotice(t('noticeApplyingMerge'));
     void creationSessionsApi.saveGraph(mergeReview.parentId, { ...graph, expectedRevision: mergeReview.parentRevision }).then(() => { canvasNavigate(`/create/${mergeReview.parentId}`); }).catch((error) => setNotice(error instanceof Error ? error.message : t('noticeMergeFailed')));
   }, [edges, mergeReview]);
@@ -5068,7 +4985,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const candidateNodes = all.filter((node) => node.data.kind === 'candidate');
       const attachedTo = new Map<string, CreationFlowNode>();
       for (const node of candidateNodes) {
-        const resume = resolveNodeRef(resumes, 'resume', node.data.resumeRef);
+        const resume = resolveObjectRef(resumes, 'resume', node.data.resumeRef);
         if (resume && !attachedTo.has(resume.id)) attachedTo.set(resume.id, node);
       }
 
@@ -10268,485 +10185,42 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   }, [edges, nodes, setNodes, t]);
 
   /**
-   * `investorUpdate.send`, with a delivery behind it.
+   * A CARD ACT — `invoice.issue`, `offer.hire`, `submission.mark`, and seven more.
    *
-   * The act stays GATED (`canvasApprovalGate.GATED_ACTIONS`), so a model still
-   * cannot fire it — what changed is that a human who approves it now gets a send
-   * rather than "no delivery adapter is connected".
+   * Ten `useCallback`s used to live here, one per act, each repeating the same six
+   * steps: find the card by id and kind, refuse without an account, validate its
+   * fields, do the work, stamp the result back, say what happened. They are now
+   * registry entries owned by the contexts they belong to — finance, hiring,
+   * teaching — and this is the ONE place the board is mutated on their behalf.
    *
-   * Recipients come from the object's own `recipients` rows and from NOWHERE
-   * else. Harvesting addresses out of a `fundingRound`'s investor table would be
-   * the convenient version and the wrong one: those rows carry firm names, not
-   * consent to be emailed, and the failure mode of guessing is a private update
-   * reaching a stranger. An update with no recipients says so and sends nothing.
+   * The dispatch below asks `cardActFor` FIRST rather than calling this and
+   * checking, because the chain it sits in is synchronous and "did an act answer"
+   * has to be known before the next `else if` is considered.
    */
-  const sendUpdateToInvestors = useCallback(async (objectId: string) => {
-    const target = nodesRef.current.find((node) => node.id === objectId && node.data.kind === 'investorUpdate');
-    if (!target) return;
-    if (persistence !== 'server') { setNotice(t('noticeInvestorUpdateNeedsAccount')); return; }
-
-    const recipients = (Array.isArray(target.data.recipients) ? target.data.recipients : [])
-      .flatMap((row) => {
-        const entry = row as { name?: unknown; email?: unknown };
-        const email = typeof entry.email === 'string' ? entry.email.trim() : '';
-        return email.includes('@') ? [{ email, name: typeof entry.name === 'string' ? entry.name : null }] : [];
+  const runCardActOnObject = useCallback(async (objectId: string, action: string) => {
+    const outcome = await runCardAct(CARD_ACTS, {
+      objectId,
+      action,
+      persistence,
+      t: ((key: string, values?: Record<string, string | number>) => t(key as never, values as never)) as CanvasTextTranslator,
+      board: { objects: nodesRef.current, create: newNode },
+    });
+    if (!outcome) return;
+    const { patch, add } = outcome;
+    if (patch || add) {
+      setNodes((current) => {
+        const patched = patch
+          ? current.map((node) => (node.id === objectId ? { ...node, data: { ...node.data, ...patch } } : node))
+          : current;
+        return add ? [...patched, ...add.nodes] : patched;
       });
-    if (!recipients.length) { setNotice(t('noticeInvestorUpdateNoRecipients')); return; }
-
-    try {
-      const result = await sendInvestorUpdate({
-        content: {
-          title: target.data.title,
-          period: target.data.period ?? null,
-          highlights: target.data.highlights ?? [],
-          lowlights: target.data.lowlights ?? [],
-          metrics: target.data.metrics ?? [],
-          asks: target.data.asks ?? [],
-          summary: target.data.summary ?? null,
-        },
-        recipients,
-        objectId: null,
-      });
-      // Stamped onto the card, so "did this go out, and to how many" survives the
-      // notice being dismissed — the register's complaint about an act that ends
-      // at a card applies just as well to an act that ends at a toast.
-      setNodes((current) => current.map((node) => node.id === objectId
-        ? { ...node, data: { ...node.data, status: `Sent to ${result.sent}`, sentAt: new Date().toISOString() } }
-        : node));
-      setNotice(result.failed.length
-        ? t('noticeInvestorUpdatePartial', { sent: result.sent, failed: result.failed.length })
-        : t('noticeInvestorUpdateSent', { sent: result.sent, from: result.fromLabel }));
-    } catch (error) {
-      setNotice(error instanceof Error ? error.message : t('noticeInvestorUpdateFailed'));
+      if (add?.edges.length) setEdges((current) => [...current, ...add.edges]);
     }
-  }, [persistence, setNodes, t]);
+    setNotice(outcome.notice);
+    // The slow half — an LMS score push — replaces the sentence when it lands.
+    if (outcome.settle) void outcome.settle.then(setNotice);
+  }, [persistence, setEdges, setNodes, setNotice, t]);
 
-  /**
-   * THE receivable's three acts, on the card (FO-C2).
-   *
-   * ── WHY THE CARD IS MATERIALISED FIRST ──────────────────────────────────────
-   * A canvas `invoice` is authored, not created through a form, so the row it
-   * refers to may not exist when somebody clicks Issue. `draftInvoice` upserts it
-   * from the card's own fields keyed on the invoice number, and only then does the
-   * act run. That is deliberate rather than convenient: the ACT is what makes the
-   * record, so there is no window in which a board shows an issued invoice that
-   * the ledger has never heard of.
-   *
-   * ── WHY THE RESULT IS STAMPED BACK ──────────────────────────────────────────
-   * `issuedAt`, `dueAt`, `paymentLink` and `status` all come back from the server
-   * and are written onto the card in the same turn. The register's complaint about
-   * an act that ends at a card applies just as well to an act that ends at a
-   * toast: without this, the only trace that an invoice was issued is a notice the
-   * user is about to dismiss.
-   */
-  const runInvoiceAction = useCallback(async (objectId: string, action: string) => {
-    const target = nodesRef.current.find((node) => node.id === objectId && node.data.kind === 'invoice');
-    if (!target) return;
-    if (persistence !== 'server') { setNotice(t('noticeInvoiceNeedsAccount')); return; }
-
-    const data = target.data as Record<string, unknown>;
-    const text = (value: unknown): string => (typeof value === 'string' ? value.trim() : '');
-    const reference = text(data.invoiceNumber) || text(data.title);
-    const customerName = text(data.customer) || text(data.counterpartyAccount);
-    const amount = Number(data.amount);
-    if (!reference || !customerName || !Number.isFinite(amount)) {
-      setNotice(t('noticeInvoiceIncomplete'));
-      return;
-    }
-
-    const stamp = (patch: Record<string, unknown>) => setNodes((current) => current.map((node) => (
-      node.id === objectId ? { ...node, data: { ...node.data, ...patch } } : node
-    )));
-
-    try {
-      // Always re-drafted before an act: the card is the authoring surface, and a
-      // figure edited on it after the row was written must reach the row before
-      // anything is frozen. `draftInvoice` refuses once the invoice is issued, so
-      // this is a no-op on the two acts that follow issuing.
-      if (action === 'issue') {
-        await draftInvoice({
-          reference,
-          customerName,
-          customerRef: text(data.counterpartyAccount) || null,
-          amount,
-          ...(text(data.currency) ? { currency: text(data.currency) } : {}),
-          dueAt: text(data.dueAt) || null,
-          notes: text(data.summary) || null,
-          ...(text(data.collectionMode) ? { collectionMode: text(data.collectionMode) } : {}),
-          lines: (Array.isArray(data.lineItems) ? data.lineItems : []).flatMap((row) => {
-            const line = row as { description?: unknown; quantity?: unknown; unitPrice?: unknown; amount?: unknown };
-            const unitAmount = Number(line.unitPrice);
-            if (!text(line.description) || !Number.isFinite(unitAmount)) return [];
-            return [{
-              description: text(line.description),
-              quantity: Number.isFinite(Number(line.quantity)) ? Number(line.quantity) : 1,
-              unitAmount,
-              ...(Number.isFinite(Number(line.amount)) ? { amount: Number(line.amount) } : {}),
-            }];
-          }),
-        });
-
-        const issued = await issueInvoice(reference, {
-          deliverTo: text(data.customerEmail) || null,
-          dueAt: text(data.dueAt) || null,
-        });
-        stamp({
-          status: 'issued',
-          issuedAt: issued.issuedAtISO.slice(0, 10),
-          ...(issued.dueAtISO ? { dueAt: issued.dueAtISO.slice(0, 10) } : {}),
-          ...(issued.paymentLinkUrl ? { paymentLink: issued.paymentLinkUrl } : {}),
-        });
-        setNotice(issued.deliveredTo
-          ? t('noticeInvoiceIssuedSent', { reference, to: issued.deliveredTo })
-          : t('noticeInvoiceIssued', { reference }));
-        return;
-      }
-
-      if (action === 'record-payment') {
-        const paid = Number(data.paidAmount);
-        const outstanding = amount - (Number.isFinite(paid) ? paid : 0);
-        if (!(outstanding > 0)) { setNotice(t('noticeInvoiceNothingOutstanding')); return; }
-        const recorded = await recordInvoicePayment(reference, {
-          amount: outstanding,
-          // Stable per (invoice, amount), so a double-click is one payment — the
-          // server's unique ledger reference is what actually enforces it.
-          externalRef: `canvas:${reference}:${outstanding.toFixed(2)}`,
-          method: 'bank',
-        });
-        stamp({ status: recorded.status, paidAmount: recorded.paidAmount });
-        setNotice(recorded.applied
-          ? t('noticeInvoicePaymentRecorded', { reference, outstanding: recorded.outstanding })
-          : t('noticeInvoicePaymentAlreadyRecorded', { reference }));
-        return;
-      }
-
-      const chased = await chaseInvoice(reference, { deliverTo: text(data.customerEmail) || null });
-      setNotice(chased.deliveredTo
-        ? t('noticeInvoiceChased', { reference, to: chased.deliveredTo })
-        : t('noticeInvoiceChaseNoRecipient', { reference }));
-    } catch (error) {
-      setNotice(error instanceof Error ? error.message : t('noticeInvoiceActionFailed'));
-    }
-  }, [persistence, setNodes, t]);
-
-  /**
-   * `payRun.sync` — re-read this card's run from the provider that ran it.
-   *
-   * ── WHY IT SHARES THE TOOL'S PROJECTION ─────────────────────────────────────
-   * `payRunFieldsFrom` is exported by `canvasFounderOpsTools.ts` and called here,
-   * so the card a person refreshes and the card Brain authors are the same card.
-   * A second local mapping of `totalCost` → the board is how one of them starts
-   * showing gross where the other shows total cost, which is a different number by
-   * roughly the employer's tax bill.
-   *
-   * ── WHY IT REFUSES RATHER THAN GUESSES ──────────────────────────────────────
-   * The card is matched on the provider's own `externalRef`. A card authored by
-   * hand has none, and the honest answer there is to say so — inventing a match on
-   * the date or the amount would silently overwrite one month's payroll with
-   * another's.
-   */
-  const syncPayRunCard = useCallback(async (objectId: string) => {
-    const target = nodesRef.current.find((node) => node.id === objectId && node.data.kind === 'payRun');
-    if (!target) return;
-    if (persistence !== 'server') { setNotice(t('noticePayRunNeedsAccount')); return; }
-
-    const externalRef = typeof target.data.externalRef === 'string' ? target.data.externalRef.trim() : '';
-    if (!externalRef) { setNotice(t('noticePayRunNoReference')); return; }
-
-    try {
-      const hydration = await syncPayRuns({});
-      if (hydration.error) { setNotice(hydration.error); return; }
-      if (!hydration.source) { setNotice(t('noticePayRunNoProvider')); return; }
-
-      const run = (await listPayRuns()).find((candidate) => candidate.externalRef === externalRef);
-      if (!run) { setNotice(t('noticePayRunNotFound', { reference: externalRef })); return; }
-
-      const lines = await payRunLines(run.reference).catch(() => []);
-      const fields = payRunFieldsFrom(run, lines);
-      setNodes((current) => current.map((node) => (
-        node.id === objectId ? { ...node, data: { ...node.data, ...fields } } : node
-      )));
-      setNotice(t('noticePayRunSynced', { source: run.source }));
-    } catch (error) {
-      setNotice(error instanceof Error ? error.message : t('noticePayRunFailed'));
-    }
-  }, [persistence, setNodes, t]);
-
-  /**
-   * `offer.hire` — THE HANDOVER, and the act that ends the hiring funnel in a person.
-   *
-   * ── WHAT WAS BROKEN ──────────────────────────────────────────────────────────
-   * Two vocabularies described this transition in prose and neither performed it. A
-   * signed `offer` stayed a signed offer, and the `employee` and `employeeLifecycle`
-   * cards that should follow it were typed by hand with no link back — so the board held
-   * two funnels that stopped next to each other and nothing could answer "on what terms
-   * was this person hired".
-   *
-   * ── WHY THE MAPPING IS NOT HERE ──────────────────────────────────────────────
-   * `planEmploymentHandover` lives in the contract, beside both vocabularies and owned by
-   * neither. This function does the three things a component is entitled to do: read the
-   * board, place the cards, and say what happened. Which fields carry across is a
-   * contract question, and a copy of it here is the copy that would drift.
-   *
-   * IDEMPOTENT on `offerRef`, not on a name: hiring twice from one offer must not put the
-   * same person on the payroll twice, and two people genuinely do share a name.
-   */
-  const hireFromOffer = useCallback((offerId: string) => {
-    const all = nodesRef.current;
-    const offer = all.find((node) => node.id === offerId && node.data.kind === 'offer');
-    if (!offer) return;
-
-    const data = offer.data as unknown as Record<string, unknown>;
-    const candidate = resolveNodeRef(all, 'candidate', data.candidateRef);
-    const posting = resolveNodeRef(all, 'jobPosting', data.postingRef)
-      // An offer with no posting of its own inherits the candidate's: the candidate was
-      // considered FOR a requisition, and re-typing the reference onto the offer to make
-      // the join work would be the same fact in two places.
-      ?? resolveNodeRef(all, 'jobPosting', candidate?.data.postingRef);
-
-    const blocker = employmentHandoverBlocker({
-      offer: data,
-      candidate: (candidate?.data ?? null) as Record<string, unknown> | null,
-    });
-    if (blocker) { setNotice(t(`noticeHire${blocker[0].toUpperCase()}${blocker.slice(1)}` as 'noticeHireNotSigned')); return; }
-
-    const existing = employeeHiredFrom(all.filter((node) => node.data.kind === 'employee').map((node) => node.data as unknown as Record<string, unknown>), offer.id);
-    if (existing) { setNotice(t('noticeHireAlready', { person: String(existing.personRef ?? '') })); return; }
-
-    const plan = planEmploymentHandover({
-      offer: data,
-      candidate: (candidate?.data ?? null) as Record<string, unknown> | null,
-      posting: (posting?.data ?? null) as Record<string, unknown> | null,
-      offerRef: offer.id,
-      stepLabel: (key: OnboardingStepKey) => t(`hiring.onboardingStep.${key}` as 'hiring.onboardingStep.rightToWork'),
-    });
-
-    const employee = newNode('employee', { x: offer.position.x + 460, y: offer.position.y });
-    employee.data = { ...employee.data, ...plan.employee, title: plan.personRef, status: t('hiringHiredStatus', { date: String(plan.employee.startedAt ?? '') }) };
-    const lifecycle = newNode('employeeLifecycle', { x: offer.position.x + 460, y: offer.position.y + 260 });
-    lifecycle.data = { ...lifecycle.data, ...plan.lifecycle, title: t('hiringOnboardingTitle', { person: plan.personRef }) };
-
-    setNodes((current) => current.map((node) => (node.id === offer.id
-      ? { ...node, data: { ...node.data, status: t('hiringOfferHiredStatus') } }
-      : node)).concat([employee, lifecycle]));
-    setEdges((current) => [...current,
-      { id: crypto.randomUUID(), source: offer.id, target: employee.id, type: 'smoothstep', label: t('hiringHiredEdge'), data: { connectionKind: 'delivery' } },
-      { id: crypto.randomUUID(), source: employee.id, target: lifecycle.id, type: 'smoothstep', label: t('hiringOnboardingEdge'), data: { connectionKind: 'membership' } },
-    ]);
-    setNotice(t('noticeHired', { person: plan.personRef, steps: ((plan.lifecycle.steps as unknown[]) ?? []).length }));
-  }, [setEdges, setNodes, t]);
-
-  /**
-   * `assignment.distribute` — fan the task into one `submission` per roster row.
-   *
-   * Idempotent by construction: a learner who already has a submission for this
-   * assignment (matched on `learnerRef`) is skipped, so distributing twice — a late
-   * enrolment, a re-run after the roster grew — only creates what is missing rather
-   * than duplicating every submission on the board.
-   */
-  const distributeAssignment = useCallback((assignmentId: string) => {
-    const all = nodesRef.current;
-    const assignment = all.find((node) => node.id === assignmentId && node.data.kind === 'assignment');
-    if (!assignment) return;
-    const board = makeSpecDeriveBoard(all.map((node) => node.data as unknown as Record<string, unknown>));
-    const cohort = board.byRef('cohort', assignment.data.cohortRef);
-    const roster = cohort ? learnersFromCohort(cohort) : [];
-    if (!roster.length) { setNotice(t('noticeSubmissionsNoCohort')); return; }
-
-    const assignmentKey = specRefKey(assignment.data.title);
-    const already = new Set(all
-      .filter((node) => node.data.kind === 'submission' && specRefKey(node.data.assignmentRef) === assignmentKey)
-      .map((node) => specRefKey(node.data.learnerRef)));
-    const toCreate = roster.filter((learner) => !already.has(specRefKey(learner.ref)));
-    if (!toCreate.length) { setNotice(t('noticeSubmissionsAlreadyDistributed')); return; }
-
-    const created = toCreate.map((learner, index) => {
-      const node = newNode('submission', {
-        x: assignment.position.x + 440 + (index % 3) * 300,
-        y: assignment.position.y + 220 + Math.floor(index / 3) * 190,
-      });
-      node.data = {
-        ...node.data,
-        title: `${learner.name} — ${String(assignment.data.title ?? '')}`,
-        learnerRef: learner.ref,
-        learnerName: learner.name,
-        assignmentRef: String(assignment.data.title ?? ''),
-      };
-      return node;
-    });
-    setNodes((current) => [...current, ...created]);
-    setEdges((current) => [...current, ...created.map((node) => ({
-      id: crypto.randomUUID(), source: assignment.id, target: node.id,
-      type: 'smoothstep', label: 'submission', data: { connectionKind: 'membership' },
-    }))]);
-    setNotice(t('noticeSubmissionsDistributed', { count: created.length }));
-  }, [setEdges, setNodes, t]);
-
-  /**
-   * `cohort.import`'s GENERIC path — invoked with no roster text, so it pulls
-   * through NRPS using whatever `ltiIssuer`/`ltiMembershipsUrl` the cohort already
-   * carries. A CSV paste goes through the dedicated `canvas_import_roster` tool
-   * instead, which has the text to parse; this is what runs when the action is
-   * invoked directly with nothing else to go on.
-   */
-  const importCohortRosterFromLti = useCallback(async (cohortId: string) => {
-    const target = nodesRef.current.find((node) => node.id === cohortId && node.data.kind === 'cohort');
-    if (!target) return;
-    const issuer = String(target.data.ltiIssuer ?? '').trim();
-    const membershipsUrl = String(target.data.ltiMembershipsUrl ?? '').trim();
-    if (!issuer || !membershipsUrl) { setNotice(t('noticeRosterNoLmsBound')); return; }
-    try {
-      const result = await pullLtiRoster(issuer, membershipsUrl);
-      setNodes((current) => current.map((node) => node.id === cohortId
-        ? { ...node, data: { ...node.data, roster: result.roster, enrolledCount: result.roster.length } }
-        : node));
-      setNotice(t('noticeRosterPulled', { count: result.roster.length }));
-    } catch (error) {
-      setNotice(t('noticeRosterPullFailed', { reason: error instanceof Error ? error.message : String(error) }));
-    }
-  }, [setNodes, t]);
-
-  /**
-   * `gradebook.compute` — the matrix, mean, median, pass rate and distribution are
-   * already `derive`d live from the submissions on the board (see
-   * `academic/derivations.ts`); this action's job is to make that explicit and
-   * reportable, stamping the figure onto the card the same way `sendUpdateToInvestors`
-   * stamps what it sent rather than leaving it to be read off a toast that closes.
-   */
-  const computeGradebook = useCallback((gradebookId: string) => {
-    const all = nodesRef.current;
-    const target = all.find((node) => node.id === gradebookId && node.data.kind === 'gradebook');
-    if (!target) return;
-    const board = makeSpecDeriveBoard(all.map((node) => node.data as unknown as Record<string, unknown>));
-    const stats = statsOf(target.data as unknown as Record<string, unknown>, board);
-    if (!stats) { setNotice(t('noticeGradebookEmpty')); return; }
-    setNodes((current) => current.map((node) => node.id === gradebookId
-      ? { ...node, data: { ...node.data, status: `Computed — ${stats.mean ?? 0}% mean, ${stats.markedCount}/${stats.learnerCount} marked`, computedAt: new Date().toISOString() } }
-      : node));
-    setNotice(t('noticeGradebookComputed', { mean: stats.mean ?? 0, marked: stats.markedCount, total: stats.learnerCount }));
-  }, [setNodes, t]);
-
-  /** Why {@link rubricProblems} refused to mark, in one short clause. */
-  const rubricBlockReason = (code: string): string => (code === 'noLevels'
-    ? 'it declares no achievement levels'
-    : code === 'noCriteria'
-      ? 'it declares no criteria'
-      : 'every criterion weight is zero');
-
-  /**
-   * `submission.mark` — apply the rubric to the placements already authored onto
-   * `submission.placements`, apply the assignment's late policy, and write the
-   * result. Never invents a judgement: the placements are the input, `applyRubric`
-   * and `applyLatePolicy` are the same engines the gradebook already trusts, and a
-   * submission with no placements yet is refused rather than marked zero.
-   */
-  const markSubmission = useCallback((submissionId: string) => {
-    const all = nodesRef.current;
-    const submission = all.find((node) => node.id === submissionId && node.data.kind === 'submission');
-    if (!submission) return;
-    const board = makeSpecDeriveBoard(all.map((node) => node.data as unknown as Record<string, unknown>));
-    const assignment = board.byRef('assignment', submission.data.assignmentRef);
-    const rubric = assignment ? board.byRef('rubric', assignment.rubricRef) : null;
-    if (!assignment || !rubric) { setNotice(t('noticeSubmissionNoRubric')); return; }
-
-    const parsedRubric = rubricFromNode(rubric);
-    const maxMarks = Number(assignment.maxMarks);
-    const problems = rubricProblems(parsedRubric, Number.isFinite(maxMarks) ? maxMarks : undefined);
-    const blocking = problems.find((problem) => problem.code === 'noLevels' || problem.code === 'noCriteria' || problem.code === 'weightsZero');
-    if (blocking) { setNotice(t('noticeSubmissionRubricBroken', { reason: rubricBlockReason(blocking.code) })); return; }
-
-    const placements = Array.isArray(submission.data.placements) ? submission.data.placements : [];
-    if (!placements.length) { setNotice(t('noticeSubmissionNoPlacements')); return; }
-    const selections: CriterionSelection[] = placements.flatMap((raw): CriterionSelection[] => {
-      if (!raw || typeof raw !== 'object') return [];
-      const row = raw as Record<string, unknown>;
-      const criterion = String(row.criterion ?? '').trim();
-      const levelIndex = Number(row.levelIndex);
-      if (!criterion || !Number.isInteger(levelIndex)) return [];
-      return [{ criterion, levelIndex, comment: typeof row.comment === 'string' ? row.comment : undefined }];
-    });
-    const result = applyRubric(parsedRubric, selections);
-    if (result.unmarked.length) { setNotice(t('noticeSubmissionPlacementsIncomplete', { criteria: result.unmarked.join(', ') })); return; }
-
-    const policy = parseLatePolicy(assignment.latePolicy);
-    const hours = hoursLate(submission.data.submittedAt, assignment.dueAt);
-    const late = applyLatePolicy(result.total, hours, policy);
-    const percent = parsedRubric.totalMarks > 0 ? Math.round((late.mark / parsedRubric.totalMarks) * 1000) / 10 : 0;
-
-    const commentNotes = result.breakdown.map((row) => row.comment).filter(Boolean).join(' ');
-    const lateNote = late.daysLate > 0
-      ? ` Submitted ${late.daysLate} day${late.daysLate === 1 ? '' : 's'} late; ${late.deducted} marks deducted under the late policy.`
-      : '';
-    const feedback = `${commentNotes}${lateNote}`.trim();
-    const markBreakdown = result.breakdown.map((row) => ({ criterion: row.criterion, level: row.level, marks: row.marks, comment: row.comment }));
-
-    setNodes((current) => current.map((node) => node.id === submissionId
-      ? { ...node, data: { ...node.data, mark: late.mark, markBreakdown, feedback, status: `Marked — ${percent}%` } }
-      : node));
-
-    const learnerName = String(submission.data.learnerName ?? submission.data.learnerRef ?? '');
-    const learnerRef = String(submission.data.learnerRef ?? '').trim();
-    const cohort = board.byRef('cohort', assignment.cohortRef);
-    const issuer = cohort ? String(cohort.ltiIssuer ?? '').trim() : '';
-    const lineItemUrl = String(assignment.ltiLineItemUrl ?? '').trim();
-
-    const baseNotice = late.daysLate > 0
-      ? t('noticeSubmissionMarkedLate', { name: learnerName, percent, mark: late.mark, total: parsedRubric.totalMarks, days: late.daysLate, deducted: late.deducted })
-      : t('noticeSubmissionMarked', { name: learnerName, percent, mark: late.mark, total: parsedRubric.totalMarks });
-
-    if (issuer && lineItemUrl && learnerRef) {
-      pushLtiScore({
-        issuer, lineItemUrl, userId: learnerRef, scoreGiven: late.mark, scoreMaximum: parsedRubric.totalMarks,
-        released: true, ...(feedback ? { comment: feedback } : {}),
-      })
-        .then(() => setNotice(`${baseNotice} ${t('noticeSubmissionScorePushed')}`))
-        .catch((error) => setNotice(`${baseNotice} ${t('noticeSubmissionScorePushFailed', { reason: error instanceof Error ? error.message : String(error) })}`));
-    } else {
-      setNotice(baseNotice);
-    }
-  }, [setNodes, t]);
-
-  /**
-   * `curriculumMap.validate` — structural problems the coverage figure alone cannot
-   * show: an outcome nobody mapped, a mapping column naming an assessment that is
-   * not actually on this board. See `curriculumMapProblems`.
-   */
-  const validateCurriculumMap = useCallback((curriculumMapId: string) => {
-    const all = nodesRef.current;
-    const target = all.find((node) => node.id === curriculumMapId && node.data.kind === 'curriculumMap');
-    if (!target) return;
-    const board = makeSpecDeriveBoard(all.map((node) => node.data as unknown as Record<string, unknown>));
-    const data = target.data as unknown as Record<string, unknown>;
-    const problems = curriculumMapProblems(data, board);
-    const rows = mappingRows(data);
-    const coverage = rows.length ? Math.round((rows.filter((row) => row.assured).length / rows.length) * 100) : 0;
-    setNodes((current) => current.map((node) => node.id === curriculumMapId
-      ? { ...node, data: { ...node.data, status: problems.length ? `Validated — ${problems.length} issue(s)` : 'Validated — fully mapped', validatedAt: new Date().toISOString() } }
-      : node));
-    setNotice(t('noticeCurriculumMapValidated', { coverage, issues: problems.length }));
-  }, [setNodes, t]);
-
-  /**
-   * `bibliography.import`'s GENERIC path — invoked with no reference text, so it
-   * looks for a `.bib`/`.ris` export already sitting on the board as a document (the
-   * same shape `canvas_import_resume` reads a résumé out of) and parses that. A
-   * pasted or uploaded reference list goes through the dedicated
-   * `canvas_import_references` tool instead, which has the text directly.
-   */
-  const importReferencesFromDocument = useCallback((bibliographyId: string) => {
-    const all = nodesRef.current;
-    const target = all.find((node) => node.id === bibliographyId && node.data.kind === 'bibliography');
-    if (!target) return;
-    const candidate = all
-      .map((node) => ({ node, records: parseReferences(canvasDocument(node.data)?.markdown ?? '') }))
-      .find((entry) => entry.records.length > 0);
-    if (!candidate) { setNotice(t('noticeReferencesImportEmpty')); return; }
-    const existing = Array.isArray(target.data.entries) ? target.data.entries : [];
-    setNodes((current) => current.map((node) => node.id === bibliographyId
-      ? { ...node, data: { ...node.data, entries: [...existing, ...candidate.records.map(entryRowFromRecord)] } }
-      : node));
-    setNotice(t('noticeReferencesImported', { count: candidate.records.length }));
-  }, [setNodes, t]);
 
   /**
    * The poll's four acts, run from the BOARD rather than from the room.
@@ -10834,27 +10308,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     else if (target.data.kind === 'evermind' && pending.action === 'train') openEvermindTraining();
     else if (target.data.kind === 'evermind' && pending.action === 'evaluate') evaluateEvermind(target.id);
     else if (target.data.kind === 'testPlan' && pending.action === 'gate') evaluateReleaseGate(target.id);
-    else if (target.data.kind === 'investorUpdate' && pending.action === 'send') void sendUpdateToInvestors(target.id);
-    // The receivable's three acts. Routed BEFORE the generic `export` branch
-    // below, which would otherwise never see them but reads better next to the
-    // other founder-operations acts.
-    else if (target.data.kind === 'invoice' && ['issue', 'record-payment', 'chase'].includes(pending.action)) {
-      void runInvoiceAction(target.id, pending.action);
-    }
-    // A `payRun` re-reads itself from the provider that ran it, through the SAME
-    // projection the hydrating tool uses — so there is exactly one path from a
-    // provider's records to this card, whichever end asks for it.
-    else if (target.data.kind === 'payRun' && pending.action === 'sync') void syncPayRunCard(target.id);
-    // THE HANDOVER. Routed here beside the other acts that CREATE objects from an
-    // object, because that is what it is: a signed offer fans out into an employment
-    // record and an onboarding plan, exactly as an assignment fans out into submissions.
-    else if (target.data.kind === 'offer' && pending.action === 'hire') hireFromOffer(target.id);
-    else if (target.data.kind === 'assignment' && pending.action === 'distribute') distributeAssignment(target.id);
-    else if (target.data.kind === 'cohort' && pending.action === 'import') void importCohortRosterFromLti(target.id);
-    else if (target.data.kind === 'gradebook' && pending.action === 'compute') computeGradebook(target.id);
-    else if (target.data.kind === 'submission' && pending.action === 'mark') markSubmission(target.id);
-    else if (target.data.kind === 'curriculumMap' && pending.action === 'validate') validateCurriculumMap(target.id);
-    else if (target.data.kind === 'bibliography' && pending.action === 'import') importReferencesFromDocument(target.id);
+    // TEN acts used to be ten branches here, each naming a kind and an action, and
+    // each one a place to forget the next kind that offers the same act. They are
+    // registry entries now (`domains/canvas/application/cardActs.ts`), so this is
+    // one lookup and the chain stops growing.
+    else if (cardActFor(CARD_ACTS, target.data.kind, pending.action)) void runCardActOnObject(target.id, pending.action);
     else if (pending.action === 'export') void exportArtifact(target.id, defaultExportAction(target.data.kind)).then(setNotice);
     else if (target.data.kind === 'slides' && pending.action === 'present') setPresentMode(true);
     else if (target.data.kind === 'evermind' && pending.action === 'publish') {
@@ -10865,7 +10323,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       setNotice(t('noticeNoDeliveryAdapter', { action: pending.action, kind: creationObjectDefinition(target.data.kind).label }));
     }
     finish();
-  }, [compareProjects, compileWorkflow, computeGradebook, convertObjectToDiagram, deliverMockup, distributeAssignment, evaluateEvermind, evaluateReleaseGate, expandMockupSet, expandProject, exportArtifact, generateVideo, hireFromOffer, importCohortRosterFromLti, importReferencesFromDocument, markSubmission, nodes, openBuild, openEvermindTraining, pendingBrainActions, persistence, plotDataset, profileDataset, publishWebsite, runCreativeAction, runInvoiceAction, runPollAction, runWorkflow, selectedId, sendUpdateToInvestors, syncPayRunCard, setEdges, setNodes, startStandup, t, validateCurriculumMap, visualizeDataset]);
+  }, [compareProjects, compileWorkflow, convertObjectToDiagram, deliverMockup, evaluateEvermind, evaluateReleaseGate, expandMockupSet, expandProject, exportArtifact, generateVideo, nodes, openBuild, openEvermindTraining, pendingBrainActions, plotDataset, profileDataset, publishWebsite, runCardActOnObject, runCreativeAction, runPollAction, runWorkflow, selectedId, setEdges, setNodes, setNotice, startStandup, t, visualizeDataset]);
 
   const openHistory = useCallback(() => {
     setHistoryOpen(true);

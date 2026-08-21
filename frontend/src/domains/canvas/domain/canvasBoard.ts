@@ -30,6 +30,7 @@ import type { Edge } from '@xyflow/react';
 import { isCreationObjectKind } from '@builderforce/creation-canvas-contract';
 import { edgeVisuals, readConnectionStyle } from '@/lib/canvasConnectionStyle';
 import { CANVAS_BOARD_INVARIANTS_BY_KEY, type CanvasBoardInvariantKey } from '@/lib/canvas/boundedContexts';
+import { specRefKey } from '@/lib/specObjects';
 import type { CanvasObject, CanvasObjectData, CreationObjectKind } from './canvasObject';
 
 /**
@@ -162,6 +163,95 @@ export function boardFromPersistedGraph(graph: PersistedCanvasGraph): BoardFromP
 }
 
 /**
+ * A board AS PERSISTENCE WANTS IT — the other half of the anti-corruption
+ * boundary whose read half is {@link boardFromPersistedGraph}.
+ *
+ * ── WHY IT MOVED HERE ────────────────────────────────────────────────────────
+ * This was `creationGraphFromSnapshot` in `lib/creationSessions.ts`, next to
+ * localStorage. So the two directions of the SAME translation lived in two
+ * modules that never imported each other, and the one rule they must agree on —
+ * what an edge's `metadata` carries — was written twice. `connectionStyle` was
+ * added to the write side and a board came back with solid edges until the read
+ * side caught up, which is the failure this arrangement guarantees eventually.
+ * Read and write now sit ten lines apart and share `readConnectionStyle`.
+ *
+ * The measured size is preferred over the declared one because it is what the
+ * user actually SEES: an auto-sized card reloading at its authored default is a
+ * board that rearranges itself between sessions.
+ */
+/**
+ * What the board PRODUCES for persistence — deliberately not the same type as
+ * `PersistedCanvasObject`, which is what persistence hands BACK.
+ *
+ * The inbound shape is permissive because a stored row genuinely may be missing
+ * anything: that is the condition the boundary exists to survive. The outbound
+ * shape is not, because the board always writes both fields. Reusing one type for
+ * both directions makes the WRITER as weak as the reader, and the consumer that
+ * needs a real `canvasData` then has to either widen its own contract or cast —
+ * which is exactly what `creationSessionsApi.claim` refused to compile against.
+ */
+export interface PersistableCanvasObject extends PersistedCanvasObject {
+  canvasData: Record<string, unknown>;
+  content: Record<string, unknown>;
+}
+
+/** Same asymmetry, one field down: the board always writes an edge's `metadata`
+ *  (it is where `rendererType` and `connectionStyle` ride), so the outbound type
+ *  says so even though a stored row read back may not have one. */
+export interface PersistableCanvasConnection extends PersistedCanvasConnection {
+  metadata: Record<string, unknown>;
+}
+
+export interface PersistableCanvasGraph {
+  objects: PersistableCanvasObject[];
+  connections: PersistableCanvasConnection[];
+  viewport?: { x: number; y: number; zoom: number };
+}
+
+export function persistedGraphFromBoard(
+  board: CanvasBoard & { viewport?: { x: number; y: number; zoom: number } },
+): PersistableCanvasGraph {
+  return {
+    objects: board.nodes.map((node) => {
+      const [resourceType, ...resourceParts] = (typeof node.data.resourceId === 'string' ? node.data.resourceId : '').split(':');
+      const width = node.measured?.width ?? node.width ?? node.style?.width;
+      const height = node.measured?.height ?? node.height ?? node.style?.height;
+      return {
+        id: node.id,
+        kind: node.data.kind,
+        resourceType: resourceParts.length ? resourceType! : null,
+        resourceId: resourceParts.length ? resourceParts.join(':') : null,
+        canvasData: {
+          x: node.position.x,
+          y: node.position.y,
+          ...(typeof width === 'number' ? { w: width } : {}),
+          ...(typeof height === 'number' ? { h: height } : {}),
+        },
+        content: { ...node.data },
+      };
+    }),
+    connections: board.edges.map((edge) => ({
+      id: edge.id,
+      sourceObjectId: edge.source,
+      targetObjectId: edge.target,
+      kind: typeof edge.data?.connectionKind === 'string' ? edge.data.connectionKind : 'reference',
+      label: typeof edge.label === 'string' ? edge.label : null,
+      // `connectionStyle` rides the metadata beside `rendererType` because it is the same
+      // class of fact — how the edge is DRAWN, as opposed to `kind`, which is what it
+      // means. Without it a dashed two-way connector came back solid on reload, which is
+      // the one moment a styling feature is worthless: the person who set it is the
+      // person reopening the board.
+      metadata: {
+        animated: !!edge.animated,
+        rendererType: typeof edge.type === 'string' ? edge.type : 'smoothstep',
+        connectionStyle: readConnectionStyle((edge.data as { connectionStyle?: unknown } | undefined)?.connectionStyle),
+      },
+    })),
+    ...(board.viewport ? { viewport: board.viewport } : {}),
+  };
+}
+
+/**
  * Two boards, one of which is this browser's and wins.
  *
  * LOCAL LAST is the whole rule: a collaborator's snapshot is a base to fill gaps
@@ -203,6 +293,40 @@ export function objectAtPoint(
       && point.y >= node.position.y && point.y <= node.position.y + height) return node;
   }
   return null;
+}
+
+/**
+ * The object a cross-object reference names, or nothing.
+ *
+ * ── WHY IT IS NOT `SpecDeriveBoard.byRef` ────────────────────────────────────
+ * `byRef` answers the same question and returns the DATA, which is all a `derive`
+ * needs. An ACT needs the OBJECT — its id, to write a back reference; its
+ * position, to place what it creates beside it — and `CanvasObjectData`
+ * deliberately does not carry the id (the id belongs to the object, and
+ * duplicating it into the data is the one-fact-in-two-places the vocabulary rules
+ * refuse one layer down).
+ *
+ * ID FIRST, then title, because the hints that document these refs say "by id or
+ * by its exact title" and a board where somebody typed the title is the common
+ * case, while a board where a title happens to equal another card's id is not a
+ * case at all. Normalised through `specRefKey` so this is the same matching rule
+ * `byRef` applies rather than a second spelling of it.
+ *
+ * It lives on the BOARD because it is a board query — the same class of thing as
+ * {@link objectAtPoint} — and because two callers now need it: the résumé surface
+ * in the canvas and the hiring context's `offer.hire`. One of them holding the
+ * definition would make the other import across a context boundary for a rule
+ * that belongs to neither.
+ */
+export function resolveObjectRef(
+  objects: readonly CanvasObject[],
+  kind: CreationObjectKind,
+  ref: unknown,
+): CanvasObject | undefined {
+  const key = specRefKey(ref);
+  if (!key) return undefined;
+  return objects.find((object) => object.data.kind === kind && object.id.toLowerCase() === key)
+    ?? objects.find((object) => object.data.kind === kind && specRefKey(object.data.title) === key);
 }
 
 /**

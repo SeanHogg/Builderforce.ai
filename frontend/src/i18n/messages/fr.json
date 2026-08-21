@@ -19324,6 +19324,7 @@
     "noticePrdNotSaved": "Le PRD du projet n’a pas été enregistré",
     "noticeQualityCardAdded": "Carte qualité ajoutée — lancez un diagnostic pour établir un score",
     "noticeSaveFailed": "Échec de l’enregistrement",
+    "noticeSaveConflict": "Quelqu’un d’autre a enregistré en premier — rouvrez le canevas pour voir sa version.",
     "noticeStandupFramePrepared": "Cadre du stand-up préparé",
     "noticeObjectLocked": "Un autre collaborateur modifie cet objet",
     "noticeLensAlreadyExpanded": "Cette vue du projet est déjà développée",

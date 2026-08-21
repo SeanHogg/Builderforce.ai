@@ -19324,6 +19324,7 @@
     "noticePrdNotSaved": "Project PRD was not saved",
     "noticeQualityCardAdded": "Quality card added — run a diagnostic to establish a score",
     "noticeSaveFailed": "Save failed",
+    "noticeSaveConflict": "Someone else saved first — reopen the board to see their version.",
     "noticeStandupFramePrepared": "Stand-up frame prepared",
     "noticeObjectLocked": "This object is being edited by another collaborator",
     "noticeLensAlreadyExpanded": "This project lens is already expanded",

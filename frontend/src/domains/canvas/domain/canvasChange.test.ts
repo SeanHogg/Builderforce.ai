@@ -59,8 +59,9 @@ describe('canInvokeCreationObjectAction', () => {
   });
 
   it('allows an act the kind actually has an adapter for', () => {
-    expect(canInvokeCreationObjectAction('website' as CreationObjectKind, 'publish')).toBe(true);
-    expect(canInvokeCreationObjectAction('poll' as CreationObjectKind, 'reveal')).toBe(true);
+    for (const [kind, action] of [['website', 'publish'], ['video', 'generate'], ['workflow', 'run'], ['mockup', 'deliver'], ['poll', 'reveal']] as const) {
+      expect(canInvokeCreationObjectAction(kind as CreationObjectKind, action), `${kind}.${action}`).toBe(true);
+    }
     // THE HANDOVER. Advertised by the `offer` spec AND connected here — the pairing that
     // was missing for the whole life of the hiring vocabulary, which is why an accepted
     // offer stayed an accepted offer and somebody re-typed the person into an `employee`.

@@ -58,6 +58,14 @@ describe('duplicateAddUpdateTarget', () => {
     expect(duplicateAddUpdateTarget('make the bars blue', 'dashboard' as CreationObjectKind, nodes, selected)?.id).toBe('chart-1');
   });
 
+  it('is not fooled by "add" applied to something OTHER than the object', () => {
+    // "Add labels to the chart" begins with a creation verb and names the kind, so
+    // a looser rule reads it as "make a second chart" and the person watches their
+    // selected chart stay unchanged while a duplicate appears beside it.
+    expect(duplicateAddUpdateTarget('Add labels to the chart', 'dashboard' as CreationObjectKind, nodes, selected)?.id).toBe('chart-1');
+    expect(duplicateAddUpdateTarget('What do you mean by Reach? Change those labels.', 'dashboard' as CreationObjectKind, nodes, selected)?.id).toBe('chart-1');
+  });
+
   it('yields to a prompt that explicitly asks for another one', () => {
     expect(duplicateAddUpdateTarget('add another dashboard', 'dashboard' as CreationObjectKind, nodes, selected)).toBeUndefined();
     expect(duplicateAddUpdateTarget('create a dashboard', 'dashboard' as CreationObjectKind, nodes, selected)).toBeUndefined();

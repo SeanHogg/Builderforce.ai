@@ -33,7 +33,7 @@
  * The four that are ours (`cylinder`, `document`, `pill`, `round`) are named in the entry.
  */
 
-import { STICKY_COLORS } from '@/components/creation-canvas/authoredColors';
+import { STICKY_COLORS } from '@/domains/canvas/domain/authoredColors';
 
 /**
  * Every geometry the board can DRAW.

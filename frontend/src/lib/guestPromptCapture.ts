@@ -24,7 +24,7 @@
 
 import { apiRequestStream } from './apiClient';
 import { getVisitorId, getFirstTouch } from './visitor';
-import { createLocalCreationSession } from './creationSessions';
+import { createLocalCreationSession } from '@/domains/canvas/infrastructure/localCanvasStore';
 import { NEW_CHAT_MODE, type ChatMode } from './brain';
 
 /** Where the prompt was typed. Mirrors `GUEST_PROMPT_SURFACES` on the server;

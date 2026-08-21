@@ -19,7 +19,7 @@ import { seatHueVar, type SeatOrPlatform } from '@/lib/seats';
 import { isNavItemActive } from '@/lib/nav';
 import { rendersAppShell } from '@/lib/shellRouting';
 import { useMobileNav } from '@/lib/useMobileNav';
-import { listLocalCreationSessions } from '@/lib/creationSessions';
+import { listLocalCreationSessions } from '@/domains/canvas/infrastructure/localCanvasStore';
 import { Icon } from '@/components/ui/Icon';
 import { HeaderCartButton } from './HeaderCartButton';
 

@@ -3,13 +3,13 @@
 import { creationSessionsApi, type CreationSessionSummary } from '@/lib/builderforceApi';
 import { getStoredTenant } from '@/lib/auth';
 import { getOrSetClientCached, invalidateClientCache } from '@/infrastructure/http/readThrough';
+import { persistedGraphFromBoard } from '@/domains/canvas/domain/canvasBoard';
 import {
-  creationGraphFromSnapshot,
   listLocalCreationSessions,
   readLocalCreationSession,
   removeLocalCreationSession,
   type LocalCreationEntry,
-} from '@/lib/creationSessions';
+} from '@/domains/canvas/infrastructure/localCanvasStore';
 
 /**
  * "What was I working on?" — the ONE answer, for every surface that asks.
@@ -82,7 +82,7 @@ export function claimLocalDraft(localSessionId: string): Promise<ClaimedDraft | 
       title: snapshot.title,
       initialPrompt: snapshot.initialPrompt,
       timeline: snapshot.timeline,
-      ...creationGraphFromSnapshot(snapshot),
+      ...persistedGraphFromBoard(snapshot),
     });
     removeLocalCreationSession(localSessionId);
     invalidateRecentCanvases();

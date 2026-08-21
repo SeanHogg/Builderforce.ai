@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/AuthContext';
-import { isLocalCreationSession } from '@/lib/creationSessions';
+import { isLocalCreationSession } from '@/domains/canvas/infrastructure/localCanvasStore';
 import { claimLocalDraft, rememberLastCanvas } from '@/lib/pendingWork';
 import { useOptionalActiveCanvas } from '@/lib/canvas/ActiveCanvasContext';
 import { readModelComparison } from '@/lib/modelComparisonRequest';

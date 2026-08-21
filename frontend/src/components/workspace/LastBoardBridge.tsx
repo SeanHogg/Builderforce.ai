@@ -37,7 +37,7 @@ import { useEffect, useRef } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import { useOptionalActiveCanvas } from '@/lib/canvas/ActiveCanvasContext';
-import { listLocalCreationSessions } from '@/lib/creationSessions';
+import { listLocalCreationSessions } from '@/domains/canvas/infrastructure/localCanvasStore';
 import { fetchRecentCanvases, readLastCanvas } from '@/lib/pendingWork';
 import { panelOpen } from '@/lib/workbenchPolicy';
 

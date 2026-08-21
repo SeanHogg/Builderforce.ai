@@ -9,7 +9,7 @@
  *
  * ── WHY IT IS DECLARED HERE ──────────────────────────────────────────────────
  * This exact shape was invented twice already — `ImportTranslator` in
- * `lib/canvasFileImport.ts` and `CanvasNoticeTranslator` in `lib/canvasNotices.ts`
+ * `application/ImportCanvasFile.ts` and `CanvasNoticeTranslator` in `lib/canvasNotices.ts`
  * — because both modules hit the same problem and neither had a place to put the
  * answer. It belongs to the canvas context, so it is declared once here and both
  * of those become aliases. A third copy is what the DRY rule exists to stop.

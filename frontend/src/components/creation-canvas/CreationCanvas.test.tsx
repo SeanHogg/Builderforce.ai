@@ -1,20 +1,18 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CREATION_CANVAS_TOUR, CreationCanvas, persistCanonicalProjectPrd, projectEvermindNodePatch, scoreAgentTestResponse } from './CreationCanvas';
-// The canvas DOMAIN. These used to be exported from the component beside it, which
-// meant asserting a pure rule cost a full canvas mount in jsdom (~35 s). They now
-// have their own suites next to the modules — `domains/canvas/domain/*.test.ts`,
-// 52 cases in 8 s — and what stays HERE is only what genuinely needs the component.
-import { associateBrainWithArtifacts } from '@/domains/canvas/domain/canvasBoard';
-import { duplicateAddUpdateTarget, shouldAcquireCanvasObjectLock } from '@/domains/canvas/domain/selection';
-import { canInvokeCreationObjectAction, canvasChangesCanAutoApply, type ProposedCanvasChange } from '@/domains/canvas/domain/canvasChange';
+// The five pure rules that used to be asserted HERE — auto-apply, connected actions,
+// the object lock, Brain association and the duplicate-vs-update target — moved to
+// `domains/canvas/domain/*.test.ts` with their coverage widened. Each one cost a full
+// canvas mount in jsdom (~8 s of a 692 s file) to assert something with no DOM in it.
+// What remains in this file is what genuinely needs the component rendered.
 import { writeSectionTourHistory } from '@/lib/onboarding/browserSectionTourHistory';
 import { CreationNode } from './CreationNode';
 import { BrainDock } from './BrainDock';
 import { specsApi } from '@/lib/builderforceApi';
 import type { CreationFlowNode } from './CreationNode';
 import type { ProjectEvermindContributions, ProjectEvermindHead } from '@/lib/projectEvermindApi';
-import { createLocalCreationSession } from '@/lib/creationSessions';
+import { createLocalCreationSession } from '@/domains/canvas/infrastructure/localCanvasStore';
 import { buildBrowserCreativeArtifact } from '@/lib/creationDeliverables';
 
 vi.mock('next-intl', async () => (await import('@/test/realCatalogTranslations')).realCatalogIntlMock(
@@ -86,12 +84,32 @@ vi.mock('@/components/workflow-builder/WorkflowBuilder', () => ({
   </div>,
 }));
 
-// No suite-level timeout override: this file inherits the project ceiling. The
-// 15s cap that used to live here was a mitigation for the render loop in the
-// next-intl mock, and once that was fixed it became the only thing cutting off
-// the heaviest mounts (3D, mini map) when this file runs alongside the other
-// ~56 component files rather than on its own.
-describe('CreationCanvas', () => {
+/**
+ * THIS FILE IS PRICED ABOVE THE PROJECT CEILING, AND SAYS SO.
+ *
+ * A 15s cap used to live here as a mitigation for the render loop in the next-intl
+ * mock; once that was fixed it became the only thing cutting off the heaviest
+ * mounts, so it was removed and this file inherited the project's 60s. Measured
+ * 2026-08-20: **86 tests, 692 s** — roughly 8 s each, with the 3D and dock mounts
+ * landing in the 60-70 s band. So the ceiling is crossed by a handful of tests,
+ * and WHICH ones depends on machine load, which is the whole reason this file has
+ * been failing a different case on every run and reading as flaky.
+ *
+ * The project config already makes the argument for why a longer ceiling is safe,
+ * and it holds here without modification: *"Neither ceiling can make a wrong
+ * assertion pass — `waitFor` POLLS, and a test that finishes early never spends
+ * its budget."* A genuine hang does not time out at all (see
+ * `test/realCatalogTranslations.ts` — an unbounded effect loop never yields to the
+ * event loop, so no timeout fires), which means this number cannot hide the
+ * failure mode people reach for a timeout to catch.
+ *
+ * It is a SYMPTOM fix and is recorded as one. The cause is that mounting
+ * `CreationCanvas.tsx` costs ~8 s, and the cure for that is the §3.4 carve
+ * currently moving logic out of it into `domains/canvas/` — five pure rules left
+ * this file in the pass that raised this number, and each one had been paying a
+ * full canvas mount to assert something with no DOM in it.
+ */
+describe('CreationCanvas', { timeout: 120_000 }, () => {
   it('scores explicit agent-test criteria and preserves unscored review runs', () => {
     expect(scoreAgentTestResponse('I understand the duplicate charge. Please share your order number; I will investigate before discussing a refund.', 'duplicate charge, order number, investigate')).toMatchObject({ passed: true, missing: [] });
     expect(scoreAgentTestResponse('A refund is guaranteed.', 'ask for order number, explain investigation')).toMatchObject({ passed: false, matched: [] });
@@ -319,30 +337,6 @@ describe('CreationCanvas', () => {
     expect(cardX(card)).toBe(placed);
   });
 
-  it('auto-applies basic canvas output but keeps consequential changes in review', () => {
-    const visual = {
-      id: 'add-visual', type: 'object.add', label: 'Add astronomy visual',
-      node: { id: 'visual', type: 'creation', position: { x: 100, y: 100 }, data: { kind: 'mockup', title: 'Astronomy visual' } },
-    } satisfies ProposedCanvasChange;
-    const response = {
-      id: 'update-response', type: 'object.update', label: 'Update Brain response',
-      objectId: 'brain', patch: { aiResponse: 'A foundational explanation.' },
-    } satisfies ProposedCanvasChange;
-
-    expect(canvasChangesCanAutoApply([visual, response])).toBe(true);
-    expect(canvasChangesCanAutoApply([{ id: 'delete', type: 'object.delete', label: 'Delete', objectId: 'visual' }])).toBe(false);
-    expect(canvasChangesCanAutoApply([{
-      ...visual, id: 'canonical-prd', node: { ...visual.node, data: { ...visual.node.data, kind: 'prd', canonicalPrdPending: true } },
-    }])).toBe(false);
-  });
-
-  it('distinguishes real Canvas actions from advertised capability intent', () => {
-    expect(canInvokeCreationObjectAction('workflow', 'run')).toBe(true);
-    expect(canInvokeCreationObjectAction('mockup', 'deliver')).toBe(true);
-    expect(canInvokeCreationObjectAction('website', 'publish')).toBe(true);
-    expect(canInvokeCreationObjectAction('video', 'generate')).toBe(true);
-  });
-
   beforeEach(() => {
     localStorage.clear();
     // The guided-tour offer fires on the FIRST visit to a section, and a guest
@@ -410,12 +404,6 @@ describe('CreationCanvas', () => {
     expect(screen.queryByRole('complementary', { name: 'Session outcome metrics' })).not.toBeInTheDocument();
   });
 
-  it('does not lock a newly created server object until autosave persists it', () => {
-    const objectId = 'a5d80af7-bb65-45cc-bd2b-d190616fc904';
-    expect(shouldAcquireCanvasObjectLock('server', objectId, true, new Set())).toBe(false);
-    expect(shouldAcquireCanvasObjectLock('server', objectId, true, new Set([objectId]))).toBe(true);
-  });
-
   it('persists an accepted PRD to its canonical project before materializing its canvas reference', async () => {
     const createSpec = vi.fn(async (body: Parameters<typeof specsApi.create>[0]) => ({
       id: '6f4b36f8-f8a0-49e8-aeed-faa42cacad11', projectId: body.projectId ?? null,
@@ -431,21 +419,6 @@ describe('CreationCanvas', () => {
     expect(createSpec).toHaveBeenCalledWith({ projectId: 42, goal: 'BuilderForce consolidated PRD', prd: '# Complete requirements', status: 'ready', kind: 'feature' });
     expect(saved.data.resourceId).toBe('spec:6f4b36f8-f8a0-49e8-aeed-faa42cacad11');
     expect(saved.data.canonicalPrdPending).toBeUndefined();
-  });
-
-  it('associates Brain with artifacts once without duplicating relationships', () => {
-    const once = associateBrainWithArtifacts([], 'brain', ['artifact']);
-    const twice = associateBrainWithArtifacts(once, 'brain', ['artifact']);
-    expect(once).toHaveLength(1);
-    expect(twice).toHaveLength(1);
-    expect(twice[0]).toMatchObject({ source: 'brain', target: 'artifact', label: 'Brain context', data: { connectionKind: 'reference' } });
-  });
-
-  it('redirects selected-object corrections to update while allowing an explicit additional chart', () => {
-    const chart = { id: 'chart-1', type: 'creation', position: { x: 0, y: 0 }, data: { kind: 'chart', title: 'Tasks by status' } } satisfies CreationFlowNode;
-    expect(duplicateAddUpdateTarget('What do you mean by Reach? Change those labels.', 'chart', [chart], [chart.id])).toBe(chart);
-    expect(duplicateAddUpdateTarget('Add labels to the chart', 'chart', [chart], [chart.id])).toBe(chart);
-    expect(duplicateAddUpdateTarget('Create another chart for priority', 'chart', [chart], [chart.id])).toBeUndefined();
   });
 
   it('fills the persisted project boundary with the visible project card', () => {

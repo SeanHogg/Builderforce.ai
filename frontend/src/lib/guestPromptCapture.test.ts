@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('./apiClient', () => ({ apiRequestStream: mocks.apiRequestStream }));
 vi.mock('./visitor', () => ({ getVisitorId: mocks.getVisitorId, getFirstTouch: mocks.getFirstTouch }));
-vi.mock('./creationSessions', () => ({ createLocalCreationSession: mocks.createLocalCreationSession }));
+vi.mock('@/domains/canvas/infrastructure/localCanvasStore', () => ({ createLocalCreationSession: mocks.createLocalCreationSession }));
 vi.mock('./brain', () => ({ NEW_CHAT_MODE: 'work' }));
 
 import { recordGuestPrompt, startGuestCreationSession } from './guestPromptCapture';

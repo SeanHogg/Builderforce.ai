@@ -28,7 +28,7 @@
 import { useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useRegisterBrainActions, type BrainAction } from '@/lib/brain';
-import { createLocalCreationBoard } from '@/lib/creationSessions';
+import { createLocalCreationBoard } from '@/domains/canvas/infrastructure/localCanvasStore';
 
 interface ShowCanvasArgs {
   title?: string;

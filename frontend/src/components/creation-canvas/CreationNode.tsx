@@ -11,8 +11,7 @@ import type { CreationNodeData, CreationObjectKind } from './types';
 import {
   EMPTY_SPEC_BOARD, makeSpecDeriveBoard, specKindReadsBoard, type SpecDeriveBoard,
 } from '@/lib/specObjects';
-import { AUTHORED_FRAME_BORDER, AUTHORED_FRAME_FILL } from './authoredColors';
-import { STICKY_COLORS } from './authoredColors';
+import { AUTHORED_FRAME_BORDER, AUTHORED_FRAME_FILL, STICKY_COLORS } from '@/domains/canvas/domain/authoredColors';
 import { CanvasClockBody } from './CanvasClockBody';
 import { CanvasTransclusionBody } from './CanvasTransclusionBody';
 import styles from './CreationCanvas.module.css';

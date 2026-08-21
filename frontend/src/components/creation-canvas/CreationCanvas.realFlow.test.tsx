@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createLocalCreationSession, creationStorageKey, writeLocalCreationSession } from '@/lib/creationSessions';
+import { createLocalCreationSession, creationStorageKey, writeLocalCreationSession } from '@/domains/canvas/infrastructure/localCanvasStore';
 import { CreationCanvas } from './CreationCanvas';
 
 // No suite-level timeout override — see the note in `CreationCanvas.test.tsx`:

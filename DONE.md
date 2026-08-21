@@ -1,3 +1,193 @@
+## ✅ RESOLVED 2026-08-20 — The canvas god component gives up its remaining use cases, and ten acts stop being ten branches
+
+PRD 22 §3.4's remaining slices, plus the one it named but did not scope: the acts that
+`CanvasInner` was implementing on behalf of contexts it does not own.
+
+### The three named application slices are out
+
+- **`application/ShareCanvasSession.ts`** — the account-less shared board. Five `useCallback`s
+  and three `useRef`s in `CanvasInner` held the two rules that decide whether a shared session
+  works at all: **echo suppression** (never push back the snapshot you just pulled, or two peers
+  ping-pong a board neither is touching) and **the hydration gate** (never push before this
+  device has read the room, or an invitee's default starter board wipes the host's). Both were
+  one-line comparisons reachable only by mounting 940 KB of canvas. They are `decidePush` now,
+  with sixteen cases running in milliseconds. Entering a second room re-closes the gate — which
+  the ref version did not do, and which is the same wipe one room along.
+- **`application/PresenceRelay.ts`** — the coalescing throttle for cursor/viewport/typing.
+  Injecting the clock immediately surfaced a latent bug: the window started at `0` and was
+  compared against `Date.now()`, so "have we sent recently" was really "is the epoch more than
+  50 ms old" and the first frame went out for the right answer by accident. It starts at
+  `-Infinity` now, which is what it always meant. A refused frame no longer consumes the window
+  either, so the first frame after a reconnect is not made to wait out an interval it spent
+  offline. Teardown became `dispose()` instead of the socket effect reaching into a ref.
+- **`application/PersistCanvas.ts`** — autosave, the conflict merge and the status line. The
+  60-line `useEffect` decided whether the board had changed, chose between two storage
+  strategies, minted an idempotency key, interpreted `Session changed`, re-read the session,
+  merged two boards and set six pieces of React state. Three rules were load-bearing and none
+  had a test: `boardSignature` (four hand-written `JSON.stringify` calls, any one of which
+  drifting turns autosave into a no-op or a write per render), `saveAttemptKey` (stable across
+  retries of the same board, new for a different one) and the conflict path — `Session changed`
+  is a **collaborator having saved first**, not a failure, and the recovery merges LOCAL LAST.
+
+Two defects fell out of writing those tests. The merge signed the MERGED board, so a local edit
+that survived a conflict was marked saved without ever being written; it signs the REMOTE board
+now. And a re-read that ALSO failed put the raw, untranslated string `Session changed` on the
+status pill in all five locales — `creationCanvas.noticeSaveConflict` is added to every catalog
+with real translations. The merge also now names any kind a collaborator sent that this build
+cannot render, which the initial load already did and the merge did not.
+
+### `lib/canvasFileImport.ts` → `application/ImportCanvasFile.ts`
+
+It was already this layer's other use case and had been since before the folder existed —
+`MaterializeDataset` was written by copying its shape. Leaving the original in `lib/` while its
+twin sat in `application/` is how a layer becomes a suggestion.
+
+### Infrastructure exists, and the two moves that unblocked it
+
+`infrastructure/guestRoomGateway.ts` and `infrastructure/canvasSessionGateway.ts` implement the
+two ports. Both are thin on purpose: everything interesting is in the use case, and what is left
+is the part that genuinely cannot be tested without a network — which HTTP call is which, and
+that `createGuestRoom` reports failure as a bare string.
+
+`lib/creationSessions.ts` became **`infrastructure/localCanvasStore.ts`**. Its name read like the
+API client for server sessions and it was `localStorage` with a schema on top; two modules whose
+names differ by nothing and whose storage differs by everything is how a call site writes a guest
+board where an account board goes. 15 importers repointed. `parseLocalCreationSnapshot` came out
+of it as the ONE reader for a stored board: the room's copy was parsed with a bare `JSON.parse`
+inlined in a callback, so a board arriving **from a different browser** skipped every default,
+clamp and filter the disk path applies.
+
+`components/creation-canvas/authoredColors.ts` became **`domain/authoredColors.ts`** (11
+importers, and the design-scale ratchet's exemption moved with it). It is colour PERSISTED into
+an object as the author's choice — domain data, and infrastructure could not import it where it
+was without inverting the layer direction.
+
+### The write half of the persistence boundary joins its read half
+
+`creationGraphFromSnapshot` moved from `lib/creationSessions.ts` into the `CanvasBoard` aggregate
+as **`persistedGraphFromBoard`**, ten lines from `boardFromPersistedGraph`. The two directions of
+one translation lived in modules that never imported each other, and the rule they must agree on
+— what an edge's `metadata` carries — was written twice; `connectionStyle` was added to the write
+side and boards came back with solid edges until the read side caught up. `resolveObjectRef`
+joined it for the same reason: two callers now need it and neither should own it.
+
+### Ten acts become registry data
+
+`CanvasInner` held ten `useCallback`s — `runInvoiceAction`, `syncPayRunCard`,
+`sendUpdateToInvestors`, `hireFromOffer`, `distributeAssignment`, `importCohortRosterFromLti`,
+`computeGradebook`, `markSubmission`, `validateCurriculumMap`, `importReferencesFromDocument` —
+and every one was the same seven steps in the same order, six of them identical. They were
+reached by a fifty-line `else if` chain keyed on `kind` and `action`: the exact "new branch per
+case" the architecture rules forbid, in the one place where a forgotten branch means an
+advertised action answers "no delivery adapter is connected".
+
+`domains/canvas/application/CardAct.ts` is the shape; the acts are **registry entries owned by
+the contexts they belong to** — `domains/finance/application/founderOpsActs.ts`,
+`domains/hiring/application/employmentHandover.ts`,
+`domains/teaching/application/academicActs.ts` — and `cardActs.ts` is the one list. The dispatch
+is now a single lookup and stops growing. `markSubmission` alone was sixty lines deciding a
+student's grade with no test at all; "a submission with no placements is refused rather than
+marked zero" is now an assertion that runs in a millisecond.
+
+Three behaviours that had drifted between the copies are enforced once: the account check, the
+`try`/`catch` two acts were missing, and `connectionKind` on a created edge — omitted by one
+act, so the board's critical path and coverage figures silently skipped that connection.
+
+### `syncSocialCampaign` too, and it is NOT an act
+
+It looks like a card act and is not: an act is invoked by name on a card, while this is the
+card's inline editor propagating a patch on every edit. So it is a plain use case in
+`domains/marketing/application/SyncSocialCampaign.ts`, with its own one-method port. The rule
+worth having somewhere testable is `scheduledAt`: it is the ONE field whose absence and whose
+`null` mean different things to the server, so a patch that spread the whole card would quietly
+unschedule a send every time somebody fixed a typo in the body — a failure nobody notices until
+the post does not go out.
+
+### Measured
+
+`CanvasInner` **11,688 → 11,174 lines**; the file 13,739 → 13,241. 172 tests over `src/domains/`
+run in **10 s** — the same rules cost ~35 s per mount where they were. All 39 creation-canvas
+suites (484 tests), the five suites touched by the moves (122 tests), both catalog suites (83
+tests), `check:i18n-keys`, `eslint` and `tsc --noEmit` are green, and the layering ratchet
+reports **21 layered modules** with an empty baseline.
+
+One guard is red and it is not from this pass: `check:design-scale`'s `offScaleFontSizes` leg is
+3,807 against a baseline of 3,767, in forty files none of which this pass touched. It is already
+recorded in the register with the same numbers.
+
+## ✅ RESOLVED 2026-08-20 — Five duplicated tests leave the 692-second file, and the file admits what it costs
+
+Three things, all of them consequences of the domain layer landing earlier the same evening.
+
+### The pure tests had been left behind
+
+The pass that moved `associateBrainWithArtifacts`, `duplicateAddUpdateTarget`,
+`shouldAcquireCanvasObjectLock`, `canInvokeCreationObjectAction` and `canvasChangesCanAutoApply`
+into `domains/canvas/` updated `CreationCanvas.test.tsx`'s IMPORTS and left the test cases
+behind — and then wrote a comment claiming "what stays HERE is only what genuinely needs the
+component", which was not true of the file it was written in. Five cases were duplicating the
+domain suites while paying ~8 s each for a canvas mount to assert something with no DOM in it.
+
+They are gone, and the three assertions the domain suites did not already make were carried
+across first rather than dropped:
+
+- the Brain connection's **default label and `reference` kind** (and the caller-supplied
+  "Changed with Brain" variant);
+- **"Add labels to the chart"** must read as an EDIT — it opens with a creation verb and names
+  the kind, so a looser rule makes a duplicate chart appear while the selected one stays
+  unchanged;
+- the four concrete kind/action pairs (`video.generate`, `workflow.run`, `mockup.deliver`,
+  `website.publish`) rather than only the two the new suite happened to pick.
+
+### The file now states its own price
+
+`CreationCanvas.test.tsx` had a comment saying "No suite-level timeout override: this file
+inherits the project ceiling." Measured 2026-08-20: **86 tests, 692 s** — ~8 s each, with the 3D
+and dock mounts landing in the **60-70 s** band against a 60 s ceiling. So a handful of tests
+cross it, WHICH ones depends on machine load, and that is the entire reason this file has been
+failing a different case every run and reading as flaky. Two consecutive full runs failed
+`renders staff and task inspector edits` and then `docks Brain to one side only` — different
+cases, same cause.
+
+The suite now declares `{ timeout: 120_000 }`, and the argument for why that is safe is the one
+the project config already makes for its own 60 s: *"Neither ceiling can make a wrong assertion
+pass — `waitFor` POLLS, and a test that finishes early never spends its budget."* A genuine hang
+does not time out at all (`test/realCatalogTranslations.ts` documents exactly that: an unbounded
+effect loop never yields, so no timeout fires), so the number cannot hide the failure mode people
+reach for a timeout to catch.
+
+It is recorded in the file as a SYMPTOM fix. The cause is that mounting `CreationCanvas.tsx`
+costs ~8 s, and the cure is the §3.4 carve.
+
+**Also found:** `--testTimeout` on the vitest CLI does **not** reach this file. The config defines
+`projects: [...]` with `extends: true`, and each project resolves its own `testTimeout`, so the
+flag is silently ignored — which is why "just raise the timeout to check" appeared to prove the
+test was genuinely stuck when it was only slow.
+
+### A half-landed refactor, finished
+
+A concurrent session moved the board→persistence serialiser out of `lib/creationSessions.ts`
+into the domain as `persistedGraphFromBoard` — the correct home, since it is the outbound half of
+`boardFromPersistedGraph` and the two had been in modules that never imported each other, which
+is how `connectionStyle` came to be written by one side and dropped by the other. It updated
+`pendingWork.ts` and deleted the old export, but **three call sites in `CreationCanvas.tsx` still
+named it**, so the tree did not compile. Finished here.
+
+Its type failure was worth fixing properly rather than casting past. `PersistedCanvasObject` is
+the INBOUND shape and is permissive on purpose — a stored row genuinely may be missing anything,
+which is the condition the boundary exists to survive. Reusing it for the outbound direction made
+the WRITER as weak as the reader, and `creationSessionsApi.claim` refused to compile against it.
+There are now `PersistableCanvasObject` and `PersistableCanvasConnection`, whose `canvasData`,
+`content` and `metadata` are required because the board always writes them. Also fixed: the moved
+`ImportCanvasFile.ts` kept a relative `import('./canvasMediaStore')` that no longer resolved from
+its new directory — a dynamic import, so it would have failed at runtime on a docx with images
+rather than at build.
+
+**Verified:** `tsgo --noEmit` green, zero errors; `check:layering`, `check:canvas-glossary` and
+`check:i18n-keys` green; **110 tests across `src/domains/canvas` in 6.7 s**.
+
+---
+
 ## ✅ RESOLVED 2026-08-20 — The canvas application layer opens with PRD 22's own worked example
 
 §3.4 does not just say "extract use cases" — it prints a code sample and names it:

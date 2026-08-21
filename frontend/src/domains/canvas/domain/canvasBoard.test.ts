@@ -18,6 +18,7 @@ import {
   edgesWithinBoard,
   mergeCollaboratorBoards,
   objectAtPoint,
+  persistedGraphFromBoard,
   type CanvasBoard,
   type PersistedCanvasGraph,
 } from './canvasBoard';
@@ -191,6 +192,16 @@ describe('associateBrainWithArtifacts', () => {
     expect(result.every((item) => item.source === 'brain')).toBe(true);
   });
 
+  it('labels the connection and types it as a REFERENCE by default', () => {
+    const [edge] = associateBrainWithArtifacts([], 'brain', ['artifact']);
+    expect(edge).toMatchObject({ source: 'brain', target: 'artifact', label: 'Brain context', data: { connectionKind: 'reference' } });
+  });
+
+  it('takes a caller-supplied label, for a turn that CHANGED rather than read', () => {
+    const [edge] = associateBrainWithArtifacts([], 'brain', ['artifact'], 'Changed with Brain');
+    expect(edge?.label).toBe('Changed with Brain');
+  });
+
   it('is idempotent — the same artifact twice is not a second connection', () => {
     const once = associateBrainWithArtifacts([], 'brain', ['a']);
     expect(associateBrainWithArtifacts(once, 'brain', ['a'])).toHaveLength(1);
@@ -203,5 +214,32 @@ describe('associateBrainWithArtifacts', () => {
   it('returns the connections untouched when there is no Brain on the board', () => {
     const existing = [edge('e', 'a', 'b')];
     expect(associateBrainWithArtifacts(existing, '', ['a'])).toBe(existing);
+  });
+});
+
+describe('persistedGraphFromBoard', () => {
+  it('persists semantic connection kinds independently from renderer types', () => {
+    const nodes: CanvasObject[] = [
+      { id: '00000000-0000-4000-8000-000000000001', type: 'creation', position: { x: 1, y: 2 }, data: { kind: 'dataset', title: 'Evidence' } },
+      { id: '00000000-0000-4000-8000-000000000002', type: 'creation', position: { x: 3, y: 4 }, data: { kind: 'chart', title: 'Chart' } },
+    ];
+    const graph = persistedGraphFromBoard({ nodes, edges: [{
+      id: '00000000-0000-4000-8000-000000000003', source: nodes[0]!.id, target: nodes[1]!.id,
+      type: 'smoothstep', data: { connectionKind: 'data' }, animated: true,
+    }] });
+    expect(graph.connections[0]).toMatchObject({ kind: 'data', metadata: { rendererType: 'smoothstep', animated: true } });
+  });
+
+  it('persists the rendered footprint used by collision-free AI layout', () => {
+    const graph = persistedGraphFromBoard({
+      nodes: [{
+        id: '00000000-0000-4000-8000-000000000004', type: 'creation', position: { x: 10, y: 20 },
+        width: 240, height: 130, measured: { width: 460, height: 315 },
+        data: { kind: 'task', title: 'Tall task' },
+      }],
+      edges: [],
+    });
+
+    expect(graph.objects[0]?.canvasData).toMatchObject({ x: 10, y: 20, w: 460, h: 315 });
   });
 });

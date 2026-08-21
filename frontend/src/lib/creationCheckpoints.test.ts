@@ -14,7 +14,7 @@ import {
   readLocalCheckpoint, readLocalCheckpoints, saveLocalCheckpoint, withCheckpoint,
   type LocalCheckpoint,
 } from './creationCheckpoints';
-import { removeLocalCreationSession, writeLocalCreationSession } from './creationSessions';
+import { removeLocalCreationSession, writeLocalCreationSession } from '@/domains/canvas/infrastructure/localCanvasStore';
 
 const SESSION = 'local-abc';
 

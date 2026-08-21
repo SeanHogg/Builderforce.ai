@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { listPendingDrafts } from '@/lib/pendingWork';
-import { mergeLocalCreationSessions, removeLocalCreationSession, updateLocalCreationSession, type LocalCreationEntry } from '@/lib/creationSessions';
+import { mergeLocalCreationSessions, removeLocalCreationSession, updateLocalCreationSession, type LocalCreationEntry } from '@/domains/canvas/infrastructure/localCanvasStore';
 
 /**
  * Account-less boards still held in this browser, surfaced in the canvas library.

@@ -135,7 +135,7 @@ export default function DashboardPage() {
       router.push(`/create/${created.session.id}`);
     } catch {
       // Preserve intent locally if server persistence is briefly unavailable.
-      const { createLocalCreationSession } = await import('@/lib/creationSessions');
+      const { createLocalCreationSession } = await import('@/domains/canvas/infrastructure/localCanvasStore');
       router.push(`/create/${createLocalCreationSession(p)}`);
     } finally {
       setBuilding(false);

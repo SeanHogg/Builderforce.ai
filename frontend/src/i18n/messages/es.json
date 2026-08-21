@@ -19324,6 +19324,7 @@
     "noticePrdNotSaved": "El PRD del proyecto no se guardó",
     "noticeQualityCardAdded": "Tarjeta de calidad añadida: ejecuta un diagnóstico para obtener una puntuación",
     "noticeSaveFailed": "Error al guardar",
+    "noticeSaveConflict": "Otra persona guardó primero: vuelve a abrir el lienzo para ver su versión.",
     "noticeStandupFramePrepared": "Marco de la reunión diaria preparado",
     "noticeObjectLocked": "Otro colaborador está editando este objeto",
     "noticeLensAlreadyExpanded": "Esta vista del proyecto ya está expandida",

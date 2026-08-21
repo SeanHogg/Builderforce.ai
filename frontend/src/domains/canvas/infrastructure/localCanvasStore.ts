@@ -1,9 +1,28 @@
+/**
+ * THE LOCAL CANVAS STORE — a board on THIS DEVICE, for somebody with no account.
+ *
+ * ── WHY IT IS INFRASTRUCTURE, AND WHY IT MOVED ───────────────────────────────
+ * This is `localStorage` with a schema on top: read, write, index, list, remove,
+ * merge. PRD 22 §3.4 lists it (as `canvasPersistence`) among the canvas slices
+ * still sitting outside the context that owns them, and it was in `lib/` under a
+ * name — `creationSessions.ts` — that read like the API client for server
+ * sessions, which is a different thing in a different bounded context. Two
+ * modules whose names differ by nothing and whose storage differs by everything
+ * is how a call site ends up writing a guest board where an account board goes.
+ *
+ * Its NAME now says which of the two it is, and its FOLDER says the canvas
+ * context owns it. Nothing about the stored shape changed, so no board written
+ * by an earlier build has to be migrated.
+ *
+ * The board↔persistence TRANSLATION does not live here: that is the domain's
+ * anti-corruption boundary, `persistedGraphFromBoard` / `boardFromPersistedGraph`
+ * in `../domain/canvasBoard.ts`. This file moves bytes.
+ */
+
 import type { Edge } from '@xyflow/react';
-import type { CreationFlowNode } from '@/components/creation-canvas/CreationNode';
-import type { CreationGraphInput } from '@/lib/builderforceApi';
 import { NEW_CHAT_MODE, normalizeChatMode, type ChatMode } from '@/lib/brain';
-import { STICKY_COLORS } from '@/components/creation-canvas/authoredColors';
-import { readConnectionStyle } from '@/lib/canvasConnectionStyle';
+import { STICKY_COLORS } from '../domain/authoredColors';
+import type { CanvasObject } from '../domain/canvasObject';
 
 export const LOCAL_CREATION_PREFIX = 'local-';
 const LOCAL_TOOL_CREATION_PREFIX = `${LOCAL_CREATION_PREFIX}tool-`;
@@ -31,7 +50,7 @@ export interface LocalCreationSnapshot {
    */
   mode?: ChatMode;
   timeline?: Array<{ clientMessageId: string; role: 'user' | 'assistant' | 'system'; body: string; metadata?: { scope?: string; objectIds?: string[]; model?: string; error?: boolean; authoredBy?: { kind: 'agent' | 'brain' | 'human'; ref: string; name: string } }; createdAt: string }>;
-  nodes: CreationFlowNode[];
+  nodes: CanvasObject[];
   edges: Edge[];
   viewport?: { x: number; y: number; zoom: number };
   updatedAt: string;
@@ -153,7 +172,7 @@ export function createLocalCreationBoard(input: { title?: string; text?: string;
   const sessionId = `${LOCAL_CREATION_PREFIX}${crypto.randomUUID()}`;
   const now = new Date().toISOString();
   const title = (input.title ?? '').trim().slice(0, 80) || 'Untitled board';
-  const nodes: CreationFlowNode[] = [];
+  const nodes: CanvasObject[] = [];
   let top = 140;
   const intro = (input.text ?? '').trim();
   if (intro) {
@@ -186,7 +205,7 @@ export function createLocalCreationSession(prompt: string, mode: ChatMode = NEW_
   const now = new Date().toISOString();
   const nodeId = crypto.randomUUID();
   const title = prompt.trim().slice(0, 80) || 'Untitled session';
-  const nodes: CreationFlowNode[] = [{
+  const nodes: CanvasObject[] = [{
     id: nodeId,
     type: 'creation',
     position: { x: 120, y: 140 },
@@ -247,7 +266,24 @@ export function writeLocalCreationSession(sessionId: string, snapshot: LocalCrea
 export function readLocalCreationSession(sessionId: string): LocalCreationSnapshot | null {
   try {
     const raw = localStorage.getItem(creationStorageKey(sessionId));
-    if (!raw) return null;
+    return raw ? parseLocalCreationSnapshot(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The ONE reader for a stored board, independent of where the bytes came from.
+ *
+ * `localStorage` is one source; the shared room is the other, and the canvas used
+ * to parse the room's copy with a bare `JSON.parse` plus an `Array.isArray` check
+ * inlined in a callback. So a board arriving from a peer skipped every default,
+ * every clamp and the timeline filter that the disk path applies — two readers
+ * for one written shape, and the weaker one on the path where the writer is a
+ * DIFFERENT BROWSER, possibly a different build.
+ */
+export function parseLocalCreationSnapshot(raw: string): LocalCreationSnapshot | null {
+  try {
     const parsed = JSON.parse(raw) as Partial<LocalCreationSnapshot>;
     if (!Array.isArray(parsed.nodes) || !Array.isArray(parsed.edges)) return null;
     return {
@@ -358,43 +394,4 @@ export function mergeLocalCreationSessions(targetSessionId: string, sourceSessio
   writeLocalCreationSession(targetSessionId, merged);
   sources.forEach(({ id }) => removeLocalCreationSession(id));
   return merged;
-}
-
-export function creationGraphFromSnapshot(snapshot: Pick<LocalCreationSnapshot, 'nodes' | 'edges' | 'viewport'>): CreationGraphInput {
-  return {
-    objects: snapshot.nodes.map((node) => {
-      const [resourceType, ...resourceParts] = (node.data.resourceId ?? '').split(':');
-      return {
-        id: node.id,
-        kind: node.data.kind,
-        resourceType: resourceParts.length ? resourceType : null,
-        resourceId: resourceParts.length ? resourceParts.join(':') : null,
-        canvasData: {
-          x: node.position.x,
-          y: node.position.y,
-          ...(typeof node.measured?.width === 'number' ? { w: node.measured.width } : typeof node.width === 'number' ? { w: node.width } : typeof node.style?.width === 'number' ? { w: node.style.width } : {}),
-          ...(typeof node.measured?.height === 'number' ? { h: node.measured.height } : typeof node.height === 'number' ? { h: node.height } : typeof node.style?.height === 'number' ? { h: node.style.height } : {}),
-        },
-        content: { ...node.data },
-      };
-    }),
-    connections: snapshot.edges.map((edge) => ({
-      id: edge.id,
-      sourceObjectId: edge.source,
-      targetObjectId: edge.target,
-      kind: typeof edge.data?.connectionKind === 'string' ? edge.data.connectionKind : 'reference',
-      label: typeof edge.label === 'string' ? edge.label : null,
-      // `connectionStyle` rides the metadata beside `rendererType` because it is the same
-      // class of fact — how the edge is DRAWN, as opposed to `kind`, which is what it
-      // means. Without it a dashed two-way connector came back solid on reload, which is
-      // the one moment a styling feature is worthless: the person who set it is the
-      // person reopening the board.
-      metadata: {
-        animated: !!edge.animated,
-        rendererType: typeof edge.type === 'string' ? edge.type : 'smoothstep',
-        connectionStyle: readConnectionStyle((edge.data as { connectionStyle?: unknown } | undefined)?.connectionStyle),
-      },
-    })),
-    ...(snapshot.viewport ? { viewport: snapshot.viewport } : {}),
-  };
 }

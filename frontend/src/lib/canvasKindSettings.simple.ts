@@ -7,7 +7,7 @@
  */
 
 import { registerKindSettings } from './canvasKindSettings';
-import { AUTHORED_FRAME_BORDER, AUTHORED_FRAME_FILL } from '@/components/creation-canvas/authoredColors';
+import { AUTHORED_FRAME_BORDER, AUTHORED_FRAME_FILL } from '@/domains/canvas/domain/authoredColors';
 import { DOCUMENT_EDITOR_KINDS } from './creationObjectGroups';
 import { DIAGRAM_TARGETS } from './diagramNotations';
 

@@ -45,7 +45,7 @@ import { MAX_TABULAR_COLUMNS } from '@/lib/canvasTabularData';
 // The sticky palette. It used to be imported from the knowledge board, which owned it
 // first; that board has folded into this one and the pigments moved to `authoredColors`,
 // where every value a PERSON picks and the object stores verbatim already lives.
-import { STICKY_COLORS } from './authoredColors';
+import { STICKY_COLORS } from '@/domains/canvas/domain/authoredColors';
 import { DEFAULT_TIMER_MS } from './CanvasClockBody';
 import { DEFAULT_MODALITY } from '@/lib/modality';
 import { DEFAULT_PITCH_COMPETITION_ID } from '@/lib/pitchCompetition';

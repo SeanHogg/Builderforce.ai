@@ -7,26 +7,35 @@
  * workbook becomes an editable sheet per tab, a deck becomes slides, a data
  * export becomes a queryable Dataset. Deriving that in each caller is how the
  * drop path and the picker path drift apart, so every caller reads this.
+ *
+ * ── WHY IT LIVES IN `application/` ───────────────────────────────────────────
+ * It was `lib/canvasFileImport.ts`, and PRD 22 §3.4 names moving it as part of
+ * the same pass that landed `MaterializeDataset.ts` — because it was ALREADY
+ * this layer's other use case and had been since before the folder existed. It
+ * takes what it needs (a file, a translator), returns a DESCRIPTION of the
+ * objects to add, and mutates nothing; that is the application shape exactly,
+ * and `MaterializeDataset` was written by copying it. Leaving the original in
+ * `lib/` while its twin sat here is how a layer becomes a suggestion.
  */
-import { isTabularFile, parseTabularText, profileTabular, type TabularSource } from './canvasTabularData';
-import { nextDatasetVersion, rowBasis } from './canvasDatasetVersion';
-import { fileExtension, fileStem } from './canvasDocuments';
-import { htmlToMarkdown } from './richText';
+import { isTabularFile, parseTabularText, profileTabular, type TabularSource } from '@/lib/canvasTabularData';
+import { nextDatasetVersion, rowBasis } from '@/lib/canvasDatasetVersion';
+import { fileExtension, fileStem } from '@/lib/canvasDocuments';
+import { htmlToMarkdown } from '@/lib/richText';
 import {
   createResumeFamily, isJsonResume, renderResumeMarkdown, resumeDocumentFromJson, resumeNodePatch,
   type CanvasResumeDocument,
-} from './canvasResume';
+} from '@/lib/canvasResume';
 import {
   MAX_PARSEABLE_BYTES, PAGE_BREAK_MARKER, readDocx, readPdf, readPptx, readXlsx, rtfToText,
   type DocxMediaUploader, type OfficeSlide, type WorkbookSheet,
-} from './officeFormats';
+} from '@/lib/officeFormats';
 import {
   dxfPreviewSvg, meshFormatFromHint, meshPreviewSvg, parseMeshTriangles, svgDataUrl,
-} from './creativeGeometry';
+} from '@/lib/creativeGeometry';
 import {
   conversionFromGraph, diagramNotation, notationForFileName,
   type DiagramConversion, type DiagramNotation,
-} from './diagramNotations';
+} from '@/lib/diagramNotations';
 import type { CreationObjectKind } from '@builderforce/creation-canvas-contract';
 
 /** Text attachments Brain can read directly once they are on the canvas. */
@@ -64,11 +73,11 @@ export function htmlDocumentTitle(source: string): string | null {
 }
 
 /** The canvas translator seam, under this module's historical name. Declared once
- *  in `domains/canvas/domain/canvasText.ts` — this file and `canvasNotices.ts` had
+ *  in `../domain/canvasText.ts` — this file and `lib/canvasNotices.ts` had
  *  invented the identical type independently, which is two places for one decision
  *  about how a plain module speaks to a person. */
-export type { CanvasTextTranslator as ImportTranslator } from '@/domains/canvas/domain/canvasText';
-import type { CanvasTextTranslator as ImportTranslator } from '@/domains/canvas/domain/canvasText';
+export type { CanvasTextTranslator as ImportTranslator } from '../domain/canvasText';
+import type { CanvasTextTranslator as ImportTranslator } from '../domain/canvasText';
 
 export type ImportedCanvasObject = {
   kind: CreationObjectKind;
@@ -157,7 +166,7 @@ export type AttachmentBytesStrategy = (file: File) => Promise<AttachmentBytesRef
  * uploader returns null, and the figure is dropped rather than inlined.
  */
 const defaultMediaUploader: DocxMediaUploader = async (file) => {
-  const { uploadCanvasFile } = await import('./canvasMediaStore');
+  const { uploadCanvasFile } = await import('@/lib/canvasMediaStore');
   return (await uploadCanvasFile(file))?.url ?? null;
 };
 

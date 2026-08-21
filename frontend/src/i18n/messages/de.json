@@ -19324,6 +19324,7 @@
     "noticePrdNotSaved": "Projekt-PRD wurde nicht gespeichert",
     "noticeQualityCardAdded": "Qualitätskarte hinzugefügt — führe eine Diagnose aus, um einen Wert zu ermitteln",
     "noticeSaveFailed": "Speichern fehlgeschlagen",
+    "noticeSaveConflict": "Jemand anderes hat zuerst gespeichert – öffne die Leinwand erneut, um dessen Version zu sehen.",
     "noticeStandupFramePrepared": "Stand-up-Rahmen vorbereitet",
     "noticeObjectLocked": "Dieses Objekt wird von einer anderen Person bearbeitet",
     "noticeLensAlreadyExpanded": "Diese Projektansicht ist bereits erweitert",

@@ -280,7 +280,7 @@ const COLOUR_EXEMPT = [
   // ---- Colour the AUTHOR picks, persisted as data -----------------------
   // The value is written into the object and rendered back as-is, and the
   // control that picks it (`<input type="color">`) accepts only `#rrggbb`.
-  /^components\/creation-canvas\/authoredColors\.ts$/,
+  /^domains\/canvas\/domain\/authoredColors\.ts$/,
   /^components\/canvas\/canvasModel\.ts$/,
   // The résumé TEMPLATE CATALOG. Every entry's `accent`/`paper`/`ink` is the
   // document's own palette — persisted onto the résumé, editable by its author, and
