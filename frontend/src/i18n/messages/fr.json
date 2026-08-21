@@ -19985,7 +19985,9 @@
         "views": "Consultations",
         "documentBody": "Corps du document",
         "templateKey": "Modèle",
-        "abTestKey": "Clé du test A/B"
+        "abTestKey": "Clé du test A/B",
+        "trafficAllocation": "Répartition du trafic",
+        "evidence": "Preuves"
       },
       "column": {
         "actual": "Réel",

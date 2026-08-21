@@ -1,3 +1,70 @@
+## ✅ RESOLVED 2026-08-20 — The canvas application layer opens with PRD 22's own worked example
+
+§3.4 does not just say "extract use cases" — it prints a code sample and names it:
+
+> For example, a presentation callback performs a complete domain query and
+> materialisation at `CreationCanvas.tsx:1616-1659` … *React graph mutation follows in
+> the same callback.*
+
+That callback is `visualizeDataset`, and its two siblings `plotDataset` and
+`profileDataset` had the same shape. All three read the selected object, profiled it, ran
+an aggregate query, built a whole new object from the result and called `setNodes` — so
+"which column does a chart group by" could only be exercised by mounting 940 KB of canvas
+in jsdom, and consequently never was.
+
+**`domains/canvas/application/MaterializeDataset.ts`** is the first use case in that
+layer, and it deliberately copies the shape of `lib/canvasFileImport.ts` — which turns out
+to already BE this layer's `ImportCanvasFile`, written to the right pattern and sitting in
+the wrong folder since before the folder existed. Take what you need, return a
+DESCRIPTION of the change, mutate nothing; the caller applies it.
+
+### Two ports, because importing either would point the module outward
+
+- **The translator.** A use case is not a component and cannot call `useTranslations`.
+- **`createObject`.** The object factory reads the object REGISTRY, which lives in
+  `components/`. A port keeps the dependency inward and lets a test build objects without
+  the registry at all — `check-layering.mjs` fails the alternative, which is the guard
+  doing exactly the job it was landed for one slice earlier.
+
+### The translator type existed twice, and now exists once
+
+`ImportTranslator` (`lib/canvasFileImport.ts`) and `CanvasNoticeTranslator`
+(`lib/canvasNotices.ts`) were character-for-character the same declaration, invented
+independently because both modules hit the same problem and neither had a place to put
+the answer. It belongs to the canvas context, so it is declared once as
+`CanvasTextTranslator` in `domains/canvas/domain/canvasText.ts` and both of those are now
+aliases — no call site changed. A third copy was one use case away.
+
+### A duplicate the extraction exposed
+
+"Add the object, connect it to its source, select it, open its inspector, say so" is the
+same five steps for a chart and for a map, and it was written twice — so the two had
+already drifted in ways nobody had chosen. One `applyMaterialization` now holds it.
+
+### What the tests could finally reach
+
+19 new cases, **6 seconds for the whole `domains/canvas` tree (71 tests)**. The ones worth
+naming all concern `chartGroupingColumns`, the judgement PRD 22's excerpt is built around
+and which had no coverage at all:
+
+- it falls back past an **all-unique id column** — grouping by that charts row indices,
+  which is a picture of nothing;
+- it falls back past a **constant column** — one bar;
+- it still returns a column when nothing is groupable, rather than refusing to chart;
+- it never measures the column it grouped by;
+- and the row-count KPI goes through the injected formatter, so a locale that groups
+  thousands differently is not bypassed by a `String()`.
+
+**Verified:** `tsgo --noEmit` green, zero errors; `check:layering`, `check:canvas-glossary`
+and `check:i18n-keys` green; 71 tests in `src/domains/canvas` in 6 s.
+
+**What this slice is NOT:** a large line reduction. `CanvasInner` went 11,738 → 11,688,
+because applying a result still costs the component something. The value is the seam being
+proved end to end and guarded — three more use cases now have a pattern to follow and a
+ratchet that fails the wrong version.
+
+---
+
 ## ✅ RESOLVED 2026-08-20 — Evermind grows the enterprise layer customers said the platform did not have
 
 Customers were not asking for a better model. They were asking the four questions that decide whether an

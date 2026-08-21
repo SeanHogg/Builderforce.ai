@@ -19985,7 +19985,9 @@
         "views": "Aufrufe",
         "documentBody": "Dokumenttext",
         "templateKey": "Vorlage",
-        "abTestKey": "A/B-Test-Schlüssel"
+        "abTestKey": "A/B-Test-Schlüssel",
+        "trafficAllocation": "Traffic-Verteilung",
+        "evidence": "Belege"
       },
       "column": {
         "actual": "Ist",

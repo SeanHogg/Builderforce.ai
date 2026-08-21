@@ -19985,7 +19985,9 @@
         "views": "Visualizaciones",
         "documentBody": "Texto del documento",
         "templateKey": "Plantilla",
-        "abTestKey": "Clave del test A/B"
+        "abTestKey": "Clave del test A/B",
+        "trafficAllocation": "Reparto de tráfico",
+        "evidence": "Evidencia"
       },
       "column": {
         "actual": "Real",

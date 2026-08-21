@@ -93,7 +93,13 @@ describe('the industry is a VALUE, not a kind', () => {
   it('ships no per-industry kind', () => {
     // The whole argument of `operations.ts`: six industries share one shape, and a pack
     // per industry is six copies that drift. `discipline` is what tells them apart.
-    for (const kind of ['hvacJob', 'propertyRepair', 'clinicAppointment', 'fleetDefect', 'legalMatter']) {
+    //
+    // The legal example is spelled `legalPracticeJob` and NOT `legalMatter`, which this
+    // list used to name: the LEGAL vocabulary legitimately declares `legalMatter` for a
+    // different thing entirely — what is being argued, with an adverse party and a filing
+    // deadline — so asserting its absence turned a real kind into a failure and said
+    // nothing about the per-industry duplication this test is actually for.
+    for (const kind of ['hvacJob', 'propertyRepair', 'clinicAppointment', 'fleetDefect', 'legalPracticeJob']) {
       expect(CREATION_OBJECT_KINDS).not.toContain(kind);
     }
     expect(spec('workOrder').fields.map((entry) => entry.name)).toContain('discipline');

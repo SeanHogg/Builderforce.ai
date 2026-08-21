@@ -19985,7 +19985,9 @@
         "views": "Views",
         "documentBody": "Document body",
         "templateKey": "Template",
-        "abTestKey": "A/B test key"
+        "abTestKey": "A/B test key",
+        "trafficAllocation": "Traffic split",
+        "evidence": "Evidence"
       },
       "column": {
         "actual": "Actual",

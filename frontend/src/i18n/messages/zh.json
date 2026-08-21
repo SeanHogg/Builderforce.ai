@@ -19985,7 +19985,9 @@
         "views": "查看记录",
         "documentBody": "文件正文",
         "templateKey": "模板",
-        "abTestKey": "A/B 测试标识"
+        "abTestKey": "A/B 测试标识",
+        "trafficAllocation": "流量分配",
+        "evidence": "证据"
       },
       "column": {
         "actual": "实际",
