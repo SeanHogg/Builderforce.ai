@@ -50,5 +50,11 @@ import './careerObjects';
 // The Models group as spec DATA — `llm` and its derived rate card. Listed here for the
 // reason the header gives; see `modelObjects.ts` for why `evermind` is not in it.
 import './modelObjects';
+// The brand a generative board composes against, and the audience a send may reach.
+// MISSING from this list until the kind-settings completeness ratchet caught it: both
+// kinds were declared in `CREATION_OBJECT_KINDS`, spec'd in `marketingObjects.ts`, and
+// resolved to NOTHING everywhere the registry was not pulled in by accident — the exact
+// failure this module's header describes, third occurrence.
+import './marketingObjects';
 
 export {};

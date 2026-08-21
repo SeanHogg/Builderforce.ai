@@ -43,6 +43,44 @@ function wordsIn(value: unknown): number {
   return typeof value === 'string' ? value.trim().split(/\s+/).filter(Boolean).length : 0;
 }
 
+/** A finite number out of a cell, or nothing. An empty cell is NOT zero. */
+function numberIn(value: unknown): number | undefined {
+  const parsed = typeof value === 'number' ? value : Number(String(value ?? '').replace(/[^0-9.-]/g, ''));
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+/**
+ * `poll.correctRate` — share of the room that answered a quiz correctly, 0-100.
+ *
+ * THE ONE THING THE TEACHING `poll` HAD THAT THIS ONE DID NOT. When the two declarations
+ * of `poll` were folded into this kind, everything else the lecture version held had an
+ * equivalent here — `question`→`prompt`, `choices`→`options`, `anonymity`→`anonymous`,
+ * `responses`→`results` — except the number a lecturer actually acts on. Its old hint
+ * said it: under about 30% means re-teach now, not next week. Dropping it in the fold
+ * would have made "one kind for every room" cost the teaching room its only metric.
+ *
+ * Matched on the option LABEL rather than on an index, because `results` is a labelled
+ * distribution here and not a positional array — an index into a bar chart whose order
+ * the surface owns is exactly the kind of join that silently reports the wrong number.
+ * `undefined` on an opinion poll, which has no right answer to be right about.
+ */
+function derivePollCorrectRate(data: Record<string, unknown>): number | undefined {
+  const correct = new Set(rowsOf(data.options)
+    .filter((option) => option.correct === true || String(option.correct ?? '').toLowerCase() === 'true')
+    .map((option) => String(option.label ?? '').trim().toLowerCase()));
+  if (!correct.size) return undefined;
+  const bars = rowsOf(data.results);
+  let hit = 0;
+  let total = 0;
+  for (const bar of bars) {
+    const value = numberIn(bar.value);
+    if (value === undefined) continue;
+    total += value;
+    if (correct.has(String(bar.label ?? '').trim().toLowerCase())) hit += value;
+  }
+  return total > 0 ? Math.round((hit / total) * 100) : undefined;
+}
+
 /** i18n namespace for every cross-domain label, status, field and column. */
 export const SHARED_NAMESPACE = 'creationCanvas.shared';
 
@@ -130,6 +168,104 @@ export const SHARED_OBJECT_SPECS: readonly SpecObjectSpec[] = [
         name: 'lastRunAt', render: 'stat', label: 'lastRunAt',
         hint: 'ISO instant the runner last swept this cadence. Written by the sweep — a cadence whose last run is days old is one nothing is driving, and that is worth seeing on the card.',
         derived: true,
+      },
+      SUMMARY_FIELD,
+    ],
+  },
+
+  // ── THE FACILITATION PRIMITIVE ──────────────────────────────────────────────
+  // A question put to a ROOM. Cross-domain in the strongest sense on this list: a
+  // retro, a planning estimate, a class check-for-understanding, a customer workshop
+  // and an all-hands Q&A are ONE object put to five rooms. Which INSTRUMENT it is —
+  // ballot, word cloud, ranking, 1-to-5, 2x2, quiz — is `pollFormat`, for the same
+  // reason `funnelDomain` is a value below.
+  //
+  // It is NOT a `form`, and the distinction is the whole feature: a form is answered
+  // on somebody's own time and read later; a poll is answered by a room at once and
+  // read WHILE it is being answered. Same store (`question_sets` + `responses` with
+  // kind='poll' — the collection primitive's, not a second one), different object.
+  {
+    kind: 'poll',
+    icon: '▁▄█',
+    group: 'Collaborate',
+    defaultStatus: 'draft',
+    // `publish` mints the join address and opens voting — it puts a live URL in front
+    // of a room, so it is the one gated act. `open`/`close` steer voting and `reveal`
+    // shows the room the count; none of the three reaches outside the workspace, and a
+    // control that needs approval to CLOSE a poll is not a control.
+    actions: ['publish', 'open', 'close', 'reveal'],
+    // A fresh poll is a BALLOT with two blank options, because that is the instrument
+    // nine rooms out of ten want and an option list is the one thing a facilitator
+    // cannot start without. `anonymous` and `showResultsLive` are seeded to their
+    // defaults rather than left absent so the card states what it will do BEFORE it is
+    // published — an unstated anonymity setting is one nobody checks until afterwards.
+    seed: {
+      pollFormat: 'choice',
+      anonymous: true,
+      showResultsLive: true,
+      options: [{ id: 'a', label: '' }, { id: 'b', label: '' }],
+    },
+    fields: [
+      {
+        name: 'prompt', render: 'text', label: 'prompt',
+        hint: 'What the room is being asked, in the words THEY read. It is the only text on a participant\'s phone above the answer control, so a prompt that assumes the slide behind you gets answered by the people who can see it and nobody else.',
+      },
+      {
+        name: 'pollFormat', render: 'stat', label: 'pollFormat',
+        hint: 'The instrument: choice | multiChoice | scale | ranking | wordCloud | openText | quiz | grid. It decides what a participant is asked to DO and how the answers are COUNTED, and it is the field that lets one object be a ballot, a word cloud and a 2x2. Defaults to `choice`.',
+      },
+      {
+        name: 'options', render: 'rows', label: 'pollOptions', columns: ['id', 'label', 'correct'],
+        hint: 'The answerable options: {id, label, correct}. Required for choice, multiChoice, ranking and quiz; ignored by the others. `id` is stable — votes are stored against it, so renaming an id after voting starts orphans every vote already cast. `correct` is quiz-only and is NEVER sent to a phone before the poll closes.',
+      },
+      {
+        name: 'scaleMax', render: 'stat', label: 'scaleMax',
+        hint: 'Scale polls only: the top of the 1..N range, 2-10. Defaults to 5. A scale of 11 is a slider no two people read the same way.',
+      },
+      {
+        name: 'gridXLabel', render: 'stat', label: 'gridXLabel',
+        hint: 'Grid (2x2) polls only: what the horizontal axis means, e.g. "Effort". An unlabelled 2x2 is a scatter plot nobody can act on.',
+      },
+      {
+        name: 'gridYLabel', render: 'stat', label: 'gridYLabel',
+        hint: 'Grid (2x2) polls only: what the vertical axis means, e.g. "Impact".',
+      },
+      {
+        name: 'anonymous', render: 'stat', label: 'pollAnonymous',
+        hint: 'true | false. An IDENTITY setting, not a privacy one — the same distinction `form` draws. When true the vote is stored with NO respondent reference at all, even for a signed-in participant. A retro is anonymous; a team estimate usually is not. Defaults to true, because a room asked to vote in front of each other votes differently.',
+      },
+      {
+        name: 'showResultsLive', render: 'stat', label: 'showResultsLive',
+        hint: 'true | false. Whether the ROOM sees the running count on their own phones. Independent of whether voting is open, deliberately: a facilitator hides the count while people vote so the first three answers do not decide the rest, then reveals it with voting still open. Defaults to true.',
+      },
+      {
+        name: 'closesAt', render: 'stat', label: 'closesAt',
+        hint: 'ISO instant voting closes on its own. Optional — most polls are closed by the person running the room, and a poll with no close date is not late, it is live.',
+      },
+      {
+        name: 'joinUrl', render: 'stat', label: 'joinUrl',
+        hint: 'The public address a phone joins at. Written by the publish action; read it out or put it on the slide.',
+        derived: true,
+      },
+      {
+        name: 'responseCount', render: 'stat', label: 'pollResponseCount',
+        hint: 'How many people have answered. Counted per SUBMISSION, which is what makes it countable on an anonymous poll.',
+        derived: true,
+      },
+      {
+        name: 'results', render: 'bars', label: 'pollResults',
+        hint: 'The counted answers: [{label, value}]. Written by the facilitation surface from the live tally — never authored, because a result somebody typed is not a result.',
+        derived: true,
+      },
+      {
+        name: 'answers', render: 'list', label: 'pollAnswers',
+        hint: 'Open-text and Q&A answers, newest first. Empty for every counted format — a ballot has a count, not a transcript.',
+        derived: true,
+      },
+      {
+        name: 'correctRate', render: 'meter', label: 'pollCorrectRate',
+        hint: 'Quiz polls only: the share of the room that answered correctly, 0-100, computed from the results against the options marked `correct`. Under about 30% means re-teach now, not next week. Absent on every other format, which has no right answer to be right about.',
+        derive: derivePollCorrectRate,
       },
       SUMMARY_FIELD,
     ],
@@ -226,6 +362,7 @@ export const SHARED_LABELS: Record<string, string> = {
   funnel: 'Funnel',
   book: 'Book',
   sequence: 'Sequence',
+  poll: 'Poll',
 };
 
 /** Blank-object status fallbacks under `creationCanvas.shared.status.*`. */

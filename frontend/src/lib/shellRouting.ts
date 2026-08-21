@@ -46,8 +46,22 @@ function underPrefix(pathname: string, prefix: string): boolean {
  * chrome would put our nav, our pricing link and our sign-up CTA around somebody else's
  * negotiated offer, which is both a worse demo and, on a link the buyer may forward
  * internally, a leak of who we are selling to. See `ProspectDealView`.
+ *
+ * `/f/` (a published form) and `/p/` (a live poll) are the same argument a third and
+ * fourth time, and they are the two that were WRONG until this entry existed. Neither
+ * was listed, so `classifyShell` called them app routes and a signed-out visitor —
+ * which is every visitor either of them has, by construction — got the per-route
+ * marketing teaser instead of the page. The responder and the participant surfaces
+ * were unreachable by their ONLY audience: exactly the defect class recorded against
+ * the reference surfaces and `/creation-canvas` below, on the two routes where the
+ * audience can never sign in first.
+ *
+ * Trailing slashes on both, deliberately: `underPrefix` reads a trailing-slash prefix
+ * as "everything UNDER this route", so `/pricing` and `/features` stay app routes
+ * while `/p/<slug>` and `/f/<slug>` do not. A bare `/p` here would silently swallow
+ * every route beginning with p.
  */
-const NO_CHROME_PREFIXES = ['/embed', '/webcontainer', '/auth/', '/book', '/deal'];
+const NO_CHROME_PREFIXES = ['/embed', '/webcontainer', '/auth/', '/book', '/deal', '/f/', '/p/'];
 
 /**
  * The framed cross-origin surface — the VS Code webview and third-party hosts.

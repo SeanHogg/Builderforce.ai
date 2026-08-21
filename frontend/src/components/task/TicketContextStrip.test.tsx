@@ -7,6 +7,12 @@ import { tasksApi, kanbanApi, type Task, type TicketContext } from '@/lib/builde
 vi.mock('@/lib/builderforceApi', () => ({
   tasksApi: { context: vi.fn() },
   kanbanApi: { coordinate: vi.fn() },
+  // The "no objective yet" branch loads the objective list on its FIRST render, so a
+  // mock without `pmoApi` did not fail an assertion — it threw out of a passive effect
+  // as an uncaught exception, which vitest reports against whichever test happened to be
+  // running. Stubbed here rather than asserted on: the strip's contract is that a ticket
+  // serving no objective offers to link one, not that it fetched a particular list.
+  pmoApi: { objectives: { list: vi.fn(() => Promise.resolve([])), addLink: vi.fn(() => Promise.resolve()) } },
 }));
 
 const mockContext = vi.mocked(tasksApi.context);

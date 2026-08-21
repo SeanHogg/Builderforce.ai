@@ -25,6 +25,15 @@
  * than by every consumer remembering. The field EXISTS so the data has a lawful home;
  * it is restricted so having a home is not the same as being usable.
  *
+ * ── WHERE THIS VOCABULARY ENDS ──────────────────────────────────────────────────
+ * At `offer.hire`, and deliberately not at `placement`. A `placement` is the FEE — the
+ * revenue event an agency recognises — and for an agency that genuinely is the end. For
+ * everyone hiring their own staff the funnel ends in a person on the payroll, which is an
+ * `employee` and an `employeeLifecycle` in the PEOPLE vocabulary. The transition between
+ * the two is declared in `handover.ts` and performed by `offer.hire`; it is owned by
+ * neither vocabulary, because a seam owned by one side of it is an import across a
+ * bounded context.
+ *
  * `consentBasis` / `consentAt` / `retainUntil` are bookkeeping rather than restricted:
  * a recruiter must be able to SEE that a record is held lawfully and when it expires,
  * and an agent must be able to reason about "this pool is about to age out". They are
@@ -85,6 +94,21 @@ export const HIRING_OBJECT_SPECS: readonly SpecObjectSpec[] = [
       { name: 'skills', render: 'chips', label: 'skills', hint: 'Skills the résumé actually evidences. Never add a skill because the job description wanted it.' },
       { name: 'links', render: 'list', label: 'links', hint: 'Public profiles and work: [{title, url}] — LinkedIn, GitHub, portfolio, published writing.' },
       { name: 'postingRef', render: 'stat', label: 'postingRef', hint: 'The job posting this candidate is being considered for, by id.', bookkeeping: true },
+      {
+        // THE ATTACHMENT THE SCORER NEVER HAD. `resume` is a creative kind — a document
+        // somebody wrote — and `canvas_screen_resumes` ranked a pile of them against a
+        // posting while the funnel's own person object sat beside it, unlinked: a résumé
+        // scored, a candidate unscored, and no way to say the two were the same human.
+        //
+        // A REF and not an embedded document, for the reason the whole vocabulary holds:
+        // one fact in one place. The résumé is the evidence and lives in its own object
+        // with its own version history; this names it.
+        name: 'resumeRef',
+        render: 'stat',
+        label: 'resumeRef',
+        hint: 'The `resume` object on this board that evidences this person, by id or by its exact title. Screening writes this when it creates a candidate from a résumé, and reads it to score the person rather than the document. A candidate with no résumé here is scored on the structured fields alone.',
+        bookkeeping: true,
+      },
       { name: 'lastTouchAt', render: 'stat', label: 'lastTouchAt', hint: 'ISO instant of the last interaction, from `candidate_interactions`. The field that makes "who have I gone quiet on" answerable.', bookkeeping: true },
       ...CONSENT_FIELDS,
       {
@@ -170,8 +194,8 @@ export const HIRING_OBJECT_SPECS: readonly SpecObjectSpec[] = [
         name: 'ranked',
         render: 'rows',
         label: 'ranked',
-        columns: ['rank', 'candidate', 'score', 'evidence', 'gaps'],
-        hint: 'The ranking: {rank, candidate, score, evidence, gaps}. `evidence` cites what in the résumé earned the score and `gaps` names what is missing — both required, because a score with no evidence cannot be defended and a gap left unstated becomes an unexplained rejection.',
+        columns: ['rank', 'candidate', 'candidateRef', 'score', 'evidence', 'gaps'],
+        hint: 'The ranking: {rank, candidate, candidateRef, score, evidence, gaps}. `candidateRef` is the `candidate` object this row is about, by id — written by the screen, and the join that lets a row be advanced, interviewed or offered to, rather than being a name in a table. `evidence` cites what in the résumé earned the score and `gaps` names what is missing — both required, because a score with no evidence cannot be defended and a gap left unstated becomes an unexplained rejection.',
       },
       {
         name: 'knockouts',
@@ -199,6 +223,7 @@ export const HIRING_OBJECT_SPECS: readonly SpecObjectSpec[] = [
         columns: ['stage', 'interviewer', 'durationMinutes', 'focus'],
         hint: 'The loop: {stage, interviewer, durationMinutes, focus}. `focus` names the ONE competency that stage exists to assess — two interviewers assessing the same thing is the most common waste in a loop.',
       },
+      { name: 'candidateRef', render: 'stat', label: 'candidateRef', hint: "Who is being interviewed, by id or by the candidate card's exact title. Without it a loop, its scorecards and the offer that follows are three cards about a person none of them names.", bookkeeping: true },
       { name: 'panel', render: 'chips', label: 'panel', hint: 'Everyone who will meet the candidate. Check this list for who is missing as much as for who is on it.' },
       { name: 'candidateTimezone', render: 'stat', label: 'candidateTimezone', hint: 'IANA timezone of the candidate, e.g. "Europe/Berlin". Required before a slot is proposed: an offer of 9am in your timezone is 3am in theirs.' },
       { name: 'kit', render: 'list', label: 'kit', hint: 'The questions each stage asks: [{title, detail}]. A structured kit asked of every candidate is the single highest-impact bias control available, and the only one that also improves signal.' },
@@ -216,6 +241,7 @@ export const HIRING_OBJECT_SPECS: readonly SpecObjectSpec[] = [
     defaultStatus: 'notSubmitted',
     actions: ['score', 'submit'],
     fields: [
+      { name: 'candidateRef', render: 'stat', label: 'candidateRef', hint: "Who was interviewed, by id or by the candidate card's exact title. The join that makes a candidate's scorecards findable from the candidate rather than only from the loop.", bookkeeping: true },
       { name: 'interviewerRef', render: 'stat', label: 'interviewerRef', hint: 'Who filled this in, by id. One scorecard is one interviewer — a shared one is a debrief, and a debrief written before everyone has submitted is the anchoring this object exists to prevent.', bookkeeping: true },
       { name: 'stage', render: 'stat', label: 'stage', hint: 'Which stage of the loop this scores.' },
       {
@@ -237,8 +263,14 @@ export const HIRING_OBJECT_SPECS: readonly SpecObjectSpec[] = [
     icon: '✎',
     group: 'Hiring',
     defaultStatus: 'draft',
-    actions: ['draft', 'approve', 'send', 'sign'],
+    // `hire` is THE HANDOVER, and the reason this vocabulary ends in a person rather than
+    // in a signed PDF. See `handover.ts`: a signed offer becomes an `employee` and an
+    // onboarding `employeeLifecycle`, which are declared in the OTHER vocabulary — so the
+    // act is advertised here, where the funnel ends, and the mapping lives in neither.
+    actions: ['draft', 'approve', 'send', 'sign', 'hire'],
     fields: [
+      { name: 'candidateRef', render: 'stat', label: 'candidateRef', hint: "Who this offer is to, by id or by the candidate card's exact title. `hire` reads it to carry their skills and location onto the employment record; without it the offer names an email address and nothing else.", bookkeeping: true },
+      { name: 'postingRef', render: 'stat', label: 'postingRef', hint: 'The job posting this offer fills, by id. `hire` reads its title, location and employment type onto the employment record, so an offer with no posting produces an employee with no job title.', bookkeeping: true },
       { name: 'candidateEmail', render: 'stat', label: 'candidateEmail', hint: "The candidate's real email — required for `send` to do anything. Never invent one; take it from the candidate's own record or ask." },
       { name: 'baseSalary', render: 'stat', label: 'baseSalary', hint: MONEY_HINT },
       { name: 'bonus', render: 'stat', label: 'bonus', hint: 'Variable compensation, with the basis it is earned on.' },

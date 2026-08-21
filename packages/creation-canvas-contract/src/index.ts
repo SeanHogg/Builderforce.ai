@@ -8,6 +8,13 @@ export * from './dependencyGraph';
 export * from './academic';
 export * from './qa';
 export * from './people';
+// The SEAM between the hiring funnel and the employment relationship — an accepted
+// `offer` becoming an `employee` and an onboarding `employeeLifecycle`. Declared beside
+// both vocabularies and owned by neither; see handover.ts.
+export * from './handover';
+// The vocabulary a workshop is RUN in — one `poll` kind whose instrument is a value,
+// and the counting rule all three surfaces share. See facilitation.ts.
+export * from './facilitation';
 export * from './dataScience';
 export * from './triggers';
 // The live-presence frame — the ONE shape the canvas relay carries. Shared because
@@ -423,7 +430,26 @@ export function isLegalObjectKind(value: unknown): value is LegalObjectKind {
  * A kind belongs here when it is genuinely cross-domain. A kind that only looks generic
  * because nobody has written the second consumer yet belongs to its vocabulary.
  */
-export const SHARED_OBJECT_KINDS = ['funnel', 'book', 'sequence'] as const;
+export const SHARED_OBJECT_KINDS = [
+  'funnel', 'book', 'sequence',
+  /**
+   * A question put to a ROOM — the facilitation primitive.
+   *
+   * Cross-domain in the strongest sense on this list: a retro, a planning estimate, a
+   * class check-for-understanding, a customer workshop and an all-hands Q&A are one
+   * object put to five different rooms. Which INSTRUMENT it is — a ballot, a word
+   * cloud, a ranking, a 1-to-5, a 2×2, a quiz — is a value (`pollFormat`), for the
+   * same reason `funnelDomain` and `direction` are values one entry up.
+   *
+   * Its answers live in `question_sets` + `responses` with `kind = 'poll'`, which is
+   * the store the collection primitive already collapsed twelve survey tables into.
+   * A poll is NOT a `form`: a form is answered on somebody's own time and read later,
+   * a poll is answered by a room at once and read WHILE it is being answered. Same
+   * store, different object, and the difference is the whole feature — see
+   * `facilitation.ts`.
+   */
+  'poll',
+] as const;
 
 /**
  * Which side of a conversation a `sequence` is run from.
@@ -491,6 +517,33 @@ export const CREATION_OBJECT_KINDS = [
   // object state of its own, opened full-size the same way `game`/`website` are.
   'world',
   'document', 'slides', 'diagram', 'knowledge', 'file', 'url', 'note', 'drawing', 'frame', 'comment', 'timer',
+  /**
+   * COUNTING UP, which a countdown cannot do.
+   *
+   * `timer` runs a clock DOWN from a length somebody chose — a timebox. A stopwatch has
+   * no length: it answers "how long did that actually take", which is the question a
+   * facilitator asks about a demo, a discussion or a round nobody boxed. The two share
+   * a shape (`startedAt` + `baseElapsedMs`, so every viewer derives the same elapsed
+   * value from the shared model rather than a private local clock) and answer opposite
+   * questions, which is why one kind with a `countsDown` flag would need a branch at
+   * every place either is read.
+   *
+   * It came from the knowledge board, which had it while the canvas that is actually
+   * the front door did not — the seam that entry was logged against.
+   */
+  'stopwatch',
+  /**
+   * ANOTHER OBJECT, SHOWN HERE — the transclusion.
+   *
+   * Not a copy and not a link: the card renders the referenced object's own current
+   * content, so a board can put the same document in two contexts without either of
+   * them going stale. `url` points AWAY from the workspace and `knowledge` IS a
+   * knowledge item; neither says "show me that one, live, over there".
+   *
+   * The other half of the knowledge board's fold: its `embed` block transcluded a
+   * knowledge document by id, and the Creation Canvas had no equivalent.
+   */
+  'transclusion',
   // The UNTYPED escape hatch, and the only one on this list.
   //
   // Every other kind here is a claim about what a thing IS, which is the whole

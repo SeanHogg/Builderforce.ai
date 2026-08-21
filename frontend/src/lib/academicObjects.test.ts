@@ -92,7 +92,6 @@ describe('the derived-field rule', () => {
       ['submission', 'markBreakdown'], ['submission', 'lateBy'],
       ['gradebook', 'marks'], ['gradebook', 'distribution'], ['gradebook', 'mean'],
       ['gradebook', 'passRate'], ['gradebook', 'moderation'],
-      ['poll', 'responses'], ['poll', 'correctRate'],
       ['lecture', 'attendanceCount'], ['curriculumMap', 'coverage'], ['cohort', 'progress'],
     ];
     for (const [kind, field] of forbidden) {
@@ -357,13 +356,8 @@ describe('cross-object derivations', () => {
 });
 
 describe('single-object derivations', () => {
-  it('reads a poll off its own responses', () => {
-    const poll = { kind: 'poll', title: 'Q1', correctIndex: 1, responses: [{ label: 'A', value: 3 }, { label: 'B', value: 9 }] };
-    expect(value('poll', 'responseCount', poll)).toBe(12);
-    expect(value('poll', 'correctRate', poll)).toBe(75);
-    // An opinion poll has no right answer to be right about.
-    expect(value('poll', 'correctRate', { kind: 'poll', title: 'Q1', responses: poll.responses })).toBeUndefined();
-  });
+  // The lecture poll folded into the ONE cross-domain `poll` — its derivations and the
+  // kinds it now shares a declaration with are covered by sharedCanvasObjects.test.ts.
 
   it('counts booked office-hours slots', () => {
     expect(value('officeHours', 'utilisation', {
@@ -396,12 +390,12 @@ describe('single-object derivations', () => {
 describe('what stays testimony', () => {
   it('never computes a value that has to be recorded rather than derived', () => {
     // A mark, a mark breakdown, feedback, an integrity ledger, an attendance COUNT, a
-    // poll's raw responses, a moderation record and a bank's usage count are evidence of
-    // something that happened off the board. Computing one would be inventing it.
+    // moderation record and a bank's usage count are evidence of something that happened
+    // off the board. Computing one would be inventing it.
     for (const [kind, name] of [
       ['submission', 'mark'], ['submission', 'markBreakdown'], ['submission', 'feedback'],
       ['submission', 'integrity'], ['gradebook', 'moderation'], ['lecture', 'attendanceCount'],
-      ['poll', 'responses'], ['feedbackBank', 'usageCount'],
+      ['feedbackBank', 'usageCount'],
     ] as const) {
       const field = specObjectSpec(kind)?.fields.find((entry) => entry.name === name);
       expect(field?.derive, kind + '.' + name + ' must not be computed').toBeUndefined();
@@ -413,7 +407,7 @@ describe('what stays testimony', () => {
     for (const [kind, name] of [
       ['gradebook', 'mean'], ['gradebook', 'passRate'], ['gradebook', 'marks'],
       ['assignment', 'submissionCount'], ['submission', 'lateBy'], ['cohort', 'progress'],
-      ['poll', 'correctRate'], ['curriculumMap', 'coverage'], ['officeHours', 'utilisation'],
+      ['curriculumMap', 'coverage'], ['officeHours', 'utilisation'],
     ] as const) {
       expect(specMutableFields(kind)).not.toContain(name);
     }

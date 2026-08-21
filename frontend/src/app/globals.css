@@ -71,6 +71,10 @@
   --font-display: var(--font-sans);
   --font-body: var(--font-sans);
   --font-mono: 'SF Mono', 'Fira Code', 'JetBrains Mono', monospace;
+  /* The one SERIF family. Declared because a document rendered by this product —
+     a resume preview, a printed sheet — has a typeface of its own, and a literal
+     `Georgia, serif` at the call site is a font nobody can change from here. */
+  --font-serif: Georgia, 'Times New Roman', 'Noto Serif', serif;
 
   /* BuilderForceAgentsLink-style shell (same header, footer, slide-out nav) */
   --footer-height: 44px;

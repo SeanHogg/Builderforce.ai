@@ -19,8 +19,12 @@
  * TYPE precisely so the surface can say it in the visitor's language.
  */
 
-/** The narrow slice of a next-intl translator these notices need. */
-export type CanvasNoticeTranslator = (key: string, values?: Record<string, string | number>) => string;
+/** The narrow slice of a next-intl translator these notices need — the canvas
+ *  translator seam under this module's historical name. Declared once in
+ *  `domains/canvas/domain/canvasText.ts`, because this file and `canvasFileImport.ts`
+ *  had independently invented the identical type. */
+export type { CanvasTextTranslator as CanvasNoticeTranslator } from '@/domains/canvas/domain/canvasText';
+import type { CanvasTextTranslator as CanvasNoticeTranslator } from '@/domains/canvas/domain/canvasText';
 
 export interface CanvasNotices {
   /** A canvas change was proposed but the model said nothing about it. */

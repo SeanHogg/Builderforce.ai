@@ -1,0 +1,139 @@
+/**
+ * The facilitation surface — what a person running a room reads, and what a room reads
+ * over their shoulder.
+ *
+ * Two sizes at once, deliberately: the join address is typed into a phone from across a
+ * room, so it is the largest thing on the screen; the controls are small because the
+ * facilitator is standing next to them. Every colour is a canvas token, so the surface
+ * works in both themes on whatever machine is plugged into the projector.
+ */
+
+.surface {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  overflow: hidden;
+  background: var(--surface);
+  color: var(--text-primary);
+}
+
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 12px clamp(12px, 3vw, 24px);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-raised);
+}
+
+.barTitle {
+  flex: 1 1 240px;
+  min-width: 0;
+  margin: 0;
+  font-size: var(--font-size-body);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.button {
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: var(--font-size-small);
+  cursor: pointer;
+}
+
+.button:hover:not(:disabled) { border-color: var(--coral-bright); }
+.button:disabled { opacity: .5; cursor: not-allowed; }
+
+.buttonPrimary {
+  border-color: var(--coral-bright);
+  background: var(--coral-bright);
+  color: var(--bg-base);
+  font-weight: 600;
+}
+
+.body {
+  overflow: auto;
+  padding: clamp(16px, 4vw, 32px);
+  display: grid;
+  gap: 24px;
+  align-content: start;
+  justify-items: center;
+}
+
+.stage { width: 100%; max-width: 720px; display: grid; gap: 20px; }
+
+.prompt {
+  margin: 0;
+  font-size: clamp(var(--font-size-body), 2.4vw, var(--font-size-section));
+  line-height: 1.3;
+  text-align: center;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+/* --- The join address ------------------------------------------------------
+   Read from the back of a room and typed into a phone keyboard. It is the
+   largest thing on this surface because the alternative is a person who does not
+   vote. */
+.join {
+  display: grid;
+  gap: 6px;
+  justify-items: center;
+  padding: 16px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-raised);
+}
+
+.joinLabel { color: var(--text-muted); font-size: var(--font-size-small); }
+
+.joinUrl {
+  font-size: clamp(1.1rem, 4vw, 2rem);
+  font-weight: 700;
+  letter-spacing: .01em;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+
+.joinActions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+
+.state {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  justify-content: center;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--font-size-small);
+}
+
+.unpublished {
+  display: grid;
+  gap: 12px;
+  justify-items: center;
+  text-align: center;
+  max-width: 460px;
+  color: var(--text-secondary);
+  font-size: var(--font-size-body);
+  line-height: 1.6;
+}
+
+.error {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid color-mix(in srgb, var(--red-bright) 40%, transparent);
+  background: color-mix(in srgb, var(--red-bright) 12%, transparent);
+  color: var(--text-primary);
+  font-size: var(--font-size-small);
+  line-height: 1.5;
+}

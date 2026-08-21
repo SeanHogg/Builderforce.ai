@@ -151,6 +151,7 @@ import { resolvePublicResume } from './application/creation/publicResumeProjecti
 // Founder operations (0469) — collection, signature, payables, and the founder's
 // own network. See the mounts below for why two of these carry no auth.
 import { createFormRoutes, createPublicFormRoutes } from './presentation/routes/formRoutes';
+import { createPollRoutes, createPublicPollRoutes } from './presentation/routes/pollRoutes';
 import { createSignatureRoutes, createPublicSignatureRoutes } from './presentation/routes/signatureRoutes';
 import { createLegalDocumentRoutes, createPublicLegalDocumentRoutes } from './presentation/routes/legalDocumentRoutes';
 import { createDataRoomRoutes, createPublicDataRoomRoutes } from './presentation/routes/dataRoomRoutes';
@@ -906,6 +907,11 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // what makes a demo something you hand over rather than something you screen-share.
   app.route('/api/public/deals',      createPublicProspectRoutes(db));
   app.route('/api/public/forms',      createPublicFormRoutes(db));
+  // The PARTICIPANT's surface — a phone in a room, with no account and no session.
+  // Same shape as the responder above and for a stronger reason: a poll that required
+  // an account would not be a poll, it would be a survey sent to people who already
+  // work here.
+  app.route('/api/public/polls',      createPublicPollRoutes(db));
   // The CUSTOMER's invoice, and the checkout they just completed (FO-C2/FO-C4).
   // Same shape again: a person with no account holds a token, and the row it
   // resolves to reports its own tenant. This is what makes an invoice payable.
@@ -919,6 +925,8 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/public/data-rooms', createPublicDataRoomRoutes(db));
   // The workspace halves.
   app.route('/api/forms',             createFormRoutes(db));
+  // The FACILITATOR's half of the same store — publish, steer, and read the tally.
+  app.route('/api/polls',             createPollRoutes(db));
   app.route('/api/signatures',        createSignatureRoutes(db));
   app.route('/api/legal-documents',   createLegalDocumentRoutes(db));
   // The data room's own share flow, and what the firm actually read.

@@ -1173,6 +1173,17 @@ export const questionSets = pgTable('question_sets', {
   /** Stamped by the sweep AFTER delivery, so a transport failure retries next
    *  tick instead of silently skipping a cycle. */
   lastRemindedAt: timestamp('last_reminded_at'),
+  /**
+   * Whether the ROOM sees the running tally — the facilitation half (migration
+   * 1103, `kind = 'poll'`).
+   *
+   * Its own column and NOT a `status` value, because it is decided independently
+   * of whether voting is open: a facilitator hides the count while people vote,
+   * so the first three answers do not decide the rest, and reveals it with voting
+   * still open. Folding it into `status` would make "reveal" mean "close", which
+   * is the one thing a facilitator has to be able to do separately.
+   */
+  showResultsLive: boolean('show_results_live').notNull().default(true),
   createdAt:   timestamp('created_at').notNull().defaultNow(),
   updatedAt:   timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
@@ -1226,6 +1237,10 @@ export const responses = pgTable('responses', {
   index('idx_responses_object').on(t.objectId),
   index('idx_responses_respondent').on(t.tenantId, t.respondentKind, t.respondentRef),
   index('idx_responses_submission').on(t.questionSetId, t.submissionId),
+  // The poll tally's own read: every vote for one set, in arrival order. Without it
+  // a refresh in front of a room scans every answer the platform holds — see
+  // migration 1103.
+  index('idx_responses_set_submitted').on(t.questionSetId, t.submittedAt),
 ]);
 
 /**

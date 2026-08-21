@@ -99,6 +99,13 @@ export const GATED_ACTIONS: Readonly<Record<string, readonly string[]>> = {
   // update or a data-room share — see the GATED_ACTIONS header. `offer.sign` is
   // deliberately absent: it only re-reads a request `send` already created and
   // asserts nothing new, so gating it would ask a human to approve a status refresh.
+  //
+  // `offer.hire` is absent for the stronger version of the same reason. It is the
+  // HANDOVER (see `handover.ts`): it refuses outright unless the offer is signed, so
+  // the authority it acts on is the counterparty's own signature on a letter this
+  // list already made somebody approve before it was sent. Gating it would ask a
+  // human to approve the consequence of an approval they have already given, and the
+  // records it writes are two cards on a board — deletable, unlike a send.
   offer: ['send'],
   // A `legalDocument`'s `share` mints a link an external party can read the real
   // file through with no Builderforce account, and `request-signature` emails a

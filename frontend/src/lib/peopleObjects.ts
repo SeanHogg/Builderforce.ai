@@ -89,6 +89,34 @@ const CONFIDENTIALITY_FIELD: SpecField = {
 // The specs
 // ---------------------------------------------------------------------------
 
+/**
+ * Where an employment record CAME FROM, and why it is declared in this vocabulary.
+ *
+ * The hiring funnel ends at `offer.hire`, which creates the two cards below out of a
+ * signed offer (see `handover.ts`). Both carry the offer's id back, and that back
+ * reference does two jobs nothing else can: it is the idempotence key — hiring twice from
+ * one offer must not produce two employment records for the same person — and it is the
+ * only thing that lets somebody reading an employment record answer "on what terms was
+ * this agreed" without a name search across a board.
+ *
+ * A field on THESE kinds rather than on `offer`, because the reference points the way the
+ * dependency does: the employment record is created by the funnel and outlives it, and an
+ * `offer` holding a list of the employees it produced would be the hiring vocabulary
+ * carrying HR state.
+ */
+const OFFER_REF_FIELD: SpecField = {
+  name: 'offerRef',
+  render: 'stat',
+  label: 'offerRef',
+  hint: 'The `offer` object this employment began from, by id. Written by `offer.hire` and readable, never writable: a hand-typed reference is the one thing that can make the idempotence check miss and hire the same person twice.',
+  // `derived`, not merely `bookkeeping`: the model must be able to READ where an
+  // employment record came from and must never assert it, which is the same rule
+  // `placement.splits` is held to and for the same reason — a reference a model can write
+  // is a reference that can be made to point at the wrong offer.
+  derived: true,
+  bookkeeping: true,
+};
+
 export const PEOPLE_OBJECT_SPECS: readonly SpecObjectSpec[] = [
   // ── THE PERSON AND THE ORGANISATION ───────────────────────────────────────────
   {
@@ -111,6 +139,7 @@ export const PEOPLE_OBJECT_SPECS: readonly SpecObjectSpec[] = [
       { name: 'endedAt', render: 'stat', label: 'endedAt', hint: 'ISO leaving date, when there is one. The anchor an offboarding lifecycle counts BACKWARDS from, which is why an empty value here on a known leaver leaves access revocation undated.' },
       { name: 'band', render: 'stat', label: 'band', hint: 'The title of the compBand object this role sits in. This is what makes pay equity computable — an employee with no band cannot be compared to anyone.' },
       { name: 'competencies', render: 'chips', label: 'competencies', hint: 'Capabilities this person actually has, in the same words the skillsMatrix uses. Different words for the same skill is how a matrix reports a gap that is not there.' },
+      OFFER_REF_FIELD,
       SUMMARY_FIELD,
       CONFIDENTIALITY_FIELD,
       EVIDENCE_FIELD,
@@ -281,6 +310,7 @@ export const PEOPLE_OBJECT_SPECS: readonly SpecObjectSpec[] = [
         hint: 'Offboarding only, and its own field rather than a step category because it is the one with real risk: {system, owner, revokedAt, confirmedBy}. List EVERY system the person could reach, including the ones granted informally. An empty row here on a completed offboarding is an open account.',
       },
       { name: 'blockers', render: 'chips', label: 'blockers', hint: 'What is stopping a step — an unreturned laptop, a missing document, an unsigned form.' },
+      OFFER_REF_FIELD,
       SUMMARY_FIELD,
       CONFIDENTIALITY_FIELD,
       EVIDENCE_FIELD,

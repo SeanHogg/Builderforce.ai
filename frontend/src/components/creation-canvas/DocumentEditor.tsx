@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * The document editor on the card — word processing, on the board.
+ * The document editor — word processing, on the card AND at page scale.
  *
  * When a person asks the canvas for a document they get a document, and the very
  * next thing they want is to change a sentence, bold a phrase, and take it away
@@ -15,6 +15,23 @@
  * read back through `htmlToMarkdown` on blur, on a pause in typing, and before
  * any export — so the card, the Files library, Brain's context, and the .docx
  * writer all keep reading the one document they always did.
+ *
+ * ── ONE EDITOR, TWO SCALES ───────────────────────────────────────────────────
+ * `scale` is a MEASURE, not a second editor. On a card the document is being
+ * RECOGNISED, so the type is 9px and the writing area is a 340px box. On the
+ * page runtime it is being WRITTEN, so the base type is a readable 15px, the
+ * sheet takes the room a page assumes, the toolbar sticks to the top of the
+ * scroll the way a ribbon does, and the PAGE scrolls rather than a box inside
+ * it. Every one of those is a value in the stylesheet keyed off `data-scale` —
+ * no branch here draws a different editor, because two editors is how the card
+ * and the page end up disagreeing about what bold looks like.
+ *
+ * ── WHAT THE TOOLBAR MAY CONTAIN ─────────────────────────────────────────────
+ * Exactly what markdown can store, and nothing else. A control that produced a
+ * style the save silently dropped — underline, a font, a colour, an alignment —
+ * would be a lie told once per keystroke. Everything offered here survives the
+ * round trip through `richText`, which is also what the print sheet and the
+ * .docx writer read, so what is typed is what is exported.
  */
 
 import { Icon } from '@/components/ui/Icon';
@@ -41,12 +58,25 @@ const LIST_COMMANDS = [
   { id: 'numberList', command: 'insertOrderedList', glyph: '№' },
 ] as const;
 
+/** Nesting, which markdown stores as indented list items. Live only inside a
+ * list: `indent` outside one produces a `<blockquote>` in most engines, which is
+ * a quote appearing where the reader pressed "indent". */
+const NEST_COMMANDS = [
+  { id: 'outdent', command: 'outdent', glyph: '⇤' },
+  { id: 'indent', command: 'indent', glyph: '⇥' },
+] as const;
+
 /** Block styles, and the tag name `formatBlock` wants for each. Not composed at
  * the call site: `formatBlock` takes an angle-bracketed tag in most engines and
  * a bare name in others, so the exact string belongs in one place. */
-const BLOCK_FORMATS = ['p', 'h1', 'h2', 'h3', 'blockquote', 'pre'];
+const BLOCK_FORMATS = ['p', 'h1', 'h2', 'h3', 'h4', 'blockquote', 'pre'];
 const BLOCK_TAGS: Readonly<Record<string, string>> = Object.fromEntries(BLOCK_FORMATS.map((name) => [name, ['<', name, '>'].join('')]));
-type BlockFormat = 'p' | 'h1' | 'h2' | 'h3' | 'blockquote' | 'pre';
+type BlockFormat = 'p' | 'h1' | 'h2' | 'h3' | 'h4' | 'blockquote' | 'pre';
+
+/** The shape a fresh table arrives in. Three columns is what fits the card's
+ * measure without a horizontal scrollbar on the first keystroke. */
+const TABLE_COLUMNS = 3;
+const TABLE_ROWS = 3;
 
 /** Ask the browser which marks apply at the caret. Wrapped because
  * `queryCommandState` throws rather than returning false in some engines when
@@ -68,14 +98,16 @@ function currentBlockFormat(): BlockFormat {
   }
 }
 
-/** The `<code>` the caret sits in, if any — inline code has no editing command
- * of its own, so it is toggled by hand. */
-function enclosingCode(root: HTMLElement): HTMLElement | null {
+/** The nearest ancestor of the caret carrying this tag, stopping at the editing
+ * surface. Inline code has no editing command of its own and is toggled by hand;
+ * list nesting has commands but only means something inside an `<li>`. Both are
+ * the same walk, so it is written once. */
+function enclosingTag(root: HTMLElement, tag: string): HTMLElement | null {
   const selection = window.getSelection();
   const anchor = selection?.anchorNode ?? null;
   let node: Node | null = anchor?.nodeType === 1 ? anchor : anchor?.parentNode ?? null;
   while (node && node !== root) {
-    if ((node as Element).tagName === 'CODE') return node as HTMLElement;
+    if ((node as Element).tagName === tag) return node as HTMLElement;
     node = node.parentNode;
   }
   return null;
@@ -88,11 +120,15 @@ export interface DocumentEditorProps {
   /** Accessible name for the editing region, so a board of documents does not
    * present six identically-named editors. */
   label: string;
+  /** How much room the editor has. `card` is the ~340px node body it was born
+   * in; `page` is the page runtime, where a document is actually written. */
+  scale?: 'card' | 'page';
   onCommit: (markdown: string) => void;
 }
 
-export function DocumentEditor({ markdown, label, onCommit }: DocumentEditorProps) {
+export function DocumentEditor({ markdown, label, scale = 'card', onCommit }: DocumentEditorProps) {
   const t = useTranslations('creationCanvas.editor');
+  const tCommon = useTranslations('common');
   const surface = useRef<HTMLDivElement>(null);
   /** The markdown the surface currently represents. Guards the load effect from
    * re-writing the DOM (and dropping the caret) when the parent echoes back the
@@ -100,16 +136,45 @@ export function DocumentEditor({ markdown, label, onCommit }: DocumentEditorProp
   const loaded = useRef<string | null>(null);
   const savedRange = useRef<Range | null>(null);
   const autosave = useRef<number>(0);
-  const [marks, setMarks] = useState<{ inline: readonly string[]; block: BlockFormat; code: boolean }>({ inline: [], block: 'p', code: false });
-  const [linkOpen, setLinkOpen] = useState(false);
-  const [linkUrl, setLinkUrl] = useState('');
+  const [marks, setMarks] = useState<{ inline: readonly string[]; block: BlockFormat; code: boolean; list: boolean }>({ inline: [], block: 'p', code: false, list: false });
+  /** Which insertion the URL row is collecting for, or `null` when it is shut.
+   * A link and an image ask the same question and differ only in what they
+   * write, so they share one row rather than growing a second identical one. */
+  const [inserting, setInserting] = useState<null | 'link' | 'image'>(null);
+  const [insertUrl, setInsertUrl] = useState('');
+  /** What the status bar reports. Read from the live DOM rather than derived
+   * from the `markdown` prop, which only changes when the autosave fires — a
+   * count that lags a second behind the typing is worse than no count. */
+  const [stats, setStats] = useState({ words: 0, characters: 0 });
+  const measuring = useRef<number>(0);
+
+  /**
+   * Count what is on the surface — but only when something is showing the count,
+   * and at most once a frame.
+   *
+   * `innerText` is not a free read: it forces layout, and this is on the keystroke
+   * path. The card never renders the status bar, so it never pays; the page reads
+   * once per frame rather than once per character, which is the difference between
+   * a live count and a reflow per keypress on a long document.
+   */
+  const measure = useCallback(() => {
+    if (scale !== 'page' || measuring.current) return;
+    measuring.current = window.requestAnimationFrame(() => {
+      measuring.current = 0;
+      const text = surface.current?.innerText ?? '';
+      setStats({ words: (text.match(/\S+/g) ?? []).length, characters: text.trim().length });
+    });
+  }, [scale]);
+
+  useEffect(() => () => { if (measuring.current) window.cancelAnimationFrame(measuring.current); }, []);
 
   useEffect(() => {
     const node = surface.current;
     if (!node || loaded.current === markdown) return;
     loaded.current = markdown;
     node.innerHTML = markdownToHtml(markdown) || '<p><br></p>';
-  }, [markdown]);
+    measure();
+  }, [markdown, measure]);
 
   const readMarks = useCallback(() => {
     const node = surface.current;
@@ -117,7 +182,8 @@ export function DocumentEditor({ markdown, label, onCommit }: DocumentEditorProp
     setMarks({
       inline: [...INLINE_COMMANDS, ...LIST_COMMANDS].filter((entry) => commandActive(entry.command)).map((entry) => entry.id),
       block: currentBlockFormat(),
-      code: !!enclosingCode(node),
+      code: !!enclosingTag(node, 'CODE'),
+      list: !!enclosingTag(node, 'LI'),
     });
   }, []);
 
@@ -132,9 +198,10 @@ export function DocumentEditor({ markdown, label, onCommit }: DocumentEditorProp
   }, [onCommit]);
 
   const scheduleCommit = useCallback(() => {
+    measure();
     window.clearTimeout(autosave.current);
     autosave.current = window.setTimeout(commit, AUTOSAVE_MS);
-  }, [commit]);
+  }, [commit, measure]);
 
   useEffect(() => () => window.clearTimeout(autosave.current), []);
 
@@ -161,7 +228,7 @@ export function DocumentEditor({ markdown, label, onCommit }: DocumentEditorProp
     const node = surface.current;
     if (!node) return;
     node.focus();
-    const existing = enclosingCode(node);
+    const existing = enclosingTag(node, 'CODE');
     if (existing) {
       existing.replaceWith(...Array.from(existing.childNodes));
     } else {
@@ -172,18 +239,33 @@ export function DocumentEditor({ markdown, label, onCommit }: DocumentEditorProp
     scheduleCommit();
   }, [readMarks, scheduleCommit, t]);
 
-  const openLink = useCallback(() => {
+  /** A GFM table — the one structure a word processor offers that has no editing
+   * command behind it. Body cells carry a `<br>` so an empty row still has a
+   * line to click into; `htmlToMarkdown` reads them back as empty cells. */
+  const insertTable = useCallback(() => {
+    const node = surface.current;
+    if (!node) return;
+    node.focus();
+    const head = Array.from({ length: TABLE_COLUMNS }, (_item, index) => `<th>${escapeHtml(t('tableColumn', { index: index + 1 }))}</th>`).join('');
+    const body = Array.from({ length: TABLE_ROWS }, () => `<tr>${'<td><br></td>'.repeat(TABLE_COLUMNS)}</tr>`).join('');
+    document.execCommand('insertHTML', false, `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table><p><br></p>`);
+    readMarks();
+    scheduleCommit();
+  }, [readMarks, scheduleCommit, t]);
+
+  const openInsert = useCallback((kind: 'link' | 'image') => {
     const selection = window.getSelection();
     savedRange.current = selection?.rangeCount ? selection.getRangeAt(0).cloneRange() : null;
-    setLinkUrl('');
-    setLinkOpen(true);
+    setInsertUrl('');
+    setInserting(kind);
   }, []);
 
-  const applyLink = useCallback(() => {
+  const applyInsert = useCallback(() => {
     const node = surface.current;
-    const url = linkUrl.trim();
-    setLinkOpen(false);
-    if (!node || !url) return;
+    const url = insertUrl.trim();
+    const kind = inserting;
+    setInserting(null);
+    if (!node || !url || !kind) return;
     node.focus();
     const range = savedRange.current;
     if (range) {
@@ -191,16 +273,18 @@ export function DocumentEditor({ markdown, label, onCommit }: DocumentEditorProp
       selection?.removeAllRanges();
       selection?.addRange(range);
     }
-    if (range && !range.collapsed) document.execCommand('createLink', false, url);
+    if (kind === 'image') document.execCommand('insertHTML', false, `<img src="${escapeHtml(url)}" alt="">`);
+    else if (range && !range.collapsed) document.execCommand('createLink', false, url);
     else document.execCommand('insertHTML', false, `<a href="${escapeHtml(url)}">${escapeHtml(url)}</a>`);
     scheduleCommit();
-  }, [linkUrl, scheduleCommit]);
+  }, [insertUrl, inserting, scheduleCommit]);
 
   const blockOptions = useMemo(() => [
     { value: 'p' as const, label: t('blockParagraph') },
     { value: 'h1' as const, label: t('blockHeading1') },
     { value: 'h2' as const, label: t('blockHeading2') },
     { value: 'h3' as const, label: t('blockHeading3') },
+    { value: 'h4' as const, label: t('blockHeading4') },
     { value: 'blockquote' as const, label: t('blockQuote') },
     { value: 'pre' as const, label: t('blockCode') },
   ], [t]);
@@ -211,7 +295,7 @@ export function DocumentEditor({ markdown, label, onCommit }: DocumentEditorProp
 
   const applyBlockFormat = useCallback((format: string) => run('formatBlock', BLOCK_TAGS[format] ?? BLOCK_TAGS.p!), [run]);
 
-  return <div className={`${styles.docEditor} nodrag nowheel`} onPointerDownCapture={(event) => event.stopPropagation()}>
+  return <div className={`${styles.docEditor} nodrag nowheel`} data-scale={scale} onPointerDownCapture={(event) => event.stopPropagation()}>
     <div className={styles.docToolbar} role="toolbar" aria-label={t('toolbar')}>
       <div className={styles.docToolGroup}>
         <button type="button" onMouseDown={hold} onClick={() => run('undo')} aria-label={t('undo')} title={t('undo')}>↶</button>
@@ -247,30 +331,41 @@ export function DocumentEditor({ markdown, label, onCommit }: DocumentEditorProp
           aria-label={t(entry.id)}
           title={t(entry.id)}
         >{entry.glyph}</button>)}
+        {NEST_COMMANDS.map((entry) => <button
+          key={entry.id}
+          type="button"
+          disabled={!marks.list}
+          onMouseDown={hold}
+          onClick={() => run(entry.command)}
+          aria-label={t(entry.id)}
+          title={t(entry.id)}
+        >{entry.glyph}</button>)}
       </div>
       <div className={styles.docToolGroup}>
-        <button type="button" aria-expanded={linkOpen} onMouseDown={hold} onClick={openLink} aria-label={t('link')} title={t('link')}><Icon source="🔗" size="1em" /></button>
+        <button type="button" aria-expanded={inserting === 'link'} onMouseDown={hold} onClick={() => openInsert('link')} aria-label={t('link')} title={t('link')}><Icon source="🔗" size="1em" /></button>
+        <button type="button" aria-expanded={inserting === 'image'} onMouseDown={hold} onClick={() => openInsert('image')} aria-label={t('image')} title={t('image')}><Icon source="🖼" size="1em" /></button>
+        <button type="button" onMouseDown={hold} onClick={insertTable} aria-label={t('table')} title={t('table')}>▦</button>
         <button type="button" onMouseDown={hold} onClick={() => run('insertHorizontalRule')} aria-label={t('rule')} title={t('rule')}>―</button>
         <button type="button" onMouseDown={hold} onClick={() => run('removeFormat')} aria-label={t('clearFormatting')} title={t('clearFormatting')}>⌫</button>
       </div>
     </div>
 
-    {linkOpen && <div className={styles.docLinkRow}>
+    {inserting && <div className={styles.docLinkRow}>
       <input
         autoFocus
-        value={linkUrl}
+        value={insertUrl}
         inputMode="url"
-        placeholder={t('linkPlaceholder')}
-        aria-label={t('linkUrl')}
-        onChange={(event) => setLinkUrl(event.target.value)}
+        placeholder={inserting === 'image' ? t('imagePlaceholder') : t('linkPlaceholder')}
+        aria-label={inserting === 'image' ? t('imageUrl') : t('linkUrl')}
+        onChange={(event) => setInsertUrl(event.target.value)}
         onKeyDown={(event) => {
           event.stopPropagation();
-          if (event.key === 'Enter') { event.preventDefault(); applyLink(); }
-          if (event.key === 'Escape') { event.preventDefault(); setLinkOpen(false); }
+          if (event.key === 'Enter') { event.preventDefault(); applyInsert(); }
+          if (event.key === 'Escape') { event.preventDefault(); setInserting(null); }
         }}
       />
-      <button type="button" onMouseDown={hold} onClick={applyLink}>{t('linkApply')}</button>
-      <button type="button" onMouseDown={hold} onClick={() => setLinkOpen(false)}>{t('linkCancel')}</button>
+      <button type="button" onMouseDown={hold} onClick={applyInsert}>{t('insertApply')}</button>
+      <button type="button" onMouseDown={hold} onClick={() => setInserting(null)}>{tCommon('cancel')}</button>
     </div>}
 
     <div
@@ -291,8 +386,22 @@ export function DocumentEditor({ markdown, label, onCommit }: DocumentEditorProp
       // object from the board, and the board's shortcuts listen on the document.
       onKeyDown={(event) => {
         event.stopPropagation();
-        if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') { event.preventDefault(); commit(); }
+        const chord = event.metaKey || event.ctrlKey;
+        if (chord && event.key.toLowerCase() === 's') { event.preventDefault(); commit(); return; }
+        if (chord && event.key.toLowerCase() === 'k') { event.preventDefault(); openInsert('link'); return; }
+        // Tab nests a list item, the way it does in a word processor. Outside a
+        // list it stays "leave this field", which is how a keyboard user gets
+        // back out of the document.
+        if (event.key === 'Tab' && surface.current && enclosingTag(surface.current, 'LI')) {
+          event.preventDefault();
+          run(event.shiftKey ? 'outdent' : 'indent');
+        }
       }}
     />
+
+    {scale === 'page' && <p className={styles.docStatus}>
+      <span>{t('words', { count: stats.words })}</span>
+      <span>{t('characters', { count: stats.characters })}</span>
+    </p>}
   </div>;
 }

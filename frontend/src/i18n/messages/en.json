@@ -327,62 +327,14 @@
     "approvalOnHint": "On — running a high or urgent ticket opens a manager-approval request before any agent executes it.",
     "approvalOffHint": "Off — high and urgent tickets run immediately, with no approval step. Use with care: this overrides the governance gate for this board.",
     "bannerManage": "Manage approval setting",
-    "parking": {
-      "en": "Parked",
-      "zh": "搁置区",
-      "es": "En pausa",
-      "fr": "En attente",
-      "de": "Pausiert"
-    },
-    "parkingTitle": {
-      "en": "Off the delivery path (blocked / on hold / cancelled). Excluded from %-complete, and work is never advanced into it automatically.",
-      "zh": "不在交付路径上（阻塞／暂停／已取消）。不计入完成百分比，也不会自动将工作推进到该泳道。",
-      "es": "Fuera de la ruta de entrega (bloqueado / en espera / cancelado). Se excluye del % completado y el trabajo nunca avanza aquí automáticamente.",
-      "fr": "Hors du parcours de livraison (bloqué / en attente / annulé). Exclu du % d’avancement, et le travail n’y est jamais avancé automatiquement.",
-      "de": "Außerhalb des Lieferpfads (blockiert / pausiert / abgebrochen). Vom Fortschritt in % ausgenommen; Arbeit wird nie automatisch hierher verschoben."
-    },
-    "mergeInto": {
-      "en": "Merge tickets into",
-      "zh": "将工单合并到",
-      "es": "Fusionar tickets en",
-      "fr": "Fusionner les tickets vers",
-      "de": "Tickets zusammenführen in"
-    },
-    "mergeIntoTitle": {
-      "en": "Where this lane’s tickets go when it is deleted. Leave on Automatic to let the board choose the earliest active lane.",
-      "zh": "删除该泳道时其工单的去向。保持“自动”可让看板选择最早的活动泳道。",
-      "es": "A dónde van los tickets de este carril al eliminarlo. Deja «Automático» para que el tablero elija el carril activo más temprano.",
-      "fr": "Où vont les tickets de ce couloir lors de sa suppression. Laissez « Automatique » pour que le tableau choisisse le premier couloir actif.",
-      "de": "Wohin die Tickets dieser Spur gehen, wenn sie gelöscht wird. „Automatisch“ lässt das Board die früheste aktive Spur wählen."
-    },
-    "mergeIntoAuto": {
-      "en": "Automatic",
-      "zh": "自动",
-      "es": "Automático",
-      "fr": "Automatique",
-      "de": "Automatisch"
-    },
-    "laneUnstaffed": {
-      "en": "This lane runs automatically but has no agent assigned, so nothing here can start on its own. Assign an agent below.",
-      "zh": "该泳道为自动运行，但未分配代理，因此这里的工作无法自行开始。请在下方分配一个代理。",
-      "es": "Este carril se ejecuta automáticamente pero no tiene ningún agente asignado, así que nada puede empezar aquí por sí solo. Asigna un agente abajo.",
-      "fr": "Ce couloir s’exécute automatiquement mais aucun agent n’y est affecté : rien ne peut démarrer ici tout seul. Affectez un agent ci-dessous.",
-      "de": "Diese Spur läuft automatisch, hat aber keinen zugewiesenen Agenten — hier kann nichts von selbst starten. Weisen Sie unten einen Agenten zu."
-    },
-    "wipCapLabel": {
-      "en": "Default work-in-progress cap per member",
-      "zh": "每位成员的默认在制品上限",
-      "es": "Límite de trabajo en curso por miembro (predeterminado)",
-      "fr": "Plafond d’en-cours par membre (par défaut)",
-      "de": "Standard-WIP-Limit pro Mitglied"
-    },
-    "wipCapHint": {
-      "en": "Used by the standup power meter when a member sets no cap of their own.",
-      "zh": "当成员未设置自己的上限时，站会能量条将使用该值。",
-      "es": "Lo usa el medidor de carga del standup cuando un miembro no fija su propio límite.",
-      "fr": "Utilisé par la jauge de charge du standup lorsqu’un membre ne fixe pas son propre plafond.",
-      "de": "Wird von der Auslastungsanzeige im Standup verwendet, wenn ein Mitglied kein eigenes Limit setzt."
-    },
+    "parking": "Parked",
+    "parkingTitle": "Off the delivery path (blocked / on hold / cancelled). Excluded from %-complete, and work is never advanced into it automatically.",
+    "mergeInto": "Merge tickets into",
+    "mergeIntoTitle": "Where this lane’s tickets go when it is deleted. Leave on Automatic to let the board choose the earliest active lane.",
+    "mergeIntoAuto": "Automatic",
+    "laneUnstaffed": "This lane runs automatically but has no agent assigned, so nothing here can start on its own. Assign an agent below.",
+    "wipCapLabel": "Default work-in-progress cap per member",
+    "wipCapHint": "Used by the standup power meter when a member sets no cap of their own.",
     "title": "Board configuration",
     "tab": {
       "lanes": "Swimlanes & agents",
@@ -4071,47 +4023,6 @@
     "by": "by {author}"
   },
   "canvas": {
-    "add_text": "Text",
-    "add_sticky": "Sticky",
-    "add_image": "Image",
-    "add_embed": "Embed",
-    "add_timer": "Timer",
-    "add_stopwatch": "Stopwatch",
-    "blockCount": "{count, plural, =0 {Empty} one {# block} other {# blocks}}",
-    "emptyHint": "Add a block from the toolbar to start.",
-    "emptyReadOnly": "This canvas is empty.",
-    "type_text": "Text",
-    "type_sticky": "Sticky",
-    "type_image": "Image",
-    "type_embed": "Embed",
-    "type_timer": "Timer",
-    "type_stopwatch": "Stopwatch",
-    "remove": "Remove",
-    "resize": "Resize",
-    "textPlaceholder": "Write…",
-    "stickyPlaceholder": "Note…",
-    "color": "Colour",
-    "noImage": "No image",
-    "imageUrlPlaceholder": "Paste an image URL…",
-    "noEmbed": "No document linked",
-    "embedIdPlaceholder": "Knowledge document ID…",
-    "openEmbeddedDoc": "Open document",
-    "add_video": "Video",
-    "add_file": "File",
-    "type_video": "Video",
-    "type_file": "File",
-    "noVideo": "No video",
-    "videoUrlPlaceholder": "Paste a video or embed URL…",
-    "noFile": "No file linked",
-    "fileNamePlaceholder": "File name (optional)…",
-    "fileUrlPlaceholder": "Paste a file URL…",
-    "saveToKnowledge": "Save to Knowledge",
-    "saving": "Saving…",
-    "defaultBoardTitle": "Untitled canvas",
-    "start": "Start",
-    "pause": "Pause",
-    "reset": "Reset",
-    "close": "Close",
     "ads": {
       "title": "Paid media",
       "close": "Close",
@@ -9769,20 +9680,8 @@
     "audit": {
       "flagged": "Flagged",
       "flaggedTitle": "This ticket skipped a required role or diagnostic — review needed",
-      "unstaffed": {
-        "en": "{count} unstaffed",
-        "zh": "{count} 个未配备",
-        "es": "{count} sin asignar",
-        "fr": "{count} sans titulaire",
-        "de": "{count} unbesetzt"
-      },
-      "unstaffedTitle": {
-        "en": "{count} required sign-off role(s) have nobody assigned — these gate completion and merge.",
-        "zh": "有 {count} 个必需的签核角色无人负责——它们会阻止完成与合并。",
-        "es": "{count} rol(es) de aprobación obligatorios no tienen a nadie asignado: bloquean la finalización y la fusión.",
-        "fr": "{count} rôle(s) de validation requis n’ont personne d’assigné — ils bloquent la clôture et la fusion.",
-        "de": "{count} erforderliche Freigaberolle(n) haben niemanden zugewiesen — sie blockieren Abschluss und Merge."
-      },
+      "unstaffed": "{count} unstaffed",
+      "unstaffedTitle": "{count} required sign-off role(s) have nobody assigned — these gate completion and merge.",
       "participantsTitle": "Required-role participation: complete of required"
     },
     "build": {
@@ -13670,41 +13569,11 @@
     "placeHint": "Placing…",
     "pickUp": "Pick up {title} to move it",
     "putDown": "Put {title} back down",
-    "turnPaused": {
-      "en": "paused",
-      "zh": "已暂停",
-      "es": "en pausa",
-      "fr": "en pause",
-      "de": "pausiert"
-    },
-    "pauseTurn": {
-      "en": "Pause",
-      "zh": "暂停",
-      "es": "Pausar",
-      "fr": "Pause",
-      "de": "Pause"
-    },
-    "resumeTurn": {
-      "en": "Resume",
-      "zh": "继续",
-      "es": "Reanudar",
-      "fr": "Reprendre",
-      "de": "Fortsetzen"
-    },
-    "pauseTurnHint": {
-      "en": "Stop the clock on the current speaker — time is not charged to them while paused.",
-      "zh": "暂停当前发言人的计时——暂停期间不会计入其发言时长。",
-      "es": "Detén el reloj del orador actual: el tiempo no se le contabiliza mientras esté en pausa.",
-      "fr": "Arrêter le chronomètre de l’intervenant en cours — le temps ne lui est pas décompté pendant la pause.",
-      "de": "Die Uhr des aktuellen Sprechers anhalten — die Zeit wird während der Pause nicht angerechnet."
-    },
-    "resumeTurnHint": {
-      "en": "Restart the clock on the current speaker.",
-      "zh": "重新开始当前发言人的计时。",
-      "es": "Reanuda el reloj del orador actual.",
-      "fr": "Relancer le chronomètre de l’intervenant en cours.",
-      "de": "Die Uhr des aktuellen Sprechers wieder starten."
-    },
+    "turnPaused": "paused",
+    "pauseTurn": "Pause",
+    "resumeTurn": "Resume",
+    "pauseTurnHint": "Stop the clock on the current speaker — time is not charged to them while paused.",
+    "resumeTurnHint": "Restart the clock on the current speaker.",
     "assignTo": "Assign the picked task to {name}",
     "returnToBacklog": "Return the picked task to the backlog",
     "groupIntoEpic": "Group the picked task into {title}",
@@ -13756,7 +13625,9 @@
     "assignedWork": {
       "assignedTo": "{count} assigned · {name}",
       "empty": "Nothing assigned."
-    }
+    },
+    "nextSpeaker": "Next",
+    "completeSession": "Complete"
   },
   "meetings": {
     "title": "Meetings",
@@ -13767,41 +13638,11 @@
     "scheduleTitle": "Schedule a meeting",
     "loading": "Loading…",
     "liveAndUpcoming": "Live & upcoming",
-    "rsvpLabel": {
-      "en": "Your response",
-      "zh": "你的回复",
-      "es": "Tu respuesta",
-      "fr": "Votre réponse",
-      "de": "Ihre Antwort"
-    },
-    "rsvp_accepted": {
-      "en": "Going",
-      "zh": "参加",
-      "es": "Asistiré",
-      "fr": "Je participe",
-      "de": "Nehme teil"
-    },
-    "rsvp_tentative": {
-      "en": "Maybe",
-      "zh": "待定",
-      "es": "Quizá",
-      "fr": "Peut-être",
-      "de": "Vielleicht"
-    },
-    "rsvp_declined": {
-      "en": "Cannot attend",
-      "zh": "无法参加",
-      "es": "No puedo asistir",
-      "fr": "Je ne peux pas",
-      "de": "Kann nicht"
-    },
-    "rsvpFailed": {
-      "en": "Could not record your response.",
-      "zh": "无法记录你的回复。",
-      "es": "No se pudo registrar tu respuesta.",
-      "fr": "Impossible d’enregistrer votre réponse.",
-      "de": "Ihre Antwort konnte nicht erfasst werden."
-    },
+    "rsvpLabel": "Your response",
+    "rsvp_accepted": "Going",
+    "rsvp_tentative": "Maybe",
+    "rsvp_declined": "Cannot attend",
+    "rsvpFailed": "Could not record your response.",
     "noMeetings": "No meetings yet. Start one now or schedule one.",
     "fromYourCalendar": "From your calendar",
     "anytime": "Anytime",
@@ -15514,13 +15355,7 @@
         "no_contribution": "No contribution",
         "waived": "Waived",
         "changes_requested": "Changes requested",
-        "auto_attested": {
-          "en": "Auto-credited",
-          "zh": "自动记入",
-          "es": "Acreditado automáticamente",
-          "fr": "Crédité automatiquement",
-          "de": "Automatisch gutgeschrieben"
-        }
+        "auto_attested": "Auto-credited"
       },
       "detail": {
         "unsigned": "Required role has not signed off.",
@@ -15532,13 +15367,7 @@
         "no_contribution": "Approved with no linked contribution — a rubber-stamp risk.",
         "waived": "Waived: {reason}",
         "waived_no_reason": "Waived without a recorded reason.",
-        "auto_attested": {
-          "en": "Credited automatically from a completed run — no member recorded a verdict of their own.",
-          "zh": "由已完成的运行自动记入——没有成员自行记录裁定结果。",
-          "es": "Acreditado automáticamente a partir de una ejecución completada: ningún miembro registró su propio veredicto.",
-          "fr": "Crédité automatiquement à partir d’une exécution terminée — aucun membre n’a enregistré son propre verdict.",
-          "de": "Automatisch aus einem abgeschlossenen Lauf gutgeschrieben — kein Mitglied hat ein eigenes Urteil erfasst."
-        }
+        "auto_attested": "Credited automatically from a completed run — no member recorded a verdict of their own."
       }
     },
     "table": {
@@ -16916,62 +16745,14 @@
     "thisTicket": "This ticket",
     "thisEpic": "This epic",
     "parentEpic": "Parent epic",
-    "parked": {
-      "en": "Parked",
-      "zh": "已搁置",
-      "es": "En pausa",
-      "fr": "En attente",
-      "de": "Pausiert"
-    },
-    "linkObjectiveLabel": {
-      "en": "Objective to link this ticket to",
-      "zh": "要关联此工单的目标",
-      "es": "Objetivo al que vincular este ticket",
-      "fr": "Objectif auquel rattacher ce ticket",
-      "de": "Ziel, mit dem dieses Ticket verknüpft wird"
-    },
-    "loadingObjectives": {
-      "en": "Loading objectives…",
-      "zh": "正在加载目标…",
-      "es": "Cargando objetivos…",
-      "fr": "Chargement des objectifs…",
-      "de": "Ziele werden geladen…"
-    },
-    "chooseObjective": {
-      "en": "Choose an objective…",
-      "zh": "选择一个目标…",
-      "es": "Elige un objetivo…",
-      "fr": "Choisir un objectif…",
-      "de": "Ziel auswählen…"
-    },
-    "linkObjective": {
-      "en": "Link",
-      "zh": "关联",
-      "es": "Vincular",
-      "fr": "Rattacher",
-      "de": "Verknüpfen"
-    },
-    "linking": {
-      "en": "Linking…",
-      "zh": "正在关联…",
-      "es": "Vinculando…",
-      "fr": "Rattachement…",
-      "de": "Wird verknüpft…"
-    },
-    "linkObjectiveDenied": {
-      "en": "Only a manager can link a ticket to an objective.",
-      "zh": "只有管理者才能将工单关联到目标。",
-      "es": "Solo un gestor puede vincular un ticket a un objetivo.",
-      "fr": "Seul un manager peut rattacher un ticket à un objectif.",
-      "de": "Nur eine Managerin oder ein Manager kann ein Ticket mit einem Ziel verknüpfen."
-    },
-    "noObjectivesYet": {
-      "en": "No objectives exist yet — create one on the Planning board.",
-      "zh": "尚未创建任何目标——请在规划看板上创建。",
-      "es": "Todavía no hay objetivos: crea uno en el tablero de planificación.",
-      "fr": "Aucun objectif pour l’instant — créez-en un sur le tableau de planification.",
-      "de": "Es gibt noch keine Ziele — legen Sie eines im Planungsboard an."
-    },
+    "parked": "Parked",
+    "linkObjectiveLabel": "Objective to link this ticket to",
+    "loadingObjectives": "Loading objectives…",
+    "chooseObjective": "Choose an objective…",
+    "linkObjective": "Link",
+    "linking": "Linking…",
+    "linkObjectiveDenied": "Only a manager can link a ticket to an objective.",
+    "noObjectivesYet": "No objectives exist yet — create one on the Planning board.",
     "signoffs": "Sign-offs",
     "basisLane": "Stage {index} of {total}",
     "basisSignoff": "{done} of {total} signed off",
@@ -18277,7 +18058,18 @@
       "pipelineOpen": "{count} open · {amount}",
       "pipelineUnpriced": "{count} unpriced",
       "pipelineOdds": "{percent}%",
-      "adapterVersion": "Adapter"
+      "adapterVersion": "Adapter",
+      "campaignSendable": "Sendable",
+      "campaignConsent": "Consent",
+      "campaignConsentOk": "Clear to send",
+      "campaignConsentBlocked": "Blocked",
+      "campaignBlocker": {
+        "noAudience": "No audience is bound to this campaign",
+        "unknownConsent": "The lawful basis for mailing this audience is not recorded",
+        "noSuppressionCheck": "The suppression list has not been checked",
+        "emptyAfterSuppression": "Nobody is left once suppressions are removed",
+        "forbiddenClaim": "The copy makes a claim the brand forbids"
+      }
     },
     "editor": {
       "toolbar": "Formatting",
@@ -18300,10 +18092,19 @@
       "link": "Insert link",
       "linkUrl": "Link address",
       "linkPlaceholder": "https://example.com",
-      "linkApply": "Apply",
-      "linkCancel": "Cancel",
       "rule": "Horizontal rule",
-      "clearFormatting": "Clear formatting"
+      "clearFormatting": "Clear formatting",
+      "blockHeading4": "Heading 4",
+      "indent": "Increase indent",
+      "outdent": "Decrease indent",
+      "image": "Insert picture",
+      "imageUrl": "Picture address",
+      "imagePlaceholder": "https://example.com/picture.png",
+      "table": "Insert table",
+      "tableColumn": "Column {index}",
+      "insertApply": "Insert",
+      "words": "{count, plural, =0 {no words} one {# word} other {# words}}",
+      "characters": "{count, plural, =0 {no characters} one {# character} other {# characters}}"
     },
     "export": {
       "group": "Download",
@@ -18560,7 +18361,7 @@
       "accommodation": "Accommodation",
       "feedbackBank": "Feedback bank",
       "lecture": "Lecture",
-      "poll": "Live poll",
+      "poll": "Poll",
       "officeHours": "Office hours",
       "curriculumMap": "Curriculum map",
       "grantProposal": "Grant proposal",
@@ -18664,7 +18465,9 @@
       "ipAsset": "IP asset",
       "legalMatter": "Legal matter",
       "brandKit": "Brand kit",
-      "audience": "Audience"
+      "audience": "Audience",
+      "stopwatch": "Stopwatch",
+      "transclusion": "Transclusion"
     },
     "twilioSetup": {
       "title": "Twilio integration",
@@ -19307,6 +19110,7 @@
     "creativeNoMediaModel": "Publish an Evermind media model to render this object",
     "creativeNoFrames": "The model returned no readable frames",
     "modeSaveFailed": "Could not save the session mode",
+    "objectsRejected": "{count, plural, one {# object could not be opened} other {# objects could not be opened}} — this build does not know the kind {kinds}. The rest of the board loaded.",
     "alignNeedsTwo": "Select at least two objects to align",
     "objectsAligned": "{count, plural, one {# object aligned} other {# objects aligned}}",
     "editorActions": "Editor actions",
@@ -20180,7 +19984,8 @@
         "shares": "Access granted",
         "views": "Views",
         "documentBody": "Document body",
-        "templateKey": "Template"
+        "templateKey": "Template",
+        "abTestKey": "A/B test key"
       },
       "column": {
         "actual": "Actual",
@@ -20484,7 +20289,8 @@
         "teams": "Teams",
         "timeline": "Timeline",
         "triggeredBy": "Triggered by",
-        "version": "Version"
+        "version": "Version",
+        "offerRef": "Hired from offer"
       },
       "column": {
         "acknowledgedAt": "Acknowledged",
@@ -20953,7 +20759,8 @@
         "guaranteeDays": "Guarantee (days)",
         "guaranteeEndsAt": "Guarantee ends",
         "invoiceState": "Invoice",
-        "selfIdentification": "Self-identification"
+        "selfIdentification": "Self-identification",
+        "resumeRef": "Résumé"
       },
       "column": {
         "category": "Category",
@@ -20988,7 +20795,16 @@
         "at": "At",
         "party": "Party",
         "share": "Share",
-        "amount": "Amount"
+        "amount": "Amount",
+        "candidateRef": "Candidate card"
+      },
+      "onboardingStep": {
+        "rightToWork": "Right-to-work evidence collected and checked",
+        "payrollEnrolment": "Payroll and benefits enrolment",
+        "equipment": "Equipment ordered and delivered",
+        "systemAccess": "System access provisioned",
+        "managerIntroduction": "Manager introduction and first-week plan",
+        "probationReview": "Probation review booked"
       }
     },
     "shared": {
@@ -21002,7 +20818,8 @@
       "label": {
         "funnel": "Funnel",
         "book": "Book",
-        "sequence": "Sequence"
+        "sequence": "Sequence",
+        "poll": "Poll"
       },
       "field": {
         "funnelDomain": "Funnel",
@@ -21037,7 +20854,21 @@
         "enrolled": "Enrolled",
         "replyRate": "Reply rate",
         "sequenceProgress": "Progress",
-        "lastRunAt": "Last run"
+        "lastRunAt": "Last run",
+        "prompt": "Question",
+        "pollFormat": "Instrument",
+        "pollOptions": "Options",
+        "scaleMax": "Top of the scale",
+        "gridXLabel": "Horizontal axis",
+        "gridYLabel": "Vertical axis",
+        "pollAnonymous": "Anonymous",
+        "showResultsLive": "Show the room the count",
+        "closesAt": "Closes at",
+        "joinUrl": "Join address",
+        "pollResponseCount": "Answers",
+        "pollResults": "Results",
+        "pollAnswers": "What people said",
+        "pollCorrectRate": "Correct"
       },
       "column": {
         "stage": "Stage",
@@ -21064,7 +20895,10 @@
         "name": "Name",
         "contactRef": "Contact",
         "stepsSent": "Sent",
-        "repliedAtISO": "Replied"
+        "repliedAtISO": "Replied",
+        "id": "Id",
+        "label": "Label",
+        "correct": "Correct"
       },
       "status": {
         "manuscript": "Manuscript",
@@ -21853,7 +21687,20 @@
       "objectLabel": "{title}, at full size",
       "switcher": "Canvas view",
       "enterFullscreen": "Full screen",
-      "exitFullscreen": "Exit full screen"
+      "exitFullscreen": "Exit full screen",
+      "calendar": {
+        "label": "Calendar",
+        "enter": "Plan the month",
+        "active": "You are in the calendar",
+        "open": "Open the calendar",
+        "regionLabel": "This canvas, read as one month",
+        "navLabel": "Which month",
+        "previousMonth": "Previous month",
+        "nextMonth": "Next month",
+        "summary": "{scheduled} scheduled · {dated} dated · {undated} with no date",
+        "gridLabel": "The days of this month",
+        "conflict": "Another commitment shares this day"
+      }
     },
     "miro": {
       "title": "Miro boards",
@@ -21958,7 +21805,9 @@
       "modelPlaceholder": "Follow the board default",
       "builtinSeat": "Built-in seat",
       "customAgent": "Custom agent",
-      "builtinSeatHint": "This seat comes from the role catalog - its brief, its tools and its review rights come with it. What you set here is how it works on this board."
+      "builtinSeatHint": "This seat comes from the role catalog - its brief, its tools and its review rights come with it. What you set here is how it works on this board.",
+      "timerDurationMs": "Timebox (ms)",
+      "transclusionDocumentId": "Document id"
     },
     "nodeMessage": {
       "emptyShell": "This object has a title and no content yet - it will look finished and be empty."
@@ -22077,7 +21926,7 @@
       "accommodation": "A documented disability or learning accommodation a student is entitled to.",
       "feedbackBank": "A reusable library of instructor comments to drop into grading fast.",
       "lecture": "A class session's slides, notes, recording, and materials in one place.",
-      "poll": "A live in-class question students answer in real time from their devices.",
+      "poll": "Ask the room a question and watch the answers arrive. Joinable from a phone, no account needed.",
       "officeHours": "A bookable schedule of instructor availability for 1:1 student meetings.",
       "curriculumMap": "A map of how courses and learning outcomes connect across a program.",
       "grantProposal": "A funding pitch laying out the study's aims, budget, and timeline.",
@@ -22159,7 +22008,9 @@
       "incident": "Report of a safety or operational incident and its resolution.",
       "book": "General ledger recording financial transactions and journal entries.",
       "account": "A financial account tracking balances and transactions.",
-      "sticky": "Freeform sticky note for quick thoughts on the canvas."
+      "sticky": "Freeform sticky note for quick thoughts on the canvas.",
+      "stopwatch": "Time how long something actually takes. Everyone watching sees the same clock.",
+      "transclusion": "Show another knowledge document here, live — not a copy of it."
     },
     "previewWidth": "Preview width",
     "viewportName": {
@@ -22483,7 +22334,166 @@
     "llmCacheHitRate": "Cache hit rate",
     "llmLatencyP50Ms": "Latency p50 (ms)",
     "llmLatencyP95Ms": "Latency p95 (ms)",
-    "objectNeedsUpgrade": "Upgrade to a paid plan to add this."
+    "objectNeedsUpgrade": "Upgrade to a paid plan to add this.",
+    "brandClaimViolation": "This makes a claim the brand forbids: {claims}",
+    "noticeHireNotSigned": "This offer is not signed yet, so there is nobody to hire. An employment record that begins from an unsigned offer is a record of something that did not happen.",
+    "noticeHireNoPerson": "This offer names no candidate and no email address, so the employment record would be about nobody. Set its candidateRef or candidateEmail first.",
+    "noticeHireNoStartDate": "This offer has no start date. Every onboarding step is dated from it, so a plan without one has no due dates at all.",
+    "noticeHireAlready": "{person} was already hired from this offer. Nothing was created — hiring twice from one offer would put the same person on the payroll twice.",
+    "noticeHired": "{person} hired: an employment record and a {steps}-step onboarding plan are on the board.",
+    "hiringHiredStatus": "Hired — starts {date}",
+    "hiringOfferHiredStatus": "Hired",
+    "hiringOnboardingTitle": "Onboarding — {person}",
+    "hiringHiredEdge": "hired",
+    "hiringOnboardingEdge": "onboarding",
+    "hiringCandidateCreated": "Create candidate “{title}”",
+    "hiringCandidateScored": "Score candidate “{title}”",
+    "hiringCandidateStageScreened": "Screened",
+    "clock": {
+      "finished": "Finished",
+      "running": "Running",
+      "paused": "Paused",
+      "boxOf": "of {length}",
+      "start": "Start",
+      "pause": "Pause",
+      "reset": "Reset"
+    },
+    "transclusion": {
+      "chooseDocument": "Choose the document this card shows.",
+      "loading": "Loading the document…",
+      "unavailable": "That document is unavailable — it may have been deleted, or you may not have access to it.",
+      "empty": "That document has no content yet.",
+      "readAll": "Read all of it",
+      "openDocument": "Open the document"
+    },
+    "stencilShape": {
+      "square": "Square",
+      "rectangle": "Rectangle",
+      "round": "Rounded",
+      "roundRectangle": "Rounded rectangle",
+      "ellipse": "Ellipse",
+      "circle": "Circle",
+      "rhombus": "Diamond",
+      "triangle": "Triangle",
+      "parallelogram": "Parallelogram",
+      "trapezoid": "Trapezoid",
+      "pentagon": "Pentagon",
+      "hexagon": "Hexagon",
+      "octagon": "Octagon",
+      "star": "Star",
+      "cross": "Cross",
+      "rightArrow": "Arrow right",
+      "leftArrow": "Arrow left",
+      "leftRightArrow": "Double arrow",
+      "cloud": "Cloud",
+      "cylinder": "Cylinder",
+      "document": "Document",
+      "pill": "Stadium"
+    },
+    "stencilPack": {
+      "flowchart": "Flowchart",
+      "flowchartDescription": "Flowchart shape",
+      "mindMap": "Mind map",
+      "mindMapDescription": "Mind-map node",
+      "wireframe": "Wireframe",
+      "wireframeDescription": "Wireframe block",
+      "cloud": "Cloud architecture",
+      "cloudDescription": "Architecture shape",
+      "uml": "UML",
+      "umlDescription": "UML shape"
+    },
+    "stencil": {
+      "process": "Process",
+      "decision": "Decision",
+      "start": "Start",
+      "end": "End",
+      "data": "Data",
+      "document": "Document",
+      "database": "Database",
+      "connector": "Connector",
+      "centre": "Central idea",
+      "branch": "Branch",
+      "leaf": "Leaf",
+      "question": "Question",
+      "screen": "Screen",
+      "header": "Header bar",
+      "block": "Content block",
+      "field": "Input field",
+      "button": "Button",
+      "modal": "Dialog",
+      "internet": "Internet",
+      "loadBalancer": "Load balancer",
+      "compute": "Compute",
+      "store": "Data store",
+      "queue": "Queue",
+      "user": "User",
+      "boundary": "Boundary",
+      "class": "Class",
+      "interface": "Interface",
+      "actor": "Actor",
+      "component": "Component",
+      "note": "Note"
+    },
+    "connector": {
+      "line": "Line",
+      "ends": "Ends",
+      "router": "Route",
+      "line_solid": "Solid",
+      "line_dashed": "Dashed",
+      "line_dotted": "Dotted",
+      "ends_arrow": "Arrow",
+      "ends_open": "Open arrow",
+      "ends_both": "Both ends",
+      "ends_none": "No arrow",
+      "router_smoothstep": "Curved corners",
+      "router_step": "Elbow",
+      "router_straight": "Straight",
+      "router_bezier": "Curve"
+    },
+    "timerDurationMs": "Timebox (ms)",
+    "transclusionDocumentId": "Document id",
+    "marketing": {
+      "empty": "This {label} has nothing authored yet.",
+      "emptyHint": "Ask Brain to research and fill it, or open the inspector to write it yourself.",
+      "meterLabel": "{label}: {score} out of 100",
+      "label": {
+        "brandKit": "Brand kit",
+        "audience": "Audience"
+      },
+      "status": {
+        "drafting": "Drafting",
+        "notCounted": "Not counted"
+      },
+      "field": {
+        "brandKitId": "Brand kit",
+        "palette": "Palette",
+        "typography": "Typefaces",
+        "logoUrl": "Logo",
+        "logoDarkUrl": "Logo (dark)",
+        "voice": "Voice",
+        "doNotSay": "Never say",
+        "boundObjects": "Bound objects",
+        "audienceId": "Audience",
+        "rules": "Segment rules",
+        "consentBasis": "Lawful basis",
+        "consentEvidence": "Consent evidence",
+        "size": "Size",
+        "suppressedCount": "Suppressed",
+        "sendableCount": "Sendable",
+        "suppressedShare": "Suppressed share",
+        "refreshedAt": "Last counted",
+        "sources": "Sources",
+        "summary": "Summary"
+      },
+      "column": {
+        "field": "Field",
+        "operator": "Operator",
+        "value": "Value",
+        "title": "Title",
+        "detail": "Detail",
+        "url": "URL"
+      }
+    }
   },
   "canvasCommands": {
     "cleanLayout": "Clean up canvas layout",
@@ -26080,5 +26090,74 @@
       "week": "7 days",
       "month": "This month"
     }
+  },
+  "poll": {
+    "accountBody": "A poll needs a public address people can join from a phone, and that belongs to your workspace. Sign up free to publish it.",
+    "accountTitle": "Create a free account to run a poll",
+    "anonymousNo": "Your answer is recorded against you",
+    "anonymousYes": "Anonymous — your answer is not recorded against you",
+    "answerFirst": "Choose an answer before sending it.",
+    "answerPlaceholder": "Your answer",
+    "backToBoard": "Back to the board",
+    "changeVote": "Change my answer",
+    "chooseAny": "Choose any that apply",
+    "chooseOne": "Choose one",
+    "chooseScale": "Choose 1 to {max}",
+    "closeVoting": "Close voting",
+    "cloudLabel": "Word cloud of {terms} terms",
+    "copyJoinLink": "Copy the link",
+    "correctOption": "{label} (correct)",
+    "gridLabel": "{count} placements on the grid",
+    "hideResults": "Hide results",
+    "joinAt": "Join at",
+    "loading": "Loading the poll…",
+    "mean": "Average {mean}",
+    "missing": "There is no poll at this address. Check the link, or ask for it again.",
+    "moveDown": "Move item {position} down",
+    "moveUp": "Move item {position} up",
+    "noAnswersYet": "No answers yet.",
+    "noticePublishFirst": "Publish the poll before opening or closing voting.",
+    "noticePublished": "The poll is open. Read the join address out to the room.",
+    "noticeVotingClosed": "Voting is closed.",
+    "noticeVotingOpen": "Voting is open.",
+    "ofExpected": "of {expected} expected",
+    "openJoinPage": "Open the join page",
+    "openVoting": "Open voting",
+    "placeOnGrid": "Place yourself on the grid — {x} across, {y} up",
+    "publish": "Publish and open",
+    "publishFailed": "The poll could not be published.",
+    "quadrant": {
+      "lowLow": "Low / low",
+      "highLow": "High / low",
+      "lowHigh": "Low / high",
+      "highHigh": "High / high"
+    },
+    "quadrantShares": "Answers by quadrant",
+    "rankThem": "Put these in order",
+    "readFailed": "The results could not be read.",
+    "readOnlyHint": "You have read-only access to this board, so you cannot publish or steer this poll.",
+    "republish": "Update the poll",
+    "responseCount": "{count} answered",
+    "resultsHeading": "What the room said",
+    "resultsHidden": "The results are hidden until the facilitator shows them.",
+    "resultsHiddenFromRoom": "The count is hidden from the room",
+    "resultsLabel": "Poll results",
+    "resultsShown": "The room can see the count",
+    "revealResults": "Show results",
+    "sendVote": "Send",
+    "sending": "Sending…",
+    "statusClosed": "Voting closed",
+    "statusOpen": "Voting open",
+    "steerFailed": "That change could not be applied.",
+    "termCount": "{term}: {count}",
+    "truncated": "Showing the most recent answers only",
+    "unpublishedHint": "Publish this poll to get an address the room can join from a phone. No account is needed to answer.",
+    "untitled": "Untitled poll",
+    "updateVote": "Update my answer",
+    "voteFailed": "Your answer could not be sent. Try again.",
+    "voteRecorded": "Your answer has been recorded.",
+    "votingClosed": "Voting has closed",
+    "votingOpen": "Voting is open",
+    "wordPlaceholder": "One or two words"
   }
 }

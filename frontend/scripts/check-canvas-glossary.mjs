@@ -39,7 +39,16 @@ if (!existsSync(mapFile)) {
   process.exit(1);
 }
 
-const mapSource = readFileSync(mapFile, 'utf8');
+// LINE ENDINGS ARE NORMALISED BEFORE ANYTHING IS PARSED.
+//
+// The patterns below anchor on `\n  {\n` and `\n] as const;`, which do not match
+// a CRLF file — and this repository has mixed endings, so any edit to the map
+// from a Windows editor turned the whole guard into "parsed to zero contexts".
+// That message says the map grew a shape the guard cannot read, which sends the
+// reader to look at their content change when nothing about it was wrong. A
+// guard whose failure describes the wrong cause is worse than one that is merely
+// strict, so it reads the file the same way on every platform.
+const mapSource = readFileSync(mapFile, 'utf8').replace(/\r\n/g, '\n');
 
 // The map is data, but this guard must not import TypeScript — parse the two
 // literal blocks it needs. Deliberately narrow: a shape this cannot read is a

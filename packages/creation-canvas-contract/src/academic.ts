@@ -63,9 +63,16 @@ export const ACADEMIC_OBJECT_KINDS = [
   'gradebook',
   // The lawful and reusable parts of running a class.
   'accommodation', 'feedbackBank',
-  // Delivering it: the session plan, the live question asked during it, and the
-  // bookable hours after it.
-  'lecture', 'poll', 'officeHours',
+  // Delivering it: the session plan and the bookable hours after it.
+  //
+  // The live question asked DURING it is not here. `poll` was declared twice — once as a
+  // teaching kind and once, the same week, as the facilitation primitive in
+  // `SHARED_OBJECT_KINDS` — and two declarations of one word is not a duplicate the way
+  // two similar tables are: `CREATION_OBJECT_KINDS` concatenates both lists, so the
+  // registry indexed one kind twice and whichever spec loaded last silently won. A
+  // lecture check-for-understanding is the shared `poll` with `pollFormat: 'quiz'`,
+  // which is exactly the argument `SHARED_OBJECT_KINDS` makes for it.
+  'lecture', 'officeHours',
   // Programme outcomes mapped to what actually evidences them. This is the
   // accreditation artifact every department rebuilds in a spreadsheet every cycle.
   'curriculumMap',

@@ -1,6 +1,13 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { associateBrainWithArtifacts, canInvokeCreationObjectAction, canvasChangesCanAutoApply, CREATION_CANVAS_TOUR, CreationCanvas, duplicateAddUpdateTarget, persistCanonicalProjectPrd, projectEvermindNodePatch, scoreAgentTestResponse, shouldAcquireCanvasObjectLock, type ProposedCanvasChange } from './CreationCanvas';
+import { CREATION_CANVAS_TOUR, CreationCanvas, persistCanonicalProjectPrd, projectEvermindNodePatch, scoreAgentTestResponse } from './CreationCanvas';
+// The canvas DOMAIN. These used to be exported from the component beside it, which
+// meant asserting a pure rule cost a full canvas mount in jsdom (~35 s). They now
+// have their own suites next to the modules — `domains/canvas/domain/*.test.ts`,
+// 52 cases in 8 s — and what stays HERE is only what genuinely needs the component.
+import { associateBrainWithArtifacts } from '@/domains/canvas/domain/canvasBoard';
+import { duplicateAddUpdateTarget, shouldAcquireCanvasObjectLock } from '@/domains/canvas/domain/selection';
+import { canInvokeCreationObjectAction, canvasChangesCanAutoApply, type ProposedCanvasChange } from '@/domains/canvas/domain/canvasChange';
 import { writeSectionTourHistory } from '@/lib/onboarding/browserSectionTourHistory';
 import { CreationNode } from './CreationNode';
 import { BrainDock } from './BrainDock';

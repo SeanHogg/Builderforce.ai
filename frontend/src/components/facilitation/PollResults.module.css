@@ -1,0 +1,127 @@
+/**
+ * How a poll's answers are DRAWN — the marks the shared bar primitive has no shape for.
+ *
+ * `BarChart` already draws every counted format (choice, multi-choice, ranking, scale,
+ * quadrant shares), and this file deliberately adds nothing to it. What is here is the
+ * two results that are not a ranking of categories — a word cloud (a shape) and a 2x2
+ * (a position) — plus the Q&A list.
+ *
+ * Every colour is a token: this is rendered BOTH on the facilitator's board and on a
+ * participant's phone, in whatever theme each of them is in.
+ */
+
+.results { display: grid; gap: 12px; }
+
+.summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--font-size-small);
+}
+
+.empty {
+  margin: 0;
+  padding: 18px 0;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: var(--font-size-small);
+}
+
+/* --- The word cloud -------------------------------------------------------
+   Size IS the value, so the number is also written into the title and the
+   accessible list below — a reader who cannot compare two font sizes must not
+   lose the result. */
+.cloud {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: center;
+  gap: 4px 12px;
+  padding: 8px 4px;
+}
+
+.term {
+  color: var(--text-primary);
+  font-weight: 600;
+  line-height: 1.15;
+  /* Set per term from its share; the variable is the only inline value, so the
+     rest of the treatment stays in the stylesheet. */
+  font-size: calc(var(--font-size-body) * var(--term-scale, 1));
+}
+
+.termQuiet { color: var(--text-secondary); font-weight: 500; }
+
+/* --- The 2x2 --------------------------------------------------------------
+   A square that stays square: aspect-ratio rather than a fixed height, so it is
+   the same instrument on a phone and on a projector. */
+.grid {
+  position: relative;
+  aspect-ratio: 1;
+  width: 100%;
+  max-width: 420px;
+  margin: 0 auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+}
+
+.gridAxis {
+  position: absolute;
+  background: var(--border);
+}
+
+.gridAxisX { left: 0; right: 0; top: 50%; height: 1px; }
+.gridAxisY { top: 0; bottom: 0; left: 50%; width: 1px; }
+
+.gridLabel {
+  position: absolute;
+  color: var(--text-muted);
+  font-size: var(--font-size-small);
+  pointer-events: none;
+}
+
+.gridLabelX { right: 8px; top: calc(50% + 6px); }
+.gridLabelY { left: calc(50% + 6px); top: 8px; }
+
+.gridPoint {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  margin: -6px 0 0 -6px;
+  border-radius: 50%;
+  background: var(--coral-bright);
+  /* Overlapping placements are the interesting part of a 2x2 — where the room
+     clustered — so they read as a denser patch rather than one dot. */
+  opacity: .65;
+}
+
+/* --- The Q&A --------------------------------------------------------------- */
+.answers { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+
+.answer {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  font-size: var(--font-size-body);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+/* The accessible restatement of a cloud or a grid: the same numbers, as text,
+   for a reader the shape does not reach. Visually hidden rather than removed —
+   a result nobody can read is not a result. */
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}

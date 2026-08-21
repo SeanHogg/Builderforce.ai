@@ -21,7 +21,6 @@ import { WidgetBrainBridge } from './widgets/WidgetBrainBridge';
 import { DestinationBrainBridge } from './workspace/DestinationBrainBridge';
 import { DevexPanelProvider } from './insights/DevexPanelProvider';
 import { DevexPanelBrainBridge } from './insights/DevexPanelBrainBridge';
-import { CanvasPanelProvider } from './canvas/CanvasPanelProvider';
 import { CanvasPanelBrainBridge } from './canvas/CanvasPanelBrainBridge';
 import { FloatingBrain } from './brain/FloatingBrain';
 import { GuestBrainPanel } from './brain/GuestBrainPanel';
@@ -396,7 +395,6 @@ function AppBrainShell({ children, qualityEndpoint }: {
         <DeliveryPanelProvider>
           <FinancePanelProvider>
           <DevexPanelProvider>
-          <CanvasPanelProvider>
           <BrainActionsProvider>
             <BrainContextProvider>
               <ReportErrorProvider endpoint={qualityEndpoint}>
@@ -462,13 +460,14 @@ function AppBrainShell({ children, qualityEndpoint }: {
                   registry the palette and sidebar read, so asking to open a page
                   and searching for it can never disagree about what exists. */}
               {showBrain && hasTenant && <DestinationBrainBridge />}
-              {/* Canvas slide-out tool: `show_canvas` lets the Brain generate a
-                  visual board (notes/timers) and the user save it to Knowledge. */}
+              {/* `show_canvas` — the Brain lays a set of ideas out as notes and OPENS
+                  them on the Creation Canvas. It used to fill a right-hand drawer
+                  running a second canvas implementation; that board folded into this
+                  one, so the tool now needs no provider, only the router. */}
               {showBrain && <CanvasPanelBrainBridge />}
               </ReportErrorProvider>
             </BrainContextProvider>
           </BrainActionsProvider>
-          </CanvasPanelProvider>
           </DevexPanelProvider>
           </FinancePanelProvider>
         </DeliveryPanelProvider>

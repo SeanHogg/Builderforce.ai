@@ -1,12 +1,12 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import PageContainer from '@/components/PageContainer';
 import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
 import { knowledgeApi, type KnowledgeTemplate, type DocType } from '@/lib/knowledgeApi';
-import { emptyCanvas, serializeCanvas } from '@/components/canvas/canvasModel';
 import { useCreateKnowledge } from '../useCreateKnowledge';
 import { Icon } from '@/components/ui/Icon';
 
@@ -25,15 +25,22 @@ interface BlankStarter {
   descKey: string;
   icon: string;
   docType: DocType;
-  /** Canvas blanks seed `content` with an empty serialized canvas model. */
-  canvas?: boolean;
 }
 
+/**
+ * The blank starters. A knowledge item is a DOCUMENT.
+ *
+ * There used to be a fourth — "blank canvas" — which created a knowledge doc whose
+ * `content` held a serialised board for the second canvas implementation
+ * (`components/canvas/canvasModel.ts`). That board has folded into the Creation Canvas,
+ * so the starter is now the CARD BELOW: it opens the one canvas rather than seeding a
+ * second one inside a document's content string. Nothing is lost — the board it used to
+ * make was a strictly smaller surface than the one it now opens.
+ */
 const BLANKS: BlankStarter[] = [
   { key: 'blank-doc', labelKey: 'blankDoc', descKey: 'blankDocDesc', icon: '📄', docType: 'doc' },
   { key: 'blank-sop', labelKey: 'blankSop', descKey: 'blankSopDesc', icon: '📋', docType: 'sop' },
   { key: 'blank-process', labelKey: 'blankProcess', descKey: 'blankProcessDesc', icon: '🔁', docType: 'process' },
-  { key: 'blank-canvas', labelKey: 'blankCanvas', descKey: 'blankCanvasDesc', icon: '🧩', docType: 'doc', canvas: true },
 ];
 
 const DOC_TYPE_LABELS: Record<DocType, string> = { sop: 'type_sop', process: 'type_process', doc: 'type_doc', postmortem: 'type_postmortem', known_error: 'type_known_error' };
@@ -43,6 +50,7 @@ export default function NewKnowledgeClient() {
   const scope = useOptionalProjectScope();
   const projectId = scope?.currentProjectId ?? null;
   const { create, creatingKey, error } = useCreateKnowledge(projectId);
+  const router = useRouter();
 
   const [templates, setTemplates] = useState<KnowledgeTemplate[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -78,16 +86,21 @@ export default function NewKnowledgeClient() {
                 title={t(b.labelKey)}
                 desc={t(b.descKey)}
                 busy={creatingKey === b.key}
-                onClick={() =>
-                  create({
-                    busyKey: b.key,
-                    docType: b.docType,
-                    title: t(b.labelKey),
-                    content: b.canvas ? serializeCanvas(emptyCanvas()) : undefined,
-                  })
-                }
+                onClick={() => create({ busyKey: b.key, docType: b.docType, title: t(b.labelKey) })}
               />
             ))}
+            {/* The board starter, pointing at the ONE canvas. It is in this row rather
+                than removed because "start a board" is a thing people came to this
+                gallery for — what changed is where the board lives. */}
+            <TemplateCard
+              icon="🧩"
+              title={t('blankCanvas')}
+              desc={t('blankCanvasDesc')}
+              // Never busy: this one navigates rather than creating anything here, so
+              // there is no request to wait on.
+              busy={false}
+              onClick={() => router.push('/create/new')}
+            />
           </div>
         </section>
 
@@ -120,7 +133,7 @@ function TemplateCard({
   desc,
   badge,
   hint,
-  busy,
+  busy = false,
   onClick,
 }: {
   icon: string;
@@ -128,7 +141,10 @@ function TemplateCard({
   desc: string;
   badge?: string;
   hint?: string;
-  busy: boolean;
+  /** Optional, because not every card starts work that can be pending — the board
+   *  starter navigates and is never busy. Making it required forced that call site to
+   *  write `busy={false}` to say nothing, and omitting it failed the build instead. */
+  busy?: boolean;
   onClick: () => void;
 }) {
   return (

@@ -1,0 +1,8 @@
+# Files under src/domains/ whose imports point OUTWARD, against the layering.
+# This list may only SHRINK — see scripts/check-layering.mjs.
+# Regenerate with: node scripts/check-layering.mjs --update
+#
+# EMPTY, and that is the point. PRD 22 Phase 0 item 5 says the ratchet has to land
+# BEFORE the moves, "or the move's mistakes become the baseline". It landed after
+# exactly one move (the canvas domain layer, 2026-08-20) with nothing to forgive,
+# so the first line anybody adds here has to be argued for in a diff.

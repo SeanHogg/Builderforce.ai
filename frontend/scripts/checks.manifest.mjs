@@ -18,4 +18,5 @@ export default [
   ['check:declared-deps', 'check-declared-deps.mjs'],
   ['check:methodology', 'check-methodology.mjs'],
   ['check:canvas-glossary', 'check-canvas-glossary.mjs'],
+  ['check:layering', 'check-layering.mjs'],
 ];

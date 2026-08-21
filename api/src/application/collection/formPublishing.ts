@@ -66,10 +66,19 @@ export class FormError extends Error {
   }
 }
 
-function mintSlug(): string {
+/**
+ * Mint a public address.
+ *
+ * Exported because the facilitation primitive publishes into the SAME table with the
+ * same globally-unique `slug` column, and a second alphabet or a second length would
+ * make two classes of public address out of one column — one of which would then be
+ * the one somebody reads aloud badly.
+ */
+export function mintPublicSlug(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(SLUG_LENGTH));
   return [...bytes].map((b) => SLUG_ALPHABET[b % SLUG_ALPHABET.length]).join('');
 }
+const mintSlug = mintPublicSlug;
 
 /**
  * Read a question set's declared questions back into the contract's shape.

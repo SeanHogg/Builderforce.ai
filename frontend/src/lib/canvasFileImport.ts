@@ -63,7 +63,12 @@ export function htmlDocumentTitle(source: string): string | null {
   return title || null;
 }
 
-export type ImportTranslator = (key: string, values?: Record<string, string | number>) => string;
+/** The canvas translator seam, under this module's historical name. Declared once
+ *  in `domains/canvas/domain/canvasText.ts` — this file and `canvasNotices.ts` had
+ *  invented the identical type independently, which is two places for one decision
+ *  about how a plain module speaks to a person. */
+export type { CanvasTextTranslator as ImportTranslator } from '@/domains/canvas/domain/canvasText';
+import type { CanvasTextTranslator as ImportTranslator } from '@/domains/canvas/domain/canvasText';
 
 export type ImportedCanvasObject = {
   kind: CreationObjectKind;

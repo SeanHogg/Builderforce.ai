@@ -45,7 +45,7 @@ import {
   deriveCohortProgress, deriveCurriculumMapCoverage, deriveCurriculumMapGaps,
   deriveGradebookDistribution, deriveGradebookMarks, deriveGradebookMean, deriveGradebookMedian,
   deriveGradebookPassRate, deriveLectureAttendanceRate, deriveOfficeHoursUtilisation,
-  deriveParticipantPoolConsentRate, derivePollCorrectRate, derivePollResponseCount,
+  deriveParticipantPoolConsentRate,
   deriveSubmissionLateBy,
 } from './academic/derivations';
 
@@ -335,36 +335,6 @@ export const ACADEMIC_OBJECT_SPECS: readonly SpecObjectSpec[] = [
         derive: deriveLectureAttendanceRate,
       },
       SUMMARY_FIELD,
-    ],
-  },
-  {
-    kind: 'poll',
-    icon: '◍',
-    group: 'Teaching',
-    defaultStatus: 'notOpened',
-    actions: ['open', 'close', 'reveal'],
-    fields: [
-      { name: 'question', render: 'verdict', label: 'question', hint: 'The question asked, in one sentence. A good lecture poll tests a misconception, not a definition.' },
-      { name: 'choices', render: 'chips', label: 'choices', hint: 'The options, in display order. Distractors should each correspond to a real way of being wrong.' },
-      { name: 'correctIndex', render: 'stat', label: 'correctIndex', hint: 'Zero-based index of the correct choice. Omit for an opinion poll with no right answer.' },
-      { name: 'anonymity', render: 'stat', label: 'anonymity', hint: 'anonymous | identified. Identified responses count toward participation; anonymous ones get honest answers. Pick for the question being asked.' },
-      { name: 'openedAt', render: 'stat', label: 'openedAt', hint: `When responses opened. ${ISO_DATE}`, bookkeeping: true },
-      { name: 'closedAt', render: 'stat', label: 'closedAt', hint: `When responses closed. ${ISO_DATE}`, bookkeeping: true },
-      { name: 'responses', render: 'bars', label: 'responses', hint: 'Response count per choice.', derived: true },
-      {
-        name: 'responseCount',
-        render: 'stat',
-        label: 'responseCount',
-        hint: 'Total responses received, summed from the per-choice counts above.',
-        derive: derivePollResponseCount,
-      },
-      {
-        name: 'correctRate',
-        render: 'meter',
-        label: 'correctRate',
-        hint: 'Share answering correctly, 0-100, computed from the responses and `correctIndex`. Under about 30% means re-teach now, not next week. Absent on an opinion poll, which has no right answer to be right about.',
-        derive: derivePollCorrectRate,
-      },
     ],
   },
   {
@@ -747,7 +717,7 @@ export const ACADEMIC_SPEC_KINDS: readonly AcademicObjectKind[] =
 export const ACADEMIC_LABELS: Record<AcademicObjectKind, string> = {
   cohort: 'Cohort', assignment: 'Assignment', rubric: 'Rubric', submission: 'Submission',
   gradebook: 'Gradebook', accommodation: 'Accommodation', feedbackBank: 'Feedback bank',
-  lecture: 'Lecture', poll: 'Live poll', officeHours: 'Office hours',
+  lecture: 'Lecture', officeHours: 'Office hours',
   curriculumMap: 'Curriculum map',
   grantProposal: 'Grant proposal', ethicsApproval: 'Ethics approval',
   preRegistration: 'Pre-registration', protocol: 'Protocol', consentForm: 'Consent form',
@@ -762,7 +732,7 @@ export const ACADEMIC_LABELS: Record<AcademicObjectKind, string> = {
 export const ACADEMIC_STATUSES: Readonly<Record<string, string>> = {
   noRoster: 'No roster yet', draftBrief: 'Draft brief', noCriteria: 'No criteria',
   notSubmitted: 'Not submitted', noMarks: 'No marks yet', notApproved: 'Not approved',
-  empty: 'Empty', planning: 'Planning', notOpened: 'Not opened', noSlots: 'No slots',
+  empty: 'Empty', planning: 'Planning', noSlots: 'No slots',
   notMapped: 'Not mapped', draftProposal: 'Draft proposal', draftPlan: 'Draft plan',
   draftMethod: 'Draft method', draftForm: 'Draft form', notRecruiting: 'Not recruiting',
   notSearched: 'Not searched', untested: 'Untested', draftManuscript: 'Draft',

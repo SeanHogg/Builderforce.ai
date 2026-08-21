@@ -1,3 +1,557 @@
+## ✅ RESOLVED 2026-08-20 — Evermind grows the enterprise layer customers said the platform did not have
+
+Customers were not asking for a better model. They were asking the four questions that decide whether an
+AI system can be bought: **can it read our data, will it leak across tenants, what did that answer cost,
+and how do we know it got better?** Evermind could answer none of them, because it had no ingestion
+pipeline, no vector-store abstraction, no tenancy in retrieval, no telemetry, and no eval gate. Six new
+layers in `@seanhogg/builderforce-memory` (**2026.8.20 → 2026.8.21**, lockstep across all three packages)
+answer all four. **593 tests green across 44 suites**, coverage above every threshold the package
+enforces (95.9% statements / 86.6% branches / 97.0% functions / 97.9% lines against 90/85/95/92), `tsc`
+and `eslint` clean.
+
+Every layer is a PORT with adapters behind it, because an enterprise never gets to choose its stack from
+scratch — the customer's existing database, cloud and identity model have to be an adapter choice rather
+than a rewrite.
+
+### Ingestion — structured and unstructured through one path
+
+`src/ingest/` — `IngestionPipeline` plus a `ParserRegistry` covering markdown (keeping the full heading
+breadcrumb), HTML, JSON, CSV/TSV (an RFC-4180 subset that recovers numbers and booleans but leaves
+identifier-shaped strings like `007` alone) and typed rows. A ticket export and a policy document reach
+the index through the same pipeline; the difference is which parser ran.
+
+The point is that **structure surviving parsing becomes filterable metadata**, which is what makes
+*"summarise open P1 tickets about billing"* answerable — `status` and `priority` are database predicates
+rather than something the embedding has to imply.
+
+What makes it production-grade is the second run: deterministic chunk ids (`sourceId#n`, so a re-run
+overwrites instead of duplicating), FNV-1a content hashes so a `diff` sync re-embeds only what changed
+and deletes only what vanished, bounded concurrency so a corpus is not a self-inflicted 429, per-document
+failure isolation reported by id, and `forget(sourceId)` as a first-class erasure primitive.
+
+### Vector store — a port, and filters that are DATA
+
+`src/vectorstore/` — `MemoryVectorStore` (HNSW-backed, with BM25 keyword search) and `RestVectorStore`,
+one adapter over a **dialect registry**: `evermind`, `qdrant`, `pinecone`, `vertex-ai`, and
+`registerDialect()` for a customer's own.
+
+Two decisions carry the weight. First, `MetadataFilter` is a declarative algebra, not a predicate
+function, because `(record) => boolean` cannot be pushed down to a remote database — it forces
+fetch-everything-then-filter, which is both slow and a leak. When a dialect cannot express a clause,
+`translateFilter` returns it as a **residual** the store applies locally after over-fetching, so a clause
+is never silently dropped. Second, **tenancy is compiled, not remembered**: `AccessScope` becomes a
+filter AND-ed into every read, and it fails *closed* — ingestion always writes a non-empty `acl`
+(defaulting to `['*']`), so a record written without one matches nothing rather than everything.
+
+`MemoryVectorStore` also fixes a real performance trap: the shared `denseSearch` helper rebuilds its HNSW
+index per call, which is right for a one-shot rerank and wrong for a store queried repeatedly. The
+adapter owns a persistent graph, extends it incrementally, tombstones deletes, and rebuilds only past a
+tombstone ratio — then falls back to an exact scan when a filter is selective enough that the graph could
+not fill the page, so a filtered query is never silently short.
+
+### Retrieval — hybrid, scoped, cited, and honest when it degrades
+
+`src/rag/EnterpriseRetriever` runs the dense and lexical arms concurrently, fuses with RRF, reranks with
+MMR, and optionally hands off to a reranker. Dense alone misses the exact tokens users type verbatim
+(error codes, SKUs, clause numbers); lexical alone misses paraphrase.
+
+Two behaviours that are the difference between a demo and a system: against a store with no lexical index
+it reports `mode: 'dense-only'` instead of quietly returning worse answers, and with no passages in scope
+it **refuses** rather than answering — a confident answer with no evidence is the failure that kills
+pilots, and here the model is never even called.
+
+### Orchestration — multi-agent as a stateful graph
+
+`src/orchestration/AgentGraph` executes in supersteps: a frontier runs concurrently, partial updates
+merge through declared channel reducers, the next frontier comes from the edges. The three hard parts of
+multi-agent work fall out of that model — fan-out is a bigger frontier, a merge conflict has a declared
+answer instead of a race, and the state between supersteps fully describes the run.
+
+That last property is why **crash recovery, human-in-the-loop approval and time-travel debugging are one
+mechanism here rather than three features**: `interruptBefore` pauses, `resume()` merges the human's edit
+through the same reducers a node's update goes through, and `InMemoryCheckpointer` /
+`KeyValueCheckpointer` persist it.
+
+Three patterns ship on top and compose — a supervisor's worker can be a ReAct agent (`asWorker`):
+`createReactAgent` (iteration cap enforced in the routing, not asked for in the prompt; a malformed
+action or a failing tool returns as an *observation* the model can recover from), `createReflectionAgent`
+(generate → critique → revise, bounded on both ends), and `createSupervisor` (workers return a result,
+not their transcript, so the supervisor's context does not grow into the sum of everything its workers
+read).
+
+### Telemetry — metrics as a projection of the trace stream
+
+`src/telemetry/` — `Tracer`, `MetricsRegistry` (which IS a `SpanExporter`, so metrics cannot drift from
+traces), `InstrumentedBridge` as ONE decorator over the `TransformerBridge` port, and exporters for
+memory, console and any OTLP/HTTP collector (Cloud Trace, Datadog, Honeycomb, Tempo) using GenAI
+semantic conventions over `fetch` rather than the OpenTelemetry SDK — so the package still runs in a
+browser and in a Worker.
+
+Cost is now **measured, not estimated**: `TransformerBridge` gained an optional `lastCall`, and the
+Anthropic, OpenAI, Vertex, exact-cache and semantic-cache bridges all populate it. Anthropic's three-way
+input split (fresh / cache read / cache write) is priced at three different rates, because folding them
+together overstates spend by ~10× on exactly the cache-heavy traffic this package is tuned to produce —
+there is a test asserting that ratio. OpenAI's streaming path now sets `stream_options.include_usage`,
+without which a streamed call reports no usage at all and cost silently falls back to a guess. A model
+missing from the rate card is counted as an `unpricedCall`, never billed at a silent zero.
+
+### Evaluation — the launch gate
+
+`src/eval/` — `EvalHarness`, a grader set, and an `EvalGate` a build can fail on. Two graders matter most
+and generic LLM evals omit both: **`retrievalRecall`** asks whether the right source came back at all
+(a generation score cannot distinguish "reasoned badly" from "was handed nothing", and those have
+opposite fixes), and **`citationValidity`** catches an answer citing `[7]` when six passages were
+supplied — which scores fine on similarity and fails an audit. Cost and latency are graded alongside
+quality, and a gate with no thresholds reports itself as **vacuous** rather than green.
+
+### Google Cloud
+
+`VertexAIBridge` and `VertexAIEmbedder` (Gemini and text-embeddings over the publisher-model surface),
+plus the `vertex-ai` dialect mapping the filter algebra onto Vertex `restricts` / `numericRestricts`.
+Auth is **injected, never owned** — `getAccessToken` means the same code runs under ADC locally, Workload
+Identity on GKE and an impersonated token in CI, with no credential lifecycle and no Node-only vendor SDK
+in a package that must stay browser-safe. Vertex stores vectors but not text, so its dialect declares
+`storesText: false` and the store hydrates chunk text through a `textResolver`; pretending otherwise
+would return matches with empty text and an answer with no evidence.
+
+### Discovery
+
+`builderforce-memory/docs/enterprise-discovery.md` — the customer-facing half: what to ask in the first
+two technical sessions, which answer selects which port, the red flags (*"we'll index everything and
+figure out permissions later"*, *"we'll give you a service-account key"*), the six things a session must
+leave the room with, and a default four-week architecture sequenced so value and evidence arrive
+together.
+
+### One bug fixed on the way through
+
+`parseOpenAIStream` had been given an `onEvent` hook that was never called, so streamed OpenAI usage was
+dropped on the floor. Caught by the test that asserts a streamed call reports provider-measured tokens.
+
+### Residuals
+
+Four are recorded in the Gap Register under **Evermind enterprise layer — residuals**: the vendor
+dialects have never spoken to a live service (blocked on credentials), the api and the package hold two
+lexical scorers with different tokenizers, the platform api consumes the retrieval primitives but not yet
+the new ports, and `Tracer` has no W3C `traceparent` propagation helper for a trace crossing HTTP hops.
+
+---
+
+## ✅ RESOLVED 2026-08-20 — The frontend gets its layering ratchet, and the inspector stops white-screening when you click a second card
+
+Two things landed behind the canvas domain layer: the guard PRD 22 says had to come first, and a
+deterministic crash the canvas suite had been carrying.
+
+### `frontend/scripts/check-layering.mjs`, with an EMPTY baseline
+
+PRD 22 §3.15 recorded that every architecture ratchet in this repository was API-side — `api/scripts/`
+has twenty-odd, `frontend/scripts/` had checks for tokens, transport and scale and **nothing about
+layering** — and its Phase 0 item 5 is explicit about the ordering, for a reason that is the whole value
+of the guard:
+
+> These must exist *before* Phase 3 moves code, or the move's mistakes become the baseline.
+
+It was never in the register at all, so it was a documented prerequisite with no ticket behind it. It
+now exists, wired into `npm test` through `checks.manifest.mjs` (12 guards, up from 11), modelled on
+`api/scripts/check-layering.mjs` so the ratchet semantics are the same in both packages: a NEW violation
+fails, and a baseline entry that no longer violates ALSO fails, so the list can only shrink.
+
+**The baseline is empty**, and that is the point — it landed after exactly one §3.4 move, with nothing
+to forgive, so the first line anyone adds has to be argued for in a diff.
+
+Three rules, each proved against a deliberate violation before landing:
+
+- `domain/` importing `application/`, `infrastructure/` or `presentation/` → fails.
+- `domain` / `application` / `infrastructure` importing `@/components/` or `@/app/` → fails.
+- The same import written as `import type` → **passes**, because TypeScript erases it and it crosses no
+  runtime boundary. Same allowance the api guard makes.
+
+That second rule is the one that bites, and it is not hypothetical: `CanvasObjectData` was declared in
+`components/creation-canvas/types.ts`, so every domain module needing the core type of its own aggregate
+would have imported upward from a component. Once one does, the rule is dead and backend table shapes
+start arriving in component props — §3.5's god module in miniature.
+
+**Deliberately not enforced yet:** `src/lib/` is unclassified. It holds genuine domain material (the
+context map itself is `lib/canvas/boundedContexts.ts`), typed API clients that are really
+infrastructure, and pure helpers. Forbidding it would fail on day one for correct reasons and teach
+everyone to add baseline lines, which is how a ratchet becomes decoration. Classifying `lib/` is its own
+pass and is stated in the guard's header rather than left as a silent gap.
+
+### The inspector crashed on the second card you clicked
+
+`CreationCanvas.test.tsx` was failing `renders staff and task inspector edits live on their widgets`
+with **"Rendered more hooks than during the previous render"**. Not a flake, and not a timeout — the
+whole reason it looked like one is that it lives in a suite where a different case times out every run.
+
+`Inspector` rendered a kind's custom section by CALLING it:
+
+```tsx
+{kindCustomSection && kindCustomSection(kindSectionProps)}
+```
+
+A plain function call is not a component boundary, so every section's hooks were appended to
+`Inspector`'s own hook list. The sections have different hook counts — `ResumeInspectorSection` has
+none, most call `useTranslations`, `TaskInspectorSection` calls `useFormat` as well — so selecting a
+résumé card and then a task card changed how many hooks `Inspector` rendered between two renders, and
+React threw. A white-screened inspector from an ordinary click, on a registry whose entire purpose is
+that each kind is a COMPONENT.
+
+Mounted as an element (`<KindCustomSection {...props} />`), each section gets its own instance and its
+own hook list. The failing test passes; the suite is **138/138**.
+
+**Verified:** `tsgo --noEmit` green, zero errors; `check:layering` and `check:canvas-glossary` green;
+926 tests across `src/domains/canvas` + `src/lib/canvas` in 18 s; the full canvas suite 138/138.
+`check:architecture` and `check:design-scale` remain red on their own register entries, both re-measured
+by the concurrent session while this landed — neither number moved because of this work (the domain
+layer adds zero `'use client'` files and no file over 800 lines).
+
+---
+
+## ✅ RESOLVED 2026-08-20 — `check:i18n-keys` is a wall again, and the design-scale colour leg is closed for the second time
+
+The guard had been red for long enough to hide things: the 30 locale-bundle messages survived precisely
+because the next raw key to land was invisible behind an already-failing check. It is green now.
+
+- **The 36 keys it was red on were a feature being written in this checkout while the guard ran** —
+  `poll.*` (`PollAnswerControl`, `PollJoin`, `PollResults`), `creationCanvas.clock.*`,
+  `creationCanvas.transclusion.*`. Those belonged to the facilitation session and that session added
+  them, per the standing localize-in-the-same-pass rule.
+- **Two namespaces that belonged to nobody's in-flight feature are now written in all five languages.**
+  `creationCanvas.marketing` had NEVER existed — `marketingObjects.ts` registered itself and was never
+  listed in `specObjectSets.ts`, so `brandKit` and `audience` resolved to nothing everywhere the
+  registry was not pulled in by accident, and there was no catalog behind them either. And
+  `creationCanvas.shared.field.pollCorrectRate`, for the one metric carried across when the two `poll`
+  declarations were folded into one kind.
+- **`literalHexFiles` is back to 0.** `CanvasFacilitateSurface.module.css` carried
+  `background: var(--surface, #fff)`; the token exists, so the literal was doing nothing but tripping
+  the guard.
+
+`check:design-scale` remains red on its type-ramp leg (`offScaleFontSizes` 3,807 vs 3,767) and
+`check:architecture` on its four counts — both pre-existing on `main`, both still in the register with
+re-measured numbers. Frontend guards: **9/11 passing, up from 5/11 at the previous commit.**
+
+## ✅ RESOLVED 2026-08-20 — The canvas has a domain layer, and it found three bugs on the way out
+
+PRD 22 §3.4 has asked for `frontend/src/domains/canvas/` since the audit. It did not exist.
+`lib/canvas/boundedContexts.ts` had named `CanvasBoard` the aggregate root and written down its
+invariants, and **nothing imported them** — they were prose beside an 11,700-line React function that
+re-decided each of them by hand. This is the first of the four §3.4 layers, and it was chosen first
+because it is the one that can be moved under an active writer: every change to the contended file was
+a targeted string replacement, never a whole-file write.
+
+**`domains/canvas/domain/` now holds four modules and 52 tests that run in 8 seconds** — against a
+canvas suite that takes 778 s for 83 tests, because every one of those has to mount 940 KB of source in
+jsdom to assert a pure rule.
+
+### Aggregate, not topic
+
+§3.4 proposed `graph.ts` / `history.ts` / `selection.ts`. The context map had already rejected that as a
+split by TOPIC — three files, one implicit aggregate, invariants still nowhere — so the split follows
+the aggregate instead:
+
+- **`canvasObject.ts`** — `CanvasObject` and `CanvasObjectData`, moved out of
+  `components/creation-canvas/types.ts`. They had to move first: a domain that imports its own core type
+  from a component imports upward from presentation. `types.ts` is now a re-export shim carrying the
+  historical names, which is why **none of its 102 importers changed** — a rename is a separate decision
+  from a move, and doing both at once makes the move unreviewable.
+- **`canvasBoard.ts`** — the aggregate. `boardFromPersistedGraph` is the anti-corruption boundary,
+  `mergeCollaboratorBoards` states the local-wins rule, `objectAtPoint` takes its measurer as an argument
+  (an object's drawn size is a presentation fact, and a domain that reaches for it makes a headless test
+  need a browser), and `boardInvariantViolations` / `assertBoardInvariants` make the invariants run.
+- **`selection.ts`** — `Selection` is about a board rather than in it (two people on one board have two),
+  so the aggregate cannot check its invariant and this module does.
+- **`canvasChange.ts`** — `ProposedCanvasChange`, the auto-apply rule, and `CONNECTED_CANVAS_ACTIONS`.
+
+**The invariants are keyed now, not positional.** They were a bare array, which was harmless while
+nothing read them; the moment something CHECKS them, a citation by list position is one insertion away
+from reporting a rule the code did not test. Two were also added — `uniqueObjectIds` and
+`noDanglingConnection` — which is not scope creep: PRD 22 §4.4(a) states both in the same breath as the
+aggregate root, and the original five simply had not carried them across. They are also the two a board
+can be checked against on its own, which is what made their absence obvious the moment anything ran.
+
+### Three defects the move surfaced
+
+None of these was the goal. All three were invisible while the logic sat inside a component nobody
+could test cheaply.
+
+- **An unknown object kind was rendered as a blank card.** Both persistence readers cast
+  `object.kind as CreationObjectKind` unchecked — a session written by a newer deployment, or a
+  hand-edited row, produced an object with no error anywhere. That is verbatim what `declaredKind`
+  forbids ("rejected at the boundary, never rendered as a blank card"). The boundary now uses the
+  contract's own `isCreationObjectKind`, drops what it cannot name, drops the connections that pointed
+  at it in the same pass, and the surface SAYS SO in five languages (`creationCanvas.objectsRejected`) —
+  a notice and not a throw, because one bad row in a session of two hundred must not cost the other 199.
+- **A Brain turn that deleted an object left the multi-selection naming it.** The apply path cleared
+  `selectedIds` only when the single `selectedId` happened to be among the deleted, and not at all when
+  the same turn also ADDED something. Three cards selected, Brain deletes one of the other two, and the
+  selection kept an id the board no longer held — `selectionWithinBoard`, whose own wording is "in the
+  same change, not on the next render". Now filtered in that change.
+- **"Create a new dashboard" edited the dashboard you had selected.** `duplicateAddUpdateTarget` matched
+  ONE determiner: `create a dashboard` yielded correctly, `create a new dashboard` did not, so the
+  commonest phrasing a person uses to ask for a second object fell through to the edit branch and
+  overwrote the first. The determiner run now repeats. Found by the third test written against the
+  extracted function.
+
+### And one in the guard that was supposed to prevent this
+
+`check-canvas-glossary.mjs` anchors its patterns on `
+  {
+`, which does not match a CRLF file — and
+this repository has mixed line endings. Editing the context map from a Windows editor turned the whole
+guard into **"the context map parsed to zero contexts — the shape this guard reads has changed"**: a
+message that sends the reader to inspect a content change when nothing about it was wrong. A guard whose
+failure names the wrong cause is worse than one that is merely strict, so it normalises before parsing
+and now passes against the same file in either encoding.
+
+**Verified:** `frontend tsgo --noEmit` is **green, zero errors** (which included fixing two that arrived
+with the concurrent session's in-flight work — a `Pick` over an index-signature type that produced
+required `unknown` properties no caller could satisfy, and a card prop made required that one call site
+has no state for); `check:canvas-glossary` green; 52 domain tests in 8 s.
+
+**What is NOT closed:** the other three §3.4 layers. `CanvasInner` is still 11,738 lines in one function,
+and it is still where nine use cases belonging to other bounded contexts are implemented. That entry
+stays in the register with its blocker named.
+
+---
+
+## ✅ RESOLVED 2026-08-20 — The hiring funnel now ends in a person on the payroll, and every scored résumé has a candidate attached to it
+
+`HIRING_OBJECT_KINDS` owned the funnel and `PEOPLE_OBJECT_KINDS` owned the employment relationship, and
+both headers NAMED the transition between them — `people.ts` said in as many words that "the handover
+between them is an `offer` becoming an `employee`". Neither sentence was true. Nothing performed the
+transition, so the product shipped two funnels that stopped next to each other.
+
+### The handover is declared once, in neither vocabulary
+
+`packages/creation-canvas-contract/src/handover.ts` is the seam: `VOCABULARY_HANDOVERS` declares the
+transition (`offer` --hire--> `employee` + `employeeLifecycle`, joined by `offerRef`), and
+`planEmploymentHandover` is the pure mapping over plain records that both the canvas action and its
+test read. It lives in the contract because a handover belongs to NEITHER bounded context — putting the
+field mapping in `hiringObjects.ts` would make the recruiter's vocabulary author HR records, and putting
+it in `peopleObjects.ts` would make the HR vocabulary read the recruiter's fields.
+
+- **It refuses before it writes.** `employmentHandoverBlocker` returns `notSigned`, `noPerson` or
+  `noStartDate` — an employment record that begins from an unsigned offer is a record of something that
+  did not happen, and a lifecycle with no anchor date has no due dates at all. `planEmploymentHandover`
+  THROWS on a blocked offer rather than returning a half-populated pair.
+- **It invents nothing.** Job title, location and employment basis come off the posting, skills and
+  location off the candidate, start date off the offer. `department` and `band` are deliberately absent:
+  both have to reconcile against a `headcountPlan`'s team names and a `compBand`'s title, and a guessed
+  department reconciles against a plan that never approved the hire. `employmentBasisFor` is the one
+  place the two vocabularies' different words are reconciled (`permanent` → `full_time`), so the HR
+  domain never holds a value its own column rejects.
+- **It is idempotent on the reference, not on a name.** `offerRef` is `derived` on both produced kinds —
+  readable so a person can answer "on what terms was this agreed", never writable, because a hand-typed
+  reference is the one thing that can make the check miss and put the same person on the payroll twice.
+- **The onboarding plan is real work, in the reader's language.** `ONBOARDING_STEP_BLUEPRINT` declares
+  six steps as DATA — right-to-work at day −5, payroll and equipment at −3, access at −1, the manager's
+  first week at 0, a booked probation review at +30 — with `key`s the caller resolves through
+  `creationCanvas.hiring.onboardingStep.*`, so a step cannot be added without a translation added with it.
+
+`offer.hire` is wired end to end: advertised on the spec, listed in `CONNECTED_CANVAS_ACTIONS`, routed by
+the pending-action dispatcher, and implemented by `hireFromOffer`, which places both cards beside the
+offer, draws the edges and stamps the offer `Hired`.
+
+### The résumé now attaches to the person
+
+`canvas_screen_resumes` ranked a pile of DOCUMENTS and wrote a shortlist naming document ids, while every
+`candidate` card on the board kept the empty `fitScore` its own hint said may only be set "from a scored
+shortlist" — an instruction with no mechanism behind it. The screen now resolves each résumé through
+`candidate.resumeRef`, writes the score and the posting onto the candidate that already names it, and
+proposes a candidate for a résumé nobody has claimed — carrying only the name, headline and location the
+résumé itself states, and leaving consent and source for a person. `shortlist.ranked` gained a
+`candidateRef` column, and `interviewLoop`, `scorecard` and `offer` gained `candidateRef`, so the funnel
+joins end to end instead of being five cards about a person none of them names.
+
+Localized in all five catalogs. Covered by `frontend/src/lib/hiringHandover.test.ts`.
+
+### Found and fixed on the way
+
+- **`poll` was declared TWICE** — as a teaching kind in `ACADEMIC_OBJECT_KINDS` and, the same week, as
+  the facilitation primitive in `SHARED_OBJECT_KINDS`. `CREATION_OBJECT_KINDS` concatenates both lists,
+  so the registry indexed one kind twice and whichever spec loaded last silently won. Folded into the
+  shared kind (a lecture check-for-understanding is `pollFormat: 'quiz'`), and the one number the
+  teaching version had that the shared one did not — `correctRate`, "under about 30% means re-teach now"
+  — was carried across as a derivation over the labelled results rather than a positional index.
+- **The MARKETING vocabulary was registered nowhere and localized nowhere.** `marketingObjects.ts`
+  registered itself and was never listed in `specObjectSets.ts`, which is the exact failure that
+  module's header describes — third occurrence — so `brandKit` and `audience` resolved to nothing
+  everywhere the registry was not pulled in by accident. Listed, and `creationCanvas.marketing` written
+  in all five languages.
+
+## ✅ RESOLVED 2026-08-20 — A document opened on the page runtime is now written at page size, and thirty messages that had been raw keys in all five languages are messages again
+
+Reported from the product: a document created on the canvas opens into an editor whose writing area is
+too small, whose default type is too small, and which does not feel like editing in Word. Three separate
+defects, plus two more the same screenshot happened to contain.
+
+### The editor now has the page it always claimed to have
+
+`DocumentEditor` was built for a ~340px node body and was mounted UNCHANGED on the page runtime, so a
+person writing a page did it through a 9px type ramp inside a `max-height:340px` box with its own
+scrollbar — four lines of visible document at a time. The fix is a `scale` prop that is a MEASURE and
+not a second editor, because two editors is how a card and a page end up disagreeing about what bold
+looks like:
+
+- **The type scale is now driven by one number.** `.documentMarkdown` took `font-size: 9px` and fifteen
+  hard-coded px measures under it; every one of those is now `em` off `--document-font-size` (`em`, not
+  `rem` — a `rem` here is the app's root, which is not the document's measure and does not change when
+  the document is opened). The card keeps 9px by default; page scale sets 15px and 1.7 line-height, and
+  the same rules draw both.
+- **The page scrolls, not a box inside it.** At page scale `.docSurface` drops its height cap and its
+  own `overflow`, so a long document is one continuous sheet with the toolbar `position:sticky` at the
+  top of the surface's scroll, the way a ribbon is. Margins go to `clamp(28px,5vw,64px)` and the sheet's
+  measure to 960px, via a `data-runtime` attribute on `.pageSheet` so a résumé — which draws its OWN A4
+  sheet inside this one — inherits neither.
+- **More of what a word processor actually has.** Heading 4, list nesting (with Tab / Shift+Tab inside a
+  list, and the buttons disabled outside one because `indent` produces a `<blockquote>` there), an
+  inserted GFM table, a picture by URL, Ctrl+K for a link, and a status bar with live word and character
+  counts. Everything added round-trips through `lib/richText.ts`, which is the constraint that decides
+  this toolbar: a control that produced a style the save dropped would be a lie told once per keystroke.
+  What markdown cannot store — underline, alignment, font, size, colour — is NOT added and is now a
+  register entry with the product question it needs answered.
+
+The link row is now one insert row serving both a link and a picture rather than a second identical row,
+and `enclosingCode` became `enclosingTag(root, tag)` because inline code and list nesting were asking the
+same question with two walks.
+
+### Thirty messages were shipped as per-locale OBJECTS, so they rendered as raw keys in every language
+
+A patch pass had written messages in the shape `{ "en": "…", "zh": "…", "es": "…", … }` into ALL FIVE
+catalogs, instead of splitting the strings across the five files. next-intl renders the dotted path when
+asked to format an object, so `board.audit.unstaffed`, all eight `boardConfig` lane-and-WIP labels, five
+`ceremony` turn controls, five `meetings` RSVP strings, eight `ticketContext` objective-linking strings
+and two `accountability` gap labels were sitting in the product as literal keys — in English, Chinese,
+Spanish, French and German at once, which is exactly why it did not look like a translation gap. The
+translations were never missing; they were in the wrong shape. `scripts/i18n-flatten-locale-objects.mjs`
+splits them, and `messages.test.ts` now fails on the shape, because neither existing guard could see it:
+`leaves()` skips non-string leaves, so the parity check and the ICU check both walked straight past all
+thirty.
+
+### The calendar surface had no namespace at all
+
+Visible in the same screenshot: the surface rail read `creationCanvas.surface.calendar.label`.
+`CanvasCalendarSurface` shipped asking for eleven keys that were in none of the five catalogs, so its
+month header, its navigation and its conflict tooltip all rendered their own dotted paths. Added in all
+five, with `creationCanvas.node.campaign*` (the send-consent readout, including a label per
+`SendBlocker`) and `creationCanvas.brandClaimViolation`, which were call sites written against keys
+nobody added. `check:i18n-keys` went from 40 missing keys across 8 files to zero on every file this pass
+touched.
+
+### Two guards that had been red are green
+
+- **`check:design-tokens`** — six undeclared references, four of them `var(--canvas-ink-muted)` in the
+  same calendar surface (a name that resolves to nothing, so those labels painted as inherited colour in
+  both themes) → `--canvas-muted`. `--bg-subtle` → `--surface-interactive`, and `--font-serif` is now
+  DECLARED in `globals.css` rather than being a literal `Georgia, serif` fallback at the call site — a
+  document this product renders has a typeface of its own, and it should be changeable from the palette.
+- **`check:api-transport`** — the two raw `fetch()` calls in `lib/passkeys.ts` are the sign-in half of
+  the story `auth.ts` is already exempt for: they run before a session token exists, so `apiRequest`
+  would redirect a failed passkey attempt off the login page instead of showing why it failed. Added to
+  `ALLOWED` with that reason, which is the guard's own documented route.
+
+Two hardcoded English strings went with it (`StandupControls`' Next and Complete buttons), localized in
+all five.
+
+**What is NOT closed:** the format ceiling above, and `check:i18n-keys` is red again on 36 keys belonging
+to a facilitation/poll feature being written in this same checkout — both are in the register.
+
+---
+
+## ✅ RESOLVED 2026-08-20 — The frontend has a context map, an aggregate root and a glossary gate; only the god class is still standing
+
+The register carried "Frontend *domains* are named ad hoc with no bounded-context list, context map, or
+aggregate roots" as fully open. Every strategic item in its `Fix =` clause had in fact shipped, and the
+guard that proves it runs green. Verified 2026-08-20 against the code, not against the entry.
+
+- **The context list is published and is DATA, not prose.** `lib/canvas/boundedContexts.ts` declares five
+  frontend contexts — `canvas`, `live`, `training`, `inference`, `voice` — each with the ubiquitous
+  language it owns, where its code lives, and a declared relationship to every context it names, drawn
+  from the four strategic patterns (`sharedKernel`, `conformist`, `antiCorruption`, `customerSupplier`)
+  with a stated reason per relationship. `BACKEND_CONTEXTS` names the PRD 20 contexts a relationship is
+  allowed to point at, so the map has both sides rather than being a directory.
+- **`CanvasBoard` is named as the aggregate root, with its invariants written down** —
+  `CANVAS_BOARD_INVARIANTS`, five of them, stated in the context that owns them rather than implied by
+  whichever callback happens to run.
+- **Commands and events are different types, and only one of them can reach the wire.**
+  `broadcastableCanvasChange` accepts a `CanvasEvent` and cannot be handed a `CanvasCommand`, so PRD 22
+  §3.7's proposal — broadcast commands and let every peer re-run validation — fails to compile instead of
+  shipping and diverging in production. That was the correctness half of the entry.
+- **The glossary has a gate.** `scripts/check-canvas-glossary.mjs` runs in the `npm test` chain via
+  `checks.manifest.mjs` (the single list the runner reads, which is why it needs no `package.json`
+  script of its own) and reports *5 frontend contexts, 23 terms, every relationship declared, no command
+  on the wire.*
+
+The file makes the argument for why it is data and not a document, and it is the right one: a term that
+appears in the Canvas vocabulary must be spelled the way the map spells it, the same technique
+`check-prompt-tool-names.mjs` already proves, because a document nobody can execute drifts silently and
+is discovered by a user.
+
+**What is NOT closed, and stays in the register:** PRD 22 §3.4 — the module split itself.
+`frontend/src/domains/canvas/` does not exist, `CreationCanvas.tsx` has grown from 5,713 to 13,771 lines
+since the audit measured it, and the five invariants above are still enforced nowhere. The context map
+is the thing that makes that split possible; it is not the split.
+
+---
+
+## ✅ RESOLVED 2026-08-20 — The register was carrying finished work, and two bullets had been deleted out from under their own tails
+
+A hygiene pass over `ROADMAP.md` read every entry that still described itself as closed, checked each
+one against `DONE.md` and against the code, and removed what was no longer outstanding. **243 open
+entries, recounted from the body rather than carried forward** (the index table had drifted two groups
+in both directions: group 9 read 22 against a body of 24, group 15 read 23 against a body of 23 that
+contained two finished items).
+
+### What was finished and still sitting in the roadmap
+
+- **`check:canvas-tools` — CLOSED.** Re-run 2026-08-20: *113 canvas tools classified (43 guest-safe,
+  11 guest-gated, 59 account-required); 54 guest-visible descriptions and the canvas system prompt
+  cross-checked.* The guard had gone red on `canvas_promote_dataset_to_corpus`, and the session that
+  wrote the tool classified it account-required — which is exactly what the entry asked for. The entry
+  had been kept one edition so the recovery was visible; that edition is over.
+- **The five `frontend tsgo` errors** — already written up in full in the 2026-08-20 register-audit
+  entry above (the gated-workflow narrowing, the missing `MarketingObjectKind` exhaustiveness arm, the
+  dead `RuntimeSurfaceSelect` seam, and Settings → Logs redirecting to its own URL). The roadmap kept a
+  second copy of the same closure.
+- **Reachable vendors — the port has no adapter-shaped gap left.** Payroll (`defaults/payroll.ts`),
+  sales tax, banking, cap table, e-signature and, with migration **1091**, accounting are all built-in
+  manifests. What the entry called its "last family" — cap-table writes — is a *decision that was made*,
+  not a gap: `mutates: true` appears nowhere in `defaults/banking.ts` or the cap-table manifest on
+  purpose, because a payment-initiation API is not something to point a credentialled agent at, and
+  writing to Carta would leave two systems both believing they are authoritative about who owns the
+  company. Recorded here so it is revisited only alongside an approval gate designed for it, rather
+  than re-opened as though merely unbuilt.
+- **Connected mailboxes & campaign studio — residuals.** Every bullet under this heading had already
+  been closed and moved (attachments reachable through our own streaming route; the two entries closed
+  in the campaign-studio pass), leaving a heading and an intro paragraph explaining what "these" were
+  with nothing left below it.
+- **The Career layer.** Its own intro already said "everything this section was opened for has shipped"
+  — the tools, the pure `application/career/*` domain, the board objects (`job`, `jobApplication`,
+  `applicationPipeline`, `coverLetter`, `interviewPrep`, `runway`, `timecard`), the tailored `resume`
+  variant, the Career category, the `job-hunt` pack and the measurement gate — and it carried no
+  outstanding bullets at all. Its one surviving child, the Miro competitive-gap section, is now a
+  sibling rather than a subsection of a closed heading.
+- **Upwork-parity items 2 and 3** (richer job-posting and proposal fields; client-side talent ops —
+  migration **0985**, `marketplace/talentRecommendations.ts`) were marked CLOSED in place and left in
+  the numbered list. The remaining three renumbered.
+- **FO-B4's closure note**, which pointed at a DONE.md entry that already says the same thing.
+- **The per-visitor-identity note** in group 13, likewise (`site_users` + `site_user_sessions`).
+
+### Two paragraph tails outliving their own bullets
+
+Deleting a multi-line bullet by its opening lines leaves the rest of it indented under whatever bullet
+now precedes it, where it reads as that bullet's argument. Both instances were found by looking for an
+indented continuation line immediately after a line ending in `Unblocks: ….`:
+
+- Under **FO-B3** (`jobPosting` applications), the tail of the deleted FO-B4 e-signature bullet — "a
+  vendor adapter with no internal engine has nothing to map onto…" — made a *blocked-on-a-decision*
+  entry appear to also be arguing for a connector manifest.
+- Under **the Miro OAuth connector**, the tail of the deleted public-canvas-API bullet —
+  "(`publicApiRoutes.ts`) is read-only catalog listings against a tenant key…" — which had shipped
+  as migrations **1100**/**1101** and is recorded above. It left a `Fix =` sentence attached to an
+  entry whose fix is a Miro developer app.
+
+---
+
 ## ✅ RESOLVED 2026-08-20 — The Worker was 12.9% over its ceiling, and it was mermaid
 
 `Deploy frontend` could not upload: `error 10027 — Your Worker exceeded the size limit of
@@ -21061,3 +21615,97 @@ Career analyzers receive `ToolCopy` as a pure `analyze()` argument. Their compos
 recommendations and empty states are consequently localized with the form in every supported locale,
 while measurements remain locale-independent. Focused lifecycle, chart-rewriter, and career-copy tests
 cover the rendering and localization contracts.
+
+## ✅ RESOLVED 2026-08-20 — The canvas can be FACILITATED, DRAWN on, and is now the only canvas
+
+Three Consolidated Gap Register entries, closed together because they are one seam: the board could be built
+collaboratively and could not be RUN, could receive a diagram and not draw one, and was not even the only canvas
+in the product.
+
+### 1. The facilitation layer — a question put to a ROOM
+
+**Was:** the entire facilitation surface was the `timer` and `comment` kinds. `grep -i 'poll|vote'` over
+`creation-canvas/` returned HTTP polling and nothing about a ballot. A board could be built by a group and never
+facilitated: no way to ask twelve people a question, no way for them to answer from a phone without an account,
+and no way for the answer to land on the board everybody is looking at.
+
+**Now:** a `poll` spec-object kind (`SHARED_OBJECT_KINDS` — genuinely cross-domain: a retro, a planning estimate,
+a class check-for-understanding and an all-hands Q&A are one object put to four rooms), a per-participant response
+set, and a public join path at `/p/<slug>`.
+
+- **One kind, eight instruments.** `PollFormat` is a VALUE — `choice`, `multiChoice`, `scale`, `ranking`,
+  `wordCloud`, `openText`, `quiz`, `grid` (the 2×2) — for the same open/closed reason `funnelDomain` collapses two
+  funnels. A ninth instrument is a case in `tallyPollVotes` plus a control, never a table or a render branch.
+- **No new store.** A poll is a `question_sets` row with `kind = 'poll'` plus `responses`, which is the pair that
+  already absorbed twelve survey tables and thirteen answer tables. Migration **1103** adds ONE column
+  (`show_results_live`) and ONE constraint. A `polls`/`poll_votes` pair would have been the third response store
+  the kernel's own note warns about.
+- **One vote per participant, with no identity stored.** The device keeps its own `submission_id` and sends it
+  with every vote, so re-voting REPLACES the previous answer (partial unique index, migration 1103). That is what
+  lets a person change their mind on an ANONYMOUS poll without anything being recorded about them — the
+  alternative, a device fingerprint, is a column somebody eventually joins.
+- **Reveal ≠ close.** `show_results_live` is its own column and its own button precisely so a facilitator can hide
+  the count while voting continues, which is what stops the first three answers deciding the rest. The server
+  sends an EMPTY tally while it is hidden: a payload carrying a hidden count is a hidden count in name only.
+- **One counting rule for three surfaces.** `tallyPollVotes` lives in the contract package, so the board, the
+  phone and the server cannot disagree about what share chose B — the same reasoning `sequenceProgress` follows.
+- **A surface, not a card.** `facilitate` joins `page`/`play`/`site`/`timeline`/`world` in `CANVAS_SURFACES`: a
+  poll's own axis is the people answering it, which a ~340px card can preview and cannot be.
+- **Found and fixed on the way:** `/f/<slug>`, the published-FORM responder, was not in `NO_CHROME_PREFIXES`, so
+  `classifyShell` called it an app route and a signed-out visitor — which is every visitor it has, by construction
+  — got the per-route marketing teaser instead of the page. The responder was unreachable by its only audience.
+  Both `/f/` and `/p/` are listed now.
+- **Also fixed:** the public form responder's stylesheet is now the shared
+  `components/public/publicSurface.module.css`, which the poll surface composes rather than copying — the 16px
+  input floor, the 44px tap target and the opaque `<option>` are argued once.
+
+### 2. The stencil registry — a shape LIBRARY, and connector styling
+
+**Was:** `stickyShape` shipped as a renderer and an inspector select, so a person could change a note into one of
+eight geometries, one card at a time, from a settings panel, after already having made a note. There was no shape
+library on the palette, no connector styling, and no stencil pack.
+
+**Now:** `lib/canvasStencils.ts` — ONE geometry vocabulary (`STENCIL_SHAPES`, 22 values) and five packs the
+palette reads: flowchart, mind map, wireframe, cloud architecture, UML.
+
+- **A stencil is a PRESET, not a kind.** It creates a `sticky` with a geometry, a pigment, a size and sometimes a
+  starting word. Twenty-nine new kinds would have been twenty-nine things the board can compute nothing over.
+- **One list of geometries, not two.** The sticky inspector's shape select is GENERATED from `STENCIL_SHAPES`
+  rather than restating eight values beside a stylesheet that knows about them. The degradation when the two
+  disagree is silent (an undrawn shape falls back to the square card), which is exactly why they cannot be
+  maintained separately. Eleven new geometries were drawn to match: hexagon, pentagon, octagon, trapezoid, cross,
+  left/double arrow, cloud, cylinder, document, stadium.
+- **Connector styling is its own axis.** `lib/canvasConnectionStyle.ts` — line (solid/dashed/dotted), ends
+  (arrow/open/both/none) and route (curved/elbow/straight/curve), stored beside `connectionKind` and never folded
+  into it: the board computes the critical path from `blocks` and coverage from `verifies`, and a dashed line is
+  not a kind of relationship. The control restyles the SELECTED edges as well as arming the next draw, and the
+  style rides `metadata` so a reload does not return a dashed two-way connector as a solid arrow.
+
+### 3. Two canvases became one
+
+**Was:** `components/canvas/canvasModel.ts` (`<CanvasBoard>`) had eight block types, its own serialisation, its own
+collaborative timer and its own store inside the knowledge `content` string. The Creation Canvas has ~180 kinds and
+a different persistence model. This entry was blocked on an explicit product decision.
+
+**Decision (operator, 2026-08-20): the knowledge board was never used. Fold it into the one canvas — no converter,
+no content to preserve.**
+
+- `canvasModel.ts`, `CanvasBoard.tsx`, `CanvasSlideOver.tsx` and `CanvasPanelProvider.tsx` are DELETED.
+- `STICKY_COLORS` moved to `creation-canvas/authoredColors.ts`, which is where every value a person picks and the
+  object stores verbatim already lives.
+- `/knowledge/[id]` is a Markdown document again — no board branch. The gallery's "blank canvas" starter now opens
+  `/create/new` rather than seeding a second board inside a document's content string.
+- The Brain's `show_canvas` tool no longer fills a drawer: it writes a local-first Creation Canvas session and
+  navigates to it, so the notes land on the canvas that IS the front door, with connections, history, sharing and
+  Brain itself. Local rather than server-side because the tool is reachable by a signed-out visitor.
+- **The two primitives the knowledge board had and the front door did not are now canvas kinds.** `stopwatch`
+  joins `timer`, both drawn by ONE `CanvasClockBody` (a countdown and a count-up are the same machine read from
+  opposite ends) with the shared `startedAt` + `baseElapsedMs` model, so every viewer derives the same elapsed
+  value. That also FIXED `timer`, which had shipped as a card with the string "05:00" in its status and no clock
+  at all. `transclusion` renders another knowledge document's current content live — not a copy.
+- The dead `canvas.*` message keys those components owned are removed from all five catalogs.
+
+**Verification:** `tsgo`/`tsc` clean across frontend, api and the contract package; the canvas registry,
+kind-settings completeness, i18n catalog, Miro import, creation-session, shell-routing and bounded-context suites
+pass. Every new string is in all five catalogs with real translations.
+

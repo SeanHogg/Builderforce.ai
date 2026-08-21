@@ -51,7 +51,7 @@ function Miniature({ template }: { template: (typeof RESUME_TEMPLATES)[number] }
         '--paper': template.paper,
         '--ink': template.ink,
         '--accent': template.accent,
-        '--face': template.font === 'serif' ? 'var(--font-serif, Georgia, serif)'
+        '--face': template.font === 'serif' ? 'var(--font-serif)'
           : template.font === 'mono' ? 'var(--font-mono, ui-monospace, monospace)'
             : 'var(--font-sans, system-ui, sans-serif)',
       } as React.CSSProperties}

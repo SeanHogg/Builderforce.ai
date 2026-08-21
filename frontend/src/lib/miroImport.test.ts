@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { miroBoardToCanvas, miroStickyColor, miroTextToPlain, type MiroConnector, type MiroItem } from './miroImport';
-import { STICKY_COLORS } from '@/components/canvas/canvasModel';
+import { STICKY_COLORS } from '@/components/creation-canvas/authoredColors';
 
 /** Deterministic ids, so a test can assert on the graph rather than on a uuid. */
 function ids(): () => string {

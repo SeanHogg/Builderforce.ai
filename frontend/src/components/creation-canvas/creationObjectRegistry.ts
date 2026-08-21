@@ -42,11 +42,11 @@ import {
   type DataArchitectureKind,
 } from '@/lib/dataArchitectureObjects';
 import { MAX_TABULAR_COLUMNS } from '@/lib/canvasTabularData';
-// The sticky palette is the KNOWLEDGE board's, imported rather than re-declared: two
-// lists of the same six pigments is exactly the duplication that lets one board drift
-// a shade away from the other. creation-canvas already depends on components/canvas
-// (CanvasCommands, Canvas3DView), so this is the direction the graph already runs.
-import { STICKY_COLORS } from '@/components/canvas/canvasModel';
+// The sticky palette. It used to be imported from the knowledge board, which owned it
+// first; that board has folded into this one and the pigments moved to `authoredColors`,
+// where every value a PERSON picks and the object stores verbatim already lives.
+import { STICKY_COLORS } from './authoredColors';
+import { DEFAULT_TIMER_MS } from './CanvasClockBody';
 import { DEFAULT_MODALITY } from '@/lib/modality';
 import { DEFAULT_PITCH_COMPETITION_ID } from '@/lib/pitchCompetition';
 import { COURSE_EXPORT_STANDARDS, emptyCourse } from '@/lib/courseLms';
@@ -239,7 +239,18 @@ const BASE_CREATION_OBJECT_REGISTRY = [
   { kind: 'sticky', label: 'Sticky note', icon: '▪', group: 'Collaborate', createData: () => ({ kind: 'sticky', title: '', stickyColor: STICKY_COLORS[0] }) },
   { kind: 'drawing', label: 'Drawing', icon: '⌁', group: 'Collaborate', createData: () => ({ kind: 'drawing', title: 'Sketch', subtitle: 'Draw and annotate an idea.' }) },
   { kind: 'comment', label: 'Comment', icon: '●', group: 'Collaborate', createData: () => ({ kind: 'comment', title: 'Comment thread' }) },
-  { kind: 'timer', label: 'Timer', icon: '◷', group: 'Collaborate', createData: () => ({ kind: 'timer', title: 'Focus timer', status: '05:00' }) },
+  // The two clocks. A `timer` counts a TIMEBOX down; a `stopwatch` answers "how long did
+  // that actually take". Same shape (`startedAt` + `baseElapsedMs`, so every viewer
+  // derives the same elapsed value from the shared model rather than a private local
+  // clock) and opposite questions — see the contract's own note on `stopwatch`.
+  //
+  // The timer's status no longer carries "05:00": the length is `durationMs` and the
+  // card DERIVES what it shows from it, where the string was a label nothing could run.
+  { kind: 'timer', label: 'Timer', icon: '◷', group: 'Collaborate', createData: () => ({ kind: 'timer', title: 'Focus timer', durationMs: DEFAULT_TIMER_MS, startedAt: null, baseElapsedMs: 0 }) },
+  { kind: 'stopwatch', label: 'Stopwatch', icon: '⏱', group: 'Collaborate', createData: () => ({ kind: 'stopwatch', title: 'Stopwatch', startedAt: null, baseElapsedMs: 0 }) },
+  // Another document, shown here, live. Created with NO reference, because the reference
+  // is the whole object and a seeded one would point at somebody else's document.
+  { kind: 'transclusion', label: 'Transclusion', icon: '⧉', group: 'Knowledge', createData: () => ({ kind: 'transclusion', title: 'Embedded document', documentId: '' }) },
   { kind: 'mcp', label: 'MCP tool', icon: '⌘', group: 'Integrations', createData: () => ({ kind: 'mcp', title: 'Connected tool', status: 'Choose operation' }) },
   { kind: 'evermind', label: 'Evermind', icon: '🧠', group: 'Models', createData: () => ({ kind: 'evermind', title: 'Untitled Evermind', status: 'Blueprint', subtitle: 'Create, teach, tune, evaluate, and publish a self-learning model on this canvas.', evermindVersion: 0, contributions: 0 }) },
 ] as const satisfies readonly BaseCreationObjectDefinition[];
@@ -538,7 +549,16 @@ const BASE_MUTABLE_FIELDS = {
   sticky: ['content', 'stickyColor', 'stickyShape'],
   drawing: ['content', 'points', 'drawingWidth', 'drawingHeight', 'stroke', 'strokeWidth'],
   comment: ['content', 'resolved', 'mentions'],
-  timer: ['content', 'duration', 'remaining', 'running'],
+  // `duration`/`remaining`/`running` were three fields nothing read: the card had no
+  // clock, so a model could write "running: true" onto a card that never moved. The
+  // shared model is `durationMs` + `startedAt` + `baseElapsedMs`, and all three are
+  // authorable so a model asked to "put a five-minute timer on this" can set the box
+  // AND start it — see `CanvasClockBody` for why liveness is these two numbers.
+  timer: ['content', 'durationMs', 'startedAt', 'baseElapsedMs'],
+  stopwatch: ['content', 'startedAt', 'baseElapsedMs'],
+  // The reference IS the object. Authorable, because "embed the onboarding SOP here" is
+  // a request a model can satisfy once it has the document's id.
+  transclusion: ['content', 'documentId'],
   mcp: ['content', 'toolName', 'operation', 'arguments'],
   evermind: ['content', 'model', 'instructions', 'teacherModel', 'inferenceEnabled', 'evermindVersion', 'evermindSeeded', 'contributions', 'pendingContributions', 'recentLearnings', 'trainingLoss', 'learningMode', 'lastLearnedAt', 'quarantinedAt', 'quarantineReason', 'evalPoint', 'stages', 'sources'],
   // ── The QA objects ─────────────────────────────────────────────────────────

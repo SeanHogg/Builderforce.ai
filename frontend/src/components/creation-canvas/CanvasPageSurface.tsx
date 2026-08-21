@@ -44,7 +44,10 @@ export function CanvasPageSurface({ data, onExit, onEdit, onTailor, onDetach, sh
 
   return (
     <CanvasObjectSurface surface="page" data={data} onExit={onExit}>
-      <div className={styles.pageSheet}>
+      {/* Which runtime holds the sheet, so the stylesheet can give a document the
+          measure and the margins a page assumes without a résumé — which draws its
+          OWN sheet inside this one — inheriting them. */}
+      <div className={styles.pageSheet} data-runtime={data.kind === 'resume' ? 'resume' : 'document'}>
         {data.kind === 'resume'
           ? <CanvasResumeEditor
             data={data}
@@ -60,6 +63,7 @@ export function CanvasPageSurface({ data, onExit, onEdit, onTailor, onDetach, sh
             ? <DocumentEditor
               markdown={authoredMarkdown(data) ?? ''}
               label={String(data.title ?? '')}
+              scale="page"
               onCommit={(markdown) => onEdit({ markdown, content: markdown })}
             />
             : <p className={styles.pageSheetReadOnly}>{t('roleCannotEdit')}</p>}

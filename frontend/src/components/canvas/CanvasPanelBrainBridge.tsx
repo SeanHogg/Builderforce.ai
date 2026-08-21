@@ -1,21 +1,34 @@
 'use client';
 
 /**
- * Registers the `show_canvas` Brain tool: lets the Brain generate a visual board
- * (text + sticky notes) and show it in the global canvas slide-out — over
- * /brainstorm or the floating drawer. The same reusable <CanvasBoard> backs both
- * the Brain board and the Knowledge canvas editor, so a board generated here can
- * be saved straight into Knowledge from the panel header.
+ * Registers the `show_canvas` Brain tool: the model lays a set of ideas out as notes and
+ * OPENS THEM ON THE CANVAS.
  *
- * Mounted inside CanvasPanelProvider (to drive the drawer) and the Brain action
- * providers (so the tool reaches the model) — see ConditionalAppShell. Renders no
- * UI (mirrors AiInsightPanelBrainBridge).
+ * ── WHAT CHANGED, AND WHY ───────────────────────────────────────────────────
+ * This tool used to build a board for the second canvas implementation
+ * (`components/canvas/canvasModel.ts`) and show it in a right-hand slide-out, with a
+ * "Save to Knowledge" button that serialised the board into a knowledge document's
+ * `content` string. That was the seam the roadmap logged: two canvases owning
+ * overlapping primitives, and only one of them the front door. A person who brainstormed
+ * in the drawer could not move what they made to the board where the work happens.
+ *
+ * So the drawer is gone and the tool opens a REAL Creation Canvas session — the same
+ * notes, on the canvas that is the front door, with everything that board never had:
+ * connections, the object registry, history, sharing, export, and Brain itself.
+ *
+ * ── WHY A LOCAL SESSION ─────────────────────────────────────────────────────
+ * `show_canvas` is reachable by a signed-out visitor from the Brain drawer. A tool that
+ * created a server session would answer with an account gate where it used to answer
+ * with a board — so it writes a local-first session, which is exactly what the product's
+ * own anonymous Create flow does (PRD 21 §0) and is upgradeable by signing in.
+ *
+ * Mounted inside the Brain action providers — see `ConditionalAppShell`. Renders no UI.
  */
 
 import { useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import { useRegisterBrainActions, type BrainAction } from '@/lib/brain';
-import { newBlockId, STICKY_COLORS, type CanvasBlock, type CanvasModel } from './canvasModel';
-import { useOptionalCanvasPanel } from './CanvasPanelProvider';
+import { createLocalCreationBoard } from '@/lib/creationSessions';
 
 interface ShowCanvasArgs {
   title?: string;
@@ -23,67 +36,48 @@ interface ShowCanvasArgs {
   stickies?: string[];
 }
 
-/** Lay the requested pieces out into a board: intro text on top, stickies in a grid. */
-function buildModel(args: ShowCanvasArgs): CanvasModel {
-  const blocks: CanvasBlock[] = [];
-  let y = 24;
-  if (args.text && args.text.trim()) {
-    blocks.push({ id: newBlockId(), type: 'text', x: 24, y, w: 320, h: 130, text: args.text.trim() });
-    y += 152;
-  }
-  const stickies = Array.isArray(args.stickies) ? args.stickies.filter((s) => typeof s === 'string' && s.trim()) : [];
-  stickies.forEach((s, i) => {
-    const col = i % 3;
-    const row = Math.floor(i / 3);
-    blocks.push({
-      id: newBlockId(),
-      type: 'sticky',
-      x: 24 + col * 200,
-      y: y + row * 180,
-      w: 180,
-      h: 160,
-      text: s.trim(),
-      color: STICKY_COLORS[i % STICKY_COLORS.length] ?? STICKY_COLORS[0]!,
-    });
-  });
-  return { version: 1, blocks };
-}
-
 export function CanvasPanelBrainBridge() {
-  const panel = useOptionalCanvasPanel();
-  const open = panel?.open;
+  const router = useRouter();
 
-  const actions = useMemo<BrainAction[]>(() => {
-    if (!open) return [];
-    return [
-      {
-        name: 'show_canvas',
-        description:
-          'Open a visual canvas board in a slide-out side panel and populate it with notes. ' +
-          'Use this when the user wants to brainstorm visually, map ideas, run a retro, plan on a board, or see ideas as sticky notes. ' +
-          'Provide a short intro `text` block and a list of `stickies` (one idea per note). The user can then drag, edit, add timers, and save the board to Knowledge.',
-        parameters: {
-          type: 'object',
-          properties: {
-            title: { type: 'string', description: 'Board title shown in the panel header.' },
-            text: { type: 'string', description: 'Optional intro/context text placed as a block at the top of the board (Markdown).' },
-            stickies: {
-              type: 'array',
-              items: { type: 'string' },
-              description: 'Sticky-note texts to place on the board — one idea/item per string.',
-            },
+  const actions = useMemo<BrainAction[]>(() => [
+    {
+      name: 'show_canvas',
+      description:
+        'Open a visual canvas board and populate it with notes. '
+        + 'Use this when the user wants to brainstorm visually, map ideas, run a retro, plan on a board, or see ideas as sticky notes. '
+        + 'Provide a short intro `text` and a list of `stickies` (one idea per note). The board opens on the Creation Canvas, '
+        + 'where the user can drag, edit, connect, add more objects and keep working with you.',
+      parameters: {
+        type: 'object',
+        properties: {
+          title: { type: 'string', description: 'Board title.' },
+          text: { type: 'string', description: 'Optional intro/context, placed as a note at the top of the board.' },
+          stickies: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Sticky-note texts to place on the board — one idea/item per string.',
           },
         },
-        mutates: false,
-        run: (args: unknown) => {
-          const a = (args ?? {}) as ShowCanvasArgs;
-          const model = buildModel(a);
-          open(model, typeof a.title === 'string' ? a.title : undefined);
-          return { opened: true, title: a.title ?? null, blocks: model.blocks.length };
-        },
       },
-    ];
-  }, [open]);
+      // It NAVIGATES. Declared as mutating so the turn's own approval rules treat it as
+      // an act rather than a read: opening a board replaces what the user is looking at,
+      // which is not something a lookup does.
+      mutates: true,
+      run: (args: unknown) => {
+        const input = (args ?? {}) as ShowCanvasArgs;
+        const stickies = Array.isArray(input.stickies)
+          ? input.stickies.filter((note): note is string => typeof note === 'string')
+          : [];
+        const sessionId = createLocalCreationBoard({
+          ...(typeof input.title === 'string' ? { title: input.title } : {}),
+          ...(typeof input.text === 'string' ? { text: input.text } : {}),
+          stickies,
+        });
+        router.push(`/create/${sessionId}`);
+        return { opened: true, sessionId, title: input.title ?? null, notes: stickies.length };
+      },
+    },
+  ], [router]);
 
   useRegisterBrainActions(actions);
   return null;

@@ -125,6 +125,37 @@ const tagsFor = (message: string): Record<string, (chunks: unknown) => unknown> 
 describe('message catalogs', () => {
   const enPaths = leaves(en as Record<string, unknown>).map((l) => l.path);
 
+  /**
+   * THE THIRD FAILURE MODE, and the one that hid the longest: a per-locale BUNDLE
+   * merged in as a single value.
+   *
+   *   "unstaffed": { "en": "{count} unstaffed", "zh": "…", "es": "…", … }
+   *
+   * written into all five catalogs instead of split across them. Every catalog then
+   * holds an object where next-intl wants a message, so it renders the dotted path —
+   * in all five languages at once, which is why it does not look like a translation
+   * gap. Thirty messages shipped that way before this test existed; `leaves()` above
+   * skips non-string leaves, so neither the parity check nor the ICU check could see
+   * any of them. The shape is unmistakable and no real namespace shares it: a node
+   * whose keys are ALL locale codes and whose values are all strings.
+   */
+  it.each(LOCALES)('%s has no per-locale bundle left as a message value', (locale) => {
+    const localeKeys = new Set<string>(LOCALES);
+    const bundles: string[] = [];
+    const walk = (node: Record<string, unknown>, prefix: string): void => {
+      const keys = Object.keys(node);
+      if (keys.length > 0 && keys.every((key) => localeKeys.has(key)) && keys.every((key) => typeof node[key] === 'string')) {
+        bundles.push(prefix);
+        return;
+      }
+      for (const [key, value] of Object.entries(node)) {
+        if (value && typeof value === 'object' && !Array.isArray(value)) walk(value as Record<string, unknown>, prefix ? `${prefix}.${key}` : key);
+      }
+    };
+    walk(CATALOGS[locale], '');
+    expect(bundles).toEqual([]);
+  });
+
   it.each(LOCALES)('%s has every QuickStart message', (locale) => {
     const quickStart = CATALOGS[locale].quickStart as Record<string, unknown> | undefined;
     expect(quickStart).toBeDefined();

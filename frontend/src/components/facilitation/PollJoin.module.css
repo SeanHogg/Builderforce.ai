@@ -1,0 +1,148 @@
+/**
+ * The poll participant's page — a phone, in a room, with no account.
+ *
+ * Every shared primitive `composes` from `components/public/publicSurface.module.css`,
+ * which is where the 16px input minimum, the 44px tap target and the opaque `<option>`
+ * are argued. What is local is what a poll has and a form does not: an option that is a
+ * whole tap target rather than a checkbox with a label, the drag-free 2x2, and the
+ * ranking list you reorder with two buttons rather than a drag nobody can do one-handed.
+ */
+
+.page { composes: page from '../public/publicSurface.module.css'; }
+.sheet { composes: sheet from '../public/publicSurface.module.css'; }
+.title { composes: title from '../public/publicSurface.module.css'; }
+.description { composes: description from '../public/publicSurface.module.css'; }
+.meta { composes: meta from '../public/publicSurface.module.css'; }
+.label { composes: label from '../public/publicSurface.module.css'; }
+.textarea { composes: textarea from '../public/publicSurface.module.css'; }
+.input { composes: input from '../public/publicSurface.module.css'; }
+.scale { composes: scale from '../public/publicSurface.module.css'; }
+.scaleButton { composes: scaleButton from '../public/publicSurface.module.css'; }
+.scaleButtonOn { composes: scaleButtonOn from '../public/publicSurface.module.css'; }
+.actions { composes: actions from '../public/publicSurface.module.css'; }
+.submit { composes: submit from '../public/publicSurface.module.css'; }
+.error { composes: error from '../public/publicSurface.module.css'; }
+.notice { composes: notice from '../public/publicSurface.module.css'; }
+
+/* --- Options ---------------------------------------------------------------
+   A whole card is the tap target, not a 20px radio beside a label. A room votes
+   with a thumb, at arm's length, in a hurry. */
+.options { display: grid; gap: 10px; }
+
+.option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 52px;
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: max(16px, var(--font-size-body));
+  text-align: left;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.option:hover { border-color: var(--coral-bright); }
+
+.optionOn {
+  border-color: var(--coral-bright);
+  background: color-mix(in srgb, var(--coral-bright) 14%, var(--surface-raised));
+  font-weight: 600;
+}
+
+.optionMark {
+  flex: 0 0 auto;
+  width: 22px;
+  color: var(--coral-bright);
+  font-size: var(--font-size-body);
+}
+
+/* --- Ranking ---------------------------------------------------------------
+   Reordered with two buttons rather than a drag: a drag needs a second hand and
+   a steady surface, and this is answered standing up. */
+.rankRow { display: flex; align-items: center; gap: 10px; }
+.rankPosition { flex: 0 0 auto; width: 22px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.rankLabel { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+
+.rankButton {
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  font-size: var(--font-size-body);
+  cursor: pointer;
+}
+
+.rankButton:disabled { opacity: .4; cursor: not-allowed; }
+
+/* --- The 2x2 you place yourself on ----------------------------------------
+   A tap, not a drag, for the same reason the ranking uses buttons. The frame
+   stays square at every width so the answer means the same thing on a phone and
+   on the board it lands on. */
+.placer {
+  position: relative;
+  aspect-ratio: 1;
+  width: 100%;
+  max-width: 380px;
+  margin: 0 auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  cursor: crosshair;
+  touch-action: manipulation;
+}
+
+.placerAxis { position: absolute; background: var(--border); }
+.placerAxisX { left: 0; right: 0; top: 50%; height: 1px; }
+.placerAxisY { top: 0; bottom: 0; left: 50%; width: 1px; }
+
+.placerLabel {
+  position: absolute;
+  color: var(--text-muted);
+  font-size: var(--font-size-small);
+  pointer-events: none;
+}
+
+.placerLabelX { right: 8px; top: calc(50% + 6px); }
+.placerLabelY { left: calc(50% + 6px); top: 8px; }
+
+.placerPin {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  margin: -9px 0 0 -9px;
+  border-radius: 50%;
+  border: 2px solid var(--bg-base);
+  background: var(--coral-bright);
+  pointer-events: none;
+}
+
+/* --- After the vote -------------------------------------------------------- */
+.results { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--border); }
+
+.resultsHeading {
+  margin: 0 0 12px;
+  font-size: var(--font-size-body);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.change {
+  margin-top: 16px;
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--coral-bright);
+  font-family: inherit;
+  font-size: var(--font-size-small);
+  text-decoration: underline;
+  cursor: pointer;
+}

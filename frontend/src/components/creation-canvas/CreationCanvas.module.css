@@ -1707,14 +1707,95 @@
 .node_sticky[data-sticky-shape='right_arrow'] { clip-path:polygon(0% 25%, 68% 25%, 68% 0%, 100% 50%, 68% 100%, 68% 75%, 0% 75%); }
 .node_sticky[data-sticky-shape='right_arrow'] .nodeBody { padding:48px 56px 48px 16px; }
 
+/* --- The stencil geometries ----------------------------------------------
+   Everything above shipped with the shape RENDERER; these came with the shape
+   LIBRARY (`lib/canvasStencils.ts`), which is what the palette reads. Same rules
+   as above, for the same reasons: `clip-path` over an SVG background so the text
+   stays selectable and the author's pigment stays the element's own background,
+   and a padding compensation so the label sits inside the visible area rather
+   than under a cut corner.
+
+   Every value here has an entry in `STENCIL_SHAPES` and every entry there has a
+   rule here. That is not a coincidence to be maintained by memory — the sticky
+   inspector's shape select is GENERATED from that list, so a value with no rule
+   would silently degrade to the square card and read as a bug in the card. */
+
+/* A stadium. The flowchart terminator, and the wireframe button. */
+.node_sticky[data-sticky-shape='pill'] { border-radius:999px; }
+.node_sticky[data-sticky-shape='pill'] .nodeBody { padding:12px 26px; }
+
+.node_sticky[data-sticky-shape='hexagon'] { clip-path:polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%); }
+.node_sticky[data-sticky-shape='hexagon'] .nodeBody { padding:20px 42px; }
+
+.node_sticky[data-sticky-shape='pentagon'] { clip-path:polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%); }
+.node_sticky[data-sticky-shape='pentagon'] .nodeBody { padding:42px 30px 16px; }
+
+.node_sticky[data-sticky-shape='octagon'] { clip-path:polygon(30% 0%, 70% 0%, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0% 70%, 0% 30%); }
+.node_sticky[data-sticky-shape='octagon'] .nodeBody { padding:22px 24px; }
+
+.node_sticky[data-sticky-shape='trapezoid'] { clip-path:polygon(18% 0%, 82% 0%, 100% 100%, 0% 100%); }
+.node_sticky[data-sticky-shape='trapezoid'] .nodeBody { padding:14px 38px; }
+
+.node_sticky[data-sticky-shape='cross'] {
+  clip-path:polygon(35% 0%, 65% 0%, 65% 35%, 100% 35%, 100% 65%, 65% 65%, 65% 100%, 35% 100%, 35% 65%, 0% 65%, 0% 35%, 35% 35%);
+}
+.node_sticky[data-sticky-shape='cross'] .nodeBody { padding:12px 6px; }
+
+.node_sticky[data-sticky-shape='left_arrow'] { clip-path:polygon(0% 50%, 32% 0%, 32% 25%, 100% 25%, 100% 75%, 32% 75%, 32% 100%); }
+.node_sticky[data-sticky-shape='left_arrow'] .nodeBody { padding:48px 16px 48px 56px; }
+
+.node_sticky[data-sticky-shape='left_right_arrow'] {
+  clip-path:polygon(0% 50%, 18% 0%, 18% 25%, 82% 25%, 82% 0%, 100% 50%, 82% 100%, 82% 75%, 18% 75%, 18% 100%);
+}
+.node_sticky[data-sticky-shape='left_right_arrow'] .nodeBody { padding:34px 46px; }
+
+/* An approximation, deliberately. A cloud's real outline is arcs, which
+   `clip-path: polygon()` cannot express — and `path()` would bake one fixed
+   coordinate space into a card that resizes. Nineteen points read as a cloud at
+   every size, which is what the shape is for. */
+.node_sticky[data-sticky-shape='cloud'] {
+  clip-path:polygon(
+    22% 88%, 10% 82%, 4% 70%, 8% 58%, 18% 52%, 16% 40%, 24% 28%, 38% 24%, 48% 12%,
+    64% 10%, 76% 18%, 84% 30%, 94% 38%, 97% 52%, 92% 66%, 84% 76%, 72% 84%, 56% 90%, 38% 92%
+  );
+}
+.node_sticky[data-sticky-shape='cloud'] .nodeBody { padding:34px 30px; }
+
+/* The stored-data cylinder. Elliptical top and bottom edges from an asymmetric
+   border-radius rather than a clip: a clip cannot draw a curve at all, and this
+   keeps the drop shadow every clipped shape has to give up. */
+.node_sticky[data-sticky-shape='cylinder'] { border-radius:50% / 16%; }
+.node_sticky[data-sticky-shape='cylinder'] .nodeBody { padding:26px 20px; }
+
+/* A page with a torn bottom edge — the flowchart document, and the UML note. */
+.node_sticky[data-sticky-shape='document'] {
+  clip-path:polygon(0% 0%, 100% 0%, 100% 86%, 75% 100%, 50% 86%, 25% 100%, 0% 86%);
+}
+.node_sticky[data-sticky-shape='document'] .nodeBody { padding:12px 14px 30px; }
+
 /* A CLIPPED card cannot carry a drop shadow — the shadow is painted outside the
    clip and is cut away with it, leaving a shape that floats differently from
-   every other card. A hairline of the ink colour restores the edge instead. */
+   every other card. A hairline of the ink colour restores the edge instead.
+
+   Listed per shape rather than as "anything with a clip-path", because CSS has
+   no such selector — and the two shapes that curve instead of clipping
+   (`ellipse`, `cylinder`) deliberately keep their real shadow, since a rule that
+   swept them in would trade a correct shadow for a filter that costs a
+   compositing layer. */
 .node_sticky[data-sticky-shape='rhombus'],
 .node_sticky[data-sticky-shape='triangle'],
 .node_sticky[data-sticky-shape='parallelogram'],
 .node_sticky[data-sticky-shape='star'],
-.node_sticky[data-sticky-shape='right_arrow'] {
+.node_sticky[data-sticky-shape='right_arrow'],
+.node_sticky[data-sticky-shape='hexagon'],
+.node_sticky[data-sticky-shape='pentagon'],
+.node_sticky[data-sticky-shape='octagon'],
+.node_sticky[data-sticky-shape='trapezoid'],
+.node_sticky[data-sticky-shape='cross'],
+.node_sticky[data-sticky-shape='left_arrow'],
+.node_sticky[data-sticky-shape='left_right_arrow'],
+.node_sticky[data-sticky-shape='cloud'],
+.node_sticky[data-sticky-shape='document'] {
   box-shadow:none; filter:drop-shadow(0 2px 5px rgba(16,32,58,.22));
 }
 
@@ -2281,7 +2362,19 @@
 
 /* A page keeps a MEASURE. Stretching prose to a 2560px monitor makes the surface bigger
    and the document worse, and the sheet is also what makes this resemble the export. */
-.pageSheet { width:min(100%,var(--page-sheet-width,880px)); margin:0 auto; padding:20px 16px 28px; }
+/* A column, and one that GROWS: `flex:1 0 auto` is what lets the document editor
+   inside it take the height the surface has rather than stopping at its own
+   content, which is what left a page-sized document being written through a
+   340px window. It still overflows freely when the document is longer than the
+   screen, because the shrink is 0. */
+.pageSheet {
+  display:flex; flex-direction:column; flex:1 0 auto;
+  width:min(100%,var(--page-sheet-width,880px)); margin:0 auto; padding:20px 16px 28px;
+}
+/* A document is written edge to edge of its own sheet, so it gets the wider
+   measure and the thinner gutter. A résumé draws its OWN A4 sheet inside this
+   one and must not inherit either. */
+.pageSheet[data-runtime='document'] { --page-sheet-width:960px; padding:14px 12px 24px; }
 .pageSheetReadOnly { padding:24px; color:var(--canvas-muted); font-size:12px; text-align:center; }
 
 /* A build wants the room, so the frame takes it and the controls sit under it. */
@@ -2787,6 +2880,7 @@
   /* Same on the object surfaces: the sheet gives up its measure, and the header stops
      reserving the rail's gutter because the rail moves to the bottom edge here. */
   .pageSheet { --page-sheet-width:100%; padding:12px 10px 20px; }
+  .pageSheet[data-runtime='document'] { --page-sheet-width:100%; padding:8px 6px 16px; }
   .objectSurfaceHeader { gap:8px; padding:8px 10px; }
   .objectSurfaceTitle strong { font-size:12px; }
   .playStage,.timelineStage { padding:10px 8px 14px; }
@@ -3274,30 +3368,40 @@
   background:var(--canvas-widget-surface,#fff);
   box-shadow:inset 0 1px 0 var(--canvas-panel-muted,#faf8f4);
 }
-.documentMarkdown { color:var(--canvas-ink,var(--text-primary)); font-size:9px; line-height:1.55; overflow-wrap:anywhere; }
+/* The document's own type scale, driven by ONE number.
+   `--document-font-size` is the base and every measure below is `em` off it, so the
+   SAME rules draw the 9px preview on a card and the 15px page in the page runtime —
+   one definition at two scales, rather than a second stylesheet for the big one.
+   Sizes are `em` rather than `rem` for exactly that reason: a `rem` here would be
+   the app's root, which is not the document's measure and does not change when the
+   document is opened at page size. */
+.documentMarkdown {
+  color:var(--canvas-ink,var(--text-primary));
+  font-size:var(--document-font-size,9px); line-height:var(--document-line-height,1.55); overflow-wrap:anywhere;
+}
 .documentMarkdown > :first-child { margin-top:0; }
 .documentMarkdown > :last-child { margin-bottom:0; }
-.documentMarkdown h1 { margin:0 0 6px; font-size:15px; letter-spacing:-.02em; }
-.documentMarkdown h2 { margin:10px 0 4px; font-size:12px; }
-.documentMarkdown h3,.documentMarkdown h4 { margin:8px 0 3px; font-size:10px; }
-.documentMarkdown p { margin:5px 0; }
-.documentMarkdown ul,.documentMarkdown ol { margin:5px 0; padding-left:16px; }
-.documentMarkdown li { margin:2px 0; }
+.documentMarkdown h1 { margin:0 0 .4em; font-size:1.67em; line-height:1.25; letter-spacing:-.02em; }
+.documentMarkdown h2 { margin:.84em 0 .34em; font-size:1.33em; line-height:1.3; }
+.documentMarkdown h3,.documentMarkdown h4 { margin:.8em 0 .3em; font-size:1.11em; line-height:1.35; }
+.documentMarkdown p { margin:.55em 0; }
+.documentMarkdown ul,.documentMarkdown ol { margin:.55em 0; padding-left:1.8em; }
+.documentMarkdown li { margin:.22em 0; }
 .documentMarkdown blockquote {
-  margin:6px 0; padding:2px 0 2px 8px;
+  margin:.66em 0; padding:.22em 0 .22em .9em;
   border-left:2px solid var(--canvas-line,#e3ddd3); color:var(--canvas-muted,var(--text-muted));
 }
 .documentMarkdown code {
-  padding:1px 3px; border-radius:var(--radius-sm);
-  background:var(--canvas-panel-muted,#faf8f4); font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:8px;
+  padding:.12em .37em; border-radius:var(--radius-sm);
+  background:var(--canvas-panel-muted,#faf8f4); font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.9em;
 }
-.documentMarkdown pre { overflow:auto; margin:6px 0; padding:7px; border-radius:var(--radius-sm); background:var(--canvas-panel-muted,#faf8f4); }
+.documentMarkdown pre { overflow:auto; margin:.66em 0; padding:.78em; border-radius:var(--radius-sm); background:var(--canvas-panel-muted,#faf8f4); }
 .documentMarkdown pre code { padding:0; background:none; }
-.documentMarkdown table { width:100%; border-collapse:collapse; margin:6px 0; font-size:8px; }
-.documentMarkdown th,.documentMarkdown td { padding:3px 5px; border:1px solid var(--canvas-line,#e3ddd3); text-align:left; }
+.documentMarkdown table { width:100%; border-collapse:collapse; margin:.66em 0; font-size:.9em; }
+.documentMarkdown th,.documentMarkdown td { padding:.38em .62em; border:1px solid var(--canvas-line,#e3ddd3); text-align:left; }
 .documentMarkdown th { background:var(--canvas-panel-muted,#faf8f4); }
 .documentMarkdown a { color:var(--canvas-accent-ink,#0b5f58); text-decoration:underline; }
-.documentMarkdown hr { margin:8px 0; border:0; border-top:1px solid var(--canvas-line,#e3ddd3); }
+.documentMarkdown hr { margin:.9em 0; border:0; border-top:1px solid var(--canvas-line,#e3ddd3); }
 .documentMarkdown img { max-width:100%; height:auto; border-radius:var(--radius-sm); }
 
 /* ── A file that has landed but has not been read yet ────────────────────────
@@ -3407,6 +3511,52 @@
   cursor:text;
 }
 .docSurface:focus-visible { border-color:var(--canvas-accent-ink,#0b5f58); outline:none; }
+.docToolGroup button:disabled { opacity:.38; cursor:not-allowed; }
+
+/* ── The same editor at PAGE scale ───────────────────────────────────────────
+   Everything here is a MEASURE, never a different control: the base type, the
+   sheet's margins, the height of the writing area, and which box does the
+   scrolling. That last one is the difference a writer actually feels — on a card
+   the body is a 340px box with its own scrollbar, and a person writing a page
+   inside a 340px box is reading four lines at a time. Here the surface has no
+   height cap at all and the PAGE scrolls, with the toolbar stuck to the top of
+   that scroll the way a ribbon is. */
+.docEditor[data-scale='page'] {
+  --document-font-size:15px; --document-line-height:1.7;
+  display:flex; flex-direction:column; flex:1 0 auto; gap:0; min-height:0;
+}
+.docEditor[data-scale='page'] .docToolbar {
+  position:sticky; top:0; z-index:3; flex:none;
+  gap:7px; padding:8px 12px;
+  border-radius:var(--radius-md) var(--radius-md) 0 0; border-bottom:0;
+  background:var(--canvas-panel,#faf8f4);
+}
+.docEditor[data-scale='page'] .docToolGroup button { min-width:34px; min-height:32px; padding:0 8px; font-size:14px; }
+.docEditor[data-scale='page'] .docBlockSelect { min-height:32px; max-width:170px; padding:0 8px; font-size:13px; }
+.docEditor[data-scale='page'] .docLinkRow {
+  flex:none;
+  gap:6px; padding:8px 12px;
+  border-inline:1px solid var(--canvas-line,#e3ddd3); background:var(--canvas-panel-muted,#faf8f4);
+}
+.docEditor[data-scale='page'] .docLinkRow input { min-height:32px; padding:0 10px; font-size:13px; }
+.docEditor[data-scale='page'] .docLinkRow button { min-height:32px; padding:0 12px; font-size:12px; }
+/* `overflow:visible` is the point of this rule, not a tidy-up: it hands the
+   scroll back to the surface the page sits in, which is what makes a long
+   document one continuous page instead of a box inside a box. */
+.docEditor[data-scale='page'] .docSurface {
+  overflow:visible; flex:1 0 auto; min-height:min(1040px,66vh); max-height:none;
+  padding:clamp(28px,5vw,64px); border-radius:0 0 var(--radius-md) var(--radius-md);
+  box-shadow:0 8px 30px var(--canvas-shadow);
+}
+/* What a word processor keeps in its status bar, in the one place there is room
+   for it. The card has no such bar: at 9px a word count is chrome competing with
+   the document it is counting. */
+.docStatus {
+  flex:none;
+  display:flex; flex-wrap:wrap; align-items:center; justify-content:flex-end; gap:16px;
+  margin:0; padding:8px 4px 0;
+  color:var(--canvas-muted,var(--text-muted)); font-size:11px; font-variant-numeric:tabular-nums;
+}
 
 /* One page of a document, turned rather than scrolled. A file imported from
    Word or PDF keeps the breaks its author declared, so the page on the card is
@@ -3502,6 +3652,14 @@
      rather than pushing the card past a phone-width board. */
   .docSurface { min-height:120px; max-height:220px; }
   .docBlockSelect { max-width:88px; }
+  /* The page keeps its own measures on a phone — the point of page scale is that
+     the document is being written, and a 220px box is the thing this fixes. Type
+     comes down a step and the sheet's margins collapse to what a 360px viewport
+     can spare, which is where a printed gutter would be if it could. */
+  .docEditor[data-scale='page'] { --document-font-size:14px; }
+  .docEditor[data-scale='page'] .docSurface { min-height:70vh; max-height:none; padding:18px 14px; }
+  .docEditor[data-scale='page'] .docToolbar { gap:5px; padding:6px 8px; }
+  .docEditor[data-scale='page'] .docBlockSelect { max-width:112px; }
   .slideDeck { grid-template-columns:repeat(auto-fill,minmax(108px,1fr)); }
 }
 
@@ -4698,10 +4856,10 @@
   background:var(--canvas-panel); color:var(--canvas-ink); font-size:16px; line-height:1; cursor:pointer;
 }
 .calendarNav button:hover,.calendarNav button:focus-visible { background:var(--canvas-hover); outline:none; }
-.calendarSummary { margin:0; font:500 11px var(--font-sans); color:var(--canvas-ink-muted); }
+.calendarSummary { margin:0; font:500 11px var(--font-sans); color:var(--canvas-muted); }
 .calendarWeekdays {
   display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:4px; flex:none; padding:0 14px 6px;
-  font:600 10px var(--font-sans); text-transform:uppercase; letter-spacing:.04em; color:var(--canvas-ink-muted);
+  font:600 10px var(--font-sans); text-transform:uppercase; letter-spacing:.04em; color:var(--canvas-muted);
 }
 .calendarGrid {
   display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); grid-auto-rows:minmax(84px,1fr);
@@ -4712,9 +4870,9 @@
   border:1px solid var(--canvas-line); border-radius:var(--radius-md);
   background:var(--canvas-panel); color:var(--canvas-ink);
 }
-.calendarDay[data-outside='true'] { background:var(--canvas-panel-muted); color:var(--canvas-ink-muted); }
+.calendarDay[data-outside='true'] { background:var(--canvas-panel-muted); color:var(--canvas-muted); }
 .calendarDay[data-today='true'] { border-color:var(--canvas-accent); }
-.calendarDay > small { font:600 10px var(--font-sans); color:var(--canvas-ink-muted); }
+.calendarDay > small { font:600 10px var(--font-sans); color:var(--canvas-muted); }
 .calendarEntry {
   display:flex; align-items:center; gap:5px; min-width:0; padding:3px 5px;
   border:1px solid var(--canvas-line); border-radius:var(--radius-sm);
@@ -4736,3 +4894,37 @@
   .calendarGrid { grid-template-columns:1fr; grid-auto-rows:auto; }
   .calendarDay:empty { display:none; }
 }
+
+/* --- The clocks ----------------------------------------------------------
+   `timer` counts a timebox down and `stopwatch` counts up; ONE body draws both
+   (`CanvasClockBody`), because they are the same machine read from opposite
+   ends. The number is the card, so it is the only large thing on it, and it is
+   tabular so the seconds digit does not shuffle the layout every second.
+
+   Every colour is a canvas token: this is read in both themes, on whatever
+   machine is plugged into the room's projector. */
+.clockBody { display:grid; gap:6px; justify-items:center; padding:6px 0 2px; }
+.clockValue {
+  font-size:34px; font-variant-numeric:tabular-nums; letter-spacing:.02em;
+  color:var(--canvas-ink); line-height:1.05;
+}
+.clockCaption { color:var(--canvas-muted); font-size:10px; text-align:center; }
+/* A timebox that has run out. The colour is a signal and the caption says
+   "finished" beside it, so it is never colour alone. */
+.clockBody[data-expired='true'] .clockValue { color:var(--tone-danger-ink); }
+.clockActions { display:flex; gap:6px; margin-top:2px; }
+.clockActions button {
+  min-height:28px; padding:0 12px; border:1px solid var(--canvas-line); border-radius:var(--radius-sm);
+  background:var(--canvas-panel, #fff); color:var(--canvas-ink); font:inherit; font-size:11px; cursor:pointer;
+}
+.clockActions button:hover:not(:disabled) { border-color:var(--canvas-accent); }
+.clockActions button:disabled { opacity:.45; cursor:not-allowed; }
+
+/* --- The transclusion ----------------------------------------------------
+   Another document, shown here, live. It scrolls inside its own box rather than
+   growing the card: a transcluded SOP is somebody else's length, and letting it
+   set this card's height would let one reference push a board off the screen. */
+.transclusionBody { display:grid; gap:6px; max-height:260px; overflow:auto; }
+.transclusionBody > strong { color:var(--canvas-ink); font-size:12px; }
+.transclusionNotice { margin:0; color:var(--canvas-muted); font-size:11px; line-height:1.5; }
+.transclusionLink { color:var(--canvas-accent); font-size:11px; text-decoration:underline; }

@@ -1,168 +1,39 @@
 /**
  * The public form responder.
  *
- * Every colour is a token, because this page is rendered to somebody outside the
- * workspace in whatever theme their machine is in — and it is the one surface
- * where a wrong contrast is not an inconvenience but an unanswerable question.
+ * Every primitive here now `composes` from `components/public/publicSurface.module.css`
+ * rather than declaring its own copy. These rules were written here first and were
+ * right; what changed is that a SECOND public surface (the poll participant's page)
+ * needed the same nine of them, and two copies is how the two pages a stranger sees come
+ * to look like two products. The shared module carries the reasoning — the 16px input
+ * minimum, the 44px tap target, the opaque `<option>` — and this file now says only that
+ * the responder uses them.
+ *
+ * `required` stays local: it is the only rule on this page a poll has no use for, because
+ * a poll asks exactly one question and asking whether it is optional is meaningless.
  */
 
-.page {
-  min-height: 100vh;
-  background: var(--bg-base);
-  color: var(--text-primary);
-  /* clamp rather than a media query: the responder is read on a phone at least
-     as often as on a laptop, and the padding should shrink continuously. */
-  padding: clamp(16px, 5vw, 48px) clamp(12px, 4vw, 32px);
-}
+.page { composes: page from '../public/publicSurface.module.css'; }
+.sheet { composes: sheet from '../public/publicSurface.module.css'; }
+.title { composes: title from '../public/publicSurface.module.css'; }
+.description { composes: description from '../public/publicSurface.module.css'; }
+.meta { composes: meta from '../public/publicSurface.module.css'; }
+.field { composes: field from '../public/publicSurface.module.css'; }
+.label { composes: label from '../public/publicSurface.module.css'; }
+.help { composes: help from '../public/publicSurface.module.css'; }
+.input { composes: input from '../public/publicSurface.module.css'; }
+.textarea { composes: textarea from '../public/publicSurface.module.css'; }
+.select { composes: select from '../public/publicSurface.module.css'; }
+.choices { composes: choices from '../public/publicSurface.module.css'; }
+.choice { composes: choice from '../public/publicSurface.module.css'; }
+.scale { composes: scale from '../public/publicSurface.module.css'; }
+.scaleButton { composes: scaleButton from '../public/publicSurface.module.css'; }
+.scaleButtonOn { composes: scaleButtonOn from '../public/publicSurface.module.css'; }
+.actions { composes: actions from '../public/publicSurface.module.css'; }
+.submit { composes: submit from '../public/publicSurface.module.css'; }
+.error { composes: error from '../public/publicSurface.module.css'; }
+.notice { composes: notice from '../public/publicSurface.module.css'; }
+.done { composes: done from '../public/publicSurface.module.css'; }
 
-.sheet {
-  max-width: 640px;
-  margin: 0 auto;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: clamp(16px, 4vw, 32px);
-  box-shadow: var(--shadow-lg);
-}
-
-.title {
-  margin: 0 0 8px;
-  font-size: var(--font-size-section);
-  line-height: 1.25;
-  color: var(--text-primary);
-}
-
-.description {
-  margin: 0 0 24px;
-  color: var(--text-secondary);
-  font-size: var(--font-size-body);
-  line-height: 1.6;
-  white-space: pre-wrap;
-}
-
-.meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 16px;
-  margin: 0 0 24px;
-  color: var(--text-muted);
-  font-size: var(--font-size-small);
-}
-
-.field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 22px; }
-
-.label {
-  font-size: var(--font-size-body);
-  font-weight: 600;
-  color: var(--text-primary);
-  line-height: 1.4;
-}
-
+/** The asterisk beside a required question's label. */
 .required { color: var(--red-bright); margin-left: 4px; }
-
-.help { color: var(--text-secondary); font-size: var(--font-size-small); line-height: 1.5; }
-
-.input,
-.textarea,
-.select {
-  width: 100%;
-  box-sizing: border-box;
-  /* 16px minimum so iOS does not zoom the viewport on focus — a zoomed form is
-     a form the responder has to pinch back out of after every question. */
-  font-size: max(16px, var(--font-size-body));
-  font-family: inherit;
-  color: var(--text-primary);
-  background: var(--surface-raised);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: 10px 12px;
-}
-
-.textarea { min-height: 110px; resize: vertical; line-height: 1.5; }
-
-/* A native <option> inherits nothing useful from its <select> on Windows, so it
-   needs its own opaque background and foreground or half the list is invisible
-   in one of the two themes. */
-.select option { background: var(--surface); color: var(--text-primary); }
-
-.input:focus-visible,
-.textarea:focus-visible,
-.select:focus-visible {
-  outline: 2px solid var(--coral-bright);
-  outline-offset: 1px;
-}
-
-.choices { display: flex; flex-direction: column; gap: 8px; }
-
-.choice {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  /* A tap target, not a text label: 44px is the smallest thing a thumb hits
-     reliably, and this list is answered on a phone. */
-  min-height: 44px;
-  padding: 4px 8px;
-  border-radius: var(--radius-md);
-  color: var(--text-primary);
-  font-size: var(--font-size-body);
-  cursor: pointer;
-}
-
-.choice:hover { background: var(--surface-raised); }
-
-.scale { display: flex; flex-wrap: wrap; gap: 8px; }
-
-.scaleButton {
-  min-width: 44px;
-  min-height: 44px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border);
-  background: var(--surface-raised);
-  color: var(--text-primary);
-  font-size: var(--font-size-body);
-  cursor: pointer;
-}
-
-.scaleButtonOn {
-  background: var(--coral-bright);
-  border-color: var(--coral-bright);
-  color: var(--bg-base);
-  font-weight: 600;
-}
-
-.actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 28px; }
-
-.submit {
-  min-height: 44px;
-  padding: 0 22px;
-  border: none;
-  border-radius: var(--radius-md);
-  background: var(--coral-bright);
-  color: var(--bg-base);
-  font-size: var(--font-size-body);
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.submit:disabled { opacity: .55; cursor: not-allowed; }
-
-.error {
-  margin: 16px 0 0;
-  padding: 12px 14px;
-  border-radius: var(--radius-md);
-  border: 1px solid color-mix(in srgb, var(--red-bright) 40%, transparent);
-  background: color-mix(in srgb, var(--red-bright) 12%, transparent);
-  color: var(--text-primary);
-  font-size: var(--font-size-small);
-  line-height: 1.5;
-}
-
-.notice {
-  margin: 0;
-  color: var(--text-secondary);
-  font-size: var(--font-size-body);
-  line-height: 1.6;
-}
-
-.done { text-align: center; padding: 24px 0; }
-.done h1 { margin: 0 0 12px; font-size: var(--font-size-section); color: var(--text-primary); }

@@ -1,7 +1,7 @@
 'use client';
 
 import { Icon } from '@/components/ui/Icon';
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { DocumentMarkdown } from '@/components/DocumentMarkdown';
@@ -12,8 +12,6 @@ import { Select } from '@/components/Select';
 import { usePermission } from '@/lib/rbac';
 import { useAuth } from '@/lib/AuthContext';
 import { useDocCollaboration } from '@/hooks/useDocCollaboration';
-import { CanvasBoard } from '@/components/canvas/CanvasBoard';
-import { parseCanvas, serializeCanvas } from '@/components/canvas/canvasModel';
 import {
   knowledgeApi,
   type KnowledgeDocDetail,
@@ -155,10 +153,11 @@ export default function KnowledgeDocClient({ docId }: { docId: string }) {
     setter(v);
   };
 
-  // A canvas document stores its board (JSON) inside `content`. When detected we
-  // swap the Markdown editor for the reusable <CanvasBoard>; edits serialise back
-  // through the same content path (autosave + realtime collab unchanged).
-  const canvasModel = useMemo(() => parseCanvas(content), [content]);
+  // A knowledge item is a DOCUMENT. It used to be able to be a board too — a second
+  // canvas implementation serialised into this `content` string — and that board has
+  // folded into the Creation Canvas, which is the one the product's front door opens.
+  // So there is no branch here any more: this route edits Markdown, and a board is
+  // made where boards are made.
 
   if (error) {
     return (
@@ -266,18 +265,6 @@ export default function KnowledgeDocClient({ docId }: { docId: string }) {
         />
       )}
 
-      {/* Canvas documents render the reusable board; Markdown docs the editor. */}
-      {canvasModel ? (
-        <div style={{ margin: '18px 0 8px' }}>
-          <CanvasBoard
-            value={canvasModel}
-            readOnly={!canEdit}
-            onChange={(next) => onContentChange(serializeCanvas(next))}
-            height={560}
-          />
-        </div>
-      ) : (
-        <>
       {/* Content edit/preview */}
       <div style={{ display: 'flex', gap: 8, margin: '18px 0 8px' }}>
         {canEdit && (
@@ -328,8 +315,6 @@ export default function KnowledgeDocClient({ docId }: { docId: string }) {
             <span style={{ color: 'var(--text-muted)' }}>{t('emptyContent')}</span>
           )}
         </article>
-      )}
-        </>
       )}
 
       {/* Publish / delete (editors) */}

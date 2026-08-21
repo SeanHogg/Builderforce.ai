@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type MouseEvent } from 'react';
-import { Handle, NodeResizer, Position, useStore, type Node, type NodeProps } from '@xyflow/react';
+import { Handle, NodeResizer, Position, useStore, type NodeProps } from '@xyflow/react';
 import { useTranslations } from 'next-intl';
 import type { BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
 import ReactMarkdown from 'react-markdown';
@@ -12,7 +12,9 @@ import {
   EMPTY_SPEC_BOARD, makeSpecDeriveBoard, specKindReadsBoard, type SpecDeriveBoard,
 } from '@/lib/specObjects';
 import { AUTHORED_FRAME_BORDER, AUTHORED_FRAME_FILL } from './authoredColors';
-import { STICKY_COLORS } from '@/components/canvas/canvasModel';
+import { STICKY_COLORS } from './authoredColors';
+import { CanvasClockBody } from './CanvasClockBody';
+import { CanvasTransclusionBody } from './CanvasTransclusionBody';
 import styles from './CreationCanvas.module.css';
 import { creationObjectDefinition, emptyShellProblem } from './creationObjectRegistry';
 import {
@@ -99,7 +101,13 @@ import '@/lib/academicObjects';
 import { useMoneyFormat } from '@/lib/useMoneyFormat';
 import { useFormat } from "@/i18n/useFormat";
 
-export type CreationFlowNode = Node<CreationNodeData, 'creation'>;
+/** The historical name for `CanvasObject`, which the canvas domain now owns.
+ *  Aliased rather than re-declared: two structurally identical declarations of
+ *  one type is the duplication that lets them drift apart later. Imported AND
+ *  exported because this file uses the name itself — `export … from` re-exports
+ *  without binding anything in local scope. */
+import type { CanvasObject } from '@/domains/canvas/domain/canvasObject';
+export type CreationFlowNode = CanvasObject;
 
 /**
  * Spec kinds whose body renders a table or a grid, and therefore needs the wide card.
@@ -2700,7 +2708,7 @@ export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenD
   // creative kinds did: a studio tile followed by a second, redundant block
   // repeating the same authored text. They are folded in from the one set that
   // already lists them, so a new creative kind cannot reintroduce the same bug.
-  const specialized = new Set(['workflow','website','build','prototype','guidedTour','dashboard','chart','map','report','evaluation','diagnostics','agent','staff','chat','dataset','table','spreadsheet','kpi','voice','video','note','project','roadmap','task','mockup','mockupSet','featureSummary','evermind','projectComparison','standup','drawing','frame','release','file','document','prd','knowledge','slides','diagram','pitch','pitchScorecard','pitchQa','pitchApplication','course','practice','game','resume','socialFeed','socialPost','socialCampaign','erd','datasource','dataContract','dataQuality','metric','lineage','testPlan','testCase','testRun','defect','sticky', ...SPEC_KINDS, ...CREATIVE_STUDIO_KINDS, ...WEB_PAGE_KINDS]);
+  const specialized = new Set(['workflow','website','build','prototype','guidedTour','dashboard','chart','map','report','evaluation','diagnostics','agent','staff','chat','dataset','table','spreadsheet','kpi','voice','video','note','project','roadmap','task','mockup','mockupSet','featureSummary','evermind','projectComparison','standup','drawing','frame','release','file','document','prd','knowledge','slides','diagram','pitch','pitchScorecard','pitchQa','pitchApplication','course','practice','game','resume','socialFeed','socialPost','socialCampaign','erd','datasource','dataContract','dataQuality','metric','lineage','testPlan','testCase','testRun','defect','sticky','timer','stopwatch','transclusion', ...SPEC_KINDS, ...CREATIVE_STUDIO_KINDS, ...WEB_PAGE_KINDS]);
   const authoredSize = useAuthoredNodeSize(id);
   const frameStyle = data.kind === 'frame' ? { background: String(data.frameColor || AUTHORED_FRAME_FILL), borderColor: String(data.frameBorder || AUTHORED_FRAME_BORDER) } : undefined;
   // The author's pigment, applied the same way the frame's is. Both are colours a
@@ -2943,6 +2951,14 @@ export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenD
         {data.kind === 'standup' && <StandupBody data={data} />}
         {data.kind === 'drawing' && <DrawingBody data={data} {...(onEditData ? { onEdit: (patch: Partial<CreationNodeData>) => onEditData(id, patch) } : {})} />}
         {data.kind === 'frame' && <div className={styles.frameBody}><strong>{String(data.framePurpose || t('arrangeObjects'))}</strong><p>{data.subtitle || t('frameFallback')}</p></div>}
+        {/* The two clocks, from ONE component: a countdown and a count-up are the same
+            machine read from opposite ends. The `timer` kind shipped as a card with the
+            string "05:00" in its status and no way to start it; this is the running
+            clock the knowledge board had, on the canvas that is the front door. */}
+        {(data.kind === 'timer' || data.kind === 'stopwatch') && <CanvasClockBody data={data} {...(onEditData ? { onEdit: (patch: Partial<CreationNodeData>) => onEditData(id, patch) } : {})} />}
+        {/* Another document, shown here, LIVE — the knowledge board's `embed` block, and
+            the second primitive that surface had and this one did not. */}
+        {data.kind === 'transclusion' && <CanvasTransclusionBody data={data} />}
         {data.kind === 'release' && <ReleaseBody data={data} onOpen={() => onOpenDetails?.(id, 'delivery')} />}
         {/* The one real UI control `legalDocument` needs beyond the stat rows
             SpecObjectBody already draws for it — see the component's own header

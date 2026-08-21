@@ -37,7 +37,15 @@ import {
 } from '@/lib/canvasPromptPlacement';
 import { CanvasNodePanel } from './CanvasNodePanel';
 import { CanvasObjectPicker } from './CanvasObjectPicker';
+import { parsePaletteChoice, stencilSeed, stencilSize, type PaletteChoice } from '@/lib/canvasStencils';
+import {
+  CONNECTION_ENDS, CONNECTION_LINES, CONNECTION_ROUTERS, DEFAULT_CONNECTION_STYLE,
+  edgeVisuals, readConnectionStyle, type ConnectionStyle,
+} from '@/lib/canvasConnectionStyle';
 import { CanvasSurfaceRouter } from './CanvasSurfaceRouter';
+import { CanvasFacilitateSurface } from './CanvasFacilitateSurface';
+import { publishPoll, setPollState } from '@/lib/pollApi';
+import { pollJoinUrl, pollPublishBody } from '@/lib/pollObject';
 import { CanvasCalendarSurface } from './CanvasCalendarSurface';
 import { CanvasSurfaceSwitcher } from './CanvasSurfaceSwitcher';
 import { CanvasSessionActions, type CanvasSessionActionHandler } from './CanvasSessionActions';
@@ -75,6 +83,38 @@ import { BrainSurfaceProvider, type BrainSurfaceContextValue } from './brainSurf
 import { useToast } from '@/components/ToastProvider';
 import { CreationNode, type CreationFlowNode } from './CreationNode';
 import type { CreationNodeData, CreationObjectKind } from './types';
+// ── The canvas DOMAIN ────────────────────────────────────────────────────────
+// `CanvasBoard` is the aggregate root (`lib/canvas/boundedContexts.ts`). These are
+// the operations that produce or consume a whole board, the selection rules, and
+// the change vocabulary — all of them pure, none of them React, and every one of
+// them previously declared inside this component where its invariants could not
+// be asserted. See `domains/canvas/domain/canvasBoard.ts` for why the persistence
+// boundary is the place the "declared kind" invariant is enforced.
+import {
+  associateBrainWithArtifacts,
+  boardFromPersistedGraph,
+  mergeCollaboratorBoards,
+  objectAtPoint,
+  type RejectedCanvasObject,
+} from '@/domains/canvas/domain/canvasBoard';
+import { duplicateAddUpdateTarget, selectionWithinBoard, shouldAcquireCanvasObjectLock } from '@/domains/canvas/domain/selection';
+import {
+  canInvokeCreationObjectAction,
+  canvasChangesCanAutoApply,
+  CONNECTED_CANVAS_ACTIONS,
+  type ProposedCanvasChange,
+} from '@/domains/canvas/domain/canvasChange';
+import type { CanvasTextTranslator } from '@/domains/canvas/domain/canvasText';
+// The canvas APPLICATION layer. PRD 22 §3.4 used the three dataset materialisations
+// as its worked example of a presentation callback running a whole domain query and
+// mutating the graph in the same function; they are now use cases that return a
+// DESCRIPTION of the change, and this file is what applies it.
+import {
+  plotDataset as plotDatasetUseCase,
+  profileDataset as profileDatasetUseCase,
+  visualizeDataset as visualizeDatasetUseCase,
+  type MaterializeResult,
+} from '@/domains/canvas/application/MaterializeDataset';
 import { AUTHORED_DRAWING_STROKE, AUTHORED_WEBSITE_ACCENT } from './authoredColors';
 import { DiagramConvertPanel } from './DiagramConvertPanel';
 import styles from './CreationCanvas.module.css';
@@ -232,6 +272,9 @@ import {
   resumeFamilyFromNode, resumeNodePatch, resumeTemplateVariants, type ResumeTemplateId,
 } from '@/lib/canvasResume';
 import { resumeDocumentFromText, resumeDocumentIsThin } from '@builderforce/creation-canvas-contract';
+// THE HANDOVER between the two hiring vocabularies — see `handover.ts`. Imported as a
+// pure mapping so this component performs the transition and does not define it.
+import { employeeHiredFrom, employmentHandoverBlocker, OFFER_TO_EMPLOYMENT_HANDOVER, planEmploymentHandover, type OnboardingStepKey } from '@builderforce/creation-canvas-contract';
 import { renderedCanvasResume, resumeHtmlFile } from '@/lib/canvasResumeRenderer';
 import { useOptionalLiveSession } from '@/lib/live/LiveSessionContext';
 import { createCanvasJournal, describeGraphChange } from '@/lib/canvasActionJournal';
@@ -453,62 +496,6 @@ const ACCOUNT_REQUIRED_OBJECT_ACTIONS =new Set(['publish', 'deliver', 'assign', 
 function accountGateResult(tool: string, reason: string): { requiresAccount: true; tool: string; error: string } {
   return { requiresAccount: true, tool, error: reason };
 }
-const CONNECTED_CANVAS_ACTIONS: Partial<Record<CreationObjectKind, readonly string[]>> = {
-  website: ['publish'], video: ['generate'], build: ['open'],
-  // `build` compiles the authored steps into a real workflow definition; `run`
-  // executes one. Run builds first when needed, so Brain can call either.
-  workflow: ['build', 'run'], dataset: ['visualize', 'plot', 'profile'], project: ['expand', 'compare'],
-  mockup: ['deliver'], mockupSet: ['expand', 'deliver'], standup: ['start'],
-  evermind: ['train', 'evaluate', 'publish'],
-  image: ['generate', 'preview', 'export', 'convert-to-diagram'], drawing: ['convert-to-diagram'], diagram: ['convert-to-diagram'], animation: ['generate', 'preview', 'export'], podcast: ['generate', 'preview', 'export'],
-  comic: ['generate', 'preview', 'export'], game: ['generate', 'preview', 'export'], cad: ['generate', 'preview', 'export', 'convert-to-diagram'], model3d: ['generate', 'preview', 'export'],
-  resume: ['generate', 'preview', 'export'], template: ['browse', 'apply'],
-  // The QA objects. `gate` recomputes the plan's verdict from the runs, defects and
-  // audits on the board; `export` writes the .spec.ts (a plan writes its whole suite
-  // as one file). Nothing else is advertised, because nothing else is connected —
-  // running a suite is `canvas_publish_tests`, and a kind that advertised `run` here
-  // would produce the honest-but-useless "no delivery adapter" answer forever.
-  testPlan: ['gate', 'export'], testCase: ['export'], testRun: ['export'], defect: ['export'],
-  // The monthly update, actually sent — over the SAME transports a campaign uses
-  // (platform sender, the tenant's connected mailbox, or their SendGrid
-  // connection). It stays a GATED action in `canvasApprovalGate`, so a model
-  // cannot fire it: what changed is that a human who approves it now gets a send
-  // instead of "no delivery adapter is connected".
-  investorUpdate: ['send'],
-  // The receivable's three acts (FO-C2). They were advertised by the spec, named
-  // by the approval gate as irreversible or attested, and answered "no delivery
-  // adapter is connected" for every one of them — the same state the three BILL
-  // acts were in before 0469. `issue` freezes the figures, mints the customer's
-  // own link, prices the way to pay it against this workspace's merchant account
-  // and sends it; `record-payment` lands a receipt on the ledger idempotently;
-  // `chase` climbs one rung of the collections ladder through the SAME function
-  // the nightly sweep uses, so there is one collections history and not two.
-  invoice: ['issue', 'record-payment', 'chase'],
-  // Read the runs a connected payroll provider actually ran. `sync` and not `run`:
-  // this platform must never calculate a salary — see the kind's own note.
-  payRun: ['sync'],
-  // The assessment cycle. `distribute` fans an assignment into one `submission` per
-  // roster row; `compute` surfaces the gradebook's already-live derivation as a
-  // reported figure; `mark` applies the rubric to a submission's authored
-  // `placements` and, when the assignment is LTI-bound, pushes the score through
-  // AGS; `import` pulls a cohort's roster from a connected LMS through NRPS (a CSV
-  // paste goes through the dedicated `canvas_import_roster` tool instead, since this
-  // generic action carries no text); `validate` checks a curriculum map's mapping
-  // grid for outcomes and columns that do not resolve on the board.
-  assignment: ['distribute'], gradebook: ['compute'], submission: ['mark'],
-  cohort: ['import'], curriculumMap: ['validate'], bibliography: ['import'],
-  // FO-B3's five consumers are NOT here, deliberately — see DEDICATED_ACTION_TOOLS
-  // below. Each is performed by a tool that takes arguments this generic seam cannot
-  // carry, and listing them here made `canvas_invoke_object_action` stage a proposal
-  // the pending-action dispatcher had no branch for: an approved `contract.sign` ended
-  // in "no delivery adapter is connected" while the adapter it named sat one tool away.
-  // FO-D1..FO-D4: the ownership acts, each of which reaches the real ledger.
-  // `capTable.sync` FOLDS it onto the card and `model` prices a round against it;
-  // `equityGrant.issue` and `convertible.record` WRITE it, and both stay GATED in
-  // `canvasApprovalGate` — what changed is that a human who approves either now
-  // gets a real event instead of a number typed onto a card.
-  capTable: ['sync', 'model'], equityGrant: ['issue', 'sync'], convertible: ['record', 'model'],
-};
 
 /**
  * Acts performed by a DEDICATED tool rather than by the generic action seam.
@@ -598,73 +585,47 @@ function specBoardOf(source: readonly CreationFlowNode[]) {
   return makeSpecDeriveBoard(source.map((node) => node.data as unknown as Record<string, unknown>));
 }
 
-/** True only when an advertised capability has a real Canvas-side adapter. */
-export function canInvokeCreationObjectAction(kind: CreationObjectKind, action: string): boolean {
-  return action === 'inspect' || action === 'edit' || CONNECTED_CANVAS_ACTIONS[kind]?.includes(action) === true;
+/**
+ * The node a cross-object reference names, or nothing.
+ *
+ * ── WHY IT IS NOT `SpecDeriveBoard.byRef` ────────────────────────────────────────
+ * `byRef` answers the same question and returns the DATA, which is all a `derive` needs.
+ * An act needs the NODE — its id, to write a back reference; its position, to place what
+ * it creates beside it — and `CreationNodeData` deliberately does not carry the id (the
+ * id belongs to the node, and duplicating it into the data is the one-fact-in-two-places
+ * the vocabulary rules refuse one layer down).
+ *
+ * ID FIRST, then title, because the hints that document these refs say "by id or by its
+ * exact title" and a board where somebody typed the title is the common case while a
+ * board where a title happens to equal another card's id is not a case at all.
+ * Normalised through `specRefKey` so this is the same matching rule `byRef` applies,
+ * rather than a second spelling of it.
+ */
+function resolveNodeRef(
+  all: readonly CreationFlowNode[],
+  kind: CreationObjectKind,
+  ref: unknown,
+): CreationFlowNode | undefined {
+  const key = specRefKey(ref);
+  if (!key) return undefined;
+  return all.find((node) => node.data.kind === kind && node.id.toLowerCase() === key)
+    ?? all.find((node) => node.data.kind === kind && specRefKey(node.data.title) === key);
 }
+
 const PALETTE_GROUP_ICONS: Record<CreationObjectGroup, string> = {
   Build: '✦', Data: '▦', Knowledge: '▤', Insights: '↗', Work: '✓', Quality: '⛉', Teaching: '◈', Research: '⌕',
   Pitch: '◈', People: '●', Hiring: '◐', Career: '⌖', Operations: '⬢', Revenue: '⌸', Agents: '✧', Models: '◉', Collaborate: '◇', Integrations: '⌘',
 };
-export type ProposedCanvasChange =
-  | { id: string; type: 'object.add'; label: string; node: CreationFlowNode }
-  | { id: string; type: 'object.update'; label: string; objectId: string; patch: Partial<CreationNodeData> }
-  | { id: string; type: 'object.delete'; label: string; objectId: string }
-  | { id: string; type: 'object.layout'; label: string; objectId: string; position?: { x: number; y: number }; width?: number; height?: number; hidden?: boolean; locked?: boolean }
-  | { id: string; type: 'object.action'; label: string; objectId: string; action: string }
-  | { id: string; type: 'connection.add'; label: string; edge: Edge }
-  | { id: string; type: 'connection.update'; label: string; connectionId: string; patch: { label?: string; kind?: CreationConnectionKind } }
-  | { id: string; type: 'connection.delete'; label: string; connectionId: string };
-
-/**
- * Canvas-local authoring is reversible and is the direct result the user asked
- * Brain to create, so it must not stop behind a second approval step. Keep
- * destructive operations, executable actions, and canonical PRD persistence in
- * review. Those can remove data, trigger work, or write outside the canvas.
- */
-export function canvasChangesCanAutoApply(changes: readonly ProposedCanvasChange[]): boolean {
-  return changes.length > 0 && changes.every((change) => {
-    if (change.type === 'object.add') return change.node.data.canonicalPrdPending !== true;
-    return change.type === 'object.update'
-      || change.type === 'object.layout'
-      || change.type === 'connection.add'
-      || change.type === 'connection.update';
-  });
-}
 type MergeItem = { key: string; source: CreationFlowNode; target: CreationFlowNode | null; choice: 'branch' | 'parent' };
 type MergeReview = { parentId: string; parentRevision: number; parentNodes: CreationFlowNode[]; parentEdges: Edge[]; items: MergeItem[] };
 type FramePreset = { id: string; name: string; data: CreationNodeData };
 
-/** A follow-up about the selected object is an edit unless the user clearly asks
- * for another object. This is also enforced at the tool boundary so a model that
- * ignores the prompt cannot silently duplicate a chart while claiming an update. */
-export function duplicateAddUpdateTarget(
-  prompt: string,
-  kind: CreationObjectKind,
-  nodes: CreationFlowNode[],
-  selectedIds: string[],
-): CreationFlowNode | undefined {
-  const selected = nodes.find((node) => selectedIds.includes(node.id) && node.data.kind === kind && node.data.kind !== 'chat');
-  if (!selected) return undefined;
-  const escapedKind = kind.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replaceAll('-', '[ -]');
-  const explicitlyCreatesObject = new RegExp(`\\b(?:create|add|insert|duplicate|copy)\\s+(?:(?:a|an|another|new|additional|second|one)\\s+)?(?:analytical\\s+)?${escapedKind}\\b`, 'i').test(prompt)
-    || /\b(?:another|new|additional|second)\s+(?:object|visual|widget|version)\b/i.test(prompt);
-  return explicitlyCreatesObject ? undefined : selected;
-}
 type CanvasTimelineMessage = Pick<CreationTimelineMessage, 'clientMessageId' | 'messageRole' | 'body' | 'createdAt'> & { id?: number; metadata?: CreationTimelineMessage['metadata'] };
 type BrowserSpeechRecognition = { lang: string; interimResults: boolean; onresult: ((event: { results: ArrayLike<{ 0: { transcript: string } }> }) => void) | null; onerror: (() => void) | null; onend: (() => void) | null; start: () => void };
 type AccountGate = { title: string; description: string; action: string };
 /** The panels that share the canvas's left dock. One is open, or none is. */
 type CanvasDockPanel = 'files' | 'miro' | 'social' | 'ads' | 'outline';
 
-export function shouldAcquireCanvasObjectLock(
-  persistence: 'local' | 'server',
-  selectedId: string | null,
-  canEdit: boolean,
-  persistedObjectIds: ReadonlySet<string>,
-): boolean {
-  return persistence === 'server' && !!selectedId && canEdit && persistedObjectIds.has(selectedId);
-}
 
 export async function persistCanonicalProjectPrd(
   node: CreationFlowNode,
@@ -792,36 +753,22 @@ const DRAWING_TOOL_GLYPH: Readonly<Record<CanvasDrawingTool, string>> = {
 const DRAWING_FALLBACK_HEX = '#4d9eff';
 
 /**
- * The object a point lands on, topmost first.
+ * The object a point lands on — `objectAtPoint`, given this surface's measurer.
  *
- * What makes a stroke an annotation rather than a stray sketch: the mark belongs
- * to whatever is under the pen when it goes down. Later nodes render above
- * earlier ones, so the list is walked backwards — the card a person can see is
- * the card they think they are drawing on.
+ * The domain deliberately takes the measurer as an argument rather than importing
+ * one: an object's drawn size is a PRESENTATION fact (it depends on the renderer
+ * and, for auto-sized cards, on the DOM), so a domain that reached for it would
+ * make a headless test of the hit rule need a browser. Binding it here is the
+ * whole adaptation.
  */
 function topmostNodeAt(nodes: readonly CreationFlowNode[], point: { x: number; y: number }): CreationFlowNode | null {
-  for (let index = nodes.length - 1; index >= 0; index -= 1) {
-    const node = nodes[index]!;
-    if (node.hidden) continue;
-    const { width, height } = canvasNodeDimensions(node);
-    if (point.x >= node.position.x && point.x <= node.position.x + width && point.y >= node.position.y && point.y <= node.position.y + height) return node;
-  }
-  return null;
+  return objectAtPoint(nodes, point, canvasNodeDimensions);
 }
 
 /** Social-campaign fields the SERVER owns — see `syncSocialCampaign`. Editing one on
  *  the tile has to write through, or the board shows one message and publishes another. */
 const SERVER_OWNED_CAMPAIGN_FIELDS = ['body', 'linkUrl', 'mediaUrls', 'variants', 'scheduledAt'] as const;
 
-export function associateBrainWithArtifacts(current: Edge[], brainId: string, artifactIds: Iterable<string>, label = 'Brain context'): Edge[] {
-  if (!brainId) return current;
-  const next = [...current];
-  for (const artifactId of artifactIds) {
-    if (!artifactId || artifactId === brainId || next.some((edge) => edge.source === brainId && edge.target === artifactId)) continue;
-    next.push({ id: crypto.randomUUID(), source: brainId, target: artifactId, type: 'smoothstep', label, data: { connectionKind: 'reference' } });
-  }
-  return next;
-}
 
 export function scoreAgentTestResponse(response: string, expected: string): { passed: boolean | null; matched: string[]; missing: string[] } {
   const criteria = expected.split(/[\n,;]+/).map((item) => item.replace(/^[-*\d.)\s]+/, '').trim()).filter(Boolean).slice(0, 20);
@@ -919,45 +866,41 @@ const INITIAL_EDGES: Edge[] = [
   { id: SEED.websiteDashboard, source: SEED.website, target: SEED.dashboard, label: 'measures', type: 'smoothstep', data: { connectionKind: 'data' } },
 ];
 
-function flowFromSession(detail: CreationSessionDetail): { nodes: CreationFlowNode[]; edges: Edge[] } {
-  return {
-    nodes: detail.objects.map((object) => ({
-      id: object.id, type: 'creation',
-      position: { x: Number(object.canvasData?.x ?? 0), y: Number(object.canvasData?.y ?? 0) },
-      draggable: object.content?.placementLocked !== true,
-      hidden: object.content?.placementHidden === true,
-      ...((Number(object.canvasData?.w) > 0 || Number(object.canvasData?.h) > 0) ? { style: { width: Number(object.canvasData?.w) || undefined, height: Number(object.canvasData?.h) || undefined } } : {}),
-      data: {
-        kind: object.kind as CreationObjectKind,
-        title: object.kind,
-        ...(object.resourceType && object.resourceId ? { resourceId: `${object.resourceType}:${object.resourceId}` } : {}),
-        ...(object.content ?? {}),
-      } as CreationNodeData,
-    })),
-    edges: detail.connections.map((edge) => ({
-      id: edge.id, source: edge.sourceObjectId, target: edge.targetObjectId,
-      type: typeof edge.metadata?.rendererType === 'string' ? edge.metadata.rendererType : 'smoothstep', label: edge.label ?? undefined, animated: !!edge.metadata?.animated,
-      data: { connectionKind: edge.kind || 'reference' },
-    })),
-  };
+/**
+ * What the board refused to load, gathered so the surface can SAY it.
+ *
+ * The old readers cast `object.kind as CreationObjectKind` unchecked, so a kind
+ * this build's contract does not declare — a session written by a newer
+ * deployment, a hand-edited row — became an object rendered as a blank card with
+ * no error anywhere. That is precisely what the `declaredKind` invariant forbids
+ * ("rejected at the boundary, never rendered as a blank card"), and it could not
+ * be enforced while the reader was a private function in this file.
+ *
+ * The rejection is a NOTICE rather than a thrown error because one unreadable
+ * object in a session of two hundred must not cost the user the other 199. It
+ * rides on the RETURN VALUE rather than a module-level "last rejection", which
+ * would be a second board's answer to the first board's question the moment two
+ * of these mount — and this component mounts twice on a comparison surface.
+ */
+type LoadedBoard = { nodes: CreationFlowNode[]; edges: Edge[]; rejected: RejectedCanvasObject[] };
+
+function flowFromSession(detail: CreationSessionDetail): LoadedBoard {
+  const { board, rejected } = boardFromPersistedGraph(detail);
+  return { ...board, rejected };
 }
 
 function mergeCollaboratorGraph(local: { nodes: CreationFlowNode[]; edges: Edge[] }, remote: { nodes: CreationFlowNode[]; edges: Edge[] }) {
-  const nodes = new Map(remote.nodes.map((node) => [node.id, node]));
-  local.nodes.forEach((node) => nodes.set(node.id, node));
-  const edges = new Map(remote.edges.map((edge) => [edge.id, edge]));
-  local.edges.forEach((edge) => edges.set(edge.id, edge));
-  return { nodes: [...nodes.values()], edges: [...edges.values()] };
+  return mergeCollaboratorBoards(local, remote);
 }
 
-function flowFromSnapshotGraph(graph: { objects: Array<{ id: string; kind: string; resourceType?: string | null; resourceId?: string | null; canvasData: Record<string, unknown>; content: Record<string, unknown> }>; connections: Array<{ id: string; sourceObjectId: string; targetObjectId: string; kind?: string; label?: string | null; metadata?: Record<string, unknown> }> }) {
-  const nodes: CreationFlowNode[] = graph.objects.map((object) => ({
-    id: object.id, type: 'creation', position: { x: Number(object.canvasData?.x ?? 0), y: Number(object.canvasData?.y ?? 0) }, draggable: object.content?.placementLocked !== true, hidden: object.content?.placementHidden === true,
-    ...((Number(object.canvasData?.w) > 0 || Number(object.canvasData?.h) > 0) ? { style: { width: Number(object.canvasData?.w) || undefined, height: Number(object.canvasData?.h) || undefined } } : {}),
-    data: { kind: object.kind as CreationObjectKind, title: object.kind, ...(object.resourceType && object.resourceId ? { resourceId: `${object.resourceType}:${object.resourceId}` } : {}), ...(object.content ?? {}) } as CreationNodeData,
-  }));
-  const edges: Edge[] = graph.connections.map((edge) => ({ id: edge.id, source: edge.sourceObjectId, target: edge.targetObjectId, type: typeof edge.metadata?.rendererType === 'string' ? edge.metadata.rendererType : 'smoothstep', label: edge.label ?? undefined, animated: !!edge.metadata?.animated, data: { connectionKind: edge.kind || 'reference' } }));
-  return { nodes, edges };
+function flowFromSnapshotGraph(graph: { objects: Array<{ id: string; kind: string; resourceType?: string | null; resourceId?: string | null; canvasData: Record<string, unknown>; content: Record<string, unknown> }>; connections: Array<{ id: string; sourceObjectId: string; targetObjectId: string; kind?: string; label?: string | null; metadata?: Record<string, unknown> }> }): LoadedBoard {
+  const { board, rejected } = boardFromPersistedGraph(graph);
+  return { ...board, rejected };
+}
+
+/** The distinct kinds a read refused, for the one sentence the user sees. */
+function rejectedObjectKinds(rejected: readonly RejectedCanvasObject[]): string {
+  return [...new Set(rejected.map((object) => object.kind))].join(', ');
 }
 
 /** Canonical project state rendered over an attached Evermind node. Kept outside the
@@ -1017,6 +960,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const tSocial = useTranslations('creationCanvas.social');
   const tAds = useTranslations('canvas.ads');
   const tImport = useTranslations('creationCanvas.import');
+  // The facilitation vocabulary. Its own namespace rather than `creationCanvas.poll.*`
+  // because the SAME strings are read by the participant's page — which is not a canvas
+  // at all — and a phone must not have to load the board's catalogue to say "voting
+  // closed".
+  const tPoll = useTranslations('poll');
   /** The import engine is a plain module, so it is handed the catalog rather
    * than reaching for one — every string it produces stays translated. */
   const importLabel = useCallback<ImportTranslator>((key, values) => tImport(key as never, values as never), [tImport]);
@@ -1073,6 +1021,19 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const [inspectorFocus, setInspectorFocus] = useState<'knowledge' | 'test' | 'evaluation' | 'delivery' | null>(null);
   const [scopeMode, setScopeMode] = useState<'auto' | 'canvas' | 'selection' | 'connected' | 'frame'>('auto');
   const [connectionKind, setConnectionKind] = useState<CreationConnectionKind>('reference');
+  /**
+   * How the next connector LOOKS — a separate axis from what it MEANS.
+   *
+   * `connectionKind` is semantics the board computes over (the critical path is a fold
+   * over `blocks`, coverage over `verifies`); this is appearance. Keeping them as two
+   * controls is the whole point: a dashed line is not a kind of relationship, and adding
+   * one to the kind list would put a rendering choice into the vocabulary the critical
+   * path is computed from. See `lib/canvasConnectionStyle.ts`.
+   *
+   * Changing it restyles whatever edges are SELECTED as well as arming the next draw,
+   * which is the only behaviour that makes it usable on a diagram already on the board.
+   */
+  const [connectionStyle, setConnectionStyleState] = useState<ConnectionStyle>(DEFAULT_CONNECTION_STYLE);
   const [title, setTitle] = useState('Untitled session');
   const [paletteOpen, setPaletteOpen] = useState(true);
   const [minimapOpen, setMinimapOpen] = useState(true);
@@ -2074,7 +2035,12 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const openedAt = performance.now();
       void creationSessionsApi.recordOutcome(sessionId, { correlationId: sessionOpenCorrelation.current, action: 'session.open', phase: 'started' }).catch(() => undefined);
       void Promise.all([creationSessionsApi.get(sessionId), creationSessionsApi.timeline.list(sessionId)]).then(([detail, transcript]) => {
-        const { nodes: loadedNodes, edges: loadedEdges } = flowFromSession(detail);
+        const { nodes: loadedNodes, edges: loadedEdges, rejected } = flowFromSession(detail);
+        // The `declaredKind` invariant, said out loud. An object this build cannot
+        // name is dropped rather than drawn as a blank card, and the user is told
+        // which kinds — without that sentence the board silently has fewer objects
+        // than the person who saved it put on it, which is the worse failure.
+        if (rejected.length) setNotice(t('objectsRejected', { count: rejected.length, kinds: rejectedObjectKinds(rejected) }));
         setTitle(detail.session.title);
         // Mode is a property of the SESSION (0409), so a collaborator opening this
         // board inherits the mode it is actually running in rather than the default.
@@ -3134,52 +3100,35 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     window.addEventListener('keydown', keyboard); return () => window.removeEventListener('keydown', keyboard);
   }, [canEdit, copySelection, duplicateSelection, goToPresentationStep, movePresentation, pasteSelection, presentationSteps.length, redo, selectionIds, setEdges, setNodes, setPresentMode, undo]);
 
+  /**
+   * Apply what a materialisation use case decided.
+   *
+   * ONE place that turns a `MaterializeResult` into board state, because "add the
+   * object, connect it to its source, select it, open its inspector, say so" is
+   * the same five steps for a chart and for a map — and they were written twice,
+   * so the map already differed from the chart in ways nobody had chosen.
+   */
+  const applyMaterialization = useCallback((result: MaterializeResult) => {
+    if (!result.ok) { setNotice(result.notice); return; }
+    setNodes((current) => [...current, result.object]);
+    setEdges((current) => [...current, result.edge]);
+    setSelectedId(result.object.id);
+    openNodeInspector(result.object.id);
+    setNotice(result.notice);
+  }, [openNodeInspector, setEdges, setNodes, setNotice]);
+
+  /** The dependencies every materialisation takes: how to speak to the person, and
+   *  how to build an object of a kind (the factory reads the object registry, which
+   *  the application layer must not import). */
+  const materializeDeps = useMemo(
+    () => ({ t: ((key: string, values?: Record<string, string | number>) => t(key as never, values as never)) as CanvasTextTranslator, createObject: newNode }),
+    [t],
+  );
+
   const visualizeDataset = useCallback(() => {
     if (!selectedNode || selectedNode.data.kind !== 'dataset') return;
-    const source = tabularFromObject(selectedNode.data as Record<string, unknown>);
-    if (!source.columns.length || !source.rows.length) { setNotice(t('datasetImportBeforeVisualizing')); return; }
-    // Group by the most informative low-cardinality column and total the first
-    // numeric measure, rather than charting the first six rows verbatim.
-    const profile = profileTabular(source);
-    const groupable = (column: { distinct: number }) => {
-      const distinct = column.distinct;
-      if (distinct < 2) return false;
-      return distinct < 25;
-    };
-    const category = profile.find((column) => column.type !== 'number' && groupable(column))
-      ?? profile.find(groupable)
-      ?? profile[0]!;
-    const measure = profile.find((column) => column.type === 'number' && column.name !== category.name);
-    const result = queryTabular(source, {
-      groupBy: category.name,
-      aggregate: measure ? [{ op: 'sum', column: measure.name, label: measure.name }] : [{ op: 'count', label: 'count' }],
-      sort: { column: measure ? measure.name : 'count', direction: 'desc' },
-      limit: 8,
-    });
-    const valueKey = measure ? measure.name : 'count';
-    const dashboard = newNode('dashboard', { x: selectedNode.position.x + 440, y: selectedNode.position.y });
-    dashboard.data = {
-      ...dashboard.data,
-      title: t('datasetVisualizationTitle', { name: selectedNode.data.title }),
-      status: t('statusLive'),
-      chartTitle: measure ? t('chartTitleMeasureBy', { measure: measure.name, category: category.name }) : t('chartTitleCountBy', { category: category.name }),
-      xAxisLabel: category.name,
-      yAxisLabel: measure ? measure.name : t('chartCountAxis'),
-      chartLabels: (result.groups ?? []).map((group) => group.key),
-      chartValues: (result.groups ?? []).map((group) => Number(group[valueKey] ?? group.count)),
-      kpis: [
-        { label: t('kpiTotalRows'), value: fmt.number(result.totalRows) },
-        { label: t('kpiGroups', { category: category.name }), value: String(result.groups?.length ?? 0) },
-      ],
-      sourceDatasetId: selectedNode.id,
-      subtitle: measure ? t('chartTitleMeasureBy', { measure: measure.name, category: category.name }) : t('chartTitleCountBy', { category: category.name }),
-    };
-    setNodes((current) => [...current, dashboard]);
-    setEdges((current) => [...current, { id: crypto.randomUUID(), source: selectedNode.id, target: dashboard.id, type: 'smoothstep', label: t('edgeVisualizes'), animated: true, data: { connectionKind: 'data' } }]);
-    setSelectedId(dashboard.id);
-    openNodeInspector(dashboard.id);
-    setNotice(t('datasetVisualizationAdded'));
-  }, [openNodeInspector, selectedNode, setEdges, setNodes, t]);
+    applyMaterialization(visualizeDatasetUseCase(selectedNode, materializeDeps, fmt.number));
+  }, [applyMaterialization, fmt, materializeDeps, selectedNode]);
 
   /**
    * "Plot on a map" — the direct counterpart to {@link visualizeDataset}.
@@ -3192,49 +3141,17 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    */
   const plotDataset = useCallback(() => {
     if (!selectedNode || selectedNode.data.kind !== 'dataset') return;
-    const source = tabularFromObject(selectedNode.data as Record<string, unknown>);
-    if (!source.columns.length || !source.rows.length) { setNotice(t('datasetImportBeforePlotting')); return; }
-    const geoColumns = detectGeoColumns(source);
-    const points = mapPointsFromRows(source, geoColumns, MAX_MATERIALIZED_ROWS);
-    if (!points.length) {
-      // Name the columns actually looked at: "cannot plot" is not actionable, and the
-      // usual cause is a coordinate column this dataset spells differently.
-      setNotice(geoColumns.latitude && geoColumns.longitude
-        ? t('datasetPlotNoCoordinates', { latitude: geoColumns.latitude, longitude: geoColumns.longitude })
-        : t('datasetPlotNoGeoColumns', { columns: source.columns.join(', ') }));
-      return;
-    }
-    const map = newNode('map', { x: selectedNode.position.x + 440, y: selectedNode.position.y });
-    map.style = { width: 420, height: 380 };
-    map.data = {
-      ...map.data,
-      ...mapObjectFields({
-        title: t('datasetMapTitle', { name: selectedNode.data.title }),
-        status: t('datasetPlottedCount', { count: points.length }),
-        summary: t('datasetPlotSummary', { plotted: points.length, total: source.rows.length, name: selectedNode.data.title }),
-        points,
-        columns: geoColumns,
-        sourceDatasetId: selectedNode.id,
-      }),
-    };
-    setNodes((current) => [...current, map]);
-    setEdges((current) => [...current, { id: crypto.randomUUID(), source: selectedNode.id, target: map.id, type: 'smoothstep', label: t('edgePlots'), animated: true, data: { connectionKind: 'data' } }]);
-    setSelectedId(map.id);
-    openNodeInspector(map.id);
-    setNotice(t('datasetMapAdded'));
-  }, [openNodeInspector, selectedNode, setEdges, setNodes, t]);
+    applyMaterialization(plotDatasetUseCase(selectedNode, materializeDeps));
+  }, [applyMaterialization, materializeDeps, selectedNode]);
 
   const profileDataset = useCallback((nodeId: string) => {
     const target = nodes.find((node) => node.id === nodeId);
     if (!target) return;
-    const source = tabularFromObject(target.data as Record<string, unknown>);
-    if (!source.columns.length || !source.rows.length) { setNotice(t('datasetImportBeforeProfiling')); return; }
-    const profile = profileTabular(source);
-    setNodes((current) => current.map((node) => node.id === nodeId
-      ? { ...node, data: { ...node.data, profile, rowCount: source.rows.length, columns: source.columns, summary: t('datasetProfileSummary', { rows: fmt.number(source.rows.length), columns: source.columns.length, complete: profile.filter((column) => !column.empty).length }) } }
-      : node));
-    setNotice(t('datasetProfiled', { columns: profile.length }));
-  }, [nodes, setNodes, t]);
+    const result = profileDatasetUseCase(target, materializeDeps.t, fmt.number);
+    if (!result.ok) { setNotice(result.notice); return; }
+    setNodes((current) => current.map((node) => node.id === nodeId ? { ...node, data: { ...node.data, ...result.patch } } : node));
+    setNotice(result.notice);
+  }, [fmt, materializeDeps, nodes, setNodes, setNotice]);
 
   // What a primary drag on empty board does, and how forgiving the board is about a
   // pointer that wanders. `panAndSelectConflict` is the invariant `canvasInteractionProps`
@@ -3250,7 +3167,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const connectionProps = useMemo(() => flowConnectionProps(coarsePointer ? 'coarse' : 'fine'), [coarsePointer]);
 
   const onConnect = useCallback((connection: Connection) => {
-    setEdges((current) => addEdge({ ...connection, id: crypto.randomUUID(), type: 'smoothstep', data: { connectionKind }, label: connectionKind, markerEnd: { type: MarkerType.ArrowClosed } }, current));
+    setEdges((current) => addEdge({ ...connection, id: crypto.randomUUID(), ...edgeVisuals(connectionStyle), data: { connectionKind, connectionStyle }, label: connectionKind }, current));
     trackActivity('creation_connection_added', { sessionId, metadata: { clientSurface: canvasSurface(), connectionKind } });
     const source = nodes.find((node) => node.id === connection.source);
     const target = nodes.find((node) => node.id === connection.target);
@@ -3260,7 +3177,30 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       void creationSessionsApi.recordOutcome(sessionId, { correlationId, action: 'output.reuse', phase: 'started', artifactId: source.id, metadata }).catch(() => undefined);
       void creationSessionsApi.recordOutcome(sessionId, { correlationId, action: 'output.reuse', phase: 'reused', artifactId: source.id, metricKey: 'outputs_reused', metricValue: 1, unit: 'count', metadata }).catch(() => undefined);
     }
-  }, [connectionKind, nodes, persistence, sessionId, setEdges]);
+  }, [connectionKind, connectionStyle, nodes, persistence, sessionId, setEdges]);
+
+  /**
+   * Choose the connector style — and RESTYLE what is selected.
+   *
+   * A style control that only armed the next draw would be unusable on a diagram that
+   * already exists: the way a person restyles an arrow is to select it and pick, which
+   * is what every drawing tool has taught them. So one press does both, and the same
+   * `edgeVisuals` translation runs for the new edge and the existing ones — three call
+   * sites computing that themselves would be three edges that look different while
+   * claiming one style.
+   */
+  const setConnectionStyle = useCallback((patch: Partial<ConnectionStyle>) => {
+    setConnectionStyleState((current) => {
+      const next = { ...current, ...patch };
+      setEdges((edges) => {
+        if (!edges.some((edge) => edge.selected)) return edges;
+        return edges.map((edge) => (edge.selected
+          ? { ...edge, ...edgeVisuals(next), data: { ...(edge.data ?? {}), connectionStyle: next } }
+          : edge));
+      });
+      return next;
+    });
+  }, [setEdges]);
 
   /** Selecting the Brain Object reveals the dock instead of a second transcript. */
   const openBrainDock = useCallback(() => setBrainDock((current) => {
@@ -3437,13 +3377,18 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   /** Place a new object at the middle of the viewport. `data` lets a caller that
    *  already HAS the object's content (an editor capture) seed it in one step
    *  rather than adding an empty object and patching it afterwards. */
-  const addAtCenter = useCallback((kind: CreationObjectKind, data?: Partial<CreationNodeData>) => {
+  const addAtCenter = useCallback((kind: CreationObjectKind, data?: Partial<CreationNodeData>, size?: { width: number; height: number }) => {
     if (!canEdit) { setNotice(t('roleCannotEdit')); return; }
     const position = flowRef.current?.screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 }) ?? { x: 500, y: 300 };
     const node = newNode(kind, position);
     if (kind === 'guidedTour') node.data = { ...node.data, ...localizedTourDefaults() };
     if (kind === 'chat') node.data = { ...node.data, messages: timeline.map((message) => ({ role: message.messageRole, content: message.body, createdAt: message.createdAt })) };
     if (data) node.data = { ...node.data, ...data };
+    // A stencil's PROPORTIONS are part of the preset — a hexagon at 190x170 reads as a
+    // hexagon and at 190x90 reads as a smudge. Written onto the node's style, which is
+    // where the board already keeps an authored size and where the resizer writes, so
+    // there is not a second place a card's width lives.
+    if (size) node.style = { ...node.style, width: size.width, height: size.height };
     setNodes((current) => [...current, node]);
     setSelectedId(node.id); setSelectedIds([node.id]);
     // A deliberate "add a Project/Task/Website" from the palette is a request to
@@ -3462,15 +3407,24 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * an object" — and the reason the board could previously only be built by prompting.
    * Without one it is the bar's plain add, which is `addAtCenter` unchanged.
    */
-  const pickObject = useCallback((kind: CreationObjectKind, fromNodeId?: string) => {
+  const pickObject = useCallback((choice: PaletteChoice, fromNodeId?: string) => {
     setObjectPicker(null);
-    if (!fromNodeId) { addAtCenter(kind); return; }
+    // A stencil is a PRESET of the untyped card, not a kind — see `canvasStencils.ts`.
+    // Decoded once, here, so nothing downstream has to know that the palette hands back
+    // two vocabularies through one key.
+    const picked = parsePaletteChoice(choice);
+    const kind = (picked ? 'sticky' : choice) as CreationObjectKind;
+    const seed = picked ? (stencilSeed(picked.stencil) as Partial<CreationNodeData>) : undefined;
+    const size = picked ? stencilSize(picked.stencil) : undefined;
+    if (!fromNodeId) { addAtCenter(kind, seed, size); return; }
     if (!canEdit) { setNotice(t('roleCannotEdit')); return; }
     const source = nodes.find((node) => node.id === fromNodeId);
-    if (!source) { addAtCenter(kind); return; }
+    if (!source) { addAtCenter(kind, seed, size); return; }
     // Beside it, not on top of it — far enough right that the two cards and the edge
     // between them are all legible without an immediate re-layout.
     const node = newNode(kind, { x: source.position.x + (canvasNodeDimensions(source).width || 300) + 90, y: source.position.y });
+    if (seed) node.data = { ...node.data, ...seed };
+    if (size) node.style = { ...node.style, width: size.width, height: size.height };
     setNodes((current) => [...current, node]);
     setEdges((current) => addEdge({ id: crypto.randomUUID(), source: fromNodeId, target: node.id, type: connectionKind }, current));
     setSelectedId(node.id); setSelectedIds([node.id]);
@@ -5040,7 +4994,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     // resume builder already uses, composed N:1 — which is the half a recruiter needs
     // and the 1:1 version could not express.
     name: 'canvas_screen_resumes',
-    description: 'Rank every `resume` object on this canvas against a `jobPosting` on this canvas, and write the ranking onto a `shortlist` object. Use this whenever the user asks who to interview, who the strongest candidates are, or to screen a pile of CVs — never rank them by reading the resumes yourself, because the result must be reproducible and defensible. Scores four declared signals (keyword coverage, whether matched terms appear in a dated role, demonstrated years against the stated level, and how recently the skills were used) and returns the evidence and the gaps for every candidate. It reads no demographic or personal attribute and adds nothing a resume does not state.',
+    description: 'Rank every `resume` object on this canvas against a `jobPosting` on this canvas, write the ranking onto a `shortlist` object, and attach every scored resume to a `candidate` — updating the candidate that already names it through resumeRef, or creating one carrying nothing the resume does not state. Use this whenever the user asks who to interview, who the strongest candidates are, or to screen a pile of CVs — never rank them by reading the resumes yourself, because the result must be reproducible and defensible. Scores four declared signals (keyword coverage, whether matched terms appear in a dated role, demonstrated years against the stated level, and how recently the skills were used) and returns the evidence and the gaps for every candidate. It reads no demographic or personal attribute and adds nothing a resume does not state.',
     parameters: {
       type: 'object', additionalProperties: false,
       properties: {
@@ -5098,8 +5052,68 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         return { error: 'None of those resume objects carries a parsed resume document yet, so there is nothing to score.' };
       }
 
+      // ── THE ATTACHMENT ────────────────────────────────────────────────────────
+      //
+      // A `resume` is a DOCUMENT and a `candidate` is the PERSON the funnel is about, and
+      // this tool used to score the first while ignoring the second: it ranked a pile of
+      // documents, wrote a shortlist naming document ids, and left every candidate card
+      // on the board with the empty `fitScore` its own hint says may only be set "from a
+      // scored shortlist" — an instruction with no mechanism behind it.
+      //
+      // So the screen resolves each résumé to the candidate that names it (through
+      // `candidate.resumeRef`), scores the PERSON, and where a résumé has no candidate it
+      // proposes one — carrying nothing the résumé does not state. That is what makes the
+      // funnel one funnel: after a screen, every scored document has a person attached to
+      // it, and every person carries the score and the posting they were ranked against.
+      const candidateNodes = all.filter((node) => node.data.kind === 'candidate');
+      const attachedTo = new Map<string, CreationFlowNode>();
+      for (const node of candidateNodes) {
+        const resume = resolveNodeRef(resumes, 'resume', node.data.resumeRef);
+        if (resume && !attachedTo.has(resume.id)) attachedTo.set(resume.id, node);
+      }
+
       const level = typeof args.level === 'string' && args.level.trim() ? args.level : String(posting.data.level ?? '');
       const report = screenCandidates(candidates, { jobDescription, ...(level ? { level } : {}) });
+
+      // Every scored résumé now ends beside a person: the candidate that already names it
+      // gets the score, and a résumé nobody has claimed gets a candidate proposed for it.
+      const attachments = report.ranked.map((entry) => {
+        const resume = resumes.find((node) => node.id === entry.ref);
+        const existing = attachedTo.get(entry.ref);
+        if (existing) {
+          proposalBuffer.current.push({
+            id: crypto.randomUUID(), type: 'object.update',
+            label: t('hiringCandidateScored', { title: String(existing.data.title) }),
+            objectId: existing.id,
+            patch: sanitizeCreationObjectPatch('candidate', { fitScore: entry.score, postingRef: posting.id, stage: t('hiringCandidateStageScreened') }),
+          });
+          return { ref: entry.ref, candidateId: existing.id };
+        }
+        // NOTHING INVENTED. The name, headline and location are read out of the résumé
+        // itself; consent, source and stage are left for a person, because a candidate
+        // card that asserts a lawful basis nobody recorded is worse than one that shows
+        // the gap.
+        const basics = (resume ? resumeDocumentFromNode(resume.data) : null)?.basics;
+        const node = newNode('candidate', {
+          x: (resume?.position.x ?? 320) + 40,
+          y: (resume?.position.y ?? 320) + 260,
+        });
+        node.data = {
+          ...node.data,
+          ...sanitizeCreationObjectPatch('candidate', {
+            headline: String(basics?.label ?? ''),
+            location: [basics?.location?.city, basics?.location?.region].filter(Boolean).join(', '),
+            resumeRef: entry.ref,
+            postingRef: posting.id,
+            fitScore: entry.score,
+            stage: t('hiringCandidateStageScreened'),
+          }),
+          title: String(basics?.name ?? entry.candidate),
+        };
+        proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: t('hiringCandidateCreated', { title: String(node.data.title) }), node });
+        return { ref: entry.ref, candidateId: node.id };
+      });
+      const candidateIdFor = new Map(attachments.map((entry) => [entry.ref, entry.candidateId]));
 
       const fields = {
         status: t('hiringShortlistRanked', { count: report.ranked.length }),
@@ -5108,6 +5122,9 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         ranked: report.ranked.map((entry) => ({
           rank: entry.rank,
           candidate: entry.candidate,
+          // The join the ranking never carried. A row that names only a document is a row
+          // nothing downstream can advance, interview or make an offer to.
+          candidateRef: candidateIdFor.get(entry.ref) ?? '',
           score: entry.score,
           evidence: entry.evidence.join(', '),
           gaps: entry.gaps.join(', '),
@@ -5131,7 +5148,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         ok: true, proposed: true,
         reviewedCount: report.reviewedCount,
         ranked: report.ranked.map((entry) => ({ rank: entry.rank, candidate: entry.candidate, score: entry.score, signals: entry.signals })),
-        instruction: 'Report the top of this ranking and the reason each one is there, using the evidence and gaps on the shortlist. This is a READING ORDER, not a decision: never say a candidate was rejected, and never restate a score without the gap that goes with it.',
+        candidates: attachments.length,
+        instruction: 'Report the top of this ranking and the reason each one is there, using the evidence and gaps on the shortlist. Every scored resume now has a `candidate` card carrying its fit score and the posting it was ranked against, so advance, interview and offer act on the PERSON and never on the document. This is a READING ORDER, not a decision: never say a candidate was rejected, and never restate a score without the gap that goes with it.',
       };
     },
   }, {
@@ -9412,6 +9430,16 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const changedArtifactIds = [...materializedAdditions.map((change) => change.node.id), ...updates.map((change) => change.objectId), ...layouts.map((change) => change.objectId), ...actions.map((change) => change.objectId)];
       return brain && changedArtifactIds.length ? associateBrainWithArtifacts(reviewed, brain.id, changedArtifactIds, 'Changed with Brain') : reviewed;
     });
+    // `selectionWithinBoard`, in the same change as the deletion.
+    //
+    // This used to clear the multi-selection only when the SINGLE `selectedId`
+    // happened to be one of the deleted objects, and not at all when the proposal
+    // also added something — so a turn that deleted one of three selected cards
+    // left `selectedIds` naming an object the board no longer held, and a turn
+    // that added and deleted left every stale id in place. The invariant says
+    // "in the same change, not on the next render", which is what makes this a
+    // filter here rather than an effect that tidies up afterwards.
+    if (deletedObjectIds.size) setSelectedIds((current) => selectionWithinBoard(current, nodes.filter((node) => !deletedObjectIds.has(node.id))));
     if (materializedAdditions.length) setSelectedId(materializedAdditions[materializedAdditions.length - 1]!.node.id);
     else if (selectedId && deletedObjectIds.has(selectedId)) { setSelectedId(null); setSelectedIds([]); }
     if (typeof window !== 'undefined' && window.innerWidth <= 760 && materializedAdditions.length) {
@@ -10445,6 +10473,70 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   }, [persistence, setNodes, t]);
 
   /**
+   * `offer.hire` — THE HANDOVER, and the act that ends the hiring funnel in a person.
+   *
+   * ── WHAT WAS BROKEN ──────────────────────────────────────────────────────────
+   * Two vocabularies described this transition in prose and neither performed it. A
+   * signed `offer` stayed a signed offer, and the `employee` and `employeeLifecycle`
+   * cards that should follow it were typed by hand with no link back — so the board held
+   * two funnels that stopped next to each other and nothing could answer "on what terms
+   * was this person hired".
+   *
+   * ── WHY THE MAPPING IS NOT HERE ──────────────────────────────────────────────
+   * `planEmploymentHandover` lives in the contract, beside both vocabularies and owned by
+   * neither. This function does the three things a component is entitled to do: read the
+   * board, place the cards, and say what happened. Which fields carry across is a
+   * contract question, and a copy of it here is the copy that would drift.
+   *
+   * IDEMPOTENT on `offerRef`, not on a name: hiring twice from one offer must not put the
+   * same person on the payroll twice, and two people genuinely do share a name.
+   */
+  const hireFromOffer = useCallback((offerId: string) => {
+    const all = nodesRef.current;
+    const offer = all.find((node) => node.id === offerId && node.data.kind === 'offer');
+    if (!offer) return;
+
+    const data = offer.data as unknown as Record<string, unknown>;
+    const candidate = resolveNodeRef(all, 'candidate', data.candidateRef);
+    const posting = resolveNodeRef(all, 'jobPosting', data.postingRef)
+      // An offer with no posting of its own inherits the candidate's: the candidate was
+      // considered FOR a requisition, and re-typing the reference onto the offer to make
+      // the join work would be the same fact in two places.
+      ?? resolveNodeRef(all, 'jobPosting', candidate?.data.postingRef);
+
+    const blocker = employmentHandoverBlocker({
+      offer: data,
+      candidate: (candidate?.data ?? null) as Record<string, unknown> | null,
+    });
+    if (blocker) { setNotice(t(`noticeHire${blocker[0].toUpperCase()}${blocker.slice(1)}` as 'noticeHireNotSigned')); return; }
+
+    const existing = employeeHiredFrom(all.filter((node) => node.data.kind === 'employee').map((node) => node.data as unknown as Record<string, unknown>), offer.id);
+    if (existing) { setNotice(t('noticeHireAlready', { person: String(existing.personRef ?? '') })); return; }
+
+    const plan = planEmploymentHandover({
+      offer: data,
+      candidate: (candidate?.data ?? null) as Record<string, unknown> | null,
+      posting: (posting?.data ?? null) as Record<string, unknown> | null,
+      offerRef: offer.id,
+      stepLabel: (key: OnboardingStepKey) => t(`hiring.onboardingStep.${key}` as 'hiring.onboardingStep.rightToWork'),
+    });
+
+    const employee = newNode('employee', { x: offer.position.x + 460, y: offer.position.y });
+    employee.data = { ...employee.data, ...plan.employee, title: plan.personRef, status: t('hiringHiredStatus', { date: String(plan.employee.startedAt ?? '') }) };
+    const lifecycle = newNode('employeeLifecycle', { x: offer.position.x + 460, y: offer.position.y + 260 });
+    lifecycle.data = { ...lifecycle.data, ...plan.lifecycle, title: t('hiringOnboardingTitle', { person: plan.personRef }) };
+
+    setNodes((current) => current.map((node) => (node.id === offer.id
+      ? { ...node, data: { ...node.data, status: t('hiringOfferHiredStatus') } }
+      : node)).concat([employee, lifecycle]));
+    setEdges((current) => [...current,
+      { id: crypto.randomUUID(), source: offer.id, target: employee.id, type: 'smoothstep', label: t('hiringHiredEdge'), data: { connectionKind: 'delivery' } },
+      { id: crypto.randomUUID(), source: employee.id, target: lifecycle.id, type: 'smoothstep', label: t('hiringOnboardingEdge'), data: { connectionKind: 'membership' } },
+    ]);
+    setNotice(t('noticeHired', { person: plan.personRef, steps: ((plan.lifecycle.steps as unknown[]) ?? []).length }));
+  }, [setEdges, setNodes, t]);
+
+  /**
    * `assignment.distribute` — fan the task into one `submission` per roster row.
    *
    * Idempotent by construction: a learner who already has a submission for this
@@ -10656,6 +10748,56 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setNotice(t('noticeReferencesImported', { count: candidate.records.length }));
   }, [setNodes, t]);
 
+  /**
+   * The poll's four acts, run from the BOARD rather than from the room.
+   *
+   * The facilitation surface has the same four buttons, and both call the same two
+   * endpoints through the same card reading (`pollPublishBody`) — a second reading of
+   * what `options` means would be a second poll out of one card, and the one that drifts
+   * is the one reached through a model rather than through a person.
+   *
+   * `publish` ends by OPENING the surface: the next thing that happens after a poll is
+   * published is a room being asked to answer it, and leaving the facilitator on the
+   * board with an address they cannot read out is the wrong place to stop.
+   */
+  const runPollAction = useCallback(async (nodeId: string, action: string) => {
+    const target = nodesRef.current.find((node) => node.id === nodeId);
+    if (!target) return;
+    // A poll reaches real people at a public address, which is a tenant resource. A
+    // local board has no tenant, so this is the account gate rather than a failure.
+    if (persistence !== 'server') { requireAccount('publish', tPoll('accountTitle'), tPoll('accountBody')); return; }
+    try {
+      if (action === 'publish') {
+        const result = await publishPoll(pollPublishBody(target.data, nodeId));
+        updateNodeData(nodeId, {
+          questionSetId: result.questionSetId,
+          joinUrl: pollJoinUrl(result.slug),
+          status: tPoll('statusOpen'),
+        } as Partial<CreationNodeData>);
+        setSurface('facilitate', nodeId);
+        setNotice(tPoll('noticePublished'));
+        return;
+      }
+      const questionSetId = typeof target.data.questionSetId === 'string' ? target.data.questionSetId : '';
+      if (!questionSetId) { setNotice(tPoll('noticePublishFirst')); return; }
+      const next = await setPollState(questionSetId, action === 'open'
+        ? { status: 'open' }
+        : action === 'close'
+          ? { status: 'closed' }
+          // `reveal` shows the room the count. Deliberately one-way here: hiding it again
+          // is a facilitation move made in front of the room, on the surface, not
+          // something a model should be able to do to a screen people are reading.
+          : { showResultsLive: true });
+      updateNodeData(nodeId, {
+        showResultsLive: next.showResultsLive,
+        status: next.status === 'open' ? tPoll('statusOpen') : tPoll('statusClosed'),
+      } as Partial<CreationNodeData>);
+      setNotice(next.status === 'open' ? tPoll('noticeVotingOpen') : tPoll('noticeVotingClosed'));
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : tPoll('publishFailed'));
+    }
+  }, [persistence, requireAccount, setSurface, tPoll, updateNodeData]);
+
   useEffect(() => {
     const pending = pendingBrainActions[0];
     if (!pending) return;
@@ -10688,6 +10830,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     else if (target.data.kind === 'mockupSet' && pending.action === 'expand') expandMockupSet();
     else if ((target.data.kind === 'mockup' || target.data.kind === 'mockupSet') && pending.action === 'deliver') deliverMockup();
     else if (target.data.kind === 'standup' && pending.action === 'start') startStandup();
+    else if (target.data.kind === 'poll') void runPollAction(target.id, pending.action);
     else if (target.data.kind === 'evermind' && pending.action === 'train') openEvermindTraining();
     else if (target.data.kind === 'evermind' && pending.action === 'evaluate') evaluateEvermind(target.id);
     else if (target.data.kind === 'testPlan' && pending.action === 'gate') evaluateReleaseGate(target.id);
@@ -10702,6 +10845,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     // projection the hydrating tool uses — so there is exactly one path from a
     // provider's records to this card, whichever end asks for it.
     else if (target.data.kind === 'payRun' && pending.action === 'sync') void syncPayRunCard(target.id);
+    // THE HANDOVER. Routed here beside the other acts that CREATE objects from an
+    // object, because that is what it is: a signed offer fans out into an employment
+    // record and an onboarding plan, exactly as an assignment fans out into submissions.
+    else if (target.data.kind === 'offer' && pending.action === 'hire') hireFromOffer(target.id);
     else if (target.data.kind === 'assignment' && pending.action === 'distribute') distributeAssignment(target.id);
     else if (target.data.kind === 'cohort' && pending.action === 'import') void importCohortRosterFromLti(target.id);
     else if (target.data.kind === 'gradebook' && pending.action === 'compute') computeGradebook(target.id);
@@ -10718,7 +10865,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       setNotice(t('noticeNoDeliveryAdapter', { action: pending.action, kind: creationObjectDefinition(target.data.kind).label }));
     }
     finish();
-  }, [compareProjects, compileWorkflow, computeGradebook, convertObjectToDiagram, deliverMockup, distributeAssignment, evaluateEvermind, evaluateReleaseGate, expandMockupSet, expandProject, exportArtifact, generateVideo, importCohortRosterFromLti, importReferencesFromDocument, markSubmission, nodes, openBuild, openEvermindTraining, pendingBrainActions, persistence, plotDataset, profileDataset, publishWebsite, runCreativeAction, runInvoiceAction, runWorkflow, selectedId, sendUpdateToInvestors, syncPayRunCard, setEdges, setNodes, startStandup, t, validateCurriculumMap, visualizeDataset]);
+  }, [compareProjects, compileWorkflow, computeGradebook, convertObjectToDiagram, deliverMockup, distributeAssignment, evaluateEvermind, evaluateReleaseGate, expandMockupSet, expandProject, exportArtifact, generateVideo, hireFromOffer, importCohortRosterFromLti, importReferencesFromDocument, markSubmission, nodes, openBuild, openEvermindTraining, pendingBrainActions, persistence, plotDataset, profileDataset, publishWebsite, runCreativeAction, runInvoiceAction, runPollAction, runWorkflow, selectedId, sendUpdateToInvestors, syncPayRunCard, setEdges, setNodes, startStandup, t, validateCurriculumMap, visualizeDataset]);
 
   const openHistory = useCallback(() => {
     setHistoryOpen(true);
@@ -11630,7 +11777,16 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             <button onClick={() => { setShowHidden((value) => !value); setMoreOpen(false); }}><span aria-hidden>◉</span>{showHidden ? t('hideHidden') : t('showHidden')}</button>
             <button onClick={() => { createBranch(); setMoreOpen(false); }}><span aria-hidden>⑂</span>{t('branch')}</button>
             {branchParentId && <button onClick={() => { prepareMerge(); setMoreOpen(false); }}><span aria-hidden>⇄</span>{t('merge')}</button>}
+            {/* TWO AXES, TWO CONTROLS. The first says what a connector MEANS — the
+                board folds `blocks` into a critical path and `verifies` into coverage,
+                so it must never be chosen for how it looks. The three below say how it
+                is DRAWN, and they restyle whatever edges are selected as well as arming
+                the next draw, which is how every drawing tool a person has used already
+                works. See `lib/canvasConnectionStyle.ts` for why these are not one list. */}
             <label><span><i aria-hidden>⌁</i>{t('edge')}</span><select aria-label={t('connectionKind')} value={connectionKind} onChange={(event) => setConnectionKind(event.target.value as CreationConnectionKind)}>{CREATION_CONNECTION_KINDS.map((kind) => <option key={kind} value={kind}>{kind}</option>)}</select></label>
+            <label><span><i aria-hidden>─</i>{t('connector.line')}</span><select aria-label={t('connector.line')} value={connectionStyle.line} onChange={(event) => setConnectionStyle({ line: event.target.value as ConnectionStyle['line'] })}>{CONNECTION_LINES.map((line) => <option key={line} value={line}>{t(`connector.line_${line}` as 'connector.line_solid')}</option>)}</select></label>
+            <label><span><i aria-hidden>→</i>{t('connector.ends')}</span><select aria-label={t('connector.ends')} value={connectionStyle.ends} onChange={(event) => setConnectionStyle({ ends: event.target.value as ConnectionStyle['ends'] })}>{CONNECTION_ENDS.map((ends) => <option key={ends} value={ends}>{t(`connector.ends_${ends}` as 'connector.ends_arrow')}</option>)}</select></label>
+            <label><span><i aria-hidden>⌐</i>{t('connector.router')}</span><select aria-label={t('connector.router')} value={connectionStyle.router} onChange={(event) => setConnectionStyle({ router: event.target.value as ConnectionStyle['router'] })}>{CONNECTION_ROUTERS.map((router) => <option key={router} value={router}>{t(`connector.router_${router}` as 'connector.router_step')}</option>)}</select></label>
           </div>}
           {shareOpen && <div className={styles.shareMenu} role="dialog" aria-label={t('inviteCollaborators')}>
             <div className={styles.shareMenuHeader}>
@@ -12160,6 +12316,16 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
               onExit={() => setSurface('graph')}
               {...(cardsEditable ? { onEdit: (patch: Partial<CreationNodeData>) => updateNodeData(surfaceNode.id, patch) } : {})}
             /> : null,
+            // THE ROOM. Same object-scoped shape as the four above, and the same reason
+            // for it: a poll's own axis is the people answering it, which is not a thing
+            // a ~340px card can be. `objectId` goes down so the published question set
+            // points back at the card it came from.
+            facilitate: surfaceNode ? <CanvasFacilitateSurface
+              data={surfaceNode.data}
+              objectId={surfaceNode.id}
+              onExit={() => setSurface('graph')}
+              {...(cardsEditable ? { onEdit: (patch: Partial<CreationNodeData>) => updateNodeData(surfaceNode.id, patch) } : {})}
+            /> : null,
           }}
         />
 
@@ -12641,7 +12807,22 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
       }).catch((error) => setActionStatus(error instanceof Error ? error.message : t('taskUpdateFailed')));
     },
   };
-  const kindCustomSection = KIND_DETAIL_SECTIONS[kindSettingsManifest(kind)?.custom?.component ?? ''];
+  /**
+   * The kind's custom section, as a COMPONENT TYPE — capitalised because it is
+   * mounted as an element below and never called.
+   *
+   * It used to be invoked as `kindCustomSection(props)`, which is a plain function
+   * call: React has no component boundary there, so the section's hooks were
+   * appended to `Inspector`'s own hook list. The sections have DIFFERENT hook
+   * counts (`ResumeInspectorSection` has none, most call `useTranslations`,
+   * `TaskInspectorSection` calls `useFormat` as well), so selecting a résumé and
+   * then a task changed the number of hooks `Inspector` rendered between two
+   * renders and React threw "Rendered more hooks than during the previous
+   * render" — a white-screened inspector from an ordinary click. Mounting it as
+   * an element gives each section its own instance and its own hook list, which
+   * is the entire reason the registry is a table of components.
+   */
+  const KindCustomSection = KIND_DETAIL_SECTIONS[kindSettingsManifest(kind)?.custom?.component ?? ''];
   /**
    * The object's whole inspector, drawn INSIDE the panel anchored to its card.
    *
@@ -12682,7 +12863,7 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
           see everything about an object would be the one action that hides its schedule.
           Same component both ways, so the two cannot drift on what an interval means. */}
       <TimingFields data={node.data} editable={editable} onChange={onChange} />
-      {kindCustomSection && kindCustomSection(kindSectionProps)}
+      {KindCustomSection && <KindCustomSection {...kindSectionProps} />}
       {/* The panel decides for itself whether this object has anything to
           convert, and to which notations — so no kind list is maintained here. */}
       <DiagramConvertPanel node={node} nodes={nodes} onConvert={onConvertDiagram} />

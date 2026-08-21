@@ -327,62 +327,14 @@
     "approvalOnHint": "开启 — 运行高优先级或紧急工单时，会在任何代理执行前发起经理审批请求。",
     "approvalOffHint": "关闭 — 高优先级和紧急工单将立即运行，无需审批。请谨慎使用：这将绕过本看板的治理审批关卡。",
     "bannerManage": "管理审批设置",
-    "parking": {
-      "en": "Parked",
-      "zh": "搁置区",
-      "es": "En pausa",
-      "fr": "En attente",
-      "de": "Pausiert"
-    },
-    "parkingTitle": {
-      "en": "Off the delivery path (blocked / on hold / cancelled). Excluded from %-complete, and work is never advanced into it automatically.",
-      "zh": "不在交付路径上（阻塞／暂停／已取消）。不计入完成百分比，也不会自动将工作推进到该泳道。",
-      "es": "Fuera de la ruta de entrega (bloqueado / en espera / cancelado). Se excluye del % completado y el trabajo nunca avanza aquí automáticamente.",
-      "fr": "Hors du parcours de livraison (bloqué / en attente / annulé). Exclu du % d’avancement, et le travail n’y est jamais avancé automatiquement.",
-      "de": "Außerhalb des Lieferpfads (blockiert / pausiert / abgebrochen). Vom Fortschritt in % ausgenommen; Arbeit wird nie automatisch hierher verschoben."
-    },
-    "mergeInto": {
-      "en": "Merge tickets into",
-      "zh": "将工单合并到",
-      "es": "Fusionar tickets en",
-      "fr": "Fusionner les tickets vers",
-      "de": "Tickets zusammenführen in"
-    },
-    "mergeIntoTitle": {
-      "en": "Where this lane’s tickets go when it is deleted. Leave on Automatic to let the board choose the earliest active lane.",
-      "zh": "删除该泳道时其工单的去向。保持“自动”可让看板选择最早的活动泳道。",
-      "es": "A dónde van los tickets de este carril al eliminarlo. Deja «Automático» para que el tablero elija el carril activo más temprano.",
-      "fr": "Où vont les tickets de ce couloir lors de sa suppression. Laissez « Automatique » pour que le tableau choisisse le premier couloir actif.",
-      "de": "Wohin die Tickets dieser Spur gehen, wenn sie gelöscht wird. „Automatisch“ lässt das Board die früheste aktive Spur wählen."
-    },
-    "mergeIntoAuto": {
-      "en": "Automatic",
-      "zh": "自动",
-      "es": "Automático",
-      "fr": "Automatique",
-      "de": "Automatisch"
-    },
-    "laneUnstaffed": {
-      "en": "This lane runs automatically but has no agent assigned, so nothing here can start on its own. Assign an agent below.",
-      "zh": "该泳道为自动运行，但未分配代理，因此这里的工作无法自行开始。请在下方分配一个代理。",
-      "es": "Este carril se ejecuta automáticamente pero no tiene ningún agente asignado, así que nada puede empezar aquí por sí solo. Asigna un agente abajo.",
-      "fr": "Ce couloir s’exécute automatiquement mais aucun agent n’y est affecté : rien ne peut démarrer ici tout seul. Affectez un agent ci-dessous.",
-      "de": "Diese Spur läuft automatisch, hat aber keinen zugewiesenen Agenten — hier kann nichts von selbst starten. Weisen Sie unten einen Agenten zu."
-    },
-    "wipCapLabel": {
-      "en": "Default work-in-progress cap per member",
-      "zh": "每位成员的默认在制品上限",
-      "es": "Límite de trabajo en curso por miembro (predeterminado)",
-      "fr": "Plafond d’en-cours par membre (par défaut)",
-      "de": "Standard-WIP-Limit pro Mitglied"
-    },
-    "wipCapHint": {
-      "en": "Used by the standup power meter when a member sets no cap of their own.",
-      "zh": "当成员未设置自己的上限时，站会能量条将使用该值。",
-      "es": "Lo usa el medidor de carga del standup cuando un miembro no fija su propio límite.",
-      "fr": "Utilisé par la jauge de charge du standup lorsqu’un membre ne fixe pas son propre plafond.",
-      "de": "Wird von der Auslastungsanzeige im Standup verwendet, wenn ein Mitglied kein eigenes Limit setzt."
-    },
+    "parking": "搁置区",
+    "parkingTitle": "不在交付路径上（阻塞／暂停／已取消）。不计入完成百分比，也不会自动将工作推进到该泳道。",
+    "mergeInto": "将工单合并到",
+    "mergeIntoTitle": "删除该泳道时其工单的去向。保持“自动”可让看板选择最早的活动泳道。",
+    "mergeIntoAuto": "自动",
+    "laneUnstaffed": "该泳道为自动运行，但未分配代理，因此这里的工作无法自行开始。请在下方分配一个代理。",
+    "wipCapLabel": "每位成员的默认在制品上限",
+    "wipCapHint": "当成员未设置自己的上限时，站会能量条将使用该值。",
     "title": "看板配置",
     "tab": {
       "lanes": "泳道与代理",
@@ -4071,47 +4023,6 @@
     "by": "作者：{author}"
   },
   "canvas": {
-    "add_text": "文本",
-    "add_sticky": "便签",
-    "add_image": "图片",
-    "add_embed": "嵌入",
-    "add_timer": "计时器",
-    "add_stopwatch": "秒表",
-    "blockCount": "{count, plural, =0 {空} other {# 个区块}}",
-    "emptyHint": "从工具栏添加区块以开始。",
-    "emptyReadOnly": "此画布为空。",
-    "type_text": "文本",
-    "type_sticky": "便签",
-    "type_image": "图片",
-    "type_embed": "嵌入",
-    "type_timer": "计时器",
-    "type_stopwatch": "秒表",
-    "remove": "移除",
-    "resize": "调整大小",
-    "textPlaceholder": "输入…",
-    "stickyPlaceholder": "便签…",
-    "color": "颜色",
-    "noImage": "暂无图片",
-    "imageUrlPlaceholder": "粘贴图片 URL…",
-    "noEmbed": "未关联文档",
-    "embedIdPlaceholder": "知识文档 ID…",
-    "openEmbeddedDoc": "打开文档",
-    "add_video": "视频",
-    "add_file": "文件",
-    "type_video": "视频",
-    "type_file": "文件",
-    "noVideo": "暂无视频",
-    "videoUrlPlaceholder": "粘贴视频或嵌入 URL…",
-    "noFile": "未关联文件",
-    "fileNamePlaceholder": "文件名（可选）…",
-    "fileUrlPlaceholder": "粘贴文件 URL…",
-    "saveToKnowledge": "保存到知识库",
-    "saving": "保存中…",
-    "defaultBoardTitle": "未命名画布",
-    "start": "开始",
-    "pause": "暂停",
-    "reset": "重置",
-    "close": "关闭",
     "ads": {
       "title": "付费投放",
       "close": "关闭",
@@ -9769,20 +9680,8 @@
     "audit": {
       "flagged": "已标记",
       "flaggedTitle": "此工单跳过了必需的角色或诊断——需要复核",
-      "unstaffed": {
-        "en": "{count} unstaffed",
-        "zh": "{count} 个未配备",
-        "es": "{count} sin asignar",
-        "fr": "{count} sans titulaire",
-        "de": "{count} unbesetzt"
-      },
-      "unstaffedTitle": {
-        "en": "{count} required sign-off role(s) have nobody assigned — these gate completion and merge.",
-        "zh": "有 {count} 个必需的签核角色无人负责——它们会阻止完成与合并。",
-        "es": "{count} rol(es) de aprobación obligatorios no tienen a nadie asignado: bloquean la finalización y la fusión.",
-        "fr": "{count} rôle(s) de validation requis n’ont personne d’assigné — ils bloquent la clôture et la fusion.",
-        "de": "{count} erforderliche Freigaberolle(n) haben niemanden zugewiesen — sie blockieren Abschluss und Merge."
-      },
+      "unstaffed": "{count} 个未配备",
+      "unstaffedTitle": "有 {count} 个必需的签核角色无人负责——它们会阻止完成与合并。",
       "participantsTitle": "必需角色参与情况：已完成 & 必需"
     },
     "build": {
@@ -13670,41 +13569,11 @@
     "placeHint": "放置中…",
     "pickUp": "拿起“{title}”以移动",
     "putDown": "放下“{title}”",
-    "turnPaused": {
-      "en": "paused",
-      "zh": "已暂停",
-      "es": "en pausa",
-      "fr": "en pause",
-      "de": "pausiert"
-    },
-    "pauseTurn": {
-      "en": "Pause",
-      "zh": "暂停",
-      "es": "Pausar",
-      "fr": "Pause",
-      "de": "Pause"
-    },
-    "resumeTurn": {
-      "en": "Resume",
-      "zh": "继续",
-      "es": "Reanudar",
-      "fr": "Reprendre",
-      "de": "Fortsetzen"
-    },
-    "pauseTurnHint": {
-      "en": "Stop the clock on the current speaker — time is not charged to them while paused.",
-      "zh": "暂停当前发言人的计时——暂停期间不会计入其发言时长。",
-      "es": "Detén el reloj del orador actual: el tiempo no se le contabiliza mientras esté en pausa.",
-      "fr": "Arrêter le chronomètre de l’intervenant en cours — le temps ne lui est pas décompté pendant la pause.",
-      "de": "Die Uhr des aktuellen Sprechers anhalten — die Zeit wird während der Pause nicht angerechnet."
-    },
-    "resumeTurnHint": {
-      "en": "Restart the clock on the current speaker.",
-      "zh": "重新开始当前发言人的计时。",
-      "es": "Reanuda el reloj del orador actual.",
-      "fr": "Relancer le chronomètre de l’intervenant en cours.",
-      "de": "Die Uhr des aktuellen Sprechers wieder starten."
-    },
+    "turnPaused": "已暂停",
+    "pauseTurn": "暂停",
+    "resumeTurn": "继续",
+    "pauseTurnHint": "暂停当前发言人的计时——暂停期间不会计入其发言时长。",
+    "resumeTurnHint": "重新开始当前发言人的计时。",
     "assignTo": "把选中的任务分配给 {name}",
     "returnToBacklog": "把选中的任务退回待办",
     "groupIntoEpic": "把选中的任务归入“{title}”",
@@ -13756,7 +13625,9 @@
     "assignedWork": {
       "assignedTo": "已分配 {count} 项 · {name}",
       "empty": "暂无分配。"
-    }
+    },
+    "nextSpeaker": "下一位",
+    "completeSession": "结束"
   },
   "meetings": {
     "title": "会议",
@@ -13767,41 +13638,11 @@
     "scheduleTitle": "安排会议",
     "loading": "加载中…",
     "liveAndUpcoming": "进行中和即将开始",
-    "rsvpLabel": {
-      "en": "Your response",
-      "zh": "你的回复",
-      "es": "Tu respuesta",
-      "fr": "Votre réponse",
-      "de": "Ihre Antwort"
-    },
-    "rsvp_accepted": {
-      "en": "Going",
-      "zh": "参加",
-      "es": "Asistiré",
-      "fr": "Je participe",
-      "de": "Nehme teil"
-    },
-    "rsvp_tentative": {
-      "en": "Maybe",
-      "zh": "待定",
-      "es": "Quizá",
-      "fr": "Peut-être",
-      "de": "Vielleicht"
-    },
-    "rsvp_declined": {
-      "en": "Cannot attend",
-      "zh": "无法参加",
-      "es": "No puedo asistir",
-      "fr": "Je ne peux pas",
-      "de": "Kann nicht"
-    },
-    "rsvpFailed": {
-      "en": "Could not record your response.",
-      "zh": "无法记录你的回复。",
-      "es": "No se pudo registrar tu respuesta.",
-      "fr": "Impossible d’enregistrer votre réponse.",
-      "de": "Ihre Antwort konnte nicht erfasst werden."
-    },
+    "rsvpLabel": "你的回复",
+    "rsvp_accepted": "参加",
+    "rsvp_tentative": "待定",
+    "rsvp_declined": "无法参加",
+    "rsvpFailed": "无法记录你的回复。",
     "noMeetings": "暂无会议。立即开始或安排一场会议。",
     "fromYourCalendar": "来自你的日历",
     "anytime": "随时",
@@ -15514,13 +15355,7 @@
         "no_contribution": "无贡献记录",
         "waived": "已豁免",
         "changes_requested": "要求修改",
-        "auto_attested": {
-          "en": "Auto-credited",
-          "zh": "自动记入",
-          "es": "Acreditado automáticamente",
-          "fr": "Crédité automatiquement",
-          "de": "Automatisch gutgeschrieben"
-        }
+        "auto_attested": "自动记入"
       },
       "detail": {
         "unsigned": "所需角色尚未签核。",
@@ -15532,13 +15367,7 @@
         "no_contribution": "批准时未关联任何工作成果——存在走过场的风险。",
         "waived": "已豁免：{reason}",
         "waived_no_reason": "已豁免但未记录理由。",
-        "auto_attested": {
-          "en": "Credited automatically from a completed run — no member recorded a verdict of their own.",
-          "zh": "由已完成的运行自动记入——没有成员自行记录裁定结果。",
-          "es": "Acreditado automáticamente a partir de una ejecución completada: ningún miembro registró su propio veredicto.",
-          "fr": "Crédité automatiquement à partir d’une exécution terminée — aucun membre n’a enregistré son propre verdict.",
-          "de": "Automatisch aus einem abgeschlossenen Lauf gutgeschrieben — kein Mitglied hat ein eigenes Urteil erfasst."
-        }
+        "auto_attested": "由已完成的运行自动记入——没有成员自行记录裁定结果。"
       }
     },
     "table": {
@@ -16916,62 +16745,14 @@
     "thisTicket": "本工单",
     "thisEpic": "本史诗",
     "parentEpic": "所属史诗",
-    "parked": {
-      "en": "Parked",
-      "zh": "已搁置",
-      "es": "En pausa",
-      "fr": "En attente",
-      "de": "Pausiert"
-    },
-    "linkObjectiveLabel": {
-      "en": "Objective to link this ticket to",
-      "zh": "要关联此工单的目标",
-      "es": "Objetivo al que vincular este ticket",
-      "fr": "Objectif auquel rattacher ce ticket",
-      "de": "Ziel, mit dem dieses Ticket verknüpft wird"
-    },
-    "loadingObjectives": {
-      "en": "Loading objectives…",
-      "zh": "正在加载目标…",
-      "es": "Cargando objetivos…",
-      "fr": "Chargement des objectifs…",
-      "de": "Ziele werden geladen…"
-    },
-    "chooseObjective": {
-      "en": "Choose an objective…",
-      "zh": "选择一个目标…",
-      "es": "Elige un objetivo…",
-      "fr": "Choisir un objectif…",
-      "de": "Ziel auswählen…"
-    },
-    "linkObjective": {
-      "en": "Link",
-      "zh": "关联",
-      "es": "Vincular",
-      "fr": "Rattacher",
-      "de": "Verknüpfen"
-    },
-    "linking": {
-      "en": "Linking…",
-      "zh": "正在关联…",
-      "es": "Vinculando…",
-      "fr": "Rattachement…",
-      "de": "Wird verknüpft…"
-    },
-    "linkObjectiveDenied": {
-      "en": "Only a manager can link a ticket to an objective.",
-      "zh": "只有管理者才能将工单关联到目标。",
-      "es": "Solo un gestor puede vincular un ticket a un objetivo.",
-      "fr": "Seul un manager peut rattacher un ticket à un objectif.",
-      "de": "Nur eine Managerin oder ein Manager kann ein Ticket mit einem Ziel verknüpfen."
-    },
-    "noObjectivesYet": {
-      "en": "No objectives exist yet — create one on the Planning board.",
-      "zh": "尚未创建任何目标——请在规划看板上创建。",
-      "es": "Todavía no hay objetivos: crea uno en el tablero de planificación.",
-      "fr": "Aucun objectif pour l’instant — créez-en un sur le tableau de planification.",
-      "de": "Es gibt noch keine Ziele — legen Sie eines im Planungsboard an."
-    },
+    "parked": "已搁置",
+    "linkObjectiveLabel": "要关联此工单的目标",
+    "loadingObjectives": "正在加载目标…",
+    "chooseObjective": "选择一个目标…",
+    "linkObjective": "关联",
+    "linking": "正在关联…",
+    "linkObjectiveDenied": "只有管理者才能将工单关联到目标。",
+    "noObjectivesYet": "尚未创建任何目标——请在规划看板上创建。",
     "signoffs": "签署",
     "basisLane": "第 {index} 阶段，共 {total} 阶段",
     "basisSignoff": "已签署 {done}/{total}",
@@ -18277,7 +18058,18 @@
       "pipelineOpen": "{count} 个进行中 · {amount}",
       "pipelineUnpriced": "{count} 个未定价",
       "pipelineOdds": "{percent}%",
-      "adapterVersion": "适配器"
+      "adapterVersion": "适配器",
+      "campaignSendable": "可发送",
+      "campaignConsent": "同意状态",
+      "campaignConsentOk": "可以发送",
+      "campaignConsentBlocked": "已阻止",
+      "campaignBlocker": {
+        "noAudience": "此营销活动尚未绑定受众",
+        "unknownConsent": "未记录向该受众发送邮件的合法依据",
+        "noSuppressionCheck": "尚未核对屏蔽名单",
+        "emptyAfterSuppression": "剔除屏蔽名单后已无收件人",
+        "forbiddenClaim": "文案中含有品牌禁止的说法"
+      }
     },
     "editor": {
       "toolbar": "格式",
@@ -18300,10 +18092,19 @@
       "link": "插入链接",
       "linkUrl": "链接地址",
       "linkPlaceholder": "https://example.com",
-      "linkApply": "应用",
-      "linkCancel": "取消",
       "rule": "水平分隔线",
-      "clearFormatting": "清除格式"
+      "clearFormatting": "清除格式",
+      "blockHeading4": "标题 4",
+      "indent": "增加缩进",
+      "outdent": "减少缩进",
+      "image": "插入图片",
+      "imageUrl": "图片地址",
+      "imagePlaceholder": "https://example.com/picture.png",
+      "table": "插入表格",
+      "tableColumn": "第 {index} 列",
+      "insertApply": "插入",
+      "words": "{count, plural, =0 {没有字词} other {# 个字词}}",
+      "characters": "{count, plural, =0 {没有字符} other {# 个字符}}"
     },
     "export": {
       "group": "下载",
@@ -18560,7 +18361,7 @@
       "accommodation": "便利安排",
       "feedbackBank": "评语库",
       "lecture": "课时",
-      "poll": "课堂投票",
+      "poll": "投票",
       "officeHours": "答疑时间",
       "curriculumMap": "课程矩阵",
       "grantProposal": "项目申请书",
@@ -18664,7 +18465,9 @@
       "ipAsset": "知识产权资产",
       "legalMatter": "法律事务",
       "brandKit": "品牌套件",
-      "audience": "受众"
+      "audience": "受众",
+      "stopwatch": "秒表",
+      "transclusion": "嵌入文档"
     },
     "twilioSetup": {
       "title": "Twilio 集成",
@@ -19307,6 +19110,7 @@
     "creativeNoMediaModel": "请先发布一个 Evermind 媒体模型来渲染此对象",
     "creativeNoFrames": "模型未返回可读取的帧",
     "modeSaveFailed": "无法保存会话模式",
+    "objectsRejected": "{count, plural, other {有 # 个对象无法打开}}——当前版本不认识类型 {kinds}。画板的其余部分已加载。",
     "alignNeedsTwo": "请至少选择两个对象再对齐",
     "objectsAligned": "已对齐 {count} 个对象",
     "editorActions": "编辑器操作",
@@ -20180,7 +19984,8 @@
         "shares": "访问授权",
         "views": "查看记录",
         "documentBody": "文件正文",
-        "templateKey": "模板"
+        "templateKey": "模板",
+        "abTestKey": "A/B 测试标识"
       },
       "column": {
         "actual": "实际",
@@ -20484,7 +20289,8 @@
         "teams": "团队",
         "timeline": "时间线",
         "triggeredBy": "触发条件",
-        "version": "版本"
+        "version": "版本",
+        "offerRef": "来源录用通知书"
       },
       "column": {
         "acknowledgedAt": "确认时间",
@@ -20953,7 +20759,8 @@
         "guaranteeDays": "保证期（天）",
         "guaranteeEndsAt": "保证期结束",
         "invoiceState": "开票状态",
-        "selfIdentification": "自我认同信息"
+        "selfIdentification": "自我认同信息",
+        "resumeRef": "简历"
       },
       "column": {
         "category": "类别",
@@ -20988,7 +20795,16 @@
         "at": "时间",
         "party": "分成方",
         "share": "比例",
-        "amount": "金额"
+        "amount": "金额",
+        "candidateRef": "候选人卡片"
+      },
+      "onboardingStep": {
+        "rightToWork": "收集并核验工作许可证明",
+        "payrollEnrolment": "薪资与福利登记",
+        "equipment": "设备订购与交付",
+        "systemAccess": "系统权限开通",
+        "managerIntroduction": "主管介绍与首周计划",
+        "probationReview": "预约试用期评估"
       }
     },
     "shared": {
@@ -21002,7 +20818,8 @@
       "label": {
         "funnel": "转化漏斗",
         "book": "书籍",
-        "sequence": "触达序列"
+        "sequence": "触达序列",
+        "poll": "投票"
       },
       "field": {
         "funnelDomain": "漏斗类型",
@@ -21037,7 +20854,21 @@
         "enrolled": "已加入",
         "replyRate": "回复率",
         "sequenceProgress": "进度",
-        "lastRunAt": "上次运行"
+        "lastRunAt": "上次运行",
+        "prompt": "问题",
+        "pollFormat": "形式",
+        "pollOptions": "选项",
+        "scaleMax": "量表上限",
+        "gridXLabel": "横轴",
+        "gridYLabel": "纵轴",
+        "pollAnonymous": "匿名",
+        "showResultsLive": "向现场显示统计",
+        "closesAt": "截止时间",
+        "joinUrl": "加入地址",
+        "pollResponseCount": "作答数",
+        "pollResults": "结果",
+        "pollAnswers": "大家的回答",
+        "pollCorrectRate": "正确率"
       },
       "column": {
         "stage": "阶段",
@@ -21064,7 +20895,10 @@
         "name": "姓名",
         "contactRef": "联系方式",
         "stepsSent": "已发送",
-        "repliedAtISO": "回复时间"
+        "repliedAtISO": "回复时间",
+        "id": "ID",
+        "label": "标签",
+        "correct": "正确"
       },
       "status": {
         "manuscript": "手稿",
@@ -21853,7 +21687,20 @@
       "objectLabel": "{title}（全屏）",
       "switcher": "画布视图",
       "enterFullscreen": "全屏",
-      "exitFullscreen": "退出全屏"
+      "exitFullscreen": "退出全屏",
+      "calendar": {
+        "label": "日历",
+        "enter": "规划本月",
+        "active": "你正在日历中",
+        "open": "打开日历",
+        "regionLabel": "把这块画布作为一个月来查看",
+        "navLabel": "选择月份",
+        "previousMonth": "上一个月",
+        "nextMonth": "下一个月",
+        "summary": "{scheduled} 已排期 · {dated} 有日期 · {undated} 无日期",
+        "gridLabel": "本月的日期",
+        "conflict": "同一天还有另一项安排"
+      }
     },
     "miro": {
       "title": "Miro 白板",
@@ -21958,7 +21805,9 @@
       "modelPlaceholder": "沿用画板默认值",
       "builtinSeat": "内置席位",
       "customAgent": "自定义智能体",
-      "builtinSeatHint": "此席位来自角色目录——其职责说明、工具和审阅权限随席位而来。你在此设置的是它在本画板上的工作方式。"
+      "builtinSeatHint": "此席位来自角色目录——其职责说明、工具和审阅权限随席位而来。你在此设置的是它在本画板上的工作方式。",
+      "timerDurationMs": "时长（毫秒）",
+      "transclusionDocumentId": "文档 ID"
     },
     "nodeMessage": {
       "emptyShell": "此对象只有标题、尚无内容——看起来已完成，实际是空的。"
@@ -22077,7 +21926,7 @@
       "accommodation": "记录学生依法应享有的残障或学习便利安排。",
       "feedbackBank": "可重复使用的教师评语库，加快批改速度。",
       "lecture": "集课程幻灯片、笔记、录像和资料于一体的课时页面。",
-      "poll": "课堂实时提问，学生可用设备即时作答。",
+      "poll": "向现场提问并实时看到回答。手机即可加入，无需账户。",
       "officeHours": "可预约的教师空闲时间表，用于一对一学生会面。",
       "curriculumMap": "展示课程与学习成果在整个项目中如何关联的地图。",
       "grantProposal": "阐述研究目标、预算和时间安排的资助申请书。",
@@ -22159,7 +22008,9 @@
       "incident": "安全或运营事故的报告及其处理结果。",
       "book": "记录财务交易与账目分录的总账。",
       "account": "追踪余额与交易记录的财务账户。",
-      "sticky": "用于在画布上随手记录想法的便签。"
+      "sticky": "用于在画布上随手记录想法的便签。",
+      "stopwatch": "记录某件事实际花了多久。所有人看到的是同一个计时。",
+      "transclusion": "在这里实时显示另一篇知识文档 —— 而不是它的副本。"
     },
     "previewWidth": "预览宽度",
     "viewportName": {
@@ -22483,7 +22334,166 @@
     "llmCacheHitRate": "缓存命中率",
     "llmLatencyP50Ms": "延迟 p50（毫秒）",
     "llmLatencyP95Ms": "延迟 p95（毫秒）",
-    "objectNeedsUpgrade": "升级到付费套餐后即可添加。"
+    "objectNeedsUpgrade": "升级到付费套餐后即可添加。",
+    "brandClaimViolation": "其中包含品牌禁止的说法：{claims}",
+    "noticeHireNotSigned": "此录用通知书尚未签署，因此无人可入职。以未签署的录用通知书为起点的雇佣记录，记录的是从未发生的事。",
+    "noticeHireNoPerson": "此录用通知书既未指明候选人，也没有邮箱地址，生成的雇佣记录将不指向任何人。请先填写 candidateRef 或 candidateEmail。",
+    "noticeHireNoStartDate": "此录用通知书没有入职日期。所有入职步骤都以该日期为基准，缺少它的计划将完全没有到期日。",
+    "noticeHireAlready": "{person} 已通过此录用通知书入职。未创建任何内容——重复入职会让同一个人被两次列入薪资名册。",
+    "noticeHired": "{person} 已入职：雇佣记录和包含 {steps} 个步骤的入职计划已添加到画布。",
+    "hiringHiredStatus": "已入职——{date} 开始",
+    "hiringOfferHiredStatus": "已入职",
+    "hiringOnboardingTitle": "入职——{person}",
+    "hiringHiredEdge": "入职",
+    "hiringOnboardingEdge": "入职流程",
+    "hiringCandidateCreated": "创建候选人“{title}”",
+    "hiringCandidateScored": "为候选人“{title}”评分",
+    "hiringCandidateStageScreened": "已筛选",
+    "clock": {
+      "finished": "已结束",
+      "running": "计时中",
+      "paused": "已暂停",
+      "boxOf": "共 {length}",
+      "start": "开始",
+      "pause": "暂停",
+      "reset": "重置"
+    },
+    "transclusion": {
+      "chooseDocument": "选择这张卡片要显示的文档。",
+      "loading": "正在加载文档…",
+      "unavailable": "该文档不可用 —— 可能已被删除，或你没有访问权限。",
+      "empty": "该文档尚无内容。",
+      "readAll": "阅读全文",
+      "openDocument": "打开文档"
+    },
+    "stencilShape": {
+      "square": "正方形",
+      "rectangle": "矩形",
+      "round": "圆角",
+      "roundRectangle": "圆角矩形",
+      "ellipse": "椭圆",
+      "circle": "圆形",
+      "rhombus": "菱形",
+      "triangle": "三角形",
+      "parallelogram": "平行四边形",
+      "trapezoid": "梯形",
+      "pentagon": "五边形",
+      "hexagon": "六边形",
+      "octagon": "八边形",
+      "star": "星形",
+      "cross": "十字形",
+      "rightArrow": "右箭头",
+      "leftArrow": "左箭头",
+      "leftRightArrow": "双向箭头",
+      "cloud": "云形",
+      "cylinder": "圆柱",
+      "document": "文档",
+      "pill": "胶囊形"
+    },
+    "stencilPack": {
+      "flowchart": "流程图",
+      "flowchartDescription": "流程图形状",
+      "mindMap": "思维导图",
+      "mindMapDescription": "思维导图节点",
+      "wireframe": "线框图",
+      "wireframeDescription": "线框元素",
+      "cloud": "云架构",
+      "cloudDescription": "架构图形状",
+      "uml": "UML",
+      "umlDescription": "UML 形状"
+    },
+    "stencil": {
+      "process": "处理",
+      "decision": "判断",
+      "start": "开始",
+      "end": "结束",
+      "data": "数据",
+      "document": "文档",
+      "database": "数据库",
+      "connector": "连接点",
+      "centre": "中心主题",
+      "branch": "分支",
+      "leaf": "末梢",
+      "question": "问题",
+      "screen": "屏幕",
+      "header": "标题栏",
+      "block": "内容区块",
+      "field": "输入框",
+      "button": "按钮",
+      "modal": "对话框",
+      "internet": "互联网",
+      "loadBalancer": "负载均衡",
+      "compute": "计算",
+      "store": "数据存储",
+      "queue": "队列",
+      "user": "用户",
+      "boundary": "边界",
+      "class": "类",
+      "interface": "接口",
+      "actor": "参与者",
+      "component": "组件",
+      "note": "备注"
+    },
+    "connector": {
+      "line": "线型",
+      "ends": "端点",
+      "router": "走线",
+      "line_solid": "实线",
+      "line_dashed": "虚线",
+      "line_dotted": "点线",
+      "ends_arrow": "箭头",
+      "ends_open": "开口箭头",
+      "ends_both": "两端箭头",
+      "ends_none": "无箭头",
+      "router_smoothstep": "圆角折线",
+      "router_step": "直角折线",
+      "router_straight": "直线",
+      "router_bezier": "曲线"
+    },
+    "timerDurationMs": "时长（毫秒）",
+    "transclusionDocumentId": "文档 ID",
+    "marketing": {
+      "empty": "此{label}尚未填写任何内容。",
+      "emptyHint": "让 Brain 调研并填写，或打开检查器自行编写。",
+      "meterLabel": "{label}：{score} 分（满分 100）",
+      "label": {
+        "brandKit": "品牌套件",
+        "audience": "受众"
+      },
+      "status": {
+        "drafting": "草拟中",
+        "notCounted": "尚未统计"
+      },
+      "field": {
+        "brandKitId": "品牌套件",
+        "palette": "配色",
+        "typography": "字体",
+        "logoUrl": "标志",
+        "logoDarkUrl": "标志（深色）",
+        "voice": "语调",
+        "doNotSay": "禁用表述",
+        "boundObjects": "已绑定对象",
+        "audienceId": "受众",
+        "rules": "细分规则",
+        "consentBasis": "合法依据",
+        "consentEvidence": "同意凭证",
+        "size": "规模",
+        "suppressedCount": "已屏蔽",
+        "sendableCount": "可发送",
+        "suppressedShare": "屏蔽占比",
+        "refreshedAt": "最近统计",
+        "sources": "来源",
+        "summary": "摘要"
+      },
+      "column": {
+        "field": "字段",
+        "operator": "运算符",
+        "value": "值",
+        "title": "标题",
+        "detail": "详情",
+        "url": "链接"
+      }
+    }
   },
   "canvasCommands": {
     "cleanLayout": "整理画布布局",
@@ -26080,5 +26090,74 @@
       "week": "7 天",
       "month": "本月"
     }
+  },
+  "poll": {
+    "accountBody": "投票需要一个大家可以用手机加入的公开地址，它属于你的工作区。免费注册即可发布。",
+    "accountTitle": "免费注册即可发起投票",
+    "anonymousNo": "你的答案会与你关联",
+    "anonymousYes": "匿名 —— 你的答案不会与你关联",
+    "answerFirst": "请先选择答案再提交。",
+    "answerPlaceholder": "你的答案",
+    "backToBoard": "返回画布",
+    "changeVote": "修改我的答案",
+    "chooseAny": "选择所有适用项",
+    "chooseOne": "选择一项",
+    "chooseScale": "请选择 1 到 {max}",
+    "closeVoting": "结束投票",
+    "cloudLabel": "包含 {terms} 个词的词云",
+    "copyJoinLink": "复制链接",
+    "correctOption": "{label}（正确答案）",
+    "gridLabel": "坐标图上有 {count} 个标记",
+    "hideResults": "隐藏结果",
+    "joinAt": "加入地址",
+    "loading": "正在加载投票…",
+    "mean": "平均 {mean}",
+    "missing": "此地址没有投票。请检查链接，或重新索取。",
+    "moveDown": "将第 {position} 项下移",
+    "moveUp": "将第 {position} 项上移",
+    "noAnswersYet": "暂无作答。",
+    "noticePublishFirst": "请先发布投票，再开始或结束投票。",
+    "noticePublished": "投票已开始。把加入地址念给大家。",
+    "noticeVotingClosed": "投票已结束。",
+    "noticeVotingOpen": "投票已开始。",
+    "ofExpected": "共 {expected} 人",
+    "openJoinPage": "打开加入页面",
+    "openVoting": "开始投票",
+    "placeOnGrid": "在坐标图上定位 —— 横轴 {x}，纵轴 {y}",
+    "publish": "发布并开始",
+    "publishFailed": "投票发布失败。",
+    "quadrant": {
+      "lowLow": "低 / 低",
+      "highLow": "高 / 低",
+      "lowHigh": "低 / 高",
+      "highHigh": "高 / 高"
+    },
+    "quadrantShares": "按象限统计",
+    "rankThem": "请排序",
+    "readFailed": "无法读取结果。",
+    "readOnlyHint": "你对该画布只有只读权限，因此无法发布或控制此投票。",
+    "republish": "更新投票",
+    "responseCount": "{count} 人已作答",
+    "resultsHeading": "大家的回答",
+    "resultsHidden": "在主持人公布之前，结果处于隐藏状态。",
+    "resultsHiddenFromRoom": "统计对现场隐藏",
+    "resultsLabel": "投票结果",
+    "resultsShown": "现场可以看到统计",
+    "revealResults": "公布结果",
+    "sendVote": "提交",
+    "sending": "提交中…",
+    "statusClosed": "投票已结束",
+    "statusOpen": "投票进行中",
+    "steerFailed": "该变更未能生效。",
+    "termCount": "{term}：{count}",
+    "truncated": "仅显示最近的作答",
+    "unpublishedHint": "发布这个投票，即可获得一个大家用手机就能加入的地址。作答无需账户。",
+    "untitled": "未命名投票",
+    "updateVote": "更新我的答案",
+    "voteFailed": "你的答案未能提交，请重试。",
+    "voteRecorded": "你的答案已记录。",
+    "votingClosed": "投票已结束",
+    "votingOpen": "投票进行中",
+    "wordPlaceholder": "一两个词"
   }
 }

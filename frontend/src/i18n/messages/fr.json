@@ -327,62 +327,14 @@
     "approvalOnHint": "Activé — l'exécution d'un ticket élevé ou urgent ouvre une demande d'approbation du responsable avant qu'un agent ne l'exécute.",
     "approvalOffHint": "Désactivé — les tickets élevés et urgents s'exécutent immédiatement, sans étape d'approbation. À utiliser avec prudence : cela contourne le contrôle de gouvernance de ce tableau.",
     "bannerManage": "Gérer le paramètre d'approbation",
-    "parking": {
-      "en": "Parked",
-      "zh": "搁置区",
-      "es": "En pausa",
-      "fr": "En attente",
-      "de": "Pausiert"
-    },
-    "parkingTitle": {
-      "en": "Off the delivery path (blocked / on hold / cancelled). Excluded from %-complete, and work is never advanced into it automatically.",
-      "zh": "不在交付路径上（阻塞／暂停／已取消）。不计入完成百分比，也不会自动将工作推进到该泳道。",
-      "es": "Fuera de la ruta de entrega (bloqueado / en espera / cancelado). Se excluye del % completado y el trabajo nunca avanza aquí automáticamente.",
-      "fr": "Hors du parcours de livraison (bloqué / en attente / annulé). Exclu du % d’avancement, et le travail n’y est jamais avancé automatiquement.",
-      "de": "Außerhalb des Lieferpfads (blockiert / pausiert / abgebrochen). Vom Fortschritt in % ausgenommen; Arbeit wird nie automatisch hierher verschoben."
-    },
-    "mergeInto": {
-      "en": "Merge tickets into",
-      "zh": "将工单合并到",
-      "es": "Fusionar tickets en",
-      "fr": "Fusionner les tickets vers",
-      "de": "Tickets zusammenführen in"
-    },
-    "mergeIntoTitle": {
-      "en": "Where this lane’s tickets go when it is deleted. Leave on Automatic to let the board choose the earliest active lane.",
-      "zh": "删除该泳道时其工单的去向。保持“自动”可让看板选择最早的活动泳道。",
-      "es": "A dónde van los tickets de este carril al eliminarlo. Deja «Automático» para que el tablero elija el carril activo más temprano.",
-      "fr": "Où vont les tickets de ce couloir lors de sa suppression. Laissez « Automatique » pour que le tableau choisisse le premier couloir actif.",
-      "de": "Wohin die Tickets dieser Spur gehen, wenn sie gelöscht wird. „Automatisch“ lässt das Board die früheste aktive Spur wählen."
-    },
-    "mergeIntoAuto": {
-      "en": "Automatic",
-      "zh": "自动",
-      "es": "Automático",
-      "fr": "Automatique",
-      "de": "Automatisch"
-    },
-    "laneUnstaffed": {
-      "en": "This lane runs automatically but has no agent assigned, so nothing here can start on its own. Assign an agent below.",
-      "zh": "该泳道为自动运行，但未分配代理，因此这里的工作无法自行开始。请在下方分配一个代理。",
-      "es": "Este carril se ejecuta automáticamente pero no tiene ningún agente asignado, así que nada puede empezar aquí por sí solo. Asigna un agente abajo.",
-      "fr": "Ce couloir s’exécute automatiquement mais aucun agent n’y est affecté : rien ne peut démarrer ici tout seul. Affectez un agent ci-dessous.",
-      "de": "Diese Spur läuft automatisch, hat aber keinen zugewiesenen Agenten — hier kann nichts von selbst starten. Weisen Sie unten einen Agenten zu."
-    },
-    "wipCapLabel": {
-      "en": "Default work-in-progress cap per member",
-      "zh": "每位成员的默认在制品上限",
-      "es": "Límite de trabajo en curso por miembro (predeterminado)",
-      "fr": "Plafond d’en-cours par membre (par défaut)",
-      "de": "Standard-WIP-Limit pro Mitglied"
-    },
-    "wipCapHint": {
-      "en": "Used by the standup power meter when a member sets no cap of their own.",
-      "zh": "当成员未设置自己的上限时，站会能量条将使用该值。",
-      "es": "Lo usa el medidor de carga del standup cuando un miembro no fija su propio límite.",
-      "fr": "Utilisé par la jauge de charge du standup lorsqu’un membre ne fixe pas son propre plafond.",
-      "de": "Wird von der Auslastungsanzeige im Standup verwendet, wenn ein Mitglied kein eigenes Limit setzt."
-    },
+    "parking": "En attente",
+    "parkingTitle": "Hors du parcours de livraison (bloqué / en attente / annulé). Exclu du % d’avancement, et le travail n’y est jamais avancé automatiquement.",
+    "mergeInto": "Fusionner les tickets vers",
+    "mergeIntoTitle": "Où vont les tickets de ce couloir lors de sa suppression. Laissez « Automatique » pour que le tableau choisisse le premier couloir actif.",
+    "mergeIntoAuto": "Automatique",
+    "laneUnstaffed": "Ce couloir s’exécute automatiquement mais aucun agent n’y est affecté : rien ne peut démarrer ici tout seul. Affectez un agent ci-dessous.",
+    "wipCapLabel": "Plafond d’en-cours par membre (par défaut)",
+    "wipCapHint": "Utilisé par la jauge de charge du standup lorsqu’un membre ne fixe pas son propre plafond.",
     "title": "Configuration du tableau",
     "tab": {
       "lanes": "Couloirs et agents",
@@ -4071,47 +4023,6 @@
     "by": "par {author}"
   },
   "canvas": {
-    "add_text": "Texte",
-    "add_sticky": "Note",
-    "add_image": "Image",
-    "add_embed": "Intégrer",
-    "add_timer": "Minuteur",
-    "add_stopwatch": "Chronomètre",
-    "blockCount": "{count, plural, =0 {Vide} one {# bloc} other {# blocs}}",
-    "emptyHint": "Ajoutez un bloc depuis la barre d'outils pour commencer.",
-    "emptyReadOnly": "Ce canevas est vide.",
-    "type_text": "Texte",
-    "type_sticky": "Note",
-    "type_image": "Image",
-    "type_embed": "Intégrer",
-    "type_timer": "Minuteur",
-    "type_stopwatch": "Chronomètre",
-    "remove": "Supprimer",
-    "resize": "Redimensionner",
-    "textPlaceholder": "Écrire…",
-    "stickyPlaceholder": "Note…",
-    "color": "Couleur",
-    "noImage": "Aucune image",
-    "imageUrlPlaceholder": "Collez une URL d'image…",
-    "noEmbed": "Aucun document lié",
-    "embedIdPlaceholder": "ID du document…",
-    "openEmbeddedDoc": "Ouvrir le document",
-    "add_video": "Vidéo",
-    "add_file": "Fichier",
-    "type_video": "Vidéo",
-    "type_file": "Fichier",
-    "noVideo": "Aucune vidéo",
-    "videoUrlPlaceholder": "Collez une URL de vidéo ou d'intégration…",
-    "noFile": "Aucun fichier lié",
-    "fileNamePlaceholder": "Nom du fichier (facultatif)…",
-    "fileUrlPlaceholder": "Collez une URL de fichier…",
-    "saveToKnowledge": "Enregistrer dans Connaissances",
-    "saving": "Enregistrement…",
-    "defaultBoardTitle": "Canevas sans titre",
-    "start": "Démarrer",
-    "pause": "Pause",
-    "reset": "Réinitialiser",
-    "close": "Fermer",
     "ads": {
       "title": "Médias payants",
       "close": "Fermer",
@@ -9769,20 +9680,8 @@
     "audit": {
       "flagged": "Signalé",
       "flaggedTitle": "Ce ticket a sauté un rôle ou diagnostic requis — révision nécessaire",
-      "unstaffed": {
-        "en": "{count} unstaffed",
-        "zh": "{count} 个未配备",
-        "es": "{count} sin asignar",
-        "fr": "{count} sans titulaire",
-        "de": "{count} unbesetzt"
-      },
-      "unstaffedTitle": {
-        "en": "{count} required sign-off role(s) have nobody assigned — these gate completion and merge.",
-        "zh": "有 {count} 个必需的签核角色无人负责——它们会阻止完成与合并。",
-        "es": "{count} rol(es) de aprobación obligatorios no tienen a nadie asignado: bloquean la finalización y la fusión.",
-        "fr": "{count} rôle(s) de validation requis n’ont personne d’assigné — ils bloquent la clôture et la fusion.",
-        "de": "{count} erforderliche Freigaberolle(n) haben niemanden zugewiesen — sie blockieren Abschluss und Merge."
-      },
+      "unstaffed": "{count} sans titulaire",
+      "unstaffedTitle": "{count} rôle(s) de validation requis n’ont personne d’assigné — ils bloquent la clôture et la fusion.",
       "participantsTitle": "Participation des rôles requis : terminés sur requis"
     },
     "build": {
@@ -13670,41 +13569,11 @@
     "placeHint": "Placement…",
     "pickUp": "Prendre {title} pour la déplacer",
     "putDown": "Reposer {title}",
-    "turnPaused": {
-      "en": "paused",
-      "zh": "已暂停",
-      "es": "en pausa",
-      "fr": "en pause",
-      "de": "pausiert"
-    },
-    "pauseTurn": {
-      "en": "Pause",
-      "zh": "暂停",
-      "es": "Pausar",
-      "fr": "Pause",
-      "de": "Pause"
-    },
-    "resumeTurn": {
-      "en": "Resume",
-      "zh": "继续",
-      "es": "Reanudar",
-      "fr": "Reprendre",
-      "de": "Fortsetzen"
-    },
-    "pauseTurnHint": {
-      "en": "Stop the clock on the current speaker — time is not charged to them while paused.",
-      "zh": "暂停当前发言人的计时——暂停期间不会计入其发言时长。",
-      "es": "Detén el reloj del orador actual: el tiempo no se le contabiliza mientras esté en pausa.",
-      "fr": "Arrêter le chronomètre de l’intervenant en cours — le temps ne lui est pas décompté pendant la pause.",
-      "de": "Die Uhr des aktuellen Sprechers anhalten — die Zeit wird während der Pause nicht angerechnet."
-    },
-    "resumeTurnHint": {
-      "en": "Restart the clock on the current speaker.",
-      "zh": "重新开始当前发言人的计时。",
-      "es": "Reanuda el reloj del orador actual.",
-      "fr": "Relancer le chronomètre de l’intervenant en cours.",
-      "de": "Die Uhr des aktuellen Sprechers wieder starten."
-    },
+    "turnPaused": "en pause",
+    "pauseTurn": "Pause",
+    "resumeTurn": "Reprendre",
+    "pauseTurnHint": "Arrêter le chronomètre de l’intervenant en cours — le temps ne lui est pas décompté pendant la pause.",
+    "resumeTurnHint": "Relancer le chronomètre de l’intervenant en cours.",
     "assignTo": "Attribuer la tâche choisie à {name}",
     "returnToBacklog": "Renvoyer la tâche choisie au backlog",
     "groupIntoEpic": "Regrouper la tâche choisie dans {title}",
@@ -13756,7 +13625,9 @@
     "assignedWork": {
       "assignedTo": "{count} assignées · {name}",
       "empty": "Rien d’assigné."
-    }
+    },
+    "nextSpeaker": "Suivant",
+    "completeSession": "Terminer"
   },
   "meetings": {
     "title": "Réunions",
@@ -13767,41 +13638,11 @@
     "scheduleTitle": "Planifier une réunion",
     "loading": "Chargement…",
     "liveAndUpcoming": "En direct et à venir",
-    "rsvpLabel": {
-      "en": "Your response",
-      "zh": "你的回复",
-      "es": "Tu respuesta",
-      "fr": "Votre réponse",
-      "de": "Ihre Antwort"
-    },
-    "rsvp_accepted": {
-      "en": "Going",
-      "zh": "参加",
-      "es": "Asistiré",
-      "fr": "Je participe",
-      "de": "Nehme teil"
-    },
-    "rsvp_tentative": {
-      "en": "Maybe",
-      "zh": "待定",
-      "es": "Quizá",
-      "fr": "Peut-être",
-      "de": "Vielleicht"
-    },
-    "rsvp_declined": {
-      "en": "Cannot attend",
-      "zh": "无法参加",
-      "es": "No puedo asistir",
-      "fr": "Je ne peux pas",
-      "de": "Kann nicht"
-    },
-    "rsvpFailed": {
-      "en": "Could not record your response.",
-      "zh": "无法记录你的回复。",
-      "es": "No se pudo registrar tu respuesta.",
-      "fr": "Impossible d’enregistrer votre réponse.",
-      "de": "Ihre Antwort konnte nicht erfasst werden."
-    },
+    "rsvpLabel": "Votre réponse",
+    "rsvp_accepted": "Je participe",
+    "rsvp_tentative": "Peut-être",
+    "rsvp_declined": "Je ne peux pas",
+    "rsvpFailed": "Impossible d’enregistrer votre réponse.",
     "noMeetings": "Aucune réunion pour l’instant. Démarrez-en une ou planifiez-la.",
     "fromYourCalendar": "Depuis votre agenda",
     "anytime": "À tout moment",
@@ -15514,13 +15355,7 @@
         "no_contribution": "Aucune contribution",
         "waived": "Dispensé",
         "changes_requested": "Modifications demandées",
-        "auto_attested": {
-          "en": "Auto-credited",
-          "zh": "自动记入",
-          "es": "Acreditado automáticamente",
-          "fr": "Crédité automatiquement",
-          "de": "Automatisch gutgeschrieben"
-        }
+        "auto_attested": "Crédité automatiquement"
       },
       "detail": {
         "unsigned": "Le rôle requis n'a pas encore validé.",
@@ -15532,13 +15367,7 @@
         "no_contribution": "Approuvé sans contribution liée — risque d'approbation de complaisance.",
         "waived": "Dispensé : {reason}",
         "waived_no_reason": "Dispensé sans motif enregistré.",
-        "auto_attested": {
-          "en": "Credited automatically from a completed run — no member recorded a verdict of their own.",
-          "zh": "由已完成的运行自动记入——没有成员自行记录裁定结果。",
-          "es": "Acreditado automáticamente a partir de una ejecución completada: ningún miembro registró su propio veredicto.",
-          "fr": "Crédité automatiquement à partir d’une exécution terminée — aucun membre n’a enregistré son propre verdict.",
-          "de": "Automatisch aus einem abgeschlossenen Lauf gutgeschrieben — kein Mitglied hat ein eigenes Urteil erfasst."
-        }
+        "auto_attested": "Crédité automatiquement à partir d’une exécution terminée — aucun membre n’a enregistré son propre verdict."
       }
     },
     "table": {
@@ -16916,62 +16745,14 @@
     "thisTicket": "Ce ticket",
     "thisEpic": "Cette épopée",
     "parentEpic": "Épopée parente",
-    "parked": {
-      "en": "Parked",
-      "zh": "已搁置",
-      "es": "En pausa",
-      "fr": "En attente",
-      "de": "Pausiert"
-    },
-    "linkObjectiveLabel": {
-      "en": "Objective to link this ticket to",
-      "zh": "要关联此工单的目标",
-      "es": "Objetivo al que vincular este ticket",
-      "fr": "Objectif auquel rattacher ce ticket",
-      "de": "Ziel, mit dem dieses Ticket verknüpft wird"
-    },
-    "loadingObjectives": {
-      "en": "Loading objectives…",
-      "zh": "正在加载目标…",
-      "es": "Cargando objetivos…",
-      "fr": "Chargement des objectifs…",
-      "de": "Ziele werden geladen…"
-    },
-    "chooseObjective": {
-      "en": "Choose an objective…",
-      "zh": "选择一个目标…",
-      "es": "Elige un objetivo…",
-      "fr": "Choisir un objectif…",
-      "de": "Ziel auswählen…"
-    },
-    "linkObjective": {
-      "en": "Link",
-      "zh": "关联",
-      "es": "Vincular",
-      "fr": "Rattacher",
-      "de": "Verknüpfen"
-    },
-    "linking": {
-      "en": "Linking…",
-      "zh": "正在关联…",
-      "es": "Vinculando…",
-      "fr": "Rattachement…",
-      "de": "Wird verknüpft…"
-    },
-    "linkObjectiveDenied": {
-      "en": "Only a manager can link a ticket to an objective.",
-      "zh": "只有管理者才能将工单关联到目标。",
-      "es": "Solo un gestor puede vincular un ticket a un objetivo.",
-      "fr": "Seul un manager peut rattacher un ticket à un objectif.",
-      "de": "Nur eine Managerin oder ein Manager kann ein Ticket mit einem Ziel verknüpfen."
-    },
-    "noObjectivesYet": {
-      "en": "No objectives exist yet — create one on the Planning board.",
-      "zh": "尚未创建任何目标——请在规划看板上创建。",
-      "es": "Todavía no hay objetivos: crea uno en el tablero de planificación.",
-      "fr": "Aucun objectif pour l’instant — créez-en un sur le tableau de planification.",
-      "de": "Es gibt noch keine Ziele — legen Sie eines im Planungsboard an."
-    },
+    "parked": "En attente",
+    "linkObjectiveLabel": "Objectif auquel rattacher ce ticket",
+    "loadingObjectives": "Chargement des objectifs…",
+    "chooseObjective": "Choisir un objectif…",
+    "linkObjective": "Rattacher",
+    "linking": "Rattachement…",
+    "linkObjectiveDenied": "Seul un manager peut rattacher un ticket à un objectif.",
+    "noObjectivesYet": "Aucun objectif pour l’instant — créez-en un sur le tableau de planification.",
     "signoffs": "Validations",
     "basisLane": "Étape {index} sur {total}",
     "basisSignoff": "{done} sur {total} validées",
@@ -18277,7 +18058,18 @@
       "pipelineOpen": "{count} en cours · {amount}",
       "pipelineUnpriced": "{count} sans prix",
       "pipelineOdds": "{percent} %",
-      "adapterVersion": "Adaptateur"
+      "adapterVersion": "Adaptateur",
+      "campaignSendable": "Envoyables",
+      "campaignConsent": "Consentement",
+      "campaignConsentOk": "Prêt à envoyer",
+      "campaignConsentBlocked": "Bloqué",
+      "campaignBlocker": {
+        "noAudience": "Aucune audience n’est rattachée à cette campagne",
+        "unknownConsent": "La base légale pour écrire à cette audience n’est pas enregistrée",
+        "noSuppressionCheck": "La liste d’exclusion n’a pas été vérifiée",
+        "emptyAfterSuppression": "Il ne reste personne une fois les exclusions retirées",
+        "forbiddenClaim": "Le texte avance une affirmation que la marque interdit"
+      }
     },
     "editor": {
       "toolbar": "Mise en forme",
@@ -18300,10 +18092,19 @@
       "link": "Insérer un lien",
       "linkUrl": "Adresse du lien",
       "linkPlaceholder": "https://exemple.com",
-      "linkApply": "Appliquer",
-      "linkCancel": "Annuler",
       "rule": "Ligne horizontale",
-      "clearFormatting": "Effacer la mise en forme"
+      "clearFormatting": "Effacer la mise en forme",
+      "blockHeading4": "Titre 4",
+      "indent": "Augmenter le retrait",
+      "outdent": "Diminuer le retrait",
+      "image": "Insérer une image",
+      "imageUrl": "Adresse de l’image",
+      "imagePlaceholder": "https://example.com/picture.png",
+      "table": "Insérer un tableau",
+      "tableColumn": "Colonne {index}",
+      "insertApply": "Insérer",
+      "words": "{count, plural, =0 {aucun mot} one {# mot} other {# mots}}",
+      "characters": "{count, plural, =0 {aucun caractère} one {# caractère} other {# caractères}}"
     },
     "export": {
       "group": "Télécharger",
@@ -18560,7 +18361,7 @@
       "accommodation": "Aménagement",
       "feedbackBank": "Banque de commentaires",
       "lecture": "Cours",
-      "poll": "Sondage en direct",
+      "poll": "Sondage",
       "officeHours": "Permanences",
       "curriculumMap": "Cartographie du cursus",
       "grantProposal": "Demande de financement",
@@ -18664,7 +18465,9 @@
       "ipAsset": "Actif de PI",
       "legalMatter": "Affaire juridique",
       "brandKit": "Kit de marque",
-      "audience": "Audience cible"
+      "audience": "Audience cible",
+      "stopwatch": "Chronomètre",
+      "transclusion": "Transclusion"
     },
     "twilioSetup": {
       "title": "Intégration Twilio",
@@ -19307,6 +19110,7 @@
     "creativeNoMediaModel": "Publiez un modèle média Evermind pour générer cet objet",
     "creativeNoFrames": "Le modèle n'a renvoyé aucune image lisible",
     "modeSaveFailed": "Impossible d'enregistrer le mode de la session",
+    "objectsRejected": "{count, plural, one {# objet n’a pas pu être ouvert} other {# objets n’ont pas pu être ouverts}} — cette version ne connaît pas le type {kinds}. Le reste du tableau a bien été chargé.",
     "alignNeedsTwo": "Sélectionnez au moins deux objets à aligner",
     "objectsAligned": "{count, plural, one {# objet aligné} other {# objets alignés}}",
     "editorActions": "Actions de l’éditeur",
@@ -20180,7 +19984,8 @@
         "shares": "Accès accordés",
         "views": "Consultations",
         "documentBody": "Corps du document",
-        "templateKey": "Modèle"
+        "templateKey": "Modèle",
+        "abTestKey": "Clé du test A/B"
       },
       "column": {
         "actual": "Réel",
@@ -20484,7 +20289,8 @@
         "teams": "Équipes",
         "timeline": "Chronologie",
         "triggeredBy": "Déclenché par",
-        "version": "Version"
+        "version": "Version",
+        "offerRef": "Embauchée depuis l'offre"
       },
       "column": {
         "acknowledgedAt": "Accusé le",
@@ -20953,7 +20759,8 @@
         "guaranteeDays": "Garantie (jours)",
         "guaranteeEndsAt": "Fin de garantie",
         "invoiceState": "Facture",
-        "selfIdentification": "Auto-identification"
+        "selfIdentification": "Auto-identification",
+        "resumeRef": "CV"
       },
       "column": {
         "category": "Catégorie",
@@ -20988,7 +20795,16 @@
         "at": "Le",
         "party": "Partie",
         "share": "Part",
-        "amount": "Montant"
+        "amount": "Montant",
+        "candidateRef": "Fiche candidat"
+      },
+      "onboardingStep": {
+        "rightToWork": "Justificatif du droit de travailler recueilli et vérifié",
+        "payrollEnrolment": "Inscription à la paie et aux avantages",
+        "equipment": "Matériel commandé et livré",
+        "systemAccess": "Accès aux systèmes ouverts",
+        "managerIntroduction": "Présentation au responsable et plan de la première semaine",
+        "probationReview": "Entretien de fin de période d'essai planifié"
       }
     },
     "shared": {
@@ -21002,7 +20818,8 @@
       "label": {
         "funnel": "Entonnoir",
         "book": "Livre",
-        "sequence": "Séquence"
+        "sequence": "Séquence",
+        "poll": "Sondage"
       },
       "field": {
         "funnelDomain": "Entonnoir",
@@ -21037,7 +20854,21 @@
         "enrolled": "Inscrits",
         "replyRate": "Taux de réponse",
         "sequenceProgress": "Avancement",
-        "lastRunAt": "Dernière exécution"
+        "lastRunAt": "Dernière exécution",
+        "prompt": "Question",
+        "pollFormat": "Instrument",
+        "pollOptions": "Options",
+        "scaleMax": "Haut de l’échelle",
+        "gridXLabel": "Axe horizontal",
+        "gridYLabel": "Axe vertical",
+        "pollAnonymous": "Anonyme",
+        "showResultsLive": "Montrer le décompte à la salle",
+        "closesAt": "Clôture le",
+        "joinUrl": "Adresse de participation",
+        "pollResponseCount": "Réponses",
+        "pollResults": "Résultats",
+        "pollAnswers": "Ce qui a été dit",
+        "pollCorrectRate": "Bonnes réponses"
       },
       "column": {
         "stage": "Étape",
@@ -21064,7 +20895,10 @@
         "name": "Nom",
         "contactRef": "Contact",
         "stepsSent": "Envoyés",
-        "repliedAtISO": "A répondu"
+        "repliedAtISO": "A répondu",
+        "id": "Identifiant",
+        "label": "Libellé",
+        "correct": "Bonne réponse"
       },
       "status": {
         "manuscript": "Manuscrit",
@@ -21853,7 +21687,20 @@
       "objectLabel": "{title}, en grand",
       "switcher": "Vue du canevas",
       "enterFullscreen": "Plein écran",
-      "exitFullscreen": "Quitter le plein écran"
+      "exitFullscreen": "Quitter le plein écran",
+      "calendar": {
+        "label": "Calendrier",
+        "enter": "Planifier le mois",
+        "active": "Vous êtes dans le calendrier",
+        "open": "Ouvrir le calendrier",
+        "regionLabel": "Ce canevas, lu comme un mois",
+        "navLabel": "Quel mois",
+        "previousMonth": "Mois précédent",
+        "nextMonth": "Mois suivant",
+        "summary": "{scheduled} programmés · {dated} datés · {undated} sans date",
+        "gridLabel": "Les jours de ce mois",
+        "conflict": "Un autre engagement occupe ce jour"
+      }
     },
     "miro": {
       "title": "Tableaux Miro",
@@ -21958,7 +21805,9 @@
       "modelPlaceholder": "Suivre la valeur par defaut du tableau",
       "builtinSeat": "Siege integre",
       "customAgent": "Agent personnalise",
-      "builtinSeatHint": "Ce siege vient du catalogue de roles : sa mission, ses outils et ses droits de relecture l'accompagnent. Ce que vous reglez ici, c'est sa facon de travailler sur ce tableau."
+      "builtinSeatHint": "Ce siege vient du catalogue de roles : sa mission, ses outils et ses droits de relecture l'accompagnent. Ce que vous reglez ici, c'est sa facon de travailler sur ce tableau.",
+      "timerDurationMs": "Durée impartie (ms)",
+      "transclusionDocumentId": "Identifiant du document"
     },
     "nodeMessage": {
       "emptyShell": "Cet objet a un titre mais pas encore de contenu : il paraitra termine et sera vide."
@@ -22077,7 +21926,7 @@
       "accommodation": "Un aménagement pour handicap ou trouble d'apprentissage auquel un élève a droit.",
       "feedbackBank": "Une bibliothèque réutilisable de commentaires pour noter plus rapidement.",
       "lecture": "Les diapositives, notes, enregistrement et supports d'un cours réunis en un seul endroit.",
-      "poll": "Une question posée en direct en classe, à laquelle les élèves répondent en temps réel.",
+      "poll": "Posez une question à la salle et voyez les réponses arriver. On rejoint depuis un téléphone, sans compte.",
       "officeHours": "Un créneau réservable indiquant les disponibilités de l'enseignant pour des entretiens individuels.",
       "curriculumMap": "Une carte des liens entre les cours et les acquis d'apprentissage dans un programme.",
       "grantProposal": "Une demande de financement présentant les objectifs, le budget et le calendrier de l'étude.",
@@ -22159,7 +22008,9 @@
       "incident": "Rapport d'un incident de sécurité ou opérationnel et de sa résolution.",
       "book": "Grand livre enregistrant les transactions financières et écritures comptables.",
       "account": "Compte financier suivant les soldes et les transactions.",
-      "sticky": "Note autocollante libre pour noter rapidement une idée sur le canevas."
+      "sticky": "Note autocollante libre pour noter rapidement une idée sur le canevas.",
+      "stopwatch": "Mesurez le temps réellement passé. Tout le monde voit la même horloge.",
+      "transclusion": "Affichez ici un autre document de connaissance, en direct — pas une copie."
     },
     "previewWidth": "Largeur d'aperçu",
     "viewportName": {
@@ -22483,7 +22334,166 @@
     "llmCacheHitRate": "Taux de succès du cache",
     "llmLatencyP50Ms": "Latence p50 (ms)",
     "llmLatencyP95Ms": "Latence p95 (ms)",
-    "objectNeedsUpgrade": "Passez à une offre payante pour ajouter cet élément."
+    "objectNeedsUpgrade": "Passez à une offre payante pour ajouter cet élément.",
+    "brandClaimViolation": "Ceci avance une affirmation que la marque interdit : {claims}",
+    "noticeHireNotSigned": "Cette offre n'est pas encore signée, il n'y a donc personne à embaucher. Un dossier d'emploi qui commence par une offre non signée est le dossier de quelque chose qui n'a pas eu lieu.",
+    "noticeHireNoPerson": "Cette offre ne nomme aucun candidat ni adresse e-mail : le dossier d'emploi ne concernerait personne. Renseignez d'abord son candidateRef ou son candidateEmail.",
+    "noticeHireNoStartDate": "Cette offre n'a pas de date de début. Chaque étape d'intégration est datée à partir d'elle : un plan sans cette date n'a aucune échéance.",
+    "noticeHireAlready": "{person} a déjà été embauchée à partir de cette offre. Rien n’a été créé : embaucher deux fois depuis une offre mettrait la même personne deux fois sur la paie.",
+    "noticeHired": "{person} embauchée : le dossier d'emploi et un plan d'intégration de {steps} étapes sont sur le tableau.",
+    "hiringHiredStatus": "Embauchée — débute le {date}",
+    "hiringOfferHiredStatus": "Embauchée",
+    "hiringOnboardingTitle": "Intégration — {person}",
+    "hiringHiredEdge": "embauchée",
+    "hiringOnboardingEdge": "intégration",
+    "hiringCandidateCreated": "Créer le candidat « {title} »",
+    "hiringCandidateScored": "Noter le candidat « {title} »",
+    "hiringCandidateStageScreened": "Présélectionné",
+    "clock": {
+      "finished": "Terminé",
+      "running": "En cours",
+      "paused": "En pause",
+      "boxOf": "sur {length}",
+      "start": "Démarrer",
+      "pause": "Pause",
+      "reset": "Réinitialiser"
+    },
+    "transclusion": {
+      "chooseDocument": "Choisissez le document affiché par cette carte.",
+      "loading": "Chargement du document…",
+      "unavailable": "Ce document n'est pas disponible : il a peut-être été supprimé, ou vous n'y avez pas accès.",
+      "empty": "Ce document n'a pas encore de contenu.",
+      "readAll": "Tout lire",
+      "openDocument": "Ouvrir le document"
+    },
+    "stencilShape": {
+      "square": "Carré",
+      "rectangle": "Rectangle",
+      "round": "Arrondi",
+      "roundRectangle": "Rectangle arrondi",
+      "ellipse": "Ellipse",
+      "circle": "Cercle",
+      "rhombus": "Losange",
+      "triangle": "Triangle",
+      "parallelogram": "Parallélogramme",
+      "trapezoid": "Trapèze",
+      "pentagon": "Pentagone",
+      "hexagon": "Hexagone",
+      "octagon": "Octogone",
+      "star": "Étoile",
+      "cross": "Croix",
+      "rightArrow": "Flèche droite",
+      "leftArrow": "Flèche gauche",
+      "leftRightArrow": "Double flèche",
+      "cloud": "Nuage",
+      "cylinder": "Cylindre",
+      "document": "Document",
+      "pill": "Stade"
+    },
+    "stencilPack": {
+      "flowchart": "Organigramme",
+      "flowchartDescription": "Forme d'organigramme",
+      "mindMap": "Carte mentale",
+      "mindMapDescription": "Nœud de carte mentale",
+      "wireframe": "Wireframe",
+      "wireframeDescription": "Bloc de wireframe",
+      "cloud": "Architecture cloud",
+      "cloudDescription": "Forme d'architecture",
+      "uml": "UML",
+      "umlDescription": "Forme UML"
+    },
+    "stencil": {
+      "process": "Traitement",
+      "decision": "Décision",
+      "start": "Début",
+      "end": "Fin",
+      "data": "Données",
+      "document": "Document",
+      "database": "Base de données",
+      "connector": "Connecteur",
+      "centre": "Idée centrale",
+      "branch": "Branche",
+      "leaf": "Feuille",
+      "question": "Question",
+      "screen": "Écran",
+      "header": "Barre d’en-tête",
+      "block": "Bloc de contenu",
+      "field": "Champ de saisie",
+      "button": "Bouton",
+      "modal": "Boîte de dialogue",
+      "internet": "Internet",
+      "loadBalancer": "Répartiteur de charge",
+      "compute": "Calcul",
+      "store": "Magasin de données",
+      "queue": "File d’attente",
+      "user": "Utilisateur",
+      "boundary": "Frontière",
+      "class": "Classe",
+      "interface": "Interface",
+      "actor": "Acteur",
+      "component": "Composant",
+      "note": "Note"
+    },
+    "connector": {
+      "line": "Trait",
+      "ends": "Extrémités",
+      "router": "Tracé",
+      "line_solid": "Plein",
+      "line_dashed": "Tirets",
+      "line_dotted": "Pointillés",
+      "ends_arrow": "Flèche",
+      "ends_open": "Flèche ouverte",
+      "ends_both": "Aux deux bouts",
+      "ends_none": "Sans flèche",
+      "router_smoothstep": "Angles arrondis",
+      "router_step": "Coude",
+      "router_straight": "Droit",
+      "router_bezier": "Courbe"
+    },
+    "timerDurationMs": "Durée impartie (ms)",
+    "transclusionDocumentId": "Identifiant du document",
+    "marketing": {
+      "empty": "Ce {label} ne contient encore rien.",
+      "emptyHint": "Demandez à Brain de le documenter et de le remplir, ou ouvrez l’inspecteur pour l’écrire vous-même.",
+      "meterLabel": "{label} : {score} sur 100",
+      "label": {
+        "brandKit": "Kit de marque",
+        "audience": "Audience"
+      },
+      "status": {
+        "drafting": "En rédaction",
+        "notCounted": "Non dénombrée"
+      },
+      "field": {
+        "brandKitId": "Kit de marque",
+        "palette": "Palette",
+        "typography": "Typographies",
+        "logoUrl": "Logo",
+        "logoDarkUrl": "Logo (fond sombre)",
+        "voice": "Voix",
+        "doNotSay": "À ne jamais dire",
+        "boundObjects": "Objets liés",
+        "audienceId": "Audience",
+        "rules": "Règles de segment",
+        "consentBasis": "Base légale",
+        "consentEvidence": "Preuve du consentement",
+        "size": "Taille",
+        "suppressedCount": "Supprimés",
+        "sendableCount": "Contactables",
+        "suppressedShare": "Part supprimée",
+        "refreshedAt": "Dernier comptage",
+        "sources": "Sources",
+        "summary": "Résumé"
+      },
+      "column": {
+        "field": "Champ",
+        "operator": "Opérateur",
+        "value": "Valeur",
+        "title": "Titre",
+        "detail": "Détail",
+        "url": "URL"
+      }
+    }
   },
   "canvasCommands": {
     "cleanLayout": "Réorganiser la toile",
@@ -26080,5 +26090,74 @@
       "week": "7 jours",
       "month": "Ce mois-ci"
     }
+  },
+  "poll": {
+    "accountBody": "Un sondage a besoin d'une adresse publique que l'on rejoint depuis un téléphone, et elle appartient à votre espace de travail. Inscrivez-vous gratuitement pour le publier.",
+    "accountTitle": "Créez un compte gratuit pour animer un sondage",
+    "anonymousNo": "Votre réponse est associée à vous",
+    "anonymousYes": "Anonyme — votre réponse n'est pas associée à vous",
+    "answerFirst": "Choisissez une réponse avant de l'envoyer.",
+    "answerPlaceholder": "Votre réponse",
+    "backToBoard": "Retour au tableau",
+    "changeVote": "Changer ma réponse",
+    "chooseAny": "Choisissez toutes les réponses qui conviennent",
+    "chooseOne": "Choisissez une réponse",
+    "chooseScale": "Choisissez de 1 à {max}",
+    "closeVoting": "Clore le vote",
+    "cloudLabel": "Nuage de {terms} mots",
+    "copyJoinLink": "Copier le lien",
+    "correctOption": "{label} (bonne réponse)",
+    "gridLabel": "{count} placements sur la grille",
+    "hideResults": "Masquer les résultats",
+    "joinAt": "Rejoignez sur",
+    "loading": "Chargement du sondage…",
+    "mean": "Moyenne {mean}",
+    "missing": "Il n'y a pas de sondage à cette adresse. Vérifiez le lien ou redemandez-le.",
+    "moveDown": "Descendre l'élément {position}",
+    "moveUp": "Monter l'élément {position}",
+    "noAnswersYet": "Aucune réponse pour le moment.",
+    "noticePublishFirst": "Publiez le sondage avant d’ouvrir ou de clore le vote.",
+    "noticePublished": "Le sondage est ouvert. Lisez l'adresse à voix haute à la salle.",
+    "noticeVotingClosed": "Le vote est clos.",
+    "noticeVotingOpen": "Le vote est ouvert.",
+    "ofExpected": "sur {expected} attendues",
+    "openJoinPage": "Ouvrir la page de participation",
+    "openVoting": "Ouvrir le vote",
+    "placeOnGrid": "Placez-vous sur la grille : {x} en horizontal, {y} en vertical",
+    "publish": "Publier et ouvrir",
+    "publishFailed": "Le sondage n'a pas pu être publié.",
+    "quadrant": {
+      "lowLow": "Faible / faible",
+      "highLow": "Élevé / faible",
+      "lowHigh": "Faible / élevé",
+      "highHigh": "Élevé / élevé"
+    },
+    "quadrantShares": "Réponses par quadrant",
+    "rankThem": "Classez-les",
+    "readFailed": "Les résultats n'ont pas pu être lus.",
+    "readOnlyHint": "Vous avez un accès en lecture seule à ce tableau : vous ne pouvez ni publier ni piloter ce sondage.",
+    "republish": "Mettre à jour le sondage",
+    "responseCount": "{count} ont répondu",
+    "resultsHeading": "Ce qu'a répondu la salle",
+    "resultsHidden": "Les résultats sont masqués jusqu'à ce que l'animateur les affiche.",
+    "resultsHiddenFromRoom": "Le décompte est masqué pour la salle",
+    "resultsLabel": "Résultats du sondage",
+    "resultsShown": "La salle voit le décompte",
+    "revealResults": "Afficher les résultats",
+    "sendVote": "Envoyer",
+    "sending": "Envoi…",
+    "statusClosed": "Vote clos",
+    "statusOpen": "Vote ouvert",
+    "steerFailed": "Ce changement n'a pas pu être appliqué.",
+    "termCount": "{term} : {count}",
+    "truncated": "Seules les réponses les plus récentes sont affichées",
+    "unpublishedHint": "Publiez ce sondage pour obtenir une adresse que la salle peut rejoindre depuis un téléphone. Aucun compte n'est nécessaire pour répondre.",
+    "untitled": "Sondage sans titre",
+    "updateVote": "Modifier ma réponse",
+    "voteFailed": "Votre réponse n'a pas pu être envoyée. Réessayez.",
+    "voteRecorded": "Votre réponse a été enregistrée.",
+    "votingClosed": "Le vote est clos",
+    "votingOpen": "Le vote est ouvert",
+    "wordPlaceholder": "Un ou deux mots"
   }
 }

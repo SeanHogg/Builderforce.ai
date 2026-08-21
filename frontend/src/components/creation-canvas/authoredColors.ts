@@ -34,3 +34,19 @@ export const AUTHORED_FRAME_BORDER = '#9d8bea';
  *  `defaultColor` of its own — the control still needs SOME value to open the native
  *  picker at. Not meant to be seen; every real color field should declare its own. */
 export const AUTHORED_COLOR_FALLBACK = '#000000';
+
+/**
+ * Sticky-note pigment — the palette a note, a shape and a stencil are all drawn from.
+ *
+ * Moved here from `components/canvas/canvasModel.ts`, which is deleted: the knowledge
+ * board this list originally belonged to folded into the Creation Canvas, and the
+ * pigments outlived the board because they are the one part of it that was never
+ * board-specific. Nothing about the reasoning changed — the value a person picks here is
+ * WRITTEN INTO `stickyColor` and rendered back as-is, so it is the author's choice rather
+ * than the theme's, which is the exact test this module exists to apply.
+ *
+ * Every one is a PALE pigment, which is why the ink on a sticky is always
+ * `--canvas-ink-on-light` (a surface that is light in BOTH themes) rather than the
+ * theme's own foreground.
+ */
+export const STICKY_COLORS = ['#fde68a', '#bbf7d0', '#bfdbfe', '#fbcfe8', '#fed7aa', '#ddd6fe'];

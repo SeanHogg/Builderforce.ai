@@ -4,7 +4,7 @@ import {
 } from '@builderforce/creation-canvas-contract';
 import { SHARED_OBJECT_SPECS, SHARED_LABELS, SHARED_STATUSES } from './sharedCanvasObjects';
 import './specObjectSets';
-import { specMutableFields, specObjectNamespace } from './specObjects';
+import { EMPTY_SPEC_BOARD, specFieldValue, specMutableFields, specObjectNamespace } from './specObjects';
 
 const spec = (kind: string) => SHARED_OBJECT_SPECS.find((entry) => entry.kind === kind);
 
@@ -83,5 +83,42 @@ describe('the shared funnel', () => {
     expect(spec('funnel')?.fields.map((field) => field.name)).toContain('funnelDomain');
     expect(CREATION_OBJECT_KINDS).not.toContain('hiringFunnel');
     expect(CREATION_OBJECT_KINDS).not.toContain('marketingFunnel');
+  });
+});
+
+describe('the ONE poll — the fold that ended a duplicate declaration', () => {
+  const value = (name: string, data: Record<string, unknown>) => {
+    const field = spec('poll')?.fields.find((entry) => entry.name === name);
+    return field ? specFieldValue(field, data, EMPTY_SPEC_BOARD) : undefined;
+  };
+  const QUIZ = {
+    kind: 'poll', title: 'Q1', pollFormat: 'quiz',
+    options: [{ id: 'a', label: 'A' }, { id: 'b', label: 'B', correct: true }],
+    results: [{ label: 'A', value: 3 }, { label: 'B', value: 9 }],
+  };
+
+  it('is declared exactly once, by the cross-domain vocabulary', () => {
+    // The defect this closes: `poll` was declared as a teaching kind AND as the
+    // facilitation primitive, and `CREATION_OBJECT_KINDS` concatenates both lists — so
+    // the registry indexed one kind twice and whichever spec loaded last silently won.
+    expect(CREATION_OBJECT_KINDS.filter((kind) => kind === 'poll')).toEqual(['poll']);
+    expect(SHARED_OBJECT_KINDS).toContain('poll');
+    expect(specObjectNamespace('poll')).toBe('creationCanvas.shared');
+  });
+
+  it('keeps the one number the lecture poll had that this one did not', () => {
+    expect(value('correctRate', QUIZ)).toBe(75);
+  });
+
+  it('reports nothing rather than a rate on a poll with no right answer', () => {
+    expect(value('correctRate', { ...QUIZ, options: [{ id: 'a', label: 'A' }] })).toBeUndefined();
+    // No votes yet is not "0% correct" — it is nobody having answered.
+    expect(value('correctRate', { ...QUIZ, results: [] })).toBeUndefined();
+  });
+
+  it('will not let a model write a result somebody typed', () => {
+    for (const field of ['results', 'responseCount', 'answers', 'joinUrl', 'correctRate']) {
+      expect(specMutableFields('poll'), field).not.toContain(field);
+    }
   });
 });

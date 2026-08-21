@@ -259,18 +259,6 @@ export const deriveLectureAttendanceRate: SpecDerive = (data, board) => {
   return derivePercent(deriveNumber(data.attendanceCount), enrolled || undefined);
 };
 
-/** `poll.responseCount` — see the field's hint for what it means. */
-export const derivePollResponseCount: SpecDerive = (data) => sumColumn(data.responses, 'value');
-
-/** `poll.correctRate` — see the field's hint for what it means. */
-export const derivePollCorrectRate: SpecDerive = (data) => {
-  const index = deriveNumber(data.correctIndex);
-  if (index === undefined) return undefined;
-  const bars = deriveRows(data.responses);
-  const correct = deriveNumber(bars[index]?.value ?? bars[index]?.count);
-  return derivePercent(correct, sumColumn(data.responses, 'value'));
-};
-
 /** `officeHours.utilisation` — see the field's hint for what it means. */
 export const deriveOfficeHoursUtilisation: SpecDerive = (data) => {
   const slots = deriveRows(data.slots);

@@ -161,15 +161,38 @@ export const FRONTEND_CONTEXTS: readonly FrontendContext[] = [
  * spans two objects has exactly one place it can be checked.
  *
  * These are the invariants. They are stated here, in the context that owns them,
- * rather than implied by whichever callback happens to run:
+ * rather than implied by whichever callback happens to run.
+ *
+ * ── WHY THEY ARE KEYED AND NOT A BARE LIST ───────────────────────────────────
+ * They used to be a positional array, which was fine while nothing imported
+ * them. `domains/canvas/domain/canvasBoard.ts` now CHECKS them, and a check that
+ * cites an invariant by list position is one insertion away from reporting the
+ * wrong rule — the failure mode being a violation message that names a rule the
+ * code did not test. The key is the citation; the string stays the single
+ * wording, so a check and its message cannot drift into two statements of one
+ * rule.
+ *
+ * `uniqueObjectIds` and `noDanglingConnection` are new here (2026-08-20) and are
+ * not an expansion of scope: PRD 22 §4.4(a) states both in the same breath as
+ * the aggregate root ("no edge may reference a missing node; node ids are unique
+ * within the board") and the original five simply did not carry them across.
+ * They are also the two a board can be checked against on its own, which is what
+ * made their absence visible the moment anything ran the check.
  */
-export const CANVAS_BOARD_INVARIANTS = [
-  'Every object on the board has a kind the contract declares. An unknown kind is rejected at the boundary, never rendered as a blank card.',
-  'The selection only ever names objects the board currently holds. Deleting an object removes it from the selection in the same change, not on the next render.',
-  'A checkpoint names a board state that existed. Restoring one replaces the whole board, so a half-applied restore is not a state the board can be in.',
-  'A branch has exactly one parent checkpoint, and a checkpoint belongs to exactly one branch. A board is therefore always on a single, nameable line of history.',
-  'A derived object names its source. The source is never mutated to satisfy a derivation — that is what makes the original safe to keep.',
-] as const;
+export const CANVAS_BOARD_INVARIANTS_BY_KEY = {
+  declaredKind: 'Every object on the board has a kind the contract declares. An unknown kind is rejected at the boundary, never rendered as a blank card.',
+  uniqueObjectIds: 'Object ids are unique within a board. Two objects sharing an id makes every operation that addresses one of them ambiguous.',
+  noDanglingConnection: 'A connection joins two objects the board holds. An edge to a missing object is a line drawn from nowhere to nowhere.',
+  selectionWithinBoard: 'The selection only ever names objects the board currently holds. Deleting an object removes it from the selection in the same change, not on the next render.',
+  checkpointNamesRealState: 'A checkpoint names a board state that existed. Restoring one replaces the whole board, so a half-applied restore is not a state the board can be in.',
+  singleLineOfHistory: 'A branch has exactly one parent checkpoint, and a checkpoint belongs to exactly one branch. A board is therefore always on a single, nameable line of history.',
+  derivationNamesItsSource: 'A derived object names its source. The source is never mutated to satisfy a derivation — that is what makes the original safe to keep.',
+} as const;
+
+export type CanvasBoardInvariantKey = keyof typeof CANVAS_BOARD_INVARIANTS_BY_KEY;
+
+/** The same statements as a list, for anything that only wants to read them. */
+export const CANVAS_BOARD_INVARIANTS = Object.values(CANVAS_BOARD_INVARIANTS_BY_KEY);
 
 /**
  * A COMMAND is an intent. Someone (or some agent) is ASKING the board to change.

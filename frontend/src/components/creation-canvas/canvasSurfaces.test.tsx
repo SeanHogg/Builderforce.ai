@@ -54,13 +54,15 @@ describe('canvas surface registry', () => {
     // `world` belongs here for the same reason the other four do: it is the surface of ONE
     // `world` object, with that object's own camera and props. The list was pinned before
     // it existed, so the registry had grown a fifth object surface that this assertion
-    // still called an error.
-    expect(objectScoped.map((def) => def.id)).toEqual(['page', 'play', 'site', 'timeline', 'world']);
+    // still called an error. `facilitate` is the sixth and arrived the same way — it runs
+    // ONE `poll` in front of a room, with that poll's own join address and live tally.
+    // The properties BELOW are what this test is actually for; the list is the roll call.
+    expect(objectScoped.map((def) => def.id)).toEqual(['page', 'play', 'site', 'timeline', 'world', 'facilitate']);
     // None persists: a page cannot be reopened without knowing which page.
     expect(objectScoped.every((def) => !def.persist)).toBe(true);
     // None draws the board or its objects — each is about exactly one.
     expect(objectScoped.every((def) => !def.showsBoard && !def.showsObjects)).toBe(true);
-    expect(boardCanvasSurfaces().map((def) => def.id)).toEqual(['chat', 'graph', 'scene3d', 'app']);
+    expect(boardCanvasSurfaces().map((def) => def.id)).toEqual(['chat', 'graph', 'scene3d', 'app', 'calendar']);
   });
 
   /**
@@ -246,7 +248,7 @@ describe('the chat surface on the canvas', () => {
     // and the count is pinned to the board surfaces the registry declares, so adding a
     // board surface without a button (or a button without a surface) also fails.
     const offered = within(switcher()).getAllByRole('button').map((button) => button.textContent);
-    expect(offered).toEqual(['Chat', 'Board', '3D space', 'App']);
+    expect(offered).toEqual(['Chat', 'Board', '3D space', 'App', 'Calendar']);
     expect(offered).toHaveLength(boardCanvasSurfaces().length);
   });
 

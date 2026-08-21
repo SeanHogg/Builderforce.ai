@@ -47,6 +47,16 @@ const ALLOWED = new Map([
       'login and bounce the user off the login page they are standing on.',
   ],
   [
+    'passkeys.ts',
+    'The SIGN-IN half of the same story as auth.ts, and only that half: ' +
+      '/api/auth/passkey/options and /verify are the two calls that run before a ' +
+      'session token exists, so apiRequest would redirect a failed passkey attempt ' +
+      'off the login page instead of showing "that passkey could not be used". ' +
+      'Registration DOES have a session and is already on the typed client ' +
+      '(`passkeysApi` in builderforceApi.ts); the rest of this file is WebAuthn ' +
+      'ceremony code that makes no request at all.',
+  ],
+  [
     'publicApi.ts',
     'It is the transport for UNCREDENTIALED server reads (generateMetadata, ' +
       'sitemap, public reference pages). apiClient reads localStorage and ' +

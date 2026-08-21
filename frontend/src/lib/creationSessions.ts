@@ -2,6 +2,8 @@ import type { Edge } from '@xyflow/react';
 import type { CreationFlowNode } from '@/components/creation-canvas/CreationNode';
 import type { CreationGraphInput } from '@/lib/builderforceApi';
 import { NEW_CHAT_MODE, normalizeChatMode, type ChatMode } from '@/lib/brain';
+import { STICKY_COLORS } from '@/components/creation-canvas/authoredColors';
+import { readConnectionStyle } from '@/lib/canvasConnectionStyle';
 
 export const LOCAL_CREATION_PREFIX = 'local-';
 const LOCAL_TOOL_CREATION_PREFIX = `${LOCAL_CREATION_PREFIX}tool-`;
@@ -126,6 +128,57 @@ export function listLocalCreationSessions(): LocalCreationEntry[] {
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   writeIndex(live);
   return live;
+}
+
+/**
+ * A local board seeded with NOTES — the Brain's `show_canvas` landing.
+ *
+ * ── WHY THIS EXISTS ─────────────────────────────────────────────────────────
+ * `show_canvas` used to build a board for the second canvas implementation
+ * (`components/canvas/canvasModel.ts`) and show it in a slide-out drawer, with a "save
+ * to Knowledge" button that wrote it into a document's `content` string. That board has
+ * folded into the Creation Canvas, so the tool now opens a REAL session: the same
+ * stickies, on the canvas that is the front door, with every affordance that board never
+ * had — connections, an object registry, history, sharing, and Brain itself.
+ *
+ * Local rather than server-side, deliberately: `show_canvas` is reachable by a signed-out
+ * visitor from the Brain drawer, and a tool that required an account would answer with a
+ * gate where it used to answer with a board.
+ *
+ * The reasoning in `createLocalCreationSession` about NOT guessing objects from a prompt
+ * does not apply here and is worth saying so: these notes are not a guess, they are the
+ * content the model was asked to produce and is handing over.
+ */
+export function createLocalCreationBoard(input: { title?: string; text?: string; stickies: readonly string[] }): string {
+  const sessionId = `${LOCAL_CREATION_PREFIX}${crypto.randomUUID()}`;
+  const now = new Date().toISOString();
+  const title = (input.title ?? '').trim().slice(0, 80) || 'Untitled board';
+  const nodes: CreationFlowNode[] = [];
+  let top = 140;
+  const intro = (input.text ?? '').trim();
+  if (intro) {
+    nodes.push({
+      id: crypto.randomUUID(), type: 'creation', position: { x: 120, y: top },
+      data: { kind: 'note', title, subtitle: intro },
+    });
+    top += 200;
+  }
+  // Three to a row, which is what a wall of notes looks like before anybody moves them.
+  input.stickies
+    .map((text) => text.trim())
+    .filter(Boolean)
+    .slice(0, 60)
+    .forEach((text, index) => {
+      nodes.push({
+        id: crypto.randomUUID(),
+        type: 'creation',
+        position: { x: 120 + (index % 3) * 220, y: top + Math.floor(index / 3) * 200 },
+        // `title` IS a sticky's text — see `TITLE_IS_CONTENT_KINDS`.
+        data: { kind: 'sticky', title: text, stickyColor: STICKY_COLORS[index % STICKY_COLORS.length] },
+      });
+    });
+  writeLocalCreationSession(sessionId, { version: 1, title, updatedAt: now, nodes, edges: [] });
+  return sessionId;
 }
 
 export function createLocalCreationSession(prompt: string, mode: ChatMode = NEW_CHAT_MODE): string {
@@ -331,7 +384,16 @@ export function creationGraphFromSnapshot(snapshot: Pick<LocalCreationSnapshot, 
       targetObjectId: edge.target,
       kind: typeof edge.data?.connectionKind === 'string' ? edge.data.connectionKind : 'reference',
       label: typeof edge.label === 'string' ? edge.label : null,
-      metadata: { animated: !!edge.animated, rendererType: typeof edge.type === 'string' ? edge.type : 'smoothstep' },
+      // `connectionStyle` rides the metadata beside `rendererType` because it is the same
+      // class of fact — how the edge is DRAWN, as opposed to `kind`, which is what it
+      // means. Without it a dashed two-way connector came back solid on reload, which is
+      // the one moment a styling feature is worthless: the person who set it is the
+      // person reopening the board.
+      metadata: {
+        animated: !!edge.animated,
+        rendererType: typeof edge.type === 'string' ? edge.type : 'smoothstep',
+        connectionStyle: readConnectionStyle((edge.data as { connectionStyle?: unknown } | undefined)?.connectionStyle),
+      },
     })),
     ...(snapshot.viewport ? { viewport: snapshot.viewport } : {}),
   };

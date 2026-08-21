@@ -6,6 +6,7 @@ import type { CreationObjectGroup, CreationObjectKind } from './types';
 import { useAuth } from '@/lib/AuthContext';
 import { useCanvasCapabilities } from '@/lib/canvasCapabilitiesApi';
 import { creationPaletteGroupsFor } from './creationObjectRegistry';
+import { STENCIL_PACKS, stencilChoice, type PaletteChoice } from '@/lib/canvasStencils';
 import styles from './CreationCanvas.module.css';
 
 /**
@@ -21,6 +22,17 @@ import styles from './CreationCanvas.module.css';
  * added to `creationObjectRegistry` and not to the bar, and the object then exists, is
  * authorable by Brain, and is unreachable by a person. So the contents come from
  * `CREATION_PALETTE_GROUPS` and nothing here knows any kind's name.
+ *
+ * ── THE SECOND CATALOGUE: STENCILS ──────────────────────────────────────────────
+ * A stencil is not a kind — it is a named PRESET of the untyped card (a geometry, a
+ * pigment, a size, sometimes a starting word), so it cannot come from the object
+ * registry and must not become twenty-nine new kinds the board can compute nothing over.
+ * It comes from `lib/canvasStencils.ts` by exactly the same rule: this file knows that
+ * packs exist and no stencil's name.
+ *
+ * They share the picker's one string key space, which is what `stencilChoice` /
+ * `parsePaletteChoice` are for — a declared vocabulary with a parser rather than an
+ * ad-hoc encoding, and the reason nothing outside that module splits the string.
  *
  * The search/filter/keyboard-close/outside-click interaction itself lives in the shared
  * `SearchPicker` — the workflow builder's step picker needs the exact same behaviour over
@@ -39,7 +51,7 @@ export interface CanvasObjectPickerProps {
    * between "add a step" and "add an object".
    */
   fromNodeId?: string;
-  onPick: (kind: CreationObjectKind, fromNodeId?: string) => void;
+  onPick: (choice: PaletteChoice, fromNodeId?: string) => void;
   onClose: () => void;
 }
 
@@ -57,6 +69,8 @@ const PICKER_CLASS_NAMES = {
 export function CanvasObjectPicker({ anchor, group, fromNodeId, onPick, onClose }: CanvasObjectPickerProps) {
   const t = useTranslations('creationCanvas');
   const tPicker = useTranslations('creationCanvas.picker');
+  const tStencil = useTranslations('creationCanvas.stencil');
+  const tPack = useTranslations('creationCanvas.stencilPack');
   // The picker decides its own contents rather than being handed a boolean: a signed-out
   // board has no access control, so it does not advertise the restricted-by-default
   // kinds. `authReady` guards the first hydrated frame, where `isAuthenticated` is
@@ -68,20 +82,37 @@ export function CanvasObjectPicker({ anchor, group, fromNodeId, onPick, onClose 
   // and neither offers a card the API would refuse to let this workspace place.
   const capabilities = useCanvasCapabilities(tenant?.id ?? null);
 
-  const sections = useMemo<SearchPickerSection<CreationObjectKind>[]>(
-    () => creationPaletteGroupsFor(signedIn, capabilities).map((entry) => ({
-      key: entry.group,
-      label: t(`group.${entry.group}` as 'group.Build'),
-      items: entry.items.map((item) => ({
-        kind: item.kind,
-        icon: item.icon,
-        label: t(`object.${item.kind}` as 'object.note'),
-        description: t(`objectDescription.${item.kind}` as 'objectDescription.note'),
-        // Shown and refused rather than dropped — see `SearchPickerItem.locked`.
-        ...(item.locked ? { locked: true, lockedReason: t('objectNeedsUpgrade') } : {}),
+  const sections = useMemo<SearchPickerSection<PaletteChoice>[]>(
+    () => [
+      ...creationPaletteGroupsFor(signedIn, capabilities).map((entry) => ({
+        key: entry.group,
+        label: t(`group.${entry.group}` as 'group.Build'),
+        items: entry.items.map((item) => ({
+          kind: item.kind as PaletteChoice,
+          icon: item.icon,
+          label: t(`object.${item.kind}` as 'object.note'),
+          description: t(`objectDescription.${item.kind}` as 'objectDescription.note'),
+          // Shown and refused rather than dropped — see `SearchPickerItem.locked`.
+          ...(item.locked ? { locked: true, lockedReason: t('objectNeedsUpgrade') } : {}),
+        })),
       })),
-    })),
-    [t, signedIn, capabilities],
+      // The stencil packs come AFTER every object group, deliberately: a person opening
+      // the palette is choosing what to make far more often than which shape to draw it
+      // as, and a rail that opens on "Flowchart" would bury the thing the board is for.
+      // Never entitlement-gated — a shape is the untyped card, which every visitor
+      // already has.
+      ...STENCIL_PACKS.map((pack) => ({
+        key: `stencil-${pack.key}`,
+        label: tPack(pack.labelKey as 'flowchart'),
+        items: pack.stencils.map((stencil) => ({
+          kind: stencilChoice(pack.key, stencil.key),
+          icon: pack.icon,
+          label: tStencil(stencil.labelKey as 'process'),
+          description: tPack(`${pack.labelKey}Description` as 'flowchartDescription'),
+        })),
+      })),
+    ],
+    [t, tPack, tStencil, signedIn, capabilities],
   );
 
   return (
@@ -98,8 +129,12 @@ export function CanvasObjectPicker({ anchor, group, fromNodeId, onPick, onClose 
       noMatches={(query) => tPicker('noMatches', { query })}
       testIdPrefix="canvas-picker"
       dialogTestId="canvas-object-picker"
-      onPick={(kind) => onPick(kind, fromNodeId)}
+      onPick={(choice) => onPick(choice, fromNodeId)}
       onClose={onClose}
     />
   );
 }
+
+/** Re-exported so the host types its handler against the picker's own vocabulary rather
+ *  than restating `CreationObjectKind | \`stencil:…\`` at the call site. */
+export type { PaletteChoice, CreationObjectKind };

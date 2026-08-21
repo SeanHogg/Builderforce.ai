@@ -34,7 +34,7 @@
  * preference all read the flags.
  */
 
-export type CanvasSurfaceId = 'chat' | 'graph' | 'scene3d' | 'app' | 'calendar' | 'page' | 'play' | 'site' | 'timeline' | 'world';
+export type CanvasSurfaceId = 'chat' | 'graph' | 'scene3d' | 'app' | 'calendar' | 'page' | 'play' | 'site' | 'timeline' | 'world' | 'facilitate';
 
 /**
  * What a surface is ABOUT.
@@ -133,6 +133,15 @@ export const CANVAS_SURFACES: readonly CanvasSurfaceDef[] = [
   // bound to one object snaps back to the board on reload, not into an editor whose
   // target it has to re-find.
   { id: 'world', scope: 'object', order: 9, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
+  // THE ROOM. A live poll's own axis is the people answering it — a join address on the
+  // wall, a count that moves, and two controls (open/close voting, show/hide the count)
+  // that are pressed while a room watches. A ~340px card can preview a question; it
+  // cannot be the thing a workshop is run from, which is the same argument `play` and
+  // `timeline` make about a build and an edit.
+  //
+  // It does not persist, for the reason every object-scoped surface does not: coming
+  // back tomorrow should land on the board, not inside a poll that closed last night.
+  { id: 'facilitate', scope: 'object', order: 10, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
 ];
 
 /**

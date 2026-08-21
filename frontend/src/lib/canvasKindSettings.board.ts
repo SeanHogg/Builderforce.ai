@@ -14,6 +14,9 @@
  */
 
 import { registerKindSettings } from './canvasKindSettings';
+// The ONE geometry vocabulary. The sticky's shape control reads it rather than restating
+// it — see the field's own note for why two lists of one vocabulary fail silently.
+import { STENCIL_SHAPES } from './canvasStencils';
 
 registerKindSettings({ kinds: ['table'], marketplace: { sellable: () => true }, fields: [], actions: [] });
 registerKindSettings({ kinds: ['spreadsheet'], marketplace: { sellable: () => true }, fields: [], actions: [] });
@@ -109,32 +112,52 @@ registerKindSettings({
     { name: 'stickyColor', control: 'color', section: 'basic', labelKey: 'stickyColor', surface: 'full' },
     {
       name: 'stickyShape', control: 'select', section: 'basic', labelKey: 'stickyShape', surface: 'full',
-      // The geometries `CreationCanvas.module.css` can DRAW. It offered two while the
-      // renderer drew none, so `stickyShape` was a stored preference with no visible
-      // effect; now that an ellipse renders as an ellipse a person can reach the same
-      // shapes an imported Miro board arrives carrying, rather than only being able to
-      // receive them. The values are Miro's own spellings so an import and a hand-drawn
-      // shape are one value space — two would need a translation table at the boundary,
-      // and a translation table is where a shape silently becomes a note.
-      options: [
-        { value: 'square', labelKey: 'stickyShapeSquare' },
-        { value: 'round', labelKey: 'stickyShapeRound' },
-        { value: 'ellipse', labelKey: 'stickyShapeEllipse' },
-        { value: 'rhombus', labelKey: 'stickyShapeRhombus' },
-        { value: 'triangle', labelKey: 'stickyShapeTriangle' },
-        { value: 'parallelogram', labelKey: 'stickyShapeParallelogram' },
-        { value: 'star', labelKey: 'stickyShapeStar' },
-        { value: 'right_arrow', labelKey: 'stickyShapeArrow' },
-      ],
+      // The geometries `CreationCanvas.module.css` can DRAW, read from the ONE stencil
+      // registry rather than restated here. This list used to be eight values written
+      // out beside a stylesheet that knew about them — two lists of one vocabulary, and
+      // the degradation when they disagree is SILENT (an undrawn shape falls back to the
+      // square card), so a select offering a shape nothing draws looks like a bug in the
+      // card rather than a missing rule. `lib/canvasStencils.ts` is now the source both
+      // the palette's stencil packs and this control read.
+      options: STENCIL_SHAPES.map((shape) => ({ value: shape.value, labelKey: `stencilShape.${shape.labelKey}` })),
     },
   ],
   actions: [],
 });
 
+/**
+ * The two clocks.
+ *
+ * `timer` declares its TIMEBOX (`durationMs`) and nothing else a person types: the card
+ * runs the clock and derives what it shows. It used to declare a free-text `duration`
+ * field, which was a label — the card had no clock at all, so the string was the entire
+ * feature. `stopwatch` has no box by definition, so it declares nothing and its manifest
+ * is the "considered, nothing to edit" empty case this module's header describes.
+ *
+ * Neither is sellable, for the same reason `frame` is not: board furniture.
+ */
 registerKindSettings({
   kinds: ['timer'],
   marketplace: { sellable: () => false },
-  fields: [{ name: 'duration', control: 'text', section: 'basic', labelKey: 'duration', surface: 'full' }],
+  fields: [{
+    name: 'durationMs', control: 'number', section: 'basic', labelKey: 'timerDurationMs', surface: 'both', min: 1000,
+  }],
+  actions: [],
+});
+registerKindSettings({ kinds: ['stopwatch'], marketplace: { sellable: () => false }, fields: [], actions: [] });
+
+/**
+ * The transclusion — another document, shown live.
+ *
+ * One field, because the reference IS the object: everything else on the card is the
+ * referenced document's own current content, which is exactly what a transclusion must
+ * not let anybody edit from here. Not sellable — it is a pointer at somebody's document,
+ * and what would be sold is the pointer.
+ */
+registerKindSettings({
+  kinds: ['transclusion'],
+  marketplace: { sellable: () => false },
+  fields: [{ name: 'documentId', control: 'text', section: 'basic', labelKey: 'transclusionDocumentId', surface: 'both' }],
   actions: [],
 });
 

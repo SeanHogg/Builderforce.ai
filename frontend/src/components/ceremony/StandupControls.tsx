@@ -127,11 +127,11 @@ export function StandupControls({
           </button>
           {!isLast && (
             <button type="button" style={btn('tertiary')} disabled={busy} onClick={() => onNext(turn + 1)}>
-              Next →
+              {t('nextSpeaker')} →
             </button>
           )}
           <button type="button" style={btn('primary')} disabled={busy} onClick={onComplete}>
-            Complete
+            {t('completeSession')}
           </button>
         </>
       )}

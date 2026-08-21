@@ -25,6 +25,12 @@
  * `candidate` here would have been the same object under two owners, which is the one
  * thing a bounded context exists to refuse.
  *
+ * That handover is PERFORMED, not merely described: `handover.ts` declares the mapping
+ * and `offer.hire` runs it, producing the `employee` and the onboarding
+ * `employeeLifecycle` below with an `offerRef` back to the offer they came from. This
+ * paragraph used to be the only place the transition existed, which is how the product
+ * came to ship two funnels that stopped next to each other.
+ *
  * ── THESE ARE INPUTS TO EACH OTHER ──────────────────────────────────────────────
  * An `orgChart` is only true if the `employee` objects under it carry a manager. An
  * `offer` is only defensible if its number sits inside a `compBand`. A `headcountPlan`

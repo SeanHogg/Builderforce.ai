@@ -1,0 +1,175 @@
+/**
+ * THE shared skin for every page a person outside the workspace is sent to.
+ *
+ * ── WHY THIS EXISTS ──────────────────────────────────────────────────────────
+ * The public form responder wrote the sheet, the 16px-minimum inputs, the 44px tap
+ * targets and the error callout first, and got them right. The poll participant's
+ * surface needs the same nine primitives, and a second copy of them is how the two
+ * pages a stranger sees come to look like two products — the exact duplication the
+ * DRY rule forbids. So the primitives live here once and each surface `composes`
+ * them, adding only what is genuinely its own (a form has a question list; a poll
+ * has a bar chart and a 2x2).
+ *
+ * Every colour is a token, because these pages render in whatever theme the
+ * visitor's machine is in — and they are the surfaces where a wrong contrast is not
+ * an inconvenience but an unanswerable question.
+ */
+
+.page {
+  min-height: 100vh;
+  background: var(--bg-base);
+  color: var(--text-primary);
+  /* clamp rather than a media query: these are read on a phone at least as often as
+     on a laptop, and the padding should shrink continuously. */
+  padding: clamp(16px, 5vw, 48px) clamp(12px, 4vw, 32px);
+}
+
+.sheet {
+  max-width: 640px;
+  margin: 0 auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: clamp(16px, 4vw, 32px);
+  box-shadow: var(--shadow-lg);
+}
+
+.title {
+  margin: 0 0 8px;
+  font-size: var(--font-size-section);
+  line-height: 1.25;
+  color: var(--text-primary);
+}
+
+.description {
+  margin: 0 0 24px;
+  color: var(--text-secondary);
+  font-size: var(--font-size-body);
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin: 0 0 24px;
+  color: var(--text-muted);
+  font-size: var(--font-size-small);
+}
+
+.field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 22px; }
+
+.label {
+  font-size: var(--font-size-body);
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.4;
+}
+
+.help { color: var(--text-secondary); font-size: var(--font-size-small); line-height: 1.5; }
+
+.input,
+.textarea,
+.select {
+  width: 100%;
+  box-sizing: border-box;
+  /* 16px minimum so iOS does not zoom the viewport on focus — a zoomed page is one
+     the visitor has to pinch back out of after every answer. */
+  font-size: max(16px, var(--font-size-body));
+  font-family: inherit;
+  color: var(--text-primary);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+}
+
+.textarea { min-height: 110px; resize: vertical; line-height: 1.5; }
+
+/* A native <option> inherits nothing useful from its <select> on Windows, so it
+   needs its own opaque background and foreground or half the list is invisible in
+   one of the two themes. */
+.select option { background: var(--surface); color: var(--text-primary); }
+
+.input:focus-visible,
+.textarea:focus-visible,
+.select:focus-visible {
+  outline: 2px solid var(--coral-bright);
+  outline-offset: 1px;
+}
+
+.choices { display: flex; flex-direction: column; gap: 8px; }
+
+.choice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  /* A tap target, not a text label: 44px is the smallest thing a thumb hits
+     reliably, and this list is answered on a phone. */
+  min-height: 44px;
+  padding: 4px 8px;
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: var(--font-size-body);
+  cursor: pointer;
+}
+
+.choice:hover { background: var(--surface-raised); }
+
+.scale { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.scaleButton {
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  font-size: var(--font-size-body);
+  cursor: pointer;
+}
+
+.scaleButtonOn {
+  background: var(--coral-bright);
+  border-color: var(--coral-bright);
+  color: var(--bg-base);
+  font-weight: 600;
+}
+
+.actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 28px; }
+
+.submit {
+  min-height: 44px;
+  padding: 0 22px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--coral-bright);
+  color: var(--bg-base);
+  font-size: var(--font-size-body);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.submit:disabled { opacity: .55; cursor: not-allowed; }
+
+.error {
+  margin: 16px 0 0;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid color-mix(in srgb, var(--red-bright) 40%, transparent);
+  background: color-mix(in srgb, var(--red-bright) 12%, transparent);
+  color: var(--text-primary);
+  font-size: var(--font-size-small);
+  line-height: 1.5;
+}
+
+.notice {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--font-size-body);
+  line-height: 1.6;
+}
+
+.done { text-align: center; padding: 24px 0; }
+.done h1 { margin: 0 0 12px; font-size: var(--font-size-section); color: var(--text-primary); }
