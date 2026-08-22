@@ -24,6 +24,7 @@
 
 import { apiRequestStream } from './apiClient';
 import { getVisitorId, getFirstTouch } from './visitor';
+import { getVisitId } from './visitorJourney';
 import { createLocalCreationSession } from '@/domains/canvas/infrastructure/localCanvasStore';
 import { NEW_CHAT_MODE, type ChatMode } from './brain';
 
@@ -60,6 +61,9 @@ export async function recordGuestPrompt(input: RecordGuestPromptInput): Promise<
         prompt,
         surface: input.surface,
         sessionRef: input.sessionRef,
+        // The visit the prompt was typed in, so the flow graph can draw "asked
+        // for X, then went to Y" instead of two streams nobody can join.
+        visitId: getVisitId(),
         mode: input.mode,
         // First-touch attribution rides the FIRST prompt, so a lead created here
         // carries its referrer and campaign rather than being an orphan that only

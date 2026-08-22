@@ -1,5 +1,7 @@
 import { apiRequest } from './apiClient';
 import { AUTH_API_URL } from './auth';
+import { getExistingVisitorId } from './visitor';
+import { getVisitId } from './visitorJourney';
 import { TRANSPORT_FAILURE_STATUS } from './errors/transportFailure';
 
 /**
@@ -119,6 +121,16 @@ function reportMessage(message: unknown): string {
   return 'Unknown error (no message supplied)';
 }
 
+/** The opaque ids, or nothing. Reading the visit token would MINT one, so it is
+ *  only read when a visitor id already exists — an error must not be the thing
+ *  that starts tracking someone who was never tracked. */
+function visitorIdentity(): { visitorId?: string; visitId?: string } {
+  const visitorId = getExistingVisitorId();
+  if (!visitorId) return {};
+  const visitId = getVisitId();
+  return visitId ? { visitorId, visitId } : { visitorId };
+}
+
 async function sendProductError(
   input: ReportErrorInput & { source: 'manual' | 'api-client' | 'render-crash'; context?: Record<string, unknown> },
   endpoint: string,
@@ -127,7 +139,18 @@ async function sendProductError(
     method: 'POST',
     auth: 'none',
     baseUrl: endpoint.replace(/\/$/, ''),
-    body: JSON.stringify({ ...input, message: reportMessage(input.message) }),
+    // The visitor and visit ride along so an ANONYMOUS error is answerable.
+    // Without them a report said "a TypeError happened on /pricing" and nothing
+    // more: which session hit it, what they had asked for a minute earlier, and
+    // whether they left straight afterwards were all unanswerable — for exactly
+    // the visitors the funnel is about. Opaque ids; they identify no account and
+    // grant no access. `getExistingVisitorId` deliberately does not MINT one:
+    // an error must not be the thing that starts tracking someone.
+    body: JSON.stringify({
+      ...input,
+      message: reportMessage(input.message),
+      ...visitorIdentity(),
+    }),
     // The panel renders ingest failures itself; do not create another global
     // API-error toast (and another automatic product report) for this request.
     expectedErrors: PRODUCT_REPORT_ERROR_STATUSES,

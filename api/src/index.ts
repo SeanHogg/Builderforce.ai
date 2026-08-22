@@ -683,7 +683,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // Sales-cycle demo accounts — public one-click persona demo sessions, funnel
   // telemetry, book-a-demo leads, and the (guarded) deploy-hook reseed.
   app.route('/api/demo', createDemoRoutes());
-  app.route('/api/visitor', createVisitorRoutes());
+  app.route('/api/visitor', createVisitorRoutes(db));
 
   // Signed vision attachments — public, but each object is gated by a short-lived
   // HMAC (?exp&sig minted at /api/brain/uploads/sign). Lets an upstream LLM

@@ -23,7 +23,7 @@
  * open/closed rule as data rather than as branches.
  *
  * ── ONE REVIEW PER PERSON, AND THE DATABASE SAYS SO ──────────────────────────
- * Migration 1109 carries the partial unique index. {@link submitReview} upserts
+ * Migration 1110 carries the partial unique index. {@link submitReview} upserts
  * onto it rather than reading first: two concurrent submits both read "none" and
  * both insert, which is how a rating average gets quietly stuffed.
  *
@@ -144,7 +144,7 @@ export async function submitReview(
     anchor: anchor as never,
     status,
   }).onConflictDoUpdate({
-    // The partial unique index from 1109. A re-submit REPLACES — the source
+    // The partial unique index from 1110. A re-submit REPLACES — the source
     // product's rule, and the right one: an edited opinion is not a second one.
     target: [annotations.objectId, annotations.authorRef],
     targetWhere: sql`kind = ${RATING_KIND} and deleted_at is null and author_ref is not null`,
@@ -166,7 +166,7 @@ export async function submitReview(
   return { ok: true, review: toReview(row) };
 }
 
-/** Withdraw a review. Soft delete, so the unique slot is freed (1109's predicate)
+/** Withdraw a review. Soft delete, so the unique slot is freed (1110's predicate)
  *  and the person can review the subject again later. */
 export async function withdrawReview(
   db: Db, env: Env, tenantId: number, objectId: string, authorRef: string,
@@ -227,7 +227,7 @@ export async function myReview(
  *
  * Pulling every review to average them in the isolate is the shape that works
  * for the first employer with four reviews and falls over on the one with four
- * thousand. The partial index from 1109 covers `(object_id, value)` for exactly
+ * thousand. The partial index from 1110 covers `(object_id, value)` for exactly
  * this query.
  */
 export async function ratingSummary(

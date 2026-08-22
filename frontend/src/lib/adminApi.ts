@@ -285,22 +285,62 @@ export interface AdminSuspectAccount {
   tenantCount: number;
 }
 
-export interface AdminDemoFunnelRow {
-  persona: string | null;
-  kind: string;
-  count: number;
+/** One step in the anonymous funnel. Mirrors `VisitorFlowNode` on the server. */
+export interface AdminVisitorFlowNode {
+  id: string;
+  kind: 'prompt' | 'page' | 'error' | 'exit' | 'converted';
+  label: string;
   visitors: number;
+  events: number;
+  /** Visitors whose visit ENDED here — the leak, per step. */
+  exits: number;
+  medianStepIndex: number;
 }
-export interface AdminDemoRecentEvent {
-  persona: string | null;
+
+/** One transition between steps. The leak lives here, not on a stage count. */
+export interface AdminVisitorFlowEdge {
+  from: string;
+  to: string;
+  visitors: number;
+  events: number;
+}
+
+export interface AdminVisitorFlow {
+  nodes: AdminVisitorFlowNode[];
+  edges: AdminVisitorFlowEdge[];
+  totals: {
+    visitors: number;
+    visits: number;
+    returningVisitors: number;
+    visitsWithPrompt: number;
+    visitsWithError: number;
+    convertedVisitors: number;
+  };
+  windowDays: number;
+  /** The scan hit its ceiling — the graph is of the most recent slice. */
+  truncated: boolean;
+}
+
+export interface AdminVisitorJourneyStep {
+  at: string;
   kind: string;
   path: string | null;
-  visitorId: string;
-  occurredAt: string;
+  prompt: string | null;
+  metadata: Record<string, unknown> | null;
 }
-export interface AdminDemoFunnel {
-  byKind: AdminDemoFunnelRow[];
-  recent: AdminDemoRecentEvent[];
+
+export interface AdminVisitorVisit {
+  visitId: string | null;
+  startedAt: string;
+  endedAt: string;
+  durationMs: number | null;
+  steps: AdminVisitorJourneyStep[];
+}
+
+export interface AdminVisitorJourney {
+  visitorId: string;
+  visits: AdminVisitorVisit[];
+  totals: { visits: number; pageViews: number; prompts: number; errors: number };
 }
 export type SalesLeadStatus = 'new' | 'contacted' | 'qualified' | 'closed';
 export interface AdminSalesLead {
@@ -1128,8 +1168,16 @@ export const adminApi = {
   },
 
   // Demo-account conversion funnel + book-a-demo pipeline (migration 0360).
-  async demoFunnel(): Promise<AdminDemoFunnel> {
-    return adminRequest<AdminDemoFunnel>('/api/admin/demo/funnel');
+  /** The anonymous funnel as a directed graph over a trailing window. */
+  async visitorFlow(days: number): Promise<AdminVisitorFlow> {
+    return adminRequest<AdminVisitorFlow>(`/api/admin/visitor-flow?days=${days}`);
+  },
+
+  /** One visitor's journey — the evidence behind a number in the graph. */
+  async visitorJourney(visitorId: string): Promise<AdminVisitorJourney> {
+    return adminRequest<AdminVisitorJourney>(
+      `/api/admin/visitor-flow/${encodeURIComponent(visitorId)}`,
+    );
   },
   async salesLeads(status?: SalesLeadStatus): Promise<AdminSalesLead[]> {
     const qs = status ? `?status=${status}` : '';

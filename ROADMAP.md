@@ -145,6 +145,15 @@ follows is what closing them surfaced.*
 
 ## Consolidated Gap Register — index by domain
 
+- **`pnpm dev` (Turbopack) cannot resolve pnpm-symlinked deps on Windows** — `frontend`'s dev script
+  runs `next dev --turbopack`, which fails with `Module not found: ...hast-util-from-html-isomorphic...
+  windows imports are not implemented yet` and serves a 500 for every route. Webpack dev
+  (`npx next dev`) compiles the same tree fine, so the workaround is real but undiscoverable.
+  Blocker: this is an upstream Turbopack limitation on Windows UNC/symlink paths, not something this
+  repo can patch — it needs either a Turbopack version that implements it or a decision to drop
+  `--turbopack` from the dev script. Fixing it unblocks local dev + any browser-level debugging on
+  Windows (this session had to instrument production instead).
+
 | Domain | Seat | Section |
 |---|---|---|
 | `agents` | Platform | [🤖 Agents — runtime, gateway, Evermind & Brain](#-agents--runtime-gateway-evermind--brain) |
@@ -541,7 +550,6 @@ follows is what closing them surfaced.*
 - **Only the TAX half of hired.video's payout stack is still unported** *(hired.video port, T6; rewritten 2026-08-22 — the "payouts are an env-gated stub" claim this entry rested on was false)*. Payouts, onboarding, escrow release and the earnings report ARE built: `application/payouts/PayoutAccountService.ts` (destinations as `connections` capability=`payout`, credential sealed by `credentialCrypto`, 0459's partial unique indexes enforcing one default), `finance/withdrawalMethods.ts`, `marketplace/milestones.ts` escrow and `finance/earningsLedger.ts` all move real money through `ledger_entries`. What is genuinely missing is **tax reporting**: hired.video's `TaxReportingService` and its AES-GCM tax-ID vault have no equivalent, so a platform that pays people cannot produce a 1099. The vault is the part that needs care — a tax ID is the worst possible fact to store twice, so it belongs in the kernel `credentials` seal that already holds every other secret, not in a column. Unblocks: paying US contractors above the reporting threshold without a manual year-end scramble.
 
 - **The unified menu's data halves are open: no company directory, no seat-workbench index, and two entitlement helpers.** *(unified menu, after the 2026-08-09 build — see [PRD 21 §11.11](./specs/builderforce/21-prd-unified-experience.md#1111-what-shipped-and-what-did-not--2026-08-09))* The IA shipped (one registry, the arc, four marketplace families, reference pages as panels); three data-shaped pieces did not. **(a) The company family is visible and inert.** `companies` exists (PRD 20, investor domain) but is tenant-scoped with no nullable-owner column and no verification, so browse → claim → verify has nothing to write against; it needs the company graph PRD 19 B0 brings **and** the answer to PRD 21 §7 decision 4 (does the directory list businesses that never opted in — a data-protection call, not a schema one). The family renders with an honest line rather than hidden, per §2.6 rule 7. **(b) Level 2 is still each destination's existing tab set** — `filter(parent === seat)` waits on the PRD 19 tracks that bring leaves to parent, so `REFERENCE_DESTINATIONS` currently ends at the explainer rather than continuing into a seat's feature tree. **(c) Two entitlement helpers now coexist**: `earnedRung()` (three rungs — public / signed-in / workspace) and `RosterNav`'s `earned()` (PRD 20's manifest rungs, still used by the kernel surface). Reconciling them is a decision about the manifest's rung scale, i.e. PRD 20 data, not UI. Related: the fourth rung ("claimed a company") cannot be enforced until a company can be claimed, so RUN rows sit at `WORKSPACE`. **Blocked on:** PRD 19 B0's company graph for (a) and (b), and an operator answer to §7 decision 4 for (a). Unblocks: the second front door — browse a directory, claim your business, and the whole Run stack scopes to it.
-- **The founder's `/talent/<slug>` profile is now the site's canonical résumé link, but nothing verifies the row it resolves to exists** *(footer/résumé redirect, 2026-08-22)* — `BRAND.founder` (`frontend/src/lib/content.ts`) now points the global footer, the `/agents/contact` link list, the `/agents/acknowledgements` credit and the `Person` JSON-LD at `/talent/seanhogg` instead of `hired.video/resumes/seanhogg`, which is the destination the API itself names as "the replacement for the hired.video iframe" (`publicResumeFor` in `api/src/presentation/routes/freelancerRoutes.ts`). `GET /api/freelancers/:id` resolves a vanity slug, but only for a row that is `published = true`, and a miss renders the profile-not-found copy rather than a redirect — so the marketing surface's most-linked outbound URL is one un-set column away from a dead end. Two things close it: the operator publishing the profile under the slug `seanhogg`, and a guard that fails the build when `BRAND.founder.path` does not resolve (the same shape as `check-destinations`, but it needs a live read, so it belongs in a deploy smoke test rather than a static check). **Blocker: a live database read / an operator action** — the slug is user-set data this repo cannot see. Unblocks: every "Built by Sean Hogg" link on the site landing on a résumé.
 - **Marketplace = one surface (talent/models/workforce/skills/personas/content).** **Jobs + Projects as categories (vision):** add `jobs` next (reuse `listJobs()`, low-risk); `projects` needs a product decision on what's browsable to whom.
 - **Monetization not wired (partial).** Publishing an agent stores `published`+price but `'agent'` isn't a `artifactTypeEnum` value → no purchase/payout path; "Hire" only increments `hire_count` (no provisioning/runtime bind); kanban-template/skill/persona installs are still free grants (Stripe checkout unbuilt). Knowledge listings work end-to-end on `PAYMENT_PROVIDER=manual`; hosted-card one-off settlement is the remaining follow-up (see Knowledge & canvas below).
 - **Gig Marketplace — deferred follow-ups.** Payments/payouts still ride the existing stub (`isPayoutsConfigured`) — a fixed-bid gig has no escrow/milestone flow. The hired-worker engagement-board grant is intentionally NARROW; no full board mutation / comments / web-IDE for the freelancer yet. Two publish paths exist (`marketplace.publish_ticket`; `POST /api/jobs` with `sourceTicketId`) — could converge. Eval scores (`proposal_evaluations`) aren't yet surfaced on an insights/analytics lens — only inline on the row.
@@ -568,78 +576,47 @@ follows is what closing them surfaced.*
 
 > Domain `growth` (seat: CMO). Campaigns, paid media, organic social, landing pages, SEO and every public marketing surface.
 
-### 🚪 The logged-out product — 101 app routes still trade the surface for a teaser
+### 🚪 The logged-out product — residuals after the guest-preview pass
 
-> Reviewed 2026-08-22 from `/insights`. The nine routes whose ONLY audience is signed-out (token links, LMS
-> launches, the salary SEO programme) were fixed the same pass — see [DONE.md](./DONE.md). What is left is the
-> product decision this review was asked for, recorded here because it is a direction to choose, not a defect
-> to patch.
+> **Shipped 2026-08-22** — 78 routes now render for a signed-out visitor over one sample workspace, with
+> `<SessionGate>` on the actions and the claim discarding fixture rows. Full write-up in [DONE.md](./DONE.md).
+> What is below is what that pass could not finish.
 
-**The measurement.** Of 182 page routes, 110 classify as `app`, so a logged-out visitor gets `RouteMarketing`
-instead of the page. Eleven of those are now fixed, leaving **99**. Of the 99, exactly **21** are genuinely
-operator-only (`/admin/*`, `/agent-worker`, `/billing/*`, `/debug`, `/developers`, `/import`, `/logs`,
-`/monitoring`, `/security`, `/settings/*`, `/tenants`) and the other **78** are the product itself — every Insights lens, `/pmo`, `/workforce`, `/quality`, `/growth`, `/knowledge`,
-`/tasks`, every `/seat/<domain>`.
-
-**Why it reads as a wasted page.** The teaser's own source says it: the "what's inside" band is rendered as
-*"Chips rather than links — every one of them is behind the wall this page exists because of"*
-(`RouteMarketing.tsx`). So `/insights` advertises AI Insights, Delivery, Autonomy, Finance, DevEx, Compliance,
-Alerts and Reviews as eight dead chips. `/product-management` is the same shape one rung out: its CTA is
-`isAuthenticated ? domain.appHref : '/register'`, so the visitor it was written for can only ever be sent to a
-signup form.
-
-**The seam is inconsistent, not missing.** The codebase already gates two other axes the right way and writes
-the rule down twice — `RoleGate` ("we DO NOT hide features behind roles — render them disabled and indicate
-the role required") and `UpgradeGate` ("inline, not a modal, so the wall reads as *this specific view needs a
-higher plan*"). Capability and plan indicate the gate in place; **session alone is implemented as
-substitution** — the whole surface is replaced by marketing. Three gates, one of them backwards.
-
-**The chosen direction (operator, 2026-08-22): guest session, not demo tenant.** Retire the persona demo
-tenants (migration 0360: `demoSeedService`, `demoPersonas`, `POST /api/demo/session`, the reseed cron, five
-seeded server tenants, `DemoTour`/`DemoShowcase`/`DemoModeProvider`, `lib/demoApi.ts`) and collapse their
-BLUEPRINTS into **ONE build-time sample dataset** seeded into the visitor's own session-scoped store. The
-visitor launches "AI Software Team" against **their own session id**, edits it, and it is theirs — then
-signing up LINKS it rather than discarding it. A shared demo tenant that a nightly reseed wipes is the
-opposite of that. `/book-demo` + `salesLeads` (sales-lead capture) is a different thing and stays.
-
-**What that needs, in order:**
-
-1. **Generalise the guest store.** `domains/canvas/infrastructure/localCanvasStore.ts` is already exactly this
-   for boards — schema over `localStorage`, an INDEX so work is findable after a lost `?next=`. Promote it to
-   a guest-session store keyed by session id that other bounded contexts can register a slice in. Do NOT copy
-   it per domain.
-2. **Generalise the claim.** `claimLocalDraft` / `claimPendingDrafts` (`lib/pendingWork.ts`) already turn an
-   account-less board into a durable tenant-scoped row at sign-in, driven off the index rather than the URL.
-   Widen the contract from "a canvas" to "a claimable guest slice" and keep ONE claim path.
-3. **Move the wall from the ROUTE to the ACTION.** Reads render; the gate fires on invoking an agent,
-   connecting an integration, publishing, inviting, or paying — the tenant-bound and irreversible operations.
-   That is one new primitive, a `SessionGate` matching `RoleGate`'s contract (decides its own state, no
-   prop-drilled `canX`), NOT a fourth bespoke branch per surface.
-4. **One sample dataset — labelled, editable, build-versioned.** A chart with no rows teaches nothing, so the
-   surfaces that exist to be LOOKED at get one fixture on first visit — not five personas. Three properties
-   make it honest: it always says what it is ("Sample data — your workspace replaces this", in place, never a
-   dismissible toast); the guest can EDIT it, because a number you can drag is the demo; and it is keyed by
-   BUILD ID, so a deploy replaces the fixture rather than leaving last month's shape in a browser to fail
-   against this month's code. ONE component owns the label and decides its own visibility (null the moment
-   the surface is reading real tenant rows) — a per-page banner is how half the app quietly starts lying.
-   The claim path (step 2) must explicitly DISCARD fixture rows and link only guest-authored work, or a
-   visitor's invented numbers arrive in a real workspace.
-5. **Prompt-led entry, per route.** The prompt capture already exists (`guestPromptCapture.ts`,
-   `startGuestCreationSession`, `/create/new?prompt=`). Each surface contributes route-specific prompts that
-   produce the artifact that surface is about, replacing the dead chips with the thing they name.
-6. **Shrink the teaser to what it is for.** Once a surface renders, `RouteMarketing` should serve only the 21
-   operator-only routes — and `indexableTeaserRoutes()` / `noindexTeaserRoutes()` / `sitemap.ts` must be
-   re-derived in the same pass, since today those 78 teaser URLs are submitted as the indexable entry point
-   for pages that would then render for real.
-
-**Known risks.** (a) SEO regression — those 78 teaser URLs currently rank, so a real page that ships without
-inheriting its teaser's title, description, FAQ JSON-LD and related articles is a downgrade in the one place
-this is working today. (b) Guest cost — a rendering surface invites Brain turns, so `guestLimit.ts` must gate
-every newly guest-reachable model call, not just chat. (c) Store sprawl — a second `localStorage` schema per
-domain turns step 1 into the thing it was meant to replace.
-
-**Blocker on starting: none.** Sequenced here rather than begun because steps 1–3 are one architectural change
-across 78 surfaces and the operator asked for the review first.
+- **The persona demo TENANTS are still live SERVER-side — DEPLOY-BLOCKED.** The client no longer calls them:
+  `/demo`'s doors navigate into the sample workspace and `startDemoSession` is deleted. But
+  `api/src/application/demo/demoSeedService.ts`, `demoPersonas.ts`, `POST /api/demo/session`, the reseed cron
+  in `cronSweeps.ts` and migration 0360's five seeded tenants all still exist and still work. **Single
+  blocker:** removing the route needs a deploy in which no browser is still running a bundle that calls it —
+  old tabs would 404 mid-demo — and the seeded tenants need a data migration decision (drop the rows, or leave
+  them dormant so their historic `demo_events` and `llm_usage_log` rows keep their foreign keys). Both are live
+  environment calls that cannot be made from here. Closing it removes ~900 lines of API, one cron and the
+  nightly reseed cost. The `/session` route is inert the moment the current bundle is everywhere, so it is safe
+  in the meantime — it just is not free.
+- **Fixture coverage is 10 endpoints, not the whole surface.** `domains/guest/infrastructure/fixtures/*`
+  covers projects, tasks, the three main insights lenses, workforce health, the metric catalogue and the
+  Executive dashboard. Every OTHER read falls through to the wire, takes the anonymous 401 the client already
+  treats as "nobody is signed in", and the surface renders its own empty state — honest, and strictly better
+  than the marketing page it replaced, but a lens with no fixture is a lens with an empty chart. The registry
+  is open/closed (a new surface is one entry in a fixture module; the resolver never gains a branch), so this
+  is additive work with no architectural blocker: `/api/insights/finance`, `/api/insights/compliance`,
+  `/api/insights/allocation`, the `/api/pmo/*` family and the workforce agent list are the highest-value next
+  entries. Each needs its response type read off `builderforceApi.ts` so the shape matches the wire exactly.
+- **Guest edits are stored but not yet WRITTEN by any surface.** `guestSessionStore` has
+  `readGuestEdits`/`writeGuestEdits` keyed by build id and `pendingWork` clears them on claim, but no surface
+  calls `writeGuestEdits` yet — so today the sample workspace is readable and re-readable rather than editable
+  in place. Wiring it needs the per-surface optimistic-write path (a task drag, a chart input) to route through
+  the store when `useSampleWorkspace().isSample`, which is a surface-by-surface change and was out of scope for
+  the seam pass.
+- **SEO: 78 teaser URLs are now real pages.** `indexableTeaserRoutes()` still submits them and
+  `RouteMarketing`'s per-route `<title>`, description, FAQ JSON-LD and related-article blocks no longer render
+  on them — the real surface does. Those URLs currently rank; each needs its teaser metadata moved onto the
+  route's own `generateMetadata` before the next sitemap ping, or the rewrite is a downgrade in the one place
+  this was working. Not blocked, just not done: it is ~78 `generateMetadata` exports derived from the same
+  registry the teaser read.
+- **Guest cost ceiling covers chat, not every newly reachable model call.** `guestLimit.ts` classifies the
+  gateway's `guest_limit_reached` / `guest_research_limit_reached` refusals. Now that 78 surfaces render for a
+  signed-out visitor, any of them that can reach a model needs to be behind the same allowance — audit which
+  ones can, and gate them, before this is advertised.
 
 ### 💸 Paid advertising & measurement — residuals
 
@@ -676,7 +653,6 @@ across 78 surfaces and the operator asked for the review first.
 - **Sales deck has zero customer proof** (CEO-review finding, 2026-07-23): no logos, quotes, case studies, or measured outcome numbers anywhere in marketing — the deck's ROI slide is explicitly *illustrative*. Needs GTM work, not code: land ≥1 design partner, capture one measured result (e.g. PR cycle-time delta, token-spend delta from the consumption meters we already ship), and swap it into the deck's Unit-Economics slide + /customers surface. Unblocks moving buyers from "pilot" to "org-wide."
 - **The marketing surface has 4 primitive importers out of 478 files, and 818 raw controls re-derive the accessibility contract by hand** *(public-page audit 2026-08-09, partially closed same day)*. Repo-wide `@/components/ui` adoption is 12 files; on the public pages it is `HomePatterns.tsx`, `NewsletterSignupSection.tsx`, `ToolsHubClient` and one freelance profile card — plus `RouteMarketing.tsx`, migrated in the audit pass (→ DONE.md), which moved the shared teaser surface of **86 routes** onto `<ButtonLink>`/`<Surface>` and deleted its 95-line parallel vocabulary. What remains: **2,652 inline `style={{…}}` sites, 633 hand-rolled `1px solid` borders, 581 raw `<button>`s and 237 raw `<input>/<textarea>/<select>`s** in marketing-owned files. §2.7 already rules the inline-style and hand-rolled-border rows a *verbosity* measure with no ratchet, and that judgement stands — but the raw `<button>` and `<input>` counts are **not** verbosity: §2.5 says `loading` must supply the spinner *and* `aria-busy`, and "a bare `<input>` in a form is a defect", so those 818 sites are 818 places where the a11y contract is hand-rolled. `surfaceClassName()` now exists (`components/ui/Surface.tsx`) precisely so a `<Link>`, `<details>` or `<figure>` can take the surface look without re-inlining a border — the seam that blocked this sweep. Fix = continue the migration outward from the shared chrome, then ratchet raw `<button>`/`<input>` shrink-only. **Not blocked.**
 - **1,136 English marketing copy literals live in TypeScript, outside the i18n catalogs** *(public-page audit 2026-08-09)*. `lib/content.ts` (977 long literals) and `lib/routeMarketing.ts` (159) are the single source for the product sections, competitor/integration SEO copy, and per-route hero + highlights + FAQ — plain English string constants, so `RouteMarketing` shows English BODY copy on 86 public routes in all five locales even though its chrome is now translated (`routeMarketing.*`, five catalogs → DONE.md). Plus `blogData.ts`. **Narrowed 2026-08-15:** the 25 hand-authored surfaces are unchanged, but the OTHER 61 authed routes no longer take English from this file at all — a route with no entry now renders its DESTINATION (localized `nav.group.*` name + a `routeMarketing.destination.*` pitch shipped in all five catalogs) or the method, so the English-literal surface shrank instead of growing with the route count (→ DONE.md). **The /legal half of this entry is CLOSED** (→ DONE.md): those seven pages are binding instruments, and the resolution there was the correct one for a contract — chrome fully translated, body English, and a translated notice stating the English text governs. Marketing copy is the opposite case and should genuinely be translated. **Blocked on an operator decision, not on engineering:** ≈1,136 strings × 4 locales is a commissioning decision (professional translation, MT-plus-review, or English-only with `hreflang`), and shipping unreviewed machine translation of positioning copy is worse than the gap. Name the choice and the code follows in one pass — the catalog wiring is already proven by the legal pass.
-- **7 marketing routes still have zero localized files** *(public-page audit 2026-08-09, was 23, then 13)*. Routes whose own components never call `useTranslations`, so even labels, filters and empty states are hardcoded. **The seven `/legal/*` pages and the shared `CompliancePage.tsx` are CLOSED** (→ DONE.md), taking route-local hardcoded strings from **362 → 249** and zero-i18n routes from 23 → 16 (three of which — `/models`, `/talent`, `/diagnostics` — are bare redirects with no strings at all, so 13 real routes remain). Outstanding: five of the seven `/agents/*` sub-pages — `integrations`, `shoutouts`, `showcase`, `skills` (+ `skills/[slug]`) and `workflow-builder`, none of which calls `useTranslations` anywhere. *(`acknowledgements` and `contact` closed 2026-08-22 while re-pointing the founder's résumé link: both now render from `agents.contact.*` / `agents.acknowledgements.*` in all five catalogs, with `generateMetadata` on `getTranslations` and `runtime = 'edge'` — see DONE.md.)* *(`/sell-builderforce`, `/integrations`, `/integrations/[tool]`, `/marketplace/[slug]` and `/blog/[slug]` all localized 2026-08-20; re-measured this pass.)* Distinct from the copy-corpus entry above: this is UI chrome, which should simply be translated, not commissioned. **Not blocked** — *(corrected 2026-08-22: `.claude/hooks/localize-guard.mjs` DOES exist and fires as a PostToolUse block on any frontend file with hardcoded user-facing strings; it is what forced the `contact`/`acknowledgements` half of this entry closed. The earlier "does not exist" note was wrong.)* It would block the next author who touches any of them anyway.
 - **Docs proxy** — verify post-deploy that next-on-pages *proxies* `/docs/*` (strip `/docs`) rather than 301-redirecting cross-origin; fall back to a Workers Route or bind `docs.builderforce.ai`. Marketing/public pages still center on `.page-inner` (decide per-page migration to left-aligned `PageContainer`). Per-route feature teasers still set `<title>`/`<meta>` from the CLIENT (convert to the server-wrapper pattern for indexable heads) — the `Disallow` half of this is CLOSED (→ DONE.md: `robots.txt` is now generated from the same registry as the sitemap). `/compile` not in `PUBLIC_SHELL_PREFIXES` (it is now a `noindex` generic teaser, which is the honest answer for an internal route, so this is a note rather than a defect). Per-article OG card text lost (generate per-article PNGs at build time). 23/25 blog posts have only the auto-cover. Feature copy in three unconnected lists (one `Feature`-shaped source). Marketing header dropdowns are CSS-only (no JS `aria-expanded`/touch toggle). Hero backdrop pivoted to a procedural solar-system fly-through (pacing/light-mode tuning remains). Stale `nav.tab.{finops,devfinops,allocation}` keys (remove in the insights tab-key cleanup).
 
 - **`/compare` has six arenas but leaf pages for only one.** `COMPARE_ARENAS` (frontend/src/lib/content.ts) now carries 6 markets and 30 vendor columns, and `arenaForCompetitor()` already resolves a leaf page to its arena — but `COMPETITOR_SEO` still has entries for the 7 AI-coding-agent vendors only, so `/compare/{slug}` exists for those and 404s for Jira, Figma, Zapier, OpenRouter, Upwork and the other 16. The plumbing is done; what is missing is CONTENT: each leaf needs a curated tagline, summary and verdict (`compare.competitors.<key>.*`) in all five catalogs, and 23 auto-generated ones would be exactly the thin-page bloat `SEO_INTEGRATIONS` is curated to avoid. **Blocked on an operator decision** — which of the 23 markets are worth an indexed "vs" page, since that is a positioning call and not an engineering one. Unblocks: long-tail "{vendor} alternative" capture beyond coding agents.
@@ -758,6 +734,8 @@ across 78 surfaces and the operator asked for the review first.
 ## 🧲 Hiring — postings, sourcing & applications
 
 
+- **Three API guards are red on the untracked `visitor_events` feature, and all three are the same design question** *(found 2026-08-22 while landing employer reviews; verified by running each guard — no file from that work appears in any of them)*. `check:shape-lint` reports `visitor_events` as matching the `activity_log` shape ("should this be a row in `activity_log` with a kind, rather than a table?"); `check:tenant-column` reports it has no `tenant_id`/`segment_id`/`account_id`, so `check-tenant-scope` cannot see it and no query against it can be checked; `check:swept-tables` reports it is retention-swept with no `autovacuum_vacuum_scale_factor` override. All three resolve the same way once somebody answers whether an anonymous visitor event is an `activity_log` row with `tenant_id NULL` (which that table already permits for "platform-global events (e.g. a pre-tenant login/registration)") or a genuinely different noun that needs its own scoping story. **Blocked on the author of the untracked visitor-journey work** (`migrations/1109_visitor_journey.sql`, `domain/marketing/visitorFlowGraph.ts`, `application/marketing/VisitorEventService.ts`) — answering it from outside means choosing whether their table exists, which is not a decision to take past somebody mid-edit. Two adjacent legs of the same feature WERE fixed in this pass because neither is a design call: the raw NUL bytes in `visitorFlowGraph.ts` (invisible to code search) are now ` ` escapes, and `visitorRoutes.ts` takes its `Db` from the composition root instead of importing `buildDatabase`. Unblocks: an API build that fails on new drift rather than on this.
+
 
 > Domain `hiring` (seat: Recruiter). The job posting and everything downstream of it — applications, interviews, placements — plus the public employer surfaces that feed it.
 
@@ -772,7 +750,6 @@ across 78 surfaces and the operator asked for the review first.
   to/from a real `job_postings` row (its own foundation, FO-A1-shaped) or whether applications stay
   off-canvas and are read through a different surface. Unblocks: the offer→employee handover
   `people.ts` names as the seam between the Recruiter and HR seats.
-- **`/companies` and `/reviews` are the last two ported calls to action still 404ing** *(hired.video article port; narrowed 2026-08-16 when /salary, /references and /interview landed)*. Three posts link to them — `how-to-leave-a-company-review-that-helps`, `hired-video-vs-glassdoor-…` and `research-employers-with-reviews-and-salary-data` — and they describe a multi-axis employer review (culture / leadership / work-life balance / compensation / career growth / diversity & inclusion) on a browsable company directory. Nothing here models either: `companies` in `investor.ts` is a PORTFOLIO company, `employer_branding_pages` is a tenant's own page, and `freelancer_reviews` rates a marketplace worker. So it needs two tables (`employer_companies`, `employer_reviews` with the six axes as smallint columns — six stable named axes are attributes, not a repeating group), a public browse + aggregate read, and an authenticated submit. **Blocker: an explicit operator decision on moderation posture, which is not an engineering call.** This surface publishes user-written claims about NAMED third-party employers, so someone has to choose the default (recommended: rows land `pending` and stay invisible until approved, making exposure opt-in), who approves, and what the takedown path is. Everything else is about a day once that is answered. Unblocks: the last three ported articles and the Glassdoor-comparison positioning they were written for.
 
 ## ⚖️ Legal — contracts & obligations
 

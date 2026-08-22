@@ -45,7 +45,7 @@ import { createPortal } from 'react-dom';
  *
  * ── WHAT THIS IS NOT ─────────────────────────────────────────────────────────────
  * A modal (`SlideOutPanel`, `ConfirmDialog`) covers the window and is dismissed by its
- * own veil, so it has no anchor to measure. A coach mark (`SectionTour`, `DemoTour`)
+ * own veil, so it has no anchor to measure. A coach mark (`SectionTour`)
  * looks similar and is not: its card, veil and spotlight cutout are ONE dialog root
  * placed around a selector-found element, and pulling the card out of that root to hang
  * it off a ref would separate the highlight from the thing it highlights. Neither is a

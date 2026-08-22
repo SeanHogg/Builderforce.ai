@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * THE GUEST SESSION — one id per browser, and the edits made against it.
  *
@@ -23,6 +21,11 @@
  * under when they sign up (`pendingWork`), and what the funnel joins a prompt to
  * — so a deploy must refresh the DATA without making the visitor a different
  * person halfway through their first session.
+ *
+ * No `'use client'`, matching `localCanvasStore` — the other localStorage store
+ * in this repo. The directive marks a module as belonging to a client COMPONENT
+ * tree; this one is a plain module that guards on `typeof window` itself, and is
+ * imported by things on both sides of the boundary.
  */
 
 import { APP_VERSION } from '@/lib/buildVersion';

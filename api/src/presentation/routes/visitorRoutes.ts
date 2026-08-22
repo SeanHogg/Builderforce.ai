@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import type { Env, HonoEnv } from '../../env';
-import { buildDatabase } from '../../infrastructure/database/connection';
+import type { Db } from '../../infrastructure/database/connection';
 import { recordVisitorEvents, type VisitorEventInput } from '../../application/marketing/VisitorEventService';
 
 /**
@@ -21,8 +21,13 @@ import { recordVisitorEvents, type VisitorEventInput } from '../../application/m
  * token — so it trusts nothing beyond the opaque visitor id, bounds the batch,
  * and answers 202 for every outcome. A visitor who trips an abuse ceiling must
  * still get where they were going: the status is reported, never enforced.
+ *
+ * Takes its `Db` from the composition root rather than calling `buildDatabase`
+ * itself: a route may not reach into infrastructure, and the handle already
+ * exists one layer up. The event write itself was always an application service
+ * (`recordVisitorEvents`) — this closes the last import.
  */
-export function createVisitorRoutes(): Hono<HonoEnv> {
+export function createVisitorRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
 
   router.post('/events', async (c) => {
@@ -30,7 +35,7 @@ export function createVisitorRoutes(): Hono<HonoEnv> {
       .json<{ visitorId?: string; events?: VisitorEventInput[] }>()
       .catch((): Record<string, never> => ({}));
 
-    const result = await recordVisitorEvents(buildDatabase(c.env), c.env as Env, {
+    const result = await recordVisitorEvents(db, c.env as Env, {
       visitorId: body.visitorId,
       ip: c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? null,
       events: Array.isArray(body.events) ? body.events : [],

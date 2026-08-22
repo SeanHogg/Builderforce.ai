@@ -12171,12 +12171,12 @@
       "token": "超级管理员令牌",
       "feedback": "反馈",
       "releaseNotes": "更新日志",
-      "demoFunnel": "演示漏斗",
       "salesLeads": "销售线索",
       "salesCommissions": "销售佣金",
       "cron": "定时任务",
       "broadcasts": "广播",
-      "llmRatings": "评分"
+      "llmRatings": "评分",
+      "visitorFlow": "访客流向"
     },
     "common": {
       "loading": "加载中…",
@@ -12956,41 +12956,6 @@
         "disposable": "一次性邮箱域名"
       }
     },
-    "demoFunnel": {
-      "title": "演示转化漏斗",
-      "subtitle": "按角色划分的匿名演示账户互动（最近 30 天）。",
-      "persona": "角色",
-      "total": "合计",
-      "convRate": "{rate}% 注册",
-      "tourRate": "{rate}% 完成了导览",
-      "tourRateNone": "尚无导览启动",
-      "recentTitle": "最近事件",
-      "empty": "暂无演示活动。",
-      "when": "时间",
-      "event": "事件",
-      "path": "路径",
-      "personas": {
-        "ai-team": "AI 软件团队",
-        "insights": "工程 ROI 与洞察",
-        "pmo": "PMO 指挥中心",
-        "talent": "人才与市场",
-        "governance": "安全、架构与治理"
-      },
-      "stages": {
-        "demo_start": "已开始",
-        "page_view": "页面浏览",
-        "tour_started": "导览开始",
-        "tour_step": "导览步骤",
-        "tour_completed": "导览完成",
-        "tour_skipped": "跳过导览",
-        "convert_prompt_shown": "已显示提示",
-        "convert_clicked": "点击注册",
-        "book_demo_opened": "打开预约",
-        "lead_submitted": "已提交线索",
-        "exit_prompt_shown": "显示退出",
-        "demo_exit": "已退出"
-      }
-    },
     "salesLeads": {
       "title": "销售线索",
       "subtitle": "来自营销网站的预约演示与退出意向线索。",
@@ -13263,6 +13228,49 @@
       "gradedColumn": "已评定",
       "gradedRateColumn": "评定率",
       "noData": "该周期内没有会话。"
+    },
+    "visitorFlow": {
+      "title": "访客流向",
+      "subtitle": "匿名访客想要什么、去了哪里、在哪里停下。",
+      "window": "{days} 天",
+      "empty": "此时间范围内尚无访客旅程记录。",
+      "graphLabel": "匿名访客流向：各步骤及其之间的跳转",
+      "truncated": "仅显示此时间范围内最近的一部分——扫描已达到行数上限。",
+      "drillHint": "打开某位访客的旅程，查看其输入的提示词、浏览过的页面以及出现的任何故障。",
+      "visitorPlaceholder": "访客 ID",
+      "openJourney": "打开旅程",
+      "journeyTitle": "访客旅程",
+      "journeySummary": "{visits} 次访问 · {pageViews} 次页面浏览 · {prompts} 条提示词 · {errors} 个错误",
+      "journeyEmpty": "该访客暂无任何记录。",
+      "visitNumber": "第 {number} 次访问",
+      "nodeCount": "{visitors} 位访客 · {exitPct}% 在此离开",
+      "nodeTooltip": "{label} — {visitors} 位访客，{events} 个事件，{exitPct}% 在此结束访问",
+      "edgeTooltip": "{visitors} 位访客经过此跳转（共 {events} 次）",
+      "legendDropOff": "在此步骤离开的占比",
+      "kind": {
+        "prompt": "提示词",
+        "page": "页面",
+        "error": "错误",
+        "exit": "离开",
+        "converted": "已注册"
+      },
+      "kindLabel": {
+        "prompt": "提示词",
+        "page_view": "页面浏览",
+        "visit_start": "访问开始",
+        "error": "错误",
+        "visit_end": "访问结束"
+      },
+      "stat": {
+        "visitors": "访客",
+        "visits": "访问次数",
+        "returning": "回访",
+        "returningHint": "再次到访",
+        "withPrompt": "含提示词的访问",
+        "withError": "出错的访问",
+        "withErrorHint": "遇到了故障",
+        "converted": "已注册"
+      }
     }
   },
   "providerKeys": {

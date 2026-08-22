@@ -12171,12 +12171,12 @@
       "token": "Jeton superadmin",
       "feedback": "Retours",
       "releaseNotes": "Nouveautés",
-      "demoFunnel": "Entonnoir démo",
       "salesLeads": "Leads commerciaux",
       "salesCommissions": "Commissions commerciales",
       "cron": "Tâches planifiées",
       "broadcasts": "Annonces",
-      "llmRatings": "Évaluations"
+      "llmRatings": "Évaluations",
+      "visitorFlow": "Parcours visiteurs"
     },
     "common": {
       "loading": "Chargement…",
@@ -12956,41 +12956,6 @@
         "disposable": "Domaine jetable"
       }
     },
-    "demoFunnel": {
-      "title": "Entonnoir de conversion des démos",
-      "subtitle": "Engagement anonyme des comptes démo par persona (30 derniers jours).",
-      "persona": "Persona",
-      "total": "Total",
-      "convRate": "{rate}% inscription",
-      "tourRate": "{rate}% ont terminé la visite",
-      "tourRateNone": "Aucune visite lancée pour l’instant",
-      "recentTitle": "Événements récents",
-      "empty": "Aucune activité de démo pour le moment.",
-      "when": "Quand",
-      "event": "Événement",
-      "path": "Chemin",
-      "personas": {
-        "ai-team": "Équipe logicielle IA",
-        "insights": "ROI et analyses d'ingénierie",
-        "pmo": "Centre de commande PMO",
-        "talent": "Talents et marketplace",
-        "governance": "Sécurité, architecture et gouvernance"
-      },
-      "stages": {
-        "demo_start": "Démarré",
-        "page_view": "Pages vues",
-        "tour_started": "Visite lancée",
-        "tour_step": "Étapes de la visite",
-        "tour_completed": "Visite terminée",
-        "tour_skipped": "Visite ignorée",
-        "convert_prompt_shown": "Invite affichée",
-        "convert_clicked": "Inscription cliquée",
-        "book_demo_opened": "Réservation ouverte",
-        "lead_submitted": "Lead envoyé",
-        "exit_prompt_shown": "Sortie affichée",
-        "demo_exit": "Quitté"
-      }
-    },
     "salesLeads": {
       "title": "Leads commerciaux",
       "subtitle": "Leads de réservation de démo et d’intention de sortie du site marketing.",
@@ -13263,6 +13228,49 @@
       "gradedColumn": "Évaluées",
       "gradedRateColumn": "Taux d'évaluation",
       "noData": "Aucune session sur cette période."
+    },
+    "visitorFlow": {
+      "title": "Parcours visiteurs",
+      "subtitle": "Ce que les visiteurs anonymes ont demandé, où ils sont allés, où ils se sont arrêtés.",
+      "window": "{days} jours",
+      "empty": "Aucun parcours visiteur enregistré sur cette période.",
+      "graphLabel": "Parcours des visiteurs anonymes : étapes et transitions entre elles",
+      "truncated": "Affichage de la portion la plus récente de cette période — l’analyse a atteint son plafond de lignes.",
+      "drillHint": "Ouvrez le parcours d’un visiteur pour voir le prompt saisi, les pages parcourues et ce qui a échoué.",
+      "visitorPlaceholder": "ID visiteur",
+      "openJourney": "Ouvrir le parcours",
+      "journeyTitle": "Parcours du visiteur",
+      "journeySummary": "{visits} visites · {pageViews} pages vues · {prompts} prompts · {errors} erreurs",
+      "journeyEmpty": "Rien d’enregistré pour ce visiteur.",
+      "visitNumber": "Visite {number}",
+      "nodeCount": "{visitors} visiteurs · {exitPct} % sont partis ici",
+      "nodeTooltip": "{label} — {visitors} visiteurs, {events} événements, {exitPct} % ont terminé leur visite ici",
+      "edgeTooltip": "{visitors} visiteurs ont emprunté cette étape ({events} fois)",
+      "legendDropOff": "Part de ceux qui sont partis à cette étape",
+      "kind": {
+        "prompt": "Prompt",
+        "page": "Page",
+        "error": "Erreur",
+        "exit": "Parti",
+        "converted": "Inscrit"
+      },
+      "kindLabel": {
+        "prompt": "Prompt",
+        "page_view": "Page vue",
+        "visit_start": "Visite commencée",
+        "error": "Erreur",
+        "visit_end": "Visite terminée"
+      },
+      "stat": {
+        "visitors": "Visiteurs",
+        "visits": "Visites",
+        "returning": "Revenus",
+        "returningHint": "sont revenus pour une deuxième visite",
+        "withPrompt": "Visites avec un prompt",
+        "withError": "Visites avec une erreur",
+        "withErrorHint": "ont rencontré un dysfonctionnement",
+        "converted": "Inscrits"
+      }
     }
   },
   "providerKeys": {

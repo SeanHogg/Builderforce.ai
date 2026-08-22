@@ -12171,12 +12171,12 @@
       "token": "Token de superadmin",
       "feedback": "Comentarios",
       "releaseNotes": "Novedades",
-      "demoFunnel": "Embudo de demo",
       "salesLeads": "Leads de ventas",
       "salesCommissions": "Comisiones de ventas",
       "cron": "Tareas programadas",
       "broadcasts": "Comunicados",
-      "llmRatings": "Valoraciones"
+      "llmRatings": "Valoraciones",
+      "visitorFlow": "Flujo de visitantes"
     },
     "common": {
       "loading": "Cargando…",
@@ -12956,41 +12956,6 @@
         "disposable": "Dominio desechable"
       }
     },
-    "demoFunnel": {
-      "title": "Embudo de conversión de demos",
-      "subtitle": "Interacción anónima con cuentas demo por persona (últimos 30 días).",
-      "persona": "Persona",
-      "total": "Total",
-      "convRate": "{rate}% registro",
-      "tourRate": "{rate}% completó el recorrido",
-      "tourRateNone": "Aún no se ha iniciado ningún recorrido",
-      "recentTitle": "Eventos recientes",
-      "empty": "Aún no hay actividad de demo.",
-      "when": "Cuándo",
-      "event": "Evento",
-      "path": "Ruta",
-      "personas": {
-        "ai-team": "Equipo de software con IA",
-        "insights": "ROI e insights de ingeniería",
-        "pmo": "Centro de mando PMO",
-        "talent": "Talento y marketplace",
-        "governance": "Seguridad, arquitectura y gobernanza"
-      },
-      "stages": {
-        "demo_start": "Iniciado",
-        "page_view": "Vistas de página",
-        "tour_started": "Recorrido iniciado",
-        "tour_step": "Pasos del recorrido",
-        "tour_completed": "Recorrido completado",
-        "tour_skipped": "Recorrido omitido",
-        "convert_prompt_shown": "Aviso mostrado",
-        "convert_clicked": "Clic en registro",
-        "book_demo_opened": "Reserva abierta",
-        "lead_submitted": "Lead enviado",
-        "exit_prompt_shown": "Salida mostrada",
-        "demo_exit": "Salió"
-      }
-    },
     "salesLeads": {
       "title": "Leads de ventas",
       "subtitle": "Leads de reserva de demo e intención de salida del sitio de marketing.",
@@ -13263,6 +13228,49 @@
       "gradedColumn": "Calificadas",
       "gradedRateColumn": "Tasa calificada",
       "noData": "No hay sesiones en este periodo."
+    },
+    "visitorFlow": {
+      "title": "Flujo de visitantes",
+      "subtitle": "Qué pidieron los visitantes anónimos, adónde fueron y dónde se detuvieron.",
+      "window": "{days} días",
+      "empty": "Aún no hay recorridos de visitantes en este periodo.",
+      "graphLabel": "Flujo de visitantes anónimos: pasos y las transiciones entre ellos",
+      "truncated": "Mostrando la parte más reciente de este periodo: el análisis alcanzó su límite de filas.",
+      "drillHint": "Abre el recorrido de un visitante para ver el prompt que escribió, las páginas que visitó y lo que falló.",
+      "visitorPlaceholder": "ID de visitante",
+      "openJourney": "Abrir recorrido",
+      "journeyTitle": "Recorrido del visitante",
+      "journeySummary": "{visits} visitas · {pageViews} páginas vistas · {prompts} prompts · {errors} errores",
+      "journeyEmpty": "No hay nada registrado para este visitante.",
+      "visitNumber": "Visita {number}",
+      "nodeCount": "{visitors} visitantes · {exitPct}% se fue aquí",
+      "nodeTooltip": "{label}: {visitors} visitantes, {events} eventos, {exitPct}% terminó su visita aquí",
+      "edgeTooltip": "{visitors} visitantes recorrieron este paso ({events} veces)",
+      "legendDropOff": "Proporción que se fue en este paso",
+      "kind": {
+        "prompt": "Prompt",
+        "page": "Página",
+        "error": "Error",
+        "exit": "Se fue",
+        "converted": "Se registró"
+      },
+      "kindLabel": {
+        "prompt": "Prompt",
+        "page_view": "Página vista",
+        "visit_start": "Visita iniciada",
+        "error": "Error",
+        "visit_end": "Visita finalizada"
+      },
+      "stat": {
+        "visitors": "Visitantes",
+        "visits": "Visitas",
+        "returning": "Volvieron",
+        "returningHint": "regresaron para una segunda visita",
+        "withPrompt": "Visitas con prompt",
+        "withError": "Visitas con error",
+        "withErrorHint": "se toparon con un fallo",
+        "converted": "Se registraron"
+      }
     }
   },
   "providerKeys": {

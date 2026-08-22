@@ -8,9 +8,11 @@
  *    the moment they had invested enough to care. There is one sample workspace
  *    now, it lives in the visitor's own guest session, and entering it is a
  *    navigation rather than a round trip that could fail on a per-IP counter.
- *  - `trackDemoEvents` / `queueDemoEvent` batch anonymous funnel telemetry keyed
- *    by the marketing visitorId (the signed-in activity tracker never fires for
- *    logged-out visitors — this is its marketing twin).
+ *  - `trackDemoEvent` / `queueDemoEvent` attach the persona to a journey event
+ *    and hand it to `visitorJourney`, which records EVERY logged-out visitor's
+ *    navigation. The demo's funnel is one persona-shaped slice of that, not its
+ *    own stream — it used to be the only one, which is why the rest of the site
+ *    was unmeasured.
  *  - `submitSalesLead` posts a "book a demo" / exit-intent lead. Lead capture is
  *    a different thing from the product demo and is untouched by any of this.
  *
@@ -22,6 +24,7 @@
  */
 import { apiRequestStream } from './apiClient';
 import { getVisitorId } from './visitor';
+import { flushVisitorEvents, queueVisitorEvent, trackVisitorEvent } from './visitorJourney';
 
 
 export type DemoPersona = 'ai-team' | 'insights' | 'pmo' | 'talent' | 'governance';
@@ -65,7 +68,16 @@ export function demoEntryPath(persona: DemoPersona): string {
 }
 
 // ---------------------------------------------------------------------------
-// Funnel telemetry — small batched, best-effort, keyed by visitorId.
+// Funnel telemetry.
+//
+// The demo's funnel is one persona-shaped slice of the SITE's journey, not a
+// separate stream — so it records through `visitorJourney`, which owns the visit
+// token, the batching and the endpoint. This file used to carry its own copy of
+// all three, which is how the demo ended up as the only surface on the platform
+// whose navigation was measured.
+//
+// These wrappers exist only to attach the persona; a caller that has no persona
+// should use `visitorJourney` directly.
 // ---------------------------------------------------------------------------
 
 export interface DemoEventInput {
@@ -76,43 +88,17 @@ export interface DemoEventInput {
   occurredAt?: string;
 }
 
-let queue: DemoEventInput[] = [];
-
-/** Fire one funnel event immediately (best-effort). */
+/** Fire one demo funnel event immediately (best-effort). */
 export function trackDemoEvent(event: DemoEventInput): void {
-  void trackDemoEvents([{ ...event, occurredAt: event.occurredAt ?? new Date().toISOString() }]);
+  trackVisitorEvent(event);
 }
 
-/** Queue an event; flushed on the next flushDemoEvents() or page hide. */
+/** Queue a demo funnel event; flushed on the next flush or page hide. */
 export function queueDemoEvent(event: DemoEventInput): void {
-  queue.push({ ...event, occurredAt: event.occurredAt ?? new Date().toISOString() });
-  if (queue.length >= 10) void flushDemoEvents();
+  queueVisitorEvent(event);
 }
 
-export function flushDemoEvents(): void {
-  if (queue.length === 0) return;
-  const batch = queue;
-  queue = [];
-  void trackDemoEvents(batch);
-}
-
-export async function trackDemoEvents(events: DemoEventInput[]): Promise<void> {
-  if (events.length === 0) return;
-  const visitorId = getVisitorId();
-  if (!visitorId) return;
-  try {
-    await apiRequestStream('/api/demo/events', {
-      method: 'POST',
-      auth: 'none',
-      body: JSON.stringify({ visitorId, events }),
-      keepalive: true,
-      // Fires on unload; a failure must never raise the global error toast.
-      expectedErrors: [400, 401, 403, 404, 429, 500, 502, 503],
-    });
-  } catch {
-    /* best-effort */
-  }
-}
+export const flushDemoEvents = flushVisitorEvents;
 
 // ---------------------------------------------------------------------------
 // Book-a-demo / sales lead capture.

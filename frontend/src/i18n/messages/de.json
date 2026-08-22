@@ -12171,12 +12171,12 @@
       "token": "Superadmin-Token",
       "feedback": "Feedback",
       "releaseNotes": "Neuerungen",
-      "demoFunnel": "Demo-Funnel",
       "salesLeads": "Sales-Leads",
       "salesCommissions": "Verkaufsprovisionen",
       "cron": "Geplante Läufe",
       "broadcasts": "Ankündigungen",
-      "llmRatings": "Bewertungen"
+      "llmRatings": "Bewertungen",
+      "visitorFlow": "Besucherfluss"
     },
     "common": {
       "loading": "Wird geladen…",
@@ -12956,41 +12956,6 @@
         "disposable": "Wegwerf-Domain"
       }
     },
-    "demoFunnel": {
-      "title": "Demo-Conversion-Funnel",
-      "subtitle": "Anonyme Demo-Konto-Interaktion nach Persona (letzte 30 Tage).",
-      "persona": "Persona",
-      "total": "Gesamt",
-      "convRate": "{rate}% Registrierung",
-      "tourRate": "{rate}% haben die Tour beendet",
-      "tourRateNone": "Bisher keine Tour gestartet",
-      "recentTitle": "Letzte Ereignisse",
-      "empty": "Noch keine Demo-Aktivität.",
-      "when": "Wann",
-      "event": "Ereignis",
-      "path": "Pfad",
-      "personas": {
-        "ai-team": "KI-Softwareteam",
-        "insights": "Engineering-ROI & Insights",
-        "pmo": "PMO-Kommandozentrale",
-        "talent": "Talente & Marktplatz",
-        "governance": "Sicherheit, Architektur & Governance"
-      },
-      "stages": {
-        "demo_start": "Gestartet",
-        "page_view": "Seitenaufrufe",
-        "tour_started": "Tour gestartet",
-        "tour_step": "Tour-Schritte",
-        "tour_completed": "Tour beendet",
-        "tour_skipped": "Tour übersprungen",
-        "convert_prompt_shown": "Hinweis gezeigt",
-        "convert_clicked": "Registrierung geklickt",
-        "book_demo_opened": "Buchung geöffnet",
-        "lead_submitted": "Lead gesendet",
-        "exit_prompt_shown": "Exit gezeigt",
-        "demo_exit": "Verlassen"
-      }
-    },
     "salesLeads": {
       "title": "Sales-Leads",
       "subtitle": "Demo-Buchungs- und Exit-Intent-Leads von der Marketing-Website.",
@@ -13263,6 +13228,49 @@
       "gradedColumn": "Bewertet",
       "gradedRateColumn": "Bewertungsquote",
       "noData": "Keine Sitzungen in diesem Zeitraum."
+    },
+    "visitorFlow": {
+      "title": "Besucherfluss",
+      "subtitle": "Wonach anonyme Besucher gefragt haben, wohin sie gingen, wo sie stehen blieben.",
+      "window": "{days} Tage",
+      "empty": "In diesem Zeitraum wurden noch keine Besucherwege erfasst.",
+      "graphLabel": "Fluss anonymer Besucher: Schritte und die Übergänge dazwischen",
+      "truncated": "Es wird der jüngste Ausschnitt dieses Zeitraums gezeigt — die Abfrage hat ihre Zeilengrenze erreicht.",
+      "drillHint": "Öffne den Weg eines Besuchers, um den eingegebenen Prompt, die besuchten Seiten und aufgetretene Fehler zu sehen.",
+      "visitorPlaceholder": "Besucher-ID",
+      "openJourney": "Weg öffnen",
+      "journeyTitle": "Besucherweg",
+      "journeySummary": "{visits} Besuche · {pageViews} Seitenaufrufe · {prompts} Prompts · {errors} Fehler",
+      "journeyEmpty": "Für diesen Besucher ist nichts erfasst.",
+      "visitNumber": "Besuch {number}",
+      "nodeCount": "{visitors} Besucher · {exitPct}% sind hier gegangen",
+      "nodeTooltip": "{label} — {visitors} Besucher, {events} Ereignisse, {exitPct}% haben ihren Besuch hier beendet",
+      "edgeTooltip": "{visitors} Besucher sind diesen Schritt gegangen ({events}-mal)",
+      "legendDropOff": "Anteil, der bei diesem Schritt gegangen ist",
+      "kind": {
+        "prompt": "Prompt",
+        "page": "Seite",
+        "error": "Fehler",
+        "exit": "Gegangen",
+        "converted": "Registriert"
+      },
+      "kindLabel": {
+        "prompt": "Prompt",
+        "page_view": "Seitenaufruf",
+        "visit_start": "Besuch begonnen",
+        "error": "Fehler",
+        "visit_end": "Besuch beendet"
+      },
+      "stat": {
+        "visitors": "Besucher",
+        "visits": "Besuche",
+        "returning": "Zurückgekehrt",
+        "returningHint": "kamen für einen zweiten Besuch wieder",
+        "withPrompt": "Besuche mit Prompt",
+        "withError": "Besuche mit Fehler",
+        "withErrorHint": "sind auf einen Defekt gestoßen",
+        "converted": "Registriert"
+      }
     }
   },
   "providerKeys": {

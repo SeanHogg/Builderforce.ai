@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * THE ONE QUESTION THE TRANSPORT ASKS: may this read be served from the sample
  * workspace, and if so, what does it answer?
@@ -26,6 +24,10 @@
  *     surface renders its own empty state.
  *  4. THE BROWSER IS THE CALLER. Never on the server: a server-rendered fixture
  *     would be cached and served to signed-in visitors by any layer above us.
+ *
+ * No `'use client'`, matching `apiClient` — the transport that calls this. Same
+ * reason: it is a plain module, not part of a component tree, and it guards on
+ * `typeof window` itself so a server import is inert rather than an error.
  */
 
 import { resolveGuestFixture, runGuestFixture } from '../infrastructure/guestFixtureRegistry';

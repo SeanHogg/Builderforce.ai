@@ -40,6 +40,7 @@ import { ChunkErrorBoundary } from '@/components/ChunkErrorBoundary';
 import { ChunkErrorRecovery } from '@/components/ChunkErrorRecovery';
 import { EMBED_ERROR_REPORTER } from '@/lib/embed/embedErrorReporter';
 import { QUALITY_INGEST_ENDPOINT } from '@/lib/reportError';
+import { VisitorJourneyTracker } from '@/components/VisitorJourneyTracker';
 import { DiscountCodeCapture } from '@/components/DiscountCodeCapture';
 import { CookieConsentManager } from '@/components/privacy/CookieConsentManager';
 import { SkipToContent } from '@/components/SkipToContent';
@@ -241,6 +242,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               endpoint={QUALITY_INGEST_ENDPOINT}
               environment={QUALITY_ENVIRONMENT}
             />
+            {/* The third of the three anonymous recorders, next to the error
+                reporter above and the prompt capture on the composer: where the
+                visitor WENT. It decides for itself that a signed-in session is
+                not its business. */}
+            <VisitorJourneyTracker />
           </ErrorBoundary>
 
           <ChunkErrorRecovery />

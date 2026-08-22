@@ -127,9 +127,6 @@ function GroupLink({ group, active, onNavigate, t, badge = 0, locked = false, lo
       style={{ textAlign: 'left' }}
       aria-current={active ? 'page' : undefined}
       data-label={label}
-      // Stable anchor for the demo product tour (DemoTour) — the group id maps to
-      // a TourAnchor. Inert outside a demo session.
-      data-tour={group.id}
     >
       {body}
     </Link>

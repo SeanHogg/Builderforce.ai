@@ -24,6 +24,10 @@ import type { CollectorRef, MappingRule } from '../../application/quality/errorM
 import type { NormalizedErrorEvent } from '../../application/quality/errorSpec';
 import type { HonoEnv, Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
+import { recordVisitorEvent } from '../../application/marketing/VisitorEventService';
+import { isValidVisitorId } from '../../application/marketing/MarketingService';
+import { VISITOR_JOURNEY_KINDS } from '../../domain/marketing/VisitorJourney';
 
 /** Pull the ingest key from `Authorization: Bearer <key>` or `?key=`. */
 function readIngestKey(c: { req: { header: (n: string) => string | undefined; query: (n: string) => string | undefined } }): string | null {
@@ -127,6 +131,9 @@ export function createQualityIngestRoutes(db: Db): Hono<HonoEnv> {
     const source = body.source === 'api-client' || body.source === 'render-crash'
       ? body.source
       : 'manual';
+    // The opaque marketing visitor id, when the browser had one. Never trusted for
+    // anything but correlation — it grants no access and identifies no account.
+    const visitorId = typeof body.visitorId === 'string' ? body.visitorId : null;
     const level: NormalizedErrorEvent['level'] =
       body.level === 'fatal' || body.level === 'warning' || body.level === 'info' ? body.level : 'error';
 
@@ -165,6 +172,36 @@ export function createQualityIngestRoutes(db: Db): Hono<HonoEnv> {
     const result = await ingestErrorEvents(db, c.env as Env, collector, [event]);
     if (result.capExceeded) return c.json({ error: 'Monthly error event limit reached', ...result }, 429);
     if (result.accepted !== 1) return c.json({ error: 'Could not record the report', ...result }, 422);
+
+    // ── The error also belongs on the VISITOR'S timeline ──────────────────────
+    // Until this existed, an anonymous visitor's error went into Product Quality
+    // with nothing on it that identified the session it happened in: the report
+    // said "a TypeError happened on /pricing", and the question anyone actually
+    // asks — "which visitors hit this, and did they leave afterwards" — had no
+    // answer at all. Writing the same fact onto the journey stream puts the error
+    // between the page before it and whatever the visitor did next.
+    //
+    // Deferred through waitUntil: a report is telemetry, and its second write
+    // must not add latency to the first. Best-effort by the same logic — a lost
+    // journey row must never turn a recorded error into a 500.
+    if (isValidVisitorId(visitorId)) {
+      c.executionCtx.waitUntil(
+        recordVisitorEvent(db, {
+          visitorId,
+          visitId: body.visitId,
+          kind: VISITOR_JOURNEY_KINDS.error,
+          path: typeof body.url === 'string' ? new URL(body.url, 'https://builderforce.ai').pathname : null,
+          occurredAt: event.timestamp,
+          metadata: { title, reporter: source, level },
+        }).catch((error) => reportCaughtError(error, {
+          source: 'presentation/routes/qualityIngestRoutes.ts',
+          operation: 'product-report visitor journey',
+          level: 'warning',
+          context: { visitorId },
+        })),
+      );
+    }
+
     return c.json({ ok: true, ...result }, 202);
   });
 

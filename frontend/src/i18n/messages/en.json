@@ -12171,12 +12171,12 @@
       "token": "Superadmin Token",
       "feedback": "Feedback",
       "releaseNotes": "Release notes",
-      "demoFunnel": "Demo funnel",
       "salesLeads": "Sales leads",
       "salesCommissions": "Sales commissions",
       "cron": "Scheduled sweeps",
       "broadcasts": "Broadcasts",
-      "llmRatings": "Ratings"
+      "llmRatings": "Ratings",
+      "visitorFlow": "Visitor flow"
     },
     "common": {
       "loading": "Loading…",
@@ -12956,41 +12956,6 @@
         "disposable": "Disposable domain"
       }
     },
-    "demoFunnel": {
-      "title": "Demo conversion funnel",
-      "subtitle": "Anonymous demo-account engagement by persona (last 30 days).",
-      "persona": "Persona",
-      "total": "Total",
-      "convRate": "{rate}% sign-up",
-      "tourRate": "{rate}% finished the tour",
-      "tourRateNone": "No tour starts yet",
-      "recentTitle": "Recent events",
-      "empty": "No demo activity yet.",
-      "when": "When",
-      "event": "Event",
-      "path": "Path",
-      "personas": {
-        "ai-team": "AI Software Team",
-        "insights": "Engineering ROI & Insights",
-        "pmo": "PMO Command Center",
-        "talent": "Talent & Marketplace",
-        "governance": "Security, Architecture & Governance"
-      },
-      "stages": {
-        "demo_start": "Started",
-        "page_view": "Page views",
-        "tour_started": "Tour started",
-        "tour_step": "Tour steps",
-        "tour_completed": "Tour finished",
-        "tour_skipped": "Tour skipped",
-        "convert_prompt_shown": "Prompt shown",
-        "convert_clicked": "Sign-up clicked",
-        "book_demo_opened": "Booked opened",
-        "lead_submitted": "Lead submitted",
-        "exit_prompt_shown": "Exit shown",
-        "demo_exit": "Exited"
-      }
-    },
     "salesLeads": {
       "title": "Sales leads",
       "subtitle": "Book-a-demo and exit-intent leads from the marketing site.",
@@ -13263,6 +13228,49 @@
       "gradedColumn": "Graded",
       "gradedRateColumn": "Graded rate",
       "noData": "No sessions in this period."
+    },
+    "visitorFlow": {
+      "title": "Visitor flow",
+      "subtitle": "What anonymous visitors asked for, where they went, where they stopped.",
+      "window": "{days} days",
+      "empty": "No visitor journeys recorded in this window yet.",
+      "graphLabel": "Anonymous visitor flow: steps and the transitions between them",
+      "truncated": "Showing the most recent slice of this window — the scan hit its row ceiling.",
+      "drillHint": "Open one visitor’s journey to see the prompt they typed, the pages they walked and anything that broke.",
+      "visitorPlaceholder": "Visitor ID",
+      "openJourney": "Open journey",
+      "journeyTitle": "Visitor journey",
+      "journeySummary": "{visits} visits · {pageViews} page views · {prompts} prompts · {errors} errors",
+      "journeyEmpty": "Nothing recorded for this visitor.",
+      "visitNumber": "Visit {number}",
+      "nodeCount": "{visitors} visitors · {exitPct}% left here",
+      "nodeTooltip": "{label} — {visitors} visitors, {events} events, {exitPct}% ended their visit here",
+      "edgeTooltip": "{visitors} visitors moved along this step ({events} times)",
+      "legendDropOff": "Share who left at this step",
+      "kind": {
+        "prompt": "Prompt",
+        "page": "Page",
+        "error": "Error",
+        "exit": "Left",
+        "converted": "Signed up"
+      },
+      "kindLabel": {
+        "prompt": "Prompt",
+        "page_view": "Page view",
+        "visit_start": "Visit started",
+        "error": "Error",
+        "visit_end": "Visit ended"
+      },
+      "stat": {
+        "visitors": "Visitors",
+        "visits": "Visits",
+        "returning": "Returned",
+        "returningHint": "came back for a second visit",
+        "withPrompt": "Visits with a prompt",
+        "withError": "Visits with an error",
+        "withErrorHint": "hit something broken",
+        "converted": "Signed up"
+      }
     }
   },
   "providerKeys": {

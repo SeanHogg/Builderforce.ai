@@ -30,6 +30,30 @@
  * and therefore has nowhere to put a reason. So a raise is justified HERE, in
  * prose, and a raise with no entry below is a raise nobody argued for:
  *
+ *   868 → 876 (`useClientFiles`, 2026-08-22) — the seven employer-review
+ *   components: `RatingStars`, `RatingSummaryCard`, `EmployerDirectory`,
+ *   `EmployerReviewPanel`, `ReviewList`, `ReviewModerationQueue` and
+ *   `EmployersView` (all under `components/employers/`).
+ *
+ *   Same argument as the phone entry below, and the same shape: every one is
+ *   interactive at its root (a rating input, a debounced search, a submit form, a
+ *   moderation decision) and they are mounted from `/companies`, `/reviews` and
+ *   canvas surfaces, several of which are Server Components. `RatingStars` is the
+ *   one worth naming: it is a shared primitive drawn by four of the others AND by
+ *   the directory card, and it renders as a real radio group when interactive —
+ *   which needs the client boundary wherever it is dropped, not only where its
+ *   current parents happen to have opened one.
+ *
+ *   Both new route shells (`app/companies/page.tsx`, `app/reviews/page.tsx`) are
+ *   Server Components and add nothing to this count.
+ *
+ *   The eighth point is `components/guest/SessionGate.tsx`, which arrived with a
+ *   different change (commit c5b34415f) and is named here rather than absorbed
+ *   silently: it gates a guest session on the client and has no server form. It
+ *   is not this pass's file, and the count moves for it either way — leaving the
+ *   ratchet red over one file from another change would hide the next real
+ *   regression from everybody, which is the failure this guard exists to prevent.
+ *
  *   802 → 811 (`useClientFiles`, 2026-08-22) — the nine Business Phone console
  *   cards: `PhoneBalanceCard`, `TopUpPanel`, `PhoneNumbersCard`,
  *   `NumberSearchPanel`, `SmsComposer`, `SmsLogList`, `CallLogList`,

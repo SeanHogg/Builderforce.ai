@@ -1,4 +1,4 @@
--- 1109 · One rating per author per subject, enforced by the database.
+-- 1110 · One rating per author per subject, enforced by the database.
 --
 -- ── WHAT THIS REPLACES ──────────────────────────────────────────────────────────
 -- hired.video's `reviews` table carried `uniq_reviews_subject_user (subject_type,
