@@ -28,7 +28,8 @@
     "type-check": "node ../scripts/run-checks.mjs scripts/typecheck.manifest.mjs",
     "check:design-scale": "node scripts/check-design-scale.mjs",
     "check:destinations": "node scripts/check-destinations.mjs",
-    "check:methodology": "node scripts/check-methodology.mjs"
+    "check:methodology": "node scripts/check-methodology.mjs",
+    "check:primitives": "node scripts/check-primitive-duplication.mjs"
   },
   "dependencies": {
     "@cloudflare/next-on-pages": "^1.13.16",

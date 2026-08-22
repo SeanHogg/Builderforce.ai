@@ -19,4 +19,5 @@ export default [
   ['check:methodology', 'check-methodology.mjs'],
   ['check:canvas-glossary', 'check-canvas-glossary.mjs'],
   ['check:layering', 'check-layering.mjs'],
+  ['check:primitives', 'check-primitive-duplication.mjs'],
 ];

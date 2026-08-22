@@ -33,9 +33,37 @@ There is now a fourth way to read a board, alongside the conversation, the graph
 
 Two things about that were harder than they look.
 
+```bf-figure
+{
+  "kind": "screen",
+  "frame": "A board reading as an app",
+  "ratio": 1.62,
+  "regions": [
+    { "label": "The running application", "note": "Every code card on the board, assembled and served as one document", "x": 4, "y": 8, "w": 62, "h": 74, "hue": "make" },
+    { "label": "Brain", "note": "Asks for the change, sees the error", "x": 69, "y": 8, "w": 27, "h": 74, "hue": "idea" },
+    { "label": "Surface switcher", "x": 4, "y": 88, "w": 30, "h": 8, "hue": "accent" },
+    { "label": "Run · widths · share", "x": 38, "y": 88, "w": 58, "h": 8, "hue": "accent" }
+  ],
+  "caption": "One command bar for the whole canvas, not one per runtime. The app surface contributes Run and the three widths INTO that bar rather than drawing a second one under it."
+}
+```
+
 **A preview needs an origin.** A document handed to a frame has no address, so `href="styles.css"` resolves against nothing and you get a correct-looking page with none of its styling — the classic "why does the preview look broken when the code is fine" report. The surface inlines siblings for exactly that reason.
 
 **Device widths are not a max-width.** Desktop, tablet and phone used to be three buttons that changed nothing you could see, because the frame was told both to be a certain width and to fill the space, and filling won. Worse, even where a cap did apply, capping a document hands it the *smaller* width — so its own media queries fire for the frame and your "desktop" reading renders the mobile collapse. The three settings now lay the document out at 1280, 834 and 390 real CSS pixels and scale the result into the box. They differ the way three real machines differ, because that is what they now are.
+
+```bf-figure
+{
+  "kind": "devices",
+  "title": "Three readings, at three real widths",
+  "devices": [
+    { "label": "Desktop", "width": 1280, "hue": "make", "note": "The document lays out at 1280 and is scaled into the frame" },
+    { "label": "Tablet", "width": 834, "hue": "run", "note": "Its own media queries fire for 834, not for the frame" },
+    { "label": "Phone", "width": 390, "hue": "measure", "note": "The mobile collapse you actually ship" }
+  ],
+  "caption": "Widths drawn to scale: each frame's share of the row is its width over the sum of them. A capped frame hands the document the SMALLER width, which is why the old Desktop reading rendered the mobile layout."
+}
+```
 
 ## The defect underneath
 

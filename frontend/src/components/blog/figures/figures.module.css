@@ -272,3 +272,79 @@
   color: var(--text-secondary);
   line-height: 1.55;
 }
+
+/* ── screen — a drawn interface, named regions on a frame ────────────────── */
+.screen {
+  width: 100%;
+  min-width: 320px;
+  height: auto;
+  display: block;
+}
+
+/* ── devices — frames at real widths, scaled against each other ──────────── */
+.devices {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-4);
+  min-width: 300px;
+}
+
+.device {
+  flex: 0 1 var(--share, 33%);
+  min-width: 46px;
+  display: grid;
+  gap: var(--space-1);
+  justify-items: center;
+  text-align: center;
+}
+
+.deviceFrame {
+  width: 100%;
+  aspect-ratio: var(--ratio, 16 / 10);
+  display: flex;
+  flex-direction: column;
+  gap: 6%;
+  padding: 8%;
+  border: 2px solid var(--hue, var(--coral-bright));
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--hue, var(--coral-bright)) 10%, var(--bg-elevated));
+}
+
+.deviceBar {
+  height: 14%;
+  min-height: 3px;
+  border-radius: var(--radius-full);
+  background: var(--hue, var(--coral-bright));
+  opacity: 0.75;
+}
+
+.deviceLine {
+  height: 8%;
+  min-height: 2px;
+  border-radius: var(--radius-full);
+  background: var(--text-muted);
+  opacity: 0.5;
+}
+
+.deviceLine:last-child { width: 62%; align-self: flex-start; }
+
+.deviceLabel {
+  font-family: var(--font-display);
+  font-size: var(--font-size-small);
+  color: var(--text-primary);
+}
+
+.deviceWidth {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-eyebrow);
+  color: var(--hue, var(--coral-bright));
+}
+
+.deviceNote {
+  font-size: var(--font-size-eyebrow);
+  color: var(--text-secondary);
+  line-height: 1.5;
+}

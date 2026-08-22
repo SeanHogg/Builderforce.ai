@@ -16,6 +16,25 @@ That asymmetry is not laziness. It is what happens when a tool records artifacts
 
 [Idea to Real](/blog/idea-to-real-the-operating-methodology) has three acts — Read, Prove, Build — and the middle one is the opinion. Reading an idea is cheap. Building is not. Choosing which proof is worth running is the most consequential decision in the first month of anything, and [eight ways to make it real](/blog/eight-ways-to-make-an-idea-real) exist precisely so that choice is a choice rather than a default.
 
+```bf-figure
+{
+  "kind": "bars",
+  "title": "The eight proofs, by what they cost to run",
+  "max": 5,
+  "rows": [
+    { "label": "Demo video", "value": 1, "note": "an afternoon", "hue": "prove" },
+    { "label": "Clickable prototype", "value": 2, "note": "days", "hue": "prove" },
+    { "label": "Smoke test", "value": 2, "note": "days · publishes an address", "hue": "prove" },
+    { "label": "Wizard of Oz", "value": 2, "note": "days · a human behind the curtain", "hue": "prove" },
+    { "label": "Phone line", "value": 3, "note": "a week · a real number people call", "hue": "build" },
+    { "label": "Proof of concept", "value": 3, "note": "a week", "hue": "build" },
+    { "label": "Pilot", "value": 4, "note": "weeks · real users, real stakes", "hue": "build" },
+    { "label": "Live system", "value": 5, "note": "weeks of real engineering", "hue": "build" }
+  ],
+  "caption": "Every option is always offered — this is advice about what to run FIRST, not a filter. Hiding one would make it a verdict instead of a recommendation."
+}
+```
+
 Each of those eight carries success criteria you set *before* you build: 25 signups from 500 visitors, a 90% pass rate over 20 trials, four of five pilot users completing the task unaided. That number is the kill condition — the result that would stop the project.
 
 ```bf-figure

@@ -1,3 +1,134 @@
+## ✅ RESOLVED 2026-08-22 — A DRY ratchet, so "there should only be one" is enforced rather than remembered
+
+The two entries below record a primitive being built and then, on the same day, its
+duplicates being LOGGED as roadmap work instead of migrated. Operator response, verbatim:
+"Why would you add those to the register. WTF. There should be only 1 calendar. What hook or
+rule do i need to give you to follow DRY."
+
+The honest answer was that no new rule was needed — the DRY rule already says "extract the
+shared primitive and MIGRATE every duplicate in the same pass", and it was simply not
+followed. But a rule that depends on being followed is not a control, so this is the guard.
+
+### `frontend/scripts/check-primitive-duplication.mjs`
+
+A ratchet with the same contract as `check-layering.mjs`: a NEW duplicate fails, and a
+baseline entry that no longer duplicates ALSO fails, so the list cannot hold stale debt.
+The baseline ships EMPTY — landed the same day the last duplicate was migrated, so the
+first entry anyone adds has to be argued for in a diff.
+
+Each watched primitive declares SIGNALS: the load-bearing shapes a re-implementation
+cannot avoid. For `calendar-grid` those are a seven-column day grid, a 42-cell month,
+week-start arithmetic off `getDay()`, Monday-first index normalisation, an hour-row grid,
+span lane packing, outside-month cells, a "+N more" overflow and a weekday header row. Any
+ONE is innocent — a seven-column grid is a fine weekday summary — so a file violates only
+at two DISTINCT signals. Files under the primitive's own `owner` directory are exempt by
+construction, and comments are stripped before scoring so a file that DOCUMENTS the
+primitive (an adapter explaining what it no longer draws) is judged on its code.
+
+**The signal set was measured, not guessed.** A `--stdin` mode scores one file, and the
+first draft was run against all three calendars as they stood before migration. It scored
+the canvas month grid **1/2 and let it through** — that one spelled its week start as
+`(getDay() + 6) % 7` rather than `setDate(getDay())`, and drew its grid from a CSS module
+rather than inline. Three signals were added for it. The final set scores the delivery
+month 6/2, the bookable week 4/2, the canvas month 3/2 and the canvas stylesheet 2/2.
+
+### It found a fourth duplicate on its first run
+
+`CreationCanvas.module.css` still carried the retired calendar surface's entire
+stylesheet — 56 lines of `.calendarGrid`, `.calendarDay`, `.calendarWeekdays`,
+`.calendarEntry` and their phone breakpoint, with zero references anywhere in `src/`.
+Dead the moment the surface stopped drawing its own month, invisible to every other guard,
+and deleted now. That is the case for the guard in one paragraph: it caught, on run one,
+something a human reviewer and four existing ratchets had all walked past.
+
+### The guard has its own test
+
+`src/test/primitiveDuplication.test.ts`, 8 cases. A heuristic guard's real failure mode is
+that it quietly stops catching what it was written for — a guard that finds nothing and a
+guard that looks at nothing print the same line. So it is pinned from both ends: the
+load-bearing shapes of all three real calendars must VIOLATE, and four innocent patterns
+(a formatted weekday, a seven-column stat row, a 42-point sparkline, a weekday bucket) must
+come back clean. A guard that fires on a weekday label is one somebody silences. The
+fixtures are written out in the test rather than read from git history, so a squash or a
+fresh clone cannot take them away.
+
+Wired into `npm test` via `scripts/checks.manifest.mjs` and runnable as
+`npm run check:primitives`. Adding the next primitive is one entry in `PRIMITIVES`.
+
+---
+
+## ✅ RESOLVED 2026-08-22 — There is now exactly ONE calendar in this codebase
+
+Follow-on to the entry below, and a correction to how it was closed. That pass built the shared
+calendar and then **logged** the two page-level calendars as a register entry instead of migrating
+them — which is the DRY rule inverted: extracting a primitive without migrating its duplicates
+leaves three implementations, not one. The register entry has been deleted and the migration done.
+
+### `components/ScheduleCalendar.tsx` — 447 lines → 90
+
+It drew its own six-week grid, its own greedy lane packing, its own `+N more`, its own pointer-drag
+handling with a drop-target preview, its own weekday header and its own day cells, all in inline
+style. What is left is only what is genuinely about DELIVERY:
+
+- a `Schedulable` (start + due) becomes one span, so the month still answers "what is in flight on
+  the 14th" and not only "what lands on it" — an item with a deadline alone is a one-day span, so
+  nothing that used to appear has stopped appearing;
+- the stripe colour is the **deadline status** (`DEADLINE_COLORS`), this domain's rule, carried on
+  the event as `color` — which is why the primitive gained an explicit colour that overrides its
+  category hash;
+- the health dot rides alongside as `accent`, a SECOND signal (the stripe already says "late", the
+  dot says "healthy"), so collapsing them into one field would have lost one;
+- a drop is still `shiftSchedule(item, 'move', delta)` — the one rule the Gantt also obeys, so a
+  move made on the calendar and a move made on the Gantt write the same patch, including the cases
+  that matter (an item with only a due date keeps its start `null` rather than having one invented;
+  a no-op issues no write).
+
+### `components/meetings/MeetingsCalendar.tsx` — 372 lines → 240, and it had TWO grids
+
+A private `MonthGrid` and a private `WeekGrid`, the second positioning its event blocks with a
+hand-written `calc(52px + 2px + i * (…))`. Both are gone. What stayed is what belongs to no
+calendar: the reading (meetings unioned with connected-calendar events, cancelled ones dropped,
+coloured by live / scheduled / external), the three things a click can MEAN here (join, open the
+external entry, book the slot), and the booking panel, availability editor and room it has always
+driven. Its inline styles moved to a real module stylesheet.
+
+**The availability projection is the interesting part.** Windows are stored in the owner's DECLARED
+timezone, so a grid cell — a viewer-local instant — has to be projected into that zone before the
+windows are tested, mirroring the server's own "find a time" solver. That could not move into the
+shared calendar without teaching a grid what a timezone is, so the primitive gained
+`slotShading(instantMs) → { background, label }` instead: the calendar asks about an instant and the
+caller answers, which keeps a fact about a PERSON out of a component about a grid.
+
+### What the primitive gained, and why each addition earns its place
+
+- **`CalendarEvent.color`** — a source with its own colour rule (overdue, live) uses it; absent
+  means "colour me by category", the right default for a source with no such rule.
+- **`CalendarEvent.accent`** and **`UndatedEntry.accent`** — the second dot.
+- **`UndatedEntry` + `undated` / `onSelectUndated`** — things that belong on a calendar and have no
+  date are NAMED beneath the grid, not counted. The source port changed with it
+  (`undated(): readonly UndatedEntry[]`, replacing a count), because "three things have no date" is
+  a statistic and "Onboarding, Pricing page and Q4 audit have no date" is the list a planner acts on.
+- **`slotShading`**, **`footer`**, and **`onSelectEvent`** — the last of which makes the calendar's
+  own detail panel stand down when the host knows what an entry IS. A built-in panel that could not
+  join a meeting would be the worse half of a control that already exists.
+- **A drop-target outline** while dragging, and **continued spans no longer repeat their title**: a
+  bar cannot cross a week row, so a span crossing one is drawn as two bars, and repeating the name
+  once a week reads as several separate items. Both behaviours came from `ScheduleCalendar` and are
+  now every calendar's.
+
+### Verification
+
+`tsgo --noEmit` clean. New `scheduleCalendar.test.tsx` (5 cases) asserts the migration's own
+property — that it renders through the shared primitive (`calendar-full`, and the Week grain a
+bespoke month grid never offered) — plus the span, the named undated chip, selection from both, a
+drop that moves BOTH ends by the same delta, and read-only when no handler is given.
+`calendar.test.tsx`, `canvasSurfaces.test.tsx`, `messages.test.ts` and `schedule.test.ts` all green
+(124 cases). `check:design-tokens` and `check:i18n-keys` green; the two new labels are in all five
+catalogs. `useScheduleDrag` and `ScheduleLegend` are kept — `ScheduleGantt` still uses both, and a
+Gantt is a horizontal timeline rather than a fourth calendar.
+
+---
+
 ## ✅ RESOLVED 2026-08-22 — The changelog caught up with the week, and the release notes were re-framed on Idea to Real
 
 **The gap.** The last product-update batch (`0474`) was written on 2026-08-15 and covered the work up

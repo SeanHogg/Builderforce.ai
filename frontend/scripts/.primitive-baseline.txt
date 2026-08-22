@@ -1,0 +1,3 @@
+# Files that re-implement a shared primitive. This list may only SHRINK.
+# Every entry is debt with a name — see scripts/check-primitive-duplication.mjs.
+# Regenerate with: node scripts/check-primitive-duplication.mjs --update

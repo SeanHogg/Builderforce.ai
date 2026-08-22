@@ -76,6 +76,22 @@ import creationObjectRegistry from '@/content/blog/forty-eight-live-objects-one-
 import llmInteractiveCourse from '@/content/blog/learn-how-to-build-an-llm-interactive-course.md';
 import whatsNewAlwaysOnCanvas from '@/content/blog/whats-new-always-on-canvas-workspace.md';
 import creationCanvasFunctionalityGuide from '@/content/blog/creation-canvas-functionality-guide.md';
+// The August 2026 capability set — one article per capability shipped between
+// 2026-08-16 and 2026-08-22, written so a reader searching for the capability
+// (not for us) has something to land on. Each one names where it sits in the
+// arc, because the method is what makes the set a corpus rather than a pile.
+import gradeTheProof from '@/content/blog/grade-the-proof-and-close-the-loop.md';
+import runYourAppOnTheCanvas from '@/content/blog/run-your-app-on-the-canvas.md';
+import canvasChromeRedesign from '@/content/blog/the-canvas-gave-the-screen-back-to-the-board.md';
+import build3dWorld from '@/content/blog/build-a-3d-world-in-the-browser.md';
+import readAnyPdf from '@/content/blog/read-any-pdf-even-the-scanned-ones.md';
+import closeTheDeal from '@/content/blog/close-the-deal-on-the-board-you-built-it-on.md';
+import fixedPriceEscrow from '@/content/blog/fixed-price-milestones-and-escrow.md';
+import founderBackOffice from '@/content/blog/the-founder-back-office-money-ownership-and-paperwork.md';
+import offerToPayroll from '@/content/blog/from-offer-to-payroll-without-retyping-anything.md';
+import fifteenCareerTools from '@/content/blog/fifteen-free-career-tools-and-a-salary-guide.md';
+import fourEnterpriseQuestions from '@/content/blog/four-questions-before-you-buy-enterprise-ai.md';
+
 // The methodology set — the arc, the loop, the eight proofs, and the navigation
 // that carries them. These four are the written form of what <MethodologySection>
 // renders on /features, /about, /pricing and /sell-builderforce.
@@ -206,6 +222,17 @@ function buildPost(slug: string, raw: string): BlogPost {
 
 /** All published blog posts, sorted newest-first. */
 export const BLOG_POSTS: BlogPost[] = [
+  buildPost('grade-the-proof-and-close-the-loop', gradeTheProof),
+  buildPost('run-your-app-on-the-canvas', runYourAppOnTheCanvas),
+  buildPost('the-canvas-gave-the-screen-back-to-the-board', canvasChromeRedesign),
+  buildPost('build-a-3d-world-in-the-browser', build3dWorld),
+  buildPost('read-any-pdf-even-the-scanned-ones', readAnyPdf),
+  buildPost('close-the-deal-on-the-board-you-built-it-on', closeTheDeal),
+  buildPost('fixed-price-milestones-and-escrow', fixedPriceEscrow),
+  buildPost('the-founder-back-office-money-ownership-and-paperwork', founderBackOffice),
+  buildPost('from-offer-to-payroll-without-retyping-anything', offerToPayroll),
+  buildPost('fifteen-free-career-tools-and-a-salary-guide', fifteenCareerTools),
+  buildPost('four-questions-before-you-buy-enterprise-ai', fourEnterpriseQuestions),
   buildPost('idea-to-real-the-operating-methodology', ideaToRealMethodology),
   buildPost('eight-ways-to-make-an-idea-real', eightWaysToMakeItReal),
   buildPost('read-prove-build-the-inner-loop', readProveBuild),
