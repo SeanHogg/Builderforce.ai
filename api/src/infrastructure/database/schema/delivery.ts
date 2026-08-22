@@ -56,7 +56,6 @@ import {
   workflows,
 } from './agents';
 import { brainChats, creationSessions } from './canvas';
-import { sourceControlIntegrations } from './governance';
 import { segments, teams, tenants, users } from './identity';
 import {
   AlertMetric,
@@ -3192,9 +3191,25 @@ export const alertEvents = pgTable('alert_events', {
   notifiedEmail:  boolean('notified_email').default(false),
   acknowledgedBy: varchar('acknowledged_by', { length: 36 }),
   acknowledgedAt: timestamp('acknowledged_at'),
+  /** ── An alert ABOUT SOMEBODY (migration 1106) ────────────────────────────
+   *  Every column above describes a metric crossing a threshold for a tenant,
+   *  project or team. A firing can also be about a SUBJECT — "this user closed
+   *  twenty self-authored tasks in one minute" — which is the same lifecycle
+   *  (triggered → acknowledged → resolved), the same queue and the same
+   *  reviewer, so it is these columns rather than a second flag table.
+   *  'user' | 'tenant' | 'object'; both null on a plain metric alert. */
+  subjectKind:    varchar('subject_kind', { length: 24 }),
+  subjectRef:     varchar('subject_ref', { length: 64 }),
+  /** 'low' | 'medium' | 'high'. A rule-driven firing derives urgency from its
+   *  rule's threshold; a system firing has no rule row to derive it from. */
+  severity:       varchar('severity', { length: 16 }).notNull().default('medium'),
+  /** What makes the firing reviewable. A queue whose rows carry a sentence and
+   *  no case is a queue nobody works. */
+  evidence:       jsonb('evidence'),
   createdAt:      timestamp('created_at').notNull().defaultNow(),
 }, (t) => ({
   byTenantCreated: index('idx_alert_events_tenant_created').on(t.tenantId, t.createdAt),
+  bySubject: index('idx_alert_events_subject').on(t.tenantId, t.subjectKind, t.subjectRef, t.createdAt),
 }));
 
 // ═══ PRD 20 §5 step 2 — target-schema tables ═══
@@ -3596,3 +3611,58 @@ export const taskPlanVerdicts = pgTable('task_plan_verdicts', {
   uniqueIndex('uq_task_plan_verdicts_task').on(t.taskId),
   index('idx_task_plan_verdicts_project').on(t.tenantId, t.projectId),
 ]);
+
+
+// ---------------------------------------------------------------------------
+// Moved here from `identity.ts` (PRD 20 §3). Children of DELIVERY aggregates — an
+// on-call rotation and an error group — that were filed under Identity because
+// their payload is people. The parent decides the domain.
+// ---------------------------------------------------------------------------
+
+/** An ordered participant of an on-call rotation. memberRef is assignee-encoded:
+ *  'u:<userId>' | 'c:<agentRef>' | 'contact:<businessContactId>'. */
+export const onCallMembers = pgTable('on_call_members', {
+  id:          uuid('id').primaryKey().defaultRandom(),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  rotationId:  uuid('rotation_id').notNull().references(() => onCallRotations.id, { onDelete: 'cascade' }),
+  memberRef:   varchar('member_ref', { length: 72 }).notNull(),
+  displayName: varchar('display_name', { length: 255 }),
+  position:    integer('position').notNull().default(0),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({
+  byRotation: index('idx_on_call_members_rotation').on(t.rotationId, t.position),
+}));
+
+
+/**
+ * Distinct affected users per error group (migration 0245) — the set behind the
+ * EXACT `error_groups.user_count`. The ingest path inserts (group_id, user_key)
+ * with ON CONFLICT DO NOTHING and bumps user_count only for newly-inserted pairs.
+ */
+export const errorGroupUsers = pgTable('error_group_users', {
+  groupId:   uuid('group_id').notNull().references(() => errorGroups.id, { onDelete: 'cascade' }),
+  userKey:   varchar('user_key', { length: 255 }).notNull(),
+  firstSeen: timestamp('first_seen').notNull().defaultNow(),
+}, (t) => ({
+  pk: primaryKey({ columns: [t.groupId, t.userKey] }),
+}));
+
+
+// ---------------------------------------------------------------------------
+// Moved here from `governance.ts` (PRD 20 §3). Governance declared it and never read
+// it; the only reader is `project_repositories` below. A table belongs to the domain
+// that uses it, not the one it was first typed into.
+// ---------------------------------------------------------------------------
+
+export const sourceControlIntegrations = pgTable('source_control_integrations', {
+  id:                serial('id').primaryKey(),
+  tenantId:          integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
+  provider:          sourceControlProviderEnum('provider').notNull(),
+  name:              varchar('name', { length: 255 }).notNull(),
+  accountIdentifier: varchar('account_identifier', { length: 255 }).notNull(),
+  hostUrl:           varchar('host_url', { length: 500 }),
+  isActive:          boolean('is_active').notNull().default(true),
+  createdAt:         timestamp('created_at').notNull().defaultNow(),
+  updatedAt:         timestamp('updated_at').notNull().defaultNow(),
+});

@@ -1,0 +1,263 @@
+/*
+ * Points surfaces — shared styling for the six self-contained cards.
+ *
+ * ── EVERY COLOUR AND SIZE IS A TOKEN ─────────────────────────────────────────
+ * No literal hex, not even as a `var()` fallback: a fallback paints the SAME in
+ * both themes, so a hex sitting behind a token is a light-mode value waiting to
+ * be shown to somebody in dark mode. Font sizes name the ROLE (`--font-size-*`)
+ * rather than a measurement, and radii come off the documented scale — so these
+ * cards inherit a scale change instead of resisting one.
+ *
+ * ── EVERY WIDTH IS FLUID ─────────────────────────────────────────────────────
+ * The grid is `auto-fit` over a `min()` track and every row wraps, so the same
+ * markup is three columns on a desktop and one at 360px with no horizontal
+ * scroll anywhere in between.
+ */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: clamp(0.875rem, 2vw, 1.25rem);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.cardTitle {
+  margin: 0;
+  font-size: var(--font-size-eyebrow);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.cardHint {
+  margin: -0.25rem 0 0;
+  font-size: var(--font-size-small);
+  color: var(--text-secondary);
+}
+
+/* ── Balance ─────────────────────────────────────────────────────────────── */
+
+.balance {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+}
+
+.balanceValue {
+  font-size: var(--font-size-page-title);
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.balanceUnit {
+  font-size: var(--font-size-small);
+  color: var(--text-secondary);
+}
+
+.streak {
+  margin: 0;
+  font-size: var(--font-size-body);
+  color: var(--text-primary);
+}
+
+.streakBest {
+  color: var(--text-secondary);
+}
+
+.suspended {
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  font-size: var(--font-size-small);
+  color: var(--danger-text);
+  background: var(--danger-bg);
+  border: 1px solid var(--danger-border);
+}
+
+/* ── Badges ──────────────────────────────────────────────────────────────── */
+
+.badgeGrid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(6.5rem, 1fr));
+  gap: 0.5rem;
+}
+
+.badge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.625rem 0.375rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-card);
+  text-align: center;
+}
+
+.badgeLocked {
+  opacity: 0.5;
+}
+
+.badgeGlyph {
+  font-size: var(--font-size-section);
+  line-height: 1;
+}
+
+.badgeName {
+  font-size: var(--font-size-small);
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.details {
+  border-top: 1px solid var(--border);
+  padding-top: 0.75rem;
+}
+
+.detailsSummary {
+  cursor: pointer;
+  font-size: var(--font-size-small);
+  color: var(--text-secondary);
+  margin-bottom: 0.625rem;
+}
+
+/* ── Rewards ─────────────────────────────────────────────────────────────── */
+
+.rewardList,
+.activityList,
+.earnList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.reward {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.625rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  min-width: 0;
+}
+
+.rewardBody {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-width: 0;
+}
+
+.rewardLabel {
+  font-size: var(--font-size-body);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.rewardCost,
+.rewardNote {
+  font-size: var(--font-size-small);
+  color: var(--text-secondary);
+}
+
+.rewardButton {
+  min-height: 2.25rem;
+  padding: 0 0.875rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface-card);
+  color: var(--text-primary);
+  font-size: var(--font-size-small);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.rewardButton:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.rewardButton:not(:disabled):hover {
+  border-color: var(--text-secondary);
+}
+
+/* ── Activity + earn rules ───────────────────────────────────────────────── */
+
+.activityRow,
+.earnRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: var(--font-size-small);
+  min-width: 0;
+}
+
+.activityLabel,
+.earnLabel {
+  color: var(--text-primary);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.activityNote,
+.earnCap {
+  color: var(--text-secondary);
+}
+
+.activityGain,
+.activitySpend,
+.activityZero,
+.earnValue {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.activityGain { color: var(--success-text); }
+.activitySpend { color: var(--text-secondary); }
+.activityZero { color: var(--text-secondary); }
+.earnValue { color: var(--text-secondary); }
+
+/* ── Shared states ───────────────────────────────────────────────────────── */
+
+.empty {
+  margin: 0;
+  font-size: var(--font-size-small);
+  color: var(--text-secondary);
+}
+
+.error {
+  margin: 0;
+  font-size: var(--font-size-small);
+  color: var(--danger-text);
+}
+
+/* ── The page grid ───────────────────────────────────────────────────────── */
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(20rem, 100%), 1fr));
+  gap: 1rem;
+  align-items: start;
+}
+
+.gridSpaced {
+  margin-top: 1rem;
+}

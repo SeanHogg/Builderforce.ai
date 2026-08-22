@@ -119,7 +119,7 @@ const findings = [...clusters.values()].map((set) => {
   };
 });
 
-reportRatchet({
+await reportRatchet({
   name: 'check-signature-duplication',
   baselinePath: resolve(here, '.signature-duplication-baseline.txt'),
   findings,

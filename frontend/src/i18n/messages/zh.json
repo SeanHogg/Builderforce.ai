@@ -723,7 +723,8 @@
       "cofounder": "联合创始人",
       "pipeline": "招聘流程",
       "interviewKits": "面试流程模板",
-      "offers": "Offer"
+      "offers": "Offer",
+      "rewards": "奖励"
     },
     "primaryAria": "主导航",
     "destination": {
@@ -26243,5 +26244,51 @@
       "categoryPlaceholder": "邮件、部署、假期…"
     },
     "undatedLabel": "尚无日期"
+  },
+  "points": {
+    "view": {
+      "intro": "你在本平台完成实际工作所获得的积分、由此解锁的徽章，以及积分可以兑换的内容。"
+    },
+    "balance": {
+      "title": "我的积分",
+      "unit": "积分",
+      "suspended": "该账户存在异常行为待复核，积分获取已暂停。"
+    },
+    "streak": {
+      "current": "连续 {days} 天",
+      "best": "最长 {days} 天"
+    },
+    "badges": {
+      "title": "徽章（{count}）",
+      "empty": "还没有徽章。随着工作推进会陆续解锁。",
+      "toEarn": "还有 {count} 个待解锁"
+    },
+    "rewards": {
+      "title": "奖励",
+      "cost": "{points} 积分",
+      "short": "还差 {points} 积分",
+      "unavailable": "暂不可用",
+      "redeem": "兑换",
+      "redeeming": "兑换中…",
+      "failed": "兑换未能完成。",
+      "confirmTitle": "确认兑换该奖励？",
+      "confirmMessage": "将花费 {points} 积分兑换「{label}」。积分会立即扣除。",
+      "confirmAction": "兑换"
+    },
+    "activity": {
+      "title": "最近动态",
+      "empty": "暂无记录。",
+      "noPoints": "已达每日上限"
+    },
+    "earn": {
+      "title": "如何赚取积分",
+      "hint": "以下每项操作每次事件计一次分。每日上限用于维持积分体系的公平。",
+      "points": "{points} 分",
+      "cap": "每日最多 {points} 分"
+    },
+    "leaderboard": {
+      "title": "工作区排名",
+      "rank": "第 {rank} 名"
+    }
   }
 }

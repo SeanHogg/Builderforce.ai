@@ -35,13 +35,7 @@ import {
   varchar,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
-import { brainChats } from './canvas';
-import { contributors, devTeams, meetings } from './canvas';
 import { authTokenTypeEnum, legalDocumentTypeEnum, memberAvailabilityStatusEnum, memberExperienceLevelEnum, memberProfileSyncSourceEnum, objects, segmentStatusEnum, teamMemberKindEnum, tenantIsolationModeEnum, tenantKindEnum, tenantRoleEnum, tenantStatusEnum } from './kernel';
-import { errorGroups, onCallRotations } from './delivery';
-import { marketplacePersonas } from './agents';
-import { agentHosts, importRuns, skills, toolRuns } from './agents';
-import { projects } from './delivery';
 
 
 // ---------------------------------------------------------------------------
@@ -693,18 +687,6 @@ export const tenantSkillAssignments = pgTable('tenant_skill_assignments', {
 // Chat sessions and messages
 // ---------------------------------------------------------------------------
 
-export const chatSessions = pgTable('chat_sessions', {
-  id:         serial('id').primaryKey(),
-  tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
-  agentHostId:     integer('agent_host_id').notNull().references(() => agentHosts.id, { onDelete: 'cascade' }),
-  sessionKey: varchar('session_key', { length: 255 }).notNull(),
-  projectId:  integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
-  startedAt:  timestamp('started_at').notNull().defaultNow(),
-  endedAt:    timestamp('ended_at'),
-  msgCount:   integer('msg_count').notNull().default(0),
-  lastMsgAt:  timestamp('last_msg_at'),
-});
 
 
 // ---------------------------------------------------------------------------
@@ -716,25 +698,6 @@ export const chatSessions = pgTable('chat_sessions', {
 // chat they do not own. Owner-only admin (rename/archive/invite) stays on user_id.
 // ---------------------------------------------------------------------------
 
-export const chatMembers = pgTable('chat_members', {
-  id:           serial('id').primaryKey(),
-  chatId:       integer('chat_id').notNull().references(() => brainChats.id, { onDelete: 'cascade' }),
-  tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  segmentId:    uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
-  /** Resolved member (an existing account); NULL while the invite is pending. */
-  userId:       varchar('user_id', { length: 36 }).references(() => users.id, { onDelete: 'cascade' }),
-  /** Lower-cased; set for a cold invite whose email has no account yet. */
-  invitedEmail: varchar('invited_email', { length: 255 }),
-  role:         varchar('role', { length: 24 }).notNull().default('participant'),
-  /** 'active' (has access now) | 'pending' (email invite, converts on access). */
-  status:       varchar('status', { length: 16 }).notNull().default('active'),
-  invitedBy:    varchar('invited_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
-  createdAt:    timestamp('created_at').notNull().defaultNow(),
-  updatedAt:    timestamp('updated_at').notNull().defaultNow(),
-}, (t) => [
-  uniqueIndex('uq_chat_members_user').on(t.chatId, t.userId),
-  index('idx_chat_members_user').on(t.tenantId, t.userId),
-]);
 
 
 // ---------------------------------------------------------------------------
@@ -775,16 +738,6 @@ export const magicLinkTokens = pgTable('magic_link_tokens', {
 });
 
 
-export const devTeamMembers = pgTable('dev_team_members', {
-  id:            serial('id').primaryKey(),
-  teamId:        integer('team_id').notNull().references(() => devTeams.id, { onDelete: 'cascade' }),
-  contributorId: integer('contributor_id').notNull().references(() => contributors.id, { onDelete: 'cascade' }),
-  /** 'manager' | 'member' | 'lead' */
-  memberRole:    varchar('member_role', { length: 50 }).notNull().default('member'),
-  joinedAt:      timestamp('joined_at').notNull().defaultNow(),
-}, (t) => [
-  unique('uq_team_contributor').on(t.teamId, t.contributorId),
-]);
 
 
 export const teamMembers = pgTable('team_members', {
@@ -915,23 +868,6 @@ export const userPermissionOverrides = pgTable('user_permission_overrides', {
 });
 
 
-/**
- * meeting_transcript_segments (0330) — the running transcript of a live meeting.
- * One row per spoken line: a human line captured client-side (browser
- * SpeechRecognition) or an AGENT line produced by an LLM turn. Ordered by `atMs`
- * (ms since the meeting started).
- */
-export const meetingTranscriptSegments = pgTable('meeting_transcript_segments', {
-  id:          uuid('id').primaryKey().defaultRandom(),
-  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  meetingId:   uuid('meeting_id').notNull().references(() => meetings.id, { onDelete: 'cascade' }),
-  speakerRef:  varchar('speaker_ref', { length: 64 }).notNull(),
-  speakerName: varchar('speaker_name', { length: 255 }).notNull(),
-  speakerKind: varchar('speaker_kind', { length: 16 }).notNull().default('human'), // human|agent
-  text:        text('text').notNull(),
-  atMs:        bigint('at_ms', { mode: 'number' }).notNull().default(0),
-  createdAt:   timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
 
 
 export const userAvailability = pgTable('user_availability', {
@@ -964,18 +900,6 @@ export const pokerSessions = pgTable('poker_sessions', {
 });
 
 
-export const importStagedUsers = pgTable('import_staged_users', {
-  id:           uuid('id').primaryKey().defaultRandom(),
-  runId:        uuid('run_id').notNull().references(() => importRuns.id, { onDelete: 'cascade' }),
-  tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  externalId:   varchar('external_id', { length: 255 }).notNull(),
-  displayName:  varchar('display_name', { length: 255 }),
-  email:        varchar('email', { length: 320 }),
-  /** 'invite' (send workspace invite) | 'map' (link targetUserId) | 'skip'. */
-  action:       varchar('action', { length: 8 }).notNull().default('invite'),
-  targetUserId: varchar('target_user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
-  createdAt:    timestamp('created_at').notNull().defaultNow(),
-});
 
 
 /**
@@ -1026,68 +950,12 @@ export const vscodeConnections = pgTable('vscode_connections', {
 }));
 
 
-/**
- * tenant_models — the tenant "LLM" object (migration 0211). A reusable, named
- * bundle of { base model + system prompt + params (+ optional persona / BYO key /
- * future trained model) } that any cloud agent, on-prem host, or the Designer can
- * select by ref `tenant_model:<slug>`. `providerKey` names the provider whose BYO
- * key to route through (tenant_llm_provider_keys is keyed by (tenant_id, provider),
- * no surrogate id). `trainedModelRef` is the seam for a future SSM artifact base.
- */
-export const tenantModels = pgTable('tenant_models', {
-  id:              uuid('id').primaryKey().defaultRandom(),
-  tenantId:        integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  name:            varchar('name', { length: 255 }).notNull(),
-  slug:            varchar('slug', { length: 255 }).notNull(),
-  /** A model id from the curated pool; NULL = run on the tenant/plan default base. */
-  baseModel:       text('base_model'),
-  systemPrompt:    text('system_prompt'),
-  /** { temperature?, reasoning?, top_p?, ... } applied at run time. */
-  params:          jsonb('params').notNull().default(sql`'{}'::jsonb`),
-  personaId:       uuid('persona_id').references(() => marketplacePersonas.id, { onDelete: 'set null' }),
-  /** Provider name whose BYO key to route through (e.g. 'anthropic'); NULL = managed. */
-  providerKey:     text('provider_key'),
-  /** Future: a trained SSM model artifact used as the base. */
-  trainedModelRef: text('trained_model_ref'),
-  visibility:      varchar('visibility', { length: 16 }).notNull().default('tenant'),
-  createdBy:       varchar('created_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
-  createdAt:       timestamp('created_at').notNull().defaultNow(),
-  updatedAt:       timestamp('updated_at').notNull().defaultNow(),
-}, (t) => ({
-  byTenant: index('idx_tenant_models_tenant').on(t.tenantId),
-  uqSlug:   uniqueIndex('uq_tenant_models_slug').on(t.tenantId, t.slug),
-}));
 
 
 
 
-/** An ordered participant of an on-call rotation. memberRef is assignee-encoded:
- *  'u:<userId>' | 'c:<agentRef>' | 'contact:<businessContactId>'. */
-export const onCallMembers = pgTable('on_call_members', {
-  id:          uuid('id').primaryKey().defaultRandom(),
-  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  rotationId:  uuid('rotation_id').notNull().references(() => onCallRotations.id, { onDelete: 'cascade' }),
-  memberRef:   varchar('member_ref', { length: 72 }).notNull(),
-  displayName: varchar('display_name', { length: 255 }),
-  position:    integer('position').notNull().default(0),
-  createdAt:   timestamp('created_at').notNull().defaultNow(),
-}, (t) => ({
-  byRotation: index('idx_on_call_members_rotation').on(t.rotationId, t.position),
-}));
 
 
-/**
- * Distinct affected users per error group (migration 0245) — the set behind the
- * EXACT `error_groups.user_count`. The ingest path inserts (group_id, user_key)
- * with ON CONFLICT DO NOTHING and bumps user_count only for newly-inserted pairs.
- */
-export const errorGroupUsers = pgTable('error_group_users', {
-  groupId:   uuid('group_id').notNull().references(() => errorGroups.id, { onDelete: 'cascade' }),
-  userKey:   varchar('user_key', { length: 255 }).notNull(),
-  firstSeen: timestamp('first_seen').notNull().defaultNow(),
-}, (t) => ({
-  pk: primaryKey({ columns: [t.groupId, t.userKey] }),
-}));
 
 
 export const tenantBenchmarkProfiles = pgTable('tenant_benchmark_profiles', {

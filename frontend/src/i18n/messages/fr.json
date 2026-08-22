@@ -723,7 +723,8 @@
       "cofounder": "Cofondateur",
       "pipeline": "Pipeline",
       "interviewKits": "Trames d’entretien",
-      "offers": "Offres"
+      "offers": "Offres",
+      "rewards": "Récompenses"
     },
     "primaryAria": "Principale",
     "destination": {
@@ -26243,5 +26244,51 @@
       "categoryPlaceholder": "e-mail, déploiement, congé…"
     },
     "undatedLabel": "Pas encore de date"
+  },
+  "points": {
+    "view": {
+      "intro": "Les points gagnés pour du travail réel sur cette plateforme, les badges qu’ils débloquent et ce qu’ils permettent d’obtenir."
+    },
+    "balance": {
+      "title": "Vos points",
+      "unit": "points",
+      "suspended": "Le cumul est suspendu sur ce compte pendant l’examen d’un comportement signalé."
+    },
+    "streak": {
+      "current": "Série de {days} jours",
+      "best": "record : {days}"
+    },
+    "badges": {
+      "title": "Badges ({count})",
+      "empty": "Aucun badge pour l’instant. Ils se débloquent au fil du travail.",
+      "toEarn": "{count} encore à obtenir"
+    },
+    "rewards": {
+      "title": "Récompenses",
+      "cost": "{points} points",
+      "short": "Encore {points} points",
+      "unavailable": "Pas encore disponible",
+      "redeem": "Échanger",
+      "redeeming": "Échange en cours…",
+      "failed": "Cet échange n’a pas pu aboutir.",
+      "confirmTitle": "Échanger cette récompense ?",
+      "confirmMessage": "Cela dépense {points} points pour {label}. Les points sont débités immédiatement.",
+      "confirmAction": "Échanger"
+    },
+    "activity": {
+      "title": "Activité récente",
+      "empty": "Rien pour l’instant.",
+      "noPoints": "plafond quotidien atteint"
+    },
+    "earn": {
+      "title": "Comment gagner des points",
+      "hint": "Chaque action ci-dessous paie une fois par événement. Les plafonds quotidiens gardent l’économie saine.",
+      "points": "{points} pts",
+      "cap": "jusqu’à {points}/jour"
+    },
+    "leaderboard": {
+      "title": "Classement de l’espace",
+      "rank": "N° {rank}"
+    }
   }
 }

@@ -20,14 +20,15 @@ import MeetingsContent from '@/components/meetings/MeetingsContent';
 import PageContainer from '@/components/PageContainer';
 import { AgentOpsContent, type AgentOpsTab } from '@/components/agent-ops/AgentOpsClient';
 import { CofounderMatching } from '@/components/cofounder/CofounderMatching';
+import { RewardsView } from '@/components/points/RewardsView';
 
 // Workforce sub-views are declared as query tabs in navGroups; the shell
 // <ShellIndex> renders the sub-view index. Here we just read `?tab=` to pick the
 // body and the per-tab sub-label, mirroring the /quality surface.
-type WorkforceTab = 'workforce' | 'roles' | 'teams' | 'meetings' | 'calendar' | 'talent' | 'cofounder' | 'performance' | 'plan' | 'chats' | 'approvals' | 'qa' | AgentOpsTab;
+type WorkforceTab = 'workforce' | 'roles' | 'teams' | 'meetings' | 'calendar' | 'talent' | 'cofounder' | 'performance' | 'plan' | 'chats' | 'approvals' | 'qa' | 'rewards' | AgentOpsTab;
 
 const TAB_IDS: ReadonlyArray<WorkforceTab> = [
-  'workforce', 'roles', 'teams', 'meetings', 'calendar', 'talent', 'cofounder', 'performance', 'plan', 'chats', 'approvals', 'qa', 'coordination', 'memory', 'rehearsal',
+  'workforce', 'roles', 'teams', 'meetings', 'calendar', 'talent', 'cofounder', 'performance', 'plan', 'chats', 'approvals', 'qa', 'rewards', 'coordination', 'memory', 'rehearsal',
 ];
 
 const AGENT_OPS_TABS: ReadonlyArray<AgentOpsTab> = ['coordination', 'memory', 'rehearsal'];
@@ -113,6 +114,8 @@ function WorkforcePageInner() {
         <HumanRequestsView />
       ) : tab === 'qa' ? (
         <QaContent />
+      ) : tab === 'rewards' ? (
+        <RewardsView />
       ) : isAgentOpsTab ? (
         <AgentOpsContent tab={tab as AgentOpsTab} />
       ) : (

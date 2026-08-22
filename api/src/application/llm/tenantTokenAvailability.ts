@@ -31,6 +31,7 @@ import { resolveEffectivePlan } from '../../domain/tenant/effectivePlan';
 import { resolveTokenLimits } from '../../domain/tenant/PlanLimits';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { sumTenantTextTokensDayAndMonth, utcDayStart, utcMonthStart } from './tokenUsage';
+import { aiCreditBalance } from '../points/aiCredits';
 
 export type TokenExhaustionReason = 'daily_exhausted' | 'monthly_exhausted';
 
@@ -128,6 +129,12 @@ export async function getTenantTokenAvailability(
   }
   const effectivePlan = planString(effectivePlanEnum);
 
+  // Redeemed AI-token credits lift both caps. Read BEFORE the plan resolve because
+  // it is an input to it, and cached 60s so the hot path pays a Map lookup rather
+  // than a scan. A tenant that has never redeemed has a 0 balance and the resolve
+  // behaves exactly as it did before credits existed.
+  const bonusTokens = env ? await aiCreditBalance(db, env, tenantId) : 0;
+
   // Resolve the plan/override caps WITHOUT any superadmin lift first. A tenant that is
   // already unlimited by plan (Teams / -1 override) is done here — no superadmin
   // lookup and no usage scan.
@@ -135,6 +142,7 @@ export async function getTenantTokenAvailability(
     effectivePlan: effectivePlanEnum,
     tokenDailyLimitOverride,
     isSuperadmin: false,
+    bonusTokens,
   });
   if (planLimits.dailyLimit <= 0 && planLimits.monthlyLimit <= 0) {
     return { hasTokens: true, reason: null, dailyLimit: planLimits.dailyLimit, monthlyLimit: planLimits.monthlyLimit, usageToday: 0, usageMonth: 0, effectivePlan };

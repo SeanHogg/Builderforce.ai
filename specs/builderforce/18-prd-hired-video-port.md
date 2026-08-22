@@ -530,6 +530,60 @@ Only after T1–T6 land for a surface. Per-surface, not big-bang:
 
 ---
 
+## 5a · The 2026-08-22 mapping audit — what is actually left, and where it lands
+
+This section replaces the assumption the tracks were written under. The tracks assumed the
+remaining port was a SCHEMA port: ~360 tables to create, then behaviour on top. It is not.
+`specs/builderforce/data-model/source-to-target.tsv` — the committed coverage map, guarded by
+`check-model-coverage.mjs` — already assigns **every remaining hired.video table to a primitive
+this schema owns**, and the target schema is 362/363 written. Re-verified table by table on
+2026-08-22 against `api/src/infrastructure/database/schema/`.
+
+**The consequence: the remaining port needs ZERO new tables.** What it needs is application
+code and surfaces over primitives that already exist. Two column additions (migration 1106)
+were the entire schema cost of the two biggest remaining domains.
+
+### 5a.1 The mapping, verified
+
+| hired.video source | Lands in | State |
+|---|---|---|
+| `user_points_balance`, `points_ledger` | `ledger_entries` denomination `points` | **DONE** |
+| `points_streaks`, `points_task_streaks`, `points_activity_counters` | `settings` scope=`user` feature=`points` | **DONE** |
+| `points_fraud_flags` | `alert_events` + subject columns (1106) | **DONE** |
+| `badges`, `user_badges`, `point_redemptions` | already existed; had no feature path | **DONE** |
+| `affiliate_profiles/_referrals/_conversions/_payouts/_tiers/_link_clicks` | the **Associate** program (`sales_associate_settings`, `sales_referrals`, `sales_commission_rules`) + `ledger_entries` | open |
+| `payout_profiles`, `payout_ledger_entries`, `payouts` | `connections` capability=`payout` + `ledger_entries` — **already built** (`PayoutAccountService`, `withdrawalMethods`, escrow) | closed, roadmap was stale |
+| `business_phone_numbers` | exists | exists |
+| `call_logs` | `activity_log` | open |
+| `sms_messages` | `deliveries` channel=`sms` | open |
+| `phone_balances`, `phone_balance_transactions` | `ledger_entries` denomination `comm_credits` | open |
+| `learning_paths`, `learning_path_courses`, `learning_path_enrollments` | `courses` + `relations` (ordered edges) + `course_enrollments` | open |
+| `xapi_statements`, `lrs_statements` | `activity_log` (actor-verb-object is its shape) | open |
+| `external_lrs_targets`, `lrs_credentials` | `connections` + `credentials` | open |
+| `job_board_sources`, `job_board_sync_log` | `connections` + `sync_states` | open |
+| `job_sourcing_listings` | `catalog_items` | open |
+| `company_profiles` + the 6 company satellites | `companies` + `party_roles` | open |
+| `reviews`, `review_comments` | `annotations` kind=`rating` + `status` (1106) | open |
+| `booking_*` | `booking_services` / `booking_hosts` / `booking_reservations` — already exist | exists |
+| `whitelabel_tenants`, `courses`+5, `employer_branding_pages` | already exist | exists |
+
+### 5a.2 Corrections to earlier claims in this repo
+
+* **"The Studio source is not checked out here" is FALSE.** `C:\code\hired\hired.video` is
+  present on the build machine with `frontend/lib/studio` intact. The T4 canvas-runtime port is
+  large but it is **not blocked**, and the ROADMAP entry saying otherwise was wrong.
+* **"Payouts are an env-gated stub" is FALSE.** `PayoutAccountService`, `payoutProviders`,
+  `withdrawalMethods`, `earningsLedger` and the escrow milestone flow are built and ledgered.
+  The `paidCents` escrow-conflation bug that `earningsLedger`'s docstring still described as
+  open was already fixed.
+* **`points_fraud_flags` → `ledger_entry` was a bad map row** and is corrected to `alert_event`:
+  a flag has no amount and no denomination, and filing it in the ledger would put non-money rows
+  in the table every balance sums over.
+* **Affiliates are the Associate program** (operator decision, 2026-08-22). hired.video's six
+  affiliate tables do not become a second referral economy; they reconcile onto
+  `sales_referrals` / `sales_associate_settings` / `sales_commission_rules`. `affiliate_referrals`
+  in `growth.ts` is a duplicate of that shape and is retired rather than populated.
+
 ## 6 · Coverage appendix — every hired.video surface, mapped
 
 This section is the answer to "confirm all functionality lands in Builderforce.ai." Nothing

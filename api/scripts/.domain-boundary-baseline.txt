@@ -1,5 +1,8 @@
 # Direct imports between schema modules (PRD 20 §3). Shrinks as modules merge into domains; a NEW edge is a boundary crossed for the first time.
 # Regenerate: node scripts/check-domain-boundary.mjs --update
+# A VERDICT DOES NOT BELONG HERE — this file is rewritten wholesale, so a '#' comment
+# explaining an accepted entry does not survive. Argue it in
+# scripts/adjudications/domain-boundary.mjs instead, where it is data and is counted separately.
 agents.ts -> canvas.ts
 agents.ts -> delivery.ts
 agents.ts -> identity.ts
@@ -8,13 +11,11 @@ canvas.ts -> agents.ts
 canvas.ts -> delivery.ts
 canvas.ts -> identity.ts
 canvas.ts -> platform.ts
-commerce.ts -> agents.ts
 commerce.ts -> canvas.ts
 commerce.ts -> delivery.ts
 commerce.ts -> identity.ts
 delivery.ts -> agents.ts
 delivery.ts -> canvas.ts
-delivery.ts -> governance.ts
 delivery.ts -> identity.ts
 delivery.ts -> platform.ts
 finance.ts -> canvas.ts
@@ -27,10 +28,6 @@ growth.ts -> canvas.ts
 growth.ts -> delivery.ts
 growth.ts -> identity.ts
 growth.ts -> integrations.ts
-identity.ts -> agents.ts
-identity.ts -> canvas.ts
-identity.ts -> delivery.ts
 platform.ts -> agents.ts
 platform.ts -> delivery.ts
-platform.ts -> finance.ts
 platform.ts -> identity.ts

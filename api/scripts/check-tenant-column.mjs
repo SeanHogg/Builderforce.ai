@@ -17,8 +17,10 @@
  *
  * NOT every table should have one. Global catalogues (countries, currencies,
  * model registries), platform-owned config and pure lookup tables are genuinely
- * tenant-independent. Those live in the baseline. What the baseline prevents is a
- * NEW customer-data table quietly joining them.
+ * tenant-independent — those are argued once in
+ * `scripts/adjudications/tenant-column.mjs` and stop being counted. The baseline
+ * is the rest: tables that still need that decision made. What the pair prevents
+ * is a NEW customer-data table quietly joining either list.
  */
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -32,39 +34,6 @@ const srcDir = resolve(here, '..', 'src');
  *  a parent this platform treats as tenant-owned. */
 const SCOPING_COLUMNS = ['tenant_id', 'segment_id', 'account_id'];
 
-/**
- * Tables that are genuinely tenant-independent, with the reason recorded.
- *
- * Two kinds qualify: a GLOBAL CATALOGUE, which is the same rows for every
- * tenant, and a PRE-TENANT row, which is written before a tenant exists to scope
- * it to. Both are decisions; neither is an omission.
- *
- * The baseline is for tables that still need a decision; this is for tables the
- * decision was made about. Keeping them apart matters because `--update`
- * rewrites the baseline and would drop any comment explaining an entry, and a
- * global catalogue with no argument attached is indistinguishable from a
- * customer-data table somebody forgot to scope — which is the exact failure this
- * guard exists to catch.
- */
-const TENANT_INDEPENDENT = new Map([
-  ['cities', 'a geographic catalogue — the same city for every tenant, and the join key for territory and search-by-place.'],
-  ['countries', 'ISO country list. Global by definition.'],
-  ['stage_lookup', 'the platform-wide company-stage vocabulary a tenant selects FROM; a tenant-owned stage is a `pipeline_stages` row.'],
-  ['email_otp_challenges', 'PRE-TENANT: a signup challenge is issued before the account exists. Scoped by (user_ref, purpose), which is narrower than tenant, not looser. Absorbed `email_verification_codes`, which was baselined here for the same reason.'],
-  ['marketing_sessions', 'PRE-TENANT: an anonymous visitor IS the row, and it is written on their first prompt — before an account, and therefore before a tenant, exists. Scoped by the opaque `visitor_id`, which is narrower than tenant. Moved out of the baseline (0434) because it is a decision, not an omission.'],
-  ['marketing_session_prompts', 'PRE-TENANT: the prompts behind a `marketing_sessions` row, written on the same pre-signup path and scoped by the same `visitor_id` (0434).'],
-  ['release_digest_runs', 'PLATFORM-WIDE: a release digest announces the platform release notes to EVERY user on the deployment, so the fan-out has no tenant to belong to — its identity is the digest (`note_key`) and its cursor is a global keyset position over recipients. A tenant column here would have to be invented, and inventing one would make the partial unique index that keeps the send idempotent (one open run per digest) wrong: it would permit one open run per tenant for a message that is sent once.'],
-  ['web_search_robots', 'a cache of the public robots.txt policy for a DNS domain. The policy and its expiry are identical for every tenant; tenant-owned crawl sources and frontier rows remain tenant-scoped.'],
-  // `developer_orgs` and `developer_org_members` were declared here on the
-  // argument that a publisher is not a tenant. Migration 0472 rejected that: a
-  // developer IS a tenant, both tables are gone, and `extension_packages` now
-  // carries the publisher's `tenant_id` like everything else. That the exemption
-  // could be argued for at all is what this map is supposed to surface — the
-  // reason is written down precisely so it can be re-read and overruled.
-  ['extension_versions', 'the immutable versions of an `extension_packages` row. Tenancy is INHERITED through `package_id` — the publisher owns the package, and a version cannot belong to a different workspace than the package it versions. Copying `tenant_id` down would be a second place for the same fact to be wrong.'],
-  ['extension_categories', 'the public directory\'s category taxonomy (1094) — platform configuration, identical for every workspace, and the vocabulary a published listing files itself under. A tenant-scoped copy would mean one workspace\'s "finance" was a different category from another\'s, in a directory whose entire purpose is that a stranger can find a listing under the same name the publisher chose.'],
-  ['extension_review_stages', 'one stage of the review pipeline for an `extension_versions` row (1094). Tenancy is INHERITED through `version_id` → `package_id`, exactly as `extension_versions` inherits it. The `sandbox_tenant_id` column names the workspace the DYNAMIC stage installed into, which is a piece of evidence about where the stage ran and is deliberately not a scoping column — scoping a review by the sandbox it borrowed would hand the sandbox ownership of every publisher\'s submissions.'],
-]);
 
 const tables = parseDrizzleTables(srcDir);
 if (tables.size === 0) {
@@ -74,14 +43,14 @@ if (tables.size === 0) {
 
 const findings = [];
 for (const [name, cols] of [...tables].sort((a, b) => a[0].localeCompare(b[0]))) {
-  if (SCOPING_COLUMNS.some((c) => cols.has(c)) || TENANT_INDEPENDENT.has(name)) continue;
+  if (SCOPING_COLUMNS.some((c) => cols.has(c))) continue;
   findings.push({
     key: name,
     detail: 'no tenant_id / segment_id / account_id — if this holds customer data, every query against it is unscoped by construction.',
   });
 }
 
-reportRatchet({
+await reportRatchet({
   name: 'check-tenant-column',
   baselinePath: resolve(here, '.tenant-column-baseline.txt'),
   findings,

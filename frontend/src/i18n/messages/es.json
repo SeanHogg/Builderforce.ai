@@ -723,7 +723,8 @@
       "cofounder": "Cofundador",
       "pipeline": "Proceso",
       "interviewKits": "Guiones de entrevista",
-      "offers": "Ofertas"
+      "offers": "Ofertas",
+      "rewards": "Recompensas"
     },
     "primaryAria": "Principal",
     "destination": {
@@ -26243,5 +26244,51 @@
       "categoryPlaceholder": "correo, despliegue, festivo…"
     },
     "undatedLabel": "Sin fecha todavía"
+  },
+  "points": {
+    "view": {
+      "intro": "Los puntos que ganas por trabajo real en esta plataforma, las insignias que desbloquean y lo que puedes canjear con ellos."
+    },
+    "balance": {
+      "title": "Tus puntos",
+      "unit": "puntos",
+      "suspended": "La acumulación está pausada en esta cuenta mientras se revisa un patrón marcado."
+    },
+    "streak": {
+      "current": "Racha de {days} días",
+      "best": "mejor: {days}"
+    },
+    "badges": {
+      "title": "Insignias ({count})",
+      "empty": "Aún no tienes insignias. Se desbloquean a medida que trabajas.",
+      "toEarn": "{count} por conseguir"
+    },
+    "rewards": {
+      "title": "Recompensas",
+      "cost": "{points} puntos",
+      "short": "Te faltan {points}",
+      "unavailable": "Todavía no disponible",
+      "redeem": "Canjear",
+      "redeeming": "Canjeando…",
+      "failed": "No se pudo completar el canje.",
+      "confirmTitle": "¿Canjear esta recompensa?",
+      "confirmMessage": "Esto gasta {points} puntos en {label}. Los puntos se descuentan de inmediato.",
+      "confirmAction": "Canjear"
+    },
+    "activity": {
+      "title": "Actividad reciente",
+      "empty": "Nada por ahora.",
+      "noPoints": "límite diario alcanzado"
+    },
+    "earn": {
+      "title": "Cómo ganar puntos",
+      "hint": "Cada acción paga una vez por evento. Los límites diarios mantienen la economía honesta.",
+      "points": "{points} pts",
+      "cap": "hasta {points}/día"
+    },
+    "leaderboard": {
+      "title": "Clasificación del espacio",
+      "rank": "N.º {rank}"
+    }
   }
 }

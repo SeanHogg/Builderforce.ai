@@ -96,7 +96,7 @@ for (const file of files.sort()) {
   }
 }
 
-reportRatchet({
+await reportRatchet({
   name: 'check-domain-boundary',
   baselinePath: resolve(here, '.domain-boundary-baseline.txt'),
   findings,

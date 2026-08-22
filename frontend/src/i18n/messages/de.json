@@ -723,7 +723,8 @@
       "cofounder": "Mitgründer:in",
       "pipeline": "Pipeline",
       "interviewKits": "Interview-Leitfäden",
-      "offers": "Angebote"
+      "offers": "Angebote",
+      "rewards": "Prämien"
     },
     "primaryAria": "Primär",
     "destination": {
@@ -26243,5 +26244,51 @@
       "categoryPlaceholder": "E-Mail, Deployment, Feiertag…"
     },
     "undatedLabel": "Noch kein Datum"
+  },
+  "points": {
+    "view": {
+      "intro": "Punkte für echte Arbeit auf dieser Plattform, die Abzeichen, die sie freischalten, und wofür du sie einlösen kannst."
+    },
+    "balance": {
+      "title": "Deine Punkte",
+      "unit": "Punkte",
+      "suspended": "Das Sammeln ist für dieses Konto pausiert, während ein auffälliges Muster geprüft wird."
+    },
+    "streak": {
+      "current": "{days} Tage in Folge",
+      "best": "Bestwert {days}"
+    },
+    "badges": {
+      "title": "Abzeichen ({count})",
+      "empty": "Noch keine Abzeichen. Sie schalten sich beim Arbeiten frei.",
+      "toEarn": "Noch {count} zu holen"
+    },
+    "rewards": {
+      "title": "Prämien",
+      "cost": "{points} Punkte",
+      "short": "Noch {points} Punkte",
+      "unavailable": "Noch nicht verfügbar",
+      "redeem": "Einlösen",
+      "redeeming": "Wird eingelöst…",
+      "failed": "Diese Einlösung konnte nicht abgeschlossen werden.",
+      "confirmTitle": "Diese Prämie einlösen?",
+      "confirmMessage": "Das kostet {points} Punkte für {label}. Die Punkte werden sofort abgezogen.",
+      "confirmAction": "Einlösen"
+    },
+    "activity": {
+      "title": "Letzte Aktivität",
+      "empty": "Noch nichts.",
+      "noPoints": "Tageslimit erreicht"
+    },
+    "earn": {
+      "title": "Punkte verdienen",
+      "hint": "Jede Aktion zahlt einmal pro Ereignis. Tageslimits halten die Ökonomie ehrlich.",
+      "points": "{points} Pkt.",
+      "cap": "bis zu {points}/Tag"
+    },
+    "leaderboard": {
+      "title": "Rangliste im Workspace",
+      "rank": "Nr. {rank}"
+    }
   }
 }

@@ -36,7 +36,6 @@ import {
 import { desc, sql } from 'drizzle-orm';
 import { activityEventTypeEnum, integrationProviderEnum, newsletterEventTypeEnum, newsletterSubscriptionStatusEnum, objects, teamMemberKindEnum } from './kernel';
 import {
-  chatSessions,
   teams,
   pokerSessions,
   segments,
@@ -47,6 +46,7 @@ import {
 import { integrationCredentials } from './platform';
 import {
   agentDefinitionVersions,
+  chatSessions,
   agentHosts,
   agents,
   executions,
@@ -1788,3 +1788,62 @@ export const studioAsyncInterviews = pgTable('studio_async_interviews', {
   index('idx_studio_async_interviews_status').on(t.tenantId, t.status, t.expiresAt),
   index('idx_studio_async_interviews_subject').on(t.tenantId, t.subjectRef),
 ]);
+
+
+// ---------------------------------------------------------------------------
+// Moved here from `identity.ts` (PRD 20 §3). Each hangs off a CANVAS aggregate —
+// a brain chat, a dev team, a meeting — and was only in Identity because it also
+// names a user. Same reason as the agents.ts block: naming a user does not make a
+// row Identity's, or Identity ends up importing the domains that depend on it.
+// ---------------------------------------------------------------------------
+
+export const chatMembers = pgTable('chat_members', {
+  id:           serial('id').primaryKey(),
+  chatId:       integer('chat_id').notNull().references(() => brainChats.id, { onDelete: 'cascade' }),
+  tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:    uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  /** Resolved member (an existing account); NULL while the invite is pending. */
+  userId:       varchar('user_id', { length: 36 }).references(() => users.id, { onDelete: 'cascade' }),
+  /** Lower-cased; set for a cold invite whose email has no account yet. */
+  invitedEmail: varchar('invited_email', { length: 255 }),
+  role:         varchar('role', { length: 24 }).notNull().default('participant'),
+  /** 'active' (has access now) | 'pending' (email invite, converts on access). */
+  status:       varchar('status', { length: 16 }).notNull().default('active'),
+  invitedBy:    varchar('invited_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+  updatedAt:    timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_chat_members_user').on(t.chatId, t.userId),
+  index('idx_chat_members_user').on(t.tenantId, t.userId),
+]);
+
+
+export const devTeamMembers = pgTable('dev_team_members', {
+  id:            serial('id').primaryKey(),
+  teamId:        integer('team_id').notNull().references(() => devTeams.id, { onDelete: 'cascade' }),
+  contributorId: integer('contributor_id').notNull().references(() => contributors.id, { onDelete: 'cascade' }),
+  /** 'manager' | 'member' | 'lead' */
+  memberRole:    varchar('member_role', { length: 50 }).notNull().default('member'),
+  joinedAt:      timestamp('joined_at').notNull().defaultNow(),
+}, (t) => [
+  unique('uq_team_contributor').on(t.teamId, t.contributorId),
+]);
+
+
+/**
+ * meeting_transcript_segments (0330) — the running transcript of a live meeting.
+ * One row per spoken line: a human line captured client-side (browser
+ * SpeechRecognition) or an AGENT line produced by an LLM turn. Ordered by `atMs`
+ * (ms since the meeting started).
+ */
+export const meetingTranscriptSegments = pgTable('meeting_transcript_segments', {
+  id:          uuid('id').primaryKey().defaultRandom(),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  meetingId:   uuid('meeting_id').notNull().references(() => meetings.id, { onDelete: 'cascade' }),
+  speakerRef:  varchar('speaker_ref', { length: 64 }).notNull(),
+  speakerName: varchar('speaker_name', { length: 255 }).notNull(),
+  speakerKind: varchar('speaker_kind', { length: 16 }).notNull().default('human'), // human|agent
+  text:        text('text').notNull(),
+  atMs:        bigint('at_ms', { mode: 'number' }).notNull().default(0),
+  createdAt:   timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});

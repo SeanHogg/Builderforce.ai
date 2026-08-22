@@ -31,6 +31,7 @@ import { releaseWorkItemWebhook } from '../seams/workItemWebhook';
 import { fireEventTriggers } from '../workflow/eventTriggers';
 import { TaskStatus, ExecutionStatus } from '../../domain/shared/types';
 import { DONE_CLASS, isDoneLane } from '../../domain/shared/doneClass';
+import { awardForCompletedTask } from "../points/taskEarning";
 
 /**
  * Lane keys whose work is JUDGING work someone else already did.
@@ -231,6 +232,16 @@ export async function recordStatusTransition(env: Env, db: Db, input: RecordTran
   await bumpWorkforceMetricsVersion(env, tenantId).catch((error) => {
     reportCaughtError(error, { source: "application/task/taskLifecycle.ts", operation: "recordStatusTransition" });
   });
+
+  // Points. Here rather than in the routes because this is the ONE path every lane
+  // move funnels through — a route that closes a ticket its own way still earns,
+  // and no route can pay twice. `awardPoints` never throws and is idempotent on the
+  // ticket id, so a reopened-then-reclosed ticket pays exactly once.
+  if (nowDone && !wasDone) {
+    await awardForCompletedTask(db, env, {
+      tenantId, taskId, actorKind: actor.actorKind, actorRef: actor.actorRef,
+    });
+  }
 
   // A status transition (a manual PATCH, an agent advance, OR a PR-merge completion via
   // completeTaskOnMerge) can flip a remediation ticket's badge — so drop the diagnostics

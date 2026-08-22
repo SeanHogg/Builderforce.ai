@@ -1,3 +1,181 @@
+## ✅ RESOLVED 2026-08-22 — A ratchet verdict that survives `--update`, three module inversions removed, and a typecheck that was red
+
+**The gap.** The PRD 20 roadmap entry claimed six green data-model ratchets holding 216 violations.
+Running them said otherwise: one guard was **red**, the entry omitted the largest of the six entirely,
+and four of the five numbers it did quote were stale. Underneath that, the mechanism had a defect that
+guaranteed the count would keep drifting.
+
+### The cross-tenant read the ratchet was catching
+
+`check-tenant-scope` was failing on `application/points/earnerFacets.ts:68`: the `tenant_members` read
+behind the **`employer` points facet** filtered by `userId` and `isActive` and by no tenant at all.
+A seat held in any workspace paid out in every workspace — points are ledgered per tenant, so this is a
+cross-tenant earn. Now `scopedToTenant(tenantMembers, tenantId, …)`, and the `EarnerFacts` docstring
+says which workspace it means.
+
+### A verdict had nowhere durable to live
+
+`reportRatchet --update` rewrites a baseline file wholesale, and `#` comments do not survive it. Four
+argued verdicts — two duplicate-shape clusters, two shape-lint tables, one unadopted table — were
+sitting in those comments, each a paragraph that the next routine trim would have deleted with no diff
+anybody would read as a deletion. `check-shape-lint` had solved this privately with a 400-line inline
+`ADJUDICATED` map, and `check-tenant-column` had copied the idea as `TENANT_INDEPENDENT`: the same
+mechanism, invented twice, in two shapes, with a third form rotting in comments.
+
+**`scripts/lib/adjudications.mjs`** is now the one mechanism, and `reportRatchet` consumes it:
+
+- a verdict lives in `scripts/adjudications/<guard>.mjs` as data, so `--update` cannot destroy it;
+- an adjudicated key is filtered out **before** the baseline comparison, so *decided* stops being
+  counted as *outstanding* — an open balance is now work, not a mix of work and settled argument;
+- a verdict with no argument (under 40 characters) **fails the guard** — an adjudication removes an
+  item from the balance, so it has to say why. This caught `countries: 'ISO country list.'` on the
+  first run;
+- a key adjudicated **and** baselined fails as double-counting;
+- a verdict matching no live finding is reported stale, so the registry cannot rot into arguments
+  about tables that stopped existing.
+
+All three prior forms are migrated: 49 shape-lint verdicts, 11 tenant-column verdicts, 2 cluster
+verdicts, 1 adoption verdict — 63 recorded decisions that are no longer one `--update` from gone.
+`check-shape-lint.mjs` fell from **508 lines to 93** on the way out.
+
+### Identity stopped depending on the domains that depend on it
+
+`identity.ts` imported `canvas`, `agents` and `delivery` — the module every other domain reads was
+reading three of them back. The cause was eight tables filed under Identity because their payload
+mentions a user: `chat_members` (a brain chat's), `dev_team_members`, `meeting_transcript_segments`,
+`chat_sessions`, `import_staged_users`, `tenant_models`, `on_call_members`, `error_group_users`.
+Naming a user does not make a row Identity's — **the parent aggregate decides the domain**. Each moved
+to the module that owns its parent. Every consumer imports from the schema barrel, so this is a pure
+code move: same table names, same columns, same foreign keys, **no DDL and no migration**.
+
+Three more edges went the same way: `webhook_deliveries` rejoined `webhook_subscriptions` (one
+aggregate declared in two modules), `source_control_integrations` moved to its only reader, and
+`commerce.ts` was importing `skills` and never using it — a dead import holding an edge open.
+
+**Cross-module schema imports: 34 → 28. `identity.ts` now imports nothing but the kernel.**
+
+### `npm run type-check` was red, and had been
+
+Four errors, none of them from this work: `awardPoints.ts` and `redeemPoints.ts` both imported
+`reportCaughtError` from `infrastructure/observability/errorReporter`, **a module that does not
+exist** (the function is in `application/observability/caughtErrorReporter`); `redeemPoints` then
+dereferenced a possibly-undefined `.returning()` row while debiting points against a redemption intent
+— it now refuses instead, because debiting against an intent that was never recorded is the one
+outcome worse than refusing; and `consumption/meters.ts` could not add redeemed AI credits to the
+meter because `getOrSetCached` declared `env: Env` while its own body handles an absent env and its own
+comment says it does. The signature now matches the contract it documents, and `aiCreditBalance` with
+it — so the meter and the token gate agree about credits again, which is the disagreement that file's
+comment was written about.
+
+**25/25 guards green · typecheck clean · 686 test files, 8,267 tests passing.**
+
+### What the numbers actually were
+
+The entry said 216. Six guards say **362 open + 63 adjudicated**. It omitted `check-table-adoption`
+(187, the largest); quoted 95 and 72 where the files held 67 and 71; and quoted 38 cross-module imports
+against a file holding 34. It also claimed all shape-lint verdicts "need no decision and can start
+now" — but a *duplication to migrate* verdict names the primitive the rows move into, and counting real
+feature consumers (excluding `domains/kernel/entities.ts`, which registers every kernel table by
+construction) shows `runs`, `work_items`, `annotations` and `revisions` at **zero**. The 21 entries
+shaped `annotation`, `run` or `revision` are blocked on the same PRD 20 §6 decision as the clusters.
+**44 are genuinely unblocked.** ROADMAP.md now says so, and records the `chat_messages` /
+`brain_chat_messages` duplicate pair that sits below `check-signature-duplication`'s threshold.
+
+## ✅ RESOLVED 2026-08-22 — The points economy lands whole, and the mapping audit that shrank the rest of the hired.video port to zero new tables
+
+**The finding that changed the shape of the work.** PRD 18's remaining tracks were scheduled as a
+SCHEMA port — ~360 tables to create, behaviour on top. They are not. `source-to-target.tsv`, the
+committed coverage map the build already guards, **assigns every remaining hired.video table to a
+primitive this schema owns**, and 362 of 363 targets are written. Re-verified table by table against
+`api/src/infrastructure/database/schema/`. The remaining port is application code and surfaces over
+primitives that exist, not DDL. See [PRD 18 §5a](./specs/builderforce/18-prd-hired-video-port.md) for
+the row-by-row mapping.
+
+**Three claims in the roadmap were stale and are corrected:**
+
+- **"The Studio source lives in an archived repo not checked out here"** — false. `C:\code\hired\hired.video`
+  is present on the build machine with `frontend/lib/studio` intact. T4 is large; it is not blocked.
+- **"Payouts are an env-gated stub"** — false. `PayoutAccountService`, `payoutProviders`,
+  `withdrawalMethods`, `earningsLedger` and escrow milestones are built and ledgered. The
+  `paidCents` escrow-conflation bug `earningsLedger`'s docstring still described as open had already
+  been fixed (`reference not like 'escrow:%'`).
+- **`points_fraud_flags` → `ledger_entry`** was a bad coverage-map row, now `alert_event`. A flag has
+  no amount and no denomination; filing it in the ledger would put non-money rows in the table every
+  balance on this platform sums over.
+
+### The points economy, end to end
+
+hired.video's 10-table gamification aggregate landed as **zero tables**:
+
+| source | lands in |
+|---|---|
+| `user_points_balance`, `points_ledger` | `ledger_entries`, denomination `points` |
+| `points_streaks`, `points_task_streaks`, `points_activity_counters` | one `settings` row per earner |
+| `points_fraud_flags` | `alert_events` + a subject (migration 1106) |
+| `badges`, `user_badges`, `point_redemptions` | already existed with no feature path — now reachable |
+
+- **The rules are DATA** (`pointsCatalog.ts`): 48 actions, each carrying its own payout, daily
+  ceiling, earner facets, streak signal and badge tiers. What it replaces was a forty-arm `switch`
+  spread across three files, so adding an action meant three edits nothing forced you to make
+  together — the failure mode being an action that paid points and silently unlocked nothing.
+  `pointsCatalog.test.ts` now proves every badge slug a rule names exists.
+- **Facets, not a role enum.** The source gated on a `user_role` column this platform does not have
+  and should not grow. `earnerFacets.ts` DERIVES the four facets from facts already stored
+  (`available_for_hire`/`account_type`, an active `tenant_members` seat, `party_roles`). A set, not a
+  choice — so a builder who opted in to for-hire work earns as talent AND as an employer, which the
+  enum could not express.
+- **Idempotency is the database, not a pre-read.** Every award composes
+  `pts:<user>:<action>:<ref>` into `ledger_entries.reference`, unique on (tenant, denomination,
+  reference). A retried webhook, a double-click and a replayed queue message collapse to one row with
+  no read-then-write race. The prefix order is deliberate: the unique btree makes "what has this
+  person earned from this action" an index range scan rather than a jsonb filter.
+- **Blocked attempts write a zero row.** A capped or gated action records an entry worth 0 with the
+  reason, so the activity feed says "daily limit reached" instead of silently omitting the action —
+  the most common complaint logged against the surface this replaces. `pointsAwardCount` excludes
+  zero rows, so a blocked attempt can never trip a badge threshold.
+- **Anti-farming survived the port.** `task.complete.user` pays nothing until a hundred self-authored
+  tickets are closed. `tasks` has no author column, so `taskEarning.ts` derives authorship from the
+  audit log's `task.created` actor — correct for old tickets and new ones alike, where a `created_by`
+  column would backfill NULL for exactly the population a farming check most needs to be right about.
+- **Fraud raises into the existing queue.** `alert_events` gained a subject, a severity and an
+  evidence payload, so a flag reuses the acknowledge/resolve lifecycle and the operator surface
+  instead of standing up a second review queue nobody would remember to work. High severity suspends
+  earning; the flag records why. Two heuristics ship, not the source's five — three of theirs read
+  signals this platform does not collect, and shipping heuristics that can never fire reads as
+  coverage and is not (registered in the gap register).
+- **Redemption is real, and it depletes.** Points buy AI tokens — this platform's own scarce
+  resource, which it already meters. The accounting is closed in three parts: redeem writes an
+  `ai_credits` grant, `resolveTokenLimits` lifts BOTH token caps by the balance, and a daily
+  reconcile sweep debits what each ended month actually drew. That third part is the one that is
+  easy to omit and fatal to omit — without it the lift is permanent and 500 points buy unlimited
+  inference forever, a failure that looks exactly like the feature working. It settles every
+  unsettled month, not just the last, so a missed sweep is caught up rather than forgiven.
+- **The catalog cannot lie.** A reward is advertised as available exactly when a fulfilment adapter
+  is registered for its kind — one function answers both the catalog read and the redeem guard. The
+  source product had two lists, advertised gift cards its rail had refused months earlier, and let
+  people spend points reaching a reward the server then rejected.
+- **Redeem order is intent → debit → fulfil.** A crash anywhere leaves a recoverable `pending` row
+  rather than lost points or a free reward; both steps key off the redemption id, so re-running any
+  of them is a no-op. Cancel refunds as a new ledger row, never by deleting the debit.
+- **Surfaces.** Six self-contained cards (`components/points/`), each reading the shared snapshot and
+  self-hiding — droppable into a second surface with zero edits, composed by `RewardsView` with no
+  state and no branching. Mounted as the Workforce **Rewards** tab; localized into all five catalogs
+  with real translations. Nothing was added to `CreationCanvas.tsx`.
+
+### DRY fix carried in the same pass
+
+`USD_CENTS = 'usd_cents'` was declared in **nine** files — one exported from a feature module and
+eight private copies. A misspelt denomination does not fail; it silently opens a second balance under
+a name no reader queries, so the money is not lost so much as invisible. All nine now import
+`application/kernel/denominations.ts`, which is also where `points`, `ai_credits`, `campaign_credits`
+and `comm_credits` are named.
+
+**Validation.** 25/25 API guards green (including tenant-scope, schema-drift, model-coverage,
+table-adoption), API type-check green on both compilers, 45 tests green across the new catalog and
+the two touched modules, frontend type-check green, ESLint clean on every new file, and 11/13
+frontend guards green — the two red ones being pre-existing ratchet drift in files this pass never
+opened (see the gap register).
+
 ## ✅ RESOLVED 2026-08-22 — Eleven capability articles, a figure vocabulary that DRAWS, and share cards that stopped being title cards
 
 **The gap.** The blog stopped at 2026-08-15. Everything shipped in the following week — the app

@@ -81,7 +81,11 @@ function toJsonShape<T>(value: T): T {
  * both layers, and return it. KV/L1 errors degrade to a direct loader call.
  */
 export async function getOrSetCached<T>(
-  env: Env,
+  // Optional by CONTRACT, not by accident: the body already falls through to the
+  // loader when there is no env (unit tests, non-Worker callers) and says so at
+  // the guard below. The signature said `Env`, which forced every caller holding
+  // an optional env to either assert or drop the cached read entirely.
+  env: Env | undefined,
   key: string,
   loader: () => Promise<T>,
   opts?: { kvTtlSeconds?: number; l1TtlMs?: number },

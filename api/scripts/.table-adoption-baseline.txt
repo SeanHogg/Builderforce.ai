@@ -2,6 +2,9 @@
 # (PRD 20 §5 steps 6-7). Registration is not adoption: this shrinks as each domain
 # feature is migrated onto the target schema, and must never grow silently.
 # Regenerate: node scripts/check-table-adoption.mjs --update
+# A VERDICT DOES NOT BELONG HERE — this file is rewritten wholesale, so a '#' comment
+# explaining an accepted entry does not survive. Argue it in
+# scripts/adjudications/table-adoption.mjs instead, where it is data and is counted separately.
 ab_test_segments
 ab_test_variants
 ab_tests
@@ -20,7 +23,6 @@ answer_cache
 approval_actions
 asset_inspections
 availability_slots
-badges
 billing_plans
 blog_posts
 booking_hosts
@@ -41,7 +43,6 @@ cohort_retention
 communication_tracking
 community_resources
 companies
-compensation_structures
 competencies
 consultant_consultations
 consultant_knowledge_docs
@@ -85,11 +86,9 @@ gig_projects
 headcount_impacts
 health_dimensions
 hr_emergency_contacts
-hr_employment_records
 inbound_shipments
 inbox_actions
 inbox_seat_addons
-interview_kits
 interview_question_sets
 inventory_items
 investor_peer_comparables
@@ -131,7 +130,6 @@ partner_program_opt_ins
 payback_period
 payment_methods
 people_headcount_plans
-people_objective_outcomes
 people_tenants
 people_workflow_triggers
 placement_documents
@@ -140,7 +138,6 @@ placements
 plan_features
 platform_pricing
 podcast_outreach
-point_redemptions
 portfolio_items
 pricing_simulations
 product_ideas
@@ -166,7 +163,6 @@ roi_timeline_entries
 saved_calculations
 saved_contact_searches
 scenario_assumptions
-scorecard_attributes
 scorm_cmi_states
 scratch_pad_attachments
 screening_template_items
@@ -181,31 +177,18 @@ studio_async_interviews
 support_articles
 sync_agenda_items
 sync_conflict_resolutions
-sync_states
 system_features
 task_effort_estimates
 task_time_entries
 timesheets
 uptime_monitors
-user_badges
 user_stock_media_usage
 user_terms_agreements
 validation_data_imports
 videos
 waitlist_entries
-webauthn_challenges
 website_pages
 whitelabel_tenants
 work_estimates
 workflow_actions
 workspace_grants
-
-# youtube_uploads — the wait is RECORDED, not silent (see ROADMAP.md, group 9).
-#   Migration 1095 argues at length for a chunked, resumable, Worker-eviction-surviving
-#   upload; what shipped alongside it was the SINGLE-SHOT path
-#   (`youtubePublishing.publishCanvasVideoToYouTube`), which streams an R2 object straight
-#   into Google’s resumable session and works only while the whole object fits one
-#   request’s budget. The table is the durable half and its writer is the chunk sweep,
-#   which is not written yet. Listed here so the gap is one line in a register rather than
-#   an unexplained row in the schema; it leaves the baseline when the sweep lands.
-youtube_uploads

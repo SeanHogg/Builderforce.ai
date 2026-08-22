@@ -418,16 +418,35 @@ export function resolveTokenLimits(input: {
   effectivePlan: TenantPlan;
   tokenDailyLimitOverride: number | null;
   isSuperadmin?: boolean;
+  /**
+   * Unspent AI-token credits the tenant holds — earned points redeemed through
+   * `application/points/redeemPoints.ts`, held as `ai_credits` ledger rows.
+   *
+   * Added to BOTH caps, and that pair is the whole correctness argument. Lifting
+   * only the monthly cap would leave a FREE tenant blocked by the 10K daily burst
+   * guard with credits they cannot reach; lifting only the daily cap would let the
+   * same credit be spent again every day. Lifting both bounds the total at
+   * `monthly + credits`, so the credits a month actually consumed is
+   * `max(0, monthUsage - monthly)` — which is exactly what the month-end reconcile
+   * debits, and why the balance depletes instead of renewing.
+   *
+   * An UNLIMITED cap (-1) is left alone: adding to it would turn "no ceiling" into
+   * a finite number, which is the one way this input could take capacity AWAY.
+   */
+  bonusTokens?: number;
 }): ResolvedTokenLimits {
   if (input.tokenDailyLimitOverride === -1 || input.isSuperadmin) {
     return { dailyLimit: -1, monthlyLimit: -1 };
   }
+  const bonus = Math.max(0, Math.floor(input.bonusTokens ?? 0));
+  const lift = (limit: number) => (limit > 0 ? limit + bonus : limit);
+
   const override = input.tokenDailyLimitOverride;
   if (override !== null && override >= 0) {
-    return { dailyLimit: override, monthlyLimit: -1 };
+    return { dailyLimit: lift(override), monthlyLimit: -1 };
   }
   const limits = getLimits(input.effectivePlan);
-  return { dailyLimit: limits.tokenDailyLimit, monthlyLimit: limits.tokenMonthlyLimit };
+  return { dailyLimit: lift(limits.tokenDailyLimit), monthlyLimit: lift(limits.tokenMonthlyLimit) };
 }
 
 /**

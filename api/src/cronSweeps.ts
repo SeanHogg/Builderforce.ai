@@ -82,6 +82,7 @@ import { runSignatureReminderSweep } from './application/signature/runSignatureR
 import { runFormReminderSweep } from './application/collection/formInvitations';
 import { runCollectionsSweep } from './application/finance/collectionsLadder';
 import { runSequenceSweep } from './application/sales/sequenceRunner';
+import { describeCreditReconcile, runAiCreditReconcileSweep } from './application/points/reconcileAiCredits';
 
 /**
  * `null` from a sweep's `run` = nothing worth a log line. Preserved verbatim from
@@ -487,6 +488,24 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
       return r.written > 0 || r.removed > 0 || r.failed > 0
         ? `tenants=${r.tenants} books=${r.connections} written=${r.written} removed=${r.removed} failed=${r.failed}`
         : null;
+    },
+  },
+  {
+    key: 'ai-credit-reconcile',
+    cadence: 'daily',
+    // The half of the points economy that takes credits AWAY. `aiCredits` grants
+    // them and the token gate honours them by lifting both caps; nothing else ever
+    // debits. Without this sweep the lift is permanent and redeemed points buy
+    // unlimited inference — a failure that would look exactly like the feature
+    // working. Daily rather than monthly so a missed run is a day late rather than
+    // a month, and it settles EVERY unsettled month, so a gap is caught up rather
+    // than forgiven.
+    description:
+      'Settle redeemed AI-token credits against the months they were actually spent in, '
+      + 'so a granted credit depletes instead of lifting the token cap forever.',
+    run: async ({ env }) => {
+      const r = await runAiCreditReconcileSweep(buildDatabase(env), env);
+      return describeCreditReconcile(r);
     },
   },
   {

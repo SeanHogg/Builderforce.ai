@@ -723,7 +723,8 @@
       "cofounder": "Co-founder",
       "pipeline": "Pipeline",
       "interviewKits": "Interview kits",
-      "offers": "Offers"
+      "offers": "Offers",
+      "rewards": "Rewards"
     },
     "primaryAria": "Primary",
     "destination": {
@@ -26243,5 +26244,51 @@
       "categoryPlaceholder": "email, deployment, holiday…"
     },
     "undatedLabel": "No date yet"
+  },
+  "points": {
+    "view": {
+      "intro": "Points you earn for real work on this platform, the badges they unlock, and what they buy."
+    },
+    "balance": {
+      "title": "Your points",
+      "unit": "points",
+      "suspended": "Earning is paused on this account while a flagged pattern is reviewed."
+    },
+    "streak": {
+      "current": "{days}-day streak",
+      "best": "best {days}"
+    },
+    "badges": {
+      "title": "Badges ({count})",
+      "empty": "No badges yet. They unlock as you work.",
+      "toEarn": "{count} still to earn"
+    },
+    "rewards": {
+      "title": "Rewards",
+      "cost": "{points} points",
+      "short": "{points} more to go",
+      "unavailable": "Not available yet",
+      "redeem": "Redeem",
+      "redeeming": "Redeeming…",
+      "failed": "That redemption could not be completed.",
+      "confirmTitle": "Redeem this reward?",
+      "confirmMessage": "This spends {points} points on {label}. Points are deducted straight away.",
+      "confirmAction": "Redeem"
+    },
+    "activity": {
+      "title": "Recent activity",
+      "empty": "Nothing yet.",
+      "noPoints": "daily limit reached"
+    },
+    "earn": {
+      "title": "How to earn",
+      "hint": "Every action below pays once per event. Daily limits keep the economy honest.",
+      "points": "{points} pts",
+      "cap": "up to {points}/day"
+    },
+    "leaderboard": {
+      "title": "Workspace standing",
+      "rank": "#{rank}"
+    }
   }
 }

@@ -1,40 +1,11 @@
 # Tables whose payload columns match at >= 0.55 IDF-weighted Jaccard (PRD 20 §4).
 # Regenerate: node scripts/check-signature-duplication.mjs --update
+# A VERDICT DOES NOT BELONG HERE — this file is rewritten wholesale, so a '#' comment
+# explaining an accepted entry does not survive. Argue it in
+# scripts/adjudications/signature-duplication.mjs instead, where it is data and is counted separately.
 agent_host_skill_assignments = tenant_skill_assignments
 board_type_mappings = import_type_mappings
 drive_connections = mailbox_connections
-# error_collector_integrations = feedback_collector_integrations (0.67)
-#   ACCEPTED, with an argument — not an omission.
-#   The two rows are children of DIFFERENT aggregates: one hangs off
-#   `error_collectors`, the other off `feedback_collectors`, and each cascades
-#   with its own parent. Folding them into one table means `collector_id` must
-#   point at two parents, which is either a polymorphic FK (forbidden by
-#   check-polymorphic-fk) or a pair of nullable FKs guarded by a CHECK — trading
-#   an enforced parent relationship for one the database can no longer enforce.
-#   The shape overlap is real but shallow: `provider` + an encrypted secret is
-#   what ANY signed-webhook configuration looks like. The behaviour that matters
-#   is NOT duplicated — the verification and normalisation live in one adapter
-#   registry per pillar and share `infrastructure/crypto/webhookHmac`.
-error_collector_integrations = feedback_collector_integrations
-# extension_categories = stage_lookup (0.60)
-#   ACCEPTED, with an argument — not an omission.
-#   Both are global vocabularies, so both are (key, label, description, position) —
-#   which is the SHAPE every lookup table has, and all the overlap is measuring.
-#   Neither can hold the other. `stage_lookup` is documented as "the platform-wide
-#   company-stage vocabulary a tenant selects FROM ... the shared axis that makes
-#   two tenants' Series A the same thing"; its `category` column subdivides KINDS
-#   OF STAGE and is not a free slot for unrelated vocabularies. Filling it with
-#   extension-directory chips would falsify that table's stated purpose and leave
-#   its name lying about half its rows.
-#   They differ where it counts — in IDENTITY. `extension_categories.key` is the
-#   PRIMARY KEY, so a category is referenceable by name; `stage_lookup` is a serial
-#   id unique on (category, key), so its rows are identified only inside a
-#   namespace. `extension_categories.active` also lets a chip be RETIRED without
-#   deleting a row, a lifecycle `stage_lookup` has no column for.
-#   The real consolidation, if one is wanted, is a properly named shared-vocabulary
-#   primitive both become rows of — not moving one into a table named after the
-#   other. Logged in ROADMAP.md rather than done by widening `stage_lookup`.
-extension_categories = stage_lookup
 initiatives = portfolios
 kanban_template_lane_requirements = swimlane_requirements
 marketing_tool_runs = tool_runs

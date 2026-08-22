@@ -83,7 +83,7 @@ if (cold.length) {
   process.exit(1);
 }
 
-reportRatchet({
+await reportRatchet({
   name: 'check-table-adoption',
   baselinePath: resolve(here, '.table-adoption-baseline.txt'),
   findings: registryOnly.map((t) => ({

@@ -34,19 +34,22 @@ import {
 import { sql } from 'drizzle-orm';
 import { brainChats, knowledgeDocuments } from './canvas';
 import { agentHostDirectoryStatusEnum, agentHostStatusEnum, agentTypeEnum, artifactTypeEnum, assignmentScopeEnum, executionStatusEnum, managedAgentHostRequestStatusEnum, objects, pricingModelEnum, tsvector, workflowStatusEnum, workflowTypeEnum } from './kernel';
-import { pullRequests, qaCredentials, qaTargets, qaTests } from './delivery';
-import { segments, tenants, users } from './identity';
-import { integrationCredentials } from './platform';
 import {
   boards,
   projectAgents,
   projectFacts,
   projectRepositories,
   projects,
+  pullRequests,
+  qaCredentials,
+  qaTargets,
+  qaTests,
   specs,
   swimlanes,
   tasks,
 } from './delivery';
+import { segments, tenants, users } from './identity';
+import { integrationCredentials } from './platform';
 import type { ColumnClassification, DatasetUsePolicy } from '@builderforce/creation-canvas-contract';
 
 // ═══ from runtime.ts ═══
@@ -2641,3 +2644,72 @@ export const previewSessions = pgTable('preview_sessions', {
   index('idx_preview_sessions_status_seen').on(t.status, t.lastSeenAt),
   index('idx_preview_sessions_project').on(t.tenantId, t.projectId, t.status),
 ]);
+
+
+// ---------------------------------------------------------------------------
+// Moved here from `identity.ts` (PRD 20 §3). Each of these hangs off an AGENTS
+// aggregate — an agent host, an import run, a marketplace persona — and was only
+// in Identity because it also names a user. A membership of somebody else's
+// aggregate belongs to that aggregate's domain; keeping it in Identity made the
+// module every other domain depends on depend back on three of them.
+// ---------------------------------------------------------------------------
+
+export const chatSessions = pgTable('chat_sessions', {
+  id:         serial('id').primaryKey(),
+  tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
+  agentHostId:     integer('agent_host_id').notNull().references(() => agentHosts.id, { onDelete: 'cascade' }),
+  sessionKey: varchar('session_key', { length: 255 }).notNull(),
+  projectId:  integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  startedAt:  timestamp('started_at').notNull().defaultNow(),
+  endedAt:    timestamp('ended_at'),
+  msgCount:   integer('msg_count').notNull().default(0),
+  lastMsgAt:  timestamp('last_msg_at'),
+});
+
+
+export const importStagedUsers = pgTable('import_staged_users', {
+  id:           uuid('id').primaryKey().defaultRandom(),
+  runId:        uuid('run_id').notNull().references(() => importRuns.id, { onDelete: 'cascade' }),
+  tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  externalId:   varchar('external_id', { length: 255 }).notNull(),
+  displayName:  varchar('display_name', { length: 255 }),
+  email:        varchar('email', { length: 320 }),
+  /** 'invite' (send workspace invite) | 'map' (link targetUserId) | 'skip'. */
+  action:       varchar('action', { length: 8 }).notNull().default('invite'),
+  targetUserId: varchar('target_user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+});
+
+
+/**
+ * tenant_models — the tenant "LLM" object (migration 0211). A reusable, named
+ * bundle of { base model + system prompt + params (+ optional persona / BYO key /
+ * future trained model) } that any cloud agent, on-prem host, or the Designer can
+ * select by ref `tenant_model:<slug>`. `providerKey` names the provider whose BYO
+ * key to route through (tenant_llm_provider_keys is keyed by (tenant_id, provider),
+ * no surrogate id). `trainedModelRef` is the seam for a future SSM artifact base.
+ */
+export const tenantModels = pgTable('tenant_models', {
+  id:              uuid('id').primaryKey().defaultRandom(),
+  tenantId:        integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  name:            varchar('name', { length: 255 }).notNull(),
+  slug:            varchar('slug', { length: 255 }).notNull(),
+  /** A model id from the curated pool; NULL = run on the tenant/plan default base. */
+  baseModel:       text('base_model'),
+  systemPrompt:    text('system_prompt'),
+  /** { temperature?, reasoning?, top_p?, ... } applied at run time. */
+  params:          jsonb('params').notNull().default(sql`'{}'::jsonb`),
+  personaId:       uuid('persona_id').references(() => marketplacePersonas.id, { onDelete: 'set null' }),
+  /** Provider name whose BYO key to route through (e.g. 'anthropic'); NULL = managed. */
+  providerKey:     text('provider_key'),
+  /** Future: a trained SSM model artifact used as the base. */
+  trainedModelRef: text('trained_model_ref'),
+  visibility:      varchar('visibility', { length: 16 }).notNull().default('tenant'),
+  createdBy:       varchar('created_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  createdAt:       timestamp('created_at').notNull().defaultNow(),
+  updatedAt:       timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  byTenant: index('idx_tenant_models_tenant').on(t.tenantId),
+  uqSlug:   uniqueIndex('uq_tenant_models_slug').on(t.tenantId, t.slug),
+}));

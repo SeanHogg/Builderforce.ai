@@ -161,6 +161,11 @@ export const NAV_GROUPS: NavGroup[] = [
       { id: 'meetings', labelKey: 'tab.meetings', icon: '📹' },
       { id: 'calendar', labelKey: 'tab.calendar', icon: '📅' },
       { id: 'talent', labelKey: 'tab.talent', icon: '🤝' },
+      // Recognition: points earned across the workspace, badges held, what they
+      // buy, and how to earn more. A TAB rather than a destination — it answers the
+      // question this destination already asks (who is on this team, and what have
+      // they done) rather than being a place of its own.
+      { id: 'rewards', labelKey: 'tab.rewards', icon: '🏅' },
       // Finding a CO-FOUNDER, not a hire. It is a tab of Workforce rather than a
       // row of its own because it is the same question this destination already
       // answers — who is on this team — asked about the one seat that has to be

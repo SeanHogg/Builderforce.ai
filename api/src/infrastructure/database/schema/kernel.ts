@@ -429,6 +429,16 @@ export const annotations = pgTable('annotations', {
   value:      numeric('value', { precision: 10, scale: 2 }),
   label:      varchar('label', { length: 120 }),
   anchor:     jsonb('anchor'),
+  /** ── Moderation (migration 1106) ─────────────────────────────────────────
+   *  'published' | 'pending' | 'rejected'. Defaults to published, so every
+   *  annotation this platform already writes is unaffected; a writer that
+   *  publishes user-authored claims about a NAMED third party (an employer
+   *  review) opts into 'pending' and the row stays invisible until approved.
+   *
+   *  Deliberately NOT `resolvedAt`, which on a comment means "this thread is
+   *  settled" — a different fact that can be true of a published row and false
+   *  of a pending one, so overloading it would make visibility unanswerable. */
+  status:     varchar('status', { length: 16 }).notNull().default('published'),
   resolvedAt: timestamp('resolved_at'),
   deletedAt:  timestamp('deleted_at'),
   createdAt:  timestamp('created_at').notNull().defaultNow(),

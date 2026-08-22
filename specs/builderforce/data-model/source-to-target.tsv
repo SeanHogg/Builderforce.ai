@@ -510,7 +510,7 @@ HV	points_ledger	People & HR	primitive	ledger_entry
 HV	points_activity_counters	People & HR	primitive	ledger_entry
 HV	points_streaks	People & HR	primitive	ledger_entry
 HV	points_task_streaks	People & HR	primitive	ledger_entry
-HV	points_fraud_flags	People & HR	primitive	ledger_entry
+HV	points_fraud_flags	People & HR	primitive	alert_event
 HV	badges	People & HR	keep	badges
 HV	user_badges	Identity & tenancy	keep	user_badges
 HV	point_redemptions	Finance	keep	point_redemptions

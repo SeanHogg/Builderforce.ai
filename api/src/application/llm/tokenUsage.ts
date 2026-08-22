@@ -12,7 +12,7 @@
  * discount in their budget — not just in the logs.
  */
 
-import { and, eq, gte, notInArray, sql, type SQL } from 'drizzle-orm';
+import { and, eq, gte, lt, notInArray, sql, type SQL } from 'drizzle-orm';
 import { llmUsageLog } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
 import { CACHE_READ_MULTIPLIER, CACHE_CREATION_MULTIPLIER, clampTokenCount } from './usageLedger';
@@ -133,6 +133,15 @@ export async function sumTenantTextTokensDayAndMonth(
   tenantId: number,
   dayStart: Date,
   monthStart: Date,
+  /**
+   * Exclusive upper bound. Omitted = "up to now", which is what every live gate
+   * wants. The AI-credit reconcile sweep settles a month that has ALREADY ENDED
+   * and so must bound the window on both sides — and it asks THIS function rather
+   * than writing its own sum, because `billableRow` and `rowWeight` are the rule
+   * for what counts as a spent token and a second copy of that rule is how the
+   * number a sweep settles stops matching the number the gate enforced.
+   */
+  monthEnd?: Date,
 ): Promise<{ day: number; month: number }> {
   const [row] = await db
     .select({
@@ -140,6 +149,11 @@ export async function sumTenantTextTokensDayAndMonth(
       day: sql<number>`COALESCE(SUM(${rowWeight}) FILTER (WHERE ${llmUsageLog.createdAt} >= ${dayStart}), 0)`,
     })
     .from(llmUsageLog)
-    .where(and(eq(llmUsageLog.tenantId, tenantId), gte(llmUsageLog.createdAt, monthStart), billableRow));
+    .where(and(
+      eq(llmUsageLog.tenantId, tenantId),
+      gte(llmUsageLog.createdAt, monthStart),
+      ...(monthEnd ? [lt(llmUsageLog.createdAt, monthEnd)] : []),
+      billableRow,
+    ));
   return { day: toInt(row?.day), month: toInt(row?.month) };
 }

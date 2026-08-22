@@ -38,7 +38,6 @@ import { sql } from 'drizzle-orm';
 import { creationSessionObjects, creationSessions, engagementMilestones, freelancerEngagements } from './canvas';
 import { artifactTypeEnum, objects, pricingModelEnum } from './kernel';
 import { segments, tenants, users } from './identity';
-import { skills } from './agents';
 import { projects, tasks } from './delivery';
 
 

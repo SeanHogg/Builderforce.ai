@@ -84,7 +84,7 @@ for (const [name, cols] of [...tables].sort((a, b) => a[0].localeCompare(b[0])))
   }
 }
 
-reportRatchet({
+await reportRatchet({
   name: 'check-polymorphic-fk',
   baselinePath: resolve(here, '.polymorphic-fk-baseline.txt'),
   findings,

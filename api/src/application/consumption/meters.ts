@@ -28,6 +28,7 @@ import { dailyTenantStageSandboxRuns } from '../marketplace/stageSandboxLedger';
 import { resolveSuperadminUnlimited } from '../llm/tenantTokenAvailability';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { utcMonthStart, utcNextMonthStart } from '../llm/tokenUsage';
+import { aiCreditBalance } from '../points/aiCredits';
 
 export type MeterKey = 'ai_tokens' | 'ingestion' | 'error_events' | 'outbound_fetches' | 'cloud_runs' | 'stage_sandbox_runs' | 'feedback_submissions';
 export type MeterUnit = 'tokens' | 'bytes' | 'events' | 'fetches' | 'runs' | 'sandbox_runs' | 'submissions';
@@ -122,6 +123,11 @@ export function resolveMeterLimits(input: {
   effectivePlan: TenantPlan;
   tokenDailyLimitOverride: number | null;
   isSuperadmin: boolean;
+  /** Redeemed AI-token credits. Forwarded to the TOKEN resolve only — credits buy
+   *  inference, not ingestion or error events, and the sibling resolvers below
+   *  deliberately ignore it for the same reason a positive token override does
+   *  not lift the ingestion cap: different axis. */
+  bonusTokens?: number;
 }): MeterLimits {
   return {
     tokens: resolveTokenLimits(input).monthlyLimit,
@@ -220,6 +226,13 @@ export async function buildConsumptionSnapshot(
   // number members (and chat diagnostics) READ, so it resolves through the SAME
   // rule the gate uses, acting principal included.
   const isSuperadmin = await resolveSuperadminUnlimited(db, tenantId, acting, env);
+
+  // The token gate lifts both caps by any redeemed AI-token credits, so the meter
+  // must too — otherwise a member who redeemed points reads "0 left" while every
+  // turn sails through, which is the exact disagreement the superadmin note above
+  // was written about.
+  const bonusTokens = await aiCreditBalance(db, env, tenantId);
+
   const {
     tokens: tokenLimit,
     ingestion: ingestionLimit,
@@ -228,7 +241,7 @@ export async function buildConsumptionSnapshot(
     cloudRuns: cloudRunsLimit,
     stageSandboxRuns: stageSandboxRunsLimit,
     feedbackSubmissions: feedbackSubmissionsLimit,
-  } = resolveMeterLimits({ effectivePlan, tokenDailyLimitOverride: override, isSuperadmin });
+  } = resolveMeterLimits({ effectivePlan, tokenDailyLimitOverride: override, isSuperadmin, bonusTokens });
 
   // Every meter comes back per-day; the month-to-date total is the day sum (one
   // grouped scan per meter does the work of the old single-total query) and the

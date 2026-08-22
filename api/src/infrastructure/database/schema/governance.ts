@@ -59,18 +59,6 @@ export const privacyRequests = pgTable('privacy_requests', {
 });
 
 
-export const sourceControlIntegrations = pgTable('source_control_integrations', {
-  id:                serial('id').primaryKey(),
-  tenantId:          integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
-  provider:          sourceControlProviderEnum('provider').notNull(),
-  name:              varchar('name', { length: 255 }).notNull(),
-  accountIdentifier: varchar('account_identifier', { length: 255 }).notNull(),
-  hostUrl:           varchar('host_url', { length: 500 }),
-  isActive:          boolean('is_active').notNull().default(true),
-  createdAt:         timestamp('created_at').notNull().defaultNow(),
-  updatedAt:         timestamp('updated_at').notNull().defaultNow(),
-});
 
 
 // ---------------------------------------------------------------------------
