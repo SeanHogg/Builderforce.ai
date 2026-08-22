@@ -1,16 +1,11 @@
-'use client';
-
-import { useRequireAuth } from '@/lib/useRequireAuth';
+/**
+ * Server page: the auth guard is a client BOUNDARY (`<RequireAuth>`), not a
+ * reason for this file to be a client component. The manager capability gate
+ * lives inside AlertsClient via <RoleGate capability="alerts.manage">.
+ */
+import { RequireAuth } from '@/components/auth/RequireAuth';
 import { AlertsClient } from './AlertsClient';
 
-/**
- * Thin server-of-the-client page: auth-guards then delegates to the client
- * component (mirrors the surveys page pattern). The manager capability gate lives
- * inside AlertsClient via <RoleGate capability="alerts.manage">.
- */
 export default function AlertsPage() {
-  const allowed = useRequireAuth();
-
-  if (!allowed) return null;
-  return <AlertsClient />;
+  return <RequireAuth><AlertsClient /></RequireAuth>;
 }

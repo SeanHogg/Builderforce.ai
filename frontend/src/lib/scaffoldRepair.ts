@@ -18,8 +18,8 @@
  * structural contract ({@link validateFileContentForPath}). A file that has valid
  * content for its own path is never touched, so real user work is preserved.
  */
-import { defaultsForModality } from './vanillaDefaults';
-import { validateFileContentForPath } from './fileContentGuard';
+import { scaffoldForModality } from '@builderforce/ide-templates';
+import { validateFileContentForPath } from '@builderforce/ide-file-contract';
 
 export interface ScaffoldRepairResult {
   /** The file map with empty/corrupt scaffold files replaced by the template. */
@@ -30,13 +30,16 @@ export interface ScaffoldRepairResult {
 
 /**
  * Repair the scaffold files in `files` for the given modality. Non-scaffold files
- * (the user's own extra files) are passed through untouched.
+ * (the user's own extra files) are passed through untouched, and a modality that
+ * owns no scaffold (the generative ones, which never run the Vite app) is
+ * returned unchanged rather than having a web app forced onto it.
  */
 export function repairScaffold(
   files: Record<string, string>,
   modality: string,
 ): ScaffoldRepairResult {
-  const defaults = defaultsForModality(modality);
+  const defaults = scaffoldForModality(modality);
+  if (!defaults) return { repaired: { ...files }, restored: [] };
   const repaired: Record<string, string> = { ...files };
   const restored: { path: string; reason: 'empty' | 'corrupt' }[] = [];
 

@@ -1,6 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { NextIntlClientProvider } from 'next-intl';
 import en from '@/i18n/messages/en.json';
 import { ComponentPicker } from './ComponentPicker';
 import { listComponentsForMount } from '@/lib/components/registry';
@@ -28,20 +27,31 @@ vi.mock('@/lib/rbac', () => ({
   RoleGate: ({ children }: { children: React.ReactNode }) => children,
 }));
 
+// The global mock in `test/setup.ts` returns the KEY, which is right for a test
+// that only needs a component to render. This one asserts that search matches the
+// words a reader can SEE, so it needs the real catalog — through the one shared
+// resolver rather than a sixth hand-rolled copy of it.
+vi.mock('next-intl', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('next-intl')>()),
+  useTranslations: (await import('@/test/realCatalogTranslations')).realCatalogTranslator(
+    (await import('@/i18n/messages/en.json')).default as unknown as Record<string, unknown>,
+  ),
+}));
+
 function renderPicker(props: Partial<React.ComponentProps<typeof ComponentPicker>> = {}) {
   return render(
-    <NextIntlClientProvider locale="en" messages={en}>
-      <ComponentPicker
-        open
-        onClose={() => {}}
-        mount="canvas"
-        title="Add a component"
-        action={(def) => <button type="button" data-testid={`use-${def.id}`}>Use</button>}
-        {...props}
-      />
-    </NextIntlClientProvider>,
+    <ComponentPicker
+      open
+      onClose={() => {}}
+      mount="canvas"
+      title="Add a component"
+      action={(def) => <button type="button" data-testid={`use-${def.id}`}>Use</button>}
+      {...props}
+    />,
   );
 }
+
+const search = () => screen.getByPlaceholderText(en.components.searchPlaceholder);
 
 describe('ComponentPicker', () => {
   it('offers only what the requested mount can render', () => {
@@ -65,23 +75,22 @@ describe('ComponentPicker', () => {
 
   it('searches on the visible label, not the translation key', () => {
     renderPicker();
-    const search = screen.getByPlaceholderText(en.components.searchPlaceholder);
     // 'Vendor Register' is the LABEL of the component whose titleKey is
     // `app.vendors` — typing the label must find it.
-    fireEvent.change(search, { target: { value: 'vendor register' } });
+    fireEvent.change(search(), { target: { value: 'vendor register' } });
     expect(screen.getByTestId('use-vendors')).toBeTruthy();
     expect(screen.queryByTestId('use-kanban')).toBeNull();
   });
 
   it('finds a component by the id a board card actually stores', () => {
     renderPicker();
-    fireEvent.change(screen.getByPlaceholderText(en.components.searchPlaceholder), { target: { value: 'rice-matrix' } });
+    fireEvent.change(search(), { target: { value: 'rice-matrix' } });
     expect(screen.getByTestId('use-rice-matrix')).toBeTruthy();
   });
 
   it('says so when nothing matches, rather than showing bare headings', () => {
     renderPicker();
-    fireEvent.change(screen.getByPlaceholderText(en.components.searchPlaceholder), { target: { value: 'zzzznothing' } });
+    fireEvent.change(search(), { target: { value: 'zzzznothing' } });
     expect(screen.getByText(en.components.noMatches)).toBeTruthy();
   });
 });

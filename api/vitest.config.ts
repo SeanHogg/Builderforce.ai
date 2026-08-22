@@ -54,6 +54,16 @@ export default defineConfig({
       '@builderforce/canvas-widget-protocol': fileURLToPath(
         new URL('../packages/canvas-widget-protocol/src/index.ts', import.meta.url),
       ),
+      // The IDE starter scaffolds and the workspace file contract. Both used to be
+      // a byte-identical copy per runtime pinned by a parity test, and both drifted
+      // anyway — `webmobile` reached the frontend's modality map and never the
+      // API's, so "Web + Mobile" projects were created with no files at all.
+      '@builderforce/ide-templates': fileURLToPath(
+        new URL('../packages/ide-templates/src/index.ts', import.meta.url),
+      ),
+      '@builderforce/ide-file-contract': fileURLToPath(
+        new URL('../packages/ide-file-contract/src/index.ts', import.meta.url),
+      ),
     },
   },
 });

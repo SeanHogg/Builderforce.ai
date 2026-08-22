@@ -32,6 +32,7 @@ import { executeConnectorAction } from '../connectors/connectorRuntime';
 import { debitComms, reserveComms, type CommsRefusal } from './commsBalance';
 import { rateFor, smsSegments, type CommsRateOverride } from './commsRates';
 import { defaultSendingNumber } from './phoneNumbers';
+import { requireActivePhonePlan, type PlanRefusal } from './phonePlan';
 
 const VENDOR = 'twilio';
 
@@ -42,6 +43,7 @@ export const SMS_INBOUND_TEMPLATE = 'phone.sms.inbound';
 
 export type SendSmsRefusal =
   | CommsRefusal
+  | PlanRefusal
   | { ok: false; reason: 'no_sending_number' | 'vendor_refused' | 'delivery_not_recorded'; detail?: string };
 
 export interface SentSms {
@@ -58,11 +60,18 @@ export async function sendSms(
   db: Db, env: Env,
   input: { tenantId: number; to: string; body: string; from?: string; rateOverride?: CommsRateOverride | null },
 ): Promise<{ ok: true; message: SentSms } | SendSmsRefusal> {
+  // The entitlement and the price come from the same read — see `phonePlan`. A
+  // caller MAY pass an explicit override (an operator-negotiated rate), but it
+  // cannot pass the gate.
+  const gate = await requireActivePhonePlan(db, env, input.tenantId);
+  if (!gate.ok) return gate;
+
   const from = input.from ?? (await defaultSendingNumber(db, input.tenantId))?.e164;
   if (!from) return { ok: false, reason: 'no_sending_number' };
 
+  const rates = input.rateOverride ?? gate.plan.rates;
   const segments = smsSegments(input.body);
-  const costCents = segments * rateFor('sms_segment', input.rateOverride);
+  const costCents = segments * rateFor('sms_segment', rates);
 
   const affordable = await reserveComms(db, env, input.tenantId, costCents);
   if (!affordable.ok) return affordable;

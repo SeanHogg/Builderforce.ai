@@ -1,29 +1,16 @@
-'use client';
-
-import { useEffect, useState } from 'react';
-import { useLocale, useTranslations } from 'next-intl';
 import JsonLd from '@/components/JsonLd';
 import { homepageSchema } from '@/lib/structured-data';
 import { DemoShowcase } from '@/components/demo/DemoShowcase';
-import { fetchPublicPricing, type PublicPricingPlan } from '@/lib/publicPricing';
 import { AboutAppSection } from '@/components/home/AboutAppSection';
 import { LandingCanvasHero } from '@/components/home/LandingCanvasHero';
 import { MeetCarousel } from '@/components/home/MeetCarousel';
 import { TensionBeat } from '@/components/home/TensionBeat';
+import { HomeFaqSection } from '@/components/home/HomeFaqSection';
+import { HomePricingSection } from '@/components/home/HomePricingSection';
 import { CreationCtaSection } from '@/components/marketing/CreationCtaSection';
 import { LatestBlogSection } from '@/components/marketing/LatestBlogSection';
-import MarketingFaq from '@/components/marketing/MarketingFaq';
 import { NewsletterSignupSection } from '@/components/marketing/NewsletterSignupSection';
-import {
-  CardTitle,
-  HomeButton,
-  HomeCard,
-  HomeSection,
-  HomeSectionHeader,
-  homePatternStyles as styles,
-} from '@/components/home/HomePatterns';
 
-type FaqItem = { question: string; answer: string };
 /**
  * The homepage is one argument, told in order.
  *
@@ -36,29 +23,21 @@ type FaqItem = { question: string; answer: string };
  *
  * The order below is a narrative: start on the canvas → say plainly what the
  * application is → name the problem and resolve it into a workflow → see what
- * it is → watch it work → price → objections → act. Product discovery and comparison now live on the
- * dedicated product page, where visitors are asking for that depth.
- * Numbering survives in exactly one place, "How it works", because those three
- * steps genuinely are a sequence.
+ * it is → watch it work → price → objections → act. Product discovery and
+ * comparison now live on the dedicated product page, where visitors are asking
+ * for that depth. Numbering survives in exactly one place, "How it works",
+ * because those three steps genuinely are a sequence.
  *
  * Treatment varies with the job: pricing is a plan comparison, and objections
- * are a disclosure list. Secondary material sits
- * below the primary call to action rather than between the reader and it.
+ * are a disclosure list. Secondary material sits below the primary call to
+ * action rather than between the reader and it.
+ *
+ * A SERVER component. It was `'use client'` for exactly one reason — a
+ * `useEffect` that fetched public pricing — and that one reason pulled the
+ * structured data, the section shells, the About band and the FAQ copy into the
+ * client bundle with it. The fetch now belongs to the band that needs it.
  */
 export default function LandingPage() {
-  const t = useTranslations();
-  const locale = useLocale();
-  const [publicPlans, setPublicPlans] = useState<PublicPricingPlan[]>([]);
-  const [pricingCurrency, setPricingCurrency] = useState('USD');
-
-  useEffect(() => {
-    let active = true;
-    fetchPublicPricing()
-      .then((contract) => { if (active) { setPublicPlans(contract.plans); setPricingCurrency(contract.currency); } })
-      .catch(() => { /* Pricing CTA remains available; never invent a fallback price. */ });
-    return () => { active = false; };
-  }, []);
-
   return (
     <>
       <JsonLd data={homepageSchema()} />
@@ -84,34 +63,11 @@ export default function LandingPage() {
         <DemoShowcase />
 
         {/* 6 · WHAT IT COSTS */}
-        <HomeSection id="pricing">
-          <HomeSectionHeader eyebrow={t('home.pricingHeading')} title={t('home.pricingTitle')} />
-          <div className={styles.pricingPlans}>
-            {publicPlans.map((plan) => (
-              <HomeCard
-                key={plan.id}
-                className={`${styles.pricingCard} ${plan.id === 'pro' ? styles.pricingCardFeatured : ''}`}
-              >
-                <CardTitle>{plan.name}</CardTitle>
-                <div className={styles.price}>
-                  <span>{new Intl.NumberFormat(locale, { style: 'currency', currency: pricingCurrency, maximumFractionDigits: 0 }).format(plan.monthly)}</span><small>{plan.priceSuffix}</small>
-                </div>
-                <p>{plan.description}</p>
-                <ul className={styles.perks}>{plan.features.map((perk) => <li className={styles.perk} key={perk}>{perk}</li>)}</ul>
-                <div className={styles.pricingCta}>
-                  <HomeButton href={plan.ctaHref} primary={plan.highlighted}>{plan.ctaLabel}</HomeButton>
-                </div>
-              </HomeCard>
-            ))}
-          </div>
-        </HomeSection>
+        <HomePricingSection />
 
         {/* 7 · OBJECTIONS — answered immediately before the ask, which is where
             they actually surface. */}
-        <HomeSection>
-          <HomeSectionHeader eyebrow={t('home.beat.questions')} title={t('home.faqHeading')} />
-          <MarketingFaq items={t.raw('home.homepageFaq') as FaqItem[]} openFirst />
-        </HomeSection>
+        <HomeFaqSection />
 
         {/* 8 · THE ASK */}
         <CreationCtaSection />

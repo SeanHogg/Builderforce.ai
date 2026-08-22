@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { Hono } from 'hono';
-import { ALLOWED_REQUEST_HEADERS, corsMiddleware, EXPOSED_HEADERS } from './cors';
+import { ALLOWED_REQUEST_HEADERS, corsMiddleware, EXPOSED_HEADERS, resolveAllowedOrigin } from './cors';
 import type { HonoEnv } from '../../env';
 
 /**
@@ -75,5 +75,64 @@ describe('corsMiddleware', () => {
     const res = await appWithHeader().request('/thing', { headers: { Origin: 'https://evil.example' } }, ENV);
     expect(res.headers.get('Access-Control-Allow-Origin')).toBeNull();
     expect(res.headers.get('Access-Control-Expose-Headers')).toBeNull();
+  });
+});
+
+/**
+ * The preflight short-circuit in `index.ts` answers OPTIONS before the app (and
+ * therefore the database) is built, so it CANNOT call the middleware — it calls
+ * `resolveAllowedOrigin` instead. It used to carry a private copy of this rule,
+ * and the copy said `*` where the middleware said "refused".
+ *
+ * That disagreement is not a cosmetic one: the browser is told the preflight
+ * passed, sends the real request, and receives a response with no
+ * `Access-Control-Allow-Origin` header — which every browser reports as "No
+ * 'Access-Control-Allow-Origin' header is present" on EVERY endpoint at once.
+ * It is indistinguishable from a Cloudflare-level outage and has nothing to do
+ * with one. These tests exist so the two paths can never drift again.
+ */
+describe('resolveAllowedOrigin — the one decision both paths make', () => {
+  const LIST = 'https://builderforce.ai,https://app.builderforce.ai';
+
+  it('echoes an allow-listed origin', () => {
+    expect(resolveAllowedOrigin('https://builderforce.ai', LIST, '/api/projects')).toBe('https://builderforce.ai');
+  });
+
+  it('REFUSES an unknown origin instead of answering "*"', () => {
+    expect(resolveAllowedOrigin('https://evil.example', LIST, '/api/projects')).toBeNull();
+  });
+
+  it('refuses a request with no Origin rather than blanket-allowing it', () => {
+    expect(resolveAllowedOrigin(null, LIST, '/api/projects')).toBeNull();
+  });
+
+  it('allows editor webview origins the preflight copy did not know about', () => {
+    expect(resolveAllowedOrigin('vscode-webview://abc-123', LIST, '/api/projects')).toBe('vscode-webview://abc-123');
+    expect(resolveAllowedOrigin('vscode-file://x', LIST, '/api/projects')).toBe('vscode-file://x');
+  });
+
+  it('allows any origin on the public ingest paths the preflight copy did not know about', () => {
+    expect(resolveAllowedOrigin('https://customer.example', LIST, '/api/quality-ingest/events')).toBe('*');
+    expect(resolveAllowedOrigin('https://customer.example', LIST, '/api/feedback-ingest')).toBe('*');
+    // …and not on a path that merely starts with the same letters.
+    expect(resolveAllowedOrigin('https://customer.example', LIST, '/api/quality-ingestion')).toBeNull();
+  });
+
+  it('honours the wildcard configuration', () => {
+    expect(resolveAllowedOrigin('https://anything.example', '*', '/api/projects')).toBe('*');
+  });
+
+  it('agrees with the middleware on every case', async () => {
+    const cases = [
+      'https://builderforce.ai',
+      'https://evil.example',
+      'vscode-webview://abc-123',
+      'http://localhost:3000',
+    ];
+    for (const origin of cases) {
+      const res = await appWithHeader().request('/thing', { headers: { Origin: origin } }, { CORS_ORIGINS: LIST } as unknown as HonoEnv['Bindings']);
+      expect(res.headers.get('Access-Control-Allow-Origin'), origin)
+        .toBe(resolveAllowedOrigin(origin, LIST, '/thing'));
+    }
   });
 });

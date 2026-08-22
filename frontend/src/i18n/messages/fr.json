@@ -724,7 +724,9 @@
       "pipeline": "Pipeline",
       "interviewKits": "Trames d’entretien",
       "offers": "Offres",
-      "rewards": "Récompenses"
+      "rewards": "Récompenses",
+      "mail": "Courrier",
+      "phone": "Téléphone"
     },
     "primaryAria": "Principale",
     "destination": {
@@ -2187,6 +2189,7 @@
     "title": "Portefeuille (PMO)",
     "subtitle": "Consolidez le coût, la livraison, DORA, l’efficacité de l’IA et l’atteinte des OKR depuis les projets jusqu’aux initiatives et aux portefeuilles.",
     "tabs": {
+      "health": "Santé",
       "rollup": "Synthèse",
       "structure": "Portefeuilles et OKR",
       "cost": "CAPEX/OPEX"
@@ -2324,7 +2327,51 @@
       "saved": "Lié"
     },
     "unassignedPortfolio": "Non assigné",
-    "meetingsHeading": "Réunions"
+    "meetingsHeading": "Réunions",
+    "health": {
+      "snapshotHeading": "Instantané du portefeuille",
+      "generatedAt": "Au {when}",
+      "empty": "Aucun projet actif pour l’instant — créez-en un, ou relancez un projet en attente, pour voir sa santé ici.",
+      "ofTotal": "sur {total} projets actifs",
+      "overallLabel": "Santé globale du portefeuille",
+      "topActionsHeading": "Actions prioritaires",
+      "blockerLabel": "Blocage principal :",
+      "actionLabel": "Prochaine action :",
+      "cardAria": "{name} : {rag}",
+      "taskSummary": "{done} tâches terminées sur {total} · {open} en cours",
+      "rag": {
+        "green": "Vert",
+        "amber": "Orange",
+        "red": "Rouge"
+      },
+      "risk": {
+        "low": "Risque faible",
+        "medium": "Risque moyen",
+        "high": "Risque élevé"
+      },
+      "blocker": {
+        "noTasks": "Aucune tâche définie — il n’y a rien à mesurer ni à exécuter.",
+        "onHold": "Dépriorisé — aucun travail actif n’est planifié.",
+        "blocked": "{count, plural, one {# tâche bloquée} other {# tâches bloquées}} — rien ne peut avancer.",
+        "overdue": "{count, plural, one {# tâche est en retard} other {# tâches sont en retard}}.",
+        "notStarted": "Rien n’a encore été terminé — {count, plural, one {# tâche n’a pas démarré} other {# tâches n’ont pas démarré}}.",
+        "deliveryStalled": "La livraison est à l’arrêt — santé {score}/100 sur la cadence, le temps de cycle et le flux.",
+        "deliveryAtRisk": "La livraison décroche — santé {score}/100 sur la cadence, le temps de cycle et le flux.",
+        "noSignal": "Aucun signal de livraison — ni déploiement ni travail terminé à mesurer.",
+        "onTrack": "Aucun blocage — le travail avance."
+      },
+      "action": {
+        "noTasks": "Définissez le périmètre et créez les premières tâches cette semaine, ou archivez le projet.",
+        "onHold": "Fixez une date de revue et notez ce qui relancerait le travail.",
+        "blocked": "Débloquez ou réaffectez les tâches bloquées avant d’engager de nouveaux travaux.",
+        "overdue": "Replanifiez ou clôturez les tâches en retard pour rattraper les échéances du projet.",
+        "notStarted": "Organisez un lancement : désignez un responsable et mettez les premières tâches en cours.",
+        "deliveryStalled": "Traitez-le en P0 : trouvez ce qui a stoppé le flux avant d’accepter du périmètre supplémentaire.",
+        "deliveryAtRisk": "Réduisez l’encours et livrez cette semaine le plus petit changement de bout en bout.",
+        "noSignal": "Connectez les déploiements ou terminez une première tâche pour rendre la livraison mesurable.",
+        "onTrack": "Continuez — aucune intervention nécessaire."
+      }
+    }
   },
   "insights": {
     "loading": "Chargement…",
@@ -4621,9 +4668,9 @@
     "pin": "Épingler au tableau de bord",
     "unpin": "Détacher",
     "expand": "Ouvrir le rapport complet",
-    "addTitle": "Ajouter des widgets",
+    "addTitle": "Ajouter des composants",
     "addToDashboard": "Ajouter au tableau de bord",
-    "searchPlaceholder": "Rechercher des widgets…",
+    "searchPlaceholder": "Rechercher des composants…",
     "group": {
       "aiImpact": "Impact de l'IA",
       "delivery": "Livraison",
@@ -8356,7 +8403,6 @@
     "seoTitle": "Téléphone professionnel — Builderforce.ai",
     "seoDescription": "Un numéro professionnel dédié pour la voix, les SMS et les MMS.",
     "active": "Le téléphone professionnel est actif",
-    "provisioning": "Votre numéro est prêt à être provisionné et attribué.",
     "loading": "Chargement des tarifs…",
     "createAccount": "Créer un compte",
     "voiceMessaging": "Voix et messagerie",
@@ -15992,7 +16038,25 @@
     "expandDetails": "Afficher les détails",
     "report": "Signaler cette erreur",
     "copyTicket": "Copier le ticket de support",
-    "dismiss": "Ignorer"
+    "dismiss": "Ignorer",
+    "transport": {
+      "title": "Aucune réponse",
+      "offline": "Votre appareil est hors ligne : la requête n'a jamais quitté le navigateur. Tout refonctionnera dès le retour de la connexion.",
+      "aborted": "La requête a été annulée avant qu'une réponse n'arrive.",
+      "unreachable": "Impossible de joindre BuilderForce. La requête n'est pas arrivée, ou c'est autre chose que l'API qui y a répondu — ce n'est pas un problème de réglages de votre navigateur, et l'incident a été signalé automatiquement."
+    },
+    "ticket": {
+      "heading": "Ticket de support — Erreur API",
+      "time": "Heure",
+      "url": "URL",
+      "status": "Statut",
+      "code": "Code",
+      "message": "Message",
+      "requestId": "ID de requête",
+      "details": "Détails",
+      "userAgent": "Agent utilisateur",
+      "page": "Page"
+    }
   },
   "reportError": {
     "title": "Signaler une erreur",
@@ -26353,5 +26417,117 @@
     "notEnabled": "Cette intégration n'est pas activée. Un administrateur de l'espace de travail peut l'activer dans BuilderForce → Paramètres → Intégration.",
     "capabilityMissing": "La capacité « {capability} » n'est pas activée pour cet espace de travail.",
     "comingSoon": "{label} est enregistré mais aucun composant ne l'implémente encore."
+  },
+  "phone": {
+    "console": {
+      "intro": "Votre ligne professionnelle : les numéros que vous détenez, ce que vous avez envoyé et reçu, et ce que cela coûte."
+    },
+    "plan": {
+      "active": "Actif",
+      "pastDue": "Paiement en retard",
+      "inactive": "Inactif"
+    },
+    "balance": {
+      "title": "Crédit de communication",
+      "unit": "restant",
+      "allowance": "Votre abonnement ajoute {amount} de crédit chaque mois.",
+      "includedNumbers": "{count, plural, one {# numéro est inclus dans votre abonnement} other {# numéros sont inclus dans votre abonnement}}.",
+      "empty": "Votre crédit est épuisé. Rechargez pour continuer à envoyer."
+    },
+    "topUp": {
+      "title": "Recharger",
+      "intro": "Le crédit n’expire jamais et sert aux appels, aux SMS et aux numéros.",
+      "credited": "{amount} de crédit ajouté.",
+      "failed": "Ce paiement n’a pas pu être finalisé.",
+      "cancelled": "Paiement annulé. Rien n’a été débité."
+    },
+    "numbers": {
+      "title": "Vos numéros",
+      "empty": "Vous n’avez pas encore de numéro. Cherchez-en un ci-dessous.",
+      "included": "Inclus dans votre abonnement",
+      "monthly": "{amount} par mois",
+      "suspended": "suspendu faute de crédit",
+      "release": "Libérer",
+      "releaseTitle": "Libérer ce numéro ?",
+      "releaseMessage": "{number} retourne à l’opérateur et ne pourra pas être récupéré. Les appels et messages déjà envoyés restent dans votre journal.",
+      "releaseAction": "Libérer le numéro",
+      "releaseFailed": "Ce numéro n’a pas pu être libéré."
+    },
+    "search": {
+      "title": "Trouver un numéro",
+      "areaCode": "Indicatif",
+      "areaCodePlaceholder": "ex. 415",
+      "contains": "Contient",
+      "containsPlaceholder": "chiffres ou lettres",
+      "action": "Rechercher",
+      "searching": "Recherche…",
+      "noResults": "Aucun numéro ne correspond. Essayez un autre indicatif.",
+      "buy": "Acheter",
+      "buying": "Achat…",
+      "taken": "Quelqu’un a acheté ce numéro avant vous. Choisissez-en un autre.",
+      "buyFailed": "Ce numéro n’a pas pu être acheté.",
+      "failed": "La recherche a échoué. Réessayez."
+    },
+    "compose": {
+      "title": "Envoyer un message",
+      "to": "À",
+      "toPlaceholder": "+15551234567",
+      "body": "Message",
+      "bodyPlaceholder": "Que voulez-vous dire ?",
+      "characters": "{count, plural, one {# caractère} other {# caractères}}",
+      "unicodeWarning": "contient des caractères susceptibles d’augmenter le coût",
+      "send": "Envoyer",
+      "sending": "Envoi…",
+      "sent": "Envoyé — {segments, plural, one {# segment} other {# segments}}, {amount}.",
+      "noNumber": "Il vous faut un numéro avant de pouvoir envoyer. Achetez-en un ci-dessus.",
+      "noCredit": "Crédit insuffisant pour envoyer ce message. Rechargez d’abord.",
+      "failed": "Ce message n’a pas été envoyé."
+    },
+    "messages": {
+      "title": "Messages",
+      "empty": "Aucun message pour l’instant.",
+      "from": "De {number}",
+      "to": "À {number}",
+      "status": {
+        "queued": "en file",
+        "sent": "envoyé",
+        "delivered": "remis",
+        "bounced": "non remis",
+        "failed": "échec"
+      }
+    },
+    "calls": {
+      "title": "Appels",
+      "empty": "Aucun appel pour l’instant.",
+      "from": "De {number}",
+      "to": "Vers {number}",
+      "minutes": "{count, plural, one {# min} other {# min}}",
+      "status": {
+        "completed": "terminé",
+        "busy": "occupé",
+        "no-answer": "sans réponse",
+        "failed": "échec",
+        "canceled": "annulé",
+        "ringing": "sonnerie"
+      }
+    },
+    "statement": {
+      "title": "Relevé",
+      "empty": "Aucun mouvement de crédit pour l’instant."
+    },
+    "rates": {
+      "title": "Tarifs",
+      "note": "Ce sont les tarifs qui vous sont facturés, issus de votre grille publiée.",
+      "unit": {
+        "sms_segment": "SMS, par segment",
+        "mms_message": "MMS, par message",
+        "voice_minute": "Voix, par minute",
+        "number_month": "Numéro supplémentaire, par mois"
+      }
+    }
+  },
+  "projectRedirect": {
+    "invalidProject": "Ce lien de projet n’est pas valide.",
+    "opening": "Ouverture de votre projet…"
   }
 }

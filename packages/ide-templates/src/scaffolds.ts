@@ -1,20 +1,34 @@
 /**
- * Run-only fallback files for a missing/empty scaffold. Single source of truth
- * for both Run and the publish build (previously duplicated inline in each), and
- * matched to the server-side templates so a seeded project runs identically.
+ * The IDE starter scaffolds — the FILE CONTENT, and nothing else.
  *
- * This is generated PROJECT source code (the user's app files), not product UI —
- * it is intentionally not localized. Kept in a `.ts` module so it lives outside
- * the component's JSX.
+ * These bytes are the user's app source, not product UI: deliberately not
+ * localized, and deliberately free of any runtime dependency (no R2, no fetch,
+ * no React) so the same module loads in a Cloudflare Worker and in the browser.
+ * The decision of WHEN to write them belongs to each runtime — see the API's
+ * `application/project/projectTemplate.ts` for the R2 seeding/self-heal side.
  */
-export const VANILLA_DEFAULTS: Record<string, string> = {
+
+/** Default files for new (vanilla) projects: a plain Vite + React app. Seeded
+ *  into R2 on creation AND mounted by Run when a workspace file is missing, so a
+ *  seeded project and a healed one are the same app. */
+export const VANILLA_TEMPLATE: Record<string, string> = {
   'package.json': JSON.stringify({
     name: 'my-app',
     version: '1.0.0',
     type: 'module',
-    scripts: { dev: 'vite', build: 'vite build', preview: 'vite preview' },
-    dependencies: { react: '^18.2.0', 'react-dom': '^18.2.0' },
-    devDependencies: { '@vitejs/plugin-react': '^4.0.0', vite: '^4.3.9' },
+    scripts: {
+      dev: 'vite',
+      build: 'vite build',
+      preview: 'vite preview',
+    },
+    dependencies: {
+      react: '^18.2.0',
+      'react-dom': '^18.2.0',
+    },
+    devDependencies: {
+      '@vitejs/plugin-react': '^4.0.0',
+      vite: '^4.3.9',
+    },
   }, null, 2),
   'index.html': `<!DOCTYPE html>
 <html lang="en">
@@ -88,43 +102,55 @@ const jsxInJs = {
   },
 };
 
-// react-native-web lets the same React Native source render in the browser
-// preview. Keep this alias in place so the app stays portable to Expo.
 export default defineConfig({
+  // Order matters: jsxInJs has to see .js sources before plugin-react's own
+  // transform rejects them.
   plugins: [jsxInJs, react()],
   resolve: {
+    // The whole reason a React Native source tree renders in a browser iframe.
     alias: { 'react-native': 'react-native-web' },
-    extensions: ['.web.js', '.web.jsx', '.mjs', '.js', '.mts', '.ts', '.jsx', '.tsx', '.json'],
+    extensions: ['.web.js', '.web.jsx', '.js', '.jsx', '.json'],
+  },
+  optimizeDeps: {
+    include: ['react-native-web'],
+    // Dependency pre-bundling has its own esbuild pass, and it excludes .js
+    // from the JSX loader too.
+    esbuildOptions: { loader: { '.js': 'jsx' } },
   },
   define: { global: 'window', __DEV__: 'true' },
-  optimizeDeps: { esbuildOptions: { loader: { '.js': 'jsx' } } },
-});`;
+});
+`;
 
 /**
- * Mobile scaffold — a React Native app rendered through react-native-web.
+ * Default files for new Mobile projects — a React Native app rendered through
+ * react-native-web so it runs in the IDE's browser preview while staying
+ * portable to Expo.
  *
  * The IDE's preview is a browser iframe, so a Mobile project has to be runnable
  * on the web; but writing it against `react-native` primitives (rather than
  * divs) is what keeps it a real mobile app that ports to Expo unchanged. Vite
  * aliases `react-native` to `react-native-web`, so the SAME source that renders
  * in the device simulator here compiles for iOS and Android there.
- *
- * Must stay byte-identical to MOBILE_TEMPLATE in the api's
- * `application/project/projectTemplate.ts` — the two runtimes can't share a
- * module, so `vanillaDefaults.parity.test.ts` fails the build if they drift.
  */
-export const MOBILE_DEFAULTS: Record<string, string> = {
+export const MOBILE_TEMPLATE: Record<string, string> = {
   'package.json': JSON.stringify({
     name: 'my-mobile-app',
     version: '1.0.0',
     type: 'module',
-    scripts: { dev: 'vite', build: 'vite build', preview: 'vite preview' },
+    scripts: {
+      dev: 'vite',
+      build: 'vite build',
+      preview: 'vite preview',
+    },
     dependencies: {
       react: '^18.2.0',
       'react-dom': '^18.2.0',
       'react-native-web': '^0.19.10',
     },
-    devDependencies: { '@vitejs/plugin-react': '^4.0.0', vite: '^4.3.9' },
+    devDependencies: {
+      '@vitejs/plugin-react': '^4.0.0',
+      vite: '^4.3.9',
+    },
   }, null, 2),
   'index.html': `<!DOCTYPE html>
 <html lang="en">
@@ -203,34 +229,3 @@ const styles = StyleSheet.create({
 });`,
   'vite.config.js': MOBILE_VITE_CONFIG,
 };
-
-/**
- * The run-only fallback files for a modality. Mobile — and the combined
- * Web + Mobile — projects need the React Native (react-native-web) scaffold so
- * ONE source renders as both a responsive website and a handset app; every other
- * modality that runs code uses the vanilla one.
- */
-export function defaultsForModality(modality: string): Record<string, string> {
-  return modality === 'mobile' || modality === 'webmobile' ? MOBILE_DEFAULTS : VANILLA_DEFAULTS;
-}
-
-/** Every path owned by ANY starter scaffold, across modalities. */
-const ALL_SCAFFOLD_PATHS = new Set([
-  ...Object.keys(VANILLA_DEFAULTS),
-  ...Object.keys(MOBILE_DEFAULTS),
-]);
-
-/**
- * Is this path a file a starter scaffold owns?
- *
- * A scaffold file may be edited or deleted, but never *emptied*: a 0-byte
- * `package.json` / `index.html` / `vite.config.js` is never a state anyone means
- * to reach and only ever breaks Run. The API refuses such a write at its
- * chokepoint (`workspaceStore.validateScaffoldNotEmptied`); this twin lets the
- * client avoid making the doomed request at all — most usefully in file-create,
- * which posts an empty body by construction. Pinned to the server copy by
- * `api/src/application/project/templateParity.test.ts`.
- */
-export function isScaffoldPath(path: string): boolean {
-  return ALL_SCAFFOLD_PATHS.has(path);
-}

@@ -295,8 +295,9 @@ import { createEmpMetricsRoutes } from './presentation/routes/empMetricsRoutes';
 import { createForecastRoutes } from './presentation/routes/forecastRoutes';
 
 // Middleware
-import { addCorsToResponse, corsMiddleware, EXPOSED_HEADERS, ALLOWED_REQUEST_HEADERS } from './presentation/middleware/cors';
+import { addCorsToResponse, corsMiddleware, EXPOSED_HEADERS, ALLOWED_REQUEST_HEADERS, resolveAllowedOrigin, reportRefusedOrigin } from './presentation/middleware/cors';
 import { errorHandler }   from './presentation/middleware/errorHandler';
+import { cachedApp } from './presentation/appCache';
 import { rateLimitMiddleware } from './presentation/middleware/rateLimitMiddleware';
 import { emulationMiddleware } from './presentation/middleware/emulationMiddleware';
 import {
@@ -331,6 +332,17 @@ export { TenantRateLimiterDO } from './infrastructure/ratelimit/TenantRateLimite
 // Exported so the in-process MCP catalog can replay platform actions through the
 // real /api routes (reusing their logic + role-gate authz) via `app.request(...)`.
 // Imported dynamically by the catalog to avoid a static import cycle.
+/**
+ * THE way to get the app. `buildApp` constructs it; this returns the one already
+ * built for this isolate (see {@link cachedApp}). Every entry point — the Worker
+ * `fetch` handler and the in-process route replay the builtin MCP catalog uses —
+ * goes through here, so the composition root is paid for once per isolate instead
+ * of once per request AND once per LLM tool call.
+ */
+export function resolveApp(env: Env): Hono<HonoEnv> {
+  return cachedApp(env, buildApp);
+}
+
 export function buildApp(env: Env): Hono<HonoEnv> {
   const db = buildDatabase(env);
 
@@ -1096,8 +1108,6 @@ export function buildApp(env: Env): Hono<HonoEnv> {
 // Worker export
 // ---------------------------------------------------------------------------
 
-const DEV_ORIGINS = ['http://localhost:3000', 'http://127.0.0.1:3000', 'http://localhost:5173', 'http://127.0.0.1:5173'];
-
 /** Minimal shape of a Cloudflare Email Routing message — typed locally so the
  *  build doesn't require the email-message types to be installed. */
 interface ForwardableEmailLike {
@@ -1128,14 +1138,6 @@ function stripGatewayPrefix(request: Request): Request {
     return request;
   }
   return new Request(url.toString(), request);
-}
-
-function optionCorsAllowOrigin(origin: string | null, corsOrigins: string | undefined): string {
-  if (!origin) return '*';
-  if (corsOrigins === '*') return '*';
-  const allowed = (corsOrigins ?? 'https://builderforce.ai').split(',').map((s) => s.trim()).filter(Boolean);
-  if (allowed.includes(origin) || DEV_ORIGINS.includes(origin)) return origin;
-  return '*';
 }
 
 export default {
@@ -1241,7 +1243,15 @@ export default {
     // Handle OPTIONS without building the app so we never require NEON_DATABASE_URL for preflight.
     if (request.method === 'OPTIONS') {
       const origin = request.headers.get('Origin');
-      const allow = optionCorsAllowOrigin(origin, env.CORS_ORIGINS);
+      // The SAME decision corsMiddleware makes on the real response — a preflight
+      // that answered `*` to an origin the response then refuses is what turns a
+      // config mismatch into "No 'Access-Control-Allow-Origin' header is present"
+      // on every endpoint. A refusal is a 403 here exactly as it is there.
+      const allow = resolveAllowedOrigin(origin, env.CORS_ORIGINS, new URL(request.url).pathname);
+      if (allow === null) {
+        reportRefusedOrigin(origin, new URL(request.url).pathname, env.CORS_ORIGINS);
+        return new Response(null, { status: 403 });
+      }
       return new Response(null, {
         status: 204,
         headers: {
@@ -1268,9 +1278,17 @@ export default {
     // endpoint at once, hiding the real 500. Return a CORS'd JSON 500 instead so
     // the browser can read the actual failure and the login page shows a real error.
     try {
-      return await buildApp(env).fetch(request, env, ctx);
+      return await resolveApp(env).fetch(request, env, ctx);
     } catch (err) {
-      await reportUnhandledError(err, {
+      // Deliberately NOT awaited. The durable sink is a Postgres write, and the
+      // failure this handler exists for is frequently Postgres itself being
+      // unreachable or slow under cold-start pressure — so awaiting it here spent
+      // the isolate's remaining CPU/time budget on a report instead of on the
+      // response, and a budget overrun is killed by the runtime as a HEADERLESS
+      // 1102, which is the exact "CORS error on every endpoint" this guard was
+      // added to prevent. waitUntil keeps the report durable without letting it
+      // stand between the browser and a readable error.
+      const report = reportUnhandledError(err, {
         source: 'index.ts',
         operation: 'top-level fetch',
       }, {
@@ -1278,14 +1296,24 @@ export default {
         method: request.method,
         path: new URL(request.url).pathname,
       });
+      try {
+        ctx.waitUntil(report);
+      } catch {
+        // No executionCtx (some test harnesses). The report is already
+        // best-effort internally; never let scheduling it fail the response.
+        void report;
+      }
       const origin = request.headers.get('Origin');
-      const allow = optionCorsAllowOrigin(origin, env.CORS_ORIGINS);
+      const allow = resolveAllowedOrigin(origin, env.CORS_ORIGINS, new URL(request.url).pathname);
       const message = err instanceof Error ? err.message : String(err);
       return new Response(JSON.stringify({ error: message }), {
         status: 500,
         headers: {
           'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': allow,
+          // Only for an origin the app itself would answer. A refused origin gets
+          // the same (headerless) treatment it gets from every other response —
+          // the error path is not a hole in the allow-list.
+          ...(allow ? { 'Access-Control-Allow-Origin': allow } : {}),
           'Access-Control-Expose-Headers': 'x-request-id',
           Vary: 'Origin',
         },

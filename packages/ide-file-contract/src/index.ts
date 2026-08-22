@@ -1,8 +1,20 @@
 /**
- * Guard against an agent (or any caller) writing structurally-invalid content
+ * The workspace file CONTENT CONTRACT — the ONE answer, for every runtime that
+ * writes a file.
+ *
+ * Guards against an agent (or any caller) writing structurally-invalid content
  * into a file — specifically the documented bug where the Brain wrote CSS/JS
  * into `package.json` while it was the active tab, breaking Run with
  * `Invalid package.json: Unexpected token …` [1315].
+ *
+ * Two runtimes enforce it and must never disagree: the API Worker refuses the
+ * write at its chokepoint (`workspaceStore.writeWorkspaceFile`), so no caller —
+ * agent, script, direct `PUT /files/*` — can persist cross-wired content; the
+ * browser checks the same rule before it posts, so the editor and the canvas
+ * build tools reject a bad body with a message instead of a 422. It used to be a
+ * hand-kept copy on each side pinned by a vector-parity test, which is a test
+ * that can only report a divergence AFTER someone writes it. Source-only, zero
+ * runtime deps, so the same module loads in a Worker and in the browser.
  *
  * Scope is deliberately narrow: only structural, machine-checkable formats are
  * validated, where a failure is unambiguous. We do NOT attempt fuzzy "this looks

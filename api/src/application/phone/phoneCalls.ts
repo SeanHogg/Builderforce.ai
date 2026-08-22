@@ -30,6 +30,7 @@ import { executeConnectorAction } from '../connectors/connectorRuntime';
 import { debitComms, reserveComms, type CommsRefusal } from './commsBalance';
 import { rateFor, voiceMinutes, type CommsRateOverride } from './commsRates';
 import { defaultSendingNumber } from './phoneNumbers';
+import { phonePlan, requireActivePhonePlan, type PlanRefusal } from './phonePlan';
 
 const VENDOR = 'twilio';
 
@@ -39,6 +40,7 @@ export const CALL_VERB = 'phone.call';
 
 export type PlaceCallRefusal =
   | CommsRefusal
+  | PlanRefusal
   | { ok: false; reason: 'no_sending_number' | 'vendor_refused'; detail?: string };
 
 export interface PlacedCall {
@@ -61,12 +63,15 @@ export async function placeCall(
     actorRef?: string | null; rateOverride?: CommsRateOverride | null;
   },
 ): Promise<{ ok: true; call: PlacedCall } | PlaceCallRefusal> {
+  const gate = await requireActivePhonePlan(db, env, input.tenantId);
+  if (!gate.ok) return gate;
+
   const from = input.from ?? (await defaultSendingNumber(db, input.tenantId))?.e164;
   if (!from) return { ok: false, reason: 'no_sending_number' };
 
   // One minute is the minimum billable unit, so it is also the minimum a caller
   // must be able to afford before the line opens.
-  const minute = rateFor('voice_minute', input.rateOverride);
+  const minute = rateFor('voice_minute', input.rateOverride ?? gate.plan.rates);
   const affordable = await reserveComms(db, env, input.tenantId, minute);
   if (!affordable.ok) return affordable;
 
@@ -116,7 +121,12 @@ export async function applyCallStatus(
   // up" is the answer somebody is looking for.
   const billable = input.status === 'completed' && input.durationSeconds > 0;
   const minutes = billable ? voiceMinutes(input.durationSeconds) : 0;
-  const costCents = minutes * rateFor('voice_minute', input.rateOverride);
+  // NOT gated on an active plan, deliberately: this is the settlement of a call
+  // that already happened, and a subscription that lapsed while somebody was
+  // talking does not make the carrier's invoice go away. It reads the plan only
+  // for the RATE, which stays whatever the customer was quoted.
+  const rates = input.rateOverride ?? (await phonePlan(db, env, input.tenantId)).rates;
+  const costCents = minutes * rateFor('voice_minute', rates);
 
   const fresh = billable
     ? await debitComms(db, env, {

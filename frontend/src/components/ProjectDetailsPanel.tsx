@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import type { Project } from '@/lib/types';
 import { updateProject } from '@/lib/api';
+import { PROJECT_STATUSES, useProjectStatusLabel } from '@/lib/projectStatus';
 import { checkProjectKeyAvailable } from '@/lib/builderforceApi';
 import { TaskMgmtContent } from './TaskMgmtContent';
 import { PRDsContent } from './PRDsContent';
@@ -76,8 +77,6 @@ const TAB_DEFS: { id: ProjectPanelTab; key: string }[] = [
   { id: 'brainChat', key: 'tabs.brainChat' },
   { id: 'workspace', key: 'tabs.workspace' },
 ];
-
-const PROJECT_STATUSES = ['active', 'completed', 'archived', 'on_hold'] as const;
 
 /** DOM ids of details-tab fields a "Fix" can scroll to / focus. */
 type DetailsFocusTarget = 'edit-description' | 'edit-due-date' | 'project-initiative-section';
@@ -169,9 +168,9 @@ export function ProjectDetailsPanel({
   const [pendingSpecKind, setPendingSpecKind] = useState<string | null>(initialSpecKind);
   const [pendingSpecId, setPendingSpecId] = useState<string | null>(initialSpecId);
 
-  /** Localized status label; falls back to the raw value for unknown statuses. */
-  const statusLabel = (s: string) =>
-    (PROJECT_STATUSES as readonly string[]).includes(s) ? t(`status.${s}`) : s.replace('_', ' ');
+  // Shared project-status vocabulary — the portfolio health card renders the same
+  // labels from the same place (lib/projectStatus.ts).
+  const statusLabel = useProjectStatusLabel();
 
   useEffect(() => {
     if (open) setActiveTab(initialTab);
@@ -649,7 +648,7 @@ export function ProjectDetailsPanel({
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
                         <span style={{ color: 'var(--text-muted)' }}>{t('statusLabel')}</span>
-                        <span>{statusLabel(project.status ?? 'active')}</span>
+                        <span>{statusLabel(project.status)}</span>
                       </div>
                     </>
                   )}

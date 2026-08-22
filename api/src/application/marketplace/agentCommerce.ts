@@ -53,7 +53,8 @@ import {
   ledgerEntries,
   marketplacePurchases,
 } from '../../infrastructure/database/schema';
-import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
+import { publicAgentScope } from './publicAgentScope';
 import { buildPaymentProvider } from '../../infrastructure/payment';
 import { ListingError } from './creationListings';
 import { resolveTakeRateBps } from './listingCommerce';
@@ -89,11 +90,13 @@ interface PurchasableAgent {
 /**
  * The agent a buyer is asking about.
  *
- * CROSS-TENANT BY DESIGN, and declared as such: a published agent is bought FROM
- * another workspace, so filtering by the buyer's tenant would make every agent on
- * the market invisible to everyone who might pay for it. `published` + `status`
- * are the access predicate that replaces the tenant one — exactly the pair the
- * public `GET /api/workforce/agents` listing is built on.
+ * CROSS-TENANT BY DESIGN, and declared as such inside `publicAgentScope` — the
+ * ONE definition of "an agent a stranger may see", shared with the public
+ * `GET /api/workforce/agents` listing. Filtering by the buyer's tenant would make
+ * every agent on the market invisible to everyone who might pay for it, so
+ * `published` + `status` + "not a demo fixture" are the access predicate that
+ * replaces the tenant one. Sharing it is what stops a seeded demo agent from
+ * being purchasable while being unlistable.
  */
 async function loadPurchasableAgent(db: Db, agentId: string): Promise<PurchasableAgent | null> {
   const [agent] = await db
@@ -104,10 +107,7 @@ async function loadPurchasableAgent(db: Db, agentId: string): Promise<Purchasabl
       priceCents: ideAgents.priceCents,
     })
     .from(ideAgents)
-    .where(acrossTenants(ideAgents, 'public_catalogue',
-      eq(ideAgents.id, agentId),
-      eq(ideAgents.published, true),
-      eq(ideAgents.status, 'active')))
+    .where(publicAgentScope(eq(ideAgents.id, agentId)))
     .limit(1);
   return agent ?? null;
 }

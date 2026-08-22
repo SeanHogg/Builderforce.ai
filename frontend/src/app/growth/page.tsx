@@ -1,16 +1,11 @@
-'use client';
-
-import { useRequireAuth } from '@/lib/useRequireAuth';
-import { GrowthClient } from './GrowthClient';
-
 /**
- * Thin auth-guarded page that delegates to the client component (mirrors the
- * alerts page pattern). Manager-only actions are gated inside GrowthClient — the
+ * Server page that auth-guards through the shared `<RequireAuth>` boundary
+ * (mirrors /alerts). Manager-only actions are gated inside GrowthClient — the
  * page itself is readable by any tenant member.
  */
-export default function GrowthPage() {
-  const allowed = useRequireAuth();
+import { RequireAuth } from '@/components/auth/RequireAuth';
+import { GrowthClient } from './GrowthClient';
 
-  if (!allowed) return null;
-  return <GrowthClient />;
+export default function GrowthPage() {
+  return <RequireAuth><GrowthClient /></RequireAuth>;
 }

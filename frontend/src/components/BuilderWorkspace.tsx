@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import { useTranslations } from 'next-intl';
 import { repairScaffold } from '@/lib/scaffoldRepair';
-import { defaultsForModality, isScaffoldPath } from '@/lib/vanillaDefaults';
+import { scaffoldForModality, isScaffoldPath } from '@builderforce/ide-templates';
 import { createRunLog, RUN_LOG_RULE, type RunLog } from '@/lib/runLog';
 import { datasetNameForPath, looksLikeDatasetPath, parseJsonlDataset } from '@/lib/datasetFromFile';
 import { FileExplorer } from './FileExplorer';
@@ -38,7 +38,7 @@ import { useCollaboration } from '@/hooks/useCollaboration';
 import { useVideoVersions } from '@/hooks/useVideoVersions';
 import type { Project, FileEntry, TrainingJob } from '@/lib/types';
 import { saveFile, fetchFileContent, deleteFile, fetchFiles, updateProject, importCanvasDataset } from '@/lib/api';
-import { validateFileContentForPath, coerceFileContent } from '@/lib/fileContentGuard';
+import { validateFileContentForPath, coerceFileContent } from '@builderforce/ide-file-contract';
 import { clearBuildFailures, previewErrorFrom, recordBuildFailure, teeOutput, withPreviewErrorReporter } from '@/lib/buildDiagnostics';
 import { canvasBuildActions } from '@/lib/canvasBuildTools';
 import { notifyWorkspaceFilesChanged, subscribeWorkspaceFiles } from '@/lib/workspaceFileEvents';
@@ -305,7 +305,7 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
     // 0-byte write the API now refuses at a scaffold path (an empty package.json
     // only ever breaks Run). At such a path "create" means "restore the starter
     // file", so seed the template content instead of sending a doomed write.
-    const seed = isScaffoldPath(path) ? (defaultsForModality(modality)[path] ?? '') : '';
+    const seed = isScaffoldPath(path) ? (scaffoldForModality(modality)?.[path] ?? '') : '';
     try {
       await saveFile(project.id, path, seed);
       setFiles(prev => [...prev, { path, content: seed, type: 'file' }]);

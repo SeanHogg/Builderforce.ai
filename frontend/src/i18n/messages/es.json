@@ -724,7 +724,9 @@
       "pipeline": "Proceso",
       "interviewKits": "Guiones de entrevista",
       "offers": "Ofertas",
-      "rewards": "Recompensas"
+      "rewards": "Recompensas",
+      "mail": "Correo",
+      "phone": "Teléfono"
     },
     "primaryAria": "Principal",
     "destination": {
@@ -2187,6 +2189,7 @@
     "title": "Portafolio (PMO)",
     "subtitle": "Consolida coste, entrega, DORA, eficacia de la IA y cumplimiento de OKR desde los proyectos hasta las iniciativas y los portafolios.",
     "tabs": {
+      "health": "Salud",
       "rollup": "Resumen",
       "structure": "Portafolios y OKR",
       "cost": "CAPEX/OPEX"
@@ -2324,7 +2327,51 @@
       "saved": "Vinculado"
     },
     "unassignedPortfolio": "Sin asignar",
-    "meetingsHeading": "Reuniones"
+    "meetingsHeading": "Reuniones",
+    "health": {
+      "snapshotHeading": "Instantánea del portafolio",
+      "generatedAt": "A fecha de {when}",
+      "empty": "Todavía no hay proyectos activos: crea uno, o reactiva un proyecto en espera, para ver su salud aquí.",
+      "ofTotal": "de {total} proyectos activos",
+      "overallLabel": "Salud general del portafolio",
+      "topActionsHeading": "Acciones prioritarias",
+      "blockerLabel": "Bloqueo principal:",
+      "actionLabel": "Siguiente acción:",
+      "cardAria": "{name}: {rag}",
+      "taskSummary": "{done} de {total} tareas completadas · {open} abiertas",
+      "rag": {
+        "green": "Verde",
+        "amber": "Ámbar",
+        "red": "Rojo"
+      },
+      "risk": {
+        "low": "Riesgo bajo",
+        "medium": "Riesgo medio",
+        "high": "Riesgo alto"
+      },
+      "blocker": {
+        "noTasks": "Sin tareas definidas: no hay nada que medir ni ejecutar.",
+        "onHold": "Despriorizado: no hay trabajo activo planificado.",
+        "blocked": "{count, plural, one {# tarea bloqueada} other {# tareas bloqueadas}}: nada puede avanzar.",
+        "overdue": "{count, plural, one {# tarea está vencida} other {# tareas están vencidas}}.",
+        "notStarted": "Aún no se ha completado nada: {count, plural, one {# tarea sigue sin empezar} other {# tareas siguen sin empezar}}.",
+        "deliveryStalled": "La entrega está detenida: salud {score}/100 en cadencia, tiempo de ciclo y flujo.",
+        "deliveryAtRisk": "La entrega se está deteriorando: salud {score}/100 en cadencia, tiempo de ciclo y flujo.",
+        "noSignal": "Aún no hay señal de entrega: no hay despliegues ni trabajo completado que medir.",
+        "onTrack": "Sin bloqueos: el trabajo avanza."
+      },
+      "action": {
+        "noTasks": "Define el alcance y crea las primeras tareas esta semana, o archiva el proyecto.",
+        "onHold": "Fija una fecha de revisión y documenta qué reactivaría el trabajo.",
+        "blocked": "Resuelve o reasigna las tareas bloqueadas antes de incorporar trabajo nuevo.",
+        "overdue": "Reprograma o cierra las tareas vencidas para recuperar las fechas del proyecto.",
+        "notStarted": "Haz un kickoff: asigna una persona responsable y pon las primeras tareas en curso.",
+        "deliveryStalled": "Trátalo como P0: averigua qué detuvo el flujo antes de aceptar más alcance.",
+        "deliveryAtRisk": "Reduce el trabajo en curso y entrega esta semana el cambio más pequeño de principio a fin.",
+        "noSignal": "Conecta los despliegues o completa una primera tarea para poder medir la entrega.",
+        "onTrack": "Sigue así: no hace falta intervenir."
+      }
+    }
   },
   "insights": {
     "loading": "Cargando…",
@@ -4621,9 +4668,9 @@
     "pin": "Fijar al panel",
     "unpin": "Quitar",
     "expand": "Abrir informe completo",
-    "addTitle": "Agregar widgets",
+    "addTitle": "Añadir componentes",
     "addToDashboard": "Agregar al panel",
-    "searchPlaceholder": "Buscar widgets…",
+    "searchPlaceholder": "Buscar componentes…",
     "group": {
       "aiImpact": "Impacto de IA",
       "delivery": "Entrega",
@@ -8356,7 +8403,6 @@
     "seoTitle": "Teléfono empresarial — Builderforce.ai",
     "seoDescription": "Un número empresarial dedicado para voz, SMS y MMS.",
     "active": "El teléfono empresarial está activo",
-    "provisioning": "Tu número está listo para aprovisionarse y asignarse.",
     "loading": "Cargando precios…",
     "createAccount": "Crear una cuenta",
     "voiceMessaging": "Voz y mensajería",
@@ -15992,7 +16038,25 @@
     "expandDetails": "Ver detalles",
     "report": "Reportar este error",
     "copyTicket": "Copiar ticket de soporte",
-    "dismiss": "Descartar"
+    "dismiss": "Descartar",
+    "transport": {
+      "title": "Sin respuesta",
+      "offline": "Tu dispositivo está sin conexión, así que la solicitud nunca salió del navegador. Volverá a funcionar cuando se restablezca la conexión.",
+      "aborted": "La solicitud se canceló antes de recibir una respuesta.",
+      "unreachable": "No se pudo contactar con BuilderForce. La solicitud no llegó o fue respondida por algo distinto de la API: no es un problema de la configuración de tu navegador y ya se ha notificado automáticamente."
+    },
+    "ticket": {
+      "heading": "Ticket de soporte — Error de API",
+      "time": "Hora",
+      "url": "URL",
+      "status": "Estado",
+      "code": "Código",
+      "message": "Mensaje",
+      "requestId": "ID de solicitud",
+      "details": "Detalles",
+      "userAgent": "Agente de usuario",
+      "page": "Página"
+    }
   },
   "reportError": {
     "title": "Reportar un error",
@@ -26353,5 +26417,117 @@
     "notEnabled": "Esta integración no está habilitada. Un administrador del espacio de trabajo puede habilitarla en BuilderForce → Configuración → Integración.",
     "capabilityMissing": "La capacidad «{capability}» no está habilitada para este espacio de trabajo.",
     "comingSoon": "{label} está registrado pero todavía ningún componente lo implementa."
+  },
+  "phone": {
+    "console": {
+      "intro": "Tu línea de empresa: los números que tienes, lo que has enviado y recibido, y lo que cuesta."
+    },
+    "plan": {
+      "active": "Activo",
+      "pastDue": "Pago pendiente",
+      "inactive": "No activo"
+    },
+    "balance": {
+      "title": "Crédito de comunicaciones",
+      "unit": "disponible",
+      "allowance": "Tu suscripción añade {amount} de crédito cada mes.",
+      "includedNumbers": "{count, plural, one {# número incluido en tu suscripción} other {# números incluidos en tu suscripción}}.",
+      "empty": "Te has quedado sin crédito. Recarga para seguir enviando."
+    },
+    "topUp": {
+      "title": "Recargar",
+      "intro": "El crédito no caduca y se gasta en llamadas, SMS y números.",
+      "credited": "Se han añadido {amount} de crédito.",
+      "failed": "No se ha podido completar el pago.",
+      "cancelled": "Se canceló el pago. No se ha cobrado nada."
+    },
+    "numbers": {
+      "title": "Tus números",
+      "empty": "Aún no tienes ningún número. Busca uno abajo.",
+      "included": "Incluido en tu suscripción",
+      "monthly": "{amount} al mes",
+      "suspended": "suspendido por falta de crédito",
+      "release": "Liberar",
+      "releaseTitle": "¿Liberar este número?",
+      "releaseMessage": "{number} vuelve al operador y no se puede recuperar. Las llamadas y mensajes ya enviados permanecen en tu registro.",
+      "releaseAction": "Liberar número",
+      "releaseFailed": "No se ha podido liberar ese número."
+    },
+    "search": {
+      "title": "Buscar un número",
+      "areaCode": "Prefijo",
+      "areaCodePlaceholder": "p. ej. 415",
+      "contains": "Contiene",
+      "containsPlaceholder": "dígitos o letras",
+      "action": "Buscar",
+      "searching": "Buscando…",
+      "noResults": "Ningún número coincide. Prueba con otro prefijo.",
+      "buy": "Comprar",
+      "buying": "Comprando…",
+      "taken": "Alguien compró ese número antes. Elige otro.",
+      "buyFailed": "No se ha podido comprar ese número.",
+      "failed": "La búsqueda ha fallado. Inténtalo de nuevo."
+    },
+    "compose": {
+      "title": "Enviar un mensaje",
+      "to": "Para",
+      "toPlaceholder": "+15551234567",
+      "body": "Mensaje",
+      "bodyPlaceholder": "¿Qué quieres decir?",
+      "characters": "{count, plural, one {# carácter} other {# caracteres}}",
+      "unicodeWarning": "contiene caracteres que pueden aumentar el coste",
+      "send": "Enviar",
+      "sending": "Enviando…",
+      "sent": "Enviado — {segments, plural, one {# segmento} other {# segmentos}}, {amount}.",
+      "noNumber": "Necesitas un número antes de poder enviar. Compra uno arriba.",
+      "noCredit": "No hay crédito suficiente para enviar este mensaje. Recarga primero.",
+      "failed": "Ese mensaje no se ha enviado."
+    },
+    "messages": {
+      "title": "Mensajes",
+      "empty": "Todavía no hay mensajes.",
+      "from": "De {number}",
+      "to": "Para {number}",
+      "status": {
+        "queued": "en cola",
+        "sent": "enviado",
+        "delivered": "entregado",
+        "bounced": "no entregado",
+        "failed": "fallido"
+      }
+    },
+    "calls": {
+      "title": "Llamadas",
+      "empty": "Todavía no hay llamadas.",
+      "from": "De {number}",
+      "to": "A {number}",
+      "minutes": "{count, plural, one {# min} other {# min}}",
+      "status": {
+        "completed": "completada",
+        "busy": "ocupado",
+        "no-answer": "sin respuesta",
+        "failed": "fallida",
+        "canceled": "cancelada",
+        "ringing": "sonando"
+      }
+    },
+    "statement": {
+      "title": "Movimientos",
+      "empty": "Todavía no se ha movido crédito."
+    },
+    "rates": {
+      "title": "Tarifas",
+      "note": "Estas son las tarifas que se te cobran, tomadas de tu tarifa publicada.",
+      "unit": {
+        "sms_segment": "SMS, por segmento",
+        "mms_message": "MMS, por mensaje",
+        "voice_minute": "Voz, por minuto",
+        "number_month": "Número adicional, al mes"
+      }
+    }
+  },
+  "projectRedirect": {
+    "invalidProject": "Ese enlace de proyecto no es válido.",
+    "opening": "Abriendo tu proyecto…"
   }
 }

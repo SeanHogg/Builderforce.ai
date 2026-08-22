@@ -3,7 +3,7 @@
 import { type ReactNode } from 'react';
 import { Select } from '@/components/Select';
 import { useTranslations } from 'next-intl';
-import { useRequireAuth } from '@/lib/useRequireAuth';
+import { RequireAuth } from '@/components/auth/RequireAuth';
 import PageContainer from '@/components/PageContainer';
 import { RoleGate } from '@/components/RoleGate';
 import type { Capability } from '@/lib/rbac';
@@ -40,27 +40,26 @@ export function LensPage({
   gate?: boolean;
 }) {
   const t = useTranslations('insights');
-  const allowed = useRequireAuth();
-
-  if (!allowed) return null;
 
   return (
-    <PageContainer>
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 18 }}>
-        <div style={{ flex: '1 1 260px', minWidth: 0 }}>
-          <h1 style={{ fontSize: 'var(--font-size-page-title)', fontWeight: 700, margin: 0 }}>{t(titleKey)}</h1>
-          <p style={{ fontSize: 'var(--font-size-body)', color: 'var(--text-secondary)', marginTop: 4 }}>{t(subtitleKey)}</p>
+    <RequireAuth>
+      <PageContainer>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 18 }}>
+          <div style={{ flex: '1 1 260px', minWidth: 0 }}>
+            <h1 style={{ fontSize: 'var(--font-size-page-title)', fontWeight: 700, margin: 0 }}>{t(titleKey)}</h1>
+            <p style={{ fontSize: 'var(--font-size-body)', color: 'var(--text-secondary)', marginTop: 4 }}>{t(subtitleKey)}</p>
+          </div>
+          {actions && <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>{actions}</div>}
         </div>
-        {actions && <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>{actions}</div>}
-      </div>
-      {capability && gate ? (
-        <RoleGate capability={capability} variant="block">
-          {children}
-        </RoleGate>
-      ) : (
-        children
-      )}
-    </PageContainer>
+        {capability && gate ? (
+          <RoleGate capability={capability} variant="block">
+            {children}
+          </RoleGate>
+        ) : (
+          children
+        )}
+      </PageContainer>
+    </RequireAuth>
   );
 }
 

@@ -1,21 +1,23 @@
-'use client';
-
-export const runtime = 'edge';
-
-import { useParams } from 'next/navigation';
+import { getTranslations } from 'next-intl/server';
 import { ProjectHealthPanel } from '@/components/project360/ProjectHealthPanel';
 import { ProjectSpendWidget } from '@/components/project360/ProjectSpendWidget';
+
+export const runtime = 'edge';
 
 /**
  * Project 360 — the web surface for the whole-picture project health view. A child
  * route of `/projects/[id]` (the bare `/projects/[id]` still redirects into the IDE;
- * this deeper segment renders on its own). Reuses the shared <Project360View>.
+ * this deeper segment renders on its own).
+ *
+ * A server component: the id comes from route params, so the page itself has no
+ * reason to run in the browser; the two panels below are the client leaves.
  */
-export default function Project360Page() {
-  const params = useParams<{ id: string }>();
-  const id = Number(params?.id);
+export default async function Project360Page({ params }: { params: Promise<{ id: string }> }) {
+  const { id: rawId } = await params;
+  const id = Number(rawId);
   if (!Number.isFinite(id)) {
-    return <div style={{ padding: 24, color: 'var(--text-muted)' }}>Invalid project.</div>;
+    const t = await getTranslations('projectRedirect');
+    return <div style={{ padding: 24, color: 'var(--text-muted)' }}>{t('invalidProject')}</div>;
   }
   return (
     <div style={{ minHeight: '100dvh', background: 'var(--bg-base)', display: 'flex', flexDirection: 'column' }}>

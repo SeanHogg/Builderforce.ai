@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { repairScaffold } from './scaffoldRepair';
-import { MOBILE_DEFAULTS, VANILLA_DEFAULTS } from './vanillaDefaults';
+import { MOBILE_TEMPLATE, VANILLA_TEMPLATE } from '@builderforce/ide-templates';
 
 /**
  * These tests pin the exact failures seen in the live Mobile project:
@@ -11,7 +11,7 @@ import { MOBILE_DEFAULTS, VANILLA_DEFAULTS } from './vanillaDefaults';
  */
 describe('repairScaffold', () => {
   const clean = (modality: string) =>
-    ({ ...(modality === 'mobile' ? MOBILE_DEFAULTS : VANILLA_DEFAULTS) });
+    ({ ...(modality === 'mobile' ? MOBILE_TEMPLATE : VANILLA_TEMPLATE) });
 
   it('leaves a clean mobile scaffold completely untouched', () => {
     const files = clean('mobile');
@@ -36,7 +36,7 @@ describe('repairScaffold', () => {
     };
     const { repaired, restored } = repairScaffold(files, 'mobile');
     expect(restored.map((r) => r.path).sort()).toEqual(
-      Object.keys(MOBILE_DEFAULTS).sort(),
+      Object.keys(MOBILE_TEMPLATE).sort(),
     );
     expect(restored.every((r) => r.reason === 'empty')).toBe(true);
     expect(repaired['App.js']).toContain("from 'react-native'");
@@ -45,7 +45,7 @@ describe('repairScaffold', () => {
 
   // The terminal's "package.json was corrupt — restored" case.
   it('restores package.json when it holds another file’s (non-JSON) content', () => {
-    const files = { ...MOBILE_DEFAULTS, 'package.json': "import { defineConfig } from 'vite';" };
+    const files = { ...MOBILE_TEMPLATE, 'package.json': "import { defineConfig } from 'vite';" };
     const { repaired, restored } = repairScaffold(files, 'mobile');
     expect(restored).toEqual([{ path: 'package.json', reason: 'corrupt' }]);
     expect(JSON.parse(repaired['package.json']!).name).toBe('my-mobile-app');
@@ -54,7 +54,7 @@ describe('repairScaffold', () => {
   // The screenshot bug: vite.config.js's source written into index.html →
   // the browser renders raw source. repairScaffold must restore index.html.
   it('restores index.html when it holds JS/config source (the blank-preview bug)', () => {
-    const files = { ...MOBILE_DEFAULTS, 'index.html': MOBILE_DEFAULTS['vite.config.js']! };
+    const files = { ...MOBILE_TEMPLATE, 'index.html': MOBILE_TEMPLATE['vite.config.js']! };
     const { repaired, restored } = repairScaffold(files, 'mobile');
     expect(restored).toEqual([{ path: 'index.html', reason: 'corrupt' }]);
     expect(repaired['index.html']).toContain('<!DOCTYPE html>');
@@ -63,7 +63,7 @@ describe('repairScaffold', () => {
 
   // vite.config.js holding package.json's JSON — the earlier "Expected ; but found :" crash.
   it('restores vite.config.js when it holds package.json JSON', () => {
-    const files = { ...MOBILE_DEFAULTS, 'vite.config.js': MOBILE_DEFAULTS['package.json']! };
+    const files = { ...MOBILE_TEMPLATE, 'vite.config.js': MOBILE_TEMPLATE['package.json']! };
     const { repaired, restored } = repairScaffold(files, 'mobile');
     expect(restored).toEqual([{ path: 'vite.config.js', reason: 'corrupt' }]);
     expect(repaired['vite.config.js']).toContain('defineConfig');
@@ -71,9 +71,9 @@ describe('repairScaffold', () => {
 
   it('repairs several cross-wired files at once', () => {
     const files = {
-      ...MOBILE_DEFAULTS,
+      ...MOBILE_TEMPLATE,
       'package.json': "import x from 'y';",           // JS in package.json
-      'index.html': MOBILE_DEFAULTS['index.js']!,      // JS in index.html
+      'index.html': MOBILE_TEMPLATE['index.js']!,      // JS in index.html
       'index.js': '',                                  // empty
     };
     const { repaired, restored } = repairScaffold(files, 'mobile');
@@ -98,7 +98,7 @@ describe('repairScaffold', () => {
 
   it('passes through the user’s own extra files untouched', () => {
     const files = {
-      ...MOBILE_DEFAULTS,
+      ...MOBILE_TEMPLATE,
       'src/screens/Home.js': "import { View } from 'react-native';\nexport default () => <View/>;",
       'assets/logo.svg': '<svg></svg>',
     };
@@ -110,11 +110,11 @@ describe('repairScaffold', () => {
 
   it('adds missing scaffold files that are absent from the map entirely', () => {
     // Only package.json present (with content); the other 4 are missing keys.
-    const files = { 'package.json': MOBILE_DEFAULTS['package.json']! };
+    const files = { 'package.json': MOBILE_TEMPLATE['package.json']! };
     const { repaired, restored } = repairScaffold(files, 'mobile');
     expect(restored.map((r) => r.path).sort()).toEqual(['App.js', 'index.html', 'index.js', 'vite.config.js']);
     expect(restored.every((r) => r.reason === 'empty')).toBe(true);
-    expect(Object.keys(repaired).sort()).toEqual(Object.keys(MOBILE_DEFAULTS).sort());
+    expect(Object.keys(repaired).sort()).toEqual(Object.keys(MOBILE_TEMPLATE).sort());
   });
 
   it('uses the mobile scaffold for webmobile projects', () => {

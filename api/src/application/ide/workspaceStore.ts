@@ -17,17 +17,22 @@ import { isR2SameObjectRateLimit, retryTransient } from '../../infrastructure/sh
  *   • Reads distinguish MISSING (null) from EMPTY ('') — callers must not treat
  *     "we never wrote this" as "the file is blank".
  *   • Writes enforce the same structural content contract the frontend guard
- *     enforces ({@link validateWorkspaceContent}): a `.json` file must be JSON,
+ *     enforces ({@link validateFileContentForPath}): a `.json` file must be JSON,
  *     a JS/TS file must not be a JSON object/array or an HTML document, an
  *     `.html` file must start with markup. The client already guards; the server
  *     enforcing it too means NO caller (agent, script, direct API use) can
  *     persist cross-wired content again.
  *
- * `contentGuardParity.test.ts` pins this validator to the frontend's
- * `fileContentGuard` over a shared vector set, since the two runtimes cannot
- * share a module (see the template-parity note in projectTemplate.ts).
+ * The content contract itself is `@builderforce/ide-file-contract` — one module
+ * the Worker and the browser both import, so the client cannot learn a rule the
+ * server has not (it used to be a hand-kept copy on each side).
  */
-import { IDE_PREFIX, isScaffoldPath } from '../project/projectTemplate';
+import {
+  validateFileContentForPath,
+  type FileContentValidation,
+} from '@builderforce/ide-file-contract';
+import { isScaffoldPath } from '@builderforce/ide-templates';
+import { IDE_PREFIX } from '../project/projectTemplate';
 
 // ---------------------------------------------------------------------------
 // Paths
@@ -75,78 +80,19 @@ export function workspaceKey(projectId: number, path: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Content contract (server-side twin of frontend/src/lib/fileContentGuard.ts)
+// Content contract
 // ---------------------------------------------------------------------------
 
-export type ContentValidation = { ok: true } | { ok: false; reason: string };
-
-/** JS/TS source extensions that must never contain raw JSON data or an HTML doc. */
-const JS_TS_EXTS = new Set(['js', 'jsx', 'ts', 'tsx', 'mjs', 'cjs']);
-
-function extensionOf(path: string): string {
-  const base = path.split('/').pop() ?? '';
-  const dot = base.lastIndexOf('.');
-  return dot > 0 ? base.slice(dot + 1).toLowerCase() : '';
-}
-
 /**
- * Structural content contract for a workspace file. Only unambiguous,
- * machine-checkable rules — no fuzzy language heuristics (false-positive risk):
- *   - `.json`/`.jsonl` must parse as JSON (per line for jsonl);
- *   - `.html`/`.htm` must begin with markup (`<`);
- *   - JS/TS source must be neither a top-level JSON object/array nor an HTML
- *     document — real source never satisfies either, so this only ever rejects
- *     another file's content written to the wrong path.
- * Empty/whitespace-only content is allowed (blank file creation).
+ * The structural content contract lives in `@builderforce/ide-file-contract` —
+ * ONE module the Worker and the browser both import, so the client cannot check
+ * a rule the server does not enforce (or vice versa). It used to be a hand-kept
+ * copy per runtime pinned by a vector-parity test.
+ *
+ * The validation RESULT shape keeps a workspace-local alias because the
+ * path-and-size rule below returns it too.
  */
-export function validateWorkspaceContent(path: string, content: string): ContentValidation {
-  const trimmed = content.trim();
-  if (trimmed === '') return { ok: true };
-  const ext = extensionOf(path);
-
-  if (ext === 'json') {
-    try {
-      JSON.parse(content);
-    } catch (e) {
-      return { ok: false, reason: `${path} must be valid JSON (${(e as Error).message})` };
-    }
-  }
-
-  if (ext === 'jsonl' || ext === 'ndjson') {
-    const lines = content.split('\n').map((l) => l.trim()).filter((l) => l.length > 0);
-    for (let i = 0; i < lines.length; i++) {
-      try {
-        JSON.parse(lines[i] as string);
-      } catch {
-        return { ok: false, reason: `${path} must be JSON-per-line — line ${i + 1} is not valid JSON` };
-      }
-    }
-  }
-
-  if (ext === 'html' || ext === 'htm') {
-    if (trimmed[0] !== '<') {
-      return { ok: false, reason: `${path} must be HTML markup (starting with '<')` };
-    }
-  }
-
-  if (JS_TS_EXTS.has(ext)) {
-    if (/^<!doctype html/i.test(trimmed) || /^<html[\s>]/i.test(trimmed)) {
-      return { ok: false, reason: `${path} is an HTML document, not ${ext.toUpperCase()} source` };
-    }
-    try {
-      const parsed = JSON.parse(content);
-      if (parsed !== null && typeof parsed === 'object') {
-        return { ok: false, reason: `${path} looks like JSON data, not ${ext.toUpperCase()} source` };
-      }
-    } catch (error) {
-      /* not JSON → real source → fine */
-    
-      reportCaughtError(error, { source: "application/ide/workspaceStore.ts", operation: "validateWorkspaceContent" });
-    }
-  }
-
-  return { ok: true };
-}
+export type ContentValidation = FileContentValidation;
 
 // ---------------------------------------------------------------------------
 // Store operations
@@ -160,7 +106,7 @@ export interface WorkspaceEntry {
 /**
  * The ZERO-BYTE SCAFFOLD rule, enforced on top of the content contract.
  *
- * {@link validateWorkspaceContent} deliberately allows an empty body — creating a
+ * {@link validateFileContentForPath} deliberately allows an empty body — creating a
  * blank file is legitimate. It is NOT legitimate at a path a starter scaffold
  * owns. A Mobile project was found with all five scaffold paths present in R2 at
  * size 0; the writer was never identified, and neither the creation seed nor the
@@ -173,9 +119,9 @@ export interface WorkspaceEntry {
  * scaffold file is refused with 422; deleting it is still allowed (the seed
  * re-creates it), and writing real content is untouched.
  *
- * Kept separate from `validateWorkspaceContent` because that function is a pure
- * CONTENT-FORMAT contract mirrored byte-for-byte by the frontend guard
- * (`contentGuardParity.test.ts`); this is a path+size rule, not a format rule.
+ * Kept out of `@builderforce/ide-file-contract` because that module is a pure
+ * CONTENT-FORMAT contract keyed on the extension; this is a path+size rule that
+ * depends on which paths a starter scaffold owns.
  */
 export function validateScaffoldNotEmptied(path: string, isEmpty: boolean): ContentValidation {
   if (!isEmpty || !isScaffoldPath(path)) return { ok: true };
@@ -250,7 +196,7 @@ export async function writeWorkspaceFile(
 ): Promise<WriteResult> {
   const validPath = validateWorkspacePath(path);
   if (!validPath.ok) return { ok: false, status: 400, reason: validPath.reason };
-  const validContent = validateWorkspaceContent(path, content);
+  const validContent = validateFileContentForPath(path, content);
   if (!validContent.ok) return { ok: false, status: 422, reason: validContent.reason };
   const scaffoldOk = validateScaffoldNotEmptied(path, content.trim() === '');
   if (!scaffoldOk.ok) return { ok: false, status: 422, reason: scaffoldOk.reason };

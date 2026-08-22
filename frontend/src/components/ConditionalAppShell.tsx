@@ -29,6 +29,12 @@ import ActivityTracker from './ActivityTracker';
 import { McpExtensionsBridge } from './brain/McpExtensionsBridge';
 import { PlatformActionsBridge } from './brain/PlatformActionsBridge';
 import { ProjectScopeProvider } from '@/lib/ProjectScopeContext';
+import { CartProvider } from '@/lib/CartContext';
+import { MessageHubProvider } from '@/components/messages/MessageHubContext';
+import { EmulationProvider } from '@/lib/EmulationContext';
+import { RolePreviewProvider } from '@/lib/RolePreviewContext';
+import { PermissionDebuggerProvider } from '@/lib/PermissionDebuggerContext';
+import { DemoModeProvider } from '@/components/demo/DemoModeProvider';
 import { useAuth } from '@/lib/AuthContext';
 import { useIsFreelancer, useIsSalesAssociate } from '@/lib/rbac';
 import { findActiveGroup, isFreelancerAllowedPath, isSalesAllowedPath } from '@/lib/navGroups';
@@ -371,11 +377,29 @@ function AppBrainShell({ children, qualityEndpoint }: {
   // signed-in users get the full tenant-authed config. Both are module constants,
   // so the provider's memoized runtime stays stable per auth state.
   return (
-    // Global project scope wraps BOTH the shell content AND the FloatingBrain
-    // launcher (a sibling of `content`). AppShell used to own this provider, but
-    // the floating Brain drawer is mounted outside AppShell — so it read a null
-    // scope and its chat history / new-chat scoping ignored the TopBar project
-    // filter. Hoisting it here gives the switcher and the Brain ONE shared scope.
+    // Route-scoped providers, moved down out of `app/layout.tsx` (PRD 22 §3.14).
+    //
+    // Each of these belongs to the APP, not to every document the router can
+    // serve. `/embed/*` takes the lean branch above and now never mounts them —
+    // which matters most for `DemoModeProvider`, whose pathname tracking, timers
+    // and exit-intent listeners are precisely the app-wide effects a framed
+    // webview must not run. They still sit ABOVE the page slot, so an open cart,
+    // an open conversation and an active emulation all survive a navigation, and
+    // their state changes now re-render the shell rather than the whole document.
+    //
+    // Order preserved from the root layout: cart → message hub → emulation →
+    // role preview → permission debugger, then demo mode closest to the content.
+    <CartProvider>
+    <MessageHubProvider>
+    <EmulationProvider>
+    <RolePreviewProvider>
+    <PermissionDebuggerProvider>
+    <DemoModeProvider>
+    {/* Global project scope wraps BOTH the shell content AND the FloatingBrain
+        launcher (a sibling of `content`). AppShell used to own this provider, but
+        the floating Brain drawer is mounted outside AppShell — so it read a null
+        scope and its chat history / new-chat scoping ignored the TopBar project
+        filter. Hoisting it here gives the switcher and the Brain ONE shared scope. */}
     <NavigationFeaturesProvider>
     <ProjectScopeProvider>
     {/* The live session and the active canvas are the two things that must
@@ -478,6 +502,12 @@ function AppBrainShell({ children, qualityEndpoint }: {
     </ActiveCanvasProvider>
     </ProjectScopeProvider>
     </NavigationFeaturesProvider>
+    </DemoModeProvider>
+    </PermissionDebuggerProvider>
+    </RolePreviewProvider>
+    </EmulationProvider>
+    </MessageHubProvider>
+    </CartProvider>
   );
 }
 

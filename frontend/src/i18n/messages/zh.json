@@ -724,7 +724,9 @@
       "pipeline": "招聘流程",
       "interviewKits": "面试流程模板",
       "offers": "Offer",
-      "rewards": "奖励"
+      "rewards": "奖励",
+      "mail": "邮件",
+      "phone": "电话"
     },
     "primaryAria": "主导航",
     "destination": {
@@ -2187,6 +2189,7 @@
     "title": "项目组合（PMO）",
     "subtitle": "将成本、交付、DORA、AI 效能和 OKR 达成情况从项目向上汇总到举措和项目组合。",
     "tabs": {
+      "health": "健康度",
       "rollup": "汇总",
       "structure": "项目组合与 OKR",
       "cost": "资本/运营支出"
@@ -2324,7 +2327,51 @@
       "saved": "已关联"
     },
     "unassignedPortfolio": "未分配",
-    "meetingsHeading": "会议"
+    "meetingsHeading": "会议",
+    "health": {
+      "snapshotHeading": "项目组合快照",
+      "generatedAt": "截至 {when}",
+      "empty": "暂无进行中的项目——创建一个项目，或恢复已暂停的项目，即可在此查看其健康度。",
+      "ofTotal": "共 {total} 个进行中项目",
+      "overallLabel": "项目组合整体健康度",
+      "topActionsHeading": "优先处理事项",
+      "blockerLabel": "主要阻碍：",
+      "actionLabel": "下一步：",
+      "cardAria": "{name}：{rag}",
+      "taskSummary": "{total} 个任务中已完成 {done} 个 · {open} 个进行中",
+      "rag": {
+        "green": "绿色",
+        "amber": "黄色",
+        "red": "红色"
+      },
+      "risk": {
+        "low": "低风险",
+        "medium": "中风险",
+        "high": "高风险"
+      },
+      "blocker": {
+        "noTasks": "尚未定义任务——没有可衡量或可执行的内容。",
+        "onHold": "已降低优先级——没有安排进行中的工作。",
+        "blocked": "{count, plural, other {# 个任务被阻塞}}——工作无法推进。",
+        "overdue": "{count, plural, other {# 个任务}}已逾期。",
+        "notStarted": "尚未完成任何工作——{count, plural, other {# 个任务}}仍未启动。",
+        "deliveryStalled": "交付已停滞——发布节奏、周期时间与流动性的健康度为 {score}/100。",
+        "deliveryAtRisk": "交付正在滑坡——发布节奏、周期时间与流动性的健康度为 {score}/100。",
+        "noSignal": "尚无交付信号——没有可衡量的部署或已完成的工作。",
+        "onTrack": "没有阻碍——工作正在推进。"
+      },
+      "action": {
+        "noTasks": "本周内明确范围并创建首批任务，否则归档该项目。",
+        "onHold": "设定复审日期，并记录重启该工作的触发条件。",
+        "blocked": "在引入新工作之前，先清除被阻塞的任务或重新分配。",
+        "overdue": "重新安排或关闭逾期任务，以恢复项目的时间计划。",
+        "notStarted": "召开启动会：指定负责人，并将首批任务推进到进行中。",
+        "deliveryStalled": "按 P0 处理：在承接新范围之前，先查明流动中断的原因。",
+        "deliveryAtRisk": "减少在制品，本周内端到端交付一个最小的变更。",
+        "noSignal": "接入部署记录或先完成一个任务，交付才可被衡量。",
+        "onTrack": "保持现状——无需干预。"
+      }
+    }
   },
   "insights": {
     "loading": "加载中…",
@@ -4621,9 +4668,9 @@
     "pin": "固定到仪表板",
     "unpin": "取消固定",
     "expand": "打开完整报告",
-    "addTitle": "添加小组件",
+    "addTitle": "添加组件",
     "addToDashboard": "添加到仪表板",
-    "searchPlaceholder": "搜索小组件…",
+    "searchPlaceholder": "搜索组件…",
     "group": {
       "aiImpact": "AI 影响",
       "delivery": "交付",
@@ -8356,7 +8403,6 @@
     "seoTitle": "企业电话 — Builderforce.ai",
     "seoDescription": "支持语音、短信和彩信的专属企业号码。",
     "active": "企业电话已启用",
-    "provisioning": "你的号码已可配置和分配。",
     "loading": "正在加载价格…",
     "createAccount": "创建账户",
     "voiceMessaging": "语音与消息",
@@ -15992,7 +16038,25 @@
     "expandDetails": "展开详情",
     "report": "上报此错误",
     "copyTicket": "复制支持工单",
-    "dismiss": "关闭"
+    "dismiss": "关闭",
+    "transport": {
+      "title": "无响应",
+      "offline": "您的设备已离线，请求未能发出。网络恢复后即可正常使用。",
+      "aborted": "请求在收到响应前已被取消。",
+      "unreachable": "无法连接到 BuilderForce。请求要么未送达，要么由 API 以外的服务作出了响应——这不是浏览器设置的问题，系统已自动上报。"
+    },
+    "ticket": {
+      "heading": "支持工单 — API 错误",
+      "time": "时间",
+      "url": "网址",
+      "status": "状态",
+      "code": "代码",
+      "message": "消息",
+      "requestId": "请求 ID",
+      "details": "详情",
+      "userAgent": "用户代理",
+      "page": "页面"
+    }
   },
   "reportError": {
     "title": "上报错误",
@@ -26353,5 +26417,117 @@
     "notEnabled": "此集成尚未启用。工作区管理员可在 BuilderForce → 设置 → 集成 中启用。",
     "capabilityMissing": "此工作区未启用“{capability}”能力。",
     "comingSoon": "{label} 已注册，但尚无组件实现它。"
+  },
+  "phone": {
+    "console": {
+      "intro": "您的企业专线：持有的号码、收发记录，以及相应费用。"
+    },
+    "plan": {
+      "active": "已启用",
+      "pastDue": "付款逾期",
+      "inactive": "未启用"
+    },
+    "balance": {
+      "title": "通信额度",
+      "unit": "剩余",
+      "allowance": "您的订阅每月赠送 {amount} 额度。",
+      "includedNumbers": "订阅已包含 {count} 个号码。",
+      "empty": "额度已用尽。请充值以继续发送。"
+    },
+    "topUp": {
+      "title": "充值",
+      "intro": "额度永不过期，可用于通话、短信和号码费用。",
+      "credited": "已到账 {amount} 额度。",
+      "failed": "该笔付款未能完成。",
+      "cancelled": "结账已取消，未产生任何扣费。"
+    },
+    "numbers": {
+      "title": "您的号码",
+      "empty": "您还没有号码。请在下方搜索。",
+      "included": "订阅已包含",
+      "monthly": "每月 {amount}",
+      "suspended": "因额度不足已暂停",
+      "release": "释放",
+      "releaseTitle": "确定释放该号码？",
+      "releaseMessage": "{number} 将退回运营商且无法找回。已发出的通话与消息仍保留在日志中。",
+      "releaseAction": "释放号码",
+      "releaseFailed": "该号码无法释放。"
+    },
+    "search": {
+      "title": "查找号码",
+      "areaCode": "区号",
+      "areaCodePlaceholder": "例如 415",
+      "contains": "包含",
+      "containsPlaceholder": "数字或字母",
+      "action": "搜索",
+      "searching": "搜索中…",
+      "noResults": "没有匹配的号码。请换一个区号。",
+      "buy": "购买",
+      "buying": "购买中…",
+      "taken": "该号码已被他人抢先购买，请另选一个。",
+      "buyFailed": "该号码购买失败。",
+      "failed": "搜索失败，请重试。"
+    },
+    "compose": {
+      "title": "发送消息",
+      "to": "收件人",
+      "toPlaceholder": "+15551234567",
+      "body": "消息内容",
+      "bodyPlaceholder": "您想说什么？",
+      "characters": "{count} 个字符",
+      "unicodeWarning": "包含可能增加费用的字符",
+      "send": "发送",
+      "sending": "发送中…",
+      "sent": "已发送 — {segments} 条分段，{amount}。",
+      "noNumber": "发送前需要先拥有号码。请在上方购买。",
+      "noCredit": "额度不足，无法发送此消息。请先充值。",
+      "failed": "该消息未能发送。"
+    },
+    "messages": {
+      "title": "消息",
+      "empty": "暂无消息。",
+      "from": "来自 {number}",
+      "to": "发送至 {number}",
+      "status": {
+        "queued": "排队中",
+        "sent": "已发送",
+        "delivered": "已送达",
+        "bounced": "未送达",
+        "failed": "失败"
+      }
+    },
+    "calls": {
+      "title": "通话",
+      "empty": "暂无通话记录。",
+      "from": "来自 {number}",
+      "to": "拨打至 {number}",
+      "minutes": "{count} 分钟",
+      "status": {
+        "completed": "已完成",
+        "busy": "占线",
+        "no-answer": "无人接听",
+        "failed": "失败",
+        "canceled": "已取消",
+        "ringing": "振铃中"
+      }
+    },
+    "statement": {
+      "title": "账单明细",
+      "empty": "暂无额度变动。"
+    },
+    "rates": {
+      "title": "资费",
+      "note": "以下即为实际计费资费，取自您已发布的价格表。",
+      "unit": {
+        "sms_segment": "短信，每条分段",
+        "mms_message": "彩信，每条",
+        "voice_minute": "语音，每分钟",
+        "number_month": "额外号码，每月"
+      }
+    }
+  },
+  "projectRedirect": {
+    "invalidProject": "该项目链接无效。",
+    "opening": "正在打开您的项目…"
   }
 }

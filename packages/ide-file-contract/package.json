@@ -1,0 +1,11 @@
+{
+  "name": "@builderforce/ide-file-contract",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The structural content contract for an IDE workspace file — which bodies are refused at which path. One module for the API Worker's write chokepoint and the browser's pre-write guard, so the client can never learn a rule the server has not. Source-only: every consumer aliases the bare specifier straight at src/index.ts.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "types": "./src/index.ts"
+}

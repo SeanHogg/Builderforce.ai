@@ -74,8 +74,11 @@ export async function replayRoute(
 ): Promise<unknown> {
   if (!ctx.env) throw new Error('route replay unavailable in this context');
   // Dynamic import avoids a static import cycle (index → routes → this module).
-  const { buildApp } = await import('../../index');
-  const app = buildApp(ctx.env);
+  const { resolveApp } = await import('../../index');
+  // The isolate-cached app, NOT a fresh buildApp(): an LLM turn replays many
+  // routes, and rebuilding the whole composition root per tool call was the
+  // single largest avoidable CPU cost in the worker. See presentation/appCache.
+  const app = resolveApp(ctx.env);
   const auth = resolveReplayAuth({
     authToken: ctx.authToken,
     agentRef: ctx.agentRef,

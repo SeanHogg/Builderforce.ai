@@ -35,13 +35,13 @@
  */
 import { and, eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
+import { validateFileContentForPath } from '@builderforce/ide-file-contract';
 import { ideProjects, projects, taskFileChanges, tasks } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import {
   deleteWorkspaceFile,
   listWorkspaceFiles,
   readWorkspaceFile,
-  validateWorkspaceContent,
   validateWorkspacePath,
   writeWorkspaceFile,
 } from './workspaceStore';
@@ -178,7 +178,7 @@ export async function applyTaskWorkspaceChanges(
   for (const file of args.changes.writes ?? []) {
     const validPath = validateWorkspacePath(file.path);
     if (!validPath.ok) { result.rejected.push({ path: file.path, reason: validPath.reason }); continue; }
-    const validContent = validateWorkspaceContent(file.path, file.content);
+    const validContent = validateFileContentForPath(file.path, file.content);
     if (!validContent.ok) { result.rejected.push({ path: file.path, reason: validContent.reason }); continue; }
     const existed = (await readWorkspaceFile(bucket, args.projectId, file.path)) !== null;
     const write = await writeWorkspaceFile(bucket, args.projectId, file.path, file.content);

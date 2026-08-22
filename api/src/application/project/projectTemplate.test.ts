@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
+import { VANILLA_TEMPLATE, MOBILE_TEMPLATE, isScaffoldPath, scaffoldForModality } from '@builderforce/ide-templates';
 import {
-  VANILLA_TEMPLATE,
-  MOBILE_TEMPLATE,
   templateForProject,
   scaffoldForProject,
   templateLooksUnseeded,
@@ -283,5 +282,46 @@ describe('ensureRunnableScaffold (heals a bare/empty backing repo)', () => {
     const r2 = fakeStorage();
     const written = await ensureRunnableScaffold(r2 as unknown as R2Bucket, { ...base, modality: 'video', githubRepoUrl: 'https://github.com/acme/x' });
     expect(written).toBe(0);
+  });
+});
+
+/**
+ * The scaffolds and the modality→scaffold map used to exist twice — once here and
+ * once in the frontend — pinned only by a byte-for-byte parity test. They drifted
+ * anyway: `webmobile` reached the frontend's map and never this one, and every
+ * "Web + Mobile" project was created with no files at all. Both sides now read
+ * `@builderforce/ide-templates`, so these assert the shared registry itself.
+ */
+describe('shared scaffold registry', () => {
+  it.each([
+    ['designer', VANILLA_TEMPLATE],
+    ['mobile', MOBILE_TEMPLATE],
+    ['webmobile', MOBILE_TEMPLATE],
+  ])('gives %s the same scaffold the seeder picks', (modality, expected) => {
+    expect(scaffoldForModality(modality)).toBe(expected);
+    expect(scaffoldForProject({ ...base, modality })).toBe(expected);
+  });
+
+  // A modality that never runs the Vite app must get NOTHING, not a web app
+  // synthesized for it — that is what left run-only files the server never had.
+  it.each(['video', 'evermind', 'finetune', 'voice'])('gives %s no scaffold', (modality) => {
+    expect(scaffoldForModality(modality)).toBeNull();
+  });
+
+  it('treats a missing modality as designer', () => {
+    expect(scaffoldForModality(null)).toBe(VANILLA_TEMPLATE);
+    expect(scaffoldForModality(undefined)).toBe(VANILLA_TEMPLATE);
+  });
+
+  // The zero-byte-scaffold rule is enforced server-side but ALSO consulted by the
+  // client (file-create seeds the template instead of posting an empty body), so
+  // both must name the same files — which is now structural, not a parity test.
+  it('owns exactly the paths of the shipped templates', () => {
+    for (const path of [...Object.keys(VANILLA_TEMPLATE), ...Object.keys(MOBILE_TEMPLATE)]) {
+      expect(isScaffoldPath(path)).toBe(true);
+    }
+    for (const path of ['src/notes.txt', 'README.md', 'src/components/Card.jsx', '']) {
+      expect(isScaffoldPath(path)).toBe(false);
+    }
   });
 });

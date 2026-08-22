@@ -42,6 +42,7 @@ import {
   startAgentCheckout,
 } from '../../application/marketplace/agentCommerce';
 import { ListingError } from '../../application/marketplace/creationListings';
+import { demoTenantAgent, publicAgentScope } from '../../application/marketplace/publicAgentScope';
 import {
   ensureAgentIdentity,
   provisionHiredAgent,
@@ -57,18 +58,6 @@ const purchasedCacheKey = (tenantId: number): string => `wf:purchased:${tenantId
  *  same world-readable registry for everyone). Read-heavy + open to the world →
  *  served through getOrSetCached; invalidated on any write that changes a row that
  *  could appear in it (create/update/hire/delete), including an eval-score change. */
-/**
- * "…and its tenant is not a demo tenant."
- *
- * A correlated EXISTS rather than a join: the public listing is cached and
- * ordered by hire count, and a join would change the row shape every caller of
- * `agentRowColumns` depends on. The demo flag lives on `tenants.is_demo`, which
- * is where `demoSeedService` sets it.
- */
-const notDemoTenant = sql`NOT EXISTS (
-  SELECT 1 FROM tenants t WHERE t.id = ${ideAgents.tenantId} AND t.is_demo = true
-)`;
-
 export const PUBLIC_LIST_CACHE_KEY = 'wf:public:agents';
 const PUBLIC_LIST_CACHE_TTL_SECONDS = 120;
 
@@ -400,6 +389,10 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
         status: ideAgents.status,
         tenant_id: ideAgents.tenantId,
         price_cents: ideAgents.priceCents,
+        // Selected rather than filtered on, because the two rejections BELOW
+        // this read have to keep their own answers: an owner must still be told
+        // "you already own this", not that their agent vanished.
+        is_demo_fixture: demoTenantAgent,
       })
       .from(ideAgents)
       .where(and(eq(ideAgents.id, id), eq(ideAgents.status, 'active')));
@@ -411,6 +404,10 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
       return c.json({ error: 'You already own this agent — it is already in your workforce.' }, 409);
     }
     if (!agent.published) return c.json({ error: 'Agent is not published to the marketplace' }, 409);
+    // A demo-tenant agent is a seeded fixture, never merchandise. It is already
+    // invisible in every public read (`publicAgentScope`); this closes the one
+    // door a stale id or a hand-written request could still walk through.
+    if (agent.is_demo_fixture) return c.json({ error: 'Agent is not published to the marketplace' }, 409);
 
     // THE PAY GATE. Checked before anything is written, so a refused hire leaves
     // no row, no counter movement and no binding behind it. The entitlement is a
@@ -468,14 +465,13 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
     const db = buildDatabase(c.env);
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
-    // CROSS-TENANT BY DESIGN: a published agent is bought FROM another
-    // workspace, so `published` + `status` are the access predicate that
-    // replaces the tenant one. Declared rather than baselined.
+    // The same predicate the public listing is built on — you may only pay for
+    // an agent a stranger could have found (see `publicAgentScope`), which is
+    // what keeps a demo fixture from reaching a processor.
     const [agent] = await db
       .select({ price_cents: ideAgents.priceCents })
       .from(ideAgents)
-      .where(acrossTenants(ideAgents, 'public_catalogue',
-        eq(ideAgents.id, id), eq(ideAgents.status, 'active'), eq(ideAgents.published, true)));
+      .where(publicAgentScope(eq(ideAgents.id, id)));
     if (!agent) return c.json({ error: 'Agent not found' }, 404);
     if (Number(agent.price_cents ?? 0) <= 0) return c.json({ free: true });
     if (await holdsAgentPurchase(db, tenantId, id)) return c.json({ purchased: true });
@@ -832,20 +828,13 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
       c.env as Env,
       PUBLIC_LIST_CACHE_KEY,
       // The world-readable registry: the same listing for every visitor, signed
-      // in or not. `published` + `status` IS the access control.
-      //
-      // DEMO TENANTS ARE EXCLUDED. The Talent persona demo tenant publishes
-      // `coder`/`copywriter` agents, and they are FIXTURES — seeded to make a
-      // sales demo look inhabited, not offered for hire. Left in, the public
-      // registry advertised them alongside real ones, so a visitor's first
-      // impression of the marketplace was two agents nobody wrote. The admin
-      // "paid pro" rollups already discount `is_demo`; this is the same rule
-      // applied where the public can see it.
+      // in or not. `publicAgentScope` IS the access control — and it is the one
+      // definition of "public", shared with the detail read, the IDE registry,
+      // checkout and the marketplace MCP tools.
       () => db
         .select(agentRowColumns)
         .from(ideAgents)
-        .where(acrossTenants(ideAgents, 'public_catalogue',
-          eq(ideAgents.status, 'active'), eq(ideAgents.published, true), notDemoTenant))
+        .where(publicAgentScope())
         .orderBy(desc(ideAgents.hireCount), desc(ideAgents.createdAt))
         .limit(200),
       { kvTtlSeconds: PUBLIC_LIST_CACHE_TTL_SECONDS },
@@ -859,8 +848,7 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
     const [row] = await db
       .select(agentRowColumns)
       .from(ideAgents)
-      .where(acrossTenants(ideAgents, 'public_catalogue',
-        eq(ideAgents.id, c.req.param('id')), eq(ideAgents.status, 'active'), eq(ideAgents.published, true), notDemoTenant));
+      .where(publicAgentScope(eq(ideAgents.id, c.req.param('id'))));
     if (!row) return c.json({ error: 'Agent not found' }, 404);
     return c.json(mapPublicAgentRow(row));
   });

@@ -1,5 +1,3 @@
-'use client';
-
 import { Suspense } from 'react';
 import { LensPage } from '@/components/insights/LensShell';
 import { DevexDashboard } from '@/components/insights/DevexDashboard';
@@ -11,6 +9,10 @@ import { DevexDashboard } from '@/components/insights/DevexDashboard';
  * mirrors to `?panel=<id>` so drawers are deep-linkable (the retired /surveys
  * route redirects here with the surveys panel). Each panel gates itself, so the
  * hub is gate=false.
+ */
+/**
+ * A SERVER component: nothing on this page is interactive — the hub shell and the
+ * dashboard below it are the client leaves, and this file only names which ones.
  */
 export default function DevexInsightsPage() {
   return (

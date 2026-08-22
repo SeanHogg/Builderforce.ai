@@ -9,8 +9,6 @@ import './globals.css';
 // an equation. The theme rules that adapt it live in globals.css.
 import 'katex/dist/katex.min.css';
 import { AuthProvider } from '@/lib/AuthContext';
-import { CartProvider } from '@/lib/CartContext';
-import { MessageHubProvider } from '@/components/messages/MessageHubContext';
 
 // Self-hosted via `@fontsource/jetbrains-mono` rather than `next/font/google`:
 // the Google variant fetches the font FILES from Google Fonts at BUILD time, so
@@ -29,13 +27,9 @@ const jetbrainsMono = localFont({
   variable: '--font-jetbrains-mono',
   display: 'swap',
 });
-import { EmulationProvider } from '@/lib/EmulationContext';
-import { RolePreviewProvider } from '@/lib/RolePreviewContext';
-import { PermissionDebuggerProvider } from '@/lib/PermissionDebuggerContext';
 import ThemeProvider from './ThemeProvider';
 import { ConfirmProvider } from '@/components/ConfirmProvider';
 import { ToastProvider } from '@/components/ToastProvider';
-import { DemoModeProvider } from '@/components/demo/DemoModeProvider';
 import ConditionalAppShell from '@/components/ConditionalAppShell';
 import { PwaUpdateBanner } from '@/components/PwaUpdateBanner';
 import { PwaInstallPrompt } from '@/components/PwaInstallPrompt';
@@ -200,49 +194,47 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 non-chunk error re-throws up to ErrorBoundary above. */}
             <ChunkErrorBoundary>
               <AuthProvider>
-                <CartProvider>
-                  {/* Above the router's page slot, beside the cart, for the same
-                      reason the cart is: an open conversation must survive a
-                      navigation. Mounting it inside a page would close the chat
-                      every time somebody clicked a link. */}
-                  <MessageHubProvider>
-                  <EmulationProvider>
-                    <RolePreviewProvider>
-                      <PermissionDebuggerProvider>
-                        <ConfirmProvider>
-                          <ToastProvider>
-                            <DemoModeProvider>
-                              <ConditionalAppShell
-                                qualityEndpoint={QUALITY_ENDPOINT}
-                              >
-                                {/*
-                                  ONE CSR-bailout boundary for the page slot.
+                {/*
+                  What is left at the ROOT is what EVERY route needs: the session,
+                  the confirm/toast primitives any surface may call, and the locale
+                  above them all.
 
-                                  51 client components call `useSearchParams()`,
-                                  and a statically prerendered page that reads it
-                                  without a Suspense boundary above it fails the
-                                  build outright ("should be wrapped in a suspense
-                                  boundary"). Nothing had ever hit that, because
-                                  `AuthProvider` returned null on the server and
-                                  no page below it rendered far enough to read
-                                  anything — the blank server render was masking
-                                  the missing boundaries as well as emptying the
-                                  HTML. It goes HERE, around the page slot only:
-                                  the shell chrome still prerenders, and a page
-                                  that does not read search params is unaffected,
-                                  since Suspense costs nothing until something
-                                  below it actually bails. One boundary, not 51.
-                                */}
-                                <Suspense fallback={null}>{children}</Suspense>
-                              </ConditionalAppShell>
-                            </DemoModeProvider>
-                          </ToastProvider>
-                        </ConfirmProvider>
-                      </PermissionDebuggerProvider>
-                    </RolePreviewProvider>
-                  </EmulationProvider>
-                  </MessageHubProvider>
-                </CartProvider>
+                  The cart, the message hub, and the three emulation/role-preview/
+                  permission-debugger contexts were here too, and none of them was
+                  ever a root concern — their only consumers are app-shell chrome
+                  and a handful of app routes. Sitting at the root they were mounted
+                  for `/embed/*` as well, the one surface documented as hostile to
+                  app-wide effects, and every one of their state changes re-rendered
+                  from above the router's page slot. They now live in
+                  `ConditionalAppShell`'s non-embed branch, which is still above the
+                  page slot (so an open cart or conversation still survives a
+                  navigation) and still below the shell switch. See PRD 22 §3.14.
+                */}
+                <ConfirmProvider>
+                  <ToastProvider>
+                    <ConditionalAppShell
+                      qualityEndpoint={QUALITY_ENDPOINT}
+                    >
+                      {/*
+                        ONE CSR-bailout boundary for the page slot.
+
+                        51 client components call `useSearchParams()`, and a
+                        statically prerendered page that reads it without a
+                        Suspense boundary above it fails the build outright
+                        ("should be wrapped in a suspense boundary"). Nothing had
+                        ever hit that, because `AuthProvider` returned null on the
+                        server and no page below it rendered far enough to read
+                        anything — the blank server render was masking the missing
+                        boundaries as well as emptying the HTML. It goes HERE,
+                        around the page slot only: the shell chrome still
+                        prerenders, and a page that does not read search params is
+                        unaffected, since Suspense costs nothing until something
+                        below it actually bails. One boundary, not 51.
+                      */}
+                      <Suspense fallback={null}>{children}</Suspense>
+                    </ConditionalAppShell>
+                  </ToastProvider>
+                </ConfirmProvider>
               </AuthProvider>
             </ChunkErrorBoundary>
 

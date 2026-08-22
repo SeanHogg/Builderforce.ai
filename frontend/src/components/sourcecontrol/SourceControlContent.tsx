@@ -16,7 +16,7 @@ import { saveFile } from '@/lib/api';
 import { parseRepoIdentifier, isValidRepoSegment } from '@/lib/repoIdentifier';
 import { formatRepoDiagnostic } from '@/lib/repoDiagnostic';
 import { copyTextToClipboard } from '@/lib/useCopyToClipboard';
-import { useGithubActionsReadiness } from '@/components/repos/githubActionsSurface';
+import { useGithubActionsReadiness } from '@/lib/useGithubActionsReadiness';
 
 /**
  * Project "Source control" tab — manage the repositories a project's agents

@@ -1,9 +1,5 @@
-'use client';
-
 import { Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
-import { LensPage } from '@/components/insights/LensShell';
-import { FinanceHub } from '@/components/insights/finance/FinanceHub';
+import { FinanceInsightsInner } from './FinanceInsightsInner';
 
 /**
  * `/insights/finance` — the combined Finance hub. Replaces the three separate
@@ -11,16 +7,10 @@ import { FinanceHub } from '@/components/insights/finance/FinanceHub';
  * whose tiles drill into each lens via a shared slide-out side panel. The retired
  * sub-routes (/finops, /insights/allocation) redirect here with `?drill=<panel>`
  * to open the matching drawer. Each panel gates itself, so the hub is gate=false.
+ *
+ * A server component: the `?drill=` read that forces the browser lives one file
+ * down, in the client leaf.
  */
-function FinanceInsightsInner() {
-  const initialDrill = useSearchParams().get('drill') ?? undefined;
-  return (
-    <LensPage capability="insights.finance" titleKey="finhub.title" subtitleKey="finhub.subtitle" gate={false}>
-      <FinanceHub initialDrill={initialDrill} />
-    </LensPage>
-  );
-}
-
 export default function FinanceInsightsPage() {
   // useSearchParams (the ?drill= deep-link) requires a Suspense boundary.
   return (

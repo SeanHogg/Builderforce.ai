@@ -1,4 +1,5 @@
 import { apiRequest } from './apiClient';
+import { TRANSPORT_FAILURE_STATUS } from './errors/transportFailure';
 
 /** Fields to pre-fill the reporter when opened from an existing error. */
 export interface ReportErrorPrefill {
@@ -88,5 +89,16 @@ async function sendProductError(
   return { accepted: result.accepted };
 }
 
-/** Prevent a failed reporting request from recursively reporting itself. */
-export const PRODUCT_REPORT_ERROR_STATUSES = Array.from({ length: 200 }, (_, index) => 400 + index);
+/**
+ * Prevent a failed reporting request from recursively reporting itself.
+ *
+ * Includes {@link TRANSPORT_FAILURE_STATUS} (0), which is the status a request
+ * that never reached a server reports under. That is the case this list exists
+ * for most of all: when the API is unreachable, EVERY call on the page fails,
+ * including this one — so without 0 here the reporter's own failure would raise
+ * another report, which would fail, forever.
+ */
+export const PRODUCT_REPORT_ERROR_STATUSES = [
+  TRANSPORT_FAILURE_STATUS,
+  ...Array.from({ length: 200 }, (_, index) => 400 + index),
+];

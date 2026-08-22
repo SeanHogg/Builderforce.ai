@@ -4,10 +4,8 @@ import { useId } from 'react';
 import { useTranslations } from 'next-intl';
 
 import { Select } from '@/components/Select';
-import {
-  GithubActionsUnavailableReason,
-  useGithubActionsSupported,
-} from '@/components/repos/githubActionsSurface';
+import { GithubActionsUnavailableReason } from '@/components/repos/githubActionsSurface';
+import { useGithubActionsSupported } from '@/lib/useGithubActionsReadiness';
 import type { AgentRuntimeSurface } from '@/lib/api';
 
 /**

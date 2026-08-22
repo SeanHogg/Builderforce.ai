@@ -5,13 +5,13 @@
  * persisted to the wrong path, unvalidated keys, and cross-project bleed.
  */
 import { describe, it, expect, vi } from 'vitest';
+import { validateFileContentForPath } from '@builderforce/ide-file-contract';
 import {
   captureWorkspaceVersion,
   listWorkspaceHistory,
   readWorkspaceVersion,
   restoreWorkspaceVersion,
   validateWorkspacePath,
-  validateWorkspaceContent,
   workspacePrefix,
   workspaceKey,
   listWorkspaceFiles,
@@ -250,11 +250,11 @@ describe('write-time content contract', () => {
   });
 
   it('allows legitimate edge content (JSX with <, bare scalar, blank file)', () => {
-    expect(validateWorkspaceContent('App.jsx', 'const ok = a < b;')).toEqual({ ok: true });
-    expect(validateWorkspaceContent('flag.js', 'true')).toEqual({ ok: true });
-    expect(validateWorkspaceContent('anything.js', '   ')).toEqual({ ok: true });
-    expect(validateWorkspaceContent('data.jsonl', '{"a":1}\n{"b":2}')).toEqual({ ok: true });
-    expect(validateWorkspaceContent('styles.css', 'body { color: red; }')).toEqual({ ok: true });
+    expect(validateFileContentForPath('App.jsx', 'const ok = a < b;')).toEqual({ ok: true });
+    expect(validateFileContentForPath('flag.js', 'true')).toEqual({ ok: true });
+    expect(validateFileContentForPath('anything.js', '   ')).toEqual({ ok: true });
+    expect(validateFileContentForPath('data.jsonl', '{"a":1}\n{"b":2}')).toEqual({ ok: true });
+    expect(validateFileContentForPath('styles.css', 'body { color: red; }')).toEqual({ ok: true });
   });
 });
 

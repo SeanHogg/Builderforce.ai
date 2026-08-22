@@ -32,6 +32,7 @@ import {
   enableGitHubDeploys,
 } from '../../application/ide/repoBridge';
 import { PUBLIC_LIST_CACHE_KEY } from './workforceRoutes';
+import { publicAgentScope } from '../../application/marketplace/publicAgentScope';
 import {
   ideProxy,
   readProxyChoice,
@@ -1159,11 +1160,9 @@ export function createIdeRoutes(): Hono<HonoEnv> {
   router.get('/agents', async (c) => {
     const db = buildDatabase(c.env);
     const rows = await db.select(agentRow).from(ideAgents)
-      .where(and(
-        eq(ideAgents.status, 'active'),
-        eq(ideAgents.published, true),
-        isNotNull(ideAgents.tenantId),
-      ))
+      // The SAME registry `GET /api/workforce/agents` serves — one predicate, so
+      // the two listings cannot disagree about what "published" means.
+      .where(publicAgentScope(isNotNull(ideAgents.tenantId)))
       .orderBy(desc(ideAgents.hireCount), desc(ideAgents.createdAt));
     return c.json(rows);
   });
@@ -1215,11 +1214,9 @@ export function createIdeRoutes(): Hono<HonoEnv> {
 
   router.get('/agents/:id', async (c) => {
     const db = buildDatabase(c.env);
-    const [row] = await db.select(agentRow).from(ideAgents).where(and(
-      eq(ideAgents.id, c.req.param('id')),
-      eq(ideAgents.published, true),
-      isNotNull(ideAgents.tenantId),
-    )).limit(1);
+    const [row] = await db.select(agentRow).from(ideAgents)
+      .where(publicAgentScope(eq(ideAgents.id, c.req.param('id')), isNotNull(ideAgents.tenantId)))
+      .limit(1);
     if (!row) return c.json({ error: 'Agent not found' }, 404);
     return c.json(row);
   });
@@ -1227,11 +1224,9 @@ export function createIdeRoutes(): Hono<HonoEnv> {
   router.get('/agents/:id/package', async (c) => {
     const agentId = c.req.param('id');
     const db = buildDatabase(c.env);
-    const [agent] = await db.select(agentRow).from(ideAgents).where(and(
-      eq(ideAgents.id, agentId),
-      eq(ideAgents.published, true),
-      isNotNull(ideAgents.tenantId),
-    )).limit(1);
+    const [agent] = await db.select(agentRow).from(ideAgents)
+      .where(publicAgentScope(eq(ideAgents.id, agentId), isNotNull(ideAgents.tenantId)))
+      .limit(1);
     if (!agent) return c.json({ error: 'Agent not found' }, 404);
     await db.update(ideAgents).set({ requestCount: sql`${ideAgents.requestCount} + 1`, lastUsedAt: new Date() }).where(and(
       eq(ideAgents.id, agentId),
@@ -1264,11 +1259,9 @@ export function createIdeRoutes(): Hono<HonoEnv> {
   router.get('/agents/:id/mamba-state', async (c) => {
     const db = buildDatabase(c.env);
     const [agent] = await db.select({ mamba_state: ideAgents.mambaState, package_version: ideAgents.packageVersion })
-      .from(ideAgents).where(and(
-        eq(ideAgents.id, c.req.param('id')),
-        eq(ideAgents.published, true),
-        isNotNull(ideAgents.tenantId),
-      )).limit(1);
+      .from(ideAgents)
+      .where(publicAgentScope(eq(ideAgents.id, c.req.param('id')), isNotNull(ideAgents.tenantId)))
+      .limit(1);
     if (!agent) return c.json({ error: 'Agent not found' }, 404);
     if (!agent.mamba_state) return c.json({ error: 'No mamba state stored for this agent' }, 404);
     return c.json(agent.mamba_state);
@@ -1316,11 +1309,9 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     if (!c.env.OPENROUTER_API_KEY?.trim()) {
       return c.json({ error: 'LLM not configured' }, 503);
     }
-    const [agent] = await db.select(agentRow).from(ideAgents).where(and(
-      eq(ideAgents.id, agentId),
-      eq(ideAgents.published, true),
-      isNotNull(ideAgents.tenantId),
-    )).limit(1);
+    const [agent] = await db.select(agentRow).from(ideAgents)
+      .where(publicAgentScope(eq(ideAgents.id, agentId), isNotNull(ideAgents.tenantId)))
+      .limit(1);
     if (!agent) return c.json({ error: 'Agent not found' }, 404);
 
     // Recall grounded context from the agent's ingested proprietary knowledge,

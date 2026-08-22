@@ -8,6 +8,7 @@ import de from './messages/de.json';
 import { LOCALES, DEFAULT_LOCALE, type Locale } from './config';
 import { STALL_CAUSES, PROVIDER_PROBE_STATES } from '@/lib/builderforceApi';
 import { CAMPAIGN_BLOCKERS } from '@/lib/growthApi';
+import { HEALTH_SIGNALS } from '@/lib/pm/portfolioHealth';
 import { CREATION_OBJECT_REGISTRY } from '@/components/creation-canvas/creationObjectRegistry';
 import { CREATION_TEMPLATES } from '@/components/creation-canvas/creationTemplates';
 import {
@@ -194,6 +195,36 @@ describe('message catalogs', () => {
       return t(key as never) === key;
     });
     expect(missing).toEqual([]);
+  });
+
+  /**
+   * The portfolio health card finishes BOTH of its sentences at runtime —
+   * t(`health.blocker.${key}`) and t(`health.action.${key}`) off the same signal key.
+   * `check:i18n-keys` can only prove the two prefixes exist; the suffixes are proven
+   * here, by enumerating the registry that supplies them. A gap renders the dotted
+   * path where the blocker or the recommended next action belongs.
+   */
+  it.each(LOCALES)('%s labels every portfolio health signal, blocker and action', (locale) => {
+    const t = createTranslator({ locale, messages: CATALOGS[locale] });
+    // Several of these messages interpolate — next-intl falls back to the key when an
+    // argument is missing, which is the same shape as a missing key. Supply the whole
+    // argument surface (extras are ignored) so only a genuine gap fails.
+    const values = { count: 2, score: 50 } as never;
+    const missing = HEALTH_SIGNALS.flatMap((signal) =>
+      [`pmo.health.blocker.${signal}`, `pmo.health.action.${signal}`].filter(
+        (key) => t(key as never, values) === key,
+      ),
+    );
+    expect(missing).toEqual([]);
+  });
+
+  it.each(LOCALES)('%s labels every RAG band and risk level', (locale) => {
+    const t = createTranslator({ locale, messages: CATALOGS[locale] });
+    const keys = [
+      ...['green', 'amber', 'red'].map((band) => `pmo.health.rag.${band}`),
+      ...['low', 'medium', 'high'].map((risk) => `pmo.health.risk.${risk}`),
+    ];
+    expect(keys.filter((key) => t(key as never) === key)).toEqual([]);
   });
 
   it.each(LOCALES)('%s labels every creation canvas object kind', (locale) => {

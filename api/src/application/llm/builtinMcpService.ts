@@ -51,6 +51,7 @@ import { parseJsonObject } from '../../domain/shared/json';
 import { signJwt } from '../../infrastructure/auth/JwtService';
 import { workflows, workflowDefinitions, specs, promptLibraryEntries, promptLibraryVersions, approvalRules, approvals, brainChats, agents, projectAgents, agentAssignments, savedDashboards, dashboardWidgets, alerts, alertEvents, activityLog, boards, cronJobs, portfolios, initiatives, objectives, objectiveLinks, keyResults, ideAgents, marketplaceSkills, artifactAssignments, socControls, socEvidence, pokerSessions, pokerStories, pokerVotes, retrospectives, retroItems, boardConnections, projectRepositories, pullRequests, taskFileChanges, tasks, chatSessions, chatMessages, swimlanes, tenants, executions, usageSnapshots, toolAuditEvents, executionMessages, agentHosts, agentHostProjects, errorGroups, roadmapItems, projectRoleAssignments, salesAssociateSettings, salesCampaigns, salesCoachingNotes, salesCommissionRules, salesContacts, salesReferrals, salesWeeklyGoals, users } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
+import { publicAgentScope } from '../marketplace/publicAgentScope';
 import { resolveSegment } from '../../infrastructure/auth/segmentResolver';
 import type { McpToolEntry } from './mcpExtensionService';
 import type { Env } from '../../env';
@@ -2195,11 +2196,13 @@ const CATALOG: BuiltinTool[] = [
   { tool: 'cloud_agents.delete', mutates: true, description: 'Delete a cloud agent.', parameters: obj({ agentId: S }, ['agentId']), run: async (ctx, a) => { const rows = await ctx.db.delete(ideAgents).where(and(eq(ideAgents.id, str(a.agentId)), eq(ideAgents.tenantId, ctx.tenantId))).returning({ id: ideAgents.id }); return { deleted: rows.length > 0 ? str(a.agentId) : null }; } },
 
   // ---- Marketplace: published agents + skills (PUBLIC, world-readable registries) ----
-  // agents_published is the cross-tenant marketplace view of ide_agents (published+active).
-  // It is intentionally NOT tenant-scoped — it is the same public registry for everyone
-  // (mirrors GET /api/workforce/agents). hire SKIPPED (purchase/billing flow).
-  { tool: 'agents_published.list', mutates: false, description: 'List published workforce agents (the public marketplace registry).', parameters: obj({}), run: (ctx) => ctx.db.select({ ...getTableColumns(ideAgents), tenantId: ideAgents.tenantId }).from(ideAgents).where(and(eq(ideAgents.published, true), eq(ideAgents.status, 'active'))).orderBy(desc(ideAgents.hireCount)).limit(200) },
-  { tool: 'agents_published.get', mutates: false, description: 'Get a published marketplace agent by id.', parameters: obj({ agentId: S }, ['agentId']), run: async (ctx, a) => (await ctx.db.select({ ...getTableColumns(ideAgents), tenantId: ideAgents.tenantId }).from(ideAgents).where(and(eq(ideAgents.id, str(a.agentId)), eq(ideAgents.published, true), eq(ideAgents.status, 'active'))).limit(1))[0] ?? null },
+  // agents_published is the cross-tenant marketplace view of ide_agents. It is
+  // intentionally NOT tenant-scoped — it is the same public registry for everyone, and
+  // it reads through `publicAgentScope` so it stays byte-for-byte the registry
+  // GET /api/workforce/agents serves (demo fixtures excluded, not merely
+  // published+active). hire SKIPPED (purchase/billing flow).
+  { tool: 'agents_published.list', mutates: false, description: 'List published workforce agents (the public marketplace registry).', parameters: obj({}), run: (ctx) => ctx.db.select({ ...getTableColumns(ideAgents), tenantId: ideAgents.tenantId }).from(ideAgents).where(publicAgentScope()).orderBy(desc(ideAgents.hireCount)).limit(200) },
+  { tool: 'agents_published.get', mutates: false, description: 'Get a published marketplace agent by id.', parameters: obj({ agentId: S }, ['agentId']), run: async (ctx, a) => (await ctx.db.select({ ...getTableColumns(ideAgents), tenantId: ideAgents.tenantId }).from(ideAgents).where(publicAgentScope(eq(ideAgents.id, str(a.agentId)))).limit(1))[0] ?? null },
   // skills_marketplace is the public published-skills catalog (no tenant column).
   { tool: 'skills_marketplace.list', mutates: false, description: 'Browse published marketplace skills (public).', parameters: obj({ category: S, q: S, limit: N }), run: (ctx, a) => ctx.db.select().from(marketplaceSkills).where(a.category != null ? and(eq(marketplaceSkills.published, true), eq(marketplaceSkills.category, str(a.category))) : eq(marketplaceSkills.published, true)).orderBy(desc(marketplaceSkills.downloads)).limit(a.limit != null ? num(a.limit) : 100) },
 

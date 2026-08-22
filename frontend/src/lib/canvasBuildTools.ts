@@ -43,7 +43,7 @@
 
 import type { BrainAction } from '@seanhogg/builderforce-brain-embedded';
 import { fetchFiles, fetchFileContent, fetchFileHistory, restoreFileVersion, saveFile } from '@/lib/api';
-import { coerceFileContent, validateFileContentForPath } from '@/lib/fileContentGuard';
+import { coerceFileContent, validateFileContentForPath } from '@builderforce/ide-file-contract';
 import { formatBuildFailures } from '@/lib/buildDiagnostics';
 import { MODALITIES, type ProjectModality } from '@/lib/modality';
 import type { CanvasBuildBinding } from '@/lib/canvasBuild';

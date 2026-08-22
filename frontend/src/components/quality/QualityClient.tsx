@@ -3,7 +3,7 @@
 import { useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { useRequireAuth } from '@/lib/useRequireAuth';
+import { RequireAuth } from '@/components/auth/RequireAuth';
 import PageContainer from '@/components/PageContainer';
 import { RoleGate } from '@/components/RoleGate';
 import { useProjectScope } from '@/lib/ProjectScopeContext';
@@ -25,10 +25,7 @@ import { QualityCollectorsManager } from './QualityCollectorsManager';
 export default function QualityClient() {
   const t = useTranslations('quality');
   const tFeedback = useTranslations('feedback');
-  const allowed = useRequireAuth();
   const tab = useSearchParams().get('tab') ?? '';
-
-  if (!allowed) return null;
 
   const isSetup = tab === 'collectors';
   const isFeedback = tab === 'feedback';
@@ -47,15 +44,17 @@ export default function QualityClient() {
   }
 
   return (
-    <PageContainer>
-      <div style={{ marginBottom: 18 }}>
-        <h1 style={{ fontSize: '1.5rem', fontWeight: 700, margin: 0 }}>{heading}</h1>
-        <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginTop: 4 }}>{subheading}</p>
-      </div>
-      <RoleGate capability="quality.view" variant="block">
-        {body}
-      </RoleGate>
-    </PageContainer>
+    <RequireAuth>
+      <PageContainer>
+        <div style={{ marginBottom: 18 }}>
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 700, margin: 0 }}>{heading}</h1>
+          <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginTop: 4 }}>{subheading}</p>
+        </div>
+        <RoleGate capability="quality.view" variant="block">
+          {body}
+        </RoleGate>
+      </PageContainer>
+    </RequireAuth>
   );
 }
 

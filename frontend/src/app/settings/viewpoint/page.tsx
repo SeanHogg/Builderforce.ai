@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * /settings/viewpoint — the insight-lens setting: which role's view of the
  * dashboards you get (CEO / CFO / CTO / CISO / PMO / EM).
@@ -12,14 +10,19 @@
  *
  * The old `/settings/persona` URL still resolves — see the redirect beside this
  * file. A rename that breaks every link anyone ever shared is not a rename.
+ *
+ * A server component: only <PersonaSelector> is interactive, so the heading is
+ * translated on the server and arrives in the visitor's locale on first paint.
  */
-
-import { useTranslations } from 'next-intl';
+import { getTranslations } from 'next-intl/server';
 import PageContainer from '@/components/PageContainer';
 import PersonaSelector from '@/components/settings/PersonaSelector';
 
-export default function ViewpointSettingsPage() {
-  const t = useTranslations('personaLens');
+// getTranslations reads the locale cookie, which makes the route per-request.
+export const runtime = 'edge';
+
+export default async function ViewpointSettingsPage() {
+  const t = await getTranslations('personaLens');
   return (
     <PageContainer width="readable" style={{ padding: '32px 40px' }}>
       <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 20 }}>{t('pageTitle')}</h1>

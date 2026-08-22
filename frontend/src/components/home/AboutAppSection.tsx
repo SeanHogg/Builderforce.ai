@@ -1,7 +1,13 @@
-// No `'use client'` directive on purpose: the sole importer is the homepage,
-// which is already a client boundary, so the directive would change nothing
-// except the architecture ratchet's count. Its siblings `HomePatterns` and
-// `MarketingFaq` omit it for the same reason.
+'use client';
+
+// The directive is REQUIRED here, and the reason is the homepage's runtime, not
+// this band's interactivity. `/` is a server component that must stay statically
+// prerenderable — reading copy through `getTranslations()` would touch the locale
+// cookie and turn the highest-traffic route into a per-request function. So this
+// band reads copy the way every other marketing string on `/` does: through
+// `useTranslations()` on the client, with `LocaleProvider` swapping to the
+// visitor's locale after hydration. Its siblings `HomePatterns` and `MarketingFaq`
+// take no hooks at all and stay server components.
 import { useTranslations } from 'next-intl';
 import Link from 'next/link';
 import {

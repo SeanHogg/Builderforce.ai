@@ -11,17 +11,23 @@ import { PmEmpty, PmError } from './pmShared';
 import { PmoRollup } from './PmoRollup';
 import { PmoStructure } from './PmoStructure';
 import { PmoCostReconciliation } from './PmoCostReconciliation';
+import { PortfolioHealthContent } from './PortfolioHealthContent';
 import { MeetingsCalendar } from '@/components/meetings/MeetingsCalendar';
 
 /**
- * PMO lens — the portfolio/initiative/OKR cockpit. Tabs: Rollup (the dashboard,
- * over a scope picker), Structure (the single management surface — portfolios own
- * their initiatives AND objectives, assigned by drag-drop or dropdown; the former
- * standalone OKRs tab was merged in here), and CAPEX/OPEX. The page-level RoleGate
- * (insights.portfolio) owns access; this component owns scope + tab state only.
- * Fully localized.
+ * PMO lens — the portfolio/initiative/OKR cockpit. Tabs: Health (the cross-project
+ * RAG read — one card per live project, worst first, under the counts and the top
+ * three actions), Rollup (the dashboard, over a scope picker), Structure (the single
+ * management surface — portfolios own their initiatives AND objectives, assigned by
+ * drag-drop or dropdown; the former standalone OKRs tab was merged in here), and
+ * CAPEX/OPEX. The page-level RoleGate (insights.portfolio) owns access; this component
+ * owns scope + tab state only. Fully localized.
+ *
+ * Health is first and default: it is the only tab that answers "where is the portfolio
+ * bleeding" without a scope being chosen first, which is the question somebody opening
+ * the portfolio has. Rollup is one click away and keeps its own scope picker.
  */
-type Tab = 'rollup' | 'structure' | 'cost';
+type Tab = 'health' | 'rollup' | 'structure' | 'cost';
 const WORKSPACE = 'workspace';
 
 const tabBtn = (active: boolean): React.CSSProperties => ({
@@ -37,7 +43,7 @@ const selectStyle: React.CSSProperties = {
 export function PmoContent() {
   const t = useTranslations('pmo');
   const { data: tree, error, reload } = usePmData<PmoTree>(() => pmoApi.tree(), []);
-  const [tab, setTab] = useState<Tab>('rollup');
+  const [tab, setTab] = useState<Tab>('health');
   // Deep-link from a Brain chat's "Open" on a strategy tier: `?focus=<kind>:<id>`
   // names ONE objective/initiative/portfolio card. Structure is the only tab that
   // renders those as individual cards (Rollup is an aggregate), so the link selects
@@ -89,7 +95,7 @@ export function PmoContent() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-        {(['rollup', 'structure', 'cost'] as Tab[]).map((tb) => (
+        {(['health', 'rollup', 'structure', 'cost'] as Tab[]).map((tb) => (
           <button key={tb} type="button" style={tabBtn(tab === tb)} onClick={() => setTab(tb)}>
             {t(`tabs.${tb}`)}
           </button>
@@ -128,6 +134,7 @@ export function PmoContent() {
         )}
       </div>
 
+      {tab === 'health' && <PortfolioHealthContent />}
       {tab === 'structure' && <PmoStructure tree={tree} onChange={reload} focus={focus} />}
       {tab === 'rollup' && (scope ? <PmoRollup scope={scope} /> : <PmEmpty message={t('emptyRollup')} />)}
       {tab === 'cost' && <PmoCostReconciliation />}

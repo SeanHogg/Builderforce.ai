@@ -241,9 +241,22 @@ export const NAV_GROUPS: NavGroup[] = [
     match: ['/growth'],
   },
   {
+    // Messaging, whichever wire it arrives on. Mail is the default tab; Phone is
+    // the Business Phone console — numbers, SMS, calls, credit and the statement.
+    //
+    // Phone is a TAB here rather than a destination of its own because it answers
+    // the question this destination already asks — what has this business said,
+    // and to whom — on a second channel. `/crm/phone` stays what it always was: the
+    // public page that SELLS the add-on, which is a different audience and lives in
+    // the marketing shell.
     id: 'inbox', labelKey: 'group.inbox', icon: '✉', href: '/inbox',
     seat: 'CMO', stage: 'run', rung: RUNG.WORKSPACE,
     match: ['/inbox'],
+    tabKind: 'query', basePath: '/inbox',
+    tabs: [
+      { id: '', labelKey: 'tab.mail', icon: '✉' },
+      { id: 'phone', labelKey: 'tab.phone', icon: '☎' },
+    ],
   },
   // ── RUN — the business seats ─────────────────────────────────────────────
   // Each resolves to the kernel domain surface PRD 20 built (`/seat/<domain>`),

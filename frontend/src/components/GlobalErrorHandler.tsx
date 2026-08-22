@@ -7,6 +7,7 @@ import {
   type ApiErrorEvent,
 } from '@/lib/errors/apiErrorEvent';
 import { requestReportError } from '@/lib/reportError';
+import { useApiErrorText } from '@/lib/errors/useApiErrorText';
 import { copyTextToClipboard } from '@/lib/useCopyToClipboard';
 import { useFormat } from "@/i18n/useFormat";
 
@@ -76,6 +77,10 @@ const MAX_TOASTS = 5;
 
 export function GlobalErrorHandler() {
   const [toasts, setToasts] = useState<ToastEntry[]>([]);
+  const t = useTranslations('globalError');
+  // The same naming the toast uses, so a copied ticket and the toast that
+  // produced it can never describe the failure differently.
+  const text = useApiErrorText();
 
   useEffect(() => {
     function onApiError(e: Event) {
@@ -111,19 +116,19 @@ export function GlobalErrorHandler() {
   const copyTicket = useCallback(async (entry: ToastEntry) => {
     const { event: ev } = entry;
     const detailsBlock = ev.details
-      ? `\n**Details:**\n\`\`\`json\n${JSON.stringify(ev.details, null, 2)}\n\`\`\``
+      ? `\n**${t('ticket.details')}:**\n\`\`\`json\n${JSON.stringify(ev.details, null, 2)}\n\`\`\``
       : '';
     const ticket = [
-      `## Support Ticket — API Error`,
-      `**Time:** ${ev.timestamp}`,
-      `**URL:** ${ev.method} ${ev.url}`,
-      `**Status:** ${ev.status}`,
-      ev.code ? `**Code:** ${ev.code}` : null,
-      `**Message:** ${ev.message}`,
-      ev.requestId ? `**Request ID:** ${ev.requestId}` : null,
+      `## ${t('ticket.heading')}`,
+      `**${t('ticket.time')}:** ${ev.timestamp}`,
+      `**${t('ticket.url')}:** ${ev.method} ${ev.url}`,
+      `**${t('ticket.status')}:** ${text.title(ev)}`,
+      ev.code ? `**${t('ticket.code')}:** ${ev.code}` : null,
+      `**${t('ticket.message')}:** ${text.message(ev)}`,
+      ev.requestId ? `**${t('ticket.requestId')}:** ${ev.requestId}` : null,
       detailsBlock || null,
-      `**User Agent:** ${navigator.userAgent}`,
-      `**Page:** ${window.location.href}`,
+      `**${t('ticket.userAgent')}:** ${navigator.userAgent}`,
+      `**${t('ticket.page')}:** ${window.location.href}`,
     ]
       .filter(Boolean)
       .join('\n');
@@ -133,14 +138,14 @@ export function GlobalErrorHandler() {
     // clipboard resolves false and leaves the toast unflagged, as the old catch did.
     if (!await copyTextToClipboard(ticket)) return;
     setToasts((prev) =>
-      prev.map((t) => (t.id === entry.id ? { ...t, copied: true } : t)),
+      prev.map((toast) => (toast.id === entry.id ? { ...toast, copied: true } : toast)),
     );
     setTimeout(() => {
       setToasts((prev) =>
-        prev.map((t) => (t.id === entry.id ? { ...t, copied: false } : t)),
+        prev.map((toast) => (toast.id === entry.id ? { ...toast, copied: false } : toast)),
       );
     }, 2000);
-  }, []);
+  }, [t, text]);
 
   if (toasts.length === 0) return null;
 
@@ -188,6 +193,7 @@ function Toast({
 }) {
   const fmt = useFormat();
   const t = useTranslations('globalError');
+  const text = useApiErrorText();
   const { id, event: ev, expanded, copied } = entry;
 
   return (
@@ -221,8 +227,7 @@ function Toast({
             whiteSpace: 'nowrap',
           }}
         >
-          {ev.status}
-          {ev.code ? ` ${ev.code}` : ''}
+          {text.title(ev)}
         </span>
         <span
           style={{
@@ -246,8 +251,8 @@ function Toast({
         {/* Add user context to this error in BuilderForce.ai's product Quality feed. */}
         <button
           onClick={() => requestReportError({
-            title: `${ev.status}${ev.code ? ` ${ev.code}` : ''}`.trim(),
-            message: ev.message,
+            title: text.title(ev),
+            message: text.message(ev),
             url: ev.url,
           })}
           title={t('report')}
@@ -277,16 +282,20 @@ function Toast({
         </button>
       </div>
 
-      {/* Message */}
+      {/* Message. Clamped rather than truncated to one line: a transport failure
+          explains what actually happened in a sentence, and a single ellipsised
+          line reduced it to "The API returned no response at…". */}
       <div
         style={{
           marginTop: 6,
           overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
+          display: '-webkit-box',
+          WebkitBoxOrient: 'vertical',
+          WebkitLineClamp: 3,
+          wordBreak: 'break-word',
         }}
       >
-        {ev.message}
+        {text.message(ev)}
       </div>
 
       {/* Method + URL */}

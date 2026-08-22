@@ -18,13 +18,17 @@
 import { Hono } from 'hono';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { requireRole } from '../middleware/requireRole';
-import { commsBalance, commsStatement, topUpComms } from '../../application/phone/commsBalance';
+import { commsBalance, commsStatement } from '../../application/phone/commsBalance';
+import {
+  COMMS_TOPUP_PACKS, CommsTopUpError, completeCommsTopUp, startCommsTopUp,
+} from '../../application/phone/commsTopUp';
 import { DEFAULT_COMMS_RATES } from '../../application/phone/commsRates';
 import { applyCallStatus, callLog, placeCall } from '../../application/phone/phoneCalls';
 import { applySmsStatus, recordInboundSms, sendSms, smsLog } from '../../application/phone/phoneMessaging';
 import {
   listNumbers, purchaseNumber, releaseNumber, searchAvailableNumbers,
 } from '../../application/phone/phoneNumbers';
+import { phonePlan } from '../../application/phone/phonePlan';
 import { authenticatePhoneWebhook } from '../../application/phone/phoneWebhookAuth';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
@@ -46,11 +50,20 @@ export function createPhoneRoutes(db: Db): Hono<HonoEnv> {
   router.get('/', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const env = c.env as Env;
-    const [balance, numbers] = await Promise.all([
+    const [balance, numbers, plan] = await Promise.all([
       commsBalance(db, env, tenantId),
       listNumbers(db, tenantId),
+      phonePlan(db, env, tenantId),
     ]);
-    return c.json({ balanceCents: balance, numbers, rates: DEFAULT_COMMS_RATES });
+    // The card the CONSOLE shows is the card the meter charges: the published
+    // overage rates when the add-on is live, the platform default otherwise. Two
+    // rate lists is how a customer gets quoted one price and billed another.
+    return c.json({
+      balanceCents: balance,
+      numbers,
+      plan: { active: plan.active, status: plan.status, includedNumbers: plan.includedNumbers, allowanceCents: plan.allowanceCents },
+      rates: DEFAULT_COMMS_RATES.map((rate) => ({ ...rate, cents: plan.rates[rate.unit] ?? rate.cents })),
+    });
   });
 
   router.get('/statement', async (c) => {
@@ -133,27 +146,55 @@ export function createPhoneRoutes(db: Db): Hono<HonoEnv> {
 
   // ── Top-up ──────────────────────────────────────────────────────────────
   //
-  // Records a credit that a PAYMENT already settled — `reference` is the payment
-  // provider's own id, which is what makes it idempotent and what makes it
-  // auditable. Owner-gated because it moves money into the workspace's account.
-  router.post('/topup', requireRole('owner'), async (c) => {
-    const tenantId = c.get('tenantId') as number;
-    const body = await c.req.json<{ cents?: number; reference?: string }>().catch(() => ({}));
-    const cents = Number(body.cents);
-    if (!Number.isFinite(cents) || cents <= 0) return c.json({ error: 'cents must be positive' }, 400);
-    if (!body.reference) return c.json({ error: 'reference is required' }, 400);
+  // Two steps, because credit is bought with MONEY. `start` opens a hosted
+  // checkout for a published pack; `complete` reads the session back from the
+  // processor and only then credits the ledger. An endpoint that took an amount
+  // and a caller-supplied reference would be an endpoint that mints credit.
+  //
+  // Manager+ rather than owner-only: it is a purchase against the workspace, the
+  // same commitment level as provisioning a number, and an owner-only gate makes
+  // a phone product that stops working the moment the owner is on holiday.
+  router.get('/topup/packs', async (c) => c.json({ packs: COMMS_TOPUP_PACKS }));
 
-    const applied = await topUpComms(db, c.env as Env, {
-      tenantId, cents: Math.round(cents), reference: body.reference,
-      memo: `Communications top-up`,
-    });
-    return c.json({ ok: applied, balanceCents: await commsBalance(db, c.env as Env, tenantId) });
+  router.post('/topup', requireRole('manager'), async (c) => {
+    const body = await c.req.json<{ packId?: string; billingEmail?: string }>().catch(() => ({}));
+    if (!body.packId) return c.json({ error: 'packId is required' }, 400);
+    try {
+      return c.json(await startCommsTopUp(c.env as Env, {
+        tenantId: c.get('tenantId') as number,
+        userId: c.get('userId') as string,
+        packId: body.packId,
+        billingEmail: body.billingEmail ?? null,
+        appUrl: (c.env as Env).APP_URL ?? new URL(c.req.url).origin,
+      }));
+    } catch (error) {
+      if (error instanceof CommsTopUpError) return c.json({ error: error.message }, error.status);
+      throw error;
+    }
+  });
+
+  router.post('/topup/complete', requireRole('manager'), async (c) => {
+    const body = await c.req.json<{ sessionId?: string }>().catch(() => ({}));
+    if (!body.sessionId) return c.json({ error: 'sessionId is required' }, 400);
+    try {
+      return c.json(await completeCommsTopUp(db, c.env as Env, {
+        tenantId: c.get('tenantId') as number,
+        checkoutSessionId: body.sessionId,
+      }));
+    } catch (error) {
+      if (error instanceof CommsTopUpError) return c.json({ error: error.message }, error.status);
+      throw error;
+    }
   });
 
   return router;
 }
 
-function refusalStatus(reason: string): 402 | 409 | 502 | 400 {
+function refusalStatus(reason: string): 402 | 403 | 409 | 502 | 400 {
+  // The workspace has not bought Business Phone (or it lapsed). 403 rather than
+  // 402: 402 means "top up your credit", and answering it here would send an
+  // operator to the top-up dialog for a problem topping up cannot fix.
+  if (reason === 'addon_inactive') return 403;
   if (reason === 'insufficient_credit') return 402;
   if (reason === 'no_sending_number' || reason === 'number_taken') return 409;
   if (reason === 'vendor_refused') return 502;

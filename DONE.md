@@ -1,3 +1,53 @@
+## ✅ RESOLVED 2026-08-22 — One component picker, two errands, and the label path that was resolved four ways
+
+**The gap.** A `component` card was chosen by TYPING its id. The obvious fix — a `select` built from the
+registry — could not work: `SettingsFieldOption.labelKey` resolves through the surface's own
+`useTranslations('creationCanvas')`, and the component titles live under `components.title.*`, which a
+namespaced translator cannot reach. Duplicating 34 labels into `creationCanvas` to get around that
+would have put one fact in two catalogs.
+
+The right answer was the one the register named: reuse the real picker. `AddWidgetPicker` already
+browsed this registry, grouped and searchable — it was just welded to one errand and one mount.
+
+### What was actually duplicated
+
+Not the panel. The QUESTION behind it, answered in four places with four shapes:
+
+- `AddWidgetPicker` grouped, searched and labelled the registry inline;
+- `app/insights/page.tsx` built its OWN `<optgroup>` list from `listComponentGroups()`, re-translating
+  every heading and title;
+- `WidgetBrainBridge` carried a private `title()` with a `try/catch` fallback to the raw key;
+- `WidgetCard` resolved `t('title.' + def.titleKey)` for itself.
+
+Four copies of "what is this component called", and the search was the half that would have rotted
+silently: one matched the rendered LABEL, and a future one matching `titleKey` would still pass a naive
+"it filters" test while breaking search for every component whose key and label differ — which is most.
+
+### The extraction
+
+- **`lib/components/useComponentCatalog.ts`** — grouped, searched, mount-filtered, labelled, once. It
+  takes the mount as an ARGUMENT rather than trusting callers to filter, so offering a dashboard-only
+  tile as a board card is not a thing a caller can forget to prevent. `useComponentLabel` is the one
+  label path; all four sites above now use it.
+- **`components/component-picker/ComponentPicker.tsx`** — the panel. The errand arrives as `action`, a
+  render prop, and never as a branch: it knows nothing about pins, nothing about canvas nodes, and
+  nothing about permissions. An ACTION self-gates, because only the action knows what it is asking
+  permission for — pinning a tile and mounting one on a board are not the same grant.
+- **`ComponentPinAction`** (dashboard) and **`ComponentChooseAction`** (single-selection) are those two
+  errands. `AddWidgetPicker` is DELETED; `/insights` composes the picker with the pin action.
+- **The canvas card** now opens the same catalogue, and names itself after the component it mounts
+  unless somebody has typed a title of their own.
+- Dead on arrival and removed: `hasComponent` (no callers), `WidgetBrainBridge`'s now-unused
+  translator. The shared placeholder copy stopped saying "Search widgets" — it serves two surfaces and
+  must not name one of them.
+
+**Verification.** Typecheck clean; `check:i18n-keys`, `check:design-tokens` green; 113 tests across
+picker, widgets, insights, surfaces and message parity pass, plus the canvas suite. Five new tests pin
+the properties that made the extraction worth doing: the picker offers only what a mount can render,
+renders the caller's errand for every row, searches on the visible label AND on the id a board card
+stores, and says so when nothing matches instead of showing bare headings. The real-catalog assertions
+go through the existing shared `realCatalogTranslator` rather than a sixth hand-rolled resolver.
+
 ## ✅ RESOLVED 2026-08-22 — One component registry with three mounts, and a published app that can read its owner's business
 
 **The gap.** "A reusable component" existed three times in this codebase under three names, and a

@@ -37,6 +37,7 @@ import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { executeConnectorAction } from '../connectors/connectorRuntime';
 import { debitComms, reserveComms, type CommsRefusal } from './commsBalance';
 import { rateFor, type CommsRateOverride } from './commsRates';
+import { requireActivePhonePlan, type PlanRefusal } from './phonePlan';
 
 const VENDOR = 'twilio';
 
@@ -61,6 +62,7 @@ export interface ProvisionedNumber {
 
 export type PurchaseRefusal =
   | CommsRefusal
+  | PlanRefusal
   | { ok: false; reason: 'number_taken' | 'vendor_refused'; detail: string };
 
 /** Search purchasable numbers. Read-only and uncached — an availability list is
@@ -120,7 +122,10 @@ export async function purchaseNumber(
     label?: string; rateOverride?: CommsRateOverride | null;
   },
 ): Promise<{ ok: true; number: ProvisionedNumber } | PurchaseRefusal> {
-  const monthlyCents = rateFor('number_month', input.rateOverride);
+  const gate = await requireActivePhonePlan(db, env, input.tenantId);
+  if (!gate.ok) return gate;
+
+  const monthlyCents = rateFor('number_month', input.rateOverride ?? gate.plan.rates);
 
   const affordable = await reserveComms(db, env, input.tenantId, monthlyCents);
   if (!affordable.ok) return affordable;

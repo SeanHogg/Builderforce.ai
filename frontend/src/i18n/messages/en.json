@@ -724,7 +724,9 @@
       "pipeline": "Pipeline",
       "interviewKits": "Interview kits",
       "offers": "Offers",
-      "rewards": "Rewards"
+      "rewards": "Rewards",
+      "mail": "Mail",
+      "phone": "Phone"
     },
     "primaryAria": "Primary",
     "destination": {
@@ -2187,6 +2189,7 @@
     "title": "Portfolio (PMO)",
     "subtitle": "Roll cost, delivery, DORA, AI-effectiveness and OKR attainment up from projects to initiatives and portfolios.",
     "tabs": {
+      "health": "Health",
       "rollup": "Rollup",
       "structure": "Portfolios & OKRs",
       "cost": "CAPEX/OPEX"
@@ -2324,7 +2327,51 @@
       "saved": "Linked"
     },
     "unassignedPortfolio": "Unassigned",
-    "meetingsHeading": "Meetings"
+    "meetingsHeading": "Meetings",
+    "health": {
+      "snapshotHeading": "Portfolio snapshot",
+      "generatedAt": "As of {when}",
+      "empty": "No live projects yet — create one, or take a project off hold, to see its health here.",
+      "ofTotal": "of {total} live projects",
+      "overallLabel": "Overall portfolio health",
+      "topActionsHeading": "Top priority actions",
+      "blockerLabel": "Key blocker:",
+      "actionLabel": "Next action:",
+      "cardAria": "{name}: {rag}",
+      "taskSummary": "{done} of {total} tasks done · {open} open",
+      "rag": {
+        "green": "Green",
+        "amber": "Amber",
+        "red": "Red"
+      },
+      "risk": {
+        "low": "Low risk",
+        "medium": "Medium risk",
+        "high": "High risk"
+      },
+      "blocker": {
+        "noTasks": "No tasks defined — there is nothing to measure or execute against.",
+        "onHold": "Deprioritised — no active work is scheduled.",
+        "blocked": "{count, plural, one {# blocked task} other {# blocked tasks}} — nothing can move.",
+        "overdue": "{count, plural, one {# task is overdue} other {# tasks are overdue}}.",
+        "notStarted": "Nothing has been completed yet — {count, plural, one {# task has} other {# tasks have}} not been started.",
+        "deliveryStalled": "Delivery has stalled — health {score}/100 across cadence, cycle time and flow.",
+        "deliveryAtRisk": "Delivery is slipping — health {score}/100 across cadence, cycle time and flow.",
+        "noSignal": "No delivery signal yet — no deployments and no completed work to measure.",
+        "onTrack": "No blocker — the work is moving."
+      },
+      "action": {
+        "noTasks": "Define the scope and create the first tasks this week, or archive the project.",
+        "onHold": "Set a review date and record what would restart the work.",
+        "blocked": "Clear or reassign the blocked tasks before any new work is pulled in.",
+        "overdue": "Reschedule or close the overdue tasks to recover the project's dates.",
+        "notStarted": "Run a kickoff: name an owner and pull the first tasks into progress.",
+        "deliveryStalled": "Treat as P0: find what stopped the flow before any new scope lands.",
+        "deliveryAtRisk": "Cut work in progress and ship the smallest change end to end this week.",
+        "noSignal": "Connect deployments or complete a first task so delivery becomes measurable.",
+        "onTrack": "Keep going — no intervention needed."
+      }
+    }
   },
   "insights": {
     "loading": "Loading…",
@@ -4621,9 +4668,9 @@
     "pin": "Pin to dashboard",
     "unpin": "Unpin",
     "expand": "Open full report",
-    "addTitle": "Add widgets",
+    "addTitle": "Add components",
     "addToDashboard": "Add to dashboard",
-    "searchPlaceholder": "Search widgets…",
+    "searchPlaceholder": "Search components…",
     "group": {
       "aiImpact": "AI Impact",
       "delivery": "Delivery",
@@ -8356,7 +8403,6 @@
     "seoTitle": "Business Phone — Builderforce.ai",
     "seoDescription": "A dedicated business number for voice, SMS, and MMS.",
     "active": "Business Phone is active",
-    "provisioning": "Your number is ready for provisioning and assignment.",
     "loading": "Loading pricing…",
     "createAccount": "Create an account",
     "voiceMessaging": "Voice and messaging",
@@ -15992,7 +16038,25 @@
     "expandDetails": "Expand details",
     "report": "Report this error",
     "copyTicket": "Copy support ticket",
-    "dismiss": "Dismiss"
+    "dismiss": "Dismiss",
+    "transport": {
+      "title": "No response",
+      "offline": "Your device is offline, so the request never left the browser. It will work again once the connection is back.",
+      "aborted": "The request was cancelled before a response arrived.",
+      "unreachable": "BuilderForce could not be reached. The request either never arrived or was answered by something other than the API — this is not a problem with your browser settings, and it has been reported automatically."
+    },
+    "ticket": {
+      "heading": "Support Ticket — API Error",
+      "time": "Time",
+      "url": "URL",
+      "status": "Status",
+      "code": "Code",
+      "message": "Message",
+      "requestId": "Request ID",
+      "details": "Details",
+      "userAgent": "User Agent",
+      "page": "Page"
+    }
   },
   "reportError": {
     "title": "Report an error",
@@ -26353,5 +26417,117 @@
     "notEnabled": "This integration is not enabled. A workspace administrator can enable it in BuilderForce → Settings → Integration.",
     "capabilityMissing": "The \"{capability}\" capability is not enabled for this workspace.",
     "comingSoon": "{label} is registered but no component claims it yet."
+  },
+  "phone": {
+    "console": {
+      "intro": "Your business line: the numbers you hold, what you have sent and received, and what it costs."
+    },
+    "plan": {
+      "active": "Active",
+      "pastDue": "Payment overdue",
+      "inactive": "Not active"
+    },
+    "balance": {
+      "title": "Communications credit",
+      "unit": "remaining",
+      "allowance": "{amount} of credit is added each month by your subscription.",
+      "includedNumbers": "{count, plural, one {# number is included in your subscription} other {# numbers are included in your subscription}}.",
+      "empty": "Your credit has run out. Top up to keep sending."
+    },
+    "topUp": {
+      "title": "Top up",
+      "intro": "Credit never expires and is spent across calls, SMS and numbers.",
+      "credited": "{amount} of credit added.",
+      "failed": "That payment could not be completed.",
+      "cancelled": "Checkout was cancelled. Nothing was charged."
+    },
+    "numbers": {
+      "title": "Your numbers",
+      "empty": "You do not hold a number yet. Search for one below.",
+      "included": "Included in your subscription",
+      "monthly": "{amount} per month",
+      "suspended": "suspended for low credit",
+      "release": "Release",
+      "releaseTitle": "Release this number?",
+      "releaseMessage": "{number} goes back to the carrier and cannot be reclaimed. Calls and messages already sent stay in your log.",
+      "releaseAction": "Release number",
+      "releaseFailed": "That number could not be released."
+    },
+    "search": {
+      "title": "Find a number",
+      "areaCode": "Area code",
+      "areaCodePlaceholder": "e.g. 415",
+      "contains": "Contains",
+      "containsPlaceholder": "digits or letters",
+      "action": "Search",
+      "searching": "Searching…",
+      "noResults": "No numbers matched. Try a different area code.",
+      "buy": "Buy",
+      "buying": "Buying…",
+      "taken": "Somebody bought that number first. Pick another.",
+      "buyFailed": "That number could not be bought.",
+      "failed": "The search failed. Try again."
+    },
+    "compose": {
+      "title": "Send a message",
+      "to": "To",
+      "toPlaceholder": "+15551234567",
+      "body": "Message",
+      "bodyPlaceholder": "What do you want to say?",
+      "characters": "{count, plural, one {# character} other {# characters}}",
+      "unicodeWarning": "contains characters that may increase the cost",
+      "send": "Send",
+      "sending": "Sending…",
+      "sent": "Sent — {segments, plural, one {# segment} other {# segments}}, {amount}.",
+      "noNumber": "You need a phone number before you can send. Buy one above.",
+      "noCredit": "Not enough credit to send this message. Top up first.",
+      "failed": "That message was not sent."
+    },
+    "messages": {
+      "title": "Messages",
+      "empty": "No messages yet.",
+      "from": "From {number}",
+      "to": "To {number}",
+      "status": {
+        "queued": "queued",
+        "sent": "sent",
+        "delivered": "delivered",
+        "bounced": "not delivered",
+        "failed": "failed"
+      }
+    },
+    "calls": {
+      "title": "Calls",
+      "empty": "No calls yet.",
+      "from": "From {number}",
+      "to": "To {number}",
+      "minutes": "{count, plural, one {# min} other {# min}}",
+      "status": {
+        "completed": "completed",
+        "busy": "busy",
+        "no-answer": "no answer",
+        "failed": "failed",
+        "canceled": "cancelled",
+        "ringing": "ringing"
+      }
+    },
+    "statement": {
+      "title": "Statement",
+      "empty": "No credit has moved yet."
+    },
+    "rates": {
+      "title": "Rates",
+      "note": "These are the rates you are charged, taken from your published pricing.",
+      "unit": {
+        "sms_segment": "SMS, per segment",
+        "mms_message": "MMS, per message",
+        "voice_minute": "Voice, per minute",
+        "number_month": "Extra number, per month"
+      }
+    }
+  },
+  "projectRedirect": {
+    "invalidProject": "That project link is not valid.",
+    "opening": "Opening your project…"
   }
 }

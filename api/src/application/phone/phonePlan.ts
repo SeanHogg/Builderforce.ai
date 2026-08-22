@@ -101,6 +101,26 @@ export async function phonePlan(db: Db, env: Env, tenantId: number): Promise<Pho
   };
 }
 
+export type PlanRefusal = { ok: false; reason: 'addon_inactive'; status: string };
+
+/**
+ * The entitlement gate, expressed where it cannot be skipped.
+ *
+ * It lives in the application layer rather than as route middleware on purpose:
+ * an HTTP handler is not the only caller. An MCP tool, a workflow step and a
+ * campaign automation all reach `sendSms` directly, and a gate that only exists
+ * at the route is a gate three other doors walk around. Every spend path calls
+ * this first and passes `plan.rates` on to the meter, so the price charged and
+ * the entitlement checked are read in the same breath and cannot drift.
+ */
+export async function requireActivePhonePlan(
+  db: Db, env: Env, tenantId: number,
+): Promise<{ ok: true; plan: PhonePlan } | PlanRefusal> {
+  const plan = await phonePlan(db, env, tenantId);
+  if (!plan.active) return { ok: false, reason: 'addon_inactive', status: plan.status };
+  return { ok: true, plan };
+}
+
 type PhonePricing = Awaited<ReturnType<typeof getPublishedPricing>>['businessPhone'];
 
 /** Dollars → cents, once. Fractional survives; see the file docstring. */

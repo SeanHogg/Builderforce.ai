@@ -1,23 +1,15 @@
-'use client';
-
-import { useEffect } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
-
 /**
  * Legacy `/tasks` route. Tasks now live on the consolidated Projects / Tasks page
- * (`/projects`) under the Tasks tab. Redirect here, preserving the `?project=<id>`
+ * (`/projects`) under the Tasks tab. Redirect there, preserving the `?project=<id>`
  * scope so existing deep links and bookmarks keep working.
  */
-export default function TasksRedirectPage() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
+import { retiredRoute } from '@/lib/routing/retiredRoute';
 
-  useEffect(() => {
-    const project = searchParams.get('project');
-    const params = new URLSearchParams({ tab: 'tasks' });
-    if (project) params.set('project', project);
-    router.replace(`/projects?${params.toString()}`);
-  }, [router, searchParams]);
+// Reading the incoming query string makes this route per-request.
+export const runtime = 'edge';
 
-  return null;
-}
+export default retiredRoute(({ project }) => {
+  const params = new URLSearchParams({ tab: 'tasks' });
+  if (project) params.set('project', project);
+  return `/projects?${params.toString()}`;
+});

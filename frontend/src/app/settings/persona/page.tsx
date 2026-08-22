@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * The old home of the insight lens, kept as a redirect.
  *
@@ -9,14 +7,6 @@
  * Every link ever shared — and the `psychometricPersona` feature-gate entry that
  * still keys on the old path — resolves here and lands on the real page.
  */
+import { retiredRoute } from '@/lib/routing/retiredRoute';
 
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-
-export const runtime = 'edge';
-
-export default function PersonaSettingsRedirect() {
-  const router = useRouter();
-  useEffect(() => { router.replace('/settings/viewpoint'); }, [router]);
-  return null;
-}
+export default retiredRoute('/settings/viewpoint');

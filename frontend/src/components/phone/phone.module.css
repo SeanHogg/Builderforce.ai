@@ -1,0 +1,287 @@
+/*
+ * Business Phone console — shared styling for the self-contained cards.
+ *
+ * Same two rules the points surfaces follow, for the same reasons:
+ *
+ *   · EVERY COLOUR AND SIZE IS A TOKEN. No literal hex, not even as a `var()`
+ *     fallback — a fallback paints identically in both themes, so a hex sitting
+ *     behind a token is a light-mode value waiting to be shown to somebody in
+ *     dark mode. Font sizes name the ROLE (`--font-size-*`), and radii come off
+ *     the documented scale.
+ *
+ *   · EVERY WIDTH IS FLUID. The grid is `auto-fit` over a `min()` track and every
+ *     row wraps, so the same markup is three columns on a desktop and one at
+ *     360px with no horizontal scroll in between. The two log tables scroll
+ *     inside their own container rather than pushing the page sideways.
+ */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: clamp(0.875rem, 2vw, 1.25rem);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.cardTitle {
+  margin: 0;
+  font-size: var(--font-size-eyebrow);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.cardHint {
+  margin: 0;
+  font-size: var(--font-size-small);
+  color: var(--text-secondary);
+}
+
+/* ── Balance ─────────────────────────────────────────────────────────────── */
+
+.balance {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+}
+
+.balanceValue {
+  font-size: var(--font-size-page-title);
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.balanceUnit {
+  font-size: var(--font-size-small);
+  color: var(--text-secondary);
+}
+
+/* ── Status pills ────────────────────────────────────────────────────────── */
+
+.pill {
+  align-self: flex-start;
+  padding: 0.125rem 0.5rem;
+  border-radius: 9999px;
+  font-size: var(--font-size-eyebrow);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.pillActive {
+  color: var(--success-text);
+  background: var(--success-bg);
+  border: 1px solid var(--success-border);
+}
+
+.pillWarn {
+  color: var(--warning-text);
+  background: var(--warning-bg);
+  border: 1px solid var(--warning-border);
+}
+
+.pillMuted {
+  color: var(--text-secondary);
+  background: var(--surface-card);
+  border: 1px solid var(--border);
+}
+
+/* ── Forms ───────────────────────────────────────────────────────────────── */
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.fieldRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.field {
+  flex: 1 1 8rem;
+  min-width: 0;
+}
+
+.label {
+  display: block;
+  font-size: var(--font-size-field-label);
+  color: var(--text-secondary);
+  margin-bottom: 0.25rem;
+}
+
+.input,
+.textarea {
+  width: 100%;
+  min-height: 2.25rem;
+  padding: 0.375rem 0.625rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-card);
+  color: var(--text-primary);
+  font-size: var(--font-size-body);
+  font-family: inherit;
+}
+
+.textarea {
+  min-height: 5rem;
+  resize: vertical;
+}
+
+.button {
+  min-height: 2.25rem;
+  padding: 0 0.875rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface-card);
+  color: var(--text-primary);
+  font-size: var(--font-size-small);
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.button:not(:disabled):hover {
+  border-color: var(--text-secondary);
+}
+
+.buttonRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+/* ── Lists ───────────────────────────────────────────────────────────────── */
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  min-width: 0;
+}
+
+.rowBody {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-width: 0;
+}
+
+.rowTitle {
+  font-size: var(--font-size-body);
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.rowNote {
+  font-size: var(--font-size-small);
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+/* A log line is denser than a row — no border, no padding, just two columns. */
+.logRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: var(--font-size-small);
+  min-width: 0;
+}
+
+.logLabel {
+  color: var(--text-primary);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.logMeta {
+  color: var(--text-secondary);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.logIn { color: var(--success-text); }
+.logOut { color: var(--text-secondary); }
+
+/* The two long logs scroll inside themselves so a busy month cannot make the
+   whole page scroll sideways or grow past a screen. */
+.scroller {
+  max-height: 18rem;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+/* ── Shared states ───────────────────────────────────────────────────────── */
+
+.empty {
+  margin: 0;
+  font-size: var(--font-size-small);
+  color: var(--text-secondary);
+}
+
+.error {
+  margin: 0;
+  font-size: var(--font-size-small);
+  color: var(--danger-text);
+}
+
+.notice {
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  font-size: var(--font-size-small);
+  color: var(--text-primary);
+  background: var(--surface-card);
+  border: 1px solid var(--border);
+}
+
+/* ── The console grid ────────────────────────────────────────────────────── */
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(20rem, 100%), 1fr));
+  gap: 1rem;
+  align-items: start;
+  margin-top: 1rem;
+}
+
+/* A card that needs the full width of the grid — the composer, whose textarea is
+   unusable in a 20rem column on a wide screen. */
+.wide {
+  grid-column: 1 / -1;
+}

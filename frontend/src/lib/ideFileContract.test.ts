@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { validateFileContentForPath, coerceFileContent } from './fileContentGuard';
-import { VANILLA_DEFAULTS, MOBILE_DEFAULTS } from './vanillaDefaults';
+import { validateFileContentForPath, coerceFileContent } from '@builderforce/ide-file-contract';
+import { VANILLA_TEMPLATE, MOBILE_TEMPLATE } from '@builderforce/ide-templates';
 
 describe('validateFileContentForPath', () => {
   it('allows empty/whitespace content for any path (blank file)', () => {
@@ -78,8 +78,8 @@ describe('validateFileContentForPath', () => {
   // The real scaffolds must all pass their own guard, in BOTH directions — the
   // JS configs/sources aren't flagged as JSON, and package.json stays valid JSON.
   it.each([
-    ['vanilla', VANILLA_DEFAULTS],
-    ['mobile', MOBILE_DEFAULTS],
+    ['vanilla', VANILLA_TEMPLATE],
+    ['mobile', MOBILE_TEMPLATE],
   ])('accepts every %s scaffold file at its own path', (_name, template) => {
     for (const [path, content] of Object.entries(template)) {
       expect(validateFileContentForPath(path, content)).toEqual({ ok: true });

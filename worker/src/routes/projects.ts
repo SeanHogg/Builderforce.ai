@@ -1,4 +1,4 @@
-import { scaffoldForProject } from '../../../api/src/application/project/projectTemplate';
+import { scaffoldForModality, templateByName } from '@builderforce/ide-templates';
 
 /**
  * ── THE PROJECT CRUD THAT USED TO LIVE HERE IS GONE ─────────────────────────
@@ -33,14 +33,14 @@ export function generateId(): string {
 }
 
 /**
- * Starter templates come from the API's `projectTemplate` module — the single
- * source the auth API and the lazy self-heal already seed from. This route used
- * to keep its own `VANILLA_TEMPLATE` copy AND ignore its `template` argument, so
- * a `mobile` / `webmobile` project created through this legacy worker was seeded
- * with the Vite scaffold and opened unrunnable. Re-exported for the tests that
- * assert the scaffold's shape.
+ * Starter templates come from `@builderforce/ide-templates` — the one module the
+ * API's seed, the API's lazy self-heal and the browser's Run fallback all read.
+ * This route used to keep its own `VANILLA_TEMPLATE` copy AND ignore its
+ * `template` argument, so a `mobile` / `webmobile` project created through this
+ * legacy worker was seeded with the Vite scaffold and opened unrunnable.
+ * Re-exported for the tests that assert the scaffold's shape.
  */
-export { VANILLA_TEMPLATE, MOBILE_TEMPLATE } from '../../../api/src/application/project/projectTemplate';
+export { VANILLA_TEMPLATE, MOBILE_TEMPLATE } from '@builderforce/ide-templates';
 
 /** Seed a new project's workspace with the scaffold its template/modality selects. */
 export async function createTemplateFiles(
@@ -49,7 +49,7 @@ export async function createTemplateFiles(
   template: string | null,
   modality = 'designer',
 ): Promise<void> {
-  const files = scaffoldForProject({ id: 0, template, modality, sourceControlRepoFullName: null, githubRepoUrl: null });
+  const files = templateByName(template) ?? scaffoldForModality(modality);
   if (!files) return;
   await Promise.all(
     Object.entries(files).map(([path, content]) =>

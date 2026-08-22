@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { API_ERROR_EVENT } from './errors/apiErrorEvent';
 
 vi.mock('./auth', () => ({
@@ -17,6 +17,12 @@ vi.mock('@/i18n/config', () => ({
 import { apiRequest, apiRequestStream } from './apiClient';
 import { getStoredTenantToken } from './auth';
 import { onTermsGate } from './errors/termsGateEvent';
+import {
+  ApiTransportError,
+  TRANSPORT_FAILURE_STATUS,
+  resetTransportFailureWindow,
+} from './errors/transportFailure';
+import { PRODUCT_REPORT_ERROR_STATUSES } from './reportError';
 
 /** What every auth middleware answers a request that sent no bearer token. */
 function missingAuthHeaderResponse(): Response {
@@ -224,5 +230,67 @@ describe('apiRequest nested gateway error envelope', () => {
 
     await expect(apiRequest('/api/quality-ingest/product-report', { method: 'POST' }))
       .rejects.toThrow('message is required');
+  });
+});
+
+/**
+ * A `fetch` that REJECTS was the one outcome none of the three transports
+ * handled. The `TypeError` escaped the client, so nothing toasted, nothing was
+ * reported, and the only account of the failure was the browser console — which
+ * calls it a CORS error. That is why the 2026-07-09 "CORS error for everyone"
+ * login outage could not be traced afterwards: the request never reached the
+ * worker, so there was no server-side record to find, and the client kept none.
+ */
+describe('a request that never reached a server', () => {
+  beforeEach(() => {
+    resetTransportFailureWindow();
+    vi.stubGlobal('navigator', { onLine: true });
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it('throws a typed transport error instead of a bare TypeError', async () => {
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new TypeError('Failed to fetch'));
+
+    await expect(apiRequest('/api/auth/login', { method: 'POST' }))
+      .rejects.toBeInstanceOf(ApiTransportError);
+  });
+
+  it('reports the outage so it lands in the product Quality feed', async () => {
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new TypeError('Failed to fetch'));
+    let detail: { status?: number; code?: string; url?: string } | undefined;
+    const onGlobalError = ((event: Event) => { detail = (event as CustomEvent).detail; }) as EventListener;
+    window.addEventListener(API_ERROR_EVENT, onGlobalError);
+
+    await expect(apiRequest('/api/auth/login', { method: 'POST' })).rejects.toThrow();
+
+    expect(detail?.status).toBe(TRANSPORT_FAILURE_STATUS);
+    expect(detail?.code).toBe('unreachable');
+    expect(detail?.url).toContain('/api/auth/login');
+    window.removeEventListener(API_ERROR_EVENT, onGlobalError);
+  });
+
+  /** The reporter's own request fails too during an outage. It must not recurse. */
+  it('stays silent for a caller that lists status 0 in expectedErrors', async () => {
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new TypeError('Failed to fetch'));
+    const onGlobalError: EventListener = vi.fn();
+    window.addEventListener(API_ERROR_EVENT, onGlobalError);
+
+    await expect(apiRequest('/product-report', {
+      method: 'POST',
+      expectedErrors: PRODUCT_REPORT_ERROR_STATUSES,
+    })).rejects.toBeInstanceOf(ApiTransportError);
+
+    expect(onGlobalError).not.toHaveBeenCalled();
+    window.removeEventListener(API_ERROR_EVENT, onGlobalError);
+  });
+
+  /** Every transport shares one send, so none of them can miss the case. */
+  it('covers the streaming transport too', async () => {
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new TypeError('Failed to fetch'));
+    await expect(apiRequestStream('/api/brain/stream', { method: 'POST' }))
+      .rejects.toBeInstanceOf(ApiTransportError);
   });
 });

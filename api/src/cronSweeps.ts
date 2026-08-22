@@ -84,6 +84,7 @@ import { runCollectionsSweep } from './application/finance/collectionsLadder';
 import { runSequenceSweep } from './application/sales/sequenceRunner';
 import { describeCreditReconcile, runAiCreditReconcileSweep } from './application/points/reconcileAiCredits';
 import { describeNumberRent, runPhoneNumberRentSweep } from './application/phone/chargeNumberRent';
+import { describeAllowanceGrant, runPhoneAllowanceSweep } from './application/phone/grantPhoneAllowance';
 
 /**
  * `null` from a sweep's `run` = nothing worth a log line. Preserved verbatim from
@@ -507,6 +508,27 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     run: async ({ env }) => {
       const r = await runAiCreditReconcileSweep(buildDatabase(env), env);
       return describeCreditReconcile(r);
+    },
+  },
+  {
+    key: 'phone-allowance-grant',
+    cadence: 'daily',
+    // The allowance the Business Phone subscription was SOLD — "200 minutes, 300
+    // SMS, 15 MMS" — granted as communications credit once per calendar month.
+    // A renewal webhook the platform never received would otherwise be a month a
+    // paying customer silently got nothing; keyed on the month, this is
+    // self-healing and idempotent whether it runs once a day or once a quarter.
+    //
+    // It runs BEFORE the rent sweep in this list so a tenant whose credit is thin
+    // is topped up with what they already paid for before anything is charged
+    // against it — the ordering that stops a paid-up customer being suspended for
+    // an allowance that was sitting one entry further down.
+    description:
+      'Grant the monthly communications allowance included in every active Business Phone '
+      + 'subscription, priced at the published overage rates.',
+    run: async ({ env }) => {
+      const r = await runPhoneAllowanceSweep(buildDatabase(env), env);
+      return describeAllowanceGrant(r);
     },
   },
   {

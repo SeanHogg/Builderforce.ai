@@ -32,6 +32,7 @@ import {
 } from './auth';
 import { planLimitErrorFromResponse } from './planLimitError';
 import { dispatchApiError } from './errors/apiErrorEvent';
+import { fetchWithTransportReport, TRANSPORT_FAILURE_STATUS } from './errors/transportFailure';
 import { signalTermsGate } from './errors/termsGateEvent';
 import { LOCALE_HEADER, readLocaleCookie } from '@/i18n/config';
 
@@ -319,6 +320,43 @@ async function reportAndThrow(
 }
 
 /**
+ * Everything the three transports did IDENTICALLY, in one place: resolve the
+ * credential, build the URL, send it, and apply the two judgements that are the
+ * same regardless of how the caller wants the body back (an expired session
+ * redirects; a 402 becomes the typed plan-limit error).
+ *
+ * It also owns the case none of the three handled: `fetch` REJECTING. A rejection
+ * carries no response to inspect, so every check below it was skipped and the
+ * `TypeError` escaped the client entirely - no toast, no report, and a console
+ * message blaming CORS for a failure that is almost never about CORS. That is why
+ * the 2026-07-09 login outage left nothing behind to diagnose. See
+ * {@link reportTransportFailure}.
+ */
+async function sendRequest(
+  path: string,
+  opts: RequestOptions,
+): Promise<{ res: Response; url: string; method: string; hadToken: boolean }> {
+  const { headers: optHeaders, expectedErrors, auth = 'tenant', json, baseUrl, raw: _raw, ...init } = opts;
+  const wantsJson = json ?? isSelfTypedBody(init.body) === false;
+  const authHeaders = getAuthHeaders(wantsJson ? { 'Content-Type': 'application/json' } : {}, auth);
+  const hadToken = !!authHeaders.Authorization;
+  const url = `${baseUrl ?? getApiBaseUrl()}${path}`;
+  const method = init.method ?? 'GET';
+
+  // A caller that lists status 0 in `expectedErrors` handles the outage itself —
+  // the product-error reporter does, so a failed report can never report itself.
+  const res = await fetchWithTransportReport(
+    url,
+    { ...init, headers: { ...authHeaders, ...optHeaders } as HeadersInit },
+    { silent: expectedErrors?.includes(TRANSPORT_FAILURE_STATUS) ?? false },
+  );
+
+  checkUnauthorizedAndRedirect(res, hadToken);
+  if (res.status === 402) throw await planLimitErrorFromResponse(res);
+  return { res, url, method, hadToken };
+}
+
+/**
  * Authenticated request to the API. Throws on !res.ok.
  * On 401 (invalid/expired token), clears session and redirects to login.
  * On 402, throws a typed plan-limit error the upgrade UI can render.
@@ -327,38 +365,17 @@ export async function apiRequest<T = unknown>(
   path: string,
   opts: RequestOptions = {}
 ): Promise<T> {
-  const { raw, headers: optHeaders, expectedErrors, auth = 'tenant', json, baseUrl, ...init } = opts;
-  const wantsJson = json ?? isSelfTypedBody(init.body) === false;
-  const base: Record<string, string> = wantsJson ? { 'Content-Type': 'application/json' } : {};
-  const authHeaders = getAuthHeaders(base, auth);
-  const hadToken = !!authHeaders.Authorization;
-  const url = `${baseUrl ?? getApiBaseUrl()}${path}`;
-  const res = await fetch(url, {
-    ...init,
-    headers: { ...authHeaders, ...optHeaders } as HeadersInit,
-  });
-  checkUnauthorizedAndRedirect(res, hadToken);
-  if (res.status === 402) throw await planLimitErrorFromResponse(res);
-  if (!res.ok) await reportAndThrow(res, url, init.method ?? 'GET', expectedErrors, hadToken);
-  if (raw) return undefined as T;
+  const { res, url, method, hadToken } = await sendRequest(path, opts);
+  if (!res.ok) await reportAndThrow(res, url, method, opts.expectedErrors, hadToken);
+  if (opts.raw) return undefined as T;
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
 }
 
 /** Request that returns response text (e.g. dataset download). On 401, redirects to login. */
 export async function apiRequestText(path: string, opts: RequestOptions = {}): Promise<string> {
-  const { raw: _raw, headers: optHeaders, expectedErrors, auth = 'tenant', json, baseUrl, ...init } = opts;
-  const wantsJson = json ?? isSelfTypedBody(init.body) === false;
-  const authHeaders = getAuthHeaders(wantsJson ? { 'Content-Type': 'application/json' } : {}, auth);
-  const hadToken = !!authHeaders.Authorization;
-  const url = `${baseUrl ?? getApiBaseUrl()}${path}`;
-  const res = await fetch(url, {
-    ...init,
-    headers: { ...authHeaders, ...optHeaders } as HeadersInit,
-  });
-  checkUnauthorizedAndRedirect(res, hadToken);
-  if (res.status === 402) throw await planLimitErrorFromResponse(res);
-  if (!res.ok) await reportAndThrow(res, url, init.method ?? 'GET', expectedErrors, hadToken);
+  const { res, url, method, hadToken } = await sendRequest(path, opts);
+  if (!res.ok) await reportAndThrow(res, url, method, opts.expectedErrors, hadToken);
   return res.text();
 }
 
@@ -371,25 +388,14 @@ export async function apiRequestText(path: string, opts: RequestOptions = {}): P
  * error surface so a broken stream is never silent.
  */
 export async function apiRequestStream(path: string, opts: RequestOptions = {}): Promise<Response> {
-  const { raw: _raw, headers: optHeaders, expectedErrors, auth = 'tenant', json, baseUrl, ...init } = opts;
-  const wantsJson = json ?? isSelfTypedBody(init.body) === false;
-  const authHeaders = getAuthHeaders(wantsJson ? { 'Content-Type': 'application/json' } : {}, auth);
-  const hadToken = !!authHeaders.Authorization;
-  const url = `${baseUrl ?? getApiBaseUrl()}${path}`;
-  const res = await fetch(url, {
-    ...init,
-    headers: { ...authHeaders, ...optHeaders } as HeadersInit,
-  });
-  checkUnauthorizedAndRedirect(res, hadToken);
-  // A 402 is always a plan limit, and the upgrade UI keys off the typed error —
-  // so it throws here exactly as it does in the other two transports rather than
-  // leaving each caller to remember the check.
-  if (res.status === 402) throw await planLimitErrorFromResponse(res);
+  // The 401 redirect and the typed 402 are applied by sendRequest, exactly as they
+  // are for the other two transports rather than from a copy of the checks.
+  const { res, url, method, hadToken } = await sendRequest(path, opts);
   // Same judgement as the JSON transports, from the same function rather than a
   // copy of it — this is the path the activity tracker's best-effort flush
   // takes, and an un-recognised terms bump made it raise a "Stream request
   // failed" toast every 15 seconds. It reports but does not throw: the caller
   // inspects the status itself.
-  if (!res.ok) await reportApiFailure(res, url, init.method ?? 'GET', expectedErrors, hadToken);
+  if (!res.ok) await reportApiFailure(res, url, method, opts.expectedErrors, hadToken);
   return res;
 }
