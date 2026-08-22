@@ -19,8 +19,10 @@
  * ── WHY IT IS PLAIN ESM ─────────────────────────────────────────────────────
  * Its caller is a build script run by `prebuild` as plain `node`. Nothing here
  * imports the app, and the figure shapes it reads are the same ones
- * `figures/types.ts` declares — kept in step by `gen-blog-og.test.mjs`, which
- * asserts every kind the corpus uses can be drawn.
+ * `components/blog/figures/types.ts` declares. The seam between the two is
+ * asserted by `src/lib/figurePoster.test.ts`: a kind the PAGE can render must
+ * either be drawable here or be listed there with the reason it cannot be, so a
+ * new kind cannot silently drop a post's card back to a title.
  *
  * Colours arrive as arguments rather than tokens: a PNG has no stylesheet and
  * no theme, so the card carries its own palette.

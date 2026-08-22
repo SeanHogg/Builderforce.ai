@@ -1,3 +1,78 @@
+## ✅ RESOLVED 2026-08-22 — Eleven capability articles, a figure vocabulary that DRAWS, and share cards that stopped being title cards
+
+**The gap.** The blog stopped at 2026-08-15. Everything shipped in the following week — the app
+surface, 3D world authoring, the chrome redesign, the sell motion, escrow, the founder back office,
+the career tools, the offer→payroll handover, the enterprise layer, and the proof VERDICT that closes
+the Idea to Real loop — had a changelog note and **no page a search engine could land anybody on**.
+A release note is read by people who already use the product; an article is read by people who do not.
+
+### Eleven articles, ordered along the arc
+
+`grade-the-proof-and-close-the-loop` (Idea · the loop closing, and the north-star number),
+`run-your-app-on-the-canvas`, `the-canvas-gave-the-screen-back-to-the-board`,
+`build-a-3d-world-in-the-browser`, `read-any-pdf-even-the-scanned-ones` (Make),
+`close-the-deal-on-the-board-you-built-it-on`, `fixed-price-milestones-and-escrow`,
+`the-founder-back-office-money-ownership-and-paperwork`,
+`from-offer-to-payroll-without-retyping-anything`, `fifteen-free-career-tools-and-a-salary-guide`
+(Market/Run), and `four-questions-before-you-buy-enterprise-ai` (procurement).
+
+Each names where it sits in the arc, links its siblings, and is registered in `blogData.ts`,
+`RELATED_ARTICLES` (creation-canvas · product · pricing · methodology · evermind · salary) and the
+sitemap. **Corpus 125 → 136.**
+
+### `business` — the topic the corpus had no home for
+
+`blogTopics.test.ts` went red on the founder back-office article: `founder-ops`, `finance`,
+`cap-table`, `equity`, `legal` and `invoicing` matched no topic, so it fell into `more`. Filed under a
+new topic rather than bolted onto Delivery, because it is a different READER — a founder asking how
+the money and the ownership work, not a delivery lead asking how the work is governed. `sales` and
+`marketplace` are deliberately NOT anchor tags: both are carried by articles that already have a
+correct home one topic down, and an anchor tag that steals is worse than a topic one article smaller.
+Labelled in all five catalogs.
+
+### The figure vocabulary was split, and learned to draw an interface
+
+`BlogFigure.tsx` held the union, seven renderers and the dispatcher in one 325-line file — the file
+anybody adding a figure had to edit. It is now `figures/`: `types.ts` (the union, the palette, the
+parser), one component per kind, and `registry.tsx` mapping kind → renderer as an exhaustive `Record`,
+so declaring a kind and forgetting to draw it is a compile error. `BlogFigure.tsx` keeps only the
+chrome every figure shares and holds no knowledge of any kind.
+
+Two kinds were added, both for capabilities whose argument is a SHAPE:
+
+- **`screen`** — named regions on a frame, in percentages of the frame, so a layout is authored the
+  way it is described out loud. Deliberately not a screenshot: a screenshot is stale the day the
+  product moves, carries whatever data was on screen, and is one flat image served into two themes.
+- **`devices`** — frames at real widths, each one's share of the row being its width over the sum of
+  the widths, so the figure cannot claim a difference the numbers do not have. Which is the exact
+  defect it was written to illustrate.
+
+`BlogFigure.test.tsx` had hard-coded the kind list; it reads `FIGURE_RENDERERS` now, so the test
+cannot fail against a figure that renders perfectly well.
+
+### The share cards said the title, which was the whole complaint
+
+Reported directly: *"the images created are not visual, they say the title."* Accurate — every card
+was a title on a gradient, so an article about a walkable 3D world and one about invoice ageing looked
+identical apart from their words.
+
+`scripts/lib/figurePoster.mjs` draws a post's FIRST `bf-figure` as the card's art: rows for
+flow/stack/bars (the bar length carrying the value), columns for compare, the frame-and-regions
+drawing for screen, to-scale frames for devices, points on a grid for matrix. `gen-blog-og.mjs` now
+has two layouts — art plus a narrower title column, or the old full-width title for the legacy posts
+that draw nothing. **136 cards regenerated.**
+
+`templates` and `launch` have no poster form on purpose, each with its reason recorded:
+a gallery resolved from a registry and a list of links are both things a PNG would have to lie about.
+`src/lib/figurePoster.test.ts` asserts the seam — every kind the page renders is either drawable or
+listed as artless — so a tenth kind cannot silently drop a post's card back to a title.
+
+Verified: `tsgo --noEmit` clean; 123 tests green across the blog, figure, poster and i18n-catalog
+suites; 11/13 frontend guards pass — the two that do not (`check:architecture`, `check:design-scale`)
+are red on another session's committed work and are logged in the register with that as the blocker.
+
+---
+
 ## ✅ RESOLVED 2026-08-22 — A DRY ratchet, so "there should only be one" is enforced rather than remembered
 
 The two entries below record a primitive being built and then, on the same day, its
