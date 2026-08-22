@@ -118,7 +118,7 @@ export function packageRoot(specifier) {
 }
 
 /** Windows separators out, so guard output reads the same on every machine. */
-function toPosix(path) {
+export function toPosix(path) {
   return path.split(sep).join('/');
 }
 

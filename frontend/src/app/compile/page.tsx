@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import PageContainer from '@/components/PageContainer';
 import { Select } from '@/components/Select';
+import { SessionGate } from '@/components/guest/SessionGate';
 import {
   compileApi,
   type CompiledAgentSpec,
@@ -155,7 +156,7 @@ export default function CompilePage() {
               </Select>
             </label>
             <div style={{ flex: 1 }} />
-            <button
+            <SessionGate action="generate"><button
               onClick={onCompile}
               disabled={!text.trim() || !!busy}
               style={{
@@ -164,8 +165,8 @@ export default function CompilePage() {
               }}
             >
               {busy === 'compile' ? t('compiling') : t('compileBtn')}
-            </button>
-            <button
+            </button></SessionGate>
+            <SessionGate action="runAgent"><button
               onClick={onRun}
               disabled={!text.trim() || !!busy}
               style={{
@@ -174,7 +175,7 @@ export default function CompilePage() {
               }}
             >
               {busy === 'run' ? t('running') : t('runBtn')}
-            </button>
+            </button></SessionGate>
           </div>
         </div>
 

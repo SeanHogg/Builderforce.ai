@@ -21,6 +21,9 @@ export default [
   ['check:canvas-glossary', 'check-canvas-glossary.mjs'],
   ['check:layering', 'check-layering.mjs'],
   ['check:primitives', 'check-primitive-duplication.mjs'],
+  // The repo-wide silent-catch ratchet, narrowed to this package's tree so the
+  // cost stays local. The full sweep runs in api's chain.
+  ['check:silent-catches', '../../scripts/check-silent-catches.mjs', '--target', 'frontend/src'],
   // `--changed`, not a full sweep: four of the six rules run the React Compiler,
   // so all 2,071 files cost ~10 minutes and a single component costs ~17s. The
   // cost here is proportional to the diff, and a change touching no component

@@ -26931,6 +26931,7 @@
       "signIn": "Se connecter",
       "reason": {
         "runAgent": "Connectez-vous pour lancer une exécution sur un agent.",
+        "generate": "Connectez-vous pour générer ceci avec l'IA.",
         "connectIntegration": "Connectez-vous pour connecter un compte.",
         "publish": "Connectez-vous pour publier ceci.",
         "invite": "Connectez-vous pour inviter quelqu’un.",

@@ -1,4 +1,4 @@
-import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
+import { createDurableErrorReporter, type DurableErrorReporter } from '../../application/observability/durableErrorReporter';
 /**
  * AgentHostRelayDO — Cloudflare Durable Object that acts as a WebSocket relay
  * between a BuilderForce Agents instance (upstream) and one or more browser clients.
@@ -104,7 +104,12 @@ export class AgentHostRelayDO implements DurableObject {
   /** Timer refreshing `last_seen_at` while the upstream socket is open. */
   private livenessInterval: ReturnType<typeof setInterval> | null = null;
 
-  constructor(private state: DurableObjectState, private env: unknown) {}
+  /** Bound once here so no call site can forget the runtime override. */
+  private readonly reportError: DurableErrorReporter;
+
+  constructor(private state: DurableObjectState, private env: unknown) {
+    this.reportError = createDurableErrorReporter('infrastructure/relay/AgentHostRelayDO.ts', env, state);
+  }
 
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
@@ -215,7 +220,7 @@ export class AgentHostRelayDO implements DurableObject {
     // Close any existing upstream connection
     if (this.upstreamSocket) {
       try { this.upstreamSocket.close(1001, "replaced"); } catch (error) { /* ignore */ 
-        reportCaughtError(error, { source: "infrastructure/relay/AgentHostRelayDO.ts", operation: "attachUpstream" }, { env: this.env, waitUntil: (task) => this.state.waitUntil(task) });
+        this.reportError(error, { operation: "attachUpstream" });
       }
     }
     this.upstreamSocket = ws;
@@ -340,7 +345,7 @@ export class AgentHostRelayDO implements DurableObject {
         this.appendAndPersistMessage({ role: "user", content: msg.message });
       }
     } catch (error) { /* ignore non-JSON */ 
-      reportCaughtError(error, { source: "infrastructure/relay/AgentHostRelayDO.ts", operation: "handleClientMessage" }, { env: this.env, waitUntil: (task) => this.state.waitUntil(task) });
+      this.reportError(error, { operation: "handleClientMessage" });
     }
   }
 
@@ -471,7 +476,7 @@ export class AgentHostRelayDO implements DurableObject {
 
       this.appendAndPersistMessage({ role: msg.role, content: msg.text });
     } catch (error) { /* ignore non-JSON or non-message events */ 
-      reportCaughtError(error, { source: "infrastructure/relay/AgentHostRelayDO.ts", operation: "handleUpstreamMessage" }, { env: this.env, waitUntil: (task) => this.state.waitUntil(task) });
+      this.reportError(error, { operation: "handleUpstreamMessage" });
     }
   }
 
@@ -531,7 +536,7 @@ export class AgentHostRelayDO implements DurableObject {
         body: JSON.stringify(body),
       });
     } catch (error) { /* best-effort; do not crash the relay */
-      reportCaughtError(error, { source: "infrastructure/relay/AgentHostRelayDO.ts", operation }, { env: this.env, waitUntil: (task) => this.state.waitUntil(task) });
+      this.reportError(error, { operation });
     }
   }
 
@@ -582,7 +587,7 @@ export class AgentHostRelayDO implements DurableObject {
         },
       );
     } catch (error) { /* best-effort */ 
-      reportCaughtError(error, { source: "infrastructure/relay/AgentHostRelayDO.ts", operation: "persistRemoteResult" }, { env: this.env, waitUntil: (task) => this.state.waitUntil(task) });
+      this.reportError(error, { operation: "persistRemoteResult" });
     }
   }
 

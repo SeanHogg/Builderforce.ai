@@ -1,3 +1,82 @@
+## ✅ RESOLVED 2026-08-22 — The guest cost ceiling already covered every model door, not just chat
+
+Logged during the guest-preview pass on the assumption that opening 78 app routes to signed-out
+visitors had opened new, uncapped paths to a model. Audited: it had not.
+
+Every API route module that reaches an LLM — `challengeRoutes`, `compileRoutes`, `creativeRoutes`,
+`ideAiRoutes`, `ideRoutes`, `knowledgeRoutes`, `promptAnalyzerRoutes`, `realizationRoutes` — applies
+`authMiddleware` to `*`, so an anonymous caller is refused before any model is reached.
+`adminRoutes` applies `superAdminMiddleware` the same way. That leaves `llmRoutes`, which is
+key-authenticated for tenants and carries exactly ONE anonymous door: a `bfguest_*` token minted at
+`/api/guest/session`, metered by `GuestChatService.checkCap` across per-visitor, per-IP and
+per-room counters and refused with a 429 (never a 402 — a guest has no plan to upgrade).
+
+So the ceiling was never "chat only": chat's door is the only anonymous door there is, which is why
+capping it capped everything. Opening the 78 read surfaces added no model path, because those
+surfaces read — and a guest's reads are served from the in-browser sample workspace, which never
+leaves the device.
+
+**One real defect surfaced by the audit and fixed here:** `/compile` is a genuine product surface
+(not a marketing page, despite an old note filing it as a suspected one), so the preview rule made
+it guest-reachable. Its Compile and Run buttons stayed live and failed with a raw 401 error string.
+Both are now wrapped in `SessionGate` — Run as `runAgent`, Compile as a new `generate` action added
+to the union for "produce something with a model" where no agent is dispatched but one is still
+billed, translated into all five catalogs. The wall now reads as the gate it always was.
+
+## ✅ RESOLVED 2026-08-22 — The root layout was taking every page down, one page at a time
+
+`Deploy frontend` had been red for four consecutive Release runs, and each run blamed a different
+page: `/freelancer/timecard`, then `/personas`. Neither page was broken. **`VisitorJourneyTracker`
+was mounted as a SIBLING of `AuthProvider` in `app/layout.tsx`** — inside `ErrorBoundary`, next to
+`GlobalErrorHandler` and `QualityErrorReporter`, which need no session — and it calls `useAuth()`,
+which throws when there is no provider above it.
+
+That had been survivable while `AuthProvider` returned `null` on the server. It stopped being
+survivable when the provider started rendering its children on the server (the change that fixed
+the blank-HTML/SEO defect): the throw now happens during the SERVER render of the root layout,
+which is to say on every route in the app. `next build` exits on the FIRST page that fails to
+prerender, so a layout-wide crash presented as one arbitrary broken page — and the page it named
+changed whenever the prerender order changed, which is why it looked like a new bug each time.
+
+The tracker now sits inside `AuthProvider`, still above the shell and still rendering nothing, so
+`/embed` and every other surface are recorded exactly as before.
+
+**A guard, because this shape is invisible in review.** `frontend/scripts/check-root-layout-providers.mjs`
+(in the `npm run check` chain) walks the root layout: for each provider/hook contract — `AuthProvider`/
+`useAuth`, `ConfirmProvider`/`useConfirm`, `ToastProvider`/`useToast`, declared as DATA so a new
+provider is an entry rather than a branch — no component rendered outside that provider may reach
+the throwing hook, directly or through anything it imports. Ancestors are safe by construction:
+they take the subtree as `children`, so it never appears in their import graph. Verified both ways —
+it fails on the pre-fix layout with the exact diagnosis, and passes on the fixed one.
+
+**Two more defects in the same component, found while fixing it.**
+
+*It acted before it knew who it was.* `isAuthenticated` is false until the stored session has been
+read back, and all three of the tracker's effects read false as "anonymous" — so a signed-in
+employee opened a visit and logged a page view during the first frame, which is precisely the
+double-count into `activity_log` the component documents itself as avoiding. It now gates on
+`authReady`, the fact that separates "anonymous" from "not known yet".
+
+*Every second visit was recorded as a first.* `getVisitId()` is what mints a visit and increments
+the stored count, and it is called lazily — by the first flush, a prompt capture, or an error
+report. The tracker read `isReturningVisitor()` and `visitCount()` before any of that had run, so
+on a second visit the stored count was still 1, `1 > 1` was false, and the visitor who came back
+was reported as brand new. "Did they come back" is the one fact the browser knows and the server
+cannot derive, and it was wrong in exactly the case it exists for. `beginVisit()` in
+`lib/visitorJourney.ts` now mints the visit and returns `{ visitId, visitNumber, returning }`
+together, so no caller depends on call order; `isReturningVisitor` is deleted and `visitCount` is
+no longer exported.
+
+**Also:** the visitor-flow admin components landed with three off-scale radii (`borderRadius: 5/4/2`
+on dots and a bar — all of them pills, now `var(--radius-full)`) and an undeclared
+`var(--surface-subtle)` in `VisitorJourneyDrawer`, which resolves to nothing in both themes; the
+code chip uses `var(--surface-sunken)`, which is declared in both. `check:design-tokens` is green
+again and `offScaleRadii` is back to its baseline of 0.
+
+Verified: `next build` prerenders all 51 static pages; `check:root-layout-providers` passes and
+fails correctly on the old shape; 10 new tests across `VisitorJourneyTracker.test.tsx` and
+`visitorJourney.test.ts`, including the pre-rehydration frame and the second-visit off-by-one.
+
 ## ✅ RESOLVED 2026-08-22 — Two red release jobs: a Twilio DELETE asked to declare a body encoding, and the shell index reading `?tab=` above the one page-slot boundary
 
 The `Release` run was failing on `Deploy API` and `Deploy frontend` for unrelated
@@ -58,7 +137,7 @@ It does not: it *mentions* it in a doc comment. There are **zero** inter-package
 whole entry — including the "blocked on a decision about the install graph" verdict — rested on a
 grep that could not tell a comment from an import. That is the second thing this pass fixes.
 
-`scripts/check-source-package-graph.mjs` is the single implementation of five rules over the packages
+`scripts/check-source-package-graph.mjs` is the single implementation of seven rules over the packages
 whose `exports` point straight at `src/` and therefore ship no `dist`, are never installed, and are
 resolved only because every consumer spells them out:
 
@@ -94,6 +173,19 @@ quiet. `dts: { resolve: [/^@builderforce\//] }` now inlines the types too; rebui
 references. That is rule 6 — *a published type surface never names a source-only package* — checked
 against the emitted `.d.ts`, and the guard says which packages it could not check rather than counting
 an unbuilt one as a pass.
+
+**Rule 7 came from a leftover background grep, and it found two live drift sites.** Only `tsconfig`
+`paths` need to be hand-written — JSON cannot import a module. Every JS toolchain takes the set from
+`sourcePackages.mjs`… except two that had never been migrated, and both had already gone stale:
+`agent-runtime/vitest.config.ts` typed out six of the nine packages (missing `canvas-widget-protocol`,
+`creation-canvas-contract`, `ide-file-contract`, `ide-templates` — a test reaching any of them would
+have failed to resolve and taken its whole file with it), and `worker/vitest.config.ts` typed out one
+in the OBJECT form, which matches by PREFIX and would have rewritten `@builderforce/agent-tools/node-path`
+to `…/src/index.ts/node-path`. Both now derive. The one hand-written entry that stays is
+`@builderforce/agent-tools/node-path.js` — NodeNext source spells the subpath with `.js` and the
+registry keys on the exported specifier — and it says so in place. Rule 7 fails any vite/vitest/
+esbuild/tsup/rollup/webpack config that names a source-only package in a string without importing the
+registry; verified by seeding one back. agent-runtime 138/138 and worker 63/63 pass on the derived set.
 
 The scanner underneath found its own bug on first run. It used `ts.preProcessFile`, which is what
 `frontend/scripts/check-declared-deps.mjs` was built on — and that is a LEXICAL scanner, so

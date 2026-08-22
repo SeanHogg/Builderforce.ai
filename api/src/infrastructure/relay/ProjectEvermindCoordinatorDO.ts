@@ -1,4 +1,4 @@
-import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
+import { createDurableErrorReporter, type DurableErrorReporter } from '../../application/observability/durableErrorReporter';
 /**
  * ProjectEvermindCoordinatorDO — the SINGLE WRITER for a project's Evermind.
  *
@@ -329,7 +329,11 @@ let embedModelCache: { key: string; model: { lm: EvermindLM; tok: BPETokenizer }
 export class ProjectEvermindCoordinatorDO implements DurableObject {
   declare readonly '__DURABLE_OBJECT_BRAND': never;
   private readonly db: Db;
+  /** Bound once here so no call site can forget the runtime override. */
+  private readonly reportError: DurableErrorReporter;
+
   constructor(private readonly state: DurableObjectState, private readonly env: Env) {
+    this.reportError = createDurableErrorReporter('infrastructure/relay/ProjectEvermindCoordinatorDO.ts', env, state);
     this.db = buildDatabase(env);
   }
 
@@ -1122,7 +1126,7 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
             );
           }
         } catch (error) { /* best-effort: a probe failure must never wedge the merge */ 
-          reportCaughtError(error, { source: "infrastructure/relay/ProjectEvermindCoordinatorDO.ts", operation: "drain" }, { env: this.env, waitUntil: (task) => this.state.waitUntil(task) });
+          this.reportError(error, { operation: "drain" });
         }
       }
       // Embed each text memory with the JUST-MERGED model so semantic recall (Validate)
@@ -1136,7 +1140,7 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
           try {
             m.emb = packVec(embedTokens(lm, tok.encode(src).slice(0, EMBED_MAX_TOKENS)));
           } catch (error) { /* best-effort: a failed embed just falls back to lexical recall */ 
-            reportCaughtError(error, { source: "infrastructure/relay/ProjectEvermindCoordinatorDO.ts", operation: "drain" }, { env: this.env, waitUntil: (task) => this.state.waitUntil(task) });
+            this.reportError(error, { operation: "drain" });
           }
         }
       }
@@ -1183,7 +1187,7 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
             await this.state.storage.put(EVAL_KEY, [...fresh, ...evalSet].slice(0, EVAL_MAX));
           }
         } catch (error) { /* best-effort: never fail the merge over an eval point */ 
-          reportCaughtError(error, { source: "infrastructure/relay/ProjectEvermindCoordinatorDO.ts", operation: "drain" }, { env: this.env, waitUntil: (task) => this.state.waitUntil(task) });
+          this.reportError(error, { operation: "drain" });
         }
       }
       return { merged: mergedMeta.length, newVersion: nextVersion };
@@ -1196,7 +1200,7 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
         try {
           await ingestErrorEvents(this.db, this.env, { id: null, tenantId, projectId, defaultProjectId: projectId }, faultEvents);
         } catch (error) { /* best-effort: the console.warn above is the fallback record */ 
-          reportCaughtError(error, { source: "infrastructure/relay/ProjectEvermindCoordinatorDO.ts", operation: "drain" }, { env: this.env, waitUntil: (task) => this.state.waitUntil(task) });
+          this.reportError(error, { operation: "drain" });
         }
       }
       // Clear only what we consumed; anything that arrived mid-merge OR was deferred

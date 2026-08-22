@@ -26,7 +26,7 @@
     "check:layering": "node scripts/check-layering.mjs",
     "check:tenant-scope": "node scripts/check-tenant-scope.mjs",
     "check:source": "node scripts/check-source-text.mjs",
-    "check:silent-catches": "node scripts/check-silent-catches.mjs",
+    "check:silent-catches": "node ../scripts/check-silent-catches.mjs",
     "check:dispatch-budget": "node scripts/check-dispatch-budget.mjs",
     "check:pinned-defects": "node scripts/check-pinned-defects.mjs",
     "check:prompt-tools": "node scripts/check-prompt-tool-names.mjs",

@@ -26,7 +26,10 @@ export default [
   ['check:layering', 'check-layering.mjs'],
   ['check:tenant-scope', 'check-tenant-scope.mjs'],
   ['check:source', 'check-source-text.mjs'],
-  ['check:silent-catches', 'check-silent-catches.mjs'],
+  // Repo-level: ONE silent-catch guard scans every package's source tree against
+  // the shared baseline in scripts/silent-catches.baseline.json. api's chain runs
+  // the full sweep; frontend's runs only its own tree for fast local feedback.
+  ['check:silent-catches', '../../scripts/check-silent-catches.mjs'],
   ['check:dispatch-budget', 'check-dispatch-budget.mjs'],
   ['check:pinned-defects', 'check-pinned-defects.mjs'],
   ['check:prompt-tools', 'check-prompt-tool-names.mjs'],

@@ -1,4 +1,4 @@
-import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
+import { createDurableErrorReporter, type DurableErrorReporter } from '../../application/observability/durableErrorReporter';
 /**
  * AgentContainerDO — the **long-lived Cloudflare Container** runtime for a
  * "Cloud Agent (Node/Container)". Unlike {@link CloudRunnerDO} (the durable
@@ -29,6 +29,10 @@ import type { Env } from '../../env';
 const EXEC_KEY = 'executionId';
 
 export class AgentContainerDO extends Container<Env> {
+  /** Bound once here so no call site can forget the runtime override. */
+  private readonly reportError: DurableErrorReporter =
+    createDurableErrorReporter('infrastructure/relay/AgentContainerDO.ts', this.env, this.ctx);
+
   /** The container's HTTP server listens here (see api/container/server.mjs). */
   defaultPort = 8080;
 
@@ -80,7 +84,7 @@ export class AgentContainerDO extends Container<Env> {
         }
       }
     } catch (error) { /* attribution is best-effort */ 
-      reportCaughtError(error, { source: "infrastructure/relay/AgentContainerDO.ts", operation: "fetch" }, { env: this.env, waitUntil: (task) => this.ctx.waitUntil(task) });
+      this.reportError(error, { operation: "fetch" });
     }
     return super.fetch(request);
   }
@@ -107,7 +111,7 @@ export class AgentContainerDO extends Container<Env> {
         await handleCloudRunCrash(this.env, crashDb, executionId, cloudCrashReason(detail));
       }
     } catch (e) {
-      reportCaughtError(e, { source: "infrastructure/relay/AgentContainerDO.ts", operation: "onError", context: { logMessage: '[AgentContainerDO] crash report failed', details: e } }, { env: this.env, waitUntil: (task) => this.ctx.waitUntil(task) });
+      this.reportError(e, { operation: "onError", context: { logMessage: '[AgentContainerDO] crash report failed', details: e } });
     }
     return error;
   }

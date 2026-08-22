@@ -622,10 +622,6 @@ follows is what closing them surfaced.*
   into one; `offScaleFontSizes` 3651 → 3647). **Single blocker:** raising the architecture baseline would bake
   in five files a session that is mid-write still owns. Whoever lands them runs `--update` once their file set
   is final.
-- **Guest cost ceiling covers chat, not every newly reachable model call.** `guestLimit.ts` classifies the
-  gateway's `guest_limit_reached` / `guest_research_limit_reached` refusals. Now that 78 surfaces render for a
-  signed-out visitor, any of them that can reach a model needs to be behind the same allowance — audit which
-  ones can, and gate them, before this is advertised.
 
 ### 💸 Paid advertising & measurement — residuals
 

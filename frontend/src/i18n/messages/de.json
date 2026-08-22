@@ -26931,6 +26931,7 @@
       "signIn": "Anmelden",
       "reason": {
         "runAgent": "Melde dich an, um einen Lauf an einen Agenten zu schicken.",
+        "generate": "Melden Sie sich an, um dies mit KI zu erzeugen.",
         "connectIntegration": "Melde dich an, um ein Konto zu verbinden.",
         "publish": "Melde dich an, um dies zu veröffentlichen.",
         "invite": "Melde dich an, um jemanden einzuladen.",

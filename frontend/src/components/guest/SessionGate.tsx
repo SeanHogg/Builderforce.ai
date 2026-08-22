@@ -48,6 +48,10 @@ import { useSampleWorkspace } from '@/domains/guest/presentation/useSampleWorksp
 export type GatedAction =
   /** Dispatch a run to an agent. */
   | 'runAgent'
+  /** Produce something with a model — compile, draft, summarise, extract.
+   *  Distinct from `runAgent`: no agent is dispatched, but a model is billed,
+   *  so every guest-reachable surface that reaches one gates on this. */
+  | 'generate'
   /** Connect a repository, a mailbox, an ad account — anything with a token. */
   | 'connectIntegration'
   /** Publish to the marketplace, or share outside the browser. */

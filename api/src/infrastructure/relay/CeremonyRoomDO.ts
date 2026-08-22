@@ -1,4 +1,4 @@
-import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
+import { createDurableErrorReporter, type DurableErrorReporter } from '../../application/observability/durableErrorReporter';
 import { PeerRelay, type RelayPeer } from './peerRelay';
 import { relayIdentityFromHeaders, type RelayHeaderIdentity } from '../../domain/shared/relayIdentity';
 
@@ -66,7 +66,12 @@ export class CeremonyRoomDO implements DurableObject {
    */
   private asserted = new Map<string, RelayHeaderIdentity>();
 
-  constructor(private state: DurableObjectState, private env: unknown) {}
+  /** Bound once here so no call site can forget the runtime override. */
+  private readonly reportError: DurableErrorReporter;
+
+  constructor(private state: DurableObjectState, private env: unknown) {
+    this.reportError = createDurableErrorReporter('infrastructure/relay/CeremonyRoomDO.ts', env, state);
+  }
 
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
@@ -80,7 +85,7 @@ export class CeremonyRoomDO implements DurableObject {
           const body = await request.text();
           if (body) frame = body;
         } catch (error) { /* keep default */
-          reportCaughtError(error, { source: "infrastructure/relay/CeremonyRoomDO.ts", operation: "fetch" }, { env: this.env, waitUntil: (task) => this.state.waitUntil(task) });
+          this.reportError(error, { operation: "fetch" });
         }
         this.relay.broadcast(frame);
         return new Response(null, { status: 204 });
@@ -102,7 +107,7 @@ export class CeremonyRoomDO implements DurableObject {
     server.addEventListener('error', () => this.onClose(peer));
 
     try { server.send(JSON.stringify({ type: 'hello', id: peer.id })); } catch (error) { /* ignore */
-      reportCaughtError(error, { source: "infrastructure/relay/CeremonyRoomDO.ts", operation: "fetch" }, { env: this.env, waitUntil: (task) => this.state.waitUntil(task) });
+      this.reportError(error, { operation: "fetch" });
     }
 
     return new Response(null, { status: 101, webSocket: client });

@@ -1,0 +1,26 @@
+{
+  "api/src": {
+    "empty-catch": 0,
+    "empty-promise-catch": 0,
+    "console-only": 0,
+    "durable-object-direct-report": 0
+  },
+  "frontend/src": {
+    "empty-catch": 197,
+    "empty-promise-catch": 100,
+    "console-only": 19,
+    "durable-object-direct-report": 0
+  },
+  "agent-runtime/src": {
+    "empty-catch": 436,
+    "empty-promise-catch": 100,
+    "console-only": 45,
+    "durable-object-direct-report": 0
+  },
+  "worker/src": {
+    "empty-catch": 2,
+    "empty-promise-catch": 0,
+    "console-only": 17,
+    "durable-object-direct-report": 0
+  }
+}

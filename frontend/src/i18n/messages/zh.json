@@ -26931,6 +26931,7 @@
       "signIn": "登录",
       "reason": {
         "runAgent": "登录后才能向代理派发运行任务。",
+        "generate": "登录后即可使用 AI 生成。",
         "connectIntegration": "登录后才能连接账户。",
         "publish": "登录后才能发布此内容。",
         "invite": "登录后才能邀请他人。",

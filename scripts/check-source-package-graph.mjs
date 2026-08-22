@@ -16,7 +16,7 @@
  * `.claude/hooks/source-package-graph-guard.mjs` PostToolUse hook runs this file,
  * so the editor, `npm test` and CI can never disagree about what the rule is.
  *
- * FIVE RULES:
+ * SEVEN RULES:
  *
  *  1. DECLARED EXTERNALS. Every non-builtin import in a source-only package's
  *     `src/` that is not another source-only package must appear in that
@@ -40,16 +40,24 @@
  *  5. NO CYCLES. Two source-only packages that import each other cannot be split
  *     later without breaking every consumer at once.
  *
+ *  6. A PUBLISHED TYPE SURFACE IS SELF-CONTAINED. A built package's emitted
+ *     `.d.ts` may not re-export from a source-only package: it has no `dist`, is
+ *     not a runtime dependency, and no consumer installs it.
+ *
+ *  7. TOOLCHAINS DERIVE THEIR ALIASES. Only `tsconfig` `paths` are hand-written,
+ *     because JSON cannot import a module. Every JS config takes the set from
+ *     `sourcePackages.mjs` instead of naming packages in strings.
+ *
  * Projects are DISCOVERED, not listed: the guard walks the repo for tsconfigs and
  * checks every one that resolves or imports these packages. The list it replaced
- * named three projects and there are seven.
+ * named three projects and there are nine.
  *
  * Run: `node scripts/check-source-package-graph.mjs` from anywhere in the repo.
  */
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { dirname, join, relative, resolve, sep } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createImportScanner, loadTypeScript } from './lib/moduleImports.mjs';
+import { collectSourceFiles, createImportScanner, loadTypeScript, toPosix } from './lib/moduleImports.mjs';
 import {
   declaredNames,
   linkedPackageNames,
@@ -177,6 +185,40 @@ for (const project of relevant) {
   }
 }
 
+// ── Rule 7: a JS toolchain DERIVES its aliases, never types them out ─────────
+//
+// The `tsconfig` `paths` have to be hand-written because JSON cannot import a
+// module. Nothing else does — vite, vitest, esbuild and tsup all take a JS
+// config, and `sourcePackages.mjs` exists so each one asks the manifests rather
+// than keeping a list. Two had not been migrated and both had already drifted:
+// `agent-runtime/vitest.config.ts` typed out six of the nine packages, and
+// `worker/vitest.config.ts` typed out one in the OBJECT form, which matches by
+// prefix and would have rewritten `@builderforce/agent-tools/node-path` to
+// `…/src/index.ts/node-path`. Both are the exact failure the registry replaced.
+//
+// The test is a quoted specifier in CODE: a regex like `/^@builderforce\//` in a
+// tsup `dts.resolve` is not an alias list, and comments naming a package are not
+// either, so both are stripped or unmatched rather than exempted by name.
+const CONFIG_FILE = /(?:^|[\\/])(?:vite|vitest|rollup|webpack|tsup|esbuild)(?:\.[^\\/]+)?\.config\.[cm]?[jt]s$|(?:^|[\\/])esbuild\.mjs$/;
+const QUOTED_SPECIFIER = /['"]@builderforce\/[^'"]+['"]/;
+
+for (const file of collectSourceFiles(repoRoot)) {
+  if (!CONFIG_FILE.test(file)) continue;
+  const text = readFileSync(file, 'utf8');
+  const code = text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(?:^|\s)\/\/[^\n]*/g, '');
+  if (!QUOTED_SPECIFIER.test(code)) continue;
+  if (/from\s+['"][^'"]*sourcePackages\.mjs['"]/.test(code)) continue;
+
+  failures.push({
+    rule: 'toolchains derive their aliases',
+    detail: `${toPosix(relative(repoRoot, file))} names a source-only package in a string instead of deriving the set.`,
+    remedy:
+      "Import `sourcePackageAliases` (vite/vitest) or `sourcePackageAliasMap` (esbuild) from " +
+      'scripts/sourcePackages.mjs and spread it. A hand-written entry goes stale the next time a ' +
+      'package is added, and the object form matches by PREFIX, which breaks subpath exports.',
+  });
+}
+
 // ── Rule 6: a published type surface never names a source-only package ───────
 //
 // `brain-embedded` links `@builderforce/agent-stall` as a devDependency and
@@ -263,11 +305,6 @@ function pathsTargetFor(project, specifier) {
   if (!entry) return '(unknown)';
   const rel = toPosix(relative(project.dir, entry));
   return rel.startsWith('.') ? rel : `./${rel}`;
-}
-
-/** Windows separators out, so guard output reads the same on every machine. */
-function toPosix(path) {
-  return path.split(sep).join('/');
 }
 
 // ── Report ───────────────────────────────────────────────────────────────────

@@ -26931,6 +26931,7 @@
       "signIn": "Sign in",
       "reason": {
         "runAgent": "Sign in to dispatch a run to an agent.",
+        "generate": "Sign in to generate this with AI.",
         "connectIntegration": "Sign in to connect an account.",
         "publish": "Sign in to publish this.",
         "invite": "Sign in to invite someone.",

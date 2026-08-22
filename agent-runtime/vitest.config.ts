@@ -2,8 +2,11 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
+import { sourcePackageAliases } from "../scripts/sourcePackages.mjs";
 
 const repoRoot = path.dirname(fileURLToPath(import.meta.url));
+/** `packages/` lives one level up — the source-package registry keys off the REPO root. */
+const monorepoRoot = path.join(repoRoot, "..");
 const isCI = process.env.CI === "true" || process.env.GITHUB_ACTIONS === "true";
 const isWindows = process.platform === "win32";
 const localWorkers = Math.max(4, Math.min(16, os.cpus().length));
@@ -14,41 +17,22 @@ export default defineConfig({
     // Keep this ordered: the base `@seanhogg/builderforce-agents/plugin-sdk` alias is a prefix match.
     alias: [
       {
-        // agent-tools' node-only export condition (the shared workspace-containment path
-        // resolver). MUST precede the bare-specifier alias below, which is a prefix match
-        // and would otherwise swallow this subpath.
+        // agent-tools' node-only export, spelled the way NodeNext source spells it
+        // (`src/agents/node-capability-provider.ts` imports `…/node-path.js`).
+        // The registry keys on the EXPORTED specifier, which has no `.js`, so this
+        // one variant stays hand-written — and it MUST come first, because the
+        // registry's anchored `…/node-path` pattern does not match the `.js` form
+        // while a prefix alias for the package root would swallow it.
         find: "@builderforce/agent-tools/node-path.js",
-        replacement: path.join(repoRoot, "..", "packages", "agent-tools", "src", "node-path.ts"),
+        replacement: path.join(monorepoRoot, "packages", "agent-tools", "src", "node-path.ts"),
       },
-      {
-        // Shared cross-package tool contract (also a tsconfig path; vitest needs its own).
-        find: "@builderforce/agent-tools",
-        replacement: path.join(repoRoot, "..", "packages", "agent-tools", "src", "index.ts"),
-      },
-      {
-        // Announced-but-untaken tool call recovery, shared with the Brain run loop.
-        // Also a tsconfig path; vitest needs its own.
-        find: "@builderforce/agent-stall",
-        replacement: path.join(repoRoot, "..", "packages", "agent-stall", "src", "index.ts"),
-      },
-      {
-        // Learned Model Routing contract + pure ranker, shared with the api's cloud
-        // router. Also a tsconfig path; vitest needs its own.
-        find: "@builderforce/learned-routing",
-        replacement: path.join(repoRoot, "..", "packages", "learned-routing", "src", "index.ts"),
-      },
-      {
-        // Surface-agnostic run context. Also a tsconfig path; vitest needs its own —
-        // without it EVERY test that transitively imports `run-context-client.ts` fails
-        // to resolve the package and the whole suite file is skipped as a failed import.
-        find: "@builderforce/run-context",
-        replacement: path.join(repoRoot, "..", "packages", "run-context", "src", "index.ts"),
-      },
-      {
-        // Render seam (ink/headless renderers). Also a tsconfig path; vitest needs its own.
-        find: "@builderforce/tui",
-        replacement: path.join(repoRoot, "..", "packages", "tui", "src", "index.ts"),
-      },
+      // Every source-only package under `packages/`, derived from their manifests.
+      // These were six hand-written entries and had already fallen behind the
+      // registry: `canvas-widget-protocol`, `creation-canvas-contract`,
+      // `ide-file-contract` and `ide-templates` were missing, so a test that
+      // reached one of them failed to resolve and took its whole file with it.
+      // See scripts/sourcePackages.mjs; `check:source-package-graph` holds it.
+      ...sourcePackageAliases(monorepoRoot),
       {
         find: "@seanhogg/builderforce-agents/plugin-sdk/account-id",
         replacement: path.join(repoRoot, "src", "plugin-sdk", "account-id.ts"),

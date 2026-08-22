@@ -1,4 +1,4 @@
-import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
+import { createDurableErrorReporter, type DurableErrorReporter } from '../../application/observability/durableErrorReporter';
 import { CANVAS_PRESENCE_FRAME, canvasPresenceFrame } from '@builderforce/creation-canvas-contract';
 import { relayIdentityFromHeaders } from '../../domain/shared/relayIdentity';
 import { PeerRelay, type RelayPeer } from './peerRelay';
@@ -62,7 +62,12 @@ export class SessionRoomDO implements DurableObject {
     maxFrameChars: 512,
   });
 
-  constructor(private state: DurableObjectState, private env: unknown) {}
+  /** Bound once here so no call site can forget the runtime override. */
+  private readonly reportError: DurableErrorReporter;
+
+  constructor(private state: DurableObjectState, private env: unknown) {
+    this.reportError = createDurableErrorReporter('infrastructure/relay/SessionRoomDO.ts', env, state);
+  }
 
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
@@ -75,7 +80,7 @@ export class SessionRoomDO implements DurableObject {
           const body = await request.text();
           if (body) frame = body;
         } catch (error) { /* keep default */
-          reportCaughtError(error, { source: "infrastructure/relay/SessionRoomDO.ts", operation: "fetch" }, { env: this.env, waitUntil: (task) => this.state.waitUntil(task) });
+          this.reportError(error, { operation: "fetch" });
         }
         this.broadcast(frame);
         return new Response(null, { status: 204 });
@@ -101,7 +106,7 @@ export class SessionRoomDO implements DurableObject {
     try {
       server.send('{"type":"connected"}');
     } catch (error) { /* ignore */
-      reportCaughtError(error, { source: "infrastructure/relay/SessionRoomDO.ts", operation: "fetch" }, { env: this.env, waitUntil: (task) => this.state.waitUntil(task) });
+      this.reportError(error, { operation: "fetch" });
     }
     if (peer) this.relay.announceJoin(peer);
 

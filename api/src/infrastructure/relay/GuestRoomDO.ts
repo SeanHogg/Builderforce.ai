@@ -1,4 +1,4 @@
-import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
+import { createDurableErrorReporter, type DurableErrorReporter } from '../../application/observability/durableErrorReporter';
 import { verifyGuestToken } from '../../application/guest/guestToken';
 import { GUEST_CHAT_LIMITS, GUEST_ROOM_LIMITS } from '../../domain/tenant/PlanLimits';
 import { PeerRelay, type RelayPeer } from './peerRelay';
@@ -148,7 +148,11 @@ export class GuestRoomDO implements DurableObject {
   /** Visitors who have already converted this room into a real account chat. */
   private claimedBy: string[] = [];
 
+  /** Bound once here so no call site can forget the runtime override. */
+  private readonly reportError: DurableErrorReporter;
+
   constructor(private state: DurableObjectState, private env: { JWT_SECRET?: string }) {
+    this.reportError = createDurableErrorReporter('infrastructure/relay/GuestRoomDO.ts', env, state);
     // Hydrate before ANY request is served — the turn counter must never restart
     // at zero just because the DO was evicted between two sends.
     this.state.blockConcurrencyWhile(async () => {
@@ -182,7 +186,7 @@ export class GuestRoomDO implements DurableObject {
     this.claimedBy = [];
     this.seq = 0;
     await this.state.storage.deleteAll().catch((error) => {
-      reportCaughtError(error, { source: 'infrastructure/relay/GuestRoomDO.ts', operation: 'wipe' }, { env: this.env, waitUntil: (task) => this.state.waitUntil(task) });
+      this.reportError(error, { operation: 'wipe' });
     });
     for (const peer of this.relay.list()) {
       try {
@@ -190,7 +194,7 @@ export class GuestRoomDO implements DurableObject {
       } catch (error) {
         // The socket was already torn down by the client — the room is closing
         // either way, so this is nothing to recover from, only to record.
-        reportCaughtError(error, { source: 'infrastructure/relay/GuestRoomDO.ts', operation: 'wipe' }, { env: this.env, waitUntil: (task) => this.state.waitUntil(task) });
+        this.reportError(error, { operation: 'wipe' });
       }
     }
     this.relay.clear();
@@ -518,7 +522,7 @@ export class GuestRoomDO implements DurableObject {
         if (known && known.name !== name) {
           known.name = name;
           void this.state.storage.put('participants', this.participants).catch((error) => {
-            reportCaughtError(error, { source: 'infrastructure/relay/GuestRoomDO.ts', operation: 'onMessage' }, { env: this.env, waitUntil: (task) => this.state.waitUntil(task) });
+            this.reportError(error, { operation: 'onMessage' });
           });
         }
       }

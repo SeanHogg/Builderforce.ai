@@ -26931,6 +26931,7 @@
       "signIn": "Iniciar sesión",
       "reason": {
         "runAgent": "Inicia sesión para lanzar una ejecución a un agente.",
+        "generate": "Inicia sesión para generarlo con IA.",
         "connectIntegration": "Inicia sesión para conectar una cuenta.",
         "publish": "Inicia sesión para publicar esto.",
         "invite": "Inicia sesión para invitar a alguien.",
