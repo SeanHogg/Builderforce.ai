@@ -55,6 +55,13 @@ For threat model + hardening guidance (including `builderforce security audit --
 
 - `https://docs.builderforce.ai/gateway/security`
 
+### Error reporting and what leaves the machine
+
+Caught errors are written to the local console and log file and **nowhere else**
+by default. An opt-in switch (`BUILDERFORCE_ERROR_REPORTING`) additionally files
+them against a linked builderforce.ai workspace; offline/air-gapped mode overrides
+it. See [ERROR-REPORTING.md](./ERROR-REPORTING.md) for exactly what is sent.
+
 ### Tool filesystem hardening
 
 - `tools.exec.applyPatch.workspaceOnly: true` (recommended): keeps `apply_patch` writes/deletes within the configured workspace directory.

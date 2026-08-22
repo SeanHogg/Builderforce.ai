@@ -53,7 +53,8 @@
   "config.baseUrl.desc": "URL base de la puerta de enlace de BuilderForce. Por defecto usa el dominio principal (`https://builderforce.ai/gateway`), que funciona en redes corporativas que permiten el sitio principal pero bloquean el subdominio `api.`. El endpoint compatible con OpenAI `/llm/v1/chat/completions` se añade automáticamente. Sobrescríbela para despliegues autoalojados o para llamar directamente a `https://api.builderforce.ai`.",
   "config.webUrl.desc": "URL base de la app web de BuilderForce (donde viven las páginas embebidas como el tablero). Déjala vacía para derivarla de `builderforce.baseUrl` (api.* → dominio raíz).",
   "config.defaultModel.desc": "Id del modelo predeterminado. Déjalo vacío para que la puerta de enlace elija del grupo de modelos de programación curado.",
-  "config.permissionMode.desc": "Cómo aplica el agente los cambios a tu espacio de trabajo.",  "config.permissionMode.ask": "Preguntar antes de aplicar cada edición de archivo o comando (recomendado).",
+  "config.permissionMode.desc": "Cómo aplica el agente los cambios a tu espacio de trabajo.",
+  "config.permissionMode.ask": "Preguntar antes de aplicar cada edición de archivo o comando (recomendado).",
   "config.permissionMode.acceptEdits": "Aplicar las ediciones de archivos automáticamente sin preguntar.",
   "config.sessionTabs.desc": "Cómo usa las pestañas del editor la apertura de una sesión desde la vista Sesiones.",
   "config.sessionTabs.reuse": "Reutilizar una sola pestaña de chat, cambiando de sesión dentro de ella.",
@@ -71,5 +72,6 @@
   "command.refreshMeetings": "BuilderForce: Actualizar reuniones",
   "command.scheduleMeeting": "BuilderForce: Programar reunión",
   "command.joinMeetingBrowser": "Unirse en el navegador",
-  "command.joinMeetingNative": "Unirse aquí"
+  "command.joinMeetingNative": "Unirse aquí",
+  "config.reportErrors.desc": "Envía los errores que detecta esta extensión a tu espacio de trabajo de BuilderForce para que aparezcan en Quality junto al resto de errores. Desactivado por defecto: si está desactivado, los errores solo se escriben en el canal de salida de BuilderForce y nunca salen de este equipo."
 }

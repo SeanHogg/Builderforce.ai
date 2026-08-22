@@ -14,7 +14,7 @@
   "agent-runtime/src": {
     "empty-catch": 436,
     "empty-promise-catch": 100,
-    "console-only": 45,
+    "console-only": 44,
     "durable-object-direct-report": 0
   },
   "worker/src": {

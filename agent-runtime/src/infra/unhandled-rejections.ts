@@ -1,5 +1,6 @@
 import process from "node:process";
 import { extractErrorCode, formatUncaughtError } from "./errors.js";
+import { reportAndExit } from "./fatal-exit.js";
 
 type UnhandledRejectionHandler = (reason: unknown) => boolean;
 
@@ -154,14 +155,18 @@ export function installUnhandledRejectionHandler(): void {
     }
 
     if (isFatalError(reason)) {
-      console.error("[builderforce] FATAL unhandled rejection:", formatUncaughtError(reason));
-      process.exit(1);
+      void reportAndExit(reason, {
+        operation: "unhandledRejection:fatal",
+        label: "[builderforce] FATAL unhandled rejection:",
+      });
       return;
     }
 
     if (isConfigError(reason)) {
-      console.error("[builderforce] CONFIGURATION ERROR - requires fix:", formatUncaughtError(reason));
-      process.exit(1);
+      void reportAndExit(reason, {
+        operation: "unhandledRejection:config",
+        label: "[builderforce] CONFIGURATION ERROR - requires fix:",
+      });
       return;
     }
 
@@ -173,7 +178,9 @@ export function installUnhandledRejectionHandler(): void {
       return;
     }
 
-    console.error("[builderforce] Unhandled promise rejection:", formatUncaughtError(reason));
-    process.exit(1);
+    void reportAndExit(reason, {
+      operation: "unhandledRejection",
+      label: "[builderforce] Unhandled promise rejection:",
+    });
   });
 }

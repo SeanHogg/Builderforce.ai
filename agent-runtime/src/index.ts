@@ -18,7 +18,6 @@ import {
 import { ensureBinary } from "./infra/binaries.js";
 import { loadDotEnv } from "./infra/dotenv.js";
 import { normalizeEnv } from "./infra/env.js";
-import { formatUncaughtError } from "./infra/errors.js";
 import { isMainModule } from "./infra/is-main.js";
 import { ensureBuilderForceAgentsCliOnPath } from "./infra/path-env.js";
 import {
@@ -28,6 +27,7 @@ import {
   PortInUseError,
 } from "./infra/ports.js";
 import { assertSupportedRuntime } from "./infra/runtime-guard.js";
+import { reportAndExit, installUncaughtExceptionHandler } from "./infra/fatal-exit.js";
 import { installUnhandledRejectionHandler } from "./infra/unhandled-rejections.js";
 import { enableConsoleCapture } from "./logging.js";
 import { runCommandWithTimeout, runExec } from "./process/exec.js";
@@ -81,13 +81,10 @@ if (isMain) {
   // These log the error and exit gracefully instead of crashing without trace.
   installUnhandledRejectionHandler();
 
-  process.on("uncaughtException", (error) => {
-    console.error("[builderforce] Uncaught exception:", formatUncaughtError(error));
-    process.exit(1);
-  });
+  installUncaughtExceptionHandler();
 
-  void program.parseAsync(process.argv).catch((err) => {
-    console.error("[builderforce] CLI failed:", formatUncaughtError(err));
-    process.exit(1);
-  });
+  void program.parseAsync(process.argv).catch((err) => reportAndExit(err, {
+    operation: "cli:parse",
+    label: "[builderforce] CLI failed:",
+  }));
 }

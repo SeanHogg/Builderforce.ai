@@ -5,7 +5,7 @@
  * Spans are forwarded here from the BuilderForce Agents workflow-telemetry module via
  * the X-Trace-Id header.
  *
- * POST /api/telemetry/spans        Ingest a batch of spans (agentHost API key auth)
+ * POST /api/telemetry/spans        Ingest a batch of spans (agentHost API key or tenant JWT)
  * GET  /api/telemetry/spans        Query spans by traceId, workflowId, or date range (JWT auth)
  * GET  /api/telemetry/traces       List distinct traces for a tenant (JWT auth)
  */
@@ -14,7 +14,7 @@ import { Hono } from 'hono';
 import { and, desc, eq, gte, lte } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { telemetrySpans } from '../../infrastructure/database/schema';
-import { verifyAgentHostApiKey } from '../../infrastructure/auth/agentHostAuth';
+import { resolveCallerTenant } from '../middleware/callerTenant';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { MILLICENTS_PER_USD } from '../../domain/shared/money';
@@ -24,24 +24,12 @@ export function createTelemetryRoutes(db: Db): Hono<HonoEnv> {
 
   // ── POST /api/telemetry/spans ─────────────────────────────────────────────
   // Accepts a JSON array of WorkflowSpan objects (same shape as BuilderForce Agents emits).
-  // Auth: ?agentHostId=&key= (agentHost API key) OR tenant JWT.
+  // Auth: an agent-host API key (bearer + X-AgentHost-Id, or ?agentHostId=&key=)
+  // OR a tenant JWT â€” resolved by the shared `resolveCallerTenant`.
   router.post('/spans', async (c) => {
-    let tenantId: number;
-    let resolvedAgentHostId: number | null = null;
-
-    const agentHostIdParam = Number(c.req.query('agentHostId') ?? '');
-    const apiKey = c.req.query('key');
-    if (!Number.isNaN(agentHostIdParam) && agentHostIdParam > 0 && apiKey) {
-      const agentHost = await verifyAgentHostApiKey(db, agentHostIdParam, apiKey);
-      if (!agentHost) return c.text('Unauthorized', 401);
-      tenantId = agentHost.tenantId;
-      resolvedAgentHostId = agentHost.id;
-    } else {
-      await authMiddleware(c as unknown as Parameters<typeof authMiddleware>[0], async () => {});
-      const tid = (c as unknown as { get: (k: string) => unknown }).get('tenantId');
-      if (!tid) return c.text('Unauthorized', 401);
-      tenantId = tid as number;
-    }
+    const caller = await resolveCallerTenant(db, c);
+    if (!caller) return c.text('Unauthorized', 401);
+    const { tenantId, agentHostId: resolvedAgentHostId } = caller;
 
     // Also accept traceId from header (set by BuilderForce Agents agentlink-relay)
     const headerTraceId = c.req.header('X-Trace-Id') ?? null;

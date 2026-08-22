@@ -53,7 +53,8 @@
   "config.baseUrl.desc": "BuilderForce 网关的基础 URL。默认使用主域名（`https://builderforce.ai/gateway`），可在仅将主站点加入白名单、却屏蔽 `api.` 子域名的企业网络中正常工作。会自动追加 OpenAI 兼容端点 `/llm/v1/chat/completions`。自托管部署或需直接调用 `https://api.builderforce.ai` 时可覆盖。",
   "config.webUrl.desc": "BuilderForce 网页应用的基础 URL（看板等内嵌页面所在处）。留空则从 `builderforce.baseUrl` 推导（api.* → 根域名）。",
   "config.defaultModel.desc": "要使用的默认模型 id。留空则让网关从精选的编程模型池中选择。",
-  "config.permissionMode.desc": "代理如何将更改应用到你的工作区。",  "config.permissionMode.ask": "在应用每次文件编辑或命令前询问（推荐）。",
+  "config.permissionMode.desc": "代理如何将更改应用到你的工作区。",
+  "config.permissionMode.ask": "在应用每次文件编辑或命令前询问（推荐）。",
   "config.permissionMode.acceptEdits": "自动应用文件编辑，不再提示。",
   "config.sessionTabs.desc": "从“会话”视图打开会话时如何使用编辑器选项卡。",
   "config.sessionTabs.reuse": "复用单个聊天选项卡，在其中切换会话。",
@@ -71,5 +72,6 @@
   "command.refreshMeetings": "BuilderForce：刷新会议",
   "command.scheduleMeeting": "BuilderForce：安排会议",
   "command.joinMeetingBrowser": "在浏览器中加入",
-  "command.joinMeetingNative": "在此加入"
+  "command.joinMeetingNative": "在此加入",
+  "config.reportErrors.desc": "将此扩展捕获的错误发送到您的 BuilderForce 工作区，使其与其他所有错误一起显示在 Quality 中。默认关闭：关闭时错误仅写入 BuilderForce 输出通道，绝不离开本机。"
 }

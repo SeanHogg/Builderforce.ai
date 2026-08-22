@@ -6,6 +6,7 @@
  * in its project, a tenant-level collector routes each event via its mapping rules:
  *   POST /events                       native canonical batch — Bearer bfq_… (or ?key=)
  *   POST /product-report               BuilderForce.ai's own UI errors (anonymous)
+ *   POST /client-report                agent-runtime / VSIX crashes — agent-host key or tenant JWT
  *   POST /otlp/v1/{logs,traces}        OTLP/HTTP (protobuf or JSON) — same key
  *   POST /webhooks/:collectorId/:provider  provider webhook — HMAC-verified per integration
  *
@@ -20,6 +21,8 @@ import { decryptCredentials } from '../../application/integrations/credentialCry
 import { getErrorAdapter } from '../../application/quality/adapters';
 import { otlpLogsToJson, otlpTracesToJson } from '../../application/quality/otlpProtobuf';
 import { ingestErrorEvents } from '../../application/quality/ingestEngine';
+import { parseClientErrorReport, resolveClientReportCollector } from '../../application/quality/clientErrorReport';
+import { resolveCallerTenant } from '../middleware/callerTenant';
 import type { CollectorRef, MappingRule } from '../../application/quality/errorMapping';
 import type { NormalizedErrorEvent } from '../../application/quality/errorSpec';
 import type { HonoEnv, Env } from '../../env';
@@ -203,6 +206,37 @@ export function createQualityIngestRoutes(db: Db): Hono<HonoEnv> {
     }
 
     return c.json({ ok: true, ...result }, 202);
+  });
+
+  /**
+   * The on-prem runtime's and the VS Code extension's door into the SAME store.
+   *
+   * Neither ships an ingest key — they hold the credential they were already
+   * given when the workspace was linked — so this door authenticates the
+   * CALLER and derives the collector, where `/events` authenticates the COLLECTOR
+   * itself. Everything after that is the shared pipeline: the same canonical
+   * events, the same grouping, the same monthly cap.
+   */
+  router.post('/client-report', async (c) => {
+    const caller = await resolveCallerTenant(db, c);
+    if (!caller) return c.json({ error: 'Invalid or missing credential' }, 401);
+
+    let body: unknown;
+    try { body = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON body' }, 400); }
+
+    const parsed = parseClientErrorReport(body);
+    if ('error' in parsed) return c.json({ error: parsed.error }, 400);
+
+    const collector = await resolveClientReportCollector(db, caller.tenantId, parsed.projectId);
+    if (!collector) {
+      return c.json({
+        error: 'No destination for this report — link the workspace to a project, '
+          + 'or create a workspace-level error collector with a default project.',
+      }, 422);
+    }
+
+    const result = await ingestForCollector(db, c.env as Env, collector, parsed.events);
+    return c.json(result, result.capExceeded ? 429 : 202);
   });
 
   /** Keyed native ingest (browser SDK + server/compiled code). */

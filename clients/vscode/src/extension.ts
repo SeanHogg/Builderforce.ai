@@ -29,6 +29,7 @@ import { AttentionPoller, setLocalChatRuns, onLocalRunsChange, managerAttention 
 import { appUrl } from "./auth";
 import { MeetingsController, joinMeetingInBrowser, joinMeetingNative, openMeetingsWeb, type MeetingItem } from "./meetings";
 import { CreationCanvasPanel } from "./creationCanvasPanel";
+import { initErrorReporter, reportExtensionError, surfaceError } from "./errorReporter";
 
 /** Pull a numeric Brain chat id out of a Sessions tree item or a raw id argument. */
 function chatIdOf(item: bfApi.BfBrainChat | number | string | undefined): number | undefined {
@@ -152,7 +153,8 @@ export function activate(context: vscode.ExtensionContext): void {
         trackVsix("navigation", { ref: `creation-session:${session.id}` });
         CreationCanvasPanel.open(context, session.id, session.title);
       } catch (error) {
-        void vscode.window.showErrorMessage(vscode.l10n.t("Could not create a Canvas session: {0}", (error as Error).message));
+        surfaceError(error, "command:openCreateCanvas",
+          vscode.l10n.t("Could not create a Canvas session: {0}", (error as Error).message));
       }
     }),
     vscode.commands.registerCommand("builderforce.openCreationSession", async () => {
@@ -165,7 +167,8 @@ export function activate(context: vscode.ExtensionContext): void {
         })), { title: vscode.l10n.t("Open Creation Session"), placeHolder: vscode.l10n.t("Choose a shared canvas") });
         if (picked) CreationCanvasPanel.open(context, picked.session.id, picked.session.title);
       } catch (error) {
-        void vscode.window.showErrorMessage(vscode.l10n.t("Could not open Creation Sessions: {0}", (error as Error).message));
+        surfaceError(error, "command:openCreationSession",
+          vscode.l10n.t("Could not open Creation Sessions: {0}", (error as Error).message));
       }
     }),
     vscode.commands.registerCommand("builderforce.openCreationSessionItem", (session: bfApi.BfCreationSessionSummary) => {
@@ -216,8 +219,9 @@ export function activate(context: vscode.ExtensionContext): void {
   if (typeof savedTenant === "number") bfApi.setSelectedWorkspace(savedTenant);
   void refreshWorkspaceHeader(context);
   const auth = BuilderForceAuthProvider.register(context);
-  const output = vscode.window.createOutputChannel("BuilderForce");
-  context.subscriptions.push(output);
+  // The ONE log surface, owned by errorReporter so any module can write to it and
+  // so "log it" and "file it in Quality" can never drift apart.
+  const output = initErrorReporter(context);
 
   // Native Chat participant (@builderforce) + dedicated session tab (proposed API,
   // feature-detected — no-ops unless launched with --enable-proposed-api).
@@ -424,7 +428,7 @@ export function activate(context: vscode.ExtensionContext): void {
         tree.refresh();
         BrainWebview.open(context, { kind: "new" });
       } catch (e) {
-        vscode.window.showErrorMessage(`BuilderForce: could not delete chat (${(e as Error).message}).`);
+        surfaceError(e, "command:deleteSession", `BuilderForce: could not delete chat (${(e as Error).message}).`);
       }
     }),
     vscode.commands.registerCommand("builderforce.renameSession", async (item: bfApi.BfBrainChat | string) => {
@@ -442,7 +446,7 @@ export function activate(context: vscode.ExtensionContext): void {
         await bfApi.renameBrainChat(context.secrets, id, title.trim() || vscode.l10n.t("New chat"));
         tree.refresh();
       } catch (e) {
-        vscode.window.showErrorMessage(`BuilderForce: could not rename chat (${(e as Error).message}).`);
+        surfaceError(e, "command:renameSession", `BuilderForce: could not rename chat (${(e as Error).message}).`);
       }
     }),
     // "Open Chat" opens the unified Brain (the improved experience).
@@ -572,6 +576,7 @@ async function selectProject(
   try {
     list = await bfApi.listProjects(context.secrets);
   } catch (e) {
+    void reportExtensionError(e, { operation: "projects:list" });
     const action = await vscode.window.showErrorMessage(
       `BuilderForce: could not load projects — ${(e as Error).message}`,
       "Diagnose",
@@ -784,7 +789,7 @@ async function setTaskStatus(
     projects.refresh();
     vscode.window.showInformationMessage(`BuilderForce: ${task.key ?? "task"} → ${pick}`);
   } catch (e) {
-    vscode.window.showErrorMessage(`BuilderForce: could not update task (${(e as Error).message}).`);
+    surfaceError(e, "task:update", `BuilderForce: could not update task (${(e as Error).message}).`);
   }
 }
 
@@ -886,7 +891,7 @@ async function reviewHumanRequests(
   try {
     pending = await bfApi.listHumanRequests(context.secrets, { status: "pending" });
   } catch (e) {
-    vscode.window.showErrorMessage(`BuilderForce: could not load approvals (${(e as Error).message}).`);
+    surfaceError(e, "approvals:load", `BuilderForce: could not load approvals (${(e as Error).message}).`);
     return;
   }
   if (!pending.length) {
@@ -960,7 +965,7 @@ async function reviewHumanRequests(
       if (action === "Review Next") void reviewHumanRequests(context, projects);
     }
   } catch (e) {
-    vscode.window.showErrorMessage(`BuilderForce: could not resolve approval (${(e as Error).message}).`);
+    surfaceError(e, "approvals:resolve", `BuilderForce: could not resolve approval (${(e as Error).message}).`);
   }
 }
 
@@ -975,7 +980,8 @@ async function signIn(context: vscode.ExtensionContext): Promise<void> {
     });
   } catch (e) {
     const msg = (e as { message?: string }).message ?? String(e);
-    if (!/cancel/i.test(msg)) vscode.window.showErrorMessage(`BuilderForce: ${msg}`);
+    // A cancelled sign-in is a decision, not a fault: it is neither shown nor filed.
+    if (!/cancel/i.test(msg)) surfaceError(e, "auth:signIn", `BuilderForce: ${msg}`);
     return;
   }
   vscode.window.showInformationMessage("BuilderForce: signed in.");

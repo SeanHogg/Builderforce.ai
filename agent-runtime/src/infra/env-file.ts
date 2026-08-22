@@ -90,7 +90,8 @@ export function readRuntimeEnvVar(
 
 const TRUTHY_ENV_VALUES = new Set(["1", "true", "yes", "on", "enabled"]);
 
-function isTruthyFlag(value: string | undefined): boolean {
+/** The ONE spelling of a truthy env flag in the runtime. */
+export function isTruthyFlag(value: string | undefined): boolean {
   if (!value) {
     return false;
   }

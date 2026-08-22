@@ -53,7 +53,8 @@
   "config.baseUrl.desc": "URL de base de la passerelle BuilderForce. Par défaut, utilise le domaine principal (`https://builderforce.ai/gateway`), qui fonctionne sur les réseaux d'entreprise autorisant le site principal mais bloquant le sous-domaine `api.`. Le point de terminaison compatible OpenAI `/llm/v1/chat/completions` est ajouté automatiquement. À remplacer pour les déploiements auto-hébergés ou pour appeler directement `https://api.builderforce.ai`.",
   "config.webUrl.desc": "URL de base de l'app web BuilderForce (où se trouvent les pages intégrées comme le tableau). Laissez vide pour la déduire de `builderforce.baseUrl` (api.* → domaine racine).",
   "config.defaultModel.desc": "Id du modèle par défaut. Laissez vide pour laisser la passerelle choisir dans le pool de modèles de codage sélectionné.",
-  "config.permissionMode.desc": "Comment l'agent applique les changements à votre espace de travail.",  "config.permissionMode.ask": "Demander avant d'appliquer chaque modification de fichier ou commande (recommandé).",
+  "config.permissionMode.desc": "Comment l'agent applique les changements à votre espace de travail.",
+  "config.permissionMode.ask": "Demander avant d'appliquer chaque modification de fichier ou commande (recommandé).",
   "config.permissionMode.acceptEdits": "Appliquer automatiquement les modifications de fichiers sans demander.",
   "config.sessionTabs.desc": "Comment l'ouverture d'une session depuis la vue Sessions utilise les onglets de l'éditeur.",
   "config.sessionTabs.reuse": "Réutiliser un seul onglet de discussion, en changeant de session à l'intérieur.",
@@ -71,5 +72,6 @@
   "command.refreshMeetings": "BuilderForce : Actualiser les réunions",
   "command.scheduleMeeting": "BuilderForce : Planifier une réunion",
   "command.joinMeetingBrowser": "Rejoindre dans le navigateur",
-  "command.joinMeetingNative": "Rejoindre ici"
+  "command.joinMeetingNative": "Rejoindre ici",
+  "config.reportErrors.desc": "Envoyer les erreurs interceptées par cette extension vers votre espace de travail BuilderForce, afin qu'elles apparaissent dans Quality avec toutes les autres erreurs. Désactivé par défaut : dans ce cas, les erreurs sont uniquement écrites dans le canal de sortie BuilderForce et ne quittent jamais cette machine."
 }

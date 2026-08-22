@@ -935,8 +935,11 @@ export async function postActivitySignals(
  * non-2xx — used by dispatch where 202 (approval gate) and 402 (plan limit) are
  * meaningful, expected outcomes the caller must branch on, not failures. Reuses the
  * same JWT exchange + 401-retry as `authed` (DRY). Throws only on "not signed in".
+ *
+ * Exported for `errorReporter.ts`, which must treat 422 (no destination project)
+ * and 429 (monthly cap) as "nothing more to do" rather than as a second error.
  */
-async function authedRaw<T>(
+export async function authedRaw<T>(
   secrets: vscode.SecretStorage,
   path: string,
   init?: RequestInit,
