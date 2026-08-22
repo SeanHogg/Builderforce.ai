@@ -19,6 +19,7 @@
  * product did the SELECT, per item, which is both a round trip per row and a
  * duplicate whenever two runs overlapped.
  */
+import { sha256Fingerprint } from '../../infrastructure/crypto/digest';
 
 /** One listing as the feed described it, before it is anybody's row. */
 export interface SourcedListing {
@@ -102,16 +103,13 @@ export function parseJsonFeed(data: unknown, config: JsonFeedConfig = {}): Sourc
  * fingerprinted slug can never collide with a URL-derived one.
  */
 export async function listingSlug(listing: SourcedListing): Promise<string> {
-  if (listing.url) return `u:${await sha256(listing.url.trim().toLowerCase())}`;
+  if (listing.url) return `u:${await sha256Fingerprint(listing.url.trim().toLowerCase(), 40)}`;
   const raw = [listing.title, listing.company, listing.location]
     .map((part) => part.trim().toLowerCase()).join('|');
-  return `f:${await sha256(raw)}`;
+  return `f:${await sha256Fingerprint(raw, 40)}`;
 }
 
-async function sha256(input: string): Promise<string> {
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(input));
-  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('').slice(0, 40);
-}
+
 
 // ── XML helpers ────────────────────────────────────────────────────────────
 

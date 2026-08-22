@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { TenantOverrideCard } from './TenantOverrideCard';
 
 /**
  * Generic superadmin override editor for a per-tenant integer cap with the
@@ -11,8 +12,11 @@ import { useTranslations } from 'next-intl';
  *
  * The daily token cap, the funded paid-overflow cap, and the image-credit cap
  * are all the SAME control — only the label, unit, and display↔stored transform
- * differ. This holds the radio/save/error UI once (DRY); callers pass a thin
- * config + the PATCH call.
+ * differ. This holds the three radios and the number input once (DRY); callers
+ * pass a thin config + the PATCH call.
+ *
+ * The chrome, the save and the error live one level down, in
+ * {@link TenantOverrideCard}, which the boolean premium override wears too.
  */
 
 type Mode = 'plan_default' | 'unlimited' | 'custom';
@@ -54,97 +58,91 @@ interface Props {
 export function TenantIntegerOverrideEditor({ tenantId, value, onChange, config }: Props) {
   const t = useTranslations('admin');
   const [mode, setMode] = useState<Mode>(modeFor(value));
-  const [customStr, setCustomStr] = useState<string>(
-    value !== null && value >= 0 ? config.toInput(value) : '',
-  );
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [customStr, setCustomStr] = useState<string>(value !== null && value >= 0 ? config.toInput(value) : '');
 
+  const name = `${config.fieldKey}-${tenantId}`;
+
+  /**
+   * Validation failure is thrown, not branched on: the card shows whatever an
+   * `Error` carries, so an invalid custom value and a rejected request reach the
+   * user through one path.
+   */
   const save = async () => {
-    setError(null);
     let next: number | null;
     if (mode === 'plan_default') next = null;
     else if (mode === 'unlimited') next = -1;
     else {
       const parsed = config.fromInput(customStr);
-      if (parsed === null) {
-        setError(t('tenants.intOverride.invalidValue'));
-        return;
-      }
+      if (parsed === null) throw new Error(t('tenants.intOverride.invalidValue'));
       next = parsed;
     }
-
-    setSaving(true);
-    try {
-      const saved = await config.save(tenantId, next);
-      onChange(saved);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : t('tenants.intOverride.updateFailed'));
-    } finally {
-      setSaving(false);
-    }
+    onChange(await config.save(tenantId, next));
   };
 
-  const name = `${config.fieldKey}-${tenantId}`;
-
   return (
-    <div
-      style={{
-        padding: 12,
-        background: 'var(--bg-base)',
-        border: '1px solid var(--border-subtle)',
-        borderRadius: 'var(--radius-lg)',
-        marginBottom: 12,
-      }}
+    <TenantOverrideCard
+      title={config.label}
+      current={t('tenants.intOverride.current', { value: config.summary(value) })}
+      fallbackError={t('tenants.intOverride.updateFailed')}
+      onSave={save}
     >
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-        <div style={{ fontSize: 13, fontWeight: 700 }}>{config.label}</div>
-        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('tenants.intOverride.current', { value: config.summary(value) })}</div>
-      </div>
-
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, alignItems: 'center', fontSize: 12 }}>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <input type="radio" name={name} checked={mode === 'plan_default'} onChange={() => setMode('plan_default')} disabled={saving} />
-          {t('tenants.intOverride.planDefault')}
-        </label>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <input type="radio" name={name} checked={mode === 'unlimited'} onChange={() => setMode('unlimited')} disabled={saving} />
-          {t('tenants.intOverride.unlimited')}
-        </label>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <input type="radio" name={name} checked={mode === 'custom'} onChange={() => setMode('custom')} disabled={saving} />
-          {t('tenants.intOverride.custom')}{config.customPrefix ? ` ${config.customPrefix}` : ''}
-          <input
-            type="number"
-            min={0}
-            step={config.step ?? 1}
-            value={customStr}
-            onChange={(e) => { setCustomStr(e.target.value); setMode('custom'); }}
-            placeholder={config.placeholder}
-            disabled={saving}
-            style={{
-              width: 120, padding: '4px 8px', fontSize: 12,
-              background: 'var(--bg-elevated)', color: 'var(--text-primary)',
-              border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)',
-            }}
-          />
-          {config.customSuffix}
-        </label>
-
-        <button
-          type="button"
-          className="btn-primary"
-          style={{ marginLeft: 'auto', fontSize: 12, padding: '4px 12px' }}
-          onClick={(e) => { e.stopPropagation(); void save(); }}
-          disabled={saving}
-        >
-          {saving ? t('common.saving') : t('common.save')}
-        </button>
-      </div>
-
-      {error && (
-        <div style={{ marginTop: 8, fontSize: 12, color: 'var(--coral-bright)' }}>{error}</div>
+      {(saving) => (
+        <>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <input
+              type="radio"
+              name={name}
+              checked={mode === 'plan_default'}
+              onChange={() => setMode('plan_default')}
+              disabled={saving}
+            />
+            {t('tenants.intOverride.planDefault')}
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <input
+              type="radio"
+              name={name}
+              checked={mode === 'unlimited'}
+              onChange={() => setMode('unlimited')}
+              disabled={saving}
+            />
+            {t('tenants.intOverride.unlimited')}
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <input
+              type="radio"
+              name={name}
+              checked={mode === 'custom'}
+              onChange={() => setMode('custom')}
+              disabled={saving}
+            />
+            {t('tenants.intOverride.custom')}
+            {config.customPrefix ? ` ${config.customPrefix}` : ''}
+            <input
+              type="number"
+              min={0}
+              step={config.step ?? 1}
+              value={customStr}
+              onChange={(e) => {
+                setCustomStr(e.target.value);
+                setMode('custom');
+              }}
+              placeholder={config.placeholder}
+              disabled={saving}
+              className="ui-text-small"
+              style={{
+                width: 120,
+                padding: '4px 8px',
+                background: 'var(--bg-elevated)',
+                color: 'var(--text-primary)',
+                border: '1px solid var(--border-subtle)',
+                borderRadius: 'var(--radius-sm)',
+              }}
+            />
+            {config.customSuffix}
+          </label>
+        </>
       )}
-    </div>
+    </TenantOverrideCard>
   );
 }

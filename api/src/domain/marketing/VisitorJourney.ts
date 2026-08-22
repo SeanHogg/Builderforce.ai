@@ -62,10 +62,11 @@ export const VISITOR_EVENT_LIMITS = {
   maxMetadataChars: 2_000,
 } as const;
 
-/** A journey kind is stored in `visitor_events.kind`, a varchar(64) — so the
- *  ceiling here is that column's width. Real kinds are a dozen characters; this
- *  only stops a crafted one silently losing its tail on the way in. */
-const KIND_RE = /^[a-z][a-z0-9_]{1,63}$/;
+/** A journey kind is stored as `activity_log.verb`, prefixed `visitor.` (1111) —
+ *  so the ceiling here is that column's varchar(64) minus the eight-character
+ *  prefix. Real kinds are a dozen characters; this only stops a crafted one
+ *  silently losing its tail on the way in. */
+const KIND_RE = /^[a-z][a-z0-9_]{1,55}$/;
 const VISIT_ID_RE = /^[A-Za-z0-9_-]{8,64}$/;
 
 /** Is this a storable kind? Open by design — see the note on VISITOR_JOURNEY_KINDS. */

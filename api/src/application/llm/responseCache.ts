@@ -39,6 +39,7 @@
 import type { Env } from '../../env';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { getOrSetCached, peekCached, setCached } from '../../infrastructure/cache/readThroughCache';
+import { sha256Hex } from '../../infrastructure/crypto/digest';
 
 /**
  * The narrow env slice this needs. Widened from `Env` on purpose: the LLM proxy runs
@@ -102,10 +103,7 @@ function stableStringify(value: unknown): string {
   return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${stableStringify(v)}`).join(',')}}`;
 }
 
-async function sha256Hex(input: string): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(input));
-  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
-}
+
 
 /**
  * The cache key for one request. Mirrors `builderforce-memory`'s `buildCacheKey`

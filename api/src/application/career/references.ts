@@ -14,6 +14,7 @@
 import { and, desc, eq, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { professionalReferences, referenceShares } from '../../infrastructure/database/schema';
+import { sha256Hex } from '../../infrastructure/crypto/digest';
 
 export type ReferenceStatus = 'draft' | 'requested' | 'confirmed' | 'declined';
 
@@ -62,10 +63,7 @@ export interface SharedReferenceView {
 }
 
 /** SHA-256 hex. The only form a share token is ever persisted in. */
-async function hashToken(value: string): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
-  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
-}
+const hashToken = sha256Hex;
 
 const iso = (value: Date | string | null): string | null =>
   value == null ? null : (value instanceof Date ? value.toISOString() : String(value));

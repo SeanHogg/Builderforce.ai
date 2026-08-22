@@ -35,6 +35,7 @@ import { fireEventTriggers } from '../workflow/eventTriggers';
 import type { Env } from '../../env';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { isSendableEmail, normalizeEmail } from '../shared/dnsVerification';
+import { sha256Hex } from '../../infrastructure/crypto/digest';
 
 /** How long a one-time code is good for. Long enough to switch to an inbox. */
 export const CODE_TTL_MS = 10 * 60 * 1000;
@@ -49,10 +50,7 @@ export const MAX_CODE_ATTEMPTS = 5;
 export const SITE_SESSION_COOKIE = 'bf_site_session';
 
 /** SHA-256 hex. The only form a secret is ever persisted in. */
-async function hash(value: string): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
-  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
-}
+const hash = sha256Hex;
 
 /**
  * A six-digit code, from the CSPRNG.

@@ -15,6 +15,7 @@
  * POLICY: an OAuth token is a personal subscription credential. Each tenant must
  * connect THEIR OWN subscription — it is never resold or shared across tenants.
  */
+import { sha256Base64Url } from '../../infrastructure/crypto/digest';
 
 // The public Claude Code OAuth client id (base64 of the uuid, matching
 // agent-runtime's encoding so the two never drift on a copy-paste).
@@ -68,9 +69,7 @@ function base64UrlEncode(bytes: Uint8Array): string {
 export async function generatePkce(): Promise<{ verifier: string; challenge: string }> {
   const verifierBytes = crypto.getRandomValues(new Uint8Array(32));
   const verifier = base64UrlEncode(verifierBytes);
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier));
-  const challenge = base64UrlEncode(new Uint8Array(digest));
-  return { verifier, challenge };
+  return { verifier, challenge: await sha256Base64Url(verifier) };
 }
 
 /** A random `state` value (also CSRF token); echoed back in the pasted code and

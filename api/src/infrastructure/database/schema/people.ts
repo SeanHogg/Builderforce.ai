@@ -32,6 +32,7 @@ import {
   uuid,
   varchar,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import { objects } from './kernel';
 
 // ---------------------------------------------------------------------------
@@ -251,6 +252,12 @@ export const courses = pgTable('courses', {
   id:          serial('id').primaryKey(),
   tenantId:    integer('tenant_id'),
   objectId:    uuid('object_id').references(() => objects.id, { onDelete: 'cascade' }),
+  /** 'course' — modules and lessons — or 'path', an ordered sequence of OTHER
+   *  courses (1112). One table because the columns are identical and because a
+   *  path that is a course row is enrollable, certifiable and sellable through
+   *  `course_enrollments` / `course_certificates` / `course_checkouts` without
+   *  three more tables beside them. What it contains is an edge, not a column. */
+  kind:        varchar('kind', { length: 16 }).notNull().default('course'),
   slug:        varchar('slug', { length: 160 }).notNull(),
   title:       varchar('title', { length: 300 }).notNull(),
   summary:     text('summary'),
@@ -266,6 +273,7 @@ export const courses = pgTable('courses', {
   updatedAt:   timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
   uniqueIndex('uq_courses_slug').on(t.tenantId, t.slug),
+  index('idx_courses_kind').on(t.tenantId, t.kind, t.status),
 ]);
 
 /** A chapter of a course. Distinct from `modules` in Identity, which is a
@@ -329,6 +337,10 @@ export const courseEnrollments = pgTable('course_enrollments', {
 }, (t) => [
   uniqueIndex('uq_course_enrollments_learner').on(t.tenantId, t.courseId, t.learnerRef),
   index('idx_course_enrollments_status').on(t.tenantId, t.status, t.dueAt),
+  // "How far through the path is this learner" folds over the MEMBER enrolments
+  // (1112). Partial, because `pathRef` is null on every standalone enrolment.
+  index('idx_course_enrollments_path').on(t.tenantId, t.pathRef, t.learnerRef)
+    .where(sql`${t.pathRef} IS NOT NULL`),
 ]);
 
 /** A group moving through a course together. Its members are `memberships`. */

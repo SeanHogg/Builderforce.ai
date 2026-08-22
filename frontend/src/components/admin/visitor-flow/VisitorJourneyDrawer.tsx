@@ -49,7 +49,7 @@ export function VisitorJourneyDrawer({
             fontSize: 12,
             color: 'var(--text-muted)',
             wordBreak: 'break-all',
-            background: 'var(--surface-subtle)',
+            background: 'var(--surface-sunken)',
             border: '1px solid var(--border)',
             borderRadius: 'var(--radius-md)',
             padding: '6px 8px',
@@ -122,7 +122,7 @@ function JourneyStep({ step, at }: { step: AdminVisitorJourneyStep; at: string }
     <li style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 12, minWidth: 0 }}>
       <span
         aria-hidden
-        style={{ width: 8, height: 8, borderRadius: 4, background: color, marginTop: 5, flexShrink: 0 }}
+        style={{ width: 8, height: 8, borderRadius: 'var(--radius-full)', background: color, marginTop: 5, flexShrink: 0 }}
       />
       <span className="text-muted" style={{ flexShrink: 0, minWidth: 132 }}>{at}</span>
       <span style={{ minWidth: 0, flex: 1 }}>

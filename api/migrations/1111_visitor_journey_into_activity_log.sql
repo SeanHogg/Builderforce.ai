@@ -1,83 +1,73 @@
--- 1111 · The visitor journey is not its own table. It never was.
+-- 1111 · Fold the visitor journey into `activity_log`, and drop its table.
 --
--- 1109 renamed `demo_events` to `visitor_events` and made it site-wide, which was
--- the right change to the DATA and left the wrong table standing. Three guards
--- said so independently the moment it landed:
+-- 1109 renamed `demo_events` to `visitor_events` because the stream had stopped
+-- being demo-only. Renaming it is what made the real problem legible: it was a
+-- second copy of a shape the kernel already owns — an actor, a verb, a target, a
+-- time, some metadata — and the consolidated data model had already mapped
+-- `demo_events` onto the `event_log` primitive that absorbed `activity_events`,
+-- `admin_audit_log` and eighteen other streams. The table's continued existence
+-- was the drift, not the plan.
 --
---   • `check:shape-lint`   — its columns are `activity_log`'s columns.
---   • `check:tenant-column`— it has no tenant column, and needed an exemption.
---   • `check:swept-tables` — it needed its own autovacuum tuning, like every
---                            other append-only stream the platform keeps.
+-- Three guards said the same thing from three angles and each was answerable
+-- with an adjudication: its shape matched `activity_log`, it carried no tenant
+-- column, it needed its own autovacuum tuning. Three arguments for one table is
+-- the signal that the table is the thing being argued for.
 --
--- The consolidated data model had already answered it: `demo_events` maps onto
--- the `event_log` primitive in `source-to-target.tsv`, the same primitive that
--- absorbed `activity_events`, `admin_audit_log`, `deployment_events` and the rest.
--- A visitor is an ACTOR; where they went is a verb with a target and a time. The
--- separate table was drift, not design, so this folds it in and drops it.
+-- An anonymous visitor is an ACTOR, not a special case. `activity_log.tenant_id`
+-- is already documented as nullable for platform-global, pre-tenant events, and
+-- every tenant-scoped read filters on an equality — so a visitor's rows are
+-- invisible to every workspace by construction rather than by a predicate
+-- somebody has to remember. `actor_type = 'visitor'` joins the union.
 --
--- `activity_log.tenant_id` is already documented as nullable "ONLY for
--- platform-global events (e.g. a pre-tenant login/registration)" — somebody who
--- has not chosen a workspace is exactly that, and the null is what keeps these
--- rows out of every tenant-scoped read.
---
--- The mapping (also stated once in `application/marketing/visitorActivity.ts`):
---
---   actor_type   'visitor'
---   actor_ref    visitor_id
---   verb         'visitor.' || kind
---   target_type  'visit'
---   target_id    visit_id
---   target_label path
---   metadata     metadata, with `persona` folded in
---
--- `persona` loses its column deliberately. It had one writer (the persona demo)
--- and no reader that grouped by it, so it is a fact about an event rather than a
--- dimension — and a column that is null for every non-demo row is exactly what
--- putting it on the platform's audit table would mean.
+-- The column mapping lives in `application/marketing/visitorActivity.ts`; this
+-- migration applies it once to the rows that already exist, then drops the table.
 
--- ── Carry the history across ────────────────────────────────────────────────
--- Idempotent by guard rather than by key: the source table is dropped at the end
--- of this file, so a re-run finds nothing to copy. `occurred_at` is preserved so
--- a journey keeps its real shape; `created_at` defaults to now, which is the
--- honest answer for a row that was written here today.
-DO $$
-BEGIN
-  IF to_regclass('public.visitor_events') IS NOT NULL THEN
-    INSERT INTO activity_log (tenant_id, actor_type, actor_ref, actor_name,
-                              verb, target_type, target_id, target_label,
-                              metadata, occurred_at)
-    SELECT NULL,
-           'visitor',
-           v.visitor_id,
-           'Visitor',
-           left('visitor.' || v.kind, 64),
-           'visit',
-           v.visit_id,
-           v.path,
-           CASE
-             WHEN v.persona IS NULL THEN v.metadata
-             ELSE coalesce(v.metadata, '{}'::jsonb) || jsonb_build_object('persona', v.persona)
-           END,
-           v.occurred_at
-    FROM visitor_events v;
-  END IF;
-END $$;
+INSERT INTO activity_log (
+  tenant_id, actor_type, actor_ref, actor_name,
+  verb, target_type, target_id, target_label,
+  metadata, occurred_at, created_at
+)
+SELECT
+  NULL,
+  'visitor',
+  visitor_id,
+  'Visitor',
+  -- `visitor_events.kind` was varchar(64) and `activity_log.verb` is too, so the
+  -- eight-character prefix can overflow it. The domain now caps a kind at 56
+  -- (`VisitorJourney.ts`) for exactly this reason; the truncation is here for the
+  -- rows written before that cap existed.
+  left('visitor.' || kind, 64),
+  'visit',
+  visit_id,
+  path,
+  -- `persona` was a column and had no reader outside the demo seeder: a fact
+  -- ABOUT an event, not a dimension anything grouped by. It rides in metadata
+  -- rather than earning a column on the platform's audit table.
+  CASE
+    WHEN persona IS NOT NULL
+      THEN COALESCE(metadata, '{}'::jsonb) || jsonb_build_object('persona', persona)
+    ELSE metadata
+  END,
+  occurred_at,
+  created_at
+FROM visitor_events;
 
 -- ── The one index the fold needs ────────────────────────────────────────────
--- The per-visitor timeline and the per-visit walk are both served by the
--- existing `idx_activity_log_actor (tenant_id, actor_type, actor_ref, occurred_at)`
--- and `idx_activity_log_target (tenant_id, target_type, target_id)`.
+-- The per-visitor timeline and the per-visit walk are both already served:
+-- `idx_activity_log_actor (tenant_id, actor_type, actor_ref, occurred_at)` and
+-- `idx_activity_log_target (tenant_id, target_type, target_id)`.
 --
--- The flow-graph scan is the one that is not: "every visitor event in the last N
+-- The flow-graph scan is the one that is not. "Every visitor event in the last N
 -- days" leads with time and cannot use a tenant-leading index, because these rows
--- share their null tenant with every other platform-global event. Partial, so it
--- indexes the visitor rows and nothing else.
+-- share their null tenant with every other platform-global event — a login, a
+-- registration, a broadcast. Partial, so it covers the visitor rows and nothing
+-- else, and mirrors `idx_activity_log_visitor_time` on the Drizzle table.
 CREATE INDEX IF NOT EXISTS idx_activity_log_visitor_time
   ON activity_log (occurred_at)
   WHERE actor_type = 'visitor';
 
--- ── Retire the table ────────────────────────────────────────────────────────
--- Its indexes and sequence go with it. `marketing_session_prompts.visit_id` stays:
--- a typed prompt is content, not an event, and it still joins to the journey by
--- that token — now against `activity_log.target_id`.
-DROP TABLE IF EXISTS visitor_events;
+-- Retention becomes a ROW-level policy (`purgeVisitorActivity`, wired into
+-- `runRetentionPurge`) rather than a `SWEPT_TABLES` entry, because the relation
+-- these rows now live in is the audit trail and must never be swept wholesale.
+-- The 90-day window is unchanged.
+DROP TABLE visitor_events;

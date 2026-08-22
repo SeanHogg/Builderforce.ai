@@ -25,6 +25,17 @@
  *  4. THE BROWSER IS THE CALLER. Never on the server: a server-rendered fixture
  *     would be cached and served to signed-in visitors by any layer above us.
  *
+ * ── WHY THERE IS NO CACHE HERE ───────────────────────────────────────────────
+ * Deliberate, not an omission. A fixture is a pure in-memory computation over a
+ * fixed-size dataset — seventeen tasks and thirty points, microseconds — with no
+ * round trip, no fan-out and nothing to invalidate, so a read-through cache
+ * would buy nothing. It would also COST something real: the responses are built
+ * against `Date.now()` so every offset resolves relative to the read, and a
+ * cached body is a body whose dates are frozen at whatever moment first
+ * populated it. Callers that genuinely want memoisation already have it further
+ * out — `fetchProjects` goes through `getOrSetClientCached` either way, and the
+ * fixture arrives underneath it.
+ *
  * No `'use client'`, matching `apiClient` — the transport that calls this. Same
  * reason: it is a plain module, not part of a component tree, and it guards on
  * `typeof window` itself so a server import is inert rather than an error.

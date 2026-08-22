@@ -27,6 +27,7 @@ import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { projectSites, siteTrafficDaily } from '../../infrastructure/database/schema';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import { sha256Fingerprint } from '../../infrastructure/crypto/digest';
 
 /** One site's pending counts for one UTC day. */
 export interface TrafficDelta {
@@ -75,10 +76,9 @@ export async function visitorHash(
   day: string,
 ): Promise<string> {
   const material = `${salt}|${day}|${ip ?? ''}|${userAgent ?? ''}`;
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(material));
-  return Array.from(new Uint8Array(digest).slice(0, 16))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
+  // 32 hex chars — the same 16 BYTES this has always kept, now stated as a
+  // collision budget rather than as a slice on the byte array.
+  return sha256Fingerprint(material, 32);
 }
 
 /** The salt used for visitor hashing. Dedicated secret preferred so rotating it

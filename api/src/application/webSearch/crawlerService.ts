@@ -3,13 +3,11 @@ import { evaluateRobots } from '../../domain/webSearch/robots';
 import { isUrlAllowed, normalizeWebUrl } from '../../domain/webSearch/urlPolicy';
 import { tokenize } from '../../domain/webSearch/textIndex';
 import type { CrawlerHttpPort, WebSearchStore } from './ports';
+import { sha256Hex } from '../../infrastructure/crypto/digest';
 
 export interface AddCrawlSourceInput { seedUrl: string; allowedDomains?: string[]; blockedDomains?: string[]; maxDepth?: number; crawlDelayMs?: number; perDomainConcurrency?: number }
 
-async function sha256(value: string): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
-  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
-}
+
 
 export class WebCrawlerService {
   constructor(private readonly store: WebSearchStore, private readonly http: CrawlerHttpPort) {}
@@ -63,7 +61,7 @@ export class WebCrawlerService {
       }
       const extracted = extractHtmlDocument(response.body, response.url);
       if (extracted.text.length < 40) { await this.store.markFailed(item, 'No indexable page content.', true); return { status: 'failed', url: item.url }; }
-      const contentHash = await sha256(`${extracted.title ?? ''}\n${extracted.text}`);
+      const contentHash = await sha256Hex(`${extracted.title ?? ''}\n${extracted.text}`);
       const stored = await this.store.storeDocument(item, { ...extracted, originalUrl: item.url, contentHash, httpStatus: response.status, contentType: response.contentType, wordCount: tokenize(extracted.text).length });
       const discovered = await this.store.enqueueLinks(item, extracted.outboundLinks);
       return { status: stored.duplicate ? 'duplicate' : 'indexed', url: item.url, documentId: stored.id, changed: stored.changed, discovered };

@@ -28,6 +28,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useSampleWorkspace } from '@/domains/guest/presentation/useSampleWorkspace';
 import { RoleGate } from '@/components/RoleGate';
+import { SessionGate } from '@/components/guest/SessionGate';
 import { Select } from '@/components/Select';
 import { LensPage, DaysWindowSelect } from '@/components/insights/LensShell';
 import { WidgetCard } from '@/components/widgets/WidgetCard';
@@ -240,13 +241,23 @@ export default function InsightsHomePage() {
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
               />
-              <button type="button" style={btnStyle} onClick={() => void createDashboard()}>{td('create.button')}</button>
+              {/* Both controls WRITE a dashboard to a workspace, and a guest is
+                  looking at the sample one — so the wall lands here, on the
+                  action, rather than on the route. Same shape as the `RoleGate`
+                  wrapping this whole block: the control stays visible and says
+                  what it needs, because a person cannot decide whether an
+                  account is worth having if they cannot see what it buys. */}
+              <SessionGate action="save">
+                <button type="button" style={btnStyle} onClick={() => void createDashboard()}>{td('create.button')}</button>
+              </SessionGate>
               {/* The curated starting point, beside the blank one. Shown whether or
                   not it already exists: re-applying repairs a dashboard somebody
                   pruned, and the server refuses to duplicate it. */}
-              <button type="button" style={btnStyle} onClick={() => void seedExecutive()} disabled={seeding} title={td('presets.executiveHint')}>
-                {seeding ? td('presets.creating') : td('presets.executive')}
-              </button>
+              <SessionGate action="save">
+                <button type="button" style={btnStyle} onClick={() => void seedExecutive()} disabled={seeding} title={td('presets.executiveHint')}>
+                  {seeding ? td('presets.creating') : td('presets.executive')}
+                </button>
+              </SessionGate>
             </span>
           </RoleGate>
         </div>

@@ -15,9 +15,15 @@ export default [
   ['check:edge-runtime', 'check-edge-runtime.mjs'],
   ['check:i18n-keys', 'check-i18n-keys.mjs'],
   ['check:route-exports', 'check-route-exports.mjs'],
+  ['check:root-layout-providers', 'check-root-layout-providers.mjs'],
   ['check:declared-deps', 'check-declared-deps.mjs'],
   ['check:methodology', 'check-methodology.mjs'],
   ['check:canvas-glossary', 'check-canvas-glossary.mjs'],
   ['check:layering', 'check-layering.mjs'],
   ['check:primitives', 'check-primitive-duplication.mjs'],
+  // `--changed`, not a full sweep: four of the six rules run the React Compiler,
+  // so all 2,071 files cost ~10 minutes and a single component costs ~17s. The
+  // cost here is proportional to the diff, and a change touching no component
+  // costs nothing. See scripts/check-react-hooks-ratchet.mjs.
+  ['check:react-hooks', 'check-react-hooks-ratchet.mjs', '--changed'],
 ];

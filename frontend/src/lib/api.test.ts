@@ -63,10 +63,22 @@ let fetchSpy: ReturnType<typeof vi.fn>;
 beforeEach(() => {
   fetchSpy = vi.fn();
   vi.stubGlobal('fetch', fetchSpy);
+  // A WORKSPACE TOKEN, because that is who these functions are for.
+  //
+  // Without it these are anonymous calls, and an anonymous GET to a covered
+  // path is now answered from the sample workspace before it reaches the
+  // network (`resolveGuestRead`) — so `fetchProjects` returned Nova Commerce's
+  // three projects and the fetch spy was never called. That is the intended
+  // behaviour for a signed-out visitor and the wrong premise for a suite about
+  // the transport: every caller of these functions has a session. The guest
+  // path has its own coverage in `domains/guest/application/guestRead.test.ts`,
+  // and the case below pins the boundary between the two.
+  localStorage.setItem('bf_tenant_token', 'test-tenant-token');
 });
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  localStorage.clear();
 });
 
 // ---------------------------------------------------------------------------
@@ -88,6 +100,19 @@ describe('fetchProjects', () => {
   it('throws when the server returns a non-ok response', async () => {
     fetchSpy.mockResolvedValueOnce(mockError(500));
     await expect(fetchProjects()).rejects.toThrow('Request failed');
+  });
+
+  it('answers a SIGNED-OUT read from the sample workspace instead of the network', async () => {
+    // The boundary the token in `beforeEach` exists to keep on the right side.
+    // With no credential the transport never reaches fetch: a signed-out
+    // visitor on `/insights` or a board sees the sample workspace rather than
+    // an empty grid behind a 401. The condition is the ABSENCE of the header,
+    // not anything React believes, so clearing the token is the whole setup.
+    localStorage.clear();
+    const result = await fetchProjects();
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(result.length).toBeGreaterThan(0);
+    expect(result.every((project) => typeof project.name === 'string')).toBe(true);
   });
 });
 

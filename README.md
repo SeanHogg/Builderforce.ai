@@ -63,17 +63,18 @@ Builderforce.ai is a **human-in-the-loop, fully agentic cloud** where ideas beco
 ### BuilderForce Agents Orchestration Portal
 Builderforce.ai is the cloud-side control plane for [BuilderForce Agents](https://builderforce.ai/agents) self-hosted agents:
 
-- **Fleet registration** — Claws register at `POST /api/claws` with machine profile (IP, workspace dirs, ports, tunnel metadata)
-- **Heartbeat + capability sync** — `PATCH /api/claws/:id/heartbeat` keeps capability maps and machine profiles current
-- **Assignment context** — `GET /api/claws/:id/assignment-context` delivers assigned project metadata and context hints; CoderClaw syncs to `.coderClaw/context.yaml`
-- **Claw-to-claw mesh relay** — `ClawRelayDO` Durable Object proxies WebSocket connections between Claws; `POST /api/runtime/forward` dispatches tasks to remote agents with HMAC-SHA256 payload verification (`X-Claw-Signature`)
+- **Fleet registration** — agent hosts register at `POST /api/agent-hosts` with machine profile (IP, workspace dirs, ports, tunnel metadata)
+- **Heartbeat + capability sync** — `PATCH /api/agent-hosts/:id/heartbeat` keeps capability maps and machine profiles current
+- **Assignment context** — `GET /api/agent-hosts/:id/assignment-context` delivers assigned project metadata and context hints; the runtime syncs to `.builderforce/context.yaml`
+- **Host-to-host mesh relay** — the `AgentHostRelayDO` Durable Object proxies WebSocket connections between agent hosts; `POST /api/agent-hosts/:id/forward` dispatches tasks to a remote host, authenticated with the SOURCE host's own API key (`?from=<id>&key=…`, or the `X-AgentHost-From` header) and refused across tenants
 - **Approval gates** — human-in-the-loop control for high-impact agent actions; agents request approval before executing; outcomes are audited
-- **Task management** — `tasks` and `executions` tables track work assigned to specific Claws; `POST /api/tasks/next` feeds the next task to a waiting agent
+- **Task management** — `tasks` and `executions` tables track work assigned to specific agent hosts; `POST /api/tasks/next` feeds the next task to a waiting agent
+- **Legacy mounts** — `/api/claws` and `/api/agentNodes` still answer for fleets that have not moved, with `Deprecation: true` and a `Link: rel="successor-version"` pointing at `/api/agent-hosts` (`presentation/middleware/legacyAlias.ts`). New callers use the canonical path.
 
 ### Multi-Tenant Platform
 - **JWT auth** with web token (global) + tenant token (workspace-scoped) dual-token model
 - **Multi-auth** — email/password, OAuth social login (Google, GitHub, LinkedIn, Microsoft), and magic link sign-in all coexist on the same account
-- **Tenant isolation** — all resources (projects, claws, agents, training jobs) are scoped to a tenant; no cross-tenant data access
+- **Tenant isolation** — all resources (projects, agent hosts, agents, training jobs) are scoped to a tenant; no cross-tenant data access
 - **Multi-workspace** — users belong to multiple tenants; `bf_default_tenant_id` auto-selects on login
 - **Admin observability** — `/admin` surface for platform admins (superadmin flag); `logs/global-errors.txt` in R2; `/observability` LLM usage metrics
 
@@ -531,8 +532,8 @@ See the write-up: [The AI Agent Tech Stack, Built](https://builderforce.ai/blog/
 │                                                                   │
 │  API (api.builderforce.ai — Hono)    Durable Objects             │
 │  ┌────────────────────────────┐      ┌──────────────────────┐   │
-│  │ /api/auth  /api/tenants    │      │  ClawRelayDO         │   │
-│  │ /api/claws /api/tasks      │      │  - claw mesh relay   │   │
+│  │ /api/auth  /api/tenants    │      │  AgentHostRelayDO    │   │
+│  │ /api/agent-hosts /api/tasks│      │  - host mesh relay   │   │
 │  │ /api/brain /api/projects   │      │  - heartbeat proxy   │   │
 │  │ /api/runtime/executions    │      └──────────────────────┘   │
 │  └────────────────────────────┘      ┌──────────────────────┐   │
@@ -548,7 +549,7 @@ See the write-up: [The AI Agent Tech Stack, Built](https://builderforce.ai/blog/
 │  Neon Postgres                        │ datasets (.jsonl)    │   │
 │  ┌────────────────────────────┐      │ LoRA artifacts       │   │
 │  │ users · tenants · projects │      │ agent packages       │   │
-│  │ claws · tasks · executions │      └──────────────────────┘   │
+│  │ agent_hosts · tasks        │      └──────────────────────┘   │
 │  │ agents · training_jobs     │                                   │
 │  │ agent_inference_logs       │                                   │
 │  │ contributors · dev_teams   │                                   │
@@ -562,10 +563,10 @@ See the write-up: [The AI Agent Tech Stack, Built](https://builderforce.ai/blog/
 
 | | `api` (api.builderforce.ai) | `worker` (worker.builderforce.ai) |
 |---|---|---|
-| **Purpose** | Auth, tenants, claws, tasks, brain, marketplace, dev analytics | IDE projects, files, datasets, training, collaboration |
+| **Purpose** | Auth, tenants, agent hosts, tasks, brain, marketplace, dev analytics | IDE projects, files, datasets, training, collaboration |
 | **Auth** | JWT + tenant isolation | CORS (no auth currently) |
-| **Durable Objects** | ClawRelayDO (claw mesh relay) | CollaborationRoom (Yjs sync) |
-| **Storage** | R2 `UPLOADS` (brain files, claw assets) | R2 `STORAGE` (project files, artifacts, datasets) |
+| **Durable Objects** | AgentHostRelayDO (host mesh relay) | CollaborationRoom (Yjs sync) |
+| **Storage** | R2 `UPLOADS` (brain files, agent-host assets) | R2 `STORAGE` (project files, artifacts, datasets) |
 
 ---
 

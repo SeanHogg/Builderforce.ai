@@ -92,7 +92,7 @@ const BASELINE = {
    * became `color-mix(… var(--bg-surface) …)`, `var(--coral-bright)` and
    * `var(--text-on-accent)` in the same pass as the strings.
    */
-  themeLockedColours: 178,
+  themeLockedColours: 177,
   /**
    * ONE, and it is `UnreadBadge`'s `borderRadius: size` — a live expression, not a
    * literal, so there is no scale step to name. Came down from 6 when the résumé
@@ -148,7 +148,7 @@ const BASELINE = {
    * against a +15 drift, so the floor follows the work down instead of being
    * raised to meet it.
    */
-  offScaleFontSizes: 3651,
+  offScaleFontSizes: 3647,
   /**
    * Page-column literals on the PUBLIC surface — a `max-width` (or `width`)
    * typed as a number between 900px and 1500px on a marketing file.

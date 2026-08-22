@@ -32,6 +32,7 @@ import { useTranslations } from 'next-intl';
 import { usePathname } from 'next/navigation';
 import { Icon } from '@/components/ui/Icon';
 import { ButtonLink } from '@/components/ui';
+import { GateHint } from '@/components/ui/GateHint';
 import { signInHref } from '@/lib/auth';
 import { useSampleWorkspace } from '@/domains/guest/presentation/useSampleWorkspace';
 
@@ -67,23 +68,22 @@ export interface SessionGateProps {
   style?: React.CSSProperties;
 }
 
-const pill: React.CSSProperties = {
-  display: 'inline-flex', alignItems: 'center', gap: 6,
-  fontSize: 'var(--font-size-small)', fontWeight: 600, padding: '6px 12px',
-  borderRadius: 'var(--radius-full)',
-  background: 'var(--bg-elevated)', color: 'var(--text-secondary)',
-  border: '1px solid var(--border-subtle)', boxShadow: '0 1px 6px rgba(0,0,0,0.14)',
-};
-
 export function SessionGate({ action, children, variant = 'inline', className, style }: SessionGateProps) {
-  const { ready, isSample } = useSampleWorkspace();
+  const { ready, signedIn } = useSampleWorkspace();
   const t = useTranslations('guest');
   const pathname = usePathname() || '/';
 
+  // `signedIn`, NOT `isSample`. The two are different questions and only one of
+  // them is this component's: a guest on a local-first canvas is looking at
+  // their OWN work rather than the sample workspace — so the notice stays away
+  // — but hiring an agent from that board still needs an account. Gating on
+  // "the data is sample" would have quietly let every guarded action through on
+  // exactly the surface a guest spends the most time on.
+  //
   // Until the session has been read, render the control as-is: showing a wall to
   // somebody who turns out to be signed in is worse than one frame of a live
   // button, and every one of these actions is refused server-side regardless.
-  if (!ready || !isSample) return <>{children}</>;
+  if (!ready || signedIn) return <>{children}</>;
 
   const reason = t(`gate.reason.${action}`);
 
@@ -97,7 +97,7 @@ export function SessionGate({ action, children, variant = 'inline', className, s
           position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
           alignItems: 'center', justifyContent: 'center', gap: 10, padding: 16, textAlign: 'center',
         }}>
-          <span style={pill}><Icon source="lock" size={13} /> {reason}</span>
+          <GateHint>{reason}</GateHint>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
             <ButtonLink href={`/register?next=${encodeURIComponent(pathname)}`} variant="primary" size="sm">
               {t('gate.create')}

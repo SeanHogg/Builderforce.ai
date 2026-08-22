@@ -75,7 +75,15 @@ vi.mock('@/lib/api', () => ({
   // shared projects list).
   fetchProject: vi.fn(async () => ({ id: 1, name: 'Test' })),
 }));
-vi.mock('@/lib/auth', () => ({ getStoredTenantToken: () => 'tok' }));
+// `AUTH_API_URL` as well as the token: `CodeEditor` pulls in
+// `ChunkErrorBoundary`, which reaches `reportError.ts`, which builds
+// `QUALITY_INGEST_ENDPOINT` from it at MODULE level. A mock missing an export
+// the graph reads at import time fails the whole suite before a single test
+// runs, which is why this reads as "0 test" rather than as an assertion.
+vi.mock('@/lib/auth', () => ({
+  getStoredTenantToken: () => 'tok',
+  AUTH_API_URL: 'http://test',
+}));
 vi.mock('@/lib/apiClient', () => ({ getApiBaseUrl: () => 'http://test' }));
 vi.mock('@/components/ConfirmProvider', () => ({ useConfirm: () => vi.fn(async () => true) }));
 

@@ -95,16 +95,31 @@ export function getVisitId(): string | null {
   return visitId;
 }
 
-/** How many visits this browser has started, this one included. */
-export function visitCount(): number {
+/** How many visits this browser has started, this one included. Internal: the
+ *  count only means that AFTER the visit has been minted, so callers read it
+ *  through `beginVisit()` rather than reaching for it on their own. */
+function visitCount(): number {
   if (typeof window === 'undefined') return 0;
   const raw = Number(readStored(VISIT_COUNT_KEY) ?? '0');
   return Number.isFinite(raw) && raw > 0 ? raw : 0;
 }
 
-/** Have they been here before? The client half of "did they come back". */
-export function isReturningVisitor(): boolean {
-  return visitCount() > 1;
+/**
+ * Open the visit, and report what the browser knows about it — the client half
+ * of "did they come back".
+ *
+ * `getVisitId()` is what MINTS a visit and increments the count, and it is called
+ * LAZILY: by the first flush, a prompt capture, or an error report. Reading the
+ * counters before that has happened answers for the visitor's PREVIOUS visits
+ * rather than this one, and the off-by-one landed squarely on the signal this
+ * stream exists to capture — on a second visit the stored count is 1, `1 > 1` is
+ * false, and the visitor who came back was recorded as brand new. Minting first
+ * makes both facts mean what their names say.
+ */
+export function beginVisit(): { visitId: string | null; visitNumber: number; returning: boolean } {
+  const visitId = getVisitId();
+  const visitNumber = visitCount();
+  return { visitId, visitNumber, returning: visitNumber > 1 };
 }
 
 /** Queue one event; sent on the next flush or page hide. */

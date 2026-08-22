@@ -25,16 +25,21 @@ import { usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import {
   VISITOR_JOURNEY_KINDS,
+  beginVisit,
   flushVisitorEvents,
-  isReturningVisitor,
   queueVisitorEvent,
   trackVisitorEvent,
-  visitCount,
 } from '@/lib/visitorJourney';
 
 export function VisitorJourneyTracker() {
   const pathname = usePathname();
-  const { isAuthenticated } = useAuth();
+  // `authReady` is not decoration. `isAuthenticated` is false until the stored
+  // session has been read back, and every effect below treats false as "anonymous"
+  // — so acting before it is known opens a visit, and records a page view, for the
+  // signed-in employee this component exists to EXCLUDE. Reading a not-yet-known
+  // session is the same mistake as having no session at all.
+  const { authReady, isAuthenticated } = useAuth();
+  const untracked = !authReady || isAuthenticated;
   const visitOpenedAt = useRef<number | null>(null);
   const lastPath = useRef<string | null>(null);
 
@@ -44,36 +49,36 @@ export function VisitorJourneyTracker() {
   // storage is indistinguishable from a new one, and guessing would quietly
   // inflate the number the funnel is judged on.
   useEffect(() => {
-    if (isAuthenticated) return;
+    if (untracked) return;
     if (visitOpenedAt.current !== null) return;
     visitOpenedAt.current = Date.now();
+    // Opening the visit is what makes "returning" and "visitNumber" answerable,
+    // so the two arrive together rather than being read off a count that has not
+    // been incremented yet.
+    const { returning, visitNumber } = beginVisit();
     queueVisitorEvent({
       kind: VISITOR_JOURNEY_KINDS.visitStart,
       path: window.location.pathname,
-      metadata: {
-        returning: isReturningVisitor(),
-        visitNumber: visitCount(),
-        referrer: document.referrer || null,
-      },
+      metadata: { returning, visitNumber, referrer: document.referrer || null },
     });
-  }, [isAuthenticated]);
+  }, [untracked]);
 
   // One page view per DISTINCT path. Next re-runs this effect on any navigation,
   // including a query-string change that leaves the visitor on the same screen —
   // counting those would report a filter click as a page in the funnel.
   useEffect(() => {
-    if (isAuthenticated || !pathname) return;
+    if (untracked || !pathname) return;
     if (lastPath.current === pathname) return;
     lastPath.current = pathname;
     queueVisitorEvent({ kind: VISITOR_JOURNEY_KINDS.pageView, path: pathname });
-  }, [pathname, isAuthenticated]);
+  }, [pathname, untracked]);
 
   // The visit ending is the whole point of "when did they leave", and it is the
   // one event with no second chance: `pagehide` is the last moment the tab can
   // send anything, and `visibilitychange` covers the mobile case where a tab is
   // backgrounded and never fires `pagehide` at all.
   useEffect(() => {
-    if (isAuthenticated) return;
+    if (untracked) return;
 
     const closeVisit = () => {
       const openedAt = visitOpenedAt.current;
@@ -92,7 +97,7 @@ export function VisitorJourneyTracker() {
       document.removeEventListener('visibilitychange', onVisibility);
       flushVisitorEvents();
     };
-  }, [isAuthenticated]);
+  }, [untracked]);
 
   return null;
 }

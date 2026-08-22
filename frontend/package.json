@@ -29,7 +29,8 @@
     "check:design-scale": "node scripts/check-design-scale.mjs",
     "check:destinations": "node scripts/check-destinations.mjs",
     "check:methodology": "node scripts/check-methodology.mjs",
-    "check:primitives": "node scripts/check-primitive-duplication.mjs"
+    "check:primitives": "node scripts/check-primitive-duplication.mjs",
+    "check:react-hooks": "node scripts/check-react-hooks-ratchet.mjs --changed"
   },
   "dependencies": {
     "@cloudflare/next-on-pages": "^1.13.16",

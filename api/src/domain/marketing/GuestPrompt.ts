@@ -52,8 +52,9 @@ export interface GuestPrompt {
   surface: GuestPromptSurface;
   sessionRef: string | null;
   /** The visit it was typed in (migration 1109). Joins the prompt to the pages
-   *  around it in `visitor_events`, so the flow graph can draw "asked for X,
-   *  then went to Y" instead of two unrelated streams. */
+   *  around it in the visitor journey (`activity_log.target_id`, 1111), so the
+   *  flow graph can draw "asked for X, then went to Y" instead of two unrelated
+   *  streams. */
   visitId: string | null;
   mode: string | null;
 }

@@ -195,6 +195,26 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <ChunkErrorBoundary>
               <AuthProvider>
                 {/*
+                  The third of the three anonymous recorders — next to the error
+                  reporter below and the prompt capture on the composer: where the
+                  visitor WENT. It decides for itself that a signed-in session is
+                  not its business, and reading the session is exactly why it has
+                  to sit INSIDE the provider.
+
+                  It was a SIBLING of `AuthProvider`, one level up beside the other
+                  two recorders — and those two need no session. Its `useAuth()`
+                  therefore had no context and threw on every render, which, now
+                  that `AuthProvider` renders its children on the server instead of
+                  returning null, is thrown during the SERVER render of every route.
+                  The build then fails on whichever page is prerendered first (it
+                  was `/freelancer/timecard`, then `/personas`), so it reads as one
+                  broken page rather than as the root layout taking every page down.
+
+                  Still above the shell and still rendering nothing, so it records
+                  `/embed` and every other surface exactly as it did before.
+                */}
+                <VisitorJourneyTracker />
+                {/*
                   What is left at the ROOT is what EVERY route needs: the session,
                   the confirm/toast primitives any surface may call, and the locale
                   above them all.
@@ -242,11 +262,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               endpoint={QUALITY_INGEST_ENDPOINT}
               environment={QUALITY_ENVIRONMENT}
             />
-            {/* The third of the three anonymous recorders, next to the error
-                reporter above and the prompt capture on the composer: where the
-                visitor WENT. It decides for itself that a signed-in session is
-                not its business. */}
-            <VisitorJourneyTracker />
           </ErrorBoundary>
 
           <ChunkErrorRecovery />

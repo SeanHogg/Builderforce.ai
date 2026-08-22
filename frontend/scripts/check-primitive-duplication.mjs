@@ -112,7 +112,45 @@ const PRIMITIVES = [
       { name: 'weekday header row', test: /weekday:\s*['"](?:short|narrow)['"]/ },
     ],
   },
+  {
+    id: 'tenant-override-card',
+    owner: 'components/admin/TenantOverrideCard.tsx',
+    primitive: 'components/admin/TenantOverrideCard.tsx',
+    why:
+      'The per-tenant superadmin overrides are the same card with different controls. The premium\n' +
+      "   flag copied the token cap — its own comment said \"Mirrors TenantTokenLimitOverrideEditor\" —\n" +
+      '   and carried its own saving/error state, its own card chrome and its own stopPropagation on\n' +
+      '   a Save button that sits inside a clickable tenant row. A third override would have copied\n' +
+      '   whichever of the two its author happened to open.',
+    fix:
+      'Render <TenantOverrideCard> from @/components/admin/TenantOverrideCard and pass your own\n' +
+      '   controls as `children(saving)`. It owns the frame, the save, `saving` and the error; you\n' +
+      '   own the mode controls and what dirty means. See TenantPremiumOverrideEditor.tsx (two\n' +
+      '   radios) and TenantIntegerOverrideEditor.tsx (three radios + a number input).',
+    // Its callers keep the domain vocabulary the signals below look for — an
+    // override editor still fires its own PATCH and still names its own i18n
+    // keys, because that is the part it OWNS. A file that imports the card is
+    // using it, so importing is the exemption; only a hand-rolled one scores.
+    exemptImporters: true,
+    threshold: 2,
+    signals: [
+      // The per-tenant PATCH an override editor fires itself.
+      { name: 'per-tenant override PATCH', test: /adminApi\.setTenant\w*Override/ },
+      // The i18n namespace the overrides live in.
+      { name: 'tenant override i18n keys', test: /['"]tenants\.\w*[Oo]verride\./ },
+      // A radio group named per tenant — what you write when the card is repeated
+      // down a list of tenants and the groups must not collide.
+      { name: 'per-tenant radio group', test: /name=\{`[^`]*\$\{tenantId\}`\}/ },
+      // Save inside a clickable tenant row. Nothing else in this card needs it.
+      { name: 'stopPropagation on save', test: /stopPropagation\(\)[\s\S]{0,120}void\s+save\(\)/ },
+    ],
+  },
 ];
+
+/** The module name a caller would import the primitive by, e.g. `TenantOverrideCard`. */
+function primitiveModule(primitive) {
+  return primitive.primitive.replace(/^.*\//, '').replace(/\.[jt]sx?$/, '');
+}
 
 function collect(dir, out = []) {
   if (!existsSync(dir)) return out;
@@ -139,9 +177,50 @@ const LINE_COMMENT = /(?:^|\s)\/\/[^\n]*/g;
  * — is scored on its code rather than on its prose. Getting that wrong would
  * punish exactly the files that did the right thing.
  */
-function signalsIn(text, primitive) {
+function signalsIn(text, primitive, consumers) {
   const code = text.replace(BLOCK_COMMENT, '').replace(LINE_COMMENT, '');
+  // Opt-in per primitive, because it is a real loosening: a file could import the
+  // primitive AND still draw its own copy beside it. It is right only where the
+  // signals are DOMAIN vocabulary that a legitimate caller keeps — an override
+  // editor still owns its own PATCH and its own i18n keys — rather than the
+  // primitive's own shape, which a caller has no reason to restate.
+  if (primitive.exemptImporters && consumers && importsAny(code, consumers)) return [];
   return primitive.signals.filter((signal) => signal.test.test(code)).map((signal) => signal.name);
+}
+
+/** Does this code import a module with one of these basenames? */
+function importsAny(code, moduleNames) {
+  for (const name of moduleNames) {
+    if (new RegExp(`from\\s+['"][^'"]*/${name}['"]`).test(code)) return true;
+  }
+  return false;
+}
+
+/**
+ * Every module that reaches the primitive, transitively.
+ *
+ * One level is not enough. `TenantTokenLimitOverrideEditor` is a thin config over
+ * `TenantIntegerOverrideEditor`, which is what actually renders the card — it is
+ * two hops from the primitive and as far from a re-implementation as a file can
+ * be, and a one-hop rule reported it as the duplicate.
+ *
+ * @param {object} primitive
+ * @param {Map<string, string>} texts Repo-relative path → file text.
+ * @returns {Set<string>} Module basenames, the primitive's own included.
+ */
+function consumersOf(primitive, texts) {
+  const names = new Set([primitiveModule(primitive)]);
+  for (let grew = true; grew; ) {
+    grew = false;
+    for (const [relPath, text] of texts) {
+      const base = relPath.replace(/^.*\//, '').replace(/\.[jt]sx?$/, '');
+      if (names.has(base)) continue;
+      if (!importsAny(text, names)) continue;
+      names.add(base);
+      grew = true;
+    }
+  }
+  return names;
 }
 
 if (STDIN_AT !== -1) {
@@ -161,12 +240,20 @@ if (STDIN_AT !== -1) {
 const files = collect(srcDir).filter((file) => !/\.(test|spec)\.tsx?$/.test(key(file)));
 const current = new Map();
 
-for (const file of files) {
-  const relPath = key(file);
-  const text = readFileSync(file, 'utf8');
+// Read once: the transitive consumer sets need the whole tree in hand before any
+// single file can be scored.
+const texts = new Map(files.map((file) => [key(file), readFileSync(file, 'utf8')]));
+const consumers = new Map(
+  PRIMITIVES.filter((primitive) => primitive.exemptImporters).map((primitive) => [
+    primitive.id,
+    consumersOf(primitive, texts),
+  ]),
+);
+
+for (const [relPath, text] of texts) {
   for (const primitive of PRIMITIVES) {
     if (relPath.startsWith(primitive.owner)) continue;
-    const hits = signalsIn(text, primitive);
+    const hits = signalsIn(text, primitive, consumers.get(primitive.id));
     if (hits.length < primitive.threshold) continue;
     current.set(`${primitive.id} :: ${relPath}`, { primitive, relPath, hits });
   }

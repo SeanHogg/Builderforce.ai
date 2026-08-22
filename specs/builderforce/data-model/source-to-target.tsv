@@ -557,14 +557,14 @@ HV	learning_paths	People & HR	merged	(folded into a sibling)
 HV	learning_path_courses	People & HR	primitive	relation
 HV	learning_path_enrollments	People & HR	merged	course_enrollments
 HV	scorm_cmi_states	People & HR	keep	scorm_cmi_states
-HV	xapi_statements	Platform & observability	primitive	ledger_entry
+HV	xapi_statements	Platform & observability	primitive	event_log
 HV	external_lrs_targets	Integrations	merged	(folded into a sibling)
 HV	learning_cohorts	People & HR	keep	learning_cohorts
 HV	cohort_members	Hiring	primitive	membership
 HV	learning_assignments	People & HR	primitive	membership
 HV	learning_goals	People & HR	primitive	work_item
 HV	lrs_credentials	People & HR	primitive	credential
-HV	lrs_statements	People & HR	primitive	ledger_entry
+HV	lrs_statements	People & HR	primitive	event_log
 HV	lrs_documents	People & HR	keep	lrs_documents
 HV	legal_document_acceptances	Governance & security	keep	legal_document_acceptances
 HV	lists	Revenue & CRM	keep	lists

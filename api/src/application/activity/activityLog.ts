@@ -32,8 +32,13 @@ import { buildTransactionalDatabase } from '../../infrastructure/database/connec
  * table of its own: the consolidated data model maps the retired `demo_events`
  * onto the `event_log` primitive, so a visitor's navigation is the same fact as
  * every other actor's, recorded by the same writer (migration 1111).
+ *
+ * `learner` is the same argument for the LRS (1112): an xAPI statement names its
+ * actor with an email or an account pair the platform usually has no user row
+ * for, so a learner is identified by a digest of that identifier rather than by
+ * a key into `users`.
  */
-export type ActorType = 'human' | 'hire' | 'cloud_agent' | 'host_agent' | 'system' | 'visitor';
+export type ActorType = 'human' | 'hire' | 'cloud_agent' | 'host_agent' | 'system' | 'visitor' | 'learner';
 
 export interface ActorIdentity {
   type: ActorType;
@@ -47,6 +52,10 @@ export interface ActorIdentity {
 export interface ActivityInput {
   /** null only for platform-global events (e.g. a pre-tenant login/registration). */
   tenantId: number | null;
+  /** Stable producer key. UNIQUE in the database, so a writer that can be retried
+   *  — an outbox projection, an xAPI statement id — gets idempotency from the
+   *  index instead of from a read-then-write race. */
+  eventKey?: string | null;
   segmentId?: string | null;
   projectId?: number | null;
   actor: ActorIdentity;
@@ -170,11 +179,19 @@ export async function recordActivity(env: Env | undefined, db: Db, input: Activi
   }
 }
 
-/** The ActivityInput → row projection, shared by the single and batch writers so
- *  a column can only ever be truncated or defaulted in one place. */
-function toActivityRow(input: ActivityInput): typeof activityLog.$inferInsert {
+/**
+ * The ActivityInput → row projection.
+ *
+ * Exported, and shared by three writers with three different error contracts:
+ * the two below are best-effort (an audit failure must not break a mutation),
+ * while the LRS inserts these rows itself because a statement POST that silently
+ * lost a statement is a conformance failure, not a degraded log line. What must
+ * NOT differ between them is the projection, so there is one.
+ */
+export function toActivityRow(input: ActivityInput): typeof activityLog.$inferInsert {
   return {
     tenantId: input.tenantId ?? null,
+    eventKey: input.eventKey ?? null,
     segmentId: input.segmentId ?? null,
     projectId: input.projectId ?? null,
     actorType: input.actor.type,

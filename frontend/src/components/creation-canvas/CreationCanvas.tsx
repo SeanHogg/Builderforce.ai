@@ -1647,6 +1647,16 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * same for every one of these surfaces, so the check, the copy and the
    * sign-up prompt are one function rather than a rule each panel remembers.
    *
+   * ── THE IMPERATIVE SIBLING OF `<SessionGate action="connectIntegration">` ────
+   * Same question, same answer, two shapes — and the shapes are genuinely
+   * different rather than a duplicate: `SessionGate` WRAPS a control, which is
+   * what a button in a list needs, while this is called from inside an
+   * `onClick` and from the model's own tool handlers, where there is no element
+   * to wrap. What must never differ is the CONDITION, so both read "is there a
+   * readable workspace behind this screen": the component through
+   * `useSampleWorkspace`, which is reactive because it renders, and this
+   * through the stored tenant token, which is what an event handler can see.
+   *
    * Returns true when the caller may proceed.
    */
   const connectedAccountGate = useCallback((source: string) => {

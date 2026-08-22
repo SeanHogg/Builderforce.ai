@@ -32,6 +32,7 @@ import { readProxyChoice } from '../llm/LlmProxyService';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import type { Env } from '../../env';
 import { scoreResume, type ResumeScore } from './resumeAnalysis';
+import { sha256Fingerprint } from '../../infrastructure/crypto/digest';
 import {
   buildBulletMergePrompt, buildGradePrompt, buildXyzRewritePrompt,
   parseBulletMergeResponse, parseGradeResponse, parseXyzRewriteResponse,
@@ -226,7 +227,5 @@ class ModelUnavailableError extends Error {}
 
 /** SHA-256 over the exact inputs — the content address a cached model reply is keyed by. */
 async function fingerprint(inputs: readonly string[]): Promise<string> {
-  const encoded = new TextEncoder().encode(inputs.join('\u0000'));
-  const digest = await crypto.subtle.digest('SHA-256', encoded);
-  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('').slice(0, 40);
+  return sha256Fingerprint(inputs.join('\u0000'), 40);
 }

@@ -1,6 +1,7 @@
 'use client';
 
 import { Icon } from '@/components/ui/Icon';
+import { SessionGate } from '@/components/guest/SessionGate';
 import { useTranslations } from 'next-intl';
 import type { PublishedAgent } from '@/lib/types';
 import { formatAgentPrice } from '@/lib/agentPresentation';
@@ -133,14 +134,24 @@ export function AgentCard({
                   non-owners, who can't see how/whether others are using it. */}
               {owner && agent.active_hires != null ? ` · ${t('card.inUse', { count: agent.active_hires })}` : null}
             </div>
+            {/* Hiring puts an agent on a WORKSPACE's payroll and it is the first
+                thing that costs a guest an account — the card, the profile and
+                the skills stay fully readable, which is the point: you cannot
+                decide whether to hire somebody you were not allowed to read.
+                The gate decides its own state, so a signed-in visitor sees no
+                difference here at all. */}
             {!owner && (hired ? (
-              <button type="button" className="btn btn-secondary btn-sm" disabled={unhiring} onClick={() => onUnhire?.(agent.id)}>
-                {unhiring ? t('action.unhiring') : t('action.unhire')}
-              </button>
+              <SessionGate action="runAgent">
+                <button type="button" className="btn btn-secondary btn-sm" disabled={unhiring} onClick={() => onUnhire?.(agent.id)}>
+                  {unhiring ? t('action.unhiring') : t('action.unhire')}
+                </button>
+              </SessionGate>
             ) : (
-              <button type="button" className="btn btn-primary btn-sm" disabled={hiring} onClick={() => onHire?.(agent.id)}>
-                {hiring ? t('action.hiring') : t('action.hire')}
-              </button>
+              <SessionGate action="runAgent">
+                <button type="button" className="btn btn-primary btn-sm" disabled={hiring} onClick={() => onHire?.(agent.id)}>
+                  {hiring ? t('action.hiring') : t('action.hire')}
+                </button>
+              </SessionGate>
             ))}
           </div>
           {owner && (

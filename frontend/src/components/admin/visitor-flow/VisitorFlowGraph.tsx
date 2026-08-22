@@ -209,7 +209,7 @@ function FlowLegend() {
           <span
             aria-hidden
             style={{
-              width: 10, height: 10, borderRadius: 5, background: KIND_COLOR[kind], flexShrink: 0,
+              width: 10, height: 10, borderRadius: 'var(--radius-full)', background: KIND_COLOR[kind], flexShrink: 0,
             }}
           />
           <span className="text-muted">{t(`kind.${kind}`)}</span>
@@ -218,7 +218,7 @@ function FlowLegend() {
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
         <span
           aria-hidden
-          style={{ width: 16, height: 4, borderRadius: 2, background: 'var(--warning)', flexShrink: 0 }}
+          style={{ width: 16, height: 4, borderRadius: 'var(--radius-full)', background: 'var(--warning)', flexShrink: 0 }}
         />
         <span className="text-muted">{t('legendDropOff')}</span>
       </span>

@@ -26,6 +26,7 @@ import {
 } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
+import { sha256Hex } from '../../infrastructure/crypto/digest';
 import {
   isTtsProviderConfigured,
   synthesizeClonedAudio,
@@ -101,10 +102,7 @@ async function computeCacheKey(
   language: string,
 ): Promise<string> {
   const material = `${cloneId}\u0000${normalizeText(text)}\u0000${speed}\u0000${language}`;
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(material));
-  return Array.from(new Uint8Array(digest))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
+  return sha256Hex(material);
 }
 
 /** Millicents-per-second synthesis cost basis (env override, default 5 ≈ $0.05/min). */

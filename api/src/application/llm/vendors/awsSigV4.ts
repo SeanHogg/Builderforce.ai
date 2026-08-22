@@ -8,13 +8,11 @@
  * signature → `Authorization` header. Used by `amazonBedrock.ts`; kept generic
  * (service/region/method are parameters) so it is not Bedrock-specific.
  */
+import { sha256Hex } from '../../../infrastructure/crypto/digest';
 
 const encoder = new TextEncoder();
 
-async function sha256Hex(data: string): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', encoder.encode(data));
-  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
-}
+
 
 async function hmac(key: ArrayBuffer | Uint8Array, data: string): Promise<ArrayBuffer> {
   const cryptoKey = await crypto.subtle.importKey(

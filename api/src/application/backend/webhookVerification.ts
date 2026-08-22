@@ -20,6 +20,7 @@
  */
 
 import { reportCaughtError } from '../observability/caughtErrorReporter';
+import { sha256Hex } from '../../infrastructure/crypto/digest';
 
 /** How a handler proves who called it. Declared per handler, never inferred. */
 export const VERIFY_KINDS = ['none', 'twilio', 'stripe', 'shopify', 'shared-secret'] as const;
@@ -156,7 +157,7 @@ export async function verifyTwilioSignature(args: {
       if (!bodySha) {
         return { ok: false, reason: 'JSON webhook is missing the bodySHA256 query parameter' };
       }
-      const digest = toHex(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(rawBody)));
+      const digest = await sha256Hex(rawBody);
       if (!timingSafeEqual(digest, bodySha)) {
         return { ok: false, reason: 'Request body does not match bodySHA256' };
       }
