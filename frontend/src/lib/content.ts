@@ -1599,7 +1599,7 @@ void LEGACY_COMPETITIVE_COMPARISON;
  */
 export const PRODUCT_CAPABILITY_PROOF: Record<string, CapabilityProof> = {
   'Creation Canvas': { status: 'beta', dataBoundary: 'hybrid', prerequisites: [], evidence: ['frontend/src/components/creation-canvas/CreationCanvas.test.tsx'], lastVerified: '2026-08-04' },
-  'Session Library': { status: 'beta', dataBoundary: 'workspace-cloud', prerequisites: ['account'], evidence: ['frontend/src/lib/creationSessions.ts'], lastVerified: '2026-08-04' },
+  'Session Library': { status: 'beta', dataBoundary: 'workspace-cloud', prerequisites: ['account'], evidence: ['frontend/src/lib/builderforceApi.ts', 'frontend/src/components/creation-sessions/SessionManagementControls.tsx'], lastVerified: '2026-08-22' },
   'Workflows & Evaluation': { status: 'beta', dataBoundary: 'hybrid', prerequisites: ['account'], evidence: ['frontend/src/lib/creationCanvasAi.test.ts'], lastVerified: '2026-08-04' },
   'Websites, Data & Prototypes': { status: 'beta', dataBoundary: 'hybrid', prerequisites: [], evidence: ['frontend/src/components/creation-canvas/creationObjectRegistry.ts'], lastVerified: '2026-08-04' },
   'Evermind, LLM & Voice': { status: 'beta', dataBoundary: 'hybrid', prerequisites: ['supported WebGPU device for local training'], evidence: ['frontend/src/components/workflow-builder/EvermindBuildPanel.tsx'], lastVerified: '2026-08-04' },

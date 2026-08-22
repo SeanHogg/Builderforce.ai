@@ -226,6 +226,7 @@ import { createDashboardRoutes }       from './presentation/routes/dashboardRout
 import { createConsumptionRoutes }     from './presentation/routes/consumptionRoutes';
 import { createPointsRoutes }          from './presentation/routes/pointsRoutes';
 import { createPhoneRoutes }           from './presentation/routes/phoneRoutes';
+import { createSourcingRoutes }        from './presentation/routes/sourcingRoutes';
 import { createEvalRoutes }            from './presentation/routes/evalRoutes';
 import { createDatasetRoutes }         from './presentation/routes/datasetRoutes';
 import { createTeamMemoryRoutes }      from './presentation/routes/teamMemoryRoutes';
@@ -1002,6 +1003,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/consumption',     createConsumptionRoutes(db));
   app.route('/api/points',          createPointsRoutes(db));
   app.route('/api/phone',           createPhoneRoutes(db));
+  app.route('/api/sourcing',        createSourcingRoutes(db));
   app.route('/api/eval',            createEvalRoutes(db));
   app.route('/api/dataset',         createDatasetRoutes(db));
   app.route('/api/brain',     createBrainRoutes(brainService, db));
@@ -1249,7 +1251,14 @@ export default {
       // on every endpoint. A refusal is a 403 here exactly as it is there.
       const allow = resolveAllowedOrigin(origin, env.CORS_ORIGINS, new URL(request.url).pathname);
       if (allow === null) {
-        reportRefusedOrigin(origin, new URL(request.url).pathname, env.CORS_ORIGINS);
+        reportRefusedOrigin({
+          origin,
+          pathname: new URL(request.url).pathname,
+          corsOrigins: env.CORS_ORIGINS,
+          // This runs before the app, so there is no ambient request context to
+          // deliver through — hand it one, or the report never leaves the console.
+          runtime: { env, method: 'OPTIONS', path: new URL(request.url).pathname, waitUntil: (task) => ctx.waitUntil(task) },
+        });
         return new Response(null, { status: 403 });
       }
       return new Response(null, {

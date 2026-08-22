@@ -1,0 +1,211 @@
+/*
+ * Job sourcing surfaces.
+ *
+ * Same two rules the points and phone cards follow: every colour and size is a
+ * token (no literal hex, not even as a `var()` fallback, because a fallback
+ * paints identically in both themes); every width is fluid, so the same markup
+ * is three columns on a desktop and one at 360px with no horizontal scroll.
+ */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: clamp(0.875rem, 2vw, 1.25rem);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.cardTitle {
+  margin: 0;
+  font-size: var(--font-size-eyebrow);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.cardHint {
+  margin: 0;
+  font-size: var(--font-size-small);
+  color: var(--text-secondary);
+}
+
+/* ── Form ────────────────────────────────────────────────────────────────── */
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.fieldRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.field {
+  flex: 1 1 9rem;
+  min-width: 0;
+}
+
+.label {
+  display: block;
+  font-size: var(--font-size-field-label);
+  color: var(--text-secondary);
+  margin-bottom: 0.25rem;
+}
+
+.input,
+.select {
+  width: 100%;
+  min-height: 2.25rem;
+  padding: 0.375rem 0.625rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-card);
+  color: var(--text-primary);
+  font-size: var(--font-size-body);
+  font-family: inherit;
+}
+
+/* A native <option> inherits nothing useful from its <select> in several
+   browsers, so it carries its own opaque background and foreground — otherwise
+   the list renders dark-on-dark for half the users. */
+.select option {
+  background: var(--surface-card);
+  color: var(--text-primary);
+}
+
+.button {
+  min-height: 2.25rem;
+  padding: 0 0.875rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface-card);
+  color: var(--text-primary);
+  font-size: var(--font-size-small);
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.button:not(:disabled):hover {
+  border-color: var(--text-secondary);
+}
+
+.buttonRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+/* ── Lists ───────────────────────────────────────────────────────────────── */
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  min-width: 0;
+}
+
+.rowBody {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-width: 0;
+}
+
+.rowTitle {
+  font-size: var(--font-size-body);
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.rowNote {
+  font-size: var(--font-size-small);
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.rowLink {
+  color: var(--text-primary);
+  text-decoration: underline;
+  overflow-wrap: anywhere;
+}
+
+.scroller {
+  max-height: 26rem;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/* ── States ──────────────────────────────────────────────────────────────── */
+
+.empty {
+  margin: 0;
+  font-size: var(--font-size-small);
+  color: var(--text-secondary);
+}
+
+.error {
+  margin: 0;
+  font-size: var(--font-size-small);
+  color: var(--danger-text);
+}
+
+.notice {
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  font-size: var(--font-size-small);
+  color: var(--text-primary);
+  background: var(--surface-card);
+  border: 1px solid var(--border);
+}
+
+.warn {
+  font-size: var(--font-size-small);
+  color: var(--warning-text);
+  overflow-wrap: anywhere;
+}
+
+/* ── Grid ────────────────────────────────────────────────────────────────── */
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(22rem, 100%), 1fr));
+  gap: 1rem;
+  align-items: start;
+  margin-top: 1rem;
+}
+
+.wide {
+  grid-column: 1 / -1;
+}

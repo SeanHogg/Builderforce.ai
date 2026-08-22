@@ -544,7 +544,7 @@ HV	board_bids	Delivery & work	merged	(folded into a sibling)
 HV	job_pipeline_entries	Hiring	keep	job_pipeline_entries
 HV	pipeline_touchpoints	Revenue & CRM	keep	pipeline_touchpoints
 HV	pipeline_share_links	Revenue & CRM	primitive	share_link
-HV	job_items	Hiring	keep	job_items
+HV	job_items	Hiring	primitive	catalog_item
 HV	job_preferences	Hiring	primitive	setting
 HV	job_applications	Hiring	keep	job_applications
 HV	saved_jobs	Revenue & CRM	primitive	run

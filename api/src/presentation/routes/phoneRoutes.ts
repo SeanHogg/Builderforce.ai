@@ -16,8 +16,8 @@
  */
 
 import { Hono } from 'hono';
-import { authMiddleware } from '../middleware/authMiddleware';
-import { requireRole } from '../middleware/requireRole';
+import { authMiddleware, requireRole } from '../middleware/authMiddleware';
+import { TenantRole } from '../../domain/shared/types';
 import { commsBalance, commsStatement } from '../../application/phone/commsBalance';
 import {
   COMMS_TOPUP_PACKS, CommsTopUpError, completeCommsTopUp, startCommsTopUp,
@@ -82,7 +82,7 @@ export function createPhoneRoutes(db: Db): Hono<HonoEnv> {
   });
 
   // ── Numbers ─────────────────────────────────────────────────────────────
-  router.get('/numbers/available', requireRole('manager'), async (c) => {
+  router.get('/numbers/available', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const areaCode = Number(c.req.query('areaCode'));
     return c.json({
@@ -95,9 +95,9 @@ export function createPhoneRoutes(db: Db): Hono<HonoEnv> {
     });
   });
 
-  router.post('/numbers', requireRole('manager'), async (c) => {
+  router.post('/numbers', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const body = await c.req.json<{ e164?: string; label?: string }>().catch(() => ({}));
+    const body = await c.req.json<{ e164?: string; label?: string }>().catch(() => ({} as { e164?: string; label?: string }));
     if (!body.e164) return c.json({ error: 'e164 is required' }, 400);
 
     const result = await purchaseNumber(db, c.env as Env, {
@@ -110,7 +110,7 @@ export function createPhoneRoutes(db: Db): Hono<HonoEnv> {
     return c.json(result);
   });
 
-  router.delete('/numbers/:id', requireRole('manager'), async (c) => {
+  router.delete('/numbers/:id', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const id = Number(c.req.param('id'));
     if (!Number.isInteger(id)) return c.json({ error: 'invalid number id' }, 400);
@@ -121,7 +121,7 @@ export function createPhoneRoutes(db: Db): Hono<HonoEnv> {
   // ── Sending ─────────────────────────────────────────────────────────────
   router.post('/sms', async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const body = await c.req.json<{ to?: string; body?: string; from?: string }>().catch(() => ({}));
+    const body = await c.req.json<{ to?: string; body?: string; from?: string }>().catch(() => ({} as { to?: string; body?: string; from?: string }));
     if (!body.to || !body.body) return c.json({ error: 'to and body are required' }, 400);
 
     const result = await sendSms(db, c.env as Env, {
@@ -134,7 +134,7 @@ export function createPhoneRoutes(db: Db): Hono<HonoEnv> {
   router.post('/calls', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const userId = c.get('userId') as string | undefined;
-    const body = await c.req.json<{ to?: string; twimlUrl?: string; from?: string }>().catch(() => ({}));
+    const body = await c.req.json<{ to?: string; twimlUrl?: string; from?: string }>().catch(() => ({} as { to?: string; twimlUrl?: string; from?: string }));
     if (!body.to || !body.twimlUrl) return c.json({ error: 'to and twimlUrl are required' }, 400);
 
     const result = await placeCall(db, c.env as Env, {
@@ -156,8 +156,8 @@ export function createPhoneRoutes(db: Db): Hono<HonoEnv> {
   // a phone product that stops working the moment the owner is on holiday.
   router.get('/topup/packs', async (c) => c.json({ packs: COMMS_TOPUP_PACKS }));
 
-  router.post('/topup', requireRole('manager'), async (c) => {
-    const body = await c.req.json<{ packId?: string; billingEmail?: string }>().catch(() => ({}));
+  router.post('/topup', requireRole(TenantRole.MANAGER), async (c) => {
+    const body = await c.req.json<{ packId?: string; billingEmail?: string }>().catch(() => ({} as { packId?: string; billingEmail?: string }));
     if (!body.packId) return c.json({ error: 'packId is required' }, 400);
     try {
       return c.json(await startCommsTopUp(c.env as Env, {
@@ -173,8 +173,8 @@ export function createPhoneRoutes(db: Db): Hono<HonoEnv> {
     }
   });
 
-  router.post('/topup/complete', requireRole('manager'), async (c) => {
-    const body = await c.req.json<{ sessionId?: string }>().catch(() => ({}));
+  router.post('/topup/complete', requireRole(TenantRole.MANAGER), async (c) => {
+    const body = await c.req.json<{ sessionId?: string }>().catch(() => ({} as { sessionId?: string }));
     if (!body.sessionId) return c.json({ error: 'sessionId is required' }, 400);
     try {
       return c.json(await completeCommsTopUp(db, c.env as Env, {

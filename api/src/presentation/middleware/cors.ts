@@ -1,6 +1,6 @@
 import { Context, MiddlewareHandler } from 'hono';
 import type { HonoEnv } from '../../env';
-import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
+import { reportCaughtError, type CaughtErrorRuntimeContext } from '../../application/observability/caughtErrorReporter';
 
 const DEV_ORIGINS = ['http://localhost:3000', 'http://127.0.0.1:3000', 'http://localhost:5173', 'http://127.0.0.1:5173'];
 
@@ -115,14 +115,32 @@ export function resolveAllowedOrigin(
  * (a renamed host, a preview deployment, `www` vs the apex) presents as a total
  * outage with no trace anywhere on the server side to explain it.
  */
-export function reportRefusedOrigin(origin: string | null | undefined, pathname: string, corsOrigins: string | undefined): void {
+export interface RefusedOriginReport {
+  origin: string | null | undefined;
+  pathname: string;
+  corsOrigins: string | undefined;
+  /**
+   * Required from the worker's OPTIONS short-circuit, which answers preflights
+   * BEFORE the app exists and therefore outside the per-request context the
+   * middleware runs inside. Without it the report has no runtime to deliver
+   * through and reaches the console only — which is the same blind spot this
+   * function was added to close.
+   */
+  runtime?: CaughtErrorRuntimeContext;
+}
+
+export function reportRefusedOrigin({ origin, pathname, corsOrigins, runtime }: RefusedOriginReport): void {
   if (!origin) return; // No Origin header at all: a non-browser client, not a refusal.
-  reportCaughtError(new Error(`CORS origin refused: ${origin}`), {
-    source: 'cors.ts',
-    operation: 'resolveAllowedOrigin',
-    level: 'warning',
-    context: { origin, path: pathname, configured: corsOrigins ?? '(default)' },
-  });
+  reportCaughtError(
+    new Error(`CORS origin refused: ${origin}`),
+    {
+      source: 'cors.ts',
+      operation: 'resolveAllowedOrigin',
+      level: 'warning',
+      context: { origin, path: pathname, configured: corsOrigins ?? '(default)' },
+    },
+    runtime,
+  );
 }
 
 function getCorsConfig(c: Context<HonoEnv>) {
@@ -159,7 +177,7 @@ export const corsMiddleware: MiddlewareHandler<HonoEnv> = async (c, next) => {
 
   if (c.req.method === 'OPTIONS') {
     if (!isAllowed) {
-      reportRefusedOrigin(c.req.header('Origin'), new URL(c.req.url).pathname, c.env.CORS_ORIGINS);
+      reportRefusedOrigin({ origin: c.req.header('Origin'), pathname: new URL(c.req.url).pathname, corsOrigins: c.env.CORS_ORIGINS });
       return c.newResponse(null, 403);
     }
     return c.newResponse(null, 204, {
@@ -177,7 +195,7 @@ export const corsMiddleware: MiddlewareHandler<HonoEnv> = async (c, next) => {
   if (!allowOriginValue && !isWebSocket) {
     // The response is about to go out with no CORS header — the one failure mode a
     // browser cannot describe accurately. Leave a trace that can.
-    reportRefusedOrigin(c.req.header('Origin'), new URL(c.req.url).pathname, c.env.CORS_ORIGINS);
+    reportRefusedOrigin({ origin: c.req.header('Origin'), pathname: new URL(c.req.url).pathname, corsOrigins: c.env.CORS_ORIGINS });
   }
 
   // WebSocket upgrade responses (101) are immutable in Cloudflare Workers; skip CORS.

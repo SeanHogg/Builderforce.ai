@@ -1,3 +1,361 @@
+## ✅ RESOLVED 2026-08-22 — The cross-project health dashboard moved into the product, and stopped being a hand-typed snapshot
+
+**The gap.** A whole feature sat at `Builderforce.ai/Builderforce.ai/frontend/src/dashboard/cross-project-health/`
+— a nested duplicate of the repo folder name, outside the real frontend's `tsconfig` include and outside every
+import graph. Three files, ~20 KB, written 2026-07-28 and unreachable ever since; its design doc
+`CROSS-PROJECT-HEALTH-DASHBOARD.md` sat at the repo root pointing at code nothing could load. The register
+recorded it as BLOCKED on the author's decision: move it under `frontend/src/` and wire a route, or delete it
+and the doc together. **The decision was MOVE.**
+
+### What moving it actually meant
+
+The file that could not build was not the interesting problem. `portfolioHealthData.tsx` held five projects —
+BuilderForce.AI 68%, Hired.Video 11%, RumbleDating 0%, BurnRateOS on hold, pattysnob.com empty — typed in by
+hand, with a comment telling the next person to "update once per sprint". A dashboard whose numbers are a
+literal is not a dashboard; it is a document that looks like one, and relocating it unchanged would have put a
+frozen July snapshot on a live surface. So the shape moved and the data did not: every field is now derived from
+the `/api/projects` list the projects page already reads.
+
+- **`lib/pm/portfolioHealth.ts`** — pure, hook-free, unit-tested (16 cases). It composes on top of
+  `computeProjectHealth`, the SAME function the project card, the list row and the details panel call, so a
+  project cannot read "Red" here and "Healthy" on its own card. It adds only the portfolio layer: RAG banding,
+  the blocker/action pair, and the summary.
+- **One vocabulary for both sentences.** `HEALTH_SIGNALS` is nine ordered keys, and each names BOTH the blocker
+  (`pmo.health.blocker.<key>`) and its remedy (`pmo.health.action.<key>`). There is one key, not two lists to
+  keep aligned, so an impediment and its recommended next action cannot be paired up wrongly. The module emits
+  KEYS plus interpolation values rather than English (the `VerdictReason` shape), so all five catalogs stay the
+  single source; `messages.test.ts` enumerates the registry that supplies the suffixes, which is the half
+  `check:i18n-keys` cannot see.
+- **`components/pm/PortfolioHealthCard.tsx`** takes ONE narrow prop and owns nothing else — no fetch, no scope,
+  no `canX` flag — so it drops onto a second surface with zero edits. **`PortfolioHealthContent.tsx`** owns its
+  read, its states and its layout, and takes no props at all.
+- **Wired as Projects → Portfolio → Health**, first and default, because it is the only tab that answers "where
+  is the portfolio bleeding" without a scope being chosen first. Rollup keeps its scope picker one click away.
+  The Health tab deliberately ignores that picker: a health read that hides half the portfolio is not one.
+- **Localized in all five catalogs** with real translations, ICU plurals included, and drawn entirely from theme
+  tokens and the nine-role type ramp — it adds **zero** to the `offScaleFontSizes` and `'use client'` ratchets
+  (both new components are imported only from the already-client `PmoContent`, so the directive would mark
+  nothing).
+
+### The duplicate it surfaced on the way
+
+`ProjectDetailsPanel` held the project-status vocabulary inline — the four enum values and the localized-label
+lookup. The health card needed the same two things, which is what turns an inline constant into a duplicate, so
+both now read `lib/projectStatus.ts` and the labels stay under the existing `projectDetails.status.*` namespace
+rather than forking one label into two translations that can drift.
+
+### What was deleted
+
+The nested `Builderforce.ai/Builderforce.ai/` tree and the root `CROSS-PROJECT-HEALTH-DASHBOARD.md` — the latter
+was a point-in-time report of five projects' health in prose, which is precisely what the surface now generates.
+The spec inside it (FR-1..FR-6) was worth keeping and moved to `docs/design/cross-project-health-dashboard.md`,
+rewritten to describe the live implementation and where each requirement is met.
+
+**Verified:** `tsgo --noEmit` clean · `eslint` clean on every touched file · 16 domain cases + 5 surface-mount
+cases + 89 catalog cases green · `check:i18n-keys`, `check:design-tokens`, `check:primitives`, `check:layering`
+green · `check:design-scale` and `check:architecture` unchanged by this work (both carry pre-existing balances
+tracked in ROADMAP.md; neither new file appears in either delta).
+
+## ✅ RESOLVED 2026-08-22 — The points economy lands whole, and the mapping audit that shrank the rest of the hired.video port to zero new tables
+
+**The finding that changed the shape of the work.** PRD 18's remaining tracks were scheduled as a
+SCHEMA port — ~360 tables to create, behaviour on top. They are not. `source-to-target.tsv`, the
+committed coverage map the build already guards, **assigns every remaining hired.video table to a
+primitive this schema owns**, and 362 of 363 targets are written. Re-verified table by table against
+`api/src/infrastructure/database/schema/`. The remaining port is application code and surfaces over
+primitives that exist, not DDL. See [PRD 18 §5a](./specs/builderforce/18-prd-hired-video-port.md) for
+the row-by-row mapping.
+
+**Three claims in the roadmap were stale and are corrected:**
+
+- **"The Studio source lives in an archived repo not checked out here"** — false. `C:\code\hired\hired.video`
+  is present on the build machine with `frontend/lib/studio` intact. T4 is large; it is not blocked.
+- **"Payouts are an env-gated stub"** — false. `PayoutAccountService`, `payoutProviders`,
+  `withdrawalMethods`, `earningsLedger` and escrow milestones are built and ledgered. The
+  `paidCents` escrow-conflation bug `earningsLedger`'s docstring still described as open had already
+  been fixed (`reference not like 'escrow:%'`).
+- **`points_fraud_flags` → `ledger_entry`** was a bad coverage-map row, now `alert_event`. A flag has
+  no amount and no denomination; filing it in the ledger would put non-money rows in the table every
+  balance on this platform sums over.
+
+### The points economy, end to end
+
+hired.video's 10-table gamification aggregate landed as **zero tables**:
+
+| source | lands in |
+|---|---|
+| `user_points_balance`, `points_ledger` | `ledger_entries`, denomination `points` |
+| `points_streaks`, `points_task_streaks`, `points_activity_counters` | one `settings` row per earner |
+| `points_fraud_flags` | `alert_events` + a subject (migration 1106) |
+| `badges`, `user_badges`, `point_redemptions` | already existed with no feature path — now reachable |
+
+- **The rules are DATA** (`pointsCatalog.ts`): 48 actions, each carrying its own payout, daily
+  ceiling, earner facets, streak signal and badge tiers. What it replaces was a forty-arm `switch`
+  spread across three files, so adding an action meant three edits nothing forced you to make
+  together — the failure mode being an action that paid points and silently unlocked nothing.
+  `pointsCatalog.test.ts` now proves every badge slug a rule names exists.
+- **Facets, not a role enum.** The source gated on a `user_role` column this platform does not have
+  and should not grow. `earnerFacets.ts` DERIVES the four facets from facts already stored
+  (`available_for_hire`/`account_type`, an active `tenant_members` seat, `party_roles`). A set, not a
+  choice — so a builder who opted in to for-hire work earns as talent AND as an employer, which the
+  enum could not express.
+- **Idempotency is the database, not a pre-read.** Every award composes
+  `pts:<user>:<action>:<ref>` into `ledger_entries.reference`, unique on (tenant, denomination,
+  reference). A retried webhook, a double-click and a replayed queue message collapse to one row with
+  no read-then-write race. The prefix order is deliberate: the unique btree makes "what has this
+  person earned from this action" an index range scan rather than a jsonb filter.
+- **Blocked attempts write a zero row.** A capped or gated action records an entry worth 0 with the
+  reason, so the activity feed says "daily limit reached" instead of silently omitting the action —
+  the most common complaint logged against the surface this replaces. `pointsAwardCount` excludes
+  zero rows, so a blocked attempt can never trip a badge threshold.
+- **Anti-farming survived the port.** `task.complete.user` pays nothing until a hundred self-authored
+  tickets are closed. `tasks` has no author column, so `taskEarning.ts` derives authorship from the
+  audit log's `task.created` actor — correct for old tickets and new ones alike, where a `created_by`
+  column would backfill NULL for exactly the population a farming check most needs to be right about.
+- **Fraud raises into the existing queue.** `alert_events` gained a subject, a severity and an
+  evidence payload, so a flag reuses the acknowledge/resolve lifecycle and the operator surface
+  instead of standing up a second review queue nobody would remember to work. High severity suspends
+  earning; the flag records why. Two heuristics ship, not the source's five — three of theirs read
+  signals this platform does not collect, and shipping heuristics that can never fire reads as
+  coverage and is not (registered in the gap register).
+- **Redemption is real, and it depletes.** Points buy AI tokens — this platform's own scarce
+  resource, which it already meters. The accounting is closed in three parts: redeem writes an
+  `ai_credits` grant, `resolveTokenLimits` lifts BOTH token caps by the balance, and a daily
+  reconcile sweep debits what each ended month actually drew. That third part is the one that is
+  easy to omit and fatal to omit — without it the lift is permanent and 500 points buy unlimited
+  inference forever, a failure that looks exactly like the feature working. It settles every
+  unsettled month, not just the last, so a missed sweep is caught up rather than forgiven.
+- **The catalog cannot lie.** A reward is advertised as available exactly when a fulfilment adapter
+  is registered for its kind — one function answers both the catalog read and the redeem guard. The
+  source product had two lists, advertised gift cards its rail had refused months earlier, and let
+  people spend points reaching a reward the server then rejected.
+- **Redeem order is intent → debit → fulfil.** A crash anywhere leaves a recoverable `pending` row
+  rather than lost points or a free reward; both steps key off the redemption id, so re-running any
+  of them is a no-op. Cancel refunds as a new ledger row, never by deleting the debit.
+- **Surfaces.** Six self-contained cards (`components/points/`), each reading the shared snapshot and
+  self-hiding — droppable into a second surface with zero edits, composed by `RewardsView` with no
+  state and no branching. Mounted as the Workforce **Rewards** tab; localized into all five catalogs
+  with real translations. Nothing was added to `CreationCanvas.tsx`.
+
+### DRY fix carried in the same pass
+
+`USD_CENTS = 'usd_cents'` was declared in **nine** files — one exported from a feature module and
+eight private copies. A misspelt denomination does not fail; it silently opens a second balance under
+a name no reader queries, so the money is not lost so much as invisible. All nine now import
+`application/kernel/denominations.ts`, which is also where `points`, `ai_credits`, `campaign_credits`
+and `comm_credits` are named.
+
+**Validation.** 25/25 API guards green (including tenant-scope, schema-drift, model-coverage,
+table-adoption), API type-check green on both compilers, 45 tests green across the new catalog and
+the two touched modules, frontend type-check green, ESLint clean on every new file, and 11/13
+frontend guards green — the two red ones being pre-existing ratchet drift in files this pass never
+opened (see the gap register).
+## ✅ RESOLVED 2026-08-22 — Login "CORS error for everyone": the trigger, and the reason nobody could find it
+
+**The report (2026-07-09).** `net::ERR_FAILED` plus "No 'Access-Control-Allow-Origin' header is
+present" on EVERY endpoint at once, while `curl` from outside got the CORS header back normally. The
+register carried four things to check. Three of them (Cloudflare dashboard logs, the WAF/Bot-Fight
+rules, the `api_error_log` rows) all ask the same question — *what does the record say?* — and the
+answer, every time, was nothing. That absence was not bad luck. It was the actual defect.
+
+### Why the record was empty
+
+A response with no CORS header never reaches JavaScript. `fetch` REJECTS, with an opaque `TypeError`
+carrying no status, no headers and no body. The API client did not catch that rejection anywhere:
+
+```ts
+const res = await fetch(url, { ...init, headers });   // rejects → escapes the client entirely
+checkUnauthorizedAndRedirect(res, hadToken);          // never runs
+if (!res.ok) await reportAndThrow(...);               // never runs
+```
+
+So the failure produced no toast, no `dispatchApiError`, and — the part that mattered — no row in the
+product Quality feed, because `QualityErrorReporter` listens on that same bus. Meanwhile the server
+side was empty BY CONSTRUCTION: the request never reached the worker, so there was nothing for
+`api_error_log` to hold. The only account of the outage was the browser console, which prints the CORS
+wording for a whole family of unrelated causes — and that wording is what sent the investigation after
+a CORS configuration that was never wrong.
+
+Worse, the login page is served by `auth.ts`, which is deliberately exempt from the shared transport
+(routing login through `apiRequest` would redirect a failed login off the page it is standing on). Its
+25 raw `fetch` calls — including `POST /api/auth/web/login` — each had the same hole, so the ONE
+surface the outage was reported on was the least instrumented one in the app.
+
+### The trigger
+
+`buildApp(env)` builds a Neon client, ~40 repositories and application services, and **229**
+`app.route(...)` mounts. It ran on **every request** — and a second time inside `replayRoute` for
+**every builtin MCP tool call**, so a single LLM turn could rebuild the entire composition root a dozen
+times. An isolate that exceeds its CPU or memory ceiling is killed by the Workers runtime *before any
+JavaScript runs*: no `catch` fires, no middleware runs, and Cloudflare serves its own 1101/1102 page,
+which carries no CORS header. That is exactly the reported symptom, and it is exactly what the
+try/catch mitigation in api 2026.7.67 cannot help with — a `catch` needs an isolate that is still alive.
+
+The mitigation also made the ceiling **closer**: it `await`ed a Postgres write (the error report) before
+returning the CORS'd 500, on the path whose most common cause is Postgres being slow or unreachable.
+
+### What changed
+
+**The trigger is gone.**
+- `api/src/presentation/appCache.ts` — the composition root is built **once per isolate**, keyed by the
+  bindings object in a `WeakMap`. A failed build is deliberately not cached, so a missing secret is
+  retried rather than remembered.
+- `resolveApp(env)` is now the ONE way to get the app. Both entry points use it: the worker `fetch`
+  handler and `builtinToolContext.replayRoute`, which was the heavier of the two.
+- The top-level error report moved to `ctx.waitUntil`, so a durable write can no longer stand between
+  the browser and a readable error.
+
+**The next occurrence leaves evidence.**
+- `frontend/src/lib/errors/transportFailure.ts` — a rejected `fetch` becomes a typed
+  `ApiTransportError` with an honest reason (`offline` / `aborted` / `unreachable`), and one record per
+  outage on the API-error bus, where the Quality pillar already files it. Deduped in a 10s window
+  because when the API is down every in-flight call on the page fails at once — twenty toasts and
+  twenty ingest POSTs (which would themselves fail) is not twenty times the information.
+- `fetchWithTransportReport` is now the ONLY `fetch` call in the browser bundle. `apiClient`'s three
+  transports, `auth.ts` and `passkeys.ts` all route through it, so the login path is instrumented like
+  everything else.
+- The message never says "CORS". It names what actually could have happened: a Cloudflare 1101/1102
+  page, or a bot/WAF challenge. `reportError`'s `PRODUCT_REPORT_ERROR_STATUSES` now includes status 0,
+  so the reporter's own failure during an outage cannot recurse.
+
+**A latent second cause of the same symptom, removed.** The worker's OPTIONS short-circuit (which
+answers preflights before the database exists) carried its own copy of the origin rule, and the copy
+had drifted: it answered a REFUSED origin with `*` instead of a 403, and it knew nothing about
+`vscode-webview://` origins or the public ingest paths. A browser told its preflight passed, then handed
+a response with no CORS header, reports precisely "No 'Access-Control-Allow-Origin' header is present"
+on every endpoint. `resolveAllowedOrigin` in `cors.ts` is now the single decision both paths call, and a
+refused origin — invisible to the browser by construction — is recorded via `reportRefusedOrigin` so
+a `CORS_ORIGINS` that no longer matches the deployed frontend can be seen from the server side.
+
+**Localized.** The toast reads the transport failure through `useApiErrorText`, so a person sees a real
+sentence instead of "0 unreachable"; the support-ticket labels went to the catalogs at the same time
+(en/zh/es/fr/de). The message is line-clamped rather than truncated to one line.
+
+### Where the four original questions landed
+
+- (a) *Cloudflare 1101/1102 logs* — the CPU/memory pressure that produces them is removed at the source
+  (229 route mounts per request → once per isolate). The dashboard/Logpush read itself still needs
+  Cloudflare credentials nobody has here, but it is no longer the only way to see a recurrence.
+- (b) *`api_error_log` + the Quality pillar* — was empty by construction; now populated from the browser,
+  which is the only place this failure exists.
+- (c) *Bot Fight / WAF / rate-limit rules* — cannot be read from code. A challenge now arrives as a
+  named `unreachable` report with the URL and page, instead of as silence.
+- (d) *Transient Neon construction failure in `buildDatabase`/`buildApp`* — that path runs once per
+  isolate now instead of per request, is still guarded, and its 500 no longer waits on a database write.
+
+**Tests.** `appCache.test.ts` (build-once, per-env isolation, failures not cached), `cors.test.ts`
+(preflight/response parity across allow-listed, refused, webview and ingest cases),
+`transportFailure.test.ts` (classification, one-report-per-outage, never blames CORS), and
+`apiClient.test.ts` (all three transports raise a typed transport error and report it; the reporter
+stays silent for itself).
+
+## ✅ RESOLVED 2026-08-22 — The App Router page that was a client-side SPA, and the ratchet that had stopped watching
+
+**The gap** (ROADMAP, *Frontend architecture & bundle*). Two thirds of `frontend/src` opened with
+`'use client'`, including 53 of 182 `app/**/page.tsx` route roots, and `app/layout.tsx` wrapped every
+route — marketing, embed and app alike — in ten nested client context providers. A client-rooted page
+drags its whole import subtree into the client bundle whether or not any of it is interactive, which is
+the *mechanism* behind the eager-import findings elsewhere in PRD 22 rather than an isolated mistake.
+
+The cost is not first paint — Next server-renders client components and `<Suspense>` still streams
+inside a client tree. It is transferred and parsed JS, hydration (TTI/INP), re-render breadth from ten
+root providers, and the inability to `await` data during render.
+
+### The classification
+
+The register asked for the 68 client pages to be sorted into *genuinely interactive at root* vs
+*client-by-accident*. Sorted, the accidents fell into five shapes:
+
+| shape | routes | what it actually was |
+| --- | --- | --- |
+| pure redirect | `/hires` `/tasks` `/training` `/settings/persona` `/content-manager/[id]` | a `useEffect` + `router.replace` — a redirect implemented as an application |
+| auth shell | `/alerts` `/growth` `/insights/snapshots` `/workforce/plan` | three copied lines: `useRequireAuth()`, `if (!allowed) return null` |
+| directive marking nothing | `/insights/ai` `/insights/delivery` `/insights/devex` | no client API used anywhere in the file |
+| one browser-only line | `/` `/workforce` `/workflows` `/insights/finance` `/projects/[id]` `/projects/[id]/360` `/settings/viewpoint` `/brainstorm` `/workflows/builder` | one `useSearchParams` / `useParams` / `useTranslations` / data `useEffect` |
+| genuinely interactive at root | `/realize` `/personas` `/challenges` `/skills` `/tenants` `/dashboard` `/insights` `/create` `/compile` `/import` `/debug` `/disputes` `/admin` `/seat/[domain]` `/embed/[view]` `/activate` `/auth/*` `/webcontainer/*` `/freelancer/*` `/content-manager` `/settings/integrations` `/projects` `/workforce/hire` `/sales/referral-claim` | correct as they are — recorded, not changed |
+
+### Two primitives, because five and four copies is not four and three
+
+- **`lib/routing/retiredRoute.tsx`** — a retired route is a SERVER concern. `redirect()` answers the
+  request with a real HTTP redirect, so the route bundle is never fetched: the visitor no longer
+  downloads and hydrates the whole client runtime to be sent elsewhere a frame later, and a crawler
+  sees a redirect instead of a 200 with an empty body. A destination that is a pure function of the URL
+  gets `retiredRoute('/somewhere')` or `retiredRoute((search) => …)` and nothing else. Routes whose
+  destination must be ASKED for — `/brainstorm`, `/workflows/builder`, `/projects/[id]` open a canvas
+  session first — deliberately keep a client leaf; that is not the same shape and is not bent into it.
+- **`components/auth/RequireAuth.tsx`** — the guard as a BOUNDARY. Written as three lines in a page,
+  `useRequireAuth()` is what makes the *page* a client component, for a decision that has nothing to do
+  with the page's content. As a component it is a client leaf and the page above it stays server. Every
+  duplicate migrated in the same pass, `LensShell` and `QualityClient` included; the HOOK stays for the
+  four surfaces that need the boolean for something other than rendering children (`/admin` also checks
+  superadmin, `/dashboard` sequences a fetch behind it).
+
+### The homepage
+
+`app/page.tsx` was `'use client'` for exactly one reason — a `useEffect` that fetched public pricing —
+and that one line put `JsonLd`, `structured-data`, `HomePatterns`, `AboutAppSection`, `MarketingFaq` and
+every band's copy into the client bundle with it. The fetch now belongs to `HomePricingSection`, the
+band that needs it: it fetches, formats money in the reader's locale, and still never invents a fallback
+price. `/` stays statically prerenderable — reading copy through `getTranslations()` would touch the
+locale cookie and turn the highest-traffic route into a per-request function, so the two bands that read
+copy keep `useTranslations` and the root `LocaleProvider`'s post-hydration swap, which is the trade
+every other marketing string on `/` already makes.
+
+### The root layout
+
+`CartProvider`, `MessageHubProvider`, `EmulationProvider`, `RolePreviewProvider`,
+`PermissionDebuggerProvider` and `DemoModeProvider` were mounted at the root and consumed only by
+app-shell chrome and a handful of app routes. They moved into `ConditionalAppShell`'s non-embed branch —
+still above the router's page slot, so an open cart, an open conversation and an active emulation all
+survive a navigation, but no longer above every document the router can serve. `/embed/*` takes the lean
+branch and now mounts none of them, which matters most for `DemoModeProvider`: its pathname tracking,
+timers and exit-intent listeners are precisely the app-wide effects a framed webview must not run.
+The root keeps what every route needs — locale, session, confirm, toast.
+
+### The ratchet had stopped watching
+
+Worth its own heading, because it is why the drift went unseen. `check-frontend-architecture.mjs`
+already counted both numbers — and `useClientFiles` stood at **808 against a committed reality of 848**.
+Forty client files had landed with no entry in its changelog, because the `oversizedProductionFiles` set
+was red for unrelated reasons and one red guard hides the rest. `useClientPages` had gone slack the
+other way: baseline 66, reality 53.
+
+`ratchetCount` now REPORTS slack — on the green run too, where it is the only thing printed besides the
+pass line, naming the exact JSON edit. It does not FAIL on slack: this tree routinely has more than one
+change in flight, and turning "you deleted a client component" into a red build punishes the only
+direction anyone wants.
+
+### What this pass deliberately did NOT do
+
+About 600 modules carry a `'use client'` directive whose every *current* importer is already a client
+boundary — mechanically, the directive marks nothing, and this file's own changelog has removed such
+directives three at a time before. Automating that sweep is wrong here, and the reason is a design
+decision rather than a caution: **components in this codebase are built to mount from a canvas surface
+and from an embedded app as well as from their own page.** A boundary inferred from today's import graph
+is a boundary that breaks the first time a component is reused — which is the direction the codebase is
+actively moving. The directive on a reusable component is a declaration about the component, not an
+observation about its callers.
+
+So the count came down by pages and by real extraction, not by inference. `components/phone/*` is the
+shape to copy when the question comes up again: the directive stays, with the reason written at the top
+of the file.
+
+### Where the numbers landed
+
+| | was | now |
+| --- | --- | --- |
+| client-rooted `page.tsx` | 53 (baseline 66) | **32** |
+| `'use client'` files | 848 (baseline 808) | **837** |
+| root-layout client providers | 10 | **4** |
+
+The `useClientFiles` baseline goes 808 → 837, which is a raise only on paper: 837 is the committed 848
+minus the eleven this pass removed, and the first honest value that key has held since 2026-08-15.
+Specified as PRD 22 §3.14 / §6.1 / H-18.
+
+**Not fixed, and not caused here:** the same guard's `oversizedProductionFiles` set is red at HEAD on
+`components/board/BoardConfigPanel.tsx` (849), `components/ProjectDetailsPanel.tsx` (805) and
+`lib/freelancerApi.ts` (1109). Logged in the register as its own entry.
+
 ## ✅ RESOLVED 2026-08-22 — One component picker, two errands, and the label path that was resolved four ways
 
 **The gap.** A `component` card was chosen by TYPING its id. The obvious fix — a `select` built from the
@@ -197,100 +555,6 @@ now); and `consumption/meters.ts` could not add redeemed AI credits because `get
 
 **25/25 guards green · typecheck clean · 687 test files, 8,275 tests passing.**
 
-## ✅ RESOLVED 2026-08-22 — The points economy lands whole, and the mapping audit that shrank the rest of the hired.video port to zero new tables
-
-**The finding that changed the shape of the work.** PRD 18's remaining tracks were scheduled as a
-SCHEMA port — ~360 tables to create, behaviour on top. They are not. `source-to-target.tsv`, the
-committed coverage map the build already guards, **assigns every remaining hired.video table to a
-primitive this schema owns**, and 362 of 363 targets are written. Re-verified table by table against
-`api/src/infrastructure/database/schema/`. The remaining port is application code and surfaces over
-primitives that exist, not DDL. See [PRD 18 §5a](./specs/builderforce/18-prd-hired-video-port.md) for
-the row-by-row mapping.
-
-**Three claims in the roadmap were stale and are corrected:**
-
-- **"The Studio source lives in an archived repo not checked out here"** — false. `C:\code\hired\hired.video`
-  is present on the build machine with `frontend/lib/studio` intact. T4 is large; it is not blocked.
-- **"Payouts are an env-gated stub"** — false. `PayoutAccountService`, `payoutProviders`,
-  `withdrawalMethods`, `earningsLedger` and escrow milestones are built and ledgered. The
-  `paidCents` escrow-conflation bug `earningsLedger`'s docstring still described as open had already
-  been fixed (`reference not like 'escrow:%'`).
-- **`points_fraud_flags` → `ledger_entry`** was a bad coverage-map row, now `alert_event`. A flag has
-  no amount and no denomination; filing it in the ledger would put non-money rows in the table every
-  balance on this platform sums over.
-
-### The points economy, end to end
-
-hired.video's 10-table gamification aggregate landed as **zero tables**:
-
-| source | lands in |
-|---|---|
-| `user_points_balance`, `points_ledger` | `ledger_entries`, denomination `points` |
-| `points_streaks`, `points_task_streaks`, `points_activity_counters` | one `settings` row per earner |
-| `points_fraud_flags` | `alert_events` + a subject (migration 1106) |
-| `badges`, `user_badges`, `point_redemptions` | already existed with no feature path — now reachable |
-
-- **The rules are DATA** (`pointsCatalog.ts`): 48 actions, each carrying its own payout, daily
-  ceiling, earner facets, streak signal and badge tiers. What it replaces was a forty-arm `switch`
-  spread across three files, so adding an action meant three edits nothing forced you to make
-  together — the failure mode being an action that paid points and silently unlocked nothing.
-  `pointsCatalog.test.ts` now proves every badge slug a rule names exists.
-- **Facets, not a role enum.** The source gated on a `user_role` column this platform does not have
-  and should not grow. `earnerFacets.ts` DERIVES the four facets from facts already stored
-  (`available_for_hire`/`account_type`, an active `tenant_members` seat, `party_roles`). A set, not a
-  choice — so a builder who opted in to for-hire work earns as talent AND as an employer, which the
-  enum could not express.
-- **Idempotency is the database, not a pre-read.** Every award composes
-  `pts:<user>:<action>:<ref>` into `ledger_entries.reference`, unique on (tenant, denomination,
-  reference). A retried webhook, a double-click and a replayed queue message collapse to one row with
-  no read-then-write race. The prefix order is deliberate: the unique btree makes "what has this
-  person earned from this action" an index range scan rather than a jsonb filter.
-- **Blocked attempts write a zero row.** A capped or gated action records an entry worth 0 with the
-  reason, so the activity feed says "daily limit reached" instead of silently omitting the action —
-  the most common complaint logged against the surface this replaces. `pointsAwardCount` excludes
-  zero rows, so a blocked attempt can never trip a badge threshold.
-- **Anti-farming survived the port.** `task.complete.user` pays nothing until a hundred self-authored
-  tickets are closed. `tasks` has no author column, so `taskEarning.ts` derives authorship from the
-  audit log's `task.created` actor — correct for old tickets and new ones alike, where a `created_by`
-  column would backfill NULL for exactly the population a farming check most needs to be right about.
-- **Fraud raises into the existing queue.** `alert_events` gained a subject, a severity and an
-  evidence payload, so a flag reuses the acknowledge/resolve lifecycle and the operator surface
-  instead of standing up a second review queue nobody would remember to work. High severity suspends
-  earning; the flag records why. Two heuristics ship, not the source's five — three of theirs read
-  signals this platform does not collect, and shipping heuristics that can never fire reads as
-  coverage and is not (registered in the gap register).
-- **Redemption is real, and it depletes.** Points buy AI tokens — this platform's own scarce
-  resource, which it already meters. The accounting is closed in three parts: redeem writes an
-  `ai_credits` grant, `resolveTokenLimits` lifts BOTH token caps by the balance, and a daily
-  reconcile sweep debits what each ended month actually drew. That third part is the one that is
-  easy to omit and fatal to omit — without it the lift is permanent and 500 points buy unlimited
-  inference forever, a failure that looks exactly like the feature working. It settles every
-  unsettled month, not just the last, so a missed sweep is caught up rather than forgiven.
-- **The catalog cannot lie.** A reward is advertised as available exactly when a fulfilment adapter
-  is registered for its kind — one function answers both the catalog read and the redeem guard. The
-  source product had two lists, advertised gift cards its rail had refused months earlier, and let
-  people spend points reaching a reward the server then rejected.
-- **Redeem order is intent → debit → fulfil.** A crash anywhere leaves a recoverable `pending` row
-  rather than lost points or a free reward; both steps key off the redemption id, so re-running any
-  of them is a no-op. Cancel refunds as a new ledger row, never by deleting the debit.
-- **Surfaces.** Six self-contained cards (`components/points/`), each reading the shared snapshot and
-  self-hiding — droppable into a second surface with zero edits, composed by `RewardsView` with no
-  state and no branching. Mounted as the Workforce **Rewards** tab; localized into all five catalogs
-  with real translations. Nothing was added to `CreationCanvas.tsx`.
-
-### DRY fix carried in the same pass
-
-`USD_CENTS = 'usd_cents'` was declared in **nine** files — one exported from a feature module and
-eight private copies. A misspelt denomination does not fail; it silently opens a second balance under
-a name no reader queries, so the money is not lost so much as invisible. All nine now import
-`application/kernel/denominations.ts`, which is also where `points`, `ai_credits`, `campaign_credits`
-and `comm_credits` are named.
-
-**Validation.** 25/25 API guards green (including tenant-scope, schema-drift, model-coverage,
-table-adoption), API type-check green on both compilers, 45 tests green across the new catalog and
-the two touched modules, frontend type-check green, ESLint clean on every new file, and 11/13
-frontend guards green — the two red ones being pre-existing ratchet drift in files this pass never
-opened (see the gap register).
 
 ## ✅ RESOLVED 2026-08-22 — Eleven capability articles, a figure vocabulary that DRAWS, and share cards that stopped being title cards
 

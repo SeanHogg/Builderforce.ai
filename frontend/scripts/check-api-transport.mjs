@@ -41,6 +41,14 @@ const srcDir = resolve(here, '../src');
 const ALLOWED = new Map([
   ['apiClient.ts', 'It is the transport.'],
   [
+    'errors/transportFailure.ts',
+    'It is the ONE `fetch` call in the browser bundle. Every other allowed file ' +
+      'below now goes through `fetchWithTransportReport`, because a rejected fetch ' +
+      'carries no response to inspect and every wrapper that called `fetch` ' +
+      'directly let that rejection escape unreported — which is why the ' +
+      '2026-07-09 "CORS error for everyone" login outage left no trace anywhere.',
+  ],
+  [
     'auth.ts',
     'Login / register / token-exchange run BEFORE a session exists. Routing them ' +
       'through apiRequest would invoke checkUnauthorizedAndRedirect on a failed ' +

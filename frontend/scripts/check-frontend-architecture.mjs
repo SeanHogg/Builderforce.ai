@@ -30,6 +30,28 @@
  * and therefore has nowhere to put a reason. So a raise is justified HERE, in
  * prose, and a raise with no entry below is a raise nobody argued for:
  *
+ *   802 → 811 (`useClientFiles`, 2026-08-22) — the nine Business Phone console
+ *   cards: `PhoneBalanceCard`, `TopUpPanel`, `PhoneNumbersCard`,
+ *   `NumberSearchPanel`, `SmsComposer`, `SmsLogList`, `CallLogList`,
+ *   `CommsStatementList` and `PhoneRatesCard` (all under `components/phone/`).
+ *
+ *   Each is interactive at its root — they hold form state, fire writes, and
+ *   read a shared client snapshot (`usePhone`) — so none has a server form. The
+ *   part worth arguing is why the directive is on all NINE rather than only on
+ *   `PhoneConsole`, which is their sole importer today and would have covered
+ *   them for free: these cards are built to mount from canvas surfaces and
+ *   embedded apps as well as from the console, and several of those hosts are
+ *   Server Components. A card that depends on an ancestor having already opened
+ *   the client boundary cannot be dropped into one of them without an edit,
+ *   which breaks the reuse contract the components exist to satisfy — and the
+ *   failure would surface as a build error in whichever surface adopted one
+ *   first, not here. Nine points is the price of that contract being real.
+ *
+ *   `app/inbox/page.tsx` went the other way in the same pass: it was written as
+ *   a client shell reading `useSearchParams` and is now a Server Component
+ *   taking `searchParams`, because a route shell that only picks between two
+ *   bodies has no reason to ship to the browser.
+ *
  *   786 → 787 (`useClientFiles`, 2026-08-15) — `components/marketing/
  *   MethodologySection.tsx`. It is the single renderer of the Idea→Real method
  *   for four marketing pages, two of which are Server Components
@@ -273,6 +295,45 @@
  *   exact finding of the "800 -> 798" and "803 -> 802" tightenings above. `page.tsx`
  *   stays a Server Component and reads its heading through `getTranslations`, so the
  *   feature costs one client file and zero client-rooted pages.
+ *
+ *   808 -> 837 (`useClientFiles`) and 66 -> 32 (`useClientPages`, 2026-08-22) -- the
+ *   client-boundary pass for PRD 22 SS3.14 / H-18. Two things happened, and they
+ *   should be read separately.
+ *
+ *   FIRST, the `useClientFiles` number was FICTION, and this is a RAISE only on
+ *   paper. It stood at 808 while the committed tree held 848: forty client files had
+ *   landed with no entry above, because the `oversizedProductionFiles` set was red
+ *   for unrelated reasons and one red guard hides the rest. `useClientPages` had
+ *   drifted the other way -- baseline 66, reality 53 -- thirteen points of budget
+ *   nobody had decided to grant. 837 is 848 minus the eleven this pass removed; it
+ *   is the first honest value the key has held since 2026-08-15. `ratchetCount` now
+ *   REPORTS slack, on the green run too, so the tightening half stops depending on
+ *   whoever made the improvement remembering to do it. It does not FAIL on slack:
+ *   this tree routinely has more than one change in flight, and turning "you deleted
+ *   a client component" into a red build punishes the only direction anyone wants.
+ *
+ *   SECOND, the pass itself. Twenty-one route roots stopped being client components:
+ *   five pure redirects became real HTTP redirects through `lib/routing/retiredRoute`
+ *   (a `useEffect` + `router.replace` is a redirect implemented as an application --
+ *   the visitor downloaded and hydrated the whole runtime to be sent elsewhere a frame
+ *   later); four auth shells moved to the `<RequireAuth>` boundary; three insights
+ *   hubs carried a directive while using no client API at all; and the rest -- `/`,
+ *   `/workforce`, `/workflows`, `/insights/finance`, `/projects/[id]`, `/brainstorm`,
+ *   `/workflows/builder` -- pushed their one browser-only line into a leaf beside the
+ *   page. The homepage is the one worth naming: it was `'use client'` for a single
+ *   `useEffect` that fetched public pricing, and that one line put the structured
+ *   data, the section shells, the About band and the FAQ copy in the client bundle.
+ *   The fetch now belongs to `HomePricingSection`, the band that needs it.
+ *
+ *   What this pass did NOT do, deliberately: strip the directive from the ~600
+ *   modules whose every CURRENT importer is a client boundary. The "800 -> 798" and
+ *   "807 -> 808" notes above are right that such a directive marks nothing TODAY, and
+ *   wrong as a rule to automate -- components here are built to mount from a canvas
+ *   surface and from an embedded app as well as from their page, so a boundary
+ *   inferred from today's import graph is a boundary that breaks the first time one
+ *   is reused. The directive on a reusable component is a declaration about the
+ *   component, not an observation about its callers. Removing one needs that
+ *   argument made per file, in the file, the way `components/phone/*` states it.
  */
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, relative, resolve } from 'node:path';
@@ -428,11 +489,33 @@ const recorded = readTallies(TALLY_PATH);
 const violations = [];
 /** Ratchets whose failure the tally can explain, in the order they were checked. */
 const countFailures = [];
+/** Baseline numbers this run proved are too loose, as `key -> actual`. */
+const slack = new Map();
+/**
+ * A count ratchet fails on a RISE. It does NOT fail when the tree comes in below
+ * its baseline — but it does not stay quiet about it either.
+ *
+ * The gap is budget the next regression spends silently, and this file argued
+ * exactly that in prose ("a regression to spend silently, which is how a ratchet
+ * goes slack without anyone deciding it should") and then relied on whoever made
+ * the improvement to remember. They did not: `useClientPages` sat at 66 against a
+ * real 53, and `useClientFiles` at 808 against a real 848 — forty client files
+ * that landed with no entry in the changelog above, because the guard they would
+ * have tripped was red for an unrelated reason and one red guard hides the rest.
+ *
+ * Failing on the improvement was the tempting fix and it is the wrong one: this
+ * tree routinely has more than one change in flight, and turning "you deleted a
+ * client component" into a red build punishes the only direction anyone wants.
+ * So slack is REPORTED — with the exact JSON edit to make, on the green run too,
+ * where it is the only thing printed besides the pass line.
+ */
 function ratchetCount(label, key, actual, maximum) {
   if (actual > maximum) {
     violations.push(`${label}: ${actual} exceeds baseline ${maximum}`);
     countFailures.push({ label, key });
+    return;
   }
+  if (actual < maximum) slack.set(key, actual);
 }
 function ratchetSet(label, actual, allowed) {
   const permitted = new Set(allowed);
@@ -446,11 +529,24 @@ ratchetSet('presentation engine construction', directEngineConstruction, baselin
 ratchetSet('production files over 800 lines', oversizedProductionFiles, baseline.oversizedProductionFiles);
 ratchetSet('circular static imports', importCycles, baseline.importCycles);
 
+/** Names the baselines this tree has outgrown downward, and the edit that closes them. */
+function reportSlack() {
+  if (slack.size === 0) return;
+  const lines = [...slack].map(([key, actual]) => `    "${key}": ${actual}`).join('\n');
+  console.error(
+    `\n   Baselines looser than the tree. That gap is budget the next regression\n` +
+    `   spends without anyone deciding it should — close it in\n` +
+    `   scripts/.frontend-architecture-baseline.json:\n\n${lines}\n\n` +
+    `   A tightening needs no entry in this file's changelog. A RAISE does.\n`,
+  );
+}
+
 if (violations.length) {
   console.error('❌  Frontend architecture ratchet failed:\n\n  - ' + violations.join('\n  - '));
   // Which files moved it. A raise is legitimate — the header above is where it is argued —
   // but it has to be argued for NAMED files, and until now the guard would not say which.
   for (const { label, key } of countFailures) printDelta(label, recorded[key], tallies[key]);
+  reportSlack();
   if (violations.some((entry) => entry.startsWith('circular static imports'))) {
     console.error(
       '\n  A static import cycle crashes the page it is bundled into with\n' +
@@ -471,6 +567,7 @@ if (writeTallies(TALLY_PATH, tallies)) {
   console.log(`   Recorded per-file tallies to ${relative(resolve(here, '..'), TALLY_PATH).split('\\').join('/')}.`);
 }
 
+reportSlack();
 console.log(`✅  Frontend architecture ratchet passed (${client.length} client files, ${clientPages.length} client pages, ${oversizedProductionFiles.length} grandfathered large files, 0 import cycles).`);
 // Green: a legitimate reference point, and therefore the one worth recording.
 if (writeTallies(TALLY_PATH, tallies)) console.log('   Recorded per-file tallies to scripts/.frontend-architecture-tally.json.');

@@ -25,7 +25,7 @@ import { and, desc, eq, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { activityLog } from '../../infrastructure/database/schema';
-import { recordActivity } from '../activity/activityLog';
+import { recordActivity, resolveHumanActor, SYSTEM_ACTOR } from '../activity/activityLog';
 import { executeConnectorAction } from '../connectors/connectorRuntime';
 import { debitComms, reserveComms, type CommsRefusal } from './commsBalance';
 import { rateFor, voiceMinutes, type CommsRateOverride } from './commsRates';
@@ -89,7 +89,10 @@ export async function placeCall(
 
   await recordActivity(env, db, {
     tenantId: input.tenantId,
-    actor: { type: input.actorRef ? 'human' : 'system', ref: input.actorRef ?? null },
+    // `resolveHumanActor` rather than a hand-built literal: it is what classifies
+    // a tenant member vs an engaged freelancer and supplies the display name the
+    // activity feed renders. A literal here shipped rows with no actor name.
+    actor: input.actorRef ? await resolveHumanActor(env, db, input.tenantId, input.actorRef) : SYSTEM_ACTOR,
     verb: CALL_VERB,
     targetType: 'phone_number',
     targetId: providerRef ?? input.to,
@@ -142,7 +145,7 @@ export async function applyCallStatus(
 
   await recordActivity(env, db, {
     tenantId: input.tenantId,
-    actor: { type: 'system', ref: null },
+    actor: SYSTEM_ACTOR,
     verb: CALL_VERB,
     targetType: 'phone_number',
     targetId: input.providerRef,

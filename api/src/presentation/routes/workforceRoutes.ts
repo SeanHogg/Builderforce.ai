@@ -273,10 +273,18 @@ export async function loadAgentPerfRollup(
     eq(executions.cloudAgentRef, agentId),
     inArray(executions.tenantId, activeHirerTenants),
   ));
+  // Deliberately cross-tenant, and declared as such: "how many tenants hired this
+  // agent" is a count OF tenants — scoping it to the caller's own would make every
+  // marketplace listing read `1` or `0`. The agent id is the access predicate.
   const [hires] = await db
     .select({ hired_tenants: sql<number>`COUNT(*)::int` })
     .from(agentPurchases)
-    .where(and(eq(agentPurchases.agentId, agentId), isNull(agentPurchases.unhiredAt)));
+    .where(acrossTenants(
+      agentPurchases,
+      'platform_aggregate',
+      eq(agentPurchases.agentId, agentId),
+      isNull(agentPurchases.unhiredAt),
+    ));
   const fbRows = await db
     .select({
       rating: agentFeedback.rating,
@@ -284,7 +292,9 @@ export async function loadAgentPerfRollup(
       created_at: agentFeedback.createdAt,
     })
     .from(agentFeedback)
-    .where(eq(agentFeedback.agentId, agentId))
+    // Same reason as the hire count: a public agent's rating is the rating every
+    // hirer gave it, not the rating this one tenant gave it.
+    .where(acrossTenants(agentFeedback, 'platform_aggregate', eq(agentFeedback.agentId, agentId)))
     .orderBy(desc(agentFeedback.createdAt))
     .limit(50);
 

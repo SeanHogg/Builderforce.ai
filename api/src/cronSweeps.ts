@@ -85,6 +85,7 @@ import { runSequenceSweep } from './application/sales/sequenceRunner';
 import { describeCreditReconcile, runAiCreditReconcileSweep } from './application/points/reconcileAiCredits';
 import { describeNumberRent, runPhoneNumberRentSweep } from './application/phone/chargeNumberRent';
 import { describeAllowanceGrant, runPhoneAllowanceSweep } from './application/phone/grantPhoneAllowance';
+import { describeSourcingSweep, runSourcingSweep } from './application/sourcing/runSourcingSweep';
 
 /**
  * `null` from a sweep's `run` = nothing worth a log line. Preserved verbatim from
@@ -508,6 +509,22 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     run: async ({ env }) => {
       const r = await runAiCreditReconcileSweep(buildDatabase(env), env);
       return describeCreditReconcile(r);
+    },
+  },
+  {
+    key: 'job-sourcing-sync',
+    cadence: 'daily',
+    // Every connected job feed, fetched and written into the tenant's catalogue.
+    // Sequential rather than a parallel fan-out: the URLs are operator-supplied
+    // and unbounded in number, and a burst across all of them reads from the far
+    // end as an attack. Each source's failure is recorded against its own
+    // connection, so one dead feed never stops the rest.
+    description:
+      'Fetch every connected job board feed and upsert the listings it returned, '
+      + 'recording per-source counters and failures on the connection.',
+    run: async ({ env }) => {
+      const r = await runSourcingSweep(buildDatabase(env), env);
+      return describeSourcingSweep(r);
     },
   },
   {

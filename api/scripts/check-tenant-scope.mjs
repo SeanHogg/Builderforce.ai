@@ -218,8 +218,16 @@ function targetTables(statement) {
  * through the baseline on purpose: the baseline is frozen DEBT and may only
  * shrink, and filing a deliberate decision there would make the number go up when
  * nothing is owed, then dare the next person to pay it down by breaking a feature.
+ *
+ * A NAMED SCOPE built on `acrossTenants` counts too. `publicAgentScope` IS an
+ * `acrossTenants(ideAgents, 'public_catalogue', …)` call — the one definition of
+ * "public" that the listing, the detail read, checkout and the marketplace MCP
+ * tools all share. This guard reads one statement at a time and cannot follow the
+ * helper, so without naming it here every caller of the shared primitive is
+ * reported as an unscoped query — which pushes the next author toward retyping
+ * the predicate inline, the exact duplication the primitive exists to prevent.
  */
-const SCOPED = /scopedToTenant|scopedToNullableTenant|scopedToSegment|acrossTenants|tenantId|tenant_id/;
+const SCOPED = /scopedToTenant|scopedToNullableTenant|scopedToSegment|acrossTenants|publicAgentScope|tenantId|tenant_id/;
 
 /** The text inside every `.where( … )` in `statement`, paren-balanced. */
 function whereArguments(statement) {

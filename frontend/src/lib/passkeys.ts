@@ -13,6 +13,7 @@
  */
 
 import { AUTH_API_URL } from './auth';
+import { fetchWithTransportReport } from './errors/transportFailure';
 
 export function base64UrlToBuffer(value: string): ArrayBuffer {
   const padded = value.replace(/-/g, '+').replace(/_/g, '/');
@@ -172,7 +173,7 @@ export interface PasskeyLoginResult {
 }
 
 export async function signInWithPasskey(email?: string): Promise<PasskeyLoginResult> {
-  const optionsRes = await fetch(`${AUTH_API_URL}/api/auth/passkey/options`, {
+  const optionsRes = await fetchWithTransportReport(`${AUTH_API_URL}/api/auth/passkey/options`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(email ? { email } : {}),
@@ -182,7 +183,7 @@ export async function signInWithPasskey(email?: string): Promise<PasskeyLoginRes
 
   const assertion = await getPasskeyAssertion(optionsBody.options);
 
-  const verifyRes = await fetch(`${AUTH_API_URL}/api/auth/passkey/verify`, {
+  const verifyRes = await fetchWithTransportReport(`${AUTH_API_URL}/api/auth/passkey/verify`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(assertion),

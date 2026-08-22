@@ -1,6 +1,6 @@
 {
-  "useClientFiles": 808,
-  "useClientPages": 66,
+  "useClientFiles": 837,
+  "useClientPages": 32,
   "presentationInfrastructureImports": [],
   "directEngineConstruction": [
     "components/AITrainingPanel.tsx",

@@ -11,6 +11,7 @@
 import { LOCALE_HEADER, readLocaleCookie } from '@/i18n/config';
 import type { AuthUser, Tenant } from './types';
 import type { PsychometricProfile } from './psychometric';
+import { fetchWithTransportReport } from './errors/transportFailure';
 
 export const AUTH_API_URL =
   process.env.NEXT_PUBLIC_AUTH_API_URL || 'https://api.builderforce.ai';
@@ -242,7 +243,7 @@ export interface TenantTokenResponse {
 }
 
 export async function login(email: string, password: string): Promise<AuthStepResult> {
-  const res = await fetch(`${AUTH_API_URL}/api/auth/web/login`, {
+  const res = await fetchWithTransportReport(`${AUTH_API_URL}/api/auth/web/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password }),
@@ -270,7 +271,7 @@ export async function register(
   referralCode?: string,
   ageAttested = false,
 ): Promise<AuthStepResult> {
-  const res = await fetch(`${AUTH_API_URL}/api/auth/web/register`, {
+  const res = await fetchWithTransportReport(`${AUTH_API_URL}/api/auth/web/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password, name, agreeToTerms, accountType, referralCode, ageAttested }),
@@ -300,7 +301,7 @@ export async function verifyEmailCode(
   code: string,
   trustDevice: boolean,
 ): Promise<AuthSession> {
-  const res = await fetch(`${AUTH_API_URL}/api/auth/web/register/verify`, {
+  const res = await fetchWithTransportReport(`${AUTH_API_URL}/api/auth/web/register/verify`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, code, trustDevice }),
@@ -318,7 +319,7 @@ export async function verifyEmailCode(
 
 /** Re-send a verification code. Returns a cooldown (seconds) when throttled. */
 export async function resendVerificationCode(email: string): Promise<{ cooldownSeconds?: number }> {
-  const res = await fetch(`${AUTH_API_URL}/api/auth/web/register/resend`, {
+  const res = await fetchWithTransportReport(`${AUTH_API_URL}/api/auth/web/register/resend`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email }),
@@ -330,7 +331,7 @@ export async function resendVerificationCode(email: string): Promise<{ cooldownS
 
 /** API returns { tenants: [...] }; normalizes to Tenant[]. */
 export async function getMyTenants(webToken: string): Promise<Tenant[]> {
-  const res = await fetch(`${AUTH_API_URL}/api/auth/my-tenants`, {
+  const res = await fetchWithTransportReport(`${AUTH_API_URL}/api/auth/my-tenants`, {
     headers: { Authorization: `Bearer ${webToken}` },
   });
   checkUnauthorizedAndRedirect(res, !!webToken);
@@ -353,7 +354,7 @@ export async function getTenantToken(
   webToken: string,
   tenantId: string
 ): Promise<TenantTokenResponse> {
-  const res = await fetch(`${AUTH_API_URL}/api/auth/tenant-token`, {
+  const res = await fetchWithTransportReport(`${AUTH_API_URL}/api/auth/tenant-token`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -411,7 +412,7 @@ export function getOAuthUrl(provider: string, redirect = '/dashboard', linkToken
  * Always returns successfully — does not reveal whether the email exists.
  */
 export async function requestMagicLink(email: string, redirect = '/dashboard'): Promise<void> {
-  const res = await fetch(`${AUTH_API_URL}/api/auth/magic-link`, {
+  const res = await fetchWithTransportReport(`${AUTH_API_URL}/api/auth/magic-link`, {
     method: 'POST',
     // Same locale problem as `getOAuthUrl`, different mechanism: this IS a fetch,
     // so it can carry the header `apiClient` stamps — it just never did, because
@@ -432,7 +433,7 @@ export async function requestMagicLink(email: string, redirect = '/dashboard'): 
 export async function getLinkedAccounts(
   webToken: string,
 ): Promise<{ accounts: Array<{ provider: string; email: string | null; displayName: string | null }>; hasPassword: boolean }> {
-  const res = await fetch(`${AUTH_API_URL}/api/auth/linked-accounts`, {
+  const res = await fetchWithTransportReport(`${AUTH_API_URL}/api/auth/linked-accounts`, {
     headers: { Authorization: `Bearer ${webToken}` },
   });
   checkUnauthorizedAndRedirect(res, !!webToken);
@@ -444,7 +445,7 @@ export async function getLinkedAccounts(
  * Unlink an OAuth provider from the current account.
  */
 export async function unlinkProvider(webToken: string, provider: string): Promise<void> {
-  const res = await fetch(`${AUTH_API_URL}/api/auth/unlink/${provider}`, {
+  const res = await fetchWithTransportReport(`${AUTH_API_URL}/api/auth/unlink/${provider}`, {
     method: 'DELETE',
     headers: { Authorization: `Bearer ${webToken}` },
   });
@@ -459,7 +460,7 @@ export async function unlinkProvider(webToken: string, provider: string): Promis
  * Add a password to an OAuth-only account.
  */
 export async function addPassword(webToken: string, password: string): Promise<void> {
-  const res = await fetch(`${AUTH_API_URL}/api/auth/add-password`, {
+  const res = await fetchWithTransportReport(`${AUTH_API_URL}/api/auth/add-password`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${webToken}` },
     body: JSON.stringify({ password }),
@@ -522,7 +523,7 @@ export async function getMe(webToken: string): Promise<{
   accountTypeSelected: boolean;
   availableForHire: boolean;
 }> {
-  const res = await fetch(`${AUTH_API_URL}/api/auth/me`, {
+  const res = await fetchWithTransportReport(`${AUTH_API_URL}/api/auth/me`, {
     headers: { Authorization: `Bearer ${webToken}` },
   });
   checkUnauthorizedAndRedirect(res, !!webToken);
@@ -549,7 +550,7 @@ export async function setAvailableForHire(
   webToken: string,
   available: boolean,
 ): Promise<boolean> {
-  const res = await fetch(`${AUTH_API_URL}/api/freelancers/me/availability`, {
+  const res = await fetchWithTransportReport(`${AUTH_API_URL}/api/freelancers/me/availability`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${webToken}` },
     body: JSON.stringify({ available }),
@@ -572,7 +573,7 @@ export async function selectAccountType(
   accountType: 'standard' | 'freelancer' | 'sales',
   ageAttested: boolean,
 ): Promise<AuthUser> {
-  const res = await fetch(`${AUTH_API_URL}/api/auth/me/account-type`, {
+  const res = await fetchWithTransportReport(`${AUTH_API_URL}/api/auth/me/account-type`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${webToken}` },
     body: JSON.stringify({ accountType, ageAttested }),
@@ -596,7 +597,7 @@ export async function selectAccountType(
  * without a reload.
  */
 export async function updateMyDisplayName(webToken: string, displayName: string): Promise<string | null> {
-  const res = await fetch(`${AUTH_API_URL}/api/auth/me`, {
+  const res = await fetchWithTransportReport(`${AUTH_API_URL}/api/auth/me`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${webToken}` },
     body: JSON.stringify({ displayName }),
@@ -618,7 +619,7 @@ export async function updateMyPersonality(
   webToken: string,
   psychometric: PsychometricProfile | null,
 ): Promise<PsychometricProfile | null> {
-  const res = await fetch(`${AUTH_API_URL}/api/auth/me`, {
+  const res = await fetchWithTransportReport(`${AUTH_API_URL}/api/auth/me`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${webToken}` },
     body: JSON.stringify({ psychometric }),
@@ -634,7 +635,7 @@ export async function updateMyPersonality(
 
 /** Mark onboarding as complete and optionally store user intent. */
 export async function completeOnboarding(webToken: string, intent?: string[]): Promise<void> {
-  const res = await fetch(`${AUTH_API_URL}/api/auth/me/onboarding/complete`, {
+  const res = await fetchWithTransportReport(`${AUTH_API_URL}/api/auth/me/onboarding/complete`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${webToken}` },
     body: JSON.stringify({ intent }),
@@ -651,7 +652,7 @@ export async function saveOnboardingProgress(
   webToken: string,
   progress: OnboardingProgress,
 ): Promise<void> {
-  await fetch(`${AUTH_API_URL}/api/auth/me/onboarding/progress`, {
+  await fetchWithTransportReport(`${AUTH_API_URL}/api/auth/me/onboarding/progress`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${webToken}` },
     body: JSON.stringify(progress),
@@ -681,7 +682,7 @@ export async function listTenantMembers(
   tenantId: string,
 ): Promise<TenantMember[]> {
   const { planLimitErrorFromResponse } = await import('./planLimitError');
-  const res = await fetch(`${AUTH_API_URL}/api/tenants/${tenantId}/security/users`, {
+  const res = await fetchWithTransportReport(`${AUTH_API_URL}/api/tenants/${tenantId}/security/users`, {
     headers: { Authorization: `Bearer ${tenantToken}` },
   });
   if (res.status === 402) throw await planLimitErrorFromResponse(res);
@@ -720,7 +721,7 @@ export async function removeTenantMember(
   userId: string,
 ): Promise<void> {
   const { planLimitErrorFromResponse } = await import('./planLimitError');
-  const res = await fetch(`${AUTH_API_URL}/api/tenants/${tenantId}/members/${userId}`, {
+  const res = await fetchWithTransportReport(`${AUTH_API_URL}/api/tenants/${tenantId}/members/${userId}`, {
     method: 'DELETE',
     headers: { Authorization: `Bearer ${tenantToken}` },
   });
@@ -740,7 +741,7 @@ export async function updateMemberRole(
   role: string,
 ): Promise<void> {
   const { planLimitErrorFromResponse } = await import('./planLimitError');
-  const res = await fetch(`${AUTH_API_URL}/api/tenants/${tenantId}/members/${userId}/role`, {
+  const res = await fetchWithTransportReport(`${AUTH_API_URL}/api/tenants/${tenantId}/members/${userId}/role`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tenantToken}` },
     body: JSON.stringify({ role }),
@@ -776,7 +777,7 @@ export async function inviteByEmail(
   role: string = 'developer',
 ): Promise<InviteResult> {
   const { planLimitErrorFromResponse } = await import('./planLimitError');
-  const res = await fetch(`${AUTH_API_URL}/api/tenants/${tenantId}/invite-by-email`, {
+  const res = await fetchWithTransportReport(`${AUTH_API_URL}/api/tenants/${tenantId}/invite-by-email`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tenantToken}` },
     body: JSON.stringify({ email, role }),
@@ -798,7 +799,7 @@ export async function listInvitations(
   tenantToken: string,
   tenantId: string,
 ): Promise<PendingInvitation[]> {
-  const res = await fetch(`${AUTH_API_URL}/api/tenants/${tenantId}/invitations`, {
+  const res = await fetchWithTransportReport(`${AUTH_API_URL}/api/tenants/${tenantId}/invitations`, {
     headers: { Authorization: `Bearer ${tenantToken}` },
   });
   if (!res.ok) {
@@ -815,7 +816,7 @@ export async function revokeInvitation(
   tenantId: string,
   invitationId: string,
 ): Promise<void> {
-  const res = await fetch(`${AUTH_API_URL}/api/tenants/${tenantId}/invitations/${invitationId}`, {
+  const res = await fetchWithTransportReport(`${AUTH_API_URL}/api/tenants/${tenantId}/invitations/${invitationId}`, {
     method: 'DELETE',
     headers: { Authorization: `Bearer ${tenantToken}` },
   });
@@ -827,7 +828,7 @@ export async function revokeInvitation(
 
 /** Create a new workspace (tenant). Requires WebJWT; caller becomes owner. */
 export async function createTenant(webToken: string, name: string): Promise<Tenant> {
-  const res = await fetch(`${AUTH_API_URL}/api/tenants/create`, {
+  const res = await fetchWithTransportReport(`${AUTH_API_URL}/api/tenants/create`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -847,7 +848,7 @@ export async function createTenant(webToken: string, name: string): Promise<Tena
 
 /** Rename a workspace (tenant). Requires WebJWT; caller must be owner or manager. */
 export async function renameTenant(webToken: string, tenantId: string, name: string): Promise<Tenant> {
-  const res = await fetch(`${AUTH_API_URL}/api/tenants/${tenantId}/name`, {
+  const res = await fetchWithTransportReport(`${AUTH_API_URL}/api/tenants/${tenantId}/name`, {
     method: 'PATCH',
     headers: {
       'Content-Type': 'application/json',

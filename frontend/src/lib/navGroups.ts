@@ -280,6 +280,9 @@ export const NAV_GROUPS: NavGroup[] = [
     tabKind: 'query', basePath: '/hiring',
     tabs: [
       { id: '', labelKey: 'tab.pipeline', icon: '🪜' },
+      // Where candidates come FROM, before there is a pipeline to put them in:
+      // the job feeds this workspace pulls, and the listings they returned.
+      { id: 'sourcing', labelKey: 'tab.sourcing', icon: '🧲' },
       { id: 'kits', labelKey: 'tab.interviewKits', icon: '📋' },
       { id: 'offers', labelKey: 'tab.offers', icon: '✍' },
     ],

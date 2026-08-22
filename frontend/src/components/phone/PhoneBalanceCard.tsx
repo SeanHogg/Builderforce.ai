@@ -1,5 +1,10 @@
 'use client';
 
+// The directive is REQUIRED here, not incidental to `PhoneConsole`. These cards
+// are mounted from canvas surfaces and embedded apps as well as from the console,
+// and several of those hosts are server components — a card that relies on an
+// ancestor having already opened the client boundary cannot be dropped into one
+// of them without an edit, which is the reuse contract this component is built to.
 import { useLocale, useTranslations } from 'next-intl';
 import { formatCents } from '@/lib/canvasMoney';
 import { usePhone } from '@/lib/usePhone';

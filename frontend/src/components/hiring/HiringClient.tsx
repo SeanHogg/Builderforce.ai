@@ -23,6 +23,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { SourcingView } from '@/components/sourcing/SourcingView';
 import { useTranslations } from 'next-intl';
 import PageContainer from '@/components/PageContainer';
 import { RoleGate } from '@/components/RoleGate';
@@ -309,6 +310,13 @@ export default function HiringClient() {
     heading = t('offers.title');
     subheading = t('offers.subtitle');
     bodyNode = <OffersPanel offers={offers} loading={loading} onOpenCandidate={openCandidate} />;
+  } else if (tab === 'sourcing') {
+    // Sourcing brings its OWN data and its own entitlement decisions, so this
+    // branch adds a body and nothing else — no fetch above, no state, no extra
+    // condition in the effect that loads kits and offers.
+    heading = t('sourcing.title');
+    subheading = t('sourcing.subtitle');
+    bodyNode = <SourcingView />;
   }
 
   return (

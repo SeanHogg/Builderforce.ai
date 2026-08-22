@@ -25,11 +25,17 @@
  *   `/projects?tab=tasks${search.project ? `&project=${search.project}` : ''}`);
  * ```
  *
+ * The forward is TEMPORARY (307), not permanent. A 308 is what a crawler would
+ * prefer, and it is also what a browser caches until it is cleared — so the day a
+ * retired name is reused, every visitor who ever followed the old one is pinned to
+ * the wrong page with no way for us to unpin them. Cheap to change per route if a
+ * particular one is genuinely gone for good; expensive to discover the other way.
+ *
  * A destination FUNCTION reads the query string, which makes the route dynamic —
  * declare `export const runtime = 'edge'` beside it (check:edge-runtime enforces
  * this). A constant destination needs no runtime export: it prerenders.
  */
-import { redirect, type RedirectType } from 'next/navigation';
+import { redirect } from 'next/navigation';
 
 /** Next's decoded `searchParams`, flattened to first-value-wins. */
 export type RetiredRouteSearch = Record<string, string | undefined>;
@@ -49,11 +55,11 @@ function firstValues(raw: Record<string, string | string[] | undefined>): Retire
   return out;
 }
 
-export function retiredRoute(destination: Destination, type?: RedirectType) {
+export function retiredRoute(destination: Destination) {
   return async function RetiredRoutePage({ searchParams }: RouteProps) {
     const to = typeof destination === 'function'
       ? destination(firstValues((await searchParams) ?? {}))
       : destination;
-    redirect(to, type);
+    redirect(to);
   };
 }
