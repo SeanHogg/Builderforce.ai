@@ -6,7 +6,7 @@ import { useTranslations } from 'next-intl';
 /**
  * Shared presentational bodies for registry widgets.
  *
- * Every widget {@link WidgetDef.Card} renders ONLY its body inside the
+ * Every widget {@link ComponentDef.Surface} renders ONLY its body inside the
  * {@link WidgetCard} chrome (frame/title/pin). The big-number stat and the muted
  * loading/error/empty line were copy-pasted into every widget module
  * (aiImpact/delivery/finance/core/catalog) — these are the single source so the
@@ -44,7 +44,7 @@ export function WidgetMuted({ children }: { children: ReactNode }) {
  *   if (!src.data) return state;
  */
 export function useSourceState(source: { data: unknown; error: string | null }): ReactNode {
-  const t = useTranslations('widgets');
+  const t = useTranslations('components');
   if (source.error) return <WidgetMuted>{source.error}</WidgetMuted>;
   if (source.data == null) return <WidgetMuted>{t('loading')}</WidgetMuted>;
   return null;

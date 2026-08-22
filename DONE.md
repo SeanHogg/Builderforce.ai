@@ -1,3 +1,63 @@
+## ✅ RESOLVED 2026-08-22 — One component registry with three mounts, and a published app that can read its owner's business
+
+**The gap.** "A reusable component" existed three times in this codebase under three names, and a
+capability ported from hired.video or BurnRateOS landed in none of them. `WidgetDef`
+(`lib/widgets/types.ts`) was mountable on a dashboard, a pin and the Brain. `EMBED_VIEWS`
+(`builderforce-embedded`) was mountable inside a HOST app, but resolved by a 13-branch `switch` over
+~20 hand-written imports in `app/embed/[view]/page.tsx` — whose own header conceded that only
+"kanban + backlog" were really wired, while every one of its 34 entries claimed `available: true`.
+`CREATION_OBJECT_KINDS` was mountable on a board. Nothing joined them.
+
+So a ported capability became a PAGE under `app/*`, reachable from exactly one surface: ours. An
+entrepreneur could not drop the CRM, the hiring funnel or the marketing pipeline onto their own canvas
+or into their own published app, because no unit existed that could be dropped anywhere.
+
+### The unit
+
+`lib/components/types.ts` declares `ComponentDef`: `WidgetDef`'s shape — which already read its own
+data, gated itself, and took nothing from its parent but a window — plus the two fields that make a
+component portable. `domain` names the kernel domain it reads, so multi-tenancy and project scope are a
+property of the DATA rather than of the mount. `mounts` names where it may render, as DATA: a new mount
+is an adapter that filters the list, never another branch.
+
+- **129 components migrated** across 20 modules (`Card` → `Surface`, `WidgetDef` → `ComponentDef`,
+  `*_WIDGETS` → `*_COMPONENTS`), and the i18n namespace with them (`widgets.*` → `components.*` in all
+  five catalogs) so one vocabulary describes one thing.
+- **`lib/components/scope.tsx`** resolves the project a mounted component reads — explicit provider,
+  then the embed deep-link, then the app shell — once, so a component asks the same question wherever
+  it landed. That indirection is what let the `/embed/*` surfaces move without edits.
+- **34 full surfaces declared as data** in `components/surfaces/appSurfaces.tsx`, 21 of them GENERATED
+  from `TRACKER_CONFIGS` because they are one CRUD surface differing only by field schema. The embed
+  route is now a transport and a gate: one `getComponentForMount(view, 'app')`, no switch.
+- **The canvas mount**: a `component` object kind (contract + registry + `CanvasComponentBody`) renders
+  the same live surface on a board. A CRM board is not a new kind — it is a board somebody composed.
+- **`appSurfaces.test.ts`** asserts `EMBED_VIEWS` and the registry name the same set in both
+  directions, so the wire contract a host reads cannot drift from the components that answer it. It
+  also pins that the 129 dashboard tiles keep their `['dashboard']` default: a stat tile rendered as
+  somebody's whole published page is not a product.
+
+### The leg that made the ports composable
+
+A published site's handler had four step kinds — `llm | connector | set | data` — and `data` read the
+site's own collections only. There was no path to `ObjectRegistry` / `DomainService`, so the only way to
+build an ATS here was to re-model jobs, candidates and applications as site collections: a second copy
+of a domain the platform already owns.
+
+**`entity`** is the fifth step. `application/backend/entityRead.ts` owns the decision alone rather than
+inside the ingress — the posture is **deny unless declared**, chosen by the operator: a step names
+exactly one `(domain, objectKind)` pair and that pair IS the grant, with no wildcard form and no way for
+a request to widen it. `tenantId` comes from the site record the ingress already resolved, never from
+the spec, so a handler authored inside one tenant cannot read another. The projection is narrower than
+the `objects` row — no tenant id, no ref id. `handlerEngineSource.ts` gained the matching branch so a
+spec compiled into a customer's own cloud binds the empty read and logs why instead of silently
+binding `undefined`.
+
+**Verification.** Frontend typecheck clean; `check:i18n-keys`, `check:design-tokens` green; 79 message
+parity, 485 canvas, 29 widget/insights/surfaces tests pass. API typecheck clean; `check:layering`,
+`check:tenant-scope`, `check:db-access`, `check:domain-boundary` green; 443 backend/ide tests pass,
+including 8 new ones pinning that a request naming its own domain and kind reaches the reader with
+neither.
+
 ## ✅ RESOLVED 2026-08-22 — A ratchet verdict that survives `--update`, three module inversions removed, and a typecheck that was red
 
 **The gap.** The PRD 20 roadmap entry claimed six green data-model ratchets holding 216 violations.

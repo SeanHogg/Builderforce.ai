@@ -3,11 +3,5 @@
 # A VERDICT DOES NOT BELONG HERE — this file is rewritten wholesale, so a '#' comment
 # explaining an accepted entry does not survive. Argue it in
 # scripts/adjudications/signature-duplication.mjs instead, where it is data and is counted separately.
-agent_host_skill_assignments = tenant_skill_assignments
-board_type_mappings = import_type_mappings
 drive_connections = mailbox_connections
 initiatives = portfolios
-kanban_template_lane_requirements = swimlane_requirements
-marketing_tool_runs = tool_runs
-platform_modules = tenant_custom_roles
-project_manager_configs = tenant_manager_defaults

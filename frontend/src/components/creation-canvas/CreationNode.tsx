@@ -14,6 +14,7 @@ import {
 import { AUTHORED_FRAME_BORDER, AUTHORED_FRAME_FILL, STICKY_COLORS } from '@/domains/canvas/domain/authoredColors';
 import { CanvasClockBody } from './CanvasClockBody';
 import { CanvasTransclusionBody } from './CanvasTransclusionBody';
+import { CanvasComponentBody } from './CanvasComponentBody';
 import styles from './CreationCanvas.module.css';
 import { creationObjectDefinition, emptyShellProblem } from './creationObjectRegistry';
 import {
@@ -2736,7 +2737,7 @@ export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenD
   // creative kinds did: a studio tile followed by a second, redundant block
   // repeating the same authored text. They are folded in from the one set that
   // already lists them, so a new creative kind cannot reintroduce the same bug.
-  const specialized = new Set(['workflow','website','build','prototype','guidedTour','dashboard','chart','map','report','evaluation','diagnostics','agent','staff','chat','dataset','table','spreadsheet','kpi','voice','video','note','project','roadmap','task','mockup','mockupSet','featureSummary','evermind','projectComparison','standup','drawing','frame','release','file','document','prd','knowledge','slides','diagram','pitch','pitchScorecard','pitchQa','pitchApplication','course','practice','game','resume','socialFeed','socialPost','socialCampaign','erd','datasource','dataContract','dataQuality','metric','lineage','testPlan','testCase','testRun','defect','sticky','timer','stopwatch','transclusion', ...SPEC_KINDS, ...CREATIVE_STUDIO_KINDS, ...WEB_PAGE_KINDS]);
+  const specialized = new Set(['workflow','website','build','prototype','guidedTour','dashboard','chart','map','report','evaluation','diagnostics','agent','staff','chat','dataset','table','spreadsheet','kpi','voice','video','note','project','roadmap','task','mockup','mockupSet','featureSummary','evermind','projectComparison','standup','drawing','frame','release','file','document','prd','knowledge','slides','diagram','pitch','pitchScorecard','pitchQa','pitchApplication','course','practice','game','resume','socialFeed','socialPost','socialCampaign','erd','datasource','dataContract','dataQuality','metric','lineage','testPlan','testCase','testRun','defect','sticky','timer','stopwatch','transclusion','component', ...SPEC_KINDS, ...CREATIVE_STUDIO_KINDS, ...WEB_PAGE_KINDS]);
   const authoredSize = useAuthoredNodeSize(id);
   const frameStyle = data.kind === 'frame' ? { background: String(data.frameColor || AUTHORED_FRAME_FILL), borderColor: String(data.frameBorder || AUTHORED_FRAME_BORDER) } : undefined;
   // The author's pigment, applied the same way the frame's is. Both are colours a
@@ -2987,6 +2988,7 @@ export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenD
         {/* Another document, shown here, LIVE — the knowledge board's `embed` block, and
             the second primitive that surface had and this one did not. */}
         {data.kind === 'transclusion' && <CanvasTransclusionBody data={data} />}
+        {data.kind === 'component' && <CanvasComponentBody data={data} />}
         {data.kind === 'release' && <ReleaseBody data={data} onOpen={() => onOpenDetails?.(id, 'delivery')} />}
         {/* The month, at card size — the SAME component the full-screen surface mounts,
             with a different `variant`. There is no second calendar in this codebase to

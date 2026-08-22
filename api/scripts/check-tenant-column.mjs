@@ -24,7 +24,7 @@
  */
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseDrizzleTables } from './lib/drizzleSchema.mjs';
+import { parseDrizzleReferences, parseDrizzleTables } from './lib/drizzleSchema.mjs';
 import { reportRatchet } from './lib/ratchet.mjs';
 
 const here = resolve(fileURLToPath(import.meta.url), '..');
@@ -41,9 +41,60 @@ if (tables.size === 0) {
   process.exit(1);
 }
 
+/**
+ * INHERITED TENANCY, DERIVED RATHER THAN ADJUDICATED.
+ *
+ * A child row that hangs off a tenant-scoped parent by a NOT NULL foreign key with
+ * ON DELETE CASCADE cannot outlive its parent and cannot belong to a different
+ * tenant than the parent it cascades with. `creation_session_objects.session_id`,
+ * `qa_run_steps.run_id`, `ide_training_logs.job_id` are all this shape: copying
+ * `tenant_id` down would create a second place for one fact to be wrong, and the
+ * database has no way to keep the two agreeing.
+ *
+ * This was previously hand-written, one paragraph per table, ~35 times over — the
+ * same argument retyped for every child table in the schema. It is a STRUCTURAL
+ * fact about the foreign key, so it is computed here instead. A new child table
+ * that hangs off a scoped parent correctly is now silent, and only a table that
+ * genuinely has nowhere to inherit from is a finding.
+ *
+ * The three conditions are all load-bearing and none is relaxed:
+ *   • NOT NULL   — a nullable parent id means the row can exist orphaned, with no
+ *                  tenant to inherit at all.
+ *   • CASCADE    — anything else lets the child survive its parent's deletion, at
+ *                  which point it belongs to a tenant that no longer owns it.
+ *   • the parent is itself scoped, transitively — so a chain of cascading children
+ *     (`ide_training_logs` → `ide_training_jobs` → `projects`) resolves, but a chain
+ *     that bottoms out in an unscoped table does not.
+ *
+ * `users` is deliberately NOT a scoping parent. A user belongs to many tenants, so
+ * inheriting from one tells you nothing about which tenant a row is in.
+ */
+function scopedByInheritance(tables, refs) {
+  const direct = new Set(
+    [...tables].filter(([, cols]) => SCOPING_COLUMNS.some((c) => cols.has(c))).map(([n]) => n),
+  );
+  const scoped = new Set(direct);
+  // Fixed point: each pass can only add tables, so it terminates in at most one
+  // pass per level of nesting.
+  for (let changed = true; changed; ) {
+    changed = false;
+    for (const [name, cols] of tables) {
+      if (scoped.has(name)) continue;
+      const inherits = (refs.get(name) ?? []).some(
+        (r) => r.notNull && r.onDelete === 'cascade' && r.target && r.target !== name && scoped.has(r.target),
+      );
+      if (inherits) { scoped.add(name); changed = true; }
+    }
+  }
+  for (const n of direct) scoped.delete(n);
+  return scoped;
+}
+
+const inherited = scopedByInheritance(tables, parseDrizzleReferences(srcDir));
+
 const findings = [];
 for (const [name, cols] of [...tables].sort((a, b) => a[0].localeCompare(b[0]))) {
-  if (SCOPING_COLUMNS.some((c) => cols.has(c))) continue;
+  if (SCOPING_COLUMNS.some((c) => cols.has(c)) || inherited.has(name)) continue;
   findings.push({
     key: name,
     detail: 'no tenant_id / segment_id / account_id — if this holds customer data, every query against it is unscoped by construction.',

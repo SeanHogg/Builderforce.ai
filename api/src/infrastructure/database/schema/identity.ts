@@ -664,23 +664,10 @@ export const memberMetricsPeriod = pgTable('member_metrics_period', {
 // inherit it) or to a specific BuilderForce Agents instance.
 // ---------------------------------------------------------------------------
 
-/**
- * Tenant-level skill assignment.
- * When a skill is assigned here, every active agentHost in the tenant can use it.
- * assignedBy is the userId of the owner/manager who made the assignment.
- */
-export const tenantSkillAssignments = pgTable('tenant_skill_assignments', {
-  id:         serial('id').primaryKey(),
-  tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  skillSlug:  varchar('skill_slug', { length: 255 }).notNull(),
-  assignedBy: varchar('assigned_by', { length: 36 }).references(() => users.id),
-  assignedAt: timestamp('assigned_at').notNull().defaultNow(),
-}, (t) => [
-  // `id` above is the PK; this is the enforced uniqueness contract. (Postgres
-  // permits only one PRIMARY KEY per table, so a composite primaryKey() here
-  // would silently fight the column-level id PK — demoted to unique() [1315].)
-  unique().on(t.tenantId, t.skillSlug),
-]);
+// Skill assignment moved to `schema/agents.ts` as the single `skill_assignments`
+// table (migration 1108): the tenant-level and host-level tables were one fact at
+// two scopes. It lives with `agent_hosts`, which is the aggregate a host-scoped
+// row names — Identity has no stake in which skills an agent may use.
 
 
 // ---------------------------------------------------------------------------
@@ -887,17 +874,6 @@ export const userAvailability = pgTable('user_availability', {
 // Nested session models (REST + client polling, no WebSocket infra).
 // ---------------------------------------------------------------------------
 
-export const pokerSessions = pgTable('poker_sessions', {
-  id:             uuid('id').primaryKey().defaultRandom(),
-  tenantId:       integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  segmentId:      uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
-  name:           varchar('name', { length: 255 }).notNull(),
-  votingSystem:   varchar('voting_system', { length: 20 }).notNull().default('fibonacci'),
-  status:         varchar('status', { length: 20 }).notNull().default('active'),
-  facilitatorId:  varchar('facilitator_id', { length: 64 }),
-  createdAt:      timestamp('created_at').notNull().defaultNow(),
-  updatedAt:      timestamp('updated_at').notNull().defaultNow(),
-});
 
 
 

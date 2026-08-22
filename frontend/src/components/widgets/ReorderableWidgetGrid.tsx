@@ -3,8 +3,8 @@
 import { Icon } from '@/components/ui/Icon';
 import { type CSSProperties } from 'react';
 import { useTranslations } from 'next-intl';
-import { getWidget } from '@/lib/widgets/registry';
-import type { WidgetSize } from '@/lib/widgets/types';
+import { getComponent } from '@/lib/components/registry';
+import type { ComponentSize } from '@/lib/components/types';
 import { usePins } from '@/lib/widgets/PinsProvider';
 import { useDragReorder } from '@/lib/useDragReorder';
 import { WidgetCard } from './WidgetCard';
@@ -20,17 +20,17 @@ import { WidgetCard } from './WidgetCard';
  * the dashboard.
  */
 
-const SPAN: Record<WidgetSize, CSSProperties> = {
+const SPAN: Record<ComponentSize, CSSProperties> = {
   sm: {},
   md: { gridColumn: 'span 2' },
   lg: { gridColumn: '1 / -1' },
 };
 
 export function ReorderableWidgetGrid({ ids, days }: { ids: string[]; days: number }) {
-  const t = useTranslations('widgets');
+  const t = useTranslations('components');
   const { reorder } = usePins();
 
-  const known = ids.filter((id) => getWidget(id));
+  const known = ids.filter((id) => getComponent(id));
   const drag = useDragReorder(known, reorder);
 
   const handleBtn: CSSProperties = {
@@ -41,7 +41,7 @@ export function ReorderableWidgetGrid({ ids, days }: { ids: string[]; days: numb
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 16, alignItems: 'stretch' }}>
       {known.map((id, i) => {
-        const def = getWidget(id)!;
+        const def = getComponent(id)!;
         return (
           <div
             key={id}

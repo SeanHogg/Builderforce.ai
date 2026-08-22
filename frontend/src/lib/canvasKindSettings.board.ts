@@ -161,6 +161,27 @@ registerKindSettings({
   actions: [],
 });
 
+/**
+ * A platform component, mounted on the board.
+ *
+ * One field, and it is the same shape `transclusion` uses one field for: the
+ * reference IS the object. Everything else the card shows is the component's own
+ * live, tenant-scoped surface, which is exactly what must not be editable from a
+ * board's inspector.
+ *
+ * Not sellable, and for a sharper reason than a transclusion's. What would be
+ * sold is a view onto the SELLER's tenant data — the buyer would get a card that
+ * either shows them nothing or shows them somebody else's business. A component
+ * travels to a buyer as part of the platform they are already on, not as an
+ * object in a listing.
+ */
+registerKindSettings({
+  kinds: ['component'],
+  marketplace: { sellable: () => false },
+  fields: [{ name: 'componentId', control: 'text', section: 'basic', labelKey: 'componentId', surface: 'both' }],
+  actions: [],
+});
+
 registerKindSettings({
   // A live-connected tool call, not a template — nothing here to resell.
   kinds: ['mcp'],

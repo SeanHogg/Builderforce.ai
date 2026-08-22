@@ -33,7 +33,7 @@ import { useSharedSource } from '@/lib/widgets/sharedSource';
 import { WidgetMuted as Muted } from '@/components/widgets/widgetBody';
 import { InsightStat } from '@/components/dashboard/InsightStat';
 import { formatRecency } from '@/components/dashboard/metricFormat';
-import type { WidgetCardProps, WidgetDef, WidgetDrill } from '@/lib/widgets/types';
+import type { ComponentSurfaceProps, ComponentDef, ComponentDrill } from '@/lib/components/types';
 import { DonutChart } from '@/components/charts/DonutChart';
 import { TrendChart } from '@/components/charts/TrendChart';
 import { colorAt } from '@/components/charts/chartColors';
@@ -103,9 +103,9 @@ function useCeremonyRollup(days: number) {
 // ── Alerts (`/alerts`, group: 'alerts') ─────────────────────────────────────────
 
 /** Alert firings per day over the window — the volume trend the surface lacked. */
-function AlertFiresTrendCard({ days }: WidgetCardProps) {
+function AlertFiresTrendCard({ days }: ComponentSurfaceProps) {
   const { int } = useInsightFormat();
-  const t = useTranslations('widgets');
+  const t = useTranslations('components');
   const { data, error } = useAlertEvents();
   if (error) return <Muted>{error}</Muted>;
   if (!data) return <Muted>{t('loading')}</Muted>;
@@ -124,9 +124,9 @@ function AlertFiresTrendCard({ days }: WidgetCardProps) {
 }
 
 /** Rule-health donut: enabled vs paused vs currently-firing rules. */
-function AlertRuleHealthCard(_props: WidgetCardProps) {
+function AlertRuleHealthCard(_props: ComponentSurfaceProps) {
   const { int } = useInsightFormat();
-  const t = useTranslations('widgets');
+  const t = useTranslations('components');
   const { data, error } = useAlertRules();
   if (error) return <Muted>{error}</Muted>;
   if (!data) return <Muted>{t('loading')}</Muted>;
@@ -158,9 +158,9 @@ function AlertRuleHealthCard(_props: WidgetCardProps) {
 // ── Logs / activity (`/logs`, group: 'logs') ────────────────────────────────────
 
 /** Event-volume trend from the tenant activity rollup's daily series. */
-function LogVolumeTrendCard({ days }: WidgetCardProps) {
+function LogVolumeTrendCard({ days }: ComponentSurfaceProps) {
   const { int } = useInsightFormat();
-  const t = useTranslations('widgets');
+  const t = useTranslations('components');
   const { data, error } = useActivityRollup(days);
   if (error) return <Muted>{error}</Muted>;
   if (!data) return <Muted>{t('loading')}</Muted>;
@@ -180,9 +180,9 @@ function LogVolumeTrendCard({ days }: WidgetCardProps) {
 }
 
 /** Event-type mix donut (commit / review / deploy / …) from the rollup's byType. */
-function LogTypeMixCard({ days }: WidgetCardProps) {
+function LogTypeMixCard({ days }: ComponentSurfaceProps) {
   const { int } = useInsightFormat();
-  const t = useTranslations('widgets');
+  const t = useTranslations('components');
   const { data, error } = useActivityRollup(days);
   if (error) return <Muted>{error}</Muted>;
   if (!data) return <Muted>{t('loading')}</Muted>;
@@ -203,9 +203,9 @@ function LogTypeMixCard({ days }: WidgetCardProps) {
 // ── Quality (`/quality`, group: 'quality') ──────────────────────────────────────
 
 /** Error-event volume per day over the window (from /api/quality/stats daily). */
-function QualityErrorVolumeCard(_props: WidgetCardProps) {
+function QualityErrorVolumeCard(_props: ComponentSurfaceProps) {
   const { int } = useInsightFormat();
-  const t = useTranslations('widgets');
+  const t = useTranslations('components');
   const { data, error } = useQualityStats(30);
   if (error) return <Muted>{error}</Muted>;
   if (!data) return <Muted>{t('loading')}</Muted>;
@@ -225,9 +225,9 @@ function QualityErrorVolumeCard(_props: WidgetCardProps) {
 }
 
 /** Resolution mix donut: unresolved / resolved / ignored error groups. */
-function QualityResolutionCard(_props: WidgetCardProps) {
+function QualityResolutionCard(_props: ComponentSurfaceProps) {
   const { int } = useInsightFormat();
-  const t = useTranslations('widgets');
+  const t = useTranslations('components');
   const { data, error } = useQualityStats(30);
   if (error) return <Muted>{error}</Muted>;
   if (!data) return <Muted>{t('loading')}</Muted>;
@@ -258,9 +258,9 @@ function QualityResolutionCard(_props: WidgetCardProps) {
 // ── Integrations (`/integrations`, group: 'integrations') ───────────────────────
 
 /** Connected integrations with the healthy (last-test-ok) share as the sub-line. */
-function IntegrationsConnectedCard(_props: WidgetCardProps) {
+function IntegrationsConnectedCard(_props: ComponentSurfaceProps) {
   const { int } = useInsightFormat();
-  const t = useTranslations('widgets');
+  const t = useTranslations('components');
   const dt = useTranslations('dashboard');
   const { data, error } = useIntegrations();
   if (error) return <Muted>{error}</Muted>;
@@ -280,9 +280,9 @@ function IntegrationsConnectedCard(_props: WidgetCardProps) {
 }
 
 /** By-provider mix donut — which tools the workspace is wired into. */
-function IntegrationsByProviderCard(_props: WidgetCardProps) {
+function IntegrationsByProviderCard(_props: ComponentSurfaceProps) {
   const { int } = useInsightFormat();
-  const t = useTranslations('widgets');
+  const t = useTranslations('components');
   const { data, error } = useIntegrations();
   if (error) return <Muted>{error}</Muted>;
   if (!data) return <Muted>{t('loading')}</Muted>;
@@ -306,8 +306,8 @@ function IntegrationsByProviderCard(_props: WidgetCardProps) {
 // ── Content Manager (`/content-manager`, group: 'content') ──────────────────────
 
 /** Knowledge-base coverage score with the stale-doc count as the nudge. */
-function ContentCoverageCard(_props: WidgetCardProps) {
-  const t = useTranslations('widgets');
+function ContentCoverageCard(_props: ComponentSurfaceProps) {
+  const t = useTranslations('components');
   const { data, error } = useKnowledgeOverview();
   if (error) return <Muted>{error}</Muted>;
   if (!data) return <Muted>{t('loading')}</Muted>;
@@ -323,9 +323,9 @@ function ContentCoverageCard(_props: WidgetCardProps) {
 }
 
 /** Documents by kind donut (SOP / Process / Doc) with published vs draft split. */
-function ContentByKindCard(_props: WidgetCardProps) {
+function ContentByKindCard(_props: ComponentSurfaceProps) {
   const { int } = useInsightFormat();
-  const t = useTranslations('widgets');
+  const t = useTranslations('components');
   const { data, error } = useKnowledgeOverview();
   if (error) return <Muted>{error}</Muted>;
   if (!data) return <Muted>{t('loading')}</Muted>;
@@ -350,9 +350,9 @@ function ContentByKindCard(_props: WidgetCardProps) {
 // ── Ceremonies (`/projects?tab=ceremonies`, group: 'ceremonies') ────────────────
 
 /** Ceremonies-run cadence per day + completion-rate sub-line. */
-function CeremonyCadenceCard({ days }: WidgetCardProps) {
+function CeremonyCadenceCard({ days }: ComponentSurfaceProps) {
   const { int } = useInsightFormat();
-  const t = useTranslations('widgets');
+  const t = useTranslations('components');
   const { data, error } = useCeremonyRollup(days);
   if (error) return <Muted>{error}</Muted>;
   if (!data) return <Muted>{t('loading')}</Muted>;
@@ -372,8 +372,8 @@ function CeremonyCadenceCard({ days }: WidgetCardProps) {
 }
 
 /** Talk-time balance donut: human vs AI-agent share of ceremony speaking time. */
-function CeremonyBalanceCard({ days }: WidgetCardProps) {
-  const t = useTranslations('widgets');
+function CeremonyBalanceCard({ days }: ComponentSurfaceProps) {
+  const t = useTranslations('components');
   const { data, error } = useCeremonyRollup(days);
   if (error) return <Muted>{error}</Muted>;
   if (!data) return <Muted>{t('loading')}</Muted>;
@@ -397,35 +397,35 @@ function CeremonyBalanceCard({ days }: WidgetCardProps) {
 
 // ── Registry ─────────────────────────────────────────────────────────────────
 
-const ALERTS_DRILL: WidgetDrill = { kind: 'route', href: '/alerts' };
-const CEREMONIES_DRILL: WidgetDrill = { kind: 'route', href: '/projects?tab=ceremonies' };
-const LOGS_DRILL: WidgetDrill = { kind: 'route', href: '/settings?sub=logs&log=audit' };
-const QUALITY_DRILL: WidgetDrill = { kind: 'route', href: '/quality' };
-const INTEGRATIONS_DRILL: WidgetDrill = { kind: 'route', href: '/integrations' };
-const CONTENT_DRILL: WidgetDrill = { kind: 'route', href: '/content-manager' };
+const ALERTS_DRILL: ComponentDrill = { kind: 'route', href: '/alerts' };
+const CEREMONIES_DRILL: ComponentDrill = { kind: 'route', href: '/projects?tab=ceremonies' };
+const LOGS_DRILL: ComponentDrill = { kind: 'route', href: '/settings?sub=logs&log=audit' };
+const QUALITY_DRILL: ComponentDrill = { kind: 'route', href: '/quality' };
+const INTEGRATIONS_DRILL: ComponentDrill = { kind: 'route', href: '/integrations' };
+const CONTENT_DRILL: ComponentDrill = { kind: 'route', href: '/content-manager' };
 
-export const OBSERVABILITY_WIDGETS: WidgetDef[] = [
+export const OBSERVABILITY_COMPONENTS: ComponentDef[] = [
   // ── Alerts (`/alerts`) ──
-  { id: 'obs.alert-fires', group: 'alerts', titleKey: 'obsAlertFires', size: 'md', capability: 'insights.engineering', Card: AlertFiresTrendCard, drill: ALERTS_DRILL },
-  { id: 'obs.alert-rule-health', group: 'alerts', titleKey: 'obsAlertRuleHealth', size: 'md', capability: 'insights.engineering', Card: AlertRuleHealthCard, drill: ALERTS_DRILL },
+  { id: 'obs.alert-fires', group: 'alerts', titleKey: 'obsAlertFires', size: 'md', capability: 'insights.engineering', Surface: AlertFiresTrendCard, drill: ALERTS_DRILL },
+  { id: 'obs.alert-rule-health', group: 'alerts', titleKey: 'obsAlertRuleHealth', size: 'md', capability: 'insights.engineering', Surface: AlertRuleHealthCard, drill: ALERTS_DRILL },
 
   // ── Logs / activity (`/logs`) — the tenant activity rollup is manager-gated ──
-  { id: 'obs.log-volume', group: 'logs', titleKey: 'obsLogVolume', size: 'md', capability: 'insights.engineering', Card: LogVolumeTrendCard, drill: LOGS_DRILL },
-  { id: 'obs.log-types', group: 'logs', titleKey: 'obsLogTypes', size: 'md', capability: 'insights.engineering', Card: LogTypeMixCard, drill: LOGS_DRILL },
+  { id: 'obs.log-volume', group: 'logs', titleKey: 'obsLogVolume', size: 'md', capability: 'insights.engineering', Surface: LogVolumeTrendCard, drill: LOGS_DRILL },
+  { id: 'obs.log-types', group: 'logs', titleKey: 'obsLogTypes', size: 'md', capability: 'insights.engineering', Surface: LogTypeMixCard, drill: LOGS_DRILL },
 
   // ── Quality (`/quality`) ──
-  { id: 'obs.quality-volume', group: 'quality', titleKey: 'obsQualityVolume', size: 'md', capability: 'quality.view', Card: QualityErrorVolumeCard, drill: QUALITY_DRILL },
-  { id: 'obs.quality-resolution', group: 'quality', titleKey: 'obsQualityResolution', size: 'md', capability: 'quality.view', Card: QualityResolutionCard, drill: QUALITY_DRILL },
+  { id: 'obs.quality-volume', group: 'quality', titleKey: 'obsQualityVolume', size: 'md', capability: 'quality.view', Surface: QualityErrorVolumeCard, drill: QUALITY_DRILL },
+  { id: 'obs.quality-resolution', group: 'quality', titleKey: 'obsQualityResolution', size: 'md', capability: 'quality.view', Surface: QualityResolutionCard, drill: QUALITY_DRILL },
 
   // ── Integrations (`/integrations`) ──
-  { id: 'obs.integrations-connected', group: 'integrations', titleKey: 'obsIntegrationsConnected', size: 'sm', Card: IntegrationsConnectedCard, drill: INTEGRATIONS_DRILL },
-  { id: 'obs.integrations-by-provider', group: 'integrations', titleKey: 'obsIntegrationsByProvider', size: 'md', Card: IntegrationsByProviderCard, drill: INTEGRATIONS_DRILL },
+  { id: 'obs.integrations-connected', group: 'integrations', titleKey: 'obsIntegrationsConnected', size: 'sm', Surface: IntegrationsConnectedCard, drill: INTEGRATIONS_DRILL },
+  { id: 'obs.integrations-by-provider', group: 'integrations', titleKey: 'obsIntegrationsByProvider', size: 'md', Surface: IntegrationsByProviderCard, drill: INTEGRATIONS_DRILL },
 
   // ── Content Manager (`/content-manager`) ──
-  { id: 'obs.content-coverage', group: 'content', titleKey: 'obsContentCoverage', size: 'sm', Card: ContentCoverageCard, drill: CONTENT_DRILL },
-  { id: 'obs.content-by-kind', group: 'content', titleKey: 'obsContentByKind', size: 'md', Card: ContentByKindCard, drill: CONTENT_DRILL },
+  { id: 'obs.content-coverage', group: 'content', titleKey: 'obsContentCoverage', size: 'sm', Surface: ContentCoverageCard, drill: CONTENT_DRILL },
+  { id: 'obs.content-by-kind', group: 'content', titleKey: 'obsContentByKind', size: 'md', Surface: ContentByKindCard, drill: CONTENT_DRILL },
 
   // ── Ceremonies (`/projects?tab=ceremonies`) — tenant rollup is manager-gated ──
-  { id: 'obs.ceremony-cadence', group: 'ceremonies', titleKey: 'obsCeremonyCadence', size: 'md', capability: 'insights.engineering', Card: CeremonyCadenceCard, drill: CEREMONIES_DRILL },
-  { id: 'obs.ceremony-balance', group: 'ceremonies', titleKey: 'obsCeremonyBalance', size: 'md', capability: 'insights.engineering', Card: CeremonyBalanceCard, drill: CEREMONIES_DRILL },
+  { id: 'obs.ceremony-cadence', group: 'ceremonies', titleKey: 'obsCeremonyCadence', size: 'md', capability: 'insights.engineering', Surface: CeremonyCadenceCard, drill: CEREMONIES_DRILL },
+  { id: 'obs.ceremony-balance', group: 'ceremonies', titleKey: 'obsCeremonyBalance', size: 'md', capability: 'insights.engineering', Surface: CeremonyBalanceCard, drill: CEREMONIES_DRILL },
 ];

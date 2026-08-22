@@ -563,6 +563,25 @@ export const CREATION_OBJECT_KINDS = [
    * knowledge document by id, and the Creation Canvas had no equivalent.
    */
   'transclusion',
+  /**
+   * A PLATFORM COMPONENT, MOUNTED ON THE BOARD.
+   *
+   * Not a picture of one and not a link to one: the card renders the same live,
+   * tenant-scoped surface the app renders — the kanban, the roadmap, the vendor
+   * register, the workforce directory — from the one component registry
+   * (`lib/components/registry.ts`), addressed by `componentId`.
+   *
+   * This is the kind that makes the board a place a business is RUN rather than
+   * only described. A CRM or a marketing pipeline is not a new object type here;
+   * it is a board somebody composed out of these, which is why there is one kind
+   * and not one per surface. `transclusion` shows another CANVAS object; this
+   * shows a domain the platform owns.
+   *
+   * The same id addresses the same component at `/embed/<id>` inside the app a
+   * customer publishes, so a card on the board and the surface in their product
+   * are one declaration rather than two implementations.
+   */
+  'component',
   // The UNTYPED escape hatch, and the only one on this list.
   //
   // Every other kind here is a claim about what a thing IS, which is the whole

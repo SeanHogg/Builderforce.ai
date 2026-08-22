@@ -394,4 +394,199 @@ export default {
       'delivery cannot open a second ticket. It has no recipient, no payload, no attempt ' +
       'count and no terminal state; a unique index is its entire behaviour.',
 
+  marketplace_skill_likes:
+    '`annotations` is NOT NULL on both `tenant_id` and `object_id`. This like is pressed on a PUBLIC marketplace slug, which has no tenant and no objects row — the listing is global precisely so a stranger can find it. There is nothing for either required column to hold.',
+
+  artifact_likes:
+    'the same wall as `marketplace_skill_likes`: identity is (artifact_type, artifact_slug), a SLUG rather than an object id, and the row is global. `annotations` requires a tenant and a registered object; this has neither.',
+
+  sales_coaching_notes:
+    '`annotations.tenant_id` is NOT NULL. Both ends of this note are Builderforce sales staff and the row has no tenant at all — see the tenant-column adjudication. A primitive that cannot represent the row is not a home for it.',
+
+  sales_associate_settings:
+    '`settings.tenant_id` is NOT NULL and this row has no tenant: it holds one platform associate\'s own referral codes. Same wall, different primitive.',
+
+  legal_document_versions:
+    '`revisions` requires a tenant AND an `object_id` into the registry. These are the PLATFORM\'s own Terms and Privacy versions — no tenant by design, and not registered objects. It is also a full published document, not a patch or a snapshot key.',
+
+  marketing_tool_runs:
+    '`runs.tenant_id` is NOT NULL. This is an anonymous visitor\'s free-tool result keyed by `visitor_id`, written before any account exists. The tenant-scoped counterpart IS a separate table (`tool_runs`), which is the point: two populations, one of which the primitive cannot hold.',
+
+  email_preferences:
+    '`settings` is (scope, scope_ref, feature, value) under a NOT NULL tenant. This is keyed on EMAIL precisely so it works for a recipient with no account and no workspace — a cold invite\'s unsubscribe must survive both \'no account yet\' and \'account later deleted\'. A tenant-scoped setting cannot make that promise.',
+
+  chat_messages:
+    '`messages` requires `thread_id` NOT NULL into `threads`. This transcript\'s parent is `chat_sessions` — an agent-host session, not a thread — so adopting the primitive means creating a threads row per session purely to satisfy a foreign key, and routing every read through it.',
+
+  brain_chat_messages:
+    'the same missing thread as `chat_messages`, plus a unique (chat_id, event_key) that makes a producer\'s retry idempotent. `messages` has no idempotency column, so that guarantee would move back into application code, which is where it was before this index existed.',
+
+  freelancer_messages:
+    'child of `freelancer_conversations`, which is itself not a `threads` row for the reason given there. A message cannot move to the primitive before its thread can.',
+
+  execution_messages:
+    'not a transcript — a STEERING QUEUE. Rows with role \'user\' and a null `consumedAt` are pending steers the cloud loop drains on its next step, and `consumedAt` is stamped once so a steer is delivered exactly once. `messages` has no consumption state and no queue semantics; it records what was said, not what has yet to be acted on.',
+
+  chat_members:
+    '`memberships` needs `object_id` NOT NULL into the registry and identifies the member by (member_kind, member_ref). This row carries `invited_email` — a COLD invite to somebody with no account, converting to a `user_id` on first access. A member_ref cannot name a person who does not exist yet.',
+
+  dev_team_members:
+    '`memberships.tenant_id` is NOT NULL; this table has none (it inherits through `dev_teams`), and `dev_teams` is not registered in `objects` for the `object_id` the primitive also requires. Two required columns, neither available.',
+
+  team_members:
+    'the same two walls as `dev_team_members`, and one more: `member_ref` is deliberately polymorphic with no foreign key, because a team member may be a human or an agent.',
+
+  on_call_members:
+    '`memberships` needs a registered `object_id` and `on_call_rotations` is not one. `member_ref` is assignee-encoded across three populations (\'u:\', \'c:\', \'contact:\'), and `position` is the ROTATION ORDER — the column the paging schedule advances on, which a membership has nowhere to put.',
+
+  ceremony_participants:
+    'not a membership but an ATTENDANCE RECORD: `attendance`, `attendance_source`, `attendance_set_by`, `attendance_set_at`, `notified_at`, `turn_order`, `duration_ms`. `memberships` says who belongs; this says who turned up, who says so, and how long they spoke. Different question, and the primitive has no column for any of the evidence.',
+
+  meeting_attendees:
+    'an INVITE and its response (`response`, `email`, `joined_at`, `left_at`), including for an attendee with no account to be a member of anything. `memberships` models standing access, not one meeting\'s guest list.',
+
+  tenant_members:
+    '`memberships` identifies its owner by `object_id` into the registry, and a TENANT is not an object — `objects.tenant_id` points AT it. The seat also carries `monthly_spend_cap_millicents` and its notify thresholds, which the billing gate reads on the hot path; a jsonb metadata blob is not something a spend gate can be indexed on.',
+
+  coaching_notes:
+    '`annotations` requires `object_id` NOT NULL. This is deliberately polymorphic over (member_kind, member_ref) with NO foreign key, because a coached workforce member may be an agent rather than a row in any one table. There is no object id to supply.',
+
+  coordination_notes:
+    'not an annotation — a BLACKBOARD CELL. One row per (scope_key, key); posting the same key OVERWRITES, because the board holds CURRENT intent that a peer must not contradict. `annotations` is append-and-resolve with an author and a thread; overwrite-by-key is the opposite lifecycle, and the note dies with its ticket rather than being resolved.',
+
+  knowledge_document_tags:
+    'a unique (document, tag) FILTER KEY, not an authored annotation: no author, no body, no lifecycle. `annotations` requires a registered `object_id` plus an author kind, and `knowledge_documents` is not in the registry.',
+
+  poker_votes:
+    'a BALLOT with a reveal gate: unique per (story, user), with `is_revealed` deciding whether anybody may read the value yet. `annotations` publishes on write and has no concept of a sealed value, which is the entire mechanic of planning poker.',
+
+  prompt_library_versions:
+    '`revisions` requires a registered `object_id` and stores a patch or an external snapshot key under a bigint history number. A prompt version IS its `body` — the executable text a run pins — and prompt entries are not registered objects. Same argument as `agent_definition_versions` above.',
+
+  knowledge_document_versions:
+    '`revisions` stores a patch or a snapshot key; this stores the FULL published title and content, because an SOP version is what a reader with a read-acknowledgement must be shown verbatim. Its parent is also unregistered, so the required `object_id` has nothing to hold.',
+
+  spec_versions:
+    '`revisions` again cannot hold it: the row carries THREE whole documents (`prd`, `arch_spec`, `task_list`) and a `frozen` flag that pins an execution to an exact spec. Freezing is a lifecycle `revisions` does not have, and it is the mechanism that stops a running build reading a spec that changed underneath it.',
+
+  creation_session_snapshots:
+    '`revisions` stores a patch or an external `snapshot_key`. This stores the whole `graph` inline together with the `viewport`, because the collaborative editor REWINDS to it — restoring a board means loading the graph, not fetching an object out of storage and replaying patches to reach it.',
+
+  knowledge_documents:
+    '`artifacts` models a stored FILE: `storage_key`, `mime`, `byte_size`, `checksum`. A knowledge document has no bytes — it is authored `content` with a `status`, a `version_number` and `requires_ack`, the read-acknowledgement an SOP is governed by. None of that is expressible as an artifact row.',
+
+  freelancer_conversations:
+    '`threads` has no per-side read state. This tracks it with two watermarks (`employer_last_read_at`, `freelancer_last_read_at`) rather than per message, deliberately, so a thread with several managers on the employer side stays correct. A single `last_message_at` cannot answer \'unread for whom\'.',
+
+  freelancer_notifications:
+    'nothing is DELIVERED. `deliveries` models an outbound send — a channel, a recipient, attempts, retryability, a provider reference. This is an in-app row with a `read_at`: the user comes to it. Adopting the primitive would leave every dispatch column permanently null and put the read state nowhere.',
+
+  error_collector_integrations:
+    'the child of ONE `error_collectors` row, holding ONE inbound signing secret. The kernel `connections` primitive models a WORKSPACE account with a vendor — an identity, a token lifecycle, outbound calls — and this has none of them. Argued at length in the signature-duplication adjudications, where its twin sits.',
+
+  tool_audit_events:
+    '`activity_log` records what a PRINCIPAL did, with a NOT NULL `verb` and actor. This is per-tool-call telemetry identified by `tool_call_id`, carrying `args`, `result` and `duration_ms` at a volume per run the audit log is not sized for. A tool call has a name, not a verb.',
+
+  agent_inference_logs:
+    'token counts and latency per inference call — `prompt_tokens`, `completion_tokens`, `latency_ms` — which are SUMMED into cost and performance reporting. `activity_log` has no numeric columns; the numbers would land in `metadata` jsonb and stop being aggregatable.',
+
+  personality_events:
+    'the persona provenance of a run and the execution parameters it produced (`think_level`, `reasoning_level`, `temperature`, `directive_count`). Read to explain why a run behaved as it did, not as an audit of who did what — and `activity_log.verb` has no value to carry.',
+
+  project_insight_events:
+    'per-execution code-change statistics that roll up into DevEx metrics. Numeric payload, summed — the same reason `activity_log` cannot hold `activity_events`, adjudicated above.',
+
+  agent_host_sync_history:
+    'a sync RUN and its result: `file_count`, `bytes_total`, `status`, `error_msg`. Both counters are reported and compared between syncs, which an audit row with a jsonb blob cannot support.',
+
+  deployment_events:
+    'the DORA signal `activity_events` lacks. `is_failure` gives change-failure-rate and `restored_at` minus `deployed_at` gives MTTR — two timestamps on one row, subtracted. `activity_log` has a single `occurred_at`, so the interval that IS the metric cannot be expressed.',
+
+  monitor_events:
+    'a monitor\'s own signal/breach/recovery history. Nobody DID any of this — `activity_log.actor_type` is NOT NULL and there is no actor; a threshold was crossed. Its incidents live in `prod_incidents`, which is the row an actor does act on.',
+
+  incident_events:
+    'the war-room feed AND the paging audit in one append-only timeline: `channel`, `target` and `level` record who was paged, how, and at what severity. `activity_log` has no notification columns, so half of every row would be lost.',
+
+  alert_events:
+    'one firing of a rule, carrying `observed_value`, `threshold` and `comparator` — the three numbers that let somebody see WHY it fired without re-running the rule. An audit entry records only that it fired.',
+
+  connector_call_logs:
+    'one outbound connector call: `status_code`, `duration_ms`, `ok`. It deliberately records the request SHAPE and never the body, because a connector body routinely carries customer PII. `activity_log.metadata` is an open jsonb blob — precisely the shape that invites somebody to put the body in it.',
+
+  catalog_adoption_events:
+    'an append-only analytics SERIES keyed (kind, item_id, event_type) feeding an over-time chart. `activity_log` requires a NOT NULL `verb` and actor per row; an adoption count has neither, and the series is read by grouping rather than by reading one principal\'s history.',
+
+  integration_sync_logs:
+    'one sync attempt with `items_processed`, `items_errored` and `cursor_after` — the cursor being what the NEXT sync resumes from. `runs` would bury it inside an opaque `output`, and resuming is a read of that column, not of a blob.',
+
+  creation_outcome_events:
+    'the value ledger for creation sessions: `metric_key`, `metric_value`, `unit`, `cost_usd_millicents`, rolled up session to project to tenant. `activity_log` has no numeric columns to roll up, and the unique (correlation_id, phase) that stops a started/terminal pair being double-counted has nowhere to live.',
+
+  tool_runs:
+    'the platform performed nothing: a USER filled in a questionnaire and kept the answer. `runs` is an execution with an attempt number, a queue time and a retry; none of the three applies. The `result` is also SCORED and rolls into a project diagnostic rating, so it is read and indexed rather than being an opaque `output` blob.',
+
+  qa_runs:
+    'a browser-test execution whose reported columns — `browser`, `target_url`, `commit_sha`, `total_steps`, `passed_steps`, `duration_ms` — are exactly what the QA dashboards filter on. In `runs` they become `input`/`output` jsonb. The objection recorded for `stage_sandbox_runs` also stands: the kernel `runs` table still has no feature consumer, only the generic entity browser, so this would be validating the primitive and the migration at once.',
+
+  import_runs:
+    'a migration job with a `mode` (migrate / sync / both) and a staged, resumable `status` machine the import UI drives step by step — discovering, staged, mapped, importing. `runs` has a queued/running/finished lifecycle and no notion of staging, mapping and resuming a partially applied import.',
+
+  repo_analysis_runs:
+    'a state machine the UI POLLS: `stage`, `progress`, `token_budget`, `tokens_used`. `runs` reports terminal status; this reports position and spend WHILE running, which is what the progress bar and the budget guard read.',
+
+  ide_training_jobs:
+    'a fine-tune plus its eval scorecard — `eval_score`, `eval_code_correctness`, `eval_reasoning_quality`, `eval_hallucination_rate`. The scorecard is compared ACROSS jobs to decide which checkpoint ships; inside `runs.output` it stops being comparable.',
+
+  pr_reconciliation_runs:
+    'one deterministic GitHub-to-ticket audit, carrying `approved_pr_numbers` and `error_count` as the evidence a reviewer reads before approving a merge. Same unproven-primitive objection as `qa_runs`.',
+
+  audit_report_runs:
+    'the LOG of an assembled period report — the report itself is computed live and never stored. There is no execution to model: the row records that a period was assembled and by whom, which is nearer an audit entry than a run, and is not cleanly either primitive.',
+
+  project_manager_configs:
+    '`settings` stores ONE fact per (scope, scope_ref, feature) row. This is a twenty-column policy read as a UNIT on the manager\'s sweep path — assignment, PR authority, ceremony autonomy, reassignment limits. Splitting it means twenty reads to answer one question, on a hot path. Its real duplication is `tenant_manager_defaults`, already tracked as a signature-duplication cluster.',
+
+  qa_routing_settings:
+    'the same argument one domain out: a per-project routing policy (`enabled`, `min_severity`, `target_lane_key`, `max_per_batch`) read together on the findings-ingestion path to decide whether to dispatch a PAID agent run. The decision needs all four; `settings` would make it four reads.',
+
+  rd_tax_credit_config:
+    'typed columns a calculation reads directly — `blended_labor_rate_usd` is numeric and is multiplied. `settings.value` is jsonb, so every read becomes a cast, and a bad cast inside a tax calculation is not a class of bug worth inviting.',
+
+  marketing_assets:
+    '`public_token` IS the access model, not a property of the file: a recipient\'s mail client has no session, so an authenticated artifact URL renders as a broken image in every inbox. Rotating the token — not deleting the row — is how an asset is un-published, which keeps the campaigns that referenced it explainable. `artifacts` has no unauthenticated access path.',
+
+  board_connections:
+    'not an account — a BINDING. The credential already lives elsewhere and this row points at it (`credential_id` into `integration_credentials`); what is left is which external board is bound to which Builderforce PROJECT, plus the poll cursor and webhook secret that drive the sync. `connections` models a workspace\'s account with a vendor and has no project, no external board id and no cursor. One vendor account backs many board bindings, which is the test that they are two rows.',
+
+  calendar_connections:
+    'a per-user OAuth grant, and since migration 1107 it is sealed through the SAME `oauthTokenVault` as `mailbox_connections` and `drive_connections` — which is where the shared behaviour actually lives. The three tables stay separate for the reason their own docstrings give: a grant is keyed (tenant, user, provider, account) because it belongs to a PERSON, and this one additionally carries `calendar_id`, the specific calendar within the account that events are written to. The kernel `connections` primitive is keyed to a workspace and has no per-user account slot; folding them in is the drive/mailbox cluster decision (PRD 20 §6), and this table is the third member of it, not a separate question.',
+
+  drive_connections:
+    'one half of the declared `drive_connections` = `mailbox_connections` duplicate-shape cluster, which is tracked as OPEN work by `check-signature-duplication` and is blocked on the PRD 20 §6 kernel-primitive decision. Recording it as a shape-lint finding as well counts one decision twice; the cluster is where it is owned.',
+
+  mailbox_connections:
+    'the other half of the same cluster, tracked as open work by `check-signature-duplication`. Same reason: one decision, counted once.',
+
+  connector_connections:
+    'keyed by connector KEY, not by vendor — deliberately, because the key resolves against built-in connectors AND tenant-defined ones, which is what lets a workspace connect a connector that has no `connectors` row at all. `connections.vendor` names a vendor the platform knows about; a tenant-defined connector is by definition one it does not. It also carries `base_url_override`, the self-hosted endpoint a tenant points the connector at, which a vendor-account primitive has nowhere to put.',
+
+  source_control_integrations:
+    'the workspace\'s VCS account (provider, account identifier, optional self-hosted `host_url`) — genuinely the `connections` shape, and genuinely a candidate to fold in. It stays out for one reason that is about sequencing rather than modelling: `connections` is keyed (tenant, vendor, capability, external_account) with a `cache_version`, and the six features already on it are all money-side (ledger, payouts, merchant). Moving source control across is a migration of live repo bindings that every delivery surface reads, so it belongs with the §6 primitive decision and the drive/mailbox cluster, not ahead of them.',
+
+  tenant_openrouter_connections:
+    'a named MODEL SET, not an account: a label plus an ordered `models` list plus a `priority`, of which a tenant may hold several. `key_enc` is optional — an unbound row routes through the platform\'s own OpenRouter key — so the row can exist with no credential at all, which a `connections` row cannot. What it expresses is routing order, and `connections` has no ordering column; the credential-per-provider table beside it (`tenant_llm_provider_keys`) is the one that models an account.',
+
+  creation_session_comments:
+    'the closest call of the sixty-five, and it turns on one column. `annotations` could hold the body, the anchor, the thread (`parent_id`) and the resolve state — its parent IS registered in `objects`, unlike most tables here. What it cannot hold is `object_id` pointing at a creation-session OBJECT rather than the session: a comment is anchored to one shape on the board, the shapes are `creation_session_objects` rows, and they are not registered individually. Registering every canvas shape as an object to make the comment fit would put millions of rows in the registry to move thousands of comments.',
+
+  marketing_campaign_sends:
+    'one row per (campaign, recipient), and the unique index on that pair is the entire point — it is what makes a resumed or retried campaign send idempotent, so a second pass cannot email the same person twice. `deliveries` has no idempotency key and identifies its owner through `object_id`, which `marketing_campaigns` is not registered for. Folding it in would move the no-double-send guarantee out of the database and into the sweep that retries.',
+
+  webhook_deliveries:
+    'the same shape of argument as `marketing_campaign_sends`, one domain out. `uq_webhook_delivery_event` on (subscription, event_type, event_id) is what stops an at-least-once emitter meeting a retrying caller from POSTing the same board event twice; the emit path inserts with `onConflictDoNothing` and reads \'no row came back\' as \'already enqueued\'. `deliveries` has no such key, and `subscription_id` is a real foreign key that would become an `object_id` into a registry `webhook_subscriptions` is not in.',
+
+  newsletter_events:
+    '`activity_log` requires a NOT NULL `actor_type` and `verb`. A bounce or an open has no actor — a mail server did it, or nobody did — and the subject is a `newsletter_subscribers` row that is pre-tenant by construction (adjudicated under tenant-column). Two required columns with nothing to put in them.',
+
 };

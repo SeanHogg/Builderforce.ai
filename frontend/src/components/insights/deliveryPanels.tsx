@@ -60,7 +60,7 @@ export interface DeliveryPanelDef {
 
 /**
  * The lenses load ON DEMAND — same reason as the AI hub's registry, and the same
- * cycle. `AutonomyLens` renders `<WidgetGrid>` → `lib/widgets/registry` →
+ * cycle. `AutonomyLens` renders `<WidgetGrid>` → `lib/components/registry` →
  * `allWidgets` → `hubWidgets`, and `hubWidgets` projects THIS registry into
  * pinnable cards, so it imports `DELIVERY_PANEL_IDS` back from here. Held
  * statically that is an initialization loop, and the root layout mounts

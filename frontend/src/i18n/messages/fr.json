@@ -4617,7 +4617,7 @@
     "log": "Enregistrer",
     "delete": "Supprimer l'entrée"
   },
-  "widgets": {
+  "components": {
     "pin": "Épingler au tableau de bord",
     "unpin": "Détacher",
     "expand": "Ouvrir le rapport complet",
@@ -4664,7 +4664,10 @@
       "chatModes": "Discussions et exécutions",
       "aiHub": "Aperçus IA",
       "deliveryHub": "Livraison",
-      "paidMedia": "Médias payants"
+      "paidMedia": "Médias payants",
+      "appProduct": "Produit",
+      "appAgile": "Livraison",
+      "appGovernance": "Gouvernance et sécurité"
     },
     "title": {
       "aiProductivity": "Score de productivité IA",
@@ -4809,7 +4812,43 @@
       "paidMediaSpend": "Dépense publicitaire",
       "paidMediaCostPerResult": "Coût par résultat",
       "paidMediaSpendByNetwork": "Dépense par régie",
-      "paidMediaSpendTrend": "Dépense quotidienne"
+      "paidMediaSpendTrend": "Dépense quotidienne",
+      "app": {
+        "ideas": "Découverte produit",
+        "prd": "PRD et spécifications",
+        "backlog": "Backlog stratégique",
+        "mvp": "Ossature du MVP",
+        "validation": "Laboratoire de validation",
+        "roadmap": "Feuille de route IA",
+        "release-planning": "Planification des versions",
+        "changelog": "Journal des modifications",
+        "feature-flags": "Indicateurs de fonctionnalité",
+        "feature-roi": "ROI par fonctionnalité",
+        "business-value": "Modèles de valeur métier",
+        "dependency-graph": "Graphe des dépendances",
+        "rice-matrix": "Matrice RICE",
+        "roi-dashboard": "Tableau de bord ROI",
+        "kanban": "Kanban",
+        "poker": "Planning poker",
+        "retros": "Rétrospectives",
+        "sprints": "Planification des sprints",
+        "velocity": "Vélocité",
+        "capacity": "Capacité et risque",
+        "cost": "Coût et trésorerie",
+        "feature-scoring": "Notation des fonctionnalités",
+        "workforce": "Effectif",
+        "soc2": "Suivi SOC 2",
+        "vendors": "Registre des fournisseurs",
+        "incidents": "Incidents de sécurité",
+        "data-inventory": "Inventaire des données et PII",
+        "dpa": "Gestion des DPA",
+        "training": "Formation à la sécurité",
+        "compliance-calendar": "Calendrier de conformité",
+        "access-reviews": "Revues d'accès",
+        "vuln-scans": "Analyses de vulnérabilités",
+        "dsr": "Demandes des personnes concernées",
+        "suppression": "Liste de suppression"
+      }
     },
     "loading": "Chargement…",
     "overview": {
@@ -5044,6 +5083,12 @@
       "noResults": "Aucun résultat attribué pour l'instant.",
       "spendSub": "{clicks} clics · {conversions} résultats",
       "costPerResultSub": "sur {conversions} résultats"
+    },
+    "canvas": {
+      "pickTitle": "Ajouter un composant",
+      "pickHint": "Déposez une vue en direct de votre activité sur le tableau.",
+      "unknown": "Ce composant n'est plus disponible.",
+      "empty": "Aucun composant choisi pour le moment."
     }
   },
   "compile": {
@@ -18486,7 +18531,8 @@
       "audience": "Audience cible",
       "stopwatch": "Chronomètre",
       "transclusion": "Transclusion",
-      "calendar": "Calendrier"
+      "calendar": "Calendrier",
+      "component": "Composant"
     },
     "twilioSetup": {
       "title": "Intégration Twilio",
@@ -21833,7 +21879,8 @@
       "customAgent": "Agent personnalise",
       "builtinSeatHint": "Ce siege vient du catalogue de roles : sa mission, ses outils et ses droits de relecture l'accompagnent. Ce que vous reglez ici, c'est sa facon de travailler sur ce tableau.",
       "timerDurationMs": "Durée impartie (ms)",
-      "transclusionDocumentId": "Identifiant du document"
+      "transclusionDocumentId": "Identifiant du document",
+      "componentId": "ID du composant"
     },
     "nodeMessage": {
       "emptyShell": "Cet objet a un titre mais pas encore de contenu : il paraitra termine et sera vide."
@@ -22519,7 +22566,8 @@
         "detail": "Détail",
         "url": "URL"
       }
-    }
+    },
+    "componentId": "ID du composant"
   },
   "canvasCommands": {
     "cleanLayout": "Réorganiser la toile",
@@ -26290,5 +26338,14 @@
       "title": "Classement de l’espace",
       "rank": "N° {rank}"
     }
+  },
+  "embed": {
+    "unknownView": "Vue BuilderForce inconnue : {view}",
+    "connecting": "Connexion à BuilderForce — {label}…",
+    "configError": "Impossible de charger la configuration d'intégration.",
+    "loading": "Chargement…",
+    "notEnabled": "Cette intégration n'est pas activée. Un administrateur de l'espace de travail peut l'activer dans BuilderForce → Paramètres → Intégration.",
+    "capabilityMissing": "La capacité « {capability} » n'est pas activée pour cet espace de travail.",
+    "comingSoon": "{label} est enregistré mais aucun composant ne l'implémente encore."
   }
 }

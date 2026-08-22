@@ -81,7 +81,7 @@ infrastructure/repositories/AgentHostRepository.ts:4
 presentation/middleware/emulationMiddleware.ts:3
 presentation/routes/activityRoutes.ts:9
 presentation/routes/adminRoutes.ts:15
-presentation/routes/agentHostRoutes.ts:4
+presentation/routes/agentHostRoutes.ts:3
 presentation/routes/boardWebhookRoutes.ts:1
 presentation/routes/ceremonyRoutes.ts:2
 presentation/routes/chatRoutes.ts:1

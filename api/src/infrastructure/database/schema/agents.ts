@@ -730,19 +730,31 @@ export const executionMessages = pgTable('execution_messages', {
 
 
 /**
- * AgentHost-level skill assignment.
- * Overrides or supplements the tenant-level assignment for a specific agentHost.
+ * Skill assignment, at either scope (migration 1108).
+ *
+ * Was two tables — `tenant_skill_assignments` and `agent_host_skill_assignments` —
+ * holding the same fact about the same skill, differing only in whether a host was
+ * named. That is a SCOPE, and a scope is a column value. `scope` reuses the shared
+ * `assignment_scope` enum so this answers "at what level" with the same vocabulary
+ * as every other scoped assignment.
+ *
+ * `agentHostId` is NULL exactly when `scope` is 'tenant', enforced by a CHECK in
+ * the migration rather than by whichever caller writes the row. Uniqueness is two
+ * PARTIAL indexes, not one over the nullable column: Postgres treats NULLs as
+ * distinct, so a single index would let the same tenant-wide skill be assigned
+ * twice.
  */
-export const agentHostSkillAssignments = pgTable('agent_host_skill_assignments', {
-  id:         serial('id').primaryKey(),
-  agentHostId:     integer('agent_host_id').notNull().references(() => agentHosts.id, { onDelete: 'cascade' }),
-  tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  skillSlug:  varchar('skill_slug', { length: 255 }).notNull(),
-  assignedBy: varchar('assigned_by', { length: 36 }).references(() => users.id),
-  assignedAt: timestamp('assigned_at').notNull().defaultNow(),
+export const skillAssignments = pgTable('skill_assignments', {
+  id:          serial('id').primaryKey(),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  scope:       assignmentScopeEnum('scope').notNull().default('tenant'),
+  /** NULL = every agent host in the tenant; set = this host only. */
+  agentHostId: integer('agent_host_id').references(() => agentHosts.id, { onDelete: 'cascade' }),
+  skillSlug:   varchar('skill_slug', { length: 255 }).notNull(),
+  assignedBy:  varchar('assigned_by', { length: 36 }).references(() => users.id),
+  assignedAt:  timestamp('assigned_at').notNull().defaultNow(),
 }, (t) => [
-  // `id` above is the PK; composite demoted to unique() — see note above [1315].
-  unique().on(t.agentHostId, t.skillSlug),
+  index('idx_skill_assignments_tenant').on(t.tenantId, t.scope),
 ]);
 
 

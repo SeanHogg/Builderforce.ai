@@ -5,7 +5,7 @@
  *
  * `/insights/ai` and `/insights/delivery` used to be hand-laid-out canvas boards:
  * a fixed set of floating panels that existed only on that one page. Everything
- * they show is now a registered {@link WidgetDef} instead, which is what lets the
+ * they show is now a registered {@link ComponentDef} instead, which is what lets the
  * same tile appear on the hub, on a user's home dashboard, on a shared dashboard
  * and on a canvas — one definition, every surface.
  *
@@ -27,7 +27,7 @@
  */
 
 import type { ComponentType } from 'react';
-import type { WidgetCardProps, WidgetDef } from '@/lib/widgets/types';
+import type { ComponentSurfaceProps, ComponentDef } from '@/lib/components/types';
 import { AiConsumptionHeader } from '../AiConsumptionHeader';
 import { DeliveryVerdict } from '../DeliveryVerdict';
 import { AI_INSIGHT_PANELS, AI_INSIGHT_PANEL_IDS, type AiInsightPanelId } from '../aiInsightPanels';
@@ -66,14 +66,14 @@ const DELIVERY_TITLE_KEY: Record<DeliveryPanelId, string> = {
  * summary is at least `md`, and the ones carrying a chart, a list or five
  * dimensions take a full row.
  */
-const AI_SIZE: Record<AiInsightPanelId, WidgetDef['size']> = {
+const AI_SIZE: Record<AiInsightPanelId, ComponentDef['size']> = {
   'ai-impact': 'lg',
   engineering: 'md',
   'llm-usage': 'md',
   recommendations: 'md',
 };
 
-const DELIVERY_SIZE: Partial<Record<DeliveryPanelId, WidgetDef['size']>> = {
+const DELIVERY_SIZE: Partial<Record<DeliveryPanelId, ComponentDef['size']>> = {
   dora: 'lg',
   space: 'lg',
 };
@@ -84,15 +84,15 @@ const DELIVERY_SIZE: Partial<Record<DeliveryPanelId, WidgetDef['size']>> = {
  * IS the summary — no wrapper logic, and therefore no way for the hub tile and
  * the drill-down to disagree about a number.
  */
-function bodyOf(Summary: ComponentType<{ days: number }>): ComponentType<WidgetCardProps> {
-  return function HubSummaryBody({ days }: WidgetCardProps) {
+function bodyOf(Summary: ComponentType<{ days: number }>): ComponentType<ComponentSurfaceProps> {
+  return function HubSummaryBody({ days }: ComponentSurfaceProps) {
     return <Summary days={days} />;
   };
 }
 
 // ── AI hub ────────────────────────────────────────────────────────────────────
 
-const AI_PANEL_WIDGETS: WidgetDef[] = AI_INSIGHT_PANEL_IDS.map((id) => {
+const AI_PANEL_COMPONENTS: ComponentDef[] = AI_INSIGHT_PANEL_IDS.map((id) => {
   const def = AI_INSIGHT_PANELS[id];
   return {
     id: `ai-hub.${id}`,
@@ -101,12 +101,12 @@ const AI_PANEL_WIDGETS: WidgetDef[] = AI_INSIGHT_PANEL_IDS.map((id) => {
     descKey: descOf(AI_TITLE_KEY[id]),
     capability: def.capability,
     size: AI_SIZE[id],
-    Card: bodyOf(def.Summary),
+    Surface: bodyOf(def.Summary),
     drill: { kind: 'panel', hub: 'ai', panel: id },
-  } satisfies WidgetDef;
+  } satisfies ComponentDef;
 });
 
-export const AI_HUB_WIDGETS: WidgetDef[] = [
+export const AI_HUB_COMPONENTS: ComponentDef[] = [
   {
     id: 'ai-hub.consumption',
     group: 'aiHub',
@@ -116,17 +116,17 @@ export const AI_HUB_WIDGETS: WidgetDef[] = [
     // No capability: the consumption snapshot is the all-members meter the
     // sidebar already shows, so gating it here would hide from a member a figure
     // they can read two panels away. It self-gates on having a meter at all.
-    Card: AiConsumptionHeader,
+    Surface: AiConsumptionHeader,
   },
-  ...AI_PANEL_WIDGETS,
+  ...AI_PANEL_COMPONENTS,
 ];
 
 /** Ids in the order the AI hub lays them out (hero first, then the reports). */
-export const AI_HUB_WIDGET_IDS = AI_HUB_WIDGETS.map((w) => w.id);
+export const AI_HUB_WIDGET_IDS = AI_HUB_COMPONENTS.map((w) => w.id);
 
 // ── Delivery hub ──────────────────────────────────────────────────────────────
 
-const DELIVERY_PANEL_WIDGETS: WidgetDef[] = DELIVERY_PANEL_IDS.flatMap((id) => {
+const DELIVERY_PANEL_COMPONENTS: ComponentDef[] = DELIVERY_PANEL_IDS.flatMap((id) => {
   const def = DELIVERY_PANELS[id];
   const Summary = def.Summary;
   if (!Summary) return []; // drill-down-only panel — nothing to put in a card
@@ -137,12 +137,12 @@ const DELIVERY_PANEL_WIDGETS: WidgetDef[] = DELIVERY_PANEL_IDS.flatMap((id) => {
     descKey: descOf(DELIVERY_TITLE_KEY[id]),
     capability: def.capability,
     size: DELIVERY_SIZE[id] ?? 'md',
-    Card: bodyOf(Summary),
+    Surface: bodyOf(Summary),
     drill: { kind: 'panel', hub: 'delivery', panel: id },
-  } satisfies WidgetDef];
+  } satisfies ComponentDef];
 });
 
-export const DELIVERY_HUB_WIDGETS: WidgetDef[] = [
+export const DELIVERY_HUB_COMPONENTS: ComponentDef[] = [
   {
     id: 'delivery.verdict',
     group: 'deliveryHub',
@@ -150,10 +150,10 @@ export const DELIVERY_HUB_WIDGETS: WidgetDef[] = [
     descKey: 'delivHubVerdictDesc',
     capability: 'insights.delivery',
     size: 'lg',
-    Card: DeliveryVerdict,
+    Surface: DeliveryVerdict,
   },
-  ...DELIVERY_PANEL_WIDGETS,
+  ...DELIVERY_PANEL_COMPONENTS,
 ];
 
 /** Ids in the order the Delivery hub lays them out (verdict first, then reports). */
-export const DELIVERY_HUB_WIDGET_IDS = DELIVERY_HUB_WIDGETS.map((w) => w.id);
+export const DELIVERY_HUB_WIDGET_IDS = DELIVERY_HUB_COMPONENTS.map((w) => w.id);

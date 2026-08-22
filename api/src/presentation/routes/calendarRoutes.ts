@@ -27,7 +27,7 @@ import {
 import {
   getCalendarProvider, availableCalendarProviders, type CalendarProviderName, type CalendarEvent,
 } from '../../application/calendar/calendarProviders';
-import { freshAccessToken } from '../../application/calendar/calendarService';
+import { freshAccessToken, upsertCalendarGrant } from '../../application/calendar/calendarService';
 
 /** Where the connect flow sends the browser back to when it is not told. */
 const DEFAULT_RETURN_TO = '/meetings';
@@ -110,28 +110,15 @@ export function createCalendarRoutes(db: Db): Hono<HonoEnv> {
         reportCaughtError(error, { source: "presentation/routes/calendarRoutes.ts", operation: "createCalendarRoutes" });
       }
 
-      const expiresAt = tok.expires_in ? new Date(Date.now() + tok.expires_in * 1000) : null;
-      await db.insert(calendarConnections).values({
+      await upsertCalendarGrant(db, env, {
         tenantId: state.tenantId,
         userId: state.userId,
-        provider: name,
+        // `provider.name` rather than the raw path param: the provider was already
+        // resolved from it, so this is the validated value and it carries the type.
+        provider: provider.name,
         accountEmail: accountEmail || null,
-        accessToken: tok.access_token,
-        refreshToken: tok.refresh_token ?? null,
-        expiresAt,
-        scope: tok.scope ?? provider.scopes.join(' '),
-      }).onConflictDoUpdate({
-        target: [calendarConnections.userId, calendarConnections.provider],
-        set: {
-          accessToken: tok.access_token,
-          // Google omits refresh_token on re-consent unless prompt=consent; keep old if absent.
-          refreshToken: tok.refresh_token ?? undefined,
-          accountEmail: accountEmail || null,
-          expiresAt,
-          scope: tok.scope ?? provider.scopes.join(' '),
-          tenantId: state.tenantId,
-          updatedAt: new Date(),
-        },
+        tokens: tok,
+        defaultScope: provider.scopes.join(' '),
       });
       return c.redirect(`${base}${state.returnTo}?calendar=connected`);
     } catch (error) {

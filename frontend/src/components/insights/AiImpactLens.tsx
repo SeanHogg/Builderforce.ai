@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { DaysWindowSelect } from './LensShell';
 import { WidgetGrid } from '@/components/widgets/WidgetGrid';
-import { AI_IMPACT_WIDGETS } from './widgets/aiImpactWidgets';
+import { AI_IMPACT_COMPONENTS } from './widgets/aiImpactWidgets';
 
 /**
  * LENS — "AI Impact": adoption & usage trends, a multi-tool evaluation matrix,
@@ -16,7 +16,7 @@ import { AI_IMPACT_WIDGETS } from './widgets/aiImpactWidgets';
  * slide-out). One shared window drives every card via the deduped collector read.
  */
 
-const AI_IMPACT_IDS = AI_IMPACT_WIDGETS.map((w) => w.id);
+const AI_IMPACT_IDS = AI_IMPACT_COMPONENTS.map((w) => w.id);
 
 export function AiImpactLens() {
   const [days, setDays] = useState(30);

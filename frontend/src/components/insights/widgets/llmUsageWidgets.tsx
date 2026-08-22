@@ -7,7 +7,7 @@
  * consolidated AI Insights hub as the `llm-usage` slide-out panel. Each headline
  * metric the report draws — token totals, request count, the by-model split, and
  * the cost-bearing by-source / by-project / spend breakdowns — is a standalone
- * {@link WidgetDef}, so a user can pin the exact tile they want onto any
+ * {@link ComponentDef}, so a user can pin the exact tile they want onto any
  * dashboard. Every card reads the SAME source through the shared, deduped hooks
  * ({@link useLlmUsage} / {@link useLlmBySource}), renders only its body (the
  * WidgetCard chrome supplies frame + title + pin), and drills back into the full
@@ -19,7 +19,7 @@
 
 import { useTranslations } from 'next-intl';
 import { WidgetStat as Stat, WidgetMuted as Muted, useSourceState } from '@/components/widgets/widgetBody';
-import type { WidgetCardProps, WidgetDef, WidgetDrill } from '@/lib/widgets/types';
+import type { ComponentSurfaceProps, ComponentDef, ComponentDrill } from '@/lib/components/types';
 import { DonutChart } from '@/components/charts/DonutChart';
 import { BarChart } from '@/components/charts/BarChart';
 import { colorAt } from '@/components/charts/chartColors';
@@ -27,7 +27,7 @@ import { useInsightFormat } from '../format';
 import { useLlmUsage, useLlmBySource } from '../insightsSources';
 
 /** Drill back into the full LLM-Usage report (the AI Insights slide-out). */
-const DRILL: WidgetDrill = { kind: 'panel', hub: 'ai', panel: 'llm-usage' };
+const DRILL: ComponentDrill = { kind: 'panel', hub: 'ai', panel: 'llm-usage' };
 /** Cost-bearing cards are a manager surface — gated like the finance lens. */
 const FINANCE_CAP = 'insights.finance' as const;
 
@@ -35,13 +35,13 @@ const FINANCE_CAP = 'insights.finance' as const;
 // ── Card-body wrappers: own loading / error so each widget needn't repeat it ────
 
 function useUsageBody() {
-  const t = useTranslations('widgets');
+  const t = useTranslations('components');
   const source = useLlmUsage();
   return { data: source.data, state: useSourceState(source), t };
 }
 
 function useSourceBody() {
-  const t = useTranslations('widgets');
+  const t = useTranslations('components');
   const source = useLlmBySource();
   return { data: source.data, state: useSourceState(source), t };
 }
@@ -62,7 +62,7 @@ function isByoFundedOnly(rows: ReadonlyArray<{ totalTokens: number; estimatedCos
 
 // ── Widget bodies (the WidgetCard owns the frame/title/pin) ─────────────────────
 
-function LlmTokensCard(_props: WidgetCardProps) {
+function LlmTokensCard(_props: ComponentSurfaceProps) {
   const { compactTokens } = useInsightFormat();
   const { data, state, t } = useUsageBody();
   if (!data) return state;
@@ -83,14 +83,14 @@ function LlmTokensCard(_props: WidgetCardProps) {
   );
 }
 
-function LlmRequestsCard(_props: WidgetCardProps) {
+function LlmRequestsCard(_props: ComponentSurfaceProps) {
   const { int } = useInsightFormat();
   const { data, state, t } = useUsageBody();
   if (!data) return state;
   return <Stat value={int(data.totalRequests)} sub={t('llmUsage.requestsSub')} />;
 }
 
-function LlmByModelCard(_props: WidgetCardProps) {
+function LlmByModelCard(_props: ComponentSurfaceProps) {
   const { compactTokens } = useInsightFormat();
   const { data, state, t } = useUsageBody();
   if (!data) return state;
@@ -103,7 +103,7 @@ function LlmByModelCard(_props: WidgetCardProps) {
   return <BarChart data={bars} maxRows={6} formatValue={(v) => compactTokens(v)} ariaLabel={t('llmUsage.byModel')} />;
 }
 
-function LlmSpendCard(_props: WidgetCardProps) {
+function LlmSpendCard(_props: ComponentSurfaceProps) {
   const { usd } = useInsightFormat();
   const { data, state, t } = useSourceBody();
   if (!data) return state;
@@ -117,7 +117,7 @@ const SOURCE_LABEL_KEY: Record<'cloud' | 'on-prem' | 'web', string> = {
   web: 'llmUsage.sourceWeb',
 };
 
-function LlmBySourceCard(_props: WidgetCardProps) {
+function LlmBySourceCard(_props: ComponentSurfaceProps) {
   const { usd } = useInsightFormat();
   const { data, state, t } = useSourceBody();
   if (!data) return state;
@@ -138,7 +138,7 @@ function LlmBySourceCard(_props: WidgetCardProps) {
   );
 }
 
-function LlmByProjectCard(_props: WidgetCardProps) {
+function LlmByProjectCard(_props: ComponentSurfaceProps) {
   const { usd } = useInsightFormat();
   const { data, state, t } = useSourceBody();
   if (!data) return state;
@@ -157,11 +157,11 @@ function LlmByProjectCard(_props: WidgetCardProps) {
 // IDs keep the historical `core.llm-*` prefix so previously-saved pins survive
 // the move out of coreWidgets.tsx.
 
-export const LLM_USAGE_WIDGETS: WidgetDef[] = [
-  { id: 'core.llm-tokens', group: 'llmUsage', titleKey: 'llmTokens', size: 'md', Card: LlmTokensCard, drill: DRILL },
-  { id: 'core.llm-requests', group: 'llmUsage', titleKey: 'llmRequests', size: 'sm', Card: LlmRequestsCard, drill: DRILL },
-  { id: 'core.llm-by-model', group: 'llmUsage', titleKey: 'llmByModel', size: 'md', Card: LlmByModelCard, drill: DRILL },
-  { id: 'core.llm-spend', group: 'llmUsage', titleKey: 'llmSpend', capability: FINANCE_CAP, size: 'sm', Card: LlmSpendCard, drill: DRILL },
-  { id: 'core.llm-by-source', group: 'llmUsage', titleKey: 'llmBySource', capability: FINANCE_CAP, size: 'md', Card: LlmBySourceCard, drill: DRILL },
-  { id: 'core.llm-by-project', group: 'llmUsage', titleKey: 'llmByProject', capability: FINANCE_CAP, size: 'md', Card: LlmByProjectCard, drill: DRILL },
+export const LLM_USAGE_COMPONENTS: ComponentDef[] = [
+  { id: 'core.llm-tokens', group: 'llmUsage', titleKey: 'llmTokens', size: 'md', Surface: LlmTokensCard, drill: DRILL },
+  { id: 'core.llm-requests', group: 'llmUsage', titleKey: 'llmRequests', size: 'sm', Surface: LlmRequestsCard, drill: DRILL },
+  { id: 'core.llm-by-model', group: 'llmUsage', titleKey: 'llmByModel', size: 'md', Surface: LlmByModelCard, drill: DRILL },
+  { id: 'core.llm-spend', group: 'llmUsage', titleKey: 'llmSpend', capability: FINANCE_CAP, size: 'sm', Surface: LlmSpendCard, drill: DRILL },
+  { id: 'core.llm-by-source', group: 'llmUsage', titleKey: 'llmBySource', capability: FINANCE_CAP, size: 'md', Surface: LlmBySourceCard, drill: DRILL },
+  { id: 'core.llm-by-project', group: 'llmUsage', titleKey: 'llmByProject', capability: FINANCE_CAP, size: 'md', Surface: LlmByProjectCard, drill: DRILL },
 ];

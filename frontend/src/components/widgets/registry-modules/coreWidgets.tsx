@@ -5,7 +5,7 @@
  * the proof that the app-wide widget registry is NOT insights-only.
  *
  * Dashboard home (`/dashboard`) previously rendered its metrics as plain text
- * badges; they are converted here into pinnable {@link WidgetDef}s that draw a
+ * badges; they are converted here into pinnable {@link ComponentDef}s that draw a
  * CHART/STAT via the shared `@/components/charts/*` primitives — the four stat
  * cards (Projects, Tasks, Agents online, Pending requests) backed by
  * `fetchProjects`, `tasksApi`, `agentHosts`, and `approvalsApi`, all from one
@@ -40,7 +40,7 @@ import { useSharedSource } from '@/lib/widgets/sharedSource';
 import { WidgetStat as Stat, WidgetMuted as Muted, useSourceState } from '@/components/widgets/widgetBody';
 import { InsightStat } from '@/components/dashboard/InsightStat';
 import { formatRecency } from '@/components/dashboard/metricFormat';
-import type { WidgetCardProps, WidgetDef, WidgetDrill } from '@/lib/widgets/types';
+import type { ComponentSurfaceProps, ComponentDef, ComponentDrill } from '@/lib/components/types';
 import { DonutChart } from '@/components/charts/DonutChart';
 import { BarChart } from '@/components/charts/BarChart';
 import { colorAt } from '@/components/charts/chartColors';
@@ -76,14 +76,14 @@ function useOverview() {
 
 /** Wrap an overview card body: handles loading / error so each widget needn't repeat it. */
 function useOverviewBody() {
-  const t = useTranslations('widgets');
+  const t = useTranslations('components');
   const source = useOverview();
   return { data: source.data, state: useSourceState(source), t };
 }
 
 // ── Dashboard-home widget bodies (group: 'overview') ───────────────────────────
 
-function ProjectsCard(_props: WidgetCardProps) {
+function ProjectsCard(_props: ComponentSurfaceProps) {
   const { int } = useInsightFormat();
   const { data, state, t } = useOverviewBody();
   if (!data) return state;
@@ -94,7 +94,7 @@ function ProjectsCard(_props: WidgetCardProps) {
 const TASK_DONE = 'done';
 const TASK_IN_PROGRESS = 'in_progress';
 
-function TasksCard(_props: WidgetCardProps) {
+function TasksCard(_props: ComponentSurfaceProps) {
   const { int } = useInsightFormat();
   const { data, state, t } = useOverviewBody();
   if (!data) return state;
@@ -119,7 +119,7 @@ function TasksCard(_props: WidgetCardProps) {
   );
 }
 
-function AgentsOnlineCard(_props: WidgetCardProps) {
+function AgentsOnlineCard(_props: ComponentSurfaceProps) {
   const { int } = useInsightFormat();
   const { data, state, t } = useOverviewBody();
   if (!data) return state;
@@ -139,7 +139,7 @@ function AgentsOnlineCard(_props: WidgetCardProps) {
   );
 }
 
-function PendingApprovalsCard(_props: WidgetCardProps) {
+function PendingApprovalsCard(_props: ComponentSurfaceProps) {
   const { int } = useInsightFormat();
   const { data, state, t } = useOverviewBody();
   if (!data) return state;
@@ -150,9 +150,9 @@ function PendingApprovalsCard(_props: WidgetCardProps) {
 // ── Canvas build portfolio (legacy widget ids retained for saved layouts) ─────
 
 /** Canvas builds split by modality. */
-function IdeByModalityCard(_props: WidgetCardProps) {
+function IdeByModalityCard(_props: ComponentSurfaceProps) {
   const { int } = useInsightFormat();
-  const t = useTranslations('widgets');
+  const t = useTranslations('components');
   const modalityCopy = useModalityCopy();
   const { data, error } = useSharedSource<IdeProject[]>('core:ide-projects', () => listIdeProjects());
   if (error) return <Muted>{error}</Muted>;
@@ -177,9 +177,9 @@ function IdeByModalityCard(_props: WidgetCardProps) {
 }
 
 /** Build count with the most-recently-touched recency badge (staleness signal). */
-function IdeRecencyCard(_props: WidgetCardProps) {
+function IdeRecencyCard(_props: ComponentSurfaceProps) {
   const { int } = useInsightFormat();
-  const t = useTranslations('widgets');
+  const t = useTranslations('components');
   const dt = useTranslations('dashboard');
   const { data, error } = useSharedSource<IdeProject[]>('core:ide-projects', () => listIdeProjects());
   if (error) return <Muted>{error}</Muted>;
@@ -200,17 +200,17 @@ function IdeRecencyCard(_props: WidgetCardProps) {
 
 // ── Registry ─────────────────────────────────────────────────────────────────
 
-const DASHBOARD_DRILL: WidgetDrill = { kind: 'route', href: '/dashboard' };
-const BUILDER_DRILL: WidgetDrill = { kind: 'route', href: '/create?filter=build' };
+const DASHBOARD_DRILL: ComponentDrill = { kind: 'route', href: '/dashboard' };
+const BUILDER_DRILL: ComponentDrill = { kind: 'route', href: '/create?filter=build' };
 
-export const CORE_WIDGETS: WidgetDef[] = [
+export const CORE_COMPONENTS: ComponentDef[] = [
   // ── Dashboard home (`/dashboard`) ──
-  { id: 'core.projects', group: 'overview', titleKey: 'projects', size: 'sm', Card: ProjectsCard, drill: DASHBOARD_DRILL },
-  { id: 'core.tasks', group: 'overview', titleKey: 'tasks', size: 'md', Card: TasksCard, drill: DASHBOARD_DRILL },
-  { id: 'core.agents-online', group: 'overview', titleKey: 'agentsOnline', size: 'md', Card: AgentsOnlineCard, drill: DASHBOARD_DRILL },
-  { id: 'core.pending-approvals', group: 'overview', titleKey: 'pendingApprovals', size: 'sm', Card: PendingApprovalsCard, drill: DASHBOARD_DRILL },
+  { id: 'core.projects', group: 'overview', titleKey: 'projects', size: 'sm', Surface: ProjectsCard, drill: DASHBOARD_DRILL },
+  { id: 'core.tasks', group: 'overview', titleKey: 'tasks', size: 'md', Surface: TasksCard, drill: DASHBOARD_DRILL },
+  { id: 'core.agents-online', group: 'overview', titleKey: 'agentsOnline', size: 'md', Surface: AgentsOnlineCard, drill: DASHBOARD_DRILL },
+  { id: 'core.pending-approvals', group: 'overview', titleKey: 'pendingApprovals', size: 'sm', Surface: PendingApprovalsCard, drill: DASHBOARD_DRILL },
 
   // Legacy ids/groups preserve existing user dashboard layouts.
-  { id: 'core.ide-by-modality', group: 'ide', titleKey: 'ideByModality', size: 'md', Card: IdeByModalityCard, drill: BUILDER_DRILL },
-  { id: 'core.ide-recency', group: 'ide', titleKey: 'ideRecency', size: 'sm', Card: IdeRecencyCard, drill: BUILDER_DRILL },
+  { id: 'core.ide-by-modality', group: 'ide', titleKey: 'ideByModality', size: 'md', Surface: IdeByModalityCard, drill: BUILDER_DRILL },
+  { id: 'core.ide-recency', group: 'ide', titleKey: 'ideRecency', size: 'sm', Surface: IdeRecencyCard, drill: BUILDER_DRILL },
 ];

@@ -30,7 +30,7 @@ import { useSharedSource } from '@/lib/widgets/sharedSource';
 import { WidgetMuted as Muted } from '@/components/widgets/widgetBody';
 import { InsightStat } from '@/components/dashboard/InsightStat';
 import { formatRecency } from '@/components/dashboard/metricFormat';
-import type { WidgetCardProps, WidgetDef, WidgetDrill } from '@/lib/widgets/types';
+import type { ComponentSurfaceProps, ComponentDef, ComponentDrill } from '@/lib/components/types';
 import { DonutChart } from '@/components/charts/DonutChart';
 import { BarChart, type BarDatum } from '@/components/charts/BarChart';
 import { GaugeChart } from '@/components/charts/GaugeChart';
@@ -88,9 +88,9 @@ function topBars<T>(items: T[], value: (t: T) => number, label: (t: T) => string
 // ── Workforce Agents (`/workforce`, group: 'wfAgents') ─────────────────────────
 
 /** Online vs offline hosts + total agents — agent utilization at a glance. */
-function AgentsOnlineCard(_props: WidgetCardProps) {
+function AgentsOnlineCard(_props: ComponentSurfaceProps) {
   const { int } = useInsightFormat();
-  const t = useTranslations('widgets');
+  const t = useTranslations('components');
   const { data, error } = useAgents();
   if (error) return <Muted>{error}</Muted>;
   if (!data) return <Muted>{t('loading')}</Muted>;
@@ -117,9 +117,9 @@ function AgentsOnlineCard(_props: WidgetCardProps) {
 // ── Workforce Teams (`/workforce?tab=teams`, group: 'wfTeams') ─────────────────
 
 /** Team sizes — team-shape clarity + the most-recent-touch recency badge. */
-function TeamsSizeCard(_props: WidgetCardProps) {
+function TeamsSizeCard(_props: ComponentSurfaceProps) {
   const { int } = useInsightFormat();
-  const t = useTranslations('widgets');
+  const t = useTranslations('components');
   const dt = useTranslations('dashboard');
   const { data, error } = useTeams();
   if (error) return <Muted>{error}</Muted>;
@@ -146,8 +146,8 @@ function TeamsSizeCard(_props: WidgetCardProps) {
 // ── Workforce Performance (`/workforce?tab=performance`, group: 'wfPerformance') ─
 
 /** DORA deploy frequency gauge (manager surface). */
-function DoraDeployFreqCard(_props: WidgetCardProps) {
-  const t = useTranslations('widgets');
+function DoraDeployFreqCard(_props: ComponentSurfaceProps) {
+  const t = useTranslations('components');
   const { data, error } = usePerformance();
   if (error) return <Muted>{error}</Muted>;
   if (!data) return <Muted>{t('loading')}</Muted>;
@@ -166,8 +166,8 @@ function DoraDeployFreqCard(_props: WidgetCardProps) {
 }
 
 /** Average effectiveness by discipline — trend direction across the team. */
-function PerformanceByDisciplineCard(_props: WidgetCardProps) {
-  const t = useTranslations('widgets');
+function PerformanceByDisciplineCard(_props: ComponentSurfaceProps) {
+  const t = useTranslations('components');
   const { data, error } = usePerformance();
   if (error) return <Muted>{error}</Muted>;
   if (!data) return <Muted>{t('loading')}</Muted>;
@@ -180,9 +180,9 @@ function PerformanceByDisciplineCard(_props: WidgetCardProps) {
 }
 
 /** Top members by completed work over the window. */
-function PerformanceTopMembersCard(_props: WidgetCardProps) {
+function PerformanceTopMembersCard(_props: ComponentSurfaceProps) {
   const { int } = useInsightFormat();
-  const t = useTranslations('widgets');
+  const t = useTranslations('components');
   const { data, error } = usePerformance();
   if (error) return <Muted>{error}</Muted>;
   if (!data) return <Muted>{t('loading')}</Muted>;
@@ -193,19 +193,19 @@ function PerformanceTopMembersCard(_props: WidgetCardProps) {
 
 // ── Registry ─────────────────────────────────────────────────────────────────
 
-const AGENTS_DRILL: WidgetDrill = { kind: 'route', href: '/workforce' };
-const TEAMS_DRILL: WidgetDrill = { kind: 'route', href: '/workforce?tab=teams' };
-const PERF_DRILL: WidgetDrill = { kind: 'route', href: '/workforce?tab=performance' };
+const AGENTS_DRILL: ComponentDrill = { kind: 'route', href: '/workforce' };
+const TEAMS_DRILL: ComponentDrill = { kind: 'route', href: '/workforce?tab=teams' };
+const PERF_DRILL: ComponentDrill = { kind: 'route', href: '/workforce?tab=performance' };
 
-export const WORKFORCE_WIDGETS: WidgetDef[] = [
+export const WORKFORCE_COMPONENTS: ComponentDef[] = [
   // ── Agents (`/workforce`) ──
-  { id: 'wf.agents-online', group: 'wfAgents', titleKey: 'wfAgentsOnline', size: 'md', Card: AgentsOnlineCard, drill: AGENTS_DRILL },
+  { id: 'wf.agents-online', group: 'wfAgents', titleKey: 'wfAgentsOnline', size: 'md', Surface: AgentsOnlineCard, drill: AGENTS_DRILL },
 
   // ── Teams (`/workforce?tab=teams`) ──
-  { id: 'wf.teams-size', group: 'wfTeams', titleKey: 'wfTeamsSize', size: 'md', Card: TeamsSizeCard, drill: TEAMS_DRILL },
+  { id: 'wf.teams-size', group: 'wfTeams', titleKey: 'wfTeamsSize', size: 'md', Surface: TeamsSizeCard, drill: TEAMS_DRILL },
 
   // ── Performance (`/workforce?tab=performance`) — manager-gated ──
-  { id: 'wf.dora-deploy-freq', group: 'wfPerformance', titleKey: 'wfDoraDeployFreq', capability: METRICS_CAP, size: 'sm', Card: DoraDeployFreqCard, drill: PERF_DRILL },
-  { id: 'wf.performance-by-discipline', group: 'wfPerformance', titleKey: 'wfPerformanceByDiscipline', capability: METRICS_CAP, size: 'md', Card: PerformanceByDisciplineCard, drill: PERF_DRILL },
-  { id: 'wf.performance-top-members', group: 'wfPerformance', titleKey: 'wfPerformanceTopMembers', capability: METRICS_CAP, size: 'md', Card: PerformanceTopMembersCard, drill: PERF_DRILL },
+  { id: 'wf.dora-deploy-freq', group: 'wfPerformance', titleKey: 'wfDoraDeployFreq', capability: METRICS_CAP, size: 'sm', Surface: DoraDeployFreqCard, drill: PERF_DRILL },
+  { id: 'wf.performance-by-discipline', group: 'wfPerformance', titleKey: 'wfPerformanceByDiscipline', capability: METRICS_CAP, size: 'md', Surface: PerformanceByDisciplineCard, drill: PERF_DRILL },
+  { id: 'wf.performance-top-members', group: 'wfPerformance', titleKey: 'wfPerformanceTopMembers', capability: METRICS_CAP, size: 'md', Surface: PerformanceTopMembersCard, drill: PERF_DRILL },
 ];

@@ -6,7 +6,7 @@
  * personal /insights home dashboard and jump to any surface's insight — the
  * conversational counterpart to the pin control that lives on every widget.
  *
- * Reads the SAME app-wide registry (listWidgets) + pin state (usePins) the
+ * Reads the SAME app-wide registry (listComponents) + pin state (usePins) the
  * dashboard uses, so a widget id resolves identically for the Brain and the UI.
  * Mounted inside PinsProvider + the Brain action providers (see
  * ConditionalAppShell). Renders no UI — mirrors AiInsightPanelBrainBridge.
@@ -25,17 +25,17 @@ import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useRegisterBrainActions, type BrainAction } from '@/lib/brain';
 import { useOptionalPins } from '@/lib/widgets/PinsProvider';
-import { getWidget, listWidgets } from '@/lib/widgets/registry';
+import { getComponent, listComponents } from '@/lib/components/registry';
 import { dashboardsApi } from '@/lib/dashboardsApi';
 
 export function WidgetBrainBridge() {
   const pins = useOptionalPins();
   const router = useRouter();
-  const tw = useTranslations('widgets');
+  const tw = useTranslations('components');
 
   const actions = useMemo<BrainAction[]>(() => {
     if (!pins) return [];
-    const defs = listWidgets();
+    const defs = listComponents();
     const ids = defs.map((w) => w.id);
     const title = (key: string) => {
       try { return tw(`title.${key}`); } catch { return key; }
@@ -66,11 +66,11 @@ export function WidgetBrainBridge() {
         mutates: true,
         run: (args: unknown) => {
           const id = (args as { widget?: unknown })?.widget;
-          if (typeof id !== 'string' || !getWidget(id)) {
+          if (typeof id !== 'string' || !getComponent(id)) {
             return { error: `Unknown widget id. Call list_widgets for valid ids.` };
           }
           pins.pin(id);
-          return { pinned: id, title: title(getWidget(id)!.titleKey) };
+          return { pinned: id, title: title(getComponent(id)!.titleKey) };
         },
       },
       {
@@ -84,7 +84,7 @@ export function WidgetBrainBridge() {
         mutates: true,
         run: (args: unknown) => {
           const id = (args as { widget?: unknown })?.widget;
-          if (typeof id !== 'string' || !getWidget(id)) {
+          if (typeof id !== 'string' || !getComponent(id)) {
             return { error: `Unknown widget id. Call list_widgets for valid ids.` };
           }
           pins.unpin(id);
@@ -104,7 +104,7 @@ export function WidgetBrainBridge() {
         mutates: false,
         run: (args: unknown) => {
           const id = (args as { widget?: unknown })?.widget;
-          const def = typeof id === 'string' ? getWidget(id) : undefined;
+          const def = typeof id === 'string' ? getComponent(id) : undefined;
           if (!def) return { error: `Unknown widget id. Call list_widgets for valid ids.` };
           const href = def.drill?.kind === 'route' ? def.drill.href : '/insights';
           router.push(href);
@@ -142,7 +142,7 @@ export function WidgetBrainBridge() {
           // Only ids this bundle can actually render are offered back, so the model
           // never names a card the user cannot be shown.
           const widgets = (answer.widgetIds ?? [])
-            .map((id) => ({ id, def: getWidget(id) }))
+            .map((id) => ({ id, def: getComponent(id) }))
             .filter((w): w is { id: string; def: NonNullable<typeof w.def> } => w.def != null)
             .map((w) => ({ id: w.id, title: title(w.def.titleKey) }));
 

@@ -26,9 +26,9 @@ vi.mock('@/components/widgets/WidgetGrid', () => ({
   ),
 }));
 
-const { ASK_WIDGETS } = await import('@/components/insights/widgets/askWidget');
+const { ASK_COMPONENTS } = await import('@/components/insights/widgets/askWidget');
 
-const AskCard = ASK_WIDGETS[0].Card;
+const AskCard = ASK_COMPONENTS[0].Surface;
 
 function reading(matchedMetric: string, label: string, value: number | null, unit = ''): QueryAnswer {
   return { matchedMetric, label, value, unit, days: 30, explanation: `${label} explanation.`, source: 'keyword' };

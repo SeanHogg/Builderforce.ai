@@ -39,6 +39,7 @@ import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { executeConnectorAction } from '../connectors/connectorRuntime';
 import { completeForTenant } from '../llm/tenantProxy';
+import { readTenantEntities } from './entityRead';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { checkSlidingWindow } from '../ratelimit/slidingWindow';
 import { loadProjectSecretValues } from '../secrets/projectSecrets';
@@ -277,6 +278,17 @@ export function ingressRuntimeDeps(env: Env, db: Db, tenantId: number, projectId
         limit: args.limit,
         match: args.match,
       });
+    },
+
+    /**
+     * The tenant's own domain objects. Scoped to `tenantId` from the SITE record
+     * the caller already resolved — never from anything the spec or the request
+     * could influence, which is what keeps a handler authored inside one tenant
+     * from reading another. What a spec may vary is the filter, and only within
+     * the `(domain, kind)` pair it declared. See `entityRead.ts`.
+     */
+    readEntities(args) {
+      return readTenantEntities(db, env, tenantId, args);
     },
   };
 }

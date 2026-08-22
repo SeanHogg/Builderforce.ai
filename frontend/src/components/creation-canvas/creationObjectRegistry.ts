@@ -251,6 +251,10 @@ const BASE_CREATION_OBJECT_REGISTRY = [
   // Another document, shown here, live. Created with NO reference, because the reference
   // is the whole object and a seeded one would point at somebody else's document.
   { kind: 'transclusion', label: 'Transclusion', icon: '⧉', group: 'Knowledge', createData: () => ({ kind: 'transclusion', title: 'Embedded document', documentId: '' }) },
+  // A live platform surface, mounted on the board. Created with NO component chosen,
+  // for the same reason a transclusion is: the choice IS the object, and seeding one
+  // would put somebody else's kanban on a board they have not asked for it on.
+  { kind: 'component', label: 'Component', icon: '◲', group: 'Build', createData: () => ({ kind: 'component', title: 'Component', componentId: '' }) },
   { kind: 'mcp', label: 'MCP tool', icon: '⌘', group: 'Integrations', createData: () => ({ kind: 'mcp', title: 'Connected tool', status: 'Choose operation' }) },
   { kind: 'evermind', label: 'Evermind', icon: '🧠', group: 'Models', createData: () => ({ kind: 'evermind', title: 'Untitled Evermind', status: 'Blueprint', subtitle: 'Create, teach, tune, evaluate, and publish a self-learning model on this canvas.', evermindVersion: 0, contributions: 0 }) },
 ] as const satisfies readonly BaseCreationObjectDefinition[];
@@ -559,6 +563,11 @@ const BASE_MUTABLE_FIELDS = {
   // The reference IS the object. Authorable, because "embed the onboarding SOP here" is
   // a request a model can satisfy once it has the document's id.
   transclusion: ['content', 'documentId'],
+  // `componentId` is authorable so "put the hiring pipeline on this board" is a
+  // request the Brain can satisfy — it resolves against the same registry the
+  // picker reads, and an id nothing registers renders as unavailable rather than
+  // as a blank card.
+  component: ['content', 'componentId'],
   mcp: ['content', 'toolName', 'operation', 'arguments'],
   evermind: ['content', 'model', 'instructions', 'teacherModel', 'inferenceEnabled', 'evermindVersion', 'evermindSeeded', 'contributions', 'pendingContributions', 'recentLearnings', 'trainingLoss', 'learningMode', 'lastLearnedAt', 'quarantinedAt', 'quarantineReason', 'evalPoint', 'stages', 'sources'],
   // ── The QA objects ─────────────────────────────────────────────────────────

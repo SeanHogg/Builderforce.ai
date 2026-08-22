@@ -27,7 +27,7 @@ import { useSharedSource } from '@/lib/widgets/sharedSource';
 import { WidgetMuted as Muted } from '@/components/widgets/widgetBody';
 import { InsightStat } from '@/components/dashboard/InsightStat';
 import { formatRecency } from '@/components/dashboard/metricFormat';
-import type { WidgetCardProps, WidgetDef, WidgetDrill } from '@/lib/widgets/types';
+import type { ComponentSurfaceProps, ComponentDef, ComponentDrill } from '@/lib/components/types';
 import { DonutChart } from '@/components/charts/DonutChart';
 import { BarChart, type BarDatum } from '@/components/charts/BarChart';
 import { colorAt } from '@/components/charts/chartColors';
@@ -70,9 +70,9 @@ function topBars<T>(items: T[], value: (t: T) => number, label: (t: T) => string
 const DONE_KEYS = new Set(['done', 'completed', 'closed']);
 const IN_PROGRESS_KEYS = new Set(['in_progress', 'in-progress', 'doing']);
 
-function TasksByStatusCard(_props: WidgetCardProps) {
+function TasksByStatusCard(_props: ComponentSurfaceProps) {
   const { int } = useInsightFormat();
-  const t = useTranslations('widgets');
+  const t = useTranslations('components');
   const { data, error } = useTasks();
   if (error) return <Muted>{error}</Muted>;
   if (!data) return <Muted>{t('loading')}</Muted>;
@@ -98,9 +98,9 @@ function TasksByStatusCard(_props: WidgetCardProps) {
 }
 
 /** WIP (in-progress count) with the board's most-recent-update recency badge. */
-function TasksWipCard(_props: WidgetCardProps) {
+function TasksWipCard(_props: ComponentSurfaceProps) {
   const { int } = useInsightFormat();
-  const t = useTranslations('widgets');
+  const t = useTranslations('components');
   const dt = useTranslations('dashboard');
   const { data, error } = useTasks();
   if (error) return <Muted>{error}</Muted>;
@@ -122,9 +122,9 @@ function TasksWipCard(_props: WidgetCardProps) {
 // ── Workflows (`/workflows`, group: 'workflows') ───────────────────────────────
 
 /** Which workflows have run the most — surfaces the busy vs dormant automations. */
-function WorkflowRunsCard(_props: WidgetCardProps) {
+function WorkflowRunsCard(_props: ComponentSurfaceProps) {
   const { int } = useInsightFormat();
-  const t = useTranslations('widgets');
+  const t = useTranslations('components');
   const { data, error } = useWorkflows();
   if (error) return <Muted>{error}</Muted>;
   if (!data) return <Muted>{t('loading')}</Muted>;
@@ -134,9 +134,9 @@ function WorkflowRunsCard(_props: WidgetCardProps) {
 }
 
 /** Last-run outcome mix across all workflows — spot the failing/stale ones. */
-function WorkflowHealthCard(_props: WidgetCardProps) {
+function WorkflowHealthCard(_props: ComponentSurfaceProps) {
   const { int } = useInsightFormat();
-  const t = useTranslations('widgets');
+  const t = useTranslations('components');
   const { data, error } = useWorkflows();
   if (error) return <Muted>{error}</Muted>;
   if (!data) return <Muted>{t('loading')}</Muted>;
@@ -167,9 +167,9 @@ function WorkflowHealthCard(_props: WidgetCardProps) {
 // ── Brainstorm / Brain chats (`/brainstorm`, group: 'brain') ───────────────────
 
 /** Chats grouped by where they were created (brainstorm / ide / project). */
-function BrainChatsByOriginCard(_props: WidgetCardProps) {
+function BrainChatsByOriginCard(_props: ComponentSurfaceProps) {
   const { int } = useInsightFormat();
-  const t = useTranslations('widgets');
+  const t = useTranslations('components');
   const { data, error } = useBrainChats();
   if (error) return <Muted>{error}</Muted>;
   if (!data) return <Muted>{t('loading')}</Muted>;
@@ -194,9 +194,9 @@ function BrainChatsByOriginCard(_props: WidgetCardProps) {
 }
 
 /** Total active threads with the most-recent-activity recency badge. */
-function BrainActivityCard(_props: WidgetCardProps) {
+function BrainActivityCard(_props: ComponentSurfaceProps) {
   const { int } = useInsightFormat();
-  const t = useTranslations('widgets');
+  const t = useTranslations('components');
   const dt = useTranslations('dashboard');
   const { data, error } = useBrainChats();
   if (error) return <Muted>{error}</Muted>;
@@ -216,20 +216,20 @@ function BrainActivityCard(_props: WidgetCardProps) {
 
 // ── Registry ─────────────────────────────────────────────────────────────────
 
-const TASKS_DRILL: WidgetDrill = { kind: 'route', href: '/tasks' };
-const WORKFLOWS_DRILL: WidgetDrill = { kind: 'route', href: '/workflows' };
-const BRAIN_DRILL: WidgetDrill = { kind: 'route', href: '/brainstorm' };
+const TASKS_DRILL: ComponentDrill = { kind: 'route', href: '/tasks' };
+const WORKFLOWS_DRILL: ComponentDrill = { kind: 'route', href: '/workflows' };
+const BRAIN_DRILL: ComponentDrill = { kind: 'route', href: '/brainstorm' };
 
-export const OPERATIONAL_WIDGETS: WidgetDef[] = [
+export const OPERATIONAL_COMPONENTS: ComponentDef[] = [
   // ── Tasks board (`/tasks`) ──
-  { id: 'op.tasks-by-status', group: 'tasks', titleKey: 'opTasksByStatus', size: 'md', Card: TasksByStatusCard, drill: TASKS_DRILL },
-  { id: 'op.tasks-wip', group: 'tasks', titleKey: 'opTasksWip', size: 'sm', Card: TasksWipCard, drill: TASKS_DRILL },
+  { id: 'op.tasks-by-status', group: 'tasks', titleKey: 'opTasksByStatus', size: 'md', Surface: TasksByStatusCard, drill: TASKS_DRILL },
+  { id: 'op.tasks-wip', group: 'tasks', titleKey: 'opTasksWip', size: 'sm', Surface: TasksWipCard, drill: TASKS_DRILL },
 
   // ── Workflows (`/workflows`) ──
-  { id: 'op.workflow-runs', group: 'workflows', titleKey: 'opWorkflowRuns', size: 'md', Card: WorkflowRunsCard, drill: WORKFLOWS_DRILL },
-  { id: 'op.workflow-health', group: 'workflows', titleKey: 'opWorkflowHealth', size: 'md', Card: WorkflowHealthCard, drill: WORKFLOWS_DRILL },
+  { id: 'op.workflow-runs', group: 'workflows', titleKey: 'opWorkflowRuns', size: 'md', Surface: WorkflowRunsCard, drill: WORKFLOWS_DRILL },
+  { id: 'op.workflow-health', group: 'workflows', titleKey: 'opWorkflowHealth', size: 'md', Surface: WorkflowHealthCard, drill: WORKFLOWS_DRILL },
 
   // ── Brainstorm / Brain chats (`/brainstorm`) ──
-  { id: 'op.brain-by-origin', group: 'brain', titleKey: 'opBrainByOrigin', size: 'md', Card: BrainChatsByOriginCard, drill: BRAIN_DRILL },
-  { id: 'op.brain-activity', group: 'brain', titleKey: 'opBrainActivity', size: 'sm', Card: BrainActivityCard, drill: BRAIN_DRILL },
+  { id: 'op.brain-by-origin', group: 'brain', titleKey: 'opBrainByOrigin', size: 'md', Surface: BrainChatsByOriginCard, drill: BRAIN_DRILL },
+  { id: 'op.brain-activity', group: 'brain', titleKey: 'opBrainActivity', size: 'sm', Surface: BrainActivityCard, drill: BRAIN_DRILL },
 ];

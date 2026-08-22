@@ -18,7 +18,7 @@ import { useTranslations, useLocale } from 'next-intl';
 import { adsApi, formatMoney, type AdInsightsRead } from '@/lib/adsApi';
 import { useSharedSource } from '@/lib/widgets/sharedSource';
 import { WidgetMuted as Muted, WidgetStat } from '@/components/widgets/widgetBody';
-import type { WidgetCardProps, WidgetDef, WidgetDrill } from '@/lib/widgets/types';
+import type { ComponentSurfaceProps, ComponentDef, ComponentDrill } from '@/lib/components/types';
 import { BarChart, type BarDatum } from '@/components/charts/BarChart';
 import { TrendChart } from '@/components/charts/TrendChart';
 import { colorAt } from '@/components/charts/chartColors';
@@ -34,12 +34,12 @@ function useInsights(days: number) {
   });
 }
 
-const DRILL: WidgetDrill = { kind: 'route', href: '/growth' };
+const DRILL: ComponentDrill = { kind: 'route', href: '/growth' };
 
 /** Total spend for the window, with what it bought underneath it. */
-function PaidSpendCard({ days }: WidgetCardProps) {
+function PaidSpendCard({ days }: ComponentSurfaceProps) {
   const { int } = useInsightFormat();
-  const t = useTranslations('widgets');
+  const t = useTranslations('components');
   const locale = useLocale();
   const { data, error } = useInsights(days);
   if (error) return <Muted>{error}</Muted>;
@@ -63,9 +63,9 @@ function PaidSpendCard({ days }: WidgetCardProps) {
  * Shown as an honest absence when nothing has converted: dividing by zero results
  * would either crash or print an infinity, and "no results yet" is the real answer.
  */
-function CostPerResultCard({ days }: WidgetCardProps) {
+function CostPerResultCard({ days }: ComponentSurfaceProps) {
   const { int } = useInsightFormat();
-  const t = useTranslations('widgets');
+  const t = useTranslations('components');
   const locale = useLocale();
   const { data, error } = useInsights(days);
   if (error) return <Muted>{error}</Muted>;
@@ -81,8 +81,8 @@ function CostPerResultCard({ days }: WidgetCardProps) {
 }
 
 /** Where the money went, by network. */
-function SpendByNetworkCard({ days }: WidgetCardProps) {
-  const t = useTranslations('widgets');
+function SpendByNetworkCard({ days }: ComponentSurfaceProps) {
+  const t = useTranslations('components');
   const locale = useLocale();
   const { data, error } = useInsights(days);
   if (error) return <Muted>{error}</Muted>;
@@ -108,8 +108,8 @@ function SpendByNetworkCard({ days }: WidgetCardProps) {
 }
 
 /** Daily spend over the window — the shape that shows a budget running away. */
-function SpendTrendCard({ days }: WidgetCardProps) {
-  const t = useTranslations('widgets');
+function SpendTrendCard({ days }: ComponentSurfaceProps) {
+  const t = useTranslations('components');
   const locale = useLocale();
   const { data, error } = useInsights(days);
   if (error) return <Muted>{error}</Muted>;
@@ -136,9 +136,9 @@ function SpendTrendCard({ days }: WidgetCardProps) {
   );
 }
 
-export const PAID_MEDIA_WIDGETS: WidgetDef[] = [
-  { id: 'paid.spend', group: 'paidMedia', titleKey: 'paidMediaSpend', descKey: 'paidMediaSpend', size: 'sm', Card: PaidSpendCard, drill: DRILL },
-  { id: 'paid.cost-per-result', group: 'paidMedia', titleKey: 'paidMediaCostPerResult', descKey: 'paidMediaCostPerResult', size: 'sm', Card: CostPerResultCard, drill: DRILL },
-  { id: 'paid.spend-by-network', group: 'paidMedia', titleKey: 'paidMediaSpendByNetwork', size: 'md', Card: SpendByNetworkCard, drill: DRILL },
-  { id: 'paid.spend-trend', group: 'paidMedia', titleKey: 'paidMediaSpendTrend', size: 'md', Card: SpendTrendCard, drill: DRILL },
+export const PAID_MEDIA_COMPONENTS: ComponentDef[] = [
+  { id: 'paid.spend', group: 'paidMedia', titleKey: 'paidMediaSpend', descKey: 'paidMediaSpend', size: 'sm', Surface: PaidSpendCard, drill: DRILL },
+  { id: 'paid.cost-per-result', group: 'paidMedia', titleKey: 'paidMediaCostPerResult', descKey: 'paidMediaCostPerResult', size: 'sm', Surface: CostPerResultCard, drill: DRILL },
+  { id: 'paid.spend-by-network', group: 'paidMedia', titleKey: 'paidMediaSpendByNetwork', size: 'md', Surface: SpendByNetworkCard, drill: DRILL },
+  { id: 'paid.spend-trend', group: 'paidMedia', titleKey: 'paidMediaSpendTrend', size: 'md', Surface: SpendTrendCard, drill: DRILL },
 ];

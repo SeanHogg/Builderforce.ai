@@ -6,7 +6,7 @@
  * The "AI Impact" report used to be one monolithic lens (AiImpactLens.tsx). Each
  * card it drew — the productivity score, throughput, quality, efficiency, usage
  * trend, model-share donut, merge-rate bars, and the comparison tables — is now a
- * standalone {@link WidgetDef} so a user can pin the exact tile they want onto
+ * standalone {@link ComponentDef} so a user can pin the exact tile they want onto
  * their dashboard (the pins in the screenshot's card corners). Every card reads
  * the SAME collector through {@link useAiImpact} (one shared, deduped request),
  * renders only its body (the WidgetCard chrome supplies frame + title + pin), and
@@ -16,7 +16,7 @@
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { WidgetStat as Stat, WidgetMuted as Muted, useSourceState } from '@/components/widgets/widgetBody';
-import type { WidgetCardProps, WidgetDef, WidgetDrill } from '@/lib/widgets/types';
+import type { ComponentSurfaceProps, ComponentDef, ComponentDrill } from '@/lib/components/types';
 import { DonutChart } from '@/components/charts/DonutChart';
 import { BarChart } from '@/components/charts/BarChart';
 import { TrendChart } from '@/components/charts/TrendChart';
@@ -28,7 +28,7 @@ import { useInsightFormat } from '../format';
 import { useAiImpact } from '../insightsSources';
 import { ProviderConsumptionBreakdown } from '../AiInsightSummaries';
 
-const DRILL: WidgetDrill = { kind: 'panel', hub: 'ai', panel: 'ai-impact' };
+const DRILL: ComponentDrill = { kind: 'panel', hub: 'ai', panel: 'ai-impact' };
 const CAP = 'insights.aiImpact' as const;
 
 // ── Small presentational bodies (the WidgetCard owns the frame/title/pin) ──────
@@ -42,7 +42,7 @@ function useImpact(days: number) {
 
 // ── Widget bodies ──────────────────────────────────────────────────────────────
 
-function ProductivityCard({ days }: WidgetCardProps) {
+function ProductivityCard({ days }: ComponentSurfaceProps) {
   const { data, state, t } = useImpact(days);
   if (!data) return state;
   const p = data.productivity;
@@ -50,7 +50,7 @@ function ProductivityCard({ days }: WidgetCardProps) {
   return <Stat value={score2(p.score)} sub={`${sign}${p.deltaPct.toFixed(0)}% ${t('aiImpact.wow')}`} />;
 }
 
-function ThroughputCard({ days }: WidgetCardProps) {
+function ThroughputCard({ days }: ComponentSurfaceProps) {
   const { data, state, t } = useImpact(days);
   if (!data) return state;
   const runsSpark = data.adoption.series.map((b) => b.runs);
@@ -66,19 +66,19 @@ function ThroughputCard({ days }: WidgetCardProps) {
   );
 }
 
-function QualityCard({ days }: WidgetCardProps) {
+function QualityCard({ days }: ComponentSurfaceProps) {
   const { data, state, t } = useImpact(days);
   if (!data) return state;
   return <Stat value={pct(data.productivity.quality * 100)} sub={t('aiImpact.qualitySub')} />;
 }
 
-function EfficiencyCard({ days }: WidgetCardProps) {
+function EfficiencyCard({ days }: ComponentSurfaceProps) {
   const { data, state, t } = useImpact(days);
   if (!data) return state;
   return <Stat value={pct(data.productivity.efficiency * 100)} sub={t('aiImpact.efficiencySub')} />;
 }
 
-function PrevScoreCard({ days }: WidgetCardProps) {
+function PrevScoreCard({ days }: ComponentSurfaceProps) {
   const { data, state, t } = useImpact(days);
   if (!data) return state;
   return <Stat value={score2(data.productivity.prevScore)} sub={t('aiImpact.prevSub')} />;
@@ -91,7 +91,7 @@ const segBtn = (active: boolean): React.CSSProperties => ({
   fontSize: '0.74rem', fontWeight: 600, cursor: 'pointer',
 });
 
-function UsageCard({ days }: WidgetCardProps) {
+function UsageCard({ days }: ComponentSurfaceProps) {
   const { usd, int } = useInsightFormat();
   const { data, state, t } = useImpact(days);
   const [metric, setMetric] = useState<UsageMetric>('runs');
@@ -129,7 +129,7 @@ function UsageCard({ days }: WidgetCardProps) {
   );
 }
 
-function ModelShareCard({ days }: WidgetCardProps) {
+function ModelShareCard({ days }: ComponentSurfaceProps) {
   const { data, state, t } = useImpact(days);
   if (!data) return state;
   const segments = data.adoption.modelShareTrend
@@ -147,7 +147,7 @@ function ModelShareCard({ days }: WidgetCardProps) {
   );
 }
 
-function MergeRateCard({ days }: WidgetCardProps) {
+function MergeRateCard({ days }: ComponentSurfaceProps) {
   const { data, state, t } = useImpact(days);
   if (!data) return state;
   const bars = data.comparison.map((r, i) => ({ key: r.model, label: r.model, value: r.mergedRatePct, color: colorAt(i) }));
@@ -155,7 +155,7 @@ function MergeRateCard({ days }: WidgetCardProps) {
   return <BarChart data={bars} formatValue={(v) => `${v.toFixed(0)}%`} ariaLabel={t('aiImpact.mergeRateTitle')} />;
 }
 
-function ComparisonCard({ days }: WidgetCardProps) {
+function ComparisonCard({ days }: ComponentSurfaceProps) {
   const { usd, int } = useInsightFormat();
   const { data, state, t } = useImpact(days);
   if (!data) return state;
@@ -194,7 +194,7 @@ function ComparisonCard({ days }: WidgetCardProps) {
   );
 }
 
-function ShareTrendCard({ days }: WidgetCardProps) {
+function ShareTrendCard({ days }: ComponentSurfaceProps) {
   const { data, state, t } = useImpact(days);
   if (!data) return state;
   if (data.adoption.modelShareTrend.length === 0) return <Muted>{t('aiImpact.noUsage')}</Muted>;
@@ -225,7 +225,7 @@ function ShareTrendCard({ days }: WidgetCardProps) {
 /** Consumption per connected integration / platform key. Renders the SAME
  *  breakdown the AI-Impact summary card shows — one component, one rule for how
  *  BYO spend is presented. */
-function ByIntegrationCard({ days }: WidgetCardProps) {
+function ByIntegrationCard({ days }: ComponentSurfaceProps) {
   const { data, state, t } = useImpact(days);
   if (!data) return state;
   if (data.consumption.providers.length === 0) return <Muted>{t('aiImpact.noUsage')}</Muted>;
@@ -234,16 +234,16 @@ function ByIntegrationCard({ days }: WidgetCardProps) {
 
 // ── Registry ─────────────────────────────────────────────────────────────────
 
-export const AI_IMPACT_WIDGETS: WidgetDef[] = [
-  { id: 'ai-impact.productivity', group: 'aiImpact', titleKey: 'aiProductivity', capability: CAP, size: 'sm', Card: ProductivityCard, drill: DRILL },
-  { id: 'ai-impact.throughput', group: 'aiImpact', titleKey: 'aiThroughput', capability: CAP, size: 'sm', Card: ThroughputCard, drill: DRILL },
-  { id: 'ai-impact.quality', group: 'aiImpact', titleKey: 'aiQuality', capability: CAP, size: 'sm', Card: QualityCard, drill: DRILL },
-  { id: 'ai-impact.efficiency', group: 'aiImpact', titleKey: 'aiEfficiency', capability: CAP, size: 'sm', Card: EfficiencyCard, drill: DRILL },
-  { id: 'ai-impact.prev-score', group: 'aiImpact', titleKey: 'aiPrevScore', capability: CAP, size: 'sm', Card: PrevScoreCard, drill: DRILL },
-  { id: 'ai-impact.usage', group: 'aiImpact', titleKey: 'aiUsage', capability: CAP, size: 'lg', Card: UsageCard, drill: DRILL },
-  { id: 'ai-impact.model-share', group: 'aiImpact', titleKey: 'aiModelShare', capability: CAP, size: 'md', Card: ModelShareCard, drill: DRILL },
-  { id: 'ai-impact.merge-rate', group: 'aiImpact', titleKey: 'aiMergeRate', capability: CAP, size: 'md', Card: MergeRateCard, drill: DRILL },
-  { id: 'ai-impact.comparison', group: 'aiImpact', titleKey: 'aiComparison', capability: CAP, size: 'lg', Card: ComparisonCard, drill: DRILL },
-  { id: 'ai-impact.by-integration', group: 'aiImpact', titleKey: 'aiByIntegration', capability: CAP, size: 'md', Card: ByIntegrationCard, drill: DRILL },
-  { id: 'ai-impact.share-trend', group: 'aiImpact', titleKey: 'aiShareTrend', capability: CAP, size: 'md', Card: ShareTrendCard, drill: DRILL },
+export const AI_IMPACT_COMPONENTS: ComponentDef[] = [
+  { id: 'ai-impact.productivity', group: 'aiImpact', titleKey: 'aiProductivity', capability: CAP, size: 'sm', Surface: ProductivityCard, drill: DRILL },
+  { id: 'ai-impact.throughput', group: 'aiImpact', titleKey: 'aiThroughput', capability: CAP, size: 'sm', Surface: ThroughputCard, drill: DRILL },
+  { id: 'ai-impact.quality', group: 'aiImpact', titleKey: 'aiQuality', capability: CAP, size: 'sm', Surface: QualityCard, drill: DRILL },
+  { id: 'ai-impact.efficiency', group: 'aiImpact', titleKey: 'aiEfficiency', capability: CAP, size: 'sm', Surface: EfficiencyCard, drill: DRILL },
+  { id: 'ai-impact.prev-score', group: 'aiImpact', titleKey: 'aiPrevScore', capability: CAP, size: 'sm', Surface: PrevScoreCard, drill: DRILL },
+  { id: 'ai-impact.usage', group: 'aiImpact', titleKey: 'aiUsage', capability: CAP, size: 'lg', Surface: UsageCard, drill: DRILL },
+  { id: 'ai-impact.model-share', group: 'aiImpact', titleKey: 'aiModelShare', capability: CAP, size: 'md', Surface: ModelShareCard, drill: DRILL },
+  { id: 'ai-impact.merge-rate', group: 'aiImpact', titleKey: 'aiMergeRate', capability: CAP, size: 'md', Surface: MergeRateCard, drill: DRILL },
+  { id: 'ai-impact.comparison', group: 'aiImpact', titleKey: 'aiComparison', capability: CAP, size: 'lg', Surface: ComparisonCard, drill: DRILL },
+  { id: 'ai-impact.by-integration', group: 'aiImpact', titleKey: 'aiByIntegration', capability: CAP, size: 'md', Surface: ByIntegrationCard, drill: DRILL },
+  { id: 'ai-impact.share-trend', group: 'aiImpact', titleKey: 'aiShareTrend', capability: CAP, size: 'md', Surface: ShareTrendCard, drill: DRILL },
 ];

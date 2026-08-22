@@ -37,7 +37,7 @@ import { RESUME_TEMPLATES } from '@/lib/canvasResume';
 import { CANVAS_SESSION_ACTIONS } from '@/lib/canvasSessionActions';
 import { OUTCOME_METRIC_FAMILY_ORDER, OUTCOME_METRIC_MESSAGE_KEYS } from '@/lib/outcomeMetrics';
 
-import { listWidgets } from '@/lib/widgets/registry';
+import { listComponents } from '@/lib/components/registry';
 import { AI_INSIGHT_PANELS } from '@/components/insights/aiInsightPanels';
 import { DELIVERY_PANELS } from '@/components/insights/deliveryPanels';
 import { DEVEX_PANELS } from '@/components/insights/devexPanels';
@@ -367,10 +367,10 @@ describe('message catalogs', () => {
       // A widget's title, its group heading, and — now that WidgetCard renders it
       // — its optional one-line description. `descKey` had no assertion while it
       // had no consumer, so a widget could declare one the catalogs didn't have.
-      ...listWidgets().flatMap(({ titleKey, group, descKey }) => [
-        `widgets.title.${titleKey}`,
-        `widgets.group.${group}`,
-        ...(descKey ? [`widgets.desc.${descKey}`] : []),
+      ...listComponents().flatMap(({ titleKey, group, descKey }) => [
+        `components.title.${titleKey}`,
+        `components.group.${group}`,
+        ...(descKey ? [`components.desc.${descKey}`] : []),
       ]),
       ...panelKeys,
       // Every comparison arena's tab label and blurb, and a vendor name for

@@ -44,18 +44,40 @@ if (files.length === 0) {
 const SIBLING_IMPORT = /^\s*import\s+(?:type\s+)?\{([^}]*)\}\s+from\s+'\.\/([a-zA-Z0-9_]+)(?:\.js)?'/gm;
 
 /**
- * Tenancy anchors. This guard's original note said it plainly: "a foreign key to
+ * Platform anchors — the references every domain legitimately makes.
+ *
+ * This guard's original note said it plainly for the first two: "a foreign key to
  * `tenants` is not a boundary violation, it is tenancy" — and that the edge would
  * stay counted only until the kernel existed to route it through. The kernel
  * exists now, and it deliberately does NOT own tenancy: `tenants` and `segments`
  * carry the plan, the billing relationship and the segment tree, which is
  * Identity's bounded context and not a primitive fifteen domains share.
  *
- * So the reference is exempt rather than moved. An import that brings in ONLY
- * these is a scoping reference; an import that brings in anything else alongside
- * them is a real read into Identity's tables and is still counted.
+ * `users` joined them for the SAME reason, checked rather than assumed. Every
+ * reference to it from the domains that were counted for it is an ACTOR pointer —
+ * `created_by`, `author_id`, `owner_user_id`, `assigned_by`, `registered_by`,
+ * `actor_id`, `converted_user_id`, `evaluated_by_user_id`. Not one reads Identity's
+ * business data: the plan is on `tenants`, and the profile, MFA and session state
+ * are on tables no other domain imports. "Which principal did this" is as
+ * cross-cutting as "which workspace is this in", and the kernel does not own the
+ * answer to either.
+ *
+ * `tenantApiKeys` is the same pointer with a MACHINE principal on the end of it.
+ * Both references to it from outside Identity are `created_by_key_id` — "which
+ * credential registered this endpoint", the first question asked when a webhook
+ * subscription starts leaking events to a vendor whose contract ended. That is
+ * provenance, not a read of Identity's key material, and refusing to record it
+ * would not remove the coupling, only the audit trail.
+ *
+ * WHAT THIS DOES NOT EXEMPT. The rule is unchanged: an import that brings in ONLY
+ * anchors is a scoping-or-authorship reference; an import that brings in anything
+ * else alongside them — `teams`, `poker_sessions`, `tenant_api_keys`, a member
+ * profile — is a real read into Identity's tables and is still counted. And this
+ * is a guard over SCHEMA imports, so it speaks about foreign keys, not queries: a
+ * domain SELECTing `users.is_superadmin` is a layering question, which
+ * `check-layering.mjs` and `check-db-access.mjs` own.
  */
-const TENANCY_ANCHORS = new Set(['tenants', 'segments']);
+const TENANCY_ANCHORS = new Set(['tenants', 'segments', 'users', 'tenantApiKeys']);
 
 /**
  * The kernel is the sanctioned route, so an edge INTO it is not a violation —

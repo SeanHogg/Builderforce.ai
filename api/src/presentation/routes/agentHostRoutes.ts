@@ -11,6 +11,7 @@ import { reportCaughtError } from '../../application/observability/caughtErrorRe
 import { Hono, type Context } from 'hono';
 import { eq, and, isNull, desc, inArray, gte } from 'drizzle-orm';
 import { synthesizeRunFailedEvent } from '../../application/runtime/toolAuditReadRepair';
+import { effectiveSkillsForHost } from '../../application/skills/skillAssignmentPort';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import {
   agentHosts,
@@ -26,8 +27,6 @@ import {
   toolAuditEvents,
   approvals,
   executions,
-  tenantSkillAssignments,
-  agentHostSkillAssignments,
   marketplaceSkills,
   specs,
   taskSpecs,
@@ -966,39 +965,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     const agentHost = await agentHostService.getAgentHostForTenant(agentHostId, tenantId);
     if (!agentHost) return c.json({ error: 'AgentHost not found' }, 404);
 
-    const tenantSkills = await db
-      .select({
-        skillSlug:  tenantSkillAssignments.skillSlug,
-        assignedBy: tenantSkillAssignments.assignedBy,
-        assignedAt: tenantSkillAssignments.assignedAt,
-        skillName:  marketplaceSkills.name,
-        skillDesc:  marketplaceSkills.description,
-        skillIcon:  marketplaceSkills.iconUrl,
-        skillVer:   marketplaceSkills.version,
-      })
-      .from(tenantSkillAssignments)
-      .leftJoin(marketplaceSkills, eq(tenantSkillAssignments.skillSlug, marketplaceSkills.slug))
-      .where(eq(tenantSkillAssignments.tenantId, tenantId));
-
-    const agentHostSkills = await db
-      .select({
-        skillSlug:  agentHostSkillAssignments.skillSlug,
-        assignedBy: agentHostSkillAssignments.assignedBy,
-        assignedAt: agentHostSkillAssignments.assignedAt,
-        skillName:  marketplaceSkills.name,
-        skillDesc:  marketplaceSkills.description,
-        skillIcon:  marketplaceSkills.iconUrl,
-        skillVer:   marketplaceSkills.version,
-      })
-      .from(agentHostSkillAssignments)
-      .leftJoin(marketplaceSkills, eq(agentHostSkillAssignments.skillSlug, marketplaceSkills.slug))
-      .where(eq(agentHostSkillAssignments.agentHostId, agentHostId));
-
-    const merged = new Map<string, Record<string, unknown>>();
-    tenantSkills.forEach((row) => merged.set(row.skillSlug, { ...row, source: 'tenant' }));
-    agentHostSkills.forEach((row) => merged.set(row.skillSlug, { ...row, source: 'host' }));
-
-    const skills = Array.from(merged.values()).map((row) => ({
+    const skills = (await effectiveSkillsForHost(db, tenantId, agentHostId)).map((row) => ({
       skill_id: row.skillSlug,
       name: row.skillName ?? row.skillSlug,
       description: row.skillDesc ?? null,

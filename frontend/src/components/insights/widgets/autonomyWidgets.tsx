@@ -34,7 +34,7 @@ import {
   type VerdictComplianceStats,
 } from '@/lib/autonomyApi';
 import { WidgetStat as Stat, WidgetMuted as Muted, useSourceState } from '@/components/widgets/widgetBody';
-import type { WidgetCardProps, WidgetDef, WidgetDrill } from '@/lib/widgets/types';
+import type { ComponentSurfaceProps, ComponentDef, ComponentDrill } from '@/lib/components/types';
 import { BarChart } from '@/components/charts/BarChart';
 import { DonutChart } from '@/components/charts/DonutChart';
 import { StackedBar, StackedBarLegend } from '@/components/charts/StackedBar';
@@ -92,7 +92,7 @@ const HOP_HUMAN = 'var(--text-muted)';
 /** Severity hue for the stall ranking (ONE series, so no categorical collision). */
 const STALL_COLOR = colorAt(4);
 
-const DRILL: WidgetDrill = { kind: 'route', href: '/insights/autonomy' };
+const DRILL: ComponentDrill = { kind: 'route', href: '/insights/autonomy' };
 const CAP = 'insights.autonomy' as const;
 
 // ── Shared bits ───────────────────────────────────────────────────────────────
@@ -211,7 +211,7 @@ function OriginFunnel({ stats, labels }: { stats: AutonomyOriginStats; labels: L
   );
 }
 
-function OriginFunnelCard({ days }: WidgetCardProps) {
+function OriginFunnelCard({ days }: ComponentSurfaceProps) {
   const { data, state, ...labels } = useAuto(days);
   if (!data) return state;
   const origins = orderedOrigins(data);
@@ -227,7 +227,7 @@ function OriginFunnelCard({ days }: WidgetCardProps) {
 }
 
 /** Table view of the same funnel — exact counts + the end-to-end conversion. */
-function FunnelTableCard({ days }: WidgetCardProps) {
+function FunnelTableCard({ days }: ComponentSurfaceProps) {
   const { int } = useInsightFormat();
   const { data, state, t, originLabel, stageLabel } = useAuto(days);
   if (!data) return state;
@@ -277,7 +277,7 @@ function FunnelTableCard({ days }: WidgetCardProps) {
  * figure that cannot be fudged — every lane move carries an actor kind — so a
  * board that only moves when a person drags a card shows up as a neutral bar.
  */
-function HopSplitCard({ days }: WidgetCardProps) {
+function HopSplitCard({ days }: ComponentSurfaceProps) {
   const { int } = useInsightFormat();
   const { data, state, t, originLabel } = useAuto(days);
   if (!data) return state;
@@ -335,7 +335,7 @@ function HopSplitCard({ days }: WidgetCardProps) {
  * long form, falling back to the server's own `text` for a gate that has no copy
  * yet — so a newly-added server gate is still explained, never blank.
  */
-function StallGatesCard({ days }: WidgetCardProps) {
+function StallGatesCard({ days }: ComponentSurfaceProps) {
   const { int } = useInsightFormat();
   const { data, state, t } = useAuto(days);
   const tb = useTranslations('board.triage');
@@ -376,7 +376,7 @@ function StallGatesCard({ days }: WidgetCardProps) {
 
 // ── Who opens the work ────────────────────────────────────────────────────────
 
-function OriginMixCard({ days }: WidgetCardProps) {
+function OriginMixCard({ days }: ComponentSurfaceProps) {
   const { int } = useInsightFormat();
   const { data, state, t, originLabel } = useAuto(days);
   if (!data) return state;
@@ -397,7 +397,7 @@ function OriginMixCard({ days }: WidgetCardProps) {
 
 // ── Headline stats ────────────────────────────────────────────────────────────
 
-function FullyAutonomousCard({ days }: WidgetCardProps) {
+function FullyAutonomousCard({ days }: ComponentSurfaceProps) {
   const { int } = useInsightFormat();
   const { data, state, t } = useAuto(days);
   if (!data) return state;
@@ -410,7 +410,7 @@ function FullyAutonomousCard({ days }: WidgetCardProps) {
   );
 }
 
-function DispatchRateCard({ days }: WidgetCardProps) {
+function DispatchRateCard({ days }: ComponentSurfaceProps) {
   const { int } = useInsightFormat();
   const { data, state, t } = useAuto(days);
   if (!data) return state;
@@ -423,7 +423,7 @@ function DispatchRateCard({ days }: WidgetCardProps) {
   );
 }
 
-function HopShareCard({ days }: WidgetCardProps) {
+function HopShareCard({ days }: ComponentSurfaceProps) {
   const { int } = useInsightFormat();
   const { data, state, t } = useAuto(days);
   if (!data) return state;
@@ -437,7 +437,7 @@ function HopShareCard({ days }: WidgetCardProps) {
   );
 }
 
-function StalledCard({ days }: WidgetCardProps) {
+function StalledCard({ days }: ComponentSurfaceProps) {
   const { int } = useInsightFormat();
   const { data, state, t } = useAuto(days);
   if (!data) return state;
@@ -447,7 +447,7 @@ function StalledCard({ days }: WidgetCardProps) {
   );
 }
 
-function NeverStartedCard({ days }: WidgetCardProps) {
+function NeverStartedCard({ days }: ComponentSurfaceProps) {
   const { int } = useInsightFormat();
   const { data, state, t } = useAuto(days);
   if (!data) return state;
@@ -474,7 +474,7 @@ function useCompliance(days: number) {
   return { data: source.data, state: useSourceState(source), ...labels };
 }
 
-function VerdictMissRateCard({ days }: WidgetCardProps) {
+function VerdictMissRateCard({ days }: ComponentSurfaceProps) {
   const { int } = useInsightFormat();
   const { data, state, t } = useCompliance(days);
   if (!data) return state;
@@ -488,7 +488,7 @@ function VerdictMissRateCard({ days }: WidgetCardProps) {
   );
 }
 
-function VerdictByAgentCard({ days }: WidgetCardProps) {
+function VerdictByAgentCard({ days }: ComponentSurfaceProps) {
   const { int } = useInsightFormat();
   const { data, state, t } = useCompliance(days);
   if (!data) return state;
@@ -534,7 +534,7 @@ function VerdictByAgentCard({ days }: WidgetCardProps) {
   );
 }
 
-function CoverageCard({ days }: WidgetCardProps) {
+function CoverageCard({ days }: ComponentSurfaceProps) {
   const { data, state } = useAuto(days);
   if (!data) return state;
   return <AutonomyCoverage data={data} />;
@@ -542,21 +542,21 @@ function CoverageCard({ days }: WidgetCardProps) {
 
 // ── Registry ─────────────────────────────────────────────────────────────────
 
-export const AUTONOMY_WIDGETS: WidgetDef[] = [
-  { id: 'autonomy.fully-autonomous', group: 'autonomy', titleKey: 'autoFully', capability: CAP, size: 'sm', Card: FullyAutonomousCard, drill: DRILL },
-  { id: 'autonomy.dispatch-rate', group: 'autonomy', titleKey: 'autoDispatched', capability: CAP, size: 'sm', Card: DispatchRateCard, drill: DRILL },
-  { id: 'autonomy.hop-share', group: 'autonomy', titleKey: 'autoHopShare', capability: CAP, size: 'sm', Card: HopShareCard, drill: DRILL },
-  { id: 'autonomy.stalled', group: 'autonomy', titleKey: 'autoStalled', capability: CAP, size: 'sm', Card: StalledCard, drill: DRILL },
-  { id: 'autonomy.never-started', group: 'autonomy', titleKey: 'autoNeverStarted', capability: CAP, size: 'sm', Card: NeverStartedCard, drill: DRILL },
-  { id: 'autonomy.origin-funnel', group: 'autonomy', titleKey: 'autoOriginFunnel', capability: CAP, size: 'lg', Card: OriginFunnelCard, drill: DRILL },
-  { id: 'autonomy.hop-split', group: 'autonomy', titleKey: 'autoHopSplit', capability: CAP, size: 'md', Card: HopSplitCard, drill: DRILL },
-  { id: 'autonomy.stall-gates', group: 'autonomy', titleKey: 'autoStallGates', capability: CAP, size: 'md', Card: StallGatesCard, drill: DRILL },
-  { id: 'autonomy.origin-mix', group: 'autonomy', titleKey: 'autoOriginMix', capability: CAP, size: 'md', Card: OriginMixCard, drill: DRILL },
-  { id: 'autonomy.funnel-table', group: 'autonomy', titleKey: 'autoFunnelTable', capability: CAP, size: 'lg', Card: FunnelTableCard, drill: DRILL },
-  { id: 'autonomy.verdict-miss-rate', group: 'autonomy', titleKey: 'autoVerdictMissRate', capability: CAP, size: 'sm', Card: VerdictMissRateCard, drill: DRILL },
-  { id: 'autonomy.verdict-by-agent', group: 'autonomy', titleKey: 'autoVerdictByAgent', capability: CAP, size: 'lg', Card: VerdictByAgentCard, drill: DRILL },
-  { id: 'autonomy.coverage', group: 'autonomy', titleKey: 'autoCoverage', capability: CAP, size: 'md', Card: CoverageCard, drill: DRILL },
+export const AUTONOMY_COMPONENTS: ComponentDef[] = [
+  { id: 'autonomy.fully-autonomous', group: 'autonomy', titleKey: 'autoFully', capability: CAP, size: 'sm', Surface: FullyAutonomousCard, drill: DRILL },
+  { id: 'autonomy.dispatch-rate', group: 'autonomy', titleKey: 'autoDispatched', capability: CAP, size: 'sm', Surface: DispatchRateCard, drill: DRILL },
+  { id: 'autonomy.hop-share', group: 'autonomy', titleKey: 'autoHopShare', capability: CAP, size: 'sm', Surface: HopShareCard, drill: DRILL },
+  { id: 'autonomy.stalled', group: 'autonomy', titleKey: 'autoStalled', capability: CAP, size: 'sm', Surface: StalledCard, drill: DRILL },
+  { id: 'autonomy.never-started', group: 'autonomy', titleKey: 'autoNeverStarted', capability: CAP, size: 'sm', Surface: NeverStartedCard, drill: DRILL },
+  { id: 'autonomy.origin-funnel', group: 'autonomy', titleKey: 'autoOriginFunnel', capability: CAP, size: 'lg', Surface: OriginFunnelCard, drill: DRILL },
+  { id: 'autonomy.hop-split', group: 'autonomy', titleKey: 'autoHopSplit', capability: CAP, size: 'md', Surface: HopSplitCard, drill: DRILL },
+  { id: 'autonomy.stall-gates', group: 'autonomy', titleKey: 'autoStallGates', capability: CAP, size: 'md', Surface: StallGatesCard, drill: DRILL },
+  { id: 'autonomy.origin-mix', group: 'autonomy', titleKey: 'autoOriginMix', capability: CAP, size: 'md', Surface: OriginMixCard, drill: DRILL },
+  { id: 'autonomy.funnel-table', group: 'autonomy', titleKey: 'autoFunnelTable', capability: CAP, size: 'lg', Surface: FunnelTableCard, drill: DRILL },
+  { id: 'autonomy.verdict-miss-rate', group: 'autonomy', titleKey: 'autoVerdictMissRate', capability: CAP, size: 'sm', Surface: VerdictMissRateCard, drill: DRILL },
+  { id: 'autonomy.verdict-by-agent', group: 'autonomy', titleKey: 'autoVerdictByAgent', capability: CAP, size: 'lg', Surface: VerdictByAgentCard, drill: DRILL },
+  { id: 'autonomy.coverage', group: 'autonomy', titleKey: 'autoCoverage', capability: CAP, size: 'md', Surface: CoverageCard, drill: DRILL },
 ];
 
 /** Ids in the order the full lens lays them out. */
-export const AUTONOMY_WIDGET_IDS = AUTONOMY_WIDGETS.map((w) => w.id);
+export const AUTONOMY_WIDGET_IDS = AUTONOMY_COMPONENTS.map((w) => w.id);

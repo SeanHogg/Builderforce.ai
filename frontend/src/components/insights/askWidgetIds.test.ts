@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { getWidget } from '@/lib/widgets/registry';
+import { getComponent } from '@/lib/components/registry';
 
 /**
  * THE SEAM TEST: every widget id the SERVER can name must resolve in THIS registry.
@@ -67,7 +67,7 @@ function presetWidgetKeys(): string[] {
 describe('server-declared widget ids', () => {
   it('every id the server can return resolves in the widget registry', () => {
     for (const id of declaredWidgetIds()) {
-      expect(getWidget(id), `COMPOSABLE_WIDGET_IDS names '${id}', which no widget module registers`).toBeDefined();
+      expect(getComponent(id), `COMPOSABLE_WIDGET_IDS names '${id}', which no widget module registers`).toBeDefined();
     }
   });
 
@@ -75,7 +75,7 @@ describe('server-declared widget ids', () => {
     // A preset tile whose id does not resolve becomes a saved `dashboard_widgets`
     // ROW that renders nothing — worse than a missing chart, because it persists.
     for (const id of presetWidgetKeys()) {
-      expect(getWidget(id), `the Executive preset names '${id}', which no widget module registers`).toBeDefined();
+      expect(getComponent(id), `the Executive preset names '${id}', which no widget module registers`).toBeDefined();
     }
   });
 
@@ -94,6 +94,6 @@ describe('server-declared widget ids', () => {
     // The one widget this pass ADDED — asserted by id so deleting the module
     // fails here rather than emptying the workforce.health answer.
     expect(declaredWidgetIds()).toContain('workforce.health');
-    expect(getWidget('workforce.health')).toBeDefined();
+    expect(getComponent('workforce.health')).toBeDefined();
   });
 });

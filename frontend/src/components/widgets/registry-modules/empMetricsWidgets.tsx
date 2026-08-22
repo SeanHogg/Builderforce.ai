@@ -22,7 +22,7 @@ import {
 } from '@/lib/builderforceApi';
 import { useSharedSource } from '@/lib/widgets/sharedSource';
 import { WidgetMuted as Muted } from '@/components/widgets/widgetBody';
-import type { WidgetCardProps, WidgetDef, WidgetDrill } from '@/lib/widgets/types';
+import type { ComponentSurfaceProps, ComponentDef, ComponentDrill } from '@/lib/components/types';
 import { BarChart, type BarDatum } from '@/components/charts/BarChart';
 import { DonutChart } from '@/components/charts/DonutChart';
 import { colorAt } from '@/components/charts/chartColors';
@@ -49,8 +49,8 @@ function topBars<T>(items: T[], value: (t: T) => number, label: (t: T) => string
 }
 
 // ── EMP-12 — over-allocation (WIP utilization; over-allocated bars in red) ──────
-function OverAllocatedCard(_p: WidgetCardProps) {
-  const t = useTranslations('widgets');
+function OverAllocatedCard(_p: ComponentSurfaceProps) {
+  const t = useTranslations('components');
   const { data, error } = useAllocation();
   if (error) return <Muted>{error}</Muted>;
   if (!data) return <Muted>{t('emp.loading')}</Muted>;
@@ -66,9 +66,9 @@ function OverAllocatedCard(_p: WidgetCardProps) {
 }
 
 // ── EMP-14 — collaboration score ────────────────────────────────────────────────
-function CollabScoreCard(_p: WidgetCardProps) {
+function CollabScoreCard(_p: ComponentSurfaceProps) {
   const { int } = useInsightFormat();
-  const t = useTranslations('widgets');
+  const t = useTranslations('components');
   const { data, error } = useCollaboration();
   if (error) return <Muted>{error}</Muted>;
   if (!data) return <Muted>{t('emp.loading')}</Muted>;
@@ -78,9 +78,9 @@ function CollabScoreCard(_p: WidgetCardProps) {
 }
 
 // ── EMP-17 — top documentation contributors ──────────────────────────────────────
-function DocAuthorsCard(_p: WidgetCardProps) {
+function DocAuthorsCard(_p: ComponentSurfaceProps) {
   const { int } = useInsightFormat();
-  const t = useTranslations('widgets');
+  const t = useTranslations('components');
   const { data, error } = useDocs();
   if (error) return <Muted>{error}</Muted>;
   if (!data) return <Muted>{t('emp.loading')}</Muted>;
@@ -90,9 +90,9 @@ function DocAuthorsCard(_p: WidgetCardProps) {
 }
 
 // ── EMP-19 — labour cost by project ──────────────────────────────────────────────
-function LaborByProjectCard(_p: WidgetCardProps) {
+function LaborByProjectCard(_p: ComponentSurfaceProps) {
   const { usd } = useInsightFormat();
-  const t = useTranslations('widgets');
+  const t = useTranslations('components');
   const { data, error } = useLabor();
   if (error) return <Muted>{error}</Muted>;
   if (!data) return <Muted>{t('emp.loading')}</Muted>;
@@ -102,9 +102,9 @@ function LaborByProjectCard(_p: WidgetCardProps) {
 }
 
 // ── EMP-16 — performer tiers (donut) ─────────────────────────────────────────────
-function PerformerTiersCard(_p: WidgetCardProps) {
+function PerformerTiersCard(_p: ComponentSurfaceProps) {
   const { int } = useInsightFormat();
-  const t = useTranslations('widgets');
+  const t = useTranslations('components');
   const { data, error } = useTiers();
   if (error) return <Muted>{error}</Muted>;
   if (!data) return <Muted>{t('emp.loading')}</Muted>;
@@ -127,8 +127,8 @@ function PerformerTiersCard(_p: WidgetCardProps) {
 }
 
 // ── EMP-13 — initiative allocation (total effort hours per initiative) ────────────
-function InitiativeMixCard(_p: WidgetCardProps) {
-  const t = useTranslations('widgets');
+function InitiativeMixCard(_p: ComponentSurfaceProps) {
+  const t = useTranslations('components');
   const { data, error } = useInitiatives();
   if (error) return <Muted>{error}</Muted>;
   if (!data) return <Muted>{t('emp.loading')}</Muted>;
@@ -144,13 +144,13 @@ function InitiativeMixCard(_p: WidgetCardProps) {
 }
 
 // ── Registry ─────────────────────────────────────────────────────────────────
-const DRILL: WidgetDrill = { kind: 'route', href: '/workforce?tab=performance' };
+const DRILL: ComponentDrill = { kind: 'route', href: '/workforce?tab=performance' };
 
-export const EMP_METRICS_WIDGETS: WidgetDef[] = [
-  { id: 'emp.over-allocated', group: 'empAllocation', titleKey: 'empOverAllocated', capability: METRICS_CAP, size: 'md', Card: OverAllocatedCard, drill: DRILL },
-  { id: 'emp.collab-score', group: 'empCollaboration', titleKey: 'empCollabScore', capability: METRICS_CAP, size: 'md', Card: CollabScoreCard, drill: DRILL },
-  { id: 'emp.doc-authors', group: 'empDocs', titleKey: 'empDocAuthors', capability: METRICS_CAP, size: 'md', Card: DocAuthorsCard, drill: DRILL },
-  { id: 'emp.labor-by-project', group: 'empCost', titleKey: 'empLaborByProject', capability: METRICS_CAP, size: 'md', Card: LaborByProjectCard, drill: DRILL },
-  { id: 'emp.performer-tiers', group: 'empPerformers', titleKey: 'empPerformerTiers', capability: METRICS_CAP, size: 'sm', Card: PerformerTiersCard, drill: DRILL },
-  { id: 'emp.initiative-mix', group: 'empInitiatives', titleKey: 'empInitiativeMix', capability: METRICS_CAP, size: 'md', Card: InitiativeMixCard, drill: DRILL },
+export const EMP_METRICS_COMPONENTS: ComponentDef[] = [
+  { id: 'emp.over-allocated', group: 'empAllocation', titleKey: 'empOverAllocated', capability: METRICS_CAP, size: 'md', Surface: OverAllocatedCard, drill: DRILL },
+  { id: 'emp.collab-score', group: 'empCollaboration', titleKey: 'empCollabScore', capability: METRICS_CAP, size: 'md', Surface: CollabScoreCard, drill: DRILL },
+  { id: 'emp.doc-authors', group: 'empDocs', titleKey: 'empDocAuthors', capability: METRICS_CAP, size: 'md', Surface: DocAuthorsCard, drill: DRILL },
+  { id: 'emp.labor-by-project', group: 'empCost', titleKey: 'empLaborByProject', capability: METRICS_CAP, size: 'md', Surface: LaborByProjectCard, drill: DRILL },
+  { id: 'emp.performer-tiers', group: 'empPerformers', titleKey: 'empPerformerTiers', capability: METRICS_CAP, size: 'sm', Surface: PerformerTiersCard, drill: DRILL },
+  { id: 'emp.initiative-mix', group: 'empInitiatives', titleKey: 'empInitiativeMix', capability: METRICS_CAP, size: 'md', Surface: InitiativeMixCard, drill: DRILL },
 ];

@@ -36,6 +36,9 @@
 
 import { isVerifyKind, VERIFY_KINDS, type VerifyKind } from './webhookVerification';
 import { parseTwimlNodes, type TwimlNode } from './twiml';
+// The kernel's own domain list — never a copy of it, so a domain cannot be valid
+// in a handler spec and unknown to the service that answers it.
+import { isDomain } from '../kernel/ObjectRegistry';
 
 /** Methods a handler may claim. `ANY` matches every method — status callbacks vary. */
 export const HANDLER_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'ANY'] as const;
@@ -107,7 +110,57 @@ export interface DataStep {
   when?: string;
 }
 
-export type HandlerStep = LlmStep | ConnectorStep | SetStep | DataStep;
+/**
+ * Read the tenant's OWN domain data — the hiring funnel, the CRM, the roadmap —
+ * and bind `{ domain, kind, count, items }`.
+ *
+ * ── THE GAP THIS CLOSES ─────────────────────────────────────────────────────
+ * `data` reads a site's own collections and nothing else, so a published app was
+ * cut off from every domain the platform owns. A person could compose the hiring
+ * objects on their board, publish an app, and their app could not read one of
+ * them: the only way to build an ATS here was to re-model jobs, candidates and
+ * applications as site collections — a second copy of a domain that already
+ * exists, which is the duplication 3NF forbids and the reason a ported capability
+ * was only ever reachable from OUR pages.
+ *
+ * This is the read side of the same registry the board mounts a component from.
+ * The component and the handler name the same `domain`, so what a card shows and
+ * what a published page can fetch cannot drift apart.
+ *
+ * ── DENY UNLESS DECLARED ────────────────────────────────────────────────────
+ * A step names exactly one `domain` and one `kind`, and that pair IS the grant —
+ * the same posture `connector` has, where naming the connector is what authorises
+ * the call. There is no wildcard and no "all domains" form, deliberately: a
+ * handler that can read whatever it likes is one prompt-injection away from being
+ * a data-export endpoint, and the author of a spec should be able to see what it
+ * reaches by reading it.
+ *
+ * ── WHAT IT CANNOT DO ───────────────────────────────────────────────────────
+ * Read-only, and scoped to the site's own tenant by the runtime rather than by
+ * anything in this spec — a spec is data any project collaborator can edit, so a
+ * tenant id in it would be a tenant id somebody could change. Writes are absent
+ * because a public webhook that can mutate a company's CRM is a different security
+ * decision from one that can read it, and it should be taken separately.
+ */
+export interface EntityStep {
+  kind: 'entity';
+  id: string;
+  /** Kernel domain to read. Validated against `DOMAINS` at parse time, so a typo
+   *  is an author error rather than a silently empty result. */
+  domain: string;
+  /** Object kind within that domain. Required: the domain alone is too coarse a
+   *  grant, and "everything in `hiring`" is not a sentence an author should be
+   *  able to write by accident. */
+  objectKind: string;
+  /** Rows to read; clamped by the runtime. */
+  limit?: number;
+  /** Optional case-insensitive title match. Templated, so
+   *  `titleContains: "{{query.q}}"` is a search box on a published page. */
+  titleContains?: string;
+  when?: string;
+}
+
+export type HandlerStep = LlmStep | ConnectorStep | SetStep | DataStep | EntityStep;
 
 // ---------------------------------------------------------------------------
 // Response
@@ -302,8 +355,33 @@ function parseStep(raw: unknown, index: number): HandlerStep | { error: string }
         ...(when ? { when } : {}),
       };
     }
+    case 'entity': {
+      const domain = typeof raw.domain === 'string' ? raw.domain.trim() : '';
+      // Validated against the kernel's own list rather than a copy of it: a domain
+      // that does not exist can only ever return nothing, and finding that out at
+      // parse time is the difference between a spec error and a silent empty page.
+      if (!isDomain(domain)) {
+        return { error: `steps[${index}] (entity) requires a known domain (got ${JSON.stringify(raw.domain)})` };
+      }
+      // `kind` is the step's own discriminator, so the object kind is `objectKind`
+      // on the wire too — one name, rather than a field that means something
+      // different one level down.
+      const objectKind = typeof raw.objectKind === 'string' ? raw.objectKind.trim() : '';
+      if (!objectKind) {
+        return { error: `steps[${index}] (entity) requires objectKind — a domain alone is too broad a grant` };
+      }
+      return {
+        kind: 'entity',
+        id,
+        domain,
+        objectKind,
+        ...(typeof raw.limit === 'number' && Number.isFinite(raw.limit) ? { limit: raw.limit } : {}),
+        ...(typeof raw.titleContains === 'string' && raw.titleContains.trim() ? { titleContains: raw.titleContains } : {}),
+        ...(when ? { when } : {}),
+      };
+    }
     default:
-      return { error: `steps[${index}].kind must be one of: llm, connector, set, data` };
+      return { error: `steps[${index}].kind must be one of: llm, connector, set, data, entity` };
   }
 }
 

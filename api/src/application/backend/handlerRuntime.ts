@@ -21,6 +21,7 @@
 
 import type { ConnectorCallResult } from '../connectors/connectorRuntime';
 import type { HandlerCollectionRead } from '../ide/siteData';
+import type { EntityRead, EntityReadArgs } from './entityRead';
 import { renderTwiml, TWIML_CONTENT_TYPE, type TwimlNode } from './twiml';
 import type { HandlerSpec, HandlerStep } from './handlerSpec';
 
@@ -44,6 +45,16 @@ export interface HandlerRuntimeDeps {
     limit?: number;
     match?: { field: string; value: string } | undefined;
   }): Promise<HandlerCollectionRead>;
+  /**
+   * Read the tenant's own domain objects, already scoped to the site's tenant.
+   *
+   * Optional because not every host of this runtime has a kernel behind it — the
+   * self-hosted adapters compile a spec into the customer's own cloud, where
+   * there is no `objects` table to read. A spec that declares an `entity` step
+   * and runs somewhere without one binds an empty read and says so, which is the
+   * same degradation an unknown collection already gets.
+   */
+  readEntities?(args: EntityReadArgs): Promise<EntityRead>;
 }
 
 /**
@@ -192,6 +203,24 @@ async function runStep(
       // An unknown collection binds an EMPTY read rather than failing the handler,
       // so `{{#steps.rows.count}}`-style branching still works and the page
       // renders its empty state; the reason lands in the outcome list.
+      return { value: read, ...(read.error ? { error: read.error } : {}) };
+    }
+
+    case 'entity': {
+      if (!deps.readEntities) {
+        // Bind the empty shape rather than throwing, so a page written against
+        // the platform runtime still renders when the same spec is compiled into
+        // a customer's own cloud. The reason lands in the outcome list.
+        const value: EntityRead = { domain: step.domain, kind: step.objectKind, count: 0, items: [] };
+        return { value, error: 'This runtime has no entity reader' };
+      }
+      const filter = step.titleContains ? renderTemplate(step.titleContains, scope) : '';
+      const read = await deps.readEntities({
+        domain: step.domain,
+        objectKind: step.objectKind,
+        ...(step.limit !== undefined ? { limit: step.limit } : {}),
+        ...(filter ? { titleContains: filter } : {}),
+      });
       return { value: read, ...(read.error ? { error: read.error } : {}) };
     }
   }

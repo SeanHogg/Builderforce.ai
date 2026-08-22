@@ -4,7 +4,7 @@
  * Forecast / anomaly lens, decomposed into individually-pinnable widgets.
  *
  * The forward-looking overlay (regression projection + z-score anomalies over the
- * existing cost / flow series) is exposed as standalone {@link WidgetDef}s so a
+ * existing cost / flow series) is exposed as standalone {@link ComponentDef}s so a
  * user can pin the exact forecast tile they want. Each card reads the SAME
  * collector through the shared, deduped source (one request per metric+window),
  * renders only its body, and drills back into the finance hub's forecast panel.
@@ -15,12 +15,12 @@
 import { useTranslations } from 'next-intl';
 import { useSharedSource } from '@/lib/widgets/sharedSource';
 import { WidgetStat as Stat, WidgetMuted as Muted, useSourceState } from '@/components/widgets/widgetBody';
-import type { WidgetCardProps, WidgetDef, WidgetDrill } from '@/lib/widgets/types';
+import type { ComponentSurfaceProps, ComponentDef, ComponentDrill } from '@/lib/components/types';
 import { TrendChart, type TrendSeries } from '@/components/charts/TrendChart';
 import { forecastApi, type ForecastInsights, type ForecastMetric, type ForecastUnit } from '@/lib/forecastApi';
 import { useInsightFormat, type InsightFormatters } from '../format';
 
-const FORECAST_DRILL: WidgetDrill = { kind: 'panel', hub: 'finance', panel: 'forecast' };
+const FORECAST_DRILL: ComponentDrill = { kind: 'panel', hub: 'finance', panel: 'forecast' };
 // Reuses the finance capability (forecast is the finance-adjacent premium lens).
 // A dedicated `insights.forecast` capability can be added later — see integration note.
 const FORECAST_CAP = 'insights.finance' as const;
@@ -48,28 +48,28 @@ function useForecast(metric: ForecastMetric, days: number) {
 
 // ── Widget bodies ──────────────────────────────────────────────────────────────
 
-function CostProjectionCard({ days }: WidgetCardProps) {
+function CostProjectionCard({ days }: ComponentSurfaceProps) {
   const insight = useInsightFormat();
   const { data, state, t } = useForecast('cost', days);
   if (!data) return state;
   return <Stat value={unitFormatter(insight, data.unit)(data.projection)} sub={t('forecast.projection')} />;
 }
 
-function CycleProjectionCard({ days }: WidgetCardProps) {
+function CycleProjectionCard({ days }: ComponentSurfaceProps) {
   const insight = useInsightFormat();
   const { data, state, t } = useForecast('cycle_time', days);
   if (!data) return state;
   return <Stat value={unitFormatter(insight, data.unit)(data.projection)} sub={t('forecast.metric.cycle_time')} />;
 }
 
-function CfrProjectionCard({ days }: WidgetCardProps) {
+function CfrProjectionCard({ days }: ComponentSurfaceProps) {
   const insight = useInsightFormat();
   const { data, state, t } = useForecast('cfr', days);
   if (!data) return state;
   return <Stat value={unitFormatter(insight, data.unit)(data.projection)} sub={t('forecast.metric.cfr')} />;
 }
 
-function AnomaliesCard({ days }: WidgetCardProps) {
+function AnomaliesCard({ days }: ComponentSurfaceProps) {
   const { data, state, t } = useForecast('cost', days);
   if (!data) return state;
   const open = data.anomalies.filter((a) => !a.acknowledged).length;
@@ -77,7 +77,7 @@ function AnomaliesCard({ days }: WidgetCardProps) {
 }
 
 /** Cost history + dashed projection as a single trend (the headline forecast tile). */
-function CostForecastTrendCard({ days }: WidgetCardProps) {
+function CostForecastTrendCard({ days }: ComponentSurfaceProps) {
   const insight = useInsightFormat();
   const { data, state, t } = useForecast('cost', days);
   if (!data) return state;
@@ -96,10 +96,10 @@ function CostForecastTrendCard({ days }: WidgetCardProps) {
 
 // ── Registry ─────────────────────────────────────────────────────────────────
 
-export const FORECAST_WIDGETS: WidgetDef[] = [
-  { id: 'forecast.cost-projection', group: 'forecast', titleKey: 'forecastCostProjection', capability: FORECAST_CAP, size: 'sm', Card: CostProjectionCard, drill: FORECAST_DRILL },
-  { id: 'forecast.cycle-projection', group: 'forecast', titleKey: 'forecastCycleProjection', capability: FORECAST_CAP, size: 'sm', Card: CycleProjectionCard, drill: FORECAST_DRILL },
-  { id: 'forecast.cfr-projection', group: 'forecast', titleKey: 'forecastCfrProjection', capability: FORECAST_CAP, size: 'sm', Card: CfrProjectionCard, drill: FORECAST_DRILL },
-  { id: 'forecast.anomalies', group: 'forecast', titleKey: 'forecastAnomalies', capability: FORECAST_CAP, size: 'sm', Card: AnomaliesCard, drill: FORECAST_DRILL },
-  { id: 'forecast.cost-trend', group: 'forecast', titleKey: 'forecastCostTrend', capability: FORECAST_CAP, size: 'lg', Card: CostForecastTrendCard, drill: FORECAST_DRILL },
+export const FORECAST_COMPONENTS: ComponentDef[] = [
+  { id: 'forecast.cost-projection', group: 'forecast', titleKey: 'forecastCostProjection', capability: FORECAST_CAP, size: 'sm', Surface: CostProjectionCard, drill: FORECAST_DRILL },
+  { id: 'forecast.cycle-projection', group: 'forecast', titleKey: 'forecastCycleProjection', capability: FORECAST_CAP, size: 'sm', Surface: CycleProjectionCard, drill: FORECAST_DRILL },
+  { id: 'forecast.cfr-projection', group: 'forecast', titleKey: 'forecastCfrProjection', capability: FORECAST_CAP, size: 'sm', Surface: CfrProjectionCard, drill: FORECAST_DRILL },
+  { id: 'forecast.anomalies', group: 'forecast', titleKey: 'forecastAnomalies', capability: FORECAST_CAP, size: 'sm', Surface: AnomaliesCard, drill: FORECAST_DRILL },
+  { id: 'forecast.cost-trend', group: 'forecast', titleKey: 'forecastCostTrend', capability: FORECAST_CAP, size: 'lg', Surface: CostForecastTrendCard, drill: FORECAST_DRILL },
 ];

@@ -4617,7 +4617,7 @@
     "log": "Erfassen",
     "delete": "Eintrag löschen"
   },
-  "widgets": {
+  "components": {
     "pin": "An Dashboard anheften",
     "unpin": "Lösen",
     "expand": "Vollständigen Bericht öffnen",
@@ -4664,7 +4664,10 @@
       "chatModes": "Unterhaltungen und Ausführungen",
       "aiHub": "KI-Einblicke",
       "deliveryHub": "Lieferung",
-      "paidMedia": "Bezahlte Medien"
+      "paidMedia": "Bezahlte Medien",
+      "appProduct": "Produkt",
+      "appAgile": "Lieferung",
+      "appGovernance": "Governance & Sicherheit"
     },
     "title": {
       "aiProductivity": "KI-Produktivitätswert",
@@ -4809,7 +4812,43 @@
       "paidMediaSpend": "Werbeausgaben",
       "paidMediaCostPerResult": "Kosten pro Ergebnis",
       "paidMediaSpendByNetwork": "Ausgaben je Netzwerk",
-      "paidMediaSpendTrend": "Tägliche Ausgaben"
+      "paidMediaSpendTrend": "Tägliche Ausgaben",
+      "app": {
+        "ideas": "Produktentdeckung",
+        "prd": "PRDs & Spezifikationen",
+        "backlog": "Strategisches Backlog",
+        "mvp": "MVP-Gerüst",
+        "validation": "Validierungslabor",
+        "roadmap": "KI-Roadmap",
+        "release-planning": "Release-Planung",
+        "changelog": "Änderungsprotokoll",
+        "feature-flags": "Feature-Flags",
+        "feature-roi": "Feature-ROI",
+        "business-value": "Geschäftswertmodelle",
+        "dependency-graph": "Abhängigkeitsgraph",
+        "rice-matrix": "RICE-Matrix",
+        "roi-dashboard": "ROI-Dashboard",
+        "kanban": "Kanban",
+        "poker": "Planning Poker",
+        "retros": "Retrospektiven",
+        "sprints": "Sprint-Planung",
+        "velocity": "Velocity",
+        "capacity": "Kapazität & Risiko",
+        "cost": "Kosten & Runway",
+        "feature-scoring": "Feature-Bewertung",
+        "workforce": "Belegschaft",
+        "soc2": "SOC-2-Tracker",
+        "vendors": "Lieferantenregister",
+        "incidents": "Sicherheitsvorfälle",
+        "data-inventory": "PII- & Datenbestand",
+        "dpa": "DPA-Verwaltung",
+        "training": "Sicherheitsschulung",
+        "compliance-calendar": "Compliance-Kalender",
+        "access-reviews": "Zugriffsprüfungen",
+        "vuln-scans": "Schwachstellen-Scans",
+        "dsr": "Betroffenenanfragen",
+        "suppression": "Sperrliste"
+      }
     },
     "loading": "Laden…",
     "overview": {
@@ -5044,6 +5083,12 @@
       "noResults": "Noch keine Ergebnisse zugeordnet.",
       "spendSub": "{clicks} Klicks · {conversions} Ergebnisse",
       "costPerResultSub": "über {conversions} Ergebnisse"
+    },
+    "canvas": {
+      "pickTitle": "Komponente hinzufügen",
+      "pickHint": "Legen Sie eine Live-Ansicht Ihres Unternehmens auf das Board.",
+      "unknown": "Diese Komponente ist nicht mehr verfügbar.",
+      "empty": "Noch keine Komponente ausgewählt."
     }
   },
   "compile": {
@@ -18486,7 +18531,8 @@
       "audience": "Zielgruppe",
       "stopwatch": "Stoppuhr",
       "transclusion": "Transklusion",
-      "calendar": "Kalender"
+      "calendar": "Kalender",
+      "component": "Komponente"
     },
     "twilioSetup": {
       "title": "Twilio-Integration",
@@ -21833,7 +21879,8 @@
       "customAgent": "Eigener Agent",
       "builtinSeatHint": "Dieser Sitz stammt aus dem Rollenkatalog - Auftrag, Werkzeuge und Pruefrechte kommen mit ihm. Hier stellst du ein, wie er auf diesem Board arbeitet.",
       "timerDurationMs": "Zeitfenster (ms)",
-      "transclusionDocumentId": "Dokument-ID"
+      "transclusionDocumentId": "Dokument-ID",
+      "componentId": "Komponenten-ID"
     },
     "nodeMessage": {
       "emptyShell": "Dieses Objekt hat einen Titel und noch keinen Inhalt - es sieht fertig aus und ist leer."
@@ -22519,7 +22566,8 @@
         "detail": "Detail",
         "url": "URL"
       }
-    }
+    },
+    "componentId": "Komponenten-ID"
   },
   "canvasCommands": {
     "cleanLayout": "Leinwand-Layout aufräumen",
@@ -26290,5 +26338,14 @@
       "title": "Rangliste im Workspace",
       "rank": "Nr. {rank}"
     }
+  },
+  "embed": {
+    "unknownView": "Unbekannte BuilderForce-Ansicht: {view}",
+    "connecting": "Verbindung zu BuilderForce — {label}…",
+    "configError": "Einbettungskonfiguration konnte nicht geladen werden.",
+    "loading": "Wird geladen…",
+    "notEnabled": "Diese Integration ist nicht aktiviert. Ein Workspace-Administrator kann sie unter BuilderForce → Einstellungen → Integration aktivieren.",
+    "capabilityMissing": "Die Fähigkeit „{capability}“ ist für diesen Workspace nicht aktiviert.",
+    "comingSoon": "{label} ist registriert, aber noch keine Komponente beansprucht sie."
   }
 }

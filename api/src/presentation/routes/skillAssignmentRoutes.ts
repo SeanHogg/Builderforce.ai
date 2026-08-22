@@ -17,13 +17,13 @@
 import { Hono } from 'hono';
 import { eq, and } from 'drizzle-orm';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
+import { agentHosts } from '../../infrastructure/database/schema';
 import {
-  tenantSkillAssignments,
-  agentHostSkillAssignments,
-  agentHosts,
-  marketplaceSkills,
-} from '../../infrastructure/database/schema';
-import { scopedToTenant } from '../../infrastructure/database/tenantScope';
+  assignSkill,
+  listAssignedSkills,
+  marketplaceSkillExists,
+  unassignSkill,
+} from '../../application/skills/skillAssignmentPort';
 import { TenantRole } from '../../domain/shared/types';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
@@ -37,20 +37,7 @@ export function createSkillAssignmentRoutes(db: Db): Hono<HonoEnv> {
   // GET /api/skill-assignments/tenant
   router.get('/tenant', async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const rows = await db
-      .select({
-        skillSlug:  tenantSkillAssignments.skillSlug,
-        assignedBy: tenantSkillAssignments.assignedBy,
-        assignedAt: tenantSkillAssignments.assignedAt,
-        // join skill metadata
-        skillName:  marketplaceSkills.name,
-        skillDesc:  marketplaceSkills.description,
-        skillIcon:  marketplaceSkills.iconUrl,
-        skillVer:   marketplaceSkills.version,
-      })
-      .from(tenantSkillAssignments)
-      .leftJoin(marketplaceSkills, eq(tenantSkillAssignments.skillSlug, marketplaceSkills.slug))
-      .where(eq(tenantSkillAssignments.tenantId, tenantId));
+    const rows = await listAssignedSkills(db, tenantId, { scope: 'tenant' });
     return c.json({ assignments: rows });
   });
 
@@ -61,18 +48,9 @@ export function createSkillAssignmentRoutes(db: Db): Hono<HonoEnv> {
     const body     = await c.req.json<{ skillSlug: string }>();
     if (!body.skillSlug) return c.json({ error: 'skillSlug is required' }, 400);
 
-    // Verify skill exists and is published
-    const [skill] = await db
-      .select({ slug: marketplaceSkills.slug })
-      .from(marketplaceSkills)
-      .where(eq(marketplaceSkills.slug, body.skillSlug))
-      .limit(1);
-    if (!skill) return c.json({ error: 'Skill not found' }, 404);
+    if (!await marketplaceSkillExists(db, body.skillSlug)) return c.json({ error: 'Skill not found' }, 404);
 
-    await db
-      .insert(tenantSkillAssignments)
-      .values({ tenantId, skillSlug: body.skillSlug, assignedBy: userId })
-      .onConflictDoNothing();
+    await assignSkill(db, tenantId, { scope: 'tenant' }, { skillSlug: body.skillSlug, assignedBy: userId });
 
     return c.json({ ok: true, tenantId, skillSlug: body.skillSlug }, 201);
   });
@@ -81,12 +59,7 @@ export function createSkillAssignmentRoutes(db: Db): Hono<HonoEnv> {
   router.delete('/tenant/:slug', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId  = c.get('tenantId') as number;
     const skillSlug = c.req.param('slug');
-    await db
-      .delete(tenantSkillAssignments)
-      .where(and(
-        eq(tenantSkillAssignments.tenantId, tenantId),
-        eq(tenantSkillAssignments.skillSlug, skillSlug),
-      ));
+    await unassignSkill(db, tenantId, { scope: 'tenant' }, skillSlug);
     return c.body(null, 204);
   });
 
@@ -105,19 +78,7 @@ export function createSkillAssignmentRoutes(db: Db): Hono<HonoEnv> {
       .limit(1);
     if (!agentHost) return c.json({ error: 'AgentHost not found' }, 404);
 
-    const rows = await db
-      .select({
-        skillSlug:  agentHostSkillAssignments.skillSlug,
-        assignedBy: agentHostSkillAssignments.assignedBy,
-        assignedAt: agentHostSkillAssignments.assignedAt,
-        skillName:  marketplaceSkills.name,
-        skillDesc:  marketplaceSkills.description,
-        skillIcon:  marketplaceSkills.iconUrl,
-        skillVer:   marketplaceSkills.version,
-      })
-      .from(agentHostSkillAssignments)
-      .leftJoin(marketplaceSkills, eq(agentHostSkillAssignments.skillSlug, marketplaceSkills.slug))
-      .where(scopedToTenant(agentHostSkillAssignments, tenantId, eq(agentHostSkillAssignments.agentHostId, agentHostId)));
+    const rows = await listAssignedSkills(db, tenantId, { scope: 'host', agentHostId });
     return c.json({ agentHostId, assignments: rows });
   });
 
@@ -136,17 +97,9 @@ export function createSkillAssignmentRoutes(db: Db): Hono<HonoEnv> {
       .limit(1);
     if (!agentHost) return c.json({ error: 'AgentHost not found' }, 404);
 
-    const [skill] = await db
-      .select({ slug: marketplaceSkills.slug })
-      .from(marketplaceSkills)
-      .where(eq(marketplaceSkills.slug, body.skillSlug))
-      .limit(1);
-    if (!skill) return c.json({ error: 'Skill not found' }, 404);
+    if (!await marketplaceSkillExists(db, body.skillSlug)) return c.json({ error: 'Skill not found' }, 404);
 
-    await db
-      .insert(agentHostSkillAssignments)
-      .values({ agentHostId, tenantId, skillSlug: body.skillSlug, assignedBy: userId })
-      .onConflictDoNothing();
+    await assignSkill(db, tenantId, { scope: 'host', agentHostId }, { skillSlug: body.skillSlug, assignedBy: userId });
 
     return c.json({ ok: true, agentHostId, skillSlug: body.skillSlug }, 201);
   });
@@ -156,13 +109,7 @@ export function createSkillAssignmentRoutes(db: Db): Hono<HonoEnv> {
     const tenantId  = c.get('tenantId') as number;
     const agentHostId    = Number(c.req.param('agentHostId'));
     const skillSlug = c.req.param('slug');
-    await db
-      .delete(agentHostSkillAssignments)
-      .where(and(
-        eq(agentHostSkillAssignments.agentHostId, agentHostId),
-        eq(agentHostSkillAssignments.tenantId, tenantId),
-        eq(agentHostSkillAssignments.skillSlug, skillSlug),
-      ));
+    await unassignSkill(db, tenantId, { scope: 'host', agentHostId }, skillSlug);
     return c.body(null, 204);
   });
 

@@ -9,12 +9,12 @@ import type { Domain } from '@/lib/kernel/kernelApi';
  * "A reusable component" existed three times in this codebase under three names,
  * and a capability ported from hired.video or BurnRateOS landed in none of them:
  *
- *   `WidgetDef`   (lib/widgets/types.ts)      — mountable on a dashboard, a pin,
- *                                                the Brain. Correctly open/closed.
- *   `EMBED_VIEWS` (builderforce-embedded)     — mountable in a HOST app, but
- *                                                resolved by a 13-branch switch
- *                                                over ~20 hand-written imports.
- *   canvas kinds  (creationObjectRegistry)    — mountable on a board.
+ *   `WidgetDef`    (lib/widgets/types.ts)   — mountable on a dashboard, a pin,
+ *                                             the Brain. Correctly open/closed.
+ *   `EMBED_VIEWS`  (builderforce-embedded)  — mountable in a HOST app, but
+ *                                             resolved by a 13-branch switch over
+ *                                             ~20 hand-written imports.
+ *   canvas kinds   (creationObjectRegistry) — mountable on a board.
  *
  * Nothing joined them, so a ported capability became a PAGE under `app/*` and was
  * reachable from exactly one surface: ours. An entrepreneur could not drop the

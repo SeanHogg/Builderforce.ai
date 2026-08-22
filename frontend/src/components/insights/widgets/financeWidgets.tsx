@@ -8,7 +8,7 @@
  * cache reads, spend-over-time, budgets, spend-by-project) and the Engineering
  * effectiveness lens (outcome score, merge rate, CI-green, degraded rate,
  * cost-per-merged work, the approach/model/action-type rankings) are each now a
- * standalone {@link WidgetDef} so a user can pin the exact tile they want onto
+ * standalone {@link ComponentDef} so a user can pin the exact tile they want onto
  * their dashboard. Every card reads the SAME collector through a shared, deduped
  * source (one request per source+window via {@link useSharedSource}), renders
  * only its body (the WidgetCard chrome supplies frame + title + pin), and drills
@@ -25,7 +25,7 @@ import {
 } from '@/lib/builderforceApi';
 import { useSharedSource } from '@/lib/widgets/sharedSource';
 import { WidgetStat as Stat, WidgetMuted as Muted, useSourceState } from '@/components/widgets/widgetBody';
-import type { WidgetCardProps, WidgetDef, WidgetDrill } from '@/lib/widgets/types';
+import type { ComponentSurfaceProps, ComponentDef, ComponentDrill } from '@/lib/components/types';
 import { BarChart } from '@/components/charts/BarChart';
 import { TrendChart } from '@/components/charts/TrendChart';
 import { colorAt } from '@/components/charts/chartColors';
@@ -48,8 +48,8 @@ function useFinance() {
   return useSharedSource<FinanceInsights>(`finance:${period}`, () => insightsApi.finance(period));
 }
 
-const FIN_DRILL: WidgetDrill = { kind: 'panel', hub: 'finance', panel: 'finance' };
-const ENG_DRILL: WidgetDrill = { kind: 'panel', hub: 'ai', panel: 'engineering' };
+const FIN_DRILL: ComponentDrill = { kind: 'panel', hub: 'finance', panel: 'finance' };
+const ENG_DRILL: ComponentDrill = { kind: 'panel', hub: 'ai', panel: 'engineering' };
 const FIN_CAP = 'insights.finance' as const;
 const ENG_CAP = 'insights.engineering' as const;
 
@@ -71,42 +71,42 @@ function useEng(days: number) {
 
 // ── Finance widget bodies ──────────────────────────────────────────────────────
 
-function SpendCard(_: WidgetCardProps) {
+function SpendCard(_: ComponentSurfaceProps) {
   const { usd } = useInsightFormat();
   const { data, state, t } = useFin();
   if (!data) return state;
   return <Stat value={usd(data.totals.spendUsd)} sub={data.periodMonth} />;
 }
 
-function ForecastCard(_: WidgetCardProps) {
+function ForecastCard(_: ComponentSurfaceProps) {
   const { usd } = useInsightFormat();
   const { data, state, t } = useFin();
   if (!data) return state;
   return <Stat value={usd(data.totals.forecastUsd)} sub={t('fin.forecastSub')} />;
 }
 
-function CostPerPrCard(_: WidgetCardProps) {
+function CostPerPrCard(_: ComponentSurfaceProps) {
   const { usd } = useInsightFormat();
   const { data, state, t } = useFin();
   if (!data) return state;
   return <Stat value={usd(data.totals.costPerMergedPrUsd)} sub={t('fin.mergedRuns', { n: data.totals.mergedRuns })} />;
 }
 
-function PaidOverflowCard(_: WidgetCardProps) {
+function PaidOverflowCard(_: ComponentSurfaceProps) {
   const { usd } = useInsightFormat();
   const { data, state, t } = useFin();
   if (!data) return state;
   return <Stat value={usd(data.totals.paidOverflowUsd)} sub={t('fin.paidOverflowSub')} />;
 }
 
-function CacheReadCard(_: WidgetCardProps) {
+function CacheReadCard(_: ComponentSurfaceProps) {
   const { int } = useInsightFormat();
   const { data, state, t } = useFin();
   if (!data) return state;
   return <Stat value={int(data.totals.cacheReadTokens)} sub={t('fin.cacheReadSub')} />;
 }
 
-function SpendTrendCard({ days }: WidgetCardProps) {
+function SpendTrendCard({ days }: ComponentSurfaceProps) {
   const { usd } = useInsightFormat();
   const { data, state, t } = useFin();
   if (!data) return state;
@@ -125,7 +125,7 @@ function SpendTrendCard({ days }: WidgetCardProps) {
   );
 }
 
-function BudgetVarianceCard(_: WidgetCardProps) {
+function BudgetVarianceCard(_: ComponentSurfaceProps) {
   const { usd } = useInsightFormat();
   const { data, state, t } = useFin();
   if (!data) return state;
@@ -147,7 +147,7 @@ function BudgetVarianceCard(_: WidgetCardProps) {
   );
 }
 
-function ByProjectCard(_: WidgetCardProps) {
+function ByProjectCard(_: ComponentSurfaceProps) {
   const { usd } = useInsightFormat();
   const { data, state, t } = useFin();
   if (!data) return state;
@@ -165,31 +165,31 @@ function ByProjectCard(_: WidgetCardProps) {
 
 // ── Engineering widget bodies ──────────────────────────────────────────────────
 
-function OutcomeScoreCard({ days }: WidgetCardProps) {
+function OutcomeScoreCard({ days }: ComponentSurfaceProps) {
   const { data, state, t } = useEng(days);
   if (!data) return state;
   return <Stat value={score2(data.totals.avgScore)} sub={t('eng.scoreSub')} />;
 }
 
-function MergeRateCard({ days }: WidgetCardProps) {
+function MergeRateCard({ days }: ComponentSurfaceProps) {
   const { data, state, t } = useEng(days);
   if (!data) return state;
   return <Stat value={pct(data.totals.mergedRatePct)} sub={t('eng.mergeSub')} />;
 }
 
-function CiGreenCard({ days }: WidgetCardProps) {
+function CiGreenCard({ days }: ComponentSurfaceProps) {
   const { data, state, t } = useEng(days);
   if (!data) return state;
   return <Stat value={pct(data.totals.ciGreenRatePct)} sub={t('eng.ciSub')} />;
 }
 
-function DegradedCard({ days }: WidgetCardProps) {
+function DegradedCard({ days }: ComponentSurfaceProps) {
   const { data, state, t } = useEng(days);
   if (!data) return state;
   return <Stat value={pct(data.totals.degradedRatePct)} sub={t('eng.degradedSub')} />;
 }
 
-function EngCostCard({ days }: WidgetCardProps) {
+function EngCostCard({ days }: ComponentSurfaceProps) {
   const { usd } = useInsightFormat();
   const { data, state, t } = useEng(days);
   if (!data) return state;
@@ -227,21 +227,21 @@ function effectivenessTable(f: InsightFormatters, rows: EffectivenessBucket[], l
   );
 }
 
-function ByApproachCard({ days }: WidgetCardProps) {
+function ByApproachCard({ days }: ComponentSurfaceProps) {
   const insight = useInsightFormat();
   const { data, state, t } = useEng(days);
   if (!data) return state;
   return effectivenessTable(insight, data.byApproach, t('eng.approach'), t);
 }
 
-function ByModelCard({ days }: WidgetCardProps) {
+function ByModelCard({ days }: ComponentSurfaceProps) {
   const insight = useInsightFormat();
   const { data, state, t } = useEng(days);
   if (!data) return state;
   return effectivenessTable(insight, data.byModel, t('eng.model'), t);
 }
 
-function ByActionTypeCard({ days }: WidgetCardProps) {
+function ByActionTypeCard({ days }: ComponentSurfaceProps) {
   const insight = useInsightFormat();
   const { data, state, t } = useEng(days);
   if (!data) return state;
@@ -250,23 +250,23 @@ function ByActionTypeCard({ days }: WidgetCardProps) {
 
 // ── Registry ─────────────────────────────────────────────────────────────────
 
-export const FINANCE_WIDGETS: WidgetDef[] = [
+export const FINANCE_COMPONENTS: ComponentDef[] = [
   // Finance / FinOps
-  { id: 'finance.spend', group: 'finance', titleKey: 'finSpend', capability: FIN_CAP, size: 'sm', Card: SpendCard, drill: FIN_DRILL },
-  { id: 'finance.forecast', group: 'finance', titleKey: 'finForecast', capability: FIN_CAP, size: 'sm', Card: ForecastCard, drill: FIN_DRILL },
-  { id: 'finance.cost-per-pr', group: 'finance', titleKey: 'finCostPerPr', capability: FIN_CAP, size: 'sm', Card: CostPerPrCard, drill: FIN_DRILL },
-  { id: 'finance.paid-overflow', group: 'finance', titleKey: 'finPaidOverflow', capability: FIN_CAP, size: 'sm', Card: PaidOverflowCard, drill: FIN_DRILL },
-  { id: 'finance.cache-read', group: 'finance', titleKey: 'finCacheRead', capability: FIN_CAP, size: 'sm', Card: CacheReadCard, drill: FIN_DRILL },
-  { id: 'finance.spend-trend', group: 'finance', titleKey: 'finSpendTrend', capability: FIN_CAP, size: 'lg', Card: SpendTrendCard, drill: FIN_DRILL },
-  { id: 'finance.budget-variance', group: 'finance', titleKey: 'finBudgetVariance', capability: FIN_CAP, size: 'md', Card: BudgetVarianceCard, drill: FIN_DRILL },
-  { id: 'finance.by-project', group: 'finance', titleKey: 'finByProject', capability: FIN_CAP, size: 'md', Card: ByProjectCard, drill: FIN_DRILL },
+  { id: 'finance.spend', group: 'finance', titleKey: 'finSpend', capability: FIN_CAP, size: 'sm', Surface: SpendCard, drill: FIN_DRILL },
+  { id: 'finance.forecast', group: 'finance', titleKey: 'finForecast', capability: FIN_CAP, size: 'sm', Surface: ForecastCard, drill: FIN_DRILL },
+  { id: 'finance.cost-per-pr', group: 'finance', titleKey: 'finCostPerPr', capability: FIN_CAP, size: 'sm', Surface: CostPerPrCard, drill: FIN_DRILL },
+  { id: 'finance.paid-overflow', group: 'finance', titleKey: 'finPaidOverflow', capability: FIN_CAP, size: 'sm', Surface: PaidOverflowCard, drill: FIN_DRILL },
+  { id: 'finance.cache-read', group: 'finance', titleKey: 'finCacheRead', capability: FIN_CAP, size: 'sm', Surface: CacheReadCard, drill: FIN_DRILL },
+  { id: 'finance.spend-trend', group: 'finance', titleKey: 'finSpendTrend', capability: FIN_CAP, size: 'lg', Surface: SpendTrendCard, drill: FIN_DRILL },
+  { id: 'finance.budget-variance', group: 'finance', titleKey: 'finBudgetVariance', capability: FIN_CAP, size: 'md', Surface: BudgetVarianceCard, drill: FIN_DRILL },
+  { id: 'finance.by-project', group: 'finance', titleKey: 'finByProject', capability: FIN_CAP, size: 'md', Surface: ByProjectCard, drill: FIN_DRILL },
   // Engineering effectiveness
-  { id: 'engineering.outcome', group: 'engineering', titleKey: 'engOutcome', capability: ENG_CAP, size: 'sm', Card: OutcomeScoreCard, drill: ENG_DRILL },
-  { id: 'engineering.merge-rate', group: 'engineering', titleKey: 'engMergeRate', capability: ENG_CAP, size: 'sm', Card: MergeRateCard, drill: ENG_DRILL },
-  { id: 'engineering.ci-green', group: 'engineering', titleKey: 'engCiGreen', capability: ENG_CAP, size: 'sm', Card: CiGreenCard, drill: ENG_DRILL },
-  { id: 'engineering.degraded', group: 'engineering', titleKey: 'engDegraded', capability: ENG_CAP, size: 'sm', Card: DegradedCard, drill: ENG_DRILL },
-  { id: 'engineering.cost', group: 'engineering', titleKey: 'engCost', capability: ENG_CAP, size: 'sm', Card: EngCostCard, drill: ENG_DRILL },
-  { id: 'engineering.by-approach', group: 'engineering', titleKey: 'engByApproach', capability: ENG_CAP, size: 'lg', Card: ByApproachCard, drill: ENG_DRILL },
-  { id: 'engineering.by-model', group: 'engineering', titleKey: 'engByModel', capability: ENG_CAP, size: 'lg', Card: ByModelCard, drill: ENG_DRILL },
-  { id: 'engineering.by-action-type', group: 'engineering', titleKey: 'engByActionType', capability: ENG_CAP, size: 'lg', Card: ByActionTypeCard, drill: ENG_DRILL },
+  { id: 'engineering.outcome', group: 'engineering', titleKey: 'engOutcome', capability: ENG_CAP, size: 'sm', Surface: OutcomeScoreCard, drill: ENG_DRILL },
+  { id: 'engineering.merge-rate', group: 'engineering', titleKey: 'engMergeRate', capability: ENG_CAP, size: 'sm', Surface: MergeRateCard, drill: ENG_DRILL },
+  { id: 'engineering.ci-green', group: 'engineering', titleKey: 'engCiGreen', capability: ENG_CAP, size: 'sm', Surface: CiGreenCard, drill: ENG_DRILL },
+  { id: 'engineering.degraded', group: 'engineering', titleKey: 'engDegraded', capability: ENG_CAP, size: 'sm', Surface: DegradedCard, drill: ENG_DRILL },
+  { id: 'engineering.cost', group: 'engineering', titleKey: 'engCost', capability: ENG_CAP, size: 'sm', Surface: EngCostCard, drill: ENG_DRILL },
+  { id: 'engineering.by-approach', group: 'engineering', titleKey: 'engByApproach', capability: ENG_CAP, size: 'lg', Surface: ByApproachCard, drill: ENG_DRILL },
+  { id: 'engineering.by-model', group: 'engineering', titleKey: 'engByModel', capability: ENG_CAP, size: 'lg', Surface: ByModelCard, drill: ENG_DRILL },
+  { id: 'engineering.by-action-type', group: 'engineering', titleKey: 'engByActionType', capability: ENG_CAP, size: 'lg', Surface: ByActionTypeCard, drill: ENG_DRILL },
 ];

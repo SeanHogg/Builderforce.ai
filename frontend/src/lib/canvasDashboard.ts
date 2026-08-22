@@ -32,7 +32,7 @@ export const DASHBOARD_MAX_CATEGORIES = 8;
 
 /** Widgets per dashboard. High enough never to be reached in practice, low enough
  *  that a malformed patch cannot render ten thousand cards. */
-export const DASHBOARD_MAX_WIDGETS = 24;
+export const DASHBOARD_MAX_COMPONENTS = 24;
 
 export const DASHBOARD_CHART_KINDS = [
   'kpi', 'bar', 'column', 'line', 'area', 'donut', 'stackedBar', 'funnel', 'gauge', 'table',
@@ -259,7 +259,7 @@ function dashboardWidgetSignature(widget: DashboardWidget): string {
  */
 export function readDashboardWidgets(data: Record<string, unknown>): DashboardWidget[] {
   const stored = Array.isArray(data.widgets)
-    ? data.widgets.slice(0, DASHBOARD_MAX_WIDGETS)
+    ? data.widgets.slice(0, DASHBOARD_MAX_COMPONENTS)
       .map(normalizeDashboardWidget)
       .filter((widget): widget is DashboardWidget => widget != null)
     : [];
@@ -267,7 +267,7 @@ export function readDashboardWidgets(data: Record<string, unknown>): DashboardWi
   if (stored.length === 0) return legacy;
   const seen = new Set(stored.map(dashboardWidgetSignature));
   return [...stored, ...legacy.filter((widget) => !seen.has(dashboardWidgetSignature(widget)))]
-    .slice(0, DASHBOARD_MAX_WIDGETS);
+    .slice(0, DASHBOARD_MAX_COMPONENTS);
 }
 
 /**
@@ -279,7 +279,7 @@ export function readDashboardWidgets(data: Record<string, unknown>): DashboardWi
  */
 export function dashboardWidgetsPatch(widgets: readonly DashboardWidget[]): Record<string, unknown> {
   return {
-    widgets: widgets.slice(0, DASHBOARD_MAX_WIDGETS).map((widget) => {
+    widgets: widgets.slice(0, DASHBOARD_MAX_COMPONENTS).map((widget) => {
       const definition = dashboardChartDefinition(widget.chart);
       return {
         id: widget.id,

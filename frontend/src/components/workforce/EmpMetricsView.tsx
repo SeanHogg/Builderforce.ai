@@ -57,7 +57,7 @@ function ScrollTable({ children }: { children: React.ReactNode }) {
 // ── EMP-12 — over-allocation ─────────────────────────────────────────────────
 function AllocationPanel() {
   const { int } = useInsightFormat();
-  const t = useTranslations('widgets');
+  const t = useTranslations('components');
   const [data, setData] = useState<AllocationHealthResult | null>(null);
   const [err, setErr] = useState<string | null>(null);
   useEffect(() => { empMetricsApi.allocationHealth().then(setData).catch((e: Error) => setErr(e.message)); }, []);
@@ -106,7 +106,7 @@ function AllocationPanel() {
 // ── EMP-14 — collaboration ───────────────────────────────────────────────────
 function CollaborationPanel({ days }: { days: number }) {
   const { int } = useInsightFormat();
-  const t = useTranslations('widgets');
+  const t = useTranslations('components');
   const [data, setData] = useState<CollaborationResult | null>(null);
   const [err, setErr] = useState<string | null>(null);
   useEffect(() => { empMetricsApi.collaboration(days).then(setData).catch((e: Error) => setErr(e.message)); }, [days]);
@@ -168,7 +168,7 @@ function CollaborationPanel({ days }: { days: number }) {
 // ── EMP-17 — documentation activity ──────────────────────────────────────────
 function DocActivityPanel({ days }: { days: number }) {
   const { int } = useInsightFormat();
-  const t = useTranslations('widgets');
+  const t = useTranslations('components');
   const [data, setData] = useState<DocActivityResult | null>(null);
   const [err, setErr] = useState<string | null>(null);
   useEffect(() => { empMetricsApi.docActivity(days).then(setData).catch((e: Error) => setErr(e.message)); }, [days]);
@@ -210,7 +210,7 @@ function DocActivityPanel({ days }: { days: number }) {
 // ── EMP-19 — labour cost ─────────────────────────────────────────────────────
 function LaborCostPanel({ days }: { days: number }) {
   const { usd } = useInsightFormat();
-  const t = useTranslations('widgets');
+  const t = useTranslations('components');
   const [data, setData] = useState<LaborCostResult | null>(null);
   const [err, setErr] = useState<string | null>(null);
   useEffect(() => { empMetricsApi.laborCost(days).then(setData).catch((e: Error) => setErr(e.message)); }, [days]);
@@ -272,7 +272,7 @@ const TIER_COLOR: Record<PerformerTier, string> = { high: OK, solid: 'var(--acce
 
 function CoachingNotes({ member }: { member: PerformerRow }) {
   const fmt = useFormat();
-  const t = useTranslations('widgets');
+  const t = useTranslations('components');
   const [notes, setNotes] = useState<CoachingNote[] | null>(null);
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
@@ -323,7 +323,7 @@ function CoachingNotes({ member }: { member: PerformerRow }) {
 
 function PerformersPanel({ days }: { days: number }) {
   const { int } = useInsightFormat();
-  const t = useTranslations('widgets');
+  const t = useTranslations('components');
   const [data, setData] = useState<PerformerTiersResult | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
@@ -394,7 +394,7 @@ function PerformersPanel({ days }: { days: number }) {
 
 // ── EMP-13 — per-member initiative allocation (stacked) ──────────────────────
 function InitiativeAllocationPanel({ days }: { days: number }) {
-  const t = useTranslations('widgets');
+  const t = useTranslations('components');
   const [data, setData] = useState<MemberInitiativeAllocResult | null>(null);
   const [err, setErr] = useState<string | null>(null);
   useEffect(() => { empMetricsApi.initiativeAllocation(days).then(setData).catch((e: Error) => setErr(e.message)); }, [days]);
@@ -442,7 +442,7 @@ function InitiativeAllocationPanel({ days }: { days: number }) {
 }
 
 export function EmpMetricsView() {
-  const t = useTranslations('widgets');
+  const t = useTranslations('components');
   const [days, setDays] = useState(30);
   const [exporting, setExporting] = useState(false);
 

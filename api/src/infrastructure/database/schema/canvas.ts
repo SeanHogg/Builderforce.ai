@@ -37,7 +37,6 @@ import { desc, sql } from 'drizzle-orm';
 import { activityEventTypeEnum, integrationProviderEnum, newsletterEventTypeEnum, newsletterSubscriptionStatusEnum, objects, teamMemberKindEnum } from './kernel';
 import {
   teams,
-  pokerSessions,
   segments,
   tenantApiKeys,
   tenants,
@@ -989,7 +988,15 @@ export const calendarConnections = pgTable('calendar_connections', {
   userId:        varchar('user_id', { length: 64 }).notNull(),                         // users.id (the connector)
   provider:      varchar('provider', { length: 16 }).notNull(),                        // google|microsoft
   accountEmail:  varchar('account_email', { length: 255 }),
-  accessToken:   text('access_token').notNull(),
+  /** The grant, sealed by `oauthTokenVault` with the tenant's key — the same
+   *  storage every other per-user connection uses (mailbox, drive). NULL only for
+   *  a row written before migration 1107 and not yet touched since. */
+  tokenEnc:      text('token_enc'),
+  tokenIv:       text('token_iv'),
+  /** LEGACY plaintext grant (pre-1107). Read-only fallback: the first refresh
+   *  after 1107 seals the row and clears these. Dropped once the backfill drains
+   *  — see the migration note. Never write to them. */
+  accessToken:   text('access_token'),
   refreshToken:  text('refresh_token'),
   expiresAt:     timestamp('expires_at', { withTimezone: true }),
   scope:         text('scope'),
@@ -1846,4 +1853,24 @@ export const meetingTranscriptSegments = pgTable('meeting_transcript_segments', 
   text:        text('text').notNull(),
   atMs:        bigint('at_ms', { mode: 'number' }).notNull().default(0),
   createdAt:   timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+
+// ---------------------------------------------------------------------------
+// Moved here from `identity.ts` (PRD 20 SS3). `poker_stories` and `poker_votes`
+// were already in this module; the SESSION they both hang off was in Identity,
+// which split one ceremony across two domains and made Canvas import Identity to
+// reach its own aggregate root.
+// ---------------------------------------------------------------------------
+
+export const pokerSessions = pgTable('poker_sessions', {
+  id:             uuid('id').primaryKey().defaultRandom(),
+  tenantId:       integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:      uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  name:           varchar('name', { length: 255 }).notNull(),
+  votingSystem:   varchar('voting_system', { length: 20 }).notNull().default('fibonacci'),
+  status:         varchar('status', { length: 20 }).notNull().default('active'),
+  facilitatorId:  varchar('facilitator_id', { length: 64 }),
+  createdAt:      timestamp('created_at').notNull().defaultNow(),
+  updatedAt:      timestamp('updated_at').notNull().defaultNow(),
 });

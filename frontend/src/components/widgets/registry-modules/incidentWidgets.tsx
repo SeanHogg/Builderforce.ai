@@ -20,7 +20,7 @@ import { useSharedSource } from '@/lib/widgets/sharedSource';
 import { WidgetMuted as Muted } from '@/components/widgets/widgetBody';
 import { InsightStat } from '@/components/dashboard/InsightStat';
 import { formatRecency } from '@/components/dashboard/metricFormat';
-import type { WidgetCardProps, WidgetDef, WidgetDrill } from '@/lib/widgets/types';
+import type { ComponentSurfaceProps, ComponentDef, ComponentDrill } from '@/lib/components/types';
 import { DonutChart } from '@/components/charts/DonutChart';
 import { colorAt } from '@/components/charts/chartColors';
 import { useInsightFormat } from '@/components/insights/format';
@@ -60,9 +60,9 @@ function fmtMinutes(m: number | null): string {
 // ── Widgets ─────────────────────────────────────────────────────────────────────
 
 /** Open-vs-total incidents with recency + an "all clear" / "N open" nudge. */
-function IncidentStatusCard(_props: WidgetCardProps) {
+function IncidentStatusCard(_props: ComponentSurfaceProps) {
   const { int } = useInsightFormat();
-  const t = useTranslations('widgets');
+  const t = useTranslations('components');
   const dt = useTranslations('dashboard');
   const { data, error } = useMonitoringReport();
   if (error) return <Muted>{error}</Muted>;
@@ -83,9 +83,9 @@ function IncidentStatusCard(_props: WidgetCardProps) {
 }
 
 /** Severity mix donut (sev1..sev4) over the window. */
-function IncidentSeverityCard(_props: WidgetCardProps) {
+function IncidentSeverityCard(_props: ComponentSurfaceProps) {
   const { int } = useInsightFormat();
-  const t = useTranslations('widgets');
+  const t = useTranslations('components');
   const { data, error } = useMonitoringReport();
   if (error) return <Muted>{error}</Muted>;
   if (!data) return <Muted>{t('loading')}</Muted>;
@@ -106,9 +106,9 @@ function IncidentSeverityCard(_props: WidgetCardProps) {
 }
 
 /** By-affected-system donut — which systems are burning (top 6). */
-function IncidentSystemCard(_props: WidgetCardProps) {
+function IncidentSystemCard(_props: ComponentSurfaceProps) {
   const { int } = useInsightFormat();
-  const t = useTranslations('widgets');
+  const t = useTranslations('components');
   const { data, error } = useMonitoringReport();
   if (error) return <Muted>{error}</Muted>;
   if (!data) return <Muted>{t('loading')}</Muted>;
@@ -133,8 +133,8 @@ function IncidentSystemCard(_props: WidgetCardProps) {
 }
 
 /** Mean time to resolve — the reliability headline number. */
-function IncidentMttrCard(_props: WidgetCardProps) {
-  const t = useTranslations('widgets');
+function IncidentMttrCard(_props: ComponentSurfaceProps) {
+  const t = useTranslations('components');
   const { data, error } = useMonitoringReport();
   if (error) return <Muted>{error}</Muted>;
   if (!data) return <Muted>{t('loading')}</Muted>;
@@ -150,12 +150,12 @@ function IncidentMttrCard(_props: WidgetCardProps) {
 
 // ── Registry ─────────────────────────────────────────────────────────────────
 
-const INCIDENTS_DRILL: WidgetDrill = { kind: 'route', href: '/incidents' };
-const REPORTING_DRILL: WidgetDrill = { kind: 'route', href: '/incidents?tab=reporting' };
+const INCIDENTS_DRILL: ComponentDrill = { kind: 'route', href: '/incidents' };
+const REPORTING_DRILL: ComponentDrill = { kind: 'route', href: '/incidents?tab=reporting' };
 
-export const INCIDENT_WIDGETS: WidgetDef[] = [
-  { id: 'inc.status', group: 'incidents', titleKey: 'incStatus', size: 'sm', capability: 'quality.view', Card: IncidentStatusCard, drill: INCIDENTS_DRILL },
-  { id: 'inc.severity', group: 'incidents', titleKey: 'incSeverity', size: 'md', capability: 'quality.view', Card: IncidentSeverityCard, drill: REPORTING_DRILL },
-  { id: 'inc.systems', group: 'incidents', titleKey: 'incSystems', size: 'md', capability: 'quality.view', Card: IncidentSystemCard, drill: REPORTING_DRILL },
-  { id: 'inc.mttr', group: 'incidents', titleKey: 'incMttr', size: 'sm', capability: 'quality.view', Card: IncidentMttrCard, drill: REPORTING_DRILL },
+export const INCIDENT_COMPONENTS: ComponentDef[] = [
+  { id: 'inc.status', group: 'incidents', titleKey: 'incStatus', size: 'sm', capability: 'quality.view', Surface: IncidentStatusCard, drill: INCIDENTS_DRILL },
+  { id: 'inc.severity', group: 'incidents', titleKey: 'incSeverity', size: 'md', capability: 'quality.view', Surface: IncidentSeverityCard, drill: REPORTING_DRILL },
+  { id: 'inc.systems', group: 'incidents', titleKey: 'incSystems', size: 'md', capability: 'quality.view', Surface: IncidentSystemCard, drill: REPORTING_DRILL },
+  { id: 'inc.mttr', group: 'incidents', titleKey: 'incMttr', size: 'sm', capability: 'quality.view', Surface: IncidentMttrCard, drill: REPORTING_DRILL },
 ];

@@ -111,7 +111,7 @@ export interface ComposedAnswer extends QueryAnswer {
   narrative: string;
   /** Every resolved reading, in the topic's declared order. */
   metrics: QueryAnswer[];
-  /** Registry widget ids to render — resolve each through `getWidget()`. */
+  /** Registry widget ids to render — resolve each through `getComponent()`. */
   widgetIds: string[];
 }
 

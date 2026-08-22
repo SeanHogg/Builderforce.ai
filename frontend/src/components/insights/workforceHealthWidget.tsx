@@ -23,11 +23,11 @@
 import { useTranslations } from 'next-intl';
 import { WidgetMuted as Muted } from '@/components/widgets/widgetBody';
 import { useSharedSource } from '@/lib/widgets/sharedSource';
-import type { WidgetCardProps, WidgetDef, WidgetDrill } from '@/lib/widgets/types';
+import type { ComponentSurfaceProps, ComponentDef, ComponentDrill } from '@/lib/components/types';
 import { dashboardsApi, type WorkforceHealthMember, type WorkforceHealthResult } from '@/lib/dashboardsApi';
 
 /** Where the manager goes to actually rebalance — the same drill the EMP cards use. */
-const DRILL: WidgetDrill = { kind: 'route', href: '/workforce?tab=performance' };
+const DRILL: ComponentDrill = { kind: 'route', href: '/workforce?tab=performance' };
 
 /**
  * Cohort tone. Over-allocated and idle are both costs — one burns a person out,
@@ -44,7 +44,7 @@ const TONE = {
 type CohortKey = 'over' | 'under' | 'idle';
 
 function Cohort({ label, members, tone }: { label: string; members: WorkforceHealthMember[]; tone: string }) {
-  const t = useTranslations('widgets');
+  const t = useTranslations('components');
   return (
     <div style={{
       flex: '1 1 160px', minWidth: 0, padding: 12, borderRadius: 'var(--radius-md)',
@@ -79,8 +79,8 @@ function Cohort({ label, members, tone }: { label: string; members: WorkforceHea
   );
 }
 
-function WorkforceHealthCard({ days }: WidgetCardProps) {
-  const t = useTranslations('widgets');
+function WorkforceHealthCard({ days }: ComponentSurfaceProps) {
+  const t = useTranslations('components');
   // Keyed on the window so a dashboard that changes its period re-reads rather
   // than showing last period's cohorts under this period's heading.
   const { data, error } = useSharedSource<WorkforceHealthResult>(
@@ -112,7 +112,7 @@ function WorkforceHealthCard({ days }: WidgetCardProps) {
   );
 }
 
-export const WORKFORCE_HEALTH_WIDGETS: WidgetDef[] = [
+export const WORKFORCE_HEALTH_COMPONENTS: ComponentDef[] = [
   {
     id: 'workforce.health',
     group: 'empAllocation',
@@ -120,7 +120,7 @@ export const WORKFORCE_HEALTH_WIDGETS: WidgetDef[] = [
     descKey: 'workforceHealth',
     capability: 'insights.engineering',
     size: 'lg',
-    Card: WorkforceHealthCard,
+    Surface: WorkforceHealthCard,
     drill: DRILL,
   },
 ];

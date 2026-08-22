@@ -23,7 +23,7 @@ import { AiImpactSummary, EngineeringSummary, RecommendationsSummary, LlmUsageSu
  * The lenses load ON DEMAND, and that is load-bearing in two ways.
  *
  * 1. It breaks a CYCLE. `AiImpactLens` renders `<WidgetGrid>`, which reads
- *    `lib/widgets/registry`, which reads `allWidgets`, which reads
+ *    `lib/components/registry`, which reads `allComponents`, which reads
  *    `hubWidgets` — and `hubWidgets` projects THIS registry into pinnable cards,
  *    so it imports `AI_INSIGHT_PANEL_IDS` back from here. Statically that closes
  *    a loop, and a loop is only ever as safe as its entry point: this module is

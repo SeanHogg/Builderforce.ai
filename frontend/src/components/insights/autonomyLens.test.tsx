@@ -171,11 +171,11 @@ describe('localization', () => {
     'insights.autonomy.gate.no_agent', 'insights.autonomy.gate.human_gate', 'insights.autonomy.gate.run_cap_exhausted',
     'insights.autonomy.gate.cooldown_active', 'insights.autonomy.gate.unrecorded',
     'insights.delivhub.panel.autonomy', 'insights.delivhub.panel.autonomyDesc',
-    'widgets.group.autonomy',
-    'widgets.title.autoFully', 'widgets.title.autoDispatched', 'widgets.title.autoHopShare',
-    'widgets.title.autoStalled', 'widgets.title.autoNeverStarted', 'widgets.title.autoOriginFunnel',
-    'widgets.title.autoHopSplit', 'widgets.title.autoStallGates', 'widgets.title.autoOriginMix',
-    'widgets.title.autoFunnelTable', 'widgets.title.autoCoverage',
+    'components.group.autonomy',
+    'components.title.autoFully', 'components.title.autoDispatched', 'components.title.autoHopShare',
+    'components.title.autoStalled', 'components.title.autoNeverStarted', 'components.title.autoOriginFunnel',
+    'components.title.autoHopSplit', 'components.title.autoStallGates', 'components.title.autoOriginMix',
+    'components.title.autoFunnelTable', 'components.title.autoCoverage',
     'nav.tab.autonomy',
   ];
 

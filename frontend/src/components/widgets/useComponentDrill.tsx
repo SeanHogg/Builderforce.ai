@@ -5,7 +5,7 @@ import { useOptionalAiInsightPanel } from '@/components/insights/AiInsightPanelP
 import { useOptionalDeliveryPanel } from '@/components/insights/DeliveryPanelProvider';
 import { useOptionalFinancePanel } from '@/components/insights/finance/FinancePanelProvider';
 import { useOptionalDevexPanel } from '@/components/insights/DevexPanelProvider';
-import type { WidgetDrill } from '@/lib/widgets/types';
+import type { ComponentDrill } from '@/lib/components/types';
 
 /**
  * Dispatch a widget's drill-down to the full report.
@@ -31,7 +31,7 @@ const HUB_ROUTE: Record<string, string> = {
   devex: '/insights/devex',
 };
 
-export function useWidgetDrill(): (drill: WidgetDrill | undefined) => void {
+export function useComponentDrill(): (drill: ComponentDrill | undefined) => void {
   const router = useRouter();
   const ai = useOptionalAiInsightPanel();
   const delivery = useOptionalDeliveryPanel();

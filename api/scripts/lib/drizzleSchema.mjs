@@ -90,3 +90,54 @@ export function parseDrizzleTables(srcDir) {
   }
   return tables;
 }
+
+/**
+ * Parse every foreign key `.references(() => otherTable.id, { onDelete: … })`.
+ *
+ * Drizzle names the TARGET by its JavaScript binding (`creationSessions`), not by
+ * its SQL name (`creation_sessions`), so this also builds the binding → SQL-name
+ * map from the `export const X = pgTable('y'` declarations and resolves through it.
+ * A reference whose target is not a parsed table resolves to `null`, which every
+ * consumer must treat as "cannot judge" — a guard that guesses a parent wrong is
+ * worse than one that admits it does not know.
+ *
+ * `notNull` and `onDelete` are captured because together they are what makes a
+ * child row unable to outlive or escape its parent: a NULLable parent id means the
+ * row can exist orphaned, and anything other than CASCADE means it can be left
+ * behind when the parent goes.
+ *
+ * @returns Map<tableName, Array<{column, target, notNull, onDelete}>>
+ */
+export function parseDrizzleReferences(srcDir) {
+  const text = collectSourceFiles(srcDir)
+    .map((f) => readFileSync(f, 'utf8'))
+    .join('\n');
+
+  const bindingToTable = new Map();
+  for (const m of text.matchAll(/export const (\w+)\s*=\s*pgTable\(\s*'([^']+)'/g)) {
+    bindingToTable.set(m[1], m[2]);
+  }
+
+  const tableRe = /pgTable\(\s*'([^']+)'\s*,\s*\{([\s\S]*?)\n\}\s*[,)]/g;
+  const refs = new Map();
+  for (const match of text.matchAll(tableRe)) {
+    const table = match[1];
+    const found = refs.get(table) ?? [];
+    // One column per line in this schema, so the line IS the unit: take the column
+    // name, whether `.notNull()` appears on it, and the onDelete of its reference.
+    for (const line of match[2].split('\n')) {
+      const ref = line.match(/references\(\(\)\s*=>\s*(\w+)\.\w+/);
+      if (!ref) continue;
+      const col = line.match(/^\s*\w+:\s*\w+\(\s*'([^']+)'/);
+      if (!col) continue;
+      found.push({
+        column: col[1],
+        target: bindingToTable.get(ref[1]) ?? null,
+        notNull: /\.notNull\(\)/.test(line),
+        onDelete: line.match(/onDelete:\s*'([a-z ]+)'/)?.[1] ?? null,
+      });
+    }
+    refs.set(table, found);
+  }
+  return refs;
+}

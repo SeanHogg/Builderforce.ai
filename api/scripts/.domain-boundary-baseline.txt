@@ -5,7 +5,6 @@
 # scripts/adjudications/domain-boundary.mjs instead, where it is data and is counted separately.
 agents.ts -> canvas.ts
 agents.ts -> delivery.ts
-agents.ts -> identity.ts
 agents.ts -> platform.ts
 canvas.ts -> agents.ts
 canvas.ts -> delivery.ts
@@ -13,21 +12,16 @@ canvas.ts -> identity.ts
 canvas.ts -> platform.ts
 commerce.ts -> canvas.ts
 commerce.ts -> delivery.ts
-commerce.ts -> identity.ts
 delivery.ts -> agents.ts
 delivery.ts -> canvas.ts
 delivery.ts -> identity.ts
 delivery.ts -> platform.ts
 finance.ts -> canvas.ts
 finance.ts -> delivery.ts
-finance.ts -> identity.ts
 governance.ts -> agents.ts
 governance.ts -> delivery.ts
-governance.ts -> identity.ts
 growth.ts -> canvas.ts
 growth.ts -> delivery.ts
-growth.ts -> identity.ts
 growth.ts -> integrations.ts
 platform.ts -> agents.ts
 platform.ts -> delivery.ts
-platform.ts -> identity.ts

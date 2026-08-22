@@ -6,7 +6,7 @@
  * It used to be a hard-coded panel on the /insights canvas, reachable from
  * exactly one page. It is the most portable thing on that page — a person who
  * keeps a board open wants to ask "how much are we spending this month?" from the
- * board, not by navigating away from it — so it is a {@link WidgetDef} like every
+ * board, not by navigating away from it — so it is a {@link ComponentDef} like every
  * other card: pin it to your dashboard, drop it on a canvas, it works the same.
  *
  * Frameless: the WidgetCard chrome supplies the frame, title and pin. It owns its
@@ -23,7 +23,7 @@
  * The server now returns a COMPOSED answer for a question with no single-number
  * answer: a headline assembled from the figures it resolved, the readings behind
  * it, and the ids of the registry widgets that draw them. So this renders all
- * three, and the widgets come from the SAME registry (`getWidget`) every other
+ * three, and the widgets come from the SAME registry (`getComponent`) every other
  * dashboard reads — a card looks and behaves identically whether it arrived by
  * being pinned or by being asked for.
  *
@@ -36,7 +36,7 @@ import { useState } from 'react';
 import dynamic from 'next/dynamic';
 import { useTranslations } from 'next-intl';
 import { WidgetMuted as Muted } from '@/components/widgets/widgetBody';
-import type { WidgetDef } from '@/lib/widgets/types';
+import type { ComponentDef } from '@/lib/components/types';
 import { dashboardsApi, type ComposedAnswer, type QueryAnswer } from '@/lib/dashboardsApi';
 import { useInsightFormat, type InsightFormatters } from '../format';
 
@@ -206,6 +206,6 @@ function AskCard() {
   );
 }
 
-export const ASK_WIDGETS: WidgetDef[] = [
-  { id: 'overview.ask', group: 'overview', titleKey: 'overviewAsk', descKey: 'overviewAsk', size: 'lg', Card: AskCard },
+export const ASK_COMPONENTS: ComponentDef[] = [
+  { id: 'overview.ask', group: 'overview', titleKey: 'overviewAsk', descKey: 'overviewAsk', size: 'lg', Surface: AskCard },
 ];

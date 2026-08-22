@@ -36,8 +36,8 @@ import { ReorderableWidgetGrid } from '@/components/widgets/ReorderableWidgetGri
 import { AddWidgetPicker } from '@/components/widgets/AddWidgetPicker';
 import { PmEmpty, PmError } from '@/components/pm/pmShared';
 import { usePins } from '@/lib/widgets/PinsProvider';
-import { getWidget, listWidgetGroups } from '@/lib/widgets/registry';
-import type { WidgetSize } from '@/lib/widgets/types';
+import { getComponent, listComponentGroups } from '@/lib/components/registry';
+import type { ComponentSize } from '@/lib/components/types';
 import { DashboardWidget } from '@/components/dashboard';
 import {
   dashboardsApi,
@@ -53,7 +53,7 @@ const VIZ_OPTIONS: WidgetViz[] = ['stat', 'bar', 'line', 'gauge'];
 const ASK_IDS = ['overview.ask'];
 
 /** Same span rule as WidgetGrid, so a saved dashboard lays out like every other. */
-const SPAN: Record<WidgetSize, React.CSSProperties> = {
+const SPAN: Record<ComponentSize, React.CSSProperties> = {
   sm: {},
   md: { gridColumn: 'span 2' },
   lg: { gridColumn: '1 / -1' },
@@ -82,7 +82,7 @@ type View = 'me' | number;
 export default function InsightsHomePage() {
   const t = useTranslations('insights');
   const td = useTranslations('dashboards');
-  const tw = useTranslations('widgets');
+  const tw = useTranslations('components');
   // LensPage owns the redirect for a signed-out / tenantless visitor; this page
   // still reads the session so its own dashboard reads never fire before there
   // is a tenant to scope them to (they would 401).
@@ -104,7 +104,7 @@ export default function InsightsHomePage() {
   const [pickMetric, setPickMetric] = useState('');
   const [pickViz, setPickViz] = useState<WidgetViz>('stat');
   const [pickWidget, setPickWidget] = useState('');
-  const widgetGroups = useMemo(() => listWidgetGroups(), []);
+  const widgetGroups = useMemo(() => listComponentGroups(), []);
 
   const active = useMemo(
     () => (typeof view === 'number' ? dashboards.find((d) => d.id === view) ?? null : null),
@@ -282,7 +282,7 @@ export default function InsightsHomePage() {
                   <option value="">{tw('addTitle')}…</option>
                   {widgetGroups.map((g) => (
                     <optgroup key={g.group} label={tw(`group.${g.group}`)}>
-                      {g.widgets.map((w) => <option key={w.id} value={w.id}>{tw(`title.${w.titleKey}`)}</option>)}
+                      {g.components.map((w) => <option key={w.id} value={w.id}>{tw(`title.${w.titleKey}`)}</option>)}
                     </optgroup>
                   ))}
                 </Select>
@@ -307,7 +307,7 @@ export default function InsightsHomePage() {
             ) : (
               <div style={gridStyle}>
                 {data?.widgets.map((w) => {
-                  const def = w.widgetKey ? getWidget(w.widgetKey) : undefined;
+                  const def = w.widgetKey ? getComponent(w.widgetKey) : undefined;
                   return (
                     <div key={w.widgetId} style={{ ...SPAN[def?.size ?? 'sm'], position: 'relative' }}>
                       {def ? <WidgetCard def={def} days={w.days} /> : <DashboardWidget v={w} />}

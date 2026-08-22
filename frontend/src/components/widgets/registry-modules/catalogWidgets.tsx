@@ -29,7 +29,7 @@ import { toolsApi } from '@/lib/builderforceApi';
 import type { ToolSummary } from '@/lib/tools';
 import { useSharedSource } from '@/lib/widgets/sharedSource';
 import { WidgetMuted as Muted } from '@/components/widgets/widgetBody';
-import type { WidgetCardProps, WidgetDef, WidgetDrill } from '@/lib/widgets/types';
+import type { ComponentSurfaceProps, ComponentDef, ComponentDrill } from '@/lib/components/types';
 import { BarChart, type BarDatum } from '@/components/charts/BarChart';
 import { DonutChart } from '@/components/charts/DonutChart';
 import { GaugeChart } from '@/components/charts/GaugeChart';
@@ -91,9 +91,9 @@ function topBars<T>(items: T[], value: (t: T) => number, label: (t: T) => string
 
 // ── Skills (group: 'skills') ───────────────────────────────────────────────────
 
-function SkillsTopInstallsCard(_props: WidgetCardProps) {
+function SkillsTopInstallsCard(_props: ComponentSurfaceProps) {
   const { int } = useInsightFormat();
-  const t = useTranslations('widgets');
+  const t = useTranslations('components');
   const { data, error } = useSkills();
   if (error) return <Muted>{error}</Muted>;
   if (!data) return <Muted>{t('loading')}</Muted>;
@@ -102,9 +102,9 @@ function SkillsTopInstallsCard(_props: WidgetCardProps) {
   return <BarChart data={bars} formatValue={(v) => int(v)} ariaLabel={t('title.catalogSkillsTopInstalls')} />;
 }
 
-function SkillsByCategoryCard(_props: WidgetCardProps) {
+function SkillsByCategoryCard(_props: ComponentSurfaceProps) {
   const { int } = useInsightFormat();
-  const t = useTranslations('widgets');
+  const t = useTranslations('components');
   const { data, error } = useSkills();
   if (error) return <Muted>{error}</Muted>;
   if (!data) return <Muted>{t('loading')}</Muted>;
@@ -128,9 +128,9 @@ function SkillsByCategoryCard(_props: WidgetCardProps) {
 
 // ── Personas (group: 'personas') ───────────────────────────────────────────────
 
-function PersonasTopInstallsCard(_props: WidgetCardProps) {
+function PersonasTopInstallsCard(_props: ComponentSurfaceProps) {
   const { int } = useInsightFormat();
-  const t = useTranslations('widgets');
+  const t = useTranslations('components');
   const { data, error } = usePersonas();
   if (error) return <Muted>{error}</Muted>;
   if (!data) return <Muted>{t('loading')}</Muted>;
@@ -141,9 +141,9 @@ function PersonasTopInstallsCard(_props: WidgetCardProps) {
 
 // ── Prompts (group: 'prompts') ─────────────────────────────────────────────────
 
-function PromptsMostUsedCard(_props: WidgetCardProps) {
+function PromptsMostUsedCard(_props: ComponentSurfaceProps) {
   const { int } = useInsightFormat();
-  const t = useTranslations('widgets');
+  const t = useTranslations('components');
   const { data, error } = usePrompts();
   if (error) return <Muted>{error}</Muted>;
   if (!data) return <Muted>{t('loading')}</Muted>;
@@ -152,9 +152,9 @@ function PromptsMostUsedCard(_props: WidgetCardProps) {
   return <BarChart data={bars} formatValue={(v) => int(v)} ariaLabel={t('title.catalogPromptsMostUsed')} />;
 }
 
-function PromptsTopRatedCard(_props: WidgetCardProps) {
+function PromptsTopRatedCard(_props: ComponentSurfaceProps) {
   const { int } = useInsightFormat();
-  const t = useTranslations('widgets');
+  const t = useTranslations('components');
   const { data, error } = usePrompts();
   if (error) return <Muted>{error}</Muted>;
   if (!data) return <Muted>{t('loading')}</Muted>;
@@ -165,9 +165,9 @@ function PromptsTopRatedCard(_props: WidgetCardProps) {
 
 // ── Models (group: 'models') ───────────────────────────────────────────────────
 
-function ModelsByProviderCard(_props: WidgetCardProps) {
+function ModelsByProviderCard(_props: ComponentSurfaceProps) {
   const { int } = useInsightFormat();
-  const t = useTranslations('widgets');
+  const t = useTranslations('components');
   const { data, error } = useModels();
   if (error) return <Muted>{error}</Muted>;
   if (!data) return <Muted>{t('loading')}</Muted>;
@@ -194,9 +194,9 @@ function ModelsByProviderCard(_props: WidgetCardProps) {
 // ── Marketplace (group: 'marketplace') ─────────────────────────────────────────
 
 /** Top marketplace agents by cumulative hires. */
-function MarketplaceTopHiredCard(_props: WidgetCardProps) {
+function MarketplaceTopHiredCard(_props: ComponentSurfaceProps) {
   const { int } = useInsightFormat();
-  const t = useTranslations('widgets');
+  const t = useTranslations('components');
   const { data, error } = useMarketplaceAgents();
   if (error) return <Muted>{error}</Muted>;
   if (!data) return <Muted>{t('loading')}</Muted>;
@@ -206,8 +206,8 @@ function MarketplaceTopHiredCard(_props: WidgetCardProps) {
 }
 
 /** Best-evaluated marketplace agent (0-100 gauge from the AI eval score). */
-function MarketplaceTopEvalCard(_props: WidgetCardProps) {
-  const t = useTranslations('widgets');
+function MarketplaceTopEvalCard(_props: ComponentSurfaceProps) {
+  const t = useTranslations('components');
   const { data, error } = useMarketplaceAgents();
   if (error) return <Muted>{error}</Muted>;
   if (!data) return <Muted>{t('loading')}</Muted>;
@@ -233,9 +233,9 @@ function MarketplaceTopEvalCard(_props: WidgetCardProps) {
 // ── Tools (group: 'tools') ─────────────────────────────────────────────────────
 
 /** Diagnostics & tools split by category — catalog composition at a glance. */
-function ToolsByCategoryCard(_props: WidgetCardProps) {
+function ToolsByCategoryCard(_props: ComponentSurfaceProps) {
   const { int } = useInsightFormat();
-  const t = useTranslations('widgets');
+  const t = useTranslations('components');
   const { data, error } = useTools();
   if (error) return <Muted>{error}</Muted>;
   if (!data) return <Muted>{t('loading')}</Muted>;
@@ -258,32 +258,32 @@ function ToolsByCategoryCard(_props: WidgetCardProps) {
 
 // ── Registry ─────────────────────────────────────────────────────────────────
 
-const SKILLS_DRILL: WidgetDrill = { kind: 'route', href: '/skills' };
-const PERSONAS_DRILL: WidgetDrill = { kind: 'route', href: '/personas' };
-const PROMPTS_DRILL: WidgetDrill = { kind: 'route', href: '/prompts' };
-const MODELS_DRILL: WidgetDrill = { kind: 'route', href: '/marketplace?category=models' };
-const MARKETPLACE_DRILL: WidgetDrill = { kind: 'route', href: '/marketplace' };
-const TOOLS_DRILL: WidgetDrill = { kind: 'route', href: '/tools' };
+const SKILLS_DRILL: ComponentDrill = { kind: 'route', href: '/skills' };
+const PERSONAS_DRILL: ComponentDrill = { kind: 'route', href: '/personas' };
+const PROMPTS_DRILL: ComponentDrill = { kind: 'route', href: '/prompts' };
+const MODELS_DRILL: ComponentDrill = { kind: 'route', href: '/marketplace?category=models' };
+const MARKETPLACE_DRILL: ComponentDrill = { kind: 'route', href: '/marketplace' };
+const TOOLS_DRILL: ComponentDrill = { kind: 'route', href: '/tools' };
 
-export const CATALOG_WIDGETS: WidgetDef[] = [
+export const CATALOG_COMPONENTS: ComponentDef[] = [
   // ── Skills (`/skills`) ──
-  { id: 'catalog.skills-top-installs', group: 'skills', titleKey: 'catalogSkillsTopInstalls', size: 'md', Card: SkillsTopInstallsCard, drill: SKILLS_DRILL },
-  { id: 'catalog.skills-by-category', group: 'skills', titleKey: 'catalogSkillsByCategory', size: 'md', Card: SkillsByCategoryCard, drill: SKILLS_DRILL },
+  { id: 'catalog.skills-top-installs', group: 'skills', titleKey: 'catalogSkillsTopInstalls', size: 'md', Surface: SkillsTopInstallsCard, drill: SKILLS_DRILL },
+  { id: 'catalog.skills-by-category', group: 'skills', titleKey: 'catalogSkillsByCategory', size: 'md', Surface: SkillsByCategoryCard, drill: SKILLS_DRILL },
 
   // ── Personas (`/personas`) ──
-  { id: 'catalog.personas-top-installs', group: 'personas', titleKey: 'catalogPersonasTopInstalls', size: 'md', Card: PersonasTopInstallsCard, drill: PERSONAS_DRILL },
+  { id: 'catalog.personas-top-installs', group: 'personas', titleKey: 'catalogPersonasTopInstalls', size: 'md', Surface: PersonasTopInstallsCard, drill: PERSONAS_DRILL },
 
   // ── Prompts (`/prompts`) ──
-  { id: 'catalog.prompts-most-used', group: 'prompts', titleKey: 'catalogPromptsMostUsed', size: 'md', Card: PromptsMostUsedCard, drill: PROMPTS_DRILL },
-  { id: 'catalog.prompts-top-rated', group: 'prompts', titleKey: 'catalogPromptsTopRated', size: 'md', Card: PromptsTopRatedCard, drill: PROMPTS_DRILL },
+  { id: 'catalog.prompts-most-used', group: 'prompts', titleKey: 'catalogPromptsMostUsed', size: 'md', Surface: PromptsMostUsedCard, drill: PROMPTS_DRILL },
+  { id: 'catalog.prompts-top-rated', group: 'prompts', titleKey: 'catalogPromptsTopRated', size: 'md', Surface: PromptsTopRatedCard, drill: PROMPTS_DRILL },
 
   // ── Models (`/models`) ──
-  { id: 'catalog.models-by-provider', group: 'models', titleKey: 'catalogModelsByProvider', size: 'md', Card: ModelsByProviderCard, drill: MODELS_DRILL },
+  { id: 'catalog.models-by-provider', group: 'models', titleKey: 'catalogModelsByProvider', size: 'md', Surface: ModelsByProviderCard, drill: MODELS_DRILL },
 
   // ── Marketplace (`/marketplace`) ──
-  { id: 'catalog.marketplace-top-hired', group: 'marketplace', titleKey: 'catalogMarketplaceTopHired', size: 'md', Card: MarketplaceTopHiredCard, drill: MARKETPLACE_DRILL },
-  { id: 'catalog.marketplace-top-eval', group: 'marketplace', titleKey: 'catalogMarketplaceTopEval', size: 'sm', Card: MarketplaceTopEvalCard, drill: MARKETPLACE_DRILL },
+  { id: 'catalog.marketplace-top-hired', group: 'marketplace', titleKey: 'catalogMarketplaceTopHired', size: 'md', Surface: MarketplaceTopHiredCard, drill: MARKETPLACE_DRILL },
+  { id: 'catalog.marketplace-top-eval', group: 'marketplace', titleKey: 'catalogMarketplaceTopEval', size: 'sm', Surface: MarketplaceTopEvalCard, drill: MARKETPLACE_DRILL },
 
   // ── Tools (`/tools`) ──
-  { id: 'catalog.tools-by-category', group: 'tools', titleKey: 'catalogToolsByCategory', size: 'md', Card: ToolsByCategoryCard, drill: TOOLS_DRILL },
+  { id: 'catalog.tools-by-category', group: 'tools', titleKey: 'catalogToolsByCategory', size: 'md', Surface: ToolsByCategoryCard, drill: TOOLS_DRILL },
 ];

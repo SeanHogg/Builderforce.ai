@@ -53,7 +53,7 @@ const td: React.CSSProperties = { textAlign: 'right', padding: '8px 10px', fontS
 
 export function WorkforceMetricsContent() {
   const t = useTranslations('workforce');
-  const tw = useTranslations('widgets');
+  const tw = useTranslations('components');
   const [days, setDays] = useState(7);
   const [discipline, setDiscipline] = useState('');
   const [members, setMembers] = useState<MemberScorecard[] | null>(null);

@@ -4617,7 +4617,7 @@
     "log": "记录",
     "delete": "删除记录"
   },
-  "widgets": {
+  "components": {
     "pin": "固定到仪表板",
     "unpin": "取消固定",
     "expand": "打开完整报告",
@@ -4664,7 +4664,10 @@
       "chatModes": "对话与执行",
       "aiHub": "AI 洞察",
       "deliveryHub": "交付",
-      "paidMedia": "付费投放"
+      "paidMedia": "付费投放",
+      "appProduct": "产品",
+      "appAgile": "交付",
+      "appGovernance": "治理与安全"
     },
     "title": {
       "aiProductivity": "AI 生产力评分",
@@ -4809,7 +4812,43 @@
       "paidMediaSpend": "付费花费",
       "paidMediaCostPerResult": "单次转化成本",
       "paidMediaSpendByNetwork": "各平台花费",
-      "paidMediaSpendTrend": "每日花费"
+      "paidMediaSpendTrend": "每日花费",
+      "app": {
+        "ideas": "产品探索",
+        "prd": "PRD 与规格",
+        "backlog": "战略待办列表",
+        "mvp": "MVP 脚手架",
+        "validation": "验证实验室",
+        "roadmap": "AI 路线图",
+        "release-planning": "发布规划",
+        "changelog": "更新日志",
+        "feature-flags": "功能开关",
+        "feature-roi": "功能投资回报",
+        "business-value": "业务价值模型",
+        "dependency-graph": "依赖关系图",
+        "rice-matrix": "RICE 矩阵",
+        "roi-dashboard": "投资回报看板",
+        "kanban": "看板",
+        "poker": "计划扑克",
+        "retros": "回顾会议",
+        "sprints": "冲刺规划",
+        "velocity": "团队速率",
+        "capacity": "产能与风险",
+        "cost": "成本与现金流",
+        "feature-scoring": "功能评分",
+        "workforce": "团队成员",
+        "soc2": "SOC 2 跟踪器",
+        "vendors": "供应商登记册",
+        "incidents": "安全事件",
+        "data-inventory": "个人信息与数据清单",
+        "dpa": "数据处理协议管理",
+        "training": "安全培训",
+        "compliance-calendar": "合规日历",
+        "access-reviews": "访问权限审查",
+        "vuln-scans": "漏洞扫描",
+        "dsr": "数据主体请求",
+        "suppression": "屏蔽名单"
+      }
     },
     "loading": "加载中…",
     "overview": {
@@ -5044,6 +5083,12 @@
       "noResults": "尚未归因任何转化。",
       "spendSub": "{clicks} 次点击 · {conversions} 次转化",
       "costPerResultSub": "基于 {conversions} 次转化"
+    },
+    "canvas": {
+      "pickTitle": "添加组件",
+      "pickHint": "把业务的实时视图放到画布上。",
+      "unknown": "该组件已不可用。",
+      "empty": "尚未选择组件。"
     }
   },
   "compile": {
@@ -18486,7 +18531,8 @@
       "audience": "受众",
       "stopwatch": "秒表",
       "transclusion": "嵌入文档",
-      "calendar": "日历"
+      "calendar": "日历",
+      "component": "组件"
     },
     "twilioSetup": {
       "title": "Twilio 集成",
@@ -21833,7 +21879,8 @@
       "customAgent": "自定义智能体",
       "builtinSeatHint": "此席位来自角色目录——其职责说明、工具和审阅权限随席位而来。你在此设置的是它在本画板上的工作方式。",
       "timerDurationMs": "时长（毫秒）",
-      "transclusionDocumentId": "文档 ID"
+      "transclusionDocumentId": "文档 ID",
+      "componentId": "组件 ID"
     },
     "nodeMessage": {
       "emptyShell": "此对象只有标题、尚无内容——看起来已完成，实际是空的。"
@@ -22519,7 +22566,8 @@
         "detail": "详情",
         "url": "链接"
       }
-    }
+    },
+    "componentId": "组件 ID"
   },
   "canvasCommands": {
     "cleanLayout": "整理画布布局",
@@ -26290,5 +26338,14 @@
       "title": "工作区排名",
       "rank": "第 {rank} 名"
     }
+  },
+  "embed": {
+    "unknownView": "未知的 BuilderForce 视图：{view}",
+    "connecting": "正在连接 BuilderForce — {label}…",
+    "configError": "无法加载嵌入配置。",
+    "loading": "加载中…",
+    "notEnabled": "此集成尚未启用。工作区管理员可在 BuilderForce → 设置 → 集成 中启用。",
+    "capabilityMissing": "此工作区未启用“{capability}”能力。",
+    "comingSoon": "{label} 已注册，但尚无组件实现它。"
   }
 }

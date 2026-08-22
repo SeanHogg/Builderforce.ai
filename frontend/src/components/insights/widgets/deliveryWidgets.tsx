@@ -6,7 +6,7 @@
  * The consolidated Delivery hub (DeliveryLens) and the DORA four-keys lens
  * (DoraLens) each drew a stack of cards — throughput / cycle time / velocity /
  * say-do for delivery; deploy frequency / lead time / change-fail rate / MTTR for
- * DORA. Every one of those is now a standalone {@link WidgetDef} so a user can pin
+ * DORA. Every one of those is now a standalone {@link ComponentDef} so a user can pin
  * the exact tile they want onto their dashboard. Cards backed by the same
  * collector read through ONE {@link useSharedSource} (deduped to a single request
  * per window), render only their body (the WidgetCard chrome supplies frame +
@@ -19,7 +19,7 @@
 
 import { useTranslations } from 'next-intl';
 import { type LifecyclePhase } from '@/lib/builderforceApi';
-import type { WidgetCardProps, WidgetDef, WidgetDrill } from '@/lib/widgets/types';
+import type { ComponentSurfaceProps, ComponentDef, ComponentDrill } from '@/lib/components/types';
 import { WidgetStat as Stat, WidgetMuted as Muted, useSourceState } from '@/components/widgets/widgetBody';
 import { DonutChart } from '@/components/charts/DonutChart';
 import { BarChart } from '@/components/charts/BarChart';
@@ -31,8 +31,8 @@ import { hrs, pct } from '../format';
 import { useDora, useLifecycle, useVelocity } from '../insightsSources';
 
 // Both lenses live behind the same Delivery hub slide-out.
-const DRILL_DELIVERY: WidgetDrill = { kind: 'panel', hub: 'delivery', panel: 'delivery' };
-const DRILL_DORA: WidgetDrill = { kind: 'panel', hub: 'delivery', panel: 'dora' };
+const DRILL_DELIVERY: ComponentDrill = { kind: 'panel', hub: 'delivery', panel: 'delivery' };
+const DRILL_DORA: ComponentDrill = { kind: 'panel', hub: 'delivery', panel: 'dora' };
 // Capabilities reused verbatim from the matching panels in deliveryPanels.tsx.
 const CAP_DELIVERY = 'insights.delivery' as const;
 const CAP_DORA = 'insights.delivery' as const;
@@ -81,37 +81,37 @@ function useVelocityBody(days: number) {
 
 // ── DORA widget bodies ─────────────────────────────────────────────────────────
 
-function DeployFreqCard({ days }: WidgetCardProps) {
+function DeployFreqCard({ days }: ComponentSurfaceProps) {
   const { data, state, t } = useDoraBody(days);
   if (!data) return state;
   return <Stat value={t('dora.perDay', { value: data.deploymentFrequencyPerDay.toFixed(2) })} sub={t('dora.deploys', { n: data.totalDeployments })} />;
 }
 
-function LeadTimeCard({ days }: WidgetCardProps) {
+function LeadTimeCard({ days }: ComponentSurfaceProps) {
   const { data, state, t } = useDoraBody(days);
   if (!data) return state;
   return <Stat value={hrs(data.leadTimeHours)} sub={t('dora.leadSub')} />;
 }
 
-function ChangeFailCard({ days }: WidgetCardProps) {
+function ChangeFailCard({ days }: ComponentSurfaceProps) {
   const { data, state, t } = useDoraBody(days);
   if (!data) return state;
   return <Stat value={pct(data.changeFailureRatePct)} sub={t('dora.cfrSub')} />;
 }
 
-function MttrCard({ days }: WidgetCardProps) {
+function MttrCard({ days }: ComponentSurfaceProps) {
   const { data, state, t } = useDoraBody(days);
   if (!data) return state;
   return <Stat value={hrs(data.mttrHours)} sub={t('dora.mttrSub')} />;
 }
 
-function TotalDeploysCard({ days }: WidgetCardProps) {
+function TotalDeploysCard({ days }: ComponentSurfaceProps) {
   const { data, state, t } = useDoraBody(days);
   if (!data) return state;
   return <Stat value={String(data.totalDeployments)} sub={t('days', { n: data.windowDays })} />;
 }
 
-function DoraPerformanceCard({ days }: WidgetCardProps) {
+function DoraPerformanceCard({ days }: ComponentSurfaceProps) {
   const { data, state, t } = useDoraBody(days);
   if (!data) return state;
   const tiers: MetricTier[] = TIER_ORDER.map((k) => ({ key: k, label: t(`dora.tier.${k}`), color: TIER_COLOR[k] }));
@@ -129,7 +129,7 @@ function DoraPerformanceCard({ days }: WidgetCardProps) {
   );
 }
 
-function ChangeOutcomesCard({ days }: WidgetCardProps) {
+function ChangeOutcomesCard({ days }: ComponentSurfaceProps) {
   const { data, state, t } = useDoraBody(days);
   if (!data) return state;
   const cfr = data.changeFailureRatePct;
@@ -150,14 +150,14 @@ function ChangeOutcomesCard({ days }: WidgetCardProps) {
 
 // ── Delivery widget bodies ──────────────────────────────────────────────────────
 
-function CycleTimeCard({ days }: WidgetCardProps) {
+function CycleTimeCard({ days }: ComponentSurfaceProps) {
   const { data, state, t } = useLifecycleBody(days);
   if (!data) return state;
   if (data.sampleSize === 0) return <Muted>{t('deliv.lifecycle.empty')}</Muted>;
   return <Stat value={fmtDur(data.totalAvgHours)} sub={t('deliv.lifecycle.subtitle', { d: fmtDur(data.totalAvgHours), n: data.sampleSize })} />;
 }
 
-function LifecyclePhasesCard({ days }: WidgetCardProps) {
+function LifecyclePhasesCard({ days }: ComponentSurfaceProps) {
   const { data, state, t } = useLifecycleBody(days);
   if (!data) return state;
   if (data.sampleSize === 0) return <Muted>{t('deliv.lifecycle.empty')}</Muted>;
@@ -167,7 +167,7 @@ function LifecyclePhasesCard({ days }: WidgetCardProps) {
   return <BarChart data={bars} formatValue={(v) => fmtDur(v)} ariaLabel={t('deliv.lifecycle.title')} />;
 }
 
-function LifecycleTrendCard({ days }: WidgetCardProps) {
+function LifecycleTrendCard({ days }: ComponentSurfaceProps) {
   const { data, state, t } = useLifecycleBody(days);
   if (!data) return state;
   if (data.trend.length < 2) return <Muted>{t('deliv.lifecycle.empty')}</Muted>;
@@ -182,20 +182,20 @@ function LifecycleTrendCard({ days }: WidgetCardProps) {
   );
 }
 
-function VelocityCard({ days }: WidgetCardProps) {
+function VelocityCard({ days }: ComponentSurfaceProps) {
   const { data, state, t } = useVelocityBody(days);
   if (!data) return state;
   if (data.sprints.length === 0) return <Muted>{t('deliv.lifecycle.empty')}</Muted>;
   return <Stat value={data.averageVelocity != null ? data.averageVelocity.toFixed(1) : '—'} sub={t('deliv.avgVelocitySub', { n: data.velocitySampleSize })} />;
 }
 
-function EstimationCard({ days }: WidgetCardProps) {
+function EstimationCard({ days }: ComponentSurfaceProps) {
   const { data, state, t } = useVelocityBody(days);
   if (!data) return state;
   return <Stat value={`${data.estimatedTasks}`} sub={t('deliv.estimatedSub', { n: data.unestimatedTasks })} />;
 }
 
-function VelocityTrendCard({ days }: WidgetCardProps) {
+function VelocityTrendCard({ days }: ComponentSurfaceProps) {
   const { data, state, t } = useVelocityBody(days);
   if (!data) return state;
   if (data.sprints.length < 2) return <Muted>{t('deliv.lifecycle.empty')}</Muted>;
@@ -214,7 +214,7 @@ function VelocityTrendCard({ days }: WidgetCardProps) {
   );
 }
 
-function SprintTableCard({ days }: WidgetCardProps) {
+function SprintTableCard({ days }: ComponentSurfaceProps) {
   const { data, state, t } = useVelocityBody(days);
   if (!data) return state;
   if (data.sprints.length === 0) return <Muted>{t('deliv.lifecycle.empty')}</Muted>;
@@ -246,21 +246,21 @@ function SprintTableCard({ days }: WidgetCardProps) {
 
 // ── Registry ─────────────────────────────────────────────────────────────────
 
-export const DELIVERY_WIDGETS: WidgetDef[] = [
+export const DELIVERY_COMPONENTS: ComponentDef[] = [
   // Delivery (cycle time + velocity, project/window-keyed collectors)
-  { id: 'delivery.cycle-time', group: 'delivery', titleKey: 'delivCycleTime', capability: CAP_DELIVERY, size: 'sm', Card: CycleTimeCard, drill: DRILL_DELIVERY },
-  { id: 'delivery.velocity', group: 'delivery', titleKey: 'delivVelocity', capability: CAP_DELIVERY, size: 'sm', Card: VelocityCard, drill: DRILL_DELIVERY },
-  { id: 'delivery.estimation', group: 'delivery', titleKey: 'delivEstimation', capability: CAP_DELIVERY, size: 'sm', Card: EstimationCard, drill: DRILL_DELIVERY },
-  { id: 'delivery.lifecycle-phases', group: 'delivery', titleKey: 'delivLifecyclePhases', capability: CAP_DELIVERY, size: 'md', Card: LifecyclePhasesCard, drill: DRILL_DELIVERY },
-  { id: 'delivery.lifecycle-trend', group: 'delivery', titleKey: 'delivLifecycleTrend', capability: CAP_DELIVERY, size: 'md', Card: LifecycleTrendCard, drill: DRILL_DELIVERY },
-  { id: 'delivery.velocity-trend', group: 'delivery', titleKey: 'delivVelocityTrend', capability: CAP_DELIVERY, size: 'md', Card: VelocityTrendCard, drill: DRILL_DELIVERY },
-  { id: 'delivery.sprints', group: 'delivery', titleKey: 'delivSprints', capability: CAP_DELIVERY, size: 'lg', Card: SprintTableCard, drill: DRILL_DELIVERY },
+  { id: 'delivery.cycle-time', group: 'delivery', titleKey: 'delivCycleTime', capability: CAP_DELIVERY, size: 'sm', Surface: CycleTimeCard, drill: DRILL_DELIVERY },
+  { id: 'delivery.velocity', group: 'delivery', titleKey: 'delivVelocity', capability: CAP_DELIVERY, size: 'sm', Surface: VelocityCard, drill: DRILL_DELIVERY },
+  { id: 'delivery.estimation', group: 'delivery', titleKey: 'delivEstimation', capability: CAP_DELIVERY, size: 'sm', Surface: EstimationCard, drill: DRILL_DELIVERY },
+  { id: 'delivery.lifecycle-phases', group: 'delivery', titleKey: 'delivLifecyclePhases', capability: CAP_DELIVERY, size: 'md', Surface: LifecyclePhasesCard, drill: DRILL_DELIVERY },
+  { id: 'delivery.lifecycle-trend', group: 'delivery', titleKey: 'delivLifecycleTrend', capability: CAP_DELIVERY, size: 'md', Surface: LifecycleTrendCard, drill: DRILL_DELIVERY },
+  { id: 'delivery.velocity-trend', group: 'delivery', titleKey: 'delivVelocityTrend', capability: CAP_DELIVERY, size: 'md', Surface: VelocityTrendCard, drill: DRILL_DELIVERY },
+  { id: 'delivery.sprints', group: 'delivery', titleKey: 'delivSprints', capability: CAP_DELIVERY, size: 'lg', Surface: SprintTableCard, drill: DRILL_DELIVERY },
   // DORA four-keys
-  { id: 'dora.deploy-freq', group: 'dora', titleKey: 'doraDeployFreq', capability: CAP_DORA, size: 'sm', Card: DeployFreqCard, drill: DRILL_DORA },
-  { id: 'dora.lead-time', group: 'dora', titleKey: 'doraLeadTime', capability: CAP_DORA, size: 'sm', Card: LeadTimeCard, drill: DRILL_DORA },
-  { id: 'dora.change-fail', group: 'dora', titleKey: 'doraChangeFail', capability: CAP_DORA, size: 'sm', Card: ChangeFailCard, drill: DRILL_DORA },
-  { id: 'dora.mttr', group: 'dora', titleKey: 'doraMttr', capability: CAP_DORA, size: 'sm', Card: MttrCard, drill: DRILL_DORA },
-  { id: 'dora.total-deploys', group: 'dora', titleKey: 'doraTotalDeploys', capability: CAP_DORA, size: 'sm', Card: TotalDeploysCard, drill: DRILL_DORA },
-  { id: 'dora.performance', group: 'dora', titleKey: 'doraPerformance', capability: CAP_DORA, size: 'lg', Card: DoraPerformanceCard, drill: DRILL_DORA },
-  { id: 'dora.change-outcomes', group: 'dora', titleKey: 'doraChangeOutcomes', capability: CAP_DORA, size: 'md', Card: ChangeOutcomesCard, drill: DRILL_DORA },
+  { id: 'dora.deploy-freq', group: 'dora', titleKey: 'doraDeployFreq', capability: CAP_DORA, size: 'sm', Surface: DeployFreqCard, drill: DRILL_DORA },
+  { id: 'dora.lead-time', group: 'dora', titleKey: 'doraLeadTime', capability: CAP_DORA, size: 'sm', Surface: LeadTimeCard, drill: DRILL_DORA },
+  { id: 'dora.change-fail', group: 'dora', titleKey: 'doraChangeFail', capability: CAP_DORA, size: 'sm', Surface: ChangeFailCard, drill: DRILL_DORA },
+  { id: 'dora.mttr', group: 'dora', titleKey: 'doraMttr', capability: CAP_DORA, size: 'sm', Surface: MttrCard, drill: DRILL_DORA },
+  { id: 'dora.total-deploys', group: 'dora', titleKey: 'doraTotalDeploys', capability: CAP_DORA, size: 'sm', Surface: TotalDeploysCard, drill: DRILL_DORA },
+  { id: 'dora.performance', group: 'dora', titleKey: 'doraPerformance', capability: CAP_DORA, size: 'lg', Surface: DoraPerformanceCard, drill: DRILL_DORA },
+  { id: 'dora.change-outcomes', group: 'dora', titleKey: 'doraChangeOutcomes', capability: CAP_DORA, size: 'md', Surface: ChangeOutcomesCard, drill: DRILL_DORA },
 ];

@@ -3,7 +3,7 @@
 /**
  * Workforce-planning pinnable widgets — the blended human + agent capacity-vs-WIP
  * plan, decomposed into individually-pinnable cards for the app-wide widget
- * registry (see lib/widgets/types.ts). Each card reads the SAME /api/workforce/plan
+ * registry (see lib/components/types.ts). Each card reads the SAME /api/workforce/plan
  * source through the shared, deduped {@link useSharedSource} (one fetch across
  * pins), renders only its body via the shared chart primitives / InsightStat, and
  * drills to /workforce/plan. Manager surface → self-gates on the workforce-metrics
@@ -17,7 +17,7 @@ import { InsightStat } from '@/components/dashboard/InsightStat';
 import { DonutChart } from '@/components/charts/DonutChart';
 import { BarChart, type BarDatum } from '@/components/charts/BarChart';
 import { colorAt } from '@/components/charts/chartColors';
-import type { WidgetCardProps, WidgetDef, WidgetDrill } from '@/lib/widgets/types';
+import type { ComponentSurfaceProps, ComponentDef, ComponentDrill } from '@/lib/components/types';
 import { workforcePlanApi, type WorkforcePlan } from '@/lib/personaCadenceApi';
 import { useFormat } from "@/i18n/useFormat";
 
@@ -30,9 +30,9 @@ function usePlan() {
 }
 
 /** Hire-vs-agent weekly-cost split donut. */
-function CostSplitCard(_props: WidgetCardProps) {
+function CostSplitCard(_props: ComponentSurfaceProps) {
   const fmt = useFormat();
-  const t = useTranslations('widgets');
+  const t = useTranslations('components');
   const { data, error } = usePlan();
   if (error) return <Muted>{error}</Muted>;
   if (!data) return <Muted>{t('loading')}</Muted>;
@@ -53,9 +53,9 @@ function CostSplitCard(_props: WidgetCardProps) {
 }
 
 /** Open WIP per member (top N), WIP ceiling as the faint comparison track. */
-function CapacityCard(_props: WidgetCardProps) {
+function CapacityCard(_props: ComponentSurfaceProps) {
   const fmt = useFormat();
-  const t = useTranslations('widgets');
+  const t = useTranslations('components');
   const { data, error } = usePlan();
   if (error) return <Muted>{error}</Muted>;
   if (!data) return <Muted>{t('loading')}</Muted>;
@@ -74,9 +74,9 @@ function CapacityCard(_props: WidgetCardProps) {
 }
 
 /** Allocatable capacity gap (unused WIP headroom) at a glance. */
-function GapCard(_props: WidgetCardProps) {
+function GapCard(_props: ComponentSurfaceProps) {
   const fmt = useFormat();
-  const t = useTranslations('widgets');
+  const t = useTranslations('components');
   const { data, error } = usePlan();
   if (error) return <Muted>{error}</Muted>;
   if (!data) return <Muted>{t('loading')}</Muted>;
@@ -91,10 +91,10 @@ function GapCard(_props: WidgetCardProps) {
   );
 }
 
-const DRILL: WidgetDrill = { kind: 'route', href: '/workforce/plan' };
+const DRILL: ComponentDrill = { kind: 'route', href: '/workforce/plan' };
 
-export const WORKFORCE_PLAN_WIDGETS: WidgetDef[] = [
-  { id: 'wfp.cost-split', group: 'wfPlan', titleKey: 'wfpCostSplit', capability: METRICS_CAP, size: 'md', Card: CostSplitCard, drill: DRILL },
-  { id: 'wfp.capacity',   group: 'wfPlan', titleKey: 'wfpCapacity',  capability: METRICS_CAP, size: 'md', Card: CapacityCard,  drill: DRILL },
-  { id: 'wfp.gap',        group: 'wfPlan', titleKey: 'wfpGap',       capability: METRICS_CAP, size: 'sm', Card: GapCard,       drill: DRILL },
+export const WORKFORCE_PLAN_COMPONENTS: ComponentDef[] = [
+  { id: 'wfp.cost-split', group: 'wfPlan', titleKey: 'wfpCostSplit', capability: METRICS_CAP, size: 'md', Surface: CostSplitCard, drill: DRILL },
+  { id: 'wfp.capacity',   group: 'wfPlan', titleKey: 'wfpCapacity',  capability: METRICS_CAP, size: 'md', Surface: CapacityCard,  drill: DRILL },
+  { id: 'wfp.gap',        group: 'wfPlan', titleKey: 'wfpGap',       capability: METRICS_CAP, size: 'sm', Surface: GapCard,       drill: DRILL },
 ];

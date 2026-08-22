@@ -4617,7 +4617,7 @@
     "log": "Log",
     "delete": "Delete entry"
   },
-  "widgets": {
+  "components": {
     "pin": "Pin to dashboard",
     "unpin": "Unpin",
     "expand": "Open full report",
@@ -4664,7 +4664,10 @@
       "chatModes": "Conversations vs Executions",
       "aiHub": "AI Insights",
       "deliveryHub": "Delivery",
-      "paidMedia": "Paid media"
+      "paidMedia": "Paid media",
+      "appProduct": "Product",
+      "appAgile": "Delivery",
+      "appGovernance": "Governance & Security"
     },
     "title": {
       "aiProductivity": "AI Productivity Score",
@@ -4809,7 +4812,43 @@
       "paidMediaSpend": "Paid spend",
       "paidMediaCostPerResult": "Cost per result",
       "paidMediaSpendByNetwork": "Spend by network",
-      "paidMediaSpendTrend": "Daily spend"
+      "paidMediaSpendTrend": "Daily spend",
+      "app": {
+        "ideas": "Product Discovery",
+        "prd": "PRDs & Specs",
+        "backlog": "Strategic Backlog",
+        "mvp": "MVP Scaffolding",
+        "validation": "Validation Lab",
+        "roadmap": "AI Roadmap",
+        "release-planning": "Release Planning",
+        "changelog": "Changelog",
+        "feature-flags": "Feature Flags",
+        "feature-roi": "Feature ROI",
+        "business-value": "Business-Value Models",
+        "dependency-graph": "Dependency Graph",
+        "rice-matrix": "RICE Matrix",
+        "roi-dashboard": "ROI Dashboard",
+        "kanban": "Kanban",
+        "poker": "Planning Poker",
+        "retros": "Retrospectives",
+        "sprints": "Sprint Planning",
+        "velocity": "Velocity",
+        "capacity": "Capacity & Risk",
+        "cost": "Cost / Runway",
+        "feature-scoring": "Feature Scoring",
+        "workforce": "Workforce",
+        "soc2": "SOC 2 Tracker",
+        "vendors": "Vendor Register",
+        "incidents": "Security Incidents",
+        "data-inventory": "PII & Data Inventory",
+        "dpa": "DPA Management",
+        "training": "Security Training",
+        "compliance-calendar": "Compliance Calendar",
+        "access-reviews": "Access Reviews",
+        "vuln-scans": "Vulnerability Scans",
+        "dsr": "Data Subject Requests",
+        "suppression": "Suppression List"
+      }
     },
     "loading": "Loading…",
     "overview": {
@@ -5044,6 +5083,12 @@
       "noResults": "No results attributed yet.",
       "spendSub": "{clicks} clicks · {conversions} results",
       "costPerResultSub": "across {conversions} results"
+    },
+    "canvas": {
+      "pickTitle": "Add a component",
+      "pickHint": "Drop a live view of your business onto the board.",
+      "unknown": "This component is no longer available.",
+      "empty": "No component chosen yet."
     }
   },
   "compile": {
@@ -18486,7 +18531,8 @@
       "audience": "Audience",
       "stopwatch": "Stopwatch",
       "transclusion": "Transclusion",
-      "calendar": "Calendar"
+      "calendar": "Calendar",
+      "component": "Component"
     },
     "twilioSetup": {
       "title": "Twilio integration",
@@ -21833,7 +21879,8 @@
       "customAgent": "Custom agent",
       "builtinSeatHint": "This seat comes from the role catalog - its brief, its tools and its review rights come with it. What you set here is how it works on this board.",
       "timerDurationMs": "Timebox (ms)",
-      "transclusionDocumentId": "Document id"
+      "transclusionDocumentId": "Document id",
+      "componentId": "Component id"
     },
     "nodeMessage": {
       "emptyShell": "This object has a title and no content yet - it will look finished and be empty."
@@ -22519,7 +22566,8 @@
         "detail": "Detail",
         "url": "URL"
       }
-    }
+    },
+    "componentId": "Component id"
   },
   "canvasCommands": {
     "cleanLayout": "Clean up canvas layout",
@@ -26290,5 +26338,14 @@
       "title": "Workspace standing",
       "rank": "#{rank}"
     }
+  },
+  "embed": {
+    "unknownView": "Unknown BuilderForce view: {view}",
+    "connecting": "Connecting to BuilderForce — {label}…",
+    "configError": "Could not load embed configuration.",
+    "loading": "Loading…",
+    "notEnabled": "This integration is not enabled. A workspace administrator can enable it in BuilderForce → Settings → Integration.",
+    "capabilityMissing": "The \"{capability}\" capability is not enabled for this workspace.",
+    "comingSoon": "{label} is registered but no component claims it yet."
   }
 }

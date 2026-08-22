@@ -5,7 +5,7 @@ import { useState, useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { usePermission } from '@/lib/rbac';
-import { listWidgetGroups } from '@/lib/widgets/registry';
+import { listComponentGroups } from '@/lib/components/registry';
 import { usePins } from '@/lib/widgets/PinsProvider';
 import { PinButton } from './PinButton';
 
@@ -16,8 +16,8 @@ import { PinButton } from './PinButton';
  * surface contributes shows up here, pinnable in one click.
  */
 export function AddWidgetPicker({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const t = useTranslations('widgets');
-  const groups = useMemo(() => listWidgetGroups(), []);
+  const t = useTranslations('components');
+  const groups = useMemo(() => listComponentGroups(), []);
   const [q, setQ] = useState('');
   const query = q.trim().toLowerCase();
 
@@ -31,7 +31,7 @@ export function AddWidgetPicker({ open, onClose }: { open: boolean; onClose: () 
           style={{ padding: '9px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)' }}
         />
         {groups.map((g) => {
-          const items = g.widgets.filter((w) => !query || t(`title.${w.titleKey}`).toLowerCase().includes(query));
+          const items = g.components.filter((w) => !query || t(`title.${w.titleKey}`).toLowerCase().includes(query));
           if (items.length === 0) return null;
           return (
             <section key={g.group}>
@@ -52,7 +52,7 @@ export function AddWidgetPicker({ open, onClose }: { open: boolean; onClose: () 
 }
 
 function WidgetRow({ id, titleKey, capability }: { id: string; titleKey: string; capability?: string }) {
-  const t = useTranslations('widgets');
+  const t = useTranslations('components');
   const pins = usePins();
   // A widget the user can't access is shown but its pin is disabled via the
   // capability check (never hidden — same product rule as RoleGate).

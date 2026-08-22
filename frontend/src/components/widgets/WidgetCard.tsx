@@ -2,14 +2,14 @@
 
 import { useTranslations } from 'next-intl';
 import { RoleGate } from '@/components/RoleGate';
-import type { WidgetDef } from '@/lib/widgets/types';
+import type { ComponentDef } from '@/lib/components/types';
 import { PinButton } from './PinButton';
-import { useWidgetDrill } from './useWidgetDrill';
+import { useComponentDrill } from './useComponentDrill';
 
 /**
  * The chrome around a registered widget: the card frame, the title, the pin
  * control in the top-right corner, and the click-to-drill affordance. The widget
- * {@link WidgetDef.Card} renders ONLY its body (a chart/stat/table) — this owns
+ * {@link ComponentDef.Surface} renders ONLY its body (a chart/stat/table) — this owns
  * the consistent frame so every widget looks the same wherever it appears (home
  * dashboard, a custom dashboard, or inside its source lens).
  *
@@ -17,14 +17,14 @@ import { useWidgetDrill } from './useWidgetDrill';
  * hidden) and self-decides its drill affordance — callers pass only the def.
  *
  * A widget that declares a `descKey` gets its one-line explainer under the title.
- * The field had been on {@link WidgetDef} (and populated) without any consumer,
+ * The field had been on {@link ComponentDef} (and populated) without any consumer,
  * so three widgets carried a description nothing could show; the hub tiles need
  * exactly that line, and one place rendering it means every surface shows it.
  */
-export function WidgetCard({ def, days, showDrill = true }: { def: WidgetDef; days: number; showDrill?: boolean }) {
-  const t = useTranslations('widgets');
-  const drill = useWidgetDrill();
-  const Card = def.Card;
+export function WidgetCard({ def, days, showDrill = true }: { def: ComponentDef; days: number; showDrill?: boolean }) {
+  const t = useTranslations('components');
+  const drill = useComponentDrill();
+  const Card = def.Surface;
   const drillable = def.drill != null && showDrill;
 
   const body = (

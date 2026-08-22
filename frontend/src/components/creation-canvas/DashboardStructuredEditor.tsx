@@ -4,7 +4,7 @@ import styles from './CreationCanvas.module.css';
 import { useDragReorder } from '@/lib/useDragReorder';
 import {
   DASHBOARD_CHART_DEFINITIONS,
-  DASHBOARD_MAX_WIDGETS,
+  DASHBOARD_MAX_COMPONENTS,
   createDashboardWidget,
   dashboardChartDefinition,
   parseLabelList,
@@ -59,7 +59,7 @@ export function DashboardStructuredEditor({
     setDeleted(null);
   };
   const add = (chart: DashboardChartKind) => {
-    if (widgets.length >= DASHBOARD_MAX_WIDGETS) return;
+    if (widgets.length >= DASHBOARD_MAX_COMPONENTS) return;
     const id = crypto.randomUUID();
     onChange([...widgets, createDashboardWidget(chart, {
       id,
@@ -218,13 +218,13 @@ export function DashboardStructuredEditor({
       })}
 
       <div className={styles.dashboardAddWidget}>
-        <span>{widgets.length >= DASHBOARD_MAX_WIDGETS ? t('widgetLimit', { max: DASHBOARD_MAX_WIDGETS }) : t('addWidget')}</span>
+        <span>{widgets.length >= DASHBOARD_MAX_COMPONENTS ? t('widgetLimit', { max: DASHBOARD_MAX_COMPONENTS }) : t('addWidget')}</span>
         <div>
           {DASHBOARD_CHART_DEFINITIONS.map((definition) => (
             <button
               key={definition.chart}
               type="button"
-              disabled={widgets.length >= DASHBOARD_MAX_WIDGETS}
+              disabled={widgets.length >= DASHBOARD_MAX_COMPONENTS}
               title={translate(`chart.${definition.chart}`)}
               aria-label={t('addChart', { name: translate(`chart.${definition.chart}`) })}
               onClick={() => add(definition.chart)}

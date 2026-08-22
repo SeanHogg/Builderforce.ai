@@ -10,7 +10,7 @@ import { useOptionalPins } from '@/lib/widgets/PinsProvider';
  * state from {@link usePins} and toggles optimistically.
  */
 export function PinButton({ widgetKey }: { widgetKey: string }) {
-  const t = useTranslations('widgets');
+  const t = useTranslations('components');
   const pins = useOptionalPins();
   if (!pins) return null;
   const pinned = pins.isPinned(widgetKey);

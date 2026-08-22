@@ -31,7 +31,7 @@ import {
 } from '@/lib/chatModeApi';
 import { useSharedSource } from '@/lib/widgets/sharedSource';
 import { WidgetStat as Stat, WidgetMuted as Muted } from '@/components/widgets/widgetBody';
-import type { WidgetCardProps, WidgetDef, WidgetDrill } from '@/lib/widgets/types';
+import type { ComponentSurfaceProps, ComponentDef, ComponentDrill } from '@/lib/components/types';
 import { BarChart } from '@/components/charts/BarChart';
 import { StackedBar } from '@/components/charts/StackedBar';
 import { colorAt } from '@/components/charts/chartColors';
@@ -42,7 +42,7 @@ import { pct } from '../format';
 import { useInsightFormat, type InsightFormatters } from '../format';
 
 const CAP = 'insights.llmUsage' as const;
-const DRILL: WidgetDrill = { kind: 'route', href: '/insights/chat-modes' };
+const DRILL: ComponentDrill = { kind: 'route', href: '/insights/chat-modes' };
 
 /** One shared, deduped read per window — every card below reads this, not its own. */
 function useChatModes(days: number) {
@@ -64,7 +64,7 @@ function useModeLabels() {
 const usdFromMillicents = (f: InsightFormatters, v: number): string => f.usd(v / 100_000);
 
 /** The share of started conversations that were handed over as work. */
-function WorkShareCard({ days }: WidgetCardProps) {
+function WorkShareCard({ days }: ComponentSurfaceProps) {
   const { int } = useInsightFormat();
   const { t, modeLabel } = useModeLabels();
   const { data, error } = useChatModes(days);
@@ -84,7 +84,7 @@ function WorkShareCard({ days }: WidgetCardProps) {
  * THE card. Of the work items Work-mode conversations opened, what share ever had a
  * run dispatched. A low number here is the failure the mode split exists to surface.
  */
-function ExecutionRateCard({ days }: WidgetCardProps) {
+function ExecutionRateCard({ days }: ComponentSurfaceProps) {
   const { int } = useInsightFormat();
   const { t } = useModeLabels();
   const { data, error } = useChatModes(days);
@@ -103,7 +103,7 @@ function ExecutionRateCard({ days }: WidgetCardProps) {
 }
 
 /** What execution costs relative to conversation — the operating fact. */
-function CostShareCard({ days }: WidgetCardProps) {
+function CostShareCard({ days }: ComponentSurfaceProps) {
   const insight = useInsightFormat();
   const { t, modeLabel } = useModeLabels();
   const { data, error } = useChatModes(days);
@@ -122,7 +122,7 @@ function CostShareCard({ days }: WidgetCardProps) {
 }
 
 /** Conversations started, per mode. The volume read the two ratios sit on top of. */
-function ModeMixCard({ days }: WidgetCardProps) {
+function ModeMixCard({ days }: ComponentSurfaceProps) {
   const { int } = useInsightFormat();
   const { t, modeLabel } = useModeLabels();
   const { data, error } = useChatModes(days);
@@ -143,7 +143,7 @@ function ModeMixCard({ days }: WidgetCardProps) {
  * draws the linked total as a faint track so the shortfall is the visible quantity
  * rather than something the reader has to subtract.
  */
-function DispatchFunnelCard({ days }: WidgetCardProps) {
+function DispatchFunnelCard({ days }: ComponentSurfaceProps) {
   const { int } = useInsightFormat();
   const { t, modeLabel } = useModeLabels();
   const { data, error } = useChatModes(days);
@@ -164,7 +164,7 @@ function DispatchFunnelCard({ days }: WidgetCardProps) {
 }
 
 /** The exact figures — what earns the low-contrast palette entries above. */
-function ModeTableCard({ days }: WidgetCardProps) {
+function ModeTableCard({ days }: ComponentSurfaceProps) {
     const insight = useInsightFormat();
   const { int } = useInsightFormat();
   const { t, modeLabel } = useModeLabels();
@@ -206,16 +206,16 @@ function ModeTableCard({ days }: WidgetCardProps) {
   );
 }
 
-export const CHAT_MODE_WIDGETS: WidgetDef[] = [
-  { id: 'chatmode.work-share', group: 'chatModes', titleKey: 'chatModeWorkShare', descKey: 'chatModeWorkShare', capability: CAP, size: 'sm', Card: WorkShareCard, drill: DRILL },
-  { id: 'chatmode.execution-rate', group: 'chatModes', titleKey: 'chatModeExecutionRate', descKey: 'chatModeExecutionRate', capability: CAP, size: 'sm', Card: ExecutionRateCard, drill: DRILL },
-  { id: 'chatmode.cost-share', group: 'chatModes', titleKey: 'chatModeCostShare', descKey: 'chatModeCostShare', capability: CAP, size: 'sm', Card: CostShareCard, drill: DRILL },
-  { id: 'chatmode.mix', group: 'chatModes', titleKey: 'chatModeMix', capability: CAP, size: 'md', Card: ModeMixCard, drill: DRILL },
-  { id: 'chatmode.dispatch-funnel', group: 'chatModes', titleKey: 'chatModeFunnel', capability: CAP, size: 'md', Card: DispatchFunnelCard, drill: DRILL },
-  { id: 'chatmode.table', group: 'chatModes', titleKey: 'chatModeTable', capability: CAP, size: 'lg', Card: ModeTableCard, drill: DRILL },
+export const CHAT_MODE_COMPONENTS: ComponentDef[] = [
+  { id: 'chatmode.work-share', group: 'chatModes', titleKey: 'chatModeWorkShare', descKey: 'chatModeWorkShare', capability: CAP, size: 'sm', Surface: WorkShareCard, drill: DRILL },
+  { id: 'chatmode.execution-rate', group: 'chatModes', titleKey: 'chatModeExecutionRate', descKey: 'chatModeExecutionRate', capability: CAP, size: 'sm', Surface: ExecutionRateCard, drill: DRILL },
+  { id: 'chatmode.cost-share', group: 'chatModes', titleKey: 'chatModeCostShare', descKey: 'chatModeCostShare', capability: CAP, size: 'sm', Surface: CostShareCard, drill: DRILL },
+  { id: 'chatmode.mix', group: 'chatModes', titleKey: 'chatModeMix', capability: CAP, size: 'md', Surface: ModeMixCard, drill: DRILL },
+  { id: 'chatmode.dispatch-funnel', group: 'chatModes', titleKey: 'chatModeFunnel', capability: CAP, size: 'md', Surface: DispatchFunnelCard, drill: DRILL },
+  { id: 'chatmode.table', group: 'chatModes', titleKey: 'chatModeTable', capability: CAP, size: 'lg', Surface: ModeTableCard, drill: DRILL },
 ];
 
 /** Ids in the order the full lens lays them out. */
-export const CHAT_MODE_WIDGET_IDS = CHAT_MODE_WIDGETS.map((w) => w.id);
+export const CHAT_MODE_WIDGET_IDS = CHAT_MODE_COMPONENTS.map((w) => w.id);
 
 export { useChatModes };

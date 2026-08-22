@@ -1,0 +1,71 @@
+marketplace_skills [agents] :: id, name, slug, description, author_id->users, category, tags, version, readme, icon_url, repo_url, downloads, likes, published, price_cents, pricing_model, price_unit, search_vector, created_at, updated_at
+marketplace_skill_likes [agents] :: user_id->users, skill_slug
+artifact_likes [agents] :: user_id->users, artifact_type, artifact_slug, created_at
+skills [agents] :: id, agent_id->agents, name, description, input_schema, output_schema, created_at
+qa_run_steps [agents] :: id, run_id->qaRuns, seq, action, selector, status, duration_ms, error_message, screenshot_key, created_at
+marketing_tool_runs [agents] :: id, visitor_id, tool_id, input, result, created_at, updated_at, uq_marketing_tool_runs, idx_marketing_tool_runs_visitor
+agent_inference_logs [agents] :: id, agent_id->ideAgents, model_ref, prompt_tokens, completion_tokens, latency_ms, status, error_message, inference_mode, created_at
+llm_health_probes [agents] :: id, vendor, status, probed_count, ok_count, failed_count, latency_ms, models_json, trigger, created_at
+pending_prompts [agents] :: id, anon_id, prompt, path, user_id->users, created_at, expires_at, claimed_at
+platform_personas [agents] :: id, name, slug, description, voice, perspective, decision_style, output_prefix, capabilities, tags, psychometric, source, author, active, created_at, updated_at
+brain_chat_trace [agents] :: id, chat_id->brainChats, turn_seq, kind, label, args_json, result_json, is_error, duration_ms, ttft_ms, created_at
+prompt_library_versions [agents] :: id, entry_id->promptLibraryEntries, version, body, variables, model, notes, created_by->users, created_at
+prompt_library_stars [agents] :: entry_id->promptLibraryEntries, user_id->users, created_at
+ide_datasets [agents] :: id, project_id->projects, name, description, capability_prompt, r2_key, example_count, status, classifications, use_policy, source_session_id, source_object_id, created_at, updated_at, idx_ide_datasets_project_id
+ide_training_jobs [agents] :: id, project_id->projects, dataset_id->ideDatasets, base_model, lora_rank, epochs, batch_size, learning_rate, status, current_epoch, current_loss, r2_artifact_key, error_message, eval_score, eval_code_correctness, eval_reasoning_quality, eval_hallucination_rate, eval_details, evaluated_at, created_at, updated_at, idx_ide_training_jobs_project_id
+ide_training_logs [agents] :: id, job_id->ideTrainingJobs, epoch, step, loss, message, created_at, idx_ide_training_logs_job_id
+brain_chat_messages [canvas] :: id, chat_id->brainChats, role, content, metadata, event_key, seq, created_at
+freelancer_messages [canvas] :: id, conversation_id->freelancerConversations, sender_user_id->users, body, attachment_key, attachment_name, attachment_type, created_at, idx_fl_msg_conversation
+email_preferences [canvas] :: id, user_id->users, email, product_updates, onboarding_tips, digests, unsubscribed_all, unsubscribed_at, created_at, updated_at
+newsletter_subscribers [canvas] :: id, user_id->users, email, first_name, last_name, source, status, subscribed_at, unsubscribed_at, unsubscribe_reason, last_communication_at, created_at, updated_at
+newsletter_templates [canvas] :: id, name, slug, subject, preheader, body_markdown, is_active, created_by->users, updated_by->users, created_at, updated_at
+newsletter_events [canvas] :: id, subscriber_id->newsletterSubscribers, template_id->newsletterTemplates, event_type, metadata, created_at
+creation_session_objects [canvas] :: id, session_id->creationSessions, kind, resource_type, resource_id, resource_revision, canvas_data, content, search_text, created_by->users, updated_by->users, locked_by->users, lock_expires_at, created_at, updated_at, idx_creation_objects_session, uq_creation_objects_resource
+creation_session_timeline [canvas] :: id, session_id->creationSessions, client_message_id, message_role, body, metadata, created_by->users, created_at, idx_creation_timeline_session_id, uq_creation_timeline_message
+creation_session_connections [canvas] :: id, session_id->creationSessions, source_object_id->creationSessionObjects, target_object_id->creationSessionObjects, kind, label, metadata, created_by->users, created_at
+creation_session_members [canvas] :: session_id->creationSessions, user_id->users, role, invited_by->users, last_seen_revision, last_seen_at, viewport, cursor, selection, typing, pinned, watch_state, following_user_id->users, joined_at, idx_creation_members_user, idx_creation_members_presence
+creation_session_snapshots [canvas] :: session_id->creationSessions, revision, graph, viewport, label, created_by->users, created_at, idx_creation_snapshots_session_created
+creation_session_events [canvas] :: id, session_id->creationSessions, revision, actor_type, actor_ref, event_type, object_id->creationSessionObjects, payload, idempotency_key, created_at, uq_creation_events_revision, uq_creation_events_idempotency, idx_creation_events_session_revision
+creation_session_comments [canvas] :: id, session_id->creationSessions, object_id->creationSessionObjects, parent_comment_id, body, mentions, anchor, created_by->users, resolved_by->users, resolved_at, created_at, updated_at, idx_creation_comments_session, idx_creation_comments_object
+creation_session_project_links [canvas] :: session_id->creationSessions, project_id->projects, link_kind, added_by->users, created_at, idx_creation_project_links_project
+creation_session_claims [canvas] :: user_id->users, client_session_id, server_session_id->creationSessions, claimed_at
+dev_team_members [canvas] :: id, team_id->devTeams, contributor_id->contributors, member_role, joined_at
+demo_events [commerce] :: id, visitor_id, persona, kind, path, metadata, occurred_at, created_at, idx_demo_events_persona_time, idx_demo_events_visitor
+sales_leads [commerce] :: id, name, email, company, interest, message, source, locale, visitor_id, status, created_at, idx_sales_leads_created
+freelancer_profiles [commerce] :: user_id->users, headline, bio, slug, avatar_key, discipline, skills, hourly_rate_cents, currency, visibility, published, availability, location, timezone, resume_object_id->creationSessionObjects, seeking, target_roles, seniority, desired_salary_min_cents, desired_salary_max_cents, work_mode, notice_period_days, open_to_relocation, created_at, updated_at, idx_freelancer_profiles_published
+sales_contacts [commerce] :: id, owner_user_id->users, name, email, company, market, stage, value_cents, probability_percent, expected_close_at, last_touch_at, created_at, updated_at
+sales_campaigns [commerce] :: id, owner_user_id->users, name, market, subject, status, sent, replies, created_at, updated_at
+sales_weekly_goals [commerce] :: owner_user_id->users, outreach_target, contacts_target, meetings_target, updated_at
+sales_coaching_notes [commerce] :: id, associate_user_id->users, author_user_id->users, body, created_at
+sales_commission_rules [commerce] :: rule_key, plan, billing_cycle, referral_bps, sales_bps, updated_by->users, updated_at
+sales_associate_settings [commerce] :: owner_user_id->users, referral_code, sales_code, revenue_goal_cents, notify_on_signup, notify_on_conversion, updated_at
+professional_references [commerce] :: id, user_id->users, name, relationship, company, title, email, phone, can_speak_to, status, requested_at, confirmed_at, notes, created_at, updated_at
+reference_shares [commerce] :: id, user_id->users, token_hash, label, reference_ids, include_contact, expires_at, revoked_at, view_count, last_viewed_at, created_at
+workflow_tasks [delivery] :: id, workflow_id->workflows, agent_role, description, status, input, output, error, depends_on, not_before, started_at, completed_at, created_at, updated_at
+team_projects [delivery] :: id, team_id->teams, project_id->projects, added_at
+kanban_template_lanes [delivery] :: id, template_id->kanbanTemplates, key, name, position, is_terminal, gate, requirement_gate, created_at
+kanban_template_lane_requirements [delivery] :: id, lane_id->kanbanTemplateLanes, kind, ref, responsibility, is_required, description, position, ticket_type, quorum, condition, created_at
+release_notes [delivery] :: id, version, title, body, category, stage, beta_opt_in, beta_terms, stage_ends_at, published_at, emailed_at, created_at, updated_at
+release_note_beta_enrollments [delivery] :: id, release_note_id->releaseNotes, user_id->users, status, agreed_at, agreed_terms_hash, created_at, updated_at, uq_release_note_beta_enrollment, idx_release_note_beta_enrollment_user
+error_collector_integrations [delivery] :: id, collector_id->errorCollectors, provider, secret_enc, secret_iv, created_at, updated_at, uq_collector_provider
+error_group_users [delivery] :: group_id->errorGroups, user_key, first_seen
+discount_codes [finance] :: id, code, percent_off, applicable_plan, billing_cycle, duration_years, is_active, created_by_user_id->users, created_at, updated_at
+privacy_requests [governance] :: id, user_id->users, email, request_type, details, status, resolution, jurisdiction, parent_request_id, due_at, verified_at, fulfillment_evidence, processor_deletion_status, backup_disposition, created_at, updated_at, closed_at
+industry_benchmarks [governance] :: id, industry, size_band, metric, unit, p10, p25, p50, p75, p90, higher_is_better, source, updated_at, uq_industry_benchmarks_cohort_metric
+job_proposals [hiring] :: id, job_id->jobPostings, freelancer_user_id, cover_note, rate_cents, currency, status, last_eval_overall, decline_reason, screening_answers, attachments, created_at, updated_at, idx_proposals_freelancer
+users [identity] :: id, email, api_key_hash, username, display_name, avatar_url, bio, password_hash, email_verified_at, mfa_enabled, mfa_secret_enc, mfa_temp_secret_enc, mfa_temp_expires_at, mfa_enabled_at, mfa_recovery_generated_at, mfa_last_verified_at, is_superadmin, is_suspended, account_type, account_type_selected_at, available_for_hire, product_updates_seen_at, session_version, onboarding_completed_at, onboarding_progress, user_intent, psychometric, locale, created_at, updated_at
+legal_documents [identity] :: id, document_type, version, title, content, is_active, published_by->users, published_at, created_at, updated_at
+legal_document_versions [identity] :: id, document_type, version, title, content, change_kind, changed_by->users, created_at
+user_legal_acceptances [identity] :: user_id->users, document_type, version, accepted_at, updated_at
+user_mfa_recovery_codes [identity] :: id, user_id->users, code_hash, used_at, created_at
+webauthn_credentials [identity] :: id, user_id->users, credential_id, public_key, algorithm, sign_count, aaguid, transports, backup_eligible, backed_up, name, last_sign_count_regressed_at, last_used_at, created_at, updated_at
+auth_user_sessions [identity] :: id, user_id->users, session_name, user_agent, ip_address, is_active, revoked_at, created_at, last_seen_at
+tenants [identity] :: id, name, slug, status, default_agent_host_id, plan, billing_cycle, billing_status, billing_email, billing_payment_brand, billing_payment_last4, billing_updated_at, card_validated_at, card_validation_status, external_customer_id, external_subscription_id, external_payment_method_id, card_brand, card_last4, seat_count, trial_ends_at, token_daily_limit_override, premium_override, brand_palette, paid_overflow_daily_cap, premium_daily_cap, image_credits_daily_limit, member_default_spend_cap_millicents, kind, idp_issuer, isolation_mode, is_demo, demo_persona, agent_execution_enabled, publisher_state, publisher_website, publisher_support_email, publisher_domain, publisher_verification_token, publisher_verified_at, publisher_payout_connection_id, publisher_suspended_at, publisher_suspended_reason, settings, created_at, updated_at
+oauth_accounts [identity] :: id, user_id->users, provider, provider_account_id, email, display_name, avatar_url, access_token, refresh_token, token_expires_at, scope, created_at, updated_at
+magic_link_tokens [identity] :: id, email, token, expires_at, used, redirect, created_at
+team_members [identity] :: id, team_id->teams, member_kind, member_ref, member_name, added_at
+admin_impersonation_role_switches [identity] :: id, session_id->adminImpersonationSessions, from_role, to_role, switched_at
+role_permission_overrides [identity] :: id, role, permission, granted, reason, created_by->users, created_at
+platform_modules [identity] :: id, name, slug, description, base_role, permissions, is_builtin, created_by->users, created_at, updated_at
+email_delivery_failures [platform] :: id, recipient, delivery_type, provider, provider_status, error_message, created_at
+platform_pricing_configuration [platform] :: key, draft_document, published_document, published_at, published_by, updated_at

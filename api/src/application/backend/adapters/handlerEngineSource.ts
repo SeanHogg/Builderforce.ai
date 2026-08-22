@@ -678,6 +678,15 @@ export async function handleRequest(request, env) {
           matchField: step.matchField,
           matchValue: step.matchValue ? renderTemplate(step.matchValue, scope) : undefined,
         });
+      } else if (step.kind === 'entity') {
+        // The tenant's domain objects live in the PLATFORM's database, and this
+        // engine runs in the customer's own cloud with no route to it. Binding the
+        // empty read (rather than leaving the id undefined) keeps
+        // \`{{#steps.x.count}}\` branching working so the page renders its empty
+        // state, and the reason is logged rather than swallowed — a step that
+        // silently does nothing is the failure mode this whole file guards against.
+        steps[step.id] = { domain: step.domain, kind: step.objectKind, count: 0, items: [] };
+        console.error(\`step \${step.id}: entity reads are unavailable in a self-hosted deployment\`);
       }
     } catch (e) {
       // A failing step must not drop the call — see the note at the top.
