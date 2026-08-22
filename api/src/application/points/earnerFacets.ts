@@ -10,8 +10,10 @@
  *   • `users.available_for_hire` / `users.account_type` — is this person TALENT?
  *     (0269/0282: `available_for_hire` is the opt-in and is always true for a
  *     `freelancer` account, so reading both is reading one fact honestly.)
- *   • `tenant_members` — do they hold a seat in a workspace? A workspace seat is
- *     what "employer" meant: the side that posts the job and confirms the hire.
+ *   • `tenant_members` — do they hold a seat in THIS workspace? A workspace seat
+ *     is what "employer" meant: the side that posts the job and confirms the
+ *     hire. Scoped to the awarding tenant, because the points ledger is: a seat
+ *     held in another workspace is not a fact about this one.
  *   • `party_roles` — the kernel's answer to "what role does this party hold",
  *     which already carries `recruiter` and `seller` as values (PRD 20 §3.2).
  *
@@ -33,6 +35,7 @@
 import { and, eq, inArray } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { memberProfiles, partyRoles, tenantMembers, users } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { EarnerFacet } from './pointsCatalog';
 
 /** The facts the resolver reads. Named so the pure rule below can be tested
@@ -40,7 +43,9 @@ import type { EarnerFacet } from './pointsCatalog';
 export interface EarnerFacts {
   accountType: string | null;
   availableForHire: boolean;
-  /** Holds at least one ACTIVE workspace seat. */
+  /** Holds an ACTIVE seat in THIS workspace. Deliberately not "any workspace":
+   *  points are ledgered per tenant, so a seat held somewhere else must not pay
+   *  out here. */
   hasWorkspaceSeat: boolean;
   /** Active `party_roles` this person holds, lowercased. */
   partyRoles: readonly string[];
@@ -66,7 +71,8 @@ export async function loadEarnerFacts(db: Db, tenantId: number, userId: string):
     db.select({ accountType: users.accountType, availableForHire: users.availableForHire })
       .from(users).where(eq(users.id, userId)).limit(1),
     db.select({ id: tenantMembers.id }).from(tenantMembers)
-      .where(and(eq(tenantMembers.userId, userId), eq(tenantMembers.isActive, true))).limit(1),
+      .where(scopedToTenant(tenantMembers, tenantId, eq(tenantMembers.userId, userId), eq(tenantMembers.isActive, true)))
+      .limit(1),
     db.select({ role: partyRoles.role }).from(partyRoles)
       .where(and(
         eq(partyRoles.tenantId, tenantId),
