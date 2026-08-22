@@ -149,14 +149,43 @@ export function useBrainActions(): BrainActionsContextValue {
 }
 
 /**
+ * The DECLARED contract of a batch of actions — everything the model is told,
+ * and nothing about the closures that serve it.
+ *
+ * This is what registration is keyed on. The split is the whole point:
+ *
+ *  - A handler's identity changes on every render of any caller that builds its
+ *    actions inline. That must NOT re-register: it is the churn that froze the
+ *    site, and the handler is reached through a ref anyway (see `liveAction`).
+ *  - `description` and `parameters` genuinely change with DATA — the widget and
+ *    destination bridges compile the ids they know about into an `enum`. That
+ *    MUST re-register, or the model keeps being offered last hour's ids.
+ *
+ * `mutates` is reduced to its shape rather than its value: a predicate is a
+ * closure like `run`, so its identity says nothing, but flipping between a
+ * predicate and a literal `true` changes the confirm gate and must be seen.
+ */
+function declarationSignature(actions: BrainAction[]): string {
+  try {
+    return JSON.stringify(
+      actions.map((a) => [a.name, a.description, a.parameters, typeof a.mutates === 'function' ? 'fn' : a.mutates ?? false]),
+    );
+  } catch {
+    // A parameters object that will not serialise (a cycle, a BigInt) is not a
+    // reason to stop registering — fall back to the names, which always do.
+    return actions.map((a) => a.name).join(',');
+  }
+}
+
+/**
  * The registry entry for one name, reading through to the caller's LATEST action.
  *
- * Registration is keyed on the action NAMES rather than on the array identity
- * (see the hook below), so the object that lands in the registry has to stay
- * correct while the caller's closures are replaced under it. Getters do that:
- * `description`, `parameters` and `mutates` are read at the moment the Brain
- * builds a tool spec or checks the mutation gate, and `run` dispatches to the
- * newest handler — never to the one that happened to be current at registration.
+ * Registration is keyed on the declaration above rather than on the array
+ * identity, so the object that lands in the registry has to stay correct while
+ * the caller's closures are replaced under it. Getters do that: `description`,
+ * `parameters` and `mutates` are read at the moment the Brain builds a tool spec
+ * or checks the mutation gate, and `run` dispatches to the newest handler —
+ * never to the one that happened to be current at registration.
  */
 function liveAction(name: string, latest: { current: BrainAction[] }): BrainAction {
   const current = () => latest.current.find((a) => a.name === name);
@@ -197,12 +226,16 @@ export function useRegisterBrainActions(actions: BrainAction[]): void {
   // rendering does not guarantee.
   useEffect(() => { latest.current = actions; }, [actions]);
 
-  // A tool name is flat snake_case (no dots, no commas), so a comma-joined list
-  // of them is an unambiguous signature of "which names, in which order".
-  const signature = actions.map((a) => a.name).join(',');
+  const signature = declarationSignature(actions);
+  // The names are carried alongside so the effect never has to parse them back
+  // out of the signature — a tool name is flat snake_case, but a description is
+  // free text and could contain anything.
+  const names = actions.map((a) => a.name).join(',');
 
   useEffect(() => {
-    if (!register || signature === '') return;
-    return register(signature.split(',').map((name) => liveAction(name, latest)));
+    if (!register || names === '') return;
+    return register(names.split(',').map((name) => liveAction(name, latest)));
+    // `names` is derivable from `signature` and would only ever re-fire with it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [register, signature]);
 }

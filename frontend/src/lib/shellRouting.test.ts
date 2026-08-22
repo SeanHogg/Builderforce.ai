@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { classifyGuestBrainstormEntry, classifyShell, isFramedEmbed, rendersAppShell } from './shellRouting';
+import { classifyGuestBrainstormEntry, classifyShell, isFramedEmbed, isGuestPreviewRoute, isLocalFirstAppRoute, rendersAppShell } from './shellRouting';
 
 describe('classifyGuestBrainstormEntry', () => {
   it('does not mount the legacy redirect before the browser resolves ?room=', () => {
@@ -178,11 +178,51 @@ describe('rendersAppShell — one shell, signed in or not', () => {
     expect(rendersAppShell(`/create/invitations/${'a'.repeat(64)}`, false)).toBe(true);
   });
 
-  it('still teases every OTHER app route to a signed-out visitor', () => {
-    expect(rendersAppShell('/dashboard', false)).toBe(false);
-    expect(rendersAppShell('/projects/12', false)).toBe(false);
-    // A durable (server-persisted) canvas is somebody's workspace, not a guest's.
-    expect(rendersAppShell('/create/sess_9f2a', false)).toBe(false);
+  it('gives a signed-out visitor the real surface on every previewable route', () => {
+    // The inversion. These used to be `false` — the teaser replaced the page, so
+    // ninety-nine routes traded the product for a poster. A visitor who cannot
+    // see the product cannot judge whether it is worth an account.
+    expect(rendersAppShell('/dashboard', false)).toBe(true);
+    expect(rendersAppShell('/insights', false)).toBe(true);
+    expect(rendersAppShell('/insights/devex', false)).toBe(true);
+    expect(rendersAppShell('/projects/12', false)).toBe(true);
+    expect(rendersAppShell('/seat/finance', false)).toBe(true);
+    // A durable (server-persisted) canvas is somebody's workspace — but the
+    // SHELL still mounts, because the page itself is what reports that the
+    // session is not readable. Substituting the whole surface for marketing is
+    // the behaviour being removed.
+    expect(rendersAppShell('/create/sess_9f2a', false)).toBe(true);
+  });
+
+  it('keeps the teaser on operator surfaces, which have no sample version', () => {
+    // Your sessions, your invoices, platform administration. There is no honest
+    // preview of these, so the teaser is the correct answer and stays.
+    expect(rendersAppShell('/admin', false)).toBe(false);
+    expect(rendersAppShell('/admin/llm-traces', false)).toBe(false);
+    expect(rendersAppShell('/settings/members', false)).toBe(false);
+    expect(rendersAppShell('/billing/payouts', false)).toBe(false);
+    expect(rendersAppShell('/security', false)).toBe(false);
+    expect(rendersAppShell('/tenants', false)).toBe(false);
+    expect(rendersAppShell('/logs', false)).toBe(false);
+    expect(rendersAppShell('/monitoring', false)).toBe(false);
+    expect(rendersAppShell('/debug', false)).toBe(false);
+    expect(rendersAppShell('/agent-worker', false)).toBe(false);
+    // …and a developer portal and a migration wizard are capabilities being
+    // sold, not operator tooling, so they preview like anything else.
+    expect(rendersAppShell('/developers', false)).toBe(true);
+    expect(rendersAppShell('/import', false)).toBe(true);
+  });
+
+  it('separates "renders the same either way" from "previewable"', () => {
+    // Only the local-first canvas skips the one-frame wait for the session; a
+    // preview surface must not paint sample data in front of a signed-in person.
+    expect(isLocalFirstAppRoute('/create/local-abc123')).toBe(true);
+    expect(isLocalFirstAppRoute('/insights')).toBe(false);
+    expect(isGuestPreviewRoute('/insights')).toBe(true);
+    expect(isGuestPreviewRoute('/settings')).toBe(false);
+    // Never off an app route: a public page is not a "preview", it is public.
+    expect(isGuestPreviewRoute('/pricing')).toBe(false);
+    expect(isGuestPreviewRoute('/sign/abc')).toBe(false);
   });
 
   it('gives a signed-in visitor the shell on every app route, and never off one', () => {

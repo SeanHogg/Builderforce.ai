@@ -644,6 +644,7 @@ function toolSpecsFor(actions) {
 // src/BrainActionsContext.tsx
 import { jsx as jsx2 } from "react/jsx-runtime";
 var BrainActionsContext = createContext2(null);
+var BrainRegistrarContext = createContext2(null);
 function BrainActionsProvider({ children }) {
   const registry = useRef2(/* @__PURE__ */ new Map());
   const [version, setVersion] = useState2(0);
@@ -693,7 +694,7 @@ function BrainActionsProvider({ children }) {
     () => ({ toolSpecs, runTool, isMutating, register }),
     [toolSpecs, runTool, isMutating, register]
   );
-  return /* @__PURE__ */ jsx2(BrainActionsContext.Provider, { value, children });
+  return /* @__PURE__ */ jsx2(BrainRegistrarContext.Provider, { value: register, children: /* @__PURE__ */ jsx2(BrainActionsContext.Provider, { value, children }) });
 }
 function useBrainActions() {
   const ctx = useContext2(BrainActionsContext);
@@ -702,13 +703,47 @@ function useBrainActions() {
   }
   return ctx;
 }
+function declarationSignature(actions) {
+  try {
+    return JSON.stringify(
+      actions.map((a) => [a.name, a.description, a.parameters, typeof a.mutates === "function" ? "fn" : a.mutates ?? false])
+    );
+  } catch {
+    return actions.map((a) => a.name).join(",");
+  }
+}
+function liveAction(name, latest) {
+  const current = () => latest.current.find((a) => a.name === name);
+  return {
+    name,
+    get description() {
+      return current()?.description ?? "";
+    },
+    get parameters() {
+      return current()?.parameters ?? { type: "object", properties: {} };
+    },
+    get mutates() {
+      return current()?.mutates;
+    },
+    run: (args) => {
+      const action = current();
+      if (!action) return { error: `Unknown tool: ${name}` };
+      return action.run(args);
+    }
+  };
+}
 function useRegisterBrainActions(actions) {
-  const ctx = useContext2(BrainActionsContext);
-  const register = ctx?.register;
+  const register = useContext2(BrainRegistrarContext);
+  const latest = useRef2(actions);
   useEffect2(() => {
-    if (!register) return;
-    return register(actions);
-  }, [register, actions]);
+    latest.current = actions;
+  }, [actions]);
+  const signature = declarationSignature(actions);
+  const names = actions.map((a) => a.name).join(",");
+  useEffect2(() => {
+    if (!register || names === "") return;
+    return register(names.split(",").map((name) => liveAction(name, latest)));
+  }, [register, signature]);
 }
 
 // src/useMcpExtensions.ts

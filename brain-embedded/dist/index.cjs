@@ -899,6 +899,7 @@ function toolSpecsFor(actions) {
 // src/BrainActionsContext.tsx
 var import_jsx_runtime2 = require("react/jsx-runtime");
 var BrainActionsContext = (0, import_react3.createContext)(null);
+var BrainRegistrarContext = (0, import_react3.createContext)(null);
 function BrainActionsProvider({ children }) {
   const registry = (0, import_react3.useRef)(/* @__PURE__ */ new Map());
   const [version, setVersion] = (0, import_react3.useState)(0);
@@ -948,7 +949,7 @@ function BrainActionsProvider({ children }) {
     () => ({ toolSpecs, runTool, isMutating, register }),
     [toolSpecs, runTool, isMutating, register]
   );
-  return /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(BrainActionsContext.Provider, { value, children });
+  return /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(BrainRegistrarContext.Provider, { value: register, children: /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(BrainActionsContext.Provider, { value, children }) });
 }
 function useBrainActions() {
   const ctx = (0, import_react3.useContext)(BrainActionsContext);
@@ -957,13 +958,47 @@ function useBrainActions() {
   }
   return ctx;
 }
+function declarationSignature(actions) {
+  try {
+    return JSON.stringify(
+      actions.map((a) => [a.name, a.description, a.parameters, typeof a.mutates === "function" ? "fn" : a.mutates ?? false])
+    );
+  } catch {
+    return actions.map((a) => a.name).join(",");
+  }
+}
+function liveAction(name, latest) {
+  const current = () => latest.current.find((a) => a.name === name);
+  return {
+    name,
+    get description() {
+      return current()?.description ?? "";
+    },
+    get parameters() {
+      return current()?.parameters ?? { type: "object", properties: {} };
+    },
+    get mutates() {
+      return current()?.mutates;
+    },
+    run: (args) => {
+      const action = current();
+      if (!action) return { error: `Unknown tool: ${name}` };
+      return action.run(args);
+    }
+  };
+}
 function useRegisterBrainActions(actions) {
-  const ctx = (0, import_react3.useContext)(BrainActionsContext);
-  const register = ctx?.register;
+  const register = (0, import_react3.useContext)(BrainRegistrarContext);
+  const latest = (0, import_react3.useRef)(actions);
   (0, import_react3.useEffect)(() => {
-    if (!register) return;
-    return register(actions);
-  }, [register, actions]);
+    latest.current = actions;
+  }, [actions]);
+  const signature = declarationSignature(actions);
+  const names = actions.map((a) => a.name).join(",");
+  (0, import_react3.useEffect)(() => {
+    if (!register || names === "") return;
+    return register(names.split(",").map((name) => liveAction(name, latest)));
+  }, [register, signature]);
 }
 
 // src/useMcpExtensions.ts

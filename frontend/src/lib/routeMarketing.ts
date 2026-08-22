@@ -1,6 +1,6 @@
 import { PRODUCT_SECTIONS, PROJECTS_TASKS_FAQ, type FaqItem } from './content';
 import { FOR_HIRE_NAV_GROUPS, NAV_GROUPS, SALES_NAV_GROUPS, findActiveGroup, type NavGroup } from './navGroups';
-import { classifyShell } from './shellRouting';
+import { classifyShell, isOperatorOnlyRoute } from './shellRouting';
 
 /**
  * Marketing copy shown to logged-out visitors who land on an authenticated
@@ -300,7 +300,7 @@ export function destinationForRoute(pathname: string): NavGroup | undefined {
 
 /**
  * Destination teasers that must NOT be indexed: operator tooling and PERSONAL
- * consoles. Same reasoning as {@link NOINDEX_TEASER_ROUTES} — the page stays for
+ * consoles. Same reasoning as {@link isNoindexRegistryRoute} — the page stays for
  * anyone holding the link, it just has nothing to rank for. Superadmin-only rows
  * are DERIVED rather than listed, so a new one is excluded by existing.
  */
@@ -340,20 +340,24 @@ function destinationTeaserRoutes(): { route: string; group: NavGroup }[] {
 }
 
 /**
- * Registry routes that must NOT be indexed.
+ * Which routes must NOT be indexed — DERIVED from `isOperatorOnlyRoute`, not
+ * retyped.
  *
- * Every authenticated route renders a `RouteMarketing` teaser to a logged-out
- * visitor (see `ConditionalAppShell`), which makes it a real, crawlable page
- * whether or not anyone decided it should be. For a marketed surface — Canvas,
- * projects, workforce — that is the point: it is a demand-capture landing page.
- * For operator tooling it is not. A "Platform Admin" page in the index invites
- * exactly the traffic it should never receive, and a workspace switcher has
- * nothing to rank for.
+ * The rule is now one sentence: a route keeps its `RouteMarketing` teaser
+ * exactly when a signed-out visitor may not preview it, and a teaser that is the
+ * only thing at a URL for operator tooling must not be indexed. A "Platform
+ * Admin" page in the index invites exactly the traffic it should never receive,
+ * and a workspace switcher has nothing to rank for.
  *
- * These four therefore keep their teaser (so a deep link is still not a dead
- * end) and are excluded from the sitemap.
+ * It was a hand-typed set of four here while the shell decided the same question
+ * from its own list, and the two had drifted: `/security`, `/billing`, `/debug`,
+ * `/logs` and `/monitoring` were being submitted to the sitemap as marketing
+ * landing pages for operator surfaces. One declaration cannot disagree with
+ * itself.
  */
-const NOINDEX_TEASER_ROUTES = new Set(['/admin', '/tenants', '/settings', '/agent-worker']);
+function isNoindexRegistryRoute(route: string): boolean {
+  return isOperatorOnlyRoute(route);
+}
 
 /**
  * The teaser routes that belong in the sitemap, derived from the registry.
@@ -365,7 +369,7 @@ const NOINDEX_TEASER_ROUTES = new Set(['/admin', '/tenants', '/settings', '/agen
  * excluded by being named above.
  */
 export function indexableTeaserRoutes(): string[] {
-  const marketed = Object.keys(REGISTRY).filter((route) => !NOINDEX_TEASER_ROUTES.has(route));
+  const marketed = Object.keys(REGISTRY).filter((route) => !isNoindexRegistryRoute(route));
   const destinations = destinationTeaserRoutes()
     .filter(({ group }) => !isNoindexDestination(group))
     .map(({ route }) => route);
@@ -387,7 +391,8 @@ export function noindexTeaserRoutes(): string[] {
   const destinations = destinationTeaserRoutes()
     .filter(({ group }) => isNoindexDestination(group))
     .map(({ route }) => route);
-  return [...new Set([...NOINDEX_TEASER_ROUTES, ...destinations])].sort();
+  const marketed = Object.keys(REGISTRY).filter(isNoindexRegistryRoute);
+  return [...new Set([...marketed, ...destinations])].sort();
 }
 
 /**
@@ -404,7 +409,7 @@ export function isNoindexTeaserRoute(pathname: string): boolean {
   // Platform Admin's copy without ever having been marketed, and an exact-match
   // test let it back into the index under a route whose parent is excluded.
   const marketed = REGISTRY[pathname] ? pathname : longestPrefixMatch(pathname, REGISTRY)?.key;
-  if (marketed && NOINDEX_TEASER_ROUTES.has(marketed)) return true;
+  if (marketed && isNoindexRegistryRoute(marketed)) return true;
   if (REGISTRY[pathname]) return false;
   const group = destinationForRoute(pathname);
   if (group) return isNoindexDestination(group);

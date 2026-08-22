@@ -916,9 +916,18 @@ declare function BrainActionsProvider({ children }: {
 declare function useBrainActions(): BrainActionsContextValue;
 /**
  * Register page actions for as long as the calling component is mounted.
- * Pass a STABLE array (wrap in `useMemo`) — the effect re-runs when the array
- * identity changes. If no provider is present (e.g. a route without the Brain),
- * this is a no-op so pages can call it unconditionally.
+ *
+ * The array does NOT have to be referentially stable. It used to — the contract
+ * was a comment asking callers to `useMemo`, and one caller that did not (a
+ * `useComponentLabel()` that returned a fresh function every render, feeding
+ * `WidgetBrainBridge`'s memo) froze every navigation on the site. A contract a
+ * caller can silently break, whose breach takes down the whole app, belongs in
+ * the primitive instead: registration is keyed on the action NAMES, and the
+ * handlers are read through a ref, so re-running with an equivalent array is
+ * free and the registry never churns.
+ *
+ * If no provider is present (e.g. a route without the Brain) this is a no-op, so
+ * pages can call it unconditionally.
  */
 declare function useRegisterBrainActions(actions: BrainAction[]): void;
 

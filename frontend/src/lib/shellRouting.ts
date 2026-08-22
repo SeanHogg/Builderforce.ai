@@ -161,12 +161,90 @@ const PUBLIC_SHELL_PREFIXES = ['/about', '/legal', '/product', '/blog', '/tutori
  * `/create/new` too — so a signed-out visitor bounced back to the same teaser
  * with their request thrown away.
  */
-const GUEST_APP_PATTERNS: RegExp[] = [
+const LOCAL_FIRST_APP_PATTERNS: RegExp[] = [
   /^\/create$/,
   /^\/create\/new$/,
   /^\/create\/local-/,
   /^\/create\/invitations(?:\/|$)/,
 ];
+
+/**
+ * A route that renders IDENTICALLY signed in or out, so the shell must not wait
+ * a frame for the session to be read off the device before mounting it.
+ *
+ * Kept separate from guest PREVIEW below, and the distinction is the whole
+ * reason both exist. A local-first canvas has no server data to be wrong about,
+ * so rendering it before `authReady` costs nothing. A preview surface reads
+ * SAMPLE data when there is no session and REAL data when there is, so mounting
+ * it early would paint the fixture for one frame in front of a signed-in person
+ * — the flash `ConditionalAppShell` has always spent one frame avoiding.
+ */
+export function isLocalFirstAppRoute(pathname: string): boolean {
+  return LOCAL_FIRST_APP_PATTERNS.some((pattern) => pattern.test(pathname));
+}
+
+/**
+ * The routes a signed-out visitor may NOT preview — the whole of the exception.
+ *
+ * Everything else in the app shell renders for everybody (see
+ * {@link isGuestPreviewRoute}), because a visitor who cannot see the product
+ * cannot judge whether it is worth an account. These nine are the surfaces where
+ * that argument does not apply, and they share one property: they are about YOUR
+ * account, YOUR workspace or the PLATFORM — not about a capability the product
+ * has. There is no sample version of "your sessions", "your invoices" or
+ * "platform administration"; a preview of them would be a fabrication rather
+ * than a demonstration.
+ *
+ * ONE declaration, two consumers: the shell asks it to decide who renders, and
+ * `routeMarketing` derives `noindexTeaserRoutes()` from it — because a surface
+ * that keeps its teaser is exactly a surface whose teaser must not be indexed.
+ * Those two lists were written separately and had already drifted: `/admin`,
+ * `/tenants`, `/settings` and `/agent-worker` were noindex while `/security`,
+ * `/billing`, `/debug`, `/logs` and `/monitoring` were submitted to the sitemap
+ * as marketing landing pages for operator tooling.
+ *
+ * `/developers` and `/import` are deliberately NOT here. A developer portal and
+ * a migration wizard are capabilities being sold, so they preview like any other
+ * product surface.
+ */
+const OPERATOR_ONLY_PREFIXES = [
+  '/admin',
+  '/agent-worker',
+  '/billing',
+  '/debug',
+  '/logs',
+  '/monitoring',
+  '/security',
+  '/settings',
+  '/tenants',
+];
+
+/** Is this an operator surface — about your account, your workspace or the
+ *  platform — rather than a capability a visitor could be shown? */
+export function isOperatorOnlyRoute(pathname: string): boolean {
+  return OPERATOR_ONLY_PREFIXES.some((p) => underPrefix(pathname, p));
+}
+
+/**
+ * May a signed-out visitor see the REAL surface at this route?
+ *
+ * The inversion of the rule this file used to encode. Every app route rendered
+ * `RouteMarketing` to a logged-out visitor — the page never mounted, so ninety-
+ * nine routes traded the product for a poster and `/insights` advertised eight
+ * tabs as dead chips. The product's own gating primitives had already settled
+ * the argument twice: `RoleGate` renders a control disabled and names the role
+ * required, `UpgradeGate` renders the wall inline so it reads as "this view
+ * needs a higher plan". Capability and plan INDICATE the gate; session alone
+ * SUBSTITUTED the surface. This is session joining the other two.
+ *
+ * What the visitor sees is real chrome over the sample workspace
+ * (`domains/guest`), labelled as sample everywhere it appears, editable, and
+ * claimed into their workspace when they sign up. The wall moves off the route
+ * and onto the ACTION — see `<SessionGate>`.
+ */
+export function isGuestPreviewRoute(pathname: string): boolean {
+  return classifyShell(pathname) === 'app' && !isOperatorOnlyRoute(pathname);
+}
 
 export type ShellKind = 'none' | 'footer' | 'public' | 'app';
 
@@ -217,7 +295,10 @@ export function classifyShell(pathname: string): ShellKind {
 export function rendersAppShell(pathname: string, isAuthenticated: boolean): boolean {
   if (isReferenceSurface(pathname) && isAuthenticated) return true;
   if (classifyShell(pathname) !== 'app') return false;
-  return isAuthenticated || GUEST_APP_PATTERNS.some((pattern) => pattern.test(pathname));
+  // A guest gets the same shell as a member on everything but operator tooling.
+  // `isLocalFirstAppRoute` is subsumed by the preview rule and kept named
+  // because the SHELL still asks it separately — see its doc comment.
+  return isAuthenticated || isLocalFirstAppRoute(pathname) || isGuestPreviewRoute(pathname);
 }
 
 /**
