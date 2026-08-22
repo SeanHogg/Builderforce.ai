@@ -85,13 +85,15 @@ function rows(items, box, palette, { numbered = false, track = null } = {}) {
     const hue = shade(palette, item.hue);
     const width = track ? Math.max(0.22, Math.min(1, item.value / track)) * box.w : box.w;
     // The type follows the row: eight rows in the same box are half the height
-    // of four, and a 20px label in a 34px row touches both edges.
+    // of four, and a 20px label in a 34px row touches both edges. The NAME is
+    // never trimmed to the bar — a short bar means a cheap proof, not a proof
+    // with a shorter name, and "Clickable…" hides the thing being ranked.
     const labelSize = h >= 56 ? 20 : h >= 42 ? 17 : 15;
     return `
     <rect x="${box.x}" y="${y}" width="${width.toFixed(0)}" height="${h.toFixed(0)}" rx="10" fill="${hue}" fill-opacity="0.18" stroke="${hue}" stroke-width="2"/>
     <rect x="${box.x}" y="${y}" width="4" height="${h.toFixed(0)}" rx="2" fill="${hue}"/>
     ${numbered ? text(box.x + 18, y + h / 2 + 5, String(index + 1).padStart(2, '0'), { size: 14, weight: 800, fill: hue }) : ''}
-    ${text(box.x + (numbered ? 50 : 18), y + h / 2 + labelSize / 3, clip(item.label, Math.round(26 * (width / box.w))), { size: labelSize, weight: 700, fill: palette.ink })}`;
+    ${text(box.x + (numbered ? 50 : 18), y + h / 2 + labelSize / 3, clip(item.label, 26), { size: labelSize, weight: 700, fill: palette.ink })}`;
   }).join('');
 }
 
