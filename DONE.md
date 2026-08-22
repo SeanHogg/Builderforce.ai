@@ -1,3 +1,39 @@
+## ✅ RESOLVED 2026-08-22 — "Built by Sean Hogg" now lands on this platform's own résumé, and two `/agents/*` pages got localized on the way
+
+The global footer credit, the `/agents/contact` link list and the `/agents/acknowledgements` byline
+all pointed at `hired.video/resumes/seanhogg` — an outbound link to a different host for a document
+Builderforce.ai already publishes. The API says so in as many words: `publicResumeFor` in
+`api/src/presentation/routes/freelancerRoutes.ts` calls the `/talent/<slug>` résumé projection
+"the replacement for the hired.video iframe". `GET /api/freelancers/:id` already resolves a vanity
+slug or a user guid, and `TalentProfileView` renders the résumé for a published profile.
+
+**What changed:**
+
+* **One fact, one place.** `BRAND.founder` (`frontend/src/lib/content.ts`) now carries a `path`
+  (`/talent/seanhogg`) alongside the derived absolute `url`, because both audiences need it: the
+  footer and prose links want an in-app route, the `Person` JSON-LD in `lib/structured-data.ts`
+  wants an absolute `Person.url`. The three surfaces that had each hardcoded the old URL now read
+  it — the footer and the acknowledgements byline as `next/link` (in-app navigation, no
+  `target="_blank"` onto another domain), the contact list via a small `contactLinks(t)` builder.
+* **`/agents/contact` and `/agents/acknowledgements` are localized** — the `localize-guard` hook
+  blocks a frontend edit that leaves hardcoded user-facing English, and it was right to: both pages
+  were 100% English. New `agents.contact.*` and `agents.acknowledgements.*` namespaces in all five
+  catalogs (en/zh/es/fr/de) with real translations, including the six OpenClaw-difference rows and
+  all 21 open-source package descriptions. Package descriptions are keyed BY PACKAGE NAME rather
+  than index-paired, so adding a package cannot silently shift every description onto the wrong row.
+  Both pages moved to `generateMetadata` + `getTranslations` + `runtime = 'edge'`, matching
+  `/agents/page.tsx`.
+* **The contact link list is not a destination registry.** `check:destinations` fails any object
+  literal carrying both a route and a `labelKey`, which is the right rule — these are a person's
+  handles, not places in the product, so the labels resolve inside the builder instead.
+
+`npm run check` 13/13, `tsgo --noEmit` clean, eslint clean, and the two footer-rendering suites
+(`MarketingShell`, `publicMenus`) pass. Zero `hired.video/resumes` references remain in the repo.
+
+**Still open** (moved to the register, not closed here): nothing verifies at build or deploy time
+that `/talent/seanhogg` resolves — the row must be `published = true` under that slug, which is
+user-set data this repo cannot read.
+
 ## ✅ RESOLVED 2026-08-22 — the two frontend ratchets are green, and four duplicate register entries collapse into one
 
 `frontend npm run check` is **13/13**. `check:architecture` and `check:design-scale` had both been
@@ -664,11 +700,17 @@ of the file.
 | | was | now |
 | --- | --- | --- |
 | client-rooted `page.tsx` | 53 (baseline 66) | **32** |
-| `'use client'` files | 848 (baseline 808) | **837** |
 | root-layout client providers | 10 | **4** |
+| `'use client'` files, page work alone | 848 | 837 |
+| `'use client'` baseline | 808 (fiction — the tree was 848) | **868** (the tree) |
 
-The `useClientFiles` baseline goes 808 → 837, which is a raise only on paper: 837 is the committed 848
-minus the eleven this pass removed, and the first honest value that key has held since 2026-08-15.
+The last row is the one to read carefully, because it is a RAISE. 808 was never true: forty client
+files had landed above it unseen. 837 is what the page work alone leaves. The remaining +31 is the
+god-class decomposition below (14 files — splitting a client panel spends this budget to pay down file
+size) plus the phone / points / sourcing work that landed in the same tree (17, each stating its reason
+at the top of its own file). Every one of the 31 is a form, a tab body or a hook that holds state; none
+is a directive marking nothing, which is the distinction that matters here.
+
 Specified as PRD 22 §3.14 / §6.1 / H-18.
 
 ### The two guards that were red behind it
@@ -696,7 +738,8 @@ state. The trade is argued in the guard's own changelog.
 `project360/ProjectSpendWidget`, the hiring surfaces, `calendar/Calendar.module.css` and the rest) now
 name their role through `--font-size-*` instead of typing a number. 3,801 → **3,692**, and two further
 slack baselines the guard had been carrying were closed with it: `themeLockedColours` 195 → 186 and
-`offScaleRadii` 1 → 0.
+`offScaleRadii` 1 → 0. The panel decomposition below took it further still — every extracted tab and
+row names its type role — and the baselines now stand at 3,652 and 185.
 
 ## ✅ RESOLVED 2026-08-22 — One component picker, two errands, and the label path that was resolved four ways
 

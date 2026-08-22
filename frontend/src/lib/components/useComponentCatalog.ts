@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 import { listComponentGroups } from './registry';
 import type { ComponentDef, ComponentMount } from './types';
@@ -79,5 +79,13 @@ export function useComponentCatalog(mount: ComponentMount, query: string): Compo
  */
 export function useComponentLabel(): (def: Pick<ComponentDef, 'titleKey'>) => string {
   const t = useTranslations('components');
-  return (def) => t(`title.${def.titleKey}` as 'title');
+  // STABLE per locale, and that is not a micro-optimisation. This function is a
+  // dependency of consumers' `useMemo` — `WidgetBrainBridge` builds its Brain
+  // action array from it — so a fresh identity on every render rebuilt that
+  // array on every render, which re-registered the widget tools, which bumped
+  // the Brain registry, which re-rendered the bridge. The app never stopped
+  // re-rendering, React never reached an idle frame, and every `next/link`
+  // navigation on the site (a transition) was starved: no link anywhere
+  // navigated. Fixed 2026-08-22 together with the registry seam itself.
+  return useCallback((def: Pick<ComponentDef, 'titleKey'>) => t(`title.${def.titleKey}` as 'title'), [t]);
 }

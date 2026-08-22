@@ -22,7 +22,10 @@ export const panelDrawerStyle: CSSProperties = {
   width: '85%',
   maxWidth: '100%',
   borderLeft: '1px solid var(--border-subtle)',
-  boxShadow: '-8px 0 24px rgba(0,0,0,0.2)',
+  // `--shadow-color` is the token for shadows COMPOSED at a call site rather than
+  // taken whole from `--shadow-*` — globals.css names the drawer as its example.
+  // A literal here was black in both themes; the token flips warm on light.
+  boxShadow: '-8px 0 24px var(--shadow-color)',
   zIndex: 9999,
   display: 'flex',
   flexDirection: 'column',

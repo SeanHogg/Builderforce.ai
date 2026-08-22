@@ -48,6 +48,25 @@ export interface BrainActionsContextValue {
 
 const BrainActionsContext = createContext<BrainActionsContextValue | null>(null);
 
+/** What a registrant needs, and nothing else. */
+type BrainActionRegistrar = (actions: BrainAction[]) => () => void;
+
+/**
+ * The REGISTRATION seam, deliberately separate from the read seam above.
+ *
+ * A registrant subscribed to `BrainActionsContext` re-rendered every time the
+ * registry changed — including on its OWN registration, because registering
+ * bumps the version and rebuilds the context value. Any registrant whose action
+ * array was not referentially stable then rebuilt it, re-registered, bumped
+ * again, and the app re-rendered forever: React never reached an idle frame, so
+ * every `startTransition` (which is what every `next/link` navigation is) was
+ * starved and NO LINK ON THE SITE NAVIGATED. Observed in production 2026-08-22.
+ *
+ * The value here is the `register` callback itself, which is stable for the
+ * provider's lifetime — so subscribing to it can never re-render anybody.
+ */
+const BrainRegistrarContext = createContext<BrainActionRegistrar | null>(null);
+
 interface Entry {
   action: BrainAction;
   /** Identity token of the registration that owns this name, so an unmounting
@@ -113,7 +132,11 @@ export function BrainActionsProvider({ children }: { children: React.ReactNode }
     [toolSpecs, runTool, isMutating, register],
   );
 
-  return <BrainActionsContext.Provider value={value}>{children}</BrainActionsContext.Provider>;
+  return (
+    <BrainRegistrarContext.Provider value={register}>
+      <BrainActionsContext.Provider value={value}>{children}</BrainActionsContext.Provider>
+    </BrainRegistrarContext.Provider>
+  );
 }
 
 /** Consume the registry (used by the Brain panel/conversation hook). */
@@ -126,16 +149,60 @@ export function useBrainActions(): BrainActionsContextValue {
 }
 
 /**
+ * The registry entry for one name, reading through to the caller's LATEST action.
+ *
+ * Registration is keyed on the action NAMES rather than on the array identity
+ * (see the hook below), so the object that lands in the registry has to stay
+ * correct while the caller's closures are replaced under it. Getters do that:
+ * `description`, `parameters` and `mutates` are read at the moment the Brain
+ * builds a tool spec or checks the mutation gate, and `run` dispatches to the
+ * newest handler — never to the one that happened to be current at registration.
+ */
+function liveAction(name: string, latest: { current: BrainAction[] }): BrainAction {
+  const current = () => latest.current.find((a) => a.name === name);
+  return {
+    name,
+    get description() { return current()?.description ?? ''; },
+    get parameters() { return current()?.parameters ?? { type: 'object', properties: {} }; },
+    get mutates() { return current()?.mutates; },
+    run: (args: unknown) => {
+      const action = current();
+      // The owner re-rendered this name away between registration and the call.
+      if (!action) return { error: `Unknown tool: ${name}` };
+      return action.run(args);
+    },
+  };
+}
+
+/**
  * Register page actions for as long as the calling component is mounted.
- * Pass a STABLE array (wrap in `useMemo`) — the effect re-runs when the array
- * identity changes. If no provider is present (e.g. a route without the Brain),
- * this is a no-op so pages can call it unconditionally.
+ *
+ * The array does NOT have to be referentially stable. It used to — the contract
+ * was a comment asking callers to `useMemo`, and one caller that did not (a
+ * `useComponentLabel()` that returned a fresh function every render, feeding
+ * `WidgetBrainBridge`'s memo) froze every navigation on the site. A contract a
+ * caller can silently break, whose breach takes down the whole app, belongs in
+ * the primitive instead: registration is keyed on the action NAMES, and the
+ * handlers are read through a ref, so re-running with an equivalent array is
+ * free and the registry never churns.
+ *
+ * If no provider is present (e.g. a route without the Brain) this is a no-op, so
+ * pages can call it unconditionally.
  */
 export function useRegisterBrainActions(actions: BrainAction[]): void {
-  const ctx = useContext(BrainActionsContext);
-  const register = ctx?.register;
+  const register = useContext(BrainRegistrarContext);
+  const latest = useRef(actions);
+  // Declared BEFORE the registration effect so it has already run when that one
+  // fires in the same commit — no render-phase ref write, which concurrent
+  // rendering does not guarantee.
+  useEffect(() => { latest.current = actions; }, [actions]);
+
+  // A tool name is flat snake_case (no dots, no commas), so a comma-joined list
+  // of them is an unambiguous signature of "which names, in which order".
+  const signature = actions.map((a) => a.name).join(',');
+
   useEffect(() => {
-    if (!register) return;
-    return register(actions);
-  }, [register, actions]);
+    if (!register || signature === '') return;
+    return register(signature.split(',').map((name) => liveAction(name, latest)));
+  }, [register, signature]);
 }

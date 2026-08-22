@@ -37,7 +37,7 @@ import {
   type CloudAgentTarget,
   type TeamMember,
 } from '@/lib/taskAssignee';
-import { BoardConfigPanel } from './board/BoardConfigPanel';
+import { BoardConfigPanel, type ConfigTab } from './board/BoardConfigPanel';
 import { AssigneeProfilesProvider } from './workforce/AssigneeProfilesContext';
 import AssigneeHovercard, { AssigneePersonalityInline } from './workforce/AssigneeHovercard';
 import { MemberProfileEditor } from './workforce/MemberProfileEditor';
@@ -253,7 +253,9 @@ export function TaskMgmtContent({
   const [boardConfigOpen, setBoardConfigOpen] = useState(false);
   // Which tab the board-config panel opens on: the cog opens 'lanes'; the
   // approval banner's shortcut opens 'settings' (where the override toggle lives).
-  const [boardConfigTab, setBoardConfigTab] = useState<'lanes' | 'settings'>('lanes');
+  // Typed from the panel's own vocabulary rather than a second copy of it: the
+  // two tabs this surface opens are a subset, not a different set.
+  const [boardConfigTab, setBoardConfigTab] = useState<ConfigTab>('lanes');
   // Live ceremony overlay (standup/planning round-table) for the selected board.
   const [ceremony, setCeremony] = useState<CeremonyMode | null>(null);
   const [prdOpen, setPrdOpen] = useState(false);
