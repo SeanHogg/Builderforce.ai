@@ -726,7 +726,8 @@
       "offers": "Angebote",
       "rewards": "Prämien",
       "mail": "E-Mail",
-      "phone": "Telefon"
+      "phone": "Telefon",
+      "sourcing": "Sourcing"
     },
     "primaryAria": "Primär",
     "destination": {
@@ -26090,6 +26091,10 @@
       "sendOffer": "Das Angebot konnte nicht gesendet werden.",
       "respondOffer": "Die Antwort konnte nicht erfasst werden.",
       "kitSave": "Der Leitfaden konnte nicht gespeichert werden."
+    },
+    "sourcing": {
+      "title": "Sourcing",
+      "subtitle": "Die Stellen-Feeds dieses Workspace und die gelieferten Anzeigen."
     }
   },
   "earnings": {
@@ -26529,5 +26534,50 @@
   "projectRedirect": {
     "invalidProject": "Dieser Projektlink ist ungültig.",
     "opening": "Ihr Projekt wird geöffnet…"
+  },
+  "sourcing": {
+    "view": {
+      "intro": "Woher Kandidaten kommen: die Stellen-Feeds, die dieser Workspace abruft, und was sie geliefert haben."
+    },
+    "listings": {
+      "title": "Gefundene Stellen",
+      "search": "Suchen",
+      "searchPlaceholder": "Titel, Unternehmen oder Stichwort",
+      "empty": "Noch nichts gefunden. Fügen Sie einen Feed hinzu und synchronisieren Sie ihn.",
+      "noMatches": "Keine gefundene Stelle passt zu dieser Suche.",
+      "failed": "Diese Stellen konnten nicht geladen werden."
+    },
+    "sources": {
+      "title": "Stellen-Feeds",
+      "intro": "RSS, Atom oder eine JSON-API. Tägliche Synchronisierung, auf Wunsch auch sofort.",
+      "empty": "Noch keine Feeds.",
+      "name": "Name",
+      "namePlaceholder": "Indeed — Engineering",
+      "format": "Format",
+      "formatRss": "RSS oder Atom",
+      "formatJson": "JSON-API",
+      "url": "Feed-URL",
+      "urlPlaceholder": "https://example.com/jobs.rss",
+      "itemsPath": "Pfad zum Stellen-Array",
+      "itemsPathPlaceholder": "data.results",
+      "apiKey": "API-Schlüssel",
+      "apiKeyPlaceholder": "Leer lassen, um den gespeicherten Schlüssel zu behalten",
+      "authenticated": "authentifiziert",
+      "lastSynced": "zuletzt synchronisiert {when}",
+      "neverSynced": "nie synchronisiert",
+      "lastError": "Letzter Lauf fehlgeschlagen: {detail}",
+      "add": "Feed hinzufügen",
+      "adding": "Wird hinzugefügt…",
+      "saveFailed": "Dieser Feed konnte nicht gespeichert werden.",
+      "sync": "Synchronisieren",
+      "syncing": "Synchronisiere…",
+      "synced": "Synchronisiert — {fetched} abgerufen, {written} neu.",
+      "syncFailed": "Dieser Feed ist fehlgeschlagen: {detail}",
+      "remove": "Entfernen",
+      "removeTitle": "Diesen Feed entfernen?",
+      "removeMessage": "Beendet künftige Synchronisierungen von {name}. Bereits gefundene Stellen bleiben erhalten.",
+      "removeAction": "Feed entfernen",
+      "removeFailed": "Dieser Feed konnte nicht entfernt werden."
+    }
   }
 }

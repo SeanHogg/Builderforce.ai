@@ -726,7 +726,8 @@
       "offers": "Offres",
       "rewards": "Récompenses",
       "mail": "Courrier",
-      "phone": "Téléphone"
+      "phone": "Téléphone",
+      "sourcing": "Sourcing"
     },
     "primaryAria": "Principale",
     "destination": {
@@ -26090,6 +26091,10 @@
       "sendOffer": "L’offre n’a pas pu être envoyée.",
       "respondOffer": "La réponse n’a pas pu être enregistrée.",
       "kitSave": "La trame n’a pas pu être enregistrée."
+    },
+    "sourcing": {
+      "title": "Sourcing",
+      "subtitle": "Les flux d’offres que cet espace interroge et les annonces qu’ils ont renvoyées."
     }
   },
   "earnings": {
@@ -26529,5 +26534,50 @@
   "projectRedirect": {
     "invalidProject": "Ce lien de projet n’est pas valide.",
     "opening": "Ouverture de votre projet…"
+  },
+  "sourcing": {
+    "view": {
+      "intro": "D’où viennent les candidats : les flux d’offres que cet espace interroge, et ce qu’ils ont renvoyé."
+    },
+    "listings": {
+      "title": "Offres collectées",
+      "search": "Rechercher",
+      "searchPlaceholder": "Poste, entreprise ou mot-clé",
+      "empty": "Rien de collecté pour l’instant. Ajoutez un flux et synchronisez-le.",
+      "noMatches": "Aucune offre collectée ne correspond à cette recherche.",
+      "failed": "Ces offres n’ont pas pu être chargées."
+    },
+    "sources": {
+      "title": "Flux d’offres",
+      "intro": "RSS, Atom ou une API JSON. Synchronisation quotidienne, et à la demande.",
+      "empty": "Aucun flux pour l’instant.",
+      "name": "Nom",
+      "namePlaceholder": "Indeed — ingénierie",
+      "format": "Format",
+      "formatRss": "RSS ou Atom",
+      "formatJson": "API JSON",
+      "url": "URL du flux",
+      "urlPlaceholder": "https://example.com/jobs.rss",
+      "itemsPath": "Chemin vers le tableau d’offres",
+      "itemsPathPlaceholder": "data.results",
+      "apiKey": "Clé d’API",
+      "apiKeyPlaceholder": "Laissez vide pour conserver la clé enregistrée",
+      "authenticated": "authentifié",
+      "lastSynced": "dernière synchro {when}",
+      "neverSynced": "jamais synchronisé",
+      "lastError": "La dernière exécution a échoué : {detail}",
+      "add": "Ajouter un flux",
+      "adding": "Ajout…",
+      "saveFailed": "Ce flux n’a pas pu être enregistré.",
+      "sync": "Synchroniser",
+      "syncing": "Synchronisation…",
+      "synced": "Synchronisé — {fetched} récupérées, {written} nouvelles.",
+      "syncFailed": "Ce flux a échoué : {detail}",
+      "remove": "Supprimer",
+      "removeTitle": "Supprimer ce flux ?",
+      "removeMessage": "Arrête les synchronisations depuis {name}. Les offres déjà collectées sont conservées.",
+      "removeAction": "Supprimer le flux",
+      "removeFailed": "Ce flux n’a pas pu être supprimé."
+    }
   }
 }

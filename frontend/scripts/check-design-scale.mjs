@@ -242,9 +242,6 @@ const COLOUR_EXEMPT = [
   // the iframe it previews in.
   /^components\/rfp\/RfpContent\.tsx$/,
   /^app\/projects\/rfp\/\[id\]\/RfpDetailClient\.tsx$/,
-  // Generated PROJECT source — the user's own app files, not our UI. React
-  // Native takes a number for `borderRadius`; a `var()` is not one.
-  /^lib\/vanillaDefaults\.ts$/,
   // The click-to-source overlay, injected as a `<script>` into the USER'S dev-server
   // document. It draws a selection outline over THEIR app, where none of our tokens
   // are declared, so `var(--accent)` there resolves to nothing and the outline — the
@@ -415,7 +412,6 @@ const FONT_SIZE_EXEMPT = [
   /^lib\/renderedSvg\.ts$/,
   /^lib\/gamePoster\.ts$/,
   /^lib\/creativeGeometry\.ts$/,
-  /^lib\/vanillaDefaults\.ts$/,
   /^components\/rfp\/RfpContent\.tsx$/,
   /^app\/projects\/rfp\/\[id\]\/RfpDetailClient\.tsx$/,
   /^components\/blog\/BlogCover\.tsx$/,
@@ -442,10 +438,6 @@ const RADIUS_EXEMPT = [
   /^components\/builder\/DevicePreview\.tsx$/,
   /^lib\/creationDeliverables\.ts$/,
   /^lib\/courseLms\.ts$/,
-  // Generated PROJECT source. The mobile scaffold is React Native, where
-  // `borderRadius` is a NUMBER — `'var(--radius-xl)'` is not a value RN can use,
-  // and leaving it there had broken the scaffold's card and button corners.
-  /^lib\/vanillaDefaults\.ts$/,
   /^lib\/printDocument\.ts$/,
   // The selection outline drawn into the user's own dev-server document — see
   // COLOUR_EXEMPT. Same document, same reason: a `var()` does not resolve there.

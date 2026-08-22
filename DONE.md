@@ -1,3 +1,157 @@
+## ✅ RESOLVED 2026-08-22 — Three Gap Register items closed: the demo fixtures in the public marketplace, the builder intent that stopped being recorded, and the tour events nobody could see
+
+### 1. Demo-tenant agents in the PUBLIC marketplace — and the seven other places that asked the same question differently
+
+The register asked for a product decision plus "a marketplace-read filter". The decision is **no**: the Talent
+persona demo tenant's `coder`/`copywriter` agents are FIXTURES — seeded so a sales demo looks inhabited, never
+offered for hire — so a visitor's first impression of the marketplace must not be two agents nobody wrote. The
+admin "paid pro" rollups already discount `is_demo`; this is the same rule applied where the public can see it.
+
+The filter alone would have been the wrong fix. **"Which `ide_agents` rows may a stranger see?" was answered
+independently in eight places, and the answers had already drifted** — only two of the eight excluded demo
+tenants, so the same fixture agent was hidden from the marketplace page while remaining:
+
+- listable and fetchable through `GET /api/ide/agents` and `/agents/:id` (the second registry),
+- **downloadable** through `/agents/:id/package`, and readable through `/agents/:id/mamba-state`,
+- chattable through `POST /agents/:id/chat`,
+- listable by any agent holding the MCP catalogue (`agents_published.list` / `.get`),
+- **purchasable** — `loadPurchasableAgent` and `POST /agents/:id/checkout` would take money for one.
+
+The predicate now lives in ONE module, `application/marketplace/publicAgentScope.ts`: `publicAgentScope()` is
+an `acrossTenants(ideAgents, 'public_catalogue', …)` carrying active + published + not-a-demo-tenant, with
+`publiclyListedAgent()` for callers composing their own `and(…)` and `demoTenantAgent` for the one site that
+must REJECT with its own message rather than filter a set. All eight reads migrated in the same pass; not one
+`eq(ideAgents.published, true)` is written inline any more.
+
+`POST /agents/:id/hire` keeps its own lookup on purpose — it has to keep telling an owner "you already own
+this" before it says anything else — so it selects `demoTenantAgent` as a column and refuses a fixture beside
+the unpublished case, closing the door a stale id could still have walked through.
+
+`publicAgentScope.test.ts` pins both halves: the predicate keeps its demo exclusion when a caller adds
+conditions, and a **drift guard** re-reads all four source files and fails if any of them re-states
+`eq(ideAgents.published, true)` inline — a ninth hand-rolled answer is what reopened this the first time.
+
+### 2. Onboarding stopped recording a builder's intent
+
+Zero-setup onboarding auto-provisions the workspace and the first project, the manual project step went away,
+and the build / custom-agent / monetize / automate / learn multi-select went with it — so `users.userIntent`
+was blank for every new builder and the personalization and signup analytics that read it went quietly dark.
+
+Intent is back as its own step, and deliberately the LIGHTEST one: `'intent'` leads `BUILDER_STEP_IDS`,
+nothing is required, **"Next" works with zero selections**, and it is one tap on a phone. `completeOnboarding`
+passes the selections again and `POST /api/auth/me/onboarding/complete` writes `users.userIntent`. Chips are
+theme-token only (`var(--accent)` / `var(--bg-elevated)` / `var(--text-strong)`) so they read in both themes,
+`flexWrap` keeps them off the horizontal scrollbar at 360px, and selection is announced via `aria-pressed`
+inside a labelled `role="group"`. Localized in all five catalogs (`onboarding.intentQuestion`, `intentHint`,
+`intent.*`, `steps.intent.label`); the stale `steps.workspace.*` / `steps.project.*` keys are deleted.
+
+### 3. Demo product-tour events are first-class funnel columns
+
+`DemoTour` had been emitting `tour_started` / `tour_step` / `tour_completed` / `tour_skipped` to `demo_events`
+all along, and `GET /api/admin/demo/funnel` rolls up every kind without a filter — the data was there. The
+funnel matrix just never named the four kinds in its `STAGES` array, so they surfaced in the "recent events"
+list and nowhere else, and "which persona's guided tour actually gets finished" was a question the data could
+answer and the screen could not.
+
+The four kinds now sit in `STAGES` between the first page view and the convert prompt, which is where the tour
+runs, and each persona row carries a **tour completion rate** denominated on tour STARTS rather than demo
+starts — a persona whose tour nobody opens is a different problem from one whose tour nobody finishes, and a
+shared denominator would have hidden the difference. Labels localized in all five catalogs
+(`admin.demoFunnel.stages.tour_*`, `tourRate`, `tourRateNone`).
+
+---
+
+## ✅ RESOLVED 2026-08-22 — The IDE scaffolds and the workspace file contract stopped existing twice
+
+**The gap.** Two modules were byte-identical copies kept on opposite sides of the Worker/Next split, each
+pinned by a parity test:
+
+- the starter scaffolds — `api/src/application/project/projectTemplate.ts` (what the API seeds into R2) and
+  `frontend/src/lib/vanillaDefaults.ts` (what Run mounts as the fallback), pinned by `templateParity.test.ts`;
+- the structural content contract — `workspaceStore.validateWorkspaceContent` and
+  `frontend/src/lib/fileContentGuard.ts`, pinned by `contentGuardParity.test.ts`.
+
+Both entries gave the same reason: *"the two runtimes cannot share a module."* **That premise was false when it
+was written.** `@builderforce/creation-canvas-contract` is a private, source-only package imported by 74 API
+modules and 135 frontend modules, and it ships through `wrangler` AND `next-on-pages` today. The mechanism was
+already proven in production; nothing needed to be risked to use it a third time.
+
+The copies had already drifted and shipped a broken product: `webmobile` reached the frontend's modality map and
+never the API's, so every "Web + Mobile" project was created with **no files at all**. A parity test can only
+report that divergence after someone has written it — it makes the drift loud, it does not make it impossible.
+
+### What replaced them
+
+Two source-only packages, each named for its one job, aliased at `src/index.ts` from every consumer:
+
+- **`@builderforce/ide-templates`** — the scaffold bytes plus `TEMPLATE_BY_MODALITY`, `scaffoldForModality`
+  and `isScaffoldPath`. A modality now maps to a scaffold in exactly ONE place, so `webmobile`-class drift is
+  unrepresentable rather than merely tested for.
+- **`@builderforce/ide-file-contract`** — `validateFileContentForPath` + `coerceFileContent`, the rules the API
+  enforces at its write chokepoint and the browser checks before it posts.
+
+Consumers migrated in the same pass, with both parity tests and both duplicate modules deleted:
+
+- `projectTemplate.ts` keeps only the R2 side (`ensureProjectTemplate`, `ensureRunnableScaffold`, the backfill
+  gates) and reads the scaffolds from the package — the seeding decision is Worker work and does not belong in
+  a module the browser loads.
+- `worker/src/routes/projects.ts` stopped reaching into `../../../api/src/...` by relative path.
+- `workspaceStore.ts`, `taskWorkspaceTarget.ts`, `BuilderWorkspace.tsx`, `scaffoldRepair.ts` and
+  `canvasBuildTools.ts` all import the shared modules.
+- `worker/tsconfig.json` + `worker/vitest.config.ts` gained the alias pair (every tsconfig path needs its
+  vitest twin), matching what `api` and `frontend` already do.
+
+### Two defects the consolidation removed on the way
+
+1. **Every legitimate `.js` write reported a caught error.** The API's copy of the guard called
+   `reportCaughtError` inside the `JSON.parse` catch that is the *expected* path for real ES-module source —
+   "not JSON → real source → fine" was also "→ file an error report". The shared module has no such dependency.
+2. **The frontend synthesized a web app for modalities the server seeds nothing for.** `defaultsForModality`
+   fell back to the vanilla scaffold for ANY unknown modality, so a video/voice/evermind/finetune project could
+   mount run-only files the server had never written — the exact class of bug the API's own comment warns about.
+   `scaffoldForModality` returns `null` there and `repairScaffold` passes the file set through untouched. Only
+   `designer`/`mobile`/`webmobile` reach the WebContainer run path (`showRunButton`, and voice's button calls
+   `voice.synth()`), so no reachable surface changes behaviour.
+
+### Verified
+
+`tsgo --noEmit` clean on **api**, **frontend** and **worker**; `projectTemplate.test.ts` + `workspaceStore.test.ts`
+(103), `ideFileContract.test.ts` + `scaffoldRepair.test.ts` + `canvasBuildTools.test.ts` (49) and the worker's
+`projects.test.ts` (19) all pass. The registry assertions the deleted parity tests uniquely carried — every
+modality's scaffold, the no-scaffold modalities, and the scaffold path set — moved into
+`api/src/application/project/projectTemplate.test.ts`, where they now assert the shared registry itself.
+
+---
+
+## ✅ RESOLVED 2026-08-22 — `check:tenant-scope` stopped reporting the shared public-catalogue scope as unscoped
+
+Found while getting a readable gate for the work above. `workforceRoutes.ts` was failing the ratchet at 2 → 5.
+Three of the five were **false positives**: they read through `publicAgentScope()`, which IS
+`acrossTenants(ideAgents, 'public_catalogue', …)` — but the guard reads one statement at a time and cannot
+follow a helper, so every caller of the shared primitive was reported as an unscoped query. That pressure runs
+exactly backwards: it pushes the next author to retype the predicate inline, which is the duplication the
+primitive exists to prevent. `publicAgentScope` is now named in the guard's `SCOPED` set beside `acrossTenants`.
+
+The other two were real omissions and are now declared: the marketplace agent's hire count
+(`agentPurchases`) and its rating rollup (`agentFeedback`) are `acrossTenants(…, 'platform_aggregate', …)`.
+Both are cross-tenant BY DEFINITION — "how many tenants hired this agent" scoped to the caller's own tenant
+would read 1 or 0 on every listing. Baseline ratcheted down (2 → 0); no other file moved.
+
+---
+
+## ✅ RESOLVED 2026-08-22 — Three build breaks in the working tree, found by the same typecheck
+
+Pre-existing, unrelated to the consolidation, and each one hid everything after it:
+
+- `phoneRoutes.ts` imported `requireRole` from `../middleware/requireRole`, a module that does not exist — it
+  is exported from `authMiddleware.ts`, which the same file already imports.
+- The same file passed the string `'manager'` to `requireRole` at five call sites; the parameter is
+  `TenantRole`, and every other router passes `TenantRole.MANAGER`.
+- `sourcing/sourcingSources.ts` imported `readCredential`/`writeCredential`/`deleteCredential` from
+  `../kernel/credentialVault`, a module that does not exist — and used none of the three. Dead import, deleted.
+
+---
+
 ## ✅ RESOLVED 2026-08-22 — The cross-project health dashboard moved into the product, and stopped being a hand-typed snapshot
 
 **The gap.** A whole feature sat at `Builderforce.ai/Builderforce.ai/frontend/src/dashboard/cross-project-health/`

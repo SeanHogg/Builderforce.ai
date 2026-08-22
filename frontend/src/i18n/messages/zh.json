@@ -726,7 +726,8 @@
       "offers": "Offer",
       "rewards": "奖励",
       "mail": "邮件",
-      "phone": "电话"
+      "phone": "电话",
+      "sourcing": "职位采集"
     },
     "primaryAria": "主导航",
     "destination": {
@@ -26090,6 +26091,10 @@
       "sendOffer": "无法发送该 Offer。",
       "respondOffer": "无法记录该答复。",
       "kitSave": "无法保存该模板。"
+    },
+    "sourcing": {
+      "title": "职位采集",
+      "subtitle": "本工作区拉取的职位源，以及它们返回的职位列表。"
     }
   },
   "earnings": {
@@ -26529,5 +26534,50 @@
   "projectRedirect": {
     "invalidProject": "该项目链接无效。",
     "opening": "正在打开您的项目…"
+  },
+  "sourcing": {
+    "view": {
+      "intro": "候选人的来源：本工作区拉取的职位源，以及它们返回的内容。"
+    },
+    "listings": {
+      "title": "已采集职位",
+      "search": "搜索",
+      "searchPlaceholder": "职位名称、公司或关键词",
+      "empty": "尚未采集到任何内容。请添加职位源并同步。",
+      "noMatches": "没有符合该搜索条件的职位。",
+      "failed": "无法加载这些职位。"
+    },
+    "sources": {
+      "title": "职位源",
+      "intro": "支持 RSS、Atom 或 JSON API。每日自动同步，也可随时手动运行。",
+      "empty": "暂无职位源。",
+      "name": "名称",
+      "namePlaceholder": "Indeed — 工程岗",
+      "format": "格式",
+      "formatRss": "RSS 或 Atom",
+      "formatJson": "JSON API",
+      "url": "源地址",
+      "urlPlaceholder": "https://example.com/jobs.rss",
+      "itemsPath": "职位数组路径",
+      "itemsPathPlaceholder": "data.results",
+      "apiKey": "API 密钥",
+      "apiKeyPlaceholder": "留空则保留已保存的密钥",
+      "authenticated": "已认证",
+      "lastSynced": "上次同步 {when}",
+      "neverSynced": "从未同步",
+      "lastError": "上次运行失败：{detail}",
+      "add": "添加职位源",
+      "adding": "添加中…",
+      "saveFailed": "无法保存该职位源。",
+      "sync": "同步",
+      "syncing": "同步中…",
+      "synced": "同步完成 — 获取 {fetched} 条，新增 {written} 条。",
+      "syncFailed": "该职位源同步失败：{detail}",
+      "remove": "移除",
+      "removeTitle": "确定移除该职位源？",
+      "removeMessage": "将停止从 {name} 继续同步。已采集的职位将保留。",
+      "removeAction": "移除职位源",
+      "removeFailed": "无法移除该职位源。"
+    }
   }
 }

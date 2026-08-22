@@ -726,7 +726,8 @@
       "offers": "Offers",
       "rewards": "Rewards",
       "mail": "Mail",
-      "phone": "Phone"
+      "phone": "Phone",
+      "sourcing": "Sourcing"
     },
     "primaryAria": "Primary",
     "destination": {
@@ -26090,6 +26091,10 @@
       "sendOffer": "The offer could not be sent.",
       "respondOffer": "The response could not be recorded.",
       "kitSave": "The kit could not be saved."
+    },
+    "sourcing": {
+      "title": "Sourcing",
+      "subtitle": "The job feeds this workspace pulls, and the listings they returned."
     }
   },
   "earnings": {
@@ -26529,5 +26534,50 @@
   "projectRedirect": {
     "invalidProject": "That project link is not valid.",
     "opening": "Opening your project…"
+  },
+  "sourcing": {
+    "view": {
+      "intro": "Where candidates come from: the job feeds this workspace pulls, and what they returned."
+    },
+    "listings": {
+      "title": "Sourced jobs",
+      "search": "Search",
+      "searchPlaceholder": "Title, company or keyword",
+      "empty": "Nothing sourced yet. Add a feed and sync it.",
+      "noMatches": "No sourced job matches that search.",
+      "failed": "Those listings could not be loaded."
+    },
+    "sources": {
+      "title": "Job feeds",
+      "intro": "RSS, Atom or a JSON API. Feeds sync daily and can be run on demand.",
+      "empty": "No feeds yet.",
+      "name": "Name",
+      "namePlaceholder": "Indeed — engineering",
+      "format": "Format",
+      "formatRss": "RSS or Atom",
+      "formatJson": "JSON API",
+      "url": "Feed URL",
+      "urlPlaceholder": "https://example.com/jobs.rss",
+      "itemsPath": "Path to the job array",
+      "itemsPathPlaceholder": "data.results",
+      "apiKey": "API key",
+      "apiKeyPlaceholder": "Leave blank to keep the saved key",
+      "authenticated": "authenticated",
+      "lastSynced": "last synced {when}",
+      "neverSynced": "never synced",
+      "lastError": "Last run failed: {detail}",
+      "add": "Add feed",
+      "adding": "Adding…",
+      "saveFailed": "That feed could not be saved.",
+      "sync": "Sync",
+      "syncing": "Syncing…",
+      "synced": "Synced — {fetched} fetched, {written} new.",
+      "syncFailed": "That feed failed: {detail}",
+      "remove": "Remove",
+      "removeTitle": "Remove this feed?",
+      "removeMessage": "Stops future syncs from {name}. Jobs already sourced are kept.",
+      "removeAction": "Remove feed",
+      "removeFailed": "That feed could not be removed."
+    }
   }
 }

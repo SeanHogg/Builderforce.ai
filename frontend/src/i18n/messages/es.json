@@ -726,7 +726,8 @@
       "offers": "Ofertas",
       "rewards": "Recompensas",
       "mail": "Correo",
-      "phone": "Teléfono"
+      "phone": "Teléfono",
+      "sourcing": "Captación"
     },
     "primaryAria": "Principal",
     "destination": {
@@ -26090,6 +26091,10 @@
       "sendOffer": "No se ha podido enviar la oferta.",
       "respondOffer": "No se ha podido registrar la respuesta.",
       "kitSave": "No se ha podido guardar el guion."
+    },
+    "sourcing": {
+      "title": "Captación",
+      "subtitle": "Las fuentes de empleo que este espacio consulta y los anuncios que han devuelto."
     }
   },
   "earnings": {
@@ -26529,5 +26534,50 @@
   "projectRedirect": {
     "invalidProject": "Ese enlace de proyecto no es válido.",
     "opening": "Abriendo tu proyecto…"
+  },
+  "sourcing": {
+    "view": {
+      "intro": "De dónde vienen los candidatos: las fuentes de empleo que este espacio consulta y lo que han devuelto."
+    },
+    "listings": {
+      "title": "Empleos captados",
+      "search": "Buscar",
+      "searchPlaceholder": "Puesto, empresa o palabra clave",
+      "empty": "Aún no se ha captado nada. Añade una fuente y sincronízala.",
+      "noMatches": "Ningún empleo captado coincide con esa búsqueda.",
+      "failed": "No se han podido cargar esos empleos."
+    },
+    "sources": {
+      "title": "Fuentes de empleo",
+      "intro": "RSS, Atom o una API JSON. Se sincronizan a diario y puedes lanzarlas cuando quieras.",
+      "empty": "Todavía no hay fuentes.",
+      "name": "Nombre",
+      "namePlaceholder": "Indeed — ingeniería",
+      "format": "Formato",
+      "formatRss": "RSS o Atom",
+      "formatJson": "API JSON",
+      "url": "URL de la fuente",
+      "urlPlaceholder": "https://example.com/jobs.rss",
+      "itemsPath": "Ruta al array de empleos",
+      "itemsPathPlaceholder": "data.results",
+      "apiKey": "Clave de API",
+      "apiKeyPlaceholder": "Déjalo vacío para conservar la clave guardada",
+      "authenticated": "autenticada",
+      "lastSynced": "última sincronización {when}",
+      "neverSynced": "nunca sincronizada",
+      "lastError": "La última ejecución falló: {detail}",
+      "add": "Añadir fuente",
+      "adding": "Añadiendo…",
+      "saveFailed": "No se ha podido guardar esa fuente.",
+      "sync": "Sincronizar",
+      "syncing": "Sincronizando…",
+      "synced": "Sincronizada — {fetched} obtenidos, {written} nuevos.",
+      "syncFailed": "Esa fuente ha fallado: {detail}",
+      "remove": "Eliminar",
+      "removeTitle": "¿Eliminar esta fuente?",
+      "removeMessage": "Detiene futuras sincronizaciones de {name}. Los empleos ya captados se conservan.",
+      "removeAction": "Eliminar fuente",
+      "removeFailed": "No se ha podido eliminar esa fuente."
+    }
   }
 }
