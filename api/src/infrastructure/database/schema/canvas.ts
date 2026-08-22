@@ -36,8 +36,8 @@ import {
 import { desc, sql } from 'drizzle-orm';
 import { activityEventTypeEnum, integrationProviderEnum, newsletterEventTypeEnum, newsletterSubscriptionStatusEnum, objects, teamMemberKindEnum } from './kernel';
 import {
-  ceremonySessions,
   chatSessions,
+  teams,
   pokerSessions,
   segments,
   tenantApiKeys,
@@ -50,11 +50,62 @@ import {
   agentHosts,
   agents,
   executions,
-  jobPostings,
-  jobProposals,
   workflowTriggers,
 } from './agents';
 import { projects, tasks } from './delivery';
+
+// =========================================================================
+// One concept, one module. `ceremony_participants` and `ceremony_schedules` were
+// declared here while `ceremony_sessions` — the row they both hang off — was in
+// `identity.ts`, so the parent of a canvas concept lived in another seat’s file
+// and canvas imported it back. It is here now, above its children.
+// =========================================================================
+
+// ---------------------------------------------------------------------------
+// Ceremony sessions (standup / planning round-table; migration 0119). One row per
+// officially-started, timed ceremony; participants carry turn order + speaking time.
+// ---------------------------------------------------------------------------
+
+export const ceremonySessions = pgTable('ceremony_sessions', {
+  id:             uuid('id').primaryKey().defaultRandom(),
+  tenantId:       integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:      uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  projectId:      integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  kind:           varchar('kind', { length: 16 }).notNull(),                       // 'standup' | 'planning'
+  /** 'active' | 'completed' | 'abandoned' (0364). Abandoned = concluded without being
+   *  conducted (nobody came and unattended ceremonies are not granted); it still frees
+   *  the partial unique index so the next scheduled ceremony can open. */
+  status:         varchar('status', { length: 16 }).notNull().default('active'),
+  facilitatorId:  varchar('facilitator_id', { length: 64 }),
+  turnMode:       varchar('turn_mode', { length: 16 }).notNull().default('facilitator'),
+  turnSeconds:    integer('turn_seconds').notNull().default(90),
+  currentTurn:    integer('current_turn'),                                         // index into participants.turnOrder
+  turnStartedAt:  timestamp('turn_started_at'),
+  startedAt:      timestamp('started_at').notNull().defaultNow(),
+  endedAt:        timestamp('ended_at'),
+  /** Set when the frequent cron sweep auto-opened this session from a schedule (0349). */
+  scheduleId:     uuid('schedule_id'),
+  /** Who closed it (0364): 'human' | 'manager' | 'system'. */
+  concludedBy:    varchar('concluded_by', { length: 16 }),
+  /** Why it closed (0364): 'facilitator' | 'unattended' | 'no_humans' | 'expired'.
+   *  Kept separate from `status` so "completed" never has to mean four things. */
+  closeReason:    varchar('close_reason', { length: 24 }),
+  /** Denormalised outcome counters (0364) — the history LIST renders from these alone,
+   *  so showing 20 past standups costs one query rather than 20 participant fan-outs. */
+  humansExpected: integer('humans_expected').notNull().default(0),
+  humansPresent:  integer('humans_present').notNull().default(0),
+  reassignedCount: integer('reassigned_count').notNull().default(0),
+  dispatchedCount: integer('dispatched_count').notNull().default(0),
+  /** When the "your ceremony is live, come join" fan-out ran; guards re-notification. */
+  notifiedAt:     timestamp('notified_at'),
+  /** The calendar/video meeting this ceremony is held in (0366). The ceremony owns
+   *  ATTENDANCE; the meeting owns the calendar entry and the media room, so joining the
+   *  call writes through to this session's presence rather than keeping a rival record. */
+  meetingId:      uuid('meeting_id'),
+  createdAt:      timestamp('created_at').notNull().defaultNow(),
+  updatedAt:      timestamp('updated_at').notNull().defaultNow(),
+});
+
 
 // ═══ from brain.ts ═══
 /**
@@ -437,8 +488,10 @@ export const freelancerConversations = pgTable('freelancer_conversations', {
   /** What the thread hangs off: engagement | job | proposal | direct. */
   subjectType:          varchar('subject_type', { length: 20 }).notNull().default('direct'),
   engagementId:         varchar('engagement_id', { length: 36 }).references(() => freelancerEngagements.id, { onDelete: 'set null' }),
-  jobId:                varchar('job_id', { length: 36 }).references(() => jobPostings.id, { onDelete: 'set null' }),
-  proposalId:           varchar('proposal_id', { length: 36 }).references(() => jobProposals.id, { onDelete: 'set null' }),
+  /** `job_postings.id` / `job_proposals.id` — the hiring domain owns both, so they
+   *  are ids here rather than imported tables (§3). FKs in migration 0298. */
+  jobId:                varchar('job_id', { length: 36 }),
+  proposalId:           varchar('proposal_id', { length: 36 }),
   projectId:            integer('project_id'),
   title:                varchar('title', { length: 200 }),
   /** Denormalized last-message cache so the list view renders without a per-row scan. */
@@ -771,30 +824,6 @@ export const devTeams = pgTable('dev_teams', {
 });
 
 
-// ---------------------------------------------------------------------------
-// Workforce Teams — group the workforce (agents AND humans) into named teams and
-// attach a team to projects. Distinct from `devTeams` (contributor analytics):
-// a member here is a first-class assignable workforce entity, identified exactly
-// like a task assignee — a human (users.id), a cloud agent (ide_agents.id), or a
-// remote host (agent_hosts.id). See migration 0114.
-// ---------------------------------------------------------------------------
-// teamMemberKindEnum is declared earlier (near member_profiles) so the lifecycle
-// metrics tables that share the polymorphic member identity can reference it.
-
-export const teams = pgTable('teams', {
-  id:          serial('id').primaryKey(),
-  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  segmentId:   uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
-  name:        varchar('name', { length: 255 }).notNull(),
-  description: text('description'),
-  /** A team can give itself an avatar (0294) — shown on the team card + as the face
-   *  of its team chat. An /api/brain/upload R2 URL or any image URL. */
-  avatarUrl:   text('avatar_url'), // unbounded image URL (R2 upload w/ query params); widened mig 0356
-  createdAt:   timestamp('created_at').notNull().defaultNow(),
-  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
-});
-
-
 export const teamVelocity = pgTable('team_velocity', {
   id:              uuid('id').primaryKey().defaultRandom(),
   tenantId:        integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
@@ -1122,9 +1151,10 @@ export const freelancerEngagements = pgTable('freelancer_engagements', {
 export const engagementMilestones = pgTable('engagement_milestones', {
   id:                varchar('id', { length: 36 }).primaryKey(),
   tenantId:          integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  jobId:             varchar('job_id', { length: 36 }).references(() => jobPostings.id, { onDelete: 'cascade' }),
+  /** `job_postings.id` — hiring’s, so an id (§3). FK in migration 0924. */
+  jobId:             varchar('job_id', { length: 36 }),
   engagementId:      varchar('engagement_id', { length: 36 }).references(() => freelancerEngagements.id, { onDelete: 'cascade' }),
-  proposalId:        varchar('proposal_id', { length: 36 }).references(() => jobProposals.id, { onDelete: 'set null' }),
+  proposalId:        varchar('proposal_id', { length: 36 }),
   /** Denormalised from the engagement with a single writer (the accept path): a
    *  release must pay whoever was engaged at the time, not whoever is engaged now. */
   freelancerUserId:  varchar('freelancer_user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
@@ -1292,163 +1322,6 @@ export const coachingNotes = pgTable('coaching_notes', {
 }, (t) => [
   index('idx_coaching_notes_member').on(t.tenantId, t.memberKind, t.memberRef),
 ]);
-
-
-// ---------------------------------------------------------------------------
-// Product Feedback collection (migration 0354)
-// ---------------------------------------------------------------------------
-
-/**
- * A project's feedback collector — the human-input twin of [[errorCollectors]].
- * ONE per project (one ingest key = one embeddable snippet), so any application
- * carrying the snippet can gather feature requests, bug reports and ideas from
- * its own users. `keyHash` authenticates the public snippet POST; `dailyLimit`
- * is the abuse ceiling on an endpoint that opens TICKETS.
- */
-export const feedbackCollectors = pgTable('feedback_collectors', {
-  id:               uuid('id').primaryKey().defaultRandom(),
-  tenantId:         integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  projectId:        integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
-  name:             varchar('name', { length: 255 }).notNull(),
-  /** SHA-256 of the bff_* ingest key (raw key shown once at creation). */
-  keyHash:          varchar('key_hash', { length: 64 }).unique(),
-  enabled:          boolean('enabled').notNull().default(true),
-  /** Open a backlog ticket per submission (off = record + triage only). */
-  autoCreateTask:   boolean('auto_create_task').notNull().default(true),
-  /** Submissions accepted from this collector per rolling 24h. */
-  dailyLimit:       integer('daily_limit').notNull().default(100),
-  /** '*' or a comma-separated origin allow-list the snippet may post from. */
-  allowedOrigins:   text('allowed_origins').notNull().default('*'),
-  lastSubmissionAt: timestamp('last_submission_at'),
-  createdBy:        varchar('created_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
-  createdAt:        timestamp('created_at').notNull().defaultNow(),
-  updatedAt:        timestamp('updated_at').notNull().defaultNow(),
-}, (t) => ({
-  // One collector per project — a project's feedback has a single front door.
-  uqProject: uniqueIndex('uq_feedback_collectors_project').on(t.tenantId, t.projectId),
-}));
-
-
-/**
- * A single feedback request and its link to the backlog ticket it opened.
- * `collectorId` is NULL for an IN-APP submission (the signed-in right-edge
- * feedback panel), which the session authenticates and which needs no key.
- * `fingerprint` collapses a repeat/double submit onto the existing request.
- */
-export const feedbackSubmissions = pgTable('feedback_submissions', {
-  id:              uuid('id').primaryKey().defaultRandom(),
-  tenantId:        integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  projectId:       integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
-  collectorId:     uuid('collector_id').references(() => feedbackCollectors.id, { onDelete: 'set null' }),
-  /** 'feature' | 'bug' | 'idea' | 'other'. */
-  kind:            varchar('kind', { length: 16 }).notNull().default('feature'),
-  title:           varchar('title', { length: 300 }).notNull(),
-  body:            text('body').notNull(),
-  /** 'new' | 'approved' | 'declined' — approval is the human gate on execution. */
-  status:          varchar('status', { length: 16 }).notNull().default('new'),
-  submitterUserId: varchar('submitter_user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
-  submitterEmail:  varchar('submitter_email', { length: 255 }),
-  submitterName:   varchar('submitter_name', { length: 255 }),
-  pageUrl:         text('page_url'),
-  userAgent:       text('user_agent'),
-  appVersion:      varchar('app_version', { length: 64 }),
-  context:         jsonb('context'),
-  /** SHA-256 of kind+title+body — the duplicate-collapse key. */
-  fingerprint:     varchar('fingerprint', { length: 128 }).notNull(),
-  taskId:          integer('task_id').references(() => tasks.id, { onDelete: 'set null' }),
-  reviewedBy:      varchar('reviewed_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
-  reviewedAt:      timestamp('reviewed_at'),
-  createdAt:       timestamp('created_at').notNull().defaultNow(),
-  updatedAt:       timestamp('updated_at').notNull().defaultNow(),
-}, (t) => ({
-  byProject:     index('idx_feedback_submissions_project').on(t.projectId, t.createdAt),
-  byTenant:      index('idx_feedback_submissions_tenant_status').on(t.tenantId, t.status, t.createdAt),
-  byCollector:   index('idx_feedback_submissions_collector').on(t.collectorId, t.createdAt),
-  byFingerprint: index('idx_feedback_submissions_fingerprint').on(t.projectId, t.fingerprint),
-}));
-
-
-/**
- * A provider webhook wired into a project's feedback collector (migration 1076).
- *
- * A team that already gathers requests in Sentry (User Feedback) or PostHog
- * (surveys / `$feedback` events) should not have to re-instrument their app to get
- * them onto this board. This row is the per-tenant configuration behind
- * `/api/feedback-webhooks/:collectorId/:provider`: which provider, and the shared
- * secret its signature is verified against.
- *
- * ── WHY THE SECRET IS ENCRYPTED, NOT HASHED ─────────────────────────────────
- * An ingest key is hashed (`feedback_collectors.key_hash`) because verification
- * only needs to compare a presented key. A webhook secret is different: HMAC
- * verification has to RECOMPUTE the digest over the raw body, which needs the
- * secret itself. So it is encrypted at rest with the same tenant-salted AES-GCM
- * envelope every other stored credential uses (`credentialCrypto`), and the
- * ciphertext/IV pair is split across two columns exactly like
- * `error_collector_integrations`.
- *
- * ── TENANCY ─────────────────────────────────────────────────────────────────
- * `tenant_id` is carried directly rather than reached through `collector_id`. The
- * tenant-scope guard can only check a predicate it can SEE on the table being
- * queried, and this row decrypts a secret — a child that reaches its tenant
- * through a join is unscoped by construction, and one forgotten join condition
- * would decrypt another workspace's secret under this tenant's salt.
- */
-export const feedbackCollectorIntegrations = pgTable('feedback_collector_integrations', {
-  id:          uuid('id').primaryKey().defaultRandom(),
-  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  collectorId: uuid('collector_id').notNull().references(() => feedbackCollectors.id, { onDelete: 'cascade' }),
-  /** 'sentry' | 'posthog' — must match a feedbackProviders.ts adapter id. */
-  provider:    varchar('provider', { length: 32 }).notNull(),
-  /** AES-GCM ciphertext of `{ secret }`, tenant-salted. Never returned to a client. */
-  secretEnc:   text('secret_enc'),
-  secretIv:    varchar('secret_iv', { length: 32 }),
-  /** Pausing an integration stops imports without discarding the secret, so a
-   *  noisy provider can be silenced and resumed without re-configuring it there. */
-  enabled:     boolean('enabled').notNull().default(true),
-  lastEventAt: timestamp('last_event_at'),
-  createdBy:   varchar('created_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
-  createdAt:   timestamp('created_at').notNull().defaultNow(),
-  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
-}, (t) => ({
-  // One integration per (collector, provider) — a second row would make "the
-  // secret for Sentry on this collector" a question with two answers, and
-  // verification would then depend on which one the query happened to return.
-  uqProvider: uniqueIndex('uq_feedback_collector_integration').on(t.collectorId, t.provider),
-  byTenant:   index('idx_feedback_collector_integrations_tenant').on(t.tenantId),
-}));
-
-
-/**
- * One accepted provider webhook delivery, keyed by the PROVIDER's event id
- * (migration 1077) — the replay guard.
- *
- * Webhook senders retry: on a timeout, on a 5xx, and sometimes just because. Every
- * accepted delivery here can open a backlog ticket, so an at-least-once sender
- * meeting a non-idempotent receiver puts duplicate cards in front of a human. The
- * submission fingerprint cannot close this on its own — it collapses identical
- * PROSE, whereas a retry is the same EVENT and must collapse even when the
- * provider edited the payload between attempts (a resolved issue, a re-sent
- * survey answer).
- *
- * The unique index IS the guard: the route inserts first and treats a unique
- * violation as "already handled", so two concurrent retries cannot both pass a
- * read-then-write check.
- */
-export const feedbackWebhookDeliveries = pgTable('feedback_webhook_deliveries', {
-  id:           uuid('id').primaryKey().defaultRandom(),
-  tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  collectorId:  uuid('collector_id').notNull().references(() => feedbackCollectors.id, { onDelete: 'cascade' }),
-  provider:     varchar('provider', { length: 32 }).notNull(),
-  /** The provider's own delivery id, or a SHA-256 of the raw body when it sends none. */
-  eventId:      varchar('event_id', { length: 200 }).notNull(),
-  /** The submission this delivery produced; null when it normalized to nothing
-   *  (an event we do not import), which still gets recorded so retries stay cheap. */
-  submissionId: uuid('submission_id').references(() => feedbackSubmissions.id, { onDelete: 'set null' }),
-  createdAt:    timestamp('created_at').notNull().defaultNow(),
-}, (t) => ({
-  uqDelivery: uniqueIndex('uq_feedback_webhook_delivery').on(t.collectorId, t.provider, t.eventId),
-  byTenant:   index('idx_feedback_webhook_deliveries_tenant').on(t.tenantId, t.createdAt),
-}));
 
 
 // ---------------------------------------------------------------------------

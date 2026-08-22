@@ -145,6 +145,7 @@ import { magicLinkTokens } from '../../infrastructure/database/schema';
 import { sendAdminPasswordResetEmail } from '../../infrastructure/email/EmailService';
 import { sendTransactionalEmail } from '../../application/email/sendEmail';
 import { runRetentionPurge } from '../../application/maintenance/retentionPurge';
+import { isSafeRelationName, vacuumRelation } from '../../application/maintenance/tableMaintenance';
 import { CRON_SWEEPS } from '../../cronSweeps';
 import {
   CADENCE_BY_CRON,
@@ -152,7 +153,7 @@ import {
   resolveCronTarget,
   runCronSweeps,
 } from '../../application/runtime/cronSweepRunner';
-import { evaluateCronGate, signalPendingWork } from '../../application/runtime/cronWorkSignal';
+import { evaluateCronGate, readScheduleStall, signalPendingWork } from '../../application/runtime/cronWorkSignal';
 import { createTickDispatchBudget } from '../../application/runtime/tickDispatchBudget';
 import { API_VERSION } from '../../version';
 import { getPricingDraft, publishPricing, savePricingDraft } from '../../application/tenant/pricingConfiguration';
@@ -337,10 +338,6 @@ async function inspectDatabase(db: Db, name: DatabaseTarget) {
       totalBytes: 0, tables: [], error: error instanceof Error ? error.message : 'Database inspection failed',
     };
   }
-}
-
-function isSafeRelationName(value: unknown): value is string {
-  return typeof value === 'string' && /^[a-z_][a-z0-9_]{0,62}$/.test(value);
 }
 
 /**
@@ -2133,9 +2130,10 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       return c.json({ error: 'Invalid table name.' }, 400);
     }
     const db = body.target === 'primary' ? buildDatabase(c.env) : buildTransactionalDatabase(c.env);
-    const statement = body.table ? `VACUUM (ANALYZE) "${body.table}"` : 'VACUUM (ANALYZE)';
     try {
-      await db.execute(sql.raw(statement));
+      // Same statement builder the daily maintenance sweep uses, so the quoting rule
+      // and the relation-name guard cannot diverge between the two callers.
+      await vacuumRelation(db, body.table);
     } catch (error) {
       return c.json({ error: error instanceof Error ? error.message : 'VACUUM failed' }, 500);
     }
@@ -2159,8 +2157,13 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const nowMs = Date.now();
     // Read-only: evaluateCronGate never writes, so inspecting the gate cannot
     // consume a pending-work signal or move the floor timestamp.
-    const gate = await evaluateCronGate(env, nowMs);
-    const controls = await readCronControls(env);
+    // Both reads are KV-only, so the "no Neon round-trip" property above still holds
+    // with the stall report added.
+    const [gate, controls, stall] = await Promise.all([
+      evaluateCronGate(env, nowMs),
+      readCronControls(env),
+      readScheduleStall(env),
+    ]);
     return c.json({
       now: new Date(nowMs).toISOString(),
       gate: {
@@ -2174,8 +2177,25 @@ export function createAdminRoutes(): Hono<HonoEnv> {
         nextFloorDueAt: gate.lastFloorMs
           ? new Date(gate.lastFloorMs + gate.floorIntervalMs).toISOString()
           : null,
+        /** Earliest armed schedule, and how it reads against the clock. `stuck` means
+         *  the gate is correctly declining to re-open on an ancient due time — the row
+         *  is not being cleared by any sweep and only the floor still runs it. */
+        nextDueAt: gate.nextDueMs ? new Date(gate.nextDueMs).toISOString() : null,
+        dueState: gate.dueState,
         /** Unbound KV = the gate fails open and every tick runs the fan-out. */
         kvBound: Boolean(env.AUTH_CACHE_KV),
+      },
+      /** Non-null = scheduled work is JAMMED, not idle: armed rows overdue by more than
+       *  a floor interval that every sweep has already had its chance at. */
+      scheduleStall: stall && {
+        jammedSince: new Date(stall.firstDetectedMs).toISOString(),
+        observedAt: new Date(stall.observedMs).toISOString(),
+        observations: stall.observations,
+        tables: stall.tables.map((entry) => ({
+          table: entry.table,
+          dueAt: new Date(entry.dueAtMs).toISOString(),
+          overdueMs: entry.overdueMs,
+        })),
       },
       cadences: CRON_CADENCES.map((cadence) => ({
         cadence,

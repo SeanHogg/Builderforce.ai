@@ -12598,7 +12598,8 @@
           "signal": "有写入操作标记了待处理工作",
           "floor": "已达到底线间隔",
           "idle": "没有任何标记，且底线尚未到期",
-          "kv-unavailable": "KV 不可用，闸门按放行处理"
+          "kv-unavailable": "KV 不可用，闸门按放行处理",
+          "due": "计划任务先于兜底周期到期"
         },
         "floorInterval": "底线间隔",
         "overridden": "已被覆盖",
@@ -12608,7 +12609,15 @@
         "asap": "下一次触发",
         "explainIdle": "闸门空闲并不代表没有待处理的工作。只有当工单真正通过其闸门时才会发出标记，所以一块全是停滞工单的看板不会发出任何标记，只能等待底线扫描。",
         "kvUnbound": "未绑定 AUTH_CACHE_KV，闸门按放行处理，因此每次触发都会执行扫描。",
-        "signalled": "已标记待处理工作 —— 下一次定时触发将执行扫描。"
+        "signalled": "已标记待处理工作 —— 下一次定时触发将执行扫描。",
+        "nextDue": "下一个到期计划",
+        "noSchedules": "无已启用计划",
+        "dueState": {
+          "none": "未启用任何计划",
+          "future": "等待中",
+          "due": "现已到期",
+          "stuck": "已卡住"
+        }
       },
       "actions": {
         "runFrequent": "▶ 执行 5 分钟触发",
@@ -12655,6 +12664,12 @@
         "title": "要强制执行定时任务吗？",
         "dispatch": "执行“{target}”会在所有工作区启动真实的智能体运行（所选任务中有 {count} 个会派发工作）。这会消耗额度，并非演练。",
         "confirmLabel": "立即执行"
+      },
+      "stall": {
+        "heading": "{count, plural, other {计划任务已卡住 — # 张计划表}}",
+        "since": "自 {since} 起卡住，已在 {observations, plural, other {# 次}} 触发中观察到。",
+        "explain": "这些行的到期时间已超过一个完整的兜底周期，因此每个本可处理它们的扫描任务都至少运行过一次却未能清除。网关不再将它们视为到期项——否则每次触发都会唤醒数据库——所以它们现在只在兜底扫描时运行。请检查下方对应的扫描任务是否已暂停或正在失败。",
+        "overdue": "到期时间 {due}，已逾期 {overdue}"
       }
     },
     "broadcasts": {
@@ -13744,7 +13759,8 @@
     "minutesFailed": "无法生成会议纪要。",
     "pastMeetings": "历史会议",
     "minutesAvailable": "纪要已就绪",
-    "viewNotes": "查看纪要"
+    "viewNotes": "查看纪要",
+    "calendarLabel": "会议日历"
   },
   "brainLauncher": {
     "open": "打开 Brain 助手",
@@ -18467,7 +18483,8 @@
       "brandKit": "品牌套件",
       "audience": "受众",
       "stopwatch": "秒表",
-      "transclusion": "嵌入文档"
+      "transclusion": "嵌入文档",
+      "calendar": "日历"
     },
     "twilioSetup": {
       "title": "Twilio 集成",
@@ -20822,7 +20839,8 @@
         "funnel": "转化漏斗",
         "book": "书籍",
         "sequence": "触达序列",
-        "poll": "投票"
+        "poll": "投票",
+        "calendar": "日历"
       },
       "field": {
         "funnelDomain": "漏斗类型",
@@ -20871,7 +20889,12 @@
         "pollResponseCount": "作答数",
         "pollResults": "结果",
         "pollAnswers": "大家的回答",
-        "pollCorrectRate": "正确率"
+        "pollCorrectRate": "正确率",
+        "calendarSource": "数据源",
+        "calendarDefaultView": "默认视图",
+        "calendarEvents": "事件",
+        "calendarEventCount": "事件数量",
+        "calendarNextEvent": "下一项"
       },
       "column": {
         "stage": "阶段",
@@ -20901,11 +20924,16 @@
         "repliedAtISO": "回复时间",
         "id": "ID",
         "label": "标签",
-        "correct": "正确"
+        "correct": "正确",
+        "startISO": "开始",
+        "endISO": "结束",
+        "details": "详情",
+        "category": "类别"
       },
       "status": {
         "manuscript": "手稿",
-        "draft": "草稿"
+        "draft": "草稿",
+        "noSource": "未选择数据源"
       }
     },
     "noticeGateEvaluated": "已根据此画布上的运行与缺陷评估发布门禁——满足 {score}% 的标准。",
@@ -21693,16 +21721,9 @@
       "exitFullscreen": "退出全屏",
       "calendar": {
         "label": "日历",
-        "enter": "规划本月",
-        "active": "你正在日历中",
-        "open": "打开日历",
-        "regionLabel": "把这块画布作为一个月来查看",
-        "navLabel": "选择月份",
-        "previousMonth": "上一个月",
-        "nextMonth": "下一个月",
-        "summary": "{scheduled} 已排期 · {dated} 有日期 · {undated} 无日期",
-        "gridLabel": "本月的日期",
-        "conflict": "同一天还有另一项安排"
+        "enter": "打开日历",
+        "active": "您正在日历中",
+        "open": "打开日历"
       }
     },
     "miro": {
@@ -25681,7 +25702,8 @@
     "columnRoadmapItem": "路线图条目",
     "emptyProjects": "尚无已排期的项目。添加开始日期或截止日期后即可在时间线上显示。",
     "emptyTasks": "尚无已排期的任务。添加开始日期或截止日期后即可在时间线上显示。",
-    "emptyRoadmapItems": "尚无已排期的路线图条目。添加目标日期后即可在时间线上显示。"
+    "emptyRoadmapItems": "尚无已排期的路线图条目。添加目标日期后即可在时间线上显示。",
+    "calendarLabel": "交付日历"
   },
   "collections": {
     "loading": "正在读取催收队列……",
@@ -26162,5 +26184,63 @@
     "votingClosed": "投票已结束",
     "votingOpen": "投票进行中",
     "wordPlaceholder": "一两个词"
+  },
+  "calendar": {
+    "regionLabel": "日历",
+    "detailLabel": "事件详情",
+    "gridLabel": "日期",
+    "navLabel": "切换时间",
+    "viewLabel": "显示范围",
+    "previous": "上一个",
+    "next": "下一个",
+    "today": "今天",
+    "add": "新建事件",
+    "allDay": "全天",
+    "untitled": "未命名事件",
+    "empty": "此期间没有安排。",
+    "loading": "读取中…",
+    "readFailed": "无法读取此日历的数据源。",
+    "summary": "显示 {shown} 项 · 共 {total} 项 · {undated} 项没有日期",
+    "more": "还有 {count} 项",
+    "conflict": "同一天同一类别还有其他安排",
+    "readOnly": "此数据源在这里为只读。",
+    "noDetails": "此条目没有填写详情。",
+    "openSource": "打开原始记录",
+    "openLink": "打开链接",
+    "edit": "编辑",
+    "delete": "删除",
+    "confirmDelete": "确认删除",
+    "close": "关闭",
+    "save": "保存",
+    "cancel": "取消",
+    "editTitle": "编辑事件",
+    "newTitle": "新建事件",
+    "sourceLabel": "数据源",
+    "view": {
+      "day": "日",
+      "week": "周",
+      "month": "月"
+    },
+    "source": {
+      "own": "本日历",
+      "board": "画布上有日期的卡片",
+      "meetings": "会议",
+      "tasks": "任务",
+      "releases": "发布与部署",
+      "holidays": "公司假期",
+      "connected": "已连接的日历"
+    },
+    "field": {
+      "subject": "主题",
+      "subjectPlaceholder": "将要发生什么",
+      "details": "详情",
+      "detailsPlaceholder": "读者打开时需要知道的内容",
+      "starts": "开始",
+      "ends": "结束",
+      "allDay": "全天",
+      "category": "类别",
+      "categoryPlaceholder": "邮件、部署、假期…"
+    },
+    "undatedLabel": "尚无日期"
   }
 }

@@ -222,6 +222,21 @@ export interface SpecField {
    */
   bookkeeping?: boolean;
   /**
+   * A BESPOKE NODE BODY ALREADY DRAWS THIS, so the generic spec body must not draw it
+   * again.
+   *
+   * A kind may have both: `calendar` declares `events` because the model has to be able
+   * to WRITE them, and draws them as a month grid because a list of ISO strings is not a
+   * calendar. Without this flag the card would show the grid and then a table of the same
+   * rows underneath it — two renderings of one fact, which is the drift this codebase's
+   * own comments describe as a card disagreeing with itself.
+   *
+   * It affects RENDERING ONLY. The field is still authorable, still in the AI snapshot,
+   * still exported. That is the whole difference from `derived` (who may write it) and
+   * `restricted` (who may read it): this one says who DRAWS it.
+   */
+  bodyOwned?: boolean;
+  /**
    * Written by a mechanism, never by an LLM patch — a learner's marks, an attempt
    * record, an integrity ledger. Excluded from the mutable fields the registry
    * advertises, so the model can READ it and can never assert it.

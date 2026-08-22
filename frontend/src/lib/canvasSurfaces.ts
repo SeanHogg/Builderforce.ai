@@ -105,34 +105,24 @@ export const CANVAS_SURFACES: readonly CanvasSurfaceDef[] = [
   // It persists because it is a place somebody chose to work in — a builder iterating on
   // a running app is not taking a temporary reading of the board, the way 3D is.
   { id: 'app', scope: 'board', order: 3, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: true },
-  // THE MONTH. The second surface that reads MANY objects as ONE artifact, and the second
-  // that could not be an object: `socialCampaign`, `emailCampaign` and `salesMeeting` have
-  // carried `scheduledAt` since they shipped and every spec kind declares which field
-  // holds its deadline — the dates existed, and nothing read them together. A
-  // `campaignCalendar` KIND would have been a second copy of those dates, disagreeing with
-  // the cards the first time somebody moved a send.
-  //
-  // It persists for the same reason `app` does: planning a month is a place somebody chose
-  // to work, not a temporary reading of the board the way 3D is.
-  { id: 'calendar', scope: 'board', order: 4, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: true },
   // The three medium runtimes. Each is a PROMOTION: the editor already existed, squeezed
   // into a node body where the medium's own axis had nowhere to go — a paged document in a
   // card, a playable build behind a bespoke `gameFocus` boolean, and a multi-track edit
   // with no room for a second track. None of them persists, because a surface bound to one
   // object cannot be restored without it.
-  { id: 'page', scope: 'object', order: 5, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
-  { id: 'play', scope: 'object', order: 6, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
+  { id: 'page', scope: 'object', order: 4, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
+  { id: 'play', scope: 'object', order: 5, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
   // A site is pages AND a width. It is not the `page` surface with more room: that one
   // draws ONE sheet at a reading measure, and a website is a set of pages you move
   // between at a width you choose. Two axes the sheet does not have, so two surfaces.
-  { id: 'site', scope: 'object', order: 7, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
-  { id: 'timeline', scope: 'object', order: 8, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
+  { id: 'site', scope: 'object', order: 6, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
+  { id: 'timeline', scope: 'object', order: 7, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
   // A `world` object is a place with its own camera and props, not a page — it does
   // not fit the sheet/build/track shapes above any more than they fit each other. It
   // does not persist as the active surface for the same reason they don't: a surface
   // bound to one object snaps back to the board on reload, not into an editor whose
   // target it has to re-find.
-  { id: 'world', scope: 'object', order: 9, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
+  { id: 'world', scope: 'object', order: 8, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
   // THE ROOM. A live poll's own axis is the people answering it — a join address on the
   // wall, a count that moves, and two controls (open/close voting, show/hide the count)
   // that are pressed while a room watches. A ~340px card can preview a question; it
@@ -141,7 +131,28 @@ export const CANVAS_SURFACES: readonly CanvasSurfaceDef[] = [
   //
   // It does not persist, for the reason every object-scoped surface does not: coming
   // back tomorrow should land on the board, not inside a poll that closed last night.
-  { id: 'facilitate', scope: 'object', order: 10, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
+  { id: 'facilitate', scope: 'object', order: 9, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
+  // THE MONTH — and the one entry on this list that used to be somewhere else.
+  //
+  // ── WHY IT STOPPED BEING A BOARD SURFACE ─────────────────────────────────────
+  // It shipped in the rail beside Chat, Board, 3D and App, on the argument that a month
+  // is "about every dated card at once" and so has no card to be entered from. That
+  // argument was about ONE reading of a month — this board's own dates — and it silently
+  // made that reading the only one there could ever be. A release calendar, a send
+  // calendar, the team's leave and an on-call rotation are four calendars a person
+  // legitimately wants at once, and a rail entry is a MODE: you cannot have two, cannot
+  // put one beside another, and cannot point one at meetings, releases, tasks, holidays
+  // or a connected account whose dates already existed elsewhere in this product.
+  //
+  // So the reading became a value on a `calendar` OBJECT (its `source`), and this is the
+  // surface that object opens at full size — the same promotion `page`, `play` and
+  // `timeline` each got, and for the identical reason: a month with an hour grid and a
+  // detail panel does not fit in a ~340px card, and the card previews it.
+  //
+  // It does not persist, like every object-scoped surface: it cannot be restored without
+  // knowing WHICH calendar, and a reload should land on the board rather than inside a
+  // month whose card the reader may since have deleted.
+  { id: 'calendar', scope: 'object', order: 10, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
 ];
 
 /**

@@ -355,6 +355,72 @@ export const SHARED_OBJECT_SPECS: readonly SpecObjectSpec[] = [
       SUMMARY_FIELD,
     ],
   },
+
+  // ── ANYTHING THAT IS A DATE WITH A SUBJECT ────────────────────────────────────
+  // The kind that ended a MODALITY. A month used to be a rail entry on the creation
+  // canvas — one grid, one hardcoded reading (this board's own dated cards), and
+  // therefore no way to have two calendars, no way to put one beside anything, and no
+  // way to point one at the meetings, releases, tasks, holidays or connected accounts
+  // whose dates already existed elsewhere in this product.
+  //
+  // Deployments, marketing sends, sales events, public holidays and an on-call rota are
+  // five calendars and ONE object: the reading is a value (`source`), exactly as
+  // `funnelDomain` and `pollFormat` are values above. A bound calendar owns no dates it
+  // did not author — it projects its source and writes an edit back through it, because
+  // a second copy of a send's date is how a card and a calendar come to disagree.
+  {
+    kind: 'calendar',
+    icon: '▦',
+    // `Work`, not `Insights`: a calendar is something a person PLANS in and writes to,
+    // beside the tasks and roadmaps it most often reads, rather than a reading of
+    // something that already happened.
+    group: 'Work',
+    defaultStatus: 'noSource',
+    // `refresh` re-reads the bound source; `schedule` is the model asking for an event
+    // to be written. Neither reaches outside the workspace, so neither is gated.
+    actions: ['refresh', 'schedule'],
+    // A new calendar shows the MONTH and its own events, which is the one source that
+    // works before anything is bound and the only one whose content a person can create
+    // from the card itself.
+    seed: { source: 'own', defaultView: 'month', events: [] },
+    fields: [
+      {
+        name: 'source', render: 'stat', label: 'calendarSource',
+        hint: 'Where the dates come from: own | board | meetings | tasks | releases | holidays | connected. `own` stores the events on this card and is the only one you can freely create in; `board` folds every dated object on this canvas and writes a move back to the field it came from; the rest project a store that already exists (`releases` and `connected` are read-only). Defaults to `own`.',
+      },
+      {
+        name: 'defaultView', render: 'stat', label: 'calendarDefaultView',
+        hint: 'The grain it opens on: day | week | month. Defaults to `month`. A card only ever draws the month — a day view at card size is a list — so this decides what the full-size surface opens with.',
+      },
+      {
+        name: 'events', render: 'rows', label: 'calendarEvents',
+        columns: ['subject', 'startISO', 'endISO', 'details', 'category'],
+        // The month grid IS the rendering of these rows; a table of ISO strings beneath
+        // it would be the same fact drawn twice. Still authorable, still in the AI
+        // snapshot — see `SpecField.bodyOwned`.
+        bodyOwned: true,
+        hint: 'The events this calendar OWNS, used only when `source` is `own`: {subject, startISO, endISO, details, category}. `startISO` is an ISO instant, or a bare YYYY-MM-DD for a whole day — a public holiday is a day, a stand-up is an instant, and writing a holiday as an instant makes it move for readers in another timezone. `category` is what a conflict is judged on: two entries sharing a day AND a category collide, two sharing only the day do not. A row with no parseable start is NOT plotted at midnight; it is counted as undated and reported.',
+      },
+      {
+        name: 'eventCount', render: 'stat', label: 'calendarEventCount',
+        hint: 'How many events this card holds. Counted from `events`, never typed — a stored count that disagrees with the rows beneath it is the number a reader notices first.',
+        derive: (data) => rowsOf(data.events).length || undefined,
+      },
+      {
+        name: 'nextEvent', render: 'stat', label: 'calendarNextEvent',
+        hint: 'The subject of the next authored event, so the card states the one fact it always has room for. Computed from `events`; absent on a bound calendar, whose next event lives in its source rather than on the card.',
+        derive: (data) => {
+          const upcoming = rowsOf(data.events)
+            .map((row) => ({ row, at: Date.parse(String(row.startISO ?? row.start ?? row.date ?? '')) }))
+            .filter((entry) => Number.isFinite(entry.at))
+            .sort((a, b) => a.at - b.at)[0];
+          const subject = upcoming ? String(upcoming.row.subject ?? upcoming.row.title ?? '').trim() : '';
+          return subject || undefined;
+        },
+      },
+      SUMMARY_FIELD,
+    ],
+  },
 ];
 
 /** English fallbacks the palette shows before `creationCanvas.shared.label.*` resolves. */
@@ -363,6 +429,7 @@ export const SHARED_LABELS: Record<string, string> = {
   book: 'Book',
   sequence: 'Sequence',
   poll: 'Poll',
+  calendar: 'Calendar',
 };
 
 /** Blank-object status fallbacks under `creationCanvas.shared.status.*`. */
@@ -373,6 +440,10 @@ export const SHARED_STATUSES: Record<string, string> = {
   // send, so a default claiming it would put a card that looks live in front of
   // somebody who has written no steps.
   draft: 'Draft',
+  // A calendar with nothing bound and nothing authored is not "Ready" — it is a grid
+  // with no dates in it, and saying so is what tells the reader to pick a source. The
+  // registry's own comments record what an empty card claiming to be configured costs.
+  noSource: 'No source',
 };
 
 registerSpecObjectSet({

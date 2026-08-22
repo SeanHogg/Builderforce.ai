@@ -12598,7 +12598,8 @@
           "signal": "une écriture a signalé du travail en attente",
           "floor": "l’intervalle seuil est écoulé",
           "idle": "rien n’a été signalé et le seuil n’est pas échu",
-          "kv-unavailable": "KV est injoignable, la barrière laisse donc passer"
+          "kv-unavailable": "KV est injoignable, la barrière laisse donc passer",
+          "due": "une planification est arrivée à échéance avant l’intervalle plancher"
         },
         "floorInterval": "Intervalle seuil",
         "overridden": "remplacé",
@@ -12608,7 +12609,15 @@
         "asap": "Prochain déclenchement",
         "explainIdle": "Une barrière inactive ne signifie pas qu’il n’y a rien en attente. Le signal ne part que lorsqu’un ticket franchit réellement ses barrières : un tableau de tickets bloqués ne signale donc rien et attend le balayage seuil.",
         "kvUnbound": "AUTH_CACHE_KV n’est pas lié : la barrière laisse passer et chaque déclenchement lance le balayage.",
-        "signalled": "Travail en attente signalé — le prochain déclenchement planifié lancera le balayage."
+        "signalled": "Travail en attente signalé — le prochain déclenchement planifié lancera le balayage.",
+        "nextDue": "Prochaine échéance planifiée",
+        "noSchedules": "Aucune planification active",
+        "dueState": {
+          "none": "aucune planification active",
+          "future": "en attente",
+          "due": "échue maintenant",
+          "stuck": "bloquée"
+        }
       },
       "actions": {
         "runFrequent": "▶ Lancer le tick de 5 minutes",
@@ -12655,6 +12664,12 @@
         "title": "Forcer une tâche planifiée ?",
         "dispatch": "Lancer « {target} » démarre de véritables exécutions d’agents dans tous les espaces de travail ({count} des tâches sélectionnées déclenchent du travail). Cela consomme des jetons et n’est pas un essai à blanc.",
         "confirmLabel": "Lancer maintenant"
+      },
+      "stall": {
+        "heading": "{count, plural, one {Le travail planifié est bloqué — # table de planification} other {Le travail planifié est bloqué — # tables de planification}}",
+        "since": "Bloqué depuis {since}, observé sur {observations, plural, one {# cycle} other {# cycles}}.",
+        "explain": "Ces lignes sont échues depuis plus d’un intervalle plancher complet : chaque balayage capable de les traiter s’est donc déjà exécuté au moins une fois sans y parvenir. La barrière cesse de les considérer comme échues — sinon elle réveillerait la base de données à chaque cycle — et elles ne s’exécutent plus que lors du balayage plancher. Vérifiez ci-dessous si le balayage concerné est en pause ou en échec.",
+        "overdue": "échéance {due}, {overdue} de retard"
       }
     },
     "broadcasts": {
@@ -13744,7 +13759,8 @@
     "minutesFailed": "Impossible de générer le compte rendu.",
     "pastMeetings": "Réunions passées",
     "minutesAvailable": "Compte rendu prêt",
-    "viewNotes": "Voir les notes"
+    "viewNotes": "Voir les notes",
+    "calendarLabel": "Calendrier des réunions"
   },
   "brainLauncher": {
     "open": "Ouvrir l’assistant Brain",
@@ -18467,7 +18483,8 @@
       "brandKit": "Kit de marque",
       "audience": "Audience cible",
       "stopwatch": "Chronomètre",
-      "transclusion": "Transclusion"
+      "transclusion": "Transclusion",
+      "calendar": "Calendrier"
     },
     "twilioSetup": {
       "title": "Intégration Twilio",
@@ -20822,7 +20839,8 @@
         "funnel": "Entonnoir",
         "book": "Livre",
         "sequence": "Séquence",
-        "poll": "Sondage"
+        "poll": "Sondage",
+        "calendar": "Calendrier"
       },
       "field": {
         "funnelDomain": "Entonnoir",
@@ -20871,7 +20889,12 @@
         "pollResponseCount": "Réponses",
         "pollResults": "Résultats",
         "pollAnswers": "Ce qui a été dit",
-        "pollCorrectRate": "Bonnes réponses"
+        "pollCorrectRate": "Bonnes réponses",
+        "calendarSource": "Source",
+        "calendarDefaultView": "S'ouvre sur",
+        "calendarEvents": "Événements",
+        "calendarEventCount": "Événements enregistrés",
+        "calendarNextEvent": "Prochainement"
       },
       "column": {
         "stage": "Étape",
@@ -20901,11 +20924,16 @@
         "repliedAtISO": "A répondu",
         "id": "Identifiant",
         "label": "Libellé",
-        "correct": "Bonne réponse"
+        "correct": "Bonne réponse",
+        "startISO": "Début",
+        "endISO": "Fin",
+        "details": "Détails",
+        "category": "Catégorie"
       },
       "status": {
         "manuscript": "Manuscrit",
-        "draft": "Brouillon"
+        "draft": "Brouillon",
+        "noSource": "Aucune source"
       }
     },
     "noticeGateEvaluated": "Critère de publication évalué à partir des exécutions et des anomalies de ce canevas — {score} % des critères remplis.",
@@ -21693,16 +21721,9 @@
       "exitFullscreen": "Quitter le plein écran",
       "calendar": {
         "label": "Calendrier",
-        "enter": "Planifier le mois",
+        "enter": "Ouvrir le calendrier",
         "active": "Vous êtes dans le calendrier",
-        "open": "Ouvrir le calendrier",
-        "regionLabel": "Ce canevas, lu comme un mois",
-        "navLabel": "Quel mois",
-        "previousMonth": "Mois précédent",
-        "nextMonth": "Mois suivant",
-        "summary": "{scheduled} programmés · {dated} datés · {undated} sans date",
-        "gridLabel": "Les jours de ce mois",
-        "conflict": "Un autre engagement occupe ce jour"
+        "open": "Ouvrir le calendrier"
       }
     },
     "miro": {
@@ -25681,7 +25702,8 @@
     "columnRoadmapItem": "Élément de roadmap",
     "emptyProjects": "Aucun projet planifié pour le moment. Ajoutez une date de début ou d’échéance pour l’afficher sur la chronologie.",
     "emptyTasks": "Aucune tâche planifiée pour le moment. Ajoutez une date de début ou d’échéance pour l’afficher sur la chronologie.",
-    "emptyRoadmapItems": "Aucun élément de roadmap planifié pour le moment. Ajoutez une date cible pour l’afficher sur la chronologie."
+    "emptyRoadmapItems": "Aucun élément de roadmap planifié pour le moment. Ajoutez une date cible pour l’afficher sur la chronologie.",
+    "calendarLabel": "Calendrier de livraison"
   },
   "collections": {
     "loading": "Lecture de la file de relances…",
@@ -26162,5 +26184,63 @@
     "votingClosed": "Le vote est clos",
     "votingOpen": "Le vote est ouvert",
     "wordPlaceholder": "Un ou deux mots"
+  },
+  "calendar": {
+    "regionLabel": "Calendrier",
+    "detailLabel": "Détails de l'événement",
+    "gridLabel": "Jours",
+    "navLabel": "Se déplacer dans le temps",
+    "viewLabel": "Quelle période afficher",
+    "previous": "Précédent",
+    "next": "Suivant",
+    "today": "Aujourd'hui",
+    "add": "Nouvel événement",
+    "allDay": "Toute la journée",
+    "untitled": "Événement sans titre",
+    "empty": "Rien de prévu sur cette période.",
+    "loading": "Lecture…",
+    "readFailed": "La source de ce calendrier n'a pas pu être lue.",
+    "summary": "{shown} affichés · {total} au total · {undated} sans date",
+    "more": "+{count} autres",
+    "conflict": "Une autre entrée partage ce jour et cette catégorie",
+    "readOnly": "Cette source est en lecture seule ici.",
+    "noDetails": "Aucun détail n'a été écrit pour cette entrée.",
+    "openSource": "Ouvrir l'original",
+    "openLink": "Ouvrir le lien",
+    "edit": "Modifier",
+    "delete": "Supprimer",
+    "confirmDelete": "Confirmer la suppression",
+    "close": "Fermer",
+    "save": "Enregistrer",
+    "cancel": "Annuler",
+    "editTitle": "Modifier l'événement",
+    "newTitle": "Nouvel événement",
+    "sourceLabel": "Source",
+    "view": {
+      "day": "Jour",
+      "week": "Semaine",
+      "month": "Mois"
+    },
+    "source": {
+      "own": "Ce calendrier",
+      "board": "Cartes datées de ce canevas",
+      "meetings": "Réunions",
+      "tasks": "Tâches",
+      "releases": "Versions et déploiements",
+      "holidays": "Jours fériés de l'entreprise",
+      "connected": "Calendrier connecté"
+    },
+    "field": {
+      "subject": "Objet",
+      "subjectPlaceholder": "Ce qui va se passer",
+      "details": "Détails",
+      "detailsPlaceholder": "Ce qu'il faut savoir en l'ouvrant",
+      "starts": "Début",
+      "ends": "Fin",
+      "allDay": "Toute la journée",
+      "category": "Catégorie",
+      "categoryPlaceholder": "e-mail, déploiement, congé…"
+    },
+    "undatedLabel": "Pas encore de date"
   }
 }

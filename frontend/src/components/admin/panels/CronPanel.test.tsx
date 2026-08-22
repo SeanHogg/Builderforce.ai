@@ -17,7 +17,10 @@ import { adminApi, type AdminCronRunResult, type AdminCronState } from '@/lib/ad
 const confirmSpy = vi.fn();
 vi.mock('@/components/ConfirmProvider', () => ({ useConfirm: () => confirmSpy }));
 
-const state = (over: Partial<AdminCronState['gate']> = {}): AdminCronState => ({
+const state = (
+  over: Partial<AdminCronState['gate']> = {},
+  scheduleStall: AdminCronState['scheduleStall'] = null,
+): AdminCronState => ({
   now: '2026-07-26T12:00:00.000Z',
   gate: {
     wouldRun: true,
@@ -27,9 +30,12 @@ const state = (over: Partial<AdminCronState['gate']> = {}): AdminCronState => ({
     floorIntervalOverridden: false,
     lastFloorSweepAt: '2026-07-26T11:20:00.000Z',
     nextFloorDueAt: '2026-07-26T11:50:00.000Z',
+    nextDueAt: '2026-07-26T12:05:00.000Z',
+    dueState: 'future',
     kvBound: true,
     ...over,
   },
+  scheduleStall,
   cadences: [
     { cadence: 'frequent', cron: null, sweeps: 2 },
     { cadence: 'daily', cron: '0 9 * * *', sweeps: 1 },
@@ -160,6 +166,41 @@ describe('CronPanel', () => {
     const button = await screen.findByText('admin.cron.actions.signal');
     expect(button.closest('button')).toBeDisabled();
     expect(screen.getAllByText('admin.cron.gate.kvUnbound').length).toBeGreaterThan(0);
+  });
+
+  /**
+   * "Jammed" and "idle" look identical everywhere else — the gate declines to act on
+   * an ancient due time and reports `idle` for it, which is correct behaviour and
+   * completely invisible. The banner is the only thing that tells the two apart.
+   */
+  it('shows the stall banner, naming each jammed table, when scheduled work is stuck', async () => {
+    vi.spyOn(adminApi, 'cronState').mockResolvedValue(state(
+      { wouldRun: false, reason: 'idle', dueState: 'stuck', nextDueAt: '2026-07-26T08:00:00.000Z' },
+      {
+        jammedSince: '2026-07-26T09:00:00.000Z',
+        observedAt: '2026-07-26T12:00:00.000Z',
+        observations: 7,
+        tables: [
+          { table: 'report_schedules', dueAt: '2026-07-26T08:00:00.000Z', overdueMs: 14_400_000 },
+          { table: 'qa_schedules', dueAt: '2026-07-26T09:30:00.000Z', overdueMs: 9_000_000 },
+        ],
+      },
+    ));
+    render(<CronPanel />);
+    // The next-intl mock echoes the key plus its params, so the count and each
+    // relation name are asserted through it.
+    expect(await screen.findByText(/admin\.cron\.stall\.heading 2/)).toBeInTheDocument();
+    expect(screen.getByText('report_schedules')).toBeInTheDocument();
+    expect(screen.getByText('qa_schedules')).toBeInTheDocument();
+    expect(screen.getByText('admin.cron.stall.explain')).toBeInTheDocument();
+  });
+
+  /** A healthy platform must not show a jam warning it has to explain away. */
+  it('hides the stall banner when nothing is stuck', async () => {
+    render(<CronPanel />);
+    await screen.findByText('exec-reaper');
+    expect(screen.queryByText(/admin\.cron\.stall\.heading/)).not.toBeInTheDocument();
+    expect(screen.getByText('admin.cron.gate.dueState.future')).toBeInTheDocument();
   });
 
   it('pauses and resumes an individual sweep', async () => {

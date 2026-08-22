@@ -112,7 +112,7 @@ describe('persistBoard', () => {
       replaceGraph: vi.fn(async () => { throw new Error(SESSION_CHANGED); }),
       read: vi.fn(async () => ({
         graph: { objects: [persisted('a', 'Theirs'), persisted('b', 'Also theirs')], connections: [] },
-        revision: 9,
+        revision: 9, title: 'Board', members: [],
       })),
     };
 
@@ -132,7 +132,7 @@ describe('persistBoard', () => {
     const remoteObjects = [persisted('a', 'Theirs')];
     const sessions: CanvasSessionPort = {
       replaceGraph: vi.fn(async () => { throw new Error(SESSION_CHANGED); }),
-      read: vi.fn(async () => ({ graph: { objects: remoteObjects, connections: [] }, revision: 9 })),
+      read: vi.fn(async () => ({ graph: { objects: remoteObjects, connections: [] }, revision: 9, title: 'Board', members: [] })),
     };
 
     const result = await persistBoard(attempt, sessions, t);
@@ -149,7 +149,7 @@ describe('persistBoard', () => {
       replaceGraph: vi.fn(async () => { throw new Error(SESSION_CHANGED); }),
       read: vi.fn(async () => ({
         graph: { objects: [persisted('a', 'Theirs'), { id: 'z', kind: 'from-a-newer-build', canvasData: {}, content: {} }], connections: [] },
-        revision: 9,
+        revision: 9, title: 'Board', members: [],
       })),
     };
 

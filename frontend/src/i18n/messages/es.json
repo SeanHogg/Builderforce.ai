@@ -12598,7 +12598,8 @@
           "signal": "una escritura señaló trabajo pendiente",
           "floor": "ha transcurrido el intervalo mínimo",
           "idle": "nada señalado y el intervalo mínimo no ha vencido",
-          "kv-unavailable": "KV no está disponible, así que la compuerta permite pasar"
+          "kv-unavailable": "KV no está disponible, así que la compuerta permite pasar",
+          "due": "una programación venció antes que el intervalo mínimo"
         },
         "floorInterval": "Intervalo mínimo",
         "overridden": "sobrescrito",
@@ -12608,7 +12609,15 @@
         "asap": "Siguiente disparo",
         "explainIdle": "Una compuerta inactiva no significa que no haya nada pendiente. La señal solo se emite cuando un ticket supera realmente sus compuertas, así que un tablero de tickets estancados no señala nada y espera al barrido mínimo.",
         "kvUnbound": "AUTH_CACHE_KV no está vinculado, así que la compuerta permite pasar y cada disparo ejecuta el barrido.",
-        "signalled": "Trabajo pendiente señalado: el siguiente disparo programado ejecutará el barrido."
+        "signalled": "Trabajo pendiente señalado: el siguiente disparo programado ejecutará el barrido.",
+        "nextDue": "Próxima programación",
+        "noSchedules": "Nada activo",
+        "dueState": {
+          "none": "ninguna programación activa",
+          "future": "en espera",
+          "due": "vencida ahora",
+          "stuck": "atascada"
+        }
       },
       "actions": {
         "runFrequent": "▶ Ejecutar el disparo de 5 minutos",
@@ -12655,6 +12664,12 @@
         "title": "¿Forzar una tarea programada?",
         "dispatch": "Ejecutar «{target}» inicia ejecuciones reales de agentes en todos los espacios de trabajo ({count} de las tareas seleccionadas despachan trabajo). Esto consume tokens y no es una simulación.",
         "confirmLabel": "Ejecutar ahora"
+      },
+      "stall": {
+        "heading": "{count, plural, one {El trabajo programado está atascado — # tabla de programación} other {El trabajo programado está atascado — # tablas de programación}}",
+        "since": "Atascado desde {since}, detectado en {observations, plural, one {# ciclo} other {# ciclos}}.",
+        "explain": "Estas filas llevan vencidas más de un intervalo mínimo completo, así que cada barrido que podría procesarlas ya se ejecutó al menos una vez sin conseguirlo. La compuerta deja de tratarlas como vencidas —de lo contrario despertaría la base de datos en cada ciclo—, por lo que ahora solo se ejecutan en el barrido de intervalo mínimo. Comprueba abajo si el barrido responsable está pausado o fallando.",
+        "overdue": "vencía el {due}, {overdue} de retraso"
       }
     },
     "broadcasts": {
@@ -13744,7 +13759,8 @@
     "minutesFailed": "No se pudo generar el acta.",
     "pastMeetings": "Reuniones anteriores",
     "minutesAvailable": "Acta lista",
-    "viewNotes": "Ver notas"
+    "viewNotes": "Ver notas",
+    "calendarLabel": "Calendario de reuniones"
   },
   "brainLauncher": {
     "open": "Abrir el asistente Brain",
@@ -18467,7 +18483,8 @@
       "brandKit": "Kit de marca",
       "audience": "Audiencia",
       "stopwatch": "Cronómetro",
-      "transclusion": "Transclusión"
+      "transclusion": "Transclusión",
+      "calendar": "Calendario"
     },
     "twilioSetup": {
       "title": "Integración de Twilio",
@@ -20822,7 +20839,8 @@
         "funnel": "Embudo",
         "book": "Libro",
         "sequence": "Secuencia",
-        "poll": "Encuesta"
+        "poll": "Encuesta",
+        "calendar": "Calendario"
       },
       "field": {
         "funnelDomain": "Embudo",
@@ -20871,7 +20889,12 @@
         "pollResponseCount": "Respuestas",
         "pollResults": "Resultados",
         "pollAnswers": "Lo que dijeron",
-        "pollCorrectRate": "Aciertos"
+        "pollCorrectRate": "Aciertos",
+        "calendarSource": "Fuente",
+        "calendarDefaultView": "Se abre en",
+        "calendarEvents": "Eventos",
+        "calendarEventCount": "Eventos guardados",
+        "calendarNextEvent": "Lo siguiente"
       },
       "column": {
         "stage": "Etapa",
@@ -20901,11 +20924,16 @@
         "repliedAtISO": "Respondió",
         "id": "Id",
         "label": "Etiqueta",
-        "correct": "Correcta"
+        "correct": "Correcta",
+        "startISO": "Empieza",
+        "endISO": "Termina",
+        "details": "Detalles",
+        "category": "Categoría"
       },
       "status": {
         "manuscript": "Manuscrito",
-        "draft": "Borrador"
+        "draft": "Borrador",
+        "noSource": "Sin fuente"
       }
     },
     "noticeGateEvaluated": "Criterio de publicación evaluado con las ejecuciones y los defectos de este lienzo: {score}% de los criterios cumplidos.",
@@ -21693,16 +21721,9 @@
       "exitFullscreen": "Salir de pantalla completa",
       "calendar": {
         "label": "Calendario",
-        "enter": "Planifica el mes",
+        "enter": "Abrir el calendario",
         "active": "Estás en el calendario",
-        "open": "Abrir el calendario",
-        "regionLabel": "Este lienzo, leído como un mes",
-        "navLabel": "Qué mes",
-        "previousMonth": "Mes anterior",
-        "nextMonth": "Mes siguiente",
-        "summary": "{scheduled} programados · {dated} con fecha · {undated} sin fecha",
-        "gridLabel": "Los días de este mes",
-        "conflict": "Otro compromiso comparte este día"
+        "open": "Abrir el calendario"
       }
     },
     "miro": {
@@ -25681,7 +25702,8 @@
     "columnRoadmapItem": "Elemento del roadmap",
     "emptyProjects": "Todavía no hay proyectos planificados. Añade fechas de inicio o de vencimiento para verlos en la línea de tiempo.",
     "emptyTasks": "Todavía no hay tareas planificadas. Añade fechas de inicio o de vencimiento para verlas en la línea de tiempo.",
-    "emptyRoadmapItems": "Todavía no hay elementos del roadmap planificados. Añade fechas objetivo para verlos en la línea de tiempo."
+    "emptyRoadmapItems": "Todavía no hay elementos del roadmap planificados. Añade fechas objetivo para verlos en la línea de tiempo.",
+    "calendarLabel": "Calendario de entregas"
   },
   "collections": {
     "loading": "Leyendo la cola de reclamaciones…",
@@ -26162,5 +26184,63 @@
     "votingClosed": "La votación está cerrada",
     "votingOpen": "La votación está abierta",
     "wordPlaceholder": "Una o dos palabras"
+  },
+  "calendar": {
+    "regionLabel": "Calendario",
+    "detailLabel": "Detalles del evento",
+    "gridLabel": "Días",
+    "navLabel": "Desplazarse en el tiempo",
+    "viewLabel": "Cuánto mostrar",
+    "previous": "Anterior",
+    "next": "Siguiente",
+    "today": "Hoy",
+    "add": "Nuevo evento",
+    "allDay": "Todo el día",
+    "untitled": "Evento sin título",
+    "empty": "No hay nada programado en este periodo.",
+    "loading": "Leyendo…",
+    "readFailed": "No se pudo leer la fuente de este calendario.",
+    "summary": "{shown} visibles · {total} en total · {undated} sin fecha",
+    "more": "+{count} más",
+    "conflict": "Otra entrada comparte este día y esta categoría",
+    "readOnly": "Esta fuente es de solo lectura aquí.",
+    "noDetails": "Esta entrada no tiene detalles escritos.",
+    "openSource": "Abrir el original",
+    "openLink": "Abrir enlace",
+    "edit": "Editar",
+    "delete": "Eliminar",
+    "confirmDelete": "Confirmar eliminación",
+    "close": "Cerrar",
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "editTitle": "Editar evento",
+    "newTitle": "Nuevo evento",
+    "sourceLabel": "Fuente",
+    "view": {
+      "day": "Día",
+      "week": "Semana",
+      "month": "Mes"
+    },
+    "source": {
+      "own": "Este calendario",
+      "board": "Tarjetas con fecha de este lienzo",
+      "meetings": "Reuniones",
+      "tasks": "Tareas",
+      "releases": "Versiones y despliegues",
+      "holidays": "Festivos de la empresa",
+      "connected": "Calendario conectado"
+    },
+    "field": {
+      "subject": "Asunto",
+      "subjectPlaceholder": "Qué va a ocurrir",
+      "details": "Detalles",
+      "detailsPlaceholder": "Lo que necesita saber quien lo abra",
+      "starts": "Empieza",
+      "ends": "Termina",
+      "allDay": "Todo el día",
+      "category": "Categoría",
+      "categoryPlaceholder": "correo, despliegue, festivo…"
+    },
+    "undatedLabel": "Sin fecha todavía"
   }
 }

@@ -109,8 +109,48 @@ export interface CanvasSessionPort {
     idempotencyKey: string;
     graph: PersistableCanvasGraph;
   }): Promise<{ revision: number }>;
-  /** Re-read the session, for the conflict path. */
-  read(sessionId: string): Promise<{ graph: PersistedCanvasGraph; revision: number }>;
+  /** Re-read the session — for the conflict path, and for every other moment a
+   *  collaborator's board has to be adopted (see `AdoptRemoteBoard.ts`). */
+  read(sessionId: string): Promise<CanvasSessionSnapshot>;
+}
+
+/**
+ * The session as the canvas needs it: a graph, where it is up to, what it is
+ * called, and who is in it.
+ *
+ * Four fields out of the transport's fifteen. `CreationSessionDetail` also
+ * carries invitations, project ids, a role and an embedded app, none of which
+ * adopting a board has any business seeing — and a use case handed the whole
+ * detail will eventually read one of them.
+ */
+export interface CanvasSessionSnapshot {
+  graph: PersistedCanvasGraph;
+  revision: number;
+  title: string;
+  members: readonly CanvasSessionMember[];
+}
+
+/**
+ * Someone on this session.
+ *
+ * Wider than the domain's `CanvasRosterMember` because this is the shape the
+ * PRESENCE poll and the roster share — where they are looking, what they have
+ * selected, whether they are typing. Declared here rather than re-derived from
+ * the transport type so the application layer names its own vocabulary; it is
+ * structurally what `creation-sessions` returns, so no translation is needed at
+ * the gateway.
+ */
+export interface CanvasSessionMember {
+  userId: string;
+  role: string;
+  displayName: string | null;
+  lastSeenAt?: string;
+  viewport?: Record<string, unknown>;
+  cursor?: { x?: number; y?: number } | null;
+  selection?: string[];
+  typing?: boolean;
+  watchState?: 'all' | 'mentions' | 'muted';
+  followingUserId?: string | null;
 }
 
 /** The error the server raises when someone else saved first. Not a failure. */

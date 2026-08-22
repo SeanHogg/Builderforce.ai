@@ -36,7 +36,7 @@ import {
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { brainChats } from './canvas';
-import { contributors, devTeams, meetings, teams } from './canvas';
+import { contributors, devTeams, meetings } from './canvas';
 import { authTokenTypeEnum, legalDocumentTypeEnum, memberAvailabilityStatusEnum, memberExperienceLevelEnum, memberProfileSyncSourceEnum, objects, segmentStatusEnum, teamMemberKindEnum, tenantIsolationModeEnum, tenantKindEnum, tenantRoleEnum, tenantStatusEnum } from './kernel';
 import { errorGroups, onCallRotations } from './delivery';
 import { marketplacePersonas } from './agents';
@@ -915,52 +915,6 @@ export const userPermissionOverrides = pgTable('user_permission_overrides', {
 });
 
 
-// ---------------------------------------------------------------------------
-// Ceremony sessions (standup / planning round-table; migration 0119). One row per
-// officially-started, timed ceremony; participants carry turn order + speaking time.
-// ---------------------------------------------------------------------------
-
-export const ceremonySessions = pgTable('ceremony_sessions', {
-  id:             uuid('id').primaryKey().defaultRandom(),
-  tenantId:       integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  segmentId:      uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
-  projectId:      integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
-  kind:           varchar('kind', { length: 16 }).notNull(),                       // 'standup' | 'planning'
-  /** 'active' | 'completed' | 'abandoned' (0364). Abandoned = concluded without being
-   *  conducted (nobody came and unattended ceremonies are not granted); it still frees
-   *  the partial unique index so the next scheduled ceremony can open. */
-  status:         varchar('status', { length: 16 }).notNull().default('active'),
-  facilitatorId:  varchar('facilitator_id', { length: 64 }),
-  turnMode:       varchar('turn_mode', { length: 16 }).notNull().default('facilitator'),
-  turnSeconds:    integer('turn_seconds').notNull().default(90),
-  currentTurn:    integer('current_turn'),                                         // index into participants.turnOrder
-  turnStartedAt:  timestamp('turn_started_at'),
-  startedAt:      timestamp('started_at').notNull().defaultNow(),
-  endedAt:        timestamp('ended_at'),
-  /** Set when the frequent cron sweep auto-opened this session from a schedule (0349). */
-  scheduleId:     uuid('schedule_id'),
-  /** Who closed it (0364): 'human' | 'manager' | 'system'. */
-  concludedBy:    varchar('concluded_by', { length: 16 }),
-  /** Why it closed (0364): 'facilitator' | 'unattended' | 'no_humans' | 'expired'.
-   *  Kept separate from `status` so "completed" never has to mean four things. */
-  closeReason:    varchar('close_reason', { length: 24 }),
-  /** Denormalised outcome counters (0364) — the history LIST renders from these alone,
-   *  so showing 20 past standups costs one query rather than 20 participant fan-outs. */
-  humansExpected: integer('humans_expected').notNull().default(0),
-  humansPresent:  integer('humans_present').notNull().default(0),
-  reassignedCount: integer('reassigned_count').notNull().default(0),
-  dispatchedCount: integer('dispatched_count').notNull().default(0),
-  /** When the "your ceremony is live, come join" fan-out ran; guards re-notification. */
-  notifiedAt:     timestamp('notified_at'),
-  /** The calendar/video meeting this ceremony is held in (0366). The ceremony owns
-   *  ATTENDANCE; the meeting owns the calendar entry and the media room, so joining the
-   *  call writes through to this session's presence rather than keeping a rival record. */
-  meetingId:      uuid('meeting_id'),
-  createdAt:      timestamp('created_at').notNull().defaultNow(),
-  updatedAt:      timestamp('updated_at').notNull().defaultNow(),
-});
-
-
 /**
  * meeting_transcript_segments (0330) — the running transcript of a live meeting.
  * One row per spoken line: a human line captured client-side (browser
@@ -1694,3 +1648,25 @@ export const ssoDomains = pgTable('sso_domains', {
   uniqueIndex('uq_sso_domains_domain').on(t.domain),
   index('idx_sso_domains_connection').on(t.connectionId),
 ]);
+
+
+// =========================================================================
+// `team` is one of this seat’s three declared kinds (user / team / workspace) and
+// `teams` is the row a team IS — declared, until this move, in `canvas.ts`, which
+// then had to be imported back here and by `delivery.ts` to attach a team to work.
+// It references nothing outside identity, so it belongs here and travels whole.
+// =========================================================================
+
+
+export const teams = pgTable('teams', {
+  id:          serial('id').primaryKey(),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:   uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
+  name:        varchar('name', { length: 255 }).notNull(),
+  description: text('description'),
+  /** A team can give itself an avatar (0294) — shown on the team card + as the face
+   *  of its team chat. An /api/brain/upload R2 URL or any image URL. */
+  avatarUrl:   text('avatar_url'), // unbounded image URL (R2 upload w/ query params); widened mig 0356
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+});

@@ -27,7 +27,6 @@ growth.ts -> canvas.ts
 growth.ts -> delivery.ts
 growth.ts -> identity.ts
 growth.ts -> integrations.ts
-growth.ts -> platform.ts
 identity.ts -> agents.ts
 identity.ts -> canvas.ts
 identity.ts -> delivery.ts

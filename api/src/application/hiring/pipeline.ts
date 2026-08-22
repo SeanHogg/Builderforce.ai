@@ -43,8 +43,8 @@ import {
   candidateResumes,
   jobApplications,
   jobPipelineEntries,
+  jobPostings,
 } from '../../infrastructure/database/schema/hiring';
-import { jobPostings } from '../../infrastructure/database/schema/agents';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { invalidateHiringFunnel } from './hiringFunnel';

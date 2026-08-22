@@ -1,11 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import {
+  classifyDueTime,
   evaluateCronGate,
   floorIntervalMs,
   FLOOR_INTERVAL_MS,
   MAX_FLOOR_INTERVAL_MS,
   MIN_FLOOR_INTERVAL_MS,
   openCronTick,
+  readScheduleStall,
   signalPendingWork,
 } from './cronWorkSignal';
 import type { Env } from '../../env';
@@ -203,5 +205,71 @@ describe('evaluateCronGate — dynamic next-due', () => {
       'cron:next-due': String(now - 1_000),
     });
     expect(await evaluateCronGate(envWith(kv), now)).toMatchObject({ run: true, reason: 'signal' });
+  });
+});
+
+/**
+ * The other half of the bounded `due` window. The gate correctly declines to re-open
+ * on an ancient due time — but declining is not noticing, and before this a jammed
+ * schedule was indistinguishable from an idle platform: both read "nothing due".
+ */
+describe('classifyDueTime', () => {
+  const FLOOR = FLOOR_INTERVAL_MS;
+
+  it('names the four states the gate and the diagnostic both branch on', () => {
+    expect(classifyDueTime(null, 1_000, FLOOR)).toBe('none');
+    expect(classifyDueTime(2_000, 1_000, FLOOR)).toBe('future');
+    expect(classifyDueTime(1_000, 1_000, FLOOR)).toBe('due');
+    expect(classifyDueTime(1_000, 1_000 + FLOOR + 1, FLOOR)).toBe('stuck');
+  });
+
+  /** Exactly one interval overdue is still DUE — the boundary belongs to the run side,
+   *  so a schedule is never declared jammed while the gate would still act on it. */
+  it('puts the boundary itself on the due side', () => {
+    expect(classifyDueTime(1_000, 1_000 + FLOOR, FLOOR)).toBe('due');
+  });
+});
+
+describe('evaluateCronGate — dueState', () => {
+  const FLOOR = FLOOR_INTERVAL_MS;
+
+  it('reports a stuck due time even while the gate correctly idles on it', async () => {
+    const now = 10 * FLOOR;
+    const { kv } = fakeKv({
+      'cron:last-floor-sweep': String(now - 60_000),
+      'cron:next-due': String(now - FLOOR - 1),
+    });
+    const decision = await evaluateCronGate(envWith(kv), now);
+    expect(decision).toMatchObject({ run: false, reason: 'idle', dueState: 'stuck' });
+  });
+
+  it('reports dueState alongside every other reason', async () => {
+    const now = 10 * FLOOR;
+    const { kv } = fakeKv({ 'cron:last-floor-sweep': String(now - 60_000), 'cron:next-due': String(now + 60_000) });
+    expect(await evaluateCronGate(envWith(kv), now)).toMatchObject({ reason: 'idle', dueState: 'future' });
+    expect(await evaluateCronGate(envWith(), now)).toMatchObject({ reason: 'kv-unavailable', dueState: 'none' });
+  });
+});
+
+describe('readScheduleStall', () => {
+  it('returns null when nothing is stored, KV is unbound, or the value is corrupt', async () => {
+    await expect(readScheduleStall(envWith())).resolves.toBeNull();
+    await expect(readScheduleStall(envWith(fakeKv().kv))).resolves.toBeNull();
+    await expect(readScheduleStall(envWith(fakeKv({ 'cron:schedule-stall': '{oops' }).kv))).resolves.toBeNull();
+  });
+
+  /** An empty `tables` array is not a stall — it must not light the panel up. */
+  it('treats a report with no tables as no stall', async () => {
+    const { kv } = fakeKv({ 'cron:schedule-stall': JSON.stringify({ firstDetectedMs: 1, tables: [] }) });
+    await expect(readScheduleStall(envWith(kv))).resolves.toBeNull();
+  });
+
+  it('reads back a stored report', async () => {
+    const report = {
+      firstDetectedMs: 1_000, observedMs: 2_000, observations: 3, lastRaisedMs: 1_000,
+      tables: [{ table: 'report_schedules', dueAtMs: 500, overdueMs: 1_500 }],
+    };
+    const { kv } = fakeKv({ 'cron:schedule-stall': JSON.stringify(report) });
+    await expect(readScheduleStall(envWith(kv))).resolves.toEqual(report);
   });
 });

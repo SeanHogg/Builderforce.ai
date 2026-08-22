@@ -38,7 +38,7 @@ import { sql } from 'drizzle-orm';
 import { creationSessionObjects, creationSessions, engagementMilestones, freelancerEngagements } from './canvas';
 import { artifactTypeEnum, objects, pricingModelEnum } from './kernel';
 import { segments, tenants, users } from './identity';
-import { jobPostings, skills } from './agents';
+import { skills } from './agents';
 import { projects, tasks } from './delivery';
 
 
@@ -186,39 +186,6 @@ export const businessContacts = pgTable('business_contacts', {
 }));
 
 
-/** A customer-support ticket — Support Issues / Tech Support Tix / Support-Tix-
- *  per-Customer (distinct customerRef). `isBug` flags the post-production-bug
- *  subset. Fed by Freshservice/ServiceNow poll (boardsync) keyed by externalRef,
- *  or entered manually. */
-export const supportTickets = pgTable('support_tickets', {
-  id:          uuid('id').primaryKey().defaultRandom(),
-  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  segmentId:   uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
-  source:      varchar('source', { length: 24 }).notNull().default('manual'), // freshservice | servicenow | zendesk | manual
-  externalRef: varchar('external_ref', { length: 255 }),
-  subject:     varchar('subject', { length: 512 }),
-  category:    varchar('category', { length: 24 }).notNull().default('other'), // bug | how_to | billing | feature_request | other
-  isBug:       boolean('is_bug').notNull().default(false),
-  priority:    varchar('priority', { length: 16 }).notNull().default('normal'),
-  status:      varchar('status', { length: 16 }).notNull().default('open'),
-  customerRef: varchar('customer_ref', { length: 255 }),
-  openedAt:    timestamp('opened_at').notNull().defaultNow(),
-  /** When the help desk recorded the FIRST agent reply (0941) — the provider's own
-   *  clock, never our poll time, because it is what the customer experienced.
-   *  NULL = never answered, or the provider does not report one; excluded from
-   *  `support.first_response_min` rather than counted as an instant answer. */
-  firstRespondedAt: timestamp('first_responded_at'),
-  resolvedAt:  timestamp('resolved_at'),
-  createdAt:   timestamp('created_at').notNull().defaultNow(),
-  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
-}, (t) => ({
-  byOpened: index('idx_support_tickets_opened').on(t.tenantId, t.openedAt),
-  byFirstResponse: index('idx_support_tickets_first_response').on(t.tenantId, t.firstRespondedAt),
-  byBug:    index('idx_support_tickets_bug').on(t.tenantId, t.isBug),
-  uqExternal: uniqueIndex('uq_support_tickets_external').on(t.tenantId, t.source, t.externalRef),
-}));
-
-
 // ===========================================================================
 // Deck generator (migrations 0242-0243) — the template library + generated-deck
 // records behind the board-deck download / Brain "generate deck" tooling.
@@ -331,7 +298,9 @@ export const deliverableProposals = pgTable('deliverable_proposals', {
   tenantId:         integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   engagementId:     varchar('engagement_id', { length: 36 }).notNull().references(() => freelancerEngagements.id, { onDelete: 'cascade' }),
   ticketId:         integer('ticket_id').references(() => tasks.id, { onDelete: 'set null' }),
-  jobId:            varchar('job_id', { length: 36 }).references(() => jobPostings.id, { onDelete: 'set null' }),
+  /** `job_postings.id` — hiring’s root entity, named by id across the boundary (§3).
+   *  FK in migration 0293. */
+  jobId:            varchar('job_id', { length: 36 }),
   authorUserId:     varchar('author_user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
   title:            varchar('title', { length: 200 }).notNull(),
   body:             text('body'),

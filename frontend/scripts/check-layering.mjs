@@ -88,9 +88,40 @@ const FORBIDDEN = {
     { test: (s) => /^@\/domains\/[^/]+\/presentation\//.test(s), why: 'infrastructure may not depend on presentation' },
     { test: (s) => /^@\/(components|app)\//.test(s), why: 'infrastructure may not depend on presentation' },
   ],
+  /**
+   * PRESENTATION is the outermost layer, so nothing points outward from it and
+   * the list is empty — but the layer is DECLARED, for two reasons.
+   *
+   * It has to be counted. `useSharedCanvasRoom` landed as the first presentation
+   * module and this guard reported the same total as the day before, which is a
+   * ratchet quietly not watching a folder somebody is filling.
+   *
+   * And one rule genuinely applies, enforced below rather than here because it
+   * needs to know which context the file is in: a context's presentation may
+   * reach its OWN infrastructure (that is the composition root — a hook wiring a
+   * gateway into a use case is exactly right), but not ANOTHER context's, which
+   * would be a component talking to a foreign vendor client with the owning
+   * context's application layer bypassed.
+   */
+  presentation: [],
 };
 
 const LAYERS = Object.keys(FORBIDDEN);
+
+/**
+ * The one rule that depends on WHERE the file is, not just which layer it is in.
+ *
+ * `@/domains/a/presentation/x.ts` importing `@/domains/a/infrastructure/y.ts` is
+ * the composition root and correct. Importing `@/domains/b/infrastructure/y.ts`
+ * is a component reaching around context b's application layer to talk to its
+ * vendor client, which is how a second, undocumented integration path appears.
+ */
+function crossContextInfrastructure(context, specifier) {
+  const match = /^@\/domains\/([^/]+)\/infrastructure\//.exec(specifier);
+  return match && match[1] !== context
+    ? `may not depend on the ${match[1]} context's infrastructure — go through its application layer`
+    : null;
+}
 
 /** Every `from '…'` specifier in a RUNTIME import (i.e. not `import type`). */
 function runtimeImports(text) {
@@ -126,6 +157,11 @@ function layerOf(relPath) {
   return match && LAYERS.includes(match[1]) ? match[1] : null;
 }
 
+/** The bounded context a file belongs to — `domains/<context>/…`. */
+function contextOf(relPath) {
+  return relPath.match(/^domains\/([^/]+)\//)?.[1] ?? null;
+}
+
 const current = new Map();
 for (const file of collect(domainsDir)) {
   const relPath = key(file);
@@ -138,6 +174,8 @@ for (const file of collect(domainsDir)) {
     for (const rule of FORBIDDEN[layer]) {
       if (rule.test(specifier)) current.set(relPath, `${rule.why} (imports '${specifier}')`);
     }
+    const foreign = crossContextInfrastructure(contextOf(relPath), specifier);
+    if (foreign) current.set(relPath, `${layer} ${foreign} (imports '${specifier}')`);
   }
 }
 

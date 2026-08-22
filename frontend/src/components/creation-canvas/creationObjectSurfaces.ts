@@ -40,6 +40,11 @@ const AUTHORING_SURFACE: Partial<Record<CreationObjectKind, CanvasSurfaceId>> = 
   // pressed in front of them. A card can preview the question; it cannot be the thing a
   // workshop is RUN from.
   poll: 'facilitate',
+  // A month, a week and a day, with an hour grid and a detail panel. It is here rather
+  // than in the rail because a calendar is a THING you can have several of — a release
+  // calendar beside a send calendar beside the team's leave — and a rail entry is a mode
+  // you can only be in one of. The card previews the month; this opens it at full size.
+  calendar: 'calendar',
 };
 
 /**

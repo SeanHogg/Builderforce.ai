@@ -127,7 +127,7 @@ import {
   saveAttemptKey,
   type CanvasNotices,
 } from '@/domains/canvas/application/PersistCanvas';
-import { createSharedSession, serializeForRoom, type SharedSession } from '@/domains/canvas/application/ShareCanvasSession';
+import { adoptRemoteBoard, type AdoptRemoteBoardDecision, type LocalBoardState } from '@/domains/canvas/application/AdoptRemoteBoard';
 import { createPresenceRelay, type PresenceRelay } from '@/domains/canvas/application/PresenceRelay';
 import { AUTHORED_DRAWING_STROKE, AUTHORED_WEBSITE_ACCENT } from '@/domains/canvas/domain/authoredColors';
 import { DiagramConvertPanel } from './DiagramConvertPanel';
@@ -143,9 +143,9 @@ import {
   outcomeMetricLabel,
   type OutcomeTranslator,
 } from '@/lib/outcomeMetrics';
-import { creationStorageKey, localCreationSnapshot, parseLocalCreationSnapshot, readLocalCreationSession, writeLocalCreationSession, type LocalCreationSnapshot } from '@/domains/canvas/infrastructure/localCanvasStore';
+import { creationStorageKey, localCreationSnapshot, readLocalCreationSession, writeLocalCreationSession, type LocalCreationSnapshot } from '@/domains/canvas/infrastructure/localCanvasStore';
+import { useSharedCanvasRoom } from '@/domains/canvas/presentation/useSharedCanvasRoom';
 import { canvasSessionGateway } from '@/domains/canvas/infrastructure/canvasSessionGateway';
-import { createGuestRoomGateway } from '@/domains/canvas/infrastructure/guestRoomGateway';
 import { answersComplete, defaultInput, questionIds, type ToolResult } from '@/lib/tools';
 
 /**
@@ -160,11 +160,9 @@ import { answersComplete, defaultInput, questionIds, type ToolResult } from '@/l
  */
 export const CREATION_CANVAS_TOUR = { sectionId: 'creation-canvas', version: 2 } as const;
 import { TEAMMATE_JOIN_EVENT, teammateFromDrag, type TeammatePayload } from '@/lib/team/teammate';
-import { useGuestRoom } from '@/lib/useGuestRoom';
-import { guestMediaTransport } from '@/lib/guestRoomApi';
+import { getGuestDisplayName, guestMediaTransport } from '@/lib/guestRoomApi';
 import { useCanvasLiveRoom } from '@/lib/live/useCanvasLiveRoom';
 import { GuestInviteLink } from '@/components/guest/GuestInviteLink';
-import { getActiveGuestRoom, getGuestDisplayName, setGuestDisplayName } from '@/lib/guestRoomApi';
 import { CanvasRunAbortedError, GuestAiUnavailableError, isCanvasRunAborted, runCreationCanvasAi, type CanvasAiCompletion } from '@/lib/creationCanvasAi';
 import { canvasNoticesFrom } from '@/lib/canvasNotices';
 import { canvasTranscriptForModel } from '@/lib/canvasTranscript';
@@ -901,6 +899,20 @@ export function projectEvermindNodePatch(head: ProjectEvermindHead, activity: Pr
 function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen = false, initialBuildOpen = false, initialBuildChatId, initialBuildTicket, initialPrompt, initialPresent = false, initialModelComparisonIds = [], stageActive = true }: { sessionId: string; persistence: 'local' | 'server'; initialFocusId?: string | null; initialShareOpen?: boolean; initialBuildOpen?: boolean; initialBuildChatId?: number | null; initialBuildTicket?: { kind: string; ref: string } | null; initialPrompt?: string | null; initialPresent?: boolean; initialModelComparisonIds?: readonly string[]; stageActive?: boolean }) {
   const fmt = useFormat();
   const t = useTranslations('creationCanvas');
+  /**
+   * The plain-module translator, built ONCE.
+   *
+   * Three places had written the same cast inline — the materialisation deps, the
+   * card-act runner and the shared room — because `useTranslations` returns a
+   * key-typed function and `CanvasTextTranslator` is the widened seam a use case
+   * takes (see `domains/canvas/domain/canvasText.ts`). A third copy is what the
+   * DRY rule exists to stop, and a fourth would have been written by whoever adds
+   * the next use case.
+   */
+  const canvasText = useMemo<CanvasTextTranslator>(
+    () => (key, values) => t(key as never, values as never),
+    [t],
+  );
   /** The shared metric vocabulary — labels, units and comparisons, identical to
    *  the superadmin Value outcomes panel. See `lib/outcomeMetrics.ts`. */
   const outcomeText = useTranslations('outcomeMetrics') as unknown as OutcomeTranslator;
@@ -1435,48 +1447,28 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * localStorage stays the local cache, so a dropped connection still leaves the
    * board on the device that was editing it.
    */
-  const [roomCode, setRoomCode] = useState<string | null>(null);
-  const [roomBusy, setRoomBusy] = useState(false);
-  const guestName = useRef('');
-  useEffect(() => {
-    if (persistence !== 'local') return;
-    setRoomCode(getActiveGuestRoom());
-    guestName.current = getGuestDisplayName();
-  }, [persistence]);
-  const room = useGuestRoom(persistence === 'local' ? roomCode : null, { name: guestName.current });
-  const inRoom = persistence === 'local' && !!roomCode;
-  const announceCanvas = room.announceCanvas;
   /**
-   * This device's half of the shared session — which room, whether it has been
-   * read, and what was last exchanged with it. Three `useRef`s used to hold that
-   * here, along with the echo-suppression and hydration-gate rules that make a
-   * shared board work; both rules now live in `application/ShareCanvasSession.ts`
-   * where a test can reach them without mounting the canvas.
+   * SHARED FREE SESSION, and the account-less board's ONE write.
    *
-   * The `announce` callback comes off the live room subscription, so it is fed to
-   * the gateway through a ref: the sync object is built once and must not be torn
-   * down and rebuilt every time the room re-renders, which would reset the
-   * hydration gate mid-session — the exact condition that wipes a host's board.
+   * Two state values, three refs, two effects and four callbacks used to sit here
+   * for this. They are `useSharedCanvasRoom` now — the first module of the canvas
+   * PRESENTATION layer, and the shape that actually shrinks this component: a hook
+   * that OWNS its state rather than a function this function calls while keeping it.
+   *
+   * What crosses the line is deliberately narrow: what this board is, how to speak,
+   * how to put a board on screen, and how to read the one being held. Nothing about
+   * nodes, edges or React setters goes through it.
    */
-  const announceRef = useRef(announceCanvas);
-  announceRef.current = announceCanvas;
-  const sharedRef = useRef<SharedSession<LocalCreationSnapshot> | null>(null);
-  if (!sharedRef.current) sharedRef.current = createSharedSession<LocalCreationSnapshot>(createGuestRoomGateway(() => announceRef.current()));
-  const shared = sharedRef.current;
-  useEffect(() => { shared.enter(inRoom ? roomCode : null); }, [inRoom, roomCode, shared]);
-
-  /**
-   * The ONE write for an account-less canvas: this device, and — when the session
-   * is shared — the room everybody else is reading. Called by every local save
-   * path, so a shared board can never be updated by one of them and missed by
-   * another.
-   */
-  const persistSnapshot = useCallback((snapshot: LocalCreationSnapshot) => {
-    writeLocalCreationSession(sessionId, snapshot);
-    void shared.push(serializeForRoom(snapshot), t).then((outcome) => {
-      if (outcome && !outcome.stored) setNotice(outcome.notice);
-    });
-  }, [sessionId, shared, setNotice, t]);
+  const sharedRoom = useSharedCanvasRoom({
+    enabled: persistence === 'local',
+    sessionId,
+    t: canvasText,
+    notify: setNotice,
+    adopt: (snapshot) => applyRoomSnapshotRef.current(snapshot),
+    currentSnapshot: () => currentSnapshotRef.current(),
+  });
+  const inRoom = sharedRoom.active;
+  const persistSnapshot = sharedRoom.persist;
   const [loadingSession, setLoadingSession] = useState(persistence === 'server');
   const [realtimeState, setRealtimeState] = useState<'local' | 'connecting' | 'online' | 'reconnecting' | 'offline'>(persistence === 'local' ? 'local' : 'connecting');
   const [members, setMembers] = useState<CreationSessionDetail['members']>([]);
@@ -2031,8 +2023,51 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * which is how a two-person session turns into an infinite sync loop. The echo
    * half of that now belongs to `ShareCanvasSession`, which is where it is tested.
    */
-  const applyRoomSnapshot = useCallback((snapshot: LocalCreationSnapshot, serialized: string) => {
-    shared.noteExchanged(serialized);
+  /**
+   * What this browser is holding, for the use case that decides whether a
+   * collaborator's board may replace it.
+   *
+   * A function rather than a value because the answer must be read at the MOMENT
+   * of the decision: these are refs precisely so a poll firing eight seconds after
+   * its effect closed over them still sees the board as it is now.
+   */
+  const localBoardState = useCallback((): LocalBoardState => ({
+    saving: saveInFlight.current,
+    signature: currentGraph.current,
+    savedSignature: lastSavedGraph.current,
+    revision: revision.current,
+  }), []);
+
+  /**
+   * Put an adopted board on screen. The ONE place a collaborator's board lands,
+   * for both channels that can carry one.
+   *
+   * A refusal is silent on purpose: "your unsaved edits kept a newer board out"
+   * is not something to interrupt someone with, and the next poll or frame will
+   * carry it again once the save lands.
+   */
+  const applyRemoteBoard = useCallback((decision: AdoptRemoteBoardDecision, notice: string) => {
+    if (!decision.adopt) return;
+    setNodes(decision.board.nodes);
+    setEdges(decision.board.edges);
+    setPersistedObjectIds(new Set(decision.board.nodes.map((node) => node.id)));
+    setTitle(decision.title);
+    setAllMembers(decision.members as CreationSessionDetail['members']);
+    revision.current = decision.revision;
+    lastSavedGraph.current = decision.signature;
+    currentGraph.current = decision.signature;
+    // A collaborator on a newer deployment can save a kind this build does not
+    // declare. Both of these doors used to drop those objects in silence while
+    // the initial load, three hundred lines away, said so.
+    if (decision.rejected.length) setNotice(t('objectsRejected', { count: decision.rejected.length, kinds: rejectedObjectKinds(decision.rejected) }));
+    else setNotice(notice);
+  }, [setEdges, setNodes, setNotice, t]);
+
+  const applyRoomSnapshot = useCallback((snapshot: LocalCreationSnapshot) => {
+    // `noteExchanged` is NOT called here any more: the shared session moved into
+    // `useSharedCanvasRoom`, and its `pull` records the exchange before it calls the
+    // adopt callback — which is this function, and its only caller. Calling it here
+    // would be the same fact written twice, and the binding no longer exists.
     lastSavedGraph.current = boardSignature(snapshot);
     setTitle(snapshot.title);
     setNodes(snapshot.nodes);
@@ -2047,46 +2082,34 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     // The viewport is personal — following someone else's pan mid-edit is
     // disorienting, and each participant keeps their own place on the board.
     writeLocalCreationSession(sessionId, snapshot);
-  }, [sessionId, setEdges, setNodes, shared]);
-
-  // Pull the shared board: once on entering a room (this is how a LATE joiner
-  // sees anything at all) and again whenever a peer announces a new one. Whether
-  // the payload is adoptable — and opening the hydration gate either way, so a
-  // room with no board yet lets THIS device's board become the shared one — is
-  // the use case's decision, not this effect's.
-  useEffect(() => {
-    if (persistence !== 'local' || !roomCode) return;
-    let cancelled = false;
-    void shared.pull(parseLocalCreationSnapshot).then((decision) => {
-      if (cancelled || !decision?.adopt) return;
-      applyRoomSnapshot(decision.snapshot, decision.board);
-      hydrated.current = true;
-    });
-    return () => { cancelled = true; };
-  }, [persistence, roomCode, room.canvasVersion, applyRoomSnapshot, shared]);
+    // A joiner mounts on the starter board and this is the first real one it has
+    // seen; the load gate opens here so the save debounce may start writing.
+    hydrated.current = true;
+  }, [sessionId, setEdges, setNodes]);
 
   /**
-   * Turn this private board into a shared session. The board comes WITH it —
-   * "invite people to this canvas" that starts them on an empty one would be a
-   * different (and worse) feature.
+   * The board as it stands, in the shape localStorage keeps it.
+   *
+   * ONE builder. It was written out three times — the autosave debounce, the
+   * viewport write and the moment sharing starts — and a fourth caller copying
+   * whichever one it happened to sit next to is how a field starts being carried
+   * by two of the three.
    */
-  const startSharedSession = useCallback(async () => {
-    setRoomBusy(true);
-    const name = guestName.current.trim() || t('sharedDefaultHostName');
-    setGuestDisplayName(name);
-    guestName.current = name;
-    const snapshot = localCreationSnapshot(sessionId, { title, timeline: timeline.map((message) => ({ clientMessageId: message.clientMessageId, role: message.messageRole, body: message.body, metadata: message.metadata, createdAt: message.createdAt })), nodes, edges, viewport: viewportRef.current });
-    const result = await shared.start({ hostName: name, title, board: serializeForRoom(snapshot) }, t);
-    if (result.started) setRoomCode(result.code);
-    setRoomBusy(false);
-    setNotice(result.notice);
-  }, [edges, nodes, sessionId, setNotice, shared, t, timeline, title, viewportRef]);
+  const currentSnapshot = useCallback((viewport = viewportRef.current) => localCreationSnapshot(sessionId, {
+    title,
+    timeline: timeline.map((message) => ({ clientMessageId: message.clientMessageId, role: message.messageRole, body: message.body, metadata: message.metadata, createdAt: message.createdAt })),
+    nodes,
+    edges,
+    viewport,
+  }), [edges, nodes, sessionId, timeline, title, viewportRef]);
+  const currentSnapshotRef = useRef(currentSnapshot);
+  currentSnapshotRef.current = currentSnapshot;
 
-  /** Stop sharing on THIS device. The board stays here; the room runs on for anyone else. */
-  const leaveSharedSession = useCallback(async () => {
-    setRoomCode(null);
-    setNotice((await shared.stop(t)).notice);
-  }, [setNotice, shared, t]);
+  // Both are read by the hook through a ref, so its pull effect is driven by the
+  // ROOM changing rather than by this component re-rendering — which would
+  // re-pull the shared board on every keystroke.
+  const applyRoomSnapshotRef = useRef(applyRoomSnapshot);
+  applyRoomSnapshotRef.current = applyRoomSnapshot;
 
   const evermindBindingKey = useMemo(() => JSON.stringify(nodes.flatMap((node) => {
     const match = node.data.kind === 'evermind' && typeof node.data.resourceId === 'string'
@@ -2177,7 +2200,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const signature = boardSignature(board);
       if (signature === lastSavedGraph.current) return;
       if (persistence === 'local') {
-        const snapshot = localCreationSnapshot(sessionId, { title, timeline: timeline.map((message) => ({ clientMessageId: message.clientMessageId, role: message.messageRole, body: message.body, metadata: message.metadata, createdAt: message.createdAt })), nodes, edges, viewport: viewportRef.current });
+        const snapshot = currentSnapshot();
         persistSnapshot(snapshot);
         lastSavedGraph.current = signature;
         noteSaveState(t('noticeSavedOnDevice'));
@@ -2250,21 +2273,13 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         const followed = relayed ? undefined : presence.members.find((member) => member.userId === followingUserId && member.viewport && typeof member.viewport.x === 'number' && typeof member.viewport.y === 'number' && typeof member.viewport.zoom === 'number');
         if (followed?.viewport) void flowRef.current?.setViewport({ x: Number(followed.viewport.x), y: Number(followed.viewport.y), zoom: Number(followed.viewport.zoom) }, { duration: 350 });
         if (presence.currentUserId) setCurrentUserId(presence.currentUserId);
-        if (presence.revision <= revision.current || saveInFlight.current || currentGraph.current !== lastSavedGraph.current) return;
-        const detail = await creationSessionsApi.get(sessionId);
+        // The poll's own revision is the cheap probe; whether the board may
+        // actually be replaced — and what happens to the objects this build
+        // cannot render — belongs to `AdoptRemoteBoard`.
+        if (presence.revision <= revision.current) return;
+        const decision = await adoptRemoteBoard(sessionId, localBoardState(), canvasSessionGateway);
         if (stopped) return;
-        const remoteRevision = detail.session.canvasRevision ?? detail.session.revision ?? 1;
-        if (remoteRevision <= revision.current) return;
-        const remote = flowFromSession(detail);
-        setNodes(remote.nodes);
-        setEdges(remote.edges);
-        setPersistedObjectIds(new Set(remote.nodes.map((node) => node.id)));
-        setTitle(detail.session.title);
-        setAllMembers(detail.members);
-        revision.current = remoteRevision;
-        lastSavedGraph.current = JSON.stringify(remote);
-        currentGraph.current = lastSavedGraph.current;
-        setNotice(t('noticeUpdatedByCollaborator'));
+        applyRemoteBoard(decision, t('noticeUpdatedByCollaborator'));
       } catch { /* Presence and polling are best-effort; local edits continue. */ }
     };
     void reconcile();
@@ -2287,23 +2302,16 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     let retryTimer: number | null = null;
     let retryMs = 1_000;
     const syncRevision = async (hint?: number) => {
-      if (stopped || saveInFlight.current || currentGraph.current !== lastSavedGraph.current) return;
+      if (stopped) return;
       try {
+        // `events` is this channel's cheap probe, exactly as the poll's payload is
+        // the other channel's. Everything after it is the same act, and lives in
+        // one place so the two doors cannot answer differently.
         const caughtUp = await creationSessionsApi.events(sessionId, revision.current);
-        const remoteRevision = Math.max(Number(hint || 0), Number(caughtUp.revision || 0));
-        if (remoteRevision <= revision.current) return;
-        const detail = await creationSessionsApi.get(sessionId);
+        if (Math.max(Number(hint || 0), Number(caughtUp.revision || 0)) <= revision.current) return;
+        const decision = await adoptRemoteBoard(sessionId, localBoardState(), canvasSessionGateway);
         if (stopped) return;
-        const remote = flowFromSession(detail);
-        setNodes(remote.nodes);
-        setEdges(remote.edges);
-        setPersistedObjectIds(new Set(remote.nodes.map((node) => node.id)));
-        setTitle(detail.session.title);
-        setAllMembers(detail.members);
-        revision.current = detail.session.canvasRevision ?? detail.session.revision ?? remoteRevision;
-        lastSavedGraph.current = JSON.stringify(remote);
-        currentGraph.current = lastSavedGraph.current;
-        setNotice(t('noticeUpdatedLive'));
+        applyRemoteBoard(decision, t('noticeUpdatedLive'));
       } catch { /* The presence reconciliation remains a durable fallback. */ }
     };
     const connect = () => {
@@ -2518,16 +2526,16 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const publishAnchor = liveSession?.publishAnchor;
   useEffect(() => {
     if (!publishAnchor) return undefined;
-    if (persistence !== 'local' || !inRoom || !roomCode) { publishAnchor(null); return undefined; }
+    if (persistence !== 'local' || !sharedRoom.code) { publishAnchor(null); return undefined; }
     publishAnchor({
-      roomKey: roomCode,
+      roomKey: sharedRoom.code,
       label: t('sharedCallLabel'),
       tenantId: null,
-      participant: { name: guestName.current, ref: 'self' },
+      participant: { name: getGuestDisplayName(), ref: 'self' },
       transport: guestMediaTransport,
     });
     return () => publishAnchor(null);
-  }, [inRoom, persistence, publishAnchor, roomCode, t]);
+  }, [persistence, publishAnchor, sharedRoom.code, sharedRoom.displayName, t]);
 
   const publishPresence = liveSession?.publishPresence;
   useEffect(() => {
@@ -3038,8 +3046,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    *  how to build an object of a kind (the factory reads the object registry, which
    *  the application layer must not import). */
   const materializeDeps = useMemo(
-    () => ({ t: ((key: string, values?: Record<string, string | number>) => t(key as never, values as never)) as CanvasTextTranslator, createObject: newNode }),
-    [t],
+    () => ({ t: canvasText, createObject: newNode }),
+    [canvasText],
   );
 
   const visualizeDataset = useCallback(() => {
@@ -3287,7 +3295,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     // A follower is watching this pan happen, not reading about it eight seconds later.
     if (persistence === 'server') sendPresence({ viewport });
     if (persistence !== 'local' || !hydrated.current) return;
-    const snapshot = localCreationSnapshot(sessionId, { title, timeline: timeline.map((message) => ({ clientMessageId: message.clientMessageId, role: message.messageRole, body: message.body, metadata: message.metadata, createdAt: message.createdAt })), nodes, edges, viewport });
+    const snapshot = currentSnapshot(viewport);
     persistSnapshot(snapshot);
   }, [edges, nodes, persistence, sendPresence, sessionId, storageKey, timeline, title]);
 
@@ -10120,19 +10128,6 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     void flowRef.current?.fitView({ nodes: [{ id: nodeId }], padding: .35, maxZoom: 1.1, duration: 320 });
   }, [setSurface]);
 
-  /**
-   * Move a dated object to another day, from the calendar.
-   *
-   * Writes back into the FIELD the date was read from rather than into a calendar of its
-   * own — `scheduledAt` for a commitment, whichever deadline field the kind declared
-   * otherwise. That is what lets the calendar be a projection: there is no second store
-   * to keep in step, so a send moved on the month is moved on its card, and a trigger
-   * armed against that deadline re-evaluates against the new one for free.
-   */
-  const rescheduleObject = useCallback((nodeId: string, field: string, iso: string) => {
-    updateNodeData(nodeId, { [field]: iso } as Partial<CreationNodeData>);
-  }, [updateNodeData]);
-
   /** A file the library offers: a delivered artifact opens, an authored object
    * exports through the path above. */
   const downloadCanvasFile = useCallback((file: CanvasFile) => {
@@ -10202,7 +10197,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       objectId,
       action,
       persistence,
-      t: ((key: string, values?: Record<string, string | number>) => t(key as never, values as never)) as CanvasTextTranslator,
+      t: canvasText,
       board: { objects: nodesRef.current, create: newNode },
     });
     if (!outcome) return;
@@ -10817,10 +10812,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const rosterMembers = useMemo(
     () => (persistence !== 'local'
       ? members
-      : inRoom && room.participants.length
-        ? room.participants.map((person) => ({ userId: `guest:${person.name}:${person.joinedAt}`, displayName: person.name, role: person.isHost ? ('owner' as const) : ('editor' as const) }))
+      : inRoom && sharedRoom.participants.length
+        ? sharedRoom.participants.map((person) => ({ userId: `guest:${person.name}:${person.joinedAt}`, displayName: person.name, role: person.isHost ? ('owner' as const) : ('editor' as const) }))
         : [{ userId: 'local', displayName: t('you'), role: 'owner' as const }]),
-    [inRoom, members, persistence, room.participants, t],
+    [inRoom, members, persistence, sharedRoom.participants, t],
   );
 
   const brainSurfaceOpen = !presentMode && brainDock.open;
@@ -11255,20 +11250,20 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             {/* NO ACCOUNT: invite by link into a shared free session. Everyone edits
                 the same board and shares one free-message allowance; signing up is
                 offered as the way to KEEP it, not as the price of sharing it. */}
-            {persistence === 'local' ? (inRoom && roomCode ? <>
-              <GuestInviteLink code={roomCode} surface="canvas" full={room.participants.length >= (room.state?.maxParticipants ?? 0)} />
-              <div className={styles.shareRoomPeople} aria-label={t('sharedPeopleHere', { count: room.participants.length })}>
-                {room.participants.map((person) => <span key={`${person.name}-${person.joinedAt}`}>{person.name}{person.isHost ? ` ${t('sharedHostTag')}` : ''}</span>)}
+            {persistence === 'local' ? (sharedRoom.code ? <>
+              <GuestInviteLink code={sharedRoom.code} surface="canvas" full={sharedRoom.full} />
+              <div className={styles.shareRoomPeople} aria-label={t('sharedPeopleHere', { count: sharedRoom.participants.length })}>
+                {sharedRoom.participants.map((person) => <span key={`${person.name}-${person.joinedAt}`}>{person.name}{person.isHost ? ` ${t('sharedHostTag')}` : ''}</span>)}
               </div>
               <div className={styles.shareRoomActions}>
-                <button type="button" onClick={() => void leaveSharedSession()}>{t('sharedStopSharing')}</button>
+                <button type="button" onClick={() => void sharedRoom.leave()}>{t('sharedStopSharing')}</button>
                 <button type="button" onClick={() => requireAccount('save', t('gateSaveSessionTitle'), t('gateSaveBody'))}>{t('sharedSaveToKeep')}</button>
               </div>
               {/* No call button here. "Get someone in here" and "talk to them" are one
                   errand, but they are not one CONTROL: the call is a session action in
                   the bar on every surface and in both auth states, and a second copy in
                   this panel would be one decision with two homes. */}
-            </> : <button disabled={roomBusy} onClick={() => void startSharedSession()}>{roomBusy ? t('sharedStarting') : t('sharedStart')}</button>) : <>
+            </> : <button disabled={sharedRoom.busy} onClick={() => void sharedRoom.start()}>{sharedRoom.busy ? t('sharedStarting') : t('sharedStart')}</button>) : <>
               <div><input value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} placeholder={t('emailPlaceholder')} /><select aria-label={t('invitationRole')} value={inviteRole} onChange={(event) => setInviteRole(event.target.value as CreationSessionSummary['role'])}><option value="viewer">{t('roleViewer')}</option><option value="commenter">{t('roleCommenter')}</option><option value="editor">{t('roleEditor')}</option><option value="runner">{t('roleRunner')}</option><option value="owner">{t('roleOwner')}</option></select><button disabled={!inviteEmail.trim()} onClick={() => { void creationSessionsApi.invite(sessionId, { email: inviteEmail.trim() }, inviteRole).then(async (result) => { if ('acceptPath' in result) { await copyTextToClipboard(`${canvasWebOrigin()}${result.acceptPath}`); setPendingInvitations((current) => [...current.filter((item) => item.id !== result.invitationId), { id: result.invitationId, email: result.email, role: result.role as CreationSessionSummary['role'], expiresAt: result.expiresAt, acceptedAt: null, revokedAt: null, createdAt: new Date().toISOString() }]); setNotice(result.emailSent ? t('invitationEmailed') : t('invitationSavedLinkCopied')); } else { const detail = await creationSessionsApi.get(sessionId); setAllMembers(detail.members); setNotice(result.emailSent ? t('collaboratorInvitedEmail') : t('collaboratorInvited')); } setInviteEmail(''); }).catch((error) => setNotice(error instanceof Error ? error.message : t('inviteFailed'))); }}>{t('invite')}</button></div>
               {sessionRole === 'owner' && <div aria-label={t('sessionMembers')}>{allMembers.map((member) => <div key={member.userId} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', alignItems: 'center', gap: 6, marginTop: 8 }}>
                 <span>{member.displayName || t('collaborator')}{member.userId === currentUserId ? ` ${t('youSuffix')}` : ''}</span>
@@ -11722,18 +11717,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
               onExit={() => setSurface('graph')}
               onOpenObject={revealObject}
             />,
-            // THE MONTH, and the second board-scoped surface for the same reason as the
-            // first: it is about every dated card at once, so there is no card to enter
-            // it from. It owns no dates — it folds the ones the board already carries and
-            // writes a drag back into the field each came from, which is why moving a
-            // send here moves it on the card too.
-            calendar: <CanvasCalendarSurface
-              nodes={nodes}
-              onExit={() => setSurface('graph')}
-              onOpenObject={revealObject}
-              {...(cardsEditable ? { onReschedule: rescheduleObject } : {})}
-            />,
-            // The four medium runtimes. Each takes the object the surface is ABOUT, so
+            // The five medium runtimes. Each takes the object the surface is ABOUT, so
             // each is rendered only when one resolves — `surfaceNode` going null is what
             // the effect above turns back into the board.
             page: surfaceNode ? <CanvasPageSurface
@@ -11783,6 +11767,26 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
               objectId={surfaceNode.id}
               onExit={() => setSurface('graph')}
               {...(cardsEditable ? { onEdit: (patch: Partial<CreationNodeData>) => updateNodeData(surfaceNode.id, patch) } : {})}
+            /> : null,
+            // THE MONTH. It used to be a BOARD surface in the rail — one grid welded to
+            // one reading of one board. A calendar is a thing a person can have several
+            // of (releases, sends, leave, on-call) and a rail entry is a mode you can
+            // only be in one of, so the reading became a value on a `calendar` object and
+            // this became the surface that object opens at full size.
+            //
+            // Note how little the host assembles: the calendar resolves its own source,
+            // reads its own window and routes its own writes. That is deliberate — this
+            // file is the standing god class, and "know how the calendar fetches" is the
+            // kind of knowledge that made it one.
+            calendar: surfaceNode ? <CanvasCalendarSurface
+              data={surfaceNode.data}
+              nodes={nodes}
+              onExit={() => setSurface('graph')}
+              onOpenObject={revealObject}
+              {...(cardsEditable ? {
+                onEdit: (patch: Partial<CreationNodeData>) => updateNodeData(surfaceNode.id, patch),
+                onEditObject: updateNodeData,
+              } : {})}
             /> : null,
           }}
         />

@@ -12598,7 +12598,8 @@
           "signal": "ein Schreibvorgang hat ausstehende Arbeit signalisiert",
           "floor": "das Mindestintervall ist abgelaufen",
           "idle": "nichts signalisiert und das Mindestintervall ist nicht fällig",
-          "kv-unavailable": "KV ist nicht erreichbar, das Gate lässt daher durch"
+          "kv-unavailable": "KV ist nicht erreichbar, das Gate lässt daher durch",
+          "due": "ein Zeitplan wurde vor dem Mindestintervall fällig"
         },
         "floorInterval": "Mindestintervall",
         "overridden": "überschrieben",
@@ -12608,7 +12609,15 @@
         "asap": "Nächster Tick",
         "explainIdle": "Ein untätiges Gate bedeutet nicht, dass nichts aussteht. Das Signal wird nur gesetzt, wenn ein Ticket seine Gates tatsächlich passiert – ein Board voller blockierter Tickets signalisiert also nichts und wartet auf den Mindest-Durchlauf.",
         "kvUnbound": "AUTH_CACHE_KV ist nicht gebunden – das Gate lässt durch und jeder Tick führt den Durchlauf aus.",
-        "signalled": "Ausstehende Arbeit signalisiert – der nächste geplante Tick führt den Durchlauf aus."
+        "signalled": "Ausstehende Arbeit signalisiert – der nächste geplante Tick führt den Durchlauf aus.",
+        "nextDue": "Nächster fälliger Zeitplan",
+        "noSchedules": "Nichts aktiviert",
+        "dueState": {
+          "none": "kein Zeitplan aktiviert",
+          "future": "wartend",
+          "due": "jetzt fällig",
+          "stuck": "blockiert"
+        }
       },
       "actions": {
         "runFrequent": "▶ 5-Minuten-Tick ausführen",
@@ -12655,6 +12664,12 @@
         "title": "Geplanten Lauf erzwingen?",
         "dispatch": "„{target}“ auszuführen startet echte Agenten-Läufe in allen Workspaces ({count} der ausgewählten Läufe verteilen Arbeit). Das verbraucht Tokens und ist kein Probelauf.",
         "confirmLabel": "Jetzt ausführen"
+      },
+      "stall": {
+        "heading": "{count, plural, one {Geplante Arbeit ist blockiert — # Zeitplantabelle} other {Geplante Arbeit ist blockiert — # Zeitplantabellen}}",
+        "since": "Blockiert seit {since}, beobachtet in {observations, plural, one {# Durchlauf} other {# Durchläufen}}.",
+        "explain": "Diese Zeilen sind seit mehr als einem vollen Mindestintervall fällig — jeder Sweep, der sie abarbeiten könnte, ist also bereits mindestens einmal gelaufen und hat es nicht getan. Das Gate behandelt sie nicht mehr als fällig, weil es sonst die Datenbank bei jedem Tick wecken würde; sie laufen jetzt nur noch im Mindestintervall-Sweep. Prüfen Sie unten, ob der zuständige Sweep pausiert ist oder fehlschlägt.",
+        "overdue": "fällig {due}, {overdue} überfällig"
       }
     },
     "broadcasts": {
@@ -13744,7 +13759,8 @@
     "minutesFailed": "Protokoll konnte nicht erstellt werden.",
     "pastMeetings": "Vergangene Meetings",
     "minutesAvailable": "Protokoll bereit",
-    "viewNotes": "Notizen ansehen"
+    "viewNotes": "Notizen ansehen",
+    "calendarLabel": "Besprechungskalender"
   },
   "brainLauncher": {
     "open": "Brain-Assistent öffnen",
@@ -18467,7 +18483,8 @@
       "brandKit": "Marken-Kit",
       "audience": "Zielgruppe",
       "stopwatch": "Stoppuhr",
-      "transclusion": "Transklusion"
+      "transclusion": "Transklusion",
+      "calendar": "Kalender"
     },
     "twilioSetup": {
       "title": "Twilio-Integration",
@@ -20822,7 +20839,8 @@
         "funnel": "Funnel",
         "book": "Buch",
         "sequence": "Sequenz",
-        "poll": "Umfrage"
+        "poll": "Umfrage",
+        "calendar": "Kalender"
       },
       "field": {
         "funnelDomain": "Funnel",
@@ -20871,7 +20889,12 @@
         "pollResponseCount": "Antworten",
         "pollResults": "Ergebnisse",
         "pollAnswers": "Was gesagt wurde",
-        "pollCorrectRate": "Richtig"
+        "pollCorrectRate": "Richtig",
+        "calendarSource": "Quelle",
+        "calendarDefaultView": "Öffnet mit",
+        "calendarEvents": "Termine",
+        "calendarEventCount": "Gespeicherte Termine",
+        "calendarNextEvent": "Als Nächstes"
       },
       "column": {
         "stage": "Phase",
@@ -20901,11 +20924,16 @@
         "repliedAtISO": "Geantwortet",
         "id": "ID",
         "label": "Beschriftung",
-        "correct": "Richtig"
+        "correct": "Richtig",
+        "startISO": "Beginn",
+        "endISO": "Ende",
+        "details": "Details",
+        "category": "Kategorie"
       },
       "status": {
         "manuscript": "Manuskript",
-        "draft": "Entwurf"
+        "draft": "Entwurf",
+        "noSource": "Keine Quelle"
       }
     },
     "noticeGateEvaluated": "Freigabekriterium anhand der Läufe und Fehler auf diesem Board bewertet — {score} % der Kriterien erfüllt.",
@@ -21693,16 +21721,9 @@
       "exitFullscreen": "Vollbild beenden",
       "calendar": {
         "label": "Kalender",
-        "enter": "Den Monat planen",
-        "active": "Du bist im Kalender",
-        "open": "Kalender öffnen",
-        "regionLabel": "Diese Arbeitsfläche, als ein Monat gelesen",
-        "navLabel": "Welcher Monat",
-        "previousMonth": "Voriger Monat",
-        "nextMonth": "Nächster Monat",
-        "summary": "{scheduled} geplant · {dated} mit Datum · {undated} ohne Datum",
-        "gridLabel": "Die Tage dieses Monats",
-        "conflict": "An diesem Tag liegt bereits etwas anderes"
+        "enter": "Kalender öffnen",
+        "active": "Sie sind im Kalender",
+        "open": "Kalender öffnen"
       }
     },
     "miro": {
@@ -25681,7 +25702,8 @@
     "columnRoadmapItem": "Roadmap-Eintrag",
     "emptyProjects": "Noch keine geplanten Projekte. Füge Start- oder Fälligkeitsdaten hinzu, um sie auf der Zeitachse zu sehen.",
     "emptyTasks": "Noch keine geplanten Aufgaben. Füge Start- oder Fälligkeitsdaten hinzu, um sie auf der Zeitachse zu sehen.",
-    "emptyRoadmapItems": "Noch keine geplanten Roadmap-Einträge. Füge Zieldaten hinzu, um sie auf der Zeitachse zu sehen."
+    "emptyRoadmapItems": "Noch keine geplanten Roadmap-Einträge. Füge Zieldaten hinzu, um sie auf der Zeitachse zu sehen.",
+    "calendarLabel": "Lieferkalender"
   },
   "collections": {
     "loading": "Mahnliste wird gelesen …",
@@ -26162,5 +26184,63 @@
     "votingClosed": "Die Abstimmung ist geschlossen",
     "votingOpen": "Die Abstimmung läuft",
     "wordPlaceholder": "Ein oder zwei Wörter"
+  },
+  "calendar": {
+    "regionLabel": "Kalender",
+    "detailLabel": "Termindetails",
+    "gridLabel": "Tage",
+    "navLabel": "Durch die Zeit bewegen",
+    "viewLabel": "Wie viel anzeigen",
+    "previous": "Zurück",
+    "next": "Weiter",
+    "today": "Heute",
+    "add": "Neuer Termin",
+    "allDay": "Ganztägig",
+    "untitled": "Termin ohne Titel",
+    "empty": "In diesem Zeitraum ist nichts geplant.",
+    "loading": "Wird gelesen…",
+    "readFailed": "Die Quelle dieses Kalenders konnte nicht gelesen werden.",
+    "summary": "{shown} sichtbar · {total} insgesamt · {undated} ohne Datum",
+    "more": "+{count} weitere",
+    "conflict": "Ein weiterer Eintrag teilt sich Tag und Kategorie",
+    "readOnly": "Diese Quelle ist hier schreibgeschützt.",
+    "noDetails": "Zu diesem Eintrag wurden keine Details geschrieben.",
+    "openSource": "Original öffnen",
+    "openLink": "Link öffnen",
+    "edit": "Bearbeiten",
+    "delete": "Löschen",
+    "confirmDelete": "Löschen bestätigen",
+    "close": "Schließen",
+    "save": "Speichern",
+    "cancel": "Abbrechen",
+    "editTitle": "Termin bearbeiten",
+    "newTitle": "Neuer Termin",
+    "sourceLabel": "Quelle",
+    "view": {
+      "day": "Tag",
+      "week": "Woche",
+      "month": "Monat"
+    },
+    "source": {
+      "own": "Dieser Kalender",
+      "board": "Datierte Karten auf dieser Fläche",
+      "meetings": "Besprechungen",
+      "tasks": "Aufgaben",
+      "releases": "Releases und Deployments",
+      "holidays": "Betriebsfeiertage",
+      "connected": "Verbundener Kalender"
+    },
+    "field": {
+      "subject": "Betreff",
+      "subjectPlaceholder": "Was passieren wird",
+      "details": "Details",
+      "detailsPlaceholder": "Was jemand beim Öffnen wissen muss",
+      "starts": "Beginn",
+      "ends": "Ende",
+      "allDay": "Ganztägig",
+      "category": "Kategorie",
+      "categoryPlaceholder": "E-Mail, Deployment, Feiertag…"
+    },
+    "undatedLabel": "Noch kein Datum"
   }
 }

@@ -52,6 +52,21 @@ const FLOOR_TS_KEY = 'cron:last-floor-sweep';
 const NEXT_DUE_KEY = 'cron:next-due';
 
 /**
+ * KV key: the JSON {@link ScheduleStallReport} describing armed schedule rows that
+ * have been due for longer than one floor interval — i.e. rows the sweeps have
+ * already had their chance at and did not clear.
+ *
+ * This is the OTHER half of the bound on the `due` branch. The gate deliberately
+ * stops treating a very old due time as a fresh one (see {@link classifyDueTime}),
+ * because an unbounded check would pin the gate open on every tick and undo the
+ * autosuspend this module exists to buy. Declining to act on it, though, is not the
+ * same as noticing it: without this key a jammed schedule is indistinguishable from
+ * an idle platform — both read as "nothing due" and quietly run at floor cadence.
+ * Storing the observation lets `GET /api/admin/cron` say which it is.
+ */
+const SCHEDULE_STALL_KEY = 'cron:schedule-stall';
+
+/**
  * Max time an idle platform can leave a missed signal unprocessed. The live path
  * (maybeAutoRunOnLaneEntry) already dispatches the common case instantly and the
  * signal covers dropped kickoffs, so the floor only backstops a signal that was
@@ -102,8 +117,64 @@ const NO_SCHEDULES = 'none';
  */
 const NEXT_DUE_TTL_SECONDS = 24 * 60 * 60;
 
+/**
+ * TTL on the stall report. Long, because a jam is a condition that PERSISTS and the
+ * report carries `firstDetectedMs` — an operator opening the cron panel a day later
+ * should still see how long it has been jammed, not a freshly-reset counter. It is
+ * cleared explicitly the moment nothing is stuck (see {@link publishNextDue}), so the
+ * TTL only bounds a report whose publisher stopped running entirely.
+ */
+const SCHEDULE_STALL_TTL_SECONDS = 7 * 24 * 60 * 60;
+
 function kv(env: Env): KVNamespace | undefined {
   return env.AUTH_CACHE_KV;
+}
+
+/**
+ * How a published next-due stamp reads against the clock.
+ *
+ * `stuck` is the case this module used to have no word for: the row IS due, but by
+ * more than a whole floor interval — every sweep that could clear it has already run
+ * at least once and did not. That is a jam (a sweep switched off in cron controls, a
+ * generator erroring past its retries), not a schedule waiting its turn, and the two
+ * want opposite responses: run the fan-out for a `due` row, RAISE a `stuck` one.
+ *
+ * ONE predicate, two callers — {@link evaluateCronGate} decides whether to run from
+ * it and {@link publishNextDue} decides what to raise from it — so the boundary
+ * between "due" and "stuck" can never drift between the gate and the diagnostic.
+ */
+export type ScheduleDueState = 'none' | 'future' | 'due' | 'stuck';
+
+export function classifyDueTime(nextDueMs: number | null, nowMs: number, intervalMs: number): ScheduleDueState {
+  if (nextDueMs == null) return 'none';
+  if (nowMs < nextDueMs) return 'future';
+  return nowMs - nextDueMs <= intervalMs ? 'due' : 'stuck';
+}
+
+/** One armed schedule row that has been due for longer than a floor interval. */
+export interface StalledSchedule {
+  /** Schedule table the overdue row lives in (see SCHEDULE_SOURCES). */
+  table: string;
+  /** The row's `next_run_at`, epoch-ms. */
+  dueAtMs: number;
+  /** How far past its due time it is, at the observation instant. */
+  overdueMs: number;
+}
+
+/** What the cron panel needs to tell "idle" from "jammed". */
+export interface ScheduleStallReport {
+  /** Epoch-ms the CURRENT stall was first seen — carried across ticks, so this is
+   *  "jammed since", not "noticed this tick". */
+  firstDetectedMs: number;
+  /** Epoch-ms of the most recent observation. */
+  observedMs: number;
+  /** Consecutive active ticks that have observed a stall. */
+  observations: number;
+  /** Epoch-ms this stall was last written to the error log — see the rate limit in
+   *  {@link publishNextDue}. */
+  lastRaisedMs: number;
+  /** The overdue rows, one entry per schedule table, earliest first. */
+  tables: StalledSchedule[];
 }
 
 /**
@@ -135,6 +206,14 @@ export interface CronGateDecision {
   floorIntervalMs: number;
   /** Earliest known scheduled due time (epoch-ms), or null when unknown/none armed. */
   nextDueMs: number | null;
+  /**
+   * How that due time reads against the clock. `stuck` is the one an operator has to
+   * act on: the gate is behaving correctly (it declines to re-open on an ancient due
+   * time) but the underlying row is not being cleared by any sweep. Reported here so
+   * the state is visible on the decision itself, not only in the stall report the
+   * publisher writes.
+   */
+  dueState: ScheduleDueState;
 }
 
 /**
@@ -146,7 +225,7 @@ export async function evaluateCronGate(env: Env, nowMs: number): Promise<CronGat
   const interval = floorIntervalMs(env);
   const store = kv(env);
   if (!store) {
-    return { run: true, reason: 'kv-unavailable', floorDue: true, lastFloorMs: null, floorIntervalMs: interval, nextDueMs: null };
+    return { run: true, reason: 'kv-unavailable', floorDue: true, lastFloorMs: null, floorIntervalMs: interval, nextDueMs: null, dueState: 'none' };
   }
   try {
     const [sig, lastFloorRaw, nextDueRaw] = await Promise.all([
@@ -158,27 +237,65 @@ export async function evaluateCronGate(env: Env, nowMs: number): Promise<CronGat
     const floorDue = !Number.isFinite(last) || nowMs - last >= interval;
     const lastFloorMs = Number.isFinite(last) && last > 0 ? last : null;
     const nextDueMs = parseNextDue(nextDueRaw);
-    if (sig != null) return { run: true, reason: 'signal', floorDue, lastFloorMs, floorIntervalMs: interval, nextDueMs };
-    // A schedule has come due. This is the branch that makes a finer-than-floor
-    // schedule land ON TIME while idle — without it the tick below would skip and
-    // the sweep would wait for the floor.
-    //
-    // The upper bound matters as much as the lower one. A row whose sweep never
-    // re-arms it — the reports sweep switched off in cron controls, a generator
-    // erroring past its retries — stays due FOREVER, and an unbounded check would
-    // then open this gate on every single tick and quietly undo the autosuspend the
-    // whole module exists to buy. Past one floor interval the sweeps have already had
-    // their chance at that row, so it stops being treated as a fresh due time and the
-    // floor sweep (which still runs it) becomes the backstop again.
-    if (nextDueMs != null && nowMs >= nextDueMs && nowMs - nextDueMs <= interval) {
-      return { run: true, reason: 'due', floorDue, lastFloorMs, floorIntervalMs: interval, nextDueMs };
+    // The gate's `due` window is bounded on BOTH sides, and classifyDueTime owns that
+    // boundary for the whole module: a row overdue by more than a floor interval is
+    // `stuck`, not `due`, so it cannot re-open this gate on every tick and undo the
+    // autosuspend. It still RUNS — on the floor sweep, exactly as it did pre-gate —
+    // and publishNextDue raises it so "jammed" stops looking like "idle".
+    const dueState = classifyDueTime(nextDueMs, nowMs, interval);
+    if (sig != null) return { run: true, reason: 'signal', floorDue, lastFloorMs, floorIntervalMs: interval, nextDueMs, dueState };
+    if (dueState === 'due') {
+      return { run: true, reason: 'due', floorDue, lastFloorMs, floorIntervalMs: interval, nextDueMs, dueState };
     }
-    if (floorDue) return { run: true, reason: 'floor', floorDue: true, lastFloorMs, floorIntervalMs: interval, nextDueMs };
-    return { run: false, reason: 'idle', floorDue: false, lastFloorMs, floorIntervalMs: interval, nextDueMs };
+    if (floorDue) return { run: true, reason: 'floor', floorDue: true, lastFloorMs, floorIntervalMs: interval, nextDueMs, dueState };
+    return { run: false, reason: 'idle', floorDue: false, lastFloorMs, floorIntervalMs: interval, nextDueMs, dueState };
   } catch (error) {
     reportCaughtError(error, { source: "application/runtime/cronWorkSignal.ts", operation: "evaluateCronGate", context: { logMessage: '[cron-work-signal] gate read failed; running fan-out fail-open', details: { nowMs, error } } });
     // A KV blip must never strand work — run the fan-out this tick.
-    return { run: true, reason: 'kv-unavailable', floorDue: true, lastFloorMs: null, floorIntervalMs: interval, nextDueMs: null };
+    return { run: true, reason: 'kv-unavailable', floorDue: true, lastFloorMs: null, floorIntervalMs: interval, nextDueMs: null, dueState: 'none' };
+  }
+}
+
+/**
+ * Read the stall report the last active tick published, or null when nothing is
+ * jammed. KV-only, like the rest of the gate — the cron panel calls it on every load
+ * and must not wake Postgres to answer "is anything stuck?". Never throws: a corrupt
+ * or unreachable value reads as "no stall known", which degrades the panel to what it
+ * showed before this existed rather than failing it.
+ */
+export async function readScheduleStall(env: Env): Promise<ScheduleStallReport | null> {
+  const store = kv(env);
+  if (!store) return null;
+  try {
+    return parseStallReport(await store.get(SCHEDULE_STALL_KEY));
+  } catch (error) {
+    reportCaughtError(error, {
+      source: 'application/runtime/cronWorkSignal.ts',
+      operation: 'readScheduleStall',
+      context: { logMessage: '[cron-work-signal] stall report read failed', details: { error } },
+    });
+    return null;
+  }
+}
+
+/** Parse a stored stall report defensively — an unreadable one is simply "none". */
+function parseStallReport(raw: string | null): ScheduleStallReport | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as Partial<ScheduleStallReport>;
+    if (!Array.isArray(parsed?.tables) || parsed.tables.length === 0) return null;
+    if (!Number.isFinite(parsed.firstDetectedMs)) return null;
+    return {
+      firstDetectedMs: Number(parsed.firstDetectedMs),
+      observedMs: Number(parsed.observedMs ?? parsed.firstDetectedMs),
+      observations: Number(parsed.observations ?? 1),
+      lastRaisedMs: Number(parsed.lastRaisedMs ?? 0),
+      tables: parsed.tables
+        .filter((t): t is StalledSchedule => Boolean(t) && typeof t.table === 'string' && Number.isFinite(t.dueAtMs))
+        .map((t) => ({ table: t.table, dueAtMs: Number(t.dueAtMs), overdueMs: Number(t.overdueMs ?? 0) })),
+    };
+  } catch {
+    return null;
   }
 }
 
@@ -253,10 +370,27 @@ export const NEXT_DUE_SCHEDULE_TABLES = SCHEDULE_SOURCES.map((source) => source.
  * timestamp. Best-effort throughout: a failure leaves the previous stamp (or none) in
  * place and the floor sweep still backstops every schedule, so this can never strand
  * work — it can only fail to make it prompt.
+ *
+ * It also RAISES a jam. The per-table minimums this already reads are exactly what is
+ * needed to tell "nothing is due" from "something has been due for hours and no sweep
+ * is clearing it" — the case the gate's bounded `due` window deliberately declines to
+ * act on. Declining silently made a jammed schedule indistinguishable from an idle
+ * platform, so any table whose earliest armed row is overdue by more than one floor
+ * interval is written to the stall report and logged (rate-limited).
  */
-export async function publishNextDue(env: Env, nowMs: number): Promise<number | null> {
+export interface NextDuePublication {
+  /** Earliest armed `next_run_at` across every schedule table, epoch-ms. */
+  earliestMs: number | null;
+  /** Per-table earliest armed due time — the raw observation the stall check reads. */
+  perTable: Array<{ table: string; nextDueMs: number }>;
+  /** The jam, if any, after merging with what previous ticks observed. */
+  stall: ScheduleStallReport | null;
+}
+
+export async function publishNextDue(env: Env, nowMs: number): Promise<NextDuePublication> {
+  const empty: NextDuePublication = { earliestMs: null, perTable: [], stall: null };
   const store = kv(env);
-  if (!store) return null;
+  if (!store) return empty;
   try {
     const db = buildDatabase(env);
     // Each arm is `SELECT MIN(next_run_at) FROM <t> WHERE enabled AND next_run_at IS NOT NULL`.
@@ -267,22 +401,108 @@ export async function publishNextDue(env: Env, nowMs: number): Promise<number | 
         .select({ min: sql<Date | string | null>`MIN(${source.nextRunAt})` })
         .from(source.table)
         .where(and(eq(source.enabled, true), isNotNull(source.nextRunAt)));
-      return toEpochMs(row?.min ?? null);
+      return { table: source.name as string, nextDueMs: toEpochMs(row?.min ?? null) };
     }));
 
-    const armed = mins.filter((ms): ms is number => ms != null);
-    const earliest = armed.length > 0 ? Math.min(...armed) : null;
+    const perTable = mins.flatMap((m) => (m.nextDueMs == null ? [] : [{ table: m.table, nextDueMs: m.nextDueMs }]));
+    const earliest = perTable.length > 0 ? Math.min(...perTable.map((m) => m.nextDueMs)) : null;
     await store.put(NEXT_DUE_KEY, earliest == null ? NO_SCHEDULES : String(earliest), {
       expirationTtl: NEXT_DUE_TTL_SECONDS,
     });
-    return earliest;
+
+    const stall = await reconcileScheduleStall(env, store, nowMs, perTable);
+    return { earliestMs: earliest, perTable, stall };
   } catch (error) {
     reportCaughtError(error, {
       source: 'application/runtime/cronWorkSignal.ts',
       operation: 'publishNextDue',
       context: { logMessage: '[cron-work-signal] next-due publish failed; floor sweep remains the backstop', details: { nowMs, error } },
     });
-    return null;
+    return empty;
+  }
+}
+
+/**
+ * Merge this tick's observation into the stored stall report and raise a NEW or
+ * ONGOING jam to the error log.
+ *
+ * Two properties this has to get right:
+ *
+ *   • `firstDetectedMs` is CARRIED, not restamped. An operator needs "jammed for six
+ *     hours", and every active tick re-observes the same jam — restamping would reset
+ *     the age on each one and the report would perpetually read "just now".
+ *   • The raise is rate-limited to one per floor interval. Active ticks can be as
+ *     frequent as every five minutes, and a jam is a condition that persists for as
+ *     long as nobody fixes it; logging it every tick would bury the platform's own
+ *     error stream under the very table this module is trying to keep small.
+ *
+ * Clearing is explicit: the moment nothing is overdue the key is deleted, so the panel
+ * goes green without waiting out a TTL. Best-effort — a KV failure here must never
+ * fail the publish that precedes it.
+ */
+async function reconcileScheduleStall(
+  env: Env,
+  store: KVNamespace,
+  nowMs: number,
+  perTable: Array<{ table: string; nextDueMs: number }>,
+): Promise<ScheduleStallReport | null> {
+  const interval = floorIntervalMs(env);
+  const stalled: StalledSchedule[] = perTable
+    .filter((m) => classifyDueTime(m.nextDueMs, nowMs, interval) === 'stuck')
+    .map((m) => ({ table: m.table, dueAtMs: m.nextDueMs, overdueMs: nowMs - m.nextDueMs }))
+    .sort((a, b) => a.dueAtMs - b.dueAtMs);
+
+  try {
+    if (stalled.length === 0) {
+      await store.delete(SCHEDULE_STALL_KEY);
+      return null;
+    }
+    const previous = parseStallReport(await store.get(SCHEDULE_STALL_KEY));
+    const shouldRaise = !previous || nowMs - previous.lastRaisedMs >= interval;
+    const report: ScheduleStallReport = {
+      firstDetectedMs: previous?.firstDetectedMs ?? nowMs,
+      observedMs: nowMs,
+      observations: (previous?.observations ?? 0) + 1,
+      lastRaisedMs: shouldRaise ? nowMs : (previous?.lastRaisedMs ?? 0),
+      tables: stalled,
+    };
+    await store.put(SCHEDULE_STALL_KEY, JSON.stringify(report), { expirationTtl: SCHEDULE_STALL_TTL_SECONDS });
+    const worst = stalled[0];
+    if (shouldRaise && worst) {
+      reportCaughtError(
+        new Error(
+          `Scheduled work is jammed: ${stalled.length} schedule table(s) hold armed rows overdue by more than the ` +
+          `${Math.round(interval / 60_000)}m floor interval (worst: ${worst.table}, ` +
+          `${Math.round(worst.overdueMs / 60_000)}m overdue). The cron gate is falling back to floor cadence for them.`,
+        ),
+        {
+          source: 'application/runtime/cronWorkSignal.ts',
+          operation: 'scheduleStall',
+          // A jam degrades promptness, it does not lose work — the floor sweep still
+          // runs these rows — so it is a warning, not an error.
+          level: 'warning',
+          context: {
+            logMessage: '[cron-work-signal] schedule stall detected',
+            details: {
+              floorIntervalMs: interval,
+              jammedSince: new Date(report.firstDetectedMs).toISOString(),
+              observations: report.observations,
+              tables: stalled.map((s) => ({ table: s.table, dueAt: new Date(s.dueAtMs).toISOString(), overdueMs: s.overdueMs })),
+            },
+          },
+        },
+      );
+    }
+    return report;
+  } catch (error) {
+    reportCaughtError(error, {
+      source: 'application/runtime/cronWorkSignal.ts',
+      operation: 'reconcileScheduleStall',
+      context: { logMessage: '[cron-work-signal] stall reconcile failed', details: { nowMs, error } },
+    });
+    return stalled.length > 0
+      ? { firstDetectedMs: nowMs, observedMs: nowMs, observations: 1, lastRaisedMs: 0, tables: stalled }
+      : null;
   }
 }
 

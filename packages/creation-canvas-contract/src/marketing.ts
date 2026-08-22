@@ -43,7 +43,6 @@
  * {@link resolveBrandBinding}, which falls back to the only kit present).
  */
 
-import { dateValue, resolveDeadlineField } from './triggers';
 
 /**
  * The marketing objects. Two kinds, and both of them exist because a TABLE existed with
@@ -375,110 +374,4 @@ export function sendReadiness(input: {
     blockers,
     ...(sendable === undefined ? {} : { sendable }),
   };
-}
-
-// ---------------------------------------------------------------------------
-// The time axis
-// ---------------------------------------------------------------------------
-
-/**
- * The fields that put an object on the calendar, in the order they are consulted.
- *
- * `scheduledAt` first and alone at the top: it is the field that says WHEN THIS GOES
- * OUT, which is a commitment, where a deadline is a date somebody is working toward.
- * Everything after it is `DEADLINE_FIELD_NAMES` — deliberately the same list the
- * trigger engine watches, imported rather than restated, so a date the board can warn
- * about is a date the board can also draw. A second list here would produce a calendar
- * that is missing exactly the dates people set alarms on.
- */
-export const CALENDAR_PRIMARY_FIELD = 'scheduledAt';
-
-/** One object's place on the calendar. */
-export interface CalendarEntry {
-  /** The board object's id. */
-  id: string;
-  kind: string;
-  title: string;
-  /** Epoch milliseconds. */
-  at: number;
-  /** Which field the date came from, so the surface can say "scheduled" or "due". */
-  field: string;
-  /** True when `field` is {@link CALENDAR_PRIMARY_FIELD} — a commitment rather than a
-   *  deadline. The two are drawn differently, and the distinction is decided here so two
-   *  renderers cannot disagree about which is which. */
-  scheduled: boolean;
-}
-
-/**
- * Every dated object on a board, in chronological order.
- *
- * ── WHY THIS IS A FOLD OVER THE BOARD AND NOT A NEW STORE ────────────────────────
- * `socialCampaign`, `emailCampaign` and `salesMeeting` already carry `scheduledAt`, and
- * every spec kind that carries a deadline already declares which field holds it. The
- * CMO's primary planning artifact — the month — was undrawable not because the dates
- * were missing but because nothing read them together. A `campaignCalendar` KIND would
- * have been a second copy of dates that already exist, and the first time somebody moved
- * a send the two would disagree. So the calendar is a projection: it owns no data, and
- * an object dragged to a new date is written back to the field it came from.
- */
-export function calendarEntriesFrom(
-  board: readonly (BrandBoardObject & { id: string })[],
-): readonly CalendarEntry[] {
-  const entries: CalendarEntry[] = [];
-  for (const object of board) {
-    const scheduled = dateValue(object.data[CALENDAR_PRIMARY_FIELD]);
-    const field = scheduled != null
-      ? CALENDAR_PRIMARY_FIELD
-      : resolveDeadlineField(object.data, object.data.watchesField);
-    const at = scheduled ?? (field ? dateValue(object.data[field]) : null);
-    if (at == null || !field) continue;
-    entries.push({
-      id: object.id,
-      kind: object.kind,
-      title: String(object.title ?? object.data.title ?? '').trim() || object.kind,
-      at,
-      field,
-      scheduled: field === CALENDAR_PRIMARY_FIELD,
-    });
-  }
-  return entries.sort((a, b) => a.at - b.at);
-}
-
-/**
- * Two entries that collide.
- *
- * "Collide" is same-day and same-CHANNEL, not merely same-day: two emails to one list on
- * one morning is the conflict a content calendar exists to catch, and an email plus a
- * sales meeting on the same afternoon is a normal Tuesday. Channel is read from the kind
- * because that is where it actually lives — an `emailCampaign` is the email channel by
- * being one — which is why this takes no configuration.
- */
-const CALENDAR_CHANNEL_BY_KIND: Readonly<Record<string, string>> = {
-  emailCampaign: 'email', emailTemplate: 'email',
-  socialCampaign: 'social', socialPost: 'social',
-  blogPost: 'content', website: 'content', prototype: 'content',
-};
-
-export function calendarChannel(kind: string): string | null {
-  return CALENDAR_CHANNEL_BY_KIND[kind] ?? null;
-}
-
-/** Ids of entries that share a channel and a calendar day with another entry. A SET
- *  rather than pairs: the surface marks each colliding card, and asking "is this one in
- *  conflict" is the question every consumer actually has. */
-export function calendarConflicts(entries: readonly CalendarEntry[]): ReadonlySet<string> {
-  const byBucket = new Map<string, string[]>();
-  for (const entry of entries) {
-    const channel = calendarChannel(entry.kind);
-    if (!channel || !entry.scheduled) continue;
-    const day = new Date(entry.at).toISOString().slice(0, 10);
-    const key = `${channel}|${day}`;
-    const bucket = byBucket.get(key);
-    if (bucket) bucket.push(entry.id); else byBucket.set(key, [entry.id]);
-  }
-  const conflicted = new Set<string>();
-  for (const bucket of byBucket.values()) {
-    if (bucket.length > 1) for (const id of bucket) conflicted.add(id);
-  }
-  return conflicted;
 }

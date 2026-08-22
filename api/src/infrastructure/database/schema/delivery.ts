@@ -49,16 +49,15 @@ import {
   agents,
   executions,
   importRuns,
-  jobPostings,
   repoAnalysisRuns,
   telemetrySpans,
   ticketRuns,
   workflowDefinitions,
   workflows,
 } from './agents';
-import { brainChats, creationSessions, teams } from './canvas';
+import { brainChats, creationSessions } from './canvas';
 import { sourceControlIntegrations } from './governance';
-import { segments, tenants, users } from './identity';
+import { segments, teams, tenants, users } from './identity';
 import {
   AlertMetric,
   agentTypeEnum,
@@ -175,54 +174,6 @@ export const projects = pgTable('projects', {
   securityTargetUrl: varchar('security_target_url', { length: 2048 }),
   createdAt:       timestamp('created_at').notNull().defaultNow(),
   updatedAt:       timestamp('updated_at').notNull().defaultNow(),
-});
-
-
-/**
- * Subdomain hosting for IDE (Designer) projects — a published app served at
- * {subdomain}.builderforce.ai. One row per project (project_id unique);
- * re-publishing overwrites the R2 assets and bumps `versionToken` (the cache-bust
- * token the subdomain→site lookup is keyed by). See migration 0121.
- */
-export const projectSites = pgTable('project_sites', {
-  id:            serial('id').primaryKey(),
-  projectId:     integer('project_id').notNull().unique().references(() => projects.id, { onDelete: 'cascade' }),
-  tenantId:      integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  subdomain:     varchar('subdomain', { length: 63 }).notNull().unique(),
-  /** 'static' (R2-served built assets) | 'container' (V2 container web-serving, later phase). */
-  mode:          varchar('mode', { length: 16 }).notNull().default('static'),
-  status:        varchar('status', { length: 16 }).notNull().default('active'),
-  r2Prefix:      text('r2_prefix').notNull(),
-  versionToken:  varchar('version_token', { length: 32 }).notNull(),
-  indexDocument: varchar('index_document', { length: 128 }).notNull().default('index.html'),
-  /** Vanity hostname the tenant owns. Only routable once BOTH ownership is
-   *  proven and a certificate exists, so it is meaningless without the
-   *  lifecycle columns below (0412). `unset → pending_dns → pending_certificate
-   *  → active`, or `failed`. */
-  customDomain:            varchar('custom_domain', { length: 255 }),
-  customDomainStatus:      varchar('custom_domain_status', { length: 24 }).notNull().default('unset'),
-  /** Published by the tenant as a TXT record at `_builderforce-challenge.<domain>`
-   *  and resolved over DNS-over-HTTPS, so proving ownership needs no zone access. */
-  customDomainToken:       varchar('custom_domain_token', { length: 64 }),
-  customDomainVerifiedAt:  timestamp('custom_domain_verified_at'),
-  /** Cloudflare for SaaS custom-hostname id, once the cert has been requested. */
-  customDomainHostnameId:  varchar('custom_domain_hostname_id', { length: 64 }),
-  customDomainError:       text('custom_domain_error'),
-  /** The `website` canvas card published as this site's LANDING PAGE (0473) —
-   *  the creator's own shop window, in their own brand, on their own address.
-   *
-   *  A column and not a table: a site has exactly one landing page. Referenced
-   *  by id rather than by a foreign key into `creation_session_objects` because
-   *  the canvas is a different bounded context, and a published landing page
-   *  must survive its source card being deleted (the bytes are already in R2)
-   *  rather than cascade a live site to nothing. NULL = the site serves the app
-   *  at `/`, exactly as before this existed. */
-  landingObjectId:         uuid('landing_object_id'),
-  assetCount:    integer('asset_count').notNull().default(0),
-  totalBytes:    bigint('total_bytes', { mode: 'number' }).notNull().default(0),
-  publishedAt:   timestamp('published_at'),
-  createdAt:     timestamp('created_at').notNull().defaultNow(),
-  updatedAt:     timestamp('updated_at').notNull().defaultNow(),
 });
 
 

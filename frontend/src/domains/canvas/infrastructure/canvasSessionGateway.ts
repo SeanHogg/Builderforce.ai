@@ -8,11 +8,15 @@
  * doing actual work rather than being quoted.
  *
  * The one translation that earns its keep is the SHAPE of a read. The client
- * returns a `CreationSessionDetail` — members, invitations, role, project ids,
- * an embedded app — and persistence needs exactly two of those fields. Handing
- * the whole detail to the use case would put the transport's model inside the
- * domain's decision, which is the anti-corruption boundary the canvas context
- * exists to hold (see `boardFromPersistedGraph`).
+ * returns a `CreationSessionDetail` — invitations, role, project ids, an embedded
+ * app, a fifteen-field shape — and the canvas needs four of those fields: the
+ * graph, the revision, the title and the roster. Handing the whole detail to a
+ * use case would put the transport's model inside the domain's decision, which is
+ * the anti-corruption boundary the canvas context exists to hold (see
+ * `boardFromPersistedGraph`).
+ *
+ * `revision` is the one field that needs real thought rather than a rename, and
+ * the comment below is why.
  */
 
 import { creationSessionsApi } from '@/lib/builderforceApi';
@@ -33,6 +37,8 @@ export const canvasSessionGateway: CanvasSessionPort = {
       // has ever done, conversation included. Saving against the latter makes
       // every message a stale-revision conflict on the next save.
       revision: detail.session.canvasRevision ?? detail.session.revision ?? 1,
+      title: detail.session.title,
+      members: detail.members,
     };
   },
 };

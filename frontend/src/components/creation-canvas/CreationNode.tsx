@@ -89,6 +89,7 @@ import { CanvasVideoEditor } from './CanvasVideoEditor';
 import { CanvasResumeEditor } from './CanvasResumeEditor';
 import { CanvasLegalDocumentUpload } from './CanvasLegalDocumentUpload';
 import { SpecObjectBody } from './SpecObjectBody';
+import { CalendarObjectBody } from './CalendarObjectBody';
 // One provenance line and one gate badge, rendered by every body that shows a derived
 // number — see the header there for why a truncated number is worse than a blank one.
 import { BasisNotice, EvaluationGateBadge } from './DerivedProvenance';
@@ -2646,6 +2647,31 @@ function useBoardNeighbours(reads: boolean): readonly CreationNodeData[] {
   );
 }
 
+/**
+ * The board as a list of {id, data} — what a `calendar` card bound to the `board` source
+ * projects into events.
+ *
+ * Gated exactly like {@link useBoardNeighbours} above and for the same reason: this is a
+ * subscription to every node on the canvas, so a card that is not a board-bound calendar
+ * must never take it. `enabled` is false for every other kind and for a calendar reading
+ * any other source, and the stable empty array is what keeps those nodes out of the
+ * re-render entirely.
+ */
+const NO_BOARD_OBJECTS: readonly { id: string; data: CreationNodeData }[] = [];
+
+function useCalendarBoardObjects(enabled: boolean): readonly { id: string; data: CreationNodeData }[] {
+  return useStore(
+    (state) => {
+      if (!enabled) return NO_BOARD_OBJECTS;
+      const out: { id: string; data: CreationNodeData }[] = [];
+      for (const node of state.nodeLookup.values()) out.push({ id: node.id, data: node.data as CreationNodeData });
+      return out;
+    },
+    (left, right) => left === right
+      || (left.length === right.length && left.every((item, index) => item.id === right[index]!.id && item.data === right[index]!.data)),
+  );
+}
+
 function useSpecDeriveBoard(kind: CreationObjectKind): SpecDeriveBoard {
   const neighbours = useBoardNeighbours(specKindReadsBoard(kind));
   return useMemo(
@@ -2689,6 +2715,7 @@ function DensityIcon({ density }: { density: CanvasNodeDensity }) {
 export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenDetails, onOpenBuiltinAgent, onEditData, onExport, onOpenPanel, onInsertFrom, onOpenSurface, onRevealObject, onMoveDeal }: CreationNodeProps) {
   const t = useTranslations('creationCanvas.node');
   const specBoard = useSpecDeriveBoard(data.kind);
+  const calendarBoard = useCalendarBoardObjects(data.kind === 'calendar' && data.source === 'board');
   const isWide = ['workflow', 'website', 'prototype', 'guidedTour', 'dashboard', 'chart', 'map', 'report', 'evaluation', 'diagnostics', 'roadmap', 'slides', 'document', 'diagram', 'prd', 'knowledge', 'code', 'table', 'spreadsheet', 'featureSummary', 'mockupSet', 'evermind', 'projectComparison', 'frame', 'pitch', 'pitchScorecard', 'pitchQa', 'pitchApplication', 'course',
     // A model, a lineage flow and a check suite are all read across, not down.
     'erd', 'lineage', 'dataQuality', 'dataContract', 'datasource',
@@ -2696,7 +2723,9 @@ export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenD
     // across the same way a check suite is.
     'testPlan', 'testCase', 'testRun', 'defect',
     // A game is played in its own body, so it needs the width a game needs.
-    'game', 'resume'].includes(data.kind)
+    'game', 'resume',
+    // Seven columns of day cells. A month at 240px is a grid of ellipses.
+    'calendar'].includes(data.kind)
     || WEB_PAGE_KINDS.has(data.kind)
     // Every founder object that declares a `rows` field renders a table, and a table in
     // a 240px card is unreadable. Derived from the spec rather than listed, so a kind
@@ -2959,6 +2988,18 @@ export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenD
             the second primitive that surface had and this one did not. */}
         {data.kind === 'transclusion' && <CanvasTransclusionBody data={data} />}
         {data.kind === 'release' && <ReleaseBody data={data} onOpen={() => onOpenDetails?.(id, 'delivery')} />}
+        {/* The month, at card size — the SAME component the full-screen surface mounts,
+            with a different `variant`. There is no second calendar in this codebase to
+            keep in step, which is the whole reason the rail modality became an object. */}
+        {data.kind === 'calendar' && <CalendarObjectBody
+          data={data}
+          board={calendarBoard}
+          {...(onEditData ? {
+            onEdit: (patch: Partial<CreationNodeData>) => onEditData(id, patch),
+            onEditObject: onEditData,
+          } : {})}
+          {...(onRevealObject ? { onOpenObject: onRevealObject } : {})}
+        />}
         {/* The one real UI control `legalDocument` needs beyond the stat rows
             SpecObjectBody already draws for it — see the component's own header
             for why this is a direct upload and not a BrainAction. */}

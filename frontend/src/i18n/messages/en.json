@@ -12598,7 +12598,8 @@
           "signal": "a write signalled pending work",
           "floor": "the floor interval has elapsed",
           "idle": "nothing signalled and the floor is not due",
-          "kv-unavailable": "KV is unreachable, so the gate fails open"
+          "kv-unavailable": "KV is unreachable, so the gate fails open",
+          "due": "a schedule came due before the floor did"
         },
         "floorInterval": "Floor interval",
         "overridden": "overridden",
@@ -12608,7 +12609,15 @@
         "asap": "Next tick",
         "explainIdle": "An idle gate does not mean nothing is pending. The signal only fires when a ticket actually passes its gates, so a board of stalled tickets signals nothing and waits for the floor sweep.",
         "kvUnbound": "AUTH_CACHE_KV is not bound, so the gate fails open and every tick runs the fan-out.",
-        "signalled": "Pending work signalled — the next scheduled tick will run the fan-out."
+        "signalled": "Pending work signalled — the next scheduled tick will run the fan-out.",
+        "nextDue": "Next schedule due",
+        "noSchedules": "Nothing armed",
+        "dueState": {
+          "none": "no schedule armed",
+          "future": "waiting",
+          "due": "due now",
+          "stuck": "jammed"
+        }
       },
       "actions": {
         "runFrequent": "▶ Run the 5-minute tick",
@@ -12655,6 +12664,12 @@
         "title": "Force a scheduled sweep?",
         "dispatch": "Running \"{target}\" starts real agent runs across every tenant ({count} of the selected sweeps dispatch work). This spends tokens and is not a dry run.",
         "confirmLabel": "Run now"
+      },
+      "stall": {
+        "heading": "{count, plural, one {Scheduled work is jammed — # schedule table} other {Scheduled work is jammed — # schedule tables}}",
+        "since": "Jammed since {since}, seen on {observations, plural, one {# tick} other {# ticks}}.",
+        "explain": "These rows have been due for longer than a whole floor interval, so every sweep that could clear them has already run at least once and did not. The gate stops treating them as due — otherwise it would wake the database on every tick — so they now run only on the floor sweep. Check whether the owning sweep is paused below, or failing.",
+        "overdue": "due {due}, {overdue} overdue"
       }
     },
     "broadcasts": {
@@ -13744,7 +13759,8 @@
     "minutesFailed": "Could not generate minutes.",
     "pastMeetings": "Past meetings",
     "minutesAvailable": "Minutes ready",
-    "viewNotes": "View notes"
+    "viewNotes": "View notes",
+    "calendarLabel": "Meetings calendar"
   },
   "brainLauncher": {
     "open": "Open Brain assistant",
@@ -18467,7 +18483,8 @@
       "brandKit": "Brand kit",
       "audience": "Audience",
       "stopwatch": "Stopwatch",
-      "transclusion": "Transclusion"
+      "transclusion": "Transclusion",
+      "calendar": "Calendar"
     },
     "twilioSetup": {
       "title": "Twilio integration",
@@ -20822,7 +20839,8 @@
         "funnel": "Funnel",
         "book": "Book",
         "sequence": "Sequence",
-        "poll": "Poll"
+        "poll": "Poll",
+        "calendar": "Calendar"
       },
       "field": {
         "funnelDomain": "Funnel",
@@ -20871,7 +20889,12 @@
         "pollResponseCount": "Answers",
         "pollResults": "Results",
         "pollAnswers": "What people said",
-        "pollCorrectRate": "Correct"
+        "pollCorrectRate": "Correct",
+        "calendarSource": "Source",
+        "calendarDefaultView": "Opens on",
+        "calendarEvents": "Events",
+        "calendarEventCount": "Events held",
+        "calendarNextEvent": "Next up"
       },
       "column": {
         "stage": "Stage",
@@ -20901,11 +20924,16 @@
         "repliedAtISO": "Replied",
         "id": "Id",
         "label": "Label",
-        "correct": "Correct"
+        "correct": "Correct",
+        "startISO": "Starts",
+        "endISO": "Ends",
+        "details": "Details",
+        "category": "Category"
       },
       "status": {
         "manuscript": "Manuscript",
-        "draft": "Draft"
+        "draft": "Draft",
+        "noSource": "No source"
       }
     },
     "noticeGateEvaluated": "Release gate evaluated from the runs and defects on this board — {score}% of criteria met.",
@@ -21693,16 +21721,9 @@
       "exitFullscreen": "Exit full screen",
       "calendar": {
         "label": "Calendar",
-        "enter": "Plan the month",
+        "enter": "Open the calendar",
         "active": "You are in the calendar",
-        "open": "Open the calendar",
-        "regionLabel": "This canvas, read as one month",
-        "navLabel": "Which month",
-        "previousMonth": "Previous month",
-        "nextMonth": "Next month",
-        "summary": "{scheduled} scheduled · {dated} dated · {undated} with no date",
-        "gridLabel": "The days of this month",
-        "conflict": "Another commitment shares this day"
+        "open": "Open the calendar"
       }
     },
     "miro": {
@@ -25681,7 +25702,8 @@
     "columnRoadmapItem": "Roadmap item",
     "emptyProjects": "No scheduled projects yet. Add start or due dates to see them on the timeline.",
     "emptyTasks": "No scheduled tasks yet. Add start or due dates to see them on the timeline.",
-    "emptyRoadmapItems": "No scheduled roadmap items yet. Add target dates to see them on the timeline."
+    "emptyRoadmapItems": "No scheduled roadmap items yet. Add target dates to see them on the timeline.",
+    "calendarLabel": "Delivery calendar"
   },
   "collections": {
     "loading": "Reading the collections queue…",
@@ -26162,5 +26184,63 @@
     "votingClosed": "Voting has closed",
     "votingOpen": "Voting is open",
     "wordPlaceholder": "One or two words"
+  },
+  "calendar": {
+    "regionLabel": "Calendar",
+    "detailLabel": "Event details",
+    "gridLabel": "Days",
+    "navLabel": "Move through time",
+    "viewLabel": "How much to show",
+    "previous": "Previous",
+    "next": "Next",
+    "today": "Today",
+    "add": "New event",
+    "allDay": "All day",
+    "untitled": "Untitled event",
+    "empty": "Nothing scheduled in this period.",
+    "loading": "Reading…",
+    "readFailed": "This calendar's source could not be read.",
+    "summary": "{shown} shown · {total} in total · {undated} with no date",
+    "more": "+{count} more",
+    "conflict": "Another entry shares this day and category",
+    "readOnly": "This source is read-only here.",
+    "noDetails": "No details were written for this entry.",
+    "openSource": "Open the original",
+    "openLink": "Open link",
+    "edit": "Edit",
+    "delete": "Delete",
+    "confirmDelete": "Really delete",
+    "close": "Close",
+    "save": "Save",
+    "cancel": "Cancel",
+    "editTitle": "Edit event",
+    "newTitle": "New event",
+    "sourceLabel": "Source",
+    "view": {
+      "day": "Day",
+      "week": "Week",
+      "month": "Month"
+    },
+    "source": {
+      "own": "This calendar",
+      "board": "Dated cards on this board",
+      "meetings": "Meetings",
+      "tasks": "Tasks",
+      "releases": "Releases & deployments",
+      "holidays": "Company holidays",
+      "connected": "Connected calendar"
+    },
+    "field": {
+      "subject": "Subject",
+      "subjectPlaceholder": "What is happening",
+      "details": "Details",
+      "detailsPlaceholder": "Anything the reader needs when they open it",
+      "starts": "Starts",
+      "ends": "Ends",
+      "allDay": "All day",
+      "category": "Category",
+      "categoryPlaceholder": "email, deployment, holiday…"
+    },
+    "undatedLabel": "No date yet"
   }
 }

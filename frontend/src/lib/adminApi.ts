@@ -380,14 +380,30 @@ export interface AdminCronState {
   gate: {
     /** What the next frequent tick would do if it fired right now. */
     wouldRun: boolean;
-    reason: 'signal' | 'floor' | 'idle' | 'kv-unavailable';
+    /** `due` = a schedule came due before the floor did; the gate wakes for it. */
+    reason: 'signal' | 'due' | 'floor' | 'idle' | 'kv-unavailable';
     floorDue: boolean;
     floorIntervalMs: number;
     floorIntervalOverridden: boolean;
     lastFloorSweepAt: string | null;
     nextFloorDueAt: string | null;
+    /** Earliest armed schedule across every schedule table. */
+    nextDueAt: string | null;
+    /**
+     * How that due time reads against the clock. `stuck` = overdue by more than a
+     * whole floor interval: the gate correctly refuses to re-open on it (that would
+     * pin Neon awake), so only the floor sweep still runs it.
+     */
+    dueState: 'none' | 'future' | 'due' | 'stuck';
     kvBound: boolean;
   };
+  /** Non-null = scheduled work is JAMMED rather than idle. */
+  scheduleStall: {
+    jammedSince: string;
+    observedAt: string;
+    observations: number;
+    tables: Array<{ table: string; dueAt: string; overdueMs: number }>;
+  } | null;
   cadences: Array<{ cadence: AdminCronCadence; cron: string | null; sweeps: number }>;
   sweeps: AdminCronSweep[];
   /** False when KV is unbound, so switches cannot safely survive a deploy. */

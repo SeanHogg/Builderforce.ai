@@ -1,3 +1,444 @@
+## ✅ RESOLVED 2026-08-22 — The changelog caught up with the week, and the release notes were re-framed on Idea to Real
+
+**The gap.** The last product-update batch (`0474`) was written on 2026-08-15 and covered the work up
+to that day. The 121 entries logged in this file since then — the canvas chrome redesign, the `app`
+surface, 3D world authoring, live cursors and calls, the career layer, founder-ops money and ownership,
+the sell motion, escrow, enterprise SSO, the Evermind enterprise layer, and a run of live defects
+including the empty server render — had shipped with **no customer-facing announcement at all**.
+
+**The editorial rule, now written into the migration header rather than re-derived per batch.**
+Release notes are MARKETING copy, not a changelog of commits, and a batch is framed on the product's
+own method: the arc (`STAGES` — Idea → Make → Run → Measure → Market) and the loop
+(`lib/methodology.ts` — Read → Prove → Build, whose kill condition is graded in Measure and handed
+back to Idea). The first draft of this batch was 32 engineering-shaped notes ordered by importance;
+it was rewritten to **26 marketing-shaped notes ordered along the arc**, so the panel reads as the
+method rather than as a week of tickets.
+
+**Migration `1105_august_2026_product_updates_3.sql` — 26 published notes.** It opens on the method
+itself: Idea to Real now records a VERDICT — met, missed or abandoned, with the number that decided it
+read off the console that measured it — which is what makes the arc a loop and is the one figure the
+platform holds itself to. Then live-page screenshots and guided starting points (Idea); the Run
+surface, the chrome redesign, 3D worlds, scanned-document reading, object settings and descriptions,
+and the connection fix (Make); one-button app conversion, Stage running the product, live
+collaboration, on-time scheduling and rate-limit backoff (Run); the sell motion, escrow, the money
+coming in, the cap table, founder paperwork, hiring into payroll and the career tools (Market); and
+real seat numbers, enforced confidentiality, the four enterprise questions, localisation and the
+server-render fix (Measure). **12 `new`, 11 `improvement`, 3 `fix`.** Fixed ids, `stage: 'live'`,
+`emailed_at` NULL so the digest announces them once.
+
+**What was deliberately left out.** The week's architecture work — the canvas domain/application/
+presentation layers, the layering ratchet, the tenant-scope conversion, the guard chain, the register
+audits — carries no customer-visible promise and is correctly absent. So is the origin-allowlisted
+API-key fix: real, already shipped, and unannounceable in this voice; it is recorded here and stays
+off the changelog. Nothing repeats a note `0474` already published — where a feature it announced was
+extended (embedded apps, marketplace Stage, résumé import) the note states what CHANGED.
+
+**The digest cadence is already bounded.** `MAX_NOTES_PER_DIGEST = 8` (added with `0474`) means this
+batch mails over four weekly digests, oldest-published first, with the remainder un-stamped and
+carried forward — a bulk publish cannot become one 26-item email.
+
+Verified: `check:migrations` green (494 files), `check:shape-lint`, `check:swept-tables` and
+`check:table-adoption` green with the new file in place; every string literal balanced, all 26 ids and
+publication times unique, longest title 65 characters against a 255 ceiling. `api` bumped to
+**2026.8.34**.
+
+---
+
+## ✅ RESOLVED 2026-08-22 — The canvas presentation layer opens, and the god component finally loses STATE rather than logic
+
+The previous three passes moved RULES out of `CanvasInner` — domain, four application use
+cases, infrastructure, ten card acts. `AdoptRemoteBoard` then proved something worth writing
+down: it deleted a duplicated block AND a real defect, and the component **grew 25 lines**,
+because the wiring plus its documentation costs more than the duplication it replaced.
+
+So the target was wrong. Extracting a use case improves correctness and testability; only moving
+STATE shrinks the component. This pass is the first one that does.
+
+### `domains/canvas/presentation/useSharedCanvasRoom.ts`
+
+Two `useState`s, three `useRef`s, two `useEffect`s and four callbacks left the component as one
+hook that OWNS them. It covers where an account-less board lives: this device, and — when it is
+shared — the room everybody else is reading. The device write rides with the room write on
+purpose, because a shared board updated here and missed there is a board the other people are
+editing a stale copy of; that is what the original `persistSnapshot` comment claimed and what
+nothing enforced.
+
+The contract is deliberately narrow, per the no-god-classes rule: the caller hands over what the
+board is, how to speak, how to put a board on screen, and how to read the one it is holding. It
+gets back the room's observable state and three verbs. **Nothing about nodes, edges, timelines or
+React setters crosses the line**, which is the test for whether a second surface could mount it
+unchanged.
+
+One redundancy fell out: `applyRoomSnapshot` was still calling `shared.noteExchanged(serialized)`
+even though `pull` records the exchange before it calls the adopt callback — the same fact written
+twice, dating from the pass that introduced `pull`. The callback now takes a snapshot and nothing
+it has to remember to do with it.
+
+### Two more duplications closed on the way
+
+- **The snapshot builder.** `localCreationSnapshot(sessionId, { title, timeline: timeline.map(…),
+  nodes, edges, viewport })` was written out three times — the autosave debounce, the viewport
+  write and the moment sharing starts. It is one `currentSnapshot(viewport?)` now. A fourth caller
+  copying whichever one it sat next to is how a field starts being carried by two of the three.
+- **The translator seam.** Three places had inlined the same
+  `((key, values) => t(key as never, values as never)) as CanvasTextTranslator` cast — the
+  materialisation deps, the card-act runner and the shared room — because `useTranslations`
+  returns a key-typed function and a use case takes the widened seam. One `canvasText` memo now,
+  and the next use case cannot add a fourth copy.
+
+### The ratchet was not watching the folder it was named for
+
+`useSharedCanvasRoom` landed and `check-layering.mjs` reported the SAME module total as the day
+before. `presentation` was in the guard's prose and its dependency diagram but not in its
+`FORBIDDEN` table, and `layerOf` only recognises layers that are in that table — so every file in
+`domains/*/presentation/` was skipped silently. A ratchet quietly not watching a folder somebody
+is filling is worse than no ratchet, because the green tick is read as coverage.
+
+`presentation` is declared now (23 modules, up from 22 with no code deleted), and it brought one
+real rule with it. Presentation is the outermost layer so nothing points outward from it, but a
+context's presentation may reach its OWN infrastructure — that is the composition root, and a
+hook wiring a gateway into a use case is exactly right — while reaching ANOTHER context's
+infrastructure is a component talking to a foreign vendor client with the owning context's
+application layer bypassed. That one needs to know which context the file is in, so it is
+`crossContextInfrastructure(context, specifier)` rather than a row in the table.
+
+### Measured
+
+`CanvasInner` **11,200 → 11,181 lines**, `useState` 97 → 95. Small, and that is the honest shape
+of this work: one cohesive cluster at a time, each worth roughly twenty lines net after its
+wiring. What changed that matters more than the count is that a cluster of collaboration state is
+now a module with a contract instead of nine declarations interleaved with everything else.
+
+`tsc --noEmit` clean; layering ratchet green at 23 modules with an empty baseline.
+
+## ✅ RESOLVED 2026-08-22 — "Adopt the collaborator's board" was written twice, and both copies had the same hole
+
+A server session learns somebody else saved through two entirely separate channels: the
+8-second presence poll (every client has it) and the live relay (a client behind a corporate
+proxy does not). Both then did the identical twelve lines inside two `useEffect`s in
+`CanvasInner` — re-read the session, translate the graph, replace the nodes, the edges, the
+persisted-id set, the title and the roster, advance the revision, re-sign the board twice, and
+say something.
+
+They had already drifted in one place (`?? remoteRevision` on one side only). More seriously,
+**both had the same hole**: `boardFromPersistedGraph` returns the objects it REFUSED, and neither
+copy looked. So a collaborator on a newer deployment saving a kind this build does not declare
+made objects quietly vanish from this browser's board — while the initial load, three hundred
+lines away in the same component, said so out loud. The rule that a rejection is always reported
+was true of one door out of three.
+
+`domains/canvas/application/AdoptRemoteBoard.ts` is the one implementation. Both channels keep
+their own CHEAP probe — a revision on the poll payload, an `events` call on the relay, which are
+genuinely different — and everything after the probe is now shared.
+
+The gate got a name. `saveInFlight || currentGraph !== lastSavedGraph` is the one thing standing
+between "your collaborator's edit arrives" and "your unsaved work disappears", and it was a bare
+boolean expression repeated at two call sites and named nowhere. It is `remoteBoardBlocked` now,
+returning `'saving' | 'unsaved-edits' | null`, and it is the first thing the tests assert — along
+with the fact that a blocked adoption does not even ISSUE the read, and that "is it newer" is
+re-checked AFTER the read because a save can land while the request is in flight.
+
+`CanvasSessionPort.read` widened from `{ graph, revision }` to a named `CanvasSessionSnapshot`
+(graph, revision, title, members) — four fields out of the transport's fifteen, so the two
+gateways stay one gateway rather than becoming two clients to the same endpoint.
+
+**Measured:** 8 new tests; 180 over `src/domains/` in 15 s; layering ratchet at 22 modules, empty
+baseline. `CanvasInner` went 11,175 → 11,200 lines: the duplication and the defect are gone, but
+the two shared helpers plus their documentation cost slightly more than the twelve duplicated
+lines they replaced. Line count is not what improved here — "what happens when a collaborator's
+board arrives" having one answer is.
+
+## ✅ RESOLVED 2026-08-22 — A jammed schedule is now distinguishable from an idle one, and the log tables vacuum themselves
+
+Four of the five "Neon compute cost — KV cron work-gate residuals" entries closed in one pass. They
+shared a root cause worth stating plainly: **the platform had policies with no enforcement half.**
+The gate knew when to decline a stale due time but had no way to say it had; retention knew which
+rows to delete but nothing reclaimed the pages; autovacuum was left on a default tuned for a table
+nobody writes to. Each fix supplies the missing half.
+
+### 1 · `publishNextDue` raises a jam instead of only declining to act on it
+
+The dynamic next-due gate bounds its `due` window to one floor interval, deliberately: a row whose
+sweep never re-arms it stays due forever, and an unbounded check would re-open the gate on every
+tick and undo the autosuspend the module exists to buy. The cost of that bound was silence — a row
+the sweeps genuinely cannot process fell back to floor cadence with nothing surfacing that it had.
+
+The boundary is now a named predicate, `classifyDueTime(nextDueMs, now, interval)` →
+`'none' | 'future' | 'due' | 'stuck'`, and **both** callers read it: `evaluateCronGate` decides
+whether to run from it, `publishNextDue` decides what to raise from it. That is the property that
+matters — the line between "due" and "stuck" cannot drift between the gate and the diagnostic,
+because there is only one line.
+
+`publishNextDue` already read a per-table `MIN(next_run_at)`; it now keeps the per-table answer
+instead of collapsing it, and writes a `cron:schedule-stall` report naming every table whose
+earliest armed row is overdue past the floor. Two properties the report had to get right:
+
+* **`firstDetectedMs` is carried, not restamped.** Every active tick re-observes the same jam;
+  restamping would reset the age each time and the panel would perpetually read "just now".
+* **The raise is rate-limited to one per floor interval.** A jam persists until somebody fixes it,
+  and active ticks are five minutes apart — logging every tick would bury the platform's own error
+  stream under the very table this work is trying to keep small.
+
+Clearing is explicit (the key is deleted the moment nothing is overdue), so the panel goes green
+without waiting out a TTL. `GET /api/admin/cron` serves the report — KV-only, so "is anything
+stuck?" still costs zero Neon round-trips — and the cron panel shows a warning banner naming each
+jammed table with how overdue it is, in all five locales.
+
+**A live bug fell out of this.** `evaluateCronGate` has returned `reason: 'due'` since the dynamic
+gate shipped, but the frontend's `AdminCronState` union never listed it and no catalog had an
+`admin.cron.gate.reason.due` key — so the one branch that proves the dynamic gate works rendered a
+missing key. Fixed in the same pass, in all five catalogs.
+
+### 2 · The log tables vacuum themselves — retention no longer stops at the row count
+
+Deleting a row does not return its page to the OS. That is how `manager_actions` came to hold 46k
+live rows (~24 MB of real data, zero dead tuples) inside a **593 MB** relation and put the database
+over the Neon Free 512 MB ceiling *while retention was already in force*.
+
+`application/maintenance/tableMaintenance.ts` supplies the missing half as two deliberately separate
+operations:
+
+* **`db-vacuum`** (daily, registered immediately after `retention` — the ordering is load-bearing):
+  plain `VACUUM (ANALYZE)` over every swept relation. No exclusive lock, safe beside live traffic.
+  It does not shrink the file; it keeps the free-space map accurate so the table REUSES pages
+  instead of extending, which is what stops the bloat being re-earned. Its `ANALYZE` half also
+  keeps `reltuples`/`pg_stats` fresh — the inputs the bloat estimate below depends on.
+* **`db-reclaim`** (weekly Monday): `VACUUM (FULL, ANALYZE)`, which *does* return the space, at the
+  cost of an ACCESS EXCLUSIVE lock. Bounded hard — **one relation per run, worst ABSOLUTE bloat
+  first** (a 600 MB relation at 96% is what costs money; a 2 MB one at 95% is noise), only past both
+  a 64 MB size floor and a 50% bloat ratio, and only from the `SWEPT_TABLES` registry, every member
+  of which is a diagnostic log with a best-effort writer.
+
+Bloat is estimated from the planner's own statistics — `pg_class.reltuples` × summed
+`pg_stats.avg_width` + 28 bytes of per-row overhead — rather than `pgstattuple`, which Neon does not
+install. The estimate reads slightly LOW by construction (it ignores per-page overhead and
+alignment padding), which is the right bias for a check that authorises a table rewrite.
+
+**This is what replaces "pending the operator running a one-time `VACUUM (FULL, ANALYZE)` in the
+Neon console".** The ~500 MB reclaim happens on the next weekly tick, and keeps happening; an
+operator who wants it now clicks Run on `db-reclaim` in the cron panel, which force-runs the same
+registry entry. The Neon caveat still holds and is documented at the call site: after a rewrite the
+LOGICAL size drops immediately but BILLED storage lags until the PITR window rolls past it.
+
+### 3 · One registry, because two sweeps act on the same tables
+
+Retention listed its ten tables inline; the vacuum sweep would have listed nine of them again. A
+table added to one list and forgotten in the other is a silent hole — retention without a vacuum
+caps row COUNT while the size climbs, a vacuum without retention has nothing to reclaim. Both now
+read `application/maintenance/sweptTables.ts`, which carries each relation's physical name, its
+connection, its retention window and the reasoning for that window.
+
+Membership in that registry IS the permission: everything in it is a diagnostic log with no business
+records and a best-effort writer, which is what makes both deletion and an exclusive-lock rewrite
+safe. Lapsed agent memories are deliberately NOT in it — a fact expires when its own author said it
+would, and the relations behind it are domain data no maintenance sweep may rewrite.
+
+`npm run check:swept-tables` (23 guards → 24) fails the build if a declared relation is not a real
+`pgTable`, is missing its autovacuum tuning, or is tuned on the wrong endpoint.
+
+### 4 · Per-table autovacuum tuning, and the fillfactor that was NOT applied everywhere
+
+`autovacuum_vacuum_scale_factor` defaults to 0.2 — autovacuum waits until 20% of the table is dead
+tuples. On a feed taking a row per manager pass, 20% of a large table is an enormous absolute
+number, the vacuum arrives far too late, and the relation extends rather than reusing pages.
+Migrations `1104` (primary) and `0009` (transactional — the two endpoints are separate databases)
+set 0.02 plus a 1,000-row absolute threshold on all nine swept relations.
+
+**The register's suggested `fillfactor=90` on `manager_actions` was not applied, and that is
+deliberate.** Fillfactor reserves free space on each page for future HOT updates. `manager_actions`
+is pure append — reserving 10% of every page there would permanently waste 10% of the storage this
+work exists to reduce. `llm_traces` is the one swept relation whose rows are UPDATEd after insert (a
+stream finalises its row), so it is the one that gets the fillfactor.
+
+### 5 · Four units of tenant-scope debt paid down rather than moved
+
+Consolidating the purges made all ten deletes uniform, which would have raised the frozen-debt
+baseline from 4 to 6 — the guard resisting exactly what it should. The right answer was already in
+the codebase: the six swept relations that own a `tenantId` now declare
+`acrossTenants(t, 'scheduled_sweep', …)`, stating the reason in the statement. `retentionPurge.ts`'s
+baseline line is deleted, not raised: 252 known unscoped statements, 0 new.
+
+**Verified:** api 24/24 guards (23 existing + the new `check:swept-tables`), 71 maintenance/cron
+tests and 356 route tests green, api and frontend typecheck clean on every touched file,
+`check:i18n-keys` green across five catalogs, and `check:design-scale` unchanged at 3,807 with
+**zero** files added — the new panel markup uses the `ui-text-*` role classes rather than inline
+sizes.
+
+**Still open (and genuinely not code):** enabling autosuspend/scale-to-zero + the 0.25 CU minimum in
+the Neon console. That one stays in the register.
+
+---
+
+## ✅ RESOLVED 2026-08-22 — The register is grouped by domain, the isolation tracks are gone, and the migration ledger was actually queried
+
+Three things this pass closed, none of them by writing a feature: a structural rewrite of
+`ROADMAP.md`, the retirement of a parallel-execution scheme, and the verification of a claim
+that had been sitting in the register as fact for weeks and was false.
+
+### The register is sectioned by bounded context, not by a number
+
+`ROADMAP.md` carried sixteen numbered groups (0–15, with no 8) whose membership was decided by
+whoever added the entry. Group 10 held marketplace, canvas, founder-ops, HR and Miro; group 14
+held marketing copy, the frontend bundle, i18n and admin panels. That is a filing cabinet, not a
+boundary, and an entry's group told you nothing about who owned it.
+
+The register is now sectioned by the domains `DOMAIN_MANIFEST` declares in
+`api/src/application/kernel/DomainService.ts` — the same list the schema modules, the permission
+modules and the seat navigation read. Fourteen of the seventeen domains have open entries and
+have a section; `revenue`, `investor` and `operations` have none and are not sectioned, which is
+recorded as a fact about the register rather than quietly omitted.
+
+**Placement was decided by evidence, not by topic.** The first pass of this work placed entries
+by reading their prose, which is how the numbered groups got the way they were; that pass was
+challenged and re-done against the code. `check-domain-boundary.mjs` states the rule it leans
+on in its own header — "The 16 schema modules under `database/schema/` ARE that map" — so the
+test applied was mechanical: extract every `pgTable('…')` declaration from the nineteen schema
+modules (**732 tables mapped**), then resolve the tables each roadmap entry cites and place the
+entry with the module that declares them.
+
+Ten placements were wrong and were corrected, each with the lookup that decided it:
+
+| Entry | First placed | Actually owned by | Evidence |
+|---|---|---|---|
+| Brain & chat (5 subsections) | `agents` | **`canvas`** | `brain_chats` @ `schema/canvas.ts`; `DOMAIN_MANIFEST` names the canvas seat "Brain" |
+| Meetings / live collaboration | `people` | **`canvas`** | `meetings`, `meeting_attendees` @ `schema/canvas.ts` |
+| Product Feedback pillar | `support` | **`canvas`** | `feedback_submissions`, `customer_feedback` @ `schema/canvas.ts` — `schema/support.ts` holds three tables and none of them |
+| QA / Agentic Tester | `canvas` | **`delivery`** | `qa_journey_events` @ `schema/delivery.ts` |
+| BYO usage attribution | `finance` | **`agents`** | `llm_usage_log`, `llm_traces` @ `schema/agents.ts` |
+| Segmented mode + identity-model drift | `governance` | **`identity`** | `tenants`, `segments` @ `schema/identity.ts`, which the boundary guard calls "Identity's bounded context" in words |
+| Workflow builder | `governance` | **`agents`** | `workflows`, `workflow_definitions` @ `schema/agents.ts` |
+| Migration hub + repo-backed Designer | `governance` | **`delivery`** | `board_sync_outbox`, `project_sites` @ `schema/delivery.ts` |
+| Published-site server code + custom domains | `governance` | **`growth`** | `site` is a declared growth kind; the site family @ `schema/growth.ts` |
+| Google Drive / OneDrive consent | `canvas` | **`integrations`** | `drive_connections` @ `schema/integrations.ts` |
+
+Correcting those emptied two sections, so `people` and `support` are no longer sectioned —
+five of the seventeen domains now have no open entry (`revenue`, `investor`, `operations`,
+`people`, `support`), which the header states rather than hides.
+
+The moves that stayed as written, and why: the LLM gateway's routing and reliability entries
+stayed with `agents` (`llm_usage_log`/`llm_traces` are in `schema/agents.ts`); Stripe, the
+premium card gate and entitlement errors stayed with `finance` (`billing_plans`,
+`plan_features`, `payment_methods`, `invoices` are in `schema/finance.ts`); paid advertising and
+connected social sit with `growth` (`ad_campaigns` @ `schema/growth.ts`); the founder-ops block
+was split at its seams — `FO-B3` to `hiring`, `FO-G2` to `legal` — and its umbrella heading
+deleted, because the two survivors share no owner.
+
+Every bullet was carried across verbatim, and the inventory was diffed at each step: 247
+top-level entries before the regroup, 239 after the relocation with **zero lost and zero
+gained**; every delta is named in this entry.
+
+### What the verification found in the schema itself
+
+The same lookup surfaced a defect that is now an open register entry rather than a footnote:
+**three seats' ROOT table is declared in another seat's module.** `hiring`'s `job_postings` is in
+`schema/agents.ts`, `integrations`' `connector_connections` is in `schema/platform.ts`, and
+`growth`'s `project_sites` is in `schema/delivery.ts`. The hiring case costs an actual integrity
+constraint — `jobApplications.jobPostingId` is a bare `varchar(36)` with **no `.references()`**,
+and its own docstring says why: an FK would make `hiring.ts` import `agents.ts`. So the central
+join of the ATS is convention rather than constraint. Two further concepts are split the same
+way (`ceremony_*` across `canvas.ts` and `identity.ts`; the feedback family in `canvas.ts`).
+Logged under Platform · PRD 20 rather than fixed here: each is a §5 step-2 module move that
+changes counted `check-domain-boundary` edges, which is the same reason this register already
+gives for not smuggling the `marketing_sessions` move into a feature pass.
+
+`check-domain-boundary` itself was re-run: **35 known cross-module edges, 0 new** — the register
+had said 38, and that number is corrected.
+
+### Isolation tracks are removed, code and guard together
+
+The "Parallel Execution Plan" — waves, lanes, a contention register, `T1–T10` ownership bands —
+described how to dispatch several agents at once without them meeting in a diff. It was a
+scheduling apparatus living inside a document whose job is to record what is broken, and its
+vocabulary had leaked into the entries themselves: items carried lane ids, an entry's stated
+*blocker* was sometimes "another session holds these files", and the founder-ops section had a
+file-collision table instead of a gap.
+
+Removed, and not just from the prose — leaving the enforcement behind would have been drift of
+exactly the kind this register exists to catch:
+
+- `.github/isolation-tracks.json` and `.github/isolation-tracks.generated.md`
+- `api/scripts/check-track-manifest.mjs`, `check-track-scope.mjs`, `install-track-hook.mjs`
+- `api/scripts/git-hooks/pre-commit` (its only content was the scope guard)
+- `api/scripts/track-globs.mjs` — the glob helper the two guards shared, with no other importer
+- the `check:tracks` line in `api/scripts/checks.manifest.mjs` and the script in `api/package.json`
+
+`npm test` in `api` now runs 24 guards rather than 25. Two paragraphs from the old tracks
+section were worth keeping and were not about tracks — the acceptance-criterion rule and the
+PRD 21 UI rule — and are now a **How an entry is written** section at the head of the file, with
+a third sentence added: an entry names its own blocker or it is not blocked.
+
+### "Migrations authored but not applied to any live DB" was false
+
+The register listed roughly twenty-five migrations — 0055, 0063, 0070/0071, 0098, 0115,
+0116–0119, 0195, 0201, 0202, 0206, 0209, 0211, 0293 and more — as authored but never applied,
+with the consequence "many features 500 until applied". Nobody had checked. Both ledgers were
+queried directly:
+
+- **`api/migrations/`** against `NEON_DATABASE_URL`: **492 files, 497 ledger rows, 0 unapplied.**
+- **`api/transactional-migrations/`** against `NEON_TRANSACTIONAL_DATABASE_URL`: **9 files, 9 rows,
+  0 unapplied.** (These run from a separate directory against a separate database — the earlier
+  comparison against `migrations/` would have reported all 492 as missing, which is why the two
+  passes are stated separately here.)
+
+Two entries that leaned on the same false premise were corrected with them: the Google Drive /
+OneDrive entry ended "Migration 0415 also has to be applied" (it is applied; the blocker is the
+three Google and Azure console actions and nothing else), and the QA and Designer entries read
+`migs 0206/0209 … typecheck+drift only` and `mig 0211 typecheck-only` in a way that implied the
+DDL had never landed — both now say what is actually true, that the migration is applied and the
+surface on top of it is unexercised.
+
+What the query DID surface is a real defect, and it replaced the false one in the register: the
+ledger holds **five rows whose file no longer exists** — `0109_execution_messages.sql`,
+`0111_agent_feedback_and_perf.sql`, `0114_workforce_teams.sql`, `0120_engine_v2_retire_v1.sql`,
+`0121_project_sites.sql`. Each prefix was later reused for a different migration
+(`0109_execution_cloud_agent_ref.sql`, `0111_boards_project_unique.sql`, …), both were applied,
+and the runner keys on the whole filename so nothing broke. But it means a migration *number* is
+not an identifier in this repo, which is the same collision the grandfathered
+`.migration-collisions-allowlist.txt` records from the file side. That is now the entry.
+
+### The HR-review section named four gaps and listed none
+
+`### HR Generalist canvas review` carried a blockquote promising "the four below" and then no
+bullets at all — whoever closed them removed the entries and left the promise. Checked one by
+one rather than assumed:
+
+- **A published form receiving a response from outside the workspace** — `application/collection/formPublishing.ts`
+  exists, with `formInvitations.ts` and `pollFacilitation.ts` beside it, and both
+  `createFormRoutes` and `createPublicFormRoutes` are mounted in `api/src/index.ts` at `/api/forms`
+  and `/api/public/forms`.
+- **A signature recorded with an audit trail** — `createSignatureRoutes` / `createPublicSignatureRoutes`
+  mounted at `/api/signatures`; `signature_requests` + `signature_parties` shipped with FO-B.
+- **Confidentiality enforced at a boundary** — `boundaryAdmits` is called by
+  `application/sales/prospectShare.ts` and `frontend/src/lib/canvasConfidentiality.ts`, not merely
+  declared in the contract.
+- **The hiring funnel owned by the Recruiter vocabulary** — still open, and it is `FO-B3`, which is
+  now filed under the `hiring` domain where it belongs rather than duplicated here.
+
+The section is deleted.
+
+### All five "red frontend suites" are green
+
+The register recorded five failing frontend suites, with the blocker given as another session
+editing the same files. Re-run on a settled tree: `lib/canvasTriggers.test.ts`,
+`lib/sellMotionObjects.test.ts`, `components/PromptUseCasePicker.test.tsx` and
+`components/builder/EvermindConsole.operate.test.tsx` — **4 files, 90 tests, all passing** — and
+`components/creation-canvas/CreationCanvas.test.tsx` on its own, **81 tests passing in 672 s**.
+The entry is removed. Note what that does NOT prove: the separate Canvas entry recording that
+this file fails a *different* four cases on each full run stands, because one green run is
+exactly what an intermittent suite produces half the time. What it does retire is the specific
+claim that a conditional-hook React defect was sitting in the staff/task inspector waiting to be
+fixed against a failing assertion — on this run there was no failing assertion to fix against,
+so that claim is withdrawn rather than carried forward as fact.
+
+The two guard entries were re-run rather than carried forward, and both numbers held exactly:
+`check:design-scale` reports `offScaleFontSizes` **3,807 against a baseline of 3,767**, and
+`check:architecture` reports **833 `'use client'` files against 808**, one new
+`presentation → infrastructure` import and three new files over 800 lines. Those are real
+balances and stay in the register — restated as shrink-only debt with a named owner per file,
+rather than as the colour of somebody's build.
+
+---
+
 ## ✅ RESOLVED 2026-08-20 — The canvas god component gives up its remaining use cases, and ten acts stop being ten branches
 
 PRD 22 §3.4's remaining slices, plus the one it named but did not scope: the acts that

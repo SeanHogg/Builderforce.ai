@@ -447,6 +447,9 @@ export function SpecObjectBody({ data, board = EMPTY_SPEC_BOARD }: { data: Creat
   if (!spec || !namespace) return null;
 
   const sections = spec.fields
+    // A field a bespoke body already draws is skipped here rather than drawn twice —
+    // see `SpecField.bodyOwned`. The check is on the FIELD, so no kind is named.
+    .filter((field) => !field.bodyOwned)
     .filter((field) => sectionHasContent(fmt, field, data, board))
     .map((field) => ({ field, node: <FieldSection key={field.name} field={field} data={data} board={board} t={t} /> }));
 

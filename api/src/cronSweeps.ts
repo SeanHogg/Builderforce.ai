@@ -32,6 +32,7 @@ import { runRollups } from './application/kernel/metricRollup';
 import { runVendorHealthCron } from './application/llm/vendorHealthCron';
 import { runByoCredentialHealthCron } from './application/llm/byoCredentialHealthCron';
 import { runRetentionPurge } from './application/maintenance/retentionPurge';
+import { runBloatReclaim, runTableVacuum } from './application/maintenance/tableMaintenance';
 import { runEvalDriftSweep } from './application/eval/runEvalDriftSweep';
 import { runAlertSweep } from './application/alerts/runAlertSweep';
 import { runValidatorReviewSweep } from './application/validation/validationDispatch';
@@ -253,6 +254,20 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     },
   },
   {
+    key: 'db-vacuum',
+    cadence: 'daily',
+    // Registered AFTER `retention` and that ordering is load-bearing: a vacuum run
+    // before the purge has nothing to reclaim and leaves the freed pages untracked
+    // for a whole day. Deleting a row does not return its page to the OS — it only
+    // becomes reusable once vacuumed — which is how manager_actions ended up holding
+    // 46k live rows inside a 593 MB relation despite retention already being in force.
+    description: 'VACUUM (ANALYZE) every retention-swept log table so the pages the purge freed are reused instead of the relation extending.',
+    run: async ({ env }) => {
+      const r = await runTableVacuum(env);
+      return r.failed.length > 0 ? `vacuumed=${r.vacuumed.length} failed=${r.failed.length}` : null;
+    },
+  },
+  {
     key: 'byo-health',
     cadence: 'daily',
     description: "Probe each tenant's connected model providers on their own credential; email admins on breakage.",
@@ -326,6 +341,23 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
       return r.dispatched > 0
         ? `tenantsWithSecurityAgent=${r.tenantsWithSecurityAgent} dispatched=${r.dispatched}`
         : null;
+    },
+  },
+  {
+    key: 'db-reclaim',
+    cadence: 'weekly-mon',
+    // The one operation that actually SHRINKS a relation, and the reason the platform
+    // no longer depends on an operator running `VACUUM (FULL, ANALYZE)` by hand to
+    // stay under the Neon Free 512 MB ceiling. It takes an ACCESS EXCLUSIVE lock, so
+    // it is bounded hard: one relation per run, worst absolute bloat first, and only
+    // from the SWEPT_TABLES registry — every member of which is a diagnostic log with
+    // a best-effort writer. Weekly because a rewrite is not something to do daily.
+    description: 'Rewrite the worst-bloated log table with VACUUM (FULL, ANALYZE) when it is past both the size and bloat-ratio thresholds.',
+    run: async ({ env }) => {
+      const r = await runBloatReclaim(env);
+      if (r.reclaimed.length === 0 && r.failed.length === 0) return null;
+      const freed = r.reclaimed.reduce((sum, x) => sum + Math.max(0, x.beforeBytes - x.afterBytes), 0);
+      return `eligible=${r.eligible.length} reclaimed=${r.reclaimed.map((x) => x.relation).join(',') || 'none'} freedMb=${Math.round(freed / 1048576)}${r.failed.length ? ` failed=${r.failed.length}` : ''}`;
     },
   },
   {

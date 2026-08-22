@@ -1,0 +1,52 @@
+/**
+ * What is left of the meetings calendar's own styling once the grid moved to the shared
+ * `Calendar` primitive: a height for the surface it sits in, and the legend swatches.
+ *
+ * The grid, the day cells, the hour rows and the event blocks are NOT here — they belong
+ * to `components/calendar/Calendar.module.css`, which is the only place a calendar is
+ * drawn in this codebase.
+ */
+
+.wrap {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  /* A bookable week grid needs vertical room to be bookable at all; the shared calendar
+     fills its host, so the host has to have a size. `clamp` rather than a fixed height so
+     it is usable on a phone and generous on a desktop. */
+  height: clamp(420px, 68vh, 900px);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+/* Embedded in a tab or a side panel, where the page owns the scroll. */
+.wrap[data-compact] { height: clamp(320px, 46vh, 560px); }
+
+.legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.swatch {
+  width: 10px;
+  height: 10px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+}
+
+.ghost {
+  min-height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--font-size-small);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ghost:hover { border-color: var(--accent); color: var(--text-primary); }

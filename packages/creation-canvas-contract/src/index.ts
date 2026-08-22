@@ -76,10 +76,13 @@ export * from './career';
 // audience a send may lawfully reach. Shared for two reasons the module argues in full:
 // the brand directive is composed into a prompt by BOTH the browser and the API's
 // creative dispatch, and the sendable arithmetic is printed on the campaign card AND
-// decides whether the send control refuses. It also owns the calendar projection, which
-// folds `scheduledAt` and the trigger engine's own deadline fields into one time axis
-// rather than a second store of dates that already exist.
+// decides whether the send control refuses.
 export * from './marketing';
+// ANYTHING THAT IS A DATE WITH A SUBJECT — the event shape, the day/week/month grain,
+// the conflict rule, and the projection that reads a board's own dates as events. It
+// used to live inside `marketing.ts` and to serve exactly one hardcoded reading; a
+// deployment, a holiday and an on-call shift are the same shape and were unreachable.
+export * from './calendar';
 // `export *` re-exports a binding; it does not bring it INTO scope here, and the
 // kind list below spreads it — without this import the whole contract module
 // throws `PEOPLE_OBJECT_KINDS is not defined` at import time, which takes every
@@ -449,6 +452,22 @@ export const SHARED_OBJECT_KINDS = [
    * `facilitation.ts`.
    */
   'poll',
+  /**
+   * A DATE WITH A SUBJECT, and any number of them — the calendar primitive.
+   *
+   * Cross-domain by construction, and it is the kind that ended a MODALITY. The month
+   * used to be a board-scoped surface in the canvas rail: one grid, one hardcoded
+   * reading (this board's dated cards), no way to have two, and no way to point it at
+   * the deployments, meetings, holidays or connected accounts whose dates already
+   * existed elsewhere. A release calendar, a send calendar, a leave calendar and an
+   * on-call rotation are one object bound to four SOURCES — which is a value on the
+   * card, exactly as `funnelDomain` and `pollFormat` are values one entry up.
+   *
+   * It owns no dates it did not author. A bound calendar PROJECTS its source and writes
+   * an edit back through it, because a second copy of a send's date is how a card and a
+   * calendar come to disagree about when something ships. See `calendar.ts`.
+   */
+  'calendar',
 ] as const;
 
 /**

@@ -42,6 +42,207 @@ import {
 } from 'drizzle-orm/pg-core';
 import { objects } from './kernel';
 
+// =========================================================================
+// The root entity, and the family that hangs off it.
+//
+// `DOMAIN_MANIFEST` names `job_posting` as this seat’s rootKind, and until the
+// module move these four tables were declared in `agents.ts` — a seat whose own
+// root table lived in somebody else’s file, which is the one shape §3 exists to
+// forbid. It cost a constraint in the Drizzle schema: `jobApplications` could not
+// declare `.references(() => jobPostings.id)` without making hiring import agents,
+// so the single most important join in the ATS was a bare column. It can now, and does.
+//
+// Cross-domain columns travelled as PLAIN IDS (`tenant_id`, `project_id`,
+// `source_ticket_id`, the `*_user_id`s) rather than as `.references()`, which is
+// this module’s standing convention and §3’s rule both — the foreign keys are
+// declared in migrations 0273 / 0293 / 0985 and are unaffected.
+// `check-domain-root-table.mjs` keeps a rootKind and its module together from here.
+// =========================================================================
+
+// ---------------------------------------------------------------------------
+// Freelance marketplace — two-sided (0273): job postings + proposals (bidding),
+// reviews/reputation, invoices/payment status, in-app notifications.
+// ---------------------------------------------------------------------------
+
+/** An employer posts work freelancers can BID on (distinct from a direct hire). */
+export const jobPostings = pgTable('job_postings', {
+  id:               varchar('id', { length: 36 }).primaryKey(),
+  tenantId:         integer('tenant_id').notNull(),
+  projectId:        integer('project_id'),
+  title:            varchar('title', { length: 200 }).notNull(),
+  description:      text('description'),
+  discipline:       varchar('discipline', { length: 60 }),
+  skills:           text('skills'),                        // JSON string[]
+  rateMinCents:     integer('rate_min_cents'),
+  rateMaxCents:     integer('rate_max_cents'),
+  currency:         varchar('currency', { length: 3 }).notNull().default('USD'),
+  status:           varchar('status', { length: 20 }).notNull().default('open'),      // open|closed|filled
+  visibility:       varchar('visibility', { length: 10 }).notNull().default('public'), // public|private
+  /** Gig Marketplace (0293): the work item this gig was published FROM (one-click
+   *  "Publish to Marketplace"), the gig shape, the billing/engagement shape, and the
+   *  free-text acceptance criteria a proposal is AI-evaluated against. */
+  sourceTicketId:   integer('source_ticket_id'),
+  postingType:      varchar('posting_type', { length: 20 }).notNull().default('project_bid'), // project_bid|design|fte
+  engagementType:   varchar('engagement_type', { length: 20 }),                        // fixed_bid|hourly|fte
+  requirements:     text('requirements'),
+  /** ── RICHER POSTING (0985) ───────────────────────────────────────────────────
+   *
+   *  BUDGET vs RATE. `rate_min_cents`/`rate_max_cents` are a PER-UNIT rate BAND —
+   *  "$80–$120 an hour". `budget_total_cents` is the WHOLE-JOB total for fixed-price
+   *  work — "$6,000 for the thing". They are different units of a different quantity
+   *  and the same number means opposite things in each, so they are separate columns
+   *  with unit-bearing names rather than one pair reinterpreted by context.
+   *  `engagement_type` already says which shape the work is (0293) and therefore which
+   *  column a reader looks at; a DB CHECK forbids the one combination that is a
+   *  category error (a whole-job total on hourly work). No `job_type` column is added:
+   *  hourly-vs-fixed is `engagement_type` and adding a second spelling of it would be
+   *  the same fact in two places. */
+  budgetTotalCents: integer('budget_total_cents'),
+  /** entry|intermediate|expert — the seniority the posting is pitched at. */
+  experienceLevel:  varchar('experience_level', { length: 20 }),
+  /** lt_1_month|1_3_months|3_6_months|gt_6_months|ongoing — expected duration. */
+  projectLength:    varchar('project_length', { length: 24 }),
+  /** The SUB-CATEGORY beneath `discipline`. The vocabulary is a DATA registry
+   *  (`JOB_SPECIALTIES` in application/marketplace/jobFilters.ts), so deepening the
+   *  category tree adds registry rows and never a migration per level. */
+  specialty:        varchar('specialty', { length: 60 }),
+  /** `ScreeningQuestion[]` — validated JSONB, not rows. The questions have no life
+   *  outside the posting (never joined, never filtered on), the list is bounded, and
+   *  an answer freezes the prompt it answered, so a later edit cannot silently re-key
+   *  bids that are already in. See `jobPostings.ts` for the validator. */
+  screeningQuestions: jsonb('screening_questions'),
+  /** `PostingAttachment[]` — `{ id, key, name, mime, size }` naming objects in the
+   *  EXISTING `UPLOADS` R2 bucket. No new blob store: the same bucket and the same
+   *  put/get shape the résumé and avatar uploads already use. */
+  attachments:      jsonb('attachments'),
+  createdByUserId:  varchar('created_by_user_id', { length: 36 }),
+  closedAt:         timestamp('closed_at'),
+  createdAt:        timestamp('created_at').notNull().defaultNow(),
+  updatedAt:        timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  byStatus: index('idx_job_postings_open').on(t.status),
+  byTenant: index('idx_job_postings_tenant').on(t.tenantId),
+}));
+
+
+/** A freelancer's bid on a job. One live proposal per (job, freelancer). */
+export const jobProposals = pgTable('job_proposals', {
+  id:                varchar('id', { length: 36 }).primaryKey(),
+  jobId:             varchar('job_id', { length: 36 }).notNull().references(() => jobPostings.id, { onDelete: 'cascade' }),
+  freelancerUserId:  varchar('freelancer_user_id', { length: 36 }).notNull(),
+  coverNote:         text('cover_note'),
+  rateCents:         integer('rate_cents'),
+  currency:          varchar('currency', { length: 3 }).notNull().default('USD'),
+  status:            varchar('status', { length: 20 }).notNull().default('submitted'), // submitted|shortlisted|accepted|declined|withdrawn
+  /** Gig Marketplace (0293): 0..100 cached overall from the latest AI proposal
+   *  evaluation (list display), and the courteous decline message shown to the
+   *  candidate when they aren't selected. */
+  lastEvalOverall:   integer('last_eval_overall'),
+  declineReason:     text('decline_reason'),
+  /** ── RICHER PROPOSAL (0985) ──────────────────────────────────────────────────
+   *  `ScreeningAnswer[]` — one per question the posting asked, keyed by the question's
+   *  id AND carrying a frozen copy of the prompt. The frozen copy is the point: an
+   *  employer who edits question 3 after ten bids arrived must not retroactively change
+   *  what those ten people were asked. */
+  screeningAnswers:  jsonb('screening_answers'),
+  /** `PostingAttachment[]` — same shape and same R2 bucket as the posting's own. */
+  attachments:       jsonb('attachments'),
+  createdAt:         timestamp('created_at').notNull().defaultNow(),
+  updatedAt:         timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  byFreelancer: index('idx_proposals_freelancer').on(t.freelancerUserId),
+}));
+
+
+/**
+ * A client's SHORTLIST of freelancers (0985) — the supply-side mirror of
+ * `job_proposals.status = 'saved'`, which is how the seeker shortlists work.
+ *
+ * A join and nothing else: the row IS the relationship. `list_name` lets one workspace
+ * keep several shortlists ("react leads", "backup DBAs") without a lists table nobody
+ * would ever query on its own — a new list is a value, not a schema change, which is
+ * the register's rule that a new KIND is a column value.
+ *
+ * `owner_user_id` as well as `tenant_id` because a shortlist is a PERSON's working set:
+ * two hiring managers in one workspace keep separate lists, and merging them silently
+ * would be indistinguishable from a leak between them.
+ */
+export const savedTalent = pgTable('saved_talent', {
+  id:                varchar('id', { length: 36 }).primaryKey(),
+  tenantId:          integer('tenant_id').notNull(),
+  ownerUserId:       varchar('owner_user_id', { length: 36 }).notNull(),
+  freelancerUserId:  varchar('freelancer_user_id', { length: 36 }).notNull(),
+  listName:          varchar('list_name', { length: 80 }).notNull().default('shortlist'),
+  note:              text('note'),
+  createdAt:         timestamp('created_at').notNull().defaultNow(),
+  updatedAt:         timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  uqSavedTalent: uniqueIndex('uq_saved_talent').on(t.tenantId, t.ownerUserId, t.freelancerUserId, t.listName),
+  byOwner:       index('idx_saved_talent_owner').on(t.tenantId, t.ownerUserId, t.listName),
+}));
+
+
+/**
+ * An INVITATION to one named freelancer to bid on one posting (0985).
+ *
+ * Deliberately NOT a notification. A notification is a message that has been read or
+ * not; an invite is a state machine with a counterparty, an expiry and an outcome, and
+ * accepting one lands the invitee INSIDE the proposal flow rather than at a dead end —
+ * `proposal_id` records the `job_proposals` row the acceptance opened, which is the
+ * whole difference. The notification is still sent, through `notify()` like every other
+ * marketplace event, but it is the announcement of this row and not the row itself.
+ *
+ * A live invite is also a GRANT: it is what lets an invited freelancer bid on a
+ * `visibility = 'private'` posting they could not otherwise see (see the private-job
+ * gate in `POST /api/jobs/:id/proposals`). That is why it is tenant-scoped and why the
+ * expiry is real — a grant with no end is an access-control decision nobody revisits.
+ */
+export const jobInvites = pgTable('job_invites', {
+  id:                varchar('id', { length: 36 }).primaryKey(),
+  tenantId:          integer('tenant_id').notNull(),
+  jobId:             varchar('job_id', { length: 36 }).notNull().references(() => jobPostings.id, { onDelete: 'cascade' }),
+  freelancerUserId:  varchar('freelancer_user_id', { length: 36 }).notNull(),
+  invitedByUserId:   varchar('invited_by_user_id', { length: 36 }),
+  message:           text('message'),
+  /** sent|viewed|accepted|declined|expired */
+  status:            varchar('status', { length: 20 }).notNull().default('sent'),
+  expiresAt:         timestamp('expires_at'),
+  viewedAt:          timestamp('viewed_at'),
+  respondedAt:       timestamp('responded_at'),
+  /** The bid this invite turned into. SET NULL rather than CASCADE: withdrawing a
+   *  proposal must not erase the record that the client invited this person. */
+  proposalId:        varchar('proposal_id', { length: 36 }).references(() => jobProposals.id, { onDelete: 'set null' }),
+  createdAt:         timestamp('created_at').notNull().defaultNow(),
+  updatedAt:         timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  uqJobInvite:  uniqueIndex('uq_job_invites_job_user').on(t.jobId, t.freelancerUserId),
+  byInvitee:    index('idx_job_invites_invitee').on(t.freelancerUserId, t.status),
+  byTenant:     index('idx_job_invites_tenant').on(t.tenantId, t.createdAt),
+}));
+
+
+// ── Agentic Workforce Kanban: roles, templates & per-lane requirements (0274) ─
+// One primitive — a KanbanTemplate binding {roles, required checks, gate} to each
+// lane — powers the built-in Standard SWE board, custom kanbans, the recommended
+// roster, per-ticket auditing, and swimlane gating. Built-in roles/templates live
+// as TS constants; these tables hold only tenant-created/forked/published rows.
+
+/** Tenant-extensible tail of the job-function role taxonomy (canonical set in code). */
+export const jobRoles = pgTable('job_roles', {
+  id:          varchar('id', { length: 36 }).primaryKey(),
+  tenantId:    integer('tenant_id').notNull(),
+  key:         varchar('key', { length: 60 }).notNull(),
+  name:        varchar('name', { length: 120 }).notNull(),
+  description: text('description'),
+  discipline:  varchar('discipline', { length: 60 }).notNull().default('engineering'),
+  color:       varchar('color', { length: 24 }),
+  icon:        varchar('icon', { length: 16 }),
+  position:    integer('position').notNull().default(0),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+});
+
+
 /** A person's application to a posting. The root of the hiring funnel. */
 export const jobApplications = pgTable('job_applications', {
   id:           serial('id').primaryKey(),
@@ -61,8 +262,14 @@ export const jobApplications = pgTable('job_applications', {
    * Widened rather than bridged. The alternative on the table was matching postings by
    * title, and string matching between two identifier spaces is the exact defect
    * `candidateIntake.ts` already documents removing from the party module. See 0983.
+   *
+   * DECLARED, not merely intended. This was a bare column for as long as `job_postings`
+   * lived in `agents.ts`, because declaring the reference would have made hiring import
+   * agents. The posting is in this module now, so the reference is in the schema — matching
+   * `fk_job_applications_posting` (ON DELETE SET NULL), which migration 0983 already put
+   * on the database.
    */
-  jobPostingId: varchar('job_posting_id', { length: 36 }),
+  jobPostingId: varchar('job_posting_id', { length: 36 }).references(() => jobPostings.id, { onDelete: 'set null' }),
   /** party_roles.party_ref for the candidate role — a person, not a candidate row. */
   candidateRef: varchar('candidate_ref', { length: 64 }).notNull(),
   source:       varchar('source', { length: 48 }).notNull().default('direct'),

@@ -56,13 +56,21 @@ describe('canvas surface registry', () => {
     // it existed, so the registry had grown a fifth object surface that this assertion
     // still called an error. `facilitate` is the sixth and arrived the same way — it runs
     // ONE `poll` in front of a room, with that poll's own join address and live tally.
+    // `calendar` is the seventh and arrived the OTHER way: it was a board surface first,
+    // and moved here when the month stopped being a mode and became an object.
     // The properties BELOW are what this test is actually for; the list is the roll call.
-    expect(objectScoped.map((def) => def.id)).toEqual(['page', 'play', 'site', 'timeline', 'world', 'facilitate']);
+    expect(objectScoped.map((def) => def.id)).toEqual(['page', 'play', 'site', 'timeline', 'world', 'facilitate', 'calendar']);
     // None persists: a page cannot be reopened without knowing which page.
     expect(objectScoped.every((def) => !def.persist)).toBe(true);
     // None draws the board or its objects — each is about exactly one.
     expect(objectScoped.every((def) => !def.showsBoard && !def.showsObjects)).toBe(true);
-    expect(boardCanvasSurfaces().map((def) => def.id)).toEqual(['chat', 'graph', 'scene3d', 'app', 'calendar']);
+    // `calendar` is NOT here, and its absence is the point. It shipped as a board
+    // surface — a rail entry holding one month welded to one reading of one board — and a
+    // rail entry is a MODE: you cannot have two, cannot put one beside another, and
+    // cannot point one at the meetings, releases, holidays or connected accounts whose
+    // dates already existed. The reading became a value on a `calendar` OBJECT, so the
+    // month is entered from the card that IS it, like every other object surface.
+    expect(boardCanvasSurfaces().map((def) => def.id)).toEqual(['chat', 'graph', 'scene3d', 'app']);
   });
 
   /**
@@ -94,6 +102,9 @@ describe('canvas surface registry', () => {
     // A site is pages AND a width — two axes a single sheet does not have, which is why
     // it is not folded into `page` however much both of them are "a document".
     expect(creationObjectSurface('website')).toBe('site');
+    // A month with an hour grid and a detail panel does not fit a ~340px card, so the
+    // card previews it and this opens it. Same promotion as the four above.
+    expect(creationObjectSurface('calendar')).toBe('calendar');
     expect(creationObjectSurface('prototype')).toBe('site');
     expect(creationObjectSurface('document')).toBe('page');
     // A card IS the whole object for most kinds, and should stay that way.
@@ -248,7 +259,7 @@ describe('the chat surface on the canvas', () => {
     // and the count is pinned to the board surfaces the registry declares, so adding a
     // board surface without a button (or a button without a surface) also fails.
     const offered = within(switcher()).getAllByRole('button').map((button) => button.textContent);
-    expect(offered).toEqual(['Chat', 'Board', '3D space', 'App', 'Calendar']);
+    expect(offered).toEqual(['Chat', 'Board', '3D space', 'App']);
     expect(offered).toHaveLength(boardCanvasSurfaces().length);
   });
 
@@ -310,6 +321,54 @@ describe('the chat surface on the canvas', () => {
     expect(screen.queryByTestId('canvas-page-surface')).not.toBeInTheDocument();
     // An object surface is never remembered — it cannot be restored without its object.
     expect(window.localStorage.getItem(CANVAS_SURFACE_STORAGE_KEY)).not.toBe('page');
+  });
+
+  /**
+   * The calendar's whole vertical slice, and the point of the change that made it one.
+   *
+   * It used to be a rail MODE: pressing "Calendar" replaced the board with one month of
+   * one hardcoded reading. It is a card now — so a board can hold several, each bound to
+   * its own source — and the month opens at full size from the card, through the same
+   * control that opens a page, a build and an edit.
+   */
+  it('adds a calendar as a card and opens the month from it', () => {
+    render(<CreationCanvas sessionId="surface-calendar-open-test" persistence="local" />);
+    const board = () => document.querySelector<HTMLElement>('[data-view]')!;
+
+    // Not in the rail — that is the modality this replaced.
+    expect(within(switcher()).queryByRole('button', { name: 'Calendar' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('canvas-palette-calendar'));
+    // The card draws the month itself, at card size, from the same component the
+    // surface mounts — so a board-bound calendar is readable without opening anything.
+    const card = screen.getByTestId('canvas-node-calendar');
+    const cardCalendar = within(card).getByTestId('calendar-card');
+    // The grain, not the month name: a fixture asserting "August 2026" passes for
+    // thirty-one days and then reports a bug that is only the calendar being a calendar.
+    expect(cardCalendar).toHaveAttribute('data-view', 'month');
+    // By text, not by role: a React Flow node body is not in the accessibility tree in
+    // this environment, so a role query here asserts the harness rather than the card.
+    expect(within(cardCalendar).getByText('Today')).toBeInTheDocument();
+
+    const panel = screen.getByRole('dialog', { name: /Everything/ });
+    const open = within(panel).getByTestId('open-calendar-surface');
+    expect(open).toHaveAccessibleName('Open the calendar');
+
+    fireEvent.click(open);
+    expect(board()).toHaveAttribute('data-view', 'calendar');
+    const surface = screen.getByTestId('canvas-calendar-surface');
+    // The grains a card has no room for arrive with the room.
+    const full = within(surface).getByTestId('calendar-full');
+    for (const grain of ['Day', 'Week', 'Month']) {
+      expect(within(full).getByRole('button', { name: grain })).toBeInTheDocument();
+    }
+    // …and the card's own reading never offered them.
+    expect(within(cardCalendar).queryByText('Week')).not.toBeInTheDocument();
+
+    fireEvent.click(within(surface).getByRole('button', { name: 'Back to the board' }));
+    expect(board()).toHaveAttribute('data-view', 'graph');
+    // An object surface is never remembered — it cannot be restored without its object.
+    expect(window.localStorage.getItem(CANVAS_SURFACE_STORAGE_KEY)).not.toBe('calendar');
   });
 
   /**

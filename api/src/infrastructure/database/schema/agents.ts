@@ -36,7 +36,7 @@ import { brainChats, knowledgeDocuments } from './canvas';
 import { agentHostDirectoryStatusEnum, agentHostStatusEnum, agentTypeEnum, artifactTypeEnum, assignmentScopeEnum, executionStatusEnum, managedAgentHostRequestStatusEnum, objects, pricingModelEnum, tsvector, workflowStatusEnum, workflowTypeEnum } from './kernel';
 import { pullRequests, qaCredentials, qaTargets, qaTests } from './delivery';
 import { segments, tenants, users } from './identity';
-import { connectorConnections, integrationCredentials } from './platform';
+import { integrationCredentials } from './platform';
 import {
   boards,
   projectAgents,
@@ -1190,7 +1190,9 @@ export const agentHostChannels = pgTable('agent_host_channels', {
   name:         varchar('name', { length: 255 }).notNull(),
   /** The credentialed account this target belongs to; NULL = it carries its own
    *  sealed config below. */
-  connectionId: uuid('connection_id').references(() => connectorConnections.id, { onDelete: 'set null' }),
+  /** `connector_connections.id`, owned by the integrations domain (§3: an id, not
+   *  an imported table). FK declared in migration 0410. */
+  connectionId: uuid('connection_id'),
   /** Sealed with the shared per-tenant AES-GCM credential crypto. NEVER a bare
    *  secret, and never returned to a client — the read model exposes only whether
    *  a config is present. */
@@ -1307,28 +1309,6 @@ export const ticketRuns = pgTable('ticket_runs', {
   createdAt:         timestamp('created_at').notNull().defaultNow(),
   updatedAt:         timestamp('updated_at').notNull().defaultNow(),
   // UNIQUE (board_id, task_id) enforced in migration 0064.
-});
-
-
-// ── Agentic Workforce Kanban: roles, templates & per-lane requirements (0274) ─
-// One primitive — a KanbanTemplate binding {roles, required checks, gate} to each
-// lane — powers the built-in Standard SWE board, custom kanbans, the recommended
-// roster, per-ticket auditing, and swimlane gating. Built-in roles/templates live
-// as TS constants; these tables hold only tenant-created/forked/published rows.
-
-/** Tenant-extensible tail of the job-function role taxonomy (canonical set in code). */
-export const jobRoles = pgTable('job_roles', {
-  id:          varchar('id', { length: 36 }).primaryKey(),
-  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  key:         varchar('key', { length: 60 }).notNull(),
-  name:        varchar('name', { length: 120 }).notNull(),
-  description: text('description'),
-  discipline:  varchar('discipline', { length: 60 }).notNull().default('engineering'),
-  color:       varchar('color', { length: 24 }),
-  icon:        varchar('icon', { length: 16 }),
-  position:    integer('position').notNull().default(0),
-  createdAt:   timestamp('created_at').notNull().defaultNow(),
-  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
 });
 
 
@@ -1619,168 +1599,6 @@ export const marketingToolRuns = pgTable('marketing_tool_runs', {
 }, (t) => ({
   byVisitorTool: uniqueIndex('uq_marketing_tool_runs').on(t.visitorId, t.toolId),
   byVisitor: index('idx_marketing_tool_runs_visitor').on(t.visitorId, t.updatedAt),
-}));
-
-
-// ---------------------------------------------------------------------------
-// Freelance marketplace — two-sided (0273): job postings + proposals (bidding),
-// reviews/reputation, invoices/payment status, in-app notifications.
-// ---------------------------------------------------------------------------
-
-/** An employer posts work freelancers can BID on (distinct from a direct hire). */
-export const jobPostings = pgTable('job_postings', {
-  id:               varchar('id', { length: 36 }).primaryKey(),
-  tenantId:         integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  projectId:        integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
-  title:            varchar('title', { length: 200 }).notNull(),
-  description:      text('description'),
-  discipline:       varchar('discipline', { length: 60 }),
-  skills:           text('skills'),                        // JSON string[]
-  rateMinCents:     integer('rate_min_cents'),
-  rateMaxCents:     integer('rate_max_cents'),
-  currency:         varchar('currency', { length: 3 }).notNull().default('USD'),
-  status:           varchar('status', { length: 20 }).notNull().default('open'),      // open|closed|filled
-  visibility:       varchar('visibility', { length: 10 }).notNull().default('public'), // public|private
-  /** Gig Marketplace (0293): the work item this gig was published FROM (one-click
-   *  "Publish to Marketplace"), the gig shape, the billing/engagement shape, and the
-   *  free-text acceptance criteria a proposal is AI-evaluated against. */
-  sourceTicketId:   integer('source_ticket_id').references(() => tasks.id, { onDelete: 'set null' }),
-  postingType:      varchar('posting_type', { length: 20 }).notNull().default('project_bid'), // project_bid|design|fte
-  engagementType:   varchar('engagement_type', { length: 20 }),                        // fixed_bid|hourly|fte
-  requirements:     text('requirements'),
-  /** ── RICHER POSTING (0985) ───────────────────────────────────────────────────
-   *
-   *  BUDGET vs RATE. `rate_min_cents`/`rate_max_cents` are a PER-UNIT rate BAND —
-   *  "$80–$120 an hour". `budget_total_cents` is the WHOLE-JOB total for fixed-price
-   *  work — "$6,000 for the thing". They are different units of a different quantity
-   *  and the same number means opposite things in each, so they are separate columns
-   *  with unit-bearing names rather than one pair reinterpreted by context.
-   *  `engagement_type` already says which shape the work is (0293) and therefore which
-   *  column a reader looks at; a DB CHECK forbids the one combination that is a
-   *  category error (a whole-job total on hourly work). No `job_type` column is added:
-   *  hourly-vs-fixed is `engagement_type` and adding a second spelling of it would be
-   *  the same fact in two places. */
-  budgetTotalCents: integer('budget_total_cents'),
-  /** entry|intermediate|expert — the seniority the posting is pitched at. */
-  experienceLevel:  varchar('experience_level', { length: 20 }),
-  /** lt_1_month|1_3_months|3_6_months|gt_6_months|ongoing — expected duration. */
-  projectLength:    varchar('project_length', { length: 24 }),
-  /** The SUB-CATEGORY beneath `discipline`. The vocabulary is a DATA registry
-   *  (`JOB_SPECIALTIES` in application/marketplace/jobFilters.ts), so deepening the
-   *  category tree adds registry rows and never a migration per level. */
-  specialty:        varchar('specialty', { length: 60 }),
-  /** `ScreeningQuestion[]` — validated JSONB, not rows. The questions have no life
-   *  outside the posting (never joined, never filtered on), the list is bounded, and
-   *  an answer freezes the prompt it answered, so a later edit cannot silently re-key
-   *  bids that are already in. See `jobPostings.ts` for the validator. */
-  screeningQuestions: jsonb('screening_questions'),
-  /** `PostingAttachment[]` — `{ id, key, name, mime, size }` naming objects in the
-   *  EXISTING `UPLOADS` R2 bucket. No new blob store: the same bucket and the same
-   *  put/get shape the résumé and avatar uploads already use. */
-  attachments:      jsonb('attachments'),
-  createdByUserId:  varchar('created_by_user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
-  closedAt:         timestamp('closed_at'),
-  createdAt:        timestamp('created_at').notNull().defaultNow(),
-  updatedAt:        timestamp('updated_at').notNull().defaultNow(),
-}, (t) => ({
-  byStatus: index('idx_job_postings_open').on(t.status),
-  byTenant: index('idx_job_postings_tenant').on(t.tenantId),
-}));
-
-
-/** A freelancer's bid on a job. One live proposal per (job, freelancer). */
-export const jobProposals = pgTable('job_proposals', {
-  id:                varchar('id', { length: 36 }).primaryKey(),
-  jobId:             varchar('job_id', { length: 36 }).notNull().references(() => jobPostings.id, { onDelete: 'cascade' }),
-  freelancerUserId:  varchar('freelancer_user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
-  coverNote:         text('cover_note'),
-  rateCents:         integer('rate_cents'),
-  currency:          varchar('currency', { length: 3 }).notNull().default('USD'),
-  status:            varchar('status', { length: 20 }).notNull().default('submitted'), // submitted|shortlisted|accepted|declined|withdrawn
-  /** Gig Marketplace (0293): 0..100 cached overall from the latest AI proposal
-   *  evaluation (list display), and the courteous decline message shown to the
-   *  candidate when they aren't selected. */
-  lastEvalOverall:   integer('last_eval_overall'),
-  declineReason:     text('decline_reason'),
-  /** ── RICHER PROPOSAL (0985) ──────────────────────────────────────────────────
-   *  `ScreeningAnswer[]` — one per question the posting asked, keyed by the question's
-   *  id AND carrying a frozen copy of the prompt. The frozen copy is the point: an
-   *  employer who edits question 3 after ten bids arrived must not retroactively change
-   *  what those ten people were asked. */
-  screeningAnswers:  jsonb('screening_answers'),
-  /** `PostingAttachment[]` — same shape and same R2 bucket as the posting's own. */
-  attachments:       jsonb('attachments'),
-  createdAt:         timestamp('created_at').notNull().defaultNow(),
-  updatedAt:         timestamp('updated_at').notNull().defaultNow(),
-}, (t) => ({
-  byFreelancer: index('idx_proposals_freelancer').on(t.freelancerUserId),
-}));
-
-
-/**
- * A client's SHORTLIST of freelancers (0985) — the supply-side mirror of
- * `job_proposals.status = 'saved'`, which is how the seeker shortlists work.
- *
- * A join and nothing else: the row IS the relationship. `list_name` lets one workspace
- * keep several shortlists ("react leads", "backup DBAs") without a lists table nobody
- * would ever query on its own — a new list is a value, not a schema change, which is
- * the register's rule that a new KIND is a column value.
- *
- * `owner_user_id` as well as `tenant_id` because a shortlist is a PERSON's working set:
- * two hiring managers in one workspace keep separate lists, and merging them silently
- * would be indistinguishable from a leak between them.
- */
-export const savedTalent = pgTable('saved_talent', {
-  id:                varchar('id', { length: 36 }).primaryKey(),
-  tenantId:          integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  ownerUserId:       varchar('owner_user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
-  freelancerUserId:  varchar('freelancer_user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
-  listName:          varchar('list_name', { length: 80 }).notNull().default('shortlist'),
-  note:              text('note'),
-  createdAt:         timestamp('created_at').notNull().defaultNow(),
-  updatedAt:         timestamp('updated_at').notNull().defaultNow(),
-}, (t) => ({
-  uqSavedTalent: uniqueIndex('uq_saved_talent').on(t.tenantId, t.ownerUserId, t.freelancerUserId, t.listName),
-  byOwner:       index('idx_saved_talent_owner').on(t.tenantId, t.ownerUserId, t.listName),
-}));
-
-
-/**
- * An INVITATION to one named freelancer to bid on one posting (0985).
- *
- * Deliberately NOT a notification. A notification is a message that has been read or
- * not; an invite is a state machine with a counterparty, an expiry and an outcome, and
- * accepting one lands the invitee INSIDE the proposal flow rather than at a dead end —
- * `proposal_id` records the `job_proposals` row the acceptance opened, which is the
- * whole difference. The notification is still sent, through `notify()` like every other
- * marketplace event, but it is the announcement of this row and not the row itself.
- *
- * A live invite is also a GRANT: it is what lets an invited freelancer bid on a
- * `visibility = 'private'` posting they could not otherwise see (see the private-job
- * gate in `POST /api/jobs/:id/proposals`). That is why it is tenant-scoped and why the
- * expiry is real — a grant with no end is an access-control decision nobody revisits.
- */
-export const jobInvites = pgTable('job_invites', {
-  id:                varchar('id', { length: 36 }).primaryKey(),
-  tenantId:          integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  jobId:             varchar('job_id', { length: 36 }).notNull().references(() => jobPostings.id, { onDelete: 'cascade' }),
-  freelancerUserId:  varchar('freelancer_user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
-  invitedByUserId:   varchar('invited_by_user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
-  message:           text('message'),
-  /** sent|viewed|accepted|declined|expired */
-  status:            varchar('status', { length: 20 }).notNull().default('sent'),
-  expiresAt:         timestamp('expires_at'),
-  viewedAt:          timestamp('viewed_at'),
-  respondedAt:       timestamp('responded_at'),
-  /** The bid this invite turned into. SET NULL rather than CASCADE: withdrawing a
-   *  proposal must not erase the record that the client invited this person. */
-  proposalId:        varchar('proposal_id', { length: 36 }).references(() => jobProposals.id, { onDelete: 'set null' }),
-  createdAt:         timestamp('created_at').notNull().defaultNow(),
-  updatedAt:         timestamp('updated_at').notNull().defaultNow(),
-}, (t) => ({
-  uqJobInvite:  uniqueIndex('uq_job_invites_job_user').on(t.jobId, t.freelancerUserId),
-  byInvitee:    index('idx_job_invites_invitee').on(t.freelancerUserId, t.status),
-  byTenant:     index('idx_job_invites_tenant').on(t.tenantId, t.createdAt),
 }));
 
 
@@ -2431,7 +2249,10 @@ export const proposalEvaluations = pgTable('proposal_evaluations', {
   tenantId:           integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   subjectType:        varchar('subject_type', { length: 20 }).notNull(),   // job_proposal|deliverable
   subjectId:          varchar('subject_id', { length: 36 }).notNull(),
-  jobId:              varchar('job_id', { length: 36 }).references(() => jobPostings.id, { onDelete: 'set null' }),
+  /** The posting the bid was against — `job_postings.id`, owned by the hiring
+   *  domain. An id and not a `.references()`: §3 routes cross-domain references by
+   *  id, and the FK itself is declared in migration 0293. */
+  jobId:              varchar('job_id', { length: 36 }),
   faithfulness:       real('faithfulness'),
   answerRelevance:    real('answer_relevance'),
   contextRelevance:   real('context_relevance'),

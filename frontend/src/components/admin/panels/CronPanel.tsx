@@ -133,6 +133,7 @@ export default function CronPanel() {
   if (loading && !data) return <AdminLoading />;
 
   const gate = data?.gate;
+  const stall = data?.scheduleStall ?? null;
   const gateTone = !gate ? 'neutral' : gate.reason === 'idle' ? 'neutral' : gate.reason === 'kv-unavailable' ? 'warning' : 'success';
   const toneColor = gateTone === 'success' ? 'var(--success)' : gateTone === 'warning' ? 'var(--warning)' : 'var(--text-muted)';
 
@@ -204,6 +205,18 @@ export default function CronPanel() {
               <div className="text-muted" style={{ fontSize: 12 }}>{t('gate.nextFloor')}</div>
               <div style={{ fontWeight: 600 }}>{gate.nextFloorDueAt ? fmtDateTime(gate.nextFloorDueAt) : t('gate.asap')}</div>
             </div>
+            {/* The dynamic half of the gate: a schedule coming due wakes the tick
+                ahead of the floor. `stuck` is called out because it reads as "nothing
+                due" everywhere else — that is exactly the confusion this replaces. */}
+            <div>
+              <div className="text-muted ui-text-small">{t('gate.nextDue')}</div>
+              <div style={{ fontWeight: 600, color: gate.dueState === 'stuck' ? 'var(--warning)' : undefined }}>
+                {gate.nextDueAt ? fmtDateTime(gate.nextDueAt) : t('gate.noSchedules')}
+                <span className="text-muted ui-text-small" style={{ fontWeight: 400, marginLeft: 6 }}>
+                  {t(`gate.dueState.${gate.dueState}`)}
+                </span>
+              </div>
+            </div>
           </div>
           {/* The non-obvious part: an idle gate is not "nothing is wrong", it is
               "nothing signalled", and stalled tickets never signal. */}
@@ -216,6 +229,37 @@ export default function CronPanel() {
           {signalled && (
             <p style={{ fontSize: 12, margin: '12px 0 0', color: 'var(--success)' }}>{t('gate.signalled')}</p>
           )}
+        </div>
+      )}
+
+      {/* ---- Jammed, not idle ---------------------------------------------------
+          An armed schedule row overdue by more than a floor interval has already had
+          its chance at every sweep. The gate deliberately stops treating it as due —
+          otherwise it would wake Neon on every tick — so without this banner the
+          condition is invisible and looks identical to a quiet platform. */}
+      {stall && (
+        <div
+          className="health-card"
+          role="status"
+          style={{ padding: 16, marginBottom: 16, borderColor: 'var(--warning)' }}
+        >
+          <div className="health-label" style={{ color: 'var(--warning)' }}>
+            {t('stall.heading', { count: stall.tables.length })}
+          </div>
+          <p className="ui-text-body" style={{ margin: '4px 0 0', color: 'var(--text-primary)' }}>
+            {t('stall.since', { since: fmtDateTime(stall.jammedSince), observations: stall.observations })}
+          </p>
+          <p className="text-muted ui-text-small" style={{ margin: '8px 0 0' }}>{t('stall.explain')}</p>
+          <ul className="ui-text-body" style={{ margin: '8px 0 0', paddingInlineStart: 20 }}>
+            {stall.tables.map((entry) => (
+              <li key={entry.table} style={{ marginTop: 2 }}>
+                <code className="ui-text-small">{entry.table}</code>{' '}
+                <span className="text-muted">
+                  {t('stall.overdue', { due: fmtDateTime(entry.dueAt), overdue: fmtInterval(entry.overdueMs) })}
+                </span>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 
