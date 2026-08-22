@@ -15,17 +15,19 @@ export async function generateMetadata(): Promise<Metadata> {
 /**
  * Where to reach the founder.
  *
- * `label` is a handle or a domain — a literal that must NOT be translated. `labelKey`
- * names a catalog entry for the links whose label is prose. `internal` marks a link
- * that stays on this site: the résumé is published HERE (see `BRAND.founder`), so it
- * navigates in place instead of opening a tab on another domain.
+ * Not a destination list — these are a person's handles, not places in the product,
+ * which is why the labels are resolved here rather than declared as `labelKey` rows.
+ * `internal` marks the one link that stays on this site: the résumé is published HERE
+ * (see `BRAND.founder`), so it navigates in place instead of opening another domain.
  */
-const CONTACT_LINKS: { href: string; label?: string; labelKey?: string; internal?: boolean }[] = [
-  { href: 'https://github.com/SeanHogg', label: 'github.com/SeanHogg' },
-  { href: BRAND.founder.path, labelKey: 'resumeLabel', internal: true },
-  { href: 'https://github.com/SeanHogg/Builderforce.ai/issues', labelKey: 'issuesLabel' },
-  { href: 'https://instagram.com/CrawfishMellow', label: '@CrawfishMellow' },
-];
+function contactLinks(t: (key: string) => string): { href: string; label: string; internal?: boolean }[] {
+  return [
+    { href: 'https://github.com/SeanHogg', label: 'github.com/SeanHogg' },
+    { href: BRAND.founder.path, label: t('resumeLabel'), internal: true },
+    { href: 'https://github.com/SeanHogg/Builderforce.ai/issues', label: t('issuesLabel') },
+    { href: 'https://instagram.com/CrawfishMellow', label: '@CrawfishMellow' },
+  ];
+}
 
 export default async function ContactPage() {
   const t = await getTranslations('agents.contact');
@@ -39,16 +41,13 @@ export default async function ContactPage() {
         <h2>{BRAND.founder.name}</h2>
         <p>{t('founderRole')}</p>
         <ul>
-          {CONTACT_LINKS.map((l) => {
-            const label = l.labelKey ? t(l.labelKey) : l.label;
-            return (
-              <li key={l.href}>
-                {l.internal
-                  ? <Link href={l.href}>{label}</Link>
-                  : <a href={l.href} target="_blank" rel="noopener">{label}</a>}
-              </li>
-            );
-          })}
+          {contactLinks(t).map((l) => (
+            <li key={l.href}>
+              {l.internal
+                ? <Link href={l.href}>{l.label}</Link>
+                : <a href={l.href} target="_blank" rel="noopener">{l.label}</a>}
+            </li>
+          ))}
         </ul>
       </section>
 
