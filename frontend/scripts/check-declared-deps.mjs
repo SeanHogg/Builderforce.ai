@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Declared-dependency guard.
+ * Declared-dependency guard for the frontend app.
  *
  * Every bare module specifier imported from `src/**` OR `scripts/**` must be a
  * package this app DECLARES in its own package.json — not one it merely inherits
@@ -27,43 +27,36 @@
  * that watches one of the two directories the build reads is a guard with a blind
  * spot the build can fall into.
  *
- * Specifiers come from TypeScript's own preprocessor rather than a regex: this
- * codebase is full of source code INSIDE strings (scaffold templates, generated
- * Playwright specs, model prompts), and only a real scanner tells an import
- * statement apart from a template literal that contains one.
+ * THE SCAN AND THE COMPARISON ARE SHARED. Both live in `scripts/lib/` and are
+ * used by `scripts/check-source-package-graph.mjs` too — the same rule applied to
+ * the source-only packages under `packages/`. This file used to hold its own copy
+ * of both, built on `ts.preProcessFile`, and that copy had a bug the shared one
+ * does not: `preProcessFile` is a LEXICAL scanner, so an import statement inside a
+ * template literal counts. This codebase is full of source code in strings —
+ * scaffold templates, generated Playwright specs, model prompts — and the shared
+ * scanner parses instead, so only real imports are reported.
  *
  * Run via `npm run check:declared-deps`; wired into `npm test`.
  */
-import { readdirSync, readFileSync } from 'node:fs';
-import { resolve, relative } from 'node:path';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { builtinModules } from 'node:module';
-import ts from 'typescript';
+import { loadTypeScript, packageRoot, scanBareImports } from '../../scripts/lib/moduleImports.mjs';
+import { aliasPrefixes, declaredNames, undeclaredImports } from '../../scripts/lib/declaredDependencies.mjs';
 
 const here = resolve(fileURLToPath(new URL('.', import.meta.url)));
-const srcDir = resolve(here, '../src');
-const scriptsDir = resolve(here, '../scripts');
-const pkgPath = resolve(here, '../package.json');
-const tsconfigPath = resolve(here, '../tsconfig.json');
+const frontendDir = resolve(here, '..');
+const repoRoot = resolve(frontendDir, '..');
 
-const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
-const declared = new Set([
-  ...Object.keys(pkg.dependencies ?? {}),
-  ...Object.keys(pkg.devDependencies ?? {}),
-  ...Object.keys(pkg.peerDependencies ?? {}),
-  ...Object.keys(pkg.optionalDependencies ?? {}),
-]);
+const pkg = JSON.parse(readFileSync(resolve(frontendDir, 'package.json'), 'utf8'));
+const declared = declaredNames(pkg);
 
 /**
  * tsconfig `paths` are read rather than hardcoded so the guard cannot drift
  * from the aliases the compiler actually honours (`@/*`, the canvas contract).
  */
-const tsconfig = JSON.parse(readFileSync(tsconfigPath, 'utf8').replace(/^\s*\/\/.*$/gm, ''));
-const aliases = Object.keys(tsconfig.compilerOptions?.paths ?? {}).map((key) =>
-  key.endsWith('/*') ? key.slice(0, -1) : key,
-);
-
-const builtins = new Set([...builtinModules, ...builtinModules.map((m) => `node:${m}`)]);
+const tsconfig = JSON.parse(readFileSync(resolve(frontendDir, 'tsconfig.json'), 'utf8').replace(/^\s*\/\/.*$/gm, ''));
+const aliases = aliasPrefixes(tsconfig.compilerOptions?.paths ?? {});
 
 /**
  * Specifiers supplied by the framework/bundler rather than by a package.json
@@ -74,52 +67,19 @@ const ALLOWED = new Map([
   ['client-only', 'A Next.js build-time poison-pill module, resolved by the bundler; it has no runtime surface to declare.'],
 ]);
 
-/** Bare specifier -> the package that must be declared. */
-function packageRoot(specifier) {
-  const parts = specifier.split('/');
-  return specifier.startsWith('@') ? parts.slice(0, 2).join('/') : parts[0];
-}
+const ts = loadTypeScript(repoRoot);
+const imports = await scanBareImports({
+  ts,
+  repoRoot: frontendDir,
+  dirs: [resolve(frontendDir, 'src'), resolve(frontendDir, 'scripts')],
+});
 
-function collect(dir, out = []) {
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const full = resolve(dir, entry.name);
-    if (entry.isDirectory()) collect(full, out);
-    else if (/\.[cm]?[jt]sx?$/.test(entry.name)) out.push(full);
-  }
-  return out;
-}
-
-const violations = [];
-
-const roots = [
-  { dir: srcDir, label: 'src' },
-  { dir: scriptsDir, label: 'scripts' },
-];
-
-for (const { dir: root, label } of roots) for (const file of collect(root)) {
-  const rel = `${label}/${relative(root, file).split('\\').join('/')}`;
-  const text = readFileSync(file, 'utf8');
-  // (text, readImportFiles, detectJavaScriptImports) — the third argument picks
-  // up `require(…)` and bare dynamic `import(…)` alongside static imports.
-  const { importedFiles } = ts.preProcessFile(text, true, true);
-
-  for (const imported of importedFiles) {
-    const specifier = imported.fileName;
-    if (specifier.startsWith('.') || specifier.startsWith('/')) continue;
-    if (aliases.some((alias) => specifier === alias || specifier.startsWith(alias))) continue;
-    if (builtins.has(specifier) || builtins.has(packageRoot(specifier))) continue;
-    if (ALLOWED.has(specifier) || ALLOWED.has(packageRoot(specifier))) continue;
-    if (declared.has(packageRoot(specifier))) continue;
-
-    const line = text.slice(0, imported.pos).split('\n').length;
-    violations.push({ rel, line, specifier });
-  }
-}
+const violations = undeclaredImports({ imports, declared, aliases, allowed: ALLOWED });
 
 if (violations.length > 0) {
   const missing = [...new Set(violations.map((v) => packageRoot(v.specifier)))];
   console.error(`❌  Undeclared (phantom) dependencies imported from src/ or scripts/ (${violations.length} site(s)):\n`);
-  for (const v of violations) console.error(`  - ${v.rel}:${v.line}  '${v.specifier}'`);
+  for (const v of violations) console.error(`  - ${v.relative}:${v.line}  '${v.specifier}'`);
   console.error(
     `\n   Missing from frontend/package.json: ${missing.join(', ')}` +
       '\n   These resolve locally only because a dependency of a dependency hoisted' +

@@ -117,7 +117,7 @@ export function createDemoRoutes(): Hono<HonoEnv> {
 
     const visitorId = body.visitorId;
     c.executionCtx.waitUntil(
-      recordVisitorEvent(db, {
+      recordVisitorEvent(db, c.env as Env, {
         visitorId,
         persona: target.persona,
         kind: 'demo_start',

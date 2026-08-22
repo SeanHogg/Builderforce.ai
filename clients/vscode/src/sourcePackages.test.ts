@@ -1,8 +1,9 @@
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { dirname, join, relative, resolve, sep } from 'node:path';
+import { existsSync } from 'node:fs';
+import { dirname, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { readSourcePackages } from '../../../scripts/sourcePackages.mjs';
+import { sourcePackageGraph } from '../../../scripts/sourcePackageGraph.mjs';
 import canvasConfig from '../webview/vite.canvas.config';
 
 /**
@@ -19,81 +20,19 @@ import canvasConfig from '../webview/vite.canvas.config';
  * lists and not the VS Code canvas bundle, which compiles that same frontend
  * source — and the release build failed at `Rollup failed to resolve import`.
  *
- * The JS-side lists are now derived (`scripts/sourcePackages.mjs`). This guard
- * covers what a module cannot reach: the `tsconfig` `paths` that stay JSON, and
- * the canvas bundle actually being wired to the registry rather than to a fresh
- * hand-written copy of it.
+ * WHAT THIS FILE COVERS, AND WHAT MOVED. The `tsconfig` `paths` rules — every
+ * project resolving what it imports, the transitive closure over inter-package
+ * edges, and no stale keys — now live in `scripts/check-source-package-graph.mjs`,
+ * which DISCOVERS its projects instead of listing them; the list this file used
+ * to keep named three and there are nine. What stays here is the one thing a node
+ * guard cannot read: the canvas bundle's own vite config, which is TypeScript and
+ * has to be imported to be inspected.
  */
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, '../../..');
 
 const sourcePackages = readSourcePackages(repoRoot);
 const specifiers = sourcePackages.map((pkg) => pkg.specifier);
-
-/** Projects that resolve these packages through tsconfig `paths` (tsc, Next, wrangler). */
-const PATHS_PROJECTS = [
-  { tsconfig: 'api/tsconfig.json', sources: ['api/src'] },
-  { tsconfig: 'frontend/tsconfig.json', sources: ['frontend/src'] },
-  { tsconfig: 'clients/vscode/tsconfig.json', sources: ['clients/vscode/src'] },
-];
-
-function readTsconfigPaths(tsconfigPath: string): Record<string, string[]> {
-  const parsed = JSON.parse(readFileSync(join(repoRoot, tsconfigPath), 'utf8'));
-  return parsed.compilerOptions?.paths ?? {};
-}
-
-/**
- * Resolve a bare specifier the way tsc does — exact key first, then the longest
- * matching `prefix/*` key with its capture substituted into the target.
- */
-function resolveThroughPaths(paths: Record<string, string[]>, tsconfigPath: string, specifier: string): string | null {
-  const from = dirname(join(repoRoot, tsconfigPath));
-  const exact = paths[specifier]?.[0];
-  if (exact) return resolve(from, exact);
-
-  const wildcards = Object.keys(paths)
-    .filter((key) => key.endsWith('/*') && specifier.startsWith(key.slice(0, -1)))
-    .sort((a, b) => b.length - a.length);
-  for (const key of wildcards) {
-    const target = paths[key]?.[0];
-    if (!target) continue;
-    return resolve(from, target.replace('*', specifier.slice(key.length - 1)));
-  }
-  return null;
-}
-
-/**
- * A `paths` target is written the way tsc reads it, which is not always the file
- * name: a wildcard target (`…/src/*`) stops at the extensionless path and tsc
- * appends the extension itself. Both spellings point at the same source.
- */
-function resolvesTo(candidate: string | null, entry: string | undefined): boolean {
-  if (!candidate || !entry) return false;
-  return [candidate, `${candidate}.ts`, `${candidate}.tsx`, join(candidate, 'index.ts')].includes(entry);
-}
-
-/** Every source-only specifier imported anywhere under `dir`. */
-function importedSpecifiers(dir: string): Set<string> {
-  const found = new Set<string>();
-  const pending = [join(repoRoot, dir)];
-  while (pending.length) {
-    const current = pending.pop() as string;
-    for (const dirent of readdirSync(current, { withFileTypes: true })) {
-      const full = join(current, dirent.name);
-      if (dirent.isDirectory()) {
-        if (dirent.name !== 'node_modules') pending.push(full);
-        continue;
-      }
-      if (!/\.(ts|tsx)$/.test(dirent.name)) continue;
-      const source = readFileSync(full, 'utf8');
-      if (!source.includes('@builderforce/')) continue;
-      for (const [, specifier] of source.matchAll(/(?:from|import|require)\s*\(?\s*['"](@builderforce\/[^'"]+)['"]/g)) {
-        if (specifiers.includes(specifier)) found.add(specifier);
-      }
-    }
-  }
-  return found;
-}
 
 describe('source-only shared packages', () => {
   it('finds the packages that ship no dist', () => {
@@ -113,26 +52,7 @@ describe('source-only shared packages', () => {
     expect(missing).toEqual([]);
   });
 
-  it.each(PATHS_PROJECTS)('$tsconfig declares every source-only package it imports', ({ tsconfig, sources }) => {
-    const paths = readTsconfigPaths(tsconfig);
-    const byEntry = new Map(sourcePackages.map((pkg) => [pkg.specifier, pkg.entry]));
-
-    const unresolved = [...new Set(sources.flatMap((dir) => [...importedSpecifiers(dir)]))]
-      .filter((specifier) => !resolvesTo(resolveThroughPaths(paths, tsconfig, specifier), byEntry.get(specifier)));
-    expect(unresolved).toEqual([]);
-  });
-
-  it.each(PATHS_PROJECTS)('$tsconfig has no stale @builderforce path', ({ tsconfig }) => {
-    const paths = readTsconfigPaths(tsconfig);
-    const byEntry = new Map(sourcePackages.map((pkg) => [pkg.specifier, pkg.entry]));
-
-    const wrong = Object.keys(paths)
-      .filter((key) => key.startsWith('@builderforce/') && !key.endsWith('/*'))
-      .filter((key) => !byEntry.has(key) || !resolvesTo(resolveThroughPaths(paths, tsconfig, key), byEntry.get(key)));
-    expect(wrong).toEqual([]);
-  });
-
-  it('aliases in the canvas bundle every package the frontend imports', () => {
+  it('aliases in the canvas bundle every package the frontend imports', async () => {
     // The bundle compiles `frontend/src` outside the frontend's own resolution,
     // so a package the web resolves through tsconfig `paths` reaches rollup as a
     // bare specifier and fails the release build unless it is aliased here.
@@ -142,9 +62,7 @@ describe('source-only shared packages', () => {
     const aliased = (alias as { find: string | RegExp; replacement: string }[]).filter(
       (entry) => entry.find instanceof RegExp,
     );
-    const unaliased = [...importedSpecifiers('frontend/src')].filter(
-      (specifier) => !aliased.some((entry) => (entry.find as RegExp).test(specifier)),
-    );
+    const unaliased = specifiers.filter((specifier) => !aliased.some((entry) => (entry.find as RegExp).test(specifier)));
     expect(unaliased).toEqual([]);
   });
 
@@ -160,5 +78,12 @@ describe('source-only shared packages', () => {
     const strays = replacements.filter((replacement) => !entries.has(replacement)).map((r) => relative(repoRoot, r));
     expect(strays).toEqual([]);
     expect(replacements.length).toBe(sourcePackages.length);
+  });
+
+  it('has no import cycle between source-only packages', async () => {
+    // A cycle cannot be split later without breaking every consumer at once, and
+    // it makes the closure the tsconfig guard computes unbounded in practice.
+    const graph = await sourcePackageGraph(repoRoot);
+    expect(graph.cycles()).toEqual([]);
   });
 });

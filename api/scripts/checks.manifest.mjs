@@ -7,6 +7,10 @@
  * chain, so adding a guard is one line here.
  */
 export default [
+  // Repo-level rather than api's own: the source-only package graph spans every
+  // toolchain in the repository, and this is the gate every change goes through.
+  // The guard derives its own repo root, so the cwd it runs from does not matter.
+  ['check:source-package-graph', '../../scripts/check-source-package-graph.mjs'],
   ['check:schema', 'check-schema-drift.mjs'],
   ['check:db-access', 'check-db-access.mjs'],
   ['check:migrations', 'check-migrations.mjs'],

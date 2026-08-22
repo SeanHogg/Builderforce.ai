@@ -61,6 +61,7 @@ import {
   uuid,
   varchar,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 /**
  * Schema — the kernel (PRD 20 §2).
  *
@@ -208,6 +209,11 @@ export const activityLog = pgTable('activity_log', {
   index('idx_activity_log_target').on(t.tenantId, t.targetType, t.targetId),
   index('idx_activity_log_project').on(t.tenantId, t.projectId, t.occurredAt),
   index('idx_activity_log_object').on(t.objectId, t.occurredAt),
+  // The anonymous visitor journey (1111). Partial, because it serves ONE
+  // question — "every visitor event in the last N days", the flow-graph scan —
+  // that the tenant-leading indexes above cannot: those rows carry a null tenant,
+  // so a window scan across them would read every platform-global row instead.
+  index('idx_activity_log_visitor_time').on(t.occurredAt).where(sql`${t.actorType} = 'visitor'`),
 ]);
 
 /**

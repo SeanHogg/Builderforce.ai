@@ -1482,8 +1482,8 @@ export const marketingSessionPrompts = pgTable('marketing_session_prompts', {
   /** The session the prompt opened: `local-<uuid>` pre-signup, the canvas id after. */
   sessionRef: varchar('session_ref', { length: 80 }),
   /** The visit it was typed in (migration 1109) — joins the prompt to the pages
-   *  around it in `visitor_events`. Null for prompts recorded before 1109 and for
-   *  clients that could not mint one. */
+   *  around it in the visitor journey (`activity_log`, `target_id`). Null for
+   *  prompts recorded before 1109 and for clients that could not mint one. */
   visitId:    varchar('visit_id', { length: 64 }),
   /** 'landing' | 'canvas' | 'brain' | 'room' — the vocabulary lives in the domain layer. */
   surface:    varchar('surface', { length: 24 }).notNull().default('landing'),
@@ -1499,54 +1499,21 @@ export const marketingSessionPrompts = pgTable('marketing_session_prompts', {
 
 
 /**
- * Where an anonymous visitor WENT — the other half of what they asked for
- * (migration 1109, renamed from `demo_events` / 0360).
+ * Where an anonymous visitor WENT — the other half of what they asked for — is
+ * NOT a table in this file.
  *
- * `marketing_session_prompts` keeps the visitor's intent and `marketing_sessions`
- * keeps their first touch and whether they converted. Between those two facts
- * sat the entire experience — the pages they moved through, the errors they hit,
- * the moment they left, whether they ever came back — and it was recorded only
- * inside the persona demo. A site-wide page view is the same fact as a demo page
- * view with `persona` NULL, so this is that one stream rather than a second one.
+ * It was one (`demo_events` at 0360, renamed `visitor_events` at 1109) and it was
+ * a duplicate of a shape the platform already owns. Migration 1111 folded it into
+ * `activity_log` as rows with `actor_type = 'visitor'` and a null tenant — the
+ * mapping the consolidated data model always specified, where `demo_events`
+ * targets the `event_log` primitive. `application/marketing/visitorActivity.ts`
+ * owns the column mapping and the retention window; `VisitorJourneyService` reads
+ * it back.
  *
- * Append-only and keyed by the same opaque `visitorId`, so a journey joins to its
- * lead row, its prompts, and the account it became. Joined on that id rather than
- * by a foreign key for the same reason the prompts table is: the lead row is
- * created lazily and an event must never be lost to a race with it.
- *
- * NOT tenant-scoped — written before an account exists (declared in
- * `check-tenant-column.mjs`, as `marketing_session_prompts` already is).
- *
- * `visitId` groups a contiguous run of activity. It is what makes "they left" and
- * "they came back" answerable: a returning visitor is one with more than one
- * distinct `visitId`, and time-on-site is a per-visit span rather than a
- * subtraction between two unrelated rows. Minted by the client (a tab's
- * sessionStorage token, rotated after an inactivity gap) because only the client
- * can see a tab close.
- *
- * No rollups live here. "How many visits", "did they return", "where did they
- * drop" are all derived by `VisitorJourneyService` over these rows — 3NF, and the
- * price is paid once in a cached aggregate rather than in an update anomaly on
- * every insert.
+ * `marketing_session_prompts` above keeps what the same visitor ASKED FOR, joined
+ * to the journey by `visit_id`, and stays here because a typed prompt is content,
+ * not an event.
  */
-export const visitorEvents = pgTable('visitor_events', {
-  id:         bigserial('id', { mode: 'number' }).primaryKey(),
-  visitorId:  varchar('visitor_id', { length: 64 }).notNull(),
-  /** One contiguous run of activity. Null on rows written before 1109. */
-  visitId:    varchar('visit_id', { length: 64 }),
-  /** The demo persona, when the event happened inside the persona demo. */
-  persona:    varchar('persona', { length: 32 }),
-  /** The vocabulary lives in `domain/marketing/VisitorJourney.ts`. */
-  kind:       varchar('kind', { length: 64 }).notNull(),
-  path:       varchar('path', { length: 300 }),
-  metadata:   jsonb('metadata'),
-  occurredAt: timestamp('occurred_at').notNull().defaultNow(),
-  createdAt:  timestamp('created_at').notNull().defaultNow(),
-}, (t) => ({
-  byPersonaTime: index('idx_visitor_events_persona_time').on(t.persona, t.occurredAt),
-  byVisitor: index('idx_visitor_events_visitor').on(t.visitorId, t.occurredAt),
-  byVisit: index('idx_visitor_events_visit').on(t.visitorId, t.visitId, t.occurredAt),
-}));
 
 
 /**

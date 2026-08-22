@@ -186,7 +186,7 @@ export function createQualityIngestRoutes(db: Db): Hono<HonoEnv> {
     // journey row must never turn a recorded error into a 500.
     if (isValidVisitorId(visitorId)) {
       c.executionCtx.waitUntil(
-        recordVisitorEvent(db, {
+        recordVisitorEvent(db, c.env as Env, {
           visitorId,
           visitId: body.visitId,
           kind: VISITOR_JOURNEY_KINDS.error,

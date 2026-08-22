@@ -10,13 +10,15 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * table THERE — one place, one policy (DRY).
  *
  * Every table in that registry is a diagnostic/event log (no business records), so
- * deletion is safe and never cascades to domain data. The one purge that is not
- * age-based lives at the bottom of this file.
+ * deletion is safe and never cascades to domain data. The two purges that cannot
+ * be registry entries — a row-level expiry, and a row-level window inside a table
+ * the registry may not touch — are declared alongside it in {@link runRetentionPurge}.
  */
 import { buildDatabase, buildTransactionalDatabase, type Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { SWEPT_TABLES } from './sweptTables';
 import { purgeExpiredMemories } from '../memory/memoryService';
+import { VISITOR_RETENTION_DAYS, purgeVisitorActivity } from '../marketing/visitorActivity';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const cutoff = (now: number, days: number) => new Date(now - days * DAY_MS);
@@ -42,6 +44,14 @@ export async function runRetentionPurge(env: Env, now: number = Date.now()): Pro
     // stopped returning, and the relations behind it are domain data no maintenance
     // sweep may rewrite.
     { name: 'expired_memories', run: () => purgeExpiredMemories(env, db) },
+    // The anonymous visitor journey (1111). Also NOT in SWEPT_TABLES, for the
+    // opposite reason to the memories above: it lives INSIDE `activity_log`, the
+    // audit trail, which that registry may neither purge wholesale nor rewrite.
+    // The window is the row's, declared beside the writer that produces them.
+    {
+      name: 'visitor_activity',
+      run: () => purgeVisitorActivity(db, cutoff(now, VISITOR_RETENTION_DAYS)),
+    },
   ];
 
   for (const t of targets) {

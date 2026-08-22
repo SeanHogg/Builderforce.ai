@@ -1,7 +1,8 @@
 import { desc, eq, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
-import { marketingSessionPrompts, marketingSessions, visitorEvents } from '../../infrastructure/database/schema';
+import { marketingSessionPrompts, marketingSessions } from '../../infrastructure/database/schema';
+import { forgetVisitorActivity } from './visitorActivity';
 import {
   GUEST_PROMPT_LIMITS,
   parseGuestPrompt,
@@ -287,11 +288,15 @@ export class GuestPromptService {
    * privacy request that names a visitor id gets actioned rather than only
    * tracked.
    *
-   * BOTH tables, in one call, deliberately. When `visitor_events` arrived
+   * BOTH streams, in one call, deliberately. When the journey stream arrived
    * (migration 1109) an erasure that cleared only the prompts would have left the
    * visitor's full navigation and error history in place while REPORTING the
    * request as actioned — a privacy failure that looks like a success. The
    * counts are returned separately so the audit record says what actually went.
+   *
+   * The journey now lives in `activity_log` (migration 1111), so the delete is
+   * `forgetVisitorActivity` rather than a table this file names — which is what
+   * keeps the erasure correct if that mapping ever moves again.
    */
   async forgetVisitor(env: Env, visitorId: string): Promise<{ prompts: number; events: number }> {
     const [prompts, events] = await Promise.all([
@@ -299,15 +304,12 @@ export class GuestPromptService {
         .delete(marketingSessionPrompts)
         .where(eq(marketingSessionPrompts.visitorId, visitorId))
         .returning({ id: marketingSessionPrompts.id }),
-      this.db
-        .delete(visitorEvents)
-        .where(eq(visitorEvents.visitorId, visitorId))
-        .returning({ id: visitorEvents.id }),
+      forgetVisitorActivity(this.db, visitorId),
     ]);
     await Promise.all([
       invalidateCached(env, GUEST_SESSIONS_CACHE_KEY),
       invalidateCached(env, visitorStandingCacheKey(visitorId)),
     ]);
-    return { prompts: prompts.length, events: events.length };
+    return { prompts: prompts.length, events };
   }
 }

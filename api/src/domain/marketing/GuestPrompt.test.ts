@@ -10,7 +10,7 @@ describe('parseGuestPrompt', () => {
     const parsed = parseGuestPrompt({ visitorId: 'v1', prompt: 'Build me a CRM' });
     expect(parsed).toEqual({
       ok: true,
-      value: { visitorId: 'v1', prompt: 'Build me a CRM', surface: 'landing', sessionRef: null, mode: null },
+      value: { visitorId: 'v1', prompt: 'Build me a CRM', surface: 'landing', sessionRef: null, visitId: null, mode: null },
     });
   });
 

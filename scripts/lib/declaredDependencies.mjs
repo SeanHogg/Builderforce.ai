@@ -50,6 +50,27 @@ export function runtimeDeclaredNames(manifest) {
 }
 
 /**
+ * The local packages a manifest wires by `link:`/`file:`.
+ *
+ * This is the SECOND way a project resolves a source-only package, and missing it
+ * makes a guard cry wolf: `brain-embedded` reaches `@builderforce/agent-stall`
+ * through `link:../packages/agent-stall` and a `node_modules` symlink, with no
+ * tsconfig `paths` entry at all — under `moduleResolution: Bundler`, tsc follows
+ * the package's own `exports` straight into its `src`.
+ *
+ * @param {Record<string, unknown>} manifest
+ * @returns {Set<string>} Package names.
+ */
+export function linkedPackageNames(manifest) {
+  const specs = { ...manifest.dependencies, ...manifest.devDependencies };
+  return new Set(
+    Object.entries(specs)
+      .filter(([, spec]) => typeof spec === 'string' && (spec.startsWith('link:') || spec.startsWith('file:')))
+      .map(([name]) => name),
+  );
+}
+
+/**
  * Turn tsconfig `paths` keys into the prefixes an import may legitimately start
  * with. `@/*` → `@/`, `@builderforce/run-context` → itself.
  *

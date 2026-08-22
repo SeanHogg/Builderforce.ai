@@ -40,3 +40,11 @@ CREATE INDEX IF NOT EXISTS idx_visitor_events_visit
 ALTER TABLE marketing_session_prompts ADD COLUMN IF NOT EXISTS visit_id varchar(64);
 CREATE INDEX IF NOT EXISTS idx_marketing_session_prompts_visit
   ON marketing_session_prompts (visitor_id, visit_id, created_at);
+
+-- The autovacuum override travels with the table. `1104_swept_table_autovacuum.sql`
+-- set it on `demo_events`; a rename keeps the storage parameters, but the guard
+-- reads the CURRENT name, and a retention-swept table with no override is how a
+-- high-churn stream ends up with bloat nobody notices. Restated here so the two
+-- agree by inspection rather than by remembering that a rename preserved it.
+ALTER TABLE visitor_events SET (autovacuum_vacuum_scale_factor = 0.02, autovacuum_vacuum_threshold = 1000,
+                                autovacuum_analyze_scale_factor = 0.02, autovacuum_analyze_threshold = 1000);

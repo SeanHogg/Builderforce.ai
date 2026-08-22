@@ -62,6 +62,9 @@ export const VISITOR_EVENT_LIMITS = {
   maxMetadataChars: 2_000,
 } as const;
 
+/** A journey kind is stored in `visitor_events.kind`, a varchar(64) — so the
+ *  ceiling here is that column's width. Real kinds are a dozen characters; this
+ *  only stops a crafted one silently losing its tail on the way in. */
 const KIND_RE = /^[a-z][a-z0-9_]{1,63}$/;
 const VISIT_ID_RE = /^[A-Za-z0-9_-]{8,64}$/;
 

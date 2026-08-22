@@ -189,12 +189,6 @@ export default {
       'one. The `runs` primitive models ONE attempt with an input and an output. A cron job ' +
       'produces runs; it is not one, the same way a recurring meeting is not a meeting.',
 
-  "demo_events":
-      'written BEFORE any account exists — keyed by an opaque `visitorId`, with no tenant and ' +
-      'no user. `activity_log` is `tenant_id NOT NULL` and is scoped to a principal, so there ' +
-      'is nothing to file this under. Same pre-tenant argument the `marketing_sessions` ' +
-      'retraction rests on (PRD 20 §3.3); the two tables are the same visitor\'s trail.',
-
   "equity_events":
       'the append-only OWNERSHIP LEDGER — the only place a share quantity lives, and the cap ' +
       'table is the fold over it. Seven verbs with declared debit and credit legs, cut on ' +

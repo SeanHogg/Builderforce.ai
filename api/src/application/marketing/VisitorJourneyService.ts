@@ -7,6 +7,7 @@ import {
   buildVisitorFlowGraph,
   type VisitorFlowGraph,
 } from '../../domain/marketing/visitorFlowGraph';
+import { kindFromVerb, visitorRowsSql } from './visitorActivity';
 
 /**
  * Where anonymous visitors GO — the read side of the journey.
@@ -24,6 +25,11 @@ import {
  *
  * The aggregation itself is pure and lives in the domain
  * (`visitorFlowGraph.ts`); this class owns only the queries and the cache.
+ *
+ * The journey is rows of `activity_log` with `actor_type = 'visitor'` (migration
+ * 1111) — see `visitorActivity.ts` for the column mapping. These queries stay raw
+ * SQL because they are bounded analytical scans, and they take their predicate and
+ * their verb→kind translation from that module rather than restating either.
  */
 
 /** One step on a single visitor's timeline. */
@@ -110,9 +116,10 @@ export class VisitorJourneyService {
   async journeyFor(visitorId: string): Promise<VisitorJourney> {
     const [events, prompts] = await Promise.all([
       this.db.execute(sql`
-        SELECT visit_id AS "visitId", kind, path, metadata, occurred_at AS "occurredAt"
-        FROM visitor_events
-        WHERE visitor_id = ${visitorId}
+        SELECT target_id AS "visitId", verb, target_label AS "path", metadata,
+               occurred_at AS "occurredAt"
+        FROM activity_log
+        WHERE ${visitorRowsSql} AND actor_ref = ${visitorId}
         ORDER BY occurred_at DESC
         LIMIT ${JOURNEY_EVENT_LIMIT}
       `),
@@ -127,21 +134,23 @@ export class VisitorJourneyService {
 
     return assembleJourney(
       visitorId,
-      events.rows as unknown as EventRow[],
+      (events.rows as unknown as StoredEventRow[]).map(toEventRow),
       prompts.rows as unknown as PromptRow[],
     );
   }
 
   private async loadEvents(days: number) {
     const rows = await this.db.execute(sql`
-      SELECT visitor_id AS "visitorId", visit_id AS "visitId", kind, path,
-             occurred_at AS "occurredAt"
-      FROM visitor_events
-      WHERE occurred_at > now() - (${days}::text || ' days')::interval
+      SELECT actor_ref AS "visitorId", target_id AS "visitId", verb,
+             target_label AS "path", occurred_at AS "occurredAt"
+      FROM activity_log
+      WHERE ${visitorRowsSql}
+        AND occurred_at > now() - (${days}::text || ' days')::interval
       ORDER BY occurred_at ASC
       LIMIT ${EVENT_SCAN_LIMIT}
     `);
-    return rows.rows as unknown as { visitorId: string; visitId: string | null; kind: string; path: string | null; occurredAt: string }[];
+    const stored = rows.rows as unknown as Array<{ visitorId: string; visitId: string | null; verb: string; path: string | null; occurredAt: string }>;
+    return stored.map(({ verb, ...rest }) => ({ ...rest, kind: kindFromVerb(verb) }));
   }
 
   private async loadPrompts(days: number) {
@@ -175,6 +184,12 @@ interface EventRow {
   metadata: Record<string, unknown> | null;
   occurredAt: string;
 }
+
+/** The same row as it is STORED — `verb` rather than `kind`. Translated at the
+ *  boundary so nothing below this line knows about the prefix. */
+type StoredEventRow = Omit<EventRow, 'kind'> & { verb: string };
+
+const toEventRow = ({ verb, ...rest }: StoredEventRow): EventRow => ({ ...rest, kind: kindFromVerb(verb) });
 
 interface PromptRow {
   visitId: string | null;

@@ -26,7 +26,14 @@ import { activityLog, agentHosts, freelancerEngagements, ideAgents, tenantMember
 import { bumpCacheVersion, getCacheVersion, getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { buildTransactionalDatabase } from '../../infrastructure/database/connection';
 
-export type ActorType = 'human' | 'hire' | 'cloud_agent' | 'host_agent' | 'system';
+/**
+ * WHO acted. `visitor` is an ANONYMOUS one — no user row, no tenant, an opaque
+ * browser-minted id in `ref` — and it is a member of this union rather than a
+ * table of its own: the consolidated data model maps the retired `demo_events`
+ * onto the `event_log` primitive, so a visitor's navigation is the same fact as
+ * every other actor's, recorded by the same writer (migration 1111).
+ */
+export type ActorType = 'human' | 'hire' | 'cloud_agent' | 'host_agent' | 'system' | 'visitor';
 
 export interface ActorIdentity {
   type: ActorType;
@@ -145,23 +152,7 @@ export function activityLogVersionKey(tenantId: number | null): string {
 export async function recordActivity(env: Env | undefined, db: Db, input: ActivityInput): Promise<void> {
   try {
     const activityDb = env?.NEON_TRANSACTIONAL_DATABASE_URL ? buildTransactionalDatabase(env) : db;
-    await activityDb.insert(activityLog).values({
-      tenantId: input.tenantId ?? null,
-      segmentId: input.segmentId ?? null,
-      projectId: input.projectId ?? null,
-      actorType: input.actor.type,
-      actorRef: input.actor.ref ?? null,
-      actorName: input.actor.name ? input.actor.name.slice(0, 255) : null,
-      engagementId: input.actor.engagementId ?? null,
-      verb: input.verb,
-      targetType: input.targetType ?? null,
-      targetId: input.targetId != null ? String(input.targetId).slice(0, 64) : null,
-      targetLabel: input.targetLabel ? input.targetLabel.slice(0, 300) : null,
-      objectId: input.objectId ?? null,
-      summary: input.summary ?? null,
-      metadata: (input.metadata ?? null) as Record<string, unknown> | null,
-      occurredAt: input.occurredAt ?? new Date(),
-    });
+    await activityDb.insert(activityLog).values(toActivityRow(input));
     await bumpCacheVersion(env as Env, activityLogVersionKey(input.tenantId));
   } catch (error) {
     // Best-effort — audit failures must not break the mutation, but they must be
@@ -174,6 +165,56 @@ export async function recordActivity(env: Env | undefined, db: Db, input: Activi
       targetType: input.targetType ?? null,
       targetId: input.targetId ?? null,
       actorType: input.actor.type,
+      error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+    } } });
+  }
+}
+
+/** The ActivityInput → row projection, shared by the single and batch writers so
+ *  a column can only ever be truncated or defaulted in one place. */
+function toActivityRow(input: ActivityInput): typeof activityLog.$inferInsert {
+  return {
+    tenantId: input.tenantId ?? null,
+    segmentId: input.segmentId ?? null,
+    projectId: input.projectId ?? null,
+    actorType: input.actor.type,
+    actorRef: input.actor.ref ?? null,
+    actorName: input.actor.name ? input.actor.name.slice(0, 255) : null,
+    engagementId: input.actor.engagementId ?? null,
+    verb: input.verb,
+    targetType: input.targetType ?? null,
+    targetId: input.targetId != null ? String(input.targetId).slice(0, 64) : null,
+    targetLabel: input.targetLabel ? input.targetLabel.slice(0, 300) : null,
+    objectId: input.objectId ?? null,
+    summary: input.summary ?? null,
+    metadata: (input.metadata ?? null) as Record<string, unknown> | null,
+    occurredAt: input.occurredAt ?? new Date(),
+  };
+}
+
+/**
+ * Append MANY events as one statement.
+ *
+ * The single-row emitter is right for a mutation site, and wrong for a stream:
+ * an anonymous visitor's batch flushes up to forty events on page-hide, and
+ * forty inserts plus forty cache bumps is an N+1 on the platform's busiest
+ * unauthenticated path. One insert, then one version bump per distinct tenant.
+ *
+ * Best-effort on the same terms as {@link recordActivity} — and more so here,
+ * because the unload path has nobody left to report a failure to.
+ */
+export async function recordActivityBatch(env: Env | undefined, db: Db, inputs: ActivityInput[]): Promise<void> {
+  if (inputs.length === 0) return;
+  try {
+    const activityDb = env?.NEON_TRANSACTIONAL_DATABASE_URL ? buildTransactionalDatabase(env) : db;
+    await activityDb.insert(activityLog).values(inputs.map(toActivityRow));
+    const tenants = new Set(inputs.map((i) => i.tenantId ?? null));
+    await Promise.all([...tenants].map((t) => bumpCacheVersion(env as Env, activityLogVersionKey(t))));
+  } catch (error) {
+    reportCaughtError(error, { source: "application/activity/activityLog.ts", operation: "recordActivityBatch", context: { logMessage: '[activity-log] batch append failed', details: {
+      count: inputs.length,
+      verb: inputs[0]?.verb ?? null,
+      actorType: inputs[0]?.actor.type ?? null,
       error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
     } } });
   }

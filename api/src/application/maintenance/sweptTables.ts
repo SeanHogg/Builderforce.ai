@@ -31,7 +31,6 @@ import type { Db } from '../../infrastructure/database/connection';
 import { acrossTenants } from '../../infrastructure/database/tenantScope';
 import {
   apiErrorLog,
-  visitorEvents,
   errorEvents,
   llmFailoverLog,
   llmHealthProbes,
@@ -124,13 +123,6 @@ export const SWEPT_TABLES: readonly SweptTable[] = [
     retentionDays: 90,
     rationale: 'Agent tool-audit timeline, on the same window as the other agent/telemetry streams.',
     purge: (db, cutoff) => db.delete(toolAuditEvents).where(acrossTenants(toolAuditEvents, 'scheduled_sweep', lt(toolAuditEvents.createdAt, cutoff))),
-  },
-  {
-    relation: 'visitor_events',
-    connection: 'primary',
-    retentionDays: 90,
-    rationale: 'Anonymous visitor-journey telemetry; the flow graph only looks back 30d.',
-    purge: (db, cutoff) => db.delete(visitorEvents).where(lt(visitorEvents.createdAt, cutoff)),
   },
 ];
 

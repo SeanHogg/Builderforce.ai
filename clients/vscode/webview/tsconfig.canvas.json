@@ -28,9 +28,16 @@
     "ignoreDeprecations": "6.0",
     "paths": {
       "@/*": ["../../../frontend/src/*"],
+      // Every source-only package the frontend sources reach through `@/*` above,
+      // not just the canvas contract. This project compiles FRONTEND files, so it
+      // owns their imports too — and `vite.canvas.config.ts` already aliases the
+      // whole registry, so a package missing here is a typecheck that disagrees
+      // with the bundle it is meant to be checking.
       "@builderforce/creation-canvas-contract": [
         "../../../packages/creation-canvas-contract/src/index.ts"
       ],
+      "@builderforce/ide-file-contract": ["../../../packages/ide-file-contract/src/index.ts"],
+      "@builderforce/ide-templates": ["../../../packages/ide-templates/src/index.ts"],
       // The three Next couplings, resolved to the shims the bundler also uses —
       // so types and runtime agree on what `useTranslations` / `useRouter` are.
       "next-intl": ["./src/shims/next-intl.ts"],

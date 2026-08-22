@@ -46,10 +46,16 @@
  *
  * Run: `node scripts/check-source-package-graph.mjs` from anywhere in the repo.
  */
-import { dirname, relative, resolve, sep } from 'node:path';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createImportScanner, loadTypeScript } from './lib/moduleImports.mjs';
-import { declaredNames, runtimeDeclaredNames, undeclaredImports } from './lib/declaredDependencies.mjs';
+import {
+  declaredNames,
+  linkedPackageNames,
+  runtimeDeclaredNames,
+  undeclaredImports,
+} from './lib/declaredDependencies.mjs';
 import { findTsconfigProjects, resolveThroughPaths, resolvesTo } from './lib/tsconfigPaths.mjs';
 import { sourcePackageGraph } from './sourcePackageGraph.mjs';
 
@@ -103,18 +109,33 @@ for (const cycle of graph.cycles()) {
 const projects = [];
 for (const project of findTsconfigProjects(repoRoot)) {
   const declaredHere = Object.keys(project.paths).filter((key) => specifiers.includes(key));
+  const linked = linkedPackageNames(nearestManifest(project.dir, repoRoot));
   // One scanner across every project: `frontend/tsconfig.json` and the VS Code
   // canvas project compile overlapping trees, and reading them once each is the
   // difference between a guard that runs in seconds and one that runs in minutes.
   const sites = await scanner.scan(project.sources, '@builderforce/');
   const imported = sites.map((site) => site.specifier).filter((specifier) => graph.bySpecifier.has(specifier));
-  projects.push({ ...project, declaredHere, imported: [...new Set(imported)].sort() });
+  projects.push({ ...project, declaredHere, linked, imported: [...new Set(imported)].sort() });
 }
 
 const relevant = projects.filter(
   (project) =>
     project.imported.length > 0 || Object.keys(project.paths).some((key) => key.startsWith('@builderforce/')),
 );
+
+/**
+ * Does this project resolve `specifier` at all?
+ *
+ * Two mechanisms, and a guard that knows only one cries wolf: a tsconfig `paths`
+ * entry, or a `link:`/`file:` dependency whose `node_modules` symlink lets node
+ * resolution follow the package's own `exports` into its `src`.
+ */
+function resolvesSpecifier(project, specifier) {
+  if (resolvesTo(resolveThroughPaths(project.paths, project.dir, specifier), graph.entryBySpecifier.get(specifier))) {
+    return true;
+  }
+  return project.linked.has(graph.bySpecifier.get(specifier)?.name ?? specifier);
+}
 
 if (relevant.length === 0) {
   console.error('❌  No tsconfig project resolves or imports a source-only package — discovery read empty, so rules 2–4 checked nothing.');
@@ -126,10 +147,10 @@ for (const project of relevant) {
   // import, must resolve. The closure is the whole point — a project that
   // aliases `A` and compiles a file importing `A` still fails on `A`'s own
   // import of `B` unless `B` is spelled out here too.
-  const required = graph.closure([...project.imported, ...project.declaredHere]);
+  const required = graph.closure([...project.imported, ...project.declaredHere, ...project.linked]);
   for (const specifier of [...required].sort()) {
-    const target = resolveThroughPaths(project.paths, project.dir, specifier);
-    if (resolvesTo(target, graph.entryBySpecifier.get(specifier))) continue;
+    if (!graph.bySpecifier.has(specifier)) continue; // a linked package that is not source-only
+    if (resolvesSpecifier(project, specifier)) continue;
 
     const viaEdge = !project.imported.includes(specifier);
     failures.push({
@@ -156,12 +177,97 @@ for (const project of relevant) {
   }
 }
 
+// ── Rule 6: a published type surface never names a source-only package ───────
+//
+// `brain-embedded` links `@builderforce/agent-stall` as a devDependency and
+// re-exports six of its members. tsup INLINED them into the JS bundles — zero
+// references in `dist/index.mjs` — and left the declarations pointing at the bare
+// specifier, so the published `@seanhogg/builderforce-brain-embedded` shipped a
+// `dist/index.d.ts` importing a package that has no `dist`, is not a runtime
+// dependency, and that no consumer installs. Under `skipLibCheck` those six
+// exports silently lose their types instead of failing.
+//
+// Checked against the EMITTED declarations because that is the artefact that
+// ships. When a package has not been built, the guard says so rather than
+// counting it as a pass.
+const unbuilt = [];
+for (const consumer of publishedConsumers(repoRoot, graph)) {
+  const declarations = collectDeclarationFiles(consumer.distDir);
+  if (declarations.length === 0) {
+    unbuilt.push(consumer.relative);
+    continue;
+  }
+  for (const file of declarations) {
+    const text = readFileSync(file, 'utf8');
+    for (const specifier of specifiers) {
+      if (!new RegExp(`from ['"]${specifier.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}['"]`).test(text)) continue;
+      failures.push({
+        rule: 'published surface is self-contained',
+        detail: `${toPosix(relative(repoRoot, file))} re-exports from '${specifier}', a source-only package that ships no dist and that ${consumer.name}'s consumers never install.`,
+        remedy:
+          `Inline it into the declarations — for tsup, \`dts: { resolve: [/^@builderforce\\//] }\` in ` +
+          `${consumer.relative}/tsup.config.ts — then rebuild. Moving it to \`dependencies\` does not help: a ` +
+          '`link:` specifier cannot be published.',
+      });
+      break;
+    }
+  }
+}
+
+/** Packages that publish a build AND link a source-only package. */
+function publishedConsumers(root, sourceGraph) {
+  const names = new Set(sourceGraph.nodes.map((node) => node.name));
+  const found = [];
+  for (const project of projects) {
+    const manifestPath = join(project.dir, 'package.json');
+    if (!existsSync(manifestPath)) continue;
+    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+    const types = manifest.types ?? manifest.typings ?? manifest.exports?.['.']?.types;
+    if (typeof types !== 'string' || !types.includes('dist')) continue;
+    if (![...linkedPackageNames(manifest)].some((name) => names.has(name))) continue;
+    if (found.some((entry) => entry.dir === project.dir)) continue;
+    found.push({
+      name: manifest.name ?? project.relative,
+      dir: project.dir,
+      relative: toPosix(relative(root, project.dir)),
+      distDir: join(project.dir, 'dist'),
+    });
+  }
+  return found;
+}
+
+/** Every emitted declaration file under a package's `dist`. */
+function collectDeclarationFiles(distDir) {
+  if (!existsSync(distDir)) return [];
+  return readdirSync(distDir, { withFileTypes: true, recursive: true })
+    .filter((entry) => entry.isFile() && /\.d\.[cm]?ts$/.test(entry.name))
+    .map((entry) => join(entry.parentPath ?? distDir, entry.name));
+}
+
+/** The nearest `package.json` at or above `dir`, stopping at the repo root. */
+function nearestManifest(dir, root) {
+  let current = dir;
+  for (;;) {
+    const candidate = join(current, 'package.json');
+    if (existsSync(candidate)) return JSON.parse(readFileSync(candidate, 'utf8'));
+    if (current === root) return {};
+    const parent = dirname(current);
+    if (parent === current) return {};
+    current = parent;
+  }
+}
+
 /** The `paths` target a project should write, relative to its own directory. */
 function pathsTargetFor(project, specifier) {
   const entry = graph.entryBySpecifier.get(specifier);
   if (!entry) return '(unknown)';
-  const rel = relative(project.dir, entry).split(sep).join('/');
+  const rel = toPosix(relative(project.dir, entry));
   return rel.startsWith('.') ? rel : `./${rel}`;
+}
+
+/** Windows separators out, so guard output reads the same on every machine. */
+function toPosix(path) {
+  return path.split(sep).join('/');
 }
 
 // ── Report ───────────────────────────────────────────────────────────────────
@@ -190,6 +296,12 @@ if (failures.length > 0) {
 }
 
 const edgeCount = graph.nodes.reduce((total, node) => total + node.edges.size, 0);
+if (unbuilt.length > 0) {
+  console.log(
+    `ℹ️   Not built, so their declarations could not be checked: ${unbuilt.join(', ')}. ` +
+      'Run their build before a release — `prepublishOnly` does, but only at publish time.',
+  );
+}
 console.log(
   `✅  Source-package graph: ${graph.nodes.length} source-only package(s), ${edgeCount} inter-package edge(s), ` +
     `${relevant.length} tsconfig project(s) checked — every external declared, every alias set closed.`,

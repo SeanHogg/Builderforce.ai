@@ -9,10 +9,20 @@
  *   1. Every declared `relation` must be a REAL table — the name is what `VACUUM` and
  *      `pg_class` are given as a literal, so a typo does not fail a type-check, it
  *      fails at 03:00 in a best-effort catch nobody reads.
- *   2. Every declared relation must carry the per-table autovacuum tuning applied by
- *      migrations/1104 (primary) or transactional-migrations/0009 (operational).
- *      Without it a new high-write feed inherits the 0.2 default that produced the
- *      593 MB `manager_actions` relation in the first place.
+ *   2. Every declared relation must carry the per-table autovacuum tuning — applied
+ *      by migrations/1104 (primary) or transactional-migrations/0009 (operational),
+ *      or by any LATER migration on the same endpoint. Without it a new high-write
+ *      feed inherits the 0.2 default that produced the 593 MB `manager_actions`
+ *      relation in the first place.
+ *
+ *      The later migrations are read because of the case that broke this guard:
+ *      a swept table gets RENAMED (1109's `demo_events` -> `visitor_events`).
+ *      Postgres carries the storage parameters through a rename, so the live
+ *      database is correct — but 1104 still names the old table, and it cannot be
+ *      edited to name the new one, because on a fresh database 1104 runs BEFORE
+ *      the rename and would fail on a table that does not exist yet. So the
+ *      re-statement belongs in the migration that did the rename, and this guard
+ *      has to look there.
  *   3. The declared `connection` must match which of the two migrations tuned it —
  *      the endpoints are separate databases and a mismatch means the purge and the
  *      vacuum are talking to different servers.
@@ -69,15 +79,30 @@ const readTuning = (file, connection) => {
     tunedBy.set(relation, connection);
   }
 };
+/** Every other .sql on one endpoint, in filename order, after its base tuning file. */
+const readLaterTuning = (dir, baseFile, connection) => {
+  const baseName = baseFile.split(/[\\/]/).pop();
+  for (const file of readdirSync(dir).filter((f) => f.endsWith('.sql')).sort()) {
+    if (file === baseName) continue;
+    readTuning(resolve(dir, file), connection);
+  }
+};
+
 readTuning(primaryTuning, 'primary');
 readTuning(operationalTuning, 'transactional');
+// Later migrations may re-state the tuning for a table they created or renamed.
+// Read in filename order so the LAST statement wins, which is what the database
+// ends up with too.
+readLaterTuning(resolve(here, '../migrations'), primaryTuning, 'primary');
+readLaterTuning(resolve(here, '../transactional-migrations'), operationalTuning, 'transactional');
 
 for (const entry of entries) {
   const tuned = tunedBy.get(entry.relation);
   if (!tuned) {
     failures.push(
       `'${entry.relation}' is retention-swept but has no autovacuum_vacuum_scale_factor override. `
-      + `Add an ALTER TABLE ... SET (...) to ${entry.connection === 'primary' ? 'migrations/1104_swept_table_autovacuum.sql' : 'transactional-migrations/0009_swept_table_autovacuum.sql'}.`,
+      + `Add an ALTER TABLE ... SET (...) to ${entry.connection === 'primary' ? 'migrations/1104_swept_table_autovacuum.sql' : 'transactional-migrations/0009_swept_table_autovacuum.sql'}, `
+      + 'or to the migration that creates or renames it.',
     );
   } else if (tuned !== entry.connection) {
     failures.push(

@@ -1,6 +1,6 @@
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
-import { visitorEvents } from '../../infrastructure/database/schema';
+import { recordVisitorActivity } from './visitorActivity';
 import {
   VISITOR_EVENT_LIMITS,
   parseVisitorEvent,
@@ -22,6 +22,10 @@ import { isValidVisitorId } from './MarketingService';
  * Every write is best-effort by contract. This is telemetry attached to a
  * visitor's real work — a failed insert must never fail their request, and the
  * unload-path batch in particular has nobody left to report an error to.
+ *
+ * WHERE IT LANDS is not this file's business: `visitorActivity.ts` owns the
+ * mapping onto `activity_log` (there is no `visitor_events` table — migration
+ * 1111). This module owns validation, the abuse ceiling, and nothing else.
  */
 
 export interface VisitorEventInput {
@@ -66,7 +70,7 @@ export async function recordVisitorEvents(
   if (rows.length === 0) return { ok: true, accepted: 0 };
   if (!(await withinIpBudget(env, input.ip, rows.length))) return { ok: false, reason: 'rate_limited' };
 
-  await db.insert(visitorEvents).values(rows);
+  await recordVisitorActivity(env, db, rows);
   return { ok: true, accepted: rows.length };
 }
 
@@ -79,6 +83,7 @@ export async function recordVisitorEvents(
  */
 export async function recordVisitorEvent(
   db: Db,
+  env: Env,
   event: { visitorId: string } & VisitorEventInput,
 ): Promise<void> {
   const row = parseVisitorEvent(event, {
@@ -87,7 +92,7 @@ export async function recordVisitorEvent(
     nowMs: Date.now(),
   });
   if (!row) return;
-  await db.insert(visitorEvents).values(row);
+  await recordVisitorActivity(env, db, [row]);
 }
 
 function personaOf(value: unknown): string | null {

@@ -100,9 +100,6 @@ export default {
   release_digest_runs:
     'PLATFORM-WIDE: a release digest announces the platform release notes to EVERY user on the deployment, so the fan-out has no tenant to belong to — its identity is the digest (`note_key`) and its cursor is a global keyset position over recipients. A tenant column here would have to be invented, and inventing one would make the partial unique index that keeps the send idempotent (one open run per digest) wrong: it would permit one open run per tenant for a message that is sent once.',
 
-  demo_events:
-    'PRE-TENANT: anonymous demo-tour telemetry keyed by `visitor_id`. Written before signup, so there is no tenant to scope to, and the visitor id is narrower than a tenant rather than looser.',
-
   marketing_tool_runs:
     'PRE-TENANT: a free calculator or diagnostic run by an anonymous visitor, keyed by `visitor_id` — the same pre-signup path as `marketing_sessions`. The tenant-scoped counterpart, for a run inside a workspace, is `tool_runs`.',
 

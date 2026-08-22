@@ -1,7 +1,6 @@
 import * as react_jsx_runtime from 'react/jsx-runtime';
 import { ChatErrorAction } from './chatError.js';
 export { BrainRequestError, ChatErrorActionKind, brainRequestError, chatErrorAction } from './chatError.js';
-export { ModelFallbackSurface, announcesUntakenAction, catalogToolNamesMentionedIn, claimsMissingToolData, nextFallbackModel, toolNamesMentionedIn } from '@builderforce/agent-stall';
 
 /**
  * Shared data shapes for the brain core. These define the contract the host
@@ -2471,6 +2470,116 @@ declare function fetchApiVersionVia(read: () => Promise<{
 } | null>, now?: () => number, timeoutMs?: number): Promise<string | null>;
 
 /**
+ * Untaken tool call — detection + recovery, shared by every agent loop.
+ *
+ * Recovery has two halves and BOTH live in this file: the re-prompt budget with its
+ * user-facing notices, and the MODEL FAILOVER section at the bottom. They were split
+ * across two packages once — the selector lived in a React package — and the server
+ * reply loop, unable to import it, hand-rolled its own and shipped a failover branch
+ * that could not run. See {@link chooseStallFailover}.
+ *
+ * The failure it fixes: a turn ends with `stopReason: stop` and ZERO tool calls while
+ * tools were available, and a loop that treats "no tool calls" as "done" hands the user
+ * words instead of a result. It wears four faces, all of them observed in production and
+ * all of them a model-behaviour class rather than a vendor bug:
+ *
+ *   1. the PROMISE — `"I'll search the codebase for the handler."`
+ *   2. the PSEUDO-CALL — `"run tool builtin_chats_list_tickets with chatId is 85"`
+ *   3. the MISSING-DATA CLAIM — `"The required tools have not returned results yet."`
+ *   4. the BLANK TURN — nothing at all: no call, no words.
+ *
+ * The third is the one that reads like an answer, and it is why the manager's
+ * accountability chat shipped "I have no data" to a person asking it to account for a
+ * dead board (project 11 / chat 86, 2026-07-28: 7 turns, 102 tools, 0 calls). The
+ * fourth is the one that reads like a blip, and it is why the same chat answered a
+ * 400 saying "this usually clears on a retry" four days running (2026-07-31).
+ *
+ * Deliberately zero-dependency, framework-free and free of Node builtins: the Brain
+ * run loop imports this into a BROWSER bundle (VS Code webview / Next.js client)
+ * while the on-prem + cloud agent loop imports it into Node and the Worker.
+ */
+/**
+ * Every advertised tool identifier appearing in `text`, de-duplicated, in order.
+ *
+ * Two callers, one pattern — which is the point of putting it here. The stall
+ * detector below uses it to recognise a call written as prose; the per-turn tool
+ * SELECTOR uses it to find the tools a system prompt instructs the model to call, so
+ * a relevance filter can never drop a tool the prompt just promised. Those two must
+ * agree on what a tool name looks like, or the loop recovers from a stall the
+ * selector caused.
+ */
+declare function toolNamesMentionedIn(text: string): string[];
+/**
+ * Does this reply PROMISE a tool call rather than make one?
+ *
+ * A false positive costs one extra model turn; a false negative strands the user
+ * holding a promise — so the bias runs toward catching the stall.
+ */
+declare function announcesUntakenAction(text: string): boolean;
+/**
+ * Every CATALOG-style tool id in `text` (`manager.digest`), de-duplicated, in order —
+ * the counterpart to {@link toolNamesMentionedIn}, which finds the ADVERTISED form.
+ *
+ * The pair is a DIAGNOSIS, not a curiosity, and it is the distinction a shipped report
+ * got wrong. A stalled reply naming `manager.digest` was told to call a string the model
+ * never had (the prompt / persisted-persona name mismatch, fixed by migration 0379). A
+ * stalled reply naming `builtin_manager_digest` was told correctly and could not comply —
+ * the tool list is fine and the MODEL is the problem. Identical transcripts, opposite
+ * fixes; a report that asserts the first while the evidence says the second sends the
+ * reader to re-audit prompts and migrations that were already right.
+ */
+declare function catalogToolNamesMentionedIn(text: string): string[];
+/**
+ * Does this reply blame MISSING TOOL DATA on a turn that called nothing?
+ *
+ * Exported alongside {@link announcesUntakenAction} because the two are different
+ * failure shapes with the same remedy, and a caller reporting WHY it re-prompted
+ * should be able to tell them apart.
+ */
+declare function claimsMissingToolData(text: string): boolean;
+/**
+ * The gateway model surface, as `/llm/v1/models` returns it and both browser hosts
+ * cache it. Structurally a superset of what `classifyModelFunding` takes, so one
+ * cached object feeds both. A SERVER caller composes the same shape from the pool
+ * constants it already has (see `BrainService.agentReply`).
+ */
+interface ModelFallbackSurface {
+    /** The plan pool — every model this tenant may select. */
+    data?: Array<{
+        id?: string;
+    }>;
+    /** The curated tool-calling / coding subset of the pool. */
+    codingModels?: string[];
+    /** Models reachable through the tenant's OWN connected accounts (BYO). */
+    byo?: {
+        models?: Array<{
+            id?: string;
+            vendor?: string;
+        }>;
+    };
+}
+/**
+ * The next model to try, or undefined when nothing untried is left.
+ *
+ * Preference order, and why:
+ *  1. **BYO ∩ coding pool** — the tenant's own connected account (so the retry costs
+ *     nothing against the plan allowance) AND curated for tool calling, which is the
+ *     capability that just failed. Best on both axes.
+ *  2. **Coding pool** — curated for tool calling, plan-funded. We are failing over
+ *     *because of* tool calling, so this outranks an arbitrary BYO model.
+ *  3. **Anything else untried** — BYO first, then the rest of the plan pool.
+ *
+ * A caller driving an AGENTIC turn should leave `data` unset: tier 4 is the general
+ * plan pool, and falling a tool-loop onto a non-coder produces a run that flails and
+ * ships nothing (the same reasoning as the gateway's coding-only backstop chain).
+ *
+ * `tried` holds every model already attempted this run, including the original pin.
+ * A caller that pinned nothing (gateway auto-select) should pass its resolved model,
+ * so the failover cannot hand back the model that just failed.
+ */
+declare function nextFallbackModel(surface: ModelFallbackSurface | null | undefined, tried: readonly string[]): string | undefined;
+
+/**
  * Chat ⇄ work linking — the single source for (a) the system-prompt directive that
  * tells the Brain to turn work it identifies or code it changes into a ticket LINKED
  * to the current conversation, and (b) the tool-name predicates that back the
@@ -3593,4 +3702,4 @@ declare function pmoFocusDomId(kind: string, id: string): string;
  */
 declare function artifactRoutePath(kind: string, ref: string | null | undefined, projectId?: number | null): string;
 
-export { ADDRESSED_TO_META_KEY, API_VERSION_PROBE_TIMEOUT_MS, API_VERSION_TTL_MS, AUTHORED_BY_META_KEY, type AgentDispatchActivity, type AllowanceState, type ArtifactKind, type AssembledToolCall, BUILDERFORCE_PRODUCT_NAME, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRunPersistence, type BrainRunRequest, type BrainRunSnapshot, type BrainRuntime, type BrainStreamFn, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, type ByoUnresolvedEntry, CHAT_MODES, CHAT_MODE_ICON, CODE_CHANGE_TOOLS, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type ChatActivity, type ChatActivityLabels, type ChatCompletionMessage, type ChatDiagnosticsAccount, type ChatDiagnosticsData, type ChatDiagnosticsEvermind, type ChatDiagnosticsEvermindHead, type ChatDiagnosticsMessageLike, type ChatDiagnosticsMeter, type ChatDiagnosticsModelSurface, type ChatDiagnosticsPlanSnapshot, type ChatDiagnosticsSources, ChatErrorAction, type ChatInputAttachment, type ChatMode, type ChatModelOptions, type ChatModelSelection, type CompletionMetadata, type ComposerDirectiveOptions, type ContentPart, type CreatedWorkItemLink, DEFAULT_CHAT_ACTIVITY_LABELS, DEFAULT_CHAT_TITLE, DEFAULT_MODEL_CHOICE_LABELS, DEFAULT_MODEL_IDENTITY, DEFAULT_TOOL_LIMIT, type DirectedRecipient, EVERMIND_LEARN_MIN_CHARS, type Effort, type EffortProfile, type EvermindLearnOutcome, type EvermindLearnTarget, type EvermindRecallItem, type EvermindRecallResult, type EvermindRunHooks, type GlobalRunState, type ImageUrlContentPart, type LinkedTicketToAdvance, MODEL_CATEGORIES, type McpToolEntry, type McpToolResultInfo, type McpToolStatus, type MemoryFirstAnswer, type MentionToken, type MessageProvenance, type ModelCategory, type ModelChoiceLabels, type ModelIdentityContext, type ModelItem, NEW_CHAT_MODE, NOT_STARTED_TASK_STATUSES, PMO_FOCUS_PARAM, PROJECT_EVERMIND_MODEL_PREFIX, PROVENANCE_META_KEY, type ParsedXmlToolCall, type PersistedStep, type PreparedImage, type ProvenanceAccount, RESTING_CHAT_MODE, type RatableMessage, type RatedTurnContext, type ReasoningIntent, type ReasoningLevel, type RecipientChoice, type RoutedProduct, type RunMilestoneActivity, type RunMilestonePhase, STEP_MESSAGE_ROLE, type StreamChatOptions, type StreamChatResult, type StreamHandlers, TICKET_RECORDING_TOOLS, TOOL_ROUTER_DESCRIBE, TOOL_ROUTER_FIND, TOOL_ROUTER_INVOKE, type TextContentPart, type ToolCatalogMatch, type ToolConfirmationGate, type ToolConfirmationGateOptions, type ToolConfirmationPersistence, type ToolExposure, type ToolSelection, type TurnInterruption, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, WEB_FETCH_TOOL_NAME, XmlToolCallFilter, accountUsedInTrace, activeMentionToken, activeModelKey, activityIcon, activityTone, allowanceState, artifactRoutePath, attachEvermindLearn, buildBrainTriageReport, buildComposerDirectives, buildModelItems, byoReasonHint, byoUnresolvedInTrace, byoUnresolvedSummary, byoVendorLabel, chatActivityText, chatConversationDirective, chatModeDirective, chatWorkDirective, chatWorkLinkingDirective, classifyModelFunding, clearRunError, codeChangeFile, computeBrainDiagnostics, consolidationMarkerContent, consolidationMetadata, countReconciledMemories, deriveChatTitle, describeTool, detectAnnouncedButUnmadeToolCall, detectUnbackedTicketClaim, detectUnbackedWriteClaim, displayModelName, effortProfile, extractXmlToolCalls, fetchApiVersionVia, fetchMcpToolEntries, filterMentionCandidates, filterModelItems, findTools, formatBrainDiagnostics, formatBrainProvenance, formatChatDiagnostics, formatEvermindLearnStep, formatEvermindMemoryBlock, gatherChatDiagnostics, getGlobalRunState, getLastResolvedModel, getMcpToolStatus, getRunSnapshot, getRunTrace, handleRouterCall, isActivityMessage, isChatMode, isCodeChangeTool, isConnectedAccountUnused, isConsolidationMarker, isDirectedToParticipant, isEffort, isEvermindModel, isFailedToolResult, isMalformedToolCall, isRouterTool, isRunning, isStepMessage, isTicketRecordingTool, isTruncatedTurn, isUserConfiguredModelRef, lastConsolidationIndex, linkedTicketsToAdvance, localStorageConfirmationPersistence, mcpActionsFrom, mentionRecipient, modelCategoryLabel, modelFailoversInTrace, modelInUse, modelsUsedInTrace, narratedUnadvertisedInTrace, normalizeChatMode, parseByoUnresolved, parseChatActivity, parseDirectedRecipient, parseMessageAuthor, parseMessageProvenance, parsePmoFocus, parseStepMessage, perMillionUsd, pmoFocusDomId, pmoFocusValue, premiumCostLabel, prepareImageDataUrl, productForPlan, productModelName, ratedTurnContext, ratedTurnTool, reasoningForRun, resetApiVersionCache, resetBrainRunStore, resolveRecipient, resolveRunConfirm, revealsModelId, routerToolSpecs, routingQueryForTurn, startRun as runBrainLoop, savePendingPrompt, scopeToConsolidation, selectToolsForTurn, setLastResolvedModel, setMcpToolStatus, stallRecoveriesInTrace, stallUnrecoveredInTrace, startRun, stepSig, stopRun, streamChatCompletion, subscribeRun, subscribeRunStore, subscribeToChatMessages, takePendingPrompt, toolExposureInTrace, toolSpecsFor, traceWithPersistedSteps, turnInterruption, turnOptimizationDirective, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions, useToolConfirmationGate, withDirectedMetadata, withProvenanceMetadata, workItemLinkFromCreate };
+export { ADDRESSED_TO_META_KEY, API_VERSION_PROBE_TIMEOUT_MS, API_VERSION_TTL_MS, AUTHORED_BY_META_KEY, type AgentDispatchActivity, type AllowanceState, type ArtifactKind, type AssembledToolCall, BUILDERFORCE_PRODUCT_NAME, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRunPersistence, type BrainRunRequest, type BrainRunSnapshot, type BrainRuntime, type BrainStreamFn, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, type ByoUnresolvedEntry, CHAT_MODES, CHAT_MODE_ICON, CODE_CHANGE_TOOLS, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type ChatActivity, type ChatActivityLabels, type ChatCompletionMessage, type ChatDiagnosticsAccount, type ChatDiagnosticsData, type ChatDiagnosticsEvermind, type ChatDiagnosticsEvermindHead, type ChatDiagnosticsMessageLike, type ChatDiagnosticsMeter, type ChatDiagnosticsModelSurface, type ChatDiagnosticsPlanSnapshot, type ChatDiagnosticsSources, ChatErrorAction, type ChatInputAttachment, type ChatMode, type ChatModelOptions, type ChatModelSelection, type CompletionMetadata, type ComposerDirectiveOptions, type ContentPart, type CreatedWorkItemLink, DEFAULT_CHAT_ACTIVITY_LABELS, DEFAULT_CHAT_TITLE, DEFAULT_MODEL_CHOICE_LABELS, DEFAULT_MODEL_IDENTITY, DEFAULT_TOOL_LIMIT, type DirectedRecipient, EVERMIND_LEARN_MIN_CHARS, type Effort, type EffortProfile, type EvermindLearnOutcome, type EvermindLearnTarget, type EvermindRecallItem, type EvermindRecallResult, type EvermindRunHooks, type GlobalRunState, type ImageUrlContentPart, type LinkedTicketToAdvance, MODEL_CATEGORIES, type McpToolEntry, type McpToolResultInfo, type McpToolStatus, type MemoryFirstAnswer, type MentionToken, type MessageProvenance, type ModelCategory, type ModelChoiceLabels, type ModelFallbackSurface, type ModelIdentityContext, type ModelItem, NEW_CHAT_MODE, NOT_STARTED_TASK_STATUSES, PMO_FOCUS_PARAM, PROJECT_EVERMIND_MODEL_PREFIX, PROVENANCE_META_KEY, type ParsedXmlToolCall, type PersistedStep, type PreparedImage, type ProvenanceAccount, RESTING_CHAT_MODE, type RatableMessage, type RatedTurnContext, type ReasoningIntent, type ReasoningLevel, type RecipientChoice, type RoutedProduct, type RunMilestoneActivity, type RunMilestonePhase, STEP_MESSAGE_ROLE, type StreamChatOptions, type StreamChatResult, type StreamHandlers, TICKET_RECORDING_TOOLS, TOOL_ROUTER_DESCRIBE, TOOL_ROUTER_FIND, TOOL_ROUTER_INVOKE, type TextContentPart, type ToolCatalogMatch, type ToolConfirmationGate, type ToolConfirmationGateOptions, type ToolConfirmationPersistence, type ToolExposure, type ToolSelection, type TurnInterruption, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, WEB_FETCH_TOOL_NAME, XmlToolCallFilter, accountUsedInTrace, activeMentionToken, activeModelKey, activityIcon, activityTone, allowanceState, announcesUntakenAction, artifactRoutePath, attachEvermindLearn, buildBrainTriageReport, buildComposerDirectives, buildModelItems, byoReasonHint, byoUnresolvedInTrace, byoUnresolvedSummary, byoVendorLabel, catalogToolNamesMentionedIn, chatActivityText, chatConversationDirective, chatModeDirective, chatWorkDirective, chatWorkLinkingDirective, claimsMissingToolData, classifyModelFunding, clearRunError, codeChangeFile, computeBrainDiagnostics, consolidationMarkerContent, consolidationMetadata, countReconciledMemories, deriveChatTitle, describeTool, detectAnnouncedButUnmadeToolCall, detectUnbackedTicketClaim, detectUnbackedWriteClaim, displayModelName, effortProfile, extractXmlToolCalls, fetchApiVersionVia, fetchMcpToolEntries, filterMentionCandidates, filterModelItems, findTools, formatBrainDiagnostics, formatBrainProvenance, formatChatDiagnostics, formatEvermindLearnStep, formatEvermindMemoryBlock, gatherChatDiagnostics, getGlobalRunState, getLastResolvedModel, getMcpToolStatus, getRunSnapshot, getRunTrace, handleRouterCall, isActivityMessage, isChatMode, isCodeChangeTool, isConnectedAccountUnused, isConsolidationMarker, isDirectedToParticipant, isEffort, isEvermindModel, isFailedToolResult, isMalformedToolCall, isRouterTool, isRunning, isStepMessage, isTicketRecordingTool, isTruncatedTurn, isUserConfiguredModelRef, lastConsolidationIndex, linkedTicketsToAdvance, localStorageConfirmationPersistence, mcpActionsFrom, mentionRecipient, modelCategoryLabel, modelFailoversInTrace, modelInUse, modelsUsedInTrace, narratedUnadvertisedInTrace, nextFallbackModel, normalizeChatMode, parseByoUnresolved, parseChatActivity, parseDirectedRecipient, parseMessageAuthor, parseMessageProvenance, parsePmoFocus, parseStepMessage, perMillionUsd, pmoFocusDomId, pmoFocusValue, premiumCostLabel, prepareImageDataUrl, productForPlan, productModelName, ratedTurnContext, ratedTurnTool, reasoningForRun, resetApiVersionCache, resetBrainRunStore, resolveRecipient, resolveRunConfirm, revealsModelId, routerToolSpecs, routingQueryForTurn, startRun as runBrainLoop, savePendingPrompt, scopeToConsolidation, selectToolsForTurn, setLastResolvedModel, setMcpToolStatus, stallRecoveriesInTrace, stallUnrecoveredInTrace, startRun, stepSig, stopRun, streamChatCompletion, subscribeRun, subscribeRunStore, subscribeToChatMessages, takePendingPrompt, toolExposureInTrace, toolNamesMentionedIn, toolSpecsFor, traceWithPersistedSteps, turnInterruption, turnOptimizationDirective, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions, useToolConfirmationGate, withDirectedMetadata, withProvenanceMetadata, workItemLinkFromCreate };
