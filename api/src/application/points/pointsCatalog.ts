@@ -246,7 +246,7 @@ export function getPointsRule(action: string): PointsRule | null {
 
 /** The family label a ledger row is filed under, derived rather than stored twice. */
 export function ruleSource(rule: PointsRule): string {
-  return rule.source ?? rule.key.split('.')[0];
+  return rule.source ?? rule.key.split('.')[0] ?? rule.key;
 }
 
 /**

@@ -32,7 +32,7 @@
 
 import { and, eq, inArray } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
-import { partyRoles, tenantMembers, users } from '../../infrastructure/database/schema';
+import { memberProfiles, partyRoles, tenantMembers, users } from '../../infrastructure/database/schema';
 import type { EarnerFacet } from './pointsCatalog';
 
 /** The facts the resolver reads. Named so the pure rule below can be tested
@@ -82,6 +82,26 @@ export async function loadEarnerFacts(db: Db, tenantId: number, userId: string):
     hasWorkspaceSeat: seats.length > 0,
     partyRoles: roles.map((r) => r.role.toLowerCase()),
   };
+}
+
+/**
+ * The earner's own IANA timezone, or null when unknown.
+ *
+ * Read from `member_profiles.timezone` — the column this platform already keeps
+ * for capacity and work-hours planning — rather than from a new one, because "what
+ * day is it for this person" has one right answer per person and a second column
+ * would be a second answer. Null is a legitimate result and the streak falls back
+ * to UTC; see the note in `streakEngine.localDay`.
+ */
+export async function loadEarnerTimezone(db: Db, tenantId: number, userId: string): Promise<string | null> {
+  const [row] = await db.select({ timezone: memberProfiles.timezone })
+    .from(memberProfiles)
+    .where(and(
+      eq(memberProfiles.tenantId, tenantId),
+      eq(memberProfiles.memberRef, userId),
+    ))
+    .limit(1);
+  return row?.timezone ?? null;
 }
 
 /** Does this person's facet set satisfy a rule's requirement? An EMPTY
