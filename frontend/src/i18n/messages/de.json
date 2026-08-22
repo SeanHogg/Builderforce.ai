@@ -5088,8 +5088,14 @@
       "pickTitle": "Komponente hinzufügen",
       "pickHint": "Legen Sie eine Live-Ansicht Ihres Unternehmens auf das Board.",
       "unknown": "Diese Komponente ist nicht mehr verfügbar.",
-      "empty": "Noch keine Komponente ausgewählt."
-    }
+      "empty": "Noch keine Komponente ausgewählt.",
+      "choose": "Komponente auswählen",
+      "change": "Komponente wechseln"
+    },
+    "noMatches": "Keine Treffer für diese Suche.",
+    "locked": "Sie haben darauf noch keinen Zugriff.",
+    "use": "Verwenden",
+    "inUse": "In Verwendung"
   },
   "compile": {
     "title": "Definiere einen Bedarf",

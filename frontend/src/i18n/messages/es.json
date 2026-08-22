@@ -5088,8 +5088,14 @@
       "pickTitle": "Añadir un componente",
       "pickHint": "Coloca una vista en vivo de tu negocio en el tablero.",
       "unknown": "Este componente ya no está disponible.",
-      "empty": "Aún no se ha elegido ningún componente."
-    }
+      "empty": "Aún no se ha elegido ningún componente.",
+      "choose": "Elegir un componente",
+      "change": "Cambiar componente"
+    },
+    "noMatches": "No hay coincidencias para esa búsqueda.",
+    "locked": "Todavía no tienes acceso a esto.",
+    "use": "Usar",
+    "inUse": "En uso"
   },
   "compile": {
     "title": "Define una necesidad",

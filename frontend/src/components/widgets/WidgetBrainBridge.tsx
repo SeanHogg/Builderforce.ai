@@ -22,26 +22,23 @@
 
 import { useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { useTranslations } from 'next-intl';
 import { useRegisterBrainActions, type BrainAction } from '@/lib/brain';
 import { useOptionalPins } from '@/lib/widgets/PinsProvider';
 import { getComponent, listComponents } from '@/lib/components/registry';
+import { useComponentLabel } from '@/lib/components/useComponentCatalog';
 import { dashboardsApi } from '@/lib/dashboardsApi';
 
 export function WidgetBrainBridge() {
   const pins = useOptionalPins();
   const router = useRouter();
-  const tw = useTranslations('components');
+  const label = useComponentLabel();
 
   const actions = useMemo<BrainAction[]>(() => {
     if (!pins) return [];
     const defs = listComponents();
     const ids = defs.map((w) => w.id);
-    const title = (key: string) => {
-      try { return tw(`title.${key}`); } catch { return key; }
-    };
     const catalog = () =>
-      defs.map((w) => ({ id: w.id, title: title(w.titleKey), group: w.group, pinned: pins.isPinned(w.id) }));
+      defs.map((w) => ({ id: w.id, title: label(w), group: w.group, pinned: pins.isPinned(w.id) }));
 
     return [
       {
@@ -70,7 +67,7 @@ export function WidgetBrainBridge() {
             return { error: `Unknown widget id. Call list_widgets for valid ids.` };
           }
           pins.pin(id);
-          return { pinned: id, title: title(getComponent(id)!.titleKey) };
+          return { pinned: id, title: label(getComponent(id)!) };
         },
       },
       {
@@ -144,7 +141,7 @@ export function WidgetBrainBridge() {
           const widgets = (answer.widgetIds ?? [])
             .map((id) => ({ id, def: getComponent(id) }))
             .filter((w): w is { id: string; def: NonNullable<typeof w.def> } => w.def != null)
-            .map((w) => ({ id: w.id, title: title(w.def.titleKey) }));
+            .map((w) => ({ id: w.id, title: label(w.def) }));
 
           if ((args as { pin?: unknown })?.pin === true) {
             for (const w of widgets) pins.pin(w.id);
@@ -166,7 +163,7 @@ export function WidgetBrainBridge() {
         },
       },
     ];
-  }, [pins, router, tw]);
+  }, [pins, router, label]);
 
   useRegisterBrainActions(actions);
   return null;

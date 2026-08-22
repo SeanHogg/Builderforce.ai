@@ -83,6 +83,7 @@ import { runFormReminderSweep } from './application/collection/formInvitations';
 import { runCollectionsSweep } from './application/finance/collectionsLadder';
 import { runSequenceSweep } from './application/sales/sequenceRunner';
 import { describeCreditReconcile, runAiCreditReconcileSweep } from './application/points/reconcileAiCredits';
+import { describeNumberRent, runPhoneNumberRentSweep } from './application/phone/chargeNumberRent';
 
 /**
  * `null` from a sweep's `run` = nothing worth a log line. Preserved verbatim from
@@ -506,6 +507,21 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     run: async ({ env }) => {
       const r = await runAiCreditReconcileSweep(buildDatabase(env), env);
       return describeCreditReconcile(r);
+    },
+  },
+  {
+    key: 'phone-number-rent',
+    cadence: 'daily',
+    // `purchaseNumber` charges the FIRST month and nothing else ever charges again,
+    // so without this a tenant pays once and holds a number the platform keeps
+    // paying a carrier for. Idempotent per number per month, so running daily
+    // charges once and a month the sweep missed is charged when it next runs.
+    description:
+      'Charge monthly rent on every provisioned phone number, suspending a number whose '
+      + 'workspace has run out of communications credit and reactivating it when they top up.',
+    run: async ({ env }) => {
+      const r = await runPhoneNumberRentSweep(buildDatabase(env), env);
+      return describeNumberRent(r);
     },
   },
   {

@@ -33,10 +33,12 @@ import { LensPage, DaysWindowSelect } from '@/components/insights/LensShell';
 import { WidgetCard } from '@/components/widgets/WidgetCard';
 import { WidgetGrid } from '@/components/widgets/WidgetGrid';
 import { ReorderableWidgetGrid } from '@/components/widgets/ReorderableWidgetGrid';
-import { AddWidgetPicker } from '@/components/widgets/AddWidgetPicker';
+import { ComponentPicker } from '@/components/component-picker/ComponentPicker';
+import { ComponentPinAction } from '@/components/widgets/ComponentPinAction';
 import { PmEmpty, PmError } from '@/components/pm/pmShared';
 import { usePins } from '@/lib/widgets/PinsProvider';
-import { getComponent, listComponentGroups } from '@/lib/components/registry';
+import { getComponent } from '@/lib/components/registry';
+import { useComponentCatalog, useComponentLabel } from '@/lib/components/useComponentCatalog';
 import type { ComponentSize } from '@/lib/components/types';
 import { DashboardWidget } from '@/components/dashboard';
 import {
@@ -83,6 +85,7 @@ export default function InsightsHomePage() {
   const t = useTranslations('insights');
   const td = useTranslations('dashboards');
   const tw = useTranslations('components');
+  const label = useComponentLabel();
   // LensPage owns the redirect for a signed-out / tenantless visitor; this page
   // still reads the session so its own dashboard reads never fire before there
   // is a tenant to scope them to (they would 401).
@@ -104,7 +107,10 @@ export default function InsightsHomePage() {
   const [pickMetric, setPickMetric] = useState('');
   const [pickViz, setPickViz] = useState<WidgetViz>('stat');
   const [pickWidget, setPickWidget] = useState('');
-  const widgetGroups = useMemo(() => listComponentGroups(), []);
+  // The SAME catalogue the picker panel browses — grouped, labelled and
+  // mount-filtered once. An unfiltered query means "everything at this mount";
+  // the select has no search box of its own.
+  const widgetGroups = useComponentCatalog('dashboard', '');
 
   const active = useMemo(
     () => (typeof view === 'number' ? dashboards.find((d) => d.id === view) ?? null : null),
@@ -281,8 +287,8 @@ export default function InsightsHomePage() {
                 <Select style={inputStyle} value={pickWidget} onChange={(e) => setPickWidget(e.target.value)} aria-label={tw('addTitle')}>
                   <option value="">{tw('addTitle')}…</option>
                   {widgetGroups.map((g) => (
-                    <optgroup key={g.group} label={tw(`group.${g.group}`)}>
-                      {g.components.map((w) => <option key={w.id} value={w.id}>{tw(`title.${w.titleKey}`)}</option>)}
+                    <optgroup key={g.group} label={g.groupLabel}>
+                      {g.components.map((w) => <option key={w.id} value={w.id}>{label(w)}</option>)}
                     </optgroup>
                   ))}
                 </Select>
@@ -332,7 +338,15 @@ export default function InsightsHomePage() {
         )}
       </div>
 
-      <AddWidgetPicker open={picker} onClose={() => setPicker(false)} />
+      {/* The dashboard's errand in the shared catalogue: pin one to my home. The
+          picker knows nothing about pins — the action does, and gates itself. */}
+      <ComponentPicker
+        open={picker}
+        onClose={() => setPicker(false)}
+        mount="dashboard"
+        title={`✛ ${tw('addTitle')}`}
+        action={(def) => <ComponentPinAction def={def} />}
+      />
     </LensPage>
   );
 }

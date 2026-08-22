@@ -5088,8 +5088,14 @@
       "pickTitle": "Ajouter un composant",
       "pickHint": "Déposez une vue en direct de votre activité sur le tableau.",
       "unknown": "Ce composant n'est plus disponible.",
-      "empty": "Aucun composant choisi pour le moment."
-    }
+      "empty": "Aucun composant choisi pour le moment.",
+      "choose": "Choisir un composant",
+      "change": "Changer de composant"
+    },
+    "noMatches": "Aucun résultat pour cette recherche.",
+    "locked": "Vous n'avez pas encore accès à ceci.",
+    "use": "Utiliser",
+    "inUse": "Utilisé"
   },
   "compile": {
     "title": "Définissez un besoin",

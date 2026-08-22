@@ -5088,8 +5088,14 @@
       "pickTitle": "Add a component",
       "pickHint": "Drop a live view of your business onto the board.",
       "unknown": "This component is no longer available.",
-      "empty": "No component chosen yet."
-    }
+      "empty": "No component chosen yet.",
+      "choose": "Choose a component",
+      "change": "Change component"
+    },
+    "noMatches": "Nothing matches that search.",
+    "locked": "You do not have access to this yet.",
+    "use": "Use",
+    "inUse": "In use"
   },
   "compile": {
     "title": "Define a need",

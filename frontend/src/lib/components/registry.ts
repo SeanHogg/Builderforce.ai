@@ -22,10 +22,6 @@ export function getComponent(id: string): ComponentDef | undefined {
   return BY_ID.get(id);
 }
 
-export function hasComponent(id: string): boolean {
-  return BY_ID.has(id);
-}
-
 /** Every registered component, registration order preserved. */
 export function listComponents(): ComponentDef[] {
   return ALL_COMPONENTS;

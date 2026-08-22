@@ -5088,8 +5088,14 @@
       "pickTitle": "添加组件",
       "pickHint": "把业务的实时视图放到画布上。",
       "unknown": "该组件已不可用。",
-      "empty": "尚未选择组件。"
-    }
+      "empty": "尚未选择组件。",
+      "choose": "选择组件",
+      "change": "更换组件"
+    },
+    "noMatches": "没有匹配的搜索结果。",
+    "locked": "你暂时无权访问此项。",
+    "use": "使用",
+    "inUse": "使用中"
   },
   "compile": {
     "title": "定义一个需求",

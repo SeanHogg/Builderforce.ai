@@ -88,6 +88,22 @@ export const TWILIO_REST_CREDENTIALS: readonly ConnectorAuthField[] = [
     required: true,
     help: 'Must be the partner of the field above — an API key SID pairs with its secret, an Account SID pairs with the Auth Token. Mixing the two is the usual cause of a 401.',
   },
+  {
+    // Twilio signs `X-Twilio-Signature` with the ACCOUNT AUTH TOKEN and offers no
+    // API-key equivalent (see the note above this constant). So a connection that
+    // sends through an API key — which is the recommended way to send — has no way
+    // to VERIFY an inbound webhook, and inbound verification is what stands between
+    // a public endpoint and anyone draining the balance by forging a 90-minute call.
+    //
+    // Optional, because sending does not need it and most connections only send.
+    // `phoneWebhookAuth.ts` refuses inbound webhooks when it is absent rather than
+    // accepting them unverified.
+    key: 'authToken',
+    label: 'Account Auth token (inbound webhooks only)',
+    secret: true,
+    required: false,
+    help: 'Only needed to RECEIVE calls and SMS. Twilio signs inbound webhooks with the account Auth Token — an API key secret cannot verify them. Leave blank if this connection only sends.',
+  },
 ];
 
 /**

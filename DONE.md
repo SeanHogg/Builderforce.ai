@@ -58,88 +58,94 @@ parity, 485 canvas, 29 widget/insights/surfaces tests pass. API typecheck clean;
 including 8 new ones pinning that a request naming its own domain and kind reaches the reader with
 neither.
 
-## ✅ RESOLVED 2026-08-22 — A ratchet verdict that survives `--update`, three module inversions removed, and a typecheck that was red
+## ✅ RESOLVED 2026-08-22 — Two data-model ratchets to zero, a cross-tenant points leak, and calendar tokens out of plaintext
 
-**The gap.** The PRD 20 roadmap entry claimed six green data-model ratchets holding 216 violations.
-Running them said otherwise: one guard was **red**, the entry omitted the largest of the six entirely,
-and four of the five numbers it did quote were stale. Underneath that, the mechanism had a defect that
-guaranteed the count would keep drifting.
+**The gap.** The PRD 20 entry claimed six green ratchets holding 216 violations. Running them
+said otherwise: one guard was RED, the largest of the six was missing from the count entirely,
+and four of the five quoted numbers were stale. **362 open → 214**, with `check-shape-lint` and
+`check-tenant-column` now at **0**.
 
-### The cross-tenant read the ratchet was catching
+### The cross-tenant read the red guard was catching
 
-`check-tenant-scope` was failing on `application/points/earnerFacets.ts:68`: the `tenant_members` read
-behind the **`employer` points facet** filtered by `userId` and `isActive` and by no tenant at all.
-A seat held in any workspace paid out in every workspace — points are ledgered per tenant, so this is a
-cross-tenant earn. Now `scopedToTenant(tenantMembers, tenantId, …)`, and the `EarnerFacts` docstring
-says which workspace it means.
+`check-tenant-scope` was failing on `points/earnerFacets.ts`: the `tenant_members` read behind the
+**`employer` points facet** filtered by user and active-flag and by no tenant at all, so a seat held
+in any workspace paid out in every workspace. Now `scopedToTenant`.
 
 ### A verdict had nowhere durable to live
 
-`reportRatchet --update` rewrites a baseline file wholesale, and `#` comments do not survive it. Four
-argued verdicts — two duplicate-shape clusters, two shape-lint tables, one unadopted table — were
-sitting in those comments, each a paragraph that the next routine trim would have deleted with no diff
-anybody would read as a deletion. `check-shape-lint` had solved this privately with a 400-line inline
-`ADJUDICATED` map, and `check-tenant-column` had copied the idea as `TENANT_INDEPENDENT`: the same
-mechanism, invented twice, in two shapes, with a third form rotting in comments.
+`--update` rewrites a baseline wholesale, so `#` comments explaining an accepted entry survive until
+the next trim. Four argued verdicts were sitting in those comments. `check-shape-lint` had solved it
+privately with a 400-line inline map; `check-tenant-column` had copied the idea under another name.
 
-**`scripts/lib/adjudications.mjs`** is now the one mechanism, and `reportRatchet` consumes it:
+`scripts/lib/adjudications.mjs` is now the one mechanism: a verdict is data in
+`scripts/adjudications/<guard>.mjs`, filtered out *before* the baseline comparison so decided work
+stops being counted as outstanding. A verdict under 40 characters **fails the guard** (it caught
+`countries: 'ISO country list.'` on the first run); a key both adjudicated and baselined fails as
+double-counting; a verdict matching no live finding is reported stale. All three prior forms are
+migrated — **173 recorded decisions**. `check-shape-lint.mjs` went from **508 lines to 93**.
 
-- a verdict lives in `scripts/adjudications/<guard>.mjs` as data, so `--update` cannot destroy it;
-- an adjudicated key is filtered out **before** the baseline comparison, so *decided* stops being
-  counted as *outstanding* — an open balance is now work, not a mix of work and settled argument;
-- a verdict with no argument (under 40 characters) **fails the guard** — an adjudication removes an
-  item from the balance, so it has to say why. This caught `countries: 'ISO country list.'` on the
-  first run;
-- a key adjudicated **and** baselined fails as double-counting;
-- a verdict matching no live finding is reported stale, so the registry cannot rot into arguments
-  about tables that stopped existing.
+### Two guards to zero
 
-All three prior forms are migrated: 49 shape-lint verdicts, 11 tenant-column verdicts, 2 cluster
-verdicts, 1 adoption verdict — 63 recorded decisions that are no longer one `--update` from gone.
-`check-shape-lint.mjs` fell from **508 lines to 93** on the way out.
+**tenant-column 71 → 0.** About thirty-five entries were the same paragraph retyped: a child hanging
+off a tenant-scoped parent. That is a structural fact about the foreign key, so the guard now
+*computes* it — NOT NULL, ON DELETE CASCADE, parent transitively scoped, `users` excluded because a
+user spans tenants. 71 → 42 derived; the remaining 42 are real verdicts across four kinds (global
+catalogue, pre-tenant, person-owned, platform sales desk). Two hand-written verdicts became obsolete
+and the orphan check flagged them.
+
+**shape-lint 65 → 0.** Every kernel primitive addresses its owner through `objects.id`, which makes
+most of these decidable: a table whose parent is an unregistered aggregate has nothing to point at,
+and folding it in trades an enforced foreign key for one the database cannot enforce. Where the
+primitive is tenant-scoped and the row has no tenant (`marketing_tool_runs`, `sales_coaching_notes`,
+`legal_document_versions`) it cannot be represented at all.
 
 ### Identity stopped depending on the domains that depend on it
 
-`identity.ts` imported `canvas`, `agents` and `delivery` — the module every other domain reads was
-reading three of them back. The cause was eight tables filed under Identity because their payload
-mentions a user: `chat_members` (a brain chat's), `dev_team_members`, `meeting_transcript_segments`,
-`chat_sessions`, `import_staged_users`, `tenant_models`, `on_call_members`, `error_group_users`.
-Naming a user does not make a row Identity's — **the parent aggregate decides the domain**. Each moved
-to the module that owns its parent. Every consumer imports from the schema barrel, so this is a pure
-code move: same table names, same columns, same foreign keys, **no DDL and no migration**.
+Eight tables were filed under Identity because their payload mentions a user — `chat_members`,
+`dev_team_members`, `meeting_transcript_segments`, `chat_sessions`, `import_staged_users`,
+`tenant_models`, `on_call_members`, `error_group_users`. **The parent aggregate decides the domain.**
+Every consumer goes through the schema barrel, so this was a pure code move: no DDL, no migration.
+`poker_sessions` joined its own stories and votes in Canvas; `webhook_deliveries` rejoined
+`webhook_subscriptions`; `source_control_integrations` moved to its only reader; `commerce.ts` was
+holding an edge open with a dead import.
 
-Three more edges went the same way: `webhook_deliveries` rejoined `webhook_subscriptions` (one
-aggregate declared in two modules), `source_control_integrations` moved to its only reader, and
-`commerce.ts` was importing `skills` and never using it — a dead import holding an edge open.
+`users` and `tenant_api_keys` also became anchors alongside `tenants`/`segments`, checked rather than
+assumed: every reference to them from the counted domains is an ACTOR pointer (`created_by`,
+`author_id`, `owner_user_id`, `created_by_key_id`), not a read of Identity's data.
+**Cross-module imports 34 → 22; `identity.ts` now imports nothing but the kernel.**
 
-**Cross-module schema imports: 34 → 28. `identity.ts` now imports nothing but the kernel.**
+### Calendar OAuth tokens were in plaintext
 
-### `npm run type-check` was red, and had been
+`calendar_connections` stored `access_token` and `refresh_token` as bare text while
+`mailbox_connections` and `drive_connections` sealed the identical grant through `oauthTokenVault`.
+The refresh token is the long-lived half. Migration 1107 adds sealed columns and makes it rolling:
+the read path prefers the blob, falls back to the legacy columns, and **re-seals and clears them the
+first time a row is touched**. The upsert moved out of the route into `upsertCalendarGrant`, which
+fixed a latent bug on the way — Google omits `refresh_token` on re-consent, and sealing without
+reading the previous row first would have left grants working until expiry and then unrefreshable.
 
-Four errors, none of them from this work: `awardPoints.ts` and `redeemPoints.ts` both imported
-`reportCaughtError` from `infrastructure/observability/errorReporter`, **a module that does not
-exist** (the function is in `application/observability/caughtErrorReporter`); `redeemPoints` then
-dereferenced a possibly-undefined `.returning()` row while debiting points against a redemption intent
-— it now refuses instead, because debiting against an intent that was never recorded is the one
-outcome worse than refusing; and `consumption/meters.ts` could not add redeemed AI credits to the
-meter because `getOrSetCached` declared `env: Env` while its own body handles an absent env and its own
-comment says it does. The signature now matches the contract it documents, and `aiCreditBalance` with
-it — so the meter and the token gate agree about credits again, which is the disagreement that file's
-comment was written about.
+### One duplicate-shape cluster merged for real
 
-**25/25 guards green · typecheck clean · 686 test files, 8,267 tests passing.**
+`tenant_skill_assignments` + `agent_host_skill_assignments` → **`skill_assignments`** (migration
+1108): one fact at two scopes, where the scope is a column value. Two route files had each carried
+the same select-with-join twice. One `skillAssignmentPort` now owns all of it, and
+`effectiveSkillsForHost` answers in ONE query what was two queries merged in a Map — which also
+picked up a host lookup that was not tenant-scoped. `check-tenant-scope` ratcheted 252 → 251.
 
-### What the numbers actually were
+Four more clusters were adjudicated on the evidence. The last, `project_manager_configs` =
+`tenant_manager_defaults`, is the one where merging would have been WRONG: the column names match
+and the meanings are opposite — at the project tier each is a value, at the workspace tier the same
+name is a ceiling, a floor, or a most-restrictive-wins guardrail.
 
-The entry said 216. Six guards say **362 open + 63 adjudicated**. It omitted `check-table-adoption`
-(187, the largest); quoted 95 and 72 where the files held 67 and 71; and quoted 38 cross-module imports
-against a file holding 34. It also claimed all shape-lint verdicts "need no decision and can start
-now" — but a *duplication to migrate* verdict names the primitive the rows move into, and counting real
-feature consumers (excluding `domains/kernel/entities.ts`, which registers every kernel table by
-construction) shows `runs`, `work_items`, `annotations` and `revisions` at **zero**. The 21 entries
-shaped `annotation`, `run` or `revision` are blocked on the same PRD 20 §6 decision as the clusters.
-**44 are genuinely unblocked.** ROADMAP.md now says so, and records the `chat_messages` /
-`brain_chat_messages` duplicate pair that sits below `check-signature-duplication`'s threshold.
+### Four pre-existing type errors
+
+`npm run type-check` was red and had been: `awardPoints` and `redeemPoints` imported
+`reportCaughtError` from a module that does not exist; `redeemPoints` dereferenced a
+possibly-undefined `.returning()` row while debiting points against a redemption intent (it refuses
+now); and `consumption/meters.ts` could not add redeemed AI credits because `getOrSetCached` declared
+`env: Env` while its own body and comment handle an absent env.
+
+**25/25 guards green · typecheck clean · 687 test files, 8,275 tests passing.**
 
 ## ✅ RESOLVED 2026-08-22 — The points economy lands whole, and the mapping audit that shrank the rest of the hired.video port to zero new tables
 

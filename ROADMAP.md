@@ -387,6 +387,8 @@ follows is what closing them surfaced.*
 
 ### 📖 Knowledge & canvas
 
+- **A `component` card is chosen by typing its id, because the settings-field vocabulary cannot reach the component catalog's labels.** *(component registry pass, 2026-08-22)* `registerKindSettings` gives the new kind a `text` control for `componentId` — the same shape `transclusion` uses for `documentId`, so it is a precedent rather than a new half-pattern, and the Brain can author it because `componentId` is on the authorable list. It is still the wrong affordance for "drop your CRM on this board": a person has to know that `rice-matrix` exists and is spelled that way. The obvious fix — `control: 'select'` with options built from `listComponentsForMount('canvas')` — does not work as the machinery stands: `SettingsFieldOption.labelKey` is resolved by `SettingsFieldControl.tsx` through the surface's own `useTranslations('creationCanvas')`, and the component titles live under `components.title.*`, which a namespaced translator cannot reach. Duplicating 34 labels into `creationCanvas` to work around it would put one fact in two catalogs. Fix = either let an option name its namespace (the control would need one translator per namespace, so realistically a small `<OptionLabel>` that resolves its own text), or reuse the real picker — `AddWidgetPicker` already browses this registry grouped and searchable, and the canvas wants the same panel filtered to the `canvas` mount. The second is better and is a genuine component extraction, not a patch. Unblocks: composing a board out of platform surfaces by BROWSING them, which is the difference between the mount existing and it being usable by somebody who has not read the registry.
+
 - **`CreationCanvas.test.tsx` fails a DIFFERENT four tests on each full-file run, and passes every one of them in isolation.** *(found 2026-08-19 while wiring the palette entitlement gate)* Across four consecutive runs of the same unchanged tree the failing set was `{agent model, staff/task, evermind, palette collapse}`, then `{agent model, staff/task}`, then `{staff/task, workflow focus, palette collapse, spatial frame}` — and `collapses palette sections` passes on its own with an empty error log. That is not a product defect; it is a 4,000-line suite of 20-second full-canvas renders sharing one jsdom, one `localStorage` and one set of module mocks, where a slow machine reorders enough async work to break whichever assertion is closest to a `waitFor` boundary. The cost is real: a flaky suite is a suite people stop reading, and two GENUINE regressions in this file were found only because they failed deterministically while the flaky four moved around them. Fix = give each test its own `localStorage` (the palette-collapse state persists across cases today), replace the bare `fireEvent` + immediate `expect` pairs with `waitFor`, and split the file by surface so one render does not carry eighty-six cases. Unblocks: a canvas suite whose red means something.
 
 - **Eight Canvas kinds are declared but have no editing runtime — they generate a manifest and stop** *(hired.video port, T4 — see [PRD 18](./specs/builderforce/18-prd-hired-video-port.md))*. `CREATION_OBJECT_KINDS` / `CREATIVE_CAPABILITIES` (`packages/creation-canvas-contract`) advertise `video, voice, podcast, image, animation, comic, cad, model3d` (plus `drawing`), and all of them resolve to `builtin_creative_compose`, which returns an artifact *manifest* — a description, not something a person can open and edit. **`game` is no longer one of them (2026-08-07):** it has a real in-canvas runtime (a sandboxed play frame) plus a five-adapter target port that ships it to a phone, an APK, an iOS build and Roblox — see DONE.md. The remaining eight are unchanged. hired.video has the runtimes for every one (`TimelineCanvas`, `DrawingStage`, `AnimationStage`, `InteractiveComicStage`, `GameStage`/`GameStage3D`, `CadStage`, `Cad3DStage`, `DocumentStage`, `MusicComposer`) plus the export pipelines those kinds promise — ~85K LOC across `frontend/lib/studio` + `frontend/components/studio`. This is also the root cause of the two entries below it about `comic`/`cad`/`resume` advertising formats the board cannot produce: the contract describes hired.video's capability, and the runtime that would deliver it lives in the other repo. Port one kind per slice, dynamically importing each runtime's heavy deps (`@react-three/fiber`, `ag-psd`, `jszip`, `mediapipe`) so the canvas entry chunk does not grow by their union. Unblocks: a capability list the board can actually honour, and Canvas being a creation surface rather than a brief generator. **NOT BLOCKED — the 2026-08-19 blocker was wrong and is retracted (re-verified 2026-08-22).** That check searched the Builderforce workspace root and concluded the runtimes did not exist anywhere. They do: `C:\code\hired\hired.video` is present on the build machine and `frontend/lib/studio` is intact, carrying `animation/`, `cad/`, `cad-3d/`, `comic/`, `drawing/`, `game/`, `image/`, `renderer/` and the rest. Nothing has to be restored. This is large — it is the biggest single piece of work left in the port — but it is ordinary engineering, one kind per slice, dynamically importing each runtime's heavy deps. **Two constraints on the way in:** `CreationCanvas.tsx` is a 13,246-line god component under active decomposition (see the Platform entry) and may NOT be grown — each runtime arrives as a self-contained component reached through `creationObjectRegistry` DATA, never as another branch inside it; and each runtime must land with its import/edit/preview/export loop intact rather than as a viewer. The `CREATIVE_CAPABILITIES` half of this cluster IS closed — every advertised format now names the machine that produces it, so the contract no longer promises a studio that is not here; see DONE.md.
@@ -754,32 +756,41 @@ follows is what closing them surfaced.*
 > Everything below is a **data or behaviour move against a running system**, not a schema decision —
 > exactly the boundary PRD 20 §5 draws between steps 2–3 and steps 4–5.
 
-- **Six data-model ratchets hold 362 open violations to pay down.** Each guard passes on a shrink-only
-  baseline in `api/scripts/.<name>-baseline.txt`, so green means "no worse", not "clean". Open balances:
-  **187** consolidated tables reachable only through the generic entity layer (`check-table-adoption`) ·
-  **71** tables with no tenant-scoping column (global catalogues are fine here; customer-data tables are
-  not, and are invisible to `check-tenant-scope.mjs` by construction) ·
-  **65** table names matching a kernel shape, each needing a verdict — legitimate noun, or duplication to
-  migrate · **28** cross-module schema imports ·
-  **8** duplicate-shape clusters (`drive_connections`=`mailbox_connections` · `portfolios`=`initiatives` ·
-  `tenant_custom_roles`=`platform_modules` · `tool_runs`=`marketing_tool_runs` ·
-  `tenant_manager_defaults`=`project_manager_configs` · `tenant_skill_assignments`=`agent_host_skill_assignments` ·
-  `import_type_mappings`=`board_type_mappings` · `kanban_template_lane_requirements`=`swimlane_requirements`) ·
-  **3** polymorphic `(kind, id)` references with nothing to point at (`activity_log`,
-  `creation_session_objects`, `proposal_evaluations` — clears when the `objects` registry lands).
-  A decided entry is no longer counted here: verdicts live in `api/scripts/adjudications/<guard>.mjs`.
-  **Blocked on an operator decision:** which of the 25 kernel primitives are accepted (PRD 20 §6).
-  That gates the 8 clusters and **21** of the 65 shape-lint entries — the ones shaped `annotation` (8),
-  `run` (8) and `revision` (5), whose merge targets have zero feature consumers today (`runs` and
-  `work_items` are reachable only from `domains/kernel/entities.ts`). The remaining **44** shape-lint
-  verdicts and the 28 import edges need no decision and can start now.
+- **Four of the six data-model ratchets still hold work: 214 open violations.**
+  `check-shape-lint` and `check-tenant-column` are at **0**. A decided entry is no longer
+  counted as debt — verdicts are data in `api/scripts/adjudications/<guard>.mjs`, and
+  `--update` cannot destroy them. What is left:
+  - **187 consolidated tables reachable only through the generic entity layer**
+    (`check-table-adoption`). Each clears when a real feature path reads or writes it,
+    i.e. one domain feature at a time — this is PRD 20 §5 steps 6–7, not a cleanup pass.
+  - **22 cross-module schema imports** (`check-domain-boundary`). What remains after the
+    misfiled tables were moved is genuine cross-domain reference: `projects`, `tasks`,
+    `initiatives`, `integration_credentials`, `agent_hosts`. Clearing them means replacing
+    enforced foreign keys with bare uuids, or routing through the kernel — a DDL migration
+    per edge, gated on §6.
+  - **3 polymorphic `(kind, id)` references with no foreign key** (`activity_log`,
+    `creation_session_objects`, `proposal_evaluations`). The `objects` registry exists; a
+    hard FK would reject any row whose target is not registered yet, so each clears when
+    its family moves onto the entity layer.
+  - **2 duplicate-shape clusters** — `drive_connections`=`mailbox_connections` and
+    `initiatives`=`portfolios`. Both are the §6 decision below and nothing else.
+  **Blocked on an operator decision:** which of the 25 kernel primitives are accepted
+  (PRD 20 §6). Measured, not assumed — counting feature consumers of each primitive
+  (excluding `domains/kernel/entities.ts`, which registers every kernel table by
+  construction): `activity_log` 18, `connections` 6, `artifacts` 3, `settings` 3,
+  `memberships` 3, `messages` 1, `threads` 1, `deliveries` 1, and **`runs`, `work_items`,
+  `annotations`, `revisions` at 0**. `work_items` at zero is why `initiatives`/`portfolios`
+  is blocked; `connections` being proven is why the drive/mailbox/calendar grants are a
+  real migration rather than an argument.
   Unblocks: `npm test` becomes a real gate on the data model instead of a shrinking allowance.
 
-- **`chat_messages` and `brain_chat_messages` are two message tables neither guard catches.**
-  `check-signature-duplication` scores them below its 0.55 threshold (one carries tenant/segment/
-  agent_host/session, the other chat/event_key); strip the parentage and the payload is identical —
-  `role`, `content`, `metadata`, `seq`, `created_at`. **Blocked on the same §6 decision:** the merge
-  target is the kernel `messages` primitive, whose only feature consumer is `messaging/kernelThreads.ts`.
+- **`calendar_connections` keeps a legacy plaintext token column until the backfill drains.**
+  Migration 1107 moved calendar OAuth grants into the sealed `oauthTokenVault` used by
+  mailbox and drive; it is deliberately rolling, so `access_token`/`refresh_token` remain as
+  a read-only fallback and each row re-seals the first time it is touched. The follow-up
+  migration that DROPS the two columns needs the partial index
+  `idx_calendar_connections_unsealed` to be empty, which is a production check, not a
+  code one.
 
 - **The 1,206 → 387 consolidation is specified, mapped and measured; the only thing left in it is an
   operator decision.** *(analysis 2026-08-07, spec current)* The full four-pass analysis — the 25

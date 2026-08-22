@@ -22,6 +22,10 @@
  * arrive here from a dashboard with no edits and will let the next one arrive
  * from somewhere else.
  *
+ * Choosing is not this file's either: the catalogue is `ComponentPicker`, the
+ * same panel the dashboard browses. This supplies the errand ("use this one")
+ * and writes the result onto the node.
+ *
  * ── WHY THE MOUNT IS CHECKED AND NOT ASSUMED ─────────────────────────────────
  * `getComponentForMount(id, 'canvas')` refuses a component that never declared
  * the canvas mount, so a dashboard-only tile pasted onto a board by id shows the
@@ -30,9 +34,14 @@
  * serving blank frames for keys its switch had no branch for.
  */
 
+import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { getComponentForMount } from '@/lib/components/registry';
+import { useComponentLabel } from '@/lib/components/useComponentCatalog';
 import { ComponentScopeProvider } from '@/lib/components/scope';
+import { ComponentPicker } from '@/components/component-picker/ComponentPicker';
+import { ComponentChooseAction } from '@/components/component-picker/ComponentChooseAction';
+import type { ComponentDef } from '@/lib/components/types';
 import type { CreationNodeData } from './types';
 import styles from './CreationCanvas.module.css';
 
@@ -46,25 +55,101 @@ import styles from './CreationCanvas.module.css';
  */
 const CARD_WINDOW_DAYS = 30;
 
-export function CanvasComponentBody({ data }: { data: CreationNodeData }) {
+/** The title `createData` gives a fresh card. A card still wearing it has not
+ *  been named by anybody, so picking a component may name it. */
+const UNNAMED_TITLE = 'Component';
+
+export function CanvasComponentBody({
+  data,
+  onEdit,
+}: {
+  data: CreationNodeData;
+  /** Absent on a read-only board (a shared link, a published page), which is
+   *  exactly when nobody should be able to change what a card shows. The choose
+   *  affordance is therefore absent with it rather than gated by a flag. */
+  onEdit?: (patch: Partial<CreationNodeData>) => void;
+}) {
   const t = useTranslations('components.canvas');
+  const labelOf = useComponentLabel();
+  const [picking, setPicking] = useState(false);
+
   const componentId = typeof data.componentId === 'string' ? data.componentId.trim() : '';
   const projectId = typeof data.projectId === 'number' && data.projectId > 0 ? data.projectId : null;
+  const def = componentId ? getComponentForMount(componentId, 'canvas') : undefined;
+  const title = typeof data.title === 'string' ? data.title : '';
 
-  if (!componentId) return <p className={styles.transclusionNotice}>{t('empty')}</p>;
+  /**
+   * Whether picking a component may also rename the card.
+   *
+   * True when nobody has named it — it is empty, still carries the created
+   * default, or carries the CURRENT component's own label because a previous pick
+   * set it. A title the author typed is never overwritten, which is the only rule
+   * that matters here: silently discarding somebody's words is worse than a card
+   * called "Component".
+   */
+  const mayRename = !title || title === UNNAMED_TITLE || (def != null && title === labelOf(def));
 
-  const def = getComponentForMount(componentId, 'canvas');
-  if (!def) return <p className={styles.transclusionNotice} role="alert">{t('unknown')}</p>;
+  const choose = (chosen: ComponentDef) => {
+    onEdit?.({
+      componentId: chosen.id,
+      ...(mayRename ? { title: labelOf(chosen) } : {}),
+    });
+    setPicking(false);
+  };
 
-  const { Surface } = def;
   return (
-    // The card's project wins over anything ambient: a board can hold two of
-    // these scoped to two different projects, and the app shell's current
-    // selection must not silently retarget either of them.
-    <ComponentScopeProvider projectId={projectId}>
-      <div className={styles.transclusionBody}>
-        <Surface days={CARD_WINDOW_DAYS} />
-      </div>
-    </ComponentScopeProvider>
+    <>
+      {def
+        ? (
+          // The card's project wins over anything ambient: a board can hold two
+          // of these scoped to two different projects, and the app shell's
+          // current selection must not silently retarget either of them.
+          <ComponentScopeProvider projectId={projectId}>
+            <div className={`${styles.transclusionBody} nowheel`}>
+              <def.Surface days={CARD_WINDOW_DAYS} />
+            </div>
+          </ComponentScopeProvider>
+        )
+        : (
+          <p className={styles.transclusionNotice} {...(componentId ? { role: 'alert' as const } : {})}>
+            {componentId ? t('unknown') : t('empty')}
+          </p>
+        )}
+
+      {onEdit && (
+        <>
+          <button
+            type="button"
+            className="nodrag"
+            onClick={(e) => { e.stopPropagation(); setPicking(true); }}
+            style={CHOOSE_BUTTON}
+          >
+            {def ? t('change') : t('choose')}
+          </button>
+          <ComponentPicker
+            open={picking}
+            onClose={() => setPicking(false)}
+            mount="canvas"
+            title={`◲ ${t('pickTitle')}`}
+            action={(candidate) => (
+              <ComponentChooseAction def={candidate} current={componentId} onChoose={choose} />
+            )}
+          />
+        </>
+      )}
+    </>
   );
 }
+
+const CHOOSE_BUTTON: React.CSSProperties = {
+  alignSelf: 'flex-start',
+  marginTop: 6,
+  minHeight: 30,
+  padding: '4px 10px',
+  borderRadius: 'var(--radius-sm)',
+  border: '1px solid var(--border-subtle)',
+  background: 'transparent',
+  color: 'var(--text-primary)',
+  cursor: 'pointer',
+  fontSize: '0.78rem',
+};

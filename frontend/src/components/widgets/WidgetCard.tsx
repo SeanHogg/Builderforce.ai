@@ -1,6 +1,7 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
+import { useComponentLabel } from '@/lib/components/useComponentCatalog';
 import { RoleGate } from '@/components/RoleGate';
 import type { ComponentDef } from '@/lib/components/types';
 import { PinButton } from './PinButton';
@@ -23,6 +24,7 @@ import { useComponentDrill } from './useComponentDrill';
  */
 export function WidgetCard({ def, days, showDrill = true }: { def: ComponentDef; days: number; showDrill?: boolean }) {
   const t = useTranslations('components');
+  const label = useComponentLabel();
   const drill = useComponentDrill();
   const Card = def.Surface;
   const drillable = def.drill != null && showDrill;
@@ -31,7 +33,7 @@ export function WidgetCard({ def, days, showDrill = true }: { def: ComponentDef;
     <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 18, height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
         <div style={{ minWidth: 0 }}>
-          <h3 style={{ fontSize: 'var(--font-size-card-title)', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>{t(`title.${def.titleKey}`)}</h3>
+          <h3 style={{ fontSize: 'var(--font-size-card-title)', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>{label(def)}</h3>
           {def.descKey && (
             <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)', margin: '4px 0 0' }}>{t(`desc.${def.descKey}`)}</p>
           )}

@@ -2988,7 +2988,7 @@ export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenD
         {/* Another document, shown here, LIVE — the knowledge board's `embed` block, and
             the second primitive that surface had and this one did not. */}
         {data.kind === 'transclusion' && <CanvasTransclusionBody data={data} />}
-        {data.kind === 'component' && <CanvasComponentBody data={data} />}
+        {data.kind === 'component' && <CanvasComponentBody data={data} {...(onEditData ? { onEdit: (patch: Partial<CreationNodeData>) => onEditData(id, patch) } : {})} />}
         {data.kind === 'release' && <ReleaseBody data={data} onOpen={() => onOpenDetails?.(id, 'delivery')} />}
         {/* The month, at card size — the SAME component the full-screen surface mounts,
             with a different `variant`. There is no second calendar in this codebase to

@@ -218,6 +218,45 @@ const twilio: ConnectorManifest = {
         FriendlyName: b('Label for the number'),
       },
     },
+    {
+      // PROVISIONING — the three actions that make a number something a tenant can
+      // BUY rather than something an operator pastes in from the console. Search is
+      // separate from purchase because a search result expires: Twilio does not hold
+      // a number for you, so the buy re-states the E.164 and can legitimately fail
+      // with 21422 if somebody else took it first. `application/phone/phoneNumbers.ts`
+      // is where that race is handled.
+      key: 'search_available_numbers', label: 'Search available numbers',
+      description: 'Find purchasable local numbers in a country, optionally near an area code.',
+      method: 'GET', path: '/AvailablePhoneNumbers/{CountryCode}/Local.json', mutates: false,
+      required: ['CountryCode'], resultPath: 'available_phone_numbers',
+      params: {
+        CountryCode: p('ISO country code, e.g. US'),
+        AreaCode: qn('Restrict to an area code, e.g. 415'),
+        Contains: q('Digits or letters the number must contain'),
+        SmsEnabled: q('true to require SMS capability'),
+        VoiceEnabled: q('true to require voice capability'),
+        PageSize: qn('Results per page'),
+      },
+    },
+    {
+      key: 'buy_phone_number', label: 'Buy a number',
+      description: 'Purchase a phone number onto the account.',
+      method: 'POST', path: '/IncomingPhoneNumbers.json', mutates: true, bodyFormat: 'form',
+      required: ['PhoneNumber'],
+      params: {
+        PhoneNumber: b('The E.164 number to purchase, from a search result'),
+        FriendlyName: b('Label for the number'),
+        SmsUrl: b('Webhook URL for inbound SMS'),
+        VoiceUrl: b('Webhook URL for inbound calls'),
+        StatusCallback: b('Webhook URL for call status events'),
+      },
+    },
+    {
+      key: 'release_phone_number', label: 'Release a number',
+      description: 'Give a number back. Billing stops; the number is gone and cannot be reclaimed.',
+      method: 'DELETE', path: '/IncomingPhoneNumbers/{Sid}.json', mutates: true, required: ['Sid'],
+      params: { Sid: p('SID of the phone number (PN…)') },
+    },
   ],
 };
 

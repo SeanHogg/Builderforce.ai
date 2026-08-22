@@ -225,6 +225,7 @@ import { createCostForecastRoutes }    from './presentation/routes/costForecastR
 import { createDashboardRoutes }       from './presentation/routes/dashboardRoutes';
 import { createConsumptionRoutes }     from './presentation/routes/consumptionRoutes';
 import { createPointsRoutes }          from './presentation/routes/pointsRoutes';
+import { createPhoneRoutes }           from './presentation/routes/phoneRoutes';
 import { createEvalRoutes }            from './presentation/routes/evalRoutes';
 import { createDatasetRoutes }         from './presentation/routes/datasetRoutes';
 import { createTeamMemoryRoutes }      from './presentation/routes/teamMemoryRoutes';
@@ -988,6 +989,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/dashboard',       createDashboardRoutes(db));
   app.route('/api/consumption',     createConsumptionRoutes(db));
   app.route('/api/points',          createPointsRoutes(db));
+  app.route('/api/phone',           createPhoneRoutes(db));
   app.route('/api/eval',            createEvalRoutes(db));
   app.route('/api/dataset',         createDatasetRoutes(db));
   app.route('/api/brain',     createBrainRoutes(brainService, db));
