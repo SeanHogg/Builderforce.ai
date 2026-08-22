@@ -2002,6 +2002,10 @@ export const INTEGRATION_SLUG_MAP: Record<string, IntegrationSeo> = Object.fromE
  */
 export const RELATED_ARTICLES: Record<string, string[]> = {
   'creation-canvas': [
+    'run-your-app-on-the-canvas',
+    'the-canvas-gave-the-screen-back-to-the-board',
+    'build-a-3d-world-in-the-browser',
+    'read-any-pdf-even-the-scanned-ones',
     'creation-canvas-beyond-chat',
     'every-diagram-format-the-canvas-reads',
     'which-diagram-should-you-draw',
@@ -2018,7 +2022,10 @@ export const RELATED_ARTICLES: Record<string, string[]> = {
     'how-to-build-a-3d-world-resume-in-hired-video-studio',
   ],
   product: [
+    'grade-the-proof-and-close-the-loop',
     'idea-to-real-the-operating-methodology',
+    'run-your-app-on-the-canvas',
+    'close-the-deal-on-the-board-you-built-it-on',
     'eight-ways-to-make-an-idea-real',
     'creation-canvas-beyond-chat',
     'customer-feedback-to-ten-mockups',
@@ -2040,6 +2047,7 @@ export const RELATED_ARTICLES: Record<string, string[]> = {
   ],
   // Evermind technology page / feature teaser.
   evermind: [
+    'four-questions-before-you-buy-enterprise-ai',
     'build-and-train-evermind-on-the-creation-canvas',
     'evermind-self-updating-model',
     'inside-evermind-architecture',
@@ -2058,6 +2066,7 @@ export const RELATED_ARTICLES: Record<string, string[]> = {
     // The method leads, because the pricing question a visitor actually has is
     // "what am I paying for" and the answer is the third act, not the first two.
     'read-prove-build-the-inner-loop',
+    'grade-the-proof-and-close-the-loop',
     'eight-ways-to-make-an-idea-real',
     'evermind-self-updating-model',
     'memory-first-inference-skip-the-llm',
@@ -2074,6 +2083,9 @@ export const RELATED_ARTICLES: Record<string, string[]> = {
     'eight-ways-to-make-an-idea-real',
     'read-prove-build-the-inner-loop',
     'idea-make-run-measure-menu-as-methodology',
+    // The fifth: where the loop CLOSES. The other four describe the method; this
+    // one describes what happens to the number it told you to write down.
+    'grade-the-proof-and-close-the-loop',
   ],
   // Per-competitor leaf pages — keyed by the COMPETITORS column key. Each points
   // at its dedicated head-to-head post first, then the roundup for context.
@@ -2106,6 +2118,7 @@ export const RELATED_ARTICLES: Record<string, string[]> = {
   quality: ['quality-error-observability-one-click-fix', 'incident-management-on-call-and-war-rooms', 'agentic-tester-autonomous-qa', 'task-execution-and-observability'],
   // The salary guide — the four ported posts that send readers to a pay page.
   salary: [
+    'fifteen-free-career-tools-and-a-salary-guide',
     'how-to-research-your-market-salary',
     'research-employers-with-reviews-and-salary-data',
     'hired-video-vs-glassdoor-reviews-salary-employer-branding',

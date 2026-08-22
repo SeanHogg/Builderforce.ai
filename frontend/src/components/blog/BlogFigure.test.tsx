@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { render } from '@testing-library/react';
 import BlogFigure, { parseFigure, type FigureSpec } from './BlogFigure';
+import { FIGURE_RENDERERS } from './figures/registry';
 import { BLOG_POSTS } from '@/lib/blogData';
 import { PROOF_FORMS } from '@/lib/methodology';
 import { RESUME_TEMPLATES } from '@/lib/canvasResume';
@@ -46,7 +47,10 @@ describe('BlogFigure', () => {
   });
 
   it('every figure declares a kind this component renders', () => {
-    const KINDS = ['flow', 'matrix', 'stack', 'bars', 'compare', 'templates', 'launch'];
+    // Read from the registry rather than restating it: a hand-written list here
+    // is a second declaration of which kinds exist, and the day it drifts the
+    // test fails against a figure that renders perfectly well.
+    const KINDS = Object.keys(FIGURE_RENDERERS);
     const unknown = CORPUS
       .map((figure) => ({ ...figure, spec: parseFigure(figure.source) }))
       .filter((figure) => figure.spec && !KINDS.includes(figure.spec.kind))

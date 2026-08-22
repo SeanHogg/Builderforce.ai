@@ -92,6 +92,25 @@ export const BLOG_TOPICS: readonly BlogTopic[] = [
     ],
   },
   {
+    // Running and selling the company, which is a different reader from the one
+    // browsing Delivery: a founder asking how the money, the ownership and the
+    // paperwork work, not a delivery lead asking how the work is governed.
+    //
+    // It sits after the two people topics so a recruiting article keeps its
+    // home, and before `canvas` so an article about SELLING that happens to
+    // mention the board files under what it is about. `sales` and `marketplace`
+    // are deliberately absent: both are carried by articles that already have a
+    // correct home one topic down, and an anchor tag that steals is worse than
+    // a topic that is one article smaller.
+    id: 'business',
+    labelKey: 'business',
+    tags: [
+      'founder-ops', 'finance', 'invoicing', 'cap-table', 'equity', 'legal',
+      'crm', 'quotes', 'mutual-action-plan', 'escrow', 'milestones', 'contracts',
+      'freelance', 'hrms',
+    ],
+  },
+  {
     id: 'canvas',
     labelKey: 'canvas',
     tags: [

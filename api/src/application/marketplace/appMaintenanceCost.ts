@@ -39,8 +39,8 @@ import {
   llmUsageLog,
   SESSION_PROJECT_LINK_APP,
 } from '../../infrastructure/database/schema';
+import { USD_CENTS } from '../kernel/denominations';
 
-const USD_CENTS = 'usd_cents';
 
 /** The `ledger_entries.entryKind` this module writes and reads — alongside
  *  'commission' / 'refund' / 'payout', an app-upkeep debit against the same

@@ -70,7 +70,8 @@ import {
 import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { MILESTONE_STATUSES, isHoldingFunds } from '../marketplace/escrow';
 import { settlementMode, type SettlementMode } from '../integrations/payments';
-import { quotePlatformFee, USD_CENTS, type PlatformFeeQuote } from './platformFees';
+import { quotePlatformFee, type PlatformFeeQuote } from './platformFees';
+import { USD_CENTS } from '../kernel/denominations';
 
 // ---------------------------------------------------------------------------
 // The classifier — one rule, stated twice (TypeScript and SQL), on purpose

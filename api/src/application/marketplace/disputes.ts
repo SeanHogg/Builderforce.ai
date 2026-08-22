@@ -70,8 +70,8 @@ import {
   type EscrowRefusal,
   type MilestoneStatus,
 } from './escrow';
+import { USD_CENTS } from '../kernel/denominations';
 
-const USD_CENTS = 'usd_cents';
 
 // ---------------------------------------------------------------------------
 // The vocabulary

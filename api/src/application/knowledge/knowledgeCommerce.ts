@@ -46,8 +46,8 @@ import { buildPaymentProvider } from '../../infrastructure/payment';
 import { ListingError } from '../marketplace/creationListings';
 import { platformTakeRateBps, lifetimeSellerCents, takeRateThresholdCents } from '../marketplace/listingCommerce';
 import { verifyPaidCheckout, assertCovers } from '../finance/verifiedCheckout';
+import { USD_CENTS } from '../kernel/denominations';
 
-const USD_CENTS = 'usd_cents';
 
 /** What this flow calls itself in checkout metadata. */
 export const KNOWLEDGE_PURCHASE_KIND = 'knowledge_listing';

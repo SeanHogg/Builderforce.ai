@@ -49,8 +49,8 @@ import { PayoutAccountService } from '../payouts/PayoutAccountService';
 import { verifyPaidCheckout } from '../finance/verifiedCheckout';
 import { ListingError, invalidateListingCaches, recordInstall } from './creationListings';
 import { chargeAllHostedAppMaintenance, sellerMaintenanceCostCents } from './appMaintenanceCost';
+import { USD_CENTS } from '../kernel/denominations';
 
-const USD_CENTS = 'usd_cents';
 
 /** The platform's cut ONCE A SELLER IS PAST THE THRESHOLD. 15%, overridable. */
 const DEFAULT_TAKE_RATE_BPS = 1500;

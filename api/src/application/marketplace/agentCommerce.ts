@@ -58,8 +58,8 @@ import { buildPaymentProvider } from '../../infrastructure/payment';
 import { ListingError } from './creationListings';
 import { resolveTakeRateBps } from './listingCommerce';
 import { verifyPaidCheckout, assertCovers } from '../finance/verifiedCheckout';
+import { USD_CENTS } from '../kernel/denominations';
 
-const USD_CENTS = 'usd_cents';
 
 /** What this flow calls itself in checkout metadata. */
 export const AGENT_PURCHASE_KIND = 'workforce_agent';

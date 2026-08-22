@@ -40,9 +40,8 @@ import {
   type PayoutProviderName,
   type PayoutResult,
 } from './payoutProviders';
+import { USD_CENTS } from '../kernel/denominations';
 
-/** The ledger denomination every money-shaped row in this file speaks. */
-const USD_CENTS = 'usd_cents';
 
 /** A connected destination as any surface may see it — never a credential. */
 export interface PayoutAccountView {

@@ -44,9 +44,8 @@ import {
   takeRateThresholdCents,
   type ResolvedTakeRate,
 } from '../marketplace/listingCommerce';
+import { USD_CENTS } from '../kernel/denominations';
 
-/** Every money-shaped number in this module is in this denomination. */
-export const USD_CENTS = 'usd_cents';
 
 /**
  * WHY the fee is what it is, as a code rather than a sentence — the route maps it to

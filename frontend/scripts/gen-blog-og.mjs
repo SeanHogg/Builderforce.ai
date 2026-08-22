@@ -26,6 +26,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSy
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
+import { esc, firstFigure, posterArt } from './lib/figurePoster.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const CONTENT_DIR = resolve(here, '..', 'src', 'content', 'blog');
@@ -44,11 +45,6 @@ function hueFor(slug) {
   const digest = createHash('sha256').update(slug).digest();
   return digest[0] * 360 / 256;
 }
-
-/** XML-escape — a title with an ampersand must not break the SVG. */
-const esc = (value) => value
-  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-  .replace(/"/g, '&quot;').replace(/'/g, '&apos;');
 
 /**
  * Greedy wrap at a character budget rather than measured text: the font is not
@@ -84,12 +80,32 @@ function frontMatter(source) {
   return out;
 }
 
-function card({ slug, title, date, tag }) {
+/**
+ * The card.
+ *
+ * Two layouts, decided by whether the article draws anything. A post with a
+ * figure gets that figure as ART and a narrower title column; a post without
+ * one keeps the full-width title. The alternative — decorative shapes for
+ * everyone — is what produced 125 cards that differed only in their words.
+ */
+function card({ slug, title, date, tag, figure }) {
   const hue = hueFor(slug);
   const accent = `hsl(${hue.toFixed(0)} 85% 62%)`;
   const accentSoft = `hsl(${hue.toFixed(0)} 85% 62% / 0.16)`;
-  const lines = wrap(title, 34, 4);
-  const startY = 300 - (lines.length - 1) * 32;
+  const palette = {
+    ink: INK,
+    muted: MUTED,
+    accent,
+    good: `hsl(${((hue + 118) % 360).toFixed(0)} 70% 58%)`,
+    bad: `hsl(${((hue + 232) % 360).toFixed(0)} 72% 62%)`,
+    panel: `hsl(${hue.toFixed(0)} 42% 11%)`,
+  };
+  const art = posterArt(figure, { x: 610, y: 128, w: 510, h: 372 }, palette);
+  const column = art ? 470 : 1040;
+  const lines = wrap(title, art ? 24 : 34, 4);
+  const size = art ? 42 : 54;
+  const step = art ? 52 : 64;
+  const startY = (art ? 250 : 300) - (lines.length - 1) * (step / 2);
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
@@ -99,9 +115,10 @@ function card({ slug, title, date, tag }) {
   </defs>
   <rect width="${WIDTH}" height="${HEIGHT}" fill="url(#bg)"/>
   <rect x="0" y="0" width="${WIDTH}" height="8" fill="${accent}"/>
-  <circle cx="1050" cy="150" r="190" fill="${accentSoft}"/>
+  ${art ? '' : `<circle cx="1050" cy="150" r="190" fill="${accentSoft}"/>`}
   <text x="80" y="120" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="26" font-weight="700" fill="${accent}" letter-spacing="4">${esc((tag || 'BUILDERFORCE').toUpperCase())}</text>
-  ${lines.map((line, index) => `<text x="80" y="${startY + index * 64}" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="54" font-weight="800" fill="${INK}">${esc(line)}</text>`).join('\n  ')}
+  ${lines.map((line, index) => `<text x="80" y="${startY + index * step}" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="${size}" font-weight="800" fill="${INK}" textLength="${Math.min(column, line.length * size * 0.56).toFixed(0)}" lengthAdjust="spacingAndGlyphs">${esc(line)}</text>`).join('\n  ')}
+  ${art ? `<g>${figure.title ? `<text x="610" y="108" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="20" font-weight="700" fill="${MUTED}">${esc(figure.title.length > 54 ? `${figure.title.slice(0, 53)}…` : figure.title)}</text>` : ''}${art}</g>` : ''}
   <text x="80" y="556" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="26" font-weight="600" fill="${MUTED}">builderforce.ai${date ? `  ·  ${esc(date)}` : ''}</text>
 </svg>`;
 }
@@ -124,13 +141,15 @@ async function main() {
       skipped += 1;
       continue;
     }
-    const meta = frontMatter(readFileSync(sourcePath, 'utf8'));
+    const source = readFileSync(sourcePath, 'utf8');
+    const meta = frontMatter(source);
     const tag = (meta.tags ?? '').replace(/^\[|\]$/g, '').split(',')[0]?.trim();
     const png = await sharp(Buffer.from(card({
       slug,
       title: meta.title || slug.replace(/-/g, ' '),
       date: meta.date || '',
       tag,
+      figure: firstFigure(source),
     }))).png({ compressionLevel: 9 }).toBuffer();
     writeFileSync(outPath, png);
     written += 1;

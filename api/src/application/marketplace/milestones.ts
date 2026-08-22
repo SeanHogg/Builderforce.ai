@@ -47,8 +47,8 @@ import {
   type MilestoneStatus,
   type WorkGateVerdict,
 } from './escrow';
+import { USD_CENTS } from '../kernel/denominations';
 
-const USD_CENTS = 'usd_cents';
 
 /** A milestone as every surface reads it. */
 export interface Milestone {

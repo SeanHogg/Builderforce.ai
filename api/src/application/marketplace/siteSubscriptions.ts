@@ -56,8 +56,8 @@ import {
 } from './creationListings';
 import { hostedListingStatus, type HostedListingStatus } from './creationListings.hosted';
 import { resolveTakeRateBps } from './listingCommerce';
+import { USD_CENTS } from '../kernel/denominations';
 
-const USD_CENTS = 'usd_cents';
 
 /**
  * The states a subscription can hold. `cancelled` rows are KEPT — they are the
