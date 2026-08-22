@@ -75,7 +75,10 @@ function taskRow(task: SampleTask, project: SampleProject, now: number) {
 }
 
 function allTaskRows({ now, query }: GuestFixtureContext) {
-  const wanted = query.get('project') ?? query.get('projectId');
+  // `tasksApi.list` sends `project_id`; the decomposition reads send `project`.
+  // Both spellings, because a fixture that honoured one of them would silently
+  // return every project's tickets on a board scoped to one.
+  const wanted = query.get('project_id') ?? query.get('project') ?? query.get('projectId');
   const projects = wanted ? SAMPLE_PROJECTS.filter((p) => String(p.id) === wanted) : SAMPLE_PROJECTS;
   return projects.flatMap((project) => project.tasks.map((task) => taskRow(task, project, now)));
 }

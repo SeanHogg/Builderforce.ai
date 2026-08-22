@@ -48,7 +48,7 @@
  */
 import { dirname, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { loadTypeScript, scanBareImports } from './lib/moduleImports.mjs';
+import { createImportScanner, loadTypeScript } from './lib/moduleImports.mjs';
 import { declaredNames, runtimeDeclaredNames, undeclaredImports } from './lib/declaredDependencies.mjs';
 import { findTsconfigProjects, resolveThroughPaths, resolvesTo } from './lib/tsconfigPaths.mjs';
 import { sourcePackageGraph } from './sourcePackageGraph.mjs';
@@ -59,7 +59,8 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const failures = [];
 
 const ts = loadTypeScript(repoRoot);
-const graph = sourcePackageGraph(repoRoot, ts);
+const scanner = createImportScanner({ ts, repoRoot });
+const graph = await sourcePackageGraph(repoRoot, ts);
 const specifiers = [...graph.bySpecifier.keys()];
 
 if (graph.nodes.length === 0) {
@@ -99,13 +100,16 @@ for (const cycle of graph.cycles()) {
 }
 
 // ── Rules 2–4: every project that touches these packages ─────────────────────
-const projects = findTsconfigProjects(repoRoot).map((project) => {
+const projects = [];
+for (const project of findTsconfigProjects(repoRoot)) {
   const declaredHere = Object.keys(project.paths).filter((key) => specifiers.includes(key));
-  const imported = scanBareImports({ ts, repoRoot, dirs: project.sources, mustContain: '@builderforce/' })
-    .map((site) => site.specifier)
-    .filter((specifier) => graph.bySpecifier.has(specifier));
-  return { ...project, declaredHere, imported: [...new Set(imported)].sort() };
-});
+  // One scanner across every project: `frontend/tsconfig.json` and the VS Code
+  // canvas project compile overlapping trees, and reading them once each is the
+  // difference between a guard that runs in seconds and one that runs in minutes.
+  const sites = await scanner.scan(project.sources, '@builderforce/');
+  const imported = sites.map((site) => site.specifier).filter((specifier) => graph.bySpecifier.has(specifier));
+  projects.push({ ...project, declaredHere, imported: [...new Set(imported)].sort() });
+}
 
 const relevant = projects.filter(
   (project) =>

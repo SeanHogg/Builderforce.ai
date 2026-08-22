@@ -1,13 +1,22 @@
 /**
- * What a source tree IMPORTS — read with TypeScript's own preprocessor.
+ * What a source tree IMPORTS — read from the TypeScript AST.
  *
- * A regex cannot answer this question in this repository. `packages/ide-templates/
- * src/scaffolds.ts` is a map of FILE CONTENTS: every starter template it ships is
- * a string that contains `import … from 'react'`. A regex reports those as this
- * package's imports, and a guard built on one either fails on files that do not
- * exist or gets its pattern narrowed until it stops seeing real imports too.
- * `ts.preProcessFile` sees the same import statements the compiler sees and
- * nothing else.
+ * A regex cannot answer this question in this repository, which is full of source
+ * code INSIDE strings: `packages/ide-templates/src/scaffolds.ts` is a map of file
+ * CONTENTS, and `packages/creation-canvas-contract/src/qa.ts` emits generated
+ * Playwright specs line by line. A regex reports those as the package's own
+ * imports, and a guard built on one either fails on packages that are not
+ * dependencies or gets its pattern narrowed until it stops seeing real imports.
+ *
+ * Neither does `ts.preProcessFile`, which is what this module used first and what
+ * `frontend/scripts/check-declared-deps.mjs` was written on. It is a LEXICAL
+ * scanner, not a parser: `lines.push(\`import { test } from '@playwright/test';\`)`
+ * inside a template literal is reported as an import of `@playwright/test`, and
+ * the first run of the source-package guard duly demanded that the canvas
+ * contract declare a dependency on Playwright it does not have. Parsing costs
+ * nothing here — only files that survive the `mustContain` pre-filter are parsed
+ * at all — and it is the difference between a guard people trust and one they
+ * learn to add exceptions to.
  *
  * This module owns ONE thing: turning a set of directories into the list of bare
  * specifiers their source files import, with a file and line for each. What those
@@ -120,6 +129,53 @@ function countLines(text, offset) {
   return line;
 }
 
+/** `.tsx` and `.jsx` need the JSX-aware grammar or every angle bracket misparses. */
+function scriptKindFor(ts, file) {
+  if (file.endsWith('.tsx')) return ts.ScriptKind.TSX;
+  if (file.endsWith('.jsx')) return ts.ScriptKind.JSX;
+  if (/\.[cm]?js$/.test(file)) return ts.ScriptKind.JS;
+  return ts.ScriptKind.TS;
+}
+
+/**
+ * Every module specifier the PARSER sees — static imports and re-exports,
+ * `import(...)` (expression and type position) and `require(...)`.
+ *
+ * A specifier inside a string or a template literal is not a node of any of these
+ * kinds, which is the whole reason this walks the tree instead of scanning tokens.
+ *
+ * @param {import('typescript')} ts
+ * @param {string} file
+ * @param {string} text
+ * @returns {{ specifier: string, pos: number }[]}
+ */
+function parseModuleSpecifiers(ts, file, text) {
+  const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, false, scriptKindFor(ts, file));
+  /** @type {{ specifier: string, pos: number }[]} */
+  const found = [];
+
+  const take = (node) => {
+    if (node && ts.isStringLiteralLike(node)) found.push({ specifier: node.text, pos: node.pos });
+  };
+
+  const visit = (node) => {
+    if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) take(node.moduleSpecifier);
+    else if (ts.isImportEqualsDeclaration(node) && ts.isExternalModuleReference(node.moduleReference)) {
+      take(node.moduleReference.expression);
+    } else if (ts.isImportTypeNode(node) && ts.isLiteralTypeNode(node.argument)) take(node.argument.literal);
+    else if (ts.isCallExpression(node)) {
+      const callee = node.expression;
+      const isDynamicImport = callee.kind === ts.SyntaxKind.ImportKeyword;
+      const isRequire = ts.isIdentifier(callee) && callee.text === 'require';
+      if (isDynamicImport || isRequire) take(node.arguments[0]);
+    }
+    ts.forEachChild(node, visit);
+  };
+
+  ts.forEachChild(source, visit);
+  return found;
+}
+
 /** A file whose imports are dev-time only: tests, and the configs that run them. */
 function isTestFile(file) {
   const name = file.split(/[\\/]/).pop() ?? '';
@@ -168,21 +224,17 @@ export async function scanBareImports({ ts, repoRoot, dirs, mustContain }) {
         perFile[index] = [];
         continue;
       }
-      // (text, readImportFiles, detectJavaScriptImports) — the third argument
-      // picks up `require(…)` and bare dynamic `import(…)` alongside static ones.
-      const { importedFiles } = ts.preProcessFile(text, true, true);
       const test = isTestFile(file);
       /** @type {ImportSite[]} */
       const sites = [];
-      for (const imported of importedFiles) {
-        const specifier = imported.fileName;
+      for (const { specifier, pos } of parseModuleSpecifiers(ts, file, text)) {
         if (specifier.startsWith('.') || specifier.startsWith('/')) continue;
         if (BUILTINS.has(specifier) || BUILTINS.has(packageRoot(specifier))) continue;
         sites.push({
           specifier,
           file,
           relative: toPosix(relative(repoRoot, file)),
-          line: countLines(text, imported.pos),
+          line: countLines(text, pos),
           isTest: test,
         });
       }
@@ -204,25 +256,23 @@ export async function scanBareImports({ ts, repoRoot, dirs, mustContain }) {
  * a guard process is short-lived, so it never goes stale.
  *
  * @param {{ ts: import('typescript'), repoRoot: string }} options
- * @returns {{ scan: (dirs: string[], mustContain?: string) => ImportSite[] }}
+ * @returns {{ scan: (dirs: string[], mustContain?: string) => Promise<ImportSite[]> }}
  */
 export function createImportScanner({ ts, repoRoot }) {
-  /** @type {Map<string, ImportSite[]>} */
+  /** @type {Map<string, Promise<ImportSite[]>>} */
   const cache = new Map();
   return {
-    scan(dirs, mustContain) {
-      /** @type {ImportSite[]} */
-      const out = [];
-      for (const dir of dirs) {
-        const key = `${dir} ${mustContain ?? ''}`;
+    async scan(dirs, mustContain) {
+      const pending = dirs.map((dir) => {
+        const key = [dir, mustContain ?? ''].join('|');
         let sites = cache.get(key);
         if (!sites) {
           sites = scanBareImports({ ts, repoRoot, dirs: [dir], mustContain });
           cache.set(key, sites);
         }
-        out.push(...sites);
-      }
-      return out;
+        return sites;
+      });
+      return (await Promise.all(pending)).flat();
     },
   };
 }

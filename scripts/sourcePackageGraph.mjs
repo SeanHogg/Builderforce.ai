@@ -25,7 +25,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { readSourcePackages } from './sourcePackages.mjs';
-import { loadTypeScript, packageRoot, scanBareImports } from './lib/moduleImports.mjs';
+import { createImportScanner, loadTypeScript, packageRoot } from './lib/moduleImports.mjs';
 
 /**
  * @typedef {object} SourcePackageNode
@@ -57,7 +57,8 @@ import { loadTypeScript, packageRoot, scanBareImports } from './lib/moduleImport
  * @param {import('typescript')} [ts] Injected by callers that already loaded it.
  * @returns {SourcePackageGraph}
  */
-export function sourcePackageGraph(repoRoot, ts = loadTypeScript(repoRoot)) {
+export async function sourcePackageGraph(repoRoot, ts = loadTypeScript(repoRoot)) {
+  const scanner = createImportScanner({ ts, repoRoot });
   const entries = readSourcePackages(repoRoot);
 
   /** @type {Map<string, SourcePackageNode>} */
@@ -94,7 +95,7 @@ export function sourcePackageGraph(repoRoot, ts = loadTypeScript(repoRoot)) {
   }
 
   for (const node of byDir.values()) {
-    node.imports = scanBareImports({ ts, repoRoot, dirs: [node.srcDir] });
+    node.imports = await scanner.scan([node.srcDir]);
     for (const site of node.imports) {
       if (bySpecifier.has(site.specifier)) {
         // A package importing its OWN subpath export is not an edge.
