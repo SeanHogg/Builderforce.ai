@@ -25,7 +25,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui';
 import { getStoredUser, getStoredWebToken, updateMyDisplayName } from '@/lib/auth';
-import { uploadMyAvatar } from '@/lib/freelancerApi';
+import { uploadMyAvatar } from '@/lib/freelance/talentProfile';
 
 /** Initials are the fallback identity — legible at any size, unlike a title. */
 function initials(name: string | null | undefined): string {

@@ -41,7 +41,7 @@ import { catalogItems, connections, syncStates } from '../../infrastructure/data
 import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { assertSafeUrl, resolveAndAssertPublic } from '../../infrastructure/net/ssrfGuard';
 import { bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
-import { recordActivity } from '../activity/activityLog';
+import { recordActivity, SYSTEM_ACTOR } from '../activity/activityLog';
 import { listingSlug, parseJsonFeed, parseRssFeed, type SourcedListing } from './sourcingFeed';
 import { JOB_BOARD_CAPABILITY, JOB_BOARD_RESOURCE, sourceApiKey, type SourceConfig } from './sourcingSources';
 
@@ -116,7 +116,7 @@ export async function syncJobSource(
   // for three days" is only answerable if the failures are recorded too.
   await recordActivity(env, db, {
     tenantId: source.tenantId,
-    actor: { type: 'system', ref: null },
+    actor: SYSTEM_ACTOR,
     verb: SOURCING_VERB,
     targetType: 'connection',
     targetId: String(source.id),

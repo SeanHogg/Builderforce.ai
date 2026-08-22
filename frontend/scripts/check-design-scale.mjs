@@ -83,7 +83,7 @@ const BASELINE = {
    * a value has to be written somewhere) and the board's own stylesheet, and
    * both are the honest next targets rather than exemptions.
    */
-  themeLockedColours: 195,
+  themeLockedColours: 185,
   /**
    * ONE, and it is `UnreadBadge`'s `borderRadius: size` — a live expression, not a
    * literal, so there is no scale step to name. Came down from 6 when the résumé
@@ -91,7 +91,7 @@ const BASELINE = {
    * unsnapped corners (7px, 9px, 99px, 3/4/5px — the right SIZES never named), all
    * now on `--radius-sm/md/full`, and three `999px` pills became `--radius-full`.
    */
-  offScaleRadii: 1,
+  offScaleRadii: 0,
   /**
    * Literal font sizes, i.e. a size typed as a number instead of named as a
    * role. This is the third ratchet and it exists because §2.3 spent this
@@ -139,7 +139,7 @@ const BASELINE = {
    * against a +15 drift, so the floor follows the work down instead of being
    * raised to meet it.
    */
-  offScaleFontSizes: 3767,
+  offScaleFontSizes: 3652,
   /**
    * Page-column literals on the PUBLIC surface — a `max-width` (or `width`)
    * typed as a number between 900px and 1500px on a marketing file.

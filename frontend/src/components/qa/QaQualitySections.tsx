@@ -58,7 +58,7 @@ export function QualityTrendSection({ trend }: { trend: QaQualityTrend | null })
       {trend.findings.total > 0 && (
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
           {SEVERITY_ORDER.filter((s) => trend.findings.bySeverity[s]).map((s) => (
-            <span key={s} style={{ fontSize: 11, padding: '3px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', color: SEVERITY_COLOR[s] ?? 'var(--text-secondary)', fontWeight: 700 }}>
+            <span key={s} style={{ fontSize: 'var(--font-size-eyebrow)', padding: '3px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', color: SEVERITY_COLOR[s] ?? 'var(--text-secondary)', fontWeight: 700 }}>
               {s}: {trend.findings.bySeverity[s]}
             </span>
           ))}
@@ -68,7 +68,7 @@ export function QualityTrendSection({ trend }: { trend: QaQualityTrend | null })
       {/* Daily defect series (findings + CI failures, stacked bars) */}
       {trend.daily.length > 0 && (
         <div style={{ marginBottom: 18 }}>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>{t('defectsPerDay')}</div>
+          <div style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', marginBottom: 6 }}>{t('defectsPerDay')}</div>
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 64 }}>
             {trend.daily.map((d) => (
               <div key={d.date} title={t('dailyBarTitle', { date: d.date, findings: d.findings, ciFailures: d.ciFailures })}
@@ -85,7 +85,7 @@ export function QualityTrendSection({ trend }: { trend: QaQualityTrend | null })
       <ProducerTable title={t('byModel')} rows={trend.byModel} />
       <ProducerTable title={t('byAgent')} rows={trend.byAgent} />
       {(trend.byModel.length > 0 || trend.byAgent.length > 0) && (
-        <p style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 8 }}>
+        <p style={{ fontSize: 'var(--font-size-field-label)', color: 'var(--text-muted)', marginTop: 8 }}>
           {t('producerFootnote', {
             unattributed: trend.findings.escapedUnattributed > 0
               ? t('producerFootnoteUnattributed', { count: trend.findings.escapedUnattributed })
@@ -100,9 +100,9 @@ export function QualityTrendSection({ trend }: { trend: QaQualityTrend | null })
 function Metric({ label, value, hint, color }: { label: string; value: string; hint?: string; color?: string }) {
   return (
     <div style={{ padding: '10px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--bg-deep)', minWidth: 130 }}>
-      <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.4 }}>{label}</div>
-      <div style={{ fontSize: 22, fontWeight: 700, color: color ?? 'var(--text-primary)', lineHeight: 1.3 }}>{value}</div>
-      {hint && <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>{hint}</div>}
+      <div style={{ fontSize: 'var(--font-size-field-label)', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.4 }}>{label}</div>
+      <div style={{ fontSize: 'var(--font-size-section)', fontWeight: 700, color: color ?? 'var(--text-primary)', lineHeight: 1.3 }}>{value}</div>
+      {hint && <div style={{ fontSize: 'var(--font-size-field-label)', color: 'var(--text-muted)' }}>{hint}</div>}
     </div>
   );
 }
@@ -112,11 +112,11 @@ function ProducerTable({ title, rows }: { title: string; rows: QaModelQuality[] 
   if (rows.length === 0) return null;
   return (
     <div style={{ marginTop: 8 }}>
-      <div style={{ fontSize: 11, color: 'var(--text-muted)', margin: '10px 0 4px' }}>{t('producerCaption', { title })}</div>
+      <div style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', margin: '10px 0 4px' }}>{t('producerCaption', { title })}</div>
       <Table head={[t('colProducer'), t('colRuns'), t('colAvgScore'), t('colMerged'), t('colCiGreen'), t('colCaught'), t('colEscaped')]}>
         {rows.map((r) => (
           <tr key={r.key}>
-            <Td><code style={{ fontSize: 11 }}>{r.key}</code></Td>
+            <Td><code style={{ fontSize: 'var(--font-size-eyebrow)' }}>{r.key}</code></Td>
             <Td>{r.runs}</Td>
             <Td><span style={{ color: r.avgScore < 0.5 ? 'var(--error)' : 'var(--text-secondary)', fontWeight: 700 }}>{pct(r.avgScore)}</span></Td>
             <Td>{pct(r.mergedRate)}</Td>
@@ -147,22 +147,22 @@ export function RoutingSection({ projectId, settings, busy, onRun }: {
 
   return (
     <Section title={t('routingTitle')}>
-      <p style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 10 }}>
+      <p style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', marginBottom: 10 }}>
         {t('routingBlurb')}
       </p>
       <div style={{ display: 'flex', gap: 10, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-secondary)' }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)' }}>
           <input type="checkbox" checked={draft.enabled} onChange={(e) => setDraft({ ...draft, enabled: e.target.checked })} />
           {t('enabled')}
         </label>
-        <label style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('minSeverity')}</label>
+        <label style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)' }}>{t('minSeverity')}</label>
         <Select style={inputStyle} value={draft.minSeverity} onChange={(e) => setDraft({ ...draft, minSeverity: e.target.value })}>
           {SEVERITY_ORDER.map((s) => <option key={s} value={s}>{s}</option>)}
         </Select>
-        <label style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('laneLabel')}</label>
+        <label style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)' }}>{t('laneLabel')}</label>
         <input style={inputStyle} placeholder={t('placeholderAutoDetect')} value={draft.targetLaneKey ?? ''}
           onChange={(e) => setDraft({ ...draft, targetLaneKey: e.target.value || null })} />
-        <label style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('maxPerRun')}</label>
+        <label style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)' }}>{t('maxPerRun')}</label>
         <input type="number" min={1} max={50} value={draft.maxPerBatch} style={{ ...inputStyle, minWidth: 64, width: 64 }}
           onChange={(e) => setDraft({ ...draft, maxPerBatch: Math.max(1, Math.min(50, Number(e.target.value) || 1)) })} />
         <button type="button" style={btnStyle(busy != null || !dirty)} disabled={busy != null || !dirty}

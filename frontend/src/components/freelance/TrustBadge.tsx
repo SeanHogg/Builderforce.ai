@@ -1,7 +1,7 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
-import type { FreelancerStats } from '@/lib/freelancerApi';
+import type { FreelancerStats } from '@/lib/freelance/talentProfile';
 import { Icon } from '@/components/ui/Icon';
 
 /**

@@ -12,10 +12,7 @@ import ProfileIdentityCard from '@/components/profile/ProfileIdentityCard';
 import {
   TALENT_DISCIPLINES, TALENT_AVAILABILITIES, TALENT_SEEKING_MODES, TALENT_WORK_MODES, TALENT_SENIORITIES,
 } from '@/components/freelance/talentFields';
-import {
-  getMyFreelancerProfile, updateMyFreelancerProfile, checkMySlug,
-  type FreelancerProfile, type MyResume, type ResumeSuggestions, type SlugCheck,
-} from '@/lib/freelancerApi';
+import { getMyFreelancerProfile, updateMyFreelancerProfile, checkMySlug, type FreelancerProfile, type MyResume, type ResumeSuggestions, type SlugCheck } from '@/lib/freelance/talentProfile';
 import { ProfileResumePanel } from '@/components/freelance/ProfileResumePanel';
 import { useCopyToClipboard } from '@/lib/useCopyToClipboard';
 

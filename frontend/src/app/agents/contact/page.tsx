@@ -1,54 +1,71 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { getTranslations } from 'next-intl/server';
 import ProsePage from '../ProsePage';
+import { BRAND } from '@/lib/content';
+import { pageMetadata } from '@/lib/seo';
 
-export const metadata: Metadata = {
-  title: 'Contact — Builderforce.ai',
-  description: 'Get in touch with Sean Hogg, creator and maintainer of BuilderForce Agents and Builderforce.ai.',
-  alternates: { canonical: '/agents/contact' },
-};
+export const runtime = 'edge';
 
-const links = [
-  { label: 'github.com/SeanHogg', href: 'https://github.com/SeanHogg' },
-  { label: 'Resume / Portfolio', href: 'https://hired.video/resumes/seanhogg' },
-  { label: 'GitHub Issues', href: 'https://github.com/SeanHogg/Builderforce.ai/issues' },
-  { label: '@CrawfishMellow', href: 'https://instagram.com/CrawfishMellow' },
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations('agents.contact');
+  return pageMetadata({ title: t('metaTitle'), description: t('metaDescription'), path: '/agents/contact' });
+}
+
+/**
+ * Where to reach the founder.
+ *
+ * `label` is a handle or a domain — a literal that must NOT be translated. `labelKey`
+ * names a catalog entry for the links whose label is prose. `internal` marks a link
+ * that stays on this site: the résumé is published HERE (see `BRAND.founder`), so it
+ * navigates in place instead of opening a tab on another domain.
+ */
+const CONTACT_LINKS: { href: string; label?: string; labelKey?: string; internal?: boolean }[] = [
+  { href: 'https://github.com/SeanHogg', label: 'github.com/SeanHogg' },
+  { href: BRAND.founder.path, labelKey: 'resumeLabel', internal: true },
+  { href: 'https://github.com/SeanHogg/Builderforce.ai/issues', labelKey: 'issuesLabel' },
+  { href: 'https://instagram.com/CrawfishMellow', label: '@CrawfishMellow' },
 ];
 
-export default function ContactPage() {
+export default async function ContactPage() {
+  const t = await getTranslations('agents.contact');
+
   return (
     <ProsePage>
-      <h1>Contact</h1>
-      <p className="lead">
-        Got questions about BuilderForce Agents, enterprise deployments, or just want to say hi? Reach out directly.
-      </p>
+      <h1>{t('heading')}</h1>
+      <p className="lead">{t('lead')}</p>
 
       <section>
-        <h2>Sean Hogg</h2>
-        <p>Creator &amp; maintainer, BuilderForce Agents and Builderforce.ai.</p>
+        <h2>{BRAND.founder.name}</h2>
+        <p>{t('founderRole')}</p>
         <ul>
-          {links.map((l) => (
-            <li key={l.href}>
-              <a href={l.href} target="_blank" rel="noopener">{l.label}</a>
-            </li>
-          ))}
+          {CONTACT_LINKS.map((l) => {
+            const label = l.labelKey ? t(l.labelKey) : l.label;
+            return (
+              <li key={l.href}>
+                {l.internal
+                  ? <Link href={l.href}>{label}</Link>
+                  : <a href={l.href} target="_blank" rel="noopener">{label}</a>}
+              </li>
+            );
+          })}
         </ul>
       </section>
 
       <section>
-        <h2>Other ways to engage</h2>
+        <h2>{t('engageHeading')}</h2>
         <ul>
           <li>
-            <a href="https://github.com/SeanHogg/Builderforce.ai" target="_blank" rel="noopener">BuilderForce Agents on GitHub</a>
-            {' '}— file issues, open PRs, follow releases
+            <a href="https://github.com/SeanHogg/Builderforce.ai" target="_blank" rel="noopener">{t('repoLabel')}</a>
+            {' '}— {t('repoNote')}
           </li>
           <li>
-            <a href="https://discord.gg/9gUsc2sNG6" target="_blank" rel="noopener">Discord community</a>
-            {' '}— real-time help and discussion
+            <a href="https://discord.gg/9gUsc2sNG6" target="_blank" rel="noopener">{t('discordLabel')}</a>
+            {' '}— {t('discordNote')}
           </li>
           <li>
-            <Link href="/agents/acknowledgements">Acknowledgements</Link>
-            {' '}— credits to the open-source projects this builds on
+            <Link href="/agents/acknowledgements">{t('acknowledgementsLabel')}</Link>
+            {' '}— {t('acknowledgementsNote')}
           </li>
         </ul>
       </section>

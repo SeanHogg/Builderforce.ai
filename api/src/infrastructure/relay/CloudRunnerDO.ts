@@ -319,12 +319,15 @@ export class CloudRunnerDO implements DurableObject {
         .limit(1);
       return TERMINAL_EXECUTION_STATUSES.includes(row?.status as ExecutionStatus);
     } catch (error) {
+      // The runtime override is not optional inside a Durable Object: a DO runs
+      // outside the Worker's AsyncLocalStorage context, so a report without it
+      // resolves no runtime and is dropped after the console line.
       reportCaughtError(error, {
         source: 'infrastructure/relay/CloudRunnerDO.ts',
         operation: 'isAlreadyConcluded',
         level: 'warning',
         context: { executionId },
-      });
+      }, { env: this.env, waitUntil: (task) => this.state.waitUntil(task) });
       return false;
     }
   }

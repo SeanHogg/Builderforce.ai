@@ -1,77 +1,81 @@
 import { Icon } from '@/components/ui/Icon';
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { getTranslations } from 'next-intl/server';
 import ProsePage from '../ProsePage';
+import { BRAND } from '@/lib/content';
+import { pageMetadata } from '@/lib/seo';
 
-export const metadata: Metadata = {
-  title: 'Acknowledgements — BuilderForce Agents',
-  description: "BuilderForce Agents's roots, key open-source packages, and the people who made it possible.",
-  alternates: { canonical: '/agents/acknowledgements' },
-};
+export const runtime = 'edge';
 
-const packages = [
-  { name: 'lit', desc: 'Reactive web components powering the dashboard UI.', url: 'https://lit.dev' },
-  { name: '@agentclientprotocol/sdk', desc: 'Agent Client Protocol — structured agent ↔ gateway communication.', url: 'https://github.com/agentclientprotocol' },
-  { name: 'typescript', desc: 'Strongly-typed JavaScript across the entire runtime.', url: 'https://www.typescriptlang.org' },
-  { name: 'zod', desc: 'Runtime schema validation for configs, tools, and payloads.', url: 'https://zod.dev' },
-  { name: 'express', desc: 'HTTP server powering the gateway REST surface.', url: 'https://expressjs.com' },
-  { name: 'ws', desc: 'WebSocket transport between the dashboard and gateway.', url: 'https://github.com/websockets/ws' },
-  { name: 'yaml', desc: 'Project configuration, rules, and context persistence.', url: 'https://eemeli.org/yaml/' },
-  { name: 'playwright-core', desc: 'Headless browser control for web-scraping and automation skills.', url: 'https://playwright.dev' },
-  { name: 'sharp', desc: 'Fast image processing for media-understanding pipelines.', url: 'https://sharp.pixelplumbing.com' },
-  { name: 'croner', desc: 'Lightweight cron scheduler for recurring agent runs.', url: 'https://github.com/hexagon/croner' },
-  { name: 'commander', desc: 'CLI argument parsing for the builderforce command.', url: 'https://github.com/tj/commander.js' },
-  { name: 'undici', desc: 'High-performance HTTP client for provider integrations.', url: 'https://undici.nodejs.org' },
-  { name: 'vitest', desc: 'Fast unit and integration testing framework.', url: 'https://vitest.dev' },
-  { name: 'pdfjs-dist', desc: 'PDF parsing support for document-understanding skills.', url: 'https://mozilla.github.io/pdf.js/' },
-  { name: '@sinclair/typebox', desc: 'JSON schema generation for typed tool definitions.', url: 'https://github.com/sinclairzx81/typebox' },
-  { name: '@slack/bolt', desc: 'Slack channel integration.', url: 'https://slack.dev/bolt-js/' },
-  { name: 'grammy', desc: 'Telegram bot framework behind the Telegram channel.', url: 'https://grammy.dev' },
-  { name: 'markdown-it', desc: 'Markdown rendering in the dashboard chat view.', url: 'https://markdown-it.github.io' },
-  { name: 'astro', desc: 'The framework powering the docs site.', url: 'https://astro.build' },
-  { name: 'drizzle-orm', desc: 'Type-safe ORM used in Builderforce for PostgreSQL.', url: 'https://orm.drizzle.team' },
-  { name: 'hono', desc: 'Edge-first web framework for the Builderforce API.', url: 'https://hono.dev' },
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations('agents.acknowledgements');
+  return pageMetadata({ title: t('metaTitle'), description: t('metaDescription'), path: '/agents/acknowledgements' });
+}
+
+/**
+ * The packages we lean on: NAME and URL only.
+ *
+ * The one-line description of each is prose, so it lives in the catalogs keyed by
+ * package name (`agents.acknowledgements.packages.<name>`) rather than here — the
+ * package name is an identifier and never translates, the sentence about it always
+ * does. Keyed rather than index-paired so adding a package cannot silently shift
+ * every description below it onto the wrong row.
+ */
+const PACKAGES: { name: string; url: string }[] = [
+  { name: 'lit', url: 'https://lit.dev' },
+  { name: '@agentclientprotocol/sdk', url: 'https://github.com/agentclientprotocol' },
+  { name: 'typescript', url: 'https://www.typescriptlang.org' },
+  { name: 'zod', url: 'https://zod.dev' },
+  { name: 'express', url: 'https://expressjs.com' },
+  { name: 'ws', url: 'https://github.com/websockets/ws' },
+  { name: 'yaml', url: 'https://eemeli.org/yaml/' },
+  { name: 'playwright-core', url: 'https://playwright.dev' },
+  { name: 'sharp', url: 'https://sharp.pixelplumbing.com' },
+  { name: 'croner', url: 'https://github.com/hexagon/croner' },
+  { name: 'commander', url: 'https://github.com/tj/commander.js' },
+  { name: 'undici', url: 'https://undici.nodejs.org' },
+  { name: 'vitest', url: 'https://vitest.dev' },
+  { name: 'pdfjs-dist', url: 'https://mozilla.github.io/pdf.js/' },
+  { name: '@sinclair/typebox', url: 'https://github.com/sinclairzx81/typebox' },
+  { name: '@slack/bolt', url: 'https://slack.dev/bolt-js/' },
+  { name: 'grammy', url: 'https://grammy.dev' },
+  { name: 'markdown-it', url: 'https://markdown-it.github.io' },
+  { name: 'astro', url: 'https://astro.build' },
+  { name: 'drizzle-orm', url: 'https://orm.drizzle.team' },
+  { name: 'hono', url: 'https://hono.dev' },
 ];
 
-const differences = [
-  { title: 'Deep Code Knowledge', body: 'AST parsing, semantic code maps, dependency graphs, cross-file reference tracking, and Git history awareness — persisted to .builderforce/.' },
-  { title: 'Multi-Agent Orchestration', body: '7 built-in specialist roles (Architect, Developer, Reviewer, Tester, Debugger, Refactorer, Documenter) with dynamic task lifecycle and formal execution state machines.' },
-  { title: 'Full Dev Lifecycle', body: 'PRD → Architecture → Task breakdown → Code → Review → Test → Debug → Refactor — orchestrated in a single runtime, no IDE required.' },
-  { title: 'Builderforce Integration', body: 'REST API at api.builderforce.ai for multi-tenant project management, agent registration, execution tracking, and audit trails — Cloudflare Workers + Neon PostgreSQL.' },
-  { title: 'Self-Hosted & Open', body: 'Your code stays on your machine. MIT-licensed. No IDE tether, no vendor cloud, no subscription ceiling.' },
-  { title: 'Channel-Agnostic', body: "Inherits all of OpenClaw's channel integrations — trigger coding workflows from WhatsApp, Telegram, Slack, or Discord just as easily as from the terminal." },
-];
+type Difference = { title: string; body: string };
 
-export default function AcknowledgementsPage() {
+export default async function AcknowledgementsPage() {
+  const t = await getTranslations('agents.acknowledgements');
+  const differences = t.raw('differences') as Difference[];
+  const packageDescriptions = t.raw('packages') as Record<string, string>;
+
   return (
     <ProsePage width="wide">
-      <h1>Acknowledgements</h1>
-      <p className="lead">
-        BuilderForce Agents wouldn&apos;t exist without giants to stand on. Here&apos;s where we came from and who we thank.
-      </p>
+      <h1>{t('heading')}</h1>
+      <p className="lead">{t('lead')}</p>
 
       <section>
-        <h2>Built on OpenClaw</h2>
+        <h2>{t('originHeading')}</h2>
         <p>
-          BuilderForce Agents started as a fork of <a href="https://openclaw.ai" target="_blank" rel="noopener">OpenClaw</a> —
-          the open-source personal AI assistant built by the OpenClaw team. OpenClaw gave us a battle-tested gateway
-          runtime, multi-channel connectivity (WhatsApp, Telegram, Slack, Discord, Signal, iMessage…), a reactive
-          Lit-based dashboard UI, the plugin / skills infrastructure, and an opinionated project structure we could
-          build on immediately.
+          {t('originIntroBefore')}{' '}
+          <a href="https://openclaw.ai" target="_blank" rel="noopener">OpenClaw</a>
+          {t('originIntroAfter')}
         </p>
         <p>
-          <strong>Thank you</strong> to every contributor at{' '}
+          <strong>{t('thankYou')}</strong>{' '}
+          {t('thanksBefore')}{' '}
           <a href="https://github.com/openclaw/openclaw" target="_blank" rel="noopener">github.com/openclaw/openclaw</a>{' '}
-          for the head-start. BuilderForce Agents would not exist without your work.
+          {t('thanksAfter')}
         </p>
       </section>
 
       <section>
-        <h2>How BuilderForce Agents Extends OpenClaw <Icon source="🚀" size="1em" /></h2>
-        <p>
-          BuilderForce Agents kept everything that makes OpenClaw great and added a focused developer-first orchestration layer
-          on top.
-        </p>
+        <h2>{t('extendsHeading')} <Icon source="🚀" size="1em" /></h2>
+        <p>{t('extendsIntro')}</p>
         <ul>
           {differences.map((d) => (
             <li key={d.title}>
@@ -82,46 +86,47 @@ export default function AcknowledgementsPage() {
       </section>
 
       <section>
-        <h2>Get Started <Icon source="📦" size="1em" /></h2>
-        <p>Node ≥ 22 required.</p>
-        <pre><code># Install
+        <h2>{t('getStartedHeading')} <Icon source="📦" size="1em" /></h2>
+        <p>{t('nodeRequirement')}</p>
+        <pre><code>{`# ${t('installComment')}
 npm install -g @seanhogg/builderforce-agents@latest
 
-# Or with pnpm
+# ${t('pnpmComment')}
 pnpm add -g @seanhogg/builderforce-agents@latest
 
-# Onboard
-builderforce onboard --install-daemon</code></pre>
+# ${t('onboardComment')}
+builderforce onboard --install-daemon`}</code></pre>
       </section>
 
       <section>
-        <h2>Open-Source Packages <Icon source="📚" size="1em" /></h2>
-        <p>BuilderForce Agents is powered by an excellent ecosystem of open-source projects. We&apos;re grateful to every maintainer.</p>
+        <h2>{t('packagesHeading')} <Icon source="📚" size="1em" /></h2>
+        <p>{t('packagesIntro')}</p>
         <ul>
-          {packages.map((p) => (
+          {PACKAGES.map((p) => (
             <li key={p.name}>
-              <a href={p.url} target="_blank" rel="noopener"><code>{p.name}</code></a> — {p.desc}
+              <a href={p.url} target="_blank" rel="noopener"><code>{p.name}</code></a> — {packageDescriptions[p.name]}
             </li>
           ))}
         </ul>
       </section>
 
       <section>
-        <h2>Built By <Icon source="👤" size="1em" /></h2>
+        <h2>{t('builtByHeading')} <Icon source="👤" size="1em" /></h2>
         <p>
-          <a href="https://hired.video/resumes/seanhogg" target="_blank" rel="noopener">Sean Hogg</a> — Developer,
-          architect, and maintainer of BuilderForce Agents and Builderforce.ai.{' '}
+          {/* The résumé is published on this platform — `/talent/<slug>` renders it —
+              so this is an in-app route, not a link out to another host. */}
+          <Link href={BRAND.founder.path}>{BRAND.founder.name}</Link> — {t('founderRole')}{' '}
           <a href="https://github.com/SeanHogg" target="_blank" rel="noopener">GitHub</a> ·{' '}
-          <Link href="/agents/contact">Contact</Link>
+          <Link href="/agents/contact">{t('contactLabel')}</Link>
         </p>
       </section>
 
       <section>
-        <h2>License <Icon source="⚖️" size="1em" /></h2>
+        <h2>{t('licenseHeading')} <Icon source="⚖️" size="1em" /></h2>
         <p>
-          BuilderForce Agents is released under the{' '}
-          <a href="https://opensource.org/licenses/MIT" target="_blank" rel="noopener">MIT License</a>. Use it, fork it,
-          ship it.
+          {t('licenseBefore')}{' '}
+          <a href="https://opensource.org/licenses/MIT" target="_blank" rel="noopener">{t('mitLicense')}</a>
+          {t('licenseAfter')}
         </p>
       </section>
     </ProsePage>

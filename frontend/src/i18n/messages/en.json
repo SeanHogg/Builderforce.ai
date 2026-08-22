@@ -3535,6 +3535,7 @@
       "on_hold": "On hold"
     },
     "dialogAria": "Project details",
+    "tabsAria": "Project sections",
     "deleteAria": "Delete project",
     "closeAria": "Close panel",
     "editAria": "Edit project",
@@ -8751,7 +8752,100 @@
         "question": "Can agents ship code on their own?",
         "answer": "Yes. A Cloud agent clones the bound repo through a secure server-side git proxy (your Git token never leaves the server), writes the change, pushes a branch, and opens a pull request — headless, no browser open. On-Premise agents do the same on your own machine, and approval gates can require human sign-off before any high-impact step."
       }
-    ]
+    ],
+    "contact": {
+      "metaTitle": "Contact — Builderforce.ai",
+      "metaDescription": "Get in touch with Sean Hogg, creator and maintainer of BuilderForce Agents and Builderforce.ai.",
+      "heading": "Contact",
+      "lead": "Got questions about BuilderForce Agents, enterprise deployments, or just want to say hi? Reach out directly.",
+      "founderRole": "Creator & maintainer, BuilderForce Agents and Builderforce.ai.",
+      "resumeLabel": "Resume / Portfolio",
+      "issuesLabel": "GitHub Issues",
+      "engageHeading": "Other ways to engage",
+      "repoLabel": "BuilderForce Agents on GitHub",
+      "repoNote": "file issues, open PRs, follow releases",
+      "discordLabel": "Discord community",
+      "discordNote": "real-time help and discussion",
+      "acknowledgementsLabel": "Acknowledgements",
+      "acknowledgementsNote": "credits to the open-source projects this builds on"
+    },
+    "acknowledgements": {
+      "metaTitle": "Acknowledgements — BuilderForce Agents",
+      "metaDescription": "BuilderForce Agents's roots, key open-source packages, and the people who made it possible.",
+      "heading": "Acknowledgements",
+      "lead": "BuilderForce Agents wouldn't exist without giants to stand on. Here's where we came from and who we thank.",
+      "originHeading": "Built on OpenClaw",
+      "originIntroBefore": "BuilderForce Agents started as a fork of",
+      "originIntroAfter": " — the open-source personal AI assistant built by the OpenClaw team. OpenClaw gave us a battle-tested gateway runtime, multi-channel connectivity (WhatsApp, Telegram, Slack, Discord, Signal, iMessage…), a reactive Lit-based dashboard UI, the plugin / skills infrastructure, and an opinionated project structure we could build on immediately.",
+      "thankYou": "Thank you",
+      "thanksBefore": "to every contributor at",
+      "thanksAfter": "for the head-start. BuilderForce Agents would not exist without your work.",
+      "extendsHeading": "How BuilderForce Agents Extends OpenClaw",
+      "extendsIntro": "BuilderForce Agents kept everything that makes OpenClaw great and added a focused developer-first orchestration layer on top.",
+      "getStartedHeading": "Get Started",
+      "nodeRequirement": "Node ≥ 22 required.",
+      "installComment": "Install",
+      "pnpmComment": "Or with pnpm",
+      "onboardComment": "Onboard",
+      "packagesHeading": "Open-Source Packages",
+      "packagesIntro": "BuilderForce Agents is powered by an excellent ecosystem of open-source projects. We're grateful to every maintainer.",
+      "builtByHeading": "Built By",
+      "founderRole": "Developer, architect, and maintainer of BuilderForce Agents and Builderforce.ai.",
+      "contactLabel": "Contact",
+      "licenseHeading": "License",
+      "licenseBefore": "BuilderForce Agents is released under the",
+      "mitLicense": "MIT License",
+      "licenseAfter": ". Use it, fork it, ship it.",
+      "differences": [
+        {
+          "title": "Deep Code Knowledge",
+          "body": "AST parsing, semantic code maps, dependency graphs, cross-file reference tracking, and Git history awareness — persisted to .builderforce/."
+        },
+        {
+          "title": "Multi-Agent Orchestration",
+          "body": "7 built-in specialist roles (Architect, Developer, Reviewer, Tester, Debugger, Refactorer, Documenter) with dynamic task lifecycle and formal execution state machines."
+        },
+        {
+          "title": "Full Dev Lifecycle",
+          "body": "PRD → Architecture → Task breakdown → Code → Review → Test → Debug → Refactor — orchestrated in a single runtime, no IDE required."
+        },
+        {
+          "title": "Builderforce Integration",
+          "body": "REST API at api.builderforce.ai for multi-tenant project management, agent registration, execution tracking, and audit trails — Cloudflare Workers + Neon PostgreSQL."
+        },
+        {
+          "title": "Self-Hosted & Open",
+          "body": "Your code stays on your machine. MIT-licensed. No IDE tether, no vendor cloud, no subscription ceiling."
+        },
+        {
+          "title": "Channel-Agnostic",
+          "body": "Inherits all of OpenClaw's channel integrations — trigger coding workflows from WhatsApp, Telegram, Slack, or Discord just as easily as from the terminal."
+        }
+      ],
+      "packages": {
+        "lit": "Reactive web components powering the dashboard UI.",
+        "@agentclientprotocol/sdk": "Agent Client Protocol — structured agent ↔ gateway communication.",
+        "typescript": "Strongly-typed JavaScript across the entire runtime.",
+        "zod": "Runtime schema validation for configs, tools, and payloads.",
+        "express": "HTTP server powering the gateway REST surface.",
+        "ws": "WebSocket transport between the dashboard and gateway.",
+        "yaml": "Project configuration, rules, and context persistence.",
+        "playwright-core": "Headless browser control for web-scraping and automation skills.",
+        "sharp": "Fast image processing for media-understanding pipelines.",
+        "croner": "Lightweight cron scheduler for recurring agent runs.",
+        "commander": "CLI argument parsing for the builderforce command.",
+        "undici": "High-performance HTTP client for provider integrations.",
+        "vitest": "Fast unit and integration testing framework.",
+        "pdfjs-dist": "PDF parsing support for document-understanding skills.",
+        "@sinclair/typebox": "JSON schema generation for typed tool definitions.",
+        "@slack/bolt": "Slack channel integration.",
+        "grammy": "Telegram bot framework behind the Telegram channel.",
+        "markdown-it": "Markdown rendering in the dashboard chat view.",
+        "astro": "The framework powering the docs site.",
+        "drizzle-orm": "Type-safe ORM used in Builderforce for PostgreSQL.",
+        "hono": "Edge-first web framework for the Builderforce API."
+      }
+    }
   },
   "newsletter": {
     "heading": "Stay in the Loop",

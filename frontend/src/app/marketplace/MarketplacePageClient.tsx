@@ -46,7 +46,7 @@ import { AgentCard } from '@/components/workforce/AgentCard';
 import { AgentOwnerActions } from '@/components/workforce/AgentOwnerActions';
 import { CloudAgentSlideOutPanel, type CloudAgentPanelTab } from '@/components/workforce/CloudAgentSlideOutPanel';
 import { SkillTags } from '@/components/SkillTags';
-import { listFreelancers, type FreelancerProfile } from '@/lib/freelancerApi';
+import { listFreelancers, type FreelancerProfile } from '@/lib/freelance/talentProfile';
 import { RatingStars } from '@/components/freelance/RatingStars';
 import { TrustBadge } from '@/components/freelance/TrustBadge';
 import { FAMILIES, FAMILY_IDS, creationKindForChip, kindLabelKey, publishActionFor, resolveFamily, type FamilyId } from '@/lib/marketplaceFamilies';

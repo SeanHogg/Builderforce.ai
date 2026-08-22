@@ -16,7 +16,7 @@ import { useTranslations } from 'next-intl';
 import Link from 'next/link';
 import { useFormat } from '@/i18n/useFormat';
 import { inviteStatusKey } from './jobVocabulary';
-import { listJobInvites, withdrawJobInvite, type JobInvite } from '@/lib/freelancerApi';
+import { listJobInvites, withdrawJobInvite, type JobInvite } from '@/lib/freelance/invites';
 
 const card: React.CSSProperties = {
   background: 'var(--bg-base)', border: '1px solid var(--border-subtle)',

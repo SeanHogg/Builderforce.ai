@@ -85,9 +85,9 @@ export default function AppFooter({ variant = 'legal' }: { variant?: 'legal' | '
               <p className="global-footer-summary">{STATS.quotable.creativeCanvas}</p>
               <p className="global-footer-credit">
                 {t('builtBy')}{' '}
-                <a href={BRAND.founder.url} target="_blank" rel="noopener">
-                  {BRAND.founder.name}
-                </a>{' '}
+                {/* An in-app route now, so it navigates in place rather than opening a tab
+                    on another domain — the profile it lands on IS the résumé. */}
+                <Link href={BRAND.founder.path}>{BRAND.founder.name}</Link>{' '}
                 · {BRAND.name} © {BRAND.year}
               </p>
               {versionStrip}

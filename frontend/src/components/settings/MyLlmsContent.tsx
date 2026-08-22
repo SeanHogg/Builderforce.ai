@@ -54,7 +54,7 @@ const cardStyle: React.CSSProperties = {
 
 const labelStyle: React.CSSProperties = {
   display: 'block',
-  fontSize: 12,
+  fontSize: 'var(--font-size-small)',
   fontWeight: 600,
   color: 'var(--text-secondary)',
   marginBottom: 6,
@@ -64,7 +64,7 @@ const inputStyle: React.CSSProperties = {
   width: '100%',
   boxSizing: 'border-box',
   padding: '8px 10px',
-  fontSize: 13,
+  fontSize: 'var(--font-size-small)',
   background: 'var(--bg-elevated)',
   color: 'var(--text-primary)',
   border: '1px solid var(--border-subtle)',
@@ -81,7 +81,7 @@ const optionStyle: React.CSSProperties = {
 
 const buttonPrimary: React.CSSProperties = {
   padding: '8px 14px',
-  fontSize: 12,
+  fontSize: 'var(--font-size-small)',
   fontWeight: 600,
   background: 'var(--surface-interactive)',
   color: 'var(--text-primary)',
@@ -97,7 +97,7 @@ const buttonGhost: React.CSSProperties = {
 
 const buttonDanger: React.CSSProperties = {
   padding: '4px 10px',
-  fontSize: 11,
+  fontSize: 'var(--font-size-eyebrow)',
   fontWeight: 600,
   background: 'none',
   color: 'var(--coral-bright)',
@@ -251,8 +251,8 @@ export function MyLlmsContent() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'baseline', justifyContent: 'space-between' }}>
           <div>
-            <h1 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>{t('title')}</h1>
-            <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '6px 0 0', maxWidth: '60ch' }}>{t('subtitle')}</p>
+            <h1 style={{ fontSize: 'var(--font-size-section)', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>{t('title')}</h1>
+            <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)', margin: '6px 0 0', maxWidth: '60ch' }}>{t('subtitle')}</p>
           </div>
           {editing === null && (
             <button type="button" style={buttonPrimary} onClick={openCreate}>{t('actions.create')}</button>
@@ -260,14 +260,14 @@ export function MyLlmsContent() {
         </div>
 
         {error && (
-          <div role="alert" style={{ ...cardStyle, borderColor: 'var(--coral-bright)', color: 'var(--coral-bright)', fontSize: 13 }}>
+          <div role="alert" style={{ ...cardStyle, borderColor: 'var(--coral-bright)', color: 'var(--coral-bright)', fontSize: 'var(--font-size-small)' }}>
             {error}
           </div>
         )}
 
         {editing !== null && (
           <div style={cardStyle}>
-            <h2 style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 14px' }}>
+            <h2 style={{ fontSize: 'var(--font-size-body)', fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 14px' }}>
               {editing ? t('form.editTitle') : t('form.createTitle')}
             </h2>
             <div style={{ display: 'grid', gap: 14, gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 240px), 1fr))' }}>
@@ -299,7 +299,7 @@ export function MyLlmsContent() {
                     style={inputStyle}
                   />
                 )}
-                <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '6px 0 0' }}>{t('form.baseModelHint')}</p>
+                <p style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', margin: '6px 0 0' }}>{t('form.baseModelHint')}</p>
               </div>
 
               <div>
@@ -315,7 +315,7 @@ export function MyLlmsContent() {
                     <option key={p.id} value={p.id} style={optionStyle}>{p.name}</option>
                   ))}
                 </select>
-                <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '6px 0 0' }}>
+                <p style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', margin: '6px 0 0' }}>
                   {personas.length === 0 ? t('form.personaEmpty') : t('form.personaHint')}
                 </p>
               </div>
@@ -367,7 +367,7 @@ export function MyLlmsContent() {
                 onChange={(e) => setDraft({ ...draft, systemPrompt: e.target.value })}
                 placeholder={t('form.systemPromptPlaceholder')}
               />
-              <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '6px 0 0' }}>{t('form.systemPromptHint')}</p>
+              <p style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', margin: '6px 0 0' }}>{t('form.systemPromptHint')}</p>
             </div>
 
             <div style={{ display: 'flex', gap: 10, marginTop: 16, flexWrap: 'wrap' }}>
@@ -381,9 +381,9 @@ export function MyLlmsContent() {
 
         <div style={cardStyle}>
           {loading ? (
-            <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0 }}>{t('loading')}</p>
+            <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)', margin: 0 }}>{t('loading')}</p>
           ) : models.length === 0 ? (
-            <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0 }}>{t('empty')}</p>
+            <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)', margin: 0 }}>{t('empty')}</p>
           ) : (
             <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 12 }}>
               {models.map((model) => (
@@ -400,15 +400,15 @@ export function MyLlmsContent() {
                   }}
                 >
                   <div style={{ minWidth: 0, flex: '1 1 260px' }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
+                    <div style={{ fontSize: 'var(--font-size-small)', fontWeight: 600, color: 'var(--text-primary)' }}>
                       {model.name}
                       {model.baseModel?.startsWith(EVERMIND_PIN_PREFIX) && (
-                        <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 500, color: 'var(--text-muted)' }}>
+                        <span style={{ marginLeft: 8, fontSize: 'var(--font-size-eyebrow)', fontWeight: 500, color: 'var(--text-muted)' }}>
                           {t('list.fromStudio')}
                         </span>
                       )}
                     </div>
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4, wordBreak: 'break-word' }}>
+                    <div style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', marginTop: 4, wordBreak: 'break-word' }}>
                       <code>{model.ref}</code>
                       {' · '}
                       {model.baseModel ?? t('list.planDefault')}

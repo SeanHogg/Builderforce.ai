@@ -13,7 +13,7 @@ import { useTranslations } from 'next-intl';
 import Link from 'next/link';
 import { Icon } from '@/components/ui/Icon';
 import { useMoneyFormat } from '@/lib/useMoneyFormat';
-import { listSavedTalent, unsaveTalent, type SavedTalentEntry } from '@/lib/freelancerApi';
+import { listSavedTalent, unsaveTalent, type SavedTalentEntry } from '@/lib/freelance/invites';
 
 const card: React.CSSProperties = {
   background: 'var(--bg-base)', border: '1px solid var(--border-subtle)',

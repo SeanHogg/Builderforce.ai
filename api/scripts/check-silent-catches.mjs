@@ -76,6 +76,21 @@ for (const filePath of sourceFiles) {
       }
     }
 
+    // A Durable Object runs outside the Worker's AsyncLocalStorage context, so
+    // `reportCaughtError` there resolves NO runtime and the reporter drops the
+    // record after its console line — the error is logged nowhere durable. The
+    // runtime override is what makes it land, and four call sites had silently
+    // been missing it. Inside a DO the third argument is mandatory.
+    if (
+      /DO\.ts$/.test(filePath)
+      && ts.isCallExpression(node)
+      && ts.isIdentifier(node.expression)
+      && node.expression.text === 'reportCaughtError'
+      && node.arguments.length < 3
+    ) {
+      violations.push(`${location(sourceFile, node)} reportCaughtError in a Durable Object without a runtime override (report is dropped)`);
+    }
+
     ts.forEachChild(node, visit);
   }
 

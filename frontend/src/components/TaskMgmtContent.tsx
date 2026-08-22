@@ -64,7 +64,7 @@ import { RunTaskButton } from './task/RunTaskButton';
 import { ApprovalResolveControl } from './humanRequests/ApprovalResolveControl';
 import { ChatMessageContent } from './ChatMessageContent';
 import { PublishToMarketplaceModal } from './PublishToMarketplaceModal';
-import { getTicketPosting, unpublishTicket, type TicketPosting } from '@/lib/freelancerApi';
+import { getTicketPosting, unpublishTicket, type TicketPosting } from '@/lib/freelance/postings';
 import { ViewToggle } from './ViewToggle';
 import { CeremonyStage, type CeremonyMode } from './ceremony/CeremonyStage';
 import type { ReschedulePatch } from '@/lib/schedule';

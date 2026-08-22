@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { listNotifications, markNotificationsRead, type Notification } from '@/lib/freelancerApi';
+import { listNotifications, markNotificationsRead, type Notification } from '@/lib/freelance/billing';
 
 /**
  * Global in-app notification bell for the TopBar — the single app-wide entry point

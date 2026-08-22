@@ -6,17 +6,12 @@ import { useTranslations } from 'next-intl';
 import NotificationsPanel from '@/components/freelance/NotificationsPanel';
 import { GuestSignupCta } from '@/components/GuestSignupCta';
 import { useAuth } from '@/lib/AuthContext';
-import {
-  listMyEngagements, respondEngagement,
-  listJobs, getJob, bidJob, listMyProposals, withdrawProposal,
-  listSavedJobs, saveJob, unsaveJob,
-  listMyInvites, respondToInvite, markInviteViewed,
-  listRecommendedJobs,
-  openJobAttachment, openMyProposalAttachment,
-  uploadProposalAttachment, deleteProposalAttachment,
-  type Engagement, type JobPosting, type JobProposal,
-  type JobInvite, type PostingMatch, type ScreeningQuestion,
-} from '@/lib/freelancerApi';
+import { listMyEngagements, respondEngagement, type Engagement } from '@/lib/freelance/engagements';
+import { listMyInvites, respondToInvite, markInviteViewed, type JobInvite } from '@/lib/freelance/invites';
+import { listSavedJobs, saveJob, unsaveJob } from '@/lib/freelance/jobSeeker';
+import { listRecommendedJobs, type PostingMatch } from '@/lib/freelance/matching';
+import { openJobAttachment, openMyProposalAttachment, uploadProposalAttachment, deleteProposalAttachment } from '@/lib/freelance/postingAttachments';
+import { listJobs, getJob, bidJob, listMyProposals, withdrawProposal, type JobPosting, type JobProposal, type ScreeningQuestion } from '@/lib/freelance/postings';
 import {
   ENGAGEMENT_TYPES, EXPERIENCE_LEVELS, JOB_DISCIPLINES, JOB_SPECIALTIES, PROJECT_LENGTHS,
   experienceKey, inviteStatusKey, projectLengthKey, specialtyKey,

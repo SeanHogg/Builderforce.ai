@@ -33,7 +33,7 @@ export function Section({ title, action, children }: { title: string; action?: R
   return (
     <div style={{ marginBottom: 28 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-        <h2 style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{title}</h2>
+        <h2 style={{ fontSize: 'var(--font-size-body)', fontWeight: 700, color: 'var(--text-primary)' }}>{title}</h2>
         {action}
       </div>
       {children}
@@ -43,24 +43,24 @@ export function Section({ title, action, children }: { title: string; action?: R
 
 export function btnStyle(disabled = false): React.CSSProperties {
   return {
-    padding: '6px 12px', fontSize: 12, fontWeight: 600, borderRadius: 'var(--radius-sm)',
+    padding: '6px 12px', fontSize: 'var(--font-size-small)', fontWeight: 600, borderRadius: 'var(--radius-sm)',
     border: '1px solid var(--border-subtle)', background: 'var(--surface-raised)',
     color: 'var(--text-secondary)', cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.5 : 1,
   };
 }
 
 export const inputStyle: React.CSSProperties = {
-  padding: '6px 8px', fontSize: 12, borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)',
+  padding: '6px 8px', fontSize: 'var(--font-size-small)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)',
   background: 'var(--bg-deep)', color: 'var(--text-primary)', minWidth: 120,
 };
 
 export function Empty({ children }: { children: React.ReactNode }) {
-  return <p style={{ fontSize: 13, color: 'var(--text-muted)', padding: '12px 0' }}>{children}</p>;
+  return <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', padding: '12px 0' }}>{children}</p>;
 }
 
 export function Table({ head, children }: { head: string[]; children: React.ReactNode }) {
   return (
-    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--font-size-small)' }}>
       <thead>
         <tr>
           {head.map((h) => (

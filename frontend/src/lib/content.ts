@@ -7,12 +7,28 @@
 
 /* ════════════════════ BRAND ════════════════════ */
 
+const SITE_URL = 'https://builderforce.ai';
+
+/**
+ * The founder's public profile lives on THIS platform, not on hired.video.
+ *
+ * `/talent/<slug>` is the published for-hire listing (`freelancer_profiles`) and it
+ * renders the résumé projection the API serves at `GET /api/freelancers/:id` — the
+ * route comment there calls it, in as many words, "the replacement for the hired.video
+ * iframe". Linking out to the old host sent every visitor and every crawler that reads
+ * our `Person` JSON-LD to a different domain to see a document we already publish.
+ *
+ * Kept as a path + a derived absolute URL because both audiences need it: the footer
+ * and prose links want an in-app route, structured data wants an absolute `Person.url`.
+ */
+const FOUNDER_PROFILE_PATH = '/talent/seanhogg';
+
 export const BRAND = {
   name: 'Builderforce.ai',
   legalName: 'Builderforce',
   tagline: 'The creative canvas for humans and AI agents',
-  url: 'https://builderforce.ai',
-  founder: { name: 'Sean Hogg', url: 'https://hired.video/resumes/seanhogg' },
+  url: SITE_URL,
+  founder: { name: 'Sean Hogg', path: FOUNDER_PROFILE_PATH, url: `${SITE_URL}${FOUNDER_PROFILE_PATH}` },
   year: 2026,
   ogImage: '/og-image.png',
   ogImageWidth: 1200,

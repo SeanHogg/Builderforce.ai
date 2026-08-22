@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { copyTextToClipboard } from '@/lib/useCopyToClipboard';
+import { reportRenderCrash } from '@/lib/reportError';
 
 interface ErrorBoundaryProps {
   homePath?: string;
@@ -25,6 +26,16 @@ export class ErrorBoundary extends React.Component<
 
   static getDerivedStateFromError(error: Error): ErrorBoundaryState {
     return { error };
+  }
+
+  /**
+   * A crash caught here never reaches `window.onerror`, so until this existed
+   * the most severe front-end failure — the one that replaces the page with the
+   * screen below — was the only one producing no telemetry at all. The user
+   * could copy a support ticket by hand; nothing was recorded otherwise.
+   */
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    reportRenderCrash(error, { boundary: 'ErrorBoundary', componentStack: info.componentStack });
   }
 
   private handleReset = () => this.setState({ error: null });

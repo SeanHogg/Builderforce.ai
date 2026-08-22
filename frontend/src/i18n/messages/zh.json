@@ -3535,6 +3535,7 @@
       "on_hold": "已暂停"
     },
     "dialogAria": "项目详情",
+    "tabsAria": "项目分区",
     "deleteAria": "删除项目",
     "closeAria": "关闭面板",
     "editAria": "编辑项目",
@@ -8751,7 +8752,100 @@
         "question": "智能体能自行交付代码吗？",
         "answer": "可以。云端智能体通过安全的服务器端 git 代理克隆绑定的仓库（你的 Git 令牌绝不离开服务器），编写更改、推送分支并发起拉取请求 — 无头运行，不打开浏览器。本地部署智能体在你自己的机器上执行相同操作，并且审批门控可在任何高影响步骤之前要求人工签核。"
       }
-    ]
+    ],
+    "contact": {
+      "metaTitle": "联系我们 — Builderforce.ai",
+      "metaDescription": "联系 BuilderForce Agents 与 Builderforce.ai 的创建者兼维护者 Sean Hogg。",
+      "heading": "联系我们",
+      "lead": "对 BuilderForce Agents、企业部署有疑问，或者只是想打个招呼？欢迎直接联系。",
+      "founderRole": "BuilderForce Agents 与 Builderforce.ai 的创建者兼维护者。",
+      "resumeLabel": "简历 / 作品集",
+      "issuesLabel": "GitHub Issues",
+      "engageHeading": "其他参与方式",
+      "repoLabel": "GitHub 上的 BuilderForce Agents",
+      "repoNote": "提交 issue、发起 PR、关注发布",
+      "discordLabel": "Discord 社区",
+      "discordNote": "实时答疑与讨论",
+      "acknowledgementsLabel": "致谢",
+      "acknowledgementsNote": "向本项目所依赖的开源项目致谢"
+    },
+    "acknowledgements": {
+      "metaTitle": "致谢 — BuilderForce Agents",
+      "metaDescription": "BuilderForce Agents 的由来、所依赖的关键开源软件包，以及成就它的人们。",
+      "heading": "致谢",
+      "lead": "没有巨人的肩膀，就没有 BuilderForce Agents。这里记录我们从何而来，以及我们要感谢谁。",
+      "originHeading": "构建于 OpenClaw 之上",
+      "originIntroBefore": "BuilderForce Agents 最初是",
+      "originIntroAfter": " 的一个分支——由 OpenClaw 团队打造的开源个人 AI 助手。OpenClaw 为我们提供了久经考验的网关运行时、多渠道连接能力（WhatsApp、Telegram、Slack、Discord、Signal、iMessage……）、基于 Lit 的响应式仪表板界面、插件与技能基础设施，以及一套可以立即在其上继续构建的项目结构。",
+      "thankYou": "感谢",
+      "thanksBefore": "每一位在",
+      "thanksAfter": "做出贡献的开发者，为我们打下了起点。没有你们的工作，就不会有 BuilderForce Agents。",
+      "extendsHeading": "BuilderForce Agents 如何扩展 OpenClaw",
+      "extendsIntro": "BuilderForce Agents 保留了 OpenClaw 的全部优点，并在其上增加了一层专注于开发者的编排能力。",
+      "getStartedHeading": "快速开始",
+      "nodeRequirement": "需要 Node ≥ 22。",
+      "installComment": "安装",
+      "pnpmComment": "或使用 pnpm",
+      "onboardComment": "初始化",
+      "packagesHeading": "开源软件包",
+      "packagesIntro": "BuilderForce Agents 由一个出色的开源生态系统驱动。我们向每一位维护者致以谢意。",
+      "builtByHeading": "开发者",
+      "founderRole": "BuilderForce Agents 与 Builderforce.ai 的开发者、架构师兼维护者。",
+      "contactLabel": "联系我们",
+      "licenseHeading": "许可协议",
+      "licenseBefore": "BuilderForce Agents 依据",
+      "mitLicense": "MIT 许可协议",
+      "licenseAfter": "发布。欢迎使用、复刻并交付。",
+      "differences": [
+        {
+          "title": "深度代码理解",
+          "body": "AST 解析、语义代码图谱、依赖关系图、跨文件引用追踪，以及对 Git 历史的感知——全部持久化到 .builderforce/ 目录。"
+        },
+        {
+          "title": "多代理编排",
+          "body": "内置 7 种专家角色（架构师、开发者、评审者、测试者、调试者、重构者、文档编写者），配合动态任务生命周期与正式的执行状态机。"
+        },
+        {
+          "title": "完整开发生命周期",
+          "body": "PRD → 架构 → 任务拆解 → 编码 → 评审 → 测试 → 调试 → 重构：全部在同一个运行时中编排，无需 IDE。"
+        },
+        {
+          "title": "Builderforce 集成",
+          "body": "api.builderforce.ai 上的 REST API，提供多租户项目管理、代理注册、执行追踪与审计轨迹——基于 Cloudflare Workers + Neon PostgreSQL。"
+        },
+        {
+          "title": "自托管且开放",
+          "body": "代码始终留在你自己的机器上。采用 MIT 许可。不绑定 IDE，不依赖厂商云，也没有订阅上限。"
+        },
+        {
+          "title": "渠道无关",
+          "body": "继承 OpenClaw 的全部渠道集成——从 WhatsApp、Telegram、Slack 或 Discord 触发编码工作流，就像在终端里一样简单。"
+        }
+      ],
+      "packages": {
+        "lit": "驱动仪表板界面的响应式 Web 组件。",
+        "@agentclientprotocol/sdk": "Agent Client Protocol —— 代理与网关之间的结构化通信。",
+        "typescript": "为整个运行时提供强类型的 JavaScript。",
+        "zod": "针对配置、工具和载荷的运行时结构校验。",
+        "express": "支撑网关 REST 接口的 HTTP 服务器。",
+        "ws": "仪表板与网关之间的 WebSocket 传输。",
+        "yaml": "项目配置、规则与上下文的持久化。",
+        "playwright-core": "用于网页抓取和自动化技能的无头浏览器控制。",
+        "sharp": "为媒体理解流水线提供的高速图像处理。",
+        "croner": "用于周期性代理运行的轻量级 cron 调度器。",
+        "commander": "builderforce 命令的命令行参数解析。",
+        "undici": "用于供应商集成的高性能 HTTP 客户端。",
+        "vitest": "快速的单元测试与集成测试框架。",
+        "pdfjs-dist": "为文档理解技能提供的 PDF 解析支持。",
+        "@sinclair/typebox": "为类型化工具定义生成 JSON Schema。",
+        "@slack/bolt": "Slack 渠道集成。",
+        "grammy": "支撑 Telegram 渠道的机器人框架。",
+        "markdown-it": "仪表板聊天视图中的 Markdown 渲染。",
+        "astro": "支撑文档站点的框架。",
+        "drizzle-orm": "Builderforce 中用于 PostgreSQL 的类型安全 ORM。",
+        "hono": "面向边缘优先的 Builderforce API Web 框架。"
+      }
+    }
   },
   "newsletter": {
     "heading": "保持关注",

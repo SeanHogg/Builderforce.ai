@@ -12,7 +12,7 @@ import {
 } from '@/lib/projectInspection';
 import type { HealthTier } from '@/lib/projectHealth';
 import { diagnosticScoreColor } from '@/lib/diagnosticScore';
-import type { ProjectPanelTab } from './ProjectDetailsPanel';
+import type { ProjectPanelTab } from './project-details/projectPanelTabs';
 import { BandedMetricBar, type MetricTier } from './charts/BandedMetricBar';
 import { ProjectDiagnosticsStrip } from './ProjectDiagnosticsStrip';
 

@@ -116,12 +116,12 @@ export function WhyLadderSection({
   return (
     <div style={{ ...card, display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)' }}>{t('whys.title')}</span>
-        <span style={{ fontSize: 11, color: 'var(--text-muted)', flex: 1, minWidth: 120 }}>{t('whys.hint')}</span>
+        <span style={{ fontSize: 'var(--font-size-small)', fontWeight: 700, color: 'var(--text-secondary)' }}>{t('whys.title')}</span>
+        <span style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', flex: 1, minWidth: 120 }}>{t('whys.hint')}</span>
       </div>
 
       {error && (
-        <div style={{ border: '1px solid var(--danger)', color: 'var(--danger)', borderRadius: 'var(--radius-md)', padding: 8, fontSize: 12 }}>
+        <div style={{ border: '1px solid var(--danger)', color: 'var(--danger)', borderRadius: 'var(--radius-md)', padding: 8, fontSize: 'var(--font-size-small)' }}>
           {error}
         </div>
       )}
@@ -138,12 +138,12 @@ export function WhyLadderSection({
           rootLabel={t('whys.root')}
         />
       ) : (
-        <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('whys.empty')}</span>
+        <span style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{t('whys.empty')}</span>
       ))}
 
       {editing && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+          <div style={{ fontSize: 'var(--font-size-eyebrow)', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
             {t('whys.problem')} — {incidentTitle}
           </div>
           {steps.map((s, i) => (
@@ -156,7 +156,7 @@ export function WhyLadderSection({
                 marginInlineStart: Math.min(i * 14, 70),
               }}
             >
-              <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', paddingTop: 10, whiteSpace: 'nowrap' }}>
+              <span style={{ fontSize: 'var(--font-size-eyebrow)', fontWeight: 700, color: 'var(--text-muted)', paddingTop: 10, whiteSpace: 'nowrap' }}>
                 {t('whys.step', { n: i + 1 })}
               </span>
               <input
@@ -196,7 +196,7 @@ export function WhyLadderSection({
             <button type="button" className="btn btn-secondary btn-sm" onClick={addStep} disabled={steps.length >= MAX_STEPS}>
               {t('whys.add')}
             </button>
-            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+            <span style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)' }}>
               {steps.length >= MAX_STEPS ? t('whys.capReached') : t('whys.cap', { conventional: CONVENTIONAL_STEPS, max: MAX_STEPS })}
             </span>
           </div>

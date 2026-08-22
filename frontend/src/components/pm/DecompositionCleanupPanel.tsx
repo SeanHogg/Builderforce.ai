@@ -127,7 +127,7 @@ export function DecompositionCleanupPanel({
   return (
     <SlideOutPanel open={open} onClose={onClose} title={t('title')} width="wide">
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minWidth: 0 }}>
-        <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
+        <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
           {t('intro')}
         </p>
 
@@ -155,18 +155,18 @@ export function DecompositionCleanupPanel({
           return (
             <section key={group.epic.id} style={panel()}>
               <header style={{ display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap', marginBottom: 10 }}>
-                <strong style={{ fontSize: '0.9rem', color: 'var(--text-primary)' }}>
+                <strong style={{ fontSize: 'var(--font-size-body)', color: 'var(--text-primary)' }}>
                   {group.epic.key ? `${group.epic.key} · ` : ''}{group.epic.title}
                 </strong>
                 {group.epic.decompositionSource && (
-                  <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                  <span style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)' }}>
                     {tPlanning(`source.${group.epic.decompositionSource}`)}
                   </span>
                 )}
-                <span style={{ marginLeft: 'auto', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                <span style={{ marginLeft: 'auto', fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>
                   {t('flaggedCount', { count: group.candidates.length })}
                 </span>
-                <label style={{ display: 'inline-flex', gap: 6, alignItems: 'center', fontSize: '0.78rem', cursor: 'pointer' }}>
+                <label style={{ display: 'inline-flex', gap: 6, alignItems: 'center', fontSize: 'var(--font-size-small)', cursor: 'pointer' }}>
                   <input
                     type="checkbox"
                     checked={allOn}
@@ -196,11 +196,11 @@ export function DecompositionCleanupPanel({
                         style={{ marginTop: 3, flexShrink: 0 }}
                       />
                       <span style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
-                        <span style={{ fontSize: '0.85rem', color: 'var(--text-primary)', wordBreak: 'break-word' }}>
+                        <span style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-primary)', wordBreak: 'break-word' }}>
                           {c.taskKey ? <code style={{ color: 'var(--text-muted)', marginRight: 6 }}>{c.taskKey}</code> : null}
                           {c.title}
                         </span>
-                        <span style={{ display: 'flex', gap: 10, flexWrap: 'wrap', fontSize: '0.72rem' }}>
+                        <span style={{ display: 'flex', gap: 10, flexWrap: 'wrap', fontSize: 'var(--font-size-small)' }}>
                           <span style={{ color: 'var(--warning-text, var(--warning))', fontWeight: 600 }}>
                             {reasonLabel(c.reason)}
                           </span>
@@ -239,7 +239,7 @@ export function DecompositionCleanupPanel({
                   padding: '9px 16px', borderRadius: 'var(--radius-md)', border: 'none',
                   background: selected.size === 0 ? 'var(--bg-elevated)' : 'var(--danger-text, var(--error-text))',
                   color: selected.size === 0 ? 'var(--text-muted)' : 'var(--text-on-accent)',
-                  fontWeight: 700, fontSize: '0.85rem',
+                  fontWeight: 700, fontSize: 'var(--font-size-small)',
                   cursor: selected.size === 0 ? 'default' : 'pointer',
                 }}
               >
@@ -254,7 +254,7 @@ export function DecompositionCleanupPanel({
   );
 }
 
-const muted: React.CSSProperties = { fontSize: '0.8rem', color: 'var(--text-muted)' };
+const muted: React.CSSProperties = { fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' };
 
 function panel(tone?: 'danger' | 'success'): React.CSSProperties {
   return {
@@ -263,6 +263,6 @@ function panel(tone?: 'danger' | 'success'): React.CSSProperties {
     background: tone === 'danger' ? 'var(--danger-bg)' : tone === 'success' ? 'var(--success-bg)' : 'var(--bg-elevated)',
     color: tone === 'danger' ? 'var(--danger-text)' : tone === 'success' ? 'var(--success-text)' : 'var(--text-primary)',
     padding: 12,
-    fontSize: '0.85rem',
+    fontSize: 'var(--font-size-small)',
   };
 }

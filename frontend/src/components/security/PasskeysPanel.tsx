@@ -33,14 +33,14 @@ const cardStyle: React.CSSProperties = {
 };
 
 const sectionTitle: React.CSSProperties = {
-  fontSize: 14,
+  fontSize: 'var(--font-size-body)',
   fontWeight: 700,
   color: 'var(--text-primary)',
 };
 
 const primaryButton: React.CSSProperties = {
   padding: '7px 14px',
-  fontSize: 13,
+  fontSize: 'var(--font-size-small)',
   fontWeight: 600,
   background: 'var(--accent)',
   color: 'var(--text-on-accent)',
@@ -51,7 +51,7 @@ const primaryButton: React.CSSProperties = {
 
 const quietButton: React.CSSProperties = {
   padding: '5px 10px',
-  fontSize: 12,
+  fontSize: 'var(--font-size-small)',
   fontWeight: 600,
   background: 'var(--bg-elevated)',
   color: 'var(--text-secondary)',
@@ -136,7 +136,7 @@ export default function PasskeysPanel() {
     return (
       <div style={{ ...cardStyle, marginBottom: 16 }}>
         <div style={{ ...sectionTitle, marginBottom: 4 }}>{t('title')}</div>
-        <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>{t('unsupported')}</p>
+        <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', margin: 0 }}>{t('unsupported')}</p>
       </div>
     );
   }
@@ -146,7 +146,7 @@ export default function PasskeysPanel() {
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
         <div style={{ minWidth: 0 }}>
           <div style={{ ...sectionTitle, marginBottom: 4 }}>{t('title')}</div>
-          <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 0, marginBottom: 14, maxWidth: '62ch' }}>
+          <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', marginTop: 0, marginBottom: 14, maxWidth: '62ch' }}>
             {platform ? t('subtitlePlatform') : t('subtitle')}
           </p>
         </div>
@@ -156,13 +156,13 @@ export default function PasskeysPanel() {
       </div>
 
       {error && (
-        <div style={{ fontSize: 12, color: 'var(--coral-bright)', marginBottom: 10 }}>{error}</div>
+        <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--coral-bright)', marginBottom: 10 }}>{error}</div>
       )}
 
       {loading ? (
-        <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('loading')}</div>
+        <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{t('loading')}</div>
       ) : passkeys.length === 0 ? (
-        <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>{t('empty')}</p>
+        <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', margin: 0 }}>{t('empty')}</p>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {passkeys.map((passkey) => (
@@ -188,28 +188,28 @@ export default function PasskeysPanel() {
                     }}
                     aria-label={t('nameLabel')}
                     style={{
-                      width: '100%', maxWidth: 260, padding: '4px 8px', fontSize: 13,
+                      width: '100%', maxWidth: 260, padding: '4px 8px', fontSize: 'var(--font-size-small)',
                       background: 'var(--bg-base)', color: 'var(--text-primary)',
                       border: '1px solid var(--border-strong, var(--border-subtle))',
                       borderRadius: 'var(--radius-sm)',
                     }}
                   />
                 ) : (
-                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
+                  <div style={{ fontSize: 'var(--font-size-small)', fontWeight: 600, color: 'var(--text-primary)' }}>
                     {passkey.name}
                     {passkey.backedUp && (
-                      <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 'var(--radius-sm)', background: 'var(--surface-success-soft, rgba(34,197,94,0.12))', color: 'var(--success-text, rgba(34,197,94,0.9))' }}>
+                      <span style={{ marginLeft: 8, fontSize: 'var(--font-size-field-label)', fontWeight: 700, padding: '2px 6px', borderRadius: 'var(--radius-sm)', background: 'var(--surface-success-soft, rgba(34,197,94,0.12))', color: 'var(--success-text, rgba(34,197,94,0.9))' }}>
                         {t('synced')}
                       </span>
                     )}
                     {passkey.signCountRegressed && (
-                      <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 'var(--radius-sm)', background: 'var(--surface-warning-soft, rgba(234,179,8,0.14))', color: 'var(--warning-text, rgba(234,179,8,0.95))' }} title={t('counterWarningHint')}>
+                      <span style={{ marginLeft: 8, fontSize: 'var(--font-size-field-label)', fontWeight: 700, padding: '2px 6px', borderRadius: 'var(--radius-sm)', background: 'var(--surface-warning-soft, rgba(234,179,8,0.14))', color: 'var(--warning-text, rgba(234,179,8,0.95))' }} title={t('counterWarningHint')}>
                         {t('counterWarning')}
                       </span>
                     )}
                   </div>
                 )}
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>
+                <div style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', marginTop: 3 }}>
                   {t('added', { date: fmt.dateTime(passkey.createdAt) })}
                   {passkey.lastUsedAt
                     ? ` · ${t('lastUsed', { date: fmt.dateTime(passkey.lastUsedAt) })}`

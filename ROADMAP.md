@@ -373,7 +373,6 @@ follows is what closing them surfaced.*
 
 ## 🎨 Canvas — creation surface, documents, studio & QA
 
-- **The frontend architecture ratchet is red on four pre-existing items that are not attributable to any one change** *(2026-08-22)* — `npm run check:architecture` fails on `'use client' files: 834 exceeds baseline 808`, `presentation -> infrastructure: components/repos/githubActionsSurface.tsx`, and three files over 800 lines (`components/board/BoardConfigPanel.tsx`, `components/ProjectDetailsPanel.tsx`, `lib/freelancerApi.ts`). None is in a file this pass touched, and the +26 client-directive drift spans ~50 files added across several sessions. A red ratchet hides the next real violation — which is exactly how the calendar's own `presentation -> infrastructure` breach would have gone unnoticed had the guard already been failing for other reasons. Fix = either argue the baseline up for the NAMED files (which is what the guard's own printout is for) or move the four violators; do not `--update` the whole tally blind. Unblocks: trusting this guard on the next change.
 
 > Domain `canvas` (seat: Brain). The creation session and every object on it — documents, media, games, data-science and QA objects — plus the studio runtimes and the mobile modality that render them.
 
@@ -568,6 +567,79 @@ follows is what closing them surfaced.*
 
 > Domain `growth` (seat: CMO). Campaigns, paid media, organic social, landing pages, SEO and every public marketing surface.
 
+### 🚪 The logged-out product — 101 app routes still trade the surface for a teaser
+
+> Reviewed 2026-08-22 from `/insights`. The nine routes whose ONLY audience is signed-out (token links, LMS
+> launches, the salary SEO programme) were fixed the same pass — see [DONE.md](./DONE.md). What is left is the
+> product decision this review was asked for, recorded here because it is a direction to choose, not a defect
+> to patch.
+
+**The measurement.** Of 182 page routes, 110 classify as `app`, so a logged-out visitor gets `RouteMarketing`
+instead of the page. Eleven of those are now fixed, leaving **99**. Of the 99, exactly **21** are genuinely
+operator-only (`/admin/*`, `/agent-worker`, `/billing/*`, `/debug`, `/developers`, `/import`, `/logs`,
+`/monitoring`, `/security`, `/settings/*`, `/tenants`) and the other **78** are the product itself — every Insights lens, `/pmo`, `/workforce`, `/quality`, `/growth`, `/knowledge`,
+`/tasks`, every `/seat/<domain>`.
+
+**Why it reads as a wasted page.** The teaser's own source says it: the "what's inside" band is rendered as
+*"Chips rather than links — every one of them is behind the wall this page exists because of"*
+(`RouteMarketing.tsx`). So `/insights` advertises AI Insights, Delivery, Autonomy, Finance, DevEx, Compliance,
+Alerts and Reviews as eight dead chips. `/product-management` is the same shape one rung out: its CTA is
+`isAuthenticated ? domain.appHref : '/register'`, so the visitor it was written for can only ever be sent to a
+signup form.
+
+**The seam is inconsistent, not missing.** The codebase already gates two other axes the right way and writes
+the rule down twice — `RoleGate` ("we DO NOT hide features behind roles — render them disabled and indicate
+the role required") and `UpgradeGate` ("inline, not a modal, so the wall reads as *this specific view needs a
+higher plan*"). Capability and plan indicate the gate in place; **session alone is implemented as
+substitution** — the whole surface is replaced by marketing. Three gates, one of them backwards.
+
+**The chosen direction (operator, 2026-08-22): guest session, not demo tenant.** Retire the persona demo
+tenants (migration 0360: `demoSeedService`, `demoPersonas`, `POST /api/demo/session`, the reseed cron, five
+seeded server tenants, `DemoTour`/`DemoShowcase`/`DemoModeProvider`, `lib/demoApi.ts`) and collapse their
+BLUEPRINTS into **ONE build-time sample dataset** seeded into the visitor's own session-scoped store. The
+visitor launches "AI Software Team" against **their own session id**, edits it, and it is theirs — then
+signing up LINKS it rather than discarding it. A shared demo tenant that a nightly reseed wipes is the
+opposite of that. `/book-demo` + `salesLeads` (sales-lead capture) is a different thing and stays.
+
+**What that needs, in order:**
+
+1. **Generalise the guest store.** `domains/canvas/infrastructure/localCanvasStore.ts` is already exactly this
+   for boards — schema over `localStorage`, an INDEX so work is findable after a lost `?next=`. Promote it to
+   a guest-session store keyed by session id that other bounded contexts can register a slice in. Do NOT copy
+   it per domain.
+2. **Generalise the claim.** `claimLocalDraft` / `claimPendingDrafts` (`lib/pendingWork.ts`) already turn an
+   account-less board into a durable tenant-scoped row at sign-in, driven off the index rather than the URL.
+   Widen the contract from "a canvas" to "a claimable guest slice" and keep ONE claim path.
+3. **Move the wall from the ROUTE to the ACTION.** Reads render; the gate fires on invoking an agent,
+   connecting an integration, publishing, inviting, or paying — the tenant-bound and irreversible operations.
+   That is one new primitive, a `SessionGate` matching `RoleGate`'s contract (decides its own state, no
+   prop-drilled `canX`), NOT a fourth bespoke branch per surface.
+4. **One sample dataset — labelled, editable, build-versioned.** A chart with no rows teaches nothing, so the
+   surfaces that exist to be LOOKED at get one fixture on first visit — not five personas. Three properties
+   make it honest: it always says what it is ("Sample data — your workspace replaces this", in place, never a
+   dismissible toast); the guest can EDIT it, because a number you can drag is the demo; and it is keyed by
+   BUILD ID, so a deploy replaces the fixture rather than leaving last month's shape in a browser to fail
+   against this month's code. ONE component owns the label and decides its own visibility (null the moment
+   the surface is reading real tenant rows) — a per-page banner is how half the app quietly starts lying.
+   The claim path (step 2) must explicitly DISCARD fixture rows and link only guest-authored work, or a
+   visitor's invented numbers arrive in a real workspace.
+5. **Prompt-led entry, per route.** The prompt capture already exists (`guestPromptCapture.ts`,
+   `startGuestCreationSession`, `/create/new?prompt=`). Each surface contributes route-specific prompts that
+   produce the artifact that surface is about, replacing the dead chips with the thing they name.
+6. **Shrink the teaser to what it is for.** Once a surface renders, `RouteMarketing` should serve only the 21
+   operator-only routes — and `indexableTeaserRoutes()` / `noindexTeaserRoutes()` / `sitemap.ts` must be
+   re-derived in the same pass, since today those 78 teaser URLs are submitted as the indexable entry point
+   for pages that would then render for real.
+
+**Known risks.** (a) SEO regression — those 78 teaser URLs currently rank, so a real page that ships without
+inheriting its teaser's title, description, FAQ JSON-LD and related articles is a downgrade in the one place
+this is working today. (b) Guest cost — a rendering surface invites Brain turns, so `guestLimit.ts` must gate
+every newly guest-reachable model call, not just chat. (c) Store sprawl — a second `localStorage` schema per
+domain turns step 1 into the thing it was meant to replace.
+
+**Blocker on starting: none.** Sequenced here rather than begun because steps 1–3 are one architectural change
+across 78 surfaces and the operator asked for the review first.
+
 ### 💸 Paid advertising & measurement — residuals
 
 > The connect → launch → steer → measure slice shipped 2026-08-15 (migration **0470**,
@@ -684,9 +756,7 @@ follows is what closing them surfaced.*
 
 ## 🧲 Hiring — postings, sourcing & applications
 
-- **Phone is still a connector, and the operator asked for the product** *(hired.video port, T6; decision taken 2026-08-22 — port the full phone product)*. `business_phone_numbers` exists and `tenant/businessPhoneSubscription.ts` is its only feature path; hired.video's `call_logs`, `sms_messages`, `phone_balances` and `phone_balance_transactions` are unported. **No new tables are needed** and the schema already says so: `business_phone_numbers`' own docstring reads "the calls are `deliveries`; the balance is a `ledger_entries` denomination", `deliveries.channel` already admits `'sms'`, and `comm_credits` is declared in `application/kernel/denominations.ts` for exactly this. What is missing is provisioning against a real carrier, the call/SMS write paths, and a metered balance that debits per message and per minute. Unblocks: a phone number a tenant can actually buy, and outbound SMS that is billed rather than free.
 
-- **hired.video's job SOURCING half is unported: scraper, JD refresh and job analytics** *(hired.video port, T2; scope confirmed 2026-08-22 — the operator elected to port the scraper, accepting the third-party ToS exposure)*. `services/job/scraper.ts`, `routes/jobscraper.ts`, `routes/job-analytics.ts`, `services/job/salary-popularity.ts` and `time-to-hire.ts` ingest postings from external boards and report on them. 0471 ported the job-SEEKER half. **Targets, per the coverage map:** a board is a `connections` row (vendor = the board), its sync cursor is `sync_states` — the kernel pair that already runs every other ingestion — and a scraped posting is a `catalog_items` row, so again no new tables. Unblocks: a jobs surface fed by more than what this platform's own employers post.
 
 > Domain `hiring` (seat: Recruiter). The job posting and everything downstream of it — applications, interviews, placements — plus the public employer surfaces that feed it.
 
@@ -740,9 +810,7 @@ follows is what closing them surfaced.*
 
 ## 🛠️ Platform — data model, shell, i18n, VS Code, CI/CD & cost
 
-- **Two API guards are RED on committed code, and both belong to an untracked in-flight feature** *(found 2026-08-22 while getting a readable gate for the IDE-scaffold consolidation; verified by grepping the failure output — no file from that work appears in either)*. `check:layering` reports one new `presentation → infrastructure` import in `api/src/presentation/routes/sourcingRoutes.ts`, and `check:model-coverage` reports the consolidation map at **362** distinct `keep` targets against the **363** the roster in `check-model-coverage.mjs` (`EXPECTED.keeps`) enumerates. `api/src/application/sourcing/` and `api/src/application/integrations/connectionApiKey.ts` are **untracked** — a hiring/sourcing feature someone is mid-way through, whose intended shape (which queries become an application service, whether the roster or the map is the one that moved) only its author knows. Same "one red guard hides the rest" cost as the frontend entry above: every API pass from here lands blind to its own layering and data-model drift. **Blocked on the author of the untracked `sourcing` work** — finishing it from outside would collide with an edit in progress and would mean picking a winner between the map and the roster, which `check-model-coverage` explicitly refuses to do. Unblocks: an API build that fails on new drift instead of on old.
 
-- **Two frontend ratchets are RED on the working tree, and neither was made red by the work that found them** *(found 2026-08-22 while landing the points surfaces; verified by grepping the failure output — no `components/points/*` file appears in either)*. `check:architecture` reports `'use client'` files at 842 against a baseline of 808, plus three new >800-line production files (`components/board/BoardConfigPanel.tsx`, `components/ProjectDetailsPanel.tsx`, `lib/freelancerApi.ts`) and one presentation→infrastructure violation (`components/repos/githubActionsSurface.tsx`). `check:design-scale` reports `offScaleFontSizes` at 3799 against 3767, concentrated in `components/settings/MyLlmsContent.tsx` (+16), `components/qa/QaQualitySections.tsx` (+13), `components/security/PasskeysPanel.tsx` (+13) and eight others. All of those files are from earlier in-flight work sitting uncommitted in this tree. **This matters more than the numbers do:** a ratchet that is already red cannot report the NEXT regression, which is exactly the "one red guard hides the rest" failure the build-guard convention exists to prevent — every pass from here lands blind to its own drift. **Not blocked.** Closing it is two mechanical passes (name the type role on ~32 declarations; extract the three oversized components) plus a decision on whether the `'use client'` baseline should absorb the six genuinely-new points cards, which are interactive and self-gating and therefore cannot be server components. Unblocks: a frontend build that fails on new drift instead of on old drift.
 
 - **Three of the source product's five points-fraud heuristics read signals this platform does not collect** *(points economy, 2026-08-22 — a deliberate scope decision, recorded rather than silently dropped)*. `application/points/fraudSignals.ts` ships two rules (bulk-close burst, sustained closure spike) against hired.video's five. The three omitted are **sybil signup-IP clustering** (needs a `signup_ip` on the account, which `users` does not carry), **device-fingerprint clustering** (needs a device id from an extension or app, which this platform has no ingest for), and **refund-then-redeem** (needs refunds correlated to a first earning event, which means the Stripe refund path writing into the points ledger's view of the account). Shipping them as dead code would have read as coverage while never firing once. Unblocks: detection of ring farming rather than only of single-account bursts — worth doing when redemption volume makes it worth doing, and not before.
 
@@ -939,7 +1007,6 @@ follows is what closing them surfaced.*
 
 ### Frontend architecture & bundle
 
-- **Three modules are over the 800-line ratchet at HEAD, and the failure has been hiding every other frontend architecture check** *(found 2026-08-22 while closing the client-boundary entry)*. `check-frontend-architecture.mjs`'s `oversizedProductionFiles` set is red on committed main for `components/board/BoardConfigPanel.tsx` (849), `components/ProjectDetailsPanel.tsx` (805) and `lib/freelancerApi.ts` (1109) — none of them in the baseline allowlist and none argued in the file's changelog. Because `npm run check` reports the guard as one failure, this red set is what let `useClientFiles` drift 808 → 848 unnoticed (see the client-boundary entry in DONE.md, which fixed the counts and made the count ratchet fail on slack as well as on growth). Each of the three is the god-class shape the standing rule bans: split into presentational component + container + hook + typed client, or argue the allowlist entry in the changelog the way the existing grandfathered files are. Unblocks: a frontend architecture guard that is green, and therefore one whose OTHER ratchets are actually being read. The design-scale ratchet is red for the same reason and wants the same treatment: `offScaleFontSizes` is 3801 against a baseline of 3767, concentrated in `settings/MyLlmsContent.tsx` (+16), `qa/QaQualitySections.tsx` (+13), `security/PasskeysPanel.tsx` (+13) and `project360/ProjectSpendWidget.tsx` (+12) — inline sizes where a `.ui-text-*` role class belongs.
 - **COMPONENT-level code splitting is rare — `next/dynamic` in 9 files, zero `React.lazy`** *(PRD 22 re-audit 2026-08-08)*. Note the qualifier: **library-level splitting is already established and is not a gap** — Mermaid (`MermaidDiagram.tsx:48`), xterm + 2 addons (`Terminal.tsx:22-24`), WebContainer (`useWebContainer.ts:70`, `browserRuntime/factory.ts:85`, both `webcontainer/connect` pages), onnxruntime-web (`voiceEngine.ts:54`) and y-monaco (`CodeEditor.tsx:75`) are all dynamically imported, 57 `await import()` sites in total. The gap is that runtime `import()` inside an already-loaded client module defers a *library*, whereas `next/dynamic`/`React.lazy` defers a *component subtree* including everything it statically imports — which is what PRD 22 §3.1 requires, and that exists in only 4 files (`app/ide/[id]/page.tsx`, `CodeEditor.tsx`, `agent/FileChangeViewer.tsx`, `creation-canvas/CanvasBuildPanel.tsx`) with zero `React.lazy`. Fix = scope PRD 22 Phase 1 as *introduction of the component-level pattern* with a per-route owner list (training, 3D, voice, game, Studio panels), sequenced after the RSC conversion so the gain is attributable. Unblocks: correctly-sized Phase 1 estimates.
 - **A catalog key was written as a per-locale MAP inside every catalog, and next-intl cannot resolve it** *(found 2026-08-20 running `messages.test.ts`)*. `widgets.title.autoVerdictMissRate` and `widgets.title.autoVerdictByAgent` were each stored as `{en, zh, es, fr, de}` — one object, copied identically into all five files — so `t()` returned an object where a string was expected and both widget titles rendered as the raw key in every language. It is the ad-hoc per-locale map the standing rule names explicitly, and it survived because nothing type-checks a catalog leaf. Flattened this pass and the suite is green; what is NOT closed is the guard: `messages.test.ts` catches a MISSING key and a key that merely copies English, and had no assertion for a leaf that is not a string at all. Fix = assert every leaf's type when walking the catalogs. Unblocks: the next one of these failing at authoring time rather than in front of a user.
 
@@ -992,8 +1059,6 @@ follows is what closing them surfaced.*
 > What is left is shrink-only debt with a named owner per file: the ratchets hold the line, and the
 > balance only moves when somebody touching a surface moves it.
 
-- **`check:design-scale` has one leg over its baseline: `offScaleFontSizes` is 3,807 against 3,767 (+40).** *(re-measured 2026-08-22)* The colour and radius legs are clean — the one literal hex the previous reading recorded (`components/creation-canvas/CanvasFacilitateSurface.module.css`, `var(--surface, #fff)`) is now a bare token, so `literalHexFiles` is back to 0. What is left is the type ramp, and it is a different KIND of work: 40 off-scale sizes (down from 59 as the surfaces that landed with the last commit are worked through), worst offenders `components/settings/MyLlmsContent.tsx` (16), `components/qa/QaQualitySections.tsx` (13) and `components/security/PasskeysPanel.tsx` (13). Fix = move each size onto a role in the ramp, per file — a visual change on surfaces somebody has to look at, not a codemod. **Not blocked.** Unblocks: `frontend npm run check` going green, which today hides whatever lands next.
-- **`check:architecture` is over its baseline on four counts.** *(re-measured 2026-08-22)* `'use client'` files are **833 against a baseline of 808** (+25 — `CareerAiClient`, `app/disputes`, `app/freelancer/{disputes,earnings}`, `IncidentTopologySection`, `WhyLadderSection`, `DeepLinkPickerClient`, `LtiLaunchClient`, `PublishGigClient`, `PromptUseActions`, `ReferencesClient`, `ShortlistClient`, `app/workforce/hire`, `SuspectAccountsPanel`, `TenantPremiumCapEditor`, `BlogResumeTemplates`, `BuildStatusBadge` among them); one new `presentation → infrastructure` import (`components/repos/githubActionsSurface.tsx`); and three new files over 800 lines (`components/board/BoardConfigPanel.tsx`, `components/ProjectDetailsPanel.tsx`, `lib/freelancerApi.ts`). All arrived with the 2026-08-20 commit. **Not blocked, but it is a JUDGEMENT rather than a bump**: PRD 22's whole case (the frontend-architecture entries above) is that a client-rooted page drags its import subtree into the client bundle, so raising the baseline by 25 concedes the very thing the ratchet exists to measure. Each of the 25 needs classifying as genuinely-interactive-at-root or client-by-accident before the number moves in either direction.
 
 ### 🛡️ Cloudflare serves a managed challenge to every datacenter caller of the whole `builderforce.ai` zone *(found 2026-08-08)*
 

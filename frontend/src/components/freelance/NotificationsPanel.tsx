@@ -4,7 +4,7 @@ import { Icon } from '@/components/ui/Icon';
 import { useEffect, useState, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/AuthContext';
-import { listNotifications, markNotificationsRead, type Notification } from '@/lib/freelancerApi';
+import { listNotifications, markNotificationsRead, type Notification } from '@/lib/freelance/billing';
 
 /**
  * Shared in-app notification feed for BOTH sides of the marketplace (worker gigs +

@@ -7,10 +7,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import {
-  createJobAlert, deleteJobAlert, listJobAlerts, updateJobAlert,
-  type JobAlert,
-} from '@/lib/freelancerApi';
+import { createJobAlert, deleteJobAlert, listJobAlerts, updateJobAlert, type JobAlert } from '@/lib/freelance/jobSeeker';
 
 const card: React.CSSProperties = {
   background: 'var(--bg-base)', border: '1px solid var(--border-subtle)',

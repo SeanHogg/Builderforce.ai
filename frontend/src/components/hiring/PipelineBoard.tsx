@@ -43,7 +43,7 @@ export function PipelineBoard({ board, view, busyCandidateRef, onOpenCandidate, 
   if (board.totalOpen === 0) {
     return (
       <div style={{ ...cardStyle, textAlign: 'center', padding: 32 }}>
-        <p style={{ fontSize: 14, fontWeight: 600, margin: 0 }}>{t('board.emptyTitle')}</p>
+        <p style={{ fontSize: 'var(--font-size-body)', fontWeight: 600, margin: 0 }}>{t('board.emptyTitle')}</p>
         <p style={{ ...mutedStyle, marginTop: 6 }}>{t('board.emptyBody')}</p>
       </div>
     );
@@ -72,7 +72,7 @@ export function PipelineBoard({ board, view, busyCandidateRef, onOpenCandidate, 
           }}
         >
           <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-            <h3 style={{ fontSize: 13, fontWeight: 700, margin: 0, textTransform: 'capitalize' }}>{column.stage}</h3>
+            <h3 style={{ fontSize: 'var(--font-size-small)', fontWeight: 700, margin: 0, textTransform: 'capitalize' }}>{column.stage}</h3>
             <span style={chipStyle}>{column.cards.length}</span>
           </header>
           {column.cards.length === 0 ? (
@@ -106,7 +106,7 @@ function CandidateCard({
         onClick={onOpen}
         style={{
           all: 'unset', cursor: 'pointer', display: 'block', width: '100%',
-          fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', wordBreak: 'break-word',
+          fontSize: 'var(--font-size-small)', fontWeight: 600, color: 'var(--text-primary)', wordBreak: 'break-word',
         }}
       >
         {candidateLabel(card.headline, card.candidateRef)}
@@ -128,7 +128,7 @@ function CandidateCard({
           disabled={busy}
           onChange={(event) => onMove(event.target.value)}
           style={{
-            width: '100%', fontSize: 12, padding: '5px 8px',
+            width: '100%', fontSize: 'var(--font-size-small)', padding: '5px 8px',
             border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)',
             background: 'var(--bg-base)', color: 'var(--text-primary)',
           }}
@@ -181,7 +181,7 @@ function BoardTable({
                     disabled={busyCandidateRef === card.candidateRef}
                     onChange={(event) => onMove(card, event.target.value)}
                     style={{
-                      fontSize: 12, padding: '4px 8px',
+                      fontSize: 'var(--font-size-small)', padding: '4px 8px',
                       border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)',
                       background: 'var(--bg-base)', color: 'var(--text-primary)',
                     }}

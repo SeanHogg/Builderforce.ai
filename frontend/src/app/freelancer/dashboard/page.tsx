@@ -15,12 +15,11 @@ import { useAvailableForHire } from '@/lib/rbac';
 import { useAuth } from '@/lib/AuthContext';
 import { useOnboardingPrompt } from '@/lib/onboarding';
 import { OnboardingStepper } from '@/components/OnboardingStepper';
-import {
-  listMyEngagements, listMyInvoices, getTodayActivity, type Engagement, type Invoice,
-} from '@/lib/freelancerApi';
+import { listMyInvoices, type Invoice } from '@/lib/freelance/billing';
+import { listMyEngagements, getTodayActivity, type Engagement } from '@/lib/freelance/engagements';
 import {
   listMyTimecards, type Timecard,
-} from '@/lib/freelancerTimecardsApi';
+} from '@/lib/freelance/timecards';
 import { useMoneyFormat } from '@/lib/useMoneyFormat';
 import { MyMilestonesPanel } from '@/components/freelance/MilestoneSchedulePanel';
 import { listMyMilestones, type MilestoneRow } from '@/lib/milestonesApi';
@@ -52,7 +51,7 @@ const TIMECARD_TONE: Record<Timecard['status'], string> = {
  * engagements, billable hours, paid + pending earnings) with honest 14-day trend
  * sparklines derived from data already fetched, then two tabs: My Work
  * (engagements) and My Timecards. Reuses the shared InsightStat/TabCountBadge
- * primitives and the freelancerApi worker endpoints (web-token scoped) — no new
+ * primitives and the `lib/freelance/*` worker endpoints (web-token scoped) — no new
  * fetch surface.
  */
 export default function FreelancerDashboardPage() {

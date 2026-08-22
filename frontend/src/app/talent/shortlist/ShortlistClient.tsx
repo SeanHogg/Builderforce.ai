@@ -22,7 +22,8 @@ import { ShortlistPanel } from '@/components/talent/ShortlistPanel';
 import { TalentRecommendations } from '@/components/talent/TalentRecommendations';
 import { JobInvitesPanel } from '@/components/talent/JobInvitesPanel';
 import { ProposalEvalLensPanel } from '@/components/talent/ProposalEvalLensPanel';
-import { inviteToJob, listMyJobs, type JobPosting } from '@/lib/freelancerApi';
+import { inviteToJob } from '@/lib/freelance/invites';
+import { listMyJobs, type JobPosting } from '@/lib/freelance/postings';
 
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)', border: '1px solid var(--border-subtle)',

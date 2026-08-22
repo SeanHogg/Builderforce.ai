@@ -1,0 +1,22 @@
+import { chromium } from '@playwright/test';
+const browser = await chromium.launch();
+const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
+page.on('console', m => console.log('CONSOLE', m.type(), m.text().slice(0, 400)));
+page.on('pageerror', e => console.log('PAGEERROR', String(e.stack || e).slice(0, 1200)));
+page.on('requestfailed', r => console.log('REQFAILED', r.url().slice(0,160), r.failure()?.errorText));
+page.on('response', r => { if (r.status() >= 400) console.log('HTTP', r.status(), r.url().slice(0,160)); });
+await page.goto('https://builderforce.ai/', { waitUntil: 'load' });
+await page.waitForTimeout(6000);
+console.log('--- clicking footer/nav link ---');
+const before = page.url();
+await page.evaluate(() => {
+  const a = document.querySelector('a[href="/pricing"]');
+  if (a) a.click(); else console.log('no /pricing link');
+});
+await page.waitForTimeout(4000);
+console.log('URL', before, '->', page.url());
+console.log('--- direct nav to /pricing ---');
+const resp = await page.goto('https://builderforce.ai/pricing', { waitUntil: 'domcontentloaded' });
+console.log('direct status', resp?.status(), page.url());
+await page.waitForTimeout(3000);
+await browser.close();

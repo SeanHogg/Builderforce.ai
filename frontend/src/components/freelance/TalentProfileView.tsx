@@ -5,7 +5,7 @@ import { RatingStars } from '@/components/freelance/RatingStars';
 import { TrustBadge } from '@/components/freelance/TrustBadge';
 import { ProfileAvatar } from '@/components/profile/ProfileIdentityCard';
 import { ResumeDocumentView } from '@/components/resume/ResumeDocumentView';
-import type { FreelancerProfile, FreelancerStats } from '@/lib/freelancerApi';
+import type { FreelancerProfile, FreelancerStats } from '@/lib/freelance/talentProfile';
 import { useMoneyFormat } from '@/lib/useMoneyFormat';
 import { useFormat } from "@/i18n/useFormat";
 

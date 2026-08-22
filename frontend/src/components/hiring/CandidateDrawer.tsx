@@ -114,10 +114,10 @@ function ResumeSection({ dossier }: { dossier: AtsCandidateDossier }) {
   const { resume, application } = dossier;
   return (
     <section style={cardStyle}>
-      <h3 style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>{t('drawer.resumeTitle')}</h3>
+      <h3 style={{ fontSize: 'var(--font-size-small)', fontWeight: 700, margin: 0 }}>{t('drawer.resumeTitle')}</h3>
       {resume ? (
         <>
-          {resume.headline && <p style={{ fontSize: 13, marginTop: 6, marginBottom: 0 }}>{resume.headline}</p>}
+          {resume.headline && <p style={{ fontSize: 'var(--font-size-small)', marginTop: 6, marginBottom: 0 }}>{resume.headline}</p>}
           {resume.skills.length > 0 && (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
               {resume.skills.slice(0, 24).map((skill) => <span key={skill} style={chipStyle}>{skill}</span>)}
@@ -129,8 +129,8 @@ function ResumeSection({ dossier }: { dossier: AtsCandidateDossier }) {
       )}
       {application.coverLetter && (
         <>
-          <h4 style={{ fontSize: 12, fontWeight: 700, marginTop: 12, marginBottom: 4 }}>{t('drawer.coverLetter')}</h4>
-          <p style={{ fontSize: 13, whiteSpace: 'pre-wrap', margin: 0 }}>{application.coverLetter}</p>
+          <h4 style={{ fontSize: 'var(--font-size-small)', fontWeight: 700, marginTop: 12, marginBottom: 4 }}>{t('drawer.coverLetter')}</h4>
+          <p style={{ fontSize: 'var(--font-size-small)', whiteSpace: 'pre-wrap', margin: 0 }}>{application.coverLetter}</p>
         </>
       )}
     </section>
@@ -151,7 +151,7 @@ function DecisionSection({
 
   return (
     <section style={cardStyle}>
-      <h3 style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>{t('decision.title')}</h3>
+      <h3 style={{ fontSize: 'var(--font-size-small)', fontWeight: 700, margin: 0 }}>{t('decision.title')}</h3>
       <p style={{ ...mutedStyle, marginTop: 4 }}>{t('decision.explainer')}</p>
 
       <RoleGate capability="hiring.manage" variant="block" style={{ marginTop: 10 }}>
@@ -194,7 +194,7 @@ function DecisionSection({
                 <span style={chipStyle}>{t(`decision.kind.${entry.decision}` as never)}</span>
                 <span style={mutedStyle}>{fmt.dateTime(entry.decidedAt)}</span>
               </div>
-              {entry.rationale && <p style={{ fontSize: 13, margin: '4px 0 0' }}>{entry.rationale}</p>}
+              {entry.rationale && <p style={{ fontSize: 'var(--font-size-small)', margin: '4px 0 0' }}>{entry.rationale}</p>}
             </li>
           ))}
         </ul>
@@ -226,12 +226,12 @@ function OfferSection({
 
   return (
     <section style={cardStyle}>
-      <h3 style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>{t('offer.title')}</h3>
+      <h3 style={{ fontSize: 'var(--font-size-small)', fontWeight: 700, margin: 0 }}>{t('offer.title')}</h3>
 
       {offers.map((offer) => (
         <div key={offer.id} style={{ borderTop: '1px solid var(--border-subtle)', marginTop: 10, paddingTop: 10 }}>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            <strong style={{ fontSize: 13 }}>{offer.title}</strong>
+            <strong style={{ fontSize: 'var(--font-size-small)' }}>{offer.title}</strong>
             <span style={chipStyle}>{t(`offer.status.${offer.status}` as never)}</span>
             {offer.signatureRequestId !== null && <span style={chipStyle}>{t('offer.signatureRef', { id: offer.signatureRequestId })}</span>}
           </div>

@@ -102,7 +102,7 @@ export function WorkingCalendarSettings() {
   return (
     <div style={panelStyle}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
-        <strong style={{ fontSize: '0.95rem', color: 'var(--text-primary)' }}>{t('title')}</strong>
+        <strong style={{ fontSize: 'var(--font-size-body)', color: 'var(--text-primary)' }}>{t('title')}</strong>
         <span style={mutedStyle}>{t('scopeNote')}</span>
         {!settings.configured && (
           <span style={{ ...mutedStyle, marginLeft: 'auto' }}>{t('usingDefault')}</span>
@@ -129,7 +129,7 @@ export function WorkingCalendarSettings() {
                   style={{
                     padding: '6px 12px',
                     borderRadius: 'var(--radius-md)',
-                    fontSize: '0.8rem',
+                    fontSize: 'var(--font-size-small)',
                     fontWeight: 600,
                     cursor: busy ? 'default' : 'pointer',
                     border: `1px solid ${on ? 'var(--accent)' : 'var(--border-subtle)'}`,
@@ -156,8 +156,8 @@ export function WorkingCalendarSettings() {
                   border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: '6px 10px',
                 }}
               >
-                <code style={{ fontSize: '0.8rem', color: 'var(--text-primary)' }}>{h.date}</code>
-                <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', minWidth: 0, wordBreak: 'break-word' }}>
+                <code style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-primary)' }}>{h.date}</code>
+                <span style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)', minWidth: 0, wordBreak: 'break-word' }}>
                   {h.name || t('unnamedHoliday')}
                 </span>
                 <button
@@ -210,22 +210,22 @@ const panelStyle: React.CSSProperties = {
   padding: 16,
   minWidth: 0,
 };
-const mutedStyle: React.CSSProperties = { color: 'var(--text-muted)', fontSize: '0.8rem' };
+const mutedStyle: React.CSSProperties = { color: 'var(--text-muted)', fontSize: 'var(--font-size-small)' };
 const labelStyle: React.CSSProperties = {
-  fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4,
+  fontSize: 'var(--font-size-small)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4,
   color: 'var(--text-muted)', marginBottom: 8, padding: 0,
 };
 const controlStyle: React.CSSProperties = {
   padding: '7px 10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',
-  background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: '0.85rem', maxWidth: '100%',
+  background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: 'var(--font-size-small)', maxWidth: '100%',
 };
 const ghostBtnStyle: React.CSSProperties = {
   padding: '7px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',
-  background: 'transparent', color: 'var(--text-secondary)', fontWeight: 600, fontSize: '0.8rem',
+  background: 'transparent', color: 'var(--text-secondary)', fontWeight: 600, fontSize: 'var(--font-size-small)',
   cursor: 'pointer', whiteSpace: 'nowrap',
 };
 const noticeStyle: React.CSSProperties = {
-  borderRadius: 'var(--radius-md)', padding: '8px 10px', fontSize: '0.82rem', marginBottom: 12,
+  borderRadius: 'var(--radius-md)', padding: '8px 10px', fontSize: 'var(--font-size-small)', marginBottom: 12,
 };
 const toneDanger: React.CSSProperties = { background: 'var(--danger-bg)', color: 'var(--danger-text)' };
 const toneSuccess: React.CSSProperties = { background: 'var(--success-bg)', color: 'var(--success-text)' };

@@ -1,10 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import {
-  getMyFreelancerProfileCached, invalidateMyFreelancerProfile,
-  updateMyFreelancerProfile, type FreelancerProfile,
-} from '@/lib/freelancerApi';
+import { getMyFreelancerProfileCached, invalidateMyFreelancerProfile, updateMyFreelancerProfile, type FreelancerProfile } from '@/lib/freelance/talentProfile';
 
 /**
  * Read-through cache for the signed-in user's own for-hire profile.

@@ -60,8 +60,30 @@ function underPrefix(pathname: string, prefix: string): boolean {
  * as "everything UNDER this route", so `/pricing` and `/features` stay app routes
  * while `/p/<slug>` and `/f/<slug>` do not. A bare `/p` here would silently swallow
  * every route beginning with p.
+ *
+ * The TOKEN-CREDENTIAL surfaces, added for the same reason `/f/` and `/p/` were
+ * and found the same way: each one's own doc comment says "unauthenticated by
+ * construction — the recipient has no session, so the token IS the credential",
+ * and every one of them was nonetheless classified as an app route. A signer
+ * opening `/sign/<token>`, a customer opening `/invoice/<ref>?t=…`, a firm
+ * opening a data room, a referee opening a reference request, a recruiter
+ * opening a resume link — all of them got the "This is part of Builderforce.ai"
+ * teaser, because the page never mounted. Their ONLY audience could not reach
+ * them, which is the whole defect class this list exists to close.
+ *
+ * `/lti/` is the same argument arriving from a learning management system. Both
+ * routes render inside the LMS's iframe, where our cookie is a blocked
+ * third-party cookie by design: `/lti/deep-link` is authenticated by the signed
+ * envelope in the URL and nothing else, and `/lti/launch` is the page a launch
+ * lands on precisely WHEN it was declined — a learner, or a platform that
+ * released no email address. Teasing it replaced the sentence explaining why
+ * they were turned away with an advert for the product that turned them away.
+ *
+ * Trailing slashes throughout: these are the sub-trees, not the app routes above
+ * them. `/references` is the requester's console and stays an app route; only
+ * `/references/shared/<token>` is the referee's page.
  */
-const NO_CHROME_PREFIXES = ['/embed', '/webcontainer', '/auth/', '/book', '/deal', '/f/', '/p/'];
+const NO_CHROME_PREFIXES = ['/embed', '/webcontainer', '/auth/', '/book', '/deal', '/f/', '/p/', '/sign/', '/invoice/', '/resume/', '/data-rooms/shared/', '/legal-documents/shared/', '/references/shared/', '/lti/'];
 
 /**
  * The framed cross-origin surface — the VS Code webview and third-party hosts.
@@ -89,6 +111,13 @@ export function isFramedEmbed(pathname: string): boolean {
 // visitor who followed that button got the "This is part of Builderforce.ai"
 // teaser instead of the page the button promised. Same defect class as the
 // reference surfaces above, found while giving it the marketing column.
+// `/salary` is the LARGEST programmatic-SEO surface the sitemap submits — every
+// role page plus every role x city leaf, hundreds of URLs — and every one of them
+// served the RouteMarketing teaser instead of the guide. The pages are async
+// server components reading `getSalaryDirectory()` with no session anywhere in
+// them, so the whole programme was filing hundreds of URLs of identical
+// duplicate content under hundreds of names. `check-public-surface.mjs` now
+// asserts sitemap membership and this list agree, so it cannot recur silently.
 // `/skills/` and `/personas/` carry a TRAILING SLASH on purpose, and the
 // distinction is the whole fix for [per-entity SEO]. `underPrefix` treats a
 // trailing-slash prefix as "everything UNDER this route, not the route itself",
@@ -106,7 +135,7 @@ export function isFramedEmbed(pathname: string): boolean {
 // to be client components to fetch at all. So: index → teaser (indexed once),
 // detail → real page (indexed per entity). Sitemap and teaser registry agree
 // because neither list changed for the index routes.
-const PUBLIC_SHELL_PREFIXES = ['/about', '/legal', '/product', '/blog', '/tutorials', '/agents', '/pricing', '/compare', '/marketplace', '/talent', '/prompts', '/models', '/diagnostics', '/tools', '/evermind', '/media', '/sell-builderforce', '/book-demo', '/demo', '/creation-canvas', '/crm/phone', '/skills/', '/personas/'];
+const PUBLIC_SHELL_PREFIXES = ['/about', '/legal', '/product', '/blog', '/tutorials', '/agents', '/pricing', '/compare', '/marketplace', '/talent', '/prompts', '/models', '/diagnostics', '/tools', '/evermind', '/media', '/sell-builderforce', '/book-demo', '/demo', '/creation-canvas', '/crm/phone', '/salary', '/skills/', '/personas/'];
 
 /**
  * Routes an ANONYMOUS visitor gets the OPERATOR shell for, not marketing chrome.

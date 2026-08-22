@@ -5,12 +5,10 @@ import { useEffect, useState, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
 import PageContainer from '@/components/PageContainer';
 import { Select } from '@/components/Select';
-import {
-  listMyEngagements, getTodayActivity, logMeeting, type Engagement,
-} from '@/lib/freelancerApi';
+import { listMyEngagements, getTodayActivity, logMeeting, type Engagement } from '@/lib/freelance/engagements';
 import {
   listMyTimecards, resolveTimecard, submitTimecard, listTimecardEntries, addTimecardEntry, updateTimecardEntry, deleteTimecardEntry, type Timecard, type TimecardEntry,
-} from '@/lib/freelancerTimecardsApi';
+} from '@/lib/freelance/timecards';
 import { useMoneyFormat } from '@/lib/useMoneyFormat';
 
 const card: React.CSSProperties = {

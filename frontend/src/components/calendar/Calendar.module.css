@@ -118,7 +118,7 @@
 .error { color: var(--error-text); background: var(--error-bg); }
 
 .calendar[data-variant='card'] .summary,
-.calendar[data-variant='card'] .error { font-size: 10px; padding: 2px var(--cal-pad); }
+.calendar[data-variant='card'] .error { font-size: var(--font-size-field-label); padding: 2px var(--cal-pad); }
 
 .body {
   position: relative;
@@ -136,7 +136,7 @@
   pointer-events: none;
 }
 
-.calendar[data-variant='card'] .empty { inset: auto 0 2px 0; font-size: 10px; }
+.calendar[data-variant='card'] .empty { inset: auto 0 2px 0; font-size: var(--font-size-field-label); }
 
 /* ── Month ──────────────────────────────────────────────────────────────────── */
 
@@ -151,7 +151,7 @@
 }
 
 .weekdays span { padding: 4px 0; font-size: var(--font-size-small); }
-.calendar[data-variant='card'] .weekdays span { font-size: 9px; padding: 1px 0; }
+.calendar[data-variant='card'] .weekdays span { font-size: var(--font-size-field-label); padding: 1px 0; }
 
 /*
  * A week is a grid of seven day CELLS with a bar layer stacked over it. The bars have to
@@ -189,7 +189,7 @@
   margin-top: auto;
   padding: 0 4px;
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: var(--font-size-field-label);
 }
 
 .bars {
@@ -228,7 +228,7 @@
   pointer-events: auto;
 }
 
-.calendar[data-variant='card'] .pill { font-size: 9px; padding: 0 3px; border-left-width: 2px; gap: 2px; }
+.calendar[data-variant='card'] .pill { font-size: var(--font-size-field-label); padding: 0 3px; border-left-width: 2px; gap: 2px; }
 
 .pill:hover { background: var(--surface-interactive-hover); }
 .pill:focus-visible { outline: 2px solid var(--focus-color); outline-offset: 1px; }
@@ -535,7 +535,7 @@
 .sourcePicker option { background: var(--surface); color: var(--text-primary); }
 
 .calendar[data-variant='card'] .sourcePicker > span { display: none; }
-.calendar[data-variant='card'] .sourcePicker select { max-width: 96px; font-size: 10px; min-height: 22px; }
+.calendar[data-variant='card'] .sourcePicker select { max-width: 96px; font-size: var(--font-size-field-label); min-height: 22px; }
 
 /* ── Narrow viewports ───────────────────────────────────────────────────────── */
 

@@ -352,10 +352,7 @@ function ShellContent({ children }: { children: React.ReactNode }) {
   return <>{useShellContent(children)}</>;
 }
 
-function AppBrainShell({ children, qualityEndpoint }: {
-  children: React.ReactNode;
-  qualityEndpoint: string;
-}) {
+function AppBrainShell({ children }: { children: React.ReactNode }) {
   const { hasTenant, isAuthenticated } = useAuth();
   const pathname = usePathname() || '';
   // Whether THIS route's shell renders the persistent stage. Derived rather than
@@ -421,7 +418,7 @@ function AppBrainShell({ children, qualityEndpoint }: {
           <DevexPanelProvider>
           <BrainActionsProvider>
             <BrainContextProvider>
-              <ReportErrorProvider endpoint={qualityEndpoint}>
+              <ReportErrorProvider>
               <ShellContent>{children}</ShellContent>
               {/* BurnRateOS consolidation: one anonymous-only exit-intent capture
                   across every non-embed surface, backed by the canonical
@@ -511,10 +508,7 @@ function AppBrainShell({ children, qualityEndpoint }: {
   );
 }
 
-export default function ConditionalAppShell({ children, qualityEndpoint }: {
-  children: React.ReactNode;
-  qualityEndpoint: string;
-}) {
+export default function ConditionalAppShell({ children }: { children: React.ReactNode }) {
   // `/embed` is framed cross-origin (VS Code webview / third-party host) and gets a
   // lean provider tree (no global Brain launcher/bridges) so a webview-hostile
   // global effect can't take the framed page down with it; every other route gets
@@ -524,7 +518,7 @@ export default function ConditionalAppShell({ children, qualityEndpoint }: {
   return isFramedEmbed(pathname) ? (
     <EmbedShell>{children}</EmbedShell>
   ) : (
-    <AppBrainShell qualityEndpoint={qualityEndpoint}>
+    <AppBrainShell>
       {children}
     </AppBrainShell>
   );

@@ -31,7 +31,7 @@ const cardStyle: React.CSSProperties = {
 
 const tabStyle = (active: boolean): React.CSSProperties => ({
   padding: '4px 10px',
-  fontSize: 11,
+  fontSize: 'var(--font-size-eyebrow)',
   fontWeight: 600,
   background: active ? 'var(--surface-interactive)' : 'none',
   color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
@@ -69,7 +69,7 @@ export function ProjectSpendWidget({ projectId }: { projectId: number }) {
   return (
     <section style={cardStyle} aria-label={t('title')}>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center', justifyContent: 'space-between' }}>
-        <h2 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>{t('title')}</h2>
+        <h2 style={{ fontSize: 'var(--font-size-small)', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>{t('title')}</h2>
         <div style={{ display: 'flex', gap: 6 }}>
           {WINDOWS.map((w) => (
             <button
@@ -86,30 +86,30 @@ export function ProjectSpendWidget({ projectId }: { projectId: number }) {
       </div>
 
       {!data ? (
-        <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '12px 0 0' }}>{t('loading')}</p>
+        <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', margin: '12px 0 0' }}>{t('loading')}</p>
       ) : data.requests === 0 ? (
-        <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '12px 0 0' }}>{t('empty')}</p>
+        <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', margin: '12px 0 0' }}>{t('empty')}</p>
       ) : (
         <>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 20, marginTop: 12 }}>
             <div>
-              <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)' }}>
+              <div style={{ fontSize: 'var(--font-size-section)', fontWeight: 700, color: 'var(--text-primary)' }}>
                 ${data.costUsd.toFixed(2)}
               </div>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('cost')}</div>
+              <div style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)' }}>{t('cost')}</div>
             </div>
             <div>
-              <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)' }}>{compact(data.totalTokens)}</div>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('tokens')}</div>
+              <div style={{ fontSize: 'var(--font-size-section)', fontWeight: 700, color: 'var(--text-primary)' }}>{compact(data.totalTokens)}</div>
+              <div style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)' }}>{t('tokens')}</div>
             </div>
             <div>
-              <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)' }}>{compact(data.requests)}</div>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('requests')}</div>
+              <div style={{ fontSize: 'var(--font-size-section)', fontWeight: 700, color: 'var(--text-primary)' }}>{compact(data.requests)}</div>
+              <div style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)' }}>{t('requests')}</div>
             </div>
           </div>
 
           {data.byoTokens > 0 && (
-            <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: '10px 0 0' }}>
+            <p style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-secondary)', margin: '10px 0 0' }}>
               {t('byoNote', { tokens: compact(data.byoTokens) })}
             </p>
           )}
@@ -119,7 +119,7 @@ export function ProjectSpendWidget({ projectId }: { projectId: number }) {
               {data.topModels.map((m) => (
                 <li
                   key={m.model}
-                  style={{ display: 'flex', gap: 10, justifyContent: 'space-between', fontSize: 11, color: 'var(--text-secondary)' }}
+                  style={{ display: 'flex', gap: 10, justifyContent: 'space-between', fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-secondary)' }}
                 >
                   <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.model}</span>
                   <span style={{ flexShrink: 0, color: 'var(--text-muted)' }}>

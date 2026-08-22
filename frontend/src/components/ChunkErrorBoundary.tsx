@@ -8,6 +8,7 @@ import {
   recoverFromChunkError,
   chunkRecoveryAlreadyAttempted,
 } from '@/lib/chunkErrorRecovery';
+import { reportRenderCrash } from '@/lib/reportError';
 
 /**
  * Boundary that self-heals webpack ChunkLoadError / stale-asset crashes.
@@ -38,10 +39,16 @@ export class ChunkErrorBoundary extends Component<Props, State> {
     return { error };
   }
 
-  componentDidCatch(error: Error) {
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
     // Fire recovery from a lifecycle method (side effects are allowed here, not
     // in render). Loop-guarded inside recoverFromChunkError.
-    if (isChunkLoadError(error)) void recoverFromChunkError();
+    if (!isChunkLoadError(error)) return;
+    // Report BEFORE the reload: a chunk error that self-heals is invisible to
+    // the user and was invisible to us too, which is exactly how a stale-deploy
+    // regression stays unmeasured. A non-chunk error is re-thrown by render()
+    // and reported once by the generic boundary above, so only ours is sent here.
+    reportRenderCrash(error, { boundary: 'ChunkErrorBoundary', componentStack: info.componentStack });
+    void recoverFromChunkError();
   }
 
   render() {

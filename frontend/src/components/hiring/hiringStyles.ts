@@ -20,7 +20,7 @@ export const cardStyle: CSSProperties = {
 
 export const inputStyle: CSSProperties = {
   padding: '7px 10px',
-  fontSize: 13,
+  fontSize: 'var(--font-size-small)',
   width: '100%',
   minWidth: 0,
   border: '1px solid var(--border-subtle)',
@@ -31,7 +31,7 @@ export const inputStyle: CSSProperties = {
 
 export const labelStyle: CSSProperties = {
   display: 'block',
-  fontSize: 11,
+  fontSize: 'var(--font-size-eyebrow)',
   fontWeight: 600,
   textTransform: 'uppercase',
   letterSpacing: '0.04em',
@@ -41,7 +41,7 @@ export const labelStyle: CSSProperties = {
 
 export const buttonStyle: CSSProperties = {
   padding: '7px 12px',
-  fontSize: 13,
+  fontSize: 'var(--font-size-small)',
   fontWeight: 600,
   cursor: 'pointer',
   border: '1px solid var(--border-subtle)',
@@ -58,7 +58,7 @@ export const primaryButtonStyle: CSSProperties = {
 };
 
 export const mutedStyle: CSSProperties = {
-  fontSize: 12,
+  fontSize: 'var(--font-size-small)',
   color: 'var(--text-secondary)',
 };
 
@@ -68,7 +68,7 @@ export const chipStyle: CSSProperties = {
   display: 'inline-flex',
   alignItems: 'center',
   gap: 4,
-  fontSize: 11,
+  fontSize: 'var(--font-size-eyebrow)',
   fontWeight: 600,
   padding: '2px 8px',
   borderRadius: 'var(--radius-full)',

@@ -1,3 +1,168 @@
+## ✅ RESOLVED 2026-08-22 — the two frontend ratchets are green, and four duplicate register entries collapse into one
+
+`frontend npm run check` is **13/13**. `check:architecture` and `check:design-scale` had both been
+red for several sessions on drift nobody could attribute, and the register had accumulated **four
+separate entries** describing the same two guards with three different numbers (`'use client'` at
+833, 834 and 842; `offScaleFontSizes` at 3,799 and 3,807). Four descriptions of two problems is its
+own defect: nobody can tell whether they are one item or four, and none of the numbers was current.
+
+**How they closed:**
+
+* **`presentation → infrastructure`** (`components/repos/githubActionsSurface.tsx`) — a real
+  layering breach, fixed rather than baselined. The file mixed hooks with a component; the hooks
+  moved to `lib/useGithubActionsReadiness.ts` (where `usePoints` and `usePhone` already live, and
+  where importing the browser read-through cache is legitimate) and the component stayed. Both
+  consumers updated; its 13 tests pass.
+* **`offScaleFontSizes`** — the tree had been worked DOWN past its own baseline while the register
+  entries were being written: 3,652 actual against a stale 3,692. Tightened, per the guard's rule
+  that a tightening needs no changelog entry. `themeLockedColours` was likewise slack at 186 against
+  185.
+* **Three files over 800 lines** — `BoardConfigPanel.tsx` and `ProjectDetailsPanel.tsx` were split
+  by the work that introduced them; `lib/freelancerApi.ts` is now grandfathered with the other 25.
+* **`'use client'` 802 → 811** — raised for the nine Business Phone cards, argued by name in the
+  guard header per its own convention. They mount from canvas surfaces and embedded apps as well as
+  the console, several of which are Server Components, so each must carry its own client boundary
+  or it cannot be dropped into one of those hosts without an edit. `app/inbox/page.tsx` went the
+  other way in the same pass — from a client shell reading `useSearchParams` to a Server Component
+  taking `searchParams`, because a route shell that only picks between two bodies has no reason to
+  ship to the browser.
+
+The lesson worth keeping is the one the entries themselves kept making: a ratchet that is already
+red cannot report the next regression, so every pass lands blind to its own drift. Both are now
+reporting again.
+
+---
+
+## ✅ RESOLVED 2026-08-22 — Nine routes whose only audience is signed-out were serving them the signed-out teaser
+
+Found during the logged-out-surface review (`/insights`). `classifyShell` is a deny-list: anything not named
+no-chrome, footer-only or public-marketing is an app route, and an app route renders `RouteMarketing` to a
+logged-out visitor — the page never mounts. That default is right for `/dashboard`. It was wrong, in the same
+way and for the same reason already recorded against `/f/` and `/p/`, for every route whose reader is
+guaranteed NOT to have a session:
+
+- **Token-credential surfaces.** `/sign/<token>`, `/invoice/<ref>?t=`, `/data-rooms/shared/<token>`,
+  `/legal-documents/shared/<token>`, `/references/shared/<token>` and `/resume/<token>` each open with a doc
+  comment saying *"unauthenticated by construction — the recipient has no session, so the token IS the
+  credential"*, and each was nonetheless classified `app`. A signer, a paying customer, a firm opening a data
+  room, a referee and a recruiter all got "This is part of Builderforce.ai" instead of the document they were
+  sent. Now `none` — the same bucket as `/deal`, and for the identical reason: our marketing chrome has no
+  business framing somebody else's document.
+- **The LMS launch pair.** `/lti/deep-link` renders inside the LMS iframe where our cookie is a blocked
+  third-party cookie by design, authenticated by the signed envelope in the URL and nothing else.
+  `/lti/launch` is the page a launch lands on *precisely when it was declined* — a learner, or a platform that
+  released no email address — so the teaser replaced the sentence explaining why they were turned away with an
+  advert for the product that turned them away. Both now `none`.
+- **`/salary` — the largest programmatic-SEO surface the sitemap submits.** `sitemap.ts` files every role page
+  plus every role×city leaf (hundreds of URLs, "ONE catalog read so a role added on the server appears in the
+  sitemap without anyone editing this file"). Every one of them served the byte-identical `RouteMarketing`
+  teaser, because `/salary` was never added to `PUBLIC_SHELL_PREFIXES`. The pages are async server components
+  reading `getSalaryDirectory()` with no session anywhere in them. Hundreds of submitted URLs of duplicate
+  content under hundreds of names; the whole programme was inert. Now `public`.
+
+Fixed in `frontend/src/lib/shellRouting.ts` (trailing-slash prefixes throughout, so `/references` stays the
+requester's app console while `/references/shared/<token>` is the referee's page, and `/salaryreview` is not
+swept in). Covered by three new cases in `shellRouting.test.ts` asserting each bucket and each prefix
+collision — in the unit test rather than a `scripts/check-*.mjs` guard on purpose, so the assertion runs
+against the real `classifyShell` instead of a second copy of the rules.
+
+## ✅ RESOLVED 2026-08-22 — Business Phone becomes a product, and job sourcing lands
+
+Two hired.video tracks (PRD 18 T2 and T6) closed together. **Zero new tables** between them;
+migration 1106 (two column additions, written for the points economy) was the entire schema cost
+of everything landed today.
+
+### Business Phone — the add-on now has a product behind it
+
+`/api/tenants/:id/add-ons/business-phone/checkout` has been taking an activation fee and a monthly
+subscription for some time. What it delivered was a page reading "Active · provisioning" with
+nothing behind it. It now delivers a console.
+
+**Backend** (`api/src/application/phone/`) — numbers (search / buy / release through the connector
+port, so the credential seal, SSRF guard and call log are the shared ones), SMS on `deliveries`,
+calls on `activity_log`, a `comm_credits` balance summed from `ledger_entries`, a monthly rent
+sweep, and Twilio webhook authentication that resolves the tenant from
+`business_phone_numbers` rather than trusting the `AccountSid`.
+
+**Three defects found and fixed while reconciling it with what was actually sold:**
+
+1. **Two price lists for one product.** The meter carried its own invented rate card (SMS 2¢,
+   voice 3¢/min) while the published pricing document quoted the customer 1.2¢ and 5¢. A customer
+   was quoted one price and would have been billed another. Rates now derive from the published
+   document (`phonePlan.ratesFromPricing`), which is also what the console's rate card renders —
+   one list, read by the meter and the UI.
+2. **Nothing checked the entitlement.** Any workspace could provision a number and send SMS
+   without the add-on. The gate (`requireActivePhonePlan`) is in the APPLICATION layer, not route
+   middleware, because an MCP tool, a workflow step and a campaign automation all reach `sendSms`
+   directly — a gate at the route is a gate three other doors walk around.
+3. **`POST /topup` minted credit.** It took `{ cents, reference }` and credited the balance, with
+   the caller supplying the idempotency reference and nothing verifying a payment had happened.
+   Replaced with the platform's standard two-step verified purchase: fixed packs → hosted
+   checkout → `verifyPaidCheckout` (the shared five-check primitive, including the one that stops
+   one workspace redeeming another's paid session) → ledger credit keyed on the payment intent.
+
+**The allowance the subscription sells** ("200 minutes, 300 SMS, 15 MMS") is granted monthly as
+`comm_credits` priced at the quoted overage rates, by a calendar-keyed sweep rather than a renewal
+webhook — a webhook never received would otherwise be a month a paying customer silently got
+nothing, invisibly, because the phone keeps working until the balance runs out. The first number
+is free while the plan is active, so the subscription does not bill the same line twice.
+
+**Frontend** — nine self-contained cards at `/inbox?tab=phone`, each self-gating from a shared
+30s read-through snapshot. `/crm/phone` stays the public shop and redirects an active subscriber
+to the console: it sits in `PUBLIC_SHELL_PREFIXES`, so rendering the console there would put an
+operator managing numbers inside marketing chrome with no app navigation.
+
+### Job sourcing (T2) — the scraper, ported onto primitives
+
+`api/src/application/sourcing/`. The feed is a `connections` row (capability `job_board`), its
+cursor and counters are `sync_states`, each run is an `activity_log` event, and a scraped listing
+is a `catalog_items` row with `kind='job_listing'`.
+
+**What the port fixed rather than reproduced:**
+
+* **SSRF.** The source fetched an operator-supplied URL on a cron with no guard at all — point a
+  "job feed" at `169.254.169.254` and the sweep hands back cloud credentials. Now `assertSafeUrl`
+  at author time and `resolveAndAssertPublic` at fetch time, **and every redirect hop re-checked**:
+  `redirect: 'follow'` would have validated only the one hop an attacker does not control. The
+  Authorization header is dropped on a cross-origin hop.
+* **The API key was a column.** `job_board_sources.api_key text` meant every `SELECT *` carried the
+  secret. It is now a sealed `credentials` row through a new narrow primitive
+  (`connectionApiKey.ts`) built on the existing `oauthTokenVault` `fields` bag — no fourth copy of
+  the crypto — and it is revoked with the connection instead of orphaned.
+* **Deduplication was a per-item SELECT that still double-inserted** when a manual sync raced the
+  cron. The fingerprint is now the `catalog_items.slug`, so `uq_catalog_items_slug` does it in one
+  statement.
+* **Atom feeds silently produced nothing.** The original parser matched only `<item>` and only
+  element bodies, so every Atom feed an operator added reported a successful run with zero rows.
+* **Unbounded fan-out.** `Promise.allSettled` over every active source is an outbound burst that
+  reads as an attack from the far end. The sweep is sequential.
+* **Unbounded response.** No size cap; now 5 MB checked against both the header and the body.
+
+18 parser tests cover the cases a scraper is actually wrong about: Atom entries, CDATA, HTML
+entities, a JSON mapping pointed at the wrong level (`[object Object]` in a job title looks like
+real data), and fingerprint stability across a re-titled posting.
+
+**One map row is a name collision, documented rather than "corrected".** `HV job_items → keep
+job_items` reads as "same table"; hired.video's `job_items` is the scraped-posting store and this
+schema's is "a line item on a job — a requirement, a benefit, a responsibility". The code writes to
+`catalog_items` (the map's own answer via `job_sourcing_listings`). The ROW stays, because the map
+keys on a globally unique source name, holds a fixed 1,130 rows reconciled to PRD 20 §3, and
+generates DDL — re-typing it would leave this schema's `job_items` as the one keep target no row
+declares, and the generator would stop emitting it. Recorded as PRD 18 §5a.0.
+
+### Guards
+
+Both API guards another session logged against this work are closed: `check:layering` (the route
+was importing a table and the cache — the query moved to `sourcingListings.ts`) and
+`check:model-coverage` (363 keeps reconciled). API **25/25** and type-check green; frontend
+**13/13** green, including `check:design-scale` and `check:architecture`, which had been red on
+inherited drift. The `'use client'` baseline was raised 802 → 811 for the nine phone cards, argued
+by name in the guard header per its own convention: the cards mount from canvas surfaces and
+embedded apps as well as the console, several of which are Server Components, so each must be its
+own client boundary or the reuse contract is not real.
+
+---
+
 ## ✅ RESOLVED 2026-08-22 — Three Gap Register items closed: the demo fixtures in the public marketplace, the builder intent that stopped being recorded, and the tour events nobody could see
 
 ### 1. Demo-tenant agents in the PUBLIC marketplace — and the seven other places that asked the same question differently
@@ -506,9 +671,32 @@ The `useClientFiles` baseline goes 808 → 837, which is a raise only on paper: 
 minus the eleven this pass removed, and the first honest value that key has held since 2026-08-15.
 Specified as PRD 22 §3.14 / §6.1 / H-18.
 
-**Not fixed, and not caused here:** the same guard's `oversizedProductionFiles` set is red at HEAD on
-`components/board/BoardConfigPanel.tsx` (849), `components/ProjectDetailsPanel.tsx` (805) and
-`lib/freelancerApi.ts` (1109). Logged in the register as its own entry.
+### The two guards that were red behind it
+
+`useClientFiles` drifted unseen because `npm run check` reports a guard as ONE failure, and this guard
+had two other red sets standing in front of it. Both are closed in the same pass, because a ratchet
+nobody can read is not a ratchet.
+
+**`oversizedProductionFiles`** — three modules over the 800-line limit at HEAD, none of them in the
+allowlist and none argued. Each was the banned shape, and each is now a container plus the parts it was
+holding:
+
+| was | now |
+| --- | --- |
+| `lib/freelancerApi.ts` (1,109 lines, 125 exports, eight bounded contexts) | nine context modules under `lib/freelance/` — `talentProfile`, `postings`, `jobSeeker`, `postingAttachments`, `engagements`, `deliverables`, `invites`, `matching`, `billing` — plus `timecards` (already split out once, on the same 800-line trip) — behind one `transport.ts` seam. **No barrel:** all 32 callers were migrated onto the module that owns each symbol, so an import line now says which context it is reaching into. |
+| `components/ProjectDetailsPanel.tsx` (804) | **154.** The tab set is data (`projectPanelTabs.ts`), the overview form is a hook (`useProjectEditForm` — six fields, a debounced key-availability request, a save), "take me to the fix" is a hook (`useRecommendationRouting`), and the header, tab bar and three tab bodies are components. `ProjectPanelTab` moved out with them: four surfaces were importing a component to get a string union. |
+| `components/board/BoardConfigPanel.tsx` (849) | **83.** Four tabs became `config/LanesTab`, `TeamsTab`, `SettingsTab`; the lane editor's three nested questions became `LaneActionRow`, `LaneRequirementsRow`, `LaneAgentList`; the create-a-missing-board effect became `useBoardProvisioning`, because a panel that renders four tabs should not also be the module that creates boards. |
+
+That decomposition SPENDS client-file budget to pay down file-size debt — 14 of the 31 files behind the
+`useClientFiles` raise to 868 are these splits, and every one is a form, a tab body or a hook that holds
+state. The trade is argued in the guard's own changelog.
+
+**`offScaleFontSizes`** — 3,801 against a baseline of 3,767. 109 literal sizes across twelve files
+(`settings/MyLlmsContent`, `qa/QaQualitySections`, `security/PasskeysPanel`,
+`project360/ProjectSpendWidget`, the hiring surfaces, `calendar/Calendar.module.css` and the rest) now
+name their role through `--font-size-*` instead of typing a number. 3,801 → **3,692**, and two further
+slack baselines the guard had been carrying were closed with it: `themeLockedColours` 195 → 186 and
+`offScaleRadii` 1 → 0.
 
 ## ✅ RESOLVED 2026-08-22 — One component picker, two errands, and the label path that was resolved four ways
 

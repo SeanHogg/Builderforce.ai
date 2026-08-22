@@ -92,6 +92,40 @@ describe('classifyShell — app-shell deny-list model [1557]', () => {
     expect(classifyShell('/marketplace/agent/abc123')).toBe('public');
   });
 
+  it('mounts the token-credential surfaces for the recipient who holds the token', () => {
+    // Each of these pages documents itself as "unauthenticated by construction —
+    // the token IS the credential", and each was nonetheless classified `app`, so
+    // its ONLY audience got the marketing teaser and the page never mounted.
+    expect(classifyShell('/sign/abc123')).toBe('none');
+    expect(classifyShell('/invoice/INV-2026-001')).toBe('none');
+    expect(classifyShell('/resume/abc123')).toBe('none');
+    expect(classifyShell('/data-rooms/shared/abc123')).toBe('none');
+    expect(classifyShell('/legal-documents/shared/abc123')).toBe('none');
+    expect(classifyShell('/references/shared/abc123')).toBe('none');
+    // …while the CONSOLE the requester uses stays an ordinary app route. The
+    // trailing-slash prefix is what keeps those two apart.
+    expect(classifyShell('/references')).toBe('app');
+  });
+
+  it('mounts the LMS launch surfaces, which run without our cookie by design', () => {
+    // `/lti/deep-link` is authenticated by the signed envelope in the URL inside
+    // the LMS iframe; `/lti/launch` is the page a DECLINED launch lands on, so a
+    // session is the one thing its reader is guaranteed not to have.
+    expect(classifyShell('/lti/launch')).toBe('none');
+    expect(classifyShell('/lti/deep-link')).toBe('none');
+  });
+
+  it('serves the salary guides publicly, as the sitemap already promised', () => {
+    // The largest programmatic-SEO surface in `sitemap.ts` — every role plus
+    // every role x city leaf. All of them served the RouteMarketing teaser, so
+    // hundreds of submitted URLs were byte-identical duplicate content.
+    expect(classifyShell('/salary')).toBe('public');
+    expect(classifyShell('/salary/ai-engineer')).toBe('public');
+    expect(classifyShell('/salary/ai-engineer/london')).toBe('public');
+    // A prefix collision must not be swept in with them.
+    expect(classifyShell('/salaryreview')).toBe('app');
+  });
+
   it('renders known authenticated routes in the app shell', () => {
     expect(classifyShell('/dashboard')).toBe('app');
     expect(classifyShell('/projects')).toBe('app');

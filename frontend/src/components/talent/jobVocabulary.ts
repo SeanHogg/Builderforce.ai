@@ -2,7 +2,7 @@
  * The posting vocabularies the browser side needs, in ONE module.
  *
  * `EXPERIENCE_LEVELS`, `PROJECT_LENGTHS` and `JOB_SPECIALTIES` are declared in
- * `lib/freelancerApi.ts` beside the types they belong to; this re-exports them so a
+ * `lib/freelance/postings.ts` beside the types they belong to; this re-exports them so a
  * component imports a vocabulary from a vocabulary module rather than reaching into the
  * transport client for a constant. It also holds the two things only the UI needs: the
  * message-key builders, so a label is derived from a value rather than typed out at each
@@ -17,7 +17,7 @@ export {
   JOB_SPECIALTIES,
   type ExperienceLevel,
   type ProjectLength,
-} from '@/lib/freelancerApi';
+} from '@/lib/freelance/postings';
 
 /** The coarse top level. Same nine values every talent surface filters on. */
 export const JOB_DISCIPLINES = [

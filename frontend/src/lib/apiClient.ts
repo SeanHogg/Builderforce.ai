@@ -8,7 +8,7 @@
  * Before this was the single transport there were FIVE copies of the fetch
  * wrapper — `builderforceApi.request`/`webRequest` (imported by 236 modules),
  * `personaCadenceApi`, `emailPreferencesApi`, plus 72 raw `fetch()` calls in
- * `freelancerApi`. They had drifted, and the drift was invisible:
+ * the freelance client (now `lib/freelance/*`, behind its own `transport` seam). They had drifted, and the drift was invisible:
  *
  *   - only this copy sent `X-Emulation-Token`, so a superadmin emulating a user
  *     saw their OWN data on every screen served by the other clients;

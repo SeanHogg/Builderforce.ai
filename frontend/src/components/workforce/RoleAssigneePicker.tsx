@@ -12,7 +12,7 @@ import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/AuthContext';
 import { listMyAgents, listPurchasedAgents } from '@/lib/api';
 import { listTenantMembers } from '@/lib/auth';
-import { listEngagements } from '@/lib/freelancerApi';
+import { listEngagements } from '@/lib/freelance/engagements';
 import { kanbanApi } from '@/lib/builderforceApi';
 import { Select } from '@/components/Select';
 import type { AssigneeKind } from '@/lib/kanban';

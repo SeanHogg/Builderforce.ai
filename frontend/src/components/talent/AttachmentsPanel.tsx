@@ -20,7 +20,7 @@ import { useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Icon } from '@/components/ui/Icon';
 import { formatBytes } from './jobVocabulary';
-import type { PostingAttachment } from '@/lib/freelancerApi';
+import type { PostingAttachment } from '@/lib/freelance/postings';
 
 export function AttachmentsPanel({
   attachments,

@@ -21,10 +21,8 @@ import Link from 'next/link';
 import { Icon } from '@/components/ui/Icon';
 import { useMoneyFormat } from '@/lib/useMoneyFormat';
 import { MatchScore, MatchSkills } from './MatchScore';
-import {
-  inviteToJob, listJobRecommendations, listSavedTalent, saveTalent, unsaveTalent,
-  type TalentMatch,
-} from '@/lib/freelancerApi';
+import { inviteToJob, listSavedTalent, saveTalent, unsaveTalent } from '@/lib/freelance/invites';
+import { listJobRecommendations, type TalentMatch } from '@/lib/freelance/matching';
 
 const card: React.CSSProperties = {
   background: 'var(--bg-base)', border: '1px solid var(--border-subtle)',

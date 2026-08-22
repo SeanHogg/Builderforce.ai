@@ -1,5 +1,17 @@
 import { apiRequest } from './apiClient';
+import { AUTH_API_URL } from './auth';
 import { TRANSPORT_FAILURE_STATUS } from './errors/transportFailure';
+
+/**
+ * The ONE Product Quality ingest origin every reporter on the web app posts to.
+ *
+ * It was computed in the root layout and prop-drilled down to the reporter
+ * panel, which meant a surface that wanted to report an error had to be handed
+ * a value it could derive itself — and an error boundary, which sits ABOVE the
+ * props, could not report at all. It is a constant of the deployment, so it
+ * lives with the reporting functions that consume it.
+ */
+export const QUALITY_INGEST_ENDPOINT = `${AUTH_API_URL}/api/quality-ingest`;
 
 /** Fields to pre-fill the reporter when opened from an existing error. */
 export interface ReportErrorPrefill {
@@ -32,7 +44,7 @@ export interface ReportErrorInput {
  */
 export async function reportProductError(
   input: ReportErrorInput,
-  endpoint: string,
+  endpoint: string = QUALITY_INGEST_ENDPOINT,
 ): Promise<{ accepted: number }> {
   return sendProductError({ ...input, source: 'manual' }, endpoint);
 }
@@ -40,9 +52,45 @@ export async function reportProductError(
 /** Automatically persist a global API failure to the same product project. */
 export async function reportProductApiError(
   input: ReportErrorInput & { context?: Record<string, unknown> },
-  endpoint: string,
+  endpoint: string = QUALITY_INGEST_ENDPOINT,
 ): Promise<{ accepted: number }> {
   return sendProductError({ ...input, source: 'api-client' }, endpoint);
+}
+
+/**
+ * Persist a React render crash — the ONE class of front-end failure nothing was
+ * logging.
+ *
+ * An error boundary is the reason: it stops the exception before it reaches
+ * `window.onerror`, so the browser-error listeners in `QualityErrorReporter`
+ * never observe the crash that just replaced the whole page with a fallback.
+ * Every boundary calls this from `componentDidCatch`, which is where React
+ * permits side effects.
+ *
+ * Fire-and-forget by contract: a boundary is already the last line of defence,
+ * so a failed report must never throw a second error out of it.
+ */
+export function reportRenderCrash(
+  error: Error,
+  details: { boundary: string; componentStack?: string | null },
+): void {
+  if (typeof window === 'undefined') return;
+  void sendProductError(
+    {
+      source: 'render-crash',
+      title: error.name || 'RenderCrash',
+      message: error.message || 'React render crash with no message',
+      url: window.location.href,
+      level: 'fatal',
+      context: {
+        boundary: details.boundary,
+        stack: error.stack,
+        componentStack: details.componentStack ?? undefined,
+        page: window.location.pathname,
+      },
+    },
+    QUALITY_INGEST_ENDPOINT,
+  ).catch(() => { /* reporting a crash must never raise out of a boundary */ });
 }
 
 /**
@@ -72,7 +120,7 @@ function reportMessage(message: unknown): string {
 }
 
 async function sendProductError(
-  input: ReportErrorInput & { source: 'manual' | 'api-client'; context?: Record<string, unknown> },
+  input: ReportErrorInput & { source: 'manual' | 'api-client' | 'render-crash'; context?: Record<string, unknown> },
   endpoint: string,
 ): Promise<{ accepted: number }> {
   const result = await apiRequest<{ accepted?: number }>('/product-report', {

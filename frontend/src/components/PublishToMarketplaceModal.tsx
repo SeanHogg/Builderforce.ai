@@ -11,7 +11,7 @@ import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { Select } from '@/components/Select';
-import { publishTicket, type PostingType, type EngagementType, type TicketPosting } from '@/lib/freelancerApi';
+import { publishTicket, type PostingType, type EngagementType, type TicketPosting } from '@/lib/freelance/postings';
 
 const input: React.CSSProperties = {
   background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)',

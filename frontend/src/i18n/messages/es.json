@@ -3535,6 +3535,7 @@
       "on_hold": "En espera"
     },
     "dialogAria": "Detalles del proyecto",
+    "tabsAria": "Secciones del proyecto",
     "deleteAria": "Eliminar proyecto",
     "closeAria": "Cerrar panel",
     "editAria": "Editar proyecto",
@@ -8751,7 +8752,100 @@
         "question": "¿Pueden los agentes entregar código por sí solos?",
         "answer": "Sí. Un agente en la nube clona el repositorio vinculado a través de un proxy de git seguro del lado del servidor (tu token de Git nunca sale del servidor), escribe el cambio, sube una rama y abre una pull request — sin interfaz, sin abrir un navegador. Los agentes en las instalaciones hacen lo mismo en tu propia máquina, y los controles de aprobación pueden requerir aprobación humana antes de cualquier paso de alto impacto."
       }
-    ]
+    ],
+    "contact": {
+      "metaTitle": "Contacto — Builderforce.ai",
+      "metaDescription": "Ponte en contacto con Sean Hogg, creador y responsable de BuilderForce Agents y Builderforce.ai.",
+      "heading": "Contacto",
+      "lead": "¿Tienes preguntas sobre BuilderForce Agents o sobre despliegues empresariales, o simplemente quieres saludar? Escríbenos directamente.",
+      "founderRole": "Creador y responsable de BuilderForce Agents y Builderforce.ai.",
+      "resumeLabel": "Currículum / Portafolio",
+      "issuesLabel": "Incidencias en GitHub",
+      "engageHeading": "Otras formas de participar",
+      "repoLabel": "BuilderForce Agents en GitHub",
+      "repoNote": "abre incidencias y PR, sigue las versiones",
+      "discordLabel": "Comunidad de Discord",
+      "discordNote": "ayuda y debate en tiempo real",
+      "acknowledgementsLabel": "Agradecimientos",
+      "acknowledgementsNote": "créditos a los proyectos de código abierto sobre los que se construye"
+    },
+    "acknowledgements": {
+      "metaTitle": "Agradecimientos — BuilderForce Agents",
+      "metaDescription": "Los orígenes de BuilderForce Agents, los paquetes de código abierto clave y las personas que lo hicieron posible.",
+      "heading": "Agradecimientos",
+      "lead": "BuilderForce Agents no existiría sin gigantes sobre los que apoyarse. Esto es de dónde venimos y a quién damos las gracias.",
+      "originHeading": "Construido sobre OpenClaw",
+      "originIntroBefore": "BuilderForce Agents empezó como un fork de",
+      "originIntroAfter": ", el asistente personal de IA de código abierto creado por el equipo de OpenClaw. OpenClaw nos dio un runtime de pasarela probado en producción, conectividad multicanal (WhatsApp, Telegram, Slack, Discord, Signal, iMessage…), una interfaz de panel reactiva basada en Lit, la infraestructura de plugins y habilidades, y una estructura de proyecto con criterio sobre la que pudimos construir de inmediato.",
+      "thankYou": "Gracias",
+      "thanksBefore": "a todas las personas que contribuyen en",
+      "thanksAfter": "por la ventaja inicial. BuilderForce Agents no existiría sin vuestro trabajo.",
+      "extendsHeading": "Cómo BuilderForce Agents amplía OpenClaw",
+      "extendsIntro": "BuilderForce Agents conservó todo lo que hace grande a OpenClaw y añadió encima una capa de orquestación centrada en quien programa.",
+      "getStartedHeading": "Primeros pasos",
+      "nodeRequirement": "Se requiere Node ≥ 22.",
+      "installComment": "Instalar",
+      "pnpmComment": "O con pnpm",
+      "onboardComment": "Configuración inicial",
+      "packagesHeading": "Paquetes de código abierto",
+      "packagesIntro": "BuilderForce Agents se apoya en un excelente ecosistema de proyectos de código abierto. Damos las gracias a cada persona que los mantiene.",
+      "builtByHeading": "Creado por",
+      "founderRole": "Desarrollador, arquitecto y responsable de BuilderForce Agents y Builderforce.ai.",
+      "contactLabel": "Contacto",
+      "licenseHeading": "Licencia",
+      "licenseBefore": "BuilderForce Agents se publica bajo la",
+      "mitLicense": "Licencia MIT",
+      "licenseAfter": ". Úsalo, bifúrcalo, publícalo.",
+      "differences": [
+        {
+          "title": "Conocimiento profundo del código",
+          "body": "Análisis del AST, mapas semánticos del código, grafos de dependencias, seguimiento de referencias entre archivos y conocimiento del historial de Git, todo persistido en .builderforce/."
+        },
+        {
+          "title": "Orquestación multiagente",
+          "body": "7 roles especialistas integrados (Arquitecto, Desarrollador, Revisor, Tester, Depurador, Refactorizador, Documentador) con ciclo de vida dinámico de tareas y máquinas de estado formales de ejecución."
+        },
+        {
+          "title": "Ciclo de vida completo",
+          "body": "PRD → Arquitectura → Desglose de tareas → Código → Revisión → Pruebas → Depuración → Refactorización, orquestado en un único runtime y sin necesidad de IDE."
+        },
+        {
+          "title": "Integración con Builderforce",
+          "body": "API REST en api.builderforce.ai para gestión de proyectos multiinquilino, registro de agentes, seguimiento de ejecuciones y trazas de auditoría, sobre Cloudflare Workers + Neon PostgreSQL."
+        },
+        {
+          "title": "Autoalojado y abierto",
+          "body": "Tu código se queda en tu máquina. Licencia MIT. Sin ataduras a un IDE, sin nube del proveedor y sin techo de suscripción."
+        },
+        {
+          "title": "Agnóstico al canal",
+          "body": "Hereda todas las integraciones de canal de OpenClaw: lanza flujos de trabajo de programación desde WhatsApp, Telegram, Slack o Discord con la misma facilidad que desde la terminal."
+        }
+      ],
+      "packages": {
+        "lit": "Componentes web reactivos que dan vida a la interfaz del panel.",
+        "@agentclientprotocol/sdk": "Agent Client Protocol: comunicación estructurada entre el agente y la pasarela.",
+        "typescript": "JavaScript con tipado estricto en todo el runtime.",
+        "zod": "Validación de esquemas en tiempo de ejecución para configuraciones, herramientas y cargas útiles.",
+        "express": "Servidor HTTP que sostiene la superficie REST de la pasarela.",
+        "ws": "Transporte WebSocket entre el panel y la pasarela.",
+        "yaml": "Persistencia de la configuración del proyecto, las reglas y el contexto.",
+        "playwright-core": "Control de navegador headless para las habilidades de scraping y automatización.",
+        "sharp": "Procesamiento de imágenes rápido para las canalizaciones de comprensión multimedia.",
+        "croner": "Planificador cron ligero para ejecuciones recurrentes de agentes.",
+        "commander": "Análisis de argumentos de línea de comandos para el comando builderforce.",
+        "undici": "Cliente HTTP de alto rendimiento para las integraciones con proveedores.",
+        "vitest": "Framework rápido de pruebas unitarias y de integración.",
+        "pdfjs-dist": "Soporte de análisis de PDF para las habilidades de comprensión de documentos.",
+        "@sinclair/typebox": "Generación de esquemas JSON para definiciones de herramientas tipadas.",
+        "@slack/bolt": "Integración con el canal de Slack.",
+        "grammy": "Framework de bots que sostiene el canal de Telegram.",
+        "markdown-it": "Renderizado de Markdown en la vista de chat del panel.",
+        "astro": "El framework que impulsa el sitio de documentación.",
+        "drizzle-orm": "ORM con seguridad de tipos usado en Builderforce para PostgreSQL.",
+        "hono": "Framework web edge-first para la API de Builderforce."
+      }
+    }
   },
   "newsletter": {
     "heading": "Mantente al día",

@@ -182,7 +182,7 @@ export class GuestRoomDO implements DurableObject {
     this.claimedBy = [];
     this.seq = 0;
     await this.state.storage.deleteAll().catch((error) => {
-      reportCaughtError(error, { source: 'infrastructure/relay/GuestRoomDO.ts', operation: 'wipe' });
+      reportCaughtError(error, { source: 'infrastructure/relay/GuestRoomDO.ts', operation: 'wipe' }, { env: this.env, waitUntil: (task) => this.state.waitUntil(task) });
     });
     for (const peer of this.relay.list()) {
       try {
@@ -190,7 +190,7 @@ export class GuestRoomDO implements DurableObject {
       } catch (error) {
         // The socket was already torn down by the client — the room is closing
         // either way, so this is nothing to recover from, only to record.
-        reportCaughtError(error, { source: 'infrastructure/relay/GuestRoomDO.ts', operation: 'wipe' });
+        reportCaughtError(error, { source: 'infrastructure/relay/GuestRoomDO.ts', operation: 'wipe' }, { env: this.env, waitUntil: (task) => this.state.waitUntil(task) });
       }
     }
     this.relay.clear();
@@ -518,7 +518,7 @@ export class GuestRoomDO implements DurableObject {
         if (known && known.name !== name) {
           known.name = name;
           void this.state.storage.put('participants', this.participants).catch((error) => {
-            reportCaughtError(error, { source: 'infrastructure/relay/GuestRoomDO.ts', operation: 'onMessage' });
+            reportCaughtError(error, { source: 'infrastructure/relay/GuestRoomDO.ts', operation: 'onMessage' }, { env: this.env, waitUntil: (task) => this.state.waitUntil(task) });
           });
         }
       }

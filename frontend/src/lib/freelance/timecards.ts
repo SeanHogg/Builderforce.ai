@@ -1,19 +1,18 @@
 /**
  * Timecards — the time-and-billing half of an engagement.
  *
- * Split out of `freelancerApi.ts` when that module crossed the 800-line architecture
- * ratchet. The split is by BOUNDED CONTEXT rather than by line count: a timecard is its
- * own concept with its own lifecycle (draft → submitted → approved → rejected → paid),
- * its own entries, and its own two audiences — the person logging the hours and the
- * client approving them. Nothing outside that lifecycle belongs here, and nothing in it
- * belongs in the profile module.
+ * The FIRST module split out of the old `freelancerApi.ts`, when it crossed the
+ * 800-line architecture ratchet — and the shape the rest of this folder followed
+ * when that module was split the rest of the way. The cut is by BOUNDED CONTEXT
+ * rather than by line count: a timecard is its own concept with its own lifecycle
+ * (draft → submitted → approved → rejected → paid), its own entries, and its own two
+ * audiences — the person logging the hours and the client approving them. Nothing
+ * outside that lifecycle belongs here, and nothing in it belongs in `talentProfile`.
  *
- * Every call goes through the same shared transport and error envelope the rest of the
- * freelance surface uses — see the note on {@link jsonOrThrow} in `freelancerApi.ts`.
+ * Transport, and why it is not `fetch`: see `./transport`.
  */
 
-import { apiRequestStream } from './apiClient';
-import { jsonOrThrow } from './apiEnvelope';
+import { apiRequestStream, jsonOrThrow } from './transport';
 
 export interface Timecard {
   id: string;

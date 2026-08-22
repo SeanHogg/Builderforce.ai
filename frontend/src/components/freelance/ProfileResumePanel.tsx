@@ -6,10 +6,7 @@ import { Button, Surface } from '@/components/ui';
 import { Select } from '@/components/Select';
 import { ResumeDocumentView } from '@/components/resume/ResumeDocumentView';
 import { RESUME_TEMPLATES, masterResumeRevision, type ResumeTemplateId } from '@/lib/canvasResume';
-import {
-  getMyResume, updateMyResume, uploadMyResume, getResumeSuggestions,
-  type MyResume, type ResumePrivacyLevel, type ResumeSuggestions,
-} from '@/lib/freelancerApi';
+import { getMyResume, updateMyResume, uploadMyResume, getResumeSuggestions, type MyResume, type ResumePrivacyLevel, type ResumeSuggestions } from '@/lib/freelance/talentProfile';
 
 /** Who may see the résumé. Ordered widest → narrowest, which is how the label reads. */
 const PRIVACY_LEVELS: readonly ResumePrivacyLevel[] = ['public', 'recruiter_only', 'connections', 'private'];

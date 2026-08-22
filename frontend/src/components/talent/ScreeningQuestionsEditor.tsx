@@ -16,7 +16,7 @@
 import { useTranslations } from 'next-intl';
 import { Icon } from '@/components/ui/Icon';
 import { SCREENING_QUESTION_TYPES } from './jobVocabulary';
-import type { ScreeningQuestion } from '@/lib/freelancerApi';
+import type { ScreeningQuestion } from '@/lib/freelance/postings';
 
 export type ScreeningQuestionDraft = Omit<ScreeningQuestion, 'id'> & { id?: string };
 

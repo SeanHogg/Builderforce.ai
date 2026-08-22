@@ -39,7 +39,7 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { ChunkErrorBoundary } from '@/components/ChunkErrorBoundary';
 import { ChunkErrorRecovery } from '@/components/ChunkErrorRecovery';
 import { EMBED_ERROR_REPORTER } from '@/lib/embed/embedErrorReporter';
-import { AUTH_API_URL } from '@/lib/auth';
+import { QUALITY_INGEST_ENDPOINT } from '@/lib/reportError';
 import { DiscountCodeCapture } from '@/components/DiscountCodeCapture';
 import { CookieConsentManager } from '@/components/privacy/CookieConsentManager';
 import { SkipToContent } from '@/components/SkipToContent';
@@ -50,7 +50,6 @@ const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://builderforce.ai';
 // bfq_ ingest key is read server-side (no NEXT_PUBLIC_ needed) and handed to the
 // client island; the endpoint tracks whatever API origin auth uses.
 const QUALITY_ERROR_KEY = process.env.NEXT_BUILDERFORCE_ERROR_API_KEY || '';
-const QUALITY_ENDPOINT = `${AUTH_API_URL}/api/quality-ingest`;
 const QUALITY_ENVIRONMENT = process.env.NODE_ENV === 'production' ? 'production' : 'development';
 
 export const metadata: Metadata = {
@@ -212,9 +211,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 */}
                 <ConfirmProvider>
                   <ToastProvider>
-                    <ConditionalAppShell
-                      qualityEndpoint={QUALITY_ENDPOINT}
-                    >
+                    <ConditionalAppShell>
                       {/*
                         ONE CSR-bailout boundary for the page slot.
 
@@ -241,7 +238,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <GlobalErrorHandler />
             <QualityErrorReporter
               apiKey={QUALITY_ERROR_KEY}
-              endpoint={QUALITY_ENDPOINT}
+              endpoint={QUALITY_INGEST_ENDPOINT}
               environment={QUALITY_ENVIRONMENT}
             />
           </ErrorBoundary>

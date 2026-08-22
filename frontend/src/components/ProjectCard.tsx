@@ -11,7 +11,7 @@ import { ProjectInspectionGrade } from './ProjectInspection';
 import { ProjectConfigProgress } from './ProjectConfigProgress';
 import { ProjectOriginBadge } from './ProjectOriginBadge';
 import { useOpenProjectChat } from '@/lib/brain';
-import type { ProjectPanelTab } from './ProjectDetailsPanel';
+import type { ProjectPanelTab } from './project-details/projectPanelTabs';
 import { DeleteProjectDialog } from './DeleteProjectDialog';
 import { RunDiagnosticsButton } from './RunDiagnosticsButton';
 import { ProjectDiagnosticsStrip } from './ProjectDiagnosticsStrip';

@@ -13,7 +13,7 @@
  */
 import { useTranslations } from 'next-intl';
 import { matchReasonKey } from './jobVocabulary';
-import type { MatchReason } from '@/lib/freelancerApi';
+import type { MatchReason } from '@/lib/freelance/matching';
 
 /** Above this a match is worth acting on; below it, worth seeing but not leading with. */
 const STRONG_MATCH = 65;

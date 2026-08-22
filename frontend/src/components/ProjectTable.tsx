@@ -10,7 +10,7 @@ import { ProjectOriginBadge } from './ProjectOriginBadge';
 import { ProjectHealthBadge } from './ProjectHealth';
 import { ProjectConfigBadge } from './ProjectConfigProgress';
 import { useOpenProjectChat } from '@/lib/brain';
-import type { ProjectPanelTab } from './ProjectDetailsPanel';
+import type { ProjectPanelTab } from './project-details/projectPanelTabs';
 import { DeleteProjectDialog } from './DeleteProjectDialog';
 import { RunDiagnosticsButton } from './RunDiagnosticsButton';
 import { ProjectDiagnosticsStrip } from './ProjectDiagnosticsStrip';

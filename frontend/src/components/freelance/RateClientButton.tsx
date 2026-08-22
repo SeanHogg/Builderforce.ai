@@ -4,7 +4,7 @@ import { Icon } from '@/components/ui/Icon';
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
-import { reviewClient } from '@/lib/freelancerApi';
+import { reviewClient } from '@/lib/freelance/engagements';
 
 /**
  * Freelancer-side "Rate client" control — the reverse review direction. Self-contained

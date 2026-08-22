@@ -543,6 +543,36 @@ this schema owns**, and the target schema is 362/363 written. Re-verified table 
 code and surfaces over primitives that already exist. Two column additions (migration 1106)
 were the entire schema cost of the two biggest remaining domains.
 
+### 5a.0 One map row is a NAME COLLISION, and the code does not follow it
+
+`HV job_items → keep job_items` reads as "these are the same table". They are not, and the
+sourcing port does not write to `job_items`:
+
+* **hired.video's `job_items`** is the SCRAPED POSTING store — what the job-board scraper
+  inserts, deduplicated on a fingerprint of title/company/location.
+* **This schema's `job_items`** (`api/src/infrastructure/database/schema/hiring.ts`) is "a line
+  item on a job — a requirement, a benefit, a responsibility": an ordered bullet under a
+  `job_postings` row.
+
+Writing third-party listings into a table of requirement bullets would corrupt both readings of
+it. So `application/sourcing/` writes a sourced listing to **`catalog_items` with
+`kind='job_listing'`** — which is the map's OWN answer for this concept two hundred rows further
+down (`HV job_sourcing_listings → catalog_item`), and which gets deduplication for free from the
+`uq_catalog_items_slug (tenant, kind, slug)` index that already exists.
+
+**The row stays as it is, deliberately.** The map keys on a globally unique source-table name,
+holds a fixed 1,130 rows reconciled against PRD 20 §3, and GENERATES DDL — so `job_items` cannot
+appear twice, and re-typing the row as `primitive` would leave this schema's own `job_items` as
+the one keep target no row declares, which is a table the generator would stop emitting. The row
+therefore records that the TARGET `job_items` is kept; it does not assert that the hired.video
+table of the same name is the same thing. Read it that way, and read this note before mapping
+anything else onto a name that already exists.
+
+*Scraped postings are not `job_postings` either:* that table is the freelance marketplace's own
+posting — authored by a tenant, bid on by freelancers, carrying a budget and screening questions.
+A row scraped from somebody else's board has no author here and no bidding, and putting it there
+would drop third-party listings into the pool the marketplace takes proposals against.
+
 ### 5a.1 The mapping, verified
 
 | hired.video source | Lands in | State |

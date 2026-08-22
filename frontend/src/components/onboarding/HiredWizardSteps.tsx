@@ -18,7 +18,7 @@ import { Select } from '@/components/Select';
 import { Button } from '@/components/ui';
 import { TALENT_DISCIPLINES, TALENT_AVAILABILITIES } from '@/components/freelance/talentFields';
 import { useMyTalentProfile, invalidateMyTalentProfile } from '@/components/freelance/useMyTalentProfile';
-import { uploadMyResume, getResumeSuggestions } from '@/lib/freelancerApi';
+import { uploadMyResume, getResumeSuggestions } from '@/lib/freelance/talentProfile';
 
 const intro: React.CSSProperties = { margin: '0 0 14px', fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' };
 const okText: React.CSSProperties = { fontSize: 'var(--font-size-small)', color: 'var(--success-text)' };

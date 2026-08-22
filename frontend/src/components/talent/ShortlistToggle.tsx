@@ -12,7 +12,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Icon } from '@/components/ui/Icon';
-import { listSavedTalent, saveTalent, unsaveTalent } from '@/lib/freelancerApi';
+import { listSavedTalent, saveTalent, unsaveTalent } from '@/lib/freelance/invites';
 
 export function ShortlistToggle({ freelancerUserId }: { freelancerUserId: string }) {
   const t = useTranslations('talent');

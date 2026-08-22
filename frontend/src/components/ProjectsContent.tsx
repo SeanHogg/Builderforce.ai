@@ -16,7 +16,8 @@ import { fetchProjectConnections, type ProjectConnection } from '@/lib/projectCo
 import { trackActivity } from '@/lib/activity/tracker';
 import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
 import { agentHosts } from '@/lib/builderforceApi';
-import { ProjectDetailsPanel, type ProjectPanelTab } from '@/components/ProjectDetailsPanel';
+import { ProjectDetailsPanel } from '@/components/ProjectDetailsPanel';
+import type { ProjectPanelTab } from '@/components/project-details/projectPanelTabs';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { ProjectCard } from '@/components/ProjectCard';
 import { ProjectTable } from '@/components/ProjectTable';

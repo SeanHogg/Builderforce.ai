@@ -11,7 +11,7 @@
  * to the signed-in user server-side; tenant is enriched here from the active
  * workspace so the resolver can map a signal to an engagement.
  */
-import { sendActivitySignals, type ActivitySignalInput } from '../freelancerApi';
+import { sendActivitySignals, type ActivitySignalInput } from '../freelance/engagements';
 import { getStoredTenant, getStoredWebToken } from '../auth';
 
 let queue: ActivitySignalInput[] = [];

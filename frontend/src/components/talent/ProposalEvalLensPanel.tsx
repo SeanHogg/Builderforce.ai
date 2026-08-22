@@ -22,7 +22,7 @@
  */
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { getProposalEvalLens, type ProposalEvalLens } from '@/lib/freelancerApi';
+import { getProposalEvalLens, type ProposalEvalLens } from '@/lib/freelance/matching';
 
 const card: React.CSSProperties = {
   background: 'var(--bg-base)', border: '1px solid var(--border-subtle)',

@@ -13,12 +13,13 @@ import { useTranslations } from 'next-intl';
 import NotificationsPanel from '@/components/freelance/NotificationsPanel';
 import { MessagesButton } from '@/components/freelance/MessagesButton';
 import { getStoredTenant } from '@/lib/auth';
-import {
-  listEngagements, terminateEngagement, reviewFreelancer, listMyJobs, postJob, updateJob, listJobProposals, acceptProposal, declineProposal, evaluateProposal, shortlistProposal, scheduleMeeting, listEngagementDeliverables, evaluateDeliverable, setDeliverableStatus, listEmployerInvoices, payInvoice, type Engagement, type JobPosting, type JobProposal, type Invoice, type Deliverable, type PostingType, type EngagementType,
-} from '@/lib/freelancerApi';
+import { listEmployerInvoices, payInvoice, type Invoice } from '@/lib/freelance/billing';
+import { listEngagementDeliverables, evaluateDeliverable, setDeliverableStatus, type Deliverable } from '@/lib/freelance/deliverables';
+import { listEngagements, terminateEngagement, reviewFreelancer, scheduleMeeting, type Engagement } from '@/lib/freelance/engagements';
+import { listMyJobs, postJob, updateJob, listJobProposals, acceptProposal, declineProposal, evaluateProposal, shortlistProposal, type JobPosting, type JobProposal, type PostingType, type EngagementType } from '@/lib/freelance/postings';
 import {
   listEmployerTimecards, approveTimecard, rejectTimecard, getTimecardReview, type Timecard, type TimecardEntry,
-} from '@/lib/freelancerTimecardsApi';
+} from '@/lib/freelance/timecards';
 import { useConfirm } from '@/components/ConfirmProvider';
 import {
   JobSchedulePanel, MilestoneLinesPreview, MilestoneSchedulePanel,

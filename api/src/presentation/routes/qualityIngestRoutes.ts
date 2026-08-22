@@ -88,6 +88,20 @@ async function ingestForCollector(db: Db, env: Env, collector: CollectorRef, eve
   return ingestErrorEvents(db, env, collector, events, rules);
 }
 
+/**
+ * How each product-reporter surface lands in the Quality feed, as DATA.
+ *
+ * The mapping used to be a pair of ternaries over "is it manual", which is fine
+ * for two reporters and wrong for three — adding the error boundaries meant
+ * either another branch in each expression or a crash filed as an API error.
+ * A new reporter is a row here.
+ */
+const PRODUCT_REPORT_SOURCES = {
+  manual:         { type: 'UserReportedError', environment: 'user-report' },
+  'api-client':   { type: 'ApiError',          environment: 'product-ui' },
+  'render-crash': { type: 'RenderCrash',       environment: 'product-ui' },
+} as const satisfies Record<string, { type: string; environment: string }>;
+
 export function createQualityIngestRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
 
@@ -110,7 +124,9 @@ export function createQualityIngestRoutes(db: Db): Hono<HonoEnv> {
     const message = typeof body.message === 'string' ? body.message.trim().slice(0, 10_000) : '';
     if (!message) return c.json({ error: 'message is required' }, 400);
     const title = typeof body.title === 'string' ? body.title.trim().slice(0, 300) : '';
-    const source = body.source === 'api-client' ? 'api-client' : 'manual';
+    const source = body.source === 'api-client' || body.source === 'render-crash'
+      ? body.source
+      : 'manual';
     const level: NormalizedErrorEvent['level'] =
       body.level === 'fatal' || body.level === 'warning' || body.level === 'info' ? body.level : 'error';
 
@@ -122,17 +138,19 @@ export function createQualityIngestRoutes(db: Db): Hono<HonoEnv> {
     if (matches.length !== 1) return c.json({ error: 'Product error project is unavailable' }, 503);
     const project = matches[0]!;
 
+    const reporter = PRODUCT_REPORT_SOURCES[source];
     const event: NormalizedErrorEvent = {
-      type: source === 'manual' ? 'UserReportedError' : 'ApiError',
+      type: reporter.type,
       message: title ? `${title} — ${message}` : message,
       level,
       timestamp: new Date().toISOString(),
-      environment: source === 'manual' ? 'user-report' : 'product-ui',
+      environment: reporter.environment,
       source: 'native',
       ...(typeof body.url === 'string' ? { url: body.url.slice(0, 2_048) } : {}),
       tags: { reporter: source },
       context: {
         manual: source === 'manual',
+        reporter: source,
         ...(body.context && typeof body.context === 'object' && !Array.isArray(body.context)
           ? body.context as Record<string, unknown>
           : {}),

@@ -12,10 +12,8 @@ import { useEffect, useState, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
 import PageContainer from '@/components/PageContainer';
 import NotificationsPanel from '@/components/freelance/NotificationsPanel';
-import {
-  listEngagementBoard, listEngagementTasks, requestReview, submitDeliverable, listMyDeliverables,
-  type EngagementBoard, type EngagementTask, type Deliverable,
-} from '@/lib/freelancerApi';
+import { submitDeliverable, listMyDeliverables, type Deliverable } from '@/lib/freelance/deliverables';
+import { listEngagementBoard, listEngagementTasks, requestReview, type EngagementBoard, type EngagementTask } from '@/lib/freelance/engagements';
 
 const card: React.CSSProperties = {
   background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 18,

@@ -296,7 +296,7 @@
  *   stays a Server Component and reads its heading through `getTranslations`, so the
  *   feature costs one client file and zero client-rooted pages.
  *
- *   808 -> 837 (`useClientFiles`) and 66 -> 32 (`useClientPages`, 2026-08-22) -- the
+ *   808 -> 868 (`useClientFiles`) and 66 -> 32 (`useClientPages`, 2026-08-22) -- the
  *   client-boundary pass for PRD 22 SS3.14 / H-18. Two things happened, and they
  *   should be read separately.
  *
@@ -305,8 +305,7 @@
  *   landed with no entry above, because the `oversizedProductionFiles` set was red
  *   for unrelated reasons and one red guard hides the rest. `useClientPages` had
  *   drifted the other way -- baseline 66, reality 53 -- thirteen points of budget
- *   nobody had decided to grant. 837 is 848 minus the eleven this pass removed; it
- *   is the first honest value the key has held since 2026-08-15. `ratchetCount` now
+ *   nobody had decided to grant. `ratchetCount` now
  *   REPORTS slack, on the green run too, so the tightening half stops depending on
  *   whoever made the improvement remembering to do it. It does not FAIL on slack:
  *   this tree routinely has more than one change in flight, and turning "you deleted
@@ -324,6 +323,17 @@
  *   `useEffect` that fetched public pricing, and that one line put the structured
  *   data, the section shells, the About band and the FAQ copy in the client bundle.
  *   The fetch now belongs to `HomePricingSection`, the band that needs it.
+ *
+ *   The +31 that takes 837 to 868 is TWO things, and only one of them is this pass.
+ *   Fourteen files are the god-class splits that landed with it: `ProjectDetailsPanel`
+ *   (804 lines) and `board/BoardConfigPanel` (849) were both over the
+ *   `oversizedProductionFiles` limit, and decomposing a client panel into a
+ *   container plus its tabs and hooks necessarily SPENDS this budget to pay the
+ *   other one down. Every one of the fourteen is a form, a tab body or a hook that
+ *   holds state — none is a directive marking nothing, which is the distinction
+ *   this changelog keeps making. The remaining seventeen arrived with the phone /
+ *   points / sourcing work in the same tree; those state their reason at the top of
+ *   each file (`components/phone/*` is the model) rather than here.
  *
  *   What this pass did NOT do, deliberately: strip the directive from the ~600
  *   modules whose every CURRENT importer is a client boundary. The "800 -> 798" and
