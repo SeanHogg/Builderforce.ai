@@ -2,6 +2,7 @@
 
 import { Icon } from '@/components/ui/Icon';
 import { useMemo, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 
@@ -16,8 +17,8 @@ interface Tweet {
 
 type Filter = 'agents' | 'all';
 
-function isBuilderForceAgents(t: Tweet): boolean {
-  const text = `${t.quote} ${t.author}`.toLowerCase();
+function isBuilderForceAgents(tweet: Tweet): boolean {
+  const text = `${tweet.quote} ${tweet.author}`.toLowerCase();
   return text.includes('@builderforce') || text.includes('#builderforce');
 }
 
@@ -32,6 +33,7 @@ export default function ShowcaseGrid({
 }) {
   const [filter, setFilter] = useState<Filter>('agents');
   const [viewMode, setViewMode] = useState<ViewMode>('card');
+  const t = useTranslations('agents.showcase');
 
   const visible = useMemo(
     () => (filter === 'agents' ? tweets.filter(isBuilderForceAgents) : tweets),
@@ -46,14 +48,14 @@ export default function ShowcaseGrid({
           onClick={() => setFilter('agents')}
           aria-pressed={filter === 'agents'}
         >
-          BuilderForce Agents Projects ({initialCoderagentHostCount})
+          {t('filterAgents', { count: initialCoderagentHostCount })}
         </button>
         <button
           className={`cc-filter${filter === 'all' ? ' active' : ''}`}
           onClick={() => setFilter('all')}
           aria-pressed={filter === 'all'}
         >
-          All Projects ({totalCount})
+          {t('filterAll', { count: totalCount })}
         </button>
         <div style={{ marginLeft: 'auto' }}>
           <ViewToggle value={viewMode} onChange={setViewMode} />
@@ -65,26 +67,26 @@ export default function ShowcaseGrid({
           <table style={tableStyle}>
             <thead>
               <tr style={theadRowStyle}>
-                <th style={thStyle}>Author</th>
-                <th style={thStyle}>Summary</th>
-                <th style={thStyle}>Likes</th>
-                <th style={{ ...thStyle, textAlign: 'right' }}>Link</th>
+                <th style={thStyle}>{t('colAuthor')}</th>
+                <th style={thStyle}>{t('colSummary')}</th>
+                <th style={thStyle}>{t('colLikes')}</th>
+                <th style={{ ...thStyle, textAlign: 'right' }}>{t('colLink')}</th>
               </tr>
             </thead>
             <tbody>
-              {visible.map((t) => (
-                <tr key={t.id} style={trStyle}>
-                  <td style={tdStyle}><strong>@{t.author}</strong></td>
-                  <td style={tdMutedStyle}>{t.quote}</td>
-                  <td style={tdMutedStyle}><Icon source="♥" size="1em" /> {t.likes}</td>
+              {visible.map((tweet) => (
+                <tr key={tweet.id} style={trStyle}>
+                  <td style={tdStyle}><strong>@{tweet.author}</strong></td>
+                  <td style={tdMutedStyle}>{tweet.quote}</td>
+                  <td style={tdMutedStyle}><Icon source="♥" size="1em" /> {tweet.likes}</td>
                   <td style={{ ...tdStyle, textAlign: 'right' }}>
                     <a
-                      href={`https://x.com/${t.author}/status/${t.id}`}
+                      href={`https://x.com/${tweet.author}/status/${tweet.id}`}
                       target="_blank"
                       rel="noopener"
                       className="cc-tweet-link"
                     >
-                      View on X →
+                      {t('viewOnX')}
                     </a>
                   </td>
                 </tr>
@@ -94,32 +96,32 @@ export default function ShowcaseGrid({
         </div>
       ) : (
         <div className="cc-showcase-grid">
-          {visible.map((t) => (
+          {visible.map((tweet) => (
             <a
-              key={t.id}
-              href={`https://x.com/${t.author}/status/${t.id}`}
+              key={tweet.id}
+              href={`https://x.com/${tweet.author}/status/${tweet.id}`}
               target="_blank"
               rel="noopener"
               className="cc-tweet-card"
             >
               <div className="cc-tweet-header">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={`https://unavatar.io/x/${t.author}`} alt={t.author} className="cc-avatar" loading="lazy" />
+                <img src={`https://unavatar.io/x/${tweet.author}`} alt={tweet.author} className="cc-avatar" loading="lazy" />
                 <div className="cc-author-info">
-                  <span className="cc-author-name">@{t.author}</span>
-                  <span className="cc-likes"><Icon source="♥" size="1em" /> {t.likes}</span>
+                  <span className="cc-author-name">@{tweet.author}</span>
+                  <span className="cc-likes"><Icon source="♥" size="1em" /> {tweet.likes}</span>
                 </div>
               </div>
-              <p className="cc-tweet-quote">{t.quote}</p>
-              {t.images && t.images.length > 0 && (
+              <p className="cc-tweet-quote">{tweet.quote}</p>
+              {tweet.images && tweet.images.length > 0 && (
                 <div className="cc-tweet-images">
-                  {t.images.map((img, i) => (
+                  {tweet.images.map((img, i) => (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img key={i} src={img} alt="Screenshot" className="cc-tweet-image" loading="lazy" />
+                    <img key={i} src={img} alt={t('screenshotAlt')} className="cc-tweet-image" loading="lazy" />
                   ))}
                 </div>
               )}
-              <span className="cc-tweet-link">View on X →</span>
+              <span className="cc-tweet-link">{t('viewOnX')}</span>
             </a>
           ))}
         </div>
@@ -147,8 +149,8 @@ export default function ShowcaseGrid({
         }
         .cc-filter.active {
           color: var(--coral-bright);
-          background: rgba(77,158,255,0.12);
-          border-color: rgba(77,158,255,0.4);
+          background: color-mix(in srgb, var(--coral-bright) 12%, transparent);
+          border-color: color-mix(in srgb, var(--coral-bright) 40%, transparent);
         }
         .cc-showcase-grid {
           display: grid;

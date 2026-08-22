@@ -82,8 +82,17 @@ const BASELINE = {
    * family. The two biggest holders are the palette itself (`globals.css`, where
    * a value has to be written somewhere) and the board's own stylesheet, and
    * both are the honest next targets rather than exemptions.
+   *
+   * 185 -> 179 (2026-08-22) — a TIGHTENING, paid for by the `/agents/*`
+   * localization pass. Those pages were built dark-only and said so in their
+   * colours: `rgba(255,255,255,0.03)` card grounds on the workflow-builder
+   * marketing page, `rgba(77,158,255,…)` accent chips in the skills browser and
+   * the showcase filter bar, and `color: white` on three gradient buttons. A
+   * white-on-white card is not a style opinion, it is an invisible card, so they
+   * became `color-mix(… var(--bg-surface) …)`, `var(--coral-bright)` and
+   * `var(--text-on-accent)` in the same pass as the strings.
    */
-  themeLockedColours: 185,
+  themeLockedColours: 179,
   /**
    * ONE, and it is `UnreadBadge`'s `borderRadius: size` — a live expression, not a
    * literal, so there is no scale step to name. Came down from 6 when the résumé

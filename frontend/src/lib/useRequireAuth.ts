@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import { signInHref } from '@/lib/auth';
+import { isGuestPreviewRoute } from '@/lib/shellRouting';
 
 /**
  * The ONE auth guard for a page that requires a signed-in visitor.
@@ -38,6 +39,13 @@ export function useRequireAuth(options: {
 
   useEffect(() => {
     if (!authReady) return;
+    // A previewable route renders for everybody now — the sample workspace fills
+    // it and `<SessionGate>` stops the actions that need an account. Bouncing a
+    // guest to the login screen from a page that is designed to be readable
+    // without one is the same substitution this whole change removes, one layer
+    // down: the shell would mount the surface and the page would immediately
+    // navigate away from it.
+    if (!isAuthenticated && isGuestPreviewRoute(pathname)) return;
     // The query string is part of where the visitor was: `/quality?tab=feedback`
     // and `/quality` are different screens, and sending them back to the second
     // after signing in loses the one they asked for. Read from `window` rather
@@ -55,5 +63,8 @@ export function useRequireAuth(options: {
     }
   }, [authReady, isAuthenticated, hasTenant, requireTenant, returnTo, router, pathname]);
 
+  // Same rule as the effect, so the boolean and the redirect can never
+  // disagree — a page that is told it may render must not also be navigating.
+  if (authReady && !isAuthenticated && isGuestPreviewRoute(pathname)) return true;
   return authReady && isAuthenticated && (!requireTenant || hasTenant);
 }

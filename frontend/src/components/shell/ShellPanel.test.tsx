@@ -23,7 +23,7 @@ import { useEffect } from 'react';
 
 vi.mock('./ShellIndex', () => ({
   ShellIndex: () => null,
-  useShellIndex: () => ({ group: null, items: [] }),
+  useShellDestination: () => ({ group: null, items: [], routeActiveId: '' }),
 }));
 
 const BOARD: ActiveCanvas = {

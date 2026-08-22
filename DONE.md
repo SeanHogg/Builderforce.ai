@@ -1,3 +1,65 @@
+## ✅ RESOLVED 2026-08-22 — the VSIX release build failed on a package that was wired everywhere except the one bundle that needed it, and the six hand-written lists behind that became one derived registry
+
+`Publish VS Code extension` failed at `build:canvas`:
+
+```
+[vite]: Rollup failed to resolve import "@builderforce/ide-file-contract"
+        from "frontend/src/lib/canvasBuildTools.ts"
+```
+
+**Root cause.** Eight of the packages under `packages/` are SOURCE-ONLY — their `exports` point
+straight at `./src/*.ts` and they are never built — so nothing resolves them by plain node
+resolution and every toolchain has to be told where they live. That telling was six hand-written
+lists: `api/tsconfig.json`, `api/vitest.config.ts`, `frontend/tsconfig.json`,
+`frontend/vitest.config.ts`, `clients/vscode/vitest.config.ts` + `clients/vscode/esbuild.mjs`, and
+the canvas bundle's alias array. `@builderforce/ide-file-contract` reached both frontend lists and
+both api lists and not the canvas bundle — which compiles that same `frontend/src` closure, outside
+the frontend's own resolution. The package was correctly wired everywhere the author looked. This
+is the second time the shape cost a build: `@builderforce/learned-routing` was in `api/tsconfig.json`
+and not `api/vitest.config.ts`, so a directory run of the LLM tests failed while the full suite
+passed.
+
+**What changed:**
+
+* **One registry, derived from the manifests.** `scripts/sourcePackages.mjs` reads
+  `packages/*/package.json` and treats every `exports` entry whose target starts `./src/` as
+  source-only — subpath exports included, so `@builderforce/agent-tools/node-path` is an entry of
+  its own. A BUILT package (`brain-ui` → `dist`) is skipped: aliasing it would bypass its entry
+  point. Three shapes come out of it — `sourcePackageAliases()` (anchored `{find, replacement}`
+  array for vite/vitest), `sourcePackageAliasMap()` (esbuild's specifier→path map) and
+  `sourcePackageRoots()` (the `src` roots the NodeNext `./x.js`→`./x.ts` resolver plugin scopes
+  itself to, which was itself a two-copy list). **A new source-only package is now wired in every
+  toolchain the moment its `package.json` exists.**
+* **Anchored patterns, not the object form.** An object alias matches by PREFIX, so
+  `@builderforce/agent-tools` would swallow `@builderforce/agent-tools/node-path` and rewrite it to
+  `…/src/index.ts/node-path`. Two of the migrated configs relied on key order to avoid that. Every
+  emitted pattern is `^specifier$`, so subpath exports resolve and the entries are
+  order-independent. `frontend/vitest.config.ts`'s `@/` alias moved to array form alongside them
+  (still a prefix alias — deliberately).
+* **All five JS-side copies deleted**, each replaced by the registry call:
+  `api/vitest.config.ts`, `frontend/vitest.config.ts`, `clients/vscode/vitest.config.ts`,
+  `clients/vscode/esbuild.mjs`, `clients/vscode/webview/vite.canvas.config.ts`.
+* **The `tsconfig` `paths` cannot import a module, so they get a guard instead.**
+  `clients/vscode/src/sourcePackages.test.ts` (10 cases) scans `api/src`, `frontend/src` and
+  `clients/vscode/src` for source-only imports and holds each project's `paths` to resolving them
+  at the registry's own entry (tsc's wildcard `prefix/*` targets and implicit extension included);
+  it fails any stale `@builderforce/*` path; and it imports the REAL canvas config to assert that
+  every package the frontend imports is aliased there and that no alias points anywhere but a
+  registry entry. That last pair is the assertion that would have caught this failure before it
+  reached CI — it runs in `npm test`, which the publish job runs before packaging.
+* `allowJs` on `clients/vscode/tsconfig.json` and `clients/vscode/harness/tsconfig.json`, so tsc
+  reads the registry's JSDoc-inferred types rather than a hand-written `.d.mts` twin of them.
+
+**Verified:** the canvas bundle builds clean (4m46s, the step that was failing); extension and
+harness esbuild bundles build; `npm run type-check` green across all 8 projects; `clients/vscode`
+115/115 (was 105 — the 10 new guard cases); `api` and `frontend` spot suites that import these
+packages pass, as does a frontend suite using the re-formed `@/` alias. Version deliberately NOT
+bumped: 2026.8.132 failed before publishing, so it is still unclaimed.
+
+**Logged, not closed** (moved to the register): `packages/ide-templates` imports
+`@builderforce/creation-canvas-contract` and declares no dependency on it — undeclared today,
+resolvable only because every consumer aliases both.
+
 ## ✅ RESOLVED 2026-08-22 — "Built by Sean Hogg" now lands on this platform's own résumé, and two `/agents/*` pages got localized on the way
 
 The global footer credit, the `/agents/contact` link list and the `/agents/acknowledgements` byline

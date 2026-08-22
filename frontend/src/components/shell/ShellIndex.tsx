@@ -9,11 +9,27 @@
  * primitive, and it can be asked for the vertical form so a panel can carry it
  * as an index COLUMN instead of a bar nobody can read at fourteen items.
  *
- * `useShellIndex()` is exported separately because the panel needs the group's
- * label for its crumb, and re-deriving "which destination am I on" beside this
- * component is exactly the drift the file exists to prevent.
+ * `useShellDestination()` is exported separately because the panel needs the
+ * group's label for its crumb, and re-deriving "which destination am I on"
+ * beside this component is exactly the drift the file exists to prevent.
+ *
+ * ── WHY THE QUERY READ IS A SEPARATE HOOK ───────────────────────────────────
+ * `useSearchParams()` opts every tree above it into a Suspense requirement, and
+ * this component renders in `AppShell` ABOVE the layout's one page-slot
+ * boundary. So a statically prerendered page failed the build outright
+ * ("useSearchParams() should be wrapped in a suspense boundary at page
+ * /freelancer/timecard") — the shell chrome was reading the query with nothing
+ * above it to bail into, and every page without `runtime = 'edge'` inherited it.
+ *
+ * The split is what fixes it rather than a blanket boundary: only a QUERY group
+ * ("which `?tab=` am I on") needs the URL's query, and only that path suspends —
+ * behind a boundary this component owns, whose fallback is the same bar with no
+ * tab marked active. A route group's active sub-view is the PATH, so it still
+ * prerenders whole, and `ShellPanel` — which wants the destination, never the
+ * active tab — no longer opts in at all.
  */
 
+import { Suspense } from 'react';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { getStoredTenant } from '@/lib/auth';
@@ -23,16 +39,28 @@ import { useNavCounts } from '@/lib/navCounts';
 import { TabCountBadge } from '@/components/TabCountBadge';
 import { DestinationIndex, type IndexItem, type IndexOrientation } from './DestinationIndex';
 
-export interface ShellIndexModel {
+export interface ShellDestinationModel {
   group: NavGroup | undefined;
   items: IndexItem[];
+  /**
+   * The active sub-view for a ROUTE group, which is the path itself. Empty for a
+   * query group — that answer lives in `?tab=` and only `useShellIndex()` reads it.
+   */
+  routeActiveId: string;
+}
+
+export interface ShellIndexModel extends ShellDestinationModel {
   activeId: string;
 }
 
-export function useShellIndex(): ShellIndexModel {
+/**
+ * The destination on screen and its sub-views — derived from the path and the
+ * account's own registry, with no query read, so a caller needs no Suspense
+ * boundary above it.
+ */
+export function useShellDestination(): ShellDestinationModel {
   const t = useTranslations('nav');
   const pathname = usePathname() || '';
-  const searchParams = useSearchParams();
   const counts = useNavCounts();
   // THIS account's rows, not the builder registry's. Resolving against the
   // builder set meant a restricted account had no active destination at all, and
@@ -44,7 +72,7 @@ export function useShellIndex(): ShellIndexModel {
   const groups = useNavGroups();
   const group = findActiveGroup(pathname, groups);
 
-  if (!group?.tabs?.length) return { group, items: [], activeId: '' };
+  if (!group?.tabs?.length) return { group, items: [], routeActiveId: '' };
 
   const isOwner = getStoredTenant()?.role === 'owner';
   const items: IndexItem[] = group.tabs
@@ -59,16 +87,34 @@ export function useShellIndex(): ShellIndexModel {
       badge: tab.countKey ? <TabCountBadge count={counts[tab.countKey]} /> : undefined,
     }));
 
-  const activeId = group.tabKind === 'query'
-    ? (searchParams.get('tab') ?? '')
-    : (activeRouteTabId(group, pathname) ?? '');
-
-  return { group, items, activeId };
+  return {
+    group,
+    items,
+    routeActiveId: group.tabKind === 'query' ? '' : (activeRouteTabId(group, pathname) ?? ''),
+  };
 }
 
-export function ShellIndex({ orientation = 'auto' }: { orientation?: IndexOrientation }) {
+/**
+ * …plus which sub-view is active, `?tab=` included.
+ *
+ * Reads the query, so every caller needs a Suspense boundary above it. `ShellIndex`
+ * owns one; nothing else should call this hook without providing its own.
+ */
+export function useShellIndex(): ShellIndexModel {
+  const destination = useShellDestination();
+  const searchParams = useSearchParams();
+  return {
+    ...destination,
+    activeId: destination.group?.tabKind === 'query'
+      ? (searchParams.get('tab') ?? '')
+      : destination.routeActiveId,
+  };
+}
+
+/** The bar itself, told which sub-view to mark active. */
+function ShellIndexBar({ activeId, orientation }: { activeId: string; orientation: IndexOrientation }) {
   const t = useTranslations('nav');
-  const { group, items, activeId } = useShellIndex();
+  const { group, items } = useShellDestination();
   if (!group || items.length === 0) return null;
 
   return (
@@ -79,6 +125,23 @@ export function ShellIndex({ orientation = 'auto' }: { orientation?: IndexOrient
       orientation={orientation}
       style={orientation === 'auto' || orientation === 'horizontal' ? { marginBottom: 0 } : undefined}
     />
+  );
+}
+
+/** The `?tab=` reader — the only part of the index that suspends. */
+function ShellIndexQueryBar({ orientation }: { orientation: IndexOrientation }) {
+  const { activeId } = useShellIndex();
+  return <ShellIndexBar activeId={activeId} orientation={orientation} />;
+}
+
+export function ShellIndex({ orientation = 'auto' }: { orientation?: IndexOrientation }) {
+  const { group, routeActiveId } = useShellDestination();
+  if (group?.tabKind !== 'query') return <ShellIndexBar activeId={routeActiveId} orientation={orientation} />;
+
+  return (
+    <Suspense fallback={<ShellIndexBar activeId="" orientation={orientation} />}>
+      <ShellIndexQueryBar orientation={orientation} />
+    </Suspense>
   );
 }
 

@@ -16,7 +16,6 @@
  */
 import {
   bigint,
-  bigserial,
   boolean,
   index,
   integer,
@@ -119,28 +118,6 @@ export const deliverableUpdates = pgTable('deliverable_updates', {
   createdAt:   timestamp('created_at').notNull().defaultNow(),
   updatedAt:   timestamp('updated_at').notNull().defaultNow(),
 });
-
-
-/**
- * Anonymous demo-funnel telemetry (migration 0360). The signed-in activity
- * tracker never fires for marketing-shell visitors, so the demo experience
- * writes its own append-only stream keyed by the same visitorId as
- * marketing_sessions: demo_start → page views → convert prompt shown/clicked →
- * lead/newsletter/exit. The admin funnel panel aggregates this by persona.
- */
-export const demoEvents = pgTable('demo_events', {
-  id:         bigserial('id', { mode: 'number' }).primaryKey(),
-  visitorId:  varchar('visitor_id', { length: 64 }).notNull(),
-  persona:    varchar('persona', { length: 32 }),
-  kind:       varchar('kind', { length: 64 }).notNull(),
-  path:       varchar('path', { length: 300 }),
-  metadata:   jsonb('metadata'),
-  occurredAt: timestamp('occurred_at').notNull().defaultNow(),
-  createdAt:  timestamp('created_at').notNull().defaultNow(),
-}, (t) => ({
-  byPersonaTime: index('idx_demo_events_persona_time').on(t.persona, t.occurredAt),
-  byVisitor: index('idx_demo_events_visitor').on(t.visitorId, t.occurredAt),
-}));
 
 
 /**

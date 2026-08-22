@@ -69,13 +69,18 @@ describe('rendersOperatorShell', () => {
     }
   });
 
-  it('still gives a guest with NO board marketing chrome', () => {
-    // Nothing to keep, so nothing changes: an app route shows its acquisition
-    // teaser and `/embedded` shows its real page — both in `MarketingShell`,
-    // which is the half of §11.4.5 that keeps the public surface indexable.
-    for (const route of WORKBENCH) {
-      expect(rendersOperatorShell(route, false, false)).toBe(false);
+  it('gives a guest with NO board the operator shell on a previewable app route', () => {
+    // This used to be `false` for every row: with no board there was nothing to
+    // keep, so an app route fell back to its acquisition teaser in
+    // `MarketingShell`. A guest no longer has to be holding a board to earn the
+    // product — the app routes render for everyone (`isGuestPreviewRoute`).
+    for (const route of WORKBENCH.filter((r) => r !== '/embedded')) {
+      expect(rendersOperatorShell(route, false, false)).toBe(true);
     }
+    // `/embedded` is a PUBLIC reference surface, not an app route, so with no
+    // board to keep it is still the marketing shell — the half of §11.4.5 that
+    // keeps the public surface indexable.
+    expect(rendersOperatorShell('/embedded', false, false)).toBe(false);
   });
 
   it('keeps a guest their board when they open a reference page', () => {
@@ -88,7 +93,11 @@ describe('rendersOperatorShell', () => {
   it('never hands the operator shell to a marketing or framed route', () => {
     // A long article wants the whole screen, board or no board — and the
     // storefront, pricing and the auth screens are not panels at any rung.
-    for (const route of ['/pricing', '/blog/post', '/login', '/embed/board', '/projects/7', '/marketplace']) {
+    // `/projects/7` is deliberately NOT here any more: it is an app route, and a
+    // guest gets the operator shell on every app route that is not operator
+    // tooling. What this case still guards is that PUBLIC and FRAMED routes
+    // never borrow it.
+    for (const route of ['/pricing', '/blog/post', '/login', '/embed/board', '/marketplace']) {
       expect(rendersOperatorShell(route, false, true)).toBe(false);
     }
   });

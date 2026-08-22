@@ -26,7 +26,7 @@
 import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { useAuth } from '@/lib/AuthContext';
+import { useSampleWorkspace } from '@/domains/guest/presentation/useSampleWorkspace';
 import { RoleGate } from '@/components/RoleGate';
 import { Select } from '@/components/Select';
 import { LensPage, DaysWindowSelect } from '@/components/insights/LensShell';
@@ -89,8 +89,11 @@ export default function InsightsHomePage() {
   // LensPage owns the redirect for a signed-out / tenantless visitor; this page
   // still reads the session so its own dashboard reads never fire before there
   // is a tenant to scope them to (they would 401).
-  const { isAuthenticated, hasTenant } = useAuth();
-  const signedIn = isAuthenticated && hasTenant;
+  // The ONE derivation of "is there a real workspace behind this screen",
+  // shared with the sample-data notice and every `<SessionGate>`. Written out
+  // here it was a second copy, and a second copy is how a page ends up reading
+  // real rows while the banner above it says the data is sample.
+  const { signedIn } = useSampleWorkspace();
   const { pinned, loading: pinsLoading } = usePins();
 
   const [days, setDays] = useState(30);
@@ -118,7 +121,11 @@ export default function InsightsHomePage() {
   );
 
   const reload = useCallback(async () => {
-    if (!signedIn) return;
+    // No `signedIn` guard any more, and its absence is the point. The guard was
+    // there so a tenantless visitor did not fire reads that 401; the transport
+    // now answers a guest's GET from the sample workspace, so guarding it is
+    // what would leave this page — the product's headline surface — empty for
+    // exactly the person it most needs to convince.
     setError(null);
     try {
       const [list, cat] = await Promise.all([dashboardsApi.list(), dashboardsApi.metrics()]);
@@ -128,7 +135,7 @@ export default function InsightsHomePage() {
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
-  }, [pickMetric, signedIn]);
+  }, [pickMetric]);
 
   useEffect(() => { void reload(); }, [reload]);
 

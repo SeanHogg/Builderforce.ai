@@ -1,14 +1,16 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { getTranslations } from 'next-intl/server';
+import { pageMetadata } from '@/lib/seo';
 import showcaseData from '@/data/agents/showcase.json';
 import ShowcaseGrid from './ShowcaseGrid';
 
-export const metadata: Metadata = {
-  title: 'Showcase — What People Are Building with BuilderForce Agents',
-  description:
-    'See what developers are building with BuilderForce Agents autonomous agents. Real projects, workflows, and automations from the BuilderForce Agents community.',
-  alternates: { canonical: '/agents/showcase' },
-};
+export const runtime = 'edge';
+
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations('agents.showcase');
+  return pageMetadata({ title: t('metaTitle'), description: t('metaDescription'), path: '/agents/showcase' });
+}
 
 interface Tweet {
   id: string;
@@ -19,10 +21,11 @@ interface Tweet {
   images?: string[];
 }
 
-export default function ShowcasePage() {
+export default async function ShowcasePage() {
+  const t = await getTranslations('agents.showcase');
   const tweets = showcaseData as Tweet[];
-  const isBuilderForceAgents = (t: Tweet) => {
-    const text = `${t.quote} ${t.author}`.toLowerCase();
+  const isBuilderForceAgents = (tweet: Tweet) => {
+    const text = `${tweet.quote} ${tweet.author}`.toLowerCase();
     return text.includes('@builderforce') || text.includes('#builderforce');
   };
   const agentHostCount = tweets.filter(isBuilderForceAgents).length;
@@ -30,21 +33,21 @@ export default function ShowcasePage() {
   return (
     <div className="cc-page">
       <header className="cc-page-header">
-        <h1 className="cc-page-title"><span className="cc-agentHost-accent">⟩</span> What People Are Building</h1>
-        <p className="cc-page-subtitle">Real projects, real automation, real magic.</p>
+        <h1 className="cc-page-title"><span className="cc-agentHost-accent">⟩</span> {t('heading')}</h1>
+        <p className="cc-page-subtitle">{t('subtitle')}</p>
       </header>
       <ShowcaseGrid tweets={tweets} initialCoderagentHostCount={agentHostCount} totalCount={tweets.length} />
       <section className="cc-cta-card">
-        <h2>Built something cool?</h2>
-        <p>Share your BuilderForce Agents creation with the community.</p>
+        <h2>{t('ctaHeading')}</h2>
+        <p>{t('ctaBody')}</p>
         <div className="cc-cta-buttons">
-          <a className="cc-btn primary" href="https://twitter.com/intent/tweet?text=Check%20out%20what%20I%20built%20with%20%40builderforce%21" target="_blank" rel="noopener">Share on X</a>
-          <Link className="cc-btn" href="/agents/skills">Browse Skills</Link>
-          <a className="cc-btn" href="https://discord.gg/9gUsc2sNG6" target="_blank" rel="noopener">Join Discord</a>
+          <a className="cc-btn primary" href="https://twitter.com/intent/tweet?text=Check%20out%20what%20I%20built%20with%20%40builderforce%21" target="_blank" rel="noopener">{t('shareOnX')}</a>
+          <Link className="cc-btn" href="/agents/skills">{t('browseSkills')}</Link>
+          <a className="cc-btn" href="https://discord.gg/9gUsc2sNG6" target="_blank" rel="noopener">{t('joinDiscord')}</a>
         </div>
       </section>
       <p className="cc-more">
-        Looking for more? <Link href="/docs/start/showcase">More examples in our docs</Link>.
+        {t.rich('more', { docs: (chunks) => <Link href="/docs/start/showcase">{chunks}</Link> })}
       </p>
       <style>{`
         .cc-page {
@@ -102,7 +105,7 @@ export default function ShowcasePage() {
         }
         .cc-btn.primary {
           background: linear-gradient(135deg, var(--coral-bright), var(--coral-dark, var(--coral-bright)));
-          color: white;
+          color: var(--text-on-accent);
           border-color: transparent;
         }
         .cc-more {

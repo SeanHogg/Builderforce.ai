@@ -292,6 +292,24 @@ export function authFieldsFor(manifest: ConnectorManifest): ConnectorAuthField[]
   return defaultAuthFields(manifest.auth.kind);
 }
 
+/**
+ * Whether this action's transport can carry a request body at all.
+ *
+ * A `GET` or `DELETE` never sends one, so `bodyFormat` is meaningless on those —
+ * `release_phone_number` is a `DELETE` whose only argument is a path SID, and
+ * demanding `bodyFormat: 'form'` of it would be recording an encoding for a body
+ * that is never written. SOAP inverts the rule: an envelope IS the request, so an
+ * operation with no mapped params still sends one.
+ *
+ * The runtime decides `hasBody` from this AND whether any param actually mapped;
+ * this half is the part that is a property of the action alone, which is why it is
+ * the half that can be asserted about a manifest without executing it.
+ */
+export function actionCarriesRequestBody(action: Pick<ConnectorAction, 'method' | 'soap'>): boolean {
+  if (action.soap) return true;
+  return action.method !== 'GET' && action.method !== 'DELETE';
+}
+
 function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
 }

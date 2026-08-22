@@ -1,5 +1,6 @@
 {
   "//": "The headless harness spans BOTH halves of the extension: the extension-host tool definitions (../src) and the webview's system prompt + transcript serializer (../webview/src). Neither of the existing projects covers that span, so it gets its own — otherwise `pnpm typecheck` would silently skip the code that validates everything else.",
+  "//allowJs": "`../vitest.config.ts` (below) imports the source-package registry, which is JSDoc-typed JS. allowJs lets tsc read its inferred types instead of demanding a hand-written .d.mts twin of them.",
   "compilerOptions": {
     "target": "ES2022",
     "module": "ESNext",
@@ -8,6 +9,7 @@
     "jsx": "react-jsx",
     "strict": true,
     "esModuleInterop": true,
+    "allowJs": true,
     "skipLibCheck": true,
     "noEmit": true,
     "ignoreDeprecations": "6.0",

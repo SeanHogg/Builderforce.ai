@@ -8,6 +8,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { computeBuildId } from "./buildId.mjs";
+import { sourcePackageAliasMap, sourcePackageRoots } from "../../scripts/sourcePackages.mjs";
 
 const watch = process.argv.includes("--watch");
 const production = process.argv.includes("--production");
@@ -26,37 +27,27 @@ const integration = process.argv.includes("--integration");
 if (!harness && !integration) fs.rmSync("out", { recursive: true, force: true });
 
 const here = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.resolve(here, "../..");
 
-// The shared `@builderforce/agent-tools` contract is consumed as SOURCE (no dist —
-// mirrors how `api` resolves it via tsconfig paths), so the editor surface runs the
-// SAME tool definitions as the cloud. Bundle it from its TS entry…
-const agentToolsRoot = path.resolve(here, "../../packages/agent-tools/src");
-const runContextRoot = path.resolve(here, "../../packages/run-context/src");
-const creationCanvasContract = path.resolve(here, "../../packages/creation-canvas-contract/src/index.ts");
+// The shared contracts (`@builderforce/agent-tools`, `run-context`, the canvas
+// contract) are consumed as SOURCE (no dist — mirrors how `api` resolves them via
+// tsconfig paths), so the editor surface runs the SAME tool definitions as the cloud.
+// Both the alias map and the roots below are derived from the package manifests, so a
+// new shared package is bundled here, in the harness and on the web without a list to
+// remember. See `scripts/sourcePackages.mjs`.
+//
+// `@builderforce/agent-tools/node-path` is agent-tools' node-only export condition (the
+// shared workspace-containment path resolver). The package ROOT stays node-builtin-free
+// because the Cloudflare Worker imports it; this subpath is Node-surface-only, which is
+// why it is a separate entry rather than a re-export from the index — esbuild matches
+// the longest alias key, so both resolve correctly.
+const sharedPackageAliases = sourcePackageAliasMap(repoRoot);
 
 /** Source-consumed shared packages whose NodeNext `./x.js` imports must be rewritten to
- *  `./x.ts`. Adding a package here is the ONE change needed — the resolver plugin below
- *  reads this list rather than hard-coding a single root (which is how `run-context`
- *  would otherwise have failed to bundle the moment it imported its own `blocks.js`). */
-const tsSourcePackageRoots = [agentToolsRoot, runContextRoot];
-
-/**
- * One alias map for every bundle target, so a new shared-package entry point is added in
- * ONE place instead of being copy-pasted per esbuild config.
- *
- * `@builderforce/agent-tools/node-path` is agent-tools' node-only export condition (the
- * shared workspace-containment path resolver). The package ROOT stays node-builtin-free
- * because the Cloudflare Worker imports it; this subpath is Node-surface-only, which is
- * why it is a separate entry rather than a re-export from the index.
- */
-const sharedPackageAliases = {
-  "@builderforce/agent-tools": path.join(agentToolsRoot, "index.ts"),
-  "@builderforce/agent-tools/node-path": path.join(agentToolsRoot, "node-path.ts"),
-  "@builderforce/creation-canvas-contract": creationCanvasContract,
-  // The ONE run-context contract + renderer + reconciler, shared with the api and the
-  // on-prem runner so all three prompt-assembly surfaces render the same blocks.
-  "@builderforce/run-context": path.join(runContextRoot, "index.ts"),
-};
+ *  `./x.ts`. The resolver plugin below reads these roots rather than hard-coding one
+ *  (which is how `run-context` would otherwise have failed to bundle the moment it
+ *  imported its own `blocks.js`). */
+const tsSourcePackageRoots = sourcePackageRoots(repoRoot);
 
 /** …and rewrite its NodeNext `./x.js` relative imports to the real `./x.ts` source
  *  (esbuild won't map .js→.ts on its own). Scoped to that package so nothing else

@@ -1,4 +1,4 @@
-import{a3 as gU,o as CU,a2 as RI,r as hA,j as JA,_ as tp,D as BU,v as sp,s as Ce}from"./index.js";/**
+import{bB as gU,av as CU,a_ as RI,r as hA,j as JA,_ as tp,aG as BU,v as sp,s as Ce}from"./index.js";/**
  * @license
  * Copyright 2010-2026 Three.js Authors
  * SPDX-License-Identifier: MIT

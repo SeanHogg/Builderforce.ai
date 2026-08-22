@@ -5,6 +5,7 @@ import { Select } from '@/components/Select';
 
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useTranslations } from 'next-intl';
 import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 
@@ -44,6 +45,7 @@ export default function SkillsBrowser({ skills }: { skills: Skill[] }) {
   const [search, setSearch] = useState<string>('');
   const [sort, setSort] = useState<SortKey>('trending');
   const [viewMode, setViewMode] = useState<ViewMode>('card');
+  const t = useTranslations('agents.skills');
 
   const categories = useMemo(
     () => Array.from(new Set(skills.map((s) => s.category).filter((c): c is string => Boolean(c)))).sort(),
@@ -63,7 +65,7 @@ export default function SkillsBrowser({ skills }: { skills: Skill[] }) {
           !q ||
           s.name.toLowerCase().includes(q) ||
           s.description.toLowerCase().includes(q) ||
-          (s.tags ?? []).some((t) => t.toLowerCase().includes(q))
+          (s.tags ?? []).some((tag) => tag.toLowerCase().includes(q))
       )
       .slice()
       .sort((a, b) => score(b, sort) - score(a, sort));
@@ -72,64 +74,60 @@ export default function SkillsBrowser({ skills }: { skills: Skill[] }) {
   return (
     <div className="cc-skills-page">
       <header className="cc-skills-hero">
-        <h1 className="cc-skills-title">Agent Skills Directory</h1>
-        <p className="cc-skills-lead">
-          Discover and share powerful agent skills. Browse the community registry or upload your own.
-        </p>
+        <h1 className="cc-skills-title">{t('heading')}</h1>
+        <p className="cc-skills-lead">{t('lead')}</p>
         <div className="cc-skills-cta">
-          <Link href="/marketplace" className="cc-btn primary">Browse marketplace</Link>
-          <Link href="/login" className="cc-btn">Share your skill</Link>
+          <Link href="/marketplace" className="cc-btn primary">{t('browseMarketplace')}</Link>
+          <Link href="/login" className="cc-btn">{t('shareYourSkill')}</Link>
         </div>
       </header>
 
       <section className="cc-skills-filters">
         <div className="cc-skills-filter">
-          <label htmlFor="cc-cat">Category</label>
+          <label htmlFor="cc-cat">{t('category')}</label>
           <Select id="cc-cat" value={category} onChange={(e) => setCategory(e.target.value)}>
-            <option value="">All Categories</option>
+            <option value="">{t('allCategories')}</option>
             {categories.map((c) => (
               <option key={c} value={c}>{c}</option>
             ))}
           </Select>
         </div>
         <div className="cc-skills-filter">
-          <label htmlFor="cc-search">Search</label>
+          <label htmlFor="cc-search">{t('search')}</label>
           <input
             id="cc-search"
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search skills…"
+            placeholder={t('searchPlaceholder')}
           />
         </div>
         <div className="cc-skills-filter">
-          <label htmlFor="cc-sort">Sort</label>
+          <label htmlFor="cc-sort">{t('sort')}</label>
           <Select id="cc-sort" value={sort} onChange={(e) => setSort(e.target.value as SortKey)}>
-            <option value="trending">Trending</option>
-            {hasDates && <option value="newest">Newest</option>}
-            <option value="popular">Most Popular</option>
-            <option value="downloads">Most Downloaded</option>
+            <option value="trending">{t('sortTrending')}</option>
+            {hasDates && <option value="newest">{t('sortNewest')}</option>}
+            <option value="popular">{t('sortPopular')}</option>
+            <option value="downloads">{t('sortDownloads')}</option>
           </Select>
         </div>
         <div className="cc-skills-filter" style={{ flex: '0 0 auto', justifyContent: 'flex-end' }}>
-          <label>View</label>
+          <label>{t('view')}</label>
           <ViewToggle value={viewMode} onChange={setViewMode} />
         </div>
       </section>
 
-      <p className="cc-skills-count">
-        Showing {visible.length} of {skills.length} skills
-      </p>
+      <p className="cc-skills-count">{t('count', { shown: visible.length, total: skills.length })}</p>
 
       {viewMode === 'table' ? (
         <div style={tableWrapStyle}>
           <table style={tableStyle}>
             <thead>
               <tr style={theadRowStyle}>
-                <th style={thStyle}>Skill</th>
-                <th style={thStyle}>Description</th>
-                <th style={thStyle}>Category</th>
-                <th style={{ ...thStyle, textAlign: 'right' }}>Action</th>
+                <th style={thStyle}>{t('colSkill')}</th>
+                <th style={thStyle}>{t('colDescription')}</th>
+                <th style={thStyle}>{t('colCategory')}</th>
+                <th style={{ ...thStyle, textAlign: 'right' }}>{t('colAction')}</th>
               </tr>
             </thead>
             <tbody>
@@ -137,12 +135,12 @@ export default function SkillsBrowser({ skills }: { skills: Skill[] }) {
                 <tr key={s.id} style={trStyle}>
                   <td style={tdStyle}>
                     <strong>{s.name}</strong>
-                    <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>by {s.author}</div>
+                    <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{t('byAuthor', { author: s.author })}</div>
                   </td>
                   <td style={tdMutedStyle}>{s.description}</td>
                   <td style={tdMutedStyle}>{s.category ?? '—'}</td>
                   <td style={{ ...tdStyle, textAlign: 'right' }}>
-                    <Link href="/marketplace" className="cc-btn">Get</Link>
+                    <Link href="/marketplace" className="cc-btn">{t('get')}</Link>
                   </td>
                 </tr>
               ))}
@@ -157,11 +155,11 @@ export default function SkillsBrowser({ skills }: { skills: Skill[] }) {
                 <h3 className="cc-skill-name">{s.name}</h3>
                 {s.category && <span className="cc-skill-cat">{s.category}</span>}
               </div>
-              <p className="cc-skill-author">by {s.author}</p>
+              <p className="cc-skill-author">{t('byAuthor', { author: s.author })}</p>
               <p className="cc-skill-desc">{s.description}</p>
               {s.tags && s.tags.length > 0 && (
                 <div className="cc-skill-tags">
-                  {s.tags.map((t) => <span key={t} className="cc-skill-tag">#{t}</span>)}
+                  {s.tags.map((tag) => <span key={tag} className="cc-skill-tag">#{tag}</span>)}
                 </div>
               )}
               <div className="cc-skill-stats">
@@ -212,7 +210,7 @@ export default function SkillsBrowser({ skills }: { skills: Skill[] }) {
         }
         .cc-btn.primary {
           background: linear-gradient(135deg, var(--coral-bright), var(--coral-dark, var(--coral-bright)));
-          color: white;
+          color: var(--text-on-accent);
           border-color: transparent;
         }
         .cc-skills-filters {
@@ -282,7 +280,7 @@ export default function SkillsBrowser({ skills }: { skills: Skill[] }) {
         .cc-skill-cat {
           font-size: var(--font-size-eyebrow);
           padding: 3px 8px;
-          background: rgba(77,158,255,0.12);
+          background: color-mix(in srgb, var(--coral-bright) 12%, transparent);
           color: var(--coral-bright);
           border-radius: var(--radius-sm);
           white-space: nowrap;

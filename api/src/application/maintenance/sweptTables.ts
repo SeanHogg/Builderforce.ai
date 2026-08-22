@@ -31,7 +31,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import { acrossTenants } from '../../infrastructure/database/tenantScope';
 import {
   apiErrorLog,
-  demoEvents,
+  visitorEvents,
   errorEvents,
   llmFailoverLog,
   llmHealthProbes,
@@ -126,11 +126,11 @@ export const SWEPT_TABLES: readonly SweptTable[] = [
     purge: (db, cutoff) => db.delete(toolAuditEvents).where(acrossTenants(toolAuditEvents, 'scheduled_sweep', lt(toolAuditEvents.createdAt, cutoff))),
   },
   {
-    relation: 'demo_events',
+    relation: 'visitor_events',
     connection: 'primary',
     retentionDays: 90,
-    rationale: 'Anonymous demo-funnel telemetry; the admin funnel panel only looks back 30d.',
-    purge: (db, cutoff) => db.delete(demoEvents).where(lt(demoEvents.createdAt, cutoff)),
+    rationale: 'Anonymous visitor-journey telemetry; the flow graph only looks back 30d.',
+    purge: (db, cutoff) => db.delete(visitorEvents).where(lt(visitorEvents.createdAt, cutoff)),
   },
 ];
 

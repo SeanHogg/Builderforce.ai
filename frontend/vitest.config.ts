@@ -2,6 +2,7 @@ import { defineConfig, Plugin } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 import fs from 'fs';
+import { sourcePackageAliases } from '../scripts/sourcePackages.mjs';
 
 /** Treat *.md files as raw string exports, matching the webpack asset/source loader in next.config.js. */
 const rawMarkdown: Plugin = {
@@ -90,13 +91,16 @@ export default defineConfig({
     ],
   },
   resolve: {
-    alias: {
-      '@': path.resolve(__dirname, './src'),
-      '@builderforce/creation-canvas-contract': path.resolve(__dirname, '../packages/creation-canvas-contract/src/index.ts'),
-      '@builderforce/canvas-widget-protocol': path.resolve(__dirname, '../packages/canvas-widget-protocol/src/index.ts'),
-      '@builderforce/ide-templates': path.resolve(__dirname, '../packages/ide-templates/src/index.ts'),
-      '@builderforce/ide-file-contract': path.resolve(__dirname, '../packages/ide-file-contract/src/index.ts'),
-    },
+    alias: [
+      // The source-only shared packages, derived from their manifests rather
+      // than listed here — vitest does not read tsconfig `paths`, and the two
+      // lists drifted every time they were kept by hand. See
+      // `scripts/sourcePackages.mjs`.
+      ...sourcePackageAliases(path.resolve(__dirname, '..')),
+      // Array form, so the anchored package patterns above stay exact: an
+      // object alias matches by prefix. `@/` is a prefix alias by design.
+      { find: /^@\//, replacement: path.resolve(__dirname, './src') + '/' },
+    ],
     // The `link:`ed sibling packages (brain-embedded, brain-ui) ship their deps as
     // external peers and import them bare. Vite follows the symlink into the sibling's
     // dist and would resolve those bare imports from that package's own node_modules

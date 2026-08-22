@@ -12,7 +12,7 @@
  */
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { useAuth } from '@/lib/AuthContext';
+import { useSampleWorkspace } from '@/domains/guest/presentation/useSampleWorkspace';
 import { pinsApi, type WidgetPin } from './pinsApi';
 
 interface PinsApi {
@@ -29,13 +29,16 @@ interface PinsApi {
 const PinsContext = createContext<PinsApi | null>(null);
 
 export function PinsProvider({ children }: { children: ReactNode }) {
-  const { isAuthenticated, hasTenant } = useAuth();
+  const { signedIn } = useSampleWorkspace();
   const [pinned, setPinned] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const loadedFor = useRef<boolean | null>(null);
 
   useEffect(() => {
-    const active = isAuthenticated && hasTenant;
+    // `signedIn` from the ONE place that derives it — the same answer the
+    // sample-data notice and every SessionGate read, so pins cannot believe the
+    // workspace is real while the banner above them says it is sample.
+    const active = signedIn;
     if (!active) { setPinned([]); loadedFor.current = null; return; }
     if (loadedFor.current === true) return; // already loaded for this tenant session
     loadedFor.current = true;
@@ -46,7 +49,7 @@ export function PinsProvider({ children }: { children: ReactNode }) {
       .catch(() => { /* empty home is a valid state */ })
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
-  }, [isAuthenticated, hasTenant]);
+  }, [signedIn]);
 
   const pin = useCallback((widgetKey: string) => {
     setPinned((prev) => (prev.includes(widgetKey) ? prev : [...prev, widgetKey]));

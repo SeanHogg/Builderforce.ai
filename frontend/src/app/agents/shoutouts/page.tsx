@@ -1,13 +1,16 @@
 import type { Metadata } from 'next';
+import { getTranslations } from 'next-intl/server';
+import { pageMetadata } from '@/lib/seo';
 import testimonials from '@/data/agents/testimonials.json';
 import extraTestimonials from '@/data/agents/testimonials-extra.json';
 import ShoutoutsView, { type Testimonial } from './ShoutoutsView';
 
-export const metadata: Metadata = {
-  title: 'Shoutouts — BuilderForce Agents',
-  description: 'What developers are saying about BuilderForce Agents. Real praise from engineers, founders, and builders who use BuilderForce Agents autonomous agents every day.',
-  alternates: { canonical: '/agents/shoutouts' },
-};
+export const runtime = 'edge';
+
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations('agents.shoutouts');
+  return pageMetadata({ title: t('metaTitle'), description: t('metaDescription'), path: '/agents/shoutouts' });
+}
 
 export default function ShoutoutsPage() {
   const all = [...testimonials, ...extraTestimonials] as Testimonial[];

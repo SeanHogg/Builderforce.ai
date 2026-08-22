@@ -437,6 +437,9 @@ async function callConnector(env, connectorKey, actionKey, input) {
     headers.Authorization = \`Basic \${btoa(\`\${auth.username ?? ''}:\${auth.password ?? ''}\`)}\`;
   }
 
+  // Same rule as \`actionCarriesRequestBody\` in connectorManifest.ts. This is the ONE
+  // copy that cannot import it: these lines are emitted into a standalone deployed
+  // handler that has no access to the API's modules. Change both together.
   const hasBody = action.method !== 'GET' && action.method !== 'DELETE' && Object.keys(body).length > 0;
   if (hasBody) headers['Content-Type'] = action.bodyFormat === 'form' ? 'application/x-www-form-urlencoded' : 'application/json';
 

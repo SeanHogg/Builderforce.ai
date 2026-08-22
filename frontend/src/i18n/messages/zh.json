@@ -727,7 +727,8 @@
       "rewards": "奖励",
       "mail": "邮件",
       "phone": "电话",
-      "sourcing": "职位采集"
+      "sourcing": "职位采集",
+      "employers": "雇主"
     },
     "primaryAria": "主导航",
     "destination": {
@@ -8845,6 +8846,243 @@
         "drizzle-orm": "Builderforce 中用于 PostgreSQL 的类型安全 ORM。",
         "hono": "面向边缘优先的 Builderforce API Web 框架。"
       }
+    },
+    "integrationsPage": {
+      "metaTitle": "集成 — BuilderForce Agents",
+      "metaDescription": "BuilderForce Agents 与你的整套技术栈集成——WhatsApp、Telegram、Discord、GitHub、Gmail、Obsidian 等等。把你的代理连接到你已经在用的工具上。",
+      "heading": "集成",
+      "leadLine1": "与你已经在用的应用和服务，50 多项集成。",
+      "leadLine2": "用手机聊天，用桌面控制，把一切自动化。",
+      "grid": {
+        "colIntegration": "集成",
+        "colDescription": "说明",
+        "colAction": "操作",
+        "connect": "连接 →"
+      },
+      "sections": {
+        "chatProviders": {
+          "title": "聊天渠道",
+          "description": "从任意聊天应用向 BuilderForce Agents 发消息——它就在你所在的地方回应你。"
+        },
+        "models": {
+          "title": "AI 模型",
+          "description": "想用哪个模型就用哪个——云端或本地。你的密钥，你的选择。"
+        },
+        "productivity": {
+          "title": "效率工具",
+          "description": "笔记、任务、知识库和代码——BuilderForce Agents 与你惯用的工具协同工作。"
+        },
+        "musicAudio": {
+          "title": "音乐与音频",
+          "description": "控制播放、识别歌曲、管理多房间音频。"
+        },
+        "smartHome": {
+          "title": "智能家居",
+          "description": "灯光、恒温器与物联网设备——全部支持语音控制。"
+        },
+        "tools": {
+          "title": "工具与自动化",
+          "description": "浏览器控制、定时任务、邮件触发等等。"
+        },
+        "mediaCreative": {
+          "title": "媒体与创作",
+          "description": "生成图像、截取屏幕，并找到最合适的 GIF。"
+        },
+        "social": {
+          "title": "社交",
+          "description": "发布推文、管理邮件，保持连接。"
+        },
+        "companionApps": {
+          "title": "配套应用",
+          "description": "覆盖你各类设备的原生应用与平台支持。"
+        },
+        "examples": {
+          "title": "真实案例",
+          "description": "人们正在用 BuilderForce Agents 集成真正做出来的东西。"
+        }
+      },
+      "items": {
+        "WhatsApp": "通过 Baileys 扫码配对",
+        "Telegram": "通过 grammY 使用 Bot API",
+        "Discord": "服务器、频道与私信",
+        "Slack": "通过 Bolt 接入工作区应用",
+        "Signal": "基于 signal-cli，注重隐私",
+        "iMessage": "通过 imsg 接入（AppleScript 桥接）",
+        "Microsoft Teams": "企业级支持",
+        "Nextcloud Talk": "自托管的 Nextcloud 聊天",
+        "Matrix": "Matrix 协议",
+        "Nostr": "通过 NIP-04 实现去中心化私信",
+        "Zalo": "Zalo Bot API",
+        "WebChat": "基于浏览器的界面",
+        "Anthropic": "Claude Pro/Max + Opus 4.5",
+        "OpenAI": "GPT-4、GPT-5、o1",
+        "Google": "Gemini 2.5 Pro/Flash",
+        "MiniMax": "MiniMax-M2.1",
+        "xAI": "Grok 3 与 4",
+        "Vercel AI Gateway": "一个 API 密钥，数百个模型",
+        "OpenRouter": "统一的 API 网关",
+        "Mistral": "Mistral Large 与 Codestral",
+        "DeepSeek": "DeepSeek V3 与 R1",
+        "Perplexity": "搜索增强型 AI",
+        "Hugging Face": "开源模型",
+        "Local Models": "Ollama、LM Studio",
+        "Apple Notes": "macOS/iOS 原生备忘录",
+        "Apple Reminders": "任务管理",
+        "Things 3": "GTD 任务管理器",
+        "Notion": "工作区与数据库",
+        "Obsidian": "知识图谱笔记",
+        "Bear Notes": "Markdown 笔记",
+        "Trello": "看板",
+        "GitHub": "代码、议题与 PR",
+        "Spotify": "音乐播放控制",
+        "Sonos": "多房间音频",
+        "Shazam": "歌曲识别",
+        "Philips Hue": "智能照明",
+        "8Sleep": "智能床垫",
+        "Home Assistant": "家庭自动化中枢",
+        "Browser": "Chrome/Chromium 控制",
+        "Canvas": "可视化工作区 + A2UI",
+        "Voice": "语音唤醒 + 对话模式",
+        "Gmail": "基于 Pub/Sub 的邮件触发",
+        "Cron": "定时任务",
+        "Webhooks": "外部触发器",
+        "1Password": "安全凭据管理",
+        "Weather": "天气预报与实况",
+        "Image Gen": "AI 图像生成",
+        "GIF Search": "找到最合适的 GIF",
+        "Peekaboo": "屏幕截取与控制",
+        "Camera": "拍照与录像",
+        "Twitter/X": "发推、回复、搜索",
+        "Email": "收发邮件",
+        "macOS": "菜单栏应用 + 语音唤醒",
+        "iOS": "画布、摄像头、语音唤醒",
+        "Android": "画布、摄像头、屏幕",
+        "Windows": "推荐使用 WSL2",
+        "Linux": "原生支持",
+        "Tesco Autopilot": "自动化生鲜采购",
+        "Bambu Control": "3D 打印机管理",
+        "Oura Ring": "健康数据洞察",
+        "Food Ordering": "Foodora 集成"
+      }
+    },
+    "shoutouts": {
+      "metaTitle": "用户评价 — BuilderForce Agents",
+      "metaDescription": "开发者如何评价 BuilderForce Agents。来自每天使用 BuilderForce Agents 自主代理的工程师、创业者与开发者的真实好评。",
+      "heading": "用户评价",
+      "subtitle": "社区对 BuilderForce Agents 的评价。",
+      "empty": "暂时还没有评价。",
+      "colAuthor": "作者",
+      "colHandle": "账号",
+      "colTestimonial": "评价"
+    },
+    "showcase": {
+      "metaTitle": "案例展示 — 人们正在用 BuilderForce Agents 构建什么",
+      "metaDescription": "看看开发者用 BuilderForce Agents 的自主代理构建了什么。来自 BuilderForce Agents 社区的真实项目、工作流与自动化。",
+      "heading": "人们正在构建什么",
+      "subtitle": "真实的项目，真实的自动化，真实的魔法。",
+      "filterAgents": "BuilderForce Agents 项目（{count}）",
+      "filterAll": "全部项目（{count}）",
+      "colAuthor": "作者",
+      "colSummary": "摘要",
+      "colLikes": "点赞",
+      "colLink": "链接",
+      "viewOnX": "在 X 上查看 →",
+      "screenshotAlt": "截图",
+      "ctaHeading": "做出了有意思的东西？",
+      "ctaBody": "把你用 BuilderForce Agents 的作品分享给社区。",
+      "shareOnX": "分享到 X",
+      "browseSkills": "浏览技能",
+      "joinDiscord": "加入 Discord",
+      "more": "想看更多？<docs>文档里还有更多示例</docs>。"
+    },
+    "skills": {
+      "metaTitle": "代理技能目录 — BuilderForce Agents",
+      "metaDescription": "浏览 BuilderForce Agents 的代理技能目录。发现用于代码评审、测试、文档编写、安全扫描等的现成技能。",
+      "heading": "代理技能目录",
+      "lead": "发现并分享强大的代理技能。浏览社区注册表，或上传你自己的技能。",
+      "browseMarketplace": "浏览市场",
+      "shareYourSkill": "分享你的技能",
+      "category": "分类",
+      "allCategories": "全部分类",
+      "search": "搜索",
+      "searchPlaceholder": "搜索技能…",
+      "sort": "排序",
+      "sortTrending": "热门趋势",
+      "sortNewest": "最新",
+      "sortPopular": "最受欢迎",
+      "sortDownloads": "下载最多",
+      "view": "视图",
+      "count": "显示 {total} 个技能中的 {shown} 个",
+      "colSkill": "技能",
+      "colDescription": "说明",
+      "colCategory": "分类",
+      "colAction": "操作",
+      "byAuthor": "作者：{author}",
+      "get": "获取"
+    },
+    "skillDetail": {
+      "notFoundTitle": "未找到该技能 — BuilderForce Agents",
+      "metaTitle": "{name} — 代理技能 — BuilderForce Agents",
+      "crumb": "代理技能",
+      "byAuthor": "作者：{author}",
+      "likes": "{count} 次点赞",
+      "downloads": "{count} 次下载",
+      "installHeading": "安装",
+      "installBody": "从市场把 <name></name> 技能添加到任意 BuilderForce Agents 主机，或在租户或主机范围内把它分配给某个代理。",
+      "getOnMarketplace": "前往市场获取",
+      "browseAll": "浏览全部技能"
+    },
+    "workflowBuilder": {
+      "metaTitle": "代理式工作流构建器 — Builderforce.ai",
+      "metaDescription": "拖拽式的 IPAAS 风格画布，用来编排你自己的 LLM 逻辑——记忆、知识库与训练节点——与你的代理连接，并在你自己的主机上运行。真正可执行的可视化工作流。",
+      "heading": "代理式工作流构建器",
+      "tagline": "编排你的 LLM 逻辑。连接你的代理。看着它运行。",
+      "description": "一个拖拽式的 IPAAS 风格画布，<term>记忆</term>、<term>知识库</term>与<term>训练</term>都是可以和你的代理拼接在一起的节点，然后在你自己的主机上运行。它不是画图工具：每个工作流都会真正执行。",
+      "openBuilder": "打开构建器 →",
+      "readDocs": "阅读文档 →",
+      "paletteHeading": "为代理工作而生的节点面板",
+      "paletteIntro": "大多数工作流构建器止步于 HTTP 调用和 if/else。这一个补上了让代理真正有用的原语——LLM 逻辑节点才是重头戏。",
+      "differentiator": "差异化所在",
+      "catalogHeading": "{count}+ 项集成，随取随用",
+      "catalogIntro": "MCP 服务器、LLM 平台、数据库、CRM 与数据采集源——把它们中的任何一个拖到画布上即可。",
+      "andMore": "另有 {count} 项",
+      "howItWorksHeading": "工作方式",
+      "whatYouGetHeading": "你将获得",
+      "finalCtaHeading": "构建你的第一个工作流",
+      "finalCtaBody": "打开一张空白画布，放入一个触发器、一个代理和一个记忆节点，连好线，然后在主机上运行——用不到一分钟。",
+      "exploreAgents": "了解 BuilderForce Agents →",
+      "steps": [
+        {
+          "title": "拖入你的节点",
+          "body": "把触发器、LLM 逻辑、代理和 ETL 步骤拖到画布上。每个节点都可以在侧边面板中配置——无需写代码。"
+        },
+        {
+          "title": "连接流程",
+          "body": "连接节点即声明依赖关系。图会自动编译成按依赖排序的执行计划。"
+        },
+        {
+          "title": "在你的主机上运行",
+          "body": "点击运行，工作流就会被你的某台代理主机接管、执行，并实时回传到监控图上。"
+        }
+      ],
+      "capabilities": [
+        {
+          "title": "把你的 LLM 逻辑做成节点",
+          "description": "记忆的读取与写入、知识库的查询与入库、模型训练，都是一等公民节点——像编排其他步骤一样编排它们。"
+        },
+        {
+          "title": "把你的代理当作执行者",
+          "description": "放入一个「代理运行」节点，选好角色、运行时和模型，你配置好的代理就会去干活——本地、云端、浏览器或远程网格皆可。"
+        },
+        {
+          "title": "看得见的运行",
+          "description": "每一次运行都会生成一条可追踪的执行记录——任务状态、实时依赖图、耗时与成本会自动出现在监控视图中。"
+        },
+        {
+          "title": "导入、导出与版本管理",
+          "description": "每个工作流都能与人类可编写的 YAML 双向转换——手工编辑、提交进 git，或者把手写的流程直接导入画布。"
+        }
+      ]
     }
   },
   "newsletter": {
@@ -26672,6 +26910,101 @@
       "removeMessage": "将停止从 {name} 继续同步。已采集的职位将保留。",
       "removeAction": "移除职位源",
       "removeFailed": "无法移除该职位源。"
+    }
+  },
+  "guest": {
+    "sample": {
+      "badge": "示例数据",
+      "body": "你正在浏览一个示例工作区。其中的数字都是虚构的——这里没有任何内容属于真实企业。",
+      "cta": "把它变成你的工作区"
+    },
+    "gate": {
+      "create": "创建账户",
+      "signIn": "登录",
+      "reason": {
+        "runAgent": "登录后才能向代理派发运行任务。",
+        "connectIntegration": "登录后才能连接账户。",
+        "publish": "登录后才能发布此内容。",
+        "invite": "登录后才能邀请他人。",
+        "pay": "登录后才能完成支付。",
+        "save": "登录后才能保存这项工作。"
+      }
+    }
+  },
+  "employers": {
+    "view": {
+      "intro": "雇主，以及曾在此工作的人对他们的评价。评价经审核后才会显示。"
+    },
+    "rating": {
+      "outOf": "{max} 分中的 {rating} 分",
+      "choose": "选择评分",
+      "score": "{score}"
+    },
+    "summary": {
+      "unrated": "暂无评价",
+      "count": "{count} 条评价"
+    },
+    "directory": {
+      "title": "雇主",
+      "search": "搜索",
+      "searchPlaceholder": "公司名称",
+      "empty": "暂无雇主。",
+      "noMatches": "没有符合该搜索条件的雇主。",
+      "noDetail": "暂无详细信息",
+      "failed": "无法加载雇主列表。"
+    },
+    "detail": {
+      "reviews": "评价",
+      "noReviews": "暂无已发布的评价。",
+      "anonymous": "匿名",
+      "verified": "已验证",
+      "headcount": "{count} 名员工",
+      "failed": "无法加载该雇主。"
+    },
+    "axis": {
+      "culture": "企业文化",
+      "leadership": "管理层",
+      "workLifeBalance": "工作与生活平衡",
+      "compensation": "薪酬待遇",
+      "careerGrowth": "职业发展",
+      "diversityInclusion": "多元与包容"
+    },
+    "form": {
+      "title": "撰写评价",
+      "updateTitle": "您的评价",
+      "rating": "总体评分",
+      "headline": "标题",
+      "headlinePlaceholder": "用一句话概括",
+      "body": "您的评价",
+      "bodyPlaceholder": "在那里工作的真实体验如何？",
+      "submit": "提交评价",
+      "update": "更新评价",
+      "saving": "保存中…",
+      "withdraw": "撤回",
+      "withdrawTitle": "确定撤回您的评价？",
+      "withdrawMessage": "您对 {name} 的评价将被移除。之后仍可重新撰写。",
+      "withdrawAction": "撤回评价",
+      "withdrawFailed": "无法撤回该评价。",
+      "failed": "该评价未能保存。",
+      "submittedPending": "感谢您——您的评价已提交审核，通过后即会显示。",
+      "yoursPending": "您的评价正在等待审核，尚未公开。",
+      "yoursRejected": "您的评价未通过审核。请修改后重新提交。",
+      "moderationNote": "评价会指名真实的机构，因此每条评价都会先由人工审阅再发布。"
+    },
+    "moderation": {
+      "title": "{count, plural, =0 {审核} other {审核 — # 条待处理}}",
+      "intro": "这些评价指名真实机构。只批准您愿意为之负责的内容。",
+      "about": "关于 {subject}",
+      "reason": "理由",
+      "reasonPlaceholder": "拒绝时必填——将告知作者",
+      "approve": "批准",
+      "reject": "拒绝",
+      "working": "处理中…",
+      "failed": "该操作未能生效。",
+      "status": {
+        "pending": "待审核",
+        "rejected": "已拒绝"
+      }
     }
   }
 }

@@ -2,16 +2,14 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
+import { sourcePackageAliases, sourcePackageRoots } from '../../scripts/sourcePackages.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-// The shared `@builderforce/agent-tools` contract is consumed as SOURCE (it ships no
-// dist), exactly as `esbuild.mjs` does for the extension bundle — so the harness runs
-// the same tool definitions the VSIX does, not a copy.
-const agentToolsRoot = path.resolve(here, '../../packages/agent-tools/src');
-const runContextRoot = path.resolve(here, '../../packages/run-context/src');
+const repoRoot = path.resolve(here, '../..');
 /** Every source-consumed shared package whose NodeNext `./x.js` imports need rewriting.
- *  Mirrors `esbuild.mjs`'s `tsSourcePackageRoots` — one list, both toolchains. */
-const tsSourcePackageRoots = [agentToolsRoot, runContextRoot];
+ *  Derived from the manifests, exactly as `esbuild.mjs` derives them — one registry,
+ *  both toolchains, so the harness runs the same sources the VSIX bundles. */
+const tsSourcePackageRoots = sourcePackageRoots(repoRoot);
 
 /** Map that package's NodeNext `./x.js` relative imports onto the real `./x.ts` source.
  *  Scoped to it by importer path, so nothing else is affected. Mirrors the esbuild
@@ -29,17 +27,12 @@ const agentToolsTsResolve = {
 export default defineConfig({
   plugins: [agentToolsTsResolve],
   resolve: {
-    alias: {
-      // Keep BOTH entries in step with `esbuild.mjs`'s `sharedPackageAliases`: the
-      // `/node-path` subpath is agent-tools' node-only export condition (the shared
-      // workspace-containment resolver). Without it a test that touches the local
-      // capability provider fails to import at all, which took out the whole harness
-      // suite the moment `localCapabilities.ts` started using it.
-      '@builderforce/agent-tools/node-path': path.join(agentToolsRoot, 'node-path.ts'),
-      '@builderforce/agent-tools': path.join(agentToolsRoot, 'index.ts'),
-      '@builderforce/creation-canvas-contract': path.resolve(here, '../../packages/creation-canvas-contract/src/index.ts'),
-      '@builderforce/run-context': path.join(runContextRoot, 'index.ts'),
-    },
+    // The same set `esbuild.mjs` bundles with, from the same registry. Subpath
+    // exports are included and anchored: `@builderforce/agent-tools/node-path` is
+    // agent-tools' node-only export condition (the shared workspace-containment
+    // resolver), and losing it takes out the whole harness suite the moment
+    // `localCapabilities.ts` imports it.
+    alias: sourcePackageAliases(repoRoot),
   },
   test: {
     // The harness drives the run loop headlessly — no DOM, no extension host.

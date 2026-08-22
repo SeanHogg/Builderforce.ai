@@ -14,6 +14,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { useEmulation } from '@/lib/EmulationContext';
 import { useSidebarCollapse } from '@/lib/useSidebarCollapse';
 import { useMobileNav } from '@/lib/useMobileNav';
+import { SampleDataNotice } from '@/components/guest/SampleDataNotice';
 import { NavCountsProvider } from '@/lib/navCounts';
 import { ShellIndex } from './shell/ShellIndex';
 import { ShellPanel } from './shell/ShellPanel';
@@ -117,6 +118,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             className={`content${stageActive ? ' app-full-height' : ''}`}
             style={{ width: '100%', paddingLeft: 0 }}
           >
+            {/* Mounted ONCE, above every surface the shell hosts, because
+                seventy-eight of them render for a signed-out visitor over the
+                sample workspace and each one has to say so. It decides its own
+                visibility — nothing here knows or passes whether the data is
+                real — so a new surface cannot be added that forgets to admit
+                what it is showing. */}
+            <SampleDataNotice />
             {stageActive ? (
               // Stage + panel. The board keeps its place in the tree in BOTH
               // states, which is the entire mechanism: React only preserves a

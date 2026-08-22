@@ -10,7 +10,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { startDemoSession, DEMO_PERSONAS, type DemoPersona } from '@/lib/demoApi';
+import { demoEntryPath, DEMO_PERSONAS, type DemoPersona } from '@/lib/demoApi';
 import { observeResizeOnAnimationFrame } from '@/lib/observeResize';
 
 /** Compact product-area marks — presentation only; copy comes from i18n. */
@@ -25,7 +25,6 @@ const PERSONA_META: Record<DemoPersona, { icon: string; accent: string }> = {
 export function DemoShowcase() {
   const t = useTranslations('demo.showcase');
   const [loading, setLoading] = useState<DemoPersona | null>(null);
-  const [error, setError] = useState(false);
   const [activeSlide, setActiveSlide] = useState(0);
   const [lastSlide, setLastSlide] = useState(DEMO_PERSONAS.length - 1);
   const trackRef = useRef<HTMLDivElement>(null);
@@ -70,18 +69,21 @@ export function DemoShowcase() {
     setActiveSlide(slide);
   };
 
-  const enter = async (persona: DemoPersona) => {
+  /**
+   * Open the sample workspace at this door.
+   *
+   * There is nothing to await and nothing to fail any more. It used to POST for
+   * a minted session against one of five seeded server tenants — which could
+   * 429 on a per-IP counter, which is why this function had a loading state and
+   * an error state at all. The surfaces render for a signed-out visitor now and
+   * the transport answers their reads from the sample workspace, so entering is
+   * a navigation. Kept as a full-page assign rather than a router push so the
+   * shell mounts fresh at the destination, exactly as it did before.
+   */
+  const enter = (persona: DemoPersona) => {
     if (loading) return;
-    setError(false);
     setLoading(persona);
-    try {
-      const { entryPath } = await startDemoSession(persona);
-      // Full navigation so AuthProvider rehydrates the signed-in demo session.
-      window.location.assign(entryPath);
-    } catch {
-      setError(true);
-      setLoading(null);
-    }
+    window.location.assign(demoEntryPath(persona));
   };
 
   return (
@@ -152,7 +154,6 @@ export function DemoShowcase() {
           </button>
         </div>
 
-        {error && <p className="demo-showcase-error" role="alert">{t('error')}</p>}
         <p className="demo-showcase-note">{t('note')}</p>
       </div>
 
@@ -214,7 +215,6 @@ const styles = `
   .demo-carousel-dots { display: flex; align-items: center; gap: 7px; }
   .demo-carousel-dot { width: 7px; height: 7px; border-radius: var(--radius-full); background: var(--text-muted); opacity: .38; transition: width .18s ease; }
   .demo-carousel-dot.is-active { width: 22px; background: var(--accent); opacity: 1; }
-  .demo-showcase-error { margin: 16px auto 0; text-align: center; color: var(--error-text); font-size: var(--font-size-small); }
   .demo-showcase-note { margin: 18px auto 0; text-align: center; font-size: var(--font-size-small); color: var(--text-muted); }
   @media (max-width: 1040px) {
     .demo-card { flex-basis: calc((100% - 28px) / 3); }

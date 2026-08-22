@@ -727,7 +727,8 @@
       "rewards": "Rewards",
       "mail": "Mail",
       "phone": "Phone",
-      "sourcing": "Sourcing"
+      "sourcing": "Sourcing",
+      "employers": "Employers"
     },
     "primaryAria": "Primary",
     "destination": {
@@ -8845,6 +8846,243 @@
         "drizzle-orm": "Type-safe ORM used in Builderforce for PostgreSQL.",
         "hono": "Edge-first web framework for the Builderforce API."
       }
+    },
+    "integrationsPage": {
+      "metaTitle": "Integrations — BuilderForce Agents",
+      "metaDescription": "BuilderForce Agents integrates with your entire stack — WhatsApp, Telegram, Discord, GitHub, Gmail, Obsidian, and more. Connect your agents to the tools you already use.",
+      "heading": "Integrations",
+      "leadLine1": "50+ integrations with the apps and services you already use.",
+      "leadLine2": "Chat from your phone, control from your desktop, automate everything.",
+      "grid": {
+        "colIntegration": "Integration",
+        "colDescription": "Description",
+        "colAction": "Action",
+        "connect": "Connect →"
+      },
+      "sections": {
+        "chatProviders": {
+          "title": "Chat Providers",
+          "description": "Message BuilderForce Agents from any chat app — it responds right where you are."
+        },
+        "models": {
+          "title": "AI Models",
+          "description": "Use any model you want — cloud or local. Your keys, your choice."
+        },
+        "productivity": {
+          "title": "Productivity",
+          "description": "Notes, tasks, wikis, and code — BuilderForce Agents works with your favorite tools."
+        },
+        "musicAudio": {
+          "title": "Music & Audio",
+          "description": "Control playback, identify songs, and manage multi-room audio."
+        },
+        "smartHome": {
+          "title": "Smart Home",
+          "description": "Lights, thermostats, and IoT devices — all voice-controllable."
+        },
+        "tools": {
+          "title": "Tools & Automation",
+          "description": "Browser control, scheduled tasks, email triggers, and more."
+        },
+        "mediaCreative": {
+          "title": "Media & Creative",
+          "description": "Generate images, capture screens, and find the perfect GIF."
+        },
+        "social": {
+          "title": "Social",
+          "description": "Post tweets, manage email, and stay connected."
+        },
+        "companionApps": {
+          "title": "Companion Apps",
+          "description": "Native apps and platform support across your devices."
+        },
+        "examples": {
+          "title": "Real-World Examples",
+          "description": "What people are actually building with BuilderForce Agents integrations."
+        }
+      },
+      "items": {
+        "WhatsApp": "QR pairing via Baileys",
+        "Telegram": "Bot API via grammY",
+        "Discord": "Servers, channels & DMs",
+        "Slack": "Workspace apps via Bolt",
+        "Signal": "Privacy-focused via signal-cli",
+        "iMessage": "iMessage via imsg (AppleScript bridge)",
+        "Microsoft Teams": "Enterprise support",
+        "Nextcloud Talk": "Self-hosted Nextcloud chat",
+        "Matrix": "Matrix protocol",
+        "Nostr": "Decentralized DMs via NIP-04",
+        "Zalo": "Zalo Bot API",
+        "WebChat": "Browser-based UI",
+        "Anthropic": "Claude Pro/Max + Opus 4.5",
+        "OpenAI": "GPT-4, GPT-5, o1",
+        "Google": "Gemini 2.5 Pro/Flash",
+        "MiniMax": "MiniMax-M2.1",
+        "xAI": "Grok 3 & 4",
+        "Vercel AI Gateway": "Hundreds of models, 1 API key",
+        "OpenRouter": "Unified API gateway",
+        "Mistral": "Mistral Large & Codestral",
+        "DeepSeek": "DeepSeek V3 & R1",
+        "Perplexity": "Search-augmented AI",
+        "Hugging Face": "Open-source models",
+        "Local Models": "Ollama, LM Studio",
+        "Apple Notes": "Native macOS/iOS notes",
+        "Apple Reminders": "Task management",
+        "Things 3": "GTD task manager",
+        "Notion": "Workspace & databases",
+        "Obsidian": "Knowledge graph notes",
+        "Bear Notes": "Markdown notes",
+        "Trello": "Kanban boards",
+        "GitHub": "Code, issues, PRs",
+        "Spotify": "Music playback control",
+        "Sonos": "Multi-room audio",
+        "Shazam": "Song recognition",
+        "Philips Hue": "Smart lighting",
+        "8Sleep": "Smart mattress",
+        "Home Assistant": "Home automation hub",
+        "Browser": "Chrome/Chromium control",
+        "Canvas": "Visual workspace + A2UI",
+        "Voice": "Voice Wake + Talk Mode",
+        "Gmail": "Pub/Sub email triggers",
+        "Cron": "Scheduled tasks",
+        "Webhooks": "External triggers",
+        "1Password": "Secure credentials",
+        "Weather": "Forecasts & conditions",
+        "Image Gen": "AI image generation",
+        "GIF Search": "Find the perfect GIF",
+        "Peekaboo": "Screen capture & control",
+        "Camera": "Photo/video capture",
+        "Twitter/X": "Tweet, reply, search",
+        "Email": "Send & read emails",
+        "macOS": "Menu bar app + Voice Wake",
+        "iOS": "Canvas, camera, Voice Wake",
+        "Android": "Canvas, camera, screen",
+        "Windows": "WSL2 recommended",
+        "Linux": "Native support",
+        "Tesco Autopilot": "Automated grocery shopping",
+        "Bambu Control": "3D printer management",
+        "Oura Ring": "Health data insights",
+        "Food Ordering": "Foodora integration"
+      }
+    },
+    "shoutouts": {
+      "metaTitle": "Shoutouts — BuilderForce Agents",
+      "metaDescription": "What developers are saying about BuilderForce Agents. Real praise from engineers, founders, and builders who use BuilderForce Agents autonomous agents every day.",
+      "heading": "Shoutouts",
+      "subtitle": "What the community is saying about BuilderForce Agents.",
+      "empty": "No shoutouts yet.",
+      "colAuthor": "Author",
+      "colHandle": "Handle",
+      "colTestimonial": "Testimonial"
+    },
+    "showcase": {
+      "metaTitle": "Showcase — What People Are Building with BuilderForce Agents",
+      "metaDescription": "See what developers are building with BuilderForce Agents autonomous agents. Real projects, workflows, and automations from the BuilderForce Agents community.",
+      "heading": "What People Are Building",
+      "subtitle": "Real projects, real automation, real magic.",
+      "filterAgents": "BuilderForce Agents Projects ({count})",
+      "filterAll": "All Projects ({count})",
+      "colAuthor": "Author",
+      "colSummary": "Summary",
+      "colLikes": "Likes",
+      "colLink": "Link",
+      "viewOnX": "View on X →",
+      "screenshotAlt": "Screenshot",
+      "ctaHeading": "Built something cool?",
+      "ctaBody": "Share your BuilderForce Agents creation with the community.",
+      "shareOnX": "Share on X",
+      "browseSkills": "Browse Skills",
+      "joinDiscord": "Join Discord",
+      "more": "Looking for more? <docs>More examples in our docs</docs>."
+    },
+    "skills": {
+      "metaTitle": "Agent Skills Directory — BuilderForce Agents",
+      "metaDescription": "Browse the BuilderForce Agents agent skills directory. Discover pre-built skills for code review, testing, documentation, security scanning, and more.",
+      "heading": "Agent Skills Directory",
+      "lead": "Discover and share powerful agent skills. Browse the community registry or upload your own.",
+      "browseMarketplace": "Browse marketplace",
+      "shareYourSkill": "Share your skill",
+      "category": "Category",
+      "allCategories": "All Categories",
+      "search": "Search",
+      "searchPlaceholder": "Search skills…",
+      "sort": "Sort",
+      "sortTrending": "Trending",
+      "sortNewest": "Newest",
+      "sortPopular": "Most Popular",
+      "sortDownloads": "Most Downloaded",
+      "view": "View",
+      "count": "Showing {shown} of {total} skills",
+      "colSkill": "Skill",
+      "colDescription": "Description",
+      "colCategory": "Category",
+      "colAction": "Action",
+      "byAuthor": "by {author}",
+      "get": "Get"
+    },
+    "skillDetail": {
+      "notFoundTitle": "Skill Not Found — BuilderForce Agents",
+      "metaTitle": "{name} — Agent Skill — BuilderForce Agents",
+      "crumb": "Agent Skills",
+      "byAuthor": "by {author}",
+      "likes": "{count} likes",
+      "downloads": "{count} downloads",
+      "installHeading": "Install",
+      "installBody": "Add the <name></name> skill to any BuilderForce Agents host from the marketplace, or assign it to an agent at tenant or host scope.",
+      "getOnMarketplace": "Get on the marketplace",
+      "browseAll": "Browse all skills"
+    },
+    "workflowBuilder": {
+      "metaTitle": "Agentic Workflow Builder — Builderforce.ai",
+      "metaDescription": "Drag-and-drop, IPAAS-style canvas for composing your own LLM logic — memory, knowledge-base and training nodes — wired to your agents and run on your own hosts. Visual workflows that actually execute.",
+      "heading": "Agentic Workflow Builder",
+      "tagline": "Compose your LLM logic. Wire your agents. Watch it run.",
+      "description": "A drag-and-drop, IPAAS-style canvas where <term>memory</term>, <term>knowledge base</term> and <term>training</term> are nodes you snap together with your agents — then run on your own hosts. Not a diagram tool: every workflow actually executes.",
+      "openBuilder": "Open the builder →",
+      "readDocs": "Read the docs →",
+      "paletteHeading": "A palette for agentic work",
+      "paletteIntro": "Most workflow builders stop at HTTP calls and if/else. This one adds the primitives that make agents useful — the LLM-logic nodes are the headline.",
+      "differentiator": "the differentiator",
+      "catalogHeading": "{count}+ integrations, ready to drop in",
+      "catalogIntro": "MCP servers, LLM platforms, databases, CRMs and data-collection sources — drag any of them onto the canvas.",
+      "andMore": "+{count} more",
+      "howItWorksHeading": "How it works",
+      "whatYouGetHeading": "What you get",
+      "finalCtaHeading": "Build your first workflow",
+      "finalCtaBody": "Open a blank canvas, drop a trigger, an agent and a memory node, wire them up, and run it on a host — in under a minute.",
+      "exploreAgents": "Explore BuilderForce Agents →",
+      "steps": [
+        {
+          "title": "Drag in your nodes",
+          "body": "Pull triggers, LLM-logic, agents and ETL steps onto the canvas. Every node is configurable in a side panel — no code."
+        },
+        {
+          "title": "Wire the flow",
+          "body": "Connect nodes to declare dependencies. The graph compiles to a dependency-ordered execution plan automatically."
+        },
+        {
+          "title": "Run on your hosts",
+          "body": "Hit Run and the workflow is claimed by one of your agent hosts, executed, and streamed back to the live monitoring graph."
+        }
+      ],
+      "capabilities": [
+        {
+          "title": "Your LLM logic, as nodes",
+          "description": "Memory recall/write, knowledge-base query/ingest, and model training are first-class nodes — compose them like any other step."
+        },
+        {
+          "title": "Your agents as executors",
+          "description": "Drop an Agent Run node, pick a role, runtime and model, and your configured agents do the work — local, cloud, browser or remote mesh."
+        },
+        {
+          "title": "Runs you can watch",
+          "description": "Every run instantiates a tracked execution record — task statuses, the live dependency graph, durations and cost land in the monitoring view for free."
+        },
+        {
+          "title": "Import, export, version",
+          "description": "Every workflow round-trips to human-authorable YAML — hand-edit it, check it into git, or import a hand-written flow straight onto the canvas."
+        }
+      ]
     }
   },
   "newsletter": {
@@ -26672,6 +26910,101 @@
       "removeMessage": "Stops future syncs from {name}. Jobs already sourced are kept.",
       "removeAction": "Remove feed",
       "removeFailed": "That feed could not be removed."
+    }
+  },
+  "guest": {
+    "sample": {
+      "badge": "Sample data",
+      "body": "You are looking at a sample workspace. The numbers are invented — nothing here belongs to a real business.",
+      "cta": "Make it your workspace"
+    },
+    "gate": {
+      "create": "Create an account",
+      "signIn": "Sign in",
+      "reason": {
+        "runAgent": "Sign in to dispatch a run to an agent.",
+        "connectIntegration": "Sign in to connect an account.",
+        "publish": "Sign in to publish this.",
+        "invite": "Sign in to invite someone.",
+        "pay": "Sign in to complete a payment.",
+        "save": "Sign in to save this work."
+      }
+    }
+  },
+  "employers": {
+    "view": {
+      "intro": "Employers, and what the people who worked there said about them. Reviews are checked before they appear."
+    },
+    "rating": {
+      "outOf": "{rating} out of {max}",
+      "choose": "Choose a rating",
+      "score": "{score}"
+    },
+    "summary": {
+      "unrated": "Not yet reviewed",
+      "count": "{count, plural, one {# review} other {# reviews}}"
+    },
+    "directory": {
+      "title": "Employers",
+      "search": "Search",
+      "searchPlaceholder": "Company name",
+      "empty": "No employers yet.",
+      "noMatches": "No employer matches that search.",
+      "noDetail": "No details recorded",
+      "failed": "Employers could not be loaded."
+    },
+    "detail": {
+      "reviews": "Reviews",
+      "noReviews": "No published reviews yet.",
+      "anonymous": "Anonymous",
+      "verified": "Verified",
+      "headcount": "{count, plural, one {# employee} other {# employees}}",
+      "failed": "That employer could not be loaded."
+    },
+    "axis": {
+      "culture": "Culture",
+      "leadership": "Leadership",
+      "workLifeBalance": "Work-life balance",
+      "compensation": "Compensation",
+      "careerGrowth": "Career growth",
+      "diversityInclusion": "Diversity and inclusion"
+    },
+    "form": {
+      "title": "Write a review",
+      "updateTitle": "Your review",
+      "rating": "Overall rating",
+      "headline": "Headline",
+      "headlinePlaceholder": "Sum it up in a sentence",
+      "body": "Your review",
+      "bodyPlaceholder": "What was it actually like to work there?",
+      "submit": "Submit review",
+      "update": "Update review",
+      "saving": "Saving…",
+      "withdraw": "Withdraw",
+      "withdrawTitle": "Withdraw your review?",
+      "withdrawMessage": "Your review of {name} is removed. You can write a new one later.",
+      "withdrawAction": "Withdraw review",
+      "withdrawFailed": "That review could not be withdrawn.",
+      "failed": "That review was not saved.",
+      "submittedPending": "Thanks — your review is with a reviewer and appears once approved.",
+      "yoursPending": "Your review is waiting to be approved, so it is not public yet.",
+      "yoursRejected": "Your review was not approved. Edit it and submit again.",
+      "moderationNote": "Reviews name a real organisation, so each one is read by a person before it is published."
+    },
+    "moderation": {
+      "title": "{count, plural, =0 {Moderation} one {Moderation — # waiting} other {Moderation — # waiting}}",
+      "intro": "These name a real organisation. Approve only what you would stand behind.",
+      "about": "about {subject}",
+      "reason": "Reason",
+      "reasonPlaceholder": "Required to reject — the author is told",
+      "approve": "Approve",
+      "reject": "Reject",
+      "working": "Working…",
+      "failed": "That decision was not applied.",
+      "status": {
+        "pending": "Pending",
+        "rejected": "Rejected"
+      }
     }
   }
 }

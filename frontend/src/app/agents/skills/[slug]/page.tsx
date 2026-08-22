@@ -2,6 +2,7 @@ import { Icon } from '@/components/ui/Icon';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { getTranslations } from 'next-intl/server';
 import { pageMetadata } from '@/lib/seo';
 import { getSkillBySlug } from '../skillsData';
 
@@ -13,12 +14,13 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
+  const t = await getTranslations('agents.skillDetail');
   const skill = await getSkillBySlug(slug);
   if (!skill) {
-    return { title: 'Skill Not Found — BuilderForce Agents' };
+    return { title: t('notFoundTitle') };
   }
   return pageMetadata({
-    title: `${skill.name} — Agent Skill — BuilderForce Agents`,
+    title: t('metaTitle', { name: skill.name }),
     description: skill.description,
     path: `/agents/skills/${slug}`,
   });
@@ -30,6 +32,7 @@ export default async function SkillDetailPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
+  const t = await getTranslations('agents.skillDetail');
   const skill = await getSkillBySlug(slug);
 
   if (!skill) {
@@ -40,7 +43,7 @@ export default async function SkillDetailPage({
   return (
     <div className="cc-skill-detail">
       <nav className="cc-skill-crumbs">
-        <Link href="/agents/skills">Agent Skills</Link>
+        <Link href="/agents/skills">{t('crumb')}</Link>
         <span aria-hidden="true">/</span>
         <span>{skill.name}</span>
       </nav>
@@ -48,7 +51,7 @@ export default async function SkillDetailPage({
       <header className="cc-skill-detail-head">
         <div>
           <h1 className="cc-skill-detail-title">{skill.name}</h1>
-          <p className="cc-skill-detail-author">by {skill.author}</p>
+          <p className="cc-skill-detail-author">{t('byAuthor', { author: skill.author })}</p>
         </div>
         {skill.category && <span className="cc-skill-detail-cat">{skill.category}</span>}
       </header>
@@ -57,29 +60,26 @@ export default async function SkillDetailPage({
 
       {skill.tags && skill.tags.length > 0 && (
         <div className="cc-skill-detail-tags">
-          {skill.tags.map((t) => (
-            <span key={t} className="cc-skill-detail-tag">#{t}</span>
+          {skill.tags.map((tag) => (
+            <span key={tag} className="cc-skill-detail-tag">#{tag}</span>
           ))}
         </div>
       )}
 
       <div className="cc-skill-detail-stats">
-        {typeof skill.likes === 'number' && <span><Icon source="♥" size="1em" /> {skill.likes} likes</span>}
-        {typeof skill.downloads === 'number' && <span>↓ {skill.downloads} downloads</span>}
+        {typeof skill.likes === 'number' && <span><Icon source="♥" size="1em" /> {t('likes', { count: skill.likes })}</span>}
+        {typeof skill.downloads === 'number' && <span>↓ {t('downloads', { count: skill.downloads })}</span>}
       </div>
 
       <section className="cc-skill-detail-install">
-        <h2>Install</h2>
-        <p>
-          Add the <strong>{skill.name}</strong> skill to any BuilderForce Agents host from the
-          marketplace, or assign it to an agent at tenant or host scope.
-        </p>
+        <h2>{t('installHeading')}</h2>
+        <p>{t.rich('installBody', { name: () => <strong>{skill.name}</strong> })}</p>
         <pre><code>builderforce skills add {skill.id}</code></pre>
       </section>
 
       <div className="cc-skill-detail-cta">
-        <Link href="/marketplace" className="cc-btn primary">Get on the marketplace</Link>
-        <Link href="/agents/skills" className="cc-btn">Browse all skills</Link>
+        <Link href="/marketplace" className="cc-btn primary">{t('getOnMarketplace')}</Link>
+        <Link href="/agents/skills" className="cc-btn">{t('browseAll')}</Link>
       </div>
 
       <style>{`
@@ -122,7 +122,7 @@ export default async function SkillDetailPage({
         .cc-skill-detail-cat {
           font-size: var(--font-size-small);
           padding: 4px 10px;
-          background: rgba(77,158,255,0.12);
+          background: color-mix(in srgb, var(--coral-bright) 12%, transparent);
           color: var(--coral-bright);
           border-radius: var(--radius-sm);
           white-space: nowrap;
@@ -197,7 +197,7 @@ export default async function SkillDetailPage({
         }
         .cc-btn.primary {
           background: linear-gradient(135deg, var(--coral-bright), var(--coral-dark, var(--coral-bright)));
-          color: white;
+          color: var(--text-on-accent);
           border-color: transparent;
         }
       `}</style>

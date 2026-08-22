@@ -97,6 +97,7 @@ import { AuditRunner } from './application/tools/AuditRunner';
 import { createMarketingRoutes } from './presentation/routes/marketingRoutes';
 import { createGuestRoutes } from './presentation/routes/guestRoutes';
 import { createDemoRoutes } from './presentation/routes/demoRoutes';
+import { createVisitorRoutes } from './presentation/routes/visitorRoutes';
 import { GuestChatService } from './application/guest/GuestChatService';
 import { GuestPromptService } from './application/marketing/GuestPromptService';
 import { PlatformBroadcastService } from './application/marketing/PlatformBroadcastService';
@@ -227,6 +228,7 @@ import { createConsumptionRoutes }     from './presentation/routes/consumptionRo
 import { createPointsRoutes }          from './presentation/routes/pointsRoutes';
 import { createPhoneRoutes }           from './presentation/routes/phoneRoutes';
 import { createSourcingRoutes }        from './presentation/routes/sourcingRoutes';
+import { createReviewRoutes }          from './presentation/routes/reviewRoutes';
 import { createEvalRoutes }            from './presentation/routes/evalRoutes';
 import { createDatasetRoutes }         from './presentation/routes/datasetRoutes';
 import { createTeamMemoryRoutes }      from './presentation/routes/teamMemoryRoutes';
@@ -681,6 +683,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // Sales-cycle demo accounts — public one-click persona demo sessions, funnel
   // telemetry, book-a-demo leads, and the (guarded) deploy-hook reseed.
   app.route('/api/demo', createDemoRoutes());
+  app.route('/api/visitor', createVisitorRoutes());
 
   // Signed vision attachments — public, but each object is gated by a short-lived
   // HMAC (?exp&sig minted at /api/brain/uploads/sign). Lets an upstream LLM
@@ -1004,6 +1007,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/points',          createPointsRoutes(db));
   app.route('/api/phone',           createPhoneRoutes(db));
   app.route('/api/sourcing',        createSourcingRoutes(db));
+  app.route('/api/employers',       createReviewRoutes(db));
   app.route('/api/eval',            createEvalRoutes(db));
   app.route('/api/dataset',         createDatasetRoutes(db));
   app.route('/api/brain',     createBrainRoutes(brainService, db));

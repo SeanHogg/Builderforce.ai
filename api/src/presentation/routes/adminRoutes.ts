@@ -6,6 +6,8 @@ import { reportCaughtError } from '../../application/observability/caughtErrorRe
  *
  * GET  /api/admin/users                — all platform users + tenant counts
  * GET  /api/admin/guest-sessions       — anonymous leads + the prompts they typed
+ * GET  /api/admin/visitor-flow         — the anonymous funnel as a directed graph
+ * GET  /api/admin/visitor-flow/:visitorId — one visitor's journey, visit by visit
  * GET  /api/admin/broadcasts          — platform messages to logged-out visitors
  * DELETE /api/admin/guest-sessions/:visitorId/prompts — erase one visitor's prompts
  * GET  /api/admin/creation-sessions    — saved Canvases with invitation evidence
@@ -39,6 +41,7 @@ import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { computePlatformRollup } from '../../application/admin/platformRollup';
 import { getOutcomeValueRollup } from '../../application/admin/outcomeValueRollup';
 import { GuestPromptService } from '../../application/marketing/GuestPromptService';
+import { VisitorJourneyService, VISITOR_FLOW_WINDOWS } from '../../application/marketing/VisitorJourneyService';
 import {
   broadcastVocabulary,
   PlatformBroadcastService,
@@ -1387,9 +1390,12 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const db = buildDatabase(c.env);
     const erased = await new GuestPromptService(db).forgetVisitor(c.env as Env, visitorId);
     await writeAdminAudit(db, 'GUEST_PROMPTS_ERASED', c.get('userId') as string, {
-      metadata: { visitorId, erased },
+      metadata: { visitorId, ...erased },
     });
-    return c.json({ erased });
+    // `erased` stays the headline number the drawer reports, and it now counts
+    // the journey rows too — an erasure that reported only prompts would have
+    // understated what it did the moment the journey stream landed.
+    return c.json({ erased: erased.prompts + erased.events, ...erased });
   });
 
   // -------------------------------------------------------------------------
@@ -1466,34 +1472,30 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   });
 
   // -------------------------------------------------------------------------
-  // GET /api/admin/demo/funnel
-  // Demo-account conversion funnel (migration 0360): per-persona event rollup
-  // over the trailing 30 days + the most recent raw events. Cached 60s — the
-  // stream is append-only and the panel re-polls.
+  // GET /api/admin/visitor-flow?days=30      — the anonymous funnel AS A GRAPH
+  // GET /api/admin/visitor-flow/:visitorId   — one visitor's journey, visit by visit
+  //
+  // Replaces `GET /demo/funnel` (a persona × stage COUNT matrix over the same
+  // stream). A count matrix cannot answer the question the panel exists for —
+  // "where does the funnel leak" — because a leak lives on an edge: it can say
+  // 400 visitors saw pricing, never that 300 arrived from the prompt and 280
+  // stopped there. Persona is still on every row, so the demo's funnel is one
+  // slice of this rather than a separate screen.
+  //
+  // Served by the application service, so the scan bounds, the cache and the
+  // aggregation live in one place instead of as SQL inside a route handler.
   // -------------------------------------------------------------------------
-  router.get('/demo/funnel', async (c) => {
-    const funnel = await getOrSetCached(c.env, 'admin:demo:funnel', async () => {
-      const db = buildDatabase(c.env);
-      const byKind = await db.execute(sql`
-        SELECT
-          persona,
-          kind,
-          COUNT(*)::int                    AS "count",
-          COUNT(DISTINCT visitor_id)::int  AS "visitors"
-        FROM demo_events
-        WHERE occurred_at > now() - interval '30 days'
-        GROUP BY persona, kind
-        ORDER BY persona, kind
-      `);
-      const recent = await db.execute(sql`
-        SELECT persona, kind, path, visitor_id AS "visitorId", occurred_at AS "occurredAt"
-        FROM demo_events
-        ORDER BY occurred_at DESC
-        LIMIT 100
-      `);
-      return { byKind: byKind.rows, recent: recent.rows };
-    }, { kvTtlSeconds: 60 });
-    return c.json(funnel);
+  router.get('/visitor-flow', async (c) => {
+    const service = new VisitorJourneyService(buildDatabase(c.env));
+    const days = Number(c.req.query('days') ?? VISITOR_FLOW_WINDOWS.defaultDays);
+    return c.json(await service.flowGraph(c.env as Env, days));
+  });
+
+  router.get('/visitor-flow/:visitorId', async (c) => {
+    const visitorId = c.req.param('visitorId');
+    if (!isValidVisitorId(visitorId)) return c.json({ error: 'Invalid visitor id' }, 400);
+    const service = new VisitorJourneyService(buildDatabase(c.env));
+    return c.json(await service.journeyFor(visitorId));
   });
 
   // -------------------------------------------------------------------------

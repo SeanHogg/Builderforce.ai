@@ -29,6 +29,7 @@ import { assertSafeUrl, resolveAndAssertPublic } from '../../infrastructure/net/
 import { credentialSecret, decryptCredentials } from '../integrations/credentialCrypto';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import {
+  actionCarriesRequestBody,
   authFieldsFor,
   fillTemplate,
   type ConnectorAction,
@@ -260,9 +261,7 @@ export function buildConnectorRequest(args: {
    * only meaning is the operation name inside it.
    */
   const soap = action.soap ?? null;
-  const hasBody = soap
-    ? true
-    : action.method !== 'GET' && action.method !== 'DELETE' && Object.keys(body).length > 0;
+  const hasBody = actionCarriesRequestBody(action) && (soap !== null || Object.keys(body).length > 0);
 
   let payload: string | undefined;
   if (soap) {

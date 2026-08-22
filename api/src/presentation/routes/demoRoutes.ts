@@ -3,7 +3,7 @@ import { Hono } from 'hono';
 import type { MiddlewareHandler } from 'hono';
 import type { Env, HonoEnv } from '../../env';
 import { buildDatabase } from '../../infrastructure/database/connection';
-import { demoEvents, salesLeads } from '../../infrastructure/database/schema';
+import { salesLeads } from '../../infrastructure/database/schema';
 import { isValidVisitorId } from '../../application/marketing/MarketingService';
 import {
   demoAccountsEnabled,
@@ -11,6 +11,7 @@ import {
   reseedDemoTenants,
 } from '../../application/demo/demoSeedService';
 import { isDemoPersona } from '../../application/demo/demoPersonas';
+import { recordVisitorEvent } from '../../application/marketing/VisitorEventService';
 import { mintWebSessionToken } from '../../infrastructure/auth/webSessionToken';
 import { mintTenantSessionToken } from '../../infrastructure/auth/tenantSessionToken';
 import { superAdminMiddleware } from '../middleware/superAdminMiddleware';
@@ -23,26 +24,25 @@ import { superAdminMiddleware } from '../middleware/superAdminMiddleware';
  *                    real (short-lived) web + tenant session for the shared demo
  *                    user, so the visitor explores the actual product, not a
  *                    recording. Changes they make are wiped on the next reseed.
- *   POST /events   — anonymous funnel telemetry batches (demo_start → views →
- *                    convert prompt → lead/exit), keyed by the marketing
- *                    visitorId. The signed-in activity tracker never covers
- *                    logged-out visitors, so this is its marketing twin.
  *   POST /leads    — "book a demo with sales" capture (also newsletter-adjacent
  *                    exit-intent leads).
  *   POST /reseed   — wipe + reseed all persona tenants. Guarded: deploy-hook
  *                    secret header OR a superadmin web token.
+ *
+ * Funnel telemetry is NOT here. It used to be (`POST /events`), and it was the
+ * same append-only per-visitor stream the whole site needed — so it moved to
+ * `POST /api/visitor/events` (migration 1109) and the demo posts there with its
+ * persona attached. Two validators and two abuse ceilings for one stream was the
+ * duplication; the demo's funnel is now one persona-shaped slice of the site's.
  *
  * Abuse control mirrors the guest-chat pattern: per-IP daily KV counters
  * (fail-open when KV is unbound, matching GuestChatService).
  */
 
 const DEMO_SESSION_TTL_SECONDS = 3600;
-const EVENT_KIND_RE = /^[a-z0-9_.:-]{1,64}$/i;
-const MAX_EVENTS_PER_BATCH = 25;
 
 const IP_LIMITS = {
   session: 30,
-  events: 2000,
   lead: 10,
 } as const;
 
@@ -117,12 +117,12 @@ export function createDemoRoutes(): Hono<HonoEnv> {
 
     const visitorId = body.visitorId;
     c.executionCtx.waitUntil(
-      db.insert(demoEvents).values({
+      recordVisitorEvent(db, {
         visitorId,
         persona: target.persona,
         kind: 'demo_start',
         path: target.entryPath,
-      }).then(() => undefined).catch((error) => {
+      }).catch((error) => {
         reportCaughtError(error, { source: "presentation/routes/demoRoutes.ts", operation: "createDemoRoutes" });
       }),
     );
@@ -150,39 +150,6 @@ export function createDemoRoutes(): Hono<HonoEnv> {
         plan: target.plan,
       },
     });
-  });
-
-  // Anonymous funnel telemetry — small validated batches, append-only.
-  router.post('/events', async (c) => {
-    const body = await c.req
-      .json<{ visitorId?: string; events?: Array<{ kind?: string; persona?: string; path?: string; metadata?: unknown; occurredAt?: string }> }>()
-      .catch(() => ({} as { visitorId?: string; events?: never[] }));
-    if (!isValidVisitorId(body.visitorId)) return c.json({ error: 'Invalid visitor id' }, 400);
-    const events = Array.isArray(body.events) ? body.events.slice(0, MAX_EVENTS_PER_BATCH) : [];
-    const visitorId = body.visitorId;
-
-    const now = Date.now();
-    const rows = events.flatMap((e) => {
-      if (typeof e?.kind !== 'string' || !EVENT_KIND_RE.test(e.kind)) return [];
-      const occurredMs = e.occurredAt ? Date.parse(e.occurredAt) : NaN;
-      return [{
-        visitorId,
-        persona: isDemoPersona(e.persona) ? e.persona : null,
-        kind: e.kind.toLowerCase(),
-        path: typeof e.path === 'string' ? e.path.slice(0, 300) : null,
-        metadata: e.metadata && typeof e.metadata === 'object' ? e.metadata : null,
-        occurredAt: Number.isFinite(occurredMs) && Math.abs(now - occurredMs) < 86_400_000
-          ? new Date(occurredMs)
-          : new Date(),
-      }];
-    });
-    if (rows.length === 0) return c.json({ ok: true, accepted: 0 });
-
-    if (!(await bumpIpCounter(c.env, 'events', clientIp(c), rows.length))) {
-      return c.json({ ok: false, code: 'demo_limit_reached' }, 429);
-    }
-    await buildDatabase(c.env).insert(demoEvents).values(rows);
-    return c.json({ ok: true, accepted: rows.length });
   });
 
   // "Book a demo" / sales-contact capture.

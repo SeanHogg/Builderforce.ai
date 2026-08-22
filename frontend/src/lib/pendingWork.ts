@@ -4,6 +4,7 @@ import { creationSessionsApi, type CreationSessionSummary } from '@/lib/builderf
 import { getStoredTenant } from '@/lib/auth';
 import { getOrSetClientCached, invalidateClientCache } from '@/infrastructure/http/readThrough';
 import { persistedGraphFromBoard } from '@/domains/canvas/domain/canvasBoard';
+import { clearGuestSession } from '@/domains/guest/infrastructure/guestSessionStore';
 import {
   listLocalCreationSessions,
   readLocalCreationSession,
@@ -121,6 +122,18 @@ export async function claimPendingDrafts(): Promise<{ claimed: ClaimedDraft[]; f
       failed += 1;
     }
   }
+  // The SAMPLE workspace is deliberately not claimed, and this line is where
+  // that decision is enforced rather than assumed.
+  //
+  // A guest can edit the sample data — that is the point of it; a number you
+  // can drag is the demo. But those rows describe an invented business, and a
+  // visitor who signs up and finds Nova Commerce's tickets sitting in their
+  // brand-new workspace has been misled by the product at the exact moment they
+  // decided to trust it. Boards are different: a board a person BUILT is their
+  // own work and is claimed above. So: author's work follows them in, the
+  // fixture does not, and the guest session is dropped so no shadow copy of it
+  // survives the signup.
+  clearGuestSession();
   return { claimed, failed };
 }
 

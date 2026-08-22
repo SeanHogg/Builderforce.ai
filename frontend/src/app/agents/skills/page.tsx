@@ -1,13 +1,15 @@
 import type { Metadata } from 'next';
+import { getTranslations } from 'next-intl/server';
+import { pageMetadata } from '@/lib/seo';
 import SkillsBrowser from './SkillsBrowser';
 import { fetchSkills } from './skillsData';
 
-export const metadata: Metadata = {
-  title: 'Agent Skills Directory — BuilderForce Agents',
-  description:
-    'Browse the BuilderForce Agents agent skills directory. Discover pre-built skills for code review, testing, documentation, security scanning, and more.',
-  alternates: { canonical: '/agents/skills' },
-};
+export const runtime = 'edge';
+
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations('agents.skills');
+  return pageMetadata({ title: t('metaTitle'), description: t('metaDescription'), path: '/agents/skills' });
+}
 
 export default async function SkillsPage() {
   const skills = await fetchSkills();

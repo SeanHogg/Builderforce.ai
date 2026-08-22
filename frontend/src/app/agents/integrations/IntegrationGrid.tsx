@@ -1,3 +1,4 @@
+import { useTranslations } from 'next-intl';
 import BrandIcon, { type IconSpec } from '../BrandIcon';
 import type { ViewMode } from '@/components/ViewToggle';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
@@ -23,6 +24,17 @@ export default function IntegrationGrid({
   columns?: 2 | 3 | 4;
   viewMode?: ViewMode;
 }) {
+  // Its OWN chrome only. The section title, the section description and each row's
+  // `desc` arrive already translated from the page, because they are copy ABOUT the
+  // catalogue rather than labels belonging to this table.
+  //
+  // No `'use client'` of its own, deliberately: `IntegrationsView` is the boundary and
+  // is this module's ONLY importer, so a directive here would mark nothing and spend
+  // the client-file budget for it — the same call the architecture ratchet's changelog
+  // makes for `components/career/*`. If a Server Component ever renders this grid, the
+  // directive goes on in the same commit as that importer.
+  const t = useTranslations('agents.integrationsPage.grid');
+
   return (
     <section className="cc-int-section">
       <h2 className="cc-int-h2"><span className="cc-agentHost-accent">⟩</span> {title}</h2>
@@ -32,9 +44,9 @@ export default function IntegrationGrid({
           <table style={tableStyle}>
             <thead>
               <tr style={theadRowStyle}>
-                <th style={thStyle}>Integration</th>
-                <th style={thStyle}>Description</th>
-                <th style={{ ...thStyle, textAlign: 'right' }}>Action</th>
+                <th style={thStyle}>{t('colIntegration')}</th>
+                <th style={thStyle}>{t('colDescription')}</th>
+                <th style={{ ...thStyle, textAlign: 'right' }}>{t('colAction')}</th>
               </tr>
             </thead>
             <tbody>
@@ -49,7 +61,7 @@ export default function IntegrationGrid({
                   <td style={tdMutedStyle}>{item.desc}</td>
                   <td style={{ ...tdStyle, textAlign: 'right' }}>
                     <a href={item.docs} target="_blank" rel="noopener" style={{ color: 'var(--coral-bright)', textDecoration: 'none' }}>
-                      Connect →
+                      {t('connect')}
                     </a>
                   </td>
                 </tr>

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 
@@ -13,12 +14,13 @@ export interface Testimonial {
 
 export default function ShoutoutsView({ all }: { all: Testimonial[] }) {
   const [viewMode, setViewMode] = useState<ViewMode>('card');
+  const t = useTranslations('agents.shoutouts');
 
   return (
     <>
       <header className="cc-page-header">
-        <h1 className="cc-page-title"><span className="cc-agentHost-accent">⟩</span> Shoutouts</h1>
-        <p className="cc-page-subtitle">What the community is saying about BuilderForce Agents.</p>
+        <h1 className="cc-page-title"><span className="cc-agentHost-accent">⟩</span> {t('heading')}</h1>
+        <p className="cc-page-subtitle">{t('subtitle')}</p>
       </header>
 
       <div className="cc-shoutouts-toolbar">
@@ -26,21 +28,21 @@ export default function ShoutoutsView({ all }: { all: Testimonial[] }) {
       </div>
 
       {all.length === 0 ? (
-        <p className="cc-page-subtitle" style={{ textAlign: 'center' }}>No shoutouts yet.</p>
+        <p className="cc-page-subtitle" style={{ textAlign: 'center' }}>{t('empty')}</p>
       ) : viewMode === 'card' ? (
         <div className="cc-shoutouts-grid">
-          {all.map((t, i) => (
-            <a key={i} href={t.url} target="_blank" rel="noopener" className="cc-shoutout-card">
+          {all.map((item, i) => (
+            <a key={i} href={item.url} target="_blank" rel="noopener" className="cc-shoutout-card">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src={t.avatar || `https://unavatar.io/x/${t.author}`}
-                alt={t.author}
+                src={item.avatar || `https://unavatar.io/x/${item.author}`}
+                alt={item.author}
                 loading="lazy"
                 className="cc-shoutout-avatar"
               />
               <div className="cc-shoutout-content">
-                <p className="cc-shoutout-quote">&ldquo;{t.quote}&rdquo;</p>
-                <span className="cc-shoutout-author">@{t.author}</span>
+                <p className="cc-shoutout-quote">&ldquo;{item.quote}&rdquo;</p>
+                <span className="cc-shoutout-author">@{item.author}</span>
               </div>
             </a>
           ))}
@@ -50,30 +52,30 @@ export default function ShoutoutsView({ all }: { all: Testimonial[] }) {
           <table style={tableStyle}>
             <thead>
               <tr style={theadRowStyle}>
-                <th style={thStyle}>Author</th>
-                <th style={thStyle}>Handle</th>
-                <th style={thStyle}>Testimonial</th>
+                <th style={thStyle}>{t('colAuthor')}</th>
+                <th style={thStyle}>{t('colHandle')}</th>
+                <th style={thStyle}>{t('colTestimonial')}</th>
               </tr>
             </thead>
             <tbody>
-              {all.map((t, i) => (
+              {all.map((item, i) => (
                 <tr key={i} style={trStyle}>
                   <td style={tdStyle}>
                     <span className="cc-shoutout-tauthor">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
-                        src={t.avatar || `https://unavatar.io/x/${t.author}`}
-                        alt={t.author}
+                        src={item.avatar || `https://unavatar.io/x/${item.author}`}
+                        alt={item.author}
                         loading="lazy"
                         className="cc-shoutout-tavatar"
                       />
-                      {t.author}
+                      {item.author}
                     </span>
                   </td>
                   <td style={tdMutedStyle}>
-                    <a href={t.url} target="_blank" rel="noopener" className="cc-shoutout-thandle">@{t.author}</a>
+                    <a href={item.url} target="_blank" rel="noopener" className="cc-shoutout-thandle">@{item.author}</a>
                   </td>
-                  <td style={tdMutedStyle}>&ldquo;{t.quote}&rdquo;</td>
+                  <td style={tdMutedStyle}>&ldquo;{item.quote}&rdquo;</td>
                 </tr>
               ))}
             </tbody>

@@ -145,7 +145,7 @@ export function createGuestRoutes(
   // stored but the text and where it was typed.
   router.post('/prompt', async (c) => {
     const body = await c.req
-      .json<{ visitorId?: string; prompt?: string; surface?: string; sessionRef?: string; mode?: string; touch?: MarketingTouch }>()
+      .json<{ visitorId?: string; prompt?: string; surface?: string; sessionRef?: string; visitId?: string; mode?: string; touch?: MarketingTouch }>()
       .catch((): Record<string, never> => ({}));
     if (!isValidVisitorId(body.visitorId)) return c.json({ error: 'Invalid visitor id' }, 400);
     const visitorId = body.visitorId;
@@ -162,6 +162,7 @@ export function createGuestRoutes(
       prompt: body.prompt,
       surface: body.surface,
       sessionRef: body.sessionRef,
+      visitId: body.visitId,
       mode: body.mode,
       ip: c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? null,
     });

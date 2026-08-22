@@ -34,11 +34,10 @@ import { MessageHubProvider } from '@/components/messages/MessageHubContext';
 import { EmulationProvider } from '@/lib/EmulationContext';
 import { RolePreviewProvider } from '@/lib/RolePreviewContext';
 import { PermissionDebuggerProvider } from '@/lib/PermissionDebuggerContext';
-import { DemoModeProvider } from '@/components/demo/DemoModeProvider';
 import { useAuth } from '@/lib/AuthContext';
 import { useIsFreelancer, useIsSalesAssociate } from '@/lib/rbac';
 import { findActiveGroup, isFreelancerAllowedPath, isSalesAllowedPath } from '@/lib/navGroups';
-import { classifyGuestBrainstormEntry, classifyShell, isFramedEmbed, isReferenceSurface, rendersAppShell } from '@/lib/shellRouting';
+import { classifyGuestBrainstormEntry, classifyShell, isFramedEmbed, isLocalFirstAppRoute, isReferenceSurface, rendersAppShell } from '@/lib/shellRouting';
 import { rendersOperatorShell } from '@/lib/workbenchPolicy';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
@@ -134,7 +133,13 @@ function useShellContent(children: React.ReactNode): React.ReactNode {
   // hard load. Only those routes wait, and only for the one frame `authReady`
   // takes — guest-legitimate app routes (an anonymous board) are excluded, since
   // for them the signed-out render is the correct one.
-  if (!authReady && kind === 'app' && !rendersAppShell(pathname, false)) return null;
+  // Wait the one frame it takes to read the session off the device before
+  // mounting an app route — EXCEPT the local-first canvas, which renders
+  // identically either way. It used to be every route `rendersAppShell` accepted
+  // for a guest, which was the same set; now that a guest gets the shell on
+  // seventy-eight routes it is emphatically not, and skipping the wait would
+  // paint the SAMPLE workspace for a frame in front of a signed-in person.
+  if (!authReady && kind === 'app' && !isLocalFirstAppRoute(pathname)) return null;
 
   if (kind === 'none') return <>{children}</>;
   if (kind === 'footer') return <FooterOnlyShell>{children}</FooterOnlyShell>;
@@ -204,6 +209,12 @@ function useShellContent(children: React.ReactNode): React.ReactNode {
     // therefore saw a different product from the one they were signing up for.
     // Every part of that shell self-gates on auth (disable, never hide), so the
     // difference between the two visitors is what is ENABLED, not what exists.
+    // Every previewable route now — not just the local-first canvas. The page
+    // renders over the sample workspace and `<SessionGate>` walls the actions
+    // that need an account, which is the same "indicate the gate, keep the
+    // surface" rule `RoleGate` and `UpgradeGate` already apply to capability
+    // and plan. What is left below is operator tooling, where there is nothing
+    // honest to preview and the teaser is the correct answer.
     if (rendersAppShell(pathname, false)) {
       return <AppShell>{children}</AppShell>;
     }
@@ -377,21 +388,20 @@ function AppBrainShell({ children }: { children: React.ReactNode }) {
     // Route-scoped providers, moved down out of `app/layout.tsx` (PRD 22 §3.14).
     //
     // Each of these belongs to the APP, not to every document the router can
-    // serve. `/embed/*` takes the lean branch above and now never mounts them —
-    // which matters most for `DemoModeProvider`, whose pathname tracking, timers
-    // and exit-intent listeners are precisely the app-wide effects a framed
-    // webview must not run. They still sit ABOVE the page slot, so an open cart,
-    // an open conversation and an active emulation all survive a navigation, and
-    // their state changes now re-render the shell rather than the whole document.
+    // serve. `/embed/*` takes the lean branch above and never mounts them — the
+    // pathname tracking, timers and listeners they run are precisely the
+    // app-wide effects a framed webview must not. They still sit ABOVE the page
+    // slot, so an open cart, an open conversation and an active emulation all
+    // survive a navigation, and their state changes re-render the shell rather
+    // than the whole document.
     //
     // Order preserved from the root layout: cart → message hub → emulation →
-    // role preview → permission debugger, then demo mode closest to the content.
+    // role preview → permission debugger.
     <CartProvider>
     <MessageHubProvider>
     <EmulationProvider>
     <RolePreviewProvider>
     <PermissionDebuggerProvider>
-    <DemoModeProvider>
     {/* Global project scope wraps BOTH the shell content AND the FloatingBrain
         launcher (a sibling of `content`). AppShell used to own this provider, but
         the floating Brain drawer is mounted outside AppShell — so it read a null
@@ -499,7 +509,6 @@ function AppBrainShell({ children }: { children: React.ReactNode }) {
     </ActiveCanvasProvider>
     </ProjectScopeProvider>
     </NavigationFeaturesProvider>
-    </DemoModeProvider>
     </PermissionDebuggerProvider>
     </RolePreviewProvider>
     </EmulationProvider>

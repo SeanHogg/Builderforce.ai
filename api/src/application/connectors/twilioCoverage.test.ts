@@ -12,7 +12,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { BUILTIN_CONNECTORS } from './defaults';
-import { authFieldsFor } from './connectorManifest';
+import { actionCarriesRequestBody, authFieldsFor } from './connectorManifest';
 
 /** Twilio surface → the connector + action that delivers it. */
 const COVERAGE: Array<{ surface: string; connector: string; action: string }> = [
@@ -63,11 +63,14 @@ describe('Twilio platform coverage', () => {
   });
 
   it('sends Twilio REST bodies as form data, never JSON', () => {
-    // Twilio's REST API rejects a JSON body outright. Every mutating action on
-    // the account-level and Conversations manifests must say so.
+    // Twilio's REST API rejects a JSON body outright. Every mutating action on the
+    // account-level and Conversations manifests that SENDS a body must say so —
+    // `actionCarriesRequestBody` is the runtime's own rule, not a second copy of
+    // it, so a DELETE like `release_phone_number` is not asked to declare an
+    // encoding for a body it never writes.
     for (const key of ['twilio', 'twilio-conversations']) {
       for (const action of BUILTIN_CONNECTORS.get(key)!.actions) {
-        if (!action.mutates) continue;
+        if (!action.mutates || !actionCarriesRequestBody(action)) continue;
         expect(action.bodyFormat, `${key}.${action.key} must post form-encoded`).toBe('form');
       }
     }

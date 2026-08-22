@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { canvasPaths, collectCanvasNamespaces } from './src/canvas/messageNamespaces';
+import { sourcePackageAliases } from '../../../scripts/sourcePackages.mjs';
 
 /**
  * Builds the CREATION CANVAS webview into `../media/canvas/`.
@@ -31,7 +32,8 @@ import { canvasPaths, collectCanvasNamespaces } from './src/canvas/messageNamesp
  */
 
 const HERE = fileURLToPath(new URL('.', import.meta.url));
-const FRONTEND_SRC = path.resolve(HERE, '../../../frontend/src');
+const REPO_ROOT = path.resolve(HERE, '../../..');
+const FRONTEND_SRC = path.join(REPO_ROOT, 'frontend/src');
 
 /**
  * Supplies `virtual:bf-canvas-messages` — the web message catalogs trimmed to the
@@ -102,12 +104,13 @@ export default defineConfig({
       { find: /^next-intl$/, replacement: path.join(HERE, 'src/shims/next-intl.ts') },
       { find: /^next\/navigation$/, replacement: path.join(HERE, 'src/shims/next-navigation.ts') },
       { find: /^next\/link$/, replacement: path.join(HERE, 'src/shims/next-link.tsx') },
-      // Source-only shared package (no package.json — the web resolves it through
-      // tsconfig paths), so the bundler needs it spelled out.
-      {
-        find: /^@builderforce\/creation-canvas-contract$/,
-        replacement: path.resolve(HERE, '../../../packages/creation-canvas-contract/src/index.ts'),
-      },
+      // The source-only shared packages — the canvas contract, the IDE scaffolds
+      // and the workspace file contract among them. They ship no `dist`, so the
+      // web resolves them through tsconfig `paths` and a bundler has to be told.
+      // Derived from the manifests (`scripts/sourcePackages.mjs`) rather than
+      // listed: this config compiles the frontend's whole import closure, so a
+      // package listed for the web and forgotten here fails the release build.
+      ...sourcePackageAliases(REPO_ROOT),
       // The frontend's own path alias, so its modules resolve unchanged.
       { find: /^@\//, replacement: FRONTEND_SRC + '/' },
     ],

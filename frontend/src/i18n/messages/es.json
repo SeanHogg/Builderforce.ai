@@ -727,7 +727,8 @@
       "rewards": "Recompensas",
       "mail": "Correo",
       "phone": "Teléfono",
-      "sourcing": "Captación"
+      "sourcing": "Captación",
+      "employers": "Empleadores"
     },
     "primaryAria": "Principal",
     "destination": {
@@ -8845,6 +8846,243 @@
         "drizzle-orm": "ORM con seguridad de tipos usado en Builderforce para PostgreSQL.",
         "hono": "Framework web edge-first para la API de Builderforce."
       }
+    },
+    "integrationsPage": {
+      "metaTitle": "Integraciones — BuilderForce Agents",
+      "metaDescription": "BuilderForce Agents se integra con toda tu pila: WhatsApp, Telegram, Discord, GitHub, Gmail, Obsidian y más. Conecta tus agentes a las herramientas que ya usas.",
+      "heading": "Integraciones",
+      "leadLine1": "Más de 50 integraciones con las apps y servicios que ya usas.",
+      "leadLine2": "Chatea desde el móvil, controla desde el escritorio, automatiza todo.",
+      "grid": {
+        "colIntegration": "Integración",
+        "colDescription": "Descripción",
+        "colAction": "Acción",
+        "connect": "Conectar →"
+      },
+      "sections": {
+        "chatProviders": {
+          "title": "Canales de chat",
+          "description": "Escribe a BuilderForce Agents desde cualquier app de mensajería: te responde justo donde estás."
+        },
+        "models": {
+          "title": "Modelos de IA",
+          "description": "Usa el modelo que quieras, en la nube o local. Tus claves, tu decisión."
+        },
+        "productivity": {
+          "title": "Productividad",
+          "description": "Notas, tareas, wikis y código: BuilderForce Agents funciona con tus herramientas de siempre."
+        },
+        "musicAudio": {
+          "title": "Música y audio",
+          "description": "Controla la reproducción, identifica canciones y gestiona el audio multisala."
+        },
+        "smartHome": {
+          "title": "Hogar inteligente",
+          "description": "Luces, termostatos y dispositivos IoT, todos controlables por voz."
+        },
+        "tools": {
+          "title": "Herramientas y automatización",
+          "description": "Control del navegador, tareas programadas, disparadores de correo y más."
+        },
+        "mediaCreative": {
+          "title": "Medios y creatividad",
+          "description": "Genera imágenes, captura pantallas y encuentra el GIF perfecto."
+        },
+        "social": {
+          "title": "Social",
+          "description": "Publica, gestiona el correo y mantente en contacto."
+        },
+        "companionApps": {
+          "title": "Aplicaciones complementarias",
+          "description": "Apps nativas y soporte de plataforma en todos tus dispositivos."
+        },
+        "examples": {
+          "title": "Ejemplos reales",
+          "description": "Lo que la gente está construyendo de verdad con las integraciones de BuilderForce Agents."
+        }
+      },
+      "items": {
+        "WhatsApp": "Emparejamiento por QR con Baileys",
+        "Telegram": "API de bots con grammY",
+        "Discord": "Servidores, canales y MD",
+        "Slack": "Apps de espacio de trabajo con Bolt",
+        "Signal": "Centrado en la privacidad, con signal-cli",
+        "iMessage": "iMessage con imsg (puente AppleScript)",
+        "Microsoft Teams": "Compatibilidad empresarial",
+        "Nextcloud Talk": "Chat de Nextcloud autoalojado",
+        "Matrix": "Protocolo Matrix",
+        "Nostr": "MD descentralizados con NIP-04",
+        "Zalo": "API de bots de Zalo",
+        "WebChat": "Interfaz en el navegador",
+        "Anthropic": "Claude Pro/Max + Opus 4.5",
+        "OpenAI": "GPT-4, GPT-5, o1",
+        "Google": "Gemini 2.5 Pro/Flash",
+        "MiniMax": "MiniMax-M2.1",
+        "xAI": "Grok 3 y 4",
+        "Vercel AI Gateway": "Cientos de modelos con una sola clave de API",
+        "OpenRouter": "Pasarela de API unificada",
+        "Mistral": "Mistral Large y Codestral",
+        "DeepSeek": "DeepSeek V3 y R1",
+        "Perplexity": "IA aumentada con búsqueda",
+        "Hugging Face": "Modelos de código abierto",
+        "Local Models": "Ollama, LM Studio",
+        "Apple Notes": "Notas nativas de macOS/iOS",
+        "Apple Reminders": "Gestión de tareas",
+        "Things 3": "Gestor de tareas GTD",
+        "Notion": "Espacio de trabajo y bases de datos",
+        "Obsidian": "Notas en grafo de conocimiento",
+        "Bear Notes": "Notas en Markdown",
+        "Trello": "Tableros kanban",
+        "GitHub": "Código, incidencias y PR",
+        "Spotify": "Control de reproducción musical",
+        "Sonos": "Audio multisala",
+        "Shazam": "Reconocimiento de canciones",
+        "Philips Hue": "Iluminación inteligente",
+        "8Sleep": "Colchón inteligente",
+        "Home Assistant": "Centro de automatización del hogar",
+        "Browser": "Control de Chrome/Chromium",
+        "Canvas": "Espacio visual + A2UI",
+        "Voice": "Activación por voz y modo conversación",
+        "Gmail": "Disparadores de correo por Pub/Sub",
+        "Cron": "Tareas programadas",
+        "Webhooks": "Disparadores externos",
+        "1Password": "Credenciales seguras",
+        "Weather": "Predicciones y condiciones",
+        "Image Gen": "Generación de imágenes con IA",
+        "GIF Search": "Encuentra el GIF perfecto",
+        "Peekaboo": "Captura y control de pantalla",
+        "Camera": "Captura de foto y vídeo",
+        "Twitter/X": "Publica, responde y busca",
+        "Email": "Envía y lee correos",
+        "macOS": "App en la barra de menús + activación por voz",
+        "iOS": "Lienzo, cámara y activación por voz",
+        "Android": "Lienzo, cámara y pantalla",
+        "Windows": "Se recomienda WSL2",
+        "Linux": "Compatibilidad nativa",
+        "Tesco Autopilot": "Compra automatizada del supermercado",
+        "Bambu Control": "Gestión de impresoras 3D",
+        "Oura Ring": "Información sobre datos de salud",
+        "Food Ordering": "Integración con Foodora"
+      }
+    },
+    "shoutouts": {
+      "metaTitle": "Menciones — BuilderForce Agents",
+      "metaDescription": "Lo que dicen quienes programan con BuilderForce Agents. Elogios reales de ingenieros, fundadores y creadores que usan sus agentes autónomos a diario.",
+      "heading": "Menciones",
+      "subtitle": "Lo que la comunidad dice sobre BuilderForce Agents.",
+      "empty": "Todavía no hay menciones.",
+      "colAuthor": "Autor",
+      "colHandle": "Usuario",
+      "colTestimonial": "Testimonio"
+    },
+    "showcase": {
+      "metaTitle": "Escaparate — Lo que la gente está construyendo con BuilderForce Agents",
+      "metaDescription": "Mira lo que se está construyendo con los agentes autónomos de BuilderForce Agents. Proyectos, flujos de trabajo y automatizaciones reales de la comunidad.",
+      "heading": "Lo que la gente está construyendo",
+      "subtitle": "Proyectos reales, automatización real, magia real.",
+      "filterAgents": "Proyectos de BuilderForce Agents ({count})",
+      "filterAll": "Todos los proyectos ({count})",
+      "colAuthor": "Autor",
+      "colSummary": "Resumen",
+      "colLikes": "Me gusta",
+      "colLink": "Enlace",
+      "viewOnX": "Ver en X →",
+      "screenshotAlt": "Captura de pantalla",
+      "ctaHeading": "¿Has creado algo interesante?",
+      "ctaBody": "Comparte tu creación con BuilderForce Agents con la comunidad.",
+      "shareOnX": "Compartir en X",
+      "browseSkills": "Explorar habilidades",
+      "joinDiscord": "Unirse a Discord",
+      "more": "¿Buscas más? <docs>Más ejemplos en nuestra documentación</docs>."
+    },
+    "skills": {
+      "metaTitle": "Directorio de habilidades de agentes — BuilderForce Agents",
+      "metaDescription": "Explora el directorio de habilidades de agentes de BuilderForce Agents. Descubre habilidades listas para revisión de código, pruebas, documentación, análisis de seguridad y más.",
+      "heading": "Directorio de habilidades de agentes",
+      "lead": "Descubre y comparte habilidades potentes para agentes. Explora el registro de la comunidad o sube la tuya.",
+      "browseMarketplace": "Explorar el marketplace",
+      "shareYourSkill": "Comparte tu habilidad",
+      "category": "Categoría",
+      "allCategories": "Todas las categorías",
+      "search": "Buscar",
+      "searchPlaceholder": "Buscar habilidades…",
+      "sort": "Ordenar",
+      "sortTrending": "Tendencia",
+      "sortNewest": "Más recientes",
+      "sortPopular": "Más populares",
+      "sortDownloads": "Más descargadas",
+      "view": "Vista",
+      "count": "Mostrando {shown} de {total} habilidades",
+      "colSkill": "Habilidad",
+      "colDescription": "Descripción",
+      "colCategory": "Categoría",
+      "colAction": "Acción",
+      "byAuthor": "por {author}",
+      "get": "Obtener"
+    },
+    "skillDetail": {
+      "notFoundTitle": "Habilidad no encontrada — BuilderForce Agents",
+      "metaTitle": "{name} — Habilidad de agente — BuilderForce Agents",
+      "crumb": "Habilidades de agentes",
+      "byAuthor": "por {author}",
+      "likes": "{count} me gusta",
+      "downloads": "{count} descargas",
+      "installHeading": "Instalación",
+      "installBody": "Añade la habilidad <name></name> a cualquier host de BuilderForce Agents desde el marketplace, o asígnala a un agente con alcance de inquilino o de host.",
+      "getOnMarketplace": "Obtener en el marketplace",
+      "browseAll": "Ver todas las habilidades"
+    },
+    "workflowBuilder": {
+      "metaTitle": "Constructor de flujos agénticos — Builderforce.ai",
+      "metaDescription": "Lienzo de arrastrar y soltar, al estilo IPAAS, para componer tu propia lógica de LLM —nodos de memoria, base de conocimiento y entrenamiento— conectados a tus agentes y ejecutados en tus propios hosts. Flujos visuales que se ejecutan de verdad.",
+      "heading": "Constructor de flujos agénticos",
+      "tagline": "Compón tu lógica de LLM. Conecta tus agentes. Míralo ejecutarse.",
+      "description": "Un lienzo de arrastrar y soltar, al estilo IPAAS, donde <term>memoria</term>, <term>base de conocimiento</term> y <term>entrenamiento</term> son nodos que encajas con tus agentes, y que luego se ejecutan en tus propios hosts. No es una herramienta de diagramas: cada flujo se ejecuta de verdad.",
+      "openBuilder": "Abrir el constructor →",
+      "readDocs": "Leer la documentación →",
+      "paletteHeading": "Una paleta para el trabajo agéntico",
+      "paletteIntro": "La mayoría de los constructores de flujos se quedan en llamadas HTTP y condicionales. Este añade las primitivas que hacen útiles a los agentes, y los nodos de lógica de LLM son el titular.",
+      "differentiator": "el diferenciador",
+      "catalogHeading": "Más de {count} integraciones, listas para soltar",
+      "catalogIntro": "Servidores MCP, plataformas de LLM, bases de datos, CRM y fuentes de recogida de datos: arrastra cualquiera de ellos al lienzo.",
+      "andMore": "+{count} más",
+      "howItWorksHeading": "Cómo funciona",
+      "whatYouGetHeading": "Qué obtienes",
+      "finalCtaHeading": "Crea tu primer flujo",
+      "finalCtaBody": "Abre un lienzo en blanco, suelta un disparador, un agente y un nodo de memoria, conéctalos y ejecútalo en un host: en menos de un minuto.",
+      "exploreAgents": "Descubrir BuilderForce Agents →",
+      "steps": [
+        {
+          "title": "Arrastra tus nodos",
+          "body": "Lleva al lienzo disparadores, lógica de LLM, agentes y pasos ETL. Cada nodo se configura en un panel lateral, sin escribir código."
+        },
+        {
+          "title": "Conecta el flujo",
+          "body": "Conecta los nodos para declarar dependencias. El grafo se compila automáticamente en un plan de ejecución ordenado por dependencias."
+        },
+        {
+          "title": "Ejecuta en tus hosts",
+          "body": "Pulsa Ejecutar y uno de tus hosts de agentes toma el flujo, lo ejecuta y lo transmite en directo al grafo de monitorización."
+        }
+      ],
+      "capabilities": [
+        {
+          "title": "Tu lógica de LLM, como nodos",
+          "description": "La lectura y escritura de memoria, la consulta e ingesta de la base de conocimiento y el entrenamiento de modelos son nodos de primera clase: compónlos como cualquier otro paso."
+        },
+        {
+          "title": "Tus agentes como ejecutores",
+          "description": "Suelta un nodo de ejecución de agente, elige rol, runtime y modelo, y tus agentes configurados hacen el trabajo: en local, en la nube, en el navegador o en una malla remota."
+        },
+        {
+          "title": "Ejecuciones que puedes observar",
+          "description": "Cada ejecución genera un registro rastreable: estados de tareas, el grafo de dependencias en vivo, duraciones y coste aparecen en la vista de monitorización sin esfuerzo."
+        },
+        {
+          "title": "Importa, exporta, versiona",
+          "description": "Cada flujo se convierte a YAML escrito para personas y vuelve: edítalo a mano, súbelo a git o importa un flujo escrito a mano directamente al lienzo."
+        }
+      ]
     }
   },
   "newsletter": {
@@ -26672,6 +26910,101 @@
       "removeMessage": "Detiene futuras sincronizaciones de {name}. Los empleos ya captados se conservan.",
       "removeAction": "Eliminar fuente",
       "removeFailed": "No se ha podido eliminar esa fuente."
+    }
+  },
+  "guest": {
+    "sample": {
+      "badge": "Datos de ejemplo",
+      "body": "Estás viendo un espacio de trabajo de ejemplo. Las cifras son inventadas: nada de lo que hay aquí pertenece a una empresa real.",
+      "cta": "Conviértelo en tu espacio de trabajo"
+    },
+    "gate": {
+      "create": "Crear una cuenta",
+      "signIn": "Iniciar sesión",
+      "reason": {
+        "runAgent": "Inicia sesión para lanzar una ejecución a un agente.",
+        "connectIntegration": "Inicia sesión para conectar una cuenta.",
+        "publish": "Inicia sesión para publicar esto.",
+        "invite": "Inicia sesión para invitar a alguien.",
+        "pay": "Inicia sesión para completar un pago.",
+        "save": "Inicia sesión para guardar este trabajo."
+      }
+    }
+  },
+  "employers": {
+    "view": {
+      "intro": "Empleadores, y lo que dijeron de ellos quienes trabajaron allí. Las reseñas se revisan antes de publicarse."
+    },
+    "rating": {
+      "outOf": "{rating} de {max}",
+      "choose": "Elige una valoración",
+      "score": "{score}"
+    },
+    "summary": {
+      "unrated": "Sin reseñas todavía",
+      "count": "{count, plural, one {# reseña} other {# reseñas}}"
+    },
+    "directory": {
+      "title": "Empleadores",
+      "search": "Buscar",
+      "searchPlaceholder": "Nombre de la empresa",
+      "empty": "Todavía no hay empleadores.",
+      "noMatches": "Ningún empleador coincide con esa búsqueda.",
+      "noDetail": "Sin datos registrados",
+      "failed": "No se han podido cargar los empleadores."
+    },
+    "detail": {
+      "reviews": "Reseñas",
+      "noReviews": "Aún no hay reseñas publicadas.",
+      "anonymous": "Anónimo",
+      "verified": "Verificada",
+      "headcount": "{count, plural, one {# empleado} other {# empleados}}",
+      "failed": "No se ha podido cargar ese empleador."
+    },
+    "axis": {
+      "culture": "Cultura",
+      "leadership": "Liderazgo",
+      "workLifeBalance": "Equilibrio vida-trabajo",
+      "compensation": "Retribución",
+      "careerGrowth": "Desarrollo profesional",
+      "diversityInclusion": "Diversidad e inclusión"
+    },
+    "form": {
+      "title": "Escribe una reseña",
+      "updateTitle": "Tu reseña",
+      "rating": "Valoración general",
+      "headline": "Titular",
+      "headlinePlaceholder": "Resúmelo en una frase",
+      "body": "Tu reseña",
+      "bodyPlaceholder": "¿Cómo era trabajar allí en realidad?",
+      "submit": "Enviar reseña",
+      "update": "Actualizar reseña",
+      "saving": "Guardando…",
+      "withdraw": "Retirar",
+      "withdrawTitle": "¿Retirar tu reseña?",
+      "withdrawMessage": "Se elimina tu reseña de {name}. Podrás escribir otra más adelante.",
+      "withdrawAction": "Retirar reseña",
+      "withdrawFailed": "No se ha podido retirar esa reseña.",
+      "failed": "Esa reseña no se ha guardado.",
+      "submittedPending": "Gracias: tu reseña está en revisión y aparecerá una vez aprobada.",
+      "yoursPending": "Tu reseña está pendiente de aprobación, así que aún no es pública.",
+      "yoursRejected": "Tu reseña no se aprobó. Edítala y vuelve a enviarla.",
+      "moderationNote": "Las reseñas nombran a una organización real, así que una persona las lee antes de publicarlas."
+    },
+    "moderation": {
+      "title": "{count, plural, =0 {Moderación} one {Moderación — # pendiente} other {Moderación — # pendientes}}",
+      "intro": "Estas nombran a una organización real. Aprueba solo lo que respaldarías.",
+      "about": "sobre {subject}",
+      "reason": "Motivo",
+      "reasonPlaceholder": "Obligatorio para rechazar — se comunica al autor",
+      "approve": "Aprobar",
+      "reject": "Rechazar",
+      "working": "Procesando…",
+      "failed": "Esa decisión no se ha aplicado.",
+      "status": {
+        "pending": "Pendiente",
+        "rejected": "Rechazada"
+      }
     }
   }
 }

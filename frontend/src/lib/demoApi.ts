@@ -1,21 +1,26 @@
 /**
- * Sales-cycle demo accounts (migration 0360) — client for the public demo API.
+ * The `/demo` doors and the marketing funnel behind them.
  *
- *  - `startDemoSession(persona)` mints a real (short-lived) session for the
- *    seeded persona demo tenant, persists it, and returns the in-app entry path.
- *    The caller does a full-page navigation there so AuthProvider rehydrates the
- *    signed-in session from localStorage (same pattern as the OAuth return).
+ *  - `demoEntryPath(persona)` says which surface a door opens on. It replaced
+ *    `startDemoSession`, which minted a real short-lived session for one of five
+ *    SEEDED SERVER TENANTS. Those tenants were shared, cost-capped and wiped by
+ *    a nightly reseed — so a visitor's edits were destroyed by design at exactly
+ *    the moment they had invested enough to care. There is one sample workspace
+ *    now, it lives in the visitor's own guest session, and entering it is a
+ *    navigation rather than a round trip that could fail on a per-IP counter.
  *  - `trackDemoEvents` / `queueDemoEvent` batch anonymous funnel telemetry keyed
  *    by the marketing visitorId (the signed-in activity tracker never fires for
  *    logged-out visitors — this is its marketing twin).
- *  - `submitSalesLead` posts a "book a demo" / exit-intent lead.
+ *  - `submitSalesLead` posts a "book a demo" / exit-intent lead. Lead capture is
+ *    a different thing from the product demo and is untouched by any of this.
  *
- * Demo mode is remembered in sessionStorage so the DemoModeProvider can show the
- * banner + convert/exit prompts for the duration of the visit.
+ * The demo-mode CHROME went with the tenants: a banner saying "you are in a
+ * demo" only ever activated when the authenticated tenant matched a minted demo
+ * session, and there is no minted session to match. `<SampleDataNotice>` is its
+ * honest replacement — it is mounted once by the shell, decides its own
+ * visibility, and covers every surface rather than the five a tour knew about.
  */
-import { persistSession } from './auth';
 import { apiRequestStream } from './apiClient';
-import type { AuthUser, Tenant } from './types';
 import { getVisitorId } from './visitor';
 
 
@@ -23,127 +28,40 @@ export type DemoPersona = 'ai-team' | 'insights' | 'pmo' | 'talent' | 'governanc
 
 export const DEMO_PERSONAS: DemoPersona[] = ['ai-team', 'insights', 'pmo', 'talent', 'governance'];
 
-const DEMO_MODE_KEY = 'bf_demo_mode';
-const EXIT_PROMPTED_KEY = 'bf_demo_exit_prompted';
-const TOUR_SEEN_KEY = 'bf_demo_tour_seen';
-
-export interface DemoSessionState {
-  persona: DemoPersona;
-  tenantName: string;
-  /** The demo tenant's id (auth Tenant.id, a string). The demo chrome activates
-   *  ONLY when the currently authenticated tenant matches this — so a stale flag
-   *  can never hijack a real account signed into afterwards in the same tab. */
-  tenantId: string;
-  startedAt: number;
-}
-
-interface DemoSessionResponse {
-  persona: DemoPersona;
-  entryPath: string;
-  webToken: string;
-  tenantToken: string;
-  user: AuthUser & { username?: string; displayName?: string; avatarUrl?: string | null };
-  tenant: { id: number; name: string; slug: string; role: string; plan: string };
-}
-
-export function getDemoState(): DemoSessionState | null {
-  if (typeof window === 'undefined') return null;
-  try {
-    const raw = sessionStorage.getItem(DEMO_MODE_KEY);
-    return raw ? (JSON.parse(raw) as DemoSessionState) : null;
-  } catch {
-    return null;
-  }
-}
-
-function setDemoState(state: DemoSessionState): void {
-  try {
-    sessionStorage.setItem(DEMO_MODE_KEY, JSON.stringify(state));
-  } catch {
-    /* ignore */
-  }
-}
-
-export function clearDemoMode(): void {
-  try {
-    sessionStorage.removeItem(DEMO_MODE_KEY);
-    sessionStorage.removeItem(EXIT_PROMPTED_KEY);
-    sessionStorage.removeItem(TOUR_SEEN_KEY);
-  } catch {
-    /* ignore */
-  }
-}
-
-export function hasExitPrompted(): boolean {
-  try {
-    return sessionStorage.getItem(EXIT_PROMPTED_KEY) === '1';
-  } catch {
-    return false;
-  }
-}
-
-/** Whether the product tour has already run (or been dismissed) this session. */
-export function hasTourSeen(): boolean {
-  try {
-    return sessionStorage.getItem(TOUR_SEEN_KEY) === '1';
-  } catch {
-    return false;
-  }
-}
-
-export function markTourSeen(): void {
-  try {
-    sessionStorage.setItem(TOUR_SEEN_KEY, '1');
-  } catch {
-    /* ignore */
-  }
-}
-
-export function markExitPrompted(): void {
-  try {
-    sessionStorage.setItem(EXIT_PROMPTED_KEY, '1');
-  } catch {
-    /* ignore */
-  }
-}
+/**
+ * Where each door on `/demo` lands.
+ *
+ * Five doors, ONE sample workspace behind them — which is the change. They used
+ * to be five SEEDED SERVER TENANTS a visitor borrowed with a minted session:
+ * shared, cost-capped, and wiped by a nightly reseed, so the visitor's edits
+ * were destroyed by design at the exact moment they had invested enough to care.
+ * Now a door is just the surface the sample workspace opens on, in the visitor's
+ * OWN guest session — they edit it, it is theirs, and the boards they build are
+ * claimed into their workspace when they sign up (`claimPendingDrafts`).
+ *
+ * The five cards stay because the five ENTRY POINTS are genuinely different
+ * questions ("show me the team", "show me the numbers"), and their copy is
+ * already written in five languages.
+ */
+const DEMO_ENTRY_PATHS: Record<DemoPersona, string> = {
+  'ai-team': '/workforce',
+  insights: '/insights',
+  pmo: '/pmo',
+  talent: '/workforce',
+  governance: '/seat/governance',
+};
 
 /**
- * Enter a persona demo. Mints + persists the session and returns the entry path.
- * Throws on failure so the caller can surface an error.
+ * Enter the sample workspace through one of the `/demo` doors.
+ *
+ * No network call and nothing to fail: the guest session already exists (or is
+ * minted on first read by `guestSessionStore`), the surfaces render for a
+ * signed-out visitor, and the transport answers their reads from the sample
+ * workspace. What used to be a round trip that could 429 on a per-IP counter is
+ * now a navigation.
  */
-export async function startDemoSession(persona: DemoPersona): Promise<{ entryPath: string }> {
-  const visitorId = getVisitorId();
-  const res = await apiRequestStream('/api/demo/session', {
-    method: 'POST',
-    auth: 'none',
-    body: JSON.stringify({ persona, visitorId }),
-    // The caller renders the API's `code` inline, so this is not a system fault.
-    expectedErrors: [400, 403, 429],
-  });
-  if (!res.ok) {
-    const body = (await res.json().catch(() => ({}))) as { code?: string; error?: string };
-    throw new Error(body.code ?? body.error ?? `demo_session_failed_${res.status}`);
-  }
-  const data = (await res.json()) as DemoSessionResponse;
-
-  const user: AuthUser = {
-    id: data.user.id,
-    email: data.user.email,
-    name: data.user.displayName ?? data.user.username ?? data.user.email,
-    isSuperadmin: false,
-    accountType: 'standard',
-    accountTypeSelected: true,
-  };
-  const tenant: Tenant = {
-    id: String(data.tenant.id),
-    name: data.tenant.name,
-    slug: data.tenant.slug,
-    role: data.tenant.role,
-  };
-  persistSession(data.webToken, user, data.tenantToken, tenant);
-  setDemoState({ persona: data.persona, tenantName: data.tenant.name, tenantId: tenant.id, startedAt: Date.now() });
-
-  return { entryPath: data.entryPath };
+export function demoEntryPath(persona: DemoPersona): string {
+  return DEMO_ENTRY_PATHS[persona];
 }
 
 // ---------------------------------------------------------------------------

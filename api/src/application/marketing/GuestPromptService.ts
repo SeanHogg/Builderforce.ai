@@ -1,7 +1,7 @@
 import { desc, eq, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
-import { marketingSessionPrompts, marketingSessions } from '../../infrastructure/database/schema';
+import { marketingSessionPrompts, marketingSessions, visitorEvents } from '../../infrastructure/database/schema';
 import {
   GUEST_PROMPT_LIMITS,
   parseGuestPrompt,
@@ -113,6 +113,7 @@ export class GuestPromptService {
     prompt?: unknown;
     surface?: unknown;
     sessionRef?: unknown;
+    visitId?: unknown;
     mode?: unknown;
     ip?: string | null;
   }): Promise<GuestPromptRecordResult> {
@@ -127,6 +128,7 @@ export class GuestPromptService {
     await this.db.insert(marketingSessionPrompts).values({
       visitorId: parsed.value.visitorId,
       sessionRef: parsed.value.sessionRef,
+      visitId: parsed.value.visitId,
       surface: parsed.value.surface,
       mode: parsed.value.mode,
       prompt: parsed.value.prompt,
@@ -274,25 +276,38 @@ export class GuestPromptService {
   }
 
   /**
-   * Erase every prompt a visitor typed.
+   * Erase everything an anonymous visitor left behind.
    *
-   * A prompt is free text a person wrote, which makes it personal data, and this
-   * table deliberately hangs off no cascade — it is keyed by an opaque visitor
-   * id, not by a user row, so nothing would ever remove it on its own. The
-   * superadmin console's per-visitor drawer is what calls this
+   * A prompt is free text a person wrote, and their journey is where they went
+   * and what broke — both are personal data, and both tables deliberately hang
+   * off no cascade, because they are keyed by an opaque visitor id rather than a
+   * user row, so nothing would ever remove them on its own. The superadmin
+   * console's per-visitor drawer is what calls this
    * (`DELETE /api/admin/guest-sessions/:visitorId/prompts`), which is how a
    * privacy request that names a visitor id gets actioned rather than only
-   * tracked. Returns how many rows went.
+   * tracked.
+   *
+   * BOTH tables, in one call, deliberately. When `visitor_events` arrived
+   * (migration 1109) an erasure that cleared only the prompts would have left the
+   * visitor's full navigation and error history in place while REPORTING the
+   * request as actioned — a privacy failure that looks like a success. The
+   * counts are returned separately so the audit record says what actually went.
    */
-  async forgetVisitor(env: Env, visitorId: string): Promise<number> {
-    const deleted = await this.db
-      .delete(marketingSessionPrompts)
-      .where(eq(marketingSessionPrompts.visitorId, visitorId))
-      .returning({ id: marketingSessionPrompts.id });
+  async forgetVisitor(env: Env, visitorId: string): Promise<{ prompts: number; events: number }> {
+    const [prompts, events] = await Promise.all([
+      this.db
+        .delete(marketingSessionPrompts)
+        .where(eq(marketingSessionPrompts.visitorId, visitorId))
+        .returning({ id: marketingSessionPrompts.id }),
+      this.db
+        .delete(visitorEvents)
+        .where(eq(visitorEvents.visitorId, visitorId))
+        .returning({ id: visitorEvents.id }),
+    ]);
     await Promise.all([
       invalidateCached(env, GUEST_SESSIONS_CACHE_KEY),
       invalidateCached(env, visitorStandingCacheKey(visitorId)),
     ]);
-    return deleted.length;
+    return { prompts: prompts.length, events: events.length };
   }
 }

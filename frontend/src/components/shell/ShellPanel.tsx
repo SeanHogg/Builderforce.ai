@@ -30,7 +30,7 @@ import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { panelWidth } from '@/lib/workbenchPolicy';
 import { destTitleKey, publicDestinationFor } from '@/lib/publicDestinations';
 import { seatHueVar } from '@/lib/seats';
-import { ShellIndex, useShellIndex } from './ShellIndex';
+import { ShellIndex, useShellDestination } from './ShellIndex';
 import { useOwnReferenceRail, useReferenceChrome, useReferenceSelect, type ReferenceChromeSection } from '@/lib/referenceChrome';
 import { useOptionalActiveCanvas } from '@/lib/canvas/ActiveCanvasContext';
 
@@ -128,7 +128,10 @@ export function ShellPanel({ children }: { children: React.ReactNode }) {
   const tRefSection = useTranslations('referencePanel.section');
   const pathname = usePathname() || '';
   const router = useRouter();
-  const { group, items } = useShellIndex();
+  // The destination, not the active tab: the panel wants the crumb and whether
+  // there is an index worth offering. Taking the query-reading hook here would
+  // put a CSR bailout above the page slot for a value it never reads.
+  const { group, items } = useShellDestination();
   const canvas = useOptionalActiveCanvas();
   const boardSessionId = canvas?.active?.sessionId ?? null;
 

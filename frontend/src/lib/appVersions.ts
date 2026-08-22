@@ -23,8 +23,13 @@ import { apiRequest } from './apiClient';
 
 const AUTH_API_URL = process.env.NEXT_PUBLIC_AUTH_API_URL || 'https://api.builderforce.ai';
 
-/** Build-time UI version, or '—' when the build didn't stamp one. */
-export const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION || '—';
+/**
+ * Build-time UI version. DECLARED in `./buildVersion` and re-exported here, so
+ * this module keeps being the one place anyone imports it from while the guest
+ * session store — which `apiClient` reaches, and `apiClient` is what this module
+ * imports — can read the same constant without a require cycle.
+ */
+export { APP_VERSION } from './buildVersion';
 
 /**
  * The deployed API version. Cached for the session and coalesced across callers,

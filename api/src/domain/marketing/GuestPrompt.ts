@@ -13,6 +13,8 @@
  * about what got stored.
  */
 
+import { isVisitId } from './VisitorJourney';
+
 /**
  * Where a prompt was typed.
  *
@@ -49,6 +51,10 @@ export interface GuestPrompt {
   prompt: string;
   surface: GuestPromptSurface;
   sessionRef: string | null;
+  /** The visit it was typed in (migration 1109). Joins the prompt to the pages
+   *  around it in `visitor_events`, so the flow graph can draw "asked for X,
+   *  then went to Y" instead of two unrelated streams. */
+  visitId: string | null;
   mode: string | null;
 }
 
@@ -80,6 +86,7 @@ export function parseGuestPrompt(input: {
   prompt?: unknown;
   surface?: unknown;
   sessionRef?: unknown;
+  visitId?: unknown;
   mode?: unknown;
 }): GuestPromptParse {
   const raw = typeof input.prompt === 'string' ? input.prompt : '';
@@ -101,6 +108,7 @@ export function parseGuestPrompt(input: {
       prompt: normalized.slice(0, GUEST_PROMPT_MAX_CHARS),
       surface: toGuestPromptSurface(input.surface),
       sessionRef,
+      visitId: isVisitId(input.visitId) ? input.visitId : null,
       mode,
     },
   };

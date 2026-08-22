@@ -68,25 +68,47 @@ describe('useRequireAuth', () => {
 
   it('sends a genuinely signed-out visitor to sign in, carrying where they were', () => {
     auth.authReady = true;
+    // An OPERATOR route. A previewable one no longer redirects at all — see the
+    // case below — so the redirect has to be asserted somewhere it still
+    // applies, and "your workspace's settings" is exactly such a place.
+    pathname.current = '/settings/members';
+    window.history.replaceState({}, '', '/settings/members');
 
-    renderHook(() => useRequireAuth({ returnTo: '/projects' }));
+    renderHook(() => useRequireAuth({ returnTo: '/settings/members' }));
 
-    expect(replace).toHaveBeenCalledWith('/login?next=%2Fprojects');
+    expect(replace).toHaveBeenCalledWith(`/login?next=${encodeURIComponent('/settings/members')}`);
   });
 
   it('keeps the query string in the return-to, because it is part of the screen', () => {
     auth.authReady = true;
-    pathname.current = '/quality';
-    window.history.replaceState({}, '', '/quality?tab=feedback');
+    pathname.current = '/security';
+    window.history.replaceState({}, '', '/security?tab=sessions');
 
     renderHook(() => useRequireAuth());
 
-    expect(replace).toHaveBeenCalledWith(`/login?next=${encodeURIComponent('/quality?tab=feedback')}`);
+    expect(replace).toHaveBeenCalledWith(`/login?next=${encodeURIComponent('/security?tab=sessions')}`);
+  });
+
+  it('lets a signed-out visitor stay on a previewable route', () => {
+    // The guard used to bounce them off a page that is designed to be readable
+    // without an account — the shell would mount the surface and the page would
+    // immediately navigate away from it. The sample workspace fills it instead,
+    // and `<SessionGate>` stops the actions that genuinely need an account.
+    auth.authReady = true;
+    pathname.current = '/insights/delivery';
+    window.history.replaceState({}, '', '/insights/delivery');
+
+    const { result } = renderHook(() => useRequireAuth());
+
+    expect(replace).not.toHaveBeenCalled();
+    expect(result.current).toBe(true);
   });
 
   it('sends a signed-in visitor with no workspace to the picker', () => {
     auth.authReady = true;
     auth.isAuthenticated = true;
+    // Signed IN, so the preview exemption does not apply on any route: somebody
+    // with an account and no workspace needs the picker, not sample data.
 
     const { result } = renderHook(() => useRequireAuth({ returnTo: '/alerts' }));
 

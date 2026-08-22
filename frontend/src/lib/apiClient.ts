@@ -35,6 +35,7 @@ import { dispatchApiError } from './errors/apiErrorEvent';
 import { fetchWithTransportReport, TRANSPORT_FAILURE_STATUS } from './errors/transportFailure';
 import { signalTermsGate } from './errors/termsGateEvent';
 import { LOCALE_HEADER, readLocaleCookie } from '@/i18n/config';
+import { guestReadResponse, resolveGuestRead } from '@/domains/guest/application/guestRead';
 
 export function getApiBaseUrl(): string {
   return AUTH_API_URL;
@@ -345,6 +346,16 @@ async function sendRequest(
 
   // A caller that lists status 0 in `expectedErrors` handles the outage itself —
   // the product-error reporter does, so a failed report can never report itself.
+  // A signed-out visitor's READ is answered from the sample workspace when one
+  // covers it — before the network, so a guest surface populates instead of
+  // rendering an empty grid behind a 401. Every condition that makes this safe
+  // (no credential sent, GET only, browser only, fixture must exist) lives in
+  // `resolveGuestRead`, which is the only thing that decides it; a `null` here
+  // means "go to the wire" and is the ordinary case for a signed-in person on
+  // every request they ever make.
+  const sample = resolveGuestRead({ path, method, hadToken });
+  if (sample) return { res: guestReadResponse(sample), url, method, hadToken };
+
   const res = await fetchWithTransportReport(
     url,
     { ...init, headers: { ...authHeaders, ...optHeaders } as HeadersInit },

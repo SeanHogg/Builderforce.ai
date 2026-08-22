@@ -727,7 +727,8 @@
       "rewards": "Récompenses",
       "mail": "Courrier",
       "phone": "Téléphone",
-      "sourcing": "Sourcing"
+      "sourcing": "Sourcing",
+      "employers": "Employeurs"
     },
     "primaryAria": "Principale",
     "destination": {
@@ -8845,6 +8846,243 @@
         "drizzle-orm": "ORM typé utilisé dans Builderforce pour PostgreSQL.",
         "hono": "Framework web edge-first pour l’API Builderforce."
       }
+    },
+    "integrationsPage": {
+      "metaTitle": "Intégrations — BuilderForce Agents",
+      "metaDescription": "BuilderForce Agents s’intègre à toute votre stack : WhatsApp, Telegram, Discord, GitHub, Gmail, Obsidian et plus encore. Connectez vos agents aux outils que vous utilisez déjà.",
+      "heading": "Intégrations",
+      "leadLine1": "Plus de 50 intégrations avec les applications et services que vous utilisez déjà.",
+      "leadLine2": "Discutez depuis votre téléphone, pilotez depuis votre bureau, automatisez tout.",
+      "grid": {
+        "colIntegration": "Intégration",
+        "colDescription": "Description",
+        "colAction": "Action",
+        "connect": "Connecter →"
+      },
+      "sections": {
+        "chatProviders": {
+          "title": "Canaux de discussion",
+          "description": "Écrivez à BuilderForce Agents depuis n’importe quelle messagerie : il répond là où vous êtes."
+        },
+        "models": {
+          "title": "Modèles d’IA",
+          "description": "Utilisez le modèle de votre choix, dans le cloud ou en local. Vos clés, votre décision."
+        },
+        "productivity": {
+          "title": "Productivité",
+          "description": "Notes, tâches, wikis et code : BuilderForce Agents fonctionne avec vos outils habituels."
+        },
+        "musicAudio": {
+          "title": "Musique et audio",
+          "description": "Pilotez la lecture, identifiez les morceaux et gérez l’audio multipièce."
+        },
+        "smartHome": {
+          "title": "Maison connectée",
+          "description": "Lumières, thermostats et objets connectés, tous pilotables à la voix."
+        },
+        "tools": {
+          "title": "Outils et automatisation",
+          "description": "Contrôle du navigateur, tâches planifiées, déclencheurs e-mail et plus encore."
+        },
+        "mediaCreative": {
+          "title": "Médias et création",
+          "description": "Générez des images, capturez l’écran et trouvez le GIF parfait."
+        },
+        "social": {
+          "title": "Réseaux sociaux",
+          "description": "Publiez, gérez vos e-mails et restez connecté."
+        },
+        "companionApps": {
+          "title": "Applications compagnons",
+          "description": "Applications natives et prise en charge de la plateforme sur tous vos appareils."
+        },
+        "examples": {
+          "title": "Exemples concrets",
+          "description": "Ce que les gens construisent vraiment avec les intégrations BuilderForce Agents."
+        }
+      },
+      "items": {
+        "WhatsApp": "Appairage par QR via Baileys",
+        "Telegram": "API bot via grammY",
+        "Discord": "Serveurs, salons et MP",
+        "Slack": "Applications d’espace de travail via Bolt",
+        "Signal": "Axé confidentialité, via signal-cli",
+        "iMessage": "iMessage via imsg (passerelle AppleScript)",
+        "Microsoft Teams": "Prise en charge entreprise",
+        "Nextcloud Talk": "Chat Nextcloud auto-hébergé",
+        "Matrix": "Protocole Matrix",
+        "Nostr": "MP décentralisés via NIP-04",
+        "Zalo": "API bot Zalo",
+        "WebChat": "Interface dans le navigateur",
+        "Anthropic": "Claude Pro/Max + Opus 4.5",
+        "OpenAI": "GPT-4, GPT-5, o1",
+        "Google": "Gemini 2.5 Pro/Flash",
+        "MiniMax": "MiniMax-M2.1",
+        "xAI": "Grok 3 et 4",
+        "Vercel AI Gateway": "Des centaines de modèles, une seule clé d’API",
+        "OpenRouter": "Passerelle d’API unifiée",
+        "Mistral": "Mistral Large et Codestral",
+        "DeepSeek": "DeepSeek V3 et R1",
+        "Perplexity": "IA augmentée par la recherche",
+        "Hugging Face": "Modèles open source",
+        "Local Models": "Ollama, LM Studio",
+        "Apple Notes": "Notes natives macOS/iOS",
+        "Apple Reminders": "Gestion des tâches",
+        "Things 3": "Gestionnaire de tâches GTD",
+        "Notion": "Espace de travail et bases de données",
+        "Obsidian": "Notes en graphe de connaissances",
+        "Bear Notes": "Notes en Markdown",
+        "Trello": "Tableaux kanban",
+        "GitHub": "Code, tickets et PR",
+        "Spotify": "Contrôle de la lecture musicale",
+        "Sonos": "Audio multipièce",
+        "Shazam": "Reconnaissance de morceaux",
+        "Philips Hue": "Éclairage connecté",
+        "8Sleep": "Matelas connecté",
+        "Home Assistant": "Hub de domotique",
+        "Browser": "Contrôle de Chrome/Chromium",
+        "Canvas": "Espace visuel + A2UI",
+        "Voice": "Réveil vocal et mode conversation",
+        "Gmail": "Déclencheurs e-mail via Pub/Sub",
+        "Cron": "Tâches planifiées",
+        "Webhooks": "Déclencheurs externes",
+        "1Password": "Identifiants sécurisés",
+        "Weather": "Prévisions et conditions",
+        "Image Gen": "Génération d’images par IA",
+        "GIF Search": "Trouvez le GIF parfait",
+        "Peekaboo": "Capture et contrôle de l’écran",
+        "Camera": "Capture photo et vidéo",
+        "Twitter/X": "Publier, répondre, rechercher",
+        "Email": "Envoyer et lire des e-mails",
+        "macOS": "Application de barre de menus + réveil vocal",
+        "iOS": "Canvas, caméra, réveil vocal",
+        "Android": "Canvas, caméra, écran",
+        "Windows": "WSL2 recommandé",
+        "Linux": "Prise en charge native",
+        "Tesco Autopilot": "Courses alimentaires automatisées",
+        "Bambu Control": "Gestion d’imprimante 3D",
+        "Oura Ring": "Analyses des données de santé",
+        "Food Ordering": "Intégration Foodora"
+      }
+    },
+    "shoutouts": {
+      "metaTitle": "Témoignages — BuilderForce Agents",
+      "metaDescription": "Ce que disent les développeurs de BuilderForce Agents. De vrais retours d’ingénieurs, de fondateurs et de créateurs qui utilisent ses agents autonomes au quotidien.",
+      "heading": "Témoignages",
+      "subtitle": "Ce que la communauté dit de BuilderForce Agents.",
+      "empty": "Pas encore de témoignages.",
+      "colAuthor": "Auteur",
+      "colHandle": "Compte",
+      "colTestimonial": "Témoignage"
+    },
+    "showcase": {
+      "metaTitle": "Vitrine — Ce que les gens construisent avec BuilderForce Agents",
+      "metaDescription": "Découvrez ce que les développeurs construisent avec les agents autonomes de BuilderForce Agents. Projets, workflows et automatisations réels issus de la communauté.",
+      "heading": "Ce que les gens construisent",
+      "subtitle": "De vrais projets, de vraies automatisations, de la vraie magie.",
+      "filterAgents": "Projets BuilderForce Agents ({count})",
+      "filterAll": "Tous les projets ({count})",
+      "colAuthor": "Auteur",
+      "colSummary": "Résumé",
+      "colLikes": "J’aime",
+      "colLink": "Lien",
+      "viewOnX": "Voir sur X →",
+      "screenshotAlt": "Capture d’écran",
+      "ctaHeading": "Vous avez créé quelque chose de sympa ?",
+      "ctaBody": "Partagez votre création BuilderForce Agents avec la communauté.",
+      "shareOnX": "Partager sur X",
+      "browseSkills": "Parcourir les compétences",
+      "joinDiscord": "Rejoindre Discord",
+      "more": "Envie d’en voir plus ? <docs>D’autres exemples dans la documentation</docs>."
+    },
+    "skills": {
+      "metaTitle": "Annuaire des compétences d’agents — BuilderForce Agents",
+      "metaDescription": "Parcourez l’annuaire des compétences d’agents de BuilderForce Agents. Découvrez des compétences prêtes à l’emploi pour la revue de code, les tests, la documentation, l’analyse de sécurité et plus encore.",
+      "heading": "Annuaire des compétences d’agents",
+      "lead": "Découvrez et partagez des compétences d’agents puissantes. Parcourez le registre communautaire ou publiez la vôtre.",
+      "browseMarketplace": "Parcourir la marketplace",
+      "shareYourSkill": "Partagez votre compétence",
+      "category": "Catégorie",
+      "allCategories": "Toutes les catégories",
+      "search": "Rechercher",
+      "searchPlaceholder": "Rechercher des compétences…",
+      "sort": "Trier",
+      "sortTrending": "Tendances",
+      "sortNewest": "Plus récentes",
+      "sortPopular": "Plus populaires",
+      "sortDownloads": "Plus téléchargées",
+      "view": "Affichage",
+      "count": "Affichage de {shown} compétences sur {total}",
+      "colSkill": "Compétence",
+      "colDescription": "Description",
+      "colCategory": "Catégorie",
+      "colAction": "Action",
+      "byAuthor": "par {author}",
+      "get": "Obtenir"
+    },
+    "skillDetail": {
+      "notFoundTitle": "Compétence introuvable — BuilderForce Agents",
+      "metaTitle": "{name} — Compétence d’agent — BuilderForce Agents",
+      "crumb": "Compétences d’agents",
+      "byAuthor": "par {author}",
+      "likes": "{count} j’aime",
+      "downloads": "{count} téléchargements",
+      "installHeading": "Installation",
+      "installBody": "Ajoutez la compétence <name></name> à n’importe quel hôte BuilderForce Agents depuis la marketplace, ou attribuez-la à un agent à l’échelle du locataire ou de l’hôte.",
+      "getOnMarketplace": "Obtenir sur la marketplace",
+      "browseAll": "Voir toutes les compétences"
+    },
+    "workflowBuilder": {
+      "metaTitle": "Constructeur de workflows agentiques — Builderforce.ai",
+      "metaDescription": "Canevas glisser-déposer, façon IPAAS, pour composer votre propre logique LLM — nœuds de mémoire, de base de connaissances et d’entraînement — reliés à vos agents et exécutés sur vos propres hôtes. Des workflows visuels qui s’exécutent vraiment.",
+      "heading": "Constructeur de workflows agentiques",
+      "tagline": "Composez votre logique LLM. Câblez vos agents. Regardez-les tourner.",
+      "description": "Un canevas glisser-déposer, façon IPAAS, où <term>mémoire</term>, <term>base de connaissances</term> et <term>entraînement</term> sont des nœuds que vous assemblez avec vos agents — puis exécutez sur vos propres hôtes. Pas un outil de schémas : chaque workflow s’exécute réellement.",
+      "openBuilder": "Ouvrir le constructeur →",
+      "readDocs": "Lire la documentation →",
+      "paletteHeading": "Une palette pour le travail agentique",
+      "paletteIntro": "La plupart des constructeurs de workflows s’arrêtent aux appels HTTP et aux conditions. Celui-ci ajoute les primitives qui rendent les agents utiles — les nœuds de logique LLM sont la vedette.",
+      "differentiator": "la différence",
+      "catalogHeading": "Plus de {count} intégrations, prêtes à déposer",
+      "catalogIntro": "Serveurs MCP, plateformes LLM, bases de données, CRM et sources de collecte de données : glissez n’importe lequel sur le canevas.",
+      "andMore": "+{count} de plus",
+      "howItWorksHeading": "Comment ça marche",
+      "whatYouGetHeading": "Ce que vous obtenez",
+      "finalCtaHeading": "Créez votre premier workflow",
+      "finalCtaBody": "Ouvrez un canevas vierge, déposez un déclencheur, un agent et un nœud de mémoire, reliez-les et lancez-le sur un hôte — en moins d’une minute.",
+      "exploreAgents": "Découvrir BuilderForce Agents →",
+      "steps": [
+        {
+          "title": "Glissez vos nœuds",
+          "body": "Déposez sur le canevas des déclencheurs, de la logique LLM, des agents et des étapes ETL. Chaque nœud se configure dans un panneau latéral, sans code."
+        },
+        {
+          "title": "Câblez le flux",
+          "body": "Reliez les nœuds pour déclarer les dépendances. Le graphe se compile automatiquement en un plan d’exécution ordonné par dépendances."
+        },
+        {
+          "title": "Exécutez sur vos hôtes",
+          "body": "Cliquez sur Exécuter : l’un de vos hôtes d’agents prend le workflow en charge, l’exécute et le diffuse en direct dans le graphe de supervision."
+        }
+      ],
+      "capabilities": [
+        {
+          "title": "Votre logique LLM, sous forme de nœuds",
+          "description": "La lecture et l’écriture en mémoire, l’interrogation et l’ingestion de la base de connaissances et l’entraînement de modèles sont des nœuds à part entière : composez-les comme n’importe quelle autre étape."
+        },
+        {
+          "title": "Vos agents comme exécutants",
+          "description": "Déposez un nœud d’exécution d’agent, choisissez un rôle, un runtime et un modèle, et vos agents configurés font le travail — en local, dans le cloud, dans le navigateur ou sur un maillage distant."
+        },
+        {
+          "title": "Des exécutions que vous pouvez suivre",
+          "description": "Chaque exécution crée un enregistrement traçable : statuts des tâches, graphe de dépendances en direct, durées et coûts arrivent dans la vue de supervision sans effort."
+        },
+        {
+          "title": "Importez, exportez, versionnez",
+          "description": "Chaque workflow fait l’aller-retour vers un YAML rédigeable à la main : modifiez-le, versionnez-le dans git, ou importez un flux écrit à la main directement sur le canevas."
+        }
+      ]
     }
   },
   "newsletter": {
@@ -26672,6 +26910,101 @@
       "removeMessage": "Arrête les synchronisations depuis {name}. Les offres déjà collectées sont conservées.",
       "removeAction": "Supprimer le flux",
       "removeFailed": "Ce flux n’a pas pu être supprimé."
+    }
+  },
+  "guest": {
+    "sample": {
+      "badge": "Données d’exemple",
+      "body": "Vous consultez un espace de travail d’exemple. Les chiffres sont inventés : rien ici n’appartient à une véritable entreprise.",
+      "cta": "En faire votre espace de travail"
+    },
+    "gate": {
+      "create": "Créer un compte",
+      "signIn": "Se connecter",
+      "reason": {
+        "runAgent": "Connectez-vous pour lancer une exécution sur un agent.",
+        "connectIntegration": "Connectez-vous pour connecter un compte.",
+        "publish": "Connectez-vous pour publier ceci.",
+        "invite": "Connectez-vous pour inviter quelqu’un.",
+        "pay": "Connectez-vous pour effectuer un paiement.",
+        "save": "Connectez-vous pour enregistrer ce travail."
+      }
+    }
+  },
+  "employers": {
+    "view": {
+      "intro": "Les employeurs, et ce qu’en ont dit celles et ceux qui y ont travaillé. Les avis sont vérifiés avant publication."
+    },
+    "rating": {
+      "outOf": "{rating} sur {max}",
+      "choose": "Choisir une note",
+      "score": "{score}"
+    },
+    "summary": {
+      "unrated": "Pas encore d’avis",
+      "count": "{count, plural, one {# avis} other {# avis}}"
+    },
+    "directory": {
+      "title": "Employeurs",
+      "search": "Rechercher",
+      "searchPlaceholder": "Nom de l’entreprise",
+      "empty": "Aucun employeur pour l’instant.",
+      "noMatches": "Aucun employeur ne correspond à cette recherche.",
+      "noDetail": "Aucun détail enregistré",
+      "failed": "Les employeurs n’ont pas pu être chargés."
+    },
+    "detail": {
+      "reviews": "Avis",
+      "noReviews": "Aucun avis publié pour l’instant.",
+      "anonymous": "Anonyme",
+      "verified": "Vérifié",
+      "headcount": "{count, plural, one {# salarié} other {# salariés}}",
+      "failed": "Cet employeur n’a pas pu être chargé."
+    },
+    "axis": {
+      "culture": "Culture",
+      "leadership": "Direction",
+      "workLifeBalance": "Équilibre vie pro-perso",
+      "compensation": "Rémunération",
+      "careerGrowth": "Évolution de carrière",
+      "diversityInclusion": "Diversité et inclusion"
+    },
+    "form": {
+      "title": "Rédiger un avis",
+      "updateTitle": "Votre avis",
+      "rating": "Note globale",
+      "headline": "Titre",
+      "headlinePlaceholder": "Résumez en une phrase",
+      "body": "Votre avis",
+      "bodyPlaceholder": "Comment était-ce vraiment d’y travailler ?",
+      "submit": "Publier l’avis",
+      "update": "Mettre à jour",
+      "saving": "Enregistrement…",
+      "withdraw": "Retirer",
+      "withdrawTitle": "Retirer votre avis ?",
+      "withdrawMessage": "Votre avis sur {name} sera supprimé. Vous pourrez en écrire un autre plus tard.",
+      "withdrawAction": "Retirer l’avis",
+      "withdrawFailed": "Cet avis n’a pas pu être retiré.",
+      "failed": "Cet avis n’a pas été enregistré.",
+      "submittedPending": "Merci — votre avis est en relecture et paraîtra une fois approuvé.",
+      "yoursPending": "Votre avis attend une approbation ; il n’est donc pas encore public.",
+      "yoursRejected": "Votre avis n’a pas été approuvé. Modifiez-le et renvoyez-le.",
+      "moderationNote": "Les avis nomment une organisation réelle : chacun est lu par une personne avant publication."
+    },
+    "moderation": {
+      "title": "{count, plural, =0 {Modération} one {Modération — # en attente} other {Modération — # en attente}}",
+      "intro": "Ces avis nomment une organisation réelle. N’approuvez que ce que vous assumeriez.",
+      "about": "à propos de {subject}",
+      "reason": "Motif",
+      "reasonPlaceholder": "Obligatoire pour refuser — l’auteur en est informé",
+      "approve": "Approuver",
+      "reject": "Refuser",
+      "working": "Traitement…",
+      "failed": "Cette décision n’a pas été appliquée.",
+      "status": {
+        "pending": "En attente",
+        "rejected": "Refusé"
+      }
     }
   }
 }

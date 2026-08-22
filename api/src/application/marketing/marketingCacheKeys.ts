@@ -21,3 +21,7 @@ export const BROADCAST_CONSOLE_CACHE_KEY = 'broadcast:console:v1';
 /** One visitor's place in the funnel: registered / paid / prompt count. Read on
  *  every broadcast delivery, so it is the hottest key of the four. */
 export const visitorStandingCacheKey = (visitorId: string): string => `guest:standing:v1:${visitorId}`;
+
+/** The flow graph over a trailing window. Keyed BY the window, because a graph
+ *  for 7 days and one for 30 are different answers to the same question. */
+export const visitorFlowCacheKey = (days: number): string => `admin:visitor-flow:v1:${days}`;

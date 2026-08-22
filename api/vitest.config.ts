@@ -1,9 +1,12 @@
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
+import { sourcePackageAliases } from '../scripts/sourcePackages.mjs';
 
-// Vitest does not read tsconfig `paths`, so the shared cross-package contract
+const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url));
+
+// Vitest does not read tsconfig `paths`, so the source-only shared packages
 // (`@builderforce/agent-tools`, resolved via tsconfig paths for tsc + wrangler/esbuild
-// bundling) needs an explicit resolve alias here too. Points at the package source
+// bundling) need explicit resolve aliases here too. They point at the package source
 // (vitest transforms TS on the fly).
 export default defineConfig({
   test: {
@@ -27,43 +30,11 @@ export default defineConfig({
     pool: 'threads',
   },
   resolve: {
-    alias: {
-      '@builderforce/agent-tools': fileURLToPath(
-        new URL('../packages/agent-tools/src/index.ts', import.meta.url),
-      ),
-      '@builderforce/agent-stall': fileURLToPath(
-        new URL('../packages/agent-stall/src/index.ts', import.meta.url),
-      ),
-      // Was in `tsconfig.json` `paths` but NOT here, so `classifyTask.test.ts` and
-      // everything downstream of it resolved this package only by luck of the
-      // worker's module graph — `vitest run src/application/llm` failed the whole
-      // directory with "Cannot find package '@builderforce/learned-routing'" while
-      // the full-suite run passed. Every tsconfig path needs its alias twin.
-      '@builderforce/learned-routing': fileURLToPath(
-        new URL('../packages/learned-routing/src/index.ts', import.meta.url),
-      ),
-      '@builderforce/run-context': fileURLToPath(
-        new URL('../packages/run-context/src/index.ts', import.meta.url),
-      ),
-      '@builderforce/creation-canvas-contract': fileURLToPath(
-        new URL('../packages/creation-canvas-contract/src/index.ts', import.meta.url),
-      ),
-      // The third-party widget contract — the manifest shape, the permission
-      // vocabulary and the postMessage allowlist the API enforces at registration
-      // and the browser host enforces per message. Same source, two runtimes.
-      '@builderforce/canvas-widget-protocol': fileURLToPath(
-        new URL('../packages/canvas-widget-protocol/src/index.ts', import.meta.url),
-      ),
-      // The IDE starter scaffolds and the workspace file contract. Both used to be
-      // a byte-identical copy per runtime pinned by a parity test, and both drifted
-      // anyway — `webmobile` reached the frontend's modality map and never the
-      // API's, so "Web + Mobile" projects were created with no files at all.
-      '@builderforce/ide-templates': fileURLToPath(
-        new URL('../packages/ide-templates/src/index.ts', import.meta.url),
-      ),
-      '@builderforce/ide-file-contract': fileURLToPath(
-        new URL('../packages/ide-file-contract/src/index.ts', import.meta.url),
-      ),
-    },
+    // Derived from the package manifests, never listed: every tsconfig path
+    // needs its alias twin, and hand-keeping the two lists in step failed —
+    // `@builderforce/learned-routing` was in `tsconfig.json` and not here, so
+    // `vitest run src/application/llm` failed the whole directory with "Cannot
+    // find package" while the full-suite run passed on luck of the module graph.
+    alias: sourcePackageAliases(REPO_ROOT),
   },
 });
