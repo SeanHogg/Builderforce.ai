@@ -261,6 +261,7 @@ import { createGitProxyRoutes }        from './presentation/routes/gitProxyRoute
 import { createAgentAssignmentRoutes } from './presentation/routes/agentAssignmentRoutes';
 import { createSecurityReviewRoutes } from './presentation/routes/securityReviewRoutes';
 import { createKnowledgeRoutes } from './presentation/routes/knowledgeRoutes';
+import { createCollabRoutes } from './presentation/routes/collabRoutes';
 import { createKnowledgeMarketRoutes } from './presentation/routes/knowledgeMarketRoutes';
 import { createCreationListingRoutes, createPublicListingRoutes } from './presentation/routes/creationListingRoutes';
 import { createStageSandboxRoutes } from './presentation/routes/stageSandboxRoutes';
@@ -330,6 +331,7 @@ export { ProjectEvermindCoordinatorDO } from './infrastructure/relay/ProjectEver
 export { AgentContainerDO } from './infrastructure/relay/AgentContainerDO';
 export { QaRunnerContainerDO } from './infrastructure/relay/QaRunnerContainerDO';
 export { StageSandboxContainerDO } from './infrastructure/relay/StageSandboxContainerDO';
+export { CollaborationRoomDO } from './infrastructure/relay/CollaborationRoomDO';
 export { TenantRateLimiterDO } from './infrastructure/ratelimit/TenantRateLimiterDO';
 
 // ---------------------------------------------------------------------------
@@ -1109,6 +1111,9 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/incidents',         createIncidentRoutes(db));
   app.route('/api/monitoring',        createMonitoringRoutes(db));
   app.route('/api/knowledge',         createKnowledgeRoutes(db));
+  // Real-time co-editing (Yjs over CollaborationRoomDO). One route, because
+  // y-websocket appends the room name to the base URL: /api/collab/<scope>:<id>.
+  app.route('/api/collab',            createCollabRoutes(db));
   app.route('/api/knowledge-market',  createKnowledgeMarketRoutes(db)); // PUBLIC browse (logged-out)
 
   // Selling what you built on the canvas. Two mounts because they are two auth

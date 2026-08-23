@@ -11,17 +11,31 @@
  * tables, fenced code — matching what the capability prompts actually ask the
  * model to produce. Anything unrecognised degrades to a paragraph rather than
  * being dropped, so no content is silently lost on export.
+ *
+ * ── THE FORMATTING MARKDOWN CANNOT SPELL ────────────────────────────────────
+ * A canvas document may also carry underline, colour, font, size and alignment,
+ * written as the attribute spans `richFormat.ts` defines (`[text]{u size=14pt}`,
+ * `A centred line. {align=center}`). They are read HERE, once, so every Office
+ * writer downstream receives them as run and block properties instead of finding
+ * the syntax in the middle of a sentence and printing it.
  */
 
+import {
+  readRichBlock, splitRichSpans, stripRichSpans,
+  type RichAlign, type RichMarks,
+} from '@builderforce/creation-canvas-contract';
+
+export type { RichAlign, RichMarks };
+
 export type MdBlock =
-  | { kind: 'heading'; level: 1 | 2 | 3; text: string }
-  | { kind: 'paragraph'; text: string }
-  | { kind: 'list'; ordered: boolean; items: string[] }
+  | { kind: 'heading'; level: 1 | 2 | 3; text: string; align?: RichAlign }
+  | { kind: 'paragraph'; text: string; align?: RichAlign }
+  | { kind: 'list'; ordered: boolean; items: string[]; align?: RichAlign }
   | { kind: 'table'; head: string[]; rows: string[][] }
   | { kind: 'code'; lang: string; text: string };
 
-/** One inline run of text with its emphasis flags. */
-export interface MdRun {
+/** One inline run of text with its emphasis flags and its rich marks. */
+export interface MdRun extends RichMarks {
   text: string;
   bold?: boolean;
   italic?: boolean;
@@ -45,9 +59,11 @@ export function parseMarkdownBlocks(markdown: string): MdBlock[] {
   let para: string[] = [];
 
   const flushPara = () => {
-    const text = para.join(' ').trim();
+    const joined = para.join(' ').trim();
     para = [];
-    if (text) blocks.push({ kind: 'paragraph', text });
+    if (!joined) return;
+    const { text, align } = readRichBlock(joined);
+    if (text.trim()) blocks.push({ kind: 'paragraph', text: text.trim(), ...(align ? { align } : {}) });
   };
 
   for (let i = 0; i < lines.length; i++) {
@@ -71,7 +87,8 @@ export function parseMarkdownBlocks(markdown: string): MdBlock[] {
     if (heading) {
       flushPara();
       const level = Math.min((heading[1] ?? '#').length, 3) as 1 | 2 | 3;
-      blocks.push({ kind: 'heading', level, text: (heading[2] ?? '').trim() });
+      const { text, align } = readRichBlock((heading[2] ?? '').trim());
+      blocks.push({ kind: 'heading', level, text: text.trim(), ...(align ? { align } : {}) });
       continue;
     }
 
@@ -96,15 +113,22 @@ export function parseMarkdownBlocks(markdown: string): MdBlock[] {
       flushPara();
       const isOrdered = !bullet;
       const items: string[] = [];
+      // A list aligns as a whole: Word aligns paragraphs, and one centred bullet
+      // beside a left one reads as a mistake. The first item that declares an
+      // alignment speaks for the list, and every item's suffix comes off either
+      // way so the syntax never prints.
+      let align: RichAlign | undefined;
       while (i < lines.length) {
         const cur = lines[i] ?? '';
         const m = isOrdered ? /^\s*\d+[.)]\s+(.*)$/.exec(cur) : /^\s*[-*+]\s+(.*)$/.exec(cur);
         if (!m) break;
-        items.push((m[1] ?? '').trim());
+        const item = readRichBlock((m[1] ?? '').trim());
+        align ??= item.align;
+        items.push(item.text.trim());
         i++;
       }
       i--;
-      blocks.push({ kind: 'list', ordered: isOrdered, items });
+      blocks.push({ kind: 'list', ordered: isOrdered, items, ...(align ? { align } : {}) });
       continue;
     }
 
@@ -114,29 +138,43 @@ export function parseMarkdownBlocks(markdown: string): MdBlock[] {
   return blocks;
 }
 
-/**
- * Split inline markdown into emphasis runs (`**bold**`, `*italic*`, `` `code` ``).
- * Everything else is plain text; unmatched markers stay literal.
- */
-export function parseInlineRuns(text: string): MdRun[] {
+/** Emphasis within ONE stretch of text that already carries its rich marks. */
+function emphasisRuns(text: string, marks: RichMarks): MdRun[] {
   const runs: MdRun[] = [];
   const re = /(\*\*|__)(.+?)\1|(\*|_)(.+?)\3|`([^`]+)`/g;
   let last = 0;
   let m: RegExpExecArray | null;
   while ((m = re.exec(text)) != null) {
-    if (m.index > last) runs.push({ text: text.slice(last, m.index) });
-    if (m[2] != null) runs.push({ text: m[2], bold: true });
-    else if (m[4] != null) runs.push({ text: m[4], italic: true });
-    else runs.push({ text: m[5] ?? '', code: true });
+    if (m.index > last) runs.push({ ...marks, text: text.slice(last, m.index) });
+    if (m[2] != null) runs.push({ ...marks, text: m[2], bold: true });
+    else if (m[4] != null) runs.push({ ...marks, text: m[4], italic: true });
+    else runs.push({ ...marks, text: m[5] ?? '', code: true });
     last = re.lastIndex;
   }
-  if (last < text.length) runs.push({ text: text.slice(last) });
-  return runs.filter((r) => r.text.length > 0);
+  if (last < text.length) runs.push({ ...marks, text: text.slice(last) });
+  return runs;
 }
 
-/** Strip inline markdown to plain text (link text kept, URL dropped). */
+/**
+ * Split inline markdown into runs — emphasis (`**bold**`, `*italic*`,
+ * `` `code` ``) and the rich marks an attribute span carries.
+ *
+ * Spans are taken FIRST and emphasis read inside each, which is why the
+ * canonical order is `[**text**]{u}` and not `**[text]{u}**`: splitting the
+ * other way leaves an emphasis marker orphaned on each side of the span.
+ * `canonicalRichText`, inside `splitRichSpans`, rewrites the other order so both
+ * read the same.
+ */
+export function parseInlineRuns(text: string): MdRun[] {
+  return splitRichSpans(text)
+    .flatMap((segment) => emphasisRuns(segment.text, segment.marks))
+    .filter((r) => r.text.length > 0);
+}
+
+/** Strip inline markdown to plain text (link text kept, URL dropped, an
+ *  attribute span reduced to the words it marked). */
 export function stripInline(text: string): string {
-  return text
+  return stripRichSpans(text)
     .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
     .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
     .replace(/(\*\*|__)(.+?)\1/g, '$2')

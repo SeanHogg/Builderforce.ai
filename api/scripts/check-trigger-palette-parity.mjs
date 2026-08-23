@@ -28,6 +28,7 @@
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readFrontendSource } from './lib/frontendSource.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, '../..');
@@ -37,8 +38,9 @@ const repoRoot = resolve(here, '../..');
 // without the guard moving with it, and both times the symptom was the same: this
 // check threw instead of comparing anything. It is pinned to the FIELD's file
 // rather than to the catalogue's entry point so the next re-shuffle of the
-// catalogue does not silently disarm it.
-const PALETTE = resolve(repoRoot, 'frontend/src/domains/workflow/domain/stepKinds/connect.ts');
+// catalogue does not silently disarm it, and read through `readFrontendSource` so
+// that a third move reports WHERE the file went instead of an ENOENT.
+const PALETTE = 'frontend/src/domains/workflow/domain/stepKinds/connect.ts';
 const DOMAIN = resolve(repoRoot, 'api/src/domain/workflowTriggers.ts');
 
 /** The `triggerType` select's `options: [...]` array in the palette. */
@@ -63,7 +65,7 @@ function activatableTypes(source) {
   return new Set([...read('EVENT_TRIGGER_TYPES'), ...read('ACTIVATABLE_TRIGGER_TYPES')]);
 }
 
-const palette = paletteTriggerTypes(readFileSync(PALETTE, 'utf8'));
+const palette = paletteTriggerTypes(readFrontendSource(PALETTE, 'check:trigger-palette'));
 const activatable = activatableTypes(readFileSync(DOMAIN, 'utf8'));
 
 /** Offered by the builder but never registered — a control that promises nothing. */
@@ -85,7 +87,7 @@ if (dead.length) {
 if (unreachable.length) {
   console.error(
     `check:trigger-palette FAILED — ${unreachable.length} activatable trigger type(s) are unreachable from the builder:\n` +
-    unreachable.map((t) => `  • '${t}' — add it to the triggerType options in frontend/src/components/workflow-builder/nodeKinds.ts`).join('\n'),
+    unreachable.map((t) => `  • '${t}' — add it to the triggerType options in ${PALETTE}`).join('\n'),
   );
 }
 process.exit(1);

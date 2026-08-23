@@ -2092,7 +2092,14 @@
   background:transparent; color:var(--canvas-muted);
   font-size:10px; text-overflow:ellipsis; white-space:nowrap; cursor:pointer;
 }
-.driveAccounts button[aria-pressed='true'] { border-color:var(--canvas-accent-ink); background:var(--canvas-hover); color:var(--canvas-ink); }
+/* BOTH attributes, deliberately. `aria-pressed` is what a toggle in a `role="group"`
+   sets (the drive and Miro account switchers) and `aria-selected` is what a `role="tab"`
+   sets (the ads and social panels' tab strips, now via `PanelTabs`). Only the first was
+   here, so every tab strip in the app rendered with no visible selection — three
+   identical pills and no way to tell which one you were on. */
+.driveAccounts button[aria-pressed='true'],
+.driveAccounts button[aria-selected='true'] { border-color:var(--canvas-accent-ink); background:var(--canvas-hover); color:var(--canvas-ink); }
+.driveAccounts button:focus-visible { outline:2px solid var(--canvas-accent-ink); outline-offset:1px; }
 
 .driveConnect { display:grid; gap:5px; padding:8px 10px; }
 .driveConnect button {
@@ -2196,6 +2203,76 @@
 }
 .socialStats dt { color:var(--canvas-muted); font-size:9px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; }
 .socialStats dd { margin:0; color:var(--canvas-ink); font-size:13px; font-weight:650; overflow-wrap:anywhere; }
+
+/* ── The two levels beneath a campaign ───────────────────────────────────────
+   An ad set hangs off its campaign and an ad off its ad set, so each tier is
+   INDENTED behind a rule rather than floated as a sibling list: the hierarchy is
+   the whole point of the level, and a flat list of ad sets under a flat list of
+   campaigns cannot say which belongs to which. The indent is small (8px) and the
+   rule carries the colour, so three levels still fit in a 300px panel at 360px
+   viewport width without a horizontal scrollbar. */
+.adTier {
+  display:grid; gap:2px; margin:2px 0 6px 8px; padding-left:8px;
+  border-left:1px solid var(--canvas-line);
+}
+.adTierHeading {
+  margin:6px 0 0; padding:0 4px;
+  color:var(--canvas-muted); font-size:9px; font-weight:700; letter-spacing:.04em; text-transform:uppercase;
+}
+.adSetRow { display:grid; gap:1px; padding:2px 0; }
+/* The audience, always visible. An ad set aimed at under-25s in Germany and one
+   aimed at everyone spend the same budget very differently, and a row that shows
+   only a name cannot tell them apart. Wraps rather than truncating: a truncated
+   audience is the same failure in fewer pixels. */
+.adSetAudience {
+  display:flex; flex-wrap:wrap; gap:4px; margin:0; padding:0 8px 2px;
+  color:var(--canvas-ink-soft); font-size:9px; line-height:1.45; overflow-wrap:anywhere;
+}
+.adSetAudience > span { color:var(--canvas-muted); font-weight:700; }
+.adSetActions { display:flex; flex-wrap:wrap; gap:4px; padding:0 8px 4px; }
+.adSetActions button {
+  padding:2px 8px; border:1px solid var(--canvas-line); border-radius:var(--radius-full);
+  background:transparent; color:var(--canvas-muted); font-size:9px; cursor:pointer;
+}
+.adSetActions button:hover:not(:disabled),.adSetActions button:focus-visible:not(:disabled) {
+  background:var(--canvas-hover); color:var(--canvas-ink); outline:none;
+}
+.adSetActions button:disabled { opacity:.5; cursor:not-allowed; }
+.adSetActions button[aria-expanded='true'] { border-color:var(--canvas-accent-ink); color:var(--canvas-ink); }
+/* A closed vocabulary as checkboxes rather than a native multi-select, whose
+   selection is invisible until it is opened. `auto-fit`/`minmax` so two or five
+   options reflow instead of overflowing the panel. */
+.adTargetChecks {
+  display:grid; grid-template-columns:repeat(auto-fit,minmax(6.5rem,1fr)); gap:4px;
+  margin:0; padding:6px 8px; border:1px solid var(--canvas-line); border-radius:var(--radius-md);
+}
+.adTargetChecks legend {
+  padding:0 3px; color:var(--canvas-ink-soft); font-size:10px; font-weight:650;
+}
+.adTargetChecks label {
+  display:flex !important; align-items:center; gap:5px;
+  color:var(--canvas-ink) !important; font-size:10px;
+}
+.adTargetChecks input { width:auto; min-height:0; }
+.adTargetChecks:disabled { opacity:.55; }
+/* The age window: two number boxes side by side, dropping to one column when the
+   panel is narrow. */
+.adTargetRange {
+  display:grid; grid-template-columns:repeat(auto-fit,minmax(5.5rem,1fr)); gap:6px;
+  margin:0; padding:6px 8px; border:1px solid var(--canvas-line); border-radius:var(--radius-md);
+}
+.adTargetRange legend {
+  padding:0 3px; color:var(--canvas-ink-soft); font-size:10px; font-weight:650;
+}
+.adTargetRange label { display:grid; gap:3px; color:var(--canvas-muted); font-size:10px; }
+.adTargetRange label > span { color:var(--canvas-ink-soft); font-weight:650; }
+.adTargetRange input {
+  width:100%; box-sizing:border-box; min-height:30px; padding:6px 8px;
+  border:1px solid var(--canvas-line); border-radius:var(--radius-sm);
+  background:var(--canvas-panel-muted); color:var(--canvas-ink); font:inherit; font-size:11px;
+}
+.adTargetRange small { grid-column:1 / -1; color:var(--canvas-ink-soft); font-size:9px; line-height:1.4; }
+.adTargetRange:disabled { opacity:.55; }
 
 .socialTargetPicker { display:grid; gap:5px; margin:0; padding:8px; border:1px solid var(--canvas-line); border-radius:var(--radius-md); }
 .socialTargetPicker legend { padding:0 4px; color:var(--canvas-ink-soft); font-size:9px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; }

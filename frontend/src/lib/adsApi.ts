@@ -1,10 +1,15 @@
 import { apiRequest } from './apiClient';
 import { formatCents } from '@/lib/canvasMoney';
+import type { AdTargetingDimension } from './adSetsApi';
 
 /**
- * Paid advertising — Google Ads, Meta, LinkedIn, TikTok, X, Reddit, Pinterest, Snapchat.
+ * Paid advertising — Google Ads, Meta, LinkedIn, TikTok, X, Reddit, Pinterest, Snapchat
+ * and Microsoft Advertising.
  *
- * Server counterpart: `api/src/presentation/routes/adsRoutes.ts`.
+ * Server counterpart: `api/src/presentation/routes/adsRoutes.ts`. The two levels BENEATH
+ * a campaign — ad sets and the ads inside them — live in `./adSetsApi`, mirroring the
+ * `adsService` / `adSetService` split on the server for the same reason: a new targeting
+ * dimension changes that file and not this one.
  *
  * CONNECTING an ad account is deliberately NOT here. An ad account is a connector
  * connection, so it is created and edited through `connectorsApi` like every other one
@@ -25,11 +30,14 @@ const ADS = '/api/ads';
 const json = { 'Content-Type': 'application/json' };
 
 export type AdNetwork =
-  | 'google' | 'meta' | 'linkedin' | 'tiktok' | 'x' | 'reddit' | 'pinterest' | 'snapchat';
+  | 'google' | 'meta' | 'linkedin' | 'tiktok' | 'x' | 'reddit' | 'pinterest' | 'snapchat'
+  | 'microsoft';
 
-/** The canonical order the UI lists networks in. */
+/** The canonical order the UI lists networks in — the API's `AD_NETWORKS` order. A
+ *  network missing here is not a smaller list: it is an account whose rows render
+ *  unlabelled, which is how `microsoft` shipped invisible on this surface. */
 export const AD_NETWORKS: readonly AdNetwork[] = [
-  'google', 'meta', 'linkedin', 'tiktok', 'x', 'reddit', 'pinterest', 'snapchat',
+  'google', 'meta', 'linkedin', 'tiktok', 'x', 'reddit', 'pinterest', 'snapchat', 'microsoft',
 ];
 
 /** What a campaign is trying to buy, in one vocabulary across every network. */
@@ -50,7 +58,28 @@ export interface AdAccountField {
   help: string;
 }
 
-export interface AdAccount {
+/**
+ * What a network can BUY and PLACE — the same facts the server enforces on the write
+ * path, published so a form can refuse before the spend rather than render a control
+ * whose only outcome is a 400.
+ *
+ * Server counterpart: `AdNetworkCapabilities` in `adsService.ts`, spread into both the
+ * account and the catalog entry there for the same reason it is shared here.
+ */
+export interface AdNetworkCapabilities {
+  /** What this network can actually buy — a form must not offer anything else. */
+  objectives: AdObjective[];
+  /** The targeting dimensions it can place. Anything else is refused BY NAME rather
+   *  than applied silently, so a form must not offer it either. */
+  targetingDimensions: AdTargetingDimension[];
+  /** True when a campaign cannot deliver without an ad set beneath it (Reddit, X). */
+  requiresAdSet: boolean;
+  /** True when an ad must promote EXISTING content — the form asks for a creative
+   *  reference instead of copy the network cannot author (Pinterest, X). */
+  requiresCreativeRef: boolean;
+}
+
+export interface AdAccount extends AdNetworkCapabilities {
   /** The connector connection id — the handle every other call takes. */
   id: string;
   network: AdNetwork;
@@ -60,19 +89,16 @@ export interface AdAccount {
   /** False when a required scope field (ad account id, customer id…) is missing. */
   ready: boolean;
   missingFields: AdAccountField[];
-  /** What this network can actually buy — the form must not offer anything else. */
-  objectives: AdObjective[];
   lastTestOk: boolean | null;
   lastUsedAt: string | null;
 }
 
-export interface AdNetworkOption {
+export interface AdNetworkOption extends AdNetworkCapabilities {
   network: AdNetwork;
   label: string;
   /** The built-in connector this network runs on — what /connectors is filtered by. */
   connectorKey: string;
   accountFields: AdAccountField[];
-  objectives: AdObjective[];
   connectedCount: number;
 }
 

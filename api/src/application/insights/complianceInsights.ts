@@ -12,6 +12,7 @@
 import { and, desc, eq, gte } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { toolAuditEvents } from '../../infrastructure/database/schema';
+import { csvMatrix } from '../export/tabularExport';
 
 const HOUR_MS = 3_600_000;
 const EVIDENCE_PACK_LIMIT = 5_000;
@@ -143,10 +144,11 @@ export async function buildEvidencePack(db: Db, tenantId: number, days: number):
   }));
 }
 
-/** Serialise an evidence pack to CSV (RFC-4180-ish; values quoted + escaped). */
+/** Serialise an evidence pack to CSV. The columns are this module's; the escaping
+ *  is `csvMatrix`, the api's one CSV writer. */
 export function evidencePackToCsv(rows: EvidenceRow[]): string {
-  const header = ['ts', 'tool', 'risk', 'category', 'agent', 'execution_id', 'duration_ms'];
-  const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-  const lines = rows.map((r) => [r.ts, r.toolName, r.risk, r.category, r.agent, r.executionId, r.durationMs].map(esc).join(','));
-  return [header.join(','), ...lines].join('\n');
+  return csvMatrix(
+    ['ts', 'tool', 'risk', 'category', 'agent', 'execution_id', 'duration_ms'],
+    rows.map((r) => [r.ts, r.toolName, r.risk, r.category, r.agent, r.executionId, r.durationMs]),
+  );
 }

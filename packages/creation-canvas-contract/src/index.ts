@@ -1,5 +1,6 @@
 /** Shared, transport-neutral Creation Canvas contract used by web and VSIX. */
 export * from './video';
+export * from './talktrack';
 export * from './world';
 export * from './robloxWorld';
 export * from './canvasTools';
@@ -30,6 +31,11 @@ export * from './resume';
 export * from './resumeLexicon';
 export * from './resumeModel';
 export * from './resumeDocument';
+// The formatting a canvas document carries BEYOND markdown — underline, colour, font,
+// size and alignment. Shared because the ONE stored form has five readers (card,
+// editor, print sheet, .docx/.pdf writers, Brain) and they must spell it identically;
+// see richFormat.ts.
+export * from './richFormat';
 // The counterparty vocabulary — `PARTY_ROLES`, `ACCOUNT_RELATIONSHIPS`, `partyRef`.
 // Declared in this package rather than in either consumer because the canvas `account`
 // kind, the API's `party_roles` writer and the kernel's own role column must mean the

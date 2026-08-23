@@ -10,6 +10,7 @@
  */
 
 import { zipSync, strToU8 } from 'fflate';
+import { richColorHex, type RichAlign } from '@builderforce/creation-canvas-contract';
 import { parseMarkdownBlocks, parseInlineRuns, type MdBlock, type MdRun } from './markdownBlocks';
 
 const CONTENT_TYPES = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -44,22 +45,39 @@ function esc(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+/**
+ * One run.
+ *
+ * The run's OWN marks win over the block's: a size, a colour or a font the
+ * author put on those words is the one thing in this file that was chosen rather
+ * than derived, so the theme yields to it.
+ */
 function run(r: MdRun, opts: { size: number; color?: string; bold?: boolean }, theme: ResolvedDocxTheme): string {
+  const face = r.font ?? (r.code ? 'Consolas' : theme.font);
+  const color = r.color ? richColorHex(r.color) : opts.color;
   const props = [
     r.bold || opts.bold ? '<w:b/>' : '',
     r.italic ? '<w:i/>' : '',
-    `<w:rFonts w:ascii="${r.code ? 'Consolas' : theme.font}" w:hAnsi="${r.code ? 'Consolas' : theme.font}"/>`,
-    opts.color ? `<w:color w:val="${opts.color}"/>` : '',
-    `<w:sz w:val="${opts.size}"/>`,
+    r.underline ? '<w:u w:val="single"/>' : '',
+    `<w:rFonts w:ascii="${esc(face)}" w:hAnsi="${esc(face)}"/>`,
+    color ? `<w:color w:val="${esc(color)}"/>` : '',
+    `<w:sz w:val="${r.size ? Math.round(r.size * 2) : opts.size}"/>`,
   ].join('');
   return `<w:r><w:rPr>${props}</w:rPr><w:t xml:space="preserve">${esc(r.text)}</w:t></w:r>`;
 }
 
-function para(text: string, opts: { size?: number; bold?: boolean; color?: string; indent?: number; before?: number; after?: number }, theme: ResolvedDocxTheme): string {
+/** Word's paragraph-alignment element. `left` is the default and is not written,
+ *  so a document that never aligns anything produces the same bytes it did. */
+function alignXml(align: RichAlign | undefined): string {
+  return align && align !== 'left' ? `<w:jc w:val="${align === 'justify' ? 'both' : align}"/>` : '';
+}
+
+function para(text: string, opts: { size?: number; bold?: boolean; color?: string; indent?: number; before?: number; after?: number; align?: RichAlign }, theme: ResolvedDocxTheme): string {
   const size = Math.round((opts.size ?? SIZE.body) * theme.scale);
   const pPr = [
     `<w:spacing w:before="${opts.before ?? 0}" w:after="${opts.after ?? 120}"/>`,
     opts.indent ? `<w:ind w:left="${opts.indent}"/>` : '',
+    alignXml(opts.align),
   ].join('');
   const runs = parseInlineRuns(text).map((r) => run(r, { size, bold: opts.bold, color: opts.color }, theme)).join('');
   return `<w:p><w:pPr>${pPr}</w:pPr>${runs || run({ text: '' }, { size }, theme)}</w:p>`;
@@ -86,11 +104,11 @@ function blockXml(b: MdBlock, theme: ResolvedDocxTheme): string {
   switch (b.kind) {
     case 'heading': {
       const size = b.level === 1 ? SIZE.h1 : b.level === 2 ? SIZE.h2 : SIZE.h3;
-      return para(b.text, { size, bold: true, color: b.level <= 2 ? theme.accent : '111827', before: 240, after: 120 }, theme);
+      return para(b.text, { size, bold: true, color: b.level <= 2 ? theme.accent : '111827', before: 240, after: 120, ...(b.align ? { align: b.align } : {}) }, theme);
     }
     case 'list':
       return b.items
-        .map((item, i) => para(`${b.ordered ? `${i + 1}. ` : '• '}${item}`, { indent: 480, after: 60 }, theme))
+        .map((item, i) => para(`${b.ordered ? `${i + 1}. ` : '• '}${item}`, { indent: 480, after: 60, ...(b.align ? { align: b.align } : {}) }, theme))
         .join('');
     case 'table':
       // Word needs a paragraph after a table or the next block merges into it.
@@ -101,7 +119,7 @@ function blockXml(b: MdBlock, theme: ResolvedDocxTheme): string {
         .map((line) => para(line || ' ', { size: SIZE.code, indent: 240, after: 0 }, theme))
         .join('');
     default:
-      return para(b.text, {}, theme);
+      return para(b.text, b.align ? { align: b.align } : {}, theme);
   }
 }
 

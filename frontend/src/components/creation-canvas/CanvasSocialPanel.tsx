@@ -25,19 +25,12 @@ import {
   type SocialAccount,
   type SocialCampaign,
   type SocialFeedFilter,
-  type SocialNetwork,
   type SocialNetworkOption,
 } from '@/lib/socialApi';
 import { authFieldsFor, connectorsApi, type ConnectorAuthField } from '@/lib/connectorsApi';
 import { resolvePublicMediaUrls } from '@/lib/canvasPublicMedia';
-
-/** One glyph per network. Brand marks, so they stay literal — and the record is
- *  exhaustive by TYPE, so an eleventh network fails to compile here rather than
- *  rendering a blank square beside an account nobody can identify. */
-const NETWORK_GLYPH: Readonly<Record<SocialNetwork, string>> = {
-  x: '𝕏', linkedin: 'in', facebook: 'f', instagram: '◎', tiktok: '♪',
-  youtube: '▶', reddit: '◕', pinterest: 'P', threads: '@', bluesky: '☁', googleBusiness: 'G',
-};
+import { NETWORK_GLYPHS } from '@/lib/networkGlyph';
+import { PanelTabs } from './PanelTabs';
 
 export interface CanvasSocialPanelProps {
   /** Put a live feed tile on the board. Same helper the canvas tools use. */
@@ -261,10 +254,15 @@ export function CanvasSocialPanel({ onAddFeed, onAddCampaign, boardMedia, onClos
         <button type="button" aria-label={t('close')} title={t('close')} onClick={onClose}>×</button>
       </header>
 
-      <div className={styles.driveAccounts} role="tablist" aria-label={t('title')}>
-        <button type="button" role="tab" aria-selected={mode === 'accounts'} onClick={() => setMode('accounts')}>{t('tabAccounts')}</button>
-        <button type="button" role="tab" aria-selected={mode === 'compose'} onClick={() => setMode('compose')}>{t('tabCompose')}</button>
-      </div>
+      <PanelTabs<Mode>
+        label={t('title')}
+        value={mode}
+        onChange={setMode}
+        tabs={[
+          { id: 'accounts', label: t('tabAccounts') },
+          { id: 'compose', label: t('tabCompose') },
+        ]}
+      />
 
       {error && <p className={styles.driveNotice} role="alert">{error}</p>}
       {notice && <p className={styles.driveNotice} role="status">{notice}</p>}
@@ -275,7 +273,7 @@ export function CanvasSocialPanel({ onAddFeed, onAddCampaign, boardMedia, onClos
           {!loading && accounts.length === 0 && <p className={styles.driveEmpty}>{t('noAccounts')}</p>}
           {accounts.map((account) => <div key={account.id} className={styles.socialAccountRow} role="listitem">
             <span className={styles.driveRowMain}>
-              <span aria-hidden>{NETWORK_GLYPH[account.network]}</span>
+              <span aria-hidden>{NETWORK_GLYPHS[account.network]}</span>
               <span className={styles.driveRowName}>{`${account.networkLabel} · ${account.name}`}</span>
               <small>{account.ready
                 ? t('ready')
@@ -360,7 +358,7 @@ export function CanvasSocialPanel({ onAddFeed, onAddCampaign, boardMedia, onClos
           {ready.length === 0 && <p className={styles.driveEmpty}>{t('noReadyAccounts')}</p>}
           {ready.map((account) => <label key={account.id}>
             <input type="checkbox" checked={selected.includes(account.id)} onChange={() => toggleAccount(account.id)} />
-            <span>{`${NETWORK_GLYPH[account.network]} ${account.networkLabel} · ${account.name}`}</span>
+            <span>{`${NETWORK_GLYPHS[account.network]} ${account.networkLabel} · ${account.name}`}</span>
           </label>)}
         </fieldset>
         {mediaBlocked.length > 0 && <p className={styles.driveNotice} role="status">

@@ -18,13 +18,13 @@ import {
 } from './dataProviderCatalog';
 import { CONNECTABLE_PROVIDERS, testProviderCredential } from './providerTests';
 import { fakeFetch } from '../../../test/fakeDb';
+import { readFrontendSource } from '../../../scripts/lib/frontendSource.mjs';
 
 // `.href`, not the URL object: the ambient `URL` here is the Workers/DOM one, which
 // is not structurally the `node:url` URL `fileURLToPath` declares — passing the
 // string overload sidesteps the lib clash without pulling node types into the build.
 const here = resolve(fileURLToPath(new URL('.', import.meta.url).href));
 const apiRoot = resolve(here, '../../..');
-const repoRoot = resolve(apiRoot, '..');
 
 describe('parseConnectionString', () => {
   it('parses a full DSN including a percent-encoded password', () => {
@@ -238,9 +238,12 @@ describe('catalog / enum / palette parity', () => {
   });
 
   it('every Data + Marketing palette entry resolves to a catalog spec', () => {
-    const palette = readFileSync(
-      resolve(repoRoot, 'frontend/src/components/workflow-builder/integrations.ts'),
-      'utf8',
+    // Read through `readFrontendSource` rather than `readFileSync`: this palette has
+    // already moved once (the modal builder was deleted when the canvas absorbed it),
+    // and a bare read turns that move into an ENOENT with no hint of where it went.
+    const palette = readFrontendSource(
+      'frontend/src/domains/workflow/domain/stepIntegrations.ts',
+      'the Data + Marketing palette parity contract',
     );
     const paletteIds = [...palette.matchAll(/\{\s*id:\s*'([a-z0-9-]+)',[^\n]*category:\s*'(data-db|marketing-crm)'/g)]
       .map((m) => m[1]!);

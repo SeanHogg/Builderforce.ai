@@ -1,19 +1,28 @@
 /**
- * Board referential integrity — keep `tasks.status` pointing at a real lane.
+ * Board referential integrity — keep every ticket pointing at a real lane.
  *
- * Fully-configurable boards couple a task to its lane by STRING convention
- * (`task.status === swimlane.key`) with no FK (see schema note on `swimlanes`).
- * Deleting a lane therefore ORPHANS every task that was sitting in it: the task
- * keeps the now-dead status string and only surfaces in the board's
- * auto-appended fallback column. This helper closes that gap on the delete path
- * by REASSIGNING those tasks onto a surviving lane BEFORE the lane row is
- * removed, so no task is ever left holding a status no lane defines.
+ * `tasks.swimlane_id` (migration 1115) is the reference, DERIVED by the database
+ * from (the project's board, `tasks.status`); NULL means the ticket is in no lane
+ * at all. That is the orphan state, and it has two halves:
  *
- * The fallback-lane choice is a pure function (`pickFallbackLane`) so the
- * selection policy is unit-tested without a DB; the DB-touching reassignment
- * (`reassignTasksFromLane`) is a thin wrapper around it.
+ *  • PREVENTING it on the path that causes it. Deleting a lane would leave every
+ *    resident holding a now-dead status string, visible only in the board's
+ *    auto-appended fallback column, so `reassignTasksFromLane` moves them onto a
+ *    surviving lane BEFORE the lane row is removed. The fallback-lane choice is a
+ *    pure function (`pickFallbackLane`) so the policy is unit-tested without a DB.
+ *
+ *  • REPAIRING it wherever it already exists. A board wiped by any other route — a
+ *    restored backup, a direct DELETE, a project whose board was rebuilt — still
+ *    produces orphans, and before the FK there was no query that could even find
+ *    them: the only handle on "the tickets in this lane" was the very key that had
+ *    gone missing. `countOrphanedTasks` reports them and `adoptOrphanedTasks`
+ *    re-homes them onto a lane the operator names.
+ *
+ * Re-homing matters because an orphan is INVISIBLE WORK, not just an odd column:
+ * no lane gate, no staffed agent and no requirement applies to a ticket whose
+ * status no lane defines, so it can never auto-run and never advance.
  */
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { boards, swimlanes, tasks } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { Db } from '../../infrastructure/database/connection';
@@ -125,4 +134,71 @@ export async function reassignOrphanedTasksOnLaneDelete(
     survivors,
     reassignTo: args.reassignTo ?? null,
   });
+}
+
+/**
+ * How many of a project's live tickets are in NO lane — the orphan census.
+ *
+ * Archived tickets are excluded: they have left the board, so being off it is not
+ * a defect. Counts rather than rows because every caller so far asks "is anything
+ * wrong here", and the answer belongs beside the board's other health signals.
+ */
+export async function countOrphanedTasks(
+  db: Db,
+  args: { tenantId: number; projectId: number },
+): Promise<number> {
+  const [row] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(tasks)
+    .where(scopedToTenant(
+      tasks,
+      args.tenantId,
+      eq(tasks.projectId, args.projectId),
+      eq(tasks.archived, false),
+      sql`${tasks.swimlaneId} is null`,
+    ));
+  return Number(row?.n ?? 0);
+}
+
+/**
+ * Re-home every orphaned ticket on a board onto `targetKey`.
+ *
+ * The operator names the lane, for the same reason a lane DELETE takes `?into=`:
+ * where the work goes is a decision, not a policy. A key that names no lane on
+ * this board is refused rather than approximated — sending stranded tickets
+ * somewhere arbitrary is how they got stranded.
+ */
+export async function adoptOrphanedTasks(
+  db: Db,
+  args: { tenantId: number; boardId: string; targetKey: string },
+): Promise<ReassignResult> {
+  const [board] = await db
+    .select({ projectId: boards.projectId })
+    .from(boards)
+    .where(and(eq(boards.id, args.boardId), eq(boards.tenantId, args.tenantId)));
+  if (!board) return { movedTo: null, movedCount: 0 };
+
+  const [lane] = await db
+    .select({ id: swimlanes.id })
+    .from(swimlanes)
+    .where(and(
+      eq(swimlanes.boardId, args.boardId),
+      eq(swimlanes.tenantId, args.tenantId),
+      eq(swimlanes.key, args.targetKey),
+    ));
+  if (!lane) return { movedTo: null, movedCount: 0 };
+
+  const moved = await db
+    .update(tasks)
+    .set({ status: args.targetKey, updatedAt: new Date() })
+    .where(scopedToTenant(
+      tasks,
+      args.tenantId,
+      eq(tasks.projectId, board.projectId),
+      eq(tasks.archived, false),
+      sql`${tasks.swimlaneId} is null`,
+    ))
+    .returning({ id: tasks.id });
+
+  return { movedTo: args.targetKey, movedCount: moved.length };
 }

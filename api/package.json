@@ -55,10 +55,13 @@
     "drizzle-orm": "^0.36.4",
     "fflate": "^0.8.2",
     "hono": "^4.6.17",
+    "lib0": "^0.2.94",
     "pdf-lib": "^1.17.1",
     "pptxgenjs": "^3.12.0",
     "unpdf": "^1.8.1",
-    "yaml": "^2.6.1"
+    "y-protocols": "^1.0.6",
+    "yaml": "^2.6.1",
+    "yjs": "^13.6.30"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260305.0",

@@ -1,25 +1,18 @@
 /**
  * EMP-20 — Export helpers for the member metrics.
  *
- * A tiny, dependency-free CSV builder (RFC-4180-ish: every value quoted + escaped,
- * so embedded commas/quotes/newlines are safe and Excel opens the file directly)
- * plus the member-scorecard serializer. {@link toCsv} generalises the one-off CSV
- * builder in complianceInsights (evidencePackToCsv) so future exports reuse it
- * instead of re-implementing the escaping.
+ * The member-scorecard serialiser. It chooses the COLUMNS; the escaping is
+ * `csvMatrix` in `application/export/tabularExport`, which is the api's one CSV
+ * writer — this module used to carry its own copy of it, and so did two report
+ * modules besides.
  *
  * The capitalization report's export lives in `capitalizationReport.ts` instead
  * of here: it renders to a workbook as well as to CSV, and a module named
  * `metricsCsv` owning the XLSX half of a report would be a lie about where to
- * look. It still calls {@link toCsv} for the escaping.
+ * look. It calls the same primitive.
  */
 import type { MemberScorecard } from './workforceMetrics';
-
-/** Serialise a header + value matrix to a CSV string (values quoted + escaped). */
-export function toCsv(header: string[], rows: ReadonlyArray<ReadonlyArray<unknown>>): string {
-  const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-  const lines = rows.map((r) => r.map(esc).join(','));
-  return [header.map(esc).join(','), ...lines].join('\n');
-}
+import { csvMatrix } from '../export/tabularExport';
 
 /** Round a nullable number to `dp` decimals, or '' for null (keeps cells numeric). */
 const num = (v: number | null | undefined, dp = 1): string =>
@@ -36,5 +29,5 @@ export function memberMetricsToCsv(members: MemberScorecard[]): string {
     num(m.avgCycleTimeHours), num(m.avgPickupLatencyHours), num(m.avgIdleAfterDoneHours),
     num(m.boardHygieneScore, 0), num(m.engagementScore, 0), num(m.effectivenessScore, 0),
   ]);
-  return toCsv(header, rows);
+  return csvMatrix(header, rows);
 }

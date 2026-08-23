@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { ROUND_INSTRUMENTS, ROUND_STATUSES, ROUND_TYPES } from './fundingRounds';
+import { readFrontendSource } from '../../../scripts/lib/frontendSource.mjs';
 
 const repo = resolve(__dirname, '..', '..', '..', '..');
 
@@ -56,7 +57,10 @@ describe('the round vocabularies', () => {
   it('offers the canvas card its own round types', () => {
     // The `fundingRound` spec's hint names these; a divergence would mean a value
     // the card offers and the record refuses.
-    const founderObjects = readFileSync(resolve(repo, 'frontend/src/lib/founderObjects.ts'), 'utf8');
+    const founderObjects = readFrontendSource(
+      'frontend/src/lib/founderObjects.ts',
+      'the fundingRound round-type vocabulary contract',
+    );
     const at = founderObjects.indexOf("name: 'roundType'");
     expect(at, 'the fundingRound spec no longer declares roundType — re-point this contract rather than deleting it').toBeGreaterThan(0);
     const hint = founderObjects.slice(at, at + 400);

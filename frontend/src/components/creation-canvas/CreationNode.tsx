@@ -32,6 +32,7 @@ import { BrainActivityBar, brainActivityLine, useBrainActivity } from './BrainAc
 import { BrainSurfaceActions, BrainSurfaceBody } from './BrainDock';
 import { useBrainSurface } from './brainSurfaceContext';
 import { Icon } from '@/components/ui/Icon';
+import { networkGlyph } from '@/lib/networkGlyph';
 import { highlightToneFor, profileTabular, tabularFromObject, workbookSheets, type TabularCell, type TabularHighlightRule } from '@/lib/canvasTabularData';
 import { recalculateSheet } from '@/lib/canvasSheet';
 import { columnLetters } from '@/lib/canvasFormula';
@@ -479,14 +480,6 @@ function EmailTemplateBody({ data }: { data: CreationNodeData }) {
     </div>
   </div>;
 }
-
-/** One glyph per network, so a merged feed is scannable before a label is read.
- *  Network names are brand marks and stay literal — see the i18n rule on tokens. */
-const NETWORK_GLYPH: Readonly<Record<string, string>> = {
-  x: '𝕏', linkedin: 'in', facebook: 'f', instagram: '◎', tiktok: '♪',
-};
-
-const networkGlyph = (network: unknown): string => NETWORK_GLYPH[String(network ?? '')] ?? '◈';
 
 /** Compact engagement numbers: 12400 reads as 12.4k on a 460px tile. */
 function compactCount(value: unknown): string {

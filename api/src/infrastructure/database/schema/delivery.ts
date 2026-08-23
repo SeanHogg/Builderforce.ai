@@ -198,6 +198,27 @@ export const tasks = pgTable('tasks', {
   title:             varchar('title', { length: 500 }).notNull(),
   description:       text('description'),
   status:            varchar('status', { length: 64 }).notNull().default('backlog'),
+  /**
+   * The board COLUMN this ticket sits in — `status` as a reference instead of a
+   * string convention (migration 1115).
+   *
+   * DERIVED, never written by the application: `trg_tasks_swimlane` resolves it
+   * from (the project's canonical board, {@link status}) on insert and on any
+   * status/project change, and `trg_swimlanes_relink_tasks` re-points it when a
+   * lane appears or its key is renamed. `status` stays the ticket's own fact and
+   * the single source of truth; this is the edge that fact implies, which is why
+   * it is typed optional here exactly as `tenantId`/`segmentId` are — a writer
+   * must not have to know the invariant, the database owns it.
+   *
+   * NULL means the ticket is in NO lane. On a project with a board that is the
+   * ORPHAN state (the board appends a fallback column for it), and before this
+   * column existed there was no query that could find those tickets at all — the
+   * only handle on "the tickets in this lane" was the very key being deleted or
+   * renamed, which is why renaming a lane key could not be offered safely.
+   * ON DELETE SET NULL so dropping a lane makes its residents visibly homeless
+   * rather than silently mis-filed.
+   */
+  swimlaneId:        uuid('swimlane_id').references((): AnyPgColumn => swimlanes.id, { onDelete: 'set null' }),
   priority:          taskPriorityEnum('priority').notNull().default('medium'),
   /** Fixed type dimension: 'task' (default) or 'epic'. An Epic decomposes into
    *  child tasks that link back via {@link parentTaskId}. See migration 0112. */

@@ -67,6 +67,16 @@ export interface Formatter {
   percent(value: number | null | undefined, fractionDigits?: number): string;
   /** `in 3 days` / `vor 2 Stunden`, relative to `now`. */
   relative(value: DateInput, now?: Date): string;
+  /**
+   * Several values as ONE phrase — `A, B and C` / `A、B和C` / `A, B et C`.
+   *
+   * The list separator and the final conjunction are locale data, not punctuation:
+   * joining with `', '` and appending `' and '` writes English grammar into every
+   * catalog, and the languages this app ships in disagree about both. `type: 'unit'`
+   * (the default here) is the one for a list of ATTRIBUTES — an audience is "US, GB,
+   * 18-34", not "US, GB and 18-34", which would read as a sentence about three things.
+   */
+  list(values: readonly string[], options?: Intl.ListFormatOptions): string;
   /** Raw access when a call site genuinely needs a one-off option set. */
   dateWith(value: DateInput, options: Intl.DateTimeFormatOptions): string;
 }
@@ -78,6 +88,7 @@ interface FormatterSet {
   dateLong: Intl.DateTimeFormat;
   number: Intl.NumberFormat;
   relative: Intl.RelativeTimeFormat;
+  list: Intl.ListFormat;
 }
 
 /**
@@ -87,7 +98,7 @@ interface FormatterSet {
  */
 const sets = new Map<Locale, FormatterSet>();
 /** Option-specific formatters, keyed by locale + a stable serialization of the options. */
-const adHoc = new Map<string, Intl.DateTimeFormat | Intl.NumberFormat>();
+const adHoc = new Map<string, Intl.DateTimeFormat | Intl.NumberFormat | Intl.ListFormat>();
 
 function setFor(locale: Locale): FormatterSet {
   const existing = sets.get(locale);
@@ -99,6 +110,7 @@ function setFor(locale: Locale): FormatterSet {
     dateLong: new Intl.DateTimeFormat(locale, { dateStyle: 'full' }),
     number: new Intl.NumberFormat(locale),
     relative: new Intl.RelativeTimeFormat(locale, { numeric: 'auto' }),
+    list: new Intl.ListFormat(locale, { type: 'unit' }),
   };
   sets.set(locale, built);
   return built;
@@ -130,6 +142,15 @@ function numberWith(locale: Locale, options: Intl.NumberFormatOptions): Intl.Num
  * exactly what the hand-rolled `Number.isNaN(d.getTime()) ? '—' : …` guards that
  * this replaces were doing, one file at a time.
  */
+function listWith(locale: Locale, options: Intl.ListFormatOptions): Intl.ListFormat {
+  const key = `l:${locale}:${JSON.stringify(options)}`;
+  const hit = adHoc.get(key);
+  if (hit) return hit as Intl.ListFormat;
+  const built = new Intl.ListFormat(locale, options);
+  adHoc.set(key, built);
+  return built;
+}
+
 function toDate(value: DateInput): Date | null {
   if (value === null || value === undefined || value === '') return null;
   const d = value instanceof Date ? value : new Date(value);
@@ -191,6 +212,11 @@ export function formatterFor(locale: Locale = DEFAULT_LOCALE): Formatter {
         minimumFractionDigits: fractionDigits,
         maximumFractionDigits: fractionDigits,
       }).format(value);
+    },
+    list: (values, options) => {
+      const entries = values.filter((entry) => entry !== '');
+      if (entries.length === 0) return EMPTY_VALUE;
+      return (options ? listWith(locale, options) : s.list).format(entries);
     },
     relative: (value, now) => {
       const d = toDate(value);

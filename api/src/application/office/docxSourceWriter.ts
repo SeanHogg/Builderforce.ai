@@ -45,6 +45,7 @@
  */
 
 import { unzipSync, zipSync, strToU8, strFromU8 } from 'fflate';
+import { richColorHex, type RichAlign } from '@builderforce/creation-canvas-contract';
 import { parseMarkdownBlocks, parseInlineRuns, type MdBlock, type MdRun } from './markdownBlocks';
 
 /** Delimiter before the footnote/header/footer block a conversion appends. */
@@ -137,16 +138,35 @@ function styleFor(profile: SourceProfile, id: string): string {
   return profile.styles.has(id) ? `<w:pStyle w:val="${id}"/>` : '';
 }
 
-/** An inline run, formatted only where the markdown said so. No fonts, no sizes,
- *  no colours: everything else is inherited from the source's own styles, which
- *  is the entire point of writing back into this package. */
+/**
+ * An inline run, formatted only where the document SAID so.
+ *
+ * Everything not stated here is inherited from the source's own styles, which is
+ * the entire point of writing back into this package — a font or a size applied
+ * to every run would overwrite the theme this path exists to keep. What IS
+ * stated is what the author chose: the emphasis markdown carries, and the
+ * underline, colour, font and size an attribute span carries. Those are direct
+ * formatting in Word too, so writing them as direct run properties is not a
+ * second styling system, it is the same instruction the source would hold if the
+ * edit had been made in Word.
+ */
 function runXml(run: MdRun): string {
   const properties = [
     run.bold ? '<w:b/>' : '',
     run.italic ? '<w:i/>' : '',
-    run.code ? '<w:rFonts w:ascii="Consolas" w:hAnsi="Consolas"/>' : '',
+    run.underline ? '<w:u w:val="single"/>' : '',
+    run.font ? `<w:rFonts w:ascii="${esc(run.font)}" w:hAnsi="${esc(run.font)}"/>`
+      : run.code ? '<w:rFonts w:ascii="Consolas" w:hAnsi="Consolas"/>' : '',
+    run.color ? `<w:color w:val="${esc(richColorHex(run.color))}"/>` : '',
+    run.size ? `<w:sz w:val="${Math.round(run.size * 2)}"/><w:szCs w:val="${Math.round(run.size * 2)}"/>` : '',
   ].join('');
   return `<w:r>${properties ? `<w:rPr>${properties}</w:rPr>` : ''}<w:t xml:space="preserve">${esc(run.text)}</w:t></w:r>`;
+}
+
+/** Paragraph alignment. Absent for `left`, so a paragraph the author never
+ *  aligned keeps whatever its named style says. */
+function alignXml(align: RichAlign | undefined): string {
+  return align && align !== 'left' ? `<w:jc w:val="${align === 'justify' ? 'both' : align}"/>` : '';
 }
 
 const IMAGE = /!\[[^\]]*\]\(([^)\s]+)[^)]*\)/g;
@@ -196,19 +216,20 @@ function textXml(text: string, profile: SourceProfile): string {
   return out;
 }
 
-function paragraphXml(text: string, profile: SourceProfile, properties = ''): string {
+function paragraphXml(text: string, profile: SourceProfile, properties = '', align?: RichAlign): string {
   const runs = inlineXml(text, profile);
-  return `<w:p>${properties ? `<w:pPr>${properties}</w:pPr>` : ''}${runs}</w:p>`;
+  const pPr = `${properties}${alignXml(align)}`;
+  return `<w:p>${pPr ? `<w:pPr>${pPr}</w:pPr>` : ''}${runs}</w:p>`;
 }
 
-function listParagraph(item: string, ordered: boolean, profile: SourceProfile): string {
+function listParagraph(item: string, ordered: boolean, profile: SourceProfile, align?: RichAlign): string {
   const numId = ordered ? profile.numbering.ordered : profile.numbering.bullet;
   if (!numId) {
     // No definition to attach to — the marker is written literally rather than
     // producing a list that renders as unmarked body text.
-    return paragraphXml(`${ordered ? '' : '• '}${item}`, profile, styleFor(profile, 'ListParagraph'));
+    return paragraphXml(`${ordered ? '' : '• '}${item}`, profile, styleFor(profile, 'ListParagraph'), align);
   }
-  return paragraphXml(item, profile, `${styleFor(profile, 'ListParagraph')}<w:numPr><w:ilvl w:val="0"/><w:numId w:val="${esc(numId)}"/></w:numPr>`);
+  return paragraphXml(item, profile, `${styleFor(profile, 'ListParagraph')}<w:numPr><w:ilvl w:val="0"/><w:numId w:val="${esc(numId)}"/></w:numPr>`, align);
 }
 
 function tableXml(head: string[], rows: string[][], profile: SourceProfile): string {
@@ -229,9 +250,9 @@ function tableXml(head: string[], rows: string[][], profile: SourceProfile): str
 function blockXml(block: MdBlock, profile: SourceProfile): string {
   switch (block.kind) {
     case 'heading':
-      return paragraphXml(block.text, profile, styleFor(profile, HEADING_STYLE[block.level - 1] ?? 'Heading3'));
+      return paragraphXml(block.text, profile, styleFor(profile, HEADING_STYLE[block.level - 1] ?? 'Heading3'), block.align);
     case 'list':
-      return block.items.map((item) => listParagraph(item, block.ordered, profile)).join('');
+      return block.items.map((item) => listParagraph(item, block.ordered, profile, block.align)).join('');
     case 'table':
       return tableXml(block.head, block.rows, profile);
     case 'code':
@@ -239,7 +260,7 @@ function blockXml(block: MdBlock, profile: SourceProfile): string {
         .map((line) => paragraphXml(`\`${line || ' '}\``, profile, styleFor(profile, 'HTMLPreformatted')))
         .join('');
     default:
-      return paragraphXml(block.text, profile);
+      return paragraphXml(block.text, profile, '', block.align);
   }
 }
 

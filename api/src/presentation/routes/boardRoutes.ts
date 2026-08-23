@@ -15,8 +15,10 @@
  * Swimlanes (nested):
  *   GET    /api/boards/:boardId/swimlanes               List lanes
  *   POST   /api/boards/:boardId/swimlanes               Create a lane
- *   PATCH  /api/boards/:boardId/swimlanes/:laneId       Update a lane
- *   DELETE /api/boards/:boardId/swimlanes/:laneId       Delete a lane
+ *   PATCH  /api/boards/:boardId/swimlanes/:laneId       Update a lane (incl. RENAME its key)
+ *   DELETE /api/boards/:boardId/swimlanes/:laneId       Delete a lane (= merge it away)
+ *   GET    /api/boards/:boardId/orphaned-tasks          Tickets in no lane at all
+ *   POST   /api/boards/:boardId/orphaned-tasks/adopt    Re-home them onto a lane
  *
  * Agent assignments (nested under a lane):
  *   GET    /api/boards/:boardId/swimlanes/:laneId/agents          List assignments
@@ -57,7 +59,12 @@ import {
   type AgentKind,
 } from '../../application/swimlane/resolveAssignedAgent';
 import { buildDefaultLaneRows, findOrCreateBoard } from '../../application/swimlane/findOrCreateBoard';
-import { reassignOrphanedTasksOnLaneDelete } from '../../application/swimlane/reassignOrphanedTasks';
+import {
+  adoptOrphanedTasks,
+  countOrphanedTasks,
+  reassignOrphanedTasksOnLaneDelete,
+} from '../../application/swimlane/reassignOrphanedTasks';
+import { renameLaneKey, validateLaneKeyChange } from '../../application/swimlane/renameLaneKey';
 import type { AgentHostRelayNamespace } from '../../application/swimlane/agentHostStageDispatcher';
 import type { WorkflowStatus } from '../../application/swimlane/transitions';
 import type { Env, HonoEnv } from '../../env';
@@ -74,6 +81,15 @@ type BoardEnv = { AGENT_HOST_RELAY?: AgentHostRelayNamespace };
 /** Mutable swimlane fields shared by the create + patch routes. */
 interface LaneWriteBody {
   name?: string;
+  /**
+   * The lane's KEY — the status its tickets hold, not the label a person reads.
+   *
+   * PATCHable since migration 1115 gave `tasks` a real `swimlane_id`: the lane's
+   * residents can now be found by reference, so a rename can carry them (and the
+   * board's other lane-key pointers) instead of stranding them. `renameLaneKey`
+   * owns that cascade; the route never writes `key` directly.
+   */
+  key?: string;
   position?: number;
   isTerminal?: boolean;
   gate?: string;
@@ -380,6 +396,41 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
 
     const body = await c.req.json<LaneWriteBody>();
 
+    // RENAMING THE KEY IS A CASCADE, NOT A COLUMN WRITE. The key IS the status every
+    // resident ticket holds, and three other live rows point at a lane by it, so this
+    // runs BEFORE the ordinary field update and through the one primitive that carries
+    // them all. Rejected in the route (400) rather than at the UNIQUE(board_id, key)
+    // constraint (500), and validated against the board's OTHER lanes so a no-op
+    // rename — the shape a client that PATCHes every field produces — costs nothing.
+    let renamed: Awaited<ReturnType<typeof renameLaneKey>> | null = null;
+    if (body.key !== undefined) {
+      const laneRows = await db
+        .select({ id: swimlanes.id, key: swimlanes.key })
+        .from(swimlanes)
+        .where(and(eq(swimlanes.boardId, boardId), eq(swimlanes.tenantId, tenantId)));
+      const current = laneRows.find((l) => l.id === laneId);
+      if (!current) return c.json({ error: 'Swimlane not found' }, 404);
+
+      const decision = validateLaneKeyChange({
+        requested: body.key,
+        currentKey: current.key,
+        siblingKeys: laneRows.filter((l) => l.id !== laneId).map((l) => l.key),
+      });
+      if (!decision.ok) {
+        return c.json({
+          error: decision.error === 'duplicate_key'
+            ? 'Another column on this board already uses that key'
+            : 'A column key needs at least one letter or number',
+          code: decision.error,
+        }, 400);
+      }
+      if (decision.changed) {
+        renamed = await renameLaneKey(db, {
+          tenantId, boardId, laneId, oldKey: current.key, newKey: decision.key,
+        });
+      }
+    }
+
     await db
       .update(swimlanes)
       .set({
@@ -408,7 +459,9 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
       .from(swimlanes)
       .where(and(eq(swimlanes.id, laneId), eq(swimlanes.tenantId, tenantId)));
     if (!row) return c.json({ error: 'Swimlane not found' }, 404);
-    return c.json(row);
+    // A rename moved other people's data. Report exactly what it touched so the
+    // editor can say "12 tickets moved" instead of leaving the operator to guess.
+    return c.json(renamed ? { ...row, renamed } : row);
   });
 
   // DELETE a lane = MERGE it into another. `?into=<laneKey>` names the target; without
@@ -445,6 +498,42 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
       .delete(swimlanes)
       .where(and(eq(swimlanes.id, laneId), eq(swimlanes.boardId, boardId), eq(swimlanes.tenantId, tenantId)));
     return c.json({ ok: true, reassignedTasks: reassigned.movedCount, reassignedTo: reassigned.movedTo });
+  });
+
+  // ── Orphaned tickets — the tickets in NO lane ──────────────────────────────
+  //
+  // `tasks.swimlane_id IS NULL` on a project that HAS a board (migration 1115).
+  // The board renders them in an appended fallback column so none is hidden, but a
+  // fallback column is not a lane: no gate, no staffed agent and no requirement
+  // applies to a ticket whose status no lane defines, so it can never auto-run and
+  // never advance. It is invisible work, and until the FK existed nothing outside
+  // the board component could even count it.
+
+  router.get('/:boardId/orphaned-tasks', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const boardId = c.req.param('boardId');
+    const [board] = await db
+      .select({ projectId: boards.projectId })
+      .from(boards)
+      .where(and(eq(boards.id, boardId), eq(boards.tenantId, tenantId)));
+    if (!board) return c.json({ error: 'Board not found' }, 404);
+    const count = await countOrphanedTasks(db, { tenantId, projectId: board.projectId });
+    return c.json({ count });
+  });
+
+  // Re-home them onto a lane the operator names — the same contract as deleting a
+  // lane with `?into=`: where stranded work goes is a decision, not a policy.
+  router.post('/:boardId/orphaned-tasks/adopt', requireRole(TenantRole.DEVELOPER), async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const boardId = c.req.param('boardId');
+    if (!(await assertBoard(tenantId, boardId))) return c.json({ error: 'Board not found' }, 404);
+    const body = await c.req.json<{ into?: string }>().catch(() => ({} as { into?: string }));
+    const targetKey = body.into?.trim();
+    if (!targetKey) return c.json({ error: 'into (a lane key) is required' }, 400);
+
+    const adopted = await adoptOrphanedTasks(db, { tenantId, boardId, targetKey });
+    if (!adopted.movedTo) return c.json({ error: 'That board has no column with that key' }, 400);
+    return c.json({ ok: true, movedTo: adopted.movedTo, movedCount: adopted.movedCount });
   });
 
   // ── Agent assignments (nested under a lane) ────────────────────────────────

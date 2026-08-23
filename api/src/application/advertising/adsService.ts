@@ -38,11 +38,45 @@ import {
   EMPTY_TARGETING,
   type AdAccountField, type AdAccountIdentity, type AdCampaignDraft, type AdCampaignPatch,
   type AdCampaignRemote, type AdInsightQuery, type AdInsightRow, type AdNetwork,
-  type AdObjective, type AdsProvider,
+  type AdObjective, type AdsProvider, type AdTargetingDimension,
 } from './adsProviders';
 
+/**
+ * What a network can actually BUY and PLACE, as a caller-visible shape.
+ *
+ * Declared once and spread into both {@link AdAccountView} and {@link AdNetworkOption}
+ * because a form asks the same three questions of a connected account and of a network
+ * it has not connected yet — and answering them from two hand-written copies is how a
+ * panel comes to offer Snapchat a device filter it will refuse.
+ *
+ * These are the same facts `requireTargetingSupport`, `AdsProvider.requiresAdSet` and
+ * `AdsProvider.requiresCreativeRef` enforce on the write path. Publishing them lets a
+ * surface refuse BEFORE the spend, in its own words, instead of rendering a control
+ * whose only outcome is a 400.
+ */
+export interface AdNetworkCapabilities {
+  objectives: readonly AdObjective[];
+  /** The targeting dimensions this network can place. A form must not offer another. */
+  targetingDimensions: readonly AdTargetingDimension[];
+  /** True when a campaign cannot deliver without an ad set beneath it (Reddit, X). */
+  requiresAdSet: boolean;
+  /** True when an ad must promote EXISTING content, so a form asks for a creative
+   *  reference instead of headline/body copy the network cannot author. */
+  requiresCreativeRef: boolean;
+}
+
+/** One provider's capabilities. The single place either view derives them. */
+function capabilitiesOf(provider: AdsProvider): AdNetworkCapabilities {
+  return {
+    objectives: provider.objectives,
+    targetingDimensions: provider.targetingDimensions,
+    requiresAdSet: provider.requiresAdSet,
+    requiresCreativeRef: provider.requiresCreativeRef,
+  };
+}
+
 /** What every caller outside this module sees about a connected ad account. */
-export interface AdAccountView {
+export interface AdAccountView extends AdNetworkCapabilities {
   /** The connector connection id — the handle every other call takes. */
   id: string;
   network: AdNetwork;
@@ -52,18 +86,16 @@ export interface AdAccountView {
   /** False when a required account-scope field is still missing. */
   ready: boolean;
   missingFields: AdAccountField[];
-  objectives: readonly AdObjective[];
   lastTestOk: boolean | null;
   lastUsedAt: string | null;
 }
 
 /** What a deployment could connect, whether or not it has. Drives the empty state. */
-export interface AdNetworkOption {
+export interface AdNetworkOption extends AdNetworkCapabilities {
   network: AdNetwork;
   label: string;
   connectorKey: string;
   accountFields: readonly AdAccountField[];
-  objectives: readonly AdObjective[];
   connectedCount: number;
 }
 
@@ -105,7 +137,7 @@ function toAccountView(account: ResolvedAdAccount): AdAccountView {
     ...account.base,
     network: account.provider.network,
     networkLabel: account.provider.label,
-    objectives: account.provider.objectives,
+    ...capabilitiesOf(account.provider),
   };
 }
 
@@ -122,7 +154,7 @@ export async function listAdNetworks(db: Db, env: Env, tenantId: number): Promis
     label: provider.label,
     connectorKey: provider.connectorKey,
     accountFields: provider.accountFields,
-    objectives: provider.objectives,
+    ...capabilitiesOf(provider),
     connectedCount: connected.filter((a) => a.network === provider.network).length,
   }));
 }

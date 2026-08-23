@@ -14,7 +14,7 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { and, eq, desc, inArray, sql } from 'drizzle-orm';
 import { authMiddleware, requireRole, isManager } from '../middleware/authMiddleware';
-import { TenantRole, hasMinRole } from '../../domain/shared/types';
+import { TenantRole } from '../../domain/shared/types';
 import {
   knowledgeDocuments,
   knowledgeDocumentVersions,
@@ -53,6 +53,7 @@ import {
   type KnowledgeNotifierEnv,
 } from '../../application/knowledge/knowledgeNotifier';
 import { STANDARD_LIBRARY, standardItem, computeCoverage } from '../../application/knowledge/standardLibrary';
+import { canEditAccess, documentAccessFor, type DocAccess } from '../../application/knowledge/documentAccess';
 import { recordActivity, resolveActorFromContext } from '../../application/activity/activityLog';
 import { knowledgeVersionKey } from '../../application/insights/versionKeys';
 import type { Env, HonoEnv } from '../../env';
@@ -165,28 +166,6 @@ export function buildDocCompliance(input: {
   return { rows, summary: { required, acknowledged, pending, overdue, percent } };
 }
 
-export type DocAccess = 'manager' | 'editor' | 'viewer' | 'none';
-
-/**
- * A user's effective access to a single document. Workspace managers always
- * have full access; the document creator and invited 'editor' collaborators can
- * co-edit; invited 'viewer' collaborators are explicitly associated for
- * awareness; everyone else falls back to tenant-level read ('none').
- */
-export function resolveAccess(opts: {
-  role: TenantRole;
-  isCreator: boolean;
-  collabRole: string | null;
-}): DocAccess {
-  if (hasMinRole(opts.role, TenantRole.MANAGER)) return 'manager';
-  if (opts.isCreator || opts.collabRole === 'editor') return 'editor';
-  if (opts.collabRole === 'viewer') return 'viewer';
-  return 'none';
-}
-
-export function canEditAccess(access: DocAccess): boolean {
-  return access === 'manager' || access === 'editor';
-}
 
 // ---------------------------------------------------------------------------
 // Routes
@@ -223,27 +202,14 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
     return doc ?? null;
   }
 
-  /** The current user's collaborator role on a document, or null. */
-  async function loadCollabRole(documentId: string, userId: string): Promise<string | null> {
-    const [row] = await db
-      .select({ role: knowledgeDocumentCollaborators.role })
-      .from(knowledgeDocumentCollaborators)
-      .where(
-        and(
-          eq(knowledgeDocumentCollaborators.documentId, documentId),
-          eq(knowledgeDocumentCollaborators.userId, userId),
-        ),
-      );
-    return row?.role ?? null;
-  }
-
-  /** Resolve the caller's effective access to a document. */
-  async function accessFor(c: Context<HonoEnv>, doc: { id: string; createdBy: string | null }): Promise<DocAccess> {
-    const role = c.get('role') as TenantRole;
-    const userId = c.get('userId') as string;
-    if (hasMinRole(role, TenantRole.MANAGER)) return 'manager';
-    const collabRole = doc.createdBy === userId ? null : await loadCollabRole(doc.id, userId);
-    return resolveAccess({ role, isCreator: doc.createdBy === userId, collabRole });
+  /** Resolve the caller's effective access to a document. The RULE lives in
+   *  `application/knowledge/documentAccess.ts` — the collab room admits sockets to
+   *  the same documents and must not be able to answer this differently. */
+  function accessFor(c: Context<HonoEnv>, doc: { id: string; createdBy: string | null }): Promise<DocAccess> {
+    return documentAccessFor(db, doc, {
+      userId: c.get('userId') as string,
+      role: c.get('role') as TenantRole,
+    });
   }
 
   async function tagsFor(documentIds: string[]): Promise<Map<string, string[]>> {

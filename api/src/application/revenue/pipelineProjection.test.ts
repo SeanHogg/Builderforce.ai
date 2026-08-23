@@ -1,9 +1,6 @@
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { FALLBACK_STAGES } from './pipelineProjection';
-
-const repo = resolve(__dirname, '..', '..', '..', '..');
+import { readFrontendSource } from '../../../scripts/lib/frontendSource.mjs';
 
 /**
  * The stage ladder is written down twice — once here and once in the canvas's
@@ -17,7 +14,10 @@ const repo = resolve(__dirname, '..', '..', '..', '..');
  */
 describe('the fallback stage ladder', () => {
   it('is identical to the canvas’s DEFAULT_PIPELINE_STAGES', () => {
-    const source = readFileSync(resolve(repo, 'frontend/src/lib/canvasSalesPipeline.ts'), 'utf8');
+    const source = readFrontendSource(
+      'frontend/src/lib/canvasSalesPipeline.ts',
+      'the pipeline stage-ladder contract',
+    );
     const match = source.match(/DEFAULT_PIPELINE_STAGES\s*=\s*\[([^\]]*)\]/);
     expect(match, 'DEFAULT_PIPELINE_STAGES was renamed or moved — this contract needs re-pointing, not deleting').not.toBeNull();
     const canvasStages = [...(match?.[1] ?? '').matchAll(/'([a-z-]+)'/g)].map((m) => m[1]);

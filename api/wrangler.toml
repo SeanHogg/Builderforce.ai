@@ -104,6 +104,14 @@ class_name = "QaRunnerContainerDO"
 name = "STAGE_SANDBOX_CONTAINER"
 class_name = "StageSandboxContainerDO"
 
+# Real-time co-editing (Yjs). One instance per admitted room, named
+# `collab:t<tenantId>:<scope>:<id>` by application/collab/collabScopes.ts. This
+# used to live in the never-deployed `worker/` script, which is why co-editing was
+# permanently one operator action away from existing; it ships with the api now.
+[[durable_objects.bindings]]
+name = "COLLABORATION_ROOM"
+class_name = "CollaborationRoomDO"
+
 # Long-lived Cloudflare Container for "Cloud Agent (Node/Container)" runs — a
 # persistent Node process with a real shell (build/test/lint). The image lives in
 # api/container; build context is that dir. Requires a Workers Paid plan with
@@ -239,6 +247,14 @@ tag = "v11"
 # disposable headless-Chromium runner behind marketplace Stage checks).
 # Container-control DOs are SQLite-backed.
 new_sqlite_classes = ["StageSandboxContainerDO"]
+
+[[migrations]]
+tag = "v12"
+# CollaborationRoomDO holds the authoritative Y.Doc for a co-edited document and
+# PERSISTS it (debounced) to state.storage, so a room that evicts — or a person who
+# opens the document an hour later — gets the document rather than a blank one.
+# Storage requires a SQLite-backed class.
+new_sqlite_classes = ["CollaborationRoomDO"]
 
 # Cron triggers — see scheduled() in src/index.ts
 #   "0 9 * * *"   09:00 UTC daily: probe every LLM vendor; email superadmins on status change.

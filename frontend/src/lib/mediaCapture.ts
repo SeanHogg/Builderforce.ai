@@ -168,3 +168,52 @@ export function onStreamEnded(stream: MediaStream, onEnded: () => void): () => v
   for (const track of tracks) track.addEventListener('ended', handler);
   return () => { for (const track of tracks) track.removeEventListener('ended', handler); };
 }
+
+/** A composed capture plus the audio graph holding it together. */
+export interface CombinedCapture {
+  stream: MediaStream;
+  /** Releases the mixing graph. Does NOT stop the source streams — their owners do. */
+  dispose: () => void;
+}
+
+/**
+ * One recordable stream out of several captures.
+ *
+ * ── WHY THIS IS NOT `new MediaStream([...a.getTracks(), ...b.getTracks()])` ───
+ * A narrated walkthrough is a SCREEN capture and a MICROPHONE capture, and both
+ * may carry audio — the shared tab's own sound and the narrator's voice. Handing
+ * `MediaRecorder` two audio tracks does not record two audio tracks: Chrome
+ * encodes the first and silently drops the rest, so the naive concatenation
+ * produces a walkthrough with tab audio and no narration, or narration and no tab
+ * audio, depending on track order. The failure is inaudible until playback.
+ *
+ * So two or more audio tracks are MIXED through a `WebAudio` graph into one, which
+ * is what the person actually meant by "record me talking over this". A single
+ * audio track needs no graph and gets none, and a context that has no `AudioContext`
+ * at all (an old browser, a test renderer) falls back to the LAST audio track —
+ * the microphone, by the order every caller passes — because narration with no tab
+ * sound is a usable recording and tab sound with no narration is not.
+ */
+export function combineCaptureStreams(...streams: (MediaStream | null | undefined)[]): CombinedCapture {
+  const present = streams.filter((stream): stream is MediaStream => !!stream);
+  const video = present.flatMap((stream) => stream.getVideoTracks());
+  const audioStreams = present.filter((stream) => stream.getAudioTracks().length > 0);
+  const audio = audioStreams.flatMap((stream) => stream.getAudioTracks());
+
+  if (audio.length < 2) return { stream: new MediaStream([...video, ...audio]), dispose: () => undefined };
+
+  const AudioContextCtor = typeof window !== 'undefined'
+    ? (window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext)
+    : undefined;
+  if (!AudioContextCtor) return { stream: new MediaStream([...video, audio[audio.length - 1]!]), dispose: () => undefined };
+
+  const context = new AudioContextCtor();
+  const destination = context.createMediaStreamDestination();
+  for (const stream of audioStreams) {
+    try { context.createMediaStreamSource(stream).connect(destination); } catch { /* a track that ended before mixing */ }
+  }
+  return {
+    stream: new MediaStream([...video, ...destination.stream.getAudioTracks()]),
+    dispose: () => { void context.close().catch(() => undefined); },
+  };
+}

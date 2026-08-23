@@ -29,7 +29,7 @@
 
 import type { AllocationHistory, AllocationInsights } from '../insights/allocationInsights';
 import { sheetsToXlsx, type XlsxCell, type XlsxSheet } from '../office/xlsxWriter';
-import { toCsv } from './metricsCsv';
+import { csvMatrix } from '../export/tabularExport';
 
 /** Round a nullable number to `dp` decimals, or null for null. Kept NUMERIC (not
  *  pre-formatted text) so the workbook writes real numbers and only the CSV
@@ -114,7 +114,7 @@ export function capitalizationToCsv(history: AllocationHistory, current: Allocat
     ...months.rows.map((r) => pad('month', r[0] ?? '', months.columns, r)),
     ...epics.rows.map((r) => pad('epic', r[0] ?? '', epics.columns, r)),
   ];
-  return toCsv(header, rows);
+  return csvMatrix(header, rows);
 }
 
 /** The report → a two-sheet .xlsx workbook. */

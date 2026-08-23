@@ -372,6 +372,14 @@ export interface Env {
    *  `STAGE_SANDBOX_CONTAINER`. */
   STAGE_SANDBOX_CONTAINER?: DurableObjectNamespace;
 
+  /** Durable Object holding the authoritative `Y.Doc` for one co-edited document
+   *  (real-time co-editing, Yjs). One instance per admitted room, named
+   *  `collab:t<tenantId>:<scope>:<id>` — see application/collab/collabScopes.ts.
+   *  Optional: when unset the `/api/collab/*` upgrade answers 503 and every editor
+   *  falls back to local editing with autosave. Bind in wrangler.toml:
+   *    [[durable_objects.bindings]] name = "COLLABORATION_ROOM" class_name = "CollaborationRoomDO" */
+  COLLABORATION_ROOM?: DurableObjectNamespace;
+
   /** Internal base URL the Container calls back into for each LLM step / repo
    *  telemetry / PR finalize (the container-op endpoint). Defaults to the public
    *  API origin; override for local/dev. e.g. "https://api.builderforce.ai". */

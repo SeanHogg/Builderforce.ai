@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { buildDocCompliance, normaliseTags, resolveAccess, canEditAccess, parseAnalysis } from './knowledgeRoutes';
+import { buildDocCompliance, normaliseTags, parseAnalysis } from './knowledgeRoutes';
+import { resolveAccess, canEditAccess } from '../../application/knowledge/documentAccess';
 import { TenantRole } from '../../domain/shared/types';
 
 describe('parseAnalysis', () => {

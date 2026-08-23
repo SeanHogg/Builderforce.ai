@@ -1,3 +1,27 @@
+## ✅ RESOLVED 2026-08-23 — A declined invitation is an answer, and the ceremony now reads it
+
+The RSVP endpoint and `meeting_attendees.response` had existed since 0292 with nothing in the
+product calling them, so `response` read `'invited'` on every row not auto-accepted by joining.
+Once ceremony attendance started being fed by its companion meeting (0366), that silence had a
+cost: someone who would have declined a standup had no way to say so, and was recorded as a
+no-show — and `absentHumans` is the list the reassignment rules read before handing tickets to
+an agent.
+
+`RsvpControl` in [MeetingsContent.tsx](./frontend/src/components/meetings/MeetingsContent.tsx)
+renders accepted / tentative / declined on the meeting detail, and only for a seat the signed-in
+user actually holds — nobody RSVPs on someone else's behalf. It goes through
+`meetingsApi.rsvp`, and the route now updates `RETURNING` the matched row and answers 404 when
+there is none, because it previously reported success whether or not the caller was an attendee,
+so a decline someone believed they had recorded silently did not exist.
+
+`resolveAttendanceVerdict` gained a fifth precedence rule in
+[ceremonyAttendance.ts](./api/src/application/ceremony/ceremonyAttendance.ts): a declined invite
+resolves to `'excused'` with `attendance_source='rsvp'` — kept distinct from `'pto'` because an
+operator auditing "why is this excused?" needs to see whether the platform read a calendar or a
+person answered this specific invitation. `concludeCeremony` loads the declined refs for the
+companion meeting and feeds them in as `declinedInvite`. Ranked below observed presence, because
+someone who declined and then turned up anyway was at the ceremony.
+
 ## ✅ RESOLVED 2026-08-23 — Learning paths are edges, an xAPI statement is an activity_log row, and an LRS credential is a connection
 
 The LMS core landed in migration 0420 with nine tables and no application layer. The remainder PRD 18

@@ -15,6 +15,7 @@ import { computeAllocationInsights } from '../insights/allocationInsights';
 import { computeComplianceSummary } from '../insights/complianceInsights';
 import { computeRdTaxCredit } from './rdTaxCredit';
 import { computeControlCoverage } from './socControls';
+import { csvMatrix } from '../export/tabularExport';
 
 /** Trailing window (days) used for the allocation / R&D / compliance legs. */
 const REPORT_WINDOW_DAYS = 30;
@@ -113,9 +114,9 @@ export async function assembleAuditReport(
   };
 }
 
-/** Flatten the report into a section/metric/value CSV (RFC-4180-ish). */
+/** Flatten the report into a section/metric/value CSV. The columns are this
+ *  module's; the escaping is `csvMatrix`, the api's one CSV writer. */
 export function auditReportToCsv(report: AuditReport): string {
-  const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
   const round = (n: number) => Math.round(n * 100) / 100;
   const rows: Array<[string, string, string | number]> = [
     ['meta', 'period', report.period],
@@ -144,7 +145,5 @@ export function auditReportToCsv(report: AuditReport): string {
     ['compliance', 'distinct_executions', report.compliance.distinctExecutions],
     ['compliance', 'distinct_agents', report.compliance.distinctAgents],
   ];
-  const header = ['section', 'metric', 'value'];
-  const lines = rows.map((r) => r.map(esc).join(','));
-  return [header.join(','), ...lines].join('\n');
+  return csvMatrix(['section', 'metric', 'value'], rows);
 }
