@@ -187,6 +187,36 @@ describe('the collapsed session bar', () => {
   });
 
   /**
+   * ONE BOARD PUBLISHES, however many are mounted.
+   *
+   * `CanvasStage` keeps every opened board mounted and hides all but the selected one
+   * with `visibility: hidden`, so switching boards does not throw away the state of the
+   * one you left. A PORTAL escapes that: `visibility` inherits down the DOM and the
+   * portalled row is a child of the header, not of the box that was hidden. Three cached
+   * boards therefore put three live copies of Make it real / Invite / Publish in the
+   * header — the exact duplication this whole seam exists to remove, reintroduced by the
+   * mechanism that removed it.
+   */
+  it('publishes only the board on stage, however many are kept mounted behind it', () => {
+    render(
+      <CanvasChromeSlotProvider>
+        <header><CanvasChromeSlotTarget className="canvas-chrome-slot" /></header>
+        <CreationCanvas sessionId="chrome-slot-cached-board" persistence="local" stageActive={false} />
+        <CreationCanvas sessionId="chrome-slot-staged-board" persistence="local" stageActive />
+      </CanvasChromeSlotProvider>,
+    );
+
+    const slot = screen.getByTestId('canvas-chrome-slot');
+    const hosted = screen.getAllByTestId('canvas-handoff').filter((row) => slot.contains(row));
+    expect(hosted).toHaveLength(1);
+    // The cached board keeps its own row in its own corner, where its container's
+    // `visibility: hidden` can still reach it.
+    const inCorner = screen.getAllByTestId('canvas-handoff').filter((row) => !slot.contains(row));
+    expect(inCorner).toHaveLength(1);
+    expect(inCorner[0]).toHaveAttribute('data-hosted', 'canvas');
+  });
+
+  /**
    * The fallback is not a nicety — the VS Code webview, the `/embed` tree and every
    * component test render the canvas with no header above it. A surface must not lose
    * its only route to Invite and Publish by having nowhere to consolidate into.

@@ -66,7 +66,25 @@ export function CanvasChromeSlotTarget({ className }: { className?: string }) {
   return <div ref={slot.register} className={className} data-testid="canvas-chrome-slot" />;
 }
 
-/** The element the canvas should portal its handoff row into, or `null` for none. */
-export function useCanvasChromeSlot(): HTMLElement | null {
-  return useContext(CanvasChromeSlotContext)?.element ?? null;
+/**
+ * The element the canvas should portal its handoff row into, or `null` for none.
+ *
+ * ── `publishes` IS NOT OPTIONAL DECORATION ───────────────────────────────────────
+ * The shell keeps EVERY opened board mounted — `CanvasStage` renders one
+ * `<CreationCanvas>` per entry in `opened` and hides all but the selected one with
+ * `visibility: hidden` on its container, so switching boards does not throw away the
+ * board-local state of the one you left.
+ *
+ * A portal escapes that. `visibility` is inherited down the DOM, and a portalled row is
+ * not a DOM descendant of the box it was hidden in — it is a child of the header. So
+ * three cached boards published three rows into one slot and the header grew a second
+ * and third copy of Make it real / Invite / Publish, each wired to a board nobody was
+ * looking at. Hiding a board has to hide what it contributes.
+ *
+ * Only the board on stage may publish, and only the board itself knows whether it is
+ * that board — so it says so here rather than the slot guessing from a count.
+ */
+export function useCanvasChromeSlot(publishes = true): HTMLElement | null {
+  const slot = useContext(CanvasChromeSlotContext);
+  return publishes ? slot?.element ?? null : null;
 }

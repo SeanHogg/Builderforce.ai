@@ -1117,15 +1117,19 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
   // 1400ms and then report a `delivered` workflow-run from provider
   // `browser-draft` with `validation: passed` — a success nothing observed. Run
   // must now surface the real precondition instead of simulating a result.
-  it('runs workflows from the workflow widget, and never fabricates a local run', async () => {
+  it('runs the flow from the command bar, and never fabricates a local run', async () => {
     render(<CreationCanvas sessionId="workflow-widget-run-test" persistence="local" />);
 
-    expect(screen.queryByRole('button', { name: 'Run' })).not.toBeInTheDocument();
     // RUN IS A SESSION ACTION NOW, not a button on a card. The `workflow` card became a
     // `frame` bounding real `flowStep` objects — the flow is a REGION of the board, so
-    // there is no one card left to hang Run off and it belongs beside the other worded
-    // actions that act on the whole canvas.
-    fireEvent.click(within(screen.getByTestId('canvas-handoff')).getByRole('button', { name: 'Run workflow' }));
+    // there is no one card left to hang Run off. It leads the COMMAND BAR: running the
+    // board is the most direct thing you can do TO it, and the top-right corner is for
+    // work LEAVING the canvas. Asserted as "exactly one, and it is in the bar" — the
+    // failure this replaces was a SECOND Run drawn on the object.
+    const runs = screen.getAllByRole('button', { name: 'Run' });
+    expect(runs).toHaveLength(1);
+    expect(screen.getByTestId('canvas-command-bar')).toContainElement(runs[0]);
+    fireEvent.click(runs[0]);
 
     expect(await screen.findByText('Save this workflow')).toBeInTheDocument();
     expect(screen.queryByText('Workflow completed')).not.toBeInTheDocument();

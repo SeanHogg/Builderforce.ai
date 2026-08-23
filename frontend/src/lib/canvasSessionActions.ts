@@ -59,7 +59,7 @@ export type CanvasSessionActionId =
  * trough — the same shape the surface switcher uses — because a trough is what says
  * "these are the same kind of thing" without a caption saying it.
  */
-export type CanvasSessionActionCluster = 'history' | 'inspect' | 'live' | 'session';
+export type CanvasSessionActionCluster = 'run' | 'history' | 'inspect' | 'live' | 'session';
 
 /**
  * What an action NEEDS from the surface it is drawn on.
@@ -126,6 +126,31 @@ export interface CanvasSessionActionDef {
 export const PHONE_SESSION_BAR_LIMIT = 2;
 
 export const CANVAS_SESSION_ACTIONS: readonly CanvasSessionActionDef[] = [
+  // RUN LEADS THE BAR, and both halves of that are decisions.
+  //
+  // WHY IT IS A SESSION ACTION. It used to be a button drawn on the `workflow` card.
+  // Then the card became what it always stood for: a `frame` bounding real `flowStep`
+  // objects, because the board IS the workflow. There is no longer one card to hang Run
+  // off — the flow is a REGION of the board — so running it is something you do to the
+  // canvas, which is what this registry is for.
+  //
+  // WHY IT IS A GLYPH IN THE COMMAND BAR and not a word in the top-right corner: the
+  // corner is where work LEAVES the canvas (`canvasChrome.ts` — a word opens somewhere
+  // else), and running the board is not leaving it. It is the most direct thing you can
+  // do TO the board, so it sits with the other things you do to the board, at the head
+  // of the bar. Its own cluster, and first: a trough says "these are the same kind of
+  // thing", and Run is not undo's kind of thing.
+  //
+  // It withdraws (`available: false`) on a board with no flow on it, rather than sitting
+  // lit up with nothing to run; the host decides that from the same predicate Run itself
+  // resolves with (`canvasFlowTarget.ts`), so the button cannot be offered for one object
+  // and then act on another. Pressing it on a section that has never been compiled BUILDS
+  // it first — `runWorkflow` has always said so, and this is the door that makes that
+  // sentence reachable again.
+  //
+  // Named `Run`, with `Run workflow` as the hover: the glyph sits beside undo and redo,
+  // where one word is the whole vocabulary.
+  { id: 'run', cluster: 'run', order: -1, chrome: 'icon', state: 'none', phone: 'menu', labelKey: 'runCanvas', titleKey: 'runWorkflow', needs: 'objects' },
   // History first, and undo keeps its phone slot: a fat-fingered drag on a touch board is
   // the single likeliest thing a phone user needs to take back, and burying the only cure
   // two taps deep is what makes a canvas feel unsafe to touch.
@@ -215,22 +240,6 @@ export const CANVAS_SESSION_ACTIONS: readonly CanvasSessionActionDef[] = [
   //
   // It needs OBJECTS for the same reason the scorecard does: "make this real" over a
   // conversation with nothing on it has nothing to make real.
-  //
-  // RUN — and the reason it is HERE rather than on the object.
-  //
-  // It used to be a button drawn on the `workflow` card. Then the card became what it
-  // always stood for: a `frame` bounding real `flowStep` objects, because the board IS
-  // the workflow. There is no longer one card to hang Run off — the flow is a region of
-  // the board — so the control belongs to the SESSION, beside the other worded actions
-  // that act on the whole canvas.
-  //
-  // It withdraws (`available: false`) on a board with no flow on it, rather than sitting
-  // lit up with nothing to run; the host decides that from the same predicate Run itself
-  // resolves with (`canvasFlowTarget.ts`), so the button cannot be offered for one object
-  // and then act on another. Pressing it on a section that has never been compiled BUILDS
-  // it first — `runWorkflow` has always said so, and this is the door that makes that
-  // sentence reachable again.
-  { id: 'run', cluster: 'session', order: 7, chrome: 'labelled', state: 'none', phone: 'menu', labelKey: 'runWorkflow', needs: 'objects' },
   { id: 'prove', cluster: 'session', order: 8, chrome: 'labelled', state: 'none', phone: 'menu', labelKey: 'proveThisIdea', titleKey: 'proveThisIdeaTitle', needs: 'objects' },
   { id: 'share', cluster: 'session', order: 9, chrome: 'labelled', state: 'expanded', phone: 'menu', labelKey: 'share', titleKey: 'inviteCollaborators' },
   // Publish sits beside Share because they are the two ways work leaves this canvas —

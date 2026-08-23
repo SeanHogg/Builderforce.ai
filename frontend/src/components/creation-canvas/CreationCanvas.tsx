@@ -1090,8 +1090,12 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * the floating corner card, because a surface with no header has nowhere to
    * consolidate INTO. See `lib/canvas/CanvasChromeSlot.tsx` for why the seam is a DOM
    * slot rather than a context full of handlers.
+   *
+   * Also `null` for a board the shell is keeping mounted BEHIND the one on stage: a
+   * portal escapes the `visibility: hidden` that hides it, so a cached board would
+   * otherwise put a second live copy of Make it real / Invite / Publish in the header.
    */
-  const chromeSlot = useCanvasChromeSlot();
+  const chromeSlot = useCanvasChromeSlot(stageActive);
   useEffect(() => { setBarCollapsedState(readCanvasBarCollapsed()); }, []);
   /**
    * Where the prompt lives — floating, docked into Brain, or closed. Read in an effect
