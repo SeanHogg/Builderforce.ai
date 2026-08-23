@@ -42,24 +42,37 @@ interface FetchInit {
 }
 
 /** A fetch mock whose recorded calls are `[url, init]` (typed, so we can index them). */
-function makeFetch(responder: () => Response) {
-  return vi.fn(async (_url: string, _init?: FetchInit) => responder());
+function makeFetch(responder: (url: string, init?: FetchInit) => Response) {
+  return vi.fn(async (url: string, init?: FetchInit) => responder(url, init));
 }
 
-/** Minimal Drizzle stub: select().from().where([.limit]) resolves to `rows`. */
-function dbReturning(rows: unknown[]) {
+/** Minimal Drizzle stub: select().from().where([.limit]) resolves to `rows`;
+ *  update().set().where() records the patch so `rememberProtocol` (which every
+ *  list/call path runs) has somewhere to write without a real database. */
+function dbReturning(rows: unknown[], updates: Array<{ patch: unknown }> = []) {
   const where = (..._a: unknown[]) => ({
     limit: () => Promise.resolve(rows),
     then: (resolve: (v: unknown) => unknown) => resolve(rows),
   });
-  return { select: () => ({ from: () => ({ where }) }) } as never;
+  return {
+    select: () => ({ from: () => ({ where }) }),
+    update: () => ({
+      set: (patch: unknown) => {
+        updates.push({ patch });
+        return { where: () => Promise.resolve() };
+      },
+    }),
+  } as never;
 }
 
-describe('mcpExtensionService — server-to-server relay', () => {
+// Every row below pins `protocol: 'legacy'` — these tests exercise the ORIGINAL
+// Builderforce-shaped REST relay specifically (see mcpWireClient.test.ts for the
+// real-MCP JSON-RPC transport and the `auto` probe that picks between them).
+describe('mcpExtensionService — server-to-server relay (legacy transport)', () => {
   it('listToolsForTenant fetches each enabled extension and namespaces tool names', async () => {
     const secretEnc = await encryptSecretForStorage('mcp-secret', KEY);
     const db = dbReturning([
-      { id: 'aaaaaaaa-1111-2222-3333-444444444444', tenantId: 1, name: 'CRM', serverUrl: 'https://crm.example/', secretEnc, enabled: true },
+      { id: 'aaaaaaaa-1111-2222-3333-444444444444', tenantId: 1, name: 'CRM', serverUrl: 'https://crm.example/', secretEnc, enabled: true, protocol: 'legacy', allowedTools: null },
     ]);
     const fetchMock = makeFetch(() =>
       new Response(JSON.stringify({ tools: [{ name: 'lookup_account', description: 'Find an account', parameters: { type: 'object' } }] }), { status: 200 }),
@@ -82,17 +95,33 @@ describe('mcpExtensionService — server-to-server relay', () => {
 
   it('listToolsForTenant skips an extension whose server errors', async () => {
     const db = dbReturning([
-      { id: 'bbbbbbbb-0000-0000-0000-000000000000', tenantId: 1, name: 'Down', serverUrl: 'https://down.example', secretEnc: null, enabled: true },
+      { id: 'bbbbbbbb-0000-0000-0000-000000000000', tenantId: 1, name: 'Down', serverUrl: 'https://down.example', secretEnc: null, enabled: true, protocol: 'legacy', allowedTools: null },
     ]);
     const fetchMock = makeFetch(() => new Response('boom', { status: 500 }));
     const tools = await listToolsForTenant(db, 1, KEY, fetchMock as unknown as typeof fetch);
     expect(tools).toEqual([]);
   });
 
+  it('listToolsForTenant withholds a tool the tenant has not consented to', async () => {
+    const db = dbReturning([
+      { id: 'cccccccc-0000-0000-0000-000000000000', tenantId: 1, name: 'CRM', serverUrl: 'https://crm.example', secretEnc: null, enabled: true, protocol: 'legacy', allowedTools: ['lookup_account'] },
+    ]);
+    const fetchMock = makeFetch(() =>
+      new Response(JSON.stringify({
+        tools: [
+          { name: 'lookup_account', description: 'Find an account', parameters: { type: 'object' } },
+          { name: 'delete_account', description: 'Delete an account', parameters: { type: 'object' } },
+        ],
+      }), { status: 200 }),
+    );
+    const tools = await listToolsForTenant(db, 1, KEY, fetchMock as unknown as typeof fetch);
+    expect(tools.map((t) => t.tool)).toEqual(['lookup_account']);
+  });
+
   it('callMcpTool relays to {serverUrl}/call with the decrypted secret and returns JSON', async () => {
     const secretEnc = await encryptSecretForStorage('mcp-secret', KEY);
     const db = dbReturning([
-      { id: 'ext-1', tenantId: 1, name: 'CRM', serverUrl: 'https://crm.example', secretEnc, enabled: true },
+      { id: 'ext-1', tenantId: 1, name: 'CRM', serverUrl: 'https://crm.example', secretEnc, enabled: true, protocol: 'legacy', allowedTools: null },
     ]);
     const fetchMock = makeFetch(() => new Response(JSON.stringify({ account: 'acme' }), { status: 200 }));
 
@@ -110,10 +139,56 @@ describe('mcpExtensionService — server-to-server relay', () => {
     expect(result).toEqual({ account: 'acme' });
   });
 
+  it('callMcpTool refuses a tool the tenant has not consented to, without calling the server', async () => {
+    const db = dbReturning([
+      { id: 'ext-2', tenantId: 1, name: 'CRM', serverUrl: 'https://crm.example', secretEnc: null, enabled: true, protocol: 'legacy', allowedTools: ['lookup_account'] },
+    ]);
+    const fetchMock = makeFetch(() => new Response('{}', { status: 200 }));
+    await expect(
+      callMcpTool(db, { tenantId: 1, extensionId: 'ext-2', tool: 'delete_account', arguments: {}, keyMaterial: KEY }, fetchMock as unknown as typeof fetch),
+    ).rejects.toThrow(/not approved/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('callMcpTool throws for an unknown/disabled extension', async () => {
     const db = dbReturning([]);
     await expect(
       callMcpTool(db, { tenantId: 1, extensionId: 'nope', tool: 't', arguments: {}, keyMaterial: KEY }, makeFetch(() => new Response('{}')) as unknown as typeof fetch),
     ).rejects.toThrow(/Unknown or disabled/);
+  });
+});
+
+describe('mcpExtensionService — auto protocol detection', () => {
+  it('prefers the real MCP transport and remembers it on the row', async () => {
+    const updates: Array<{ patch: unknown }> = [];
+    const db = dbReturning(
+      [{ id: 'dddddddd-0000-0000-0000-000000000000', tenantId: 1, name: 'Real MCP', serverUrl: 'https://mcp.example', secretEnc: null, enabled: true, protocol: 'auto', allowedTools: null }],
+      updates,
+    );
+    const fetchMock = makeFetch((_url, init) => {
+      const body = JSON.parse((init?.body as string) ?? '{}');
+      if (body.method === 'tools/list') {
+        return new Response(JSON.stringify({ jsonrpc: '2.0', id: body.id, result: { tools: [{ name: 'search', description: 'Search', inputSchema: { type: 'object' } }] } }), { status: 200 });
+      }
+      // initialize / notifications/initialized
+      return new Response(JSON.stringify({ jsonrpc: '2.0', id: body.id ?? null, result: {} }), { status: 200 });
+    });
+
+    const tools = await listToolsForTenant(db, 1, KEY, fetchMock as unknown as typeof fetch);
+    expect(tools.map((t) => t.tool)).toEqual(['search']);
+    expect(updates).toEqual([{ patch: { protocol: 'mcp' } }]);
+  });
+
+  it('falls back to the legacy REST shape when the server does not speak JSON-RPC', async () => {
+    const db = dbReturning([
+      { id: 'eeeeeeee-0000-0000-0000-000000000000', tenantId: 1, name: 'Old Server', serverUrl: 'https://old.example', secretEnc: null, enabled: true, protocol: 'auto', allowedTools: null },
+    ]);
+    const fetchMock = makeFetch((url) =>
+      url.endsWith('/tools')
+        ? new Response(JSON.stringify({ tools: [{ name: 'lookup', description: 'Lookup', parameters: { type: 'object' } }] }), { status: 200 })
+        : new Response('not found', { status: 404 }),
+    );
+    const tools = await listToolsForTenant(db, 1, KEY, fetchMock as unknown as typeof fetch);
+    expect(tools.map((t) => t.tool)).toEqual(['lookup']);
   });
 });

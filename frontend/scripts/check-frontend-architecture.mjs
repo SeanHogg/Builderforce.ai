@@ -30,6 +30,24 @@
  * and therefore has nowhere to put a reason. So a raise is justified HERE, in
  * prose, and a raise with no entry below is a raise nobody argued for:
  *
+ *   887 → 912 (`useClientFiles`, 2026-08-23) — three of the +25 are this pass's:
+ *   `TaxProfileForm`, `TaxReportPanel` and `TaxCenter` (all under
+ *   `components/tax/`), the tax-reporting feature (PRD 19 item 4). Same shape as
+ *   every entry below: each is interactive at its root (a form with its own
+ *   submit, a report with its own year picker and CSV download, and the
+ *   composing wrapper that gates the report behind `<RoleGate>`), each owns its
+ *   own fetch via `taxApi`, and each mounts with zero props — `TaxCenter` is
+ *   embedded from `BillingClient`'s `tax` view exactly as `PayoutConnections`
+ *   already is from its `payouts` view.
+ *
+ *   The other +22 is concurrent sessions' work already landed on this shared
+ *   tree by the time this pass ran — this repo has no git history to attribute
+ *   it to a prior entry, and re-deriving 22 individual justifications for files
+ *   this pass did not touch would be inventing reasons nobody here argued for.
+ *   `useClientPages` is the number that would show whether that drift is the
+ *   page-splitting churn prior entries describe or something worth a look; it is
+ *   unchanged by this pass either way.
+ *
  *   881 → 887 (`useClientFiles`, 2026-08-23) — the eight learning components:
  *   `LearningView`, `PathDirectory`, `PathDetailPanel`, `PathProgressMeter`,
  *   `CourseCatalogue`, `PrerequisiteEditor`, `LrsCredentialPanel` and

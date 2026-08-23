@@ -3,10 +3,16 @@ import { CREATION_OBJECT_REGISTRY, CREATION_PALETTE_GROUPS, availableCreationObj
 import { CREATION_CONNECTION_KINDS, CREATION_OBJECT_KINDS } from '@builderforce/creation-canvas-contract';
 
 describe('creation object registry', () => {
-  it('has one unique definition for every palette object', () => {
+  it('has one unique definition for every palette object, legacy kinds kept off the palette', () => {
     const kinds = CREATION_OBJECT_REGISTRY.map((definition) => definition.kind);
     expect(new Set(kinds).size).toBe(kinds.length);
-    expect(new Set(CREATION_PALETTE_GROUPS.flatMap((group) => group.items.map((item) => item.kind)))).toEqual(new Set(kinds));
+    // A `legacy` kind (currently just `workflow`) stays a REGISTRY entry — a saved
+    // board still has to render, name and inspect it — but is not a PALETTE entry:
+    // nothing may place a new one. The two sets diverge by exactly the legacy kinds.
+    const legacyKinds = new Set(CREATION_OBJECT_REGISTRY.filter((definition) => definition.legacy).map((definition) => definition.kind));
+    expect(legacyKinds).toEqual(new Set(['workflow']));
+    const paletteKinds = new Set(CREATION_PALETTE_GROUPS.flatMap((group) => group.items.map((item) => item.kind)));
+    expect(paletteKinds).toEqual(new Set(kinds.filter((kind) => !legacyKinds.has(kind))));
     expect(new Set(kinds)).toEqual(new Set(CREATION_OBJECT_KINDS));
   });
 
@@ -135,8 +141,12 @@ describe('creation object registry', () => {
 
   it('gates plan capabilities without hiding unrestricted object kinds', () => {
     const base = availableCreationObjects(new Set()).map((definition) => definition.kind);
-    expect(base).toContain('workflow');
+    expect(base).toContain('flowStep');
     expect(base).not.toContain('evermind');
+    // LEGACY, not entitlement-gated: `workflow` has no editor left to unlock, so it
+    // is absent from what may be authored while staying resolvable off the registry.
+    expect(base).not.toContain('workflow');
+    expect(creationObjectDefinition('workflow').kind).toBe('workflow');
     expect(availableCreationObjects(new Set(['evermind'])).map((definition) => definition.kind)).toContain('evermind');
   });
 
@@ -179,7 +189,10 @@ describe('creation object registry', () => {
     // locked.
     const guest = creationPaletteGroupsFor(false, new Set()).flatMap((group) => group.items.map((item) => item.kind));
     expect(guest).not.toContain('grievance');
-    expect(guest).toContain('workflow');
+    // Legacy for everybody, guest or not — there is no upgrade that gives `workflow`
+    // an editor back.
+    expect(guest).not.toContain('workflow');
+    expect(guest).toContain('flowStep');
   });
 
   it('binds every creative widget to the provider-neutral built-in MCP contract', () => {
