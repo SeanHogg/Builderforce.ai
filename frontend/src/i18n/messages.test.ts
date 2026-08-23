@@ -157,6 +157,61 @@ describe('message catalogs', () => {
     expect(bundles).toEqual([]);
   });
 
+  /**
+   * THE FOURTH FAILURE MODE: a leaf whose TYPE is wrong.
+   *
+   * `leaves()` above silently skips anything that is not a string, and the parity
+   * and ICU checks both read from it — so a message authored as a number, a boolean
+   * or `null` is invisible to every other assertion in this file and renders as the
+   * dotted key in front of a user. Arrays ARE legitimate (`t.raw` reads them), but
+   * only as a matched pair: an array leaf that is 6 long in `en` and 5 in `de` is a
+   * translation gap the key-set check cannot see, because the KEY is present.
+   *
+   * So: no scalar leaf may be anything but a string, and every array leaf must have
+   * the same structural shape in all five catalogs.
+   */
+  const shapeOf = (value: unknown): unknown => {
+    if (typeof value === 'string') return 'string';
+    if (Array.isArray(value)) return value.map(shapeOf);
+    if (value && typeof value === 'object') {
+      return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([k, v]) => [k, shapeOf(v)]));
+    }
+    return typeof value;
+  };
+
+  /** Every non-object leaf, as `path → what it actually is`. */
+  const typedLeaves = (node: Record<string, unknown>, prefix = ''): Array<[string, unknown]> =>
+    Object.entries(node).flatMap(([key, value]) => {
+      const path = prefix ? `${prefix}.${key}` : key;
+      if (value && typeof value === 'object' && !Array.isArray(value)) {
+        return typedLeaves(value as Record<string, unknown>, path);
+      }
+      return [[path, value] as [string, unknown]];
+    });
+
+  it.each(LOCALES)('%s has no leaf that is neither a string nor an array', (locale) => {
+    const wrong = typedLeaves(CATALOGS[locale])
+      .filter(([, value]) => typeof value !== 'string' && !Array.isArray(value))
+      .map(([path, value]) => `${path}: ${value === null ? 'null' : typeof value}`);
+    expect(wrong).toEqual([]);
+  });
+
+  it.each(LOCALES.filter((locale) => locale !== DEFAULT_LOCALE))(
+    '%s array leaves match the shape of the default catalog',
+    (locale) => {
+      const reference = new Map(
+        typedLeaves(CATALOGS[DEFAULT_LOCALE])
+          .filter(([, value]) => Array.isArray(value))
+          .map(([path, value]) => [path, JSON.stringify(shapeOf(value))]),
+      );
+      const drifted = typedLeaves(CATALOGS[locale])
+        .filter(([, value]) => Array.isArray(value))
+        .filter(([path, value]) => reference.has(path) && reference.get(path) !== JSON.stringify(shapeOf(value)))
+        .map(([path]) => path);
+      expect(drifted).toEqual([]);
+    },
+  );
+
   it.each(LOCALES)('%s has every QuickStart message', (locale) => {
     const quickStart = CATALOGS[locale].quickStart as Record<string, unknown> | undefined;
     expect(quickStart).toBeDefined();

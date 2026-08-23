@@ -452,21 +452,22 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
         run: |
           pnpm install --frozen-lockfile || pnpm install
-          # next-on-pages only reports a missing Edge Runtime AFTER the full Next
-          # build — ~6 minutes in, at the very end of cf-build. This static check
-          # answers the same question in milliseconds, so the deploy fails fast on
-          # a route that was localized without being moved to the Edge Runtime.
-          pnpm run check:edge-runtime
-          # A dependency imported but not DECLARED resolves in a flat local
-          # node_modules and not under pnpm's strict layout here, so it fails
-          # only in CI — and a type-only one survives every test and dies in the
-          # middle of `next build`. Also milliseconds.
-          pnpm run check:declared-deps
-          # Next rejects some export COMBINATIONS in a route module (`metadata`
-          # beside `generateMetadata`, `viewport` beside `generateViewport`) in
-          # the webpack build itself. Nothing types it, nothing tests it, and it
-          # took this deploy down once already. Milliseconds again.
-          pnpm run check:route-exports
+          # THE WHOLE GUARD CHAIN, not a hand-picked three.
+          #
+          # This job used to name `check:edge-runtime`, `check:declared-deps` and
+          # `check:route-exports` individually — the three that had each taken a
+          # deploy down — and ran none of the other thirteen. So `check:architecture`,
+          # `check:design-scale`, `check:design-tokens` and `check:root-layout-providers`
+          # could sit red indefinitely, which is exactly how the `'use client'` ratchet
+          # went unnoticed for a session: nothing except a local run ever read them.
+          #
+          # `pnpm run check` is the SAME manifest `npm test` runs (scripts/checks.manifest.mjs),
+          # so there is one list and adding a guard reaches CI for free — the three
+          # names above were a second, staler copy of that list. It runs the sixteen
+          # concurrently in ~10s, which is nothing against a ~6-minute Next build, and
+          # every one of them answers in milliseconds what `cf-build` answers at the
+          # very end.
+          pnpm run check
           pnpm run cf-build
           wrangler deploy --no-bundle
 

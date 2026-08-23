@@ -1,3 +1,98 @@
+## ✅ RESOLVED 2026-08-22 — Roadmap re-verified against the running code: three fixes, seven entries that were already true
+
+A review pass over `ROADMAP.md` that did two things: closed what was cheap to close, and cut the
+file in half (1,074 → 541 lines) so the register reads as a list of open work rather than a history
+of how each item came to be understood. The narration moved out; every open item's defect, location,
+blocker and unblock survived — verified by grepping ~170 distinctive identifiers from the old file
+against the new one.
+
+### Fixed this pass
+
+**1. The message catalogs had no leaf-TYPE assertion, so a wrong-typed message was invisible to every other test.**
+`messages.test.ts`'s `leaves()` silently skips anything that is not a string, and the parity and ICU
+checks both read from it — so a message authored as a number, a boolean or `null` was seen by
+nothing and would render as its own dotted key in front of a user. Arrays are legitimate (`t.raw`
+reads them) but only as a matched pair: an array leaf 6 long in `en` and 5 in `de` is a translation
+gap the key-set check cannot see, because the KEY is present.
+
+Two assertions now close both: **no leaf may be anything but a string or an array**, and **every
+array leaf must have the same structural shape in all five catalogs** (recursive — element types,
+nested object key sets, and length). Both are green at HEAD (81 array leaves, 0 scalar leaves, 0
+shape drift across the four non-default locales), so this locks in a property that held by accident.
+`frontend/src/i18n/messages.test.ts` — 98 tests pass.
+
+This was the open half of the per-locale-map defect: the bundle-shaped case (`{en, zh, es, fr, de}`
+as a message value) already had its own test; the type case did not.
+
+**2. The frontend `'use client'` ratchet was red at 881 against a baseline of 876, and is now green at 881 with the argument attached.**
+The +5 is the residue of a good refactor, not a regression: **133 files entered the tally and 51
+left it**, and the shape of that diff is page-splitting — `app/alerts`, `app/hires`, `app/growth`,
+`app/brainstorm` and ~50 more dropped `'use client'` from their `page.tsx` and gained a client
+island beside it (`ReferencesClient`, `LtiLaunchClient`, `PublishGigClient`, `ShortlistClient`,
+`FinanceInsightsInner`, `WorkforceTabs`, …). Each split turns one client-rooted ROUTE into a Server
+Component plus one interactive leaf: strictly better payload, strictly worse for a file count.
+`useClientPages` — the number that actually measures the harm — did not move.
+
+The raise was HELD for a session because a concurrent author had uncommitted files inside the same
+tally. That is now settled (`git status` clean but for this pass), so the number is real rather than
+momentary, and the raise is argued in prose at the top of
+`frontend/scripts/check-frontend-architecture.mjs` per that guard's own rule that "a raise with no
+entry below is a raise nobody argued for". `check:design-scale` and `check:design-tokens` were
+independently re-run and are green at baseline, so nothing was ratcheted to hide a second red.
+
+**3. No CI job ran the frontend guards — now the whole chain gates the deploy.**
+`deploy-frontend` named three guards individually (`check:edge-runtime`, `check:declared-deps`,
+`check:route-exports` — the three that had each taken a deploy down) and ran none of the other
+thirteen, so `check:architecture`, `check:design-scale`, `check:design-tokens` and
+`check:root-layout-providers` could sit red indefinitely. That is exactly how the ratchet above went
+unnoticed for a session: nothing except a local run ever read them.
+
+It now runs `pnpm run check` — the SAME manifest `npm test` uses
+(`frontend/scripts/checks.manifest.mjs`), so there is one list and adding a guard reaches CI for
+free; the three names in the workflow were a second, staler copy of that list. All **16 guards pass
+concurrently in 9.1s**, which is nothing against a ~6-minute Next build, and each answers in
+milliseconds what `cf-build` answers at the very end. Sequenced correctly, too: the ratchets were
+closed FIRST, so turning the gate on does not immediately block frontend deploys — which is the
+condition the roadmap entry named as the reason this was a user decision.
+
+### Already true — seven entries re-verified against the code and removed
+
+Each of these described a defect that had since been fixed without the register being updated. All
+were confirmed by reading the current source, not by inference:
+
+- **"Objective share is computed per direct task link only"** — `loadObjectiveLineage`
+  (`api/src/application/task/ticketContext.ts`) now walks `tasks.parent_task_id` for `epic`-kind
+  links and folds the Epic's children into the delivery denominator via `foldObjectiveDelivery`, so
+  ten children no longer each claim 100% of one objective.
+- **"CI-green not yet a producer completion signal"** and **"`has_pr` condition predicate not
+  wired"** — both closed by `api/src/application/kanban/taskPrSignal.ts`, the ONE read of "what PR
+  does this ticket have, and is its build green?". `isProducerPrEvidence` refuses to credit a
+  producer on a recorded RED build (while still crediting `null`/`pending`, so repos with no CI are
+  not permanently uncreditable), `hasNonDraftPr` backs the predicate, and
+  `RequirementCondition` carries `'has_pr'` with `requirementApplies` failing CLOSED on an
+  unresolved signal.
+- **"Lifecycle ledger cannot see sign-off / manifest state"** — `buildTicketLifecycle`
+  (`ticketLifecycleLedger.ts`) now joins SIX sources, including `ticket_role_signoffs` (with role,
+  verdict, member and contribution) and `ticket_participants`, so the chain of custody names which
+  role still owes a verdict.
+- **"Duplicate local-disk path-escape resolver across the two on-prem providers"** — both
+  `agent-runtime/src/agents/node-capability-provider.ts` and
+  `clients/vscode/src/localCapabilities.ts` now import from
+  `@builderforce/agent-tools/node-path` (`resolveInsideRoot` / `resolveInsideRootOrThrow`). The
+  hand-rolled pair is gone.
+- **"`FeedbackTriage.load` is memoized on `refreshKey` only (eslint-disabled exhaustive-deps)"** —
+  the suppression is gone, replaced by a `seenInputs` ref that dedupes the load-and-refreshKey pair
+  so the effect depends on `[load, refreshKey, refresh]` honestly.
+- **"Team chats can't be renamed/archived through the owner-admin path"** —
+  `BrainService.verifyChatOwnership` takes `{ isWorkspaceAdmin }` and widens to
+  `ACCESSIBLE_ORIGINS` for an admin, so a singleton team chat is administered rather than owned. A
+  member without the role still gets "Chat not found" rather than a 403, deliberately, so the
+  answer does not leak which chats exist.
+- **Stale `nav.tab.{finops,devfinops,allocation}` catalog keys** — none of the three exists in any
+  of the five catalogs; the cleanup happened and the note outlived it.
+
+---
+
 ## ✅ RESOLVED 2026-08-22 — A destination is a panel, a rail row is a door you can actually open, and Reliability answers a guest
 
 Four defects reported against the running site, closed together because three of them are the same

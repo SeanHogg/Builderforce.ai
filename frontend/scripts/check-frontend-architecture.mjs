@@ -30,6 +30,25 @@
  * and therefore has nowhere to put a reason. So a raise is justified HERE, in
  * prose, and a raise with no entry below is a raise nobody argued for:
  *
+ *   876 → 881 (`useClientFiles`, 2026-08-22) — a NET +5 that is the residue of a
+ *   good refactor, and the clearest case yet that counting FILES penalises the
+ *   move this ratchet exists to encourage. 133 files entered the tally and 51
+ *   left it, and the shape of that diff is page-splitting: `app/alerts`,
+ *   `app/hires`, `app/growth`, `app/brainstorm` and ~50 more dropped
+ *   `'use client'` from their `page.tsx` and gained a client island beside it —
+ *   `ReferencesClient`, `LtiLaunchClient`, `PublishGigClient`, `ShortlistClient`,
+ *   `FinanceInsightsInner`, `WorkforceTabs`, `SuspectAccountsPanel` and the rest.
+ *   Each split turns one client-rooted ROUTE into a Server Component plus one
+ *   interactive leaf, which is strictly better payload and strictly worse for a
+ *   file count. `useClientPages` — the number that actually measures the harm —
+ *   did not move.
+ *
+ *   Every addition spot-checked is genuinely interactive at its root (`useState`,
+ *   `useEffect`, `useRouter`, click handlers), so none is the "directive is
+ *   sometimes the bug" case above. This raise was held for one session because a
+ *   concurrent author had uncommitted files inside the same tally; their work has
+ *   landed and the tree is settled, so the number is real rather than momentary.
+ *
  *   868 → 876 (`useClientFiles`, 2026-08-22) — the seven employer-review
  *   components: `RatingStars`, `RatingSummaryCard`, `EmployerDirectory`,
  *   `EmployerReviewPanel`, `ReviewList`, `ReviewModerationQueue` and
