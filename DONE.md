@@ -1,3 +1,118 @@
+## ✅ RESOLVED 2026-08-23 — A canvas document can carry underline, colour, font, size and alignment
+
+Three Gap Register entries closed together because they shared one root cause: a canvas
+`document` had to earn a richer surface than markdown one reader at a time, and the
+product decision blocking that had never actually been made explicit until asked
+directly — "we shouldn't have to edit in MD."
+
+**The decision.** The format GROWS rather than gaining a sidecar. Underline, colour, font
+and size ride as Pandoc-style attribute spans stored INSIDE the markdown —
+`[the words]{u color=#c0392b font=Georgia size=14pt}`, and `{align=center}` as a block
+suffix — defined once in the new `packages/creation-canvas-contract/src/richFormat.ts`.
+An attribute span was chosen over raw `<u>`/`<span style>` for two concrete reasons, not
+taste: a block-level HTML wrapper stops CommonMark from parsing markdown inside it (so
+`**bold**` in a centred paragraph would arrive as literal asterisks on the card), and the
+shared markdown pipeline deliberately carries no `rehype-raw` because it also renders
+chat, where the markdown is model output and raw HTML would be an injection surface. An
+attribute span is inert text everywhere it is not understood, so an older document with
+none of it reads identically, and a reader that has not learned the vocabulary shows the
+braces rather than losing the words.
+
+**All five readers now parse it identically**, from the one module:
+- `frontend/src/lib/richText.ts` — the page editor's `contenteditable` (`markdownToHtml`)
+  and its own normalisation of whatever a browser's editing command hands back
+  (`<font>`, `style="color:…"`, `<u>`, `text-align`) into the one vocabulary
+  (`htmlToMarkdown`). The print/PDF-via-print path renders through the same function.
+- `frontend/src/lib/markdownRichFormat.ts` — a new remark plugin, `DOCUMENT_REMARK_PLUGINS`
+  in `markdownPipeline.ts`, wired into the document CARD's `react-markdown` renderer
+  (`CreationNode.tsx`). Kept separate from the base chat pipeline on purpose: a model
+  quoting `[a]{color=red}` syntax in a chat reply is not formatting its own answer.
+- `api/src/application/office/markdownBlocks.ts` — `parseInlineRuns`/`parseMarkdownBlocks`
+  now read spans and block suffixes into `MdRun`/`MdBlock`, shared by both `.docx` writers
+  and the `.pdf` writer.
+- `api/src/application/office/docxWriter.ts` and `docxSourceWriter.ts` — a run's own
+  colour/font/size/underline are written as direct Office XML properties (`w:color`,
+  `w:rFonts`, `w:sz`, `w:u`), and a block's alignment as `w:jc`. In the source-writing path
+  this is not a second styling system: it is the same instruction Word would hold had the
+  edit been made in Word.
+- `api/src/application/office/pdfWriter.ts` and `pdfFonts.ts` — the base-14 font-slot table
+  widened from 6 to 12 (every family's four faces, always mapped, because a run may now
+  name its own family and has to be drawable in it), and the line-layout engine draws each
+  piece in its own size/colour, underlines itself with a rule under exactly the marked
+  words, and offsets a whole line for centre/right/justify.
+
+**The editor's toolbar** (`DocumentEditor.tsx`) gained an underline button (native
+`execCommand('underline')`), a four-way alignment group (native `justifyLeft/Center/
+Right/Full`, read back for the pressed state via `queryCommandState`), and font/size/colour
+controls that wrap the live DOM selection by hand — `richMarksCss` builds the exact style
+string `richText`'s own `markedHtml` produces, so a colour applied over an underlined
+phrase reads back as one merged mark rather than two disagreeing nested ones. Localized
+across all five catalogs (`toolbar.underline/alignLeft/alignCenter/alignRight/
+alignJustify/fontFamily/fontSize/textColor` in `creationCanvas.editor`).
+
+**The other two entries were already resolved before this pass and were stale in the
+register**, verified by re-reading the code rather than trusted from the roadmap text:
+`docxXmlToMarkdown` (`frontend/src/lib/office/docx.ts`) already reads inline images
+(uploaded through `workspaceStore`/the tenant file store and referenced by URL, pinned to
+their source relationship id), footnotes, endnotes, headers and footers, appending the
+parts with no place in reading order after a `<!--docx-extras-->` marker; and
+`markdownIntoDocxSource` (`api/src/application/office/docxSourceWriter.ts`) already keeps
+an imported `.docx`'s own package and rewrites only `word/document.xml`, carrying the
+source's theme, styles, numbering and section layout across untouched, wired end to end
+through `POST /api/exports/docx`'s `sourceFileKey` path.
+
+Two real bugs surfaced and were fixed by the new round-trip tests, not left for later: a
+block's `{align=…}` suffix reader was stealing the closing `}` off an inline span at the
+end of a line (`A [stressed]{u}` was reading `{u}` as the paragraph's own alignment
+attempt and failing closed), and a font stack's CSS was interpolated into a `style`
+attribute unescaped, so a quoted family name (`font-family:Georgia, "Times New Roman", serif`)
+silently truncated every declaration after it.
+
+## ✅ RESOLVED 2026-08-23 — Per-block co-editing CRDT + the asset upload pipeline
+
+Two gaps closed together because the second was what the first was waiting on: a
+Knowledge document's real-time channel was one `Y.Text('content')` for the whole
+document (so two people editing different paragraphs still shared one merge
+sequence, and a "cursor" could only mean "somewhere in this document"), and its
+image/video/file blocks were URL-only because there was nowhere in the product to
+turn a file INTO a URL.
+
+**Per-block CRDT.** `domains/collab/domain/blockDocument.ts` is the parser/
+serialiser: markdown → `DocumentBlock[]` → markdown, round-trip stable, because a
+document is still stored as markdown and five other readers (canvas card, print
+sheet, .docx writer, Brain, exports) depend on that staying true. `BlockStore`
+(`domain/blockStore.ts`) is the one contract an editor programs against — insert,
+remove, move, setText, setAttrs, replaceAll — satisfied by a plain array
+(`createLocalBlockStore`, the offline fallback) and by a `Y.Array<Y.Map>`
+(`infrastructure/crdtBlockStore.ts`, one shared map per block, a `Y.Text` inside
+it for the block's own text) tested through the identical suite so neither
+implementation can drift from the other's behaviour. Two people editing different
+blocks now merge without either observing a change; awareness carries a
+`blockId`, so presence is attributed to a block rather than to "the document",
+which `components/knowledge/BlockEditor.tsx` renders as a coloured rail + name
+chip on the block someone is in — the block-level multi-cursor the gap asked for.
+
+**The asset pipeline.** Upload/read/type-and-size policy moved out of the Brain
+router into `api/src/application/assets/tenantAssetStore.ts`
+(`storeTenantAsset`/`readTenantAsset`/`readAssetByKey`), served at `/api/assets`
+(`presentation/routes/assetRoutes.ts`); `/api/brain/upload` and
+`/api/brain/uploads/*` are now thin delegations so published clients (VS Code,
+brain-embedded) keep working unchanged. `GET /api/assets/*` is deliberately
+PUBLIC — no bearer token — because a link embedded in a document's markdown has
+to keep working wherever that markdown renders, none of which can attach one;
+the key's own 8-hex-character random suffix is the capability, the same trust
+bar most "unlisted link" file storage uses. Upload stays authenticated,
+tenant-scoped and size/type-checked. `BlockEditor` uploads on drag-and-drop or a
+toolbar button and inserts an image/video/file block with the returned URL —
+the exact thing the roadmap called "URL-only".
+
+Landed alongside a fix the block work exposed rather than beside it:
+`knowledgeRoutes.ts`'s `resolveAccess`/`canEditAccess`/`accessFor` moved to
+`application/knowledge/documentAccess.ts` so the new collab room could reuse the
+SAME edit-rights rule the REST routes enforce — a socket admitted to a co-editing
+room on a weaker check than the PATCH it replaces would have made the access
+check exist only on paper.
+
 ## ✅ RESOLVED 2026-08-23 — The ad-set and ad levels finally reach the canvas
 
 `CanvasAdsPanel` edited campaigns only: a caller with a budget and an objective could
@@ -25229,3 +25344,63 @@ no content to preserve.**
 kind-settings completeness, i18n catalog, Miro import, creation-session, shell-routing and bounded-context suites
 pass. Every new string is in all five catalogs with real translations.
 
+## ✅ RESOLVED 2026-08-23 — One compiler left: the second canvas→workflow compiler is deleted, and two bugs it was hiding are fixed
+
+**Was:** Two compilers lowered a canvas into a workflow. The board compiled itself
+(`compileBoardFlow.ts`); a legacy `workflow` CARD also compiled its own authored `steps` list
+server-side through `POST /api/workflow-definitions/from-canvas` → `api/src/domain/canvasWorkflowSpec.ts`.
+The card's only editor — the modal workflow builder — had already been deleted in the "canvas is the
+workflow" migration, so a `workflow` card placed today minted an object nobody could subsequently author.
+
+**Now:** One compiler. `workflow` is a LEGACY, resolvable-but-not-creatable kind
+(`creationObjectRegistry.ts`'s new `legacy` flag, filtered out of `availableCreationObjects` and
+`CREATION_PALETTE_GROUPS`, kept in `CREATION_OBJECT_REGISTRY`/`byKind` so saved boards still render, name
+and inspect it). Its only actions are `edit`/`run` — no `build`. Opening one
+(`unpackWorkflow` in `CreationCanvas.tsx`) now handles BOTH sources through one placement helper: a saved
+definition via `boardFlowFromDefinition`, or a never-built authored list via the new
+`frontend/src/domains/workflow/domain/flowStepsFromCanvasSteps.ts` (ported the old server compiler's
+`inferKind`/`configForKind` into the canvas vocabulary; unlike the old compiler it never refuses — an
+underspecified step becomes an agent step with an empty task, which `compileBoardFlow` already flags as
+`agentNeedsTask` at build time). Either way the card is replaced by a frame + one `flowStep` per step.
+`compileWorkflow` no longer has a legacy branch at all: a frame is built, a legacy card gets
+`flowStep.openToBuild` ("open it first").
+
+- **Bug found and fixed in the same pass: `unpackWorkflow` dropped the card's `runTarget`/`approvalMode`
+  onto the floor.** A card reading "Approval required" unpacked into a frame with no gate, which would have
+  compiled to a definition that ran unapproved — the exact failure migration 1092 exists to prevent. Both
+  fields now travel onto the frame's `data` in the placement helper, matching what the card itself declared.
+- **Bug found and fixed in the same pass: `flowStep` was the only registered kind with no `content`
+  field**, failing the whole-registry invariant (`creationObjectRegistry.test.ts`: every kind accepts
+  authored `content`) that every OTHER kind already satisfied. Added `content` to
+  `MUTABLE_FIELDS.flowStep` — harmless and consistent with how every other kind uses it (a free-text note,
+  read generically off `data.content`/`data.markdown` wherever a preview is shown).
+- **Server side:** `api/src/domain/canvasWorkflowSpec.ts` + its test deleted outright. `POST /from-canvas`
+  and its now-unused imports (`compileCanvasWorkflowSteps`, `connectorActionIndex`, `connectorActionCatalog`)
+  deleted from `workflowDefinitionRoutes.ts`. `workflowDefinitions.fromCanvas` deleted from
+  `frontend/src/lib/builderforceApi.ts`. `labeledEdges.test.ts`'s canvas-list cases (which exercised the
+  deleted compiler) rewritten to build definitions directly and assert the EXECUTOR behaviour
+  (`outletTaken`/`prunedByEdgeLabel`) that was actually under test, including the unlabeled-graph
+  compatibility invariant.
+- **`workflowIssues`** (a compile-issue list only the deleted card-compile path ever wrote) removed from
+  `CreationNode.tsx`'s render, `creationCanvasDiagnostics.ts`'s read, and its now-dead CSS.
+- **Every producer of a NEW `workflow` card is gone.** `creationTemplates.ts`'s `campaign` and
+  `social-growth-campaign` templates still declare `kind: 'workflow'` entries (with real authored
+  connector/trigger steps) as DATA — rewriting them by hand would have duplicated the lowering a second
+  time. Instead a new `expandTemplateWorkflows.ts` expands any `workflow` template object through
+  `flowStepsFromCanvasSteps` at PLACEMENT time (in `applyTemplate`), replacing it with a frame at the same
+  array index (so existing index-based `connections` keep pointing at the right thing) plus appended
+  `flowStep` entries and their chain connections. `CreationTemplate`'s object shape gained an optional
+  `size` field so a template can size a frame it places. The two seed/demo boards in `CreationCanvas.tsx`
+  (`INITIAL_NODES`'s "Fall campaign workflow", the "Delivery workflow" related-node expander) and the
+  Evermind guided-pipeline's two display-only pipeline stages ("Tokenize examples", "Distil & tune" —
+  their `detail.steps` were cosmetic status lines, never compiler input) are now a frame + `flowStep`
+  children each, sized so the children's centres stay inside the frame and neighbouring seeded nodes are
+  not swallowed by frame containment (geometric: "is the centre inside the rect").
+- **`canvasKindSettings.simple.ts`**'s `workflow` kind actions drop `build`, keeping `openOnCanvas`/`run`.
+- Memory `canvas-is-the-workflow.md` updated: the second compiler is gone, `workflow` is documented as the
+  legacy read-only-and-openable kind, and `flowStepsFromCanvasSteps.ts` is the one door for an authored list.
+
+**Verification:** `tsgo --noEmit` clean on both `frontend` and `api` (aside from a pre-existing,
+unrelated `@/components/learning/LearningView` error from another session's in-flight work).
+`vitest run src/domains/workflow src/components/creation-canvas/creationObjectRegistry.test.ts` and
+`api`'s `src/application/workflow src/domain` pass. `npm run check` guards pass.

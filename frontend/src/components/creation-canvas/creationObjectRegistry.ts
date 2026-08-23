@@ -393,9 +393,11 @@ const BASE_MUTABLE_FIELDS = {
   // the frame when it is opened.
   workflow: ['content', 'approvalMode', 'runTarget'],
   // The step itself, its typed config, and the two declared data contracts the
-  // compiler lowers into real nodes. Brain authors all four: "add a switch on
+  // compiler lowers into real nodes. Brain authors all five: "add a switch on
   // status" is a patch, not a modal. See `flowStepObject.ts` for each shape.
-  flowStep: ['stepKind', 'stepConfig', 'stepInputs', 'stepOutputs'],
+  // `content` is the same free-text note every other kind accepts, read generically
+  // off `data.content` wherever a preview is shown (`objectPreviewText`).
+  flowStep: ['content', 'stepKind', 'stepConfig', 'stepInputs', 'stepOutputs'],
   // `abTestKey`/`variantKey` are the SPLIT half of the `experiment` binding: an
   // experiment names the test, and the page names which arm of it this page IS. Without
   // the pair, "bind experiment to `ab_tests`" would give the card a live exposure count
