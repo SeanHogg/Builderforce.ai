@@ -25,6 +25,7 @@ import { and, eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { tenantMcpExtensions } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { assertSafeUrl } from '../../infrastructure/net/ssrfGuard';
 import { encryptSecretForStorage } from '../../infrastructure/auth/MfaService';
@@ -287,7 +288,7 @@ async function rememberProtocol(
   await db
     .update(tenantMcpExtensions)
     .set({ protocol: resolved })
-    .where(eq(tenantMcpExtensions.id, row.id));
+    .where(scopedToTenant(tenantMcpExtensions, row.tenantId, eq(tenantMcpExtensions.id, row.id)));
 }
 
 /**

@@ -26,7 +26,7 @@ import { PanelTabs } from './PanelTabs';
 import { AdAccountsTab } from './ads/AdAccountsTab';
 import { AdCampaignsTab } from './ads/AdCampaignsTab';
 import { AdInsightsTab } from './ads/AdInsightsTab';
-import { useAdAccounts } from './ads/useAdAccounts';
+import { useAdAccounts } from '@/lib/ads/useAdAccounts';
 
 type Mode = 'accounts' | 'campaigns' | 'insights';
 

@@ -1,6 +1,7 @@
 import { and, eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { knowledgeDocumentCollaborators, knowledgeDocuments } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { TenantRole, hasMinRole } from '../../domain/shared/types';
 
 /**
@@ -49,14 +50,23 @@ export function canEditAccess(access: DocAccess): boolean {
 }
 
 /** The current user's collaborator role on a document, or null. */
-export async function loadCollabRole(db: Db, documentId: string, userId: string): Promise<string | null> {
+export async function loadCollabRole(
+  db: Db,
+  tenantId: number,
+  documentId: string,
+  userId: string,
+): Promise<string | null> {
   const [row] = await db
     .select({ role: knowledgeDocumentCollaborators.role })
     .from(knowledgeDocumentCollaborators)
     .where(
-      and(
-        eq(knowledgeDocumentCollaborators.documentId, documentId),
-        eq(knowledgeDocumentCollaborators.userId, userId),
+      scopedToTenant(
+        knowledgeDocumentCollaborators,
+        tenantId,
+        and(
+          eq(knowledgeDocumentCollaborators.documentId, documentId),
+          eq(knowledgeDocumentCollaborators.userId, userId),
+        ),
       ),
     );
   return row?.role ?? null;
@@ -71,11 +81,11 @@ export async function loadCollabRole(db: Db, documentId: string, userId: string)
 export async function documentAccessFor(
   db: Db,
   doc: { id: string; createdBy: string | null },
-  actor: { userId: string; role: TenantRole },
+  actor: { tenantId: number; userId: string; role: TenantRole },
 ): Promise<DocAccess> {
   if (hasMinRole(actor.role, TenantRole.MANAGER)) return 'manager';
   const isCreator = doc.createdBy === actor.userId;
-  const collabRole = isCreator ? null : await loadCollabRole(db, doc.id, actor.userId);
+  const collabRole = isCreator ? null : await loadCollabRole(db, actor.tenantId, doc.id, actor.userId);
   return resolveAccess({ role: actor.role, isCreator, collabRole });
 }
 

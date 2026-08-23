@@ -18739,7 +18739,12 @@
       "tableColumn": "Column {index}",
       "insertApply": "Insert",
       "words": "{count, plural, =0 {no words} one {# word} other {# words}}",
-      "characters": "{count, plural, =0 {no characters} one {# character} other {# characters}}"
+      "characters": "{count, plural, =0 {no characters} one {# character} other {# characters}}",
+      "fontFamily": "Font",
+      "fontFamilyPlaceholder": "Select font",
+      "fontSize": "Size",
+      "fontSizePlaceholder": "Size (pt)",
+      "textColor": "Text color"
     },
     "export": {
       "group": "Download",

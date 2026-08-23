@@ -27,7 +27,7 @@ import {
 import { NETWORK_GLYPHS } from '@/lib/networkGlyph';
 import { usePanelTask } from '@/hooks/usePanelTask';
 import { AdSetTier } from './AdSetTier';
-import { useAdAccounts } from './useAdAccounts';
+import { useAdAccounts } from '@/lib/ads/useAdAccounts';
 
 export function AdCampaignsTab() {
   const t = useTranslations('canvas.ads');

@@ -26,7 +26,7 @@ import type { AdObjective } from '@/lib/adsApi';
 import { usePanelTask } from '@/hooks/usePanelTask';
 import { AdSetCreateForm } from './AdSetCreateForm';
 import { AdSetRow } from './AdSetRow';
-import { useAdAccount } from './useAdAccounts';
+import { useAdAccount } from '@/lib/ads/useAdAccounts';
 
 export interface AdSetTierProps {
   connectionId: string;

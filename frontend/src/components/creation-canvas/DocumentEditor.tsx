@@ -238,9 +238,9 @@ export function DocumentEditor({ markdown, label, scale = 'card', onCommit }: Do
     const node = surface.current;
     if (!node) return;
     node.focus();
-    // Semantic tags, not inline styles: `<b>` round-trips to `**`, whereas a
-    // `<span style="font-weight:bold">` is a guess we would have to reverse.
-    try { document.execCommand('styleWithCSS', false, 'false'); } catch { /* not supported; tags are the default there */ }
+    try { document.execCommand('styleWithCSS', false, 'false'); } catch {
+      // not supported; tags are the default there
+    }
     document.execCommand(command, false, value);
     readMarks();
     scheduleCommit();
@@ -390,7 +390,7 @@ export function DocumentEditor({ markdown, label, scale = 'card', onCommit }: Do
           className={styles.docColorInput}
           aria-label={t('textColor')}
           title={t('textColor')}
-          defaultValue="#111827"
+          defaultValue={getComputedStyle(document.documentElement).getPropertyValue('--text-primary').trim() || '#111827'}
           onMouseDown={(event) => event.stopPropagation()}
           onChange={(event) => applyMarks({ color: event.target.value }, event.target.value)}
         />

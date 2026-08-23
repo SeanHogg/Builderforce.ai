@@ -207,6 +207,7 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
    *  the same documents and must not be able to answer this differently. */
   function accessFor(c: Context<HonoEnv>, doc: { id: string; createdBy: string | null }): Promise<DocAccess> {
     return documentAccessFor(db, doc, {
+      tenantId: c.get('tenantId') as number,
       userId: c.get('userId') as string,
       role: c.get('role') as TenantRole,
     });

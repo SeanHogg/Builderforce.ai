@@ -18739,7 +18739,12 @@
       "tableColumn": "Spalte {index}",
       "insertApply": "Einfügen",
       "words": "{count, plural, =0 {keine Wörter} one {# Wort} other {# Wörter}}",
-      "characters": "{count, plural, =0 {keine Zeichen} one {# Zeichen} other {# Zeichen}}"
+      "characters": "{count, plural, =0 {keine Zeichen} one {# Zeichen} other {# Zeichen}}",
+      "fontFamily": "Schriftart",
+      "fontFamilyPlaceholder": "Schriftart wählen",
+      "fontSize": "Größe",
+      "fontSizePlaceholder": "Größe (pt)",
+      "textColor": "Textfarbe"
     },
     "export": {
       "group": "Herunterladen",

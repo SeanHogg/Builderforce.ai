@@ -27,7 +27,7 @@ import { adSetsApi, type AdTargeting } from '@/lib/adSetsApi';
 import { AD_OBJECTIVES, type AdObjective } from '@/lib/adsApi';
 import { usePanelTask } from '@/hooks/usePanelTask';
 import { AdTargetingFields } from './AdTargetingFields';
-import { useAdAccount } from './useAdAccounts';
+import { useAdAccount } from '@/lib/ads/useAdAccounts';
 
 export interface AdSetCreateFormProps {
   connectionId: string;

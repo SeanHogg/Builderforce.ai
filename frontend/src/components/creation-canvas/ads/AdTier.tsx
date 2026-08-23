@@ -27,7 +27,7 @@ import { useTranslations } from 'next-intl';
 import styles from '../CreationCanvas.module.css';
 import { adSetsApi, type AdCreative } from '@/lib/adSetsApi';
 import { usePanelTask } from '@/hooks/usePanelTask';
-import { useAdAccount } from './useAdAccounts';
+import { useAdAccount } from '@/lib/ads/useAdAccounts';
 
 export interface AdTierProps {
   /** The ad account's connector connection — the handle every call takes. */

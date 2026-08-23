@@ -22,7 +22,7 @@ import type { AdAccount, AdNetworkOption } from '@/lib/adsApi';
 import { authFieldsFor, connectorsApi, type ConnectorAuthField } from '@/lib/connectorsApi';
 import { NETWORK_GLYPHS } from '@/lib/networkGlyph';
 import { usePanelTask } from '@/hooks/usePanelTask';
-import { invalidateAdAccounts, useAdAccounts } from './useAdAccounts';
+import { invalidateAdAccounts, useAdAccounts } from '@/lib/ads/useAdAccounts';
 
 export function AdAccountsTab() {
   const t = useTranslations('canvas.ads');

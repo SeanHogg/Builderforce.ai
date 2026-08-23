@@ -28,7 +28,7 @@ import { usePanelTask } from '@/hooks/usePanelTask';
 import { AdTargetingFields } from './AdTargetingFields';
 import { AdTargetingSummary } from './AdTargetingSummary';
 import { AdTier } from './AdTier';
-import { useAdAccount } from './useAdAccounts';
+import { useAdAccount } from '@/lib/ads/useAdAccounts';
 
 export interface AdSetRowProps {
   connectionId: string;

@@ -18739,7 +18739,12 @@
       "tableColumn": "第 {index} 列",
       "insertApply": "插入",
       "words": "{count, plural, =0 {没有字词} other {# 个字词}}",
-      "characters": "{count, plural, =0 {没有字符} other {# 个字符}}"
+      "characters": "{count, plural, =0 {没有字符} other {# 个字符}}",
+      "fontFamily": "字体",
+      "fontFamilyPlaceholder": "选择字体",
+      "fontSize": "大小",
+      "fontSizePlaceholder": "大小（磅）",
+      "textColor": "文本颜色"
     },
     "export": {
       "group": "下载",
