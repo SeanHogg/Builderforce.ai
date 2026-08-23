@@ -14,22 +14,10 @@ importers:
       hono:
         specifier: ^4.4.0
         version: 4.12.8
-      lib0:
-        specifier: ^0.2.94
-        version: 0.2.117
-      y-protocols:
-        specifier: ^1.0.6
-        version: 1.0.7(yjs@13.6.32)
-      yjs:
-        specifier: ^13.6.18
-        version: 13.6.32
     devDependencies:
       '@cloudflare/workers-types':
         specifier: ^4.20240718.0
         version: 4.20260313.1
-      '@types/ws':
-        specifier: ^8.18.1
-        version: 8.18.1
       '@typescript/native-preview':
         specifier: 7.0.0-dev.20260627.2
         version: 7.0.0-dev.20260627.2
@@ -48,9 +36,6 @@ importers:
       wrangler:
         specifier: ^4.120.1
         version: 4.120.1(@cloudflare/workers-types@4.20260313.1)
-      ws:
-        specifier: ^8.19.0
-        version: 8.21.0
 
 packages:
 
@@ -595,9 +580,6 @@ packages:
   '@types/pg@8.18.0':
     resolution: {integrity: sha512-gT+oueVQkqnj6ajGJXblFR4iavIXWsGAFCk3dP4Kki5+a9R4NMt0JARdk6s8cUKcfUoqP5dAtDSLU8xYUTFV+Q==}
 
-  '@types/ws@8.18.1':
-    resolution: {integrity: sha512-ThVF6DCVhA8kUGy+aazFQ4kXQ7E1Ty7A3ypFOe0IcJV8O/M511G99AW24irKrW56Wt44yG9+ij8FaqoBGkuBXg==}
-
   '@typescript/native-preview-darwin-arm64@7.0.0-dev.20260627.2':
     resolution: {integrity: sha512-om8UapcrjCyQ7Vsn0eb6kEB/scwo2/Np95cOyCiIIjUWObsDKL/DSpkYX3Z1cxo1L8WY48UM5edR2bzzarBxBg==}
     engines: {node: '>=16.20.0'}
@@ -736,17 +718,9 @@ packages:
     resolution: {integrity: sha512-VJCEvtrezO1IAR+kqEYnxUOoStaQPGrCmX3j4wDTNOcD1uRPFpGlwQUIW8niPuvHXaTUxeOUl5MMDGrl+tmO9A==}
     engines: {node: '>=16.9.0'}
 
-  isomorphic.js@0.2.5:
-    resolution: {integrity: sha512-PIeMbHqMt4DnUP3MA/Flc0HElYjMXArsw1qwJZcm9sqR8mq3l8NYizFMty0pWwE/tzIGH3EKK5+jes5mAr85yw==}
-
   kleur@4.1.5:
     resolution: {integrity: sha512-o+NO+8WrRiQEE4/7nwRJhN1HWpVmJm511pBHUxPLtp0BUISzlBplORYSmTclCnJvQq2tKu/sgl3xVpkc7ZWuQQ==}
     engines: {node: '>=6'}
-
-  lib0@0.2.117:
-    resolution: {integrity: sha512-DeXj9X5xDCjgKLU/7RR+/HQEVzuuEUiwldwOGsHK/sfAfELGWEyTcf0x+uOvCvK3O2zPmZePXWL85vtia6GyZw==}
-    engines: {node: '>=16'}
-    hasBin: true
 
   lightningcss-android-arm64@1.33.0:
     resolution: {integrity: sha512-gEpRTalKdosp4Bb8qWtc2iOgE5SeIHlpS1up9bFq2wAyYhl1UdTObYiHe98zEM9SQvSoqQZ1IQD0JNpg3Ml5pg==}
@@ -1077,16 +1051,6 @@ packages:
   xtend@4.0.2:
     resolution: {integrity: sha512-LKYU1iAXJXUgAXn9URjiu+MWhyUXHsvfp7mcuYm9dSUKK0/CjtrUwFAxD82/mCWbtLsGjFIad0wIsod4zrTAEQ==}
     engines: {node: '>=0.4'}
-
-  y-protocols@1.0.7:
-    resolution: {integrity: sha512-YSVsLoXxO67J6eE/nV4AtFtT3QEotZf5sK5BHxFBXso7VDUT3Tx07IfA6hsu5Q5OmBdMkQVmFZ9QOA7fikWvnw==}
-    engines: {node: '>=16.0.0', npm: '>=8.0.0'}
-    peerDependencies:
-      yjs: ^13.0.0
-
-  yjs@13.6.32:
-    resolution: {integrity: sha512-lfiJIIC4Xayt5ItynE407ehlE03pCjeOc4hkR4yxxvvNJ4kuiN25B0g+Qp8XagYz361LLL7DCzR5bvFJ81QKtQ==}
-    engines: {node: '>=16.0.0', npm: '>=8.0.0'}
 
   youch-core@0.3.3:
     resolution: {integrity: sha512-ho7XuGjLaJ2hWHoK8yFnsUGy2Y5uDpqSTq1FkHLK4/oqKtyUU1AFbOOxY4IpC9f0fTLjwYbslUz0Po5BpD1wrA==}
@@ -1443,16 +1407,13 @@ snapshots:
   '@types/node@26.0.1':
     dependencies:
       undici-types: 8.3.0
+    optional: true
 
   '@types/pg@8.18.0':
     dependencies:
       '@types/node': 22.20.0
       pg-protocol: 1.13.0
       pg-types: 2.2.0
-
-  '@types/ws@8.18.1':
-    dependencies:
-      '@types/node': 26.0.1
 
   '@typescript/native-preview-darwin-arm64@7.0.0-dev.20260627.2':
     optional: true
@@ -1588,13 +1549,7 @@ snapshots:
 
   hono@4.12.8: {}
 
-  isomorphic.js@0.2.5: {}
-
   kleur@4.1.5: {}
-
-  lib0@0.2.117:
-    dependencies:
-      isomorphic.js: 0.2.5
 
   lightningcss-android-arm64@1.33.0:
     optional: true
@@ -1792,7 +1747,8 @@ snapshots:
 
   undici-types@6.21.0: {}
 
-  undici-types@8.3.0: {}
+  undici-types@8.3.0:
+    optional: true
 
   undici@7.29.0: {}
 
@@ -1873,15 +1829,6 @@ snapshots:
   ws@8.21.0: {}
 
   xtend@4.0.2: {}
-
-  y-protocols@1.0.7(yjs@13.6.32):
-    dependencies:
-      lib0: 0.2.117
-      yjs: 13.6.32
-
-  yjs@13.6.32:
-    dependencies:
-      lib0: 0.2.117
 
   youch-core@0.3.3:
     dependencies:

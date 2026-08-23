@@ -1,83 +1,63 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useState } from 'react';
+import { useCameraCapture } from '@/lib/useCameraCapture';
+import { useDisplayCapture } from '@/lib/useDisplayCapture';
+import { recordedClipToFile, useStreamRecorder } from '@/lib/useStreamRecorder';
+import type { CaptureErrorKind } from '@/lib/mediaCapture';
 
 export type CanvasCaptureMode = 'screen' | 'camera';
 
-function preferredRecorderMime(): string {
-  return ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4']
-    .find((mime) => MediaRecorder.isTypeSupported?.(mime)) ?? 'video/webm';
-}
-
+/**
+ * "Record a clip straight onto this card" — the capture behind `CanvasVideoEditor`.
+ *
+ * It used to call `getDisplayMedia`/`getUserMedia` and drive a `MediaRecorder`
+ * itself, which made it a fourth acquisition and a third encoder in a codebase
+ * whose media layer says, at the top of `mediaCapture.ts`, that there is one of
+ * each. It is now the composition it should always have been: `useDisplayCapture`
+ * or `useCameraCapture` gets the stream, `useStreamRecorder` turns it into bytes,
+ * and this owns only the one thing neither of them can know — which of the two
+ * modes the person picked, which is what names the file.
+ *
+ * Its public shape is unchanged, so the editor did not have to be touched.
+ */
 export function useCanvasMediaCapture() {
   const [mode, setMode] = useState<CanvasCaptureMode | null>(null);
-  const [durationMs, setDurationMs] = useState(0);
-  const [error, setError] = useState<string | null>(null);
-  const stream = useRef<MediaStream | null>(null);
-  const recorder = useRef<MediaRecorder | null>(null);
-  const chunks = useRef<Blob[]>([]);
-  const startedAt = useRef(0);
-  const timer = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const cleanup = useCallback(() => {
-    stream.current?.getTracks().forEach((track) => track.stop());
-    stream.current = null;
-    recorder.current = null;
-    chunks.current = [];
-    if (timer.current) clearInterval(timer.current);
-    timer.current = null;
-  }, []);
-
-  useEffect(() => cleanup, [cleanup]);
+  const display = useDisplayCapture();
+  const camera = useCameraCapture();
+  const recorder = useStreamRecorder();
 
   const start = useCallback(async (nextMode: CanvasCaptureMode) => {
-    setError(null);
-    if (typeof MediaRecorder === 'undefined' || !navigator.mediaDevices) {
-      setError('unsupported');
-      return;
-    }
-    try {
-      const nextStream = nextMode === 'screen'
-        ? await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 30 }, audio: true })
-        : await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-      const nextRecorder = new MediaRecorder(nextStream, { mimeType: preferredRecorderMime() });
-      chunks.current = [];
-      nextRecorder.ondataavailable = (event) => { if (event.data.size) chunks.current.push(event.data); };
-      nextRecorder.start(500);
-      stream.current = nextStream;
-      recorder.current = nextRecorder;
-      startedAt.current = performance.now();
-      setMode(nextMode);
-      setDurationMs(0);
-      timer.current = setInterval(() => setDurationMs(performance.now() - startedAt.current), 250);
-    } catch (cause) {
-      setError(cause instanceof Error && cause.name !== 'NotAllowedError' ? cause.message : 'cancelled');
-      cleanup();
-    }
-  }, [cleanup]);
+    const stream = nextMode === 'screen'
+      ? await display.start({ audio: true, frameRate: 30 })
+      : await camera.start({ video: true, audio: true });
+    // Null is a declined permission or a cancelled picker — the hooks have already
+    // recorded which, and a cancel is not an error to report.
+    if (!stream) return;
+    if (recorder.start(stream)) setMode(nextMode);
+    else if (nextMode === 'screen') display.stop(); else camera.stop();
+  }, [camera, display, recorder]);
 
   const stop = useCallback(async (): Promise<File | null> => {
-    const active = recorder.current;
-    if (!active) return null;
-    if (active.state !== 'inactive') await new Promise<void>((resolve) => {
-      active.addEventListener('stop', () => resolve(), { once: true });
-      active.stop();
-    });
-    const mime = active.mimeType || 'video/webm';
-    const blob = new Blob(chunks.current, { type: mime });
-    const capturedMode = mode ?? 'screen';
-    cleanup();
+    const captured = mode ?? 'screen';
+    const clip = await recorder.stop();
+    display.stop();
+    camera.stop();
     setMode(null);
-    return blob.size ? new File([blob], `${capturedMode}-${Date.now()}.${mime.includes('mp4') ? 'mp4' : 'webm'}`, { type: mime }) : null;
-  }, [cleanup, mode]);
+    // `Date.now()` rather than a counter: two clips recorded from the same card
+    // must not collide on a storage key, and the second is what tells them apart.
+    return clip ? recordedClipToFile(clip, `${captured}-${Date.now()}`) : null;
+  }, [camera, display, mode, recorder]);
+
+  const error: CaptureErrorKind | null = display.error ?? camera.error
+    ?? (recorder.error === 'unsupported' ? 'unsupported' : recorder.error === 'failed' ? 'failed' : null);
 
   return {
-    isSupported: typeof MediaRecorder !== 'undefined' && typeof navigator !== 'undefined' && !!navigator.mediaDevices,
+    isSupported: recorder.supported && (display.supported || camera.supported),
     mode,
-    durationMs,
+    durationMs: recorder.elapsedMs,
     error,
     start,
     stop,
   };
 }
-

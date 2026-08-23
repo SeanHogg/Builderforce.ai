@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AUTH_API_URL, getStoredTenantToken } from './auth';
+import { getStoredTenantToken } from './auth';
+import { apiSocketUrl } from './apiSocket';
 import { meetingsApi } from './builderforceApi';
 import { acquireUserMedia, stopStream } from './mediaCapture';
 
@@ -80,7 +81,7 @@ export interface MediaRoomTransport {
 const meetingsTransport: MediaRoomTransport = {
   getToken: getStoredTenantToken,
   signalingUrl: (roomKey, token) =>
-    `${AUTH_API_URL.replace(/^http/, 'ws')}/api/meetings/rooms/${encodeURIComponent(roomKey)}/ws?token=${encodeURIComponent(token)}`,
+    apiSocketUrl(`/api/meetings/rooms/${encodeURIComponent(roomKey)}/ws`, { token }),
   ice: (mode) => meetingsApi.ice(mode),
 };
 

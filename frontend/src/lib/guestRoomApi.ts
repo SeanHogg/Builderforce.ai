@@ -18,7 +18,7 @@
  */
 
 import { apiRequestStream } from './apiClient';
-import { AUTH_API_URL } from './auth';
+import { apiSocketUrl } from './apiSocket';
 import { getVisitorId, getExistingVisitorId, getFirstTouch } from './visitor';
 import { storeGuestToken, clearGuestToken, getStoredGuestToken, mintGuestSession } from './guestChatApi';
 import type { MediaRoomTransport } from './useMediaRoom';
@@ -349,8 +349,7 @@ export async function claimGuestRoomIntoAccount(): Promise<number | null> {
  * frames.
  */
 export function guestRoomSocketUrl(code: string, channel: 'chat' | 'media', token: string): string {
-  const base = AUTH_API_URL.replace(/^http/, 'ws');
-  return `${base}/api/guest/rooms/${encodeURIComponent(code)}/ws?channel=${channel}&token=${encodeURIComponent(token)}`;
+  return apiSocketUrl(`/api/guest/rooms/${encodeURIComponent(code)}/ws`, { channel, token });
 }
 
 /**

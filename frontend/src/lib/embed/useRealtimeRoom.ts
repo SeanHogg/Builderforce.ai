@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect } from 'react';
-import { AUTH_API_URL, getStoredTenantToken, getStoredWebToken } from '../auth';
+import { getStoredTenantToken, getStoredWebToken } from '../auth';
+import { apiSocketUrl } from '../apiSocket';
 
 /**
  * Subscribe to a collaborative session room over WebSocket. The server pushes a
@@ -31,8 +32,7 @@ export function useRealtimeRoom(
     const token = auth === 'web' ? getStoredWebToken() : getStoredTenantToken();
     if (!token) return;
 
-    const base = AUTH_API_URL.replace(/^http/, 'ws');
-    const url = `${base}${wsPath}?token=${encodeURIComponent(token)}`;
+    const url = apiSocketUrl(wsPath, { token });
 
     let closed = false;
     let ws: WebSocket | null = null;

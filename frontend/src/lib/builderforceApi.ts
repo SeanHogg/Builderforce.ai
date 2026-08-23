@@ -6,6 +6,7 @@
 
 import { attachEvermindLearn, subscribeToChatMessages } from '@seanhogg/builderforce-brain-embedded';
 import { AUTH_API_URL, getStoredTenantToken } from './auth';
+import { apiSocketUrl } from './apiSocket';
 import { downloadBlob, filenameFromResponse } from './download';
 import { planLimitErrorFromResponse } from './planLimitError';
 import { apiRequest, apiRequestStream, apiRequestText, type RequestOptions } from './apiClient';
@@ -801,11 +802,8 @@ export const agentHosts = {
     request<void>(`/api/agent-hosts/${agentHostId}`, { method: 'DELETE' }),
 
   /** WebSocket URL for agentHost relay (gateway). Pass tenant token via ?token=. */
-  wsUrl: (agentHostId: number): string => {
-    const base = (AUTH_API_URL || '').replace(/^http/, 'ws');
-    const token = getStoredTenantToken();
-    return `${base}/api/agent-hosts/${agentHostId}/ws?token=${encodeURIComponent(token || '')}`;
-  },
+  wsUrl: (agentHostId: number): string =>
+    apiSocketUrl(`/api/agent-hosts/${agentHostId}/ws`, { token: getStoredTenantToken() }),
 
   /** Tool audit events for timeline/observability. Pass executionId to scope to a
    *  single run (parity with cloudAgents.toolAuditEvents) so a host run's Logs/Timeline
@@ -3245,8 +3243,7 @@ export const runtimeApi = {
   streamUrl: (id: number): string | null => {
     const token = getStoredTenantToken();
     if (!token) return null;
-    const base = AUTH_API_URL.replace(/^http/, 'ws');
-    return `${base}/api/runtime/executions/${id}/stream?token=${encodeURIComponent(token)}`;
+    return apiSocketUrl(`/api/runtime/executions/${id}/stream`, { token });
   },
 };
 
@@ -8114,6 +8111,28 @@ export interface Swimlane {
   updatedAt?: string;
 }
 
+/** What a lane RENAME moved besides the lane itself — see {@link SwimlanePatched}. */
+export interface LaneRenameResult {
+  key: string;
+  /** Tickets whose status was carried onto the new key. */
+  movedTasks: number;
+  /** Sibling lanes whose "move ticket to …" action was re-pointed. */
+  movedLaneActions: number;
+  /** The board's needs-attention lane pointed at the old key. */
+  movedNeedsAttention: boolean;
+  /** The project's QA routing target pointed at the old key. */
+  movedQaRouting: boolean;
+}
+
+/**
+ * A patched lane, plus the cascade report when the PATCH RENAMED its key.
+ *
+ * A rename moves other people's data — every resident ticket's status, and the
+ * board's other lane-key pointers — so the editor can tell the operator what
+ * happened instead of leaving them to guess. Absent on every other patch.
+ */
+export type SwimlanePatched = Swimlane & { renamed?: LaneRenameResult };
+
 /** A live per-lane requirement (role sign-off / diagnostic / review) the audit + gating engines enforce. */
 export interface SwimlaneRequirement {
   id: string;
@@ -8215,7 +8234,7 @@ export const boardsApi = {
       request<{ swimlanes: Swimlane[] }>(`/api/boards/${boardId}/swimlanes/ensure-defaults`, { method: 'POST' }).then((r) => r.swimlanes ?? []),
     create: (boardId: string, body: Partial<LaneWriteBody> & { key: string; name: string }): Promise<Swimlane> =>
       request(`/api/boards/${boardId}/swimlanes`, { method: 'POST', body: JSON.stringify(body) }),
-    patch: (boardId: string, laneId: string, body: Partial<LaneWriteBody>): Promise<Swimlane> =>
+    patch: (boardId: string, laneId: string, body: Partial<LaneWriteBody>): Promise<SwimlanePatched> =>
       request(`/api/boards/${boardId}/swimlanes/${laneId}`, { method: 'PATCH', body: JSON.stringify(body) }),
     /**
      * Delete a lane — which is a MERGE. `into` names the lane its tickets move to;
@@ -8225,6 +8244,21 @@ export const boardsApi = {
      */
     remove: (boardId: string, laneId: string, into?: string | null): Promise<{ ok: boolean; reassignedTasks: number; reassignedTo: string | null }> =>
       request(`/api/boards/${boardId}/swimlanes/${laneId}${into ? `?into=${encodeURIComponent(into)}` : ''}`, { method: 'DELETE' }),
+  },
+
+  /**
+   * Tickets in NO column — `tasks.swimlane_id IS NULL` (migration 1115).
+   *
+   * The board appends a fallback column so none is hidden, but a fallback column is
+   * not a lane: no gate, no staffed agent and no requirement applies to a ticket
+   * whose status no lane defines, so it can never auto-run and never advance.
+   * `adopt` re-homes them onto a column the operator names.
+   */
+  orphanedTasks: {
+    count: (boardId: string): Promise<number> =>
+      request<{ count: number }>(`/api/boards/${boardId}/orphaned-tasks`).then((r) => r.count ?? 0),
+    adopt: (boardId: string, into: string): Promise<{ ok: boolean; movedTo: string | null; movedCount: number }> =>
+      request(`/api/boards/${boardId}/orphaned-tasks/adopt`, { method: 'POST', body: JSON.stringify({ into }) }),
   },
 
   agents: {
@@ -8266,6 +8300,13 @@ export const boardsApi = {
 /** Mutable swimlane fields shared by the create + patch requests. */
 interface LaneWriteBody {
   name: string;
+  /**
+   * The lane's KEY — the status its tickets hold, not the label a person reads.
+   * PATCHing it RENAMES the column: the server moves every resident ticket and
+   * re-points the board's other lane-key references in the same operation
+   * (`renameLaneKey`). Sent raw; the server normalises and rejects a collision.
+   */
+  key: string;
   position: number;
   isTerminal: boolean;
   /** PARKED — off the delivery path (migration 1080). See {@link Swimlane.isParking}. */
@@ -9222,8 +9263,7 @@ export const creationSessionsApi = {
   liveUrl: (id: string): string | null => {
     const token = getStoredTenantToken();
     if (!token) return null;
-    const base = AUTH_API_URL.replace(/^http/, 'ws');
-    return `${base}/api/creation-sessions/${encodeURIComponent(id)}/ws?token=${encodeURIComponent(token)}`;
+    return apiSocketUrl(`/api/creation-sessions/${encodeURIComponent(id)}/ws`, { token });
   },
   pin: (id: string, pinned: boolean) => request<{ pinned: boolean }>(`/api/creation-sessions/${encodeURIComponent(id)}/pin`, { method: 'POST', body: JSON.stringify({ pinned }) }),
   duplicate: (id: string) => request<{ session: { id: string; title: string; revision: number } }>(`/api/creation-sessions/${encodeURIComponent(id)}/duplicate`, { method: 'POST', body: '{}' }),

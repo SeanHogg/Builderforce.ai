@@ -4,16 +4,12 @@ import filesRouter from './routes/files';
 import datasetsRouter from './routes/datasets';
 import trainingRouter from './routes/training';
 import agentsRouter from './routes/agents';
-import { CollaborationRoom } from './durable-objects/CollaborationRoom';
-
-export { CollaborationRoom };
 
 interface Env {
   NEON_DATABASE_URL: string;
   STORAGE: R2Bucket;
   /** Gateway base URL for worker -> api.builderforce.ai /llm calls. */
   BUILDERFORCE_API_BASE_URL?: string;
-  COLLABORATION_ROOM: DurableObjectNamespace;
   /** SECURITY (H9): shared HS256 session-token secret — MUST equal the api's
    *  JWT_SECRET. Set via `wrangler secret put JWT_SECRET` in worker/. The data
    *  routes fail closed (503) without it. See lib/auth.ts. */
@@ -56,19 +52,13 @@ app.route('/api/datasets', datasetsRouter);
 app.route('/api/training', trainingRouter);
 app.route('/api/agents', agentsRouter);
 
-app.get('/api/collab/:sessionId/ws', async (c) => {
-  const sessionId = c.req.param('sessionId');
-  const id = c.env.COLLABORATION_ROOM.idFromName(sessionId);
-  const room = c.env.COLLABORATION_ROOM.get(id);
-  return room.fetch(c.req.raw);
-});
-
-app.get('/api/collab/:sessionId', async (c) => {
-  const sessionId = c.req.param('sessionId');
-  const id = c.env.COLLABORATION_ROOM.idFromName(sessionId);
-  const room = c.env.COLLABORATION_ROOM.get(id);
-  return room.fetch(c.req.raw);
-});
+// NOTE: real-time co-editing does NOT live here. `CollaborationRoom` used to be a
+// Durable Object in this script with two UNAUTHENTICATED routes — any caller could
+// name any room and read or write the document inside it — and this script has never
+// been deployed, so the feature could not exist either. It is now `CollaborationRoomDO`
+// in the api Worker, behind authMiddleware plus a per-scope authorization registry
+// (api/src/application/collab/collabScopes.ts), and it ships with the ordinary api
+// release. Do not reintroduce a second room here.
 
 app.get('/', (c) => c.json({ name: 'Builderforce Worker', version: '0.1.0' }));
 

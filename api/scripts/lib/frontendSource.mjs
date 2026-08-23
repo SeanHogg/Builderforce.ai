@@ -89,8 +89,8 @@ export function readFrontendSource(relPath, contract) {
 
   const moved = findByBasename(resolve(repoRoot, 'frontend', 'src'), basename(relPath));
   const where = moved.length
-    ? `It looks like it moved to:\n${moved.map((p) => `  • ${p}`).join('\n')}`
-    : `No file named \`${basename(relPath)}\` remains under frontend/src.`;
+    ? `Candidates under frontend/src:\n${moved.slice(0, 10).map((p) => `  • ${p}`).join('\n')}`
+    : `Nothing under frontend/src resembles \`${basename(relPath)}\` any more.`;
   throw new Error(
     `${contract}: \`${relPath}\` no longer exists, so this cross-package contract is ` +
     `checking nothing. Re-point it — do not delete it.\n${where}`,

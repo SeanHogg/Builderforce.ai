@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { normalizeLaneKey, validateLaneKeyChange, LANE_KEY_MAX_LENGTH } from './renameLaneKey';
+import { normalizeLaneKey, uniqueLaneKey, validateLaneKeyChange, LANE_KEY_MAX_LENGTH } from './laneKey';
 
 describe('normalizeLaneKey', () => {
   it('folds a human column name into a lane key', () => {
@@ -71,5 +71,27 @@ describe('validateLaneKeyChange', () => {
     // own key in anyway the current-key check has to win first.
     expect(validateLaneKeyChange({ requested: 'qa', currentKey: 'qa', siblingKeys: ['qa', ...siblings] }))
       .toEqual({ ok: true, key: 'qa', changed: false });
+  });
+});
+
+describe('uniqueLaneKey', () => {
+  it('derives a key from the column name', () => {
+    expect(uniqueLaneKey('QA Pass', [])).toBe('qa_pass');
+  });
+
+  it('suffixes until the board has no such key', () => {
+    expect(uniqueLaneKey('Review', ['review'])).toBe('review_2');
+    expect(uniqueLaneKey('Review', ['review', 'review_2'])).toBe('review_3');
+  });
+
+  it('falls back rather than minting an empty key', () => {
+    expect(uniqueLaneKey('***', [])).toBe('lane');
+  });
+
+  it('keeps a suffixed key inside the column width', () => {
+    const base = 'a'.repeat(LANE_KEY_MAX_LENGTH);
+    const key = uniqueLaneKey(base, [base]);
+    expect(key.length).toBeLessThanOrEqual(LANE_KEY_MAX_LENGTH);
+    expect(key).not.toBe(base);
   });
 });

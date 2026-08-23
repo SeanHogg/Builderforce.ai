@@ -64,7 +64,7 @@ import {
   countOrphanedTasks,
   reassignOrphanedTasksOnLaneDelete,
 } from '../../application/swimlane/reassignOrphanedTasks';
-import { renameLaneKey, validateLaneKeyChange } from '../../application/swimlane/renameLaneKey';
+import { renameLaneKey, uniqueLaneKey, validateLaneKeyChange } from '../../application/swimlane/laneKey';
 import type { AgentHostRelayNamespace } from '../../application/swimlane/agentHostStageDispatcher';
 import type { WorkflowStatus } from '../../application/swimlane/transitions';
 import type { Env, HonoEnv } from '../../env';
@@ -347,9 +347,22 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
     const boardId = c.req.param('boardId');
     if (!(await assertBoard(tenantId, boardId))) return c.json({ error: 'Board not found' }, 404);
 
-    const body = await c.req.json<LaneWriteBody & { key: string; name: string }>();
-    if (!body.key?.trim()) return c.json({ error: 'key is required' }, 400);
+    const body = await c.req.json<LaneWriteBody & { name: string }>();
     if (!body.name?.trim()) return c.json({ error: 'name is required' }, 400);
+
+    // The key is DERIVED from the name unless the caller names one. It used to be
+    // derived in the lane editor instead, from whatever lane list the browser was
+    // holding — a uniqueness check against a stale snapshot, which two people adding
+    // a column at once turn into a UNIQUE(board_id, key) 500. Here the check and the
+    // insert see the same rows.
+    const boardLaneKeys = await db
+      .select({ key: swimlanes.key })
+      .from(swimlanes)
+      .where(and(eq(swimlanes.boardId, boardId), eq(swimlanes.tenantId, tenantId)))
+      .then((rows) => rows.map((r) => r.key));
+    const key = body.key?.trim()
+      ? uniqueLaneKey(body.key, boardLaneKeys)
+      : uniqueLaneKey(body.name, boardLaneKeys);
 
     const now = new Date();
     // APPEND when no position is given, rather than defaulting to 0. `?? 0` stacked every
@@ -368,7 +381,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
         tenantId,
         segmentId: c.get('segmentId') ?? null,
         boardId,
-        key: body.key.trim(),
+        key,
         name: body.name.trim(),
         position: nextPosition,
         isTerminal: body.isTerminal ?? false,

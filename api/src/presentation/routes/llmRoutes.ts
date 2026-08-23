@@ -70,7 +70,8 @@ import {
 } from '../../application/insights/builderInsights';
 import { originAllowed, deserializeScopes } from '../../application/llm/tenantApiKeyService';
 import { coerceStringArrayOrNull } from '../../domain/shared/jsonColumn';
-import { callGatewayMcpTool, listGatewayMcpTools } from '../../application/llm/mcpGateway';
+import { callGatewayMcpTool, listGatewayMcpTools, UnknownToolSurfaceError } from '../../application/llm/mcpGateway';
+import { DEFAULT_TOOL_SURFACE, describeToolSurfaces } from '../../application/llm/toolSurfaces';
 import {
   isCloudAgentExecutionRequest,
   classifyCloudByoAnthropic,
@@ -2087,13 +2088,40 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     const db = buildDatabase(c.env);
     // THREE sources, one list — built by the shared gateway module so this REST
     // transport and the spec JSON-RPC transport (`POST /mcp`) can never drift.
-    const tools = await listGatewayMcpTools({
-      db,
-      env: c.env as Env,
-      tenantId: access.tenantId,
-      keyMaterial: c.env.JWT_SECRET,
-    });
-    return c.json({ tools });
+    // `?surface=` narrows the catalog (see application/llm/toolSurfaces); absent
+    // = the whole thing, which is what every existing client already receives.
+    try {
+      const tools = await listGatewayMcpTools({
+        db,
+        env: c.env as Env,
+        tenantId: access.tenantId,
+        keyMaterial: c.env.JWT_SECRET,
+        surface: c.req.query('surface') ?? null,
+      });
+      return c.json({ tools, surface: c.req.query('surface')?.trim() || DEFAULT_TOOL_SURFACE });
+    } catch (e) {
+      if (e instanceof UnknownToolSurfaceError) {
+        return c.json(
+          { error: e.message, code: 'unknown_tool_surface', surfaces: describeToolSurfaces() },
+          400,
+        );
+      }
+      throw e;
+    }
+  });
+
+  // -----------------------------------------------------------------------
+  // GET /v1/mcp/surfaces — the named catalog subsets `?surface=` accepts
+  // -----------------------------------------------------------------------
+  // Static registry data, so it needs neither the tenant's tools nor a DB hit —
+  // only proof that the caller is a real tenant.
+  router.get('/v1/mcp/surfaces', async (c) => {
+    try {
+      await requireTenantAccess(c);
+    } catch (err) {
+      return respondToAccessError(c, err);
+    }
+    return c.json({ surfaces: describeToolSurfaces() });
   });
 
   // -----------------------------------------------------------------------

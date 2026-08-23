@@ -16,7 +16,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { AUTH_API_URL } from './auth';
+import { apiSocketUrl } from './apiSocket';
 import { apiRequestStream } from './apiClient';
 import { getVisitorId } from './visitor';
 
@@ -101,7 +101,7 @@ export async function reportBroadcastEvent(id: number, kind: BroadcastEventKind)
 /** The relay URL for the shared broadcast room. No token: the frame carries no
  *  data, which is exactly why one public room can serve every visitor. */
 function broadcastSocketUrl(): string {
-  return `${AUTH_API_URL.replace(/^http/, 'ws')}/api/guest/messages/ws`;
+  return apiSocketUrl('/api/guest/messages/ws');
 }
 
 export interface PlatformBroadcastsState {

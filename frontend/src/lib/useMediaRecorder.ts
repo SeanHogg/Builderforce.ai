@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { saveBinaryFile } from './api';
+import { recordedClipExtension, useStreamRecorder } from './useStreamRecorder';
 
 export interface SavedMediaRecording {
   projectId: number;
@@ -10,55 +11,55 @@ export interface SavedMediaRecording {
   size: number;
 }
 
-/** A sink for an already-acquired camera or display stream. Owns no device. */
+/**
+ * A sink for an already-acquired camera or display stream, written into the
+ * project's own workspace. Owns no device and no encoder.
+ *
+ * The encoder moved to `useStreamRecorder` — this is now only the half that is
+ * actually about a project: where the file lands, and telling the caller once it
+ * has. It kept its own `saving` and `error` because a WRITE can fail long after a
+ * recording succeeded, and the live session distinguishes the two in its UI.
+ */
 export function useMediaRecorderSink(
   stream: MediaStream | null,
   projectId: number | null,
   onSaved?: (recording: SavedMediaRecording) => void,
 ) {
-  const [recording, setRecording] = useState(false);
+  // Destructured rather than held as one object: `elapsedMs` ticks four times a
+  // second, so depending on the recorder itself would give this hook's `start` and
+  // `stop` a new identity four times a second and re-run every effect holding them.
+  const { supported, recording, error: recorderError, start: startRecording, stop: stopRecording } = useStreamRecorder();
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const recorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
+  const [error, setError] = useState<'recording_failed' | 'save_failed' | null>(null);
   const savedRef = useRef(onSaved);
   useEffect(() => { savedRef.current = onSaved; }, [onSaved]);
 
-  const stop = useCallback(() => {
-    const recorder = recorderRef.current;
-    if (recorder && recorder.state !== 'inactive') recorder.stop();
-  }, []);
-
   const start = useCallback(() => {
-    if (!stream || projectId == null || typeof MediaRecorder === 'undefined' || recorderRef.current) return;
+    if (!stream || projectId == null) return;
     setError(null);
-    chunksRef.current = [];
-    const candidates = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
-    const mimeType = candidates.find((candidate) => MediaRecorder.isTypeSupported(candidate));
-    const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
-    recorderRef.current = recorder;
-    recorder.ondataavailable = (event) => { if (event.data.size > 0) chunksRef.current.push(event.data); };
-    recorder.onerror = () => { setError('recording_failed'); setRecording(false); recorderRef.current = null; };
-    recorder.onstop = () => {
-      const blob = new Blob(chunksRef.current, { type: recorder.mimeType || 'video/webm' });
-      chunksRef.current = [];
-      recorderRef.current = null;
-      setRecording(false);
-      setSaving(true);
-      const path = `recordings/live-${new Date().toISOString().replace(/[:.]/g, '-')}.webm`;
-      void saveBinaryFile(projectId, path, blob)
-        .then(() => savedRef.current?.({ projectId, path, mimeType: blob.type, size: blob.size }))
-        .catch(() => setError('save_failed'))
-        .finally(() => setSaving(false));
-    };
-    recorder.start(1_000);
-    setRecording(true);
-  }, [projectId, stream]);
+    startRecording(stream);
+  }, [projectId, startRecording, stream]);
 
-  useEffect(() => () => {
-    const recorder = recorderRef.current;
-    if (recorder && recorder.state !== 'inactive') recorder.stop();
-  }, []);
+  const stop = useCallback(() => {
+    if (!recording) return;
+    setSaving(true);
+    void stopRecording().then(async (clip) => {
+      if (!clip || projectId == null) return;
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const path = `recordings/live-${stamp}.${recordedClipExtension(clip.mimeType)}`;
+      await saveBinaryFile(projectId, path, clip.blob);
+      savedRef.current?.({ projectId, path, mimeType: clip.mimeType, size: clip.blob.size });
+    }).catch(() => setError('save_failed')).finally(() => setSaving(false));
+  }, [projectId, recording, stopRecording]);
 
-  return { supported: typeof MediaRecorder !== 'undefined' && stream != null && projectId != null, recording, saving, error, start, stop };
+  return {
+    supported: supported && stream != null && projectId != null,
+    recording,
+    saving,
+    // A failed encoder and a failed upload are different problems with different
+    // remedies, so they stay distinguishable rather than collapsing into "failed".
+    error: recorderError === 'failed' ? 'recording_failed' as const : error,
+    start,
+    stop,
+  };
 }

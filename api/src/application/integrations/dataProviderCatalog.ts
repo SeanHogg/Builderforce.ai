@@ -2,7 +2,7 @@
  * Data + marketing provider catalog — THE source of truth for the 24
  * integrations the workflow builder advertised against nothing.
  *
- * The builder palette (`frontend/src/components/workflow-builder/integrations.ts`)
+ * The step palette (`frontend/src/domains/workflow/domain/stepIntegrations.ts`)
  * listed Postgres, Supabase, Snowflake, HubSpot, Mailchimp and 19 others as
  * droppable nodes. None of them could be connected — `integration_provider` had
  * no label to store them under — and none could run: every one compiles to the

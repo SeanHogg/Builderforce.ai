@@ -114,7 +114,7 @@ export function AdSetCreateForm({
       {/* Only asked when the campaign cannot answer it — see rule 2 in the header. */}
       {campaignObjective === null && (
         <label>
-          <span>{t('objective')}</span>
+          <span>{t('objectiveLabel')}</span>
           <select value={objective} onChange={(event) => setObjective(event.target.value as AdObjective)} required>
             <option value="">{t('choosePlaceholder')}</option>
             {objectives.map((option) => (

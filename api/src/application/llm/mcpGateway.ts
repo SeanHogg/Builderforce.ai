@@ -26,6 +26,12 @@
 import { callConnectorTool, CONNECTOR_EXTENSION_ID, listConnectorTools } from '../connectors/connectorTools';
 import { BUILTIN_EXTENSION_ID, callBuiltinTool, listBuiltinTools } from './builtinMcpService';
 import { callMcpTool, listToolsForTenant, type McpToolEntry } from './mcpExtensionService';
+import {
+  applyToolSurface,
+  resolveToolSurface,
+  surfaceIncludesSource,
+  type ToolSurfaceDefinition,
+} from './toolSurfaces';
 import { buildDatabase, type Db } from '../../infrastructure/database/connection';
 import type { TenantRole } from '../../domain/shared/types';
 import type { Env } from '../../env';
@@ -43,6 +49,27 @@ export interface GatewayMcpContext {
    */
   db?: Db;
   fetchImpl?: typeof fetch;
+  /**
+   * Which named surface to advertise ({@link ./toolSurfaces}). Absent = `full`,
+   * so every existing caller keeps the whole catalog. An UNKNOWN id is an error
+   * rather than a silent `full`, which is why this is resolved here and not
+   * defaulted at each transport.
+   */
+  surface?: string | null;
+}
+
+/** Thrown when a caller names a surface that does not exist. */
+export class UnknownToolSurfaceError extends Error {
+  constructor(public readonly requested: string) {
+    super(`Unknown tool surface '${requested}'`);
+    this.name = 'UnknownToolSurfaceError';
+  }
+}
+
+function surfaceFor(ctx: GatewayMcpContext): ToolSurfaceDefinition {
+  const surface = resolveToolSurface(ctx.surface);
+  if (!surface) throw new UnknownToolSurfaceError((ctx.surface ?? '').trim());
+  return surface;
 }
 
 const dbFor = (ctx: GatewayMcpContext): Db => ctx.db ?? buildDatabase(ctx.env);
@@ -54,12 +81,18 @@ const dbFor = (ctx: GatewayMcpContext): Db => ctx.db ?? buildDatabase(ctx.env);
  * customer server, and serialising a cached DB read behind it is free latency.
  */
 export async function listGatewayMcpTools(ctx: GatewayMcpContext): Promise<McpToolEntry[]> {
+  const surface = surfaceFor(ctx);
   const db = dbFor(ctx);
+  // A source the surface excludes is not fetched at all. The extension leg calls
+  // every customer MCP server, so skipping it is latency saved, not just bytes.
   const [connectorTools, extensionTools] = await Promise.all([
-    listConnectorTools(db, ctx.tenantId, ctx.env),
-    listToolsForTenant(db, ctx.tenantId, ctx.keyMaterial, ctx.fetchImpl ?? fetch, ctx.env),
+    surfaceIncludesSource(surface, 'connectors') ? listConnectorTools(db, ctx.tenantId, ctx.env) : [],
+    surfaceIncludesSource(surface, 'extensions')
+      ? listToolsForTenant(db, ctx.tenantId, ctx.keyMaterial, ctx.fetchImpl ?? fetch, ctx.env)
+      : [],
   ]);
-  return [...listBuiltinTools(), ...connectorTools, ...extensionTools];
+  const builtinTools = surfaceIncludesSource(surface, 'builtin') ? listBuiltinTools() : [];
+  return applyToolSurface([...builtinTools, ...connectorTools, ...extensionTools], surface);
 }
 
 /**

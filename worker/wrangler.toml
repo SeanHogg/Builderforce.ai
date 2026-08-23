@@ -28,14 +28,6 @@ BUILDERFORCE_API_BASE_URL = "https://api.builderforce.ai"
 binding = "STORAGE"
 bucket_name = "builderforce-storage"
 
-[[durable_objects.bindings]]
-name = "COLLABORATION_ROOM"
-class_name = "CollaborationRoom"
-
-[[migrations]]
-tag = "v1"
-new_sqlite_classes = ["CollaborationRoom"]
-
 # explicit custom domain for the legacy IDE/data worker
 [[routes]]
 pattern = "worker.builderforce.ai"

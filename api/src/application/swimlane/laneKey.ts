@@ -1,5 +1,5 @@
 /**
- * Renaming a board column — the other half of the lane/ticket relationship.
+ * A board column's KEY — minting one, changing one, and everything that points at it.
  *
  * A swimlane has two names: the `name` a person reads, and the `key` that IS the
  * status every resident ticket holds. Editing the first has always been safe and
@@ -57,6 +57,28 @@ export function normalizeLaneKey(raw: string): string | null {
     .slice(0, LANE_KEY_MAX_LENGTH)
     .replace(/_+$/g, '');
   return key.length > 0 ? key : null;
+}
+
+/**
+ * Mint a key for a NEW lane from its name, suffixed until it is unique on the board.
+ *
+ * Deliberately server-side. The lane editor used to derive this in the browser from
+ * the lane list it happened to be holding, which is a uniqueness check against a
+ * stale snapshot — two people adding a column at once, or one person adding a
+ * second column before a reload, both land on the same key and hit
+ * UNIQUE(board_id, key) as a 500. Here the check and the insert see the same rows,
+ * and there is exactly ONE implementation of what a lane key looks like.
+ */
+export function uniqueLaneKey(name: string, existingKeys: string[]): string {
+  const base = normalizeLaneKey(name) ?? 'lane';
+  const taken = new Set(existingKeys);
+  if (!taken.has(base)) return base;
+  // Leave room for the suffix rather than producing a key one character over the
+  // ceiling the moment a name collides.
+  const stem = base.slice(0, LANE_KEY_MAX_LENGTH - 4).replace(/_+$/g, '') || 'lane';
+  let i = 2;
+  while (taken.has(`${stem}_${i}`)) i += 1;
+  return `${stem}_${i}`;
 }
 
 export type LaneKeyChange =

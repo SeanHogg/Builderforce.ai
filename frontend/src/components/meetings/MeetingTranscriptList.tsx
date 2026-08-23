@@ -10,12 +10,21 @@ import type { MeetingTranscriptSegment } from '@/lib/builderforceApi';
  * tinted so an AI contribution reads distinctly from a person's.
  */
 export function MeetingTranscriptList({
-  segments, summary, showSummary = true,
+  segments, summary, showSummary = true, showTranscript = true,
 }: {
   segments: MeetingTranscriptSegment[];
   summary: string | null;
   /** Render the generated minutes block above the transcript. */
   showSummary?: boolean;
+  /**
+   * Render the caption lines below the minutes.
+   *
+   * Off for a surface that has room for the conclusion and not the conversation — a
+   * board card, where a hundred lines would bury the card they are drawn on. The
+   * "no transcript yet" empty state goes with them: on a surface that was never going
+   * to show the transcript, its absence is not news.
+   */
+  showTranscript?: boolean;
 }) {
   const t = useTranslations('meetings');
 

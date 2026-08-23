@@ -60,8 +60,18 @@ const COURIER_WIDTH = 600;
 /** Measured width for any code the tables do not cover (127+). */
 const DEFAULT_WIDTH = 500;
 
-/** The base-14 PostScript names this writer emits, keyed by resource slot. */
-export const PDF_FONT_SLOTS = ['F1', 'F2', 'F3', 'F4', 'F5', 'F6'] as const;
+/**
+ * The base-14 PostScript names this writer emits, keyed by resource slot.
+ *
+ * TWELVE slots, not six: every family's four faces, always mapped. A document
+ * used to register only its own family plus Courier, which was enough while the
+ * family was a document-level theme choice — but a canvas document may now put a
+ * font on a RUN (`[the words]{font=Georgia}`), and a run whose family is not in
+ * the resource dictionary cannot be drawn in it. Twelve entries of a dozen bytes
+ * each is a cheaper answer than a per-document dictionary that has to be built
+ * after the layout knows which faces the text actually used.
+ */
+export const PDF_FONT_SLOTS = ['F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8', 'F9', 'F10', 'F11', 'F12'] as const;
 export type PdfFontSlot = (typeof PDF_FONT_SLOTS)[number];
 
 export type PdfFontFamily = 'sans' | 'serif' | 'mono';
@@ -86,30 +96,42 @@ const FAMILIES: Record<PdfFontFamily, FamilyFaces> = {
   },
 };
 
-/**
- * The six PostScript font names a document's resource dictionary maps, in slot
- * order: the body family's four faces, then Courier + Courier-Bold for code.
- * Monospaced code always renders in Courier even in a serif document, because a
- * code fence's alignment is the point of the fence.
- */
-export function fontNamesFor(family: PdfFontFamily): Record<PdfFontSlot, string> {
-  const f = FAMILIES[family];
-  return { F1: f.regular, F2: f.bold, F3: f.italic, F4: f.boldItalic, F5: 'Courier', F6: 'Courier-Bold' };
+/** Slot order: sans, serif, mono — regular, bold, italic, bold-italic each. */
+const FAMILY_ORDER: readonly PdfFontFamily[] = ['sans', 'serif', 'mono'];
+
+/** Every PostScript font name a document's resource dictionary maps, in slot
+ *  order. Constant: the dictionary no longer depends on the document's theme,
+ *  because a single line of text may draw from more than one family. */
+export function fontNamesFor(): Record<PdfFontSlot, string> {
+  const names = {} as Record<PdfFontSlot, string>;
+  FAMILY_ORDER.forEach((family, index) => {
+    const faces = FAMILIES[family];
+    ([faces.regular, faces.bold, faces.italic, faces.boldItalic]).forEach((name, face) => {
+      names[PDF_FONT_SLOTS[index * 4 + face] as PdfFontSlot] = name;
+    });
+  });
+  return names;
 }
 
-/** The resource slot for a body run with these emphasis flags. */
-export function slotFor(bold: boolean, italic: boolean, mono: boolean): PdfFontSlot {
-  if (mono) return bold ? 'F6' : 'F5';
-  if (bold && italic) return 'F4';
-  if (bold) return 'F2';
-  if (italic) return 'F3';
-  return 'F1';
+/** The resource slot for a run in this family with these emphasis flags. Code
+ *  runs pass `mono`, so a fence keeps Courier's alignment even in a serif
+ *  document — the alignment is the point of the fence. */
+export function slotFor(bold: boolean, italic: boolean, family: PdfFontFamily): PdfFontSlot {
+  const base = Math.max(0, FAMILY_ORDER.indexOf(family)) * 4;
+  return PDF_FONT_SLOTS[base + (bold ? 1 : 0) + (italic ? 2 : 0)] as PdfFontSlot;
 }
 
-/** Width of one WinAnsi code point in 1/1000 em for a slot of this family. */
-function glyphWidth(family: PdfFontFamily, slot: PdfFontSlot, code: number): number {
-  if (slot === 'F5' || slot === 'F6' || family === 'mono') return COURIER_WIDTH;
-  const bold = slot === 'F2' || slot === 'F4';
+/** The family and weight a slot draws in — the inverse of {@link slotFor}, so a
+ *  measurement needs the slot alone. */
+function faceOf(slot: PdfFontSlot): { family: PdfFontFamily; bold: boolean } {
+  const index = Math.max(0, PDF_FONT_SLOTS.indexOf(slot));
+  return { family: FAMILY_ORDER[Math.floor(index / 4)] as PdfFontFamily, bold: (index % 4) % 2 === 1 };
+}
+
+/** Width of one WinAnsi code point in 1/1000 em for a slot. */
+function glyphWidth(slot: PdfFontSlot, code: number): number {
+  const { family, bold } = faceOf(slot);
+  if (family === 'mono') return COURIER_WIDTH;
   const table = bold ? FAMILIES[family].boldWidths : FAMILIES[family].regularWidths;
   if (!table) return COURIER_WIDTH;
   const idx = code - 32;
@@ -121,8 +143,8 @@ function glyphWidth(family: PdfFontFamily, slot: PdfFontSlot, code: number): num
  * already-encoded bytes so measurement and drawing agree on exactly which
  * glyphs the viewer will see.
  */
-export function measureBytes(bytes: readonly number[], family: PdfFontFamily, slot: PdfFontSlot, size: number): number {
+export function measureBytes(bytes: readonly number[], slot: PdfFontSlot, size: number): number {
   let total = 0;
-  for (const code of bytes) total += glyphWidth(family, slot, code);
+  for (const code of bytes) total += glyphWidth(slot, code);
   return (total * size) / 1000;
 }

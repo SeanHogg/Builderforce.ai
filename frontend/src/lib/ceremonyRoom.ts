@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AUTH_API_URL, getStoredTenantToken } from './auth';
+import { getStoredTenantToken } from './auth';
+import { apiSocketUrl } from './apiSocket';
 
 /**
  * useCeremonyRoom — the live multiplayer client for a standup/planning round-table.
@@ -74,8 +75,7 @@ export function useCeremonyRoom(
     const token = getStoredTenantToken();
     if (!token) return;
 
-    const base = AUTH_API_URL.replace(/^http/, 'ws');
-    const url = `${base}/api/agile/ceremonies/rooms/${projectId}/ws?token=${encodeURIComponent(token)}`;
+    const url = apiSocketUrl(`/api/agile/ceremonies/rooms/${projectId}/ws`, { token });
 
     let closed = false;
     let ws: WebSocket | null = null;

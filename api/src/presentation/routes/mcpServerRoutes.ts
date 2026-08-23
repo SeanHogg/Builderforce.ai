@@ -24,6 +24,7 @@
 
 import { Hono, type Context } from 'hono';
 import { listGatewayMcpTools, callGatewayMcpTool, resolveGatewayMcpTool } from '../../application/llm/mcpGateway';
+import { describeToolSurfaces, resolveToolSurface, TOOL_SURFACES } from '../../application/llm/toolSurfaces';
 import { requireTenantAccess, type TenantAccess } from './llmRoutes';
 import type { Env, HonoEnv } from '../../env';
 
@@ -105,7 +106,14 @@ function negotiateProtocolVersion(requested: unknown): string {
 
 async function handleRpc(
   req: JsonRpcRequest,
-  ctx: { env: Env; access: TenantAccess; authToken: string | null; executionCtx?: ExecutionContext },
+  ctx: {
+    env: Env;
+    access: TenantAccess;
+    authToken: string | null;
+    executionCtx?: ExecutionContext;
+    /** `?surface=` off the endpoint URL — see application/llm/toolSurfaces. */
+    surface: string | null;
+  },
 ): Promise<unknown | null> {
   const id: JsonRpcId = (req.id ?? null) as JsonRpcId;
 
@@ -129,7 +137,8 @@ async function handleRpc(
       instructions:
         'Builderforce exposes this tenant\'s platform tools (projects, tickets, boards, OKRs, executions) '
         + 'plus every connector and external MCP server the tenant has connected. Call tools/list for the '
-        + 'live catalog — it varies per tenant.',
+        + 'live catalog — it varies per tenant. The full catalog is large; append `?surface=<id>` to this '
+        + `endpoint URL to advertise a narrower subset instead (${TOOL_SURFACES.map((s) => s.id).join(', ')}).`,
     });
   }
 
@@ -144,6 +153,7 @@ async function handleRpc(
     env: ctx.env,
     tenantId: ctx.access.tenantId,
     keyMaterial: ctx.env.JWT_SECRET,
+    surface: ctx.surface,
   };
 
   if (method === 'tools/list') {
@@ -230,7 +240,25 @@ export function createMcpServerRoutes(): Hono<HonoEnv> {
     }
 
     const authToken = (c.req.header('Authorization') ?? '').replace(/^Bearer\s+/i, '') || null;
-    const ctx = { env: c.env as Env, access, authToken, executionCtx: optionalExecutionCtx(c) };
+    // The endpoint URL carries the catalog subset, because a remote MCP client
+    // configures ONE url and has no other channel to say "just the delivery
+    // tools" — `https://…/mcp?surface=delivery` is that channel.
+    const requestedSurface = c.req.query('surface') ?? null;
+    if (resolveToolSurface(requestedSurface) === null) {
+      return c.json(
+        rpcError(null, JSON_RPC.INVALID_PARAMS, `Unknown tool surface '${(requestedSurface ?? '').trim()}'`, {
+          surfaces: describeToolSurfaces(),
+        }),
+        400,
+      );
+    }
+    const ctx = {
+      env: c.env as Env,
+      access,
+      authToken,
+      executionCtx: optionalExecutionCtx(c),
+      surface: requestedSurface,
+    };
 
     try {
       // Batching was removed in protocol 2025-06-18 but older clients still send
