@@ -8,6 +8,7 @@
  */
 import {
   canvasWidgets,
+  creationSessionFolders,
   stockMediaAssets,
   studioAsyncInterviews,
 } from '../../../infrastructure/database/schema/canvas';
@@ -16,6 +17,20 @@ import { defineDomainEntities, entity } from '../entityDefinition';
 export const CANVAS_ENTITIES = defineDomainEntities('canvas', [
   stockMediaAssets,
   studioAsyncInterviews,
+
+  /**
+   * A folder a Creation Session is filed into (migration 1118) — readable
+   * through the generic surface, never writable through it.
+   *
+   * `creationSessionFolderRouteService.ts` owns invariants a generic PATCH
+   * cannot: the case-insensitive name uniqueness per (tenant, segment) that
+   * decides create-vs-return-existing, and that a reassigned `projectId`
+   * actually belongs to the same tenant and segment. A generic writer only
+   * knows the column exists, not that it must be validated against another
+   * tenant-scoped table first — the same reason `canvasWidgets` below is
+   * `readOnly`.
+   */
+  entity(creationSessionFolders, { readOnly: true }),
 
   /**
    * A registered third-party widget (migration 1101) — readable through the
