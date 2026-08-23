@@ -71,13 +71,20 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const { open: navOpen, openNav, closeNav } = useMobileNav();
 
   // The board, if one is open. It is mounted HERE rather than by the route, so
-  // opening a page no longer throws it away — see CanvasStage. Everyone who has
-  // not opened a canvas pays nothing: `stageActive` is false and the layout below
-  // is exactly what it always was.
+  // opening a page no longer throws it away — see CanvasStage.
   const canvas = useOptionalActiveCanvas();
   const stageActive = canvas?.active != null && canvas.stageHosted;
-  const panelHosted = stageActive && panelOpen(pathname ?? '', true);
   const onStage = isStageRoute(pathname ?? '');
+  // A workbench destination is a PANEL, whether or not a board happens to be on
+  // the stage yet. Gating this on `stageActive` is what made the same route
+  // render as two different products: a drawer when you had a canvas open and a
+  // full-bleed page when you did not, with a different width, index and way out
+  // each time. `LastBoardBridge` puts a board under it — restored or fresh — so
+  // "the panel slides over a board that stays mounted" stays literally true; the
+  // one frame before it lands is an empty stage, not a different layout.
+  // Still `stageHosted`: the shells that have no stage at all (the embed tree,
+  // marketing chrome) must not sprout one.
+  const panelHosted = (canvas?.stageHosted ?? false) && panelOpen(pathname ?? '');
 
   return (
     <ReferenceChromeProvider>
@@ -115,7 +122,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         <NavCountsProvider>
           <main
             id="main-content"
-            className={`content${stageActive ? ' app-full-height' : ''}`}
+            className={`content${stageActive || panelHosted ? ' app-full-height' : ''}`}
             style={{ width: '100%', paddingLeft: 0 }}
           >
             {/* Mounted ONCE, above every surface the shell hosts, because
@@ -125,11 +132,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 real — so a new surface cannot be added that forgets to admit
                 what it is showing. */}
             <SampleDataNotice />
-            {stageActive ? (
+            {stageActive || panelHosted ? (
               // Stage + panel. The board keeps its place in the tree in BOTH
               // states, which is the entire mechanism: React only preserves a
               // component that stays mounted at the same position, so the stage
               // must never be moved between branches to make room for a page.
+              // `panelHosted` joins the condition so the split is the layout
+              // from the FIRST frame: entering it a commit later, once the
+              // bridge has a board, would remount the panel and every page
+              // inside it.
               <div className="stage-split" data-panel={panelHosted ? 'open' : 'closed'}>
                 <CanvasStage />
                 {panelHosted ? (

@@ -2204,8 +2204,36 @@ html[data-theme='light'] .nebula {
    `cqi` is the PANEL's inline size (`.ui-panel-body` is the named container), so
    the gutter tracks how wide the reader has made the panel rather than the
    window it happens to sit in. */
+/* Everything a page needs in order to be laid out for the PANEL it is in.
+   `container-type: inline-size` on `.ui-panel-body` above made the panel
+   measurable; this is the half that spends the measurement, and it has to live
+   on a CHILD — `cqi` inside a container's own declarations resolves against the
+   next container OUT, so a token declared on `.ui-panel-body` itself would still
+   be reading the window.
+
+   The display roles were the gap. §2.3's scale is viewport-relative
+   (`clamp(2.6rem, 7.4vw, 5.1rem)`), which is correct for a page that owns the
+   screen and badly wrong for one that owns 480px of it: on a 1920px monitor the
+   hero clamps to its 5.1rem maximum whatever the panel's width, so a reference
+   page opened at `sheet` rendered an 82px headline in a 480px drawer and ran
+   straight off the right edge. Same ramp, same maxima, measured against the
+   right box — so a panel widened by the reader grows its type, and a page that
+   owns the screen is untouched because these tokens only exist in here. */
+.panel-body {
+  --font-size-hero: clamp(2rem, 7.4cqi, 5.1rem);
+  --font-size-page-title: clamp(1.5rem, 4.4cqi, 2.9rem);
+  --font-size-section: clamp(1.1rem, 2.6cqi, 1.62rem);
+  --font-size-lede: clamp(.95rem, 2cqi, 1.18rem);
+  padding: var(--space-4);
+}
+
+/* A reference page brings its own bands and its own frame, so it drops the
+   wrapper padding and widens the marketing COLUMN's gutter instead — the bands
+   keep painting edge to edge, and both marketing columns (`.mk-in` and
+   `.mkt-in`) read the same variable, so every reference page gets it. */
 .ref-panel-body {
   --marketing-gutter: clamp(24px, 5cqi, 48px);
+  padding: 0;
 }
 
 /* ── The eight type roles (PRD 21 §2.3) ──────────────────────────────────────
@@ -2302,6 +2330,11 @@ html[data-theme='light'] .nebula {
    desktop; trimmed on mobile so data/card pages run closer to full width
    instead of leaving a wide side gutter. */
 .page-container {
+  max-width: var(--page-max, none);
+  /* Beside the left rail a capped page stays LEFT-aligned — centring it would
+     open a dead gutter against the sidebar, which is why the cap was written as
+     "never centered" in the first place. */
+  margin-inline: 0;
   padding: 24px;
 }
 @media (max-width: 767px) {
@@ -2310,9 +2343,35 @@ html[data-theme='light'] .nebula {
   }
 }
 
+/* ── THE SAME PAGE WITHOUT A RAIL ──────────────────────────────────────────
+   The marketing shell has no sidebar, so "left-aligned so there is no dead
+   gutter beside the sidebar" inverts: a 1100px column pinned to the left of a
+   1920px screen IS the dead gutter, 900px of it, and every public browse detail
+   page had one — `/talent/<id>` most visibly. `/pricing` looked right only
+   because it caps and centres in its own module instead of using this container,
+   which is exactly the per-page drift `PageContainer` exists to stop.
+
+   So the container centres here, and `readable` adopts the marketing measure so
+   a public detail page and `/pricing` are literally the same column. `narrow`
+   keeps its 720px — a single-column editor does not want to be 1320px — and
+   `full` has no cap to centre. */
+.marketing-content .page-container {
+  margin-inline: auto;
+}
+.marketing-content .page-container[data-width='readable'] {
+  --page-max: var(--marketing-max);
+}
+
 /* Full-bleed content pages (IDE project page, workflow builder): no padding,
-   no scroll — the child fills the area between the top bar and footer itself. */
+   no scroll — the child fills the area between the top bar and footer itself.
+
+   `.content.app-full-height` matches the SHELL's own declaration, not only a
+   descendant's. `AppShell` marks the main element the moment it renders the
+   stage/panel split, which is a frame before the board inside it mounts and
+   supplies the `:has()` target; without this the split spent that frame in a
+   padded, scrolling block and then snapped into a flex column. */
 .content:has(.ide-full-height),
+.content.app-full-height,
 .content:has(.app-full-height) {
   padding: 0;
   overflow: hidden;

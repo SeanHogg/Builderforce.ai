@@ -1,3 +1,161 @@
+## ✅ RESOLVED 2026-08-22 — A destination is a panel, a rail row is a door you can actually open, and Reliability answers a guest
+
+Four defects reported against the running site, closed together because three of them are the same
+mistake: a surface deciding what to be from state the person could not see.
+
+### 1. A workbench destination is now ALWAYS a slide-out panel
+
+`panelOpen` took a second argument — "is there a board to keep?" — so `/incidents`, `/settings` and
+every reference page opened as a drawer for someone mid-canvas and as a full-bleed page for everyone
+else. Same URL, two layouts, different width, different index, different way out. It now reads the
+ROUTE and nothing else (`frontend/src/lib/workbenchPolicy.ts`), and `AppShell` enters the
+stage/panel split on the first frame rather than a commit later.
+
+The stage underneath is `LastBoardBridge`'s job: it restores the last board as before, and when
+there is nothing to restore it STARTS one, local-first — no account, no server row, no network — so
+✕ always has a board to close to. Gated on `rendersAppShell`, which is what keeps the public
+surface intact: a signed-out visitor on `/product-management` or `/soc2` is not on an app-shell
+route, so nothing is started and the crawler still gets the ordinary indexable page.
+
+`.content.app-full-height` now matches the shell's own declaration, not only a descendant's, so the
+split does not spend a frame as a padded scrolling block.
+
+### 2. Type inside a panel measures the PANEL
+
+`.ui-panel-body` has been a named container since the panel shipped, but the §2.3 display scale was
+still viewport-relative — `clamp(2.6rem, 7.4vw, 5.1rem)` clamps to its 5.1rem maximum on a 1920px
+monitor whatever the drawer's width, so a reference page opened at `sheet` rendered an 82px headline
+in a 480px panel and ran off the right edge. `.panel-body` (both branches of `ShellPanel`) restates
+hero / page-title / section / lede in `cqi`: same ramp, same maxima, measured against the right box.
+
+### 3. The left rail stopped locking doors that are open
+
+The rail dimmed and locked rows by a RUNG ladder (public → signed in → has a workspace) written
+before guest preview. Guest preview had already settled the same question the other way — a
+signed-out visitor gets the REAL surface on every app route that is not operator tooling — so a
+guest reading `/incidents` over the sample workspace saw a padlock on the row they were standing on,
+and eight more beside it.
+
+Reachability is now asked once, of the routing that renders the page: `destinationReachable` in
+`frontend/src/lib/shellRouting.ts`. Public routes are reachable by definition; an app route is
+reachable exactly when its shell renders for this visitor. The ladder is DELETED — `RUNG`, `Rung`,
+`earnedRung`, `NavGroup.rung` and the field on all 34 rows — because a second answer that can
+disagree with the first is the whole defect. Operator tooling (`/admin`, `/settings`, `/billing`,
+`/security`, …) still dims for a guest: a dim row is an invitation, and those are the nine where
+there is nothing honest behind the door.
+
+### 4. A capped page centres when there is no rail, and Reliability answers a signed-out reader
+
+`PageContainer` capped `readable`/`narrow` with an inline `max-width` and a comment reading "kept
+LEFT-aligned, never centered" — correct beside the sidebar, and the cause of a 900px dead gutter on
+every public browse detail page in the marketing shell (`/talent/<id>` most visibly). The measure is
+now published as `--page-max` and the SHELL owns the alignment: left against the rail, centred at
+`--marketing-max` without one, so a public detail page and `/pricing` are the same column.
+
+The 401s: `/incidents` fired six authenticated GETs as a guest, got six 401s, and answered with red
+cards reading `Missing or malformed Authorization header` under a banner promising a sample
+workspace. Both halves are closed.
+
+- `domains/guest/infrastructure/fixtures/reliabilityFixtures.ts` answers `/api/incidents`
+  (honouring `?activeOnly=`), `/api/incidents/on-call/rotations`, `/api/incidents/escalation/policies`,
+  `/api/incidents/contacts`, `/api/monitoring/boards` and `/api/monitoring/report`. The rotation
+  points at the same roster (`SAMPLE_MEMBERS`) the board and workforce lenses draw; the report is
+  DERIVED from the incident rows, and a test asserts the tallies sum back to them.
+- `ApiRequestError` now carries `signedOut`, set from the `isAnonymousUnauthorized` fact the
+  transport already knew and then threw away. `faultMessage(e)` returns `null` for it, so an
+  uncovered read renders the section's EMPTY state instead of quoting a header name at someone who
+  simply has no account.
+
+Duplication closed in the same pass: `Loader`/`ErrorCard`/`EmptyCard` were written twice, verbatim,
+in the two halves of Reliability — and had already drifted, one painting failure `--danger` and the
+other `--error`. They are now `components/ui/SectionState.tsx`, which also owns the `SECTION_CARD`
+style both files declared and the shared `SEVERITIES`/`SEVERITY_BADGE` moved to
+`lib/reliability/severity.ts`.
+
+Verified: `tsgo --noEmit` clean over the change, 3,858 frontend tests pass, 15/16 guards green
+(`check:architecture`'s `use client` tally is at 881/876 with these changes STASHED — pre-existing
+drift from other work in this tree).
+
+## ✅ RESOLVED 2026-08-22 — Every package now has a silent-catch floor, and a Durable Object error report cannot be written wrong
+
+Three entries from the "are all errors logged" audit, closed together because they share one root
+cause: the guard, the reporter and the seam it protects were each built for `api/src` alone.
+
+### 1. The silent-catch guard now covers all four packages, with a per-package ratchet
+
+`api/scripts/check-silent-catches.mjs` scanned `api/src` and nothing else. It is now
+`scripts/check-silent-catches.mjs` at the repo root, scanning **5,504 files across `api/src`,
+`frontend/src`, `agent-runtime/src` and `worker/src`** against
+`scripts/silent-catches.baseline.json`.
+
+- Rules live in `scripts/lib/silentCatchRules.mjs` (empty catch, empty `.catch(() => {})`,
+  console-only-in-a-catch, direct `reportCaughtError` in a DO); the check script owns only the
+  ratchet and the CLI, so the same rules can be pointed at any tree.
+- `api/src` stays at **0** on every rule. The other three are frozen at what they actually are
+  (`frontend/src` 197/100/19, `agent-runtime/src` 436/100/44, `worker/src` 2/0/17). A count that
+  RISES fails the build; a count that FALLS also fails, with an instruction to run
+  `--update-baseline` — so the number can only ever go down, and every step down is a recorded diff.
+  `--update-baseline` refuses to raise a recorded count at all.
+- `--target <tree>` narrows the sweep. api's guard chain runs the full sweep (18s, concurrent);
+  frontend's runs only `frontend/src` so its own `npm test` pays only for its own tree.
+- `toPosix` in `scripts/lib/moduleImports.mjs` is now exported rather than re-declared.
+
+Verified: the guard fails closed on an injected violation and passes on the real tree.
+
+### 2. `agent-runtime` and the VS Code extension have a path to the central error store
+
+Both were dead ends: the runtime wrote its own log file, the extension its output channel, and
+neither had any route to `error_groups`. That is now an **opt-in** path, keyed by the credential
+each already holds — no new secret to provision.
+
+- **Server:** `POST /api/quality-ingest/client-report` (`qualityIngestRoutes.ts`). Authenticates the
+  CALLER rather than a collector (agent-host API key, or tenant JWT), then reuses the shared
+  pipeline: same canonical events, same grouping, same monthly cap. Shape and destination live in
+  `application/quality/clientErrorReport.ts` — surfaces are DATA (`CLIENT_REPORT_SOURCES`), the
+  environment is stamped server-side so a client cannot file as another surface, and a report with
+  no resolvable destination gets a 422 that says so rather than being silently dropped.
+- **Shared credential resolver:** `application/auth/callerTenant.ts` (key half) +
+  `presentation/middleware/callerTenant.ts` (JWT half). `telemetryRoutes.ts` was migrated onto it,
+  which also FIXED a real inconsistency — its inline copy accepted only `?agentHostId=&key=`, not
+  the bearer + `X-AgentHost-Id` form every other host-authed route takes.
+- **agent-runtime:** `infra/platform-error-reporter.ts`. Local logging stays the contract and always
+  happens first; the remote half runs only when `BUILDERFORCE_ERROR_REPORTING` is truthy, and is
+  refused outright in offline/air-gapped mode whatever the switch says.
+- **One terminal-crash path:** `infra/fatal-exit.ts`. Six copies of "the process is going down
+  because of this error" (three identical `uncaughtException` handlers plus three open-coded
+  `console.error` + `process.exit(1)` branches in `unhandled-rejections.ts`) are now one
+  `reportAndExit`. It returns `void`, not `never`, deliberately: a `throw` after `process.exit` is
+  dead code in production and an INFINITE LOOP under a test that stubs `exit`, which the existing
+  `unhandled-rejections.fatal-detection` suite caught during this pass.
+- **VS Code extension:** `src/errorReporter.ts` owns the output channel (previously created inline
+  in `extension.ts`), the `builderforce.reportErrors` setting (default OFF, localized in all five
+  `package.nls` catalogs), and `surfaceError` — the one way a caught error is both shown and filed.
+  Nine catch sites that called `showErrorMessage` and dropped the error were migrated onto it.
+- **Documented:** `agent-runtime/docs/ERROR-REPORTING.md` states the contract (local logs, nothing
+  leaves the machine by default), exactly what the opt-in sends, and when it will not send at all;
+  linked from `docs/SECURITY.md`.
+
+### 3. The Durable Object runtime override is bound once, not repeated 29 times
+
+`{ env: this.env, waitUntil: (task) => this.state.waitUntil(task) }` was written out at all 29 DO
+call sites, and omitting it type-checked cleanly while silently downgrading the report to a console
+line. `application/observability/durableErrorReporter.ts` now provides
+`createDurableErrorReporter(source, env, waitUntilHost)`, bound once per DO constructor; all 29
+sites across 8 DOs call `this.reportError(error, { operation })`. `Container` subclasses
+(`AgentContainerDO`) bind through the same factory via `this.ctx`, which the shape-typed
+`DurableWaitUntilHost` parameter accommodates without an adapter.
+
+The guard rule changed with it: instead of "a DO report with fewer than three arguments", it now
+fails on **any** direct `reportCaughtError` inside a `*DO.ts` file. The seam can no longer be
+written wrong rather than merely being caught when it is.
+
+**Verification:** api 26/26 guards, 8,365 tests, tsgo+tsc clean. agent-runtime tsc clean, oxlint
+clean, oxfmt clean, targeted suites green (new `platform-error-reporter.test.ts`, 12 tests).
+VS Code extension 110 unit tests, both typecheckers, and the real extension-host gate
+(`pnpm test:integration`, 7 passing). New api tests: `durableErrorReporter.test.ts` (2),
+`clientErrorReport.test.ts` (9). Versions bumped: api 2026.8.36, agent-runtime 2026.8.22,
+VSIX 2026.8.133 (packaged, `builderforce-ai-2026.8.133.vsix`).
+
 ## ✅ RESOLVED 2026-08-22 — The guest cost ceiling already covered every model door, not just chat
 
 Logged during the guest-preview pass on the assumption that opening 78 app routes to signed-out

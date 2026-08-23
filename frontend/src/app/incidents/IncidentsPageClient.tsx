@@ -41,21 +41,10 @@ import {
   type WorkflowDefinitionSummary,
 } from '@/lib/builderforceApi';
 import { useFormat } from "@/i18n/useFormat";
+import { faultMessage } from '@/lib/apiClient';
+import { SECTION_CARD as card, SectionEmpty, SectionError, SectionLoading } from '@/components/ui/SectionState';
+import { SEVERITIES, SEVERITY_BADGE } from '@/lib/reliability/severity';
 
-const card: React.CSSProperties = {
-  background: 'var(--bg-base)',
-  border: '1px solid var(--border-subtle)',
-  borderRadius: 'var(--radius-lg)',
-  padding: 16,
-};
-
-const SEVERITIES: IncidentSeverity[] = ['sev1', 'sev2', 'sev3', 'sev4'];
-const SEVERITY_BADGE: Record<IncidentSeverity, string> = {
-  sev1: 'badge-red',
-  sev2: 'badge-orange',
-  sev3: 'badge-amber',
-  sev4: 'badge-blue',
-};
 const STATUS_BADGE: Record<IncidentStatus, string> = {
   open: 'badge-red',
   acknowledged: 'badge-amber',
@@ -130,15 +119,6 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-function Loader({ t }: { t: T }) {
-  return <div style={{ ...card, color: 'var(--text-muted)' }}>{t('loading')}</div>;
-}
-function ErrorCard({ msg }: { msg: string }) {
-  return <div style={{ ...card, borderColor: 'var(--danger)', color: 'var(--danger)' }}>{msg}</div>;
-}
-function EmptyCard({ msg }: { msg: string }) {
-  return <div style={{ ...card, color: 'var(--text-muted)', textAlign: 'center', padding: 32 }}>{msg}</div>;
-}
 
 /* ─────────────────────────── Incidents ─────────────────────────── */
 
@@ -156,7 +136,7 @@ function IncidentsSection({ t, tc, canManage }: SectionProps) {
     setError(null);
     incidentsApi.list(activeOnly)
       .then(setIncidents)
-      .catch((e: Error) => setError(e.message))
+      .catch((e: unknown) => setError(faultMessage(e)))
       .finally(() => setLoading(false));
   }, [activeOnly]);
 
@@ -179,10 +159,10 @@ function IncidentsSection({ t, tc, canManage }: SectionProps) {
         </button>
       </div>
 
-      {loading && <Loader t={tc} />}
-      {error && <ErrorCard msg={error} />}
+      {loading && <SectionLoading label={tc('loading')} />}
+      <SectionError error={error} />
       {!loading && !error && (incidents.length === 0
-        ? <EmptyCard msg={t('emptyIncidents')} />
+        ? <SectionEmpty message={t('emptyIncidents')} />
         : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {incidents.map((inc) => (
@@ -271,7 +251,7 @@ function CreateIncidentPanel({ t, tc, canManage, open, onClose, onCreated }: Sec
   return (
     <SlideOutPanel open={open} onClose={onClose} title={t('newIncident')}>
       <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {error && <ErrorCard msg={error} />}
+        <SectionError error={error} />
         <Field label={t('fieldTitle')}>
           <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t('titlePlaceholder')} />
         </Field>
@@ -321,7 +301,7 @@ function IncidentDetailPanel({ t, tc, canManage, incidentId, onClose, onChanged 
     setLoading(true);
     incidentsApi.get(incidentId)
       .then(({ incident, timeline }) => { setIncident(incident); setTimeline(timeline); setClassifyValue(incident.affectedSystem ?? ''); })
-      .catch((e: Error) => setError(e.message))
+      .catch((e: unknown) => setError(faultMessage(e)))
       .finally(() => setLoading(false));
   }, [incidentId]);
 
@@ -343,8 +323,8 @@ function IncidentDetailPanel({ t, tc, canManage, incidentId, onClose, onChanged 
   return (
     <SlideOutPanel open onClose={onClose} title={incident ? `${t('warRoomTitle')} — ${incident.title}` : t('warRoomTitle')} width="min(680px, 96vw)">
       <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {loading && <Loader t={tc} />}
-        {error && <ErrorCard msg={error} />}
+        {loading && <SectionLoading label={tc('loading')} />}
+        <SectionError error={error} />
         {incident && (
           <>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -618,7 +598,7 @@ function RcaSection({ t, tc, canManage, incident, onPublished }: SectionProps & 
   return (
     <div style={{ ...card, display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)' }}>{t('rca.formTitle')}</div>
-      {error && <ErrorCard msg={error} />}
+      <SectionError error={error} />
 
       <Field label={t('rca.docType.label')}>
         <Select className="input" value={docType} onChange={(e) => setDocType(e.target.value as PostmortemDocType)}>
@@ -737,7 +717,7 @@ function WorkflowRunsSection({ t, tc, canManage, incidentId }: SectionProps & { 
     <div style={{ ...card, display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)' }}>{t('workflows.title')}</div>
       <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>{t('workflows.blurb')}</p>
-      {error && <ErrorCard msg={error} />}
+      <SectionError error={error} />
 
       {canManage && defs.length > 0 && (
         <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
@@ -798,7 +778,7 @@ function OnCallSection({ t, tc, canManage }: SectionProps) {
     setLoading(true); setError(null);
     incidentsApi.listRotations()
       .then(setRotations)
-      .catch((e: Error) => setError(e.message))
+      .catch((e: unknown) => setError(faultMessage(e)))
       .finally(() => setLoading(false));
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -844,10 +824,10 @@ function OnCallSection({ t, tc, canManage }: SectionProps) {
         </button>
       </div>
 
-      {loading && <Loader t={tc} />}
-      {error && <ErrorCard msg={error} />}
+      {loading && <SectionLoading label={tc('loading')} />}
+      <SectionError error={error} />
       {!loading && !error && (rotations.length === 0
-        ? <EmptyCard msg={t('emptyRotations')} />
+        ? <SectionEmpty message={t('emptyRotations')} />
         : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {rotations.map((r) => {
@@ -946,7 +926,7 @@ function EscalationSection({ t, tc, canManage }: SectionProps) {
     setLoading(true); setError(null);
     incidentsApi.listPolicies()
       .then(setPolicies)
-      .catch((e: Error) => setError(e.message))
+      .catch((e: unknown) => setError(faultMessage(e)))
       .finally(() => setLoading(false));
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -1012,10 +992,10 @@ function EscalationSection({ t, tc, canManage }: SectionProps) {
         </button>
       </div>
 
-      {loading && <Loader t={tc} />}
-      {error && <ErrorCard msg={error} />}
+      {loading && <SectionLoading label={tc('loading')} />}
+      <SectionError error={error} />
       {!loading && !error && (policies.length === 0
-        ? <EmptyCard msg={t('emptyPolicies')} />
+        ? <SectionEmpty message={t('emptyPolicies')} />
         : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {policies.map((p) => {
@@ -1125,7 +1105,7 @@ function ContactsSection({ t, tc, canManage }: SectionProps) {
     setLoading(true); setError(null);
     incidentsApi.listContacts()
       .then(setContacts)
-      .catch((e: Error) => setError(e.message))
+      .catch((e: unknown) => setError(faultMessage(e)))
       .finally(() => setLoading(false));
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -1162,10 +1142,10 @@ function ContactsSection({ t, tc, canManage }: SectionProps) {
         </button>
       </div>
 
-      {loading && <Loader t={tc} />}
-      {error && <ErrorCard msg={error} />}
+      {loading && <SectionLoading label={tc('loading')} />}
+      <SectionError error={error} />
       {!loading && !error && (contacts.length === 0
-        ? <EmptyCard msg={t('emptyContacts')} />
+        ? <SectionEmpty message={t('emptyContacts')} />
         : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }}>
             {contacts.map((c) => (
@@ -1188,7 +1168,7 @@ function ContactsSection({ t, tc, canManage }: SectionProps) {
 
       <SlideOutPanel open={panelOpen} onClose={() => setPanelOpen(false)} title={editing ? t('editContact') : t('newContact')}>
         <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {error && <ErrorCard msg={error} />}
+          <SectionError error={error} />
           <Field label={t('contactName')}>
             <input className="input" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
           </Field>

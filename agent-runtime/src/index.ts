@@ -18,6 +18,7 @@ import {
 import { ensureBinary } from "./infra/binaries.js";
 import { loadDotEnv } from "./infra/dotenv.js";
 import { normalizeEnv } from "./infra/env.js";
+import { reportAndExit, installUncaughtExceptionHandler } from "./infra/fatal-exit.js";
 import { isMainModule } from "./infra/is-main.js";
 import { ensureBuilderForceAgentsCliOnPath } from "./infra/path-env.js";
 import {
@@ -27,7 +28,6 @@ import {
   PortInUseError,
 } from "./infra/ports.js";
 import { assertSupportedRuntime } from "./infra/runtime-guard.js";
-import { reportAndExit, installUncaughtExceptionHandler } from "./infra/fatal-exit.js";
 import { installUnhandledRejectionHandler } from "./infra/unhandled-rejections.js";
 import { enableConsoleCapture } from "./logging.js";
 import { runCommandWithTimeout, runExec } from "./process/exec.js";
@@ -83,8 +83,10 @@ if (isMain) {
 
   installUncaughtExceptionHandler();
 
-  void program.parseAsync(process.argv).catch((err) => reportAndExit(err, {
-    operation: "cli:parse",
-    label: "[builderforce] CLI failed:",
-  }));
+  void program.parseAsync(process.argv).catch((err) =>
+    reportAndExit(err, {
+      operation: "cli:parse",
+      label: "[builderforce] CLI failed:",
+    }),
+  );
 }

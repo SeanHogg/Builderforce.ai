@@ -8,14 +8,14 @@ import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import {
   STAGES,
-  earnedRung,
   findActiveGroup,
   groupsForStage,
   type NavGroup,
   type Stage,
 } from '@/lib/navGroups';
+import { destinationReachable } from '@/lib/shellRouting';
 import { isSeat, seatHueVar } from '@/lib/seats';
-import { getStoredTenant, signInHref } from '@/lib/auth';
+import { signInHref } from '@/lib/auth';
 import { ButtonLink } from '@/components/ui';
 import SessionList from './SessionList';
 import { NavIcon } from './navigation/NavIcon';
@@ -162,8 +162,15 @@ export default function Sidebar({ collapsed, onToggleCollapsed, mobileOpen = fal
     });
   }, []);
 
-  const rung = earnedRung(isAuthenticated, Boolean(getStoredTenant()));
   const onStage = isStageRoute(pathname);
+  // Whether a row is a door this visitor can walk through — asked of the same
+  // routing that renders the page, never of a second ladder that can disagree
+  // with it. See `destinationReachable`. `onStage` keeps the whole rail live
+  // while a board is open, which is the local-first canvas's own rule.
+  const reachable = useCallback(
+    (group: NavGroup) => onStage || destinationReachable(group.href, isAuthenticated),
+    [isAuthenticated, onStage],
+  );
 
 
   return (
@@ -210,10 +217,9 @@ export default function Sidebar({ collapsed, onToggleCollapsed, mobileOpen = fal
             {STAGES.map((stage) => {
               const rows = groupsForStage(groups, stage);
               if (rows.length === 0) return null;
-              // A stage is live when its cheapest row is. Dim, never absent:
+              // A stage is live when ANY of its rows is. Dim, never absent:
               // "a dim row is an invitation; a missing row is a secret."
-              const stageRung = Math.min(...rows.map((row) => row.rung));
-              const earned = rung >= stageRung || onStage;
+              const earned = rows.some(reachable);
               const isOpen = !collapsedStages[stage];
               return (
                 <div key={stage} className={`nav-stage${earned ? '' : ' nav-stage--dim'}`} data-stage={stage}>
@@ -245,7 +251,7 @@ export default function Sidebar({ collapsed, onToggleCollapsed, mobileOpen = fal
                         // destination rail stays navigable while signed out; the
                         // destination's durable Create/Save action owns the
                         // account gate.
-                        locked={rung < g.rung && !onStage}
+                        locked={!reachable(g)}
                         lockHint={t('stage.lockHint')}
                       />
                     ))}

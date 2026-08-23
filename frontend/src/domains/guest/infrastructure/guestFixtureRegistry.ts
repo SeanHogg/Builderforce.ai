@@ -17,11 +17,13 @@ import type { GuestFixture, GuestFixtureContext } from '../domain/guestFixture';
 import { deliveryFixtures } from './fixtures/deliveryFixtures';
 import { insightsFixtures } from './fixtures/insightsFixtures';
 import { dashboardFixtures } from './fixtures/dashboardFixtures';
+import { reliabilityFixtures } from './fixtures/reliabilityFixtures';
 
 const FIXTURES: GuestFixture[] = [
   ...deliveryFixtures,
   ...insightsFixtures,
   ...dashboardFixtures,
+  ...reliabilityFixtures,
 ];
 
 /** Exported for the ratchet that asserts ids are unique. */

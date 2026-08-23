@@ -1,14 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   NAV_GROUPS,
-  RUNG,
   STAGES,
   bottomNavFor,
-  earnedRung,
   findActiveGroup,
   groupsForStage,
   navGroupsForAccountType
 } from './navGroups';
+import { destinationReachable } from './shellRouting';
 import {
   FOOTER_COLUMNS,
   LEARN_COLUMNS,
@@ -92,16 +91,29 @@ describe('the seat is the teammate, and it is not also a menu', () => {
 });
 
 describe('progressive disclosure gates state, never visibility', () => {
-  it('climbs public → signed in → workspace', () => {
-    expect(earnedRung(false, false)).toBe(RUNG.PUBLIC);
-    expect(earnedRung(true, false)).toBe(RUNG.SIGNED_IN);
-    expect(earnedRung(true, true)).toBe(RUNG.WORKSPACE);
+  // The rail asks `destinationReachable`, not a rung ladder of its own — so
+  // these assert the rail agrees with the routing that renders the page.
+  it('leaves the canvas and the marketplace reachable with no account', () => {
+    for (const id of ['create', 'marketplace']) {
+      const row = NAV_GROUPS.find((g) => g.id === id);
+      expect(row, id).toBeDefined();
+      expect(destinationReachable(row!.href, false), id).toBe(true);
+    }
   });
 
-  it('leaves the canvas and the marketplace reachable with no account', () => {
-    const publicRows = NAV_GROUPS.filter((g) => g.rung === RUNG.PUBLIC).map((g) => g.id);
-    expect(publicRows).toContain('create');
-    expect(publicRows).toContain('marketplace');
+  it('opens every previewable destination to a guest and keeps operator tooling dim', () => {
+    // The defect this replaced: a guest reading `/incidents` over the sample
+    // workspace saw a padlock on the row they were standing on.
+    expect(destinationReachable('/incidents', false)).toBe(true);
+    expect(destinationReachable('/workforce', false)).toBe(true);
+    expect(destinationReachable('/settings', false)).toBe(false);
+    expect(destinationReachable('/admin', false)).toBe(false);
+  });
+
+  it('locks nothing once there is a session', () => {
+    for (const group of NAV_GROUPS) {
+      expect(destinationReachable(group.href, true), group.id).toBe(true);
+    }
   });
 });
 

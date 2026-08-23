@@ -45,14 +45,20 @@ describe('classifyRoute', () => {
 });
 
 describe('panelOpen', () => {
-  it('opens only when there is a board worth keeping', () => {
-    expect(panelOpen('/settings', true)).toBe(true);
-    expect(panelOpen('/settings', false)).toBe(false);
+  // The ROUTE decides, and only the route. It used to take "is there a board?"
+  // as a second argument, which made one destination render as a drawer for
+  // people mid-canvas and a full-bleed page for everyone else — the same URL,
+  // two layouts, chosen by state the person could not see. `LastBoardBridge`
+  // guarantees the stage underneath instead.
+  it('opens on a workbench destination whether or not a board is up yet', () => {
+    expect(panelOpen('/settings')).toBe(true);
+    expect(panelOpen('/incidents')).toBe(true);
   });
 
   it('stays closed on the stage itself and on standalone routes', () => {
-    expect(panelOpen('/create/c_8fa2', true)).toBe(false);
-    expect(panelOpen('/projects/7', true)).toBe(false);
+    expect(panelOpen('/create/c_8fa2')).toBe(false);
+    expect(panelOpen('/projects/7')).toBe(false);
+    expect(panelOpen('/blog/some-post')).toBe(false);
   });
 });
 

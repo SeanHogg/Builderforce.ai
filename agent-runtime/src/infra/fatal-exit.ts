@@ -13,10 +13,12 @@
  * happened anyway.
  */
 import process from "node:process";
-
 import { logDebug } from "../logger.js";
 import { formatUncaughtError } from "./errors.js";
-import { isPlatformErrorReportingEnabled, sendRuntimeErrorReport } from "./platform-error-reporter.js";
+import {
+  isPlatformErrorReportingEnabled,
+  sendRuntimeErrorReport,
+} from "./platform-error-reporter.js";
 
 /** Longest a crash may wait for its report before the process goes down regardless. */
 const REPORT_DEADLINE_MS = 5_000;
@@ -37,7 +39,7 @@ export interface FatalExitOptions {
  * Awaits the report under a hard deadline: a crash report that hangs must not turn
  * a fast crash into a wedged process.
  */
-export async function reportAndExit(error: unknown, options: FatalExitOptions): Promise<never> {
+export async function reportAndExit(error: unknown, options: FatalExitOptions): Promise<void> {
   console.error(options.label, formatUncaughtError(error));
 
   if (isPlatformErrorReportingEnabled()) {
@@ -55,9 +57,11 @@ export async function reportAndExit(error: unknown, options: FatalExitOptions): 
     });
   }
 
+  // Returns void, not `never`, on purpose. A `throw` after `process.exit` would be
+  // dead code in production and an INFINITE LOOP under a test that stubs `exit`:
+  // the rejection from this function feeds straight back into the very
+  // unhandled-rejection handler that called it.
   process.exit(options.exitCode ?? 1);
-  // `process.exit` does not return; this satisfies the `never` contract.
-  throw error;
 }
 
 /**

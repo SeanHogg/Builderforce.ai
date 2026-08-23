@@ -38,7 +38,7 @@ export function CanvasStage() {
   // panel slides OVER a board that stays mounted" (PRD 21 §0) only reads as true
   // if the board is actually visible under it. A route that keeps the whole
   // screen (the IDE, a single project) still takes it; the board waits, mounted.
-  const shown = onStage || panelOpen(pathname, active != null);
+  const shown = onStage || panelOpen(pathname);
 
   // Presentation mode is shell state now, so leaving the board no longer ends the
   // presentation — but arriving at a board via `?present=1` still has to arm it.

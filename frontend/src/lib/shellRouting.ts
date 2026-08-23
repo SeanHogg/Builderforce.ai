@@ -302,6 +302,38 @@ export function rendersAppShell(pathname: string, isAuthenticated: boolean): boo
 }
 
 /**
+ * May this visitor OPEN this destination — the question the left rail was
+ * answering with the wrong fact.
+ *
+ * The rail used to dim and lock a row by RUNG: a ladder of public → signed in →
+ * has a workspace, with each destination declaring the step it needs. That
+ * ladder was written before guest preview, and guest preview settled the same
+ * argument the other way — a signed-out visitor gets the REAL surface on every
+ * app route that is not operator tooling, over the sample workspace, with
+ * `<SessionGate>` walling the ACTIONS. The two rules then contradicted each
+ * other in the most visible place in the product: someone reading `/incidents`
+ * as a guest was looking at a rail that told them Reliability was locked, with
+ * a padlock on the row they were standing on. Nine rows claimed to be doors
+ * they were not.
+ *
+ * So reachability is asked ONCE, of the routing that actually decides it. A
+ * public route is reachable by definition — that is what public means, and it
+ * is why `/marketplace` and `/pricing` never needed a rung. An app route is
+ * reachable exactly when its shell will render for this visitor, which is
+ * `rendersAppShell`: true for every signed-in person, and for a guest on
+ * everything but the nine operator-only prefixes.
+ *
+ * A row that fails this is still LISTED, and still dim — "a dim row is an
+ * invitation; a missing row is a secret" (§11.4.4) was never the part that was
+ * wrong. What changed is that the invitation is now extended only where there
+ * is genuinely something behind the door.
+ */
+export function destinationReachable(pathname: string, isAuthenticated: boolean): boolean {
+  if (classifyShell(pathname) !== 'app') return true;
+  return rendersAppShell(pathname, isAuthenticated);
+}
+
+/**
  * The public explainer surfaces that are a PANEL when you are signed in
  * (PRD 21 §11.4.5).
  *

@@ -49,7 +49,7 @@ function Shell({ pathname, onMount }: { pathname: string; onMount: () => void })
   useEffect(() => { canvas.open(board); }, [canvas]);
   if (canvas.active == null) return null;
 
-  const asPanel = panelOpen(pathname, true);
+  const asPanel = panelOpen(pathname);
   return (
     <div>
       <StandInBoard onMount={onMount} />
@@ -85,8 +85,8 @@ describe('PRD 21 §6.1 — the stage survives a navigation', () => {
 
   it('classifies the destinations this rule is about as panels, not replacements', () => {
     for (const route of ['/settings', '/workforce', '/insights/delivery', '/quality', '/knowledge']) {
-      expect(panelOpen(route, true)).toBe(true);
+      expect(panelOpen(route)).toBe(true);
     }
-    expect(panelOpen('/projects/7', true)).toBe(false);
+    expect(panelOpen('/projects/7')).toBe(false);
   });
 });

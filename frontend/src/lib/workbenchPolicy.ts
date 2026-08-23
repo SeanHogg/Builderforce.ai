@@ -78,12 +78,24 @@ export function classifyRoute(pathname: string): RouteBucket {
 /**
  * Should the panel be open right now?
  *
- * The panel exists to keep the board while you consult a page — so with no board
- * there is nothing to keep, and the page takes the screen exactly as it does
- * today. That is what makes this change free for anyone who never opens a canvas.
+ * The ROUTE decides, and nothing else. It used to take a second argument — "is
+ * there a board to keep?" — on the reasoning that a panel exists to preserve a
+ * canvas, so with no canvas there is nothing to preserve and the page may as
+ * well take the screen. That reasoning is sound about the MECHANISM and wrong
+ * about the PRODUCT: it made one destination render as two different things.
+ * `/incidents` opened as a drawer over your board and as a full-bleed page ten
+ * minutes earlier, with a different width, a different index, a different way
+ * out and a different place for its title — and the difference was invisible
+ * state the person could not see or predict. "The UI/UX is inconsistent
+ * throughout" is that, exactly.
+ *
+ * So a workbench route is a panel, always. What it opens OVER is somebody
+ * else's job: `LastBoardBridge` restores the last board, or starts a fresh
+ * local-first one when there is nothing to restore, so the panel always has a
+ * stage under it and ✕ always has a board to close to.
  */
-export function panelOpen(pathname: string, hasActiveCanvas: boolean): boolean {
-  return hasActiveCanvas && classifyRoute(pathname) === 'workbench';
+export function panelOpen(pathname: string): boolean {
+  return classifyRoute(pathname) === 'workbench';
 }
 
 /**

@@ -2,6 +2,12 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.8.133] — When something goes wrong in the editor, someone can actually find out why
+
+- **An error in the extension used to end with you.** It was written to the BuilderForce output panel and nowhere else, so unless you thought to open that panel, copy it out and send it, nobody could see what had happened. Turn on **BuilderForce: Report Errors** in settings and the errors the extension catches are filed against your selected project, in the same Quality feed as everything else your workspace already tracks.
+- **Off by default, and it stays that way until you say otherwise.** With the setting off, nothing about an error leaves your machine — the output panel is still the complete record. Nothing new to sign in with either: it uses the account you are already signed in with.
+- **The messages you see when a command fails now leave a trace.** "Could not load projects", "could not rename chat", "could not resolve approval" and the rest used to be shown and forgotten; each one is now written to the output panel too, and filed if you have reporting on.
+
 ## [2026.8.129] — The extension starts again, and Copy diagnostics tells you when it didn't work
 
 - **The extension had stopped activating at all.** Since 2026.7.126 the bundle threw before a single line of our code ran, which kills every command, view and panel and leaves nothing behind but one notification you may already have dismissed. Fixed at the bundler, and now caught before packaging: a new test suite launches a real VS Code, activates the extension in it, checks that every command in the manifest is genuinely registered, that every view resolves, and that the chat webview actually boots and talks back to the editor.

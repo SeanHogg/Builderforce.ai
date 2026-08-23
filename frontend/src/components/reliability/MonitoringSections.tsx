@@ -40,21 +40,10 @@ import {
   type EscalationPolicy,
 } from '@/lib/builderforceApi';
 import { useFormat } from "@/i18n/useFormat";
+import { faultMessage } from '@/lib/apiClient';
+import { SECTION_CARD as card, SectionEmpty, SectionError, SectionLoading } from '@/components/ui/SectionState';
+import { SEVERITIES, SEVERITY_BADGE } from '@/lib/reliability/severity';
 
-const card: React.CSSProperties = {
-  background: 'var(--bg-base)',
-  border: '1px solid var(--border-subtle)',
-  borderRadius: 'var(--radius-lg)',
-  padding: 16,
-};
-
-const SEVERITIES: IncidentSeverity[] = ['sev1', 'sev2', 'sev3', 'sev4'];
-const SEVERITY_BADGE: Record<IncidentSeverity, string> = {
-  sev1: 'badge-red',
-  sev2: 'badge-orange',
-  sev3: 'badge-amber',
-  sev4: 'badge-blue',
-};
 const MONITOR_TYPES: MonitorType[] = ['heartbeat', 'http_check', 'webhook', 'metric_threshold', 'manual'];
 const METRICS: MonitorMetric[] = [
   'token_spend_usd',
@@ -128,15 +117,6 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     </label>
   );
 }
-function Loader({ t }: { t: T }) {
-  return <div style={{ ...card, color: 'var(--text-muted)' }}>{t('loading')}</div>;
-}
-function ErrorCard({ msg }: { msg: string }) {
-  return <div style={{ ...card, borderColor: 'var(--error)', color: 'var(--error-text)' }}>{msg}</div>;
-}
-function EmptyCard({ msg }: { msg: string }) {
-  return <div style={{ ...card, color: 'var(--text-muted)', textAlign: 'center', padding: 32 }}>{msg}</div>;
-}
 
 /* ─────────────────────────── Boards ─────────────────────────── */
 
@@ -153,7 +133,7 @@ function BoardsSection({ t, tc, canManage }: { t: T; tc: T; canManage: boolean }
     setError(null);
     monitoringApi.listBoards()
       .then(setBoards)
-      .catch((e: Error) => setError(e.message))
+      .catch((e: unknown) => setError(faultMessage(e)))
       .finally(() => setLoading(false));
   }, []);
 
@@ -210,10 +190,10 @@ function BoardsSection({ t, tc, canManage }: { t: T; tc: T; canManage: boolean }
         </button>
       </div>
 
-      {loading && <Loader t={t} />}
-      {error && <ErrorCard msg={error} />}
+      {loading && <SectionLoading label={t('loading')} />}
+      <SectionError error={error} />
       {!loading && !error && (boards.length === 0
-        ? <EmptyCard msg={t('emptyBoards')} />
+        ? <SectionEmpty message={t('emptyBoards')} />
         : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 12 }}>
             {boards.map((b) => (
@@ -267,7 +247,7 @@ function BoardCanvas({ t, tc, canManage, boardId, onBack }: { t: T; tc: T; canMa
     setError(null);
     monitoringApi.getBoard(boardId)
       .then((r) => { setBoard(r.board); setMonitors(r.monitors); })
-      .catch((e: Error) => setError(e.message))
+      .catch((e: unknown) => setError(faultMessage(e)))
       .finally(() => setLoading(false));
   }, [boardId]);
 
@@ -386,8 +366,8 @@ function BoardCanvas({ t, tc, canManage, boardId, onBack }: { t: T; tc: T; canMa
 
       <input ref={fileRef} type="file" accept="image/*" onChange={onFilePick} style={{ display: 'none' }} />
 
-      {loading && <Loader t={t} />}
-      {error && <ErrorCard msg={error} />}
+      {loading && <SectionLoading label={t('loading')} />}
+      <SectionError error={error} />
 
       {!loading && board && (
         <>
@@ -640,7 +620,7 @@ function MonitorPanel({
         setSignalUrl(r.signalUrl);
         setCurrentIncidentId(m.currentIncidentId);
       })
-      .catch((e: Error) => setError(e.message))
+      .catch((e: unknown) => setError(faultMessage(e)))
       .finally(() => setLoading(false));
   }, [isNew, monitorId]);
 
@@ -738,8 +718,8 @@ function MonitorPanel({
   return (
     <SlideOutPanel open onClose={onClose} title={isNew ? t('newMonitor') : t('editMonitor')} width="min(560px, 96vw)">
       <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {error && <ErrorCard msg={error} />}
-        {loading ? <Loader t={t} /> : (
+        <SectionError error={error} />
+        {loading ? <SectionLoading label={t('loading')} /> : (
           <>
             <Field label={t('fieldLabel')}>
               <input className="input" value={label} onChange={(e) => setLabel(e.target.value)} placeholder={t('labelPlaceholder')} />
@@ -909,13 +889,13 @@ function ReportingSection({ t }: { t: T }) {
     setError(null);
     monitoringApi.getReport()
       .then(setReport)
-      .catch((e: Error) => setError(e.message))
+      .catch((e: unknown) => setError(faultMessage(e)))
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <Loader t={t} />;
-  if (error) return <ErrorCard msg={error} />;
-  if (!report) return <EmptyCard msg={t('noData')} />;
+  if (loading) return <SectionLoading label={t('loading')} />;
+  if (error) return <SectionError error={error} />;
+  if (!report) return <SectionEmpty message={t('noData')} />;
 
   const { monitors, incidents } = report;
 

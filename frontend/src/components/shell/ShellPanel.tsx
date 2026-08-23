@@ -208,15 +208,20 @@ export function ShellPanel({ children }: { children: React.ReactNode }) {
           : items.length > 1 ? <ShellIndex orientation="vertical" /> : undefined
       }
     >
-      {/* A reference page brings its own full-bleed layout (hero, bands, wraps),
-          so it gets no panel padding — padding it produced a marketing page with
-          a 16px gutter inside a panel, which reads as a mistake in both. It gets
-          `.ref-panel-body` instead, which widens the marketing COLUMN's gutter so
-          the hero stops running into the drawer's left border while the bands
-          still paint edge to edge. */}
-      <div
-        {...(reference ? { className: 'ref-panel-body' } : { style: { padding: 'var(--space-4)' } })}
-      >
+      {/* `.panel-body` on BOTH branches, because the thing they share is the one
+          that was missing: a page in here must measure the PANEL, not the window.
+          `.ui-panel-body` is already a named container for exactly that reason,
+          but the display type scale was still `vw`, so a hero rendered at its
+          1920px size inside a 480px drawer and ran off the right edge. The class
+          restates the scale in `cqi` — see globals.css.
+
+          A reference page then adds `.ref-panel-body`: it brings its own
+          full-bleed layout (hero, bands, wraps), so it drops the padding —
+          padding it produced a marketing page with a 16px frame inside a panel,
+          which reads as a mistake in both — and widens the marketing COLUMN's
+          gutter so the hero stops running into the drawer's left border while
+          the bands still paint edge to edge. */}
+      <div className={reference ? 'panel-body ref-panel-body' : 'panel-body'}>
         {children}
       </div>
     </SlideOutPanel>

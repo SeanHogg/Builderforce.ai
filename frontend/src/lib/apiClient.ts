@@ -167,13 +167,59 @@ export class ApiRequestError extends Error {
   readonly status: number;
   readonly code?: string;
   readonly details?: unknown;
-  constructor(message: string, status: number, code?: string, details?: unknown) {
+  /**
+   * True when this is the server restating that nobody is signed in — a 401
+   * answering a request that carried no credential at all.
+   *
+   * The transport has always KNOWN this (see {@link isAnonymousUnauthorized}:
+   * it is why no support ticket is filed) and then threw an error that did not
+   * say so, leaving every caller to render `Missing or malformed Authorization
+   * header` in a red box. That sentence is not a fault report, it is a fact
+   * about the reader, and a guest reading `/incidents` over the sample
+   * workspace met it as a failure. Carrying the flag on the error is what lets
+   * a surface answer with its empty state instead — see
+   * {@link isSignedOutFailure}.
+   */
+  readonly signedOut: boolean;
+  constructor(message: string, status: number, code?: string, details?: unknown, signedOut = false) {
     super(message);
     this.name = 'ApiRequestError';
     this.status = status;
+    this.signedOut = signedOut;
     if (code !== undefined) this.code = code;
     if (details !== undefined) this.details = details;
   }
+}
+
+/**
+ * Is this rejection just "you are not signed in"?
+ *
+ * ONE predicate, so a surface never re-derives it from a status code and a
+ * guess about whether a token was sent — it cannot know the second half, which
+ * is exactly why the checks that were attempted read `status === 401` and
+ * treated an EXPIRED session as a signed-out one.
+ *
+ * Accepts `unknown` because that is what a `catch` binding is.
+ */
+export function isSignedOutFailure(error: unknown): boolean {
+  return error instanceof ApiRequestError && error.signedOut;
+}
+
+/**
+ * The message a surface should SHOW for a rejection, or `null` when there is
+ * nothing to report.
+ *
+ * The shape is chosen so the migration is one line per call site and the guards
+ * around it keep working: `setError(faultMessage(e))` in place of
+ * `setError(e.message)` leaves `error` a `string | null`, so every existing
+ * `{error && …}` and `!error &&` reads correctly — and a signed-out read now
+ * falls through to the section's EMPTY state, which is the honest answer,
+ * rather than a red box quoting a header name at someone who simply has no
+ * account.
+ */
+export function faultMessage(error: unknown): string | null {
+  if (!error || isSignedOutFailure(error)) return null;
+  return error instanceof Error ? error.message : String(error);
 }
 
 /**
@@ -317,7 +363,7 @@ async function reportAndThrow(
   // Through the same unwrap as the toast: a caller that catches this reads the
   // nested code and details too, and never a raw numeric `code`.
   const { code, details } = flattenErrorBody(body);
-  throw new ApiRequestError(errorMessage(body, res), res.status, code, details);
+  throw new ApiRequestError(errorMessage(body, res), res.status, code, details, isAnonymousUnauthorized(res.status, hadToken));
 }
 
 /**
