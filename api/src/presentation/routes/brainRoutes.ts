@@ -23,7 +23,7 @@ import { notify } from '../../application/notifications/notify';
 import { sendChatInviteEmail } from '../../infrastructure/email/EmailService';
 import { sendTransactionalEmail } from '../../application/email/sendEmail';
 import { headerHints } from '../../application/email/emailLocaleResolver';
-import { handleAssetRead, handleAssetSign, handleAssetUpload } from './assetRoutes';
+import { handleAssetSign, handleAssetUpload, handleTenantAssetRead } from './assetRoutes';
 import type { Env, HonoEnv } from '../../env';
 import type { BrainService, BrainTraceEventInput } from '../../application/brain/BrainService';
 import { learnFromPersistedTurns } from '../../application/brain/brainEvermindLearning';
@@ -752,7 +752,7 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
   // copy so the two cannot answer differently.
   router.post('/upload', handleAssetUpload);
   router.post('/uploads/sign', handleAssetSign);
-  router.get('/uploads/*', handleAssetRead);
+  router.get('/uploads/*', handleTenantAssetRead);
 
   // POST /projects/:id/memory-sync — push consolidated project memory to all tenant agentHosts
   router.post('/projects/:id/memory-sync', async (c) => {

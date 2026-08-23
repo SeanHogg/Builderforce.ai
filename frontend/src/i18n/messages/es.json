@@ -16680,7 +16680,8 @@
       "hiring": "Puestos, ATS y currículums.",
       "insights": "Entrega, gasto e impacto de la IA.",
       "inbox": "Correo, reglas y respuestas con IA.",
-      "disputes": "Disputas de depósito, mediadas hasta una resolución."
+      "disputes": "Disputas de depósito, mediadas hasta una resolución.",
+      "learning": "Rutas, requisitos previos y el LRS."
     }
   },
   "tutorials": {
@@ -23155,7 +23156,10 @@
       "opening": "Abriendo el flujo de trabajo en el lienzo…",
       "opened": "{count, plural, one {Se abrió # paso en el lienzo.} other {Se abrieron # pasos en el lienzo.}}",
       "frameHolds": "{count, plural, =0 {Todavía no hay pasos en esta sección.} one {# paso en esta sección.} other {# pasos en esta sección.}}",
-      "flowNamedAfterFrame": "El flujo de trabajo compilado toma el nombre de esta sección: {name}."
+      "flowNamedAfterFrame": "El flujo de trabajo compilado toma el nombre de esta sección: {name}.",
+      "nothingToOpen": "Este flujo aún no tiene pasos, así que no hay nada que abrir.",
+      "untitledStep": "Paso {position}",
+      "openToBuild": "Abre este flujo en el lienzo primero: el lienzo es lo que lo construye."
     },
     "flowIssue": {
       "noSteps": "Este flujo todavía no tiene pasos que ejecutar.",
@@ -24320,6 +24324,9 @@
       },
       "freelancer-earnings": {
         "description": "Un único extracto de todos los espacios de trabajo que te han pagado: bruto, la comisión de la plataforma y por qué es la que es, neto, lo que sigue en depósito y cada transacción detrás de esas cifras, además de adónde nos has dicho que enviemos el dinero."
+      },
+      "learning": {
+        "description": "Rutas de aprendizaje sobre tus cursos, los requisitos previos que las desbloquean y el Learning Record Store xAPI del propio espacio de trabajo."
       }
     }
   },

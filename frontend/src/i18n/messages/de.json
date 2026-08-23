@@ -16680,7 +16680,8 @@
       "hiring": "Rollen, Bewerbersystem und Lebensläufe.",
       "insights": "Lieferung, Ausgaben und KI-Wirkung.",
       "inbox": "E-Mail, Regeln und KI-Antworten.",
-      "disputes": "Treuhand-Streitfälle, vermittelt bis zur Entscheidung."
+      "disputes": "Treuhand-Streitfälle, vermittelt bis zur Entscheidung.",
+      "learning": "Lernpfade, Voraussetzungen und der LRS."
     }
   },
   "tutorials": {
@@ -23155,7 +23156,10 @@
       "opening": "Workflow wird auf der Leinwand geöffnet…",
       "opened": "{count, plural, one {# Schritt auf der Leinwand geöffnet.} other {# Schritte auf der Leinwand geöffnet.}}",
       "frameHolds": "{count, plural, =0 {Noch keine Schritte in diesem Bereich.} one {# Schritt in diesem Bereich.} other {# Schritte in diesem Bereich.}}",
-      "flowNamedAfterFrame": "Der erstellte Workflow trägt den Namen dieses Bereichs: {name}."
+      "flowNamedAfterFrame": "Der erstellte Workflow trägt den Namen dieses Bereichs: {name}.",
+      "nothingToOpen": "Dieser Ablauf hat noch keine Schritte, es gibt also nichts zu öffnen.",
+      "untitledStep": "Schritt {position}",
+      "openToBuild": "Öffne diesen Ablauf zuerst auf dem Board — das Board ist es, was ihn baut."
     },
     "flowIssue": {
       "noSteps": "Dieser Ablauf hat noch keine Schritte zum Ausführen.",
@@ -24320,6 +24324,9 @@
       },
       "freelancer-earnings": {
         "description": "Eine Abrechnung über alle Workspaces hinweg, die dich bezahlt haben: brutto, die Plattformgebühr und warum sie so hoch ist, netto, was noch treuhänderisch gehalten wird, und jede Transaktion hinter diesen Zahlen — dazu der Weg, den du für die Auszahlung angegeben hast."
+      },
+      "learning": {
+        "description": "Lernpfade über deine Kurse, die Voraussetzungen, die sie freischalten, und der eigene xAPI Learning Record Store des Workspace."
       }
     }
   },

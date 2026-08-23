@@ -5,7 +5,7 @@ import { Handle, NodeResizer, Position, useStore, type NodeProps } from '@xyflow
 import { useTranslations } from 'next-intl';
 import type { BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
 import ReactMarkdown from 'react-markdown';
-import { MARKDOWN_REHYPE_PLUGINS, MARKDOWN_REMARK_PLUGINS } from '@/lib/markdownPipeline';
+import { DOCUMENT_REMARK_PLUGINS, MARKDOWN_REHYPE_PLUGINS } from '@/lib/markdownPipeline';
 import { Avatar, evermindLearnedStatus, evermindNextAction } from '@seanhogg/builderforce-brain-ui';
 import type { CreationNodeData, CreationObjectKind } from './types';
 import {
@@ -1541,7 +1541,7 @@ function DocumentBody({ data, onEdit }: {
     {actions}
     <div className={`${styles.documentSheet} nowheel nodrag`} role="region" aria-label={data.title} tabIndex={0}>
       <div className={styles.documentPage} data-paginated={paginated ? 'true' : undefined}>
-        <div className={styles.documentMarkdown}><ReactMarkdown remarkPlugins={MARKDOWN_REMARK_PLUGINS} rehypePlugins={MARKDOWN_REHYPE_PLUGINS}>{pages[page] ?? document.markdown}</ReactMarkdown></div>
+        <div className={styles.documentMarkdown}><ReactMarkdown remarkPlugins={DOCUMENT_REMARK_PLUGINS} rehypePlugins={MARKDOWN_REHYPE_PLUGINS}>{pages[page] ?? document.markdown}</ReactMarkdown></div>
         {paginated && <span className={styles.documentPageNumber} aria-hidden>{page + 1}</span>}
       </div>
     </div>

@@ -117,6 +117,7 @@ import {
   visualizeDataset as visualizeDatasetUseCase,
   type MaterializeResult,
 } from '@/domains/canvas/application/MaterializeDataset';
+import { CanvasProposalStage } from '@/domains/canvas/application/CanvasProposalStage';
 import { CARD_ACTS } from '@/domains/canvas/application/cardActs';
 import { parseResourceRef } from '@/domains/canvas/domain/resourceRef';
 import { CardActProvider, useCardActRunnerFor, type CardActBoardBinding } from './cardActRunner';
@@ -1788,7 +1789,6 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   // and shrinks when the bar is collapsed.
   const topChromeSpaceRef = useChromeSpace(shellRef, '--canvas-top-chrome-space', { edge: 'top', gap: TOP_CHROME_CLEARANCE });
   const paletteSearchRef = useRef<HTMLInputElement | null>(null);
-  const proposalBuffer = useRef<ProposedCanvasChange[]>([]);
   /**
    * The executive contract THIS TURN is running, read off the prompt when the
    * run starts.
@@ -2676,6 +2676,25 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const edgesRef = useRef<Edge[]>([]);
   edgesRef.current = edges;
 
+  /**
+   * What THIS Brain turn intends the board to become, before a human has agreed
+   * to any of it.
+   *
+   * Reading it through {@link CanvasProposalStage} rather than a raw array is the
+   * reason a tool can no longer forget that its view of the board must include
+   * what the tools before it staged: `stage.nodes()` is the union and there is no
+   * accessor that is not. That question used to be re-answered by hand at 58 call
+   * sites — three of which spelled the local differently and one of which left the
+   * staged EDGES out — and getting it wrong placed objects on top of each other.
+   *
+   * Constructed once and never replaced, so the tools registered in `canvasActions`
+   * keep one identity across renders; it reads `nodesRef`/`edgesRef` so it always
+   * sees the CURRENT board rather than whichever one the memo captured.
+   */
+  const stageRef = useRef<CanvasProposalStage | null>(null);
+  stageRef.current ??= new CanvasProposalStage({ nodes: () => nodesRef.current, edges: () => edgesRef.current });
+  const stage = stageRef.current;
+
   const updateNodeData = useCallback((nodeId: string, patch: Partial<CreationNodeData>) => {
     if (!cardsEditable) return;
     setNodes((current) => current.map((node) => {
@@ -3523,9 +3542,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       // Actionable rather than a bare failure: the fix is one panel away.
       return { ok: false, error: tSocial('noAccountsHint') };
     }
-    const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
     const node = newNode('socialFeed', nextCanvasObjectPosition(
-      [...nodes, ...stagedNodes],
+      stage.nodes(),
       { ...(opts.x != null ? { x: opts.x } : {}), ...(opts.y != null ? { y: opts.y } : {}) },
       typeof window !== 'undefined' && window.innerWidth <= 760,
       'socialFeed',
@@ -4445,8 +4463,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * be classified in the next tool call rather than being reported as absent.
    */
   const resolveTabularTarget = useCallback((objectId?: string) => {
-    const staged = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
-    const candidates = [...nodes, ...staged].filter((node) =>
+    const candidates = stage.nodes().filter((node) =>
       ['dataset', 'table', 'spreadsheet', 'datasource'].includes(node.data.kind)
       && Array.isArray(node.data.rows) && node.data.rows.length > 0);
     const node = objectId ? candidates.find((candidate) => candidate.id === objectId) : candidates.length === 1 ? candidates[0] : undefined;
@@ -4480,8 +4497,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * and remount every Object on the board. */
   const boundBuildsRef = useRef<BoundCanvasBuild[]>([]);
   boundBuildsRef.current = useMemo(() => {
-    const staged = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
-    return [...nodes, ...staged].flatMap((node) => {
+    return stage.nodes().flatMap((node) => {
       if (node.data.kind !== 'build') return [];
       const binding = canvasBuildBinding(node.data);
       return binding ? [{ objectId: node.id, title: String(node.data.title ?? 'Build'), binding }] : [];
@@ -4499,9 +4515,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * the click path, so both routes leave identical state.
    */
   const createBuildForTool = useCallback(async (input: { title: string; modality: ProjectModality }): Promise<BoundCanvasBuild> => {
-    const staged = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
     const narrowViewport = typeof window !== 'undefined' && window.innerWidth <= 760;
-    const node = newNode('build', nextCanvasObjectPosition([...nodes, ...staged], {}, narrowViewport, 'build'));
+    const node = newNode('build', nextCanvasObjectPosition(stage.nodes(), {}, narrowViewport, 'build'));
     const ide = await createCanvasBuild({ title: input.title, modality: input.modality });
     const patch = canvasBuildPatch(ide);
     node.data = { ...node.data, ...patch, title: input.title };
@@ -4537,26 +4552,21 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     hasTenant: persistence === 'server',
     canEdit,
     objects: () => {
-      const staged = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
-      return [...nodesRef.current, ...staged].map((node) => ({
+      return stage.nodes().map((node) => ({
         id: node.id, kind: node.data.kind, title: node.data.title,
         data: node.data as unknown as Record<string, unknown>,
       }));
     },
     addObject: (kind, fields, at) => {
-      const staged = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
       const narrowViewport = typeof window !== 'undefined' && window.innerWidth <= 760;
-      const node = newNode(kind as CreationObjectKind, nextCanvasObjectPosition([...nodesRef.current, ...staged], at ?? {}, narrowViewport, kind as CreationObjectKind));
+      const node = newNode(kind as CreationObjectKind, nextCanvasObjectPosition(stage.nodes(), at ?? {}, narrowViewport, kind as CreationObjectKind));
       node.data = { ...node.data, ...sanitizeCreationObjectPatch(kind as CreationObjectKind, fields) } as CreationNodeData;
-      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: String(fields.title ?? node.data.title), node });
+      stage.addObject(String(fields.title ?? node.data.title), node);
       return { objectId: node.id };
     },
     updateObject: (objectId, patch, label) => {
       const kind = nodesRef.current.find((node) => node.id === objectId)?.data.kind;
-      proposalBuffer.current.push({
-        id: crypto.randomUUID(), type: 'object.update', label, objectId,
-        patch: sanitizeCreationObjectPatch((kind ?? 'account') as CreationObjectKind, patch),
-      });
+      stage.updateObject(label, objectId, sanitizeCreationObjectPatch((kind ?? 'account') as CreationObjectKind, patch));
     },
   }), [canEdit, persistence, sessionId]);
 
@@ -4609,8 +4619,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     asset: CanvasImageAsset,
     options: { title: string; prompt?: string; at?: { x?: number; y?: number } },
   ): CreationFlowNode => {
-    const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
-    const node = newNode('image', nextCanvasObjectPosition([...nodes, ...stagedNodes], options.at ?? {}, typeof window !== 'undefined' && window.innerWidth <= 760, 'image'));
+    const node = newNode('image', nextCanvasObjectPosition(stage.nodes(), options.at ?? {}, typeof window !== 'undefined' && window.innerWidth <= 760, 'image'));
     const mimeType = asset.url.startsWith('data:image/png') || /\.png(?:$|[?#])/i.test(asset.url) ? 'image/png'
       : asset.url.startsWith('data:image/webp') || /\.webp(?:$|[?#])/i.test(asset.url) ? 'image/webp' : 'image/jpeg';
     const extension = mimeType === 'image/png' ? 'png' : mimeType === 'image/webp' ? 'webp' : 'jpg';
@@ -4659,10 +4668,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       deliverables: withCreationDeliverable(node.data, delivered),
     };
     node.style = { width: 520, height: 430 };
-    proposalBuffer.current.push({
-      id: crypto.randomUUID(), type: 'object.add', node,
-      label: t(asset.source === 'stock' ? 'imageFoundProposal' : asset.source === 'capture' ? 'imageCapturedProposal' : 'imageGeneratedProposal', { title: node.data.title }),
-    });
+    stage.addObject(t(asset.source === 'stock' ? 'imageFoundProposal' : asset.source === 'capture' ? 'imageCapturedProposal' : 'imageGeneratedProposal', { title: node.data.title }), node);
     return node;
   };
 
@@ -4889,18 +4895,17 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         summary: `Synced from the investor seat's company record on ${new Date().toISOString().slice(0, 10)}.`,
       };
       const patch = sanitizeCreationObjectPatch('company', fields);
-      const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
       const existing = args.objectId
-        ? [...nodes, ...stagedNodes].find((node) => node.id === args.objectId)
-        : [...nodes, ...stagedNodes].find((node) => node.data.kind === 'company');
+        ? stage.nodes().find((node) => node.id === args.objectId)
+        : stage.nodes().find((node) => node.data.kind === 'company');
       if (existing) {
-        proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.update', label: t('founderCompanySynced', { title: String(fields.title) }), objectId: existing.id, patch });
+        stage.updateObject(t('founderCompanySynced', { title: String(fields.title) }), existing.id, patch);
         return { ok: true, proposed: true, companyFound: true, object: { id: existing.id, kind: 'company', title: fields.title, updated: true } };
       }
       const isNarrow = typeof window !== 'undefined' && window.innerWidth <= 760;
-      const node = newNode('company', nextCanvasObjectPosition([...nodes, ...stagedNodes], args, isNarrow, 'company'));
+      const node = newNode('company', nextCanvasObjectPosition(stage.nodes(), args, isNarrow, 'company'));
       node.data = { ...node.data, ...patch } as CreationNodeData;
-      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: t('founderCompanySynced', { title: String(fields.title) }), node });
+      stage.addObject(t('founderCompanySynced', { title: String(fields.title) }), node);
       return { ok: true, proposed: true, companyFound: true, object: { id: node.id, kind: 'company', title: fields.title } };
     },
   }, {
@@ -4925,8 +4930,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const args = raw as { market?: string; title?: string; coverageRadiusMiles?: number; x?: number; y?: number };
       const market = typeof args.market === 'string' ? args.market.trim() : '';
       if (!market) return { error: 'Pass the market being analysed, e.g. "Florida".' };
-      const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
-      const competitorNodes = [...nodes, ...stagedNodes].filter((node) => node.data.kind === 'competitor');
+      const competitorNodes = stage.nodes().filter((node) => node.data.kind === 'competitor');
       if (!competitorNodes.length) {
         return { error: 'No competitor objects are on this canvas yet. Research the market with builtin_web_search, resolve each site with builtin_geo_geocode, then create one `competitor` object per rival with canvas_add_object before mapping.' };
       }
@@ -4960,9 +4964,9 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       });
       const patch = sanitizeCreationObjectPatch('map', fields);
       const isNarrow = typeof window !== 'undefined' && window.innerWidth <= 760;
-      const node = newNode('map', nextCanvasObjectPosition([...nodes, ...stagedNodes], args, isNarrow, 'map'));
+      const node = newNode('map', nextCanvasObjectPosition(stage.nodes(), args, isNarrow, 'map'));
       node.data = { ...node.data, ...patch } as CreationNodeData;
-      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: t('founderCompetitorMapProposal', { title }), node });
+      stage.addObject(t('founderCompetitorMapProposal', { title }), node);
       return {
         ok: true, proposed: true,
         object: { id: node.id, kind: 'map', title },
@@ -4992,8 +4996,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       if (persistence !== 'server') return { error: 'Live metrics read tenant domain data, which needs a signed-in, saved Creation Canvas session.' };
       if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
       const args = raw as { objectId?: string; binding?: string; days?: number };
-      const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
-      const candidates = [...nodes, ...stagedNodes].filter((node) => node.data.kind === 'liveMetric');
+      const candidates = stage.nodes().filter((node) => node.data.kind === 'liveMetric');
       const target = args.objectId ? candidates.find((node) => node.id === args.objectId) : candidates.length === 1 ? candidates[0] : undefined;
       if (!target) {
         return { error: candidates.length
@@ -5031,7 +5034,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         fetchedAt: new Date().toISOString(),
       };
       const patch = sanitizeCreationObjectPatch('liveMetric', fields);
-      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.update', label: t('founderMetricRefreshed', { title: target.data.title }), objectId: target.id, patch });
+      stage.updateObject(t('founderMetricRefreshed', { title: target.data.title }), target.id, patch);
       return {
         ok: true, proposed: true,
         object: { id: target.id, kind: 'liveMetric', title: target.data.title },
@@ -5060,8 +5063,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     run: (raw: unknown) => {
       if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
       const args = raw as { postingObjectId?: string; shortlistObjectId?: string; resumeObjectIds?: string[]; level?: string };
-      const staged = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
-      const all = [...nodes, ...staged];
+      const all = stage.nodes();
 
       const postings = all.filter((node) => node.data.kind === 'jobPosting');
       const posting = args.postingObjectId ? postings.find((node) => node.id === args.postingObjectId) : postings.length === 1 ? postings[0] : undefined;
@@ -5133,12 +5135,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         const resume = resumes.find((node) => node.id === entry.ref);
         const existing = attachedTo.get(entry.ref);
         if (existing) {
-          proposalBuffer.current.push({
-            id: crypto.randomUUID(), type: 'object.update',
-            label: t('hiringCandidateScored', { title: String(existing.data.title) }),
-            objectId: existing.id,
-            patch: sanitizeCreationObjectPatch('candidate', { fitScore: entry.score, postingRef: posting.id, stage: t('hiringCandidateStageScreened') }),
-          });
+          stage.updateObject(
+            t('hiringCandidateScored', { title: String(existing.data.title) }),
+            existing.id,
+            sanitizeCreationObjectPatch('candidate', { fitScore: entry.score, postingRef: posting.id, stage: t('hiringCandidateStageScreened') }),
+          );
           return { ref: entry.ref, candidateId: existing.id };
         }
         // NOTHING INVENTED. The name, headline and location are read out of the résumé
@@ -5162,7 +5163,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           }),
           title: String(basics?.name ?? entry.candidate),
         };
-        proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: t('hiringCandidateCreated', { title: String(node.data.title) }), node });
+        stage.addObject(t('hiringCandidateCreated', { title: String(node.data.title) }), node);
         return { ref: entry.ref, candidateId: node.id };
       });
       const candidateIdFor = new Map(attachments.map((entry) => [entry.ref, entry.candidateId]));
@@ -5189,11 +5190,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const shortlists = all.filter((node) => node.data.kind === 'shortlist');
       const target = args.shortlistObjectId ? shortlists.find((node) => node.id === args.shortlistObjectId) : undefined;
       if (target) {
-        proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.update', label: t('hiringShortlistUpdated', { title: target.data.title }), objectId: target.id, patch });
+        stage.updateObject(t('hiringShortlistUpdated', { title: target.data.title }), target.id, patch);
       } else {
         const node = newNode('shortlist', { x: 320, y: 320 });
         node.data = { ...node.data, ...patch, title: t('hiringShortlistFor', { title: String(posting.data.title || '') }) };
-        proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: t('hiringShortlistCreated'), node });
+        stage.addObject(t('hiringShortlistCreated'), node);
       }
 
       return {
@@ -5228,8 +5229,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     run: (raw: unknown) => {
       if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
       const args = raw as { objectId?: string; templateIds?: unknown; count?: number };
-      const staged = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
-      const all = [...nodes, ...staged];
+      const all = stage.nodes();
       const sources = all.filter((node) => resumeDocumentFromNode(node.data) !== null);
       const source = args.objectId ? all.find((node) => node.id === args.objectId) : sources.length === 1 ? sources[0] : undefined;
       if (!source) {
@@ -5252,7 +5252,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const variants = resumeTemplateVariants(document, templateIds, { title: String(source.data.title || '') });
       const created: Array<{ id: string; templateId: string; title: string }> = [];
       for (const variant of variants) {
-        const placed = [...all, ...proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : [])];
+        const placed = stage.nodes();
         const node = newNode('resume', nextCanvasObjectPosition(placed, {}, narrowViewport, 'resume'));
         node.data = {
           ...node.data,
@@ -5262,7 +5262,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           status: t('resumeEditor.statusOriginal'),
         };
         node.style = { width: 560, height: 620 };
-        proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: `Render résumé · ${variant.industry}`, node });
+        stage.addObject(`Render résumé · ${variant.industry}`, node);
         created.push({ id: node.id, templateId: variant.templateId, title: String(node.data.title) });
       }
       return {
@@ -5305,8 +5305,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     run: async (raw: unknown) => {
       if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
       const args = raw as { objectId?: string; title?: string };
-      const staged = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
-      const all = [...nodes, ...staged];
+      const all = stage.nodes();
       // A résumé that is ALREADY structured is not a source: re-importing it would
       // replace a parsed document with a re-parse of its own rendering.
       const candidates = all.filter((node) => canvasDocument(node.data) && resumeDocumentFromNode(node.data) === null);
@@ -5360,7 +5359,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const node = newNode('resume', nextCanvasObjectPosition(all, { x: source.position.x + 460, y: source.position.y }, narrowViewport, 'resume'));
       node.data = { ...node.data, ...resumeNodePatch(family), title, status: t('resumeEditor.statusOriginal') };
       node.style = { width: 560, height: 620 };
-      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: t('resumeImportedFrom', { title: String(source.data.title || '') }), node });
+      stage.addObject(t('resumeImportedFrom', { title: String(source.data.title || '') }), node);
 
       // A structure this thin means the source had no recognisable sections. It is
       // still the person's résumé and still lands on the board — but the turn must
@@ -5408,8 +5407,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     run: async (raw: unknown) => {
       if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
       const args = raw as { objectId?: string; title?: string };
-      const staged = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
-      const all = [...nodes, ...staged];
+      const all = stage.nodes();
       // An attachment whose bytes were retained and whose text was never extracted. Both
       // halves matter: a file with a `canvasDocument` was already read for free in the
       // browser, and re-reading it through a model would spend tokens to produce a worse
@@ -5466,7 +5464,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         status: 'Transcribed',
       };
       node.style = { width: 560, height: 620 };
-      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: `Read ${fileName}`, node });
+      stage.addObject(`Read ${fileName}`, node);
 
       const illegible = (read.markdown.match(/\[illegible\]/gi) ?? []).length;
       return {
@@ -5507,10 +5505,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const existing: RosterRow[] = Array.isArray(target.data.roster) ? target.data.roster as RosterRow[] : [];
       const seen = new Set(existing.map((row) => specRefKey(row?.ref)));
       const merged = [...existing, ...parsed.filter((row) => !seen.has(specRefKey(row.ref)))];
-      proposalBuffer.current.push({
-        id: crypto.randomUUID(), type: 'object.update', label: `Import ${parsed.length} learners into ${target.data.title}`,
-        objectId: target.id, patch: { roster: merged, enrolledCount: merged.length },
-      });
+      stage.updateObject(`Import ${parsed.length} learners into ${target.data.title}`, target.id, { roster: merged, enrolledCount: merged.length });
       return { ok: true, proposed: true, objectId: target.id, imported: parsed.length, total: merged.length };
     },
   }, {
@@ -5535,10 +5530,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const records = parseReferences(String(args.source ?? ''));
       if (!records.length) return { error: 'No .bib or .ris entries were recognised in that text.' };
       const existing = Array.isArray(target.data.entries) ? target.data.entries : [];
-      proposalBuffer.current.push({
-        id: crypto.randomUUID(), type: 'object.update', label: `Import ${records.length} references into ${target.data.title}`,
-        objectId: target.id, patch: { entries: [...existing, ...records.map(entryRowFromRecord)] },
-      });
+      stage.updateObject(`Import ${records.length} references into ${target.data.title}`, target.id, { entries: [...existing, ...records.map(entryRowFromRecord)] });
       return { ok: true, proposed: true, objectId: target.id, imported: records.length };
     },
   }, {
@@ -5581,15 +5573,14 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         fetchedAt: report.fetchedAt,
       };
       const patch = sanitizeCreationObjectPatch('funnel', fields);
-      const staged = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
-      const existing = [...nodes, ...staged].filter((node) => node.data.kind === 'funnel');
+      const existing = stage.nodes().filter((node) => node.data.kind === 'funnel');
       const target = args.objectId ? existing.find((node) => node.id === args.objectId) : existing.length === 1 ? existing[0] : undefined;
       if (target) {
-        proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.update', label: t('hiringFunnelUpdated', { title: target.data.title }), objectId: target.id, patch });
+        stage.updateObject(t('hiringFunnelUpdated', { title: target.data.title }), target.id, patch);
       } else {
         const node = newNode('funnel', { x: 320, y: 520 });
         node.data = { ...node.data, ...patch, title: t('hiringFunnelTitle') };
-        proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: t('hiringFunnelCreated'), node });
+        stage.addObject(t('hiringFunnelCreated'), node);
       }
       return {
         ok: true, proposed: true,
@@ -5637,15 +5628,14 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         ...(args.candidateTimezone ? { candidateTimezone: args.candidateTimezone } : {}),
       };
       const patch = sanitizeCreationObjectPatch('interviewLoop', fields);
-      const staged = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
-      const loops = [...nodes, ...staged].filter((node) => node.data.kind === 'interviewLoop');
+      const loops = stage.nodes().filter((node) => node.data.kind === 'interviewLoop');
       const target = args.objectId ? loops.find((node) => node.id === args.objectId) : loops.length === 1 ? loops[0] : undefined;
       if (target) {
-        proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.update', label: t('hiringLoopUpdated', { title: target.data.title }), objectId: target.id, patch });
+        stage.updateObject(t('hiringLoopUpdated', { title: target.data.title }), target.id, patch);
       } else {
         const node = newNode('interviewLoop', { x: 620, y: 320 });
         node.data = { ...node.data, ...patch, title: t('hiringLoopTitle') };
-        proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: t('hiringLoopCreated'), node });
+        stage.addObject(t('hiringLoopCreated'), node);
       }
       return {
         ok: true, proposed: true,
@@ -5665,8 +5655,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     run: (raw: unknown) => {
       if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
       const args = raw as { objectId?: string };
-      const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
-      const board = [...nodes, ...stagedNodes];
+      const board = stage.nodes();
       if (!board.some((node) => node.data.kind === 'trigger' && (!args.objectId || node.id === args.objectId))) {
         return { error: args.objectId ? 'That object is not a trigger on this canvas.' : 'No trigger objects are on this canvas.' };
       }
@@ -5681,7 +5670,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           lastEvaluatedAt: evaluatedAt,
           status: t(`founderTriggerState_${entry.evaluation.state}`),
         });
-        proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.update', label: t('founderTriggerEvaluated', { title: entry.triggerTitle }), objectId: entry.triggerId, patch });
+        stage.updateObject(t('founderTriggerEvaluated', { title: entry.triggerTitle }), entry.triggerId, patch);
         return {
           id: entry.triggerId, title: entry.triggerTitle,
           watches: entry.watchedTitle, watchedKind: entry.watchedKind,
@@ -5803,8 +5792,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     },
     run: (raw: unknown) => {
       const args = raw as { objectId?: string; page?: number; pages?: number };
-      const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
-      const candidates = [...nodes, ...stagedNodes].filter((node) => canvasDocument(node.data));
+      const candidates = stage.nodes().filter((node) => canvasDocument(node.data));
       const target = args.objectId ? candidates.find((node) => node.id === args.objectId) : candidates.length === 1 ? candidates[0] : undefined;
       if (!target) {
         return { error: candidates.length
@@ -5861,8 +5849,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         status: ['draft', 'ready', 'in_progress', 'complete'].includes(String(args.status)) ? String(args.status) : 'draft',
         sourceProjectId: projectId, canonicalPrdPending: true,
       };
-      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: `Create project PRD “${title}”`, node });
-      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'connection.add', label: `Assign ${title} to ${project.data.title}`, edge: { id: crypto.randomUUID(), source: node.id, target: project.id, type: 'smoothstep', label: 'requirements for', data: { connectionKind: 'reference' } } });
+      stage.addObject(`Create project PRD “${title}”`, node);
+      stage.addConnection(
+        `Assign ${title} to ${project.data.title}`,
+        { id: crypto.randomUUID(), source: node.id, target: project.id, type: 'smoothstep', label: 'requirements for', data: { connectionKind: 'reference' } },
+      );
       return { ok: true, proposed: true, projectId, object: { id: node.id, kind: 'prd', title }, persistence: 'canonical-after-review' };
     },
   }, {
@@ -5934,8 +5925,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         datasetId?: string; materializeAs?: string; title?: string; highlight?: TabularHighlightRule[];
         mapValueColumn?: string; mapRegionName?: string; mapRegion?: unknown; mapOutline?: unknown; mapAttribution?: string;
       };
-      const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
-      const candidates = [...nodes, ...stagedNodes].filter((node) => ['dataset', 'table', 'spreadsheet'].includes(node.data.kind) && Array.isArray(node.data.rows) && node.data.rows.length > 0);
+      const candidates = stage.nodes().filter((node) => ['dataset', 'table', 'spreadsheet'].includes(node.data.kind) && Array.isArray(node.data.rows) && node.data.rows.length > 0);
       const target = args.datasetId ? candidates.find((node) => node.id === args.datasetId) : candidates.length === 1 ? candidates[0] : undefined;
       if (!target) {
         return { error: candidates.length
@@ -5971,7 +5961,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       if (!materializeAs) return payload;
       if (!canEdit) return { ...payload, error: 'The current session role cannot edit this canvas' };
       const kind: CreationObjectKind = materializeAs;
-      const existing = [...nodes, ...stagedNodes].find((node) => node.data.kind === kind && node.data.sourceDatasetId === target.id);
+      const existing = stage.nodes().find((node) => node.data.kind === kind && node.data.sourceDatasetId === target.id);
       const title = typeof args.title === 'string' && args.title.trim()
         ? args.title.trim().slice(0, 160)
         : `${target.data.title} ${materializeAs === 'kpi' ? 'metric' : materializeAs}`;
@@ -6054,15 +6044,18 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       // builder is shared with the inspector and must not have to know about it.
       const patch = sanitizeCreationObjectPatch(kind, { ...fields, ...provenance });
       if (existing) {
-        proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.update', label: `Update ${kind} “${title}”`, objectId: existing.id, patch });
+        stage.updateObject(`Update ${kind} “${title}”`, existing.id, patch);
         return { ...payload, proposed: true, materialized: { id: existing.id, kind, title, updated: true } };
       }
-      const node = newNode(kind, nextCanvasObjectPosition([...nodes, ...stagedNodes], { x: target.position.x + 460, y: target.position.y }, typeof window !== 'undefined' && window.innerWidth <= 760, kind));
+      const node = newNode(kind, nextCanvasObjectPosition(stage.nodes(), { x: target.position.x + 460, y: target.position.y }, typeof window !== 'undefined' && window.innerWidth <= 760, kind));
       node.data = { ...node.data, ...patch };
       if (kind === 'table') node.style = { width: 720, height: 460 };
       if (kind === 'map') node.style = { width: 420, height: 380 };
-      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: `Add ${kind} “${title}”`, node });
-      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'connection.add', label: `Connect ${target.data.title} to ${title}`, edge: { id: crypto.randomUUID(), source: target.id, target: node.id, type: 'smoothstep', animated: true, label: 'computed from', data: { connectionKind: 'data' } } });
+      stage.addObject(`Add ${kind} “${title}”`, node);
+      stage.addConnection(
+        `Connect ${target.data.title} to ${title}`,
+        { id: crypto.randomUUID(), source: target.id, target: node.id, type: 'smoothstep', animated: true, label: 'computed from', data: { connectionKind: 'data' } },
+      );
       return { ...payload, proposed: true, materialized: { id: node.id, kind, title, created: true } };
     },
   }, {
@@ -6148,8 +6141,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         entities?: unknown; relationships?: unknown; x?: number; y?: number;
       };
       const dialect = (SQL_DIALECTS as readonly string[]).includes(String(args.dialect)) ? args.dialect as SqlDialect : 'postgres';
-      const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
-      const all = [...nodes, ...stagedNodes];
+      const all = stage.nodes();
 
       // Two ways in. Inferring from real rows is not a lesser path: types,
       // nullability and the natural key come from what is ACTUALLY there, which
@@ -6197,16 +6189,19 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         ...(inferredFrom ? { inferredFrom } : {}),
       };
       if (existing) {
-        proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.update', label: `Update data model “${title}”`, objectId: existing.id, patch });
+        stage.updateObject(`Update data model “${title}”`, existing.id, patch);
         return { ...payload, object: { id: existing.id, kind: 'erd', title, updated: true } };
       }
       const anchor = inferredFrom ? all.find((node) => node.id === inferredFrom.id) : undefined;
       const node = newNode('erd', nextCanvasObjectPosition(all, anchor ? { x: anchor.position.x + 460, y: anchor.position.y } : args, typeof window !== 'undefined' && window.innerWidth <= 760, 'erd'));
       node.data = { ...node.data, ...patch };
       node.style = { width: 760, height: 560 };
-      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: `Create data model “${title}”`, node });
+      stage.addObject(`Create data model “${title}”`, node);
       if (anchor) {
-        proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'connection.add', label: `Model ${anchor.data.title}`, edge: { id: crypto.randomUUID(), source: anchor.id, target: node.id, type: 'smoothstep', animated: true, label: 'modelled as', data: { connectionKind: 'data' } } });
+        stage.addConnection(
+          `Model ${anchor.data.title}`,
+          { id: crypto.randomUUID(), source: anchor.id, target: node.id, type: 'smoothstep', animated: true, label: 'modelled as', data: { connectionKind: 'data' } },
+        );
       }
       return { ...payload, object: { id: node.id, kind: 'erd', title, created: true } };
     },
@@ -6228,8 +6223,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     mutates: (raw: unknown) => (raw as { materialize?: unknown })?.materialize === true,
     run: (raw: unknown) => {
       const args = raw as { objectId?: string; format?: string; dialect?: string; materialize?: boolean };
-      const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
-      const all = [...nodes, ...stagedNodes];
+      const all = stage.nodes();
       const models = all.filter((node) => node.data.kind === 'erd');
       const target = args.objectId ? models.find((node) => node.id === args.objectId) : models.length === 1 ? models[0] : undefined;
       if (!target) {
@@ -6251,8 +6245,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         status: format === 'mermaid' ? 'Diagram source' : `${model.entities.length} tables`,
         ...lineagePatch([target.id], { engine: 'tabular' }),
       }) };
-      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: `Export ${title}`, node });
-      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'connection.add', label: `Generated from ${target.data.title}`, edge: { id: crypto.randomUUID(), source: target.id, target: node.id, type: 'smoothstep', animated: true, label: 'generates', data: { connectionKind: 'data' } } });
+      stage.addObject(`Export ${title}`, node);
+      stage.addConnection(
+        `Generated from ${target.data.title}`,
+        { id: crypto.randomUUID(), source: target.id, target: node.id, type: 'smoothstep', animated: true, label: 'generates', data: { connectionKind: 'data' } },
+      );
       return { ...payload, proposed: true, object: { id: node.id, kind: 'code', title } };
     },
   }, {
@@ -6288,8 +6285,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     run: (raw: unknown) => {
       if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
       const args = raw as { leftId?: string; rightId?: string; type?: string; on?: TabularJoinKey[]; select?: string[]; rightAlias?: string; title?: string; limit?: number };
-      const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
-      const all = [...nodes, ...stagedNodes];
+      const all = stage.nodes();
       const left = all.find((node) => node.id === args.leftId);
       const right = all.find((node) => node.id === args.rightId);
       if (!left || !right) return { error: 'Both leftId and rightId must be objects on this canvas.' };
@@ -6321,9 +6317,12 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         ...lineagePatch([left.id, right.id], { engine: 'join', join: spec, rowsIn: leftSource.rows.length + rightSource.rows.length, rowsOut: result.rowCount }, { columns: result.columns }),
       }) };
       node.style = { width: 720, height: 460 };
-      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: `Join “${title}”`, node });
+      stage.addObject(`Join “${title}”`, node);
       for (const parent of [left, right]) {
-        proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'connection.add', label: `Join input ${parent.data.title}`, edge: { id: crypto.randomUUID(), source: parent.id, target: node.id, type: 'smoothstep', animated: true, label: 'joined', data: { connectionKind: 'data' } } });
+        stage.addConnection(
+          `Join input ${parent.data.title}`,
+          { id: crypto.randomUUID(), source: parent.id, target: node.id, type: 'smoothstep', animated: true, label: 'joined', data: { connectionKind: 'data' } },
+        );
       }
       return {
         ok: true, proposed: true,
@@ -6379,7 +6378,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           ? `${summary.piiColumns} of ${summary.total} columns hold personal data (${summary.categories.join(', ')}); ${summary.maskedColumns} are masked on render and export.`
           : `No personal data detected across ${summary.total} columns.`,
       });
-      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.update', label: `Classify ${dataset.data.title}`, objectId: dataset.id, patch });
+      stage.updateObject(`Classify ${dataset.data.title}`, dataset.id, patch);
       return {
         ok: true, proposed: true, objectId: dataset.id,
         classifications: classifications.filter((item) => item.pii !== 'none'),
@@ -6437,10 +6436,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const declaredAt = new Date().toISOString();
       const stored = { ...contract, declaredAt };
 
-      proposalBuffer.current.push({
-        id: crypto.randomUUID(), type: 'object.update', label: `Declare contract for ${dataset.data.title}`, objectId: dataset.id,
-        patch: sanitizeCreationObjectPatch(dataset.data.kind, { dataContract: stored, violations }),
-      });
+      stage.updateObject(`Declare contract for ${dataset.data.title}`, dataset.id, sanitizeCreationObjectPatch(dataset.data.kind, { dataContract: stored, violations }));
 
       const payload = {
         ok: true, proposed: true, objectId: dataset.id,
@@ -6449,8 +6445,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       };
       if (args.materialize === false) return payload;
 
-      const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
-      const all = [...nodes, ...stagedNodes];
+      const all = stage.nodes();
       const title = `${dataset.data.title} contract`;
       const existing = all.find((node) => node.data.kind === 'dataContract' && node.data.sourceDatasetId === dataset.id);
       const fields = sanitizeCreationObjectPatch('dataContract', {
@@ -6460,13 +6455,16 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         ...(fetchedAt ? { fetchedAt } : {}),
       });
       if (existing) {
-        proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.update', label: `Update contract “${title}”`, objectId: existing.id, patch: fields });
+        stage.updateObject(`Update contract “${title}”`, existing.id, fields);
         return { ...payload, object: { id: existing.id, kind: 'dataContract', title, updated: true } };
       }
       const node = newNode('dataContract', nextCanvasObjectPosition(all, { x: dataset.position.x + 460, y: dataset.position.y + 300 }, typeof window !== 'undefined' && window.innerWidth <= 760, 'dataContract'));
       node.data = { ...node.data, ...fields };
-      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: `Add contract “${title}”`, node });
-      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'connection.add', label: `Governs ${dataset.data.title}`, edge: { id: crypto.randomUUID(), source: node.id, target: dataset.id, type: 'smoothstep', label: 'governs', data: { connectionKind: 'reference' } } });
+      stage.addObject(`Add contract “${title}”`, node);
+      stage.addConnection(
+        `Governs ${dataset.data.title}`,
+        { id: crypto.randomUUID(), source: node.id, target: dataset.id, type: 'smoothstep', label: 'governs', data: { connectionKind: 'reference' } },
+      );
       return { ...payload, object: { id: node.id, kind: 'dataContract', title, created: true } };
     },
   }, {
@@ -6514,8 +6512,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const checks = [...byId.values()];
       if (!checks.length) return { error: `${dataset.data.title} has nothing to check yet. Declare a contract with canvas_set_data_contract, or pass checks explicitly.` };
 
-      const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
-      const all = [...nodes, ...stagedNodes];
+      const all = stage.nodes();
       const references = referenceSources(
         all.filter((node) => ['dataset', 'table', 'spreadsheet', 'datasource'].includes(node.data.kind)).map((node) => ({ id: node.id, data: node.data as Record<string, unknown> })),
         (data) => tabularFromObject(data),
@@ -6538,13 +6535,16 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         summary: `${verdict.passed} passed, ${verdict.warned} warned, ${verdict.failed} failed, ${verdict.skipped} skipped over ${fmt.number(source.rows.length)} rows.`,
       });
       if (existing) {
-        proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.update', label: `Re-run quality on ${dataset.data.title}`, objectId: existing.id, patch: fields });
+        stage.updateObject(`Re-run quality on ${dataset.data.title}`, existing.id, fields);
         return { ...payload, object: { id: existing.id, kind: 'dataQuality', title, updated: true } };
       }
       const node = newNode('dataQuality', nextCanvasObjectPosition(all, { x: dataset.position.x + 920, y: dataset.position.y + 300 }, typeof window !== 'undefined' && window.innerWidth <= 760, 'dataQuality'));
       node.data = { ...node.data, ...fields };
-      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: `Add quality checks “${title}”`, node });
-      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'connection.add', label: `Checks ${dataset.data.title}`, edge: { id: crypto.randomUUID(), source: node.id, target: dataset.id, type: 'smoothstep', label: 'checks', data: { connectionKind: 'reference' } } });
+      stage.addObject(`Add quality checks “${title}”`, node);
+      stage.addConnection(
+        `Checks ${dataset.data.title}`,
+        { id: crypto.randomUUID(), source: node.id, target: dataset.id, type: 'smoothstep', label: 'checks', data: { connectionKind: 'reference' } },
+      );
       return { ...payload, object: { id: node.id, kind: 'dataQuality', title, created: true } };
     },
   }, {
@@ -6596,8 +6596,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const value = computeMetric(source, definition);
       const series = computeMetricSeries(source, definition);
       const producedAt = new Date().toISOString();
-      const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
-      const all = [...nodes, ...stagedNodes];
+      const all = stage.nodes();
 
       const metricFields = sanitizeCreationObjectPatch('metric', {
         title: definition.name, definition, sourceObjectId: dataset.id,
@@ -6610,13 +6609,16 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       let metricId: string;
       if (existing) {
         metricId = existing.id;
-        proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.update', label: `Update metric “${definition.name}”`, objectId: existing.id, patch: metricFields });
+        stage.updateObject(`Update metric “${definition.name}”`, existing.id, metricFields);
       } else {
         const node = newNode('metric', nextCanvasObjectPosition(all, { x: dataset.position.x + 460, y: dataset.position.y - 260 }, typeof window !== 'undefined' && window.innerWidth <= 760, 'metric'));
         node.data = { ...node.data, ...metricFields };
         metricId = node.id;
-        proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: `Define metric “${definition.name}”`, node });
-        proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'connection.add', label: `Computed from ${dataset.data.title}`, edge: { id: crypto.randomUUID(), source: dataset.id, target: node.id, type: 'smoothstep', animated: true, label: 'defines', data: { connectionKind: 'data' } } });
+        stage.addObject(`Define metric “${definition.name}”`, node);
+        stage.addConnection(
+          `Computed from ${dataset.data.title}`,
+          { id: crypto.randomUUID(), source: dataset.id, target: node.id, type: 'smoothstep', animated: true, label: 'defines', data: { connectionKind: 'data' } },
+        );
       }
 
       const payload = {
@@ -6636,7 +6638,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
 
       // The artifact stores `metricId`, not a literal — which is what makes the
       // definition load-bearing rather than decorative.
-      const artifact = newNode(materializeAs, nextCanvasObjectPosition([...all, ...proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : [])], { x: dataset.position.x + 920, y: dataset.position.y - 260 }, typeof window !== 'undefined' && window.innerWidth <= 760, materializeAs));
+      const artifact = newNode(materializeAs, nextCanvasObjectPosition(stage.nodes(), { x: dataset.position.x + 920, y: dataset.position.y - 260 }, typeof window !== 'undefined' && window.innerWidth <= 760, materializeAs));
       artifact.data = { ...artifact.data, ...sanitizeCreationObjectPatch(materializeAs, materializeAs === 'kpi'
         ? {
           title: definition.name, value: formatMetricValue(value.value, definition),
@@ -6654,8 +6656,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           summary: `Defined by “${definition.name}” · computed from ${fmt.number(value.totalRows)} rows.`,
           ...lineagePatch([dataset.id], { engine: 'metric' }, { producedAt }),
         }) };
-      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: `Add ${materializeAs} “${definition.name}”`, node: artifact });
-      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'connection.add', label: `Quotes ${definition.name}`, edge: { id: crypto.randomUUID(), source: metricId, target: artifact.id, type: 'smoothstep', animated: true, label: 'quotes', data: { connectionKind: 'data' } } });
+      stage.addObject(`Add ${materializeAs} “${definition.name}”`, artifact);
+      stage.addConnection(
+        `Quotes ${definition.name}`,
+        { id: crypto.randomUUID(), source: metricId, target: artifact.id, type: 'smoothstep', animated: true, label: 'quotes', data: { connectionKind: 'data' } },
+      );
       return { ...payload, materialized: { id: artifact.id, kind: materializeAs, title: definition.name } };
     },
   }, {
@@ -6672,8 +6677,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     mutates: (raw: unknown) => (raw as { materialize?: unknown })?.materialize === true,
     run: (raw: unknown) => {
       const args = raw as { objectId?: string; column?: string; materialize?: boolean };
-      const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
-      const all = [...nodes, ...stagedNodes];
+      const all = stage.nodes();
       const objects = all.map((node) => ({ id: node.id, kind: node.data.kind, title: String(node.data.title), data: node.data as Record<string, unknown> }));
       const graph = buildLineageGraph(objects);
       const stale = staleDerivatives(objects);
@@ -6712,12 +6716,12 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         summary: `${graph.nodes.length} objects linked by ${graph.edges.length} transforms. ${stale.length} artifact${stale.length === 1 ? '' : 's'} predate their source.`,
       });
       if (existing) {
-        proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.update', label: 'Refresh lineage', objectId: existing.id, patch: fields });
+        stage.updateObject('Refresh lineage', existing.id, fields);
         return { ...payload, proposed: true, object: { id: existing.id, kind: 'lineage', title, updated: true } };
       }
       const node = newNode('lineage', nextCanvasObjectPosition(all, {}, typeof window !== 'undefined' && window.innerWidth <= 760, 'lineage'));
       node.data = { ...node.data, ...fields };
-      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: 'Trace lineage', node });
+      stage.addObject('Trace lineage', node);
       return { ...payload, proposed: true, object: { id: node.id, kind: 'lineage', title, created: true } };
     },
   }, {
@@ -6752,8 +6756,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       });
       if (!cells.length) return { error: 'Pass at least one cell with a non-empty `source`.' };
 
-      const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
-      const all = [...nodes, ...stagedNodes];
+      const all = stage.nodes();
       const candidates = all.filter((node) => ['dataset', 'table', 'spreadsheet'].includes(node.data.kind) && Array.isArray(node.data.rows) && node.data.rows.length > 0);
       const target = args.datasetId ? candidates.find((node) => node.id === args.datasetId) : candidates.length === 1 ? candidates[0] : undefined;
       if (!target) {
@@ -6791,7 +6794,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       });
       const node = newNode('notebook', nextCanvasObjectPosition(all, {}, typeof window !== 'undefined' && window.innerWidth <= 760, 'notebook'));
       node.data = { ...node.data, ...fields };
-      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: 'Run notebook', node });
+      stage.addObject('Run notebook', node);
 
       // A table or chart output becomes a real object, carrying the same provenance
       // every other derived artifact carries — so a notebook result is as traceable as
@@ -6815,7 +6818,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           });
           const child = newNode('chart', nextCanvasObjectPosition([...all, node], {}, typeof window !== 'undefined' && window.innerWidth <= 760, 'chart'));
           child.data = { ...child.data, ...childFields };
-          proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: `Chart from ${output.cellId}`, node: child });
+          stage.addObject(`Chart from ${output.cellId}`, child);
           promoted.push({ id: child.id, kind: 'chart', cellId: output.cellId });
         }
       }
@@ -6852,7 +6855,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       // The canvas has no single "bound project"; a project OBJECT on the board is what
       // binds one, which is the same resolution `canvasProjectId` already performs for
       // the Builder and Evermind paths.
-      const boardProject = [...nodes, ...proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : [])]
+      const boardProject = stage.nodes()
         .flatMap((node) => { const id = canvasProjectId(node.data); return id == null ? [] : [id]; })[0];
       const projectId = args.projectId ?? (boardProject != null ? String(boardProject) : undefined);
       if (!args.jobId) {
@@ -6870,8 +6873,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const logs = await fetchTrainingLogs(args.jobId).catch(() => []);
       const lowered = trainingRunFields(job, logs);
 
-      const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
-      const all = [...nodes, ...stagedNodes];
+      const all = stage.nodes();
       const title = `${job.base_model} · run ${job.id.slice(0, 8)}`;
       const fields = sanitizeCreationObjectPatch('trainingRun', {
         title, ...lowered,
@@ -6879,12 +6881,12 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       });
       const existing = all.find((node) => node.data.kind === 'trainingRun' && node.data.jobId === job.id);
       if (existing) {
-        proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.update', label: 'Refresh training run', objectId: existing.id, patch: fields });
+        stage.updateObject('Refresh training run', existing.id, fields);
         return { ok: true, proposed: true, object: { id: existing.id, kind: 'trainingRun', title, updated: true }, run: lowered };
       }
       const node = newNode('trainingRun', nextCanvasObjectPosition(all, {}, typeof window !== 'undefined' && window.innerWidth <= 760, 'trainingRun'));
       node.data = { ...node.data, ...fields };
-      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: 'Add training run', node });
+      stage.addObject('Add training run', node);
       return { ok: true, proposed: true, object: { id: node.id, kind: 'trainingRun', title, created: true }, run: lowered };
     },
   }, {
@@ -6902,8 +6904,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     run: (raw: unknown) => {
       const args = raw as { rankBy?: string; baselineObjectId?: string; title?: string };
       if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
-      const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
-      const all = [...nodes, ...stagedNodes];
+      const all = stage.nodes();
       const runs = all.filter((node) => node.data.kind === 'trainingRun');
       if (runs.length < 2) {
         return { error: `A comparison needs at least two training runs on the canvas; there ${runs.length === 1 ? 'is 1' : 'are none'}. Add them with canvas_read_training_run first.` };
@@ -6931,7 +6932,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       });
       const node = newNode('runComparison', nextCanvasObjectPosition(all, {}, typeof window !== 'undefined' && window.innerWidth <= 760, 'runComparison'));
       node.data = { ...node.data, ...fields };
-      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: 'Compare runs', node });
+      stage.addObject('Compare runs', node);
       return { ok: true, proposed: true, object: { id: node.id, kind: 'runComparison', title, created: true }, comparison };
     },
   }, {
@@ -6955,8 +6956,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
       const question = args.question?.trim();
       if (!question) return { error: 'A label set needs the question reviewers answer.' };
-      const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
-      const all = [...nodes, ...stagedNodes];
+      const all = stage.nodes();
       const candidates = all.filter((node) => ['dataset', 'table', 'spreadsheet'].includes(node.data.kind) && Array.isArray(node.data.rows) && node.data.rows.length > 0);
       const target = args.datasetId ? candidates.find((node) => node.id === args.datasetId) : candidates.length === 1 ? candidates[0] : undefined;
       if (!target) {
@@ -6982,7 +6982,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       });
       const node = newNode('labelSet', nextCanvasObjectPosition(all, {}, typeof window !== 'undefined' && window.innerWidth <= 760, 'labelSet'));
       node.data = { ...node.data, ...fields };
-      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: 'Sample for labels', node });
+      stage.addObject('Sample for labels', node);
       return { ok: true, proposed: true, object: { id: node.id, kind: 'labelSet', title, created: true }, sampled: samples.length, of: source.rows.length };
     },
   }, {
@@ -7003,8 +7003,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     mutates: (raw: unknown) => (raw as { materialize?: unknown })?.materialize !== false,
     run: (raw: unknown) => {
       const args = raw as { datasetId?: string; dateColumn?: string; valueColumn?: string; grain?: TabularTimeGrain; horizon?: number; materialize?: boolean; title?: string };
-      const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
-      const all = [...nodes, ...stagedNodes];
+      const all = stage.nodes();
       const candidates = all.filter((node) => ['dataset', 'table', 'spreadsheet'].includes(node.data.kind) && Array.isArray(node.data.rows) && node.data.rows.length > 0);
       const target = args.datasetId ? candidates.find((node) => node.id === args.datasetId) : candidates.length === 1 ? candidates[0] : undefined;
       if (!target) {
@@ -7044,7 +7043,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       });
       const node = newNode('chart', nextCanvasObjectPosition(all, {}, typeof window !== 'undefined' && window.innerWidth <= 760, 'chart'));
       node.data = { ...node.data, ...fields };
-      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: 'Forecast series', node });
+      stage.addObject('Forecast series', node);
       return { ok: true, proposed: true, object: { id: node.id, kind: 'chart', title, created: true }, ...result };
     },
   }, {
@@ -7064,8 +7063,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     run: (raw: unknown) => {
       const args = raw as { datasetId?: string; purposes?: string[]; lawfulBasis?: string; retentionDays?: number; collectedAt?: string };
       if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
-      const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
-      const target = [...nodes, ...stagedNodes].find((node) => node.id === args.datasetId);
+      const target = stage.nodes().find((node) => node.id === args.datasetId);
       if (!target) return { error: `No object with id ${args.datasetId} is on this canvas.` };
 
       const dataUse: DataUsePolicy = {
@@ -7078,7 +7076,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         dataUse,
         summary: `Use restricted to: ${dataUse.purposes?.join(', ') || 'any purpose'}${dataUse.lawfulBasis ? ` · basis: ${dataUse.lawfulBasis}` : ''}${dataUse.retentionDays ? ` · retained ${dataUse.retentionDays} days` : ''}.`,
       });
-      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.update', label: 'Declare data use', objectId: target.id, patch });
+      stage.updateObject('Declare data use', target.id, patch);
       return { ok: true, proposed: true, objectId: target.id, dataUse };
     },
   }, {
@@ -7231,8 +7229,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       }
       if (!schema.tables.length) return { error: `${source.name} reported no tables${args.dataset ? ` in dataset "${args.dataset}"` : ''}.` };
 
-      const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
-      const all = [...nodes, ...stagedNodes];
+      const all = stage.nodes();
       const fetchedAt = new Date().toISOString();
       const title = (args.title || source.name).trim().slice(0, 160);
       const node = newNode('datasource', nextCanvasObjectPosition(all, args, typeof window !== 'undefined' && window.innerWidth <= 760, 'datasource'));
@@ -7242,7 +7239,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         summary: `${schema.tables.length} tables and ${schema.relationships.length} foreign keys in ${schema.scanned.join(', ') || source.providerLabel}.`,
         fetchedAt,
       }), connectionId: source.id, provider: source.provider, providerLabel: source.providerLabel };
-      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: `Add data source “${title}”`, node });
+      stage.addObject(`Add data source “${title}”`, node);
 
       const payload = {
         ok: true, proposed: true,
@@ -7266,8 +7263,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         ...lineagePatch([node.id], { engine: 'import' }, { producedAt: fetchedAt }),
       }) };
       modelNode.style = { width: 760, height: 560 };
-      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: `Model “${modelTitle}”`, node: modelNode });
-      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'connection.add', label: `Schema of ${title}`, edge: { id: crypto.randomUUID(), source: node.id, target: modelNode.id, type: 'smoothstep', animated: true, label: 'schema of', data: { connectionKind: 'data' } } });
+      stage.addObject(`Model “${modelTitle}”`, modelNode);
+      stage.addConnection(
+        `Schema of ${title}`,
+        { id: crypto.randomUUID(), source: node.id, target: modelNode.id, type: 'smoothstep', animated: true, label: 'schema of', data: { connectionKind: 'data' } },
+      );
       return { ...payload, model: { id: modelNode.id, kind: 'erd', title: modelTitle, entities: summary.entities, issues } };
     },
   }, {
@@ -7311,8 +7311,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       if (!canEdit) return { ...payload, error: 'The current session role cannot edit this canvas' };
       if (!result.rows.length) return { ...payload, error: 'That query returned no rows, so nothing was added to the canvas.' };
 
-      const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
-      const all = [...nodes, ...stagedNodes];
+      const all = stage.nodes();
       const fetchedAt = new Date().toISOString();
       const title = (args.title || `${result.source.name} query`).trim().slice(0, 160);
       const bound = all.find((node) => node.data.kind === 'datasource' && node.data.connectionId === result.source.id);
@@ -7343,9 +7342,12 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const node = newNode(materializeAs, nextCanvasObjectPosition(all, bound ? { x: bound.position.x + 460, y: bound.position.y + 300 } : {}, typeof window !== 'undefined' && window.innerWidth <= 760, materializeAs));
       node.data = { ...node.data, ...sanitizeCreationObjectPatch(materializeAs, { ...fields, ...provenance, fetchedAt }) };
       if (materializeAs === 'table' || materializeAs === 'dataset') node.style = { width: 720, height: 460 };
-      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: `Add ${materializeAs} “${title}”`, node });
+      stage.addObject(`Add ${materializeAs} “${title}”`, node);
       if (bound) {
-        proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'connection.add', label: `Queried ${bound.data.title}`, edge: { id: crypto.randomUUID(), source: bound.id, target: node.id, type: 'smoothstep', animated: true, label: 'query', data: { connectionKind: 'data' } } });
+        stage.addConnection(
+          `Queried ${bound.data.title}`,
+          { id: crypto.randomUUID(), source: bound.id, target: node.id, type: 'smoothstep', animated: true, label: 'query', data: { connectionKind: 'data' } },
+        );
       }
       return { ...payload, proposed: true, materialized: { id: node.id, kind: materializeAs, title } };
     },
@@ -7406,9 +7408,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         return { error: error instanceof Error ? error.message : 'That mailbox could not be read.' };
       }
 
-      const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
       const narrowViewport = typeof window !== 'undefined' && window.innerWidth <= 760;
-      const node = newNode('inbox', nextCanvasObjectPosition([...nodes, ...stagedNodes], args, narrowViewport, 'inbox'));
+      const node = newNode('inbox', nextCanvasObjectPosition(stage.nodes(), args, narrowViewport, 'inbox'));
       const unreadCount = read.triage.filter((m) => m.unread).length;
       node.data = {
         ...node.data,
@@ -7427,7 +7428,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         fetchedAt: new Date().toISOString(),
       };
       node.style = { width: 460, height: 520 };
-      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: `Add inbox “${node.data.title}”`, node });
+      stage.addObject(`Add inbox “${node.data.title}”`, node);
       return {
         ok: true, proposed: true,
         object: { id: node.id, kind: 'inbox', title: node.data.title },
@@ -7469,7 +7470,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         fetchedAt: new Date().toISOString(),
         status: `${read.triage.length} message${read.triage.length === 1 ? '' : 's'}`,
       };
-      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.update', label: `Refresh inbox ${target.id}`, objectId: target.id, patch });
+      stage.updateObject(`Refresh inbox ${target.id}`, target.id, patch);
       return { ok: true, proposed: true, objectId: target.id, total: read.triage.length, unread: unreadCount, messages: read.triage };
     },
   }, {
@@ -7502,9 +7503,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         return { error: error instanceof Error ? error.message : 'That message could not be read.' };
       }
 
-      const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
       const node = newNode('email', nextCanvasObjectPosition(
-        [...nodes, ...stagedNodes],
+        stage.nodes(),
         { x: source.position.x + 500, y: source.position.y },
         typeof window !== 'undefined' && window.innerWidth <= 760,
         'email',
@@ -7523,8 +7523,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         hasAttachments: message.hasAttachments, webUrl: message.webUrl,
       };
       node.style = { width: 460, height: 420 };
-      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: `Pin email “${message.subject}”`, node });
-      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'connection.add', label: `Connect ${source.data.title} to ${message.subject}`, edge: { id: crypto.randomUUID(), source: source.id, target: node.id, type: 'smoothstep', animated: false, label: 'pinned from', data: { connectionKind: 'reference' } } });
+      stage.addObject(`Pin email “${message.subject}”`, node);
+      stage.addConnection(
+        `Connect ${source.data.title} to ${message.subject}`,
+        { id: crypto.randomUUID(), source: source.id, target: node.id, type: 'smoothstep', animated: false, label: 'pinned from', data: { connectionKind: 'reference' } },
+      );
       return { ok: true, proposed: true, object: { id: node.id, kind: 'email', title: message.subject }, message };
     },
   }, {
@@ -7628,7 +7631,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         ...(args.y != null ? { y: args.y } : {}),
       });
       if (!built.ok) return { error: built.error };
-      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: `Add social feed “${built.node.data.title}”`, node: built.node });
+      stage.addObject(`Add social feed “${built.node.data.title}”`, built.node);
       return {
         ok: true, proposed: true,
         object: { id: built.node.id, kind: 'socialFeed', title: built.node.data.title },
@@ -7663,7 +7666,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         return { error: error instanceof Error ? error.message : 'Those accounts could not be read.' };
       }
       const patch = socialFeedPatch(read);
-      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.update', label: `Refresh social feed ${target.id}`, objectId: target.id, patch });
+      stage.updateObject(`Refresh social feed ${target.id}`, target.id, patch);
       return {
         ok: true, proposed: true, objectId: target.id,
         total: read.items.length, engagement: totalEngagement(read.items),
@@ -7696,17 +7699,19 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const post = posts.find((item) => String(item.id) === String(args.postId));
       if (!post) return { error: 'That post is not in this feed — refresh it, or pin one of the posts it lists.' };
 
-      const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
       const node = newNode('socialPost', nextCanvasObjectPosition(
-        [...nodes, ...stagedNodes],
+        stage.nodes(),
         { x: source.position.x + 500, y: source.position.y },
         typeof window !== 'undefined' && window.innerWidth <= 760,
         'socialPost',
       ));
       node.data = { ...node.data, ...socialPostNodeData(post) };
       node.style = { width: 420, height: 420 };
-      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: `Pin ${post.network} post`, node });
-      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'connection.add', label: `Connect ${source.data.title} to the pinned post`, edge: { id: crypto.randomUUID(), source: source.id, target: node.id, type: 'smoothstep', animated: false, label: 'pinned from', data: { connectionKind: 'reference' } } });
+      stage.addObject(`Pin ${post.network} post`, node);
+      stage.addConnection(
+        `Connect ${source.data.title} to the pinned post`,
+        { id: crypto.randomUUID(), source: source.id, target: node.id, type: 'smoothstep', animated: false, label: 'pinned from', data: { connectionKind: 'reference' } },
+      );
       return { ok: true, proposed: true, object: { id: node.id, kind: 'socialPost', title: node.data.title }, post: socialPostProjection(post) };
     },
   }, {
@@ -7780,8 +7785,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       // the identical URL.
       const mediaSources = [
         ...(args.mediaObjectIds ?? []).map((id) => {
-          const node = nodes.find((candidate) => candidate.id === id)
-            ?? proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []).find((candidate) => candidate.id === id);
+          const node = stage.object(id);
           return node ? canvasMediaSource(node.data) : null;
         }),
         ...(Array.isArray(args.mediaUrls) ? args.mediaUrls.map(String) : []),
@@ -7815,13 +7819,12 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         return { error: error instanceof Error ? error.message : 'That campaign could not be drafted.' };
       }
 
-      const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
       const node = newNode('socialCampaign', nextCanvasObjectPosition(
-        [...nodes, ...stagedNodes], args, typeof window !== 'undefined' && window.innerWidth <= 760, 'socialCampaign',
+        stage.nodes(), args, typeof window !== 'undefined' && window.innerWidth <= 760, 'socialCampaign',
       ));
       node.data = { ...node.data, ...socialCampaignNodeData(created.campaign) };
       node.style = { width: 440, height: 460 };
-      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: `Add social campaign “${created.campaign.name}”`, node });
+      stage.addObject(`Add social campaign “${created.campaign.name}”`, node);
       return {
         ok: true, proposed: true,
         object: { id: node.id, kind: 'socialCampaign', title: created.campaign.name },
@@ -7864,11 +7867,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         return { error: error instanceof Error ? error.message : 'That campaign could not be published.' };
       }
       if (batch.campaign) {
-        proposalBuffer.current.push({
-          id: crypto.randomUUID(), type: 'object.update',
-          label: `Publish social campaign ${target.id}`, objectId: target.id,
-          patch: socialCampaignNodeData(batch.campaign),
-        });
+        stage.updateObject(`Publish social campaign ${target.id}`, target.id, socialCampaignNodeData(batch.campaign));
       }
       return {
         ok: true, proposed: true, objectId: target.id,
@@ -7954,9 +7953,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         }
       }
 
-      const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
       const narrowViewport = typeof window !== 'undefined' && window.innerWidth <= 760;
-      const node = newNode('diagnostics', nextCanvasObjectPosition([...nodes, ...stagedNodes], args, narrowViewport, 'diagnostics'));
+      const node = newNode('diagnostics', nextCanvasObjectPosition(stage.nodes(), args, narrowViewport, 'diagnostics'));
       node.data = {
         ...node.data,
         title: definition.name,
@@ -7975,7 +7973,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         } : { status: 'Ready to run' }),
       };
       node.style = { width: 760 };
-      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: `Add diagnostic “${definition.name}”`, node });
+      stage.addObject(`Add diagnostic “${definition.name}”`, node);
       return {
         ok: true, proposed: true,
         object: { id: node.id, kind: 'diagnostics', title: definition.name },
@@ -8055,9 +8053,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
 
       // Resolve the comparison target BEFORE spending a render: attaching a "before" to
       // an object that is not a site is a silent no-op the model would report as done.
-      const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
       const targetId = typeof args.compareWithObjectId === 'string' ? args.compareWithObjectId.trim() : '';
-      const target = targetId ? [...nodes, ...stagedNodes].find((node) => node.id === targetId) : undefined;
+      const target = targetId ? stage.nodes().find((node) => node.id === targetId) : undefined;
       if (targetId && !target) return { error: `No object with id ${targetId} is on this canvas` };
       if (target && target.data.kind !== 'website' && target.data.kind !== 'prototype') {
         return { error: `A before/after comparison belongs to a website or prototype object; ${targetId} is a "${target.data.kind}". Capture without compareWithObjectId to add the screenshot as its own image object.` };
@@ -8074,11 +8071,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             ...(asset.width ? { width: asset.width } : {}),
             ...(asset.height ? { height: asset.height } : {}),
           });
-          proposalBuffer.current.push({
-            id: crypto.randomUUID(), type: 'object.update', objectId: target.id,
-            label: t('screenshotComparisonProposal', { title: target.data.title }),
-            patch: patch as Partial<CreationNodeData>,
-          });
+          stage.updateObject(t('screenshotComparisonProposal', { title: target.data.title }), target.id, patch as Partial<CreationNodeData>);
           return {
             ok: true, proposed: true, comparison: true,
             object: { id: target.id, kind: target.data.kind, title: target.data.title },
@@ -8129,8 +8122,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         return accountGateResult(CANVAS_GAME_TOOL, CANVAS_GAME_ACCOUNT_GATE);
       }
 
-      const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
-      const node = newNode('game', nextCanvasObjectPosition([...nodes, ...stagedNodes], args, typeof window !== 'undefined' && window.innerWidth <= 760, 'game'));
+      const node = newNode('game', nextCanvasObjectPosition(stage.nodes(), args, typeof window !== 'undefined' && window.innerWidth <= 760, 'game'));
       const gameTitle = typeof args.title === 'string' && args.title.trim() ? args.title.trim().slice(0, 160) : brief.slice(0, 60);
       const seed: CreationNodeData = { ...node.data, kind: 'game', title: gameTitle, prompt: brief, gamePlatform: platform };
 
@@ -8171,7 +8163,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         deliverables: withCreationDeliverable(node.data, delivered),
       };
       node.style = { width: 520, height: 470 };
-      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: t('game.proposal', { title: gameTitle }), node });
+      stage.addObject(t('game.proposal', { title: gameTitle }), node);
       return {
         ok: true, proposed: true, playable: true,
         object: { id: node.id, kind: 'game', title: gameTitle }, platform,
@@ -8203,9 +8195,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       if (unmeasured) return unmeasured;
       const updateTarget = duplicateAddUpdateTarget(prompt, args.kind, nodes, effectiveSelectedIds);
       if (updateTarget) return { error: `This is a correction to selected ${args.kind} ${updateTarget.id}. Call canvas_update_object for that object instead of creating a duplicate.` };
-      const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
       const narrowViewport = typeof window !== 'undefined' && window.innerWidth <= 760;
-      const node = newNode(args.kind, nextCanvasObjectPosition([...nodes, ...stagedNodes], args, narrowViewport, args.kind));
+      const node = newNode(args.kind, nextCanvasObjectPosition(stage.nodes(), args, narrowViewport, args.kind));
       if (args.kind === 'guidedTour') node.data = { ...node.data, ...localizedTourDefaults() };
       let authored = sanitizeCreationObjectPatch(args.kind, { ...((args.fields && typeof args.fields === 'object') ? args.fields : {}), title: args.title, subtitle: args.subtitle, status: args.status });
       if (args.kind === 'resume') authored = initializeResumeFromPatch(typeof authored.title === 'string' ? authored.title : node.data.title, authored);
@@ -8257,7 +8248,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       node.data = { ...node.data, ...authored, title: typeof authored.title === 'string' && authored.title.trim() ? authored.title.slice(0, 160) : node.data.title };
       const width = Number(args.width); const height = Number(args.height);
       if (Number.isFinite(width) || Number.isFinite(height)) node.style = { width: Number.isFinite(width) ? Math.max(240, Math.min(width, 2_400)) : undefined, height: Number.isFinite(height) ? Math.max(130, Math.min(height, 1_800)) : undefined };
-      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: `Add ${node.data.kind} “${node.data.title}”`, node });
+      stage.addObject(`Add ${node.data.kind} “${node.data.title}”`, node);
       return { ok: true, proposed: true, object: { id: node.id, kind: node.data.kind, title: node.data.title }, mutableFields: creationObjectDefinition(args.kind).mutableFields };
     },
   }, {
@@ -8268,7 +8259,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     run: (raw: unknown) => {
       if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
       const args = raw as { objectId?: string; fields?: unknown };
-      const target = nodes.find((node) => node.id === args.objectId) || proposalBuffer.current.find((change): change is Extract<ProposedCanvasChange, { type: 'object.add' }> => change.type === 'object.add' && change.node.id === args.objectId)?.node;
+      const target = stage.object(args.objectId);
       if (!args.objectId || !target) return { error: 'Object not found' };
       // The same gate the add path applies, for the same reason: filling a `job` card's
       // match score in a second call is the identical unmeasured claim as creating it
@@ -8285,7 +8276,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         const problem = authoredWebsiteProblem({ ...target.data, ...patch });
         if (problem) return { error: `${problem} Update this object with its complete WYSIWYG page structure.` };
       }
-      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.update', label: `Update ${args.objectId}`, objectId: args.objectId, patch });
+      stage.updateObject(`Update ${args.objectId}`, args.objectId, patch);
       return { ok: true, proposed: true, objectId: args.objectId, updatedFields: Object.keys(patch) };
     },
   }, {
@@ -8296,9 +8287,9 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     run: (raw: unknown) => {
       if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
       const objectId = (raw as { objectId?: string }).objectId;
-      const target = nodes.find((node) => node.id === objectId) || proposalBuffer.current.find((change): change is Extract<ProposedCanvasChange, { type: 'object.add' }> => change.type === 'object.add' && change.node.id === objectId)?.node;
+      const target = stage.object(objectId);
       if (!objectId || !target) return { error: 'Object not found' };
-      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.delete', label: `Delete ${target.data.title}`, objectId });
+      stage.deleteObject(`Delete ${target.data.title}`, objectId);
       return { ok: true, proposed: true, objectId };
     },
   }, {
@@ -8310,8 +8301,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
       const args = raw as { objectIds?: unknown; arrangement?: CanvasArrangement; gap?: number; columns?: number };
       const requestedIds = Array.isArray(args.objectIds) ? new Set(args.objectIds.filter((id): id is string => typeof id === 'string')) : null;
-      const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
-      const targets = canvasArrangementTargets([...nodes, ...stagedNodes], requestedIds);
+      const targets = canvasArrangementTargets(stage.nodes(), requestedIds);
       if (targets.length < 2) return { error: 'At least two unlocked objects are required to arrange the canvas' };
       const narrowViewport = typeof window !== 'undefined' && window.innerWidth <= 760;
       const arrangement = args.arrangement ?? (narrowViewport ? 'column' : undefined);
@@ -8320,7 +8310,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       for (const target of targets) {
         const position = positions.get(target.id);
         if (!position || (position.x === target.position.x && position.y === target.position.y)) continue;
-        proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.layout', label: `Arrange ${target.data.title}`, objectId: target.id, position });
+        stage.layoutObject(`Arrange ${target.data.title}`, target.id, { position });
         proposed += 1;
       }
       return { ok: true, proposed: true, arrangedObjects: targets.length, proposedChanges: proposed, arrangement: arrangement || 'grid', gap: Math.max(16, Math.min(Number(args.gap ?? 48), 320)) };
@@ -8333,13 +8323,13 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     run: (raw: unknown) => {
       if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
       const args = raw as { objectId?: string; x?: number; y?: number; width?: number; height?: number; hidden?: boolean; locked?: boolean };
-      const current = nodes.find((node) => node.id === args.objectId) || proposalBuffer.current.find((change): change is Extract<ProposedCanvasChange, { type: 'object.add' }> => change.type === 'object.add' && change.node.id === args.objectId)?.node;
+      const current = stage.object(args.objectId);
       if (!args.objectId || !current) return { error: 'Object not found' };
       const hasPosition = Number.isFinite(args.x) || Number.isFinite(args.y);
       const position = hasPosition ? { x: Number.isFinite(args.x) ? Number(args.x) : current.position.x, y: Number.isFinite(args.y) ? Number(args.y) : current.position.y } : undefined;
-      const change: Extract<ProposedCanvasChange, { type: 'object.layout' }> = { id: crypto.randomUUID(), type: 'object.layout', label: `Arrange ${current.data.title}`, objectId: args.objectId, ...(position ? { position } : {}), ...(Number.isFinite(args.width) ? { width: Math.max(240, Math.min(Number(args.width), 2_400)) } : {}), ...(Number.isFinite(args.height) ? { height: Math.max(130, Math.min(Number(args.height), 1_800)) } : {}), ...(typeof args.hidden === 'boolean' ? { hidden: args.hidden } : {}), ...(typeof args.locked === 'boolean' ? { locked: args.locked } : {}) };
-      if (!change.position && change.width == null && change.height == null && change.hidden == null && change.locked == null) return { error: 'No layout change supplied' };
-      proposalBuffer.current.push(change);
+      const layout = { ...(position ? { position } : {}), ...(Number.isFinite(args.width) ? { width: Math.max(240, Math.min(Number(args.width), 2_400)) } : {}), ...(Number.isFinite(args.height) ? { height: Math.max(130, Math.min(Number(args.height), 1_800)) } : {}), ...(typeof args.hidden === 'boolean' ? { hidden: args.hidden } : {}), ...(typeof args.locked === 'boolean' ? { locked: args.locked } : {}) };
+      if (!Object.keys(layout).length) return { error: 'No layout change supplied' };
+      stage.layoutObject(`Arrange ${current.data.title}`, args.objectId, layout);
       return { ok: true, proposed: true, objectId: args.objectId };
     },
   }, {
@@ -8367,7 +8357,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     mutates: (raw: unknown) => !['inspect', 'edit'].includes(String((raw as { action?: unknown })?.action || '')),
     run: (raw: unknown) => {
       const args = raw as { objectId?: string; action?: string };
-      const target = nodes.find((node) => node.id === args.objectId) || proposalBuffer.current.find((change): change is Extract<ProposedCanvasChange, { type: 'object.add' }> => change.type === 'object.add' && change.node.id === args.objectId)?.node;
+      const target = stage.object(args.objectId);
       if (!args.objectId || !target) return { error: 'Object not found' };
       const definition = creationObjectDefinition(target.data.kind);
       if (!args.action || !definition.actions.includes(args.action)) return { error: `Unsupported action. Available actions: ${definition.actions.join(', ')}` };
@@ -8415,7 +8405,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         provenance: readProvenance(target.data as Record<string, unknown>),
       });
       if (!gate.allowed) return { error: gate.message, objectId: target.id, action: args.action, awaitingApproval: true };
-      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.action', label: `${args.action} ${target.data.title}`, objectId: target.id, action: args.action });
+      stage.invokeAction(`${args.action} ${target.data.title}`, target.id, args.action);
       return { ok: true, proposed: true, objectId: target.id, action: args.action, approval: gate.reason };
     },
   }, {
@@ -8426,10 +8416,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     run: (raw: unknown) => {
       if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
       const args = raw as { sourceId?: string; targetId?: string; kind?: CreationConnectionKind; label?: string };
-      const exists = (id: string) => nodes.some((node) => node.id === id) || proposalBuffer.current.some((change) => change.type === 'object.add' && change.node.id === id);
+      const exists = (id: string) => stage.hasObject(id);
       if (!args.sourceId || !args.targetId || !exists(args.sourceId) || !exists(args.targetId)) return { error: 'Source or target object not found' };
       const edge = { id: crypto.randomUUID(), source: args.sourceId, target: args.targetId, label: args.label?.slice(0, 120), type: 'smoothstep', animated: true, data: { connectionKind: args.kind || 'reference' } } satisfies Edge;
-      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'connection.add', label: `Connect objects${args.label ? `: ${args.label}` : ''}`, edge });
+      stage.addConnection(`Connect objects${args.label ? `: ${args.label}` : ''}`, edge);
       return { ok: true, proposed: true, connectionId: edge.id };
     },
   }, {
@@ -8440,11 +8430,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     run: (raw: unknown) => {
       if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
       const args = raw as { connectionId?: string; kind?: CreationConnectionKind; label?: string };
-      const exists = edges.some((edge) => edge.id === args.connectionId) || proposalBuffer.current.some((change) => change.type === 'connection.add' && change.edge.id === args.connectionId);
+      const exists = stage.hasConnection(args.connectionId);
       if (!args.connectionId || !exists) return { error: 'Connection not found' };
       const patch = { ...(typeof args.label === 'string' ? { label: args.label.slice(0, 120) } : {}), ...(args.kind && CREATION_CONNECTION_KINDS.includes(args.kind) ? { kind: args.kind } : {}) };
       if (!Object.keys(patch).length) return { error: 'No connection change supplied' };
-      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'connection.update', label: `Update connection ${args.connectionId}`, connectionId: args.connectionId, patch });
+      stage.updateConnection(`Update connection ${args.connectionId}`, args.connectionId, patch);
       return { ok: true, proposed: true, connectionId: args.connectionId };
     },
   }, {
@@ -8455,9 +8445,9 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     run: (raw: unknown) => {
       if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
       const connectionId = (raw as { connectionId?: string }).connectionId;
-      const exists = edges.some((edge) => edge.id === connectionId) || proposalBuffer.current.some((change) => change.type === 'connection.add' && change.edge.id === connectionId);
+      const exists = stage.hasConnection(connectionId);
       if (!connectionId || !exists) return { error: 'Connection not found' };
-      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'connection.delete', label: `Delete connection ${connectionId}`, connectionId });
+      stage.deleteConnection(`Delete connection ${connectionId}`, connectionId);
       return { ok: true, proposed: true, connectionId };
     },
     // ADVERTISE ONLY WHAT THIS SESSION CAN EXECUTE. An anonymous canvas has no tenant,
@@ -8542,8 +8532,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       if (!built.cases.length) return { error: 'Nothing to test — pass routes, page html, or at least one scenario.' };
 
       const isNarrow = typeof window !== 'undefined' && window.innerWidth <= 760;
-      const staged = () => proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
-      const planNode = newNode('testPlan', nextCanvasObjectPosition([...nodes, ...staged()], {}, isNarrow, 'testPlan'));
+      const planNode = newNode('testPlan', nextCanvasObjectPosition(stage.nodes(), {}, isNarrow, 'testPlan'));
       planNode.data = {
         ...planNode.data,
         ...sanitizeCreationObjectPatch('testPlan', {
@@ -8553,11 +8542,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         }),
         caseCount: built.cases.length,
       };
-      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: `Add test plan “${built.plan.title}”`, node: planNode });
+      stage.addObject(`Add test plan “${built.plan.title}”`, planNode);
 
       for (const [index, testCase] of built.cases.entries()) {
         const caseNode = newNode('testCase', nextCanvasObjectPosition(
-          [...nodes, ...staged()],
+          stage.nodes(),
           { x: planNode.position.x + 520, y: planNode.position.y + index * 260 },
           isNarrow, 'testCase',
         ));
@@ -8570,11 +8559,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             ...(testCase.intent ? { intent: testCase.intent } : {}),
           }),
         };
-        proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: `Add test case “${testCase.title}”`, node: caseNode });
-        proposalBuffer.current.push({
-          id: crypto.randomUUID(), type: 'connection.add', label: `Case of ${built.plan.title}`,
-          edge: { id: crypto.randomUUID(), source: planNode.id, target: caseNode.id, type: 'smoothstep', label: 'covers', data: { connectionKind: 'membership' } },
-        });
+        stage.addObject(`Add test case “${testCase.title}”`, caseNode);
+        stage.addConnection(
+          `Case of ${built.plan.title}`,
+          { id: crypto.randomUUID(), source: planNode.id, target: caseNode.id, type: 'smoothstep', label: 'covers', data: { connectionKind: 'membership' } },
+        );
       }
 
       return {
@@ -8597,12 +8586,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     description: 'Report what on this canvas is proven by a test and what is not. Reads the "verifies" connections between test cases/plans and the work they cover, and names the requirements, tasks and builds with no test at all, plus any test case that verifies nothing. Use this to answer "what is untested", "what breaks if this fails", or before a release. Connect a case to what it proves with canvas_connect_objects using kind "verifies".',
     parameters: { type: 'object', additionalProperties: false, properties: {} },
     run: () => {
-      const staged = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
-      const all = [...nodes, ...staged];
-      const stagedEdges = proposalBuffer.current.flatMap((change) => change.type === 'connection.add' ? [change.edge] : []);
+      const all = stage.nodes();
       const report = coverageReport(
         all.map((node) => ({ id: node.id, kind: node.data.kind, title: node.data.title })),
-        [...edges, ...stagedEdges].map((edge) => ({
+        stage.edges().map((edge) => ({
           source: edge.source, target: edge.target,
           connectionKind: typeof (edge.data as { connectionKind?: unknown } | undefined)?.connectionKind === 'string'
             ? String((edge.data as { connectionKind?: unknown }).connectionKind) : undefined,
@@ -8656,8 +8643,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const actual = typeof args.actual === 'string' ? args.actual.trim().slice(0, 2_000) : '';
       if (!title || !expected || !actual) return { error: 'A defect needs a title, what was expected, and what actually happened.' };
 
-      const staged = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
-      const all = [...nodes, ...staged];
+      const all = stage.nodes();
       const source = args.caseObjectId ? all.find((node) => node.id === args.caseObjectId && node.data.kind === 'testCase') : undefined;
       const steps = normalizeQaSteps(args.reproSteps ?? source?.data.steps ?? []);
       const severity = QA_SEVERITIES.includes(args.severity as QaFindingSeverity) ? args.severity as QaFindingSeverity : 'medium';
@@ -8682,12 +8668,12 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           status: 'open',
         }),
       };
-      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: `File defect “${title}”`, node });
+      stage.addObject(`File defect “${title}”`, node);
       if (source) {
-        proposalBuffer.current.push({
-          id: crypto.randomUUID(), type: 'connection.add', label: `Found by ${source.data.title}`,
-          edge: { id: crypto.randomUUID(), source: source.id, target: node.id, type: 'smoothstep', label: 'found', data: { connectionKind: 'reference' } },
-        });
+        stage.addConnection(
+          `Found by ${source.data.title}`,
+          { id: crypto.randomUUID(), source: source.id, target: node.id, type: 'smoothstep', label: 'found', data: { connectionKind: 'reference' } },
+        );
       }
       return { ok: true, proposed: true, object: { id: node.id, kind: 'defect', title, created: true }, severity, reproSteps: steps.length };
     },
@@ -8716,8 +8702,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const audit = auditPageHtml(html, url);
 
       const isNarrow = typeof window !== 'undefined' && window.innerWidth <= 760;
-      const staged = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
-      const node = newNode('diagnostics', nextCanvasObjectPosition([...nodes, ...staged], {}, isNarrow, 'diagnostics'));
+      const node = newNode('diagnostics', nextCanvasObjectPosition(stage.nodes(), {}, isNarrow, 'diagnostics'));
       const failed = audit.findings.filter((item) => item.count > 0);
       node.data = {
         ...node.data,
@@ -8728,7 +8713,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           summary: `${failed.length} of ${audit.findings.length} checks failed (${audit.counts.accessibility} accessibility, ${audit.counts.performance} performance). Static source audit: contrast and script-rendered state are not covered.`,
         }),
       };
-      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: `Audit ${url || 'page'}`, node });
+      stage.addObject(`Audit ${url || 'page'}`, node);
       return {
         ok: true, proposed: true,
         object: { id: node.id, kind: 'diagnostics', title: String(node.data.title), created: true },
@@ -8772,9 +8757,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       });
 
       const isNarrow = typeof window !== 'undefined' && window.innerWidth <= 760;
-      const staged = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
       const node = newNode('dataset', nextCanvasObjectPosition(
-        [...nodes, ...staged],
+        stage.nodes(),
         { x: dataset.position.x + 460, y: dataset.position.y + 320 },
         isNarrow, 'dataset',
       ));
@@ -8788,11 +8772,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           summary: `${fixture.counts.valid} valid, ${fixture.counts.boundary} boundary, ${fixture.counts.invalid} must-reject rows generated from the declared contract.`,
         }),
       };
-      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: `Generate fixtures for ${dataset.data.title}`, node });
-      proposalBuffer.current.push({
-        id: crypto.randomUUID(), type: 'connection.add', label: `Fixtures for ${dataset.data.title}`,
-        edge: { id: crypto.randomUUID(), source: dataset.id, target: node.id, type: 'smoothstep', label: 'fixtures', data: { connectionKind: 'data' } },
-      });
+      stage.addObject(`Generate fixtures for ${dataset.data.title}`, node);
+      stage.addConnection(
+        `Fixtures for ${dataset.data.title}`,
+        { id: crypto.randomUUID(), source: dataset.id, target: node.id, type: 'smoothstep', label: 'fixtures', data: { connectionKind: 'data' } },
+      );
       return { ok: true, proposed: true, object: { id: node.id, kind: 'dataset', title: String(node.data.title), created: true }, counts: fixture.counts };
     },
   }, {
@@ -8822,14 +8806,12 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         return accountGateResult('canvas_publish_tests', CANVAS_QA_ACCOUNT_GATE);
       }
       const args = raw as { planObjectId?: string; projectId?: number };
-      const staged = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
-      const all = [...nodes, ...staged];
+      const all = stage.nodes();
       const plans = all.filter((node) => node.data.kind === 'testPlan');
       const plan = args.planObjectId ? plans.find((node) => node.id === args.planObjectId) : plans.length === 1 ? plans[0] : undefined;
       if (!plan) return { error: plans.length ? 'Name the testPlan to publish with planObjectId.' : 'There is no test plan on this canvas yet — create one first.' };
 
-      const stagedEdges = proposalBuffer.current.flatMap((change) => change.type === 'connection.add' ? [change.edge] : []);
-      const memberIds = new Set([...edges, ...stagedEdges].filter((edge) => edge.source === plan.id).map((edge) => edge.target));
+      const memberIds = new Set(stage.edges().filter((edge) => edge.source === plan.id).map((edge) => edge.target));
       const cases = all.filter((node) => node.data.kind === 'testCase' && (memberIds.has(node.id) || memberIds.size === 0));
       if (!cases.length) return { error: 'That plan has no test cases connected to it.' };
 
@@ -8852,13 +8834,14 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           });
           const generated = await qaApi.generateTest(flow.id);
           published.push({ objectId: testCase.id, testId: generated.test.id, title: String(testCase.data.title), model: generated.usedModel });
-          proposalBuffer.current.push({
-            id: crypto.randomUUID(), type: 'object.update', label: `Publish ${testCase.data.title}`, objectId: testCase.id,
-            patch: sanitizeCreationObjectPatch('testCase', {
+          stage.updateObject(
+            `Publish ${testCase.data.title}`,
+            testCase.id,
+            sanitizeCreationObjectPatch('testCase', {
               caseId: generated.test.id, status: 'Published',
               ...(generated.test.spec ? { spec: generated.test.spec } : {}),
             }),
-          });
+          );
         } catch (error) {
           failures.push({ title: String(testCase.data.title), reason: error instanceof Error ? error.message : 'publish failed' });
         }
@@ -8878,7 +8861,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
 
       const isNarrow = typeof window !== 'undefined' && window.innerWidth <= 760;
       const runNode = newNode('testRun', nextCanvasObjectPosition(
-        [...all, ...proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : [])],
+        stage.nodes(),
         { x: plan.position.x, y: plan.position.y + 340 },
         isNarrow, 'testRun',
       ));
@@ -8894,17 +8877,17 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             : `${published.length} case(s) published to the QA library. No CI run has reported against them yet.`,
         }),
       };
-      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: `Add test run for ${plan.data.title}`, node: runNode });
-      proposalBuffer.current.push({
-        id: crypto.randomUUID(), type: 'connection.add', label: `Run of ${plan.data.title}`,
-        edge: { id: crypto.randomUUID(), source: plan.id, target: runNode.id, type: 'smoothstep', label: 'run', data: { connectionKind: 'delivery' } },
-      });
+      stage.addObject(`Add test run for ${plan.data.title}`, runNode);
+      stage.addConnection(
+        `Run of ${plan.data.title}`,
+        { id: crypto.randomUUID(), source: plan.id, target: runNode.id, type: 'smoothstep', label: 'run', data: { connectionKind: 'delivery' } },
+      );
 
       // Every failure becomes a defect, fingerprinted the same way an Agentic Tester
       // finding is — so the same break reported twice is one defect.
       for (const [index, result] of results.filter((item) => item.status === 'failed' || item.status === 'error').slice(0, 10).entries()) {
         const defectNode = newNode('defect', nextCanvasObjectPosition(
-          [...all, ...proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : [])],
+          stage.nodes(),
           { x: runNode.position.x + 520, y: runNode.position.y + index * 240 },
           isNarrow, 'defect',
         ));
@@ -8915,11 +8898,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             journal: recentJournalEvidence(),
           }),
         };
-        proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: `File defect “${result.title}”`, node: defectNode });
-        proposalBuffer.current.push({
-          id: crypto.randomUUID(), type: 'connection.add', label: `Found by ${plan.data.title}`,
-          edge: { id: crypto.randomUUID(), source: runNode.id, target: defectNode.id, type: 'smoothstep', label: 'found', data: { connectionKind: 'reference' } },
-        });
+        stage.addObject(`File defect “${result.title}”`, defectNode);
+        stage.addConnection(
+          `Found by ${plan.data.title}`,
+          { id: crypto.randomUUID(), source: runNode.id, target: defectNode.id, type: 'smoothstep', label: 'found', data: { connectionKind: 'reference' } },
+        );
       }
 
       return {
@@ -9040,7 +9023,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setSelectedId(brainId);
     setSelectedIds([brainId]);
     if (process.env.NODE_ENV !== 'test') {
-      proposalBuffer.current = [];
+      stage.reset();
       turnUnanswered.current = null;
       turnToolCalls.current = new Set();
       setBrainTrace([]);
@@ -9228,7 +9211,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         // A turn that ran at all means the allowance is no longer spent (a new day,
         // or they took the account) — retire the conversion CTA the refusal armed.
         setGuestLimit(null);
-        const changes = [...proposalBuffer.current];
+        const changes = stage.drain();
         const changedKinds = new Set(changes.flatMap((change) => {
           if (change.type === 'object.add') return [change.node.data.kind];
           if ('objectId' in change) {
@@ -9239,7 +9222,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           return [];
         }));
         const executiveContractSatisfied = !executiveWorkflow || executiveWorkflow.outputs.some((kind) => changedKinds.has(kind as CreationObjectKind));
-        turnDone({ ok: executiveContractSatisfied, detail: `${proposalBuffer.current.length} proposed change(s)${executiveUseCase ? ` · ${executiveUseCase.id} ${executiveContractSatisfied ? 'complete' : 'incomplete'}` : ''}` });
+        turnDone({ ok: executiveContractSatisfied, detail: `${changes.length} proposed change(s)${executiveUseCase ? ` · ${executiveUseCase.id} ${executiveContractSatisfied ? 'complete' : 'incomplete'}` : ''}` });
         const shouldAutoApply = changes.length > 0 && (autoApplyRef.current || canvasChangesCanAutoApply(changes));
         if (answer.trim() && unanswered) {
           appendTimeline('system', answer.trim(), { scope: resolvedScopeMode, objectIds: [...scopedNodeIds], error: true }, `${requestMessageId}:unanswered`);
@@ -9522,7 +9505,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const rejectProposedChanges = useCallback(() => {
     setProposedChanges([]);
     setAcceptedProposalIds(new Set());
-    proposalBuffer.current = [];
+    stage.reset();
     setAutoApplyPending(false);
     setNotice(t('noticeChangesRejected'));
   }, []);
@@ -9541,15 +9524,6 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   }, [nodes, selectedNode]);
 
   /**
-   * Turn an authored canvas workflow into a REAL definition and link it.
-   *
-   * This is the step that used to be missing entirely: `steps` were rendered and
-   * never compiled, so a canvas workflow could not run no matter what it said on
-   * the card. Resolves the new definition id, or null when the steps are not
-   * runnable — in which case the per-step reasons are written onto the node and
-   * shown on the card.
-   */
-  /**
    * THE BOARD, COMPILED — turn the steps inside a frame into a real definition.
    *
    * This is what "the canvas is the workflow" cashes out to. There is no separate
@@ -9563,7 +9537,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * steps that will not run) or compiling every step on the board into one graph (a
    * flow nobody authored).
    *
-   * All-or-nothing on issues, for the same reason `canvasWorkflowSpec.ts` refuses an
+   * All-or-nothing on issues, for the reason a compiler always refuses an
    * underspecified step: a graph that runs, reports success and does nothing that was
    * asked for is worse than one that will not build. Each unbuildable step SAYS what
    * it needs, on the card, so the board is the error report too.

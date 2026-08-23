@@ -117,6 +117,7 @@ import { createEarningsRoutes, createWithdrawalMethodRoutes } from './presentati
 import { createSalesRoutes } from './presentation/routes/salesRoutes';
 import { createMessageRoutes } from './presentation/routes/messageRoutes';
 import { createPayoutRoutes } from './presentation/routes/payoutRoutes';
+import { createTaxRoutes } from './presentation/routes/taxRoutes';
 import { createActivityRoutes, createTimecardRoutes } from './presentation/routes/activityRoutes';
 import { createObjectRoutes } from './presentation/routes/objectRoutes';
 import { createDomainRoutes } from './presentation/routes/domainRoutes';
@@ -863,6 +864,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // Where an earner's money goes — the sixth connection port, same shape as the
   // two above it (consent or a typed credential, sealed, with a reconnect state).
   app.route('/api/payouts',  createPayoutRoutes(db));
+  app.route('/api/tax',      createTaxRoutes(db));
   // Where the company's numbers COME FROM — the seventh port, and the one that
   // makes burn, cash and runway live over a book instead of over typing.
   app.route('/api/ledger',   createLedgerRoutes(db));

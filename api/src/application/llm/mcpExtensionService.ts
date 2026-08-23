@@ -1,19 +1,24 @@
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
- * Tenant MCP extension service — the server side of the Brain's extension
- * contract.
+ * Tenant MCP extension service — REGISTRATION of a tenant's external MCP servers.
  *
- * A tenant registers a custom MCP server (URL + optional bearer secret). The
- * gateway:
- *   - advertises that server's tools to the Brain  (listToolsForTenant)
- *   - relays the Brain's tool calls to it SERVER-TO-SERVER  (callMcpTool)
- * so the customer's secret never reaches the browser. Secrets are encrypted at
- * rest with JWT_SECRET (AES-GCM), reusing the MFA storage helpers.
+ * A tenant registers a server (URL, plus either a static bearer secret or a
+ * three-legged OAuth grant); the gateway advertises its tools to every Brain
+ * surface ({@link listToolsForTenant}) and relays calls to it SERVER-TO-SERVER
+ * ({@link callMcpTool}), so the credential never reaches a browser.
  *
- * Expected MCP server contract (what the customer implements):
- *   GET  {serverUrl}/tools  → { tools: [{ name, description, parameters }] }
- *   POST {serverUrl}/call   → body { tool, arguments }, returns arbitrary JSON
- * Both receive `Authorization: Bearer <secret>` when a secret is configured.
+ * This module owns the ROW: create, list, update, delete, and the merge of every
+ * enabled server's tools. The three things that used to be tangled into it now
+ * live beside it, each with one reason to change:
+ *
+ *   `mcp/mcpWireClient`     — how a server is spoken to (real MCP JSON-RPC, with
+ *                             the legacy Builderforce REST pair as a fallback)
+ *   `mcp/mcpExtensionAuth`  — what credential is sent, sealed at rest
+ *   `mcp/mcpToolConsent`    — which of a server's tools the tenant approved
+ *
+ * Static secrets are still encrypted at rest with JWT_SECRET (AES-GCM, the MFA
+ * helpers); OAuth grants are sealed with the tenant's derived key through the
+ * shared token vault, exactly as mailbox/drive/calendar grants are.
  */
 
 import { and, eq } from 'drizzle-orm';
@@ -21,11 +26,11 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { tenantMcpExtensions } from '../../infrastructure/database/schema';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
-import { assertSafeUrl, resolveAndAssertPublic } from '../../infrastructure/net/ssrfGuard';
-import {
-  encryptSecretForStorage,
-  decryptSecretFromStorage,
-} from '../../infrastructure/auth/MfaService';
+import { assertSafeUrl } from '../../infrastructure/net/ssrfGuard';
+import { encryptSecretForStorage } from '../../infrastructure/auth/MfaService';
+import { authKindOf, resolveAuthorization, type McpAuthKind } from './mcp/mcpExtensionAuth';
+import { assertToolConsented, filterConsentedTools } from './mcp/mcpToolConsent';
+import { callRemoteTool, listRemoteTools, type McpProtocol } from './mcp/mcpWireClient';
 
 /** Read-through cache key for a tenant's merged MCP tool list [1406]. */
 const mcpToolsCacheKey = (tenantId: number): string => `mcp-tools:tenant:${tenantId}`;
@@ -43,6 +48,14 @@ export interface McpExtensionView {
   serverUrl: string;
   enabled: boolean;
   hasSecret: boolean;
+  /** Transport this server speaks: `auto` until a probe settles it (mig 1116). */
+  protocol: string;
+  /** Tool names the tenant approved; null = every tool the server advertises. */
+  allowedTools: string[] | null;
+  /** How its requests are authenticated right now — `oauth` once a grant exists. */
+  authKind: McpAuthKind;
+  /** When a human completed the OAuth consent, if this server uses one. */
+  oauthConnectedAt: string | null;
   lastUsedAt: string | null;
   createdAt: string;
 }
@@ -84,22 +97,6 @@ export function assertSafeServerUrl(serverUrl: string): void {
   }
 }
 
-/**
- * Re-validate a tenant's MCP server URL immediately BEFORE a runtime fetch.
- *
- * Registration-time validation ({@link assertSafeServerUrl}) only checks the
- * literal URL — a hostname that was public then can be re-pointed at a private
- * IP later (DNS rebinding), and the gateway would fetch it with the tenant's
- * decrypted Bearer secret. This re-runs the literal guard AND resolves the
- * hostname over DoH, rejecting a name that now maps to a private address. Callers
- * MUST also set `redirect: 'manual'` so a 302 can't bounce the authed request to
- * an internal target after this check passes.
- */
-async function assertServerUrlLiveSafe(serverUrl: string): Promise<void> {
-  const u = assertSafeUrl(serverUrl, { allowHttp: false });
-  await resolveAndAssertPublic(u.hostname);
-}
-
 function toView(row: typeof tenantMcpExtensions.$inferSelect): McpExtensionView {
   return {
     id: row.id,
@@ -107,6 +104,10 @@ function toView(row: typeof tenantMcpExtensions.$inferSelect): McpExtensionView 
     serverUrl: row.serverUrl,
     enabled: row.enabled,
     hasSecret: row.secretEnc != null,
+    protocol: row.protocol,
+    allowedTools: row.allowedTools ?? null,
+    authKind: authKindOf(row),
+    oauthConnectedAt: row.oauthConnectedAt ? row.oauthConnectedAt.toISOString() : null,
     lastUsedAt: row.lastUsedAt ? row.lastUsedAt.toISOString() : null,
     createdAt: row.createdAt.toISOString(),
   };
@@ -151,6 +152,10 @@ export async function updateMcpExtension(
     serverUrl?: string;
     enabled?: boolean;
     secret?: string | null;
+    /** Consented tool names; `null` restores "every tool". */
+    allowedTools?: string[] | null;
+    /** Pin the transport, or `auto` to re-probe (e.g. after a server upgrade). */
+    protocol?: McpProtocol;
     keyMaterial: string;
   },
 ): Promise<McpExtensionView | null> {
@@ -159,8 +164,14 @@ export async function updateMcpExtension(
   if (args.serverUrl !== undefined) {
     assertSafeServerUrl(args.serverUrl);
     patch.serverUrl = args.serverUrl;
+    // A server that MOVED is a different server: its transport must be re-probed
+    // rather than inherited, or a legacy pin would follow the URL to a real MCP
+    // endpoint and fail every call with a 404 nobody could explain.
+    patch.protocol = 'auto';
   }
   if (args.enabled !== undefined) patch.enabled = args.enabled;
+  if (args.allowedTools !== undefined) patch.allowedTools = args.allowedTools;
+  if (args.protocol !== undefined) patch.protocol = args.protocol;
   if (args.secret !== undefined) {
     // `secret: null` clears it; a string re-encrypts.
     patch.secretEnc = args.secret ? await encryptSecretForStorage(args.secret, args.keyMaterial) : null;

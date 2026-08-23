@@ -2,11 +2,13 @@
  * THE BOARD IS THE DEFINITION — lowering canvas steps into a runnable graph.
  *
  * ── WHAT THIS REPLACES ───────────────────────────────────────────────────────
- * `api/src/domain/canvasWorkflowSpec.ts` lowers an authored STEP LIST held on one
- * `workflow` card into a linear chain. That was the right shape while the canvas
- * could only describe a workflow in words: a list has one continuation, so the
- * compiler could not invent fan-out without inventing structure the author never
- * wrote, and it said so.
+ * A `workflow` card used to hold an authored STEP LIST, lowered server-side into a
+ * linear chain by a second compiler (`api/src/domain/canvasWorkflowSpec.ts`, since
+ * deleted). That was the right shape while the canvas could only describe a workflow
+ * in words: a list has one continuation, so the compiler could not invent fan-out
+ * without inventing structure the author never wrote, and it said so. A legacy card's
+ * list is now unpacked onto the board instead (`flowStepsFromCanvasSteps.ts`), so this
+ * is the only compiler left.
  *
  * A board is not a list. The author has drawn the fan-out, drawn which outlet of
  * the switch goes where, and drawn what joins back together — so this compiler

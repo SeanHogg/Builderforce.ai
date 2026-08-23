@@ -131,12 +131,45 @@ export async function readTenantAsset(
 ): Promise<Response | 'unconfigured' | 'not-found'> {
   if (!bucket) return 'unconfigured';
   if (!isKeyOwnedByTenant(key, tenantId)) return 'not-found';
+  return objectResponse(bucket, key);
+}
 
+/**
+ * Read one object back with NO tenant check — the key itself is the capability.
+ *
+ * A document's persisted markdown embeds a plain `![alt](url)`, and that URL has
+ * to keep working wherever the markdown is rendered: the canvas card, the print
+ * sheet, the .docx writer, Brain's context, none of which hold a bearer token to
+ * attach. `/api/brain-files/*` solved the same problem for a vision fetch by
+ * trading a tenant check for a short-lived HMAC signature; a document asset needs
+ * the opposite trade — no expiry, because the link is meant to outlive the
+ * session that created it — so it trades the tenant check for the key's own
+ * entropy instead: `assetKey` mints a random 8-hex-character suffix per object
+ * (~4 billion values), which is an ordinary "unlisted link" trust bar and the
+ * same one most file-sharing products serving un-authenticated attachments use.
+ *
+ * Upload stays tenant-scoped and size/type-checked ({@link storeTenantAsset}); it
+ * is only the READ that drops the check, and only for this route — the
+ * tenant-checked {@link readTenantAsset} still backs the legacy authenticated
+ * `/api/brain/uploads/*` path.
+ */
+export async function readAssetByKey(
+  bucket: R2Bucket | undefined,
+  key: string | null | undefined,
+): Promise<Response | 'unconfigured' | 'not-found'> {
+  if (!bucket) return 'unconfigured';
+  if (!key) return 'not-found';
+  return objectResponse(bucket, key);
+}
+
+async function objectResponse(bucket: R2Bucket, key: string): Promise<Response | 'not-found'> {
   const object = await bucket.get(key);
   if (!object) return 'not-found';
-
   const headers = new Headers();
   headers.set('Content-Type', object.httpMetadata?.contentType ?? 'application/octet-stream');
+  // Aggressive and safe: a key contains a timestamp and a random suffix, so the
+  // object at a given key is immutable by construction — there is no future
+  // response this URL could ever legitimately return other than this one.
   headers.set('Cache-Control', 'public, max-age=31536000, immutable');
   return new Response(object.body, { headers });
 }

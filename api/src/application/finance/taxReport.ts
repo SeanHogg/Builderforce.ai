@@ -26,7 +26,8 @@ import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { ledgerEntries } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
-import { bumpCacheVersion, getCacheVersion, getOrSetCached } from '../../infrastructure/cache/readThroughCache';
+import { getCacheVersion, getOrSetCached } from '../../infrastructure/cache/readThroughCache';
+import { taxReportVersionKey } from './taxCacheVersion';
 import { csvMatrix } from '../export/tabularExport';
 import { USD_CENTS } from '../kernel/denominations';
 import {
@@ -75,22 +76,6 @@ export interface TaxYearReport {
   rows: TaxYearReportRow[];
 }
 
-/** The version token key — bumped by every payout and every profile write. */
-export function taxReportVersionKey(tenantId: number): string {
-  return `tax:report:v:${tenantId}`;
-}
-
-/**
- * Invalidate every cached tax report for a workspace.
- *
- * A version token rather than a key sweep because the keyspace is unbounded (one
- * key per year, and the year is caller-supplied). The WRITER owns the token, so
- * this is called by the payout path and by a profile save — never by a reader.
- */
-export async function bumpTaxReportVersion(env: Env, tenantId: number): Promise<void> {
-  await bumpCacheVersion(env, taxReportVersionKey(tenantId));
-}
-
 /** Cents from the ledger's `numeric` column, which arrives as a string. */
 function toCents(raw: unknown): number {
   const n = typeof raw === 'string' ? Number(raw) : Number(raw ?? 0);
@@ -115,9 +100,11 @@ export async function buildTaxYearReport(
 async function loadTaxYearReport(db: Db, tenantId: number, year: number): Promise<TaxYearReport> {
   const { start, end } = calendarYearBounds(year);
 
-  // A payout is written as a NEGATIVE amount (money leaving the account), so the
-  // year's total is the absolute value of the sum. Taking `SUM()` raw would
-  // report every recipient at minus-six-hundred dollars and file nobody.
+  // `ABS`, matching `PayoutAccountService.available()` which sums payouts the
+  // same way. The sign on a payout row is NOT consistent across writers — the
+  // direct payout path writes it positive, an escrow release writes it through a
+  // signed movement — and a 1099 reports a magnitude either way. Summing raw
+  // would let the two writers cancel each other out inside one recipient's year.
   const aggregates = await db
     .select({
       accountRef: ledgerEntries.accountRef,

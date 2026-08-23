@@ -33,6 +33,7 @@ import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { connections, credentials, ledgerEntries } from '../../infrastructure/database/schema';
 import { credentialSecret, decryptCredentials, encryptCredentials } from '../integrations/credentialCrypto';
+import { bumpTaxReportVersion } from '../finance/taxCacheVersion';
 import { createPayout as createWebhookPayout, isPayoutsConfigured } from '../integrations/payments';
 import {
   getPayoutProvider,
@@ -455,6 +456,11 @@ export class PayoutAccountService {
       metadata: { provider: providerName, externalRef: result.externalRef, status: result.status, currency },
     }).onConflictDoNothing({ target: [ledgerEntries.tenantId, ledgerEntries.denomination, ledgerEntries.reference] })
       .returning({ id: ledgerEntries.id });
+
+    // New money in the year invalidates every cached year-end tax report for the
+    // workspace. Only on a real insert: the idempotent retry changed nothing, and
+    // bumping on it would throw the cache away for no reason.
+    if (inserted.length > 0) await bumpTaxReportVersion(this.env, input.tenantId);
 
     return { ...result, recorded: inserted.length > 0 };
   }

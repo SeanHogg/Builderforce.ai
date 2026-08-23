@@ -16680,7 +16680,8 @@
       "hiring": "Postes, ATS et CV.",
       "insights": "Livraison, dépenses et impact de l’IA.",
       "inbox": "E-mails, règles et réponses IA.",
-      "disputes": "Les litiges de séquestre, médiés jusqu'à une décision."
+      "disputes": "Les litiges de séquestre, médiés jusqu'à une décision.",
+      "learning": "Parcours, prérequis et le LRS."
     }
   },
   "tutorials": {
@@ -23155,7 +23156,10 @@
       "opening": "Ouverture du workflow sur le canevas…",
       "opened": "{count, plural, one {# étape ouverte sur le canevas.} other {# étapes ouvertes sur le canevas.}}",
       "frameHolds": "{count, plural, =0 {Aucune étape dans cette section pour l’instant.} one {# étape dans cette section.} other {# étapes dans cette section.}}",
-      "flowNamedAfterFrame": "Le workflow compilé porte le nom de cette section : {name}."
+      "flowNamedAfterFrame": "Le workflow compilé porte le nom de cette section : {name}.",
+      "nothingToOpen": "Ce flux n’a pas encore d’étapes, il n’y a donc rien à ouvrir.",
+      "untitledStep": "Étape {position}",
+      "openToBuild": "Ouvrez d’abord ce flux sur le tableau — c’est le tableau qui le construit."
     },
     "flowIssue": {
       "noSteps": "Ce flux n’a encore aucune étape à exécuter.",
@@ -24320,6 +24324,9 @@
       },
       "freelancer-earnings": {
         "description": "Un seul relevé pour tous les espaces de travail qui vous ont payé : le brut, la commission de la plateforme et pourquoi elle vaut ce qu'elle vaut, le net, ce qui reste sous séquestre, et chaque transaction derrière ces chiffres — ainsi que l'endroit où vous nous avez demandé d'envoyer l'argent."
+      },
+      "learning": {
+        "description": "Des parcours d’apprentissage sur vos cours, les prérequis qui les déverrouillent, et le Learning Record Store xAPI de l’espace de travail."
       }
     }
   },

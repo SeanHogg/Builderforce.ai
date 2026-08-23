@@ -27,11 +27,14 @@
  * and the page end up disagreeing about what bold looks like.
  *
  * ── WHAT THE TOOLBAR MAY CONTAIN ─────────────────────────────────────────────
- * Exactly what markdown can store, and nothing else. A control that produced a
- * style the save silently dropped — underline, a font, a colour, an alignment —
- * would be a lie told once per keystroke. Everything offered here survives the
- * round trip through `richText`, which is also what the print sheet and the
- * .docx writer read, so what is typed is what is exported.
+ * Exactly what `richText` can round-trip, and nothing else. A control that
+ * produced a style the save silently dropped would be a lie told once per
+ * keystroke — which used to rule out underline, a font, a colour and alignment,
+ * because markdown itself has no syntax for any of them. It rules out nothing
+ * now: those four are written as the attribute spans `richFormat.ts` defines
+ * (`[text]{u color=#c0392b}`, `{align=center}`), which `richText` reads and
+ * writes on the way in and out of this surface, and which the print sheet, the
+ * `.docx`/`.pdf` writers and the card's own renderer all parse the same way.
  */
 
 import { Icon } from '@/components/ui/Icon';
@@ -39,18 +42,30 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import styles from './CreationCanvas.module.css';
 import { escapeHtml, htmlToMarkdown, markdownToHtml } from '@/lib/richText';
+import {
+  RICH_FONTS, RICH_SIZES, richMarksCss, type RichAlign, type RichMarks,
+} from '@builderforce/creation-canvas-contract';
 
 /** Write the body back this long after the last keystroke, so a session that
  * ends without a blur — a closed tab, a dragged card — still keeps the edit. */
 const AUTOSAVE_MS = 1200;
 
-/** Inline marks that survive the markdown round trip. Underline is absent on
- * purpose: markdown has no underline, so an underline button would produce a
- * style that silently vanished the moment the document was saved. */
+/** Inline marks the browser's own editing commands produce, and which
+ * `richText` reads back — emphasis as markdown, underline as an attribute span. */
 const INLINE_COMMANDS = [
   { id: 'bold', command: 'bold', glyph: 'B' },
   { id: 'italic', command: 'italic', glyph: 'I' },
   { id: 'strikethrough', command: 'strikeThrough', glyph: 'S' },
+  { id: 'underline', command: 'underline', glyph: 'U' },
+] as const;
+
+/** Paragraph alignment. A native command per value, so the browser's own
+ * alignment state (`document.queryCommandState`) is what drives the toolbar. */
+const ALIGN_COMMANDS = [
+  { id: 'left' as const, command: 'justifyLeft', glyph: 'L', label: 'alignLeft' as const },
+  { id: 'center' as const, command: 'justifyCenter', glyph: 'C', label: 'alignCenter' as const },
+  { id: 'right' as const, command: 'justifyRight', glyph: 'R', label: 'alignRight' as const },
+  { id: 'justify' as const, command: 'justifyFull', glyph: 'J', label: 'alignJustify' as const },
 ] as const;
 
 const LIST_COMMANDS = [
@@ -98,6 +113,12 @@ function currentBlockFormat(): BlockFormat {
   }
 }
 
+/** The caret's current alignment, read the same way its emphasis is. */
+function currentAlign(): RichAlign {
+  const active = ALIGN_COMMANDS.find((entry) => commandActive(entry.command));
+  return active?.id ?? 'left';
+}
+
 /** The nearest ancestor of the caret carrying this tag, stopping at the editing
  * surface. Inline code has no editing command of its own and is toggled by hand;
  * list nesting has commands but only means something inside an `<li>`. Both are
@@ -136,7 +157,7 @@ export function DocumentEditor({ markdown, label, scale = 'card', onCommit }: Do
   const loaded = useRef<string | null>(null);
   const savedRange = useRef<Range | null>(null);
   const autosave = useRef<number>(0);
-  const [marks, setMarks] = useState<{ inline: readonly string[]; block: BlockFormat; code: boolean; list: boolean }>({ inline: [], block: 'p', code: false, list: false });
+  const [marks, setMarks] = useState<{ inline: readonly string[]; block: BlockFormat; code: boolean; list: boolean; align: RichAlign }>({ inline: [], block: 'p', code: false, list: false, align: 'left' });
   /** Which insertion the URL row is collecting for, or `null` when it is shut.
    * A link and an image ask the same question and differ only in what they
    * write, so they share one row rather than growing a second identical one. */
@@ -184,6 +205,7 @@ export function DocumentEditor({ markdown, label, scale = 'card', onCommit }: Do
       block: currentBlockFormat(),
       code: !!enclosingTag(node, 'CODE'),
       list: !!enclosingTag(node, 'LI'),
+      align: currentAlign(),
     });
   }, []);
 
@@ -295,6 +317,40 @@ export function DocumentEditor({ markdown, label, scale = 'card', onCommit }: Do
 
   const applyBlockFormat = useCallback((format: string) => run('formatBlock', BLOCK_TAGS[format] ?? BLOCK_TAGS.p!), [run]);
 
+  /** The selection's own HTML, so a mark wraps what was actually selected —
+   *  including whatever emphasis it already carries — rather than its plain
+   *  text. `null` when there is nothing selected to wrap. */
+  const selectedHtml = useCallback((node: HTMLElement): string | null => {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return null;
+    if (!node.contains(selection.anchorNode) || !node.contains(selection.focusNode)) return null;
+    const holder = document.createElement('div');
+    holder.appendChild(selection.getRangeAt(0).cloneContents());
+    return holder.innerHTML;
+  }, []);
+
+  /**
+   * Apply a colour, a font or a size to the selection.
+   *
+   * Written by hand rather than through `run`/`execCommand`: none of the three
+   * has a cross-browser command that survives as the plain `<span style>`
+   * `richText` reads back, so the markup is built directly — the same shape
+   * `richText`'s own `markedHtml` produces, underline innermost and the span
+   * outside it, so a colour applied over an underlined phrase reads back as one
+   * mark instead of two nested ones disagreeing about order.
+   */
+  const applyMarks = useCallback((marks: RichMarks, placeholder: string) => {
+    const node = surface.current;
+    if (!node) return;
+    node.focus();
+    const html = selectedHtml(node) ?? escapeHtml(placeholder);
+    const css = richMarksCss({ ...marks, underline: false });
+    const wrapped = css ? `<span style="${escapeHtml(css)}">${html}</span>` : html;
+    document.execCommand('insertHTML', false, wrapped);
+    readMarks();
+    scheduleCommit();
+  }, [readMarks, scheduleCommit, selectedHtml]);
+
   return <div className={`${styles.docEditor} nodrag nowheel`} data-scale={scale} onPointerDownCapture={(event) => event.stopPropagation()}>
     <div className={styles.docToolbar} role="toolbar" aria-label={t('toolbar')}>
       <div className={styles.docToolGroup}>
@@ -309,6 +365,37 @@ export function DocumentEditor({ markdown, label, scale = 'card', onCommit }: Do
         onChange={(event) => applyBlockFormat(event.target.value)}
       >{blockOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select>
       <div className={styles.docToolGroup}>
+        <select
+          className={styles.docBlockSelect}
+          defaultValue=""
+          aria-label={t('fontFamily')}
+          onMouseDown={(event) => event.stopPropagation()}
+          onChange={(event) => { const { value } = event.target; event.target.value = ''; if (value) applyMarks({ font: value }, value); }}
+        >
+          <option value="">{t('fontFamilyPlaceholder')}</option>
+          {RICH_FONTS.map((font) => <option key={font.id} value={font.id} style={{ fontFamily: font.stack }}>{font.id}</option>)}
+        </select>
+        <select
+          className={styles.docBlockSelect}
+          defaultValue=""
+          aria-label={t('fontSize')}
+          onMouseDown={(event) => event.stopPropagation()}
+          onChange={(event) => { const { value } = event.target; event.target.value = ''; const size = Number(value); if (size) applyMarks({ size }, `${size}pt`); }}
+        >
+          <option value="">{t('fontSizePlaceholder')}</option>
+          {RICH_SIZES.map((size) => <option key={size} value={size}>{size}</option>)}
+        </select>
+        <input
+          type="color"
+          className={styles.docColorInput}
+          aria-label={t('textColor')}
+          title={t('textColor')}
+          defaultValue="#111827"
+          onMouseDown={(event) => event.stopPropagation()}
+          onChange={(event) => applyMarks({ color: event.target.value }, event.target.value)}
+        />
+      </div>
+      <div className={styles.docToolGroup}>
         {INLINE_COMMANDS.map((entry) => <button
           key={entry.id}
           type="button"
@@ -320,6 +407,17 @@ export function DocumentEditor({ markdown, label, scale = 'card', onCommit }: Do
           title={t(entry.id)}
         >{entry.glyph}</button>)}
         <button type="button" aria-pressed={marks.code} onMouseDown={hold} onClick={toggleCode} aria-label={t('inlineCode')} title={t('inlineCode')}>{'</>'}</button>
+      </div>
+      <div className={styles.docToolGroup}>
+        {ALIGN_COMMANDS.map((entry) => <button
+          key={entry.id}
+          type="button"
+          aria-pressed={marks.align === entry.id}
+          onMouseDown={hold}
+          onClick={() => run(entry.command)}
+          aria-label={t(entry.label)}
+          title={t(entry.label)}
+        >{entry.glyph}</button>)}
       </div>
       <div className={styles.docToolGroup}>
         {LIST_COMMANDS.map((entry) => <button

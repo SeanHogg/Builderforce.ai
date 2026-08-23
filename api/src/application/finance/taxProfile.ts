@@ -35,6 +35,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import { credentials, partyRoles } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import { bumpTaxReportVersion } from './taxCacheVersion';
 import { credentialSecret, encryptCredentials } from '../integrations/credentialCrypto';
 import { ENTITY_TYPES, formTypeFor, recipientTypeFor, taxIdLast4, type RecipientType } from '../../domain/finance/taxThreshold';
 
@@ -270,6 +271,10 @@ export async function saveTaxProfile(
     });
 
   await invalidateTaxProfile(env, tenantId, userId);
+  // A profile edit can change a recipient's residency, and residency decides the
+  // threshold — so the cached year-end report is now potentially wrong about who
+  // is reportable, not merely about a name. The writer owns the token.
+  await bumpTaxReportVersion(env, tenantId);
   return toTaxProfile(userId, merged, hasTaxId);
 }
 

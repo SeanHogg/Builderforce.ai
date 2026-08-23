@@ -1,3 +1,28 @@
+## ✅ RESOLVED 2026-08-23 — The board can now record itself: Talktrack
+
+The canvas could edit a video and render one and never make one — the single most common
+thing anyone does with a board, walking someone else through it, left no artifact. It
+happened in a call or an external screen recorder whose output came back as a file with
+no idea which part of it mattered.
+
+`useCanvasTalktrack` ([useCanvasTalktrack.ts](./frontend/src/hooks/useCanvasTalktrack.ts))
+composes four pieces that already existed rather than adding a fifth: `useDisplayCapture`
+for the screen, `useCameraCapture` for the voice, `useStreamRecorder` for the bytes, and
+`useSpeechCaptions` for the words — the same browser-native transcription a live meeting
+already captions itself with. A marked moment names a board object directly; an unmarked
+one is inferred afterwards from a pause plus a locale-specific topic-opener phrase
+("so", "next", "over here"), read from the catalog because only the surface knows the
+viewer's language.
+
+`CanvasTalktrackPanel` is the surface — a toolbar toggle (`talktrackOpen`, always mounted
+so a walkthrough survives its own panel closing) that starts and stops the capture and
+turns the result into a `video` object: the recording through `storeCanvasMedia`, the
+marked/inferred moments as `videoTimeline` chapters, the transcript as captions, and a
+`.vtt` sidecar uploaded so a player outside our own editor can still read them (a failed
+sidecar upload degrades to "no captions", never to "no walkthrough" — the cues are on the
+object either way). Everything after Stop — trimming, splitting, re-titling a chapter,
+exporting, publishing — is `CanvasVideoEditor`, unchanged.
+
 ## ✅ RESOLVED 2026-08-23 — A cross-package contract that a file move turned into an ENOENT
 
 The api test suite went red on `dataProviderCatalog.test.ts`, which reads the frontend

@@ -16680,7 +16680,8 @@
       "hiring": "岗位、招聘系统与简历。",
       "insights": "交付、支出与 AI 影响。",
       "inbox": "邮件、规则和 AI 回复。",
-      "disputes": "托管争议，经调解得出裁决。"
+      "disputes": "托管争议，经调解得出裁决。",
+      "learning": "学习路径、先修条件与 LRS。"
     }
   },
   "tutorials": {
@@ -23155,7 +23156,10 @@
       "opening": "正在画布上打开该工作流…",
       "opened": "{count, plural, other {已在画布上打开 # 个步骤。}}",
       "frameHolds": "{count, plural, =0 {该区域还没有步骤。} other {该区域有 # 个步骤。}}",
-      "flowNamedAfterFrame": "构建出的工作流将以该区域命名：{name}。"
+      "flowNamedAfterFrame": "构建出的工作流将以该区域命名：{name}。",
+      "nothingToOpen": "此流程尚无步骤，因此无法打开。",
+      "untitledStep": "第 {position} 步",
+      "openToBuild": "请先在画布上打开此流程——画布才是构建它的地方。"
     },
     "flowIssue": {
       "noSteps": "该流程还没有可运行的步骤。",
@@ -24320,6 +24324,9 @@
       },
       "freelancer-earnings": {
         "description": "跨所有付款工作区的一张对账单：总额、平台费及其计算依据、净额、仍在托管中的金额，以及支撑这些数字的每一笔交易 —— 还有你指定的收款方式。"
+      },
+      "learning": {
+        "description": "基于课程的学习路径、控制解锁的先修条件，以及工作区自有的 xAPI 学习记录存储（LRS）。"
       }
     }
   },

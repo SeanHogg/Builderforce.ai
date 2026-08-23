@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { shouldSeed } from './useDocCollaboration';
+import { shouldSeed } from './seedTiebreak';
 
 describe('shouldSeed', () => {
   it('a lone first editor with content seeds', () => {

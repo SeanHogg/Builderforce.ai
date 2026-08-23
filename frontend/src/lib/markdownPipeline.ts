@@ -2,6 +2,7 @@ import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import type { Options } from 'react-markdown';
+import { remarkRichFormat } from './markdownRichFormat';
 
 /**
  * The plugin-list type, taken from `react-markdown`'s own props rather than
@@ -39,6 +40,17 @@ type PluggableList = NonNullable<Options['remarkPlugins']>;
  * whole card down with it.
  */
 export const MARKDOWN_REMARK_PLUGINS: PluggableList = [remarkGfm, remarkMath];
+
+/**
+ * The pipeline for a canvas DOCUMENT — the base plugins plus the attribute-span
+ * vocabulary a document may carry (underline, colour, font, size, alignment).
+ *
+ * A separate list rather than an addition to the one above, because the base
+ * list also renders CHAT: a model that happens to write `[a]{color=red}` in a
+ * reply is quoting syntax, not formatting its own answer. A document is the
+ * surface where those spans are authored, imported from Word, and exported back.
+ */
+export const DOCUMENT_REMARK_PLUGINS: PluggableList = [...MARKDOWN_REMARK_PLUGINS, remarkRichFormat];
 
 export const MARKDOWN_REHYPE_PLUGINS: PluggableList = [
   [rehypeKatex, { throwOnError: false, errorColor: 'var(--error-text)', strict: false }],

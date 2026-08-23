@@ -94,11 +94,11 @@ export class CanvasProposalStage {
     return this.edges().find((edge) => edge.id === connectionId) ?? null;
   }
 
-  hasObject(objectId: string): boolean {
+  hasObject(objectId: string | undefined | null): boolean {
     return this.object(objectId) !== null;
   }
 
-  hasConnection(connectionId: string): boolean {
+  hasConnection(connectionId: string | undefined | null): boolean {
     return this.connection(connectionId) !== null;
   }
 
