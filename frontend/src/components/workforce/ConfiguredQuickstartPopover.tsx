@@ -48,16 +48,10 @@ function buildCommand(os: Os, token: string | null, slug?: string): string {
   return `curl -fsSL https://builderforce.ai/install.sh | ${prefix}bash`;
 }
 
+// Positioning is owned by the caller's `AnchoredPopover` (a portal, so it can
+// escape the toolbar's own stacking context) — this only draws the card.
 const cardStyle: React.CSSProperties = {
-  position: 'absolute',
-  top: 'calc(100% + 8px)',
-  right: 0,
-  zIndex: 50,
   width: 'min(440px, 92vw)',
-  background: 'var(--bg-elevated)',
-  border: '1px solid var(--border)',
-  borderRadius: 'var(--radius-lg)',
-  boxShadow: '0 12px 32px rgba(0,0,0,0.28)',
   padding: 16,
   textAlign: 'left',
 };

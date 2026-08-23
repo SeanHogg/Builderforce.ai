@@ -2537,6 +2537,35 @@ html[data-theme='light'] .nebula {
 .ui-button--lg { min-height: var(--control-lg); padding: 0 var(--space-5); font-size: 14px; }
 .ui-button--block { width: 100%; }
 .ui-button__spinner { width: 14px; height: 14px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: ui-spin .7s linear infinite; }
+
+/* Split button: a primary action plus a caret that opens a menu, read as one
+   control. The caret reuses the primary button's own `.ui-button--{variant}`
+   class rather than a hand-rolled color, so it matches in every theme and variant. */
+.ui-button-group { display: inline-flex; align-items: stretch; position: relative; }
+.ui-button-group--block { width: 100%; }
+.ui-button-group--block .ui-button-group__main { flex: 1; }
+/* Class selectors, not `> :first-child` — the primary button may be wrapped
+   (e.g. `<RoleGate>` inserts a `<span>`), so it is not always a direct child. */
+.ui-button-group__main { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.ui-button-group__caret {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  border-left-color: color-mix(in srgb, currentColor 25%, transparent);
+  padding: 0 var(--space-3);
+  min-width: 0;
+}
+.ui-button-group__caret svg { width: 12px; height: 12px; }
+/* Opt-in default chrome for a SplitButton's menu content — a plain item list
+   uses this; a self-chromed popover (its own card/dialog) skips it instead of
+   nesting two boxes. */
+.ui-button-group__menu {
+  min-width: 220px;
+  padding: var(--space-1);
+  background: var(--panel-drawer-bg, var(--bg-elevated));
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 6px 20px var(--shadow-color, rgba(0, 0, 0, 0.35));
+}
 @keyframes ui-spin { to { transform: rotate(360deg); } }
 
 /* Inputs / labels */

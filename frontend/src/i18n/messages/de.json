@@ -1697,6 +1697,7 @@
     "home": "Zurück zur Startseite"
   },
   "common": {
+    "unfiled": "Nicht abgelegt",
     "deleteRoadmapItemConfirm": "Dieses Roadmap-Element löschen?",
     "removeAgentFromProjectConfirm": "„{name}“ aus diesem Projekt entfernen? Die agentenspezifischen Fähigkeiten werden gelöscht.",
     "unpairNodeConfirm": "Knoten „{name}“ entkoppeln? Dadurch wird er getrennt.",
@@ -1947,14 +1948,18 @@
       "principal": "Principal"
     },
     "timezone": "Zeitzone (IANA)",
+    "timezonePlaceholder": "America/New_York",
     "maxConcurrentWip": "Max. gleichzeitige laufende Aufgaben",
     "weeklyCapacity": "Wöchentliche Kapazität (Std.)",
     "dailyCapacity": "Tägliche Kapazität (Punkte)",
     "responseSla": "Antwort-SLA (Std.)",
     "rampFactor": "Einarbeitungsfaktor (0–1)",
     "skills": "Fähigkeiten (durch Kommas getrennte Tags)",
+    "skillsPlaceholder": "react, typescript, postgres",
     "focusAreas": "Schwerpunktbereiche",
+    "focusAreasPlaceholder": "Frontend, Abrechnung",
     "preferredTaskTypes": "Bevorzugte Aufgabentypen",
+    "preferredTaskTypesPlaceholder": "Fehlerbehebung, Funktion",
     "saveProfile": "Profil speichern"
   },
   "legal": {
@@ -17428,6 +17433,20 @@
       "initiative": "Initiativenziel"
     }
   },
+  "ticketDetailsPanel": {
+    "titleFallback": "Ticketdetails",
+    "loading": "Ticket wird geladen...",
+    "restricted": "Dieses Sicherheitsticket erfordert eine zusätzliche Freigabe zur Ansicht.",
+    "factStatus": "Status",
+    "factPriority": "Priorität",
+    "factType": "Typ",
+    "factCreated": "Erstellt",
+    "factUpdated": "Aktualisiert",
+    "factDue": "Fällig",
+    "descriptionHeading": "Beschreibung",
+    "noDescription": "Keine Beschreibung vorhanden.",
+    "viewPr": "Pull Request anzeigen"
+  },
   "agentOps": {
     "loading": "Wird geladen…",
     "close": "Schließen",
@@ -22409,6 +22428,7 @@
     "founderMetricRefreshed": "Kennzahl aktualisiert: {title}",
     "founderTriggerEvaluated": "Auslöser ausgewertet: {title}",
     "sessionActionCluster": {
+      "run": "Diese Leinwand ausführen",
       "history": "Leinwandverlauf",
       "inspect": "Leinwand-Werkzeuge",
       "live": "Live und Aufnahme",

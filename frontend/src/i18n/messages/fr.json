@@ -1947,14 +1947,18 @@
       "principal": "Principal"
     },
     "timezone": "Fuseau horaire (IANA)",
+    "timezonePlaceholder": "America/New_York",
     "maxConcurrentWip": "Travaux en cours simultanés max.",
     "weeklyCapacity": "Capacité hebdomadaire (h)",
     "dailyCapacity": "Capacité quotidienne (points)",
     "responseSla": "SLA de réponse (h)",
     "rampFactor": "Facteur de montée en charge (0–1)",
     "skills": "Compétences (étiquettes séparées par des virgules)",
+    "skillsPlaceholder": "react, typescript, postgres",
     "focusAreas": "Domaines prioritaires",
+    "focusAreasPlaceholder": "frontend, facturation",
     "preferredTaskTypes": "Types de tâches préférés",
+    "preferredTaskTypesPlaceholder": "correction de bug, fonctionnalité",
     "saveProfile": "Enregistrer le profil"
   },
   "legal": {
@@ -17428,6 +17432,20 @@
       "initiative": "Objectif de l’initiative"
     }
   },
+  "ticketDetailsPanel": {
+    "titleFallback": "Détails du ticket",
+    "loading": "Chargement du ticket...",
+    "restricted": "Ce ticket de sécurité nécessite une habilitation supplémentaire pour être consulté.",
+    "factStatus": "Statut",
+    "factPriority": "Priorité",
+    "factType": "Type",
+    "factCreated": "Créé",
+    "factUpdated": "Mis à jour",
+    "factDue": "Échéance",
+    "descriptionHeading": "Description",
+    "noDescription": "Aucune description fournie.",
+    "viewPr": "Voir la pull request"
+  },
   "agentOps": {
     "loading": "Chargement…",
     "close": "Fermer",
@@ -22409,6 +22427,7 @@
     "founderMetricRefreshed": "Indicateur actualisé : {title}",
     "founderTriggerEvaluated": "Déclencheur évalué : {title}",
     "sessionActionCluster": {
+      "run": "Exécuter cette toile",
       "history": "Historique de la toile",
       "inspect": "Outils de la toile",
       "live": "Direct et enregistrement",

@@ -1697,6 +1697,7 @@
     "home": "Back to home"
   },
   "common": {
+    "unfiled": "Unfiled",
     "deleteRoadmapItemConfirm": "Delete this roadmap item?",
     "removeAgentFromProjectConfirm": "Remove \"{name}\" from this project? Its per-agent capabilities will be cleared.",
     "unpairNodeConfirm": "Unpair node \"{name}\"? This will disconnect it.",
@@ -1947,14 +1948,18 @@
       "principal": "Principal"
     },
     "timezone": "Timezone (IANA)",
+    "timezonePlaceholder": "America/New_York",
     "maxConcurrentWip": "Max concurrent WIP",
     "weeklyCapacity": "Weekly capacity (hrs)",
     "dailyCapacity": "Daily capacity (points)",
     "responseSla": "Response SLA (hrs)",
     "rampFactor": "Ramp factor (0–1)",
     "skills": "Skills (comma-separated tags)",
+    "skillsPlaceholder": "react, typescript, postgres",
     "focusAreas": "Focus areas",
+    "focusAreasPlaceholder": "frontend, billing",
     "preferredTaskTypes": "Preferred task types",
+    "preferredTaskTypesPlaceholder": "bugfix, feature",
     "saveProfile": "Save profile"
   },
   "legal": {
@@ -17428,6 +17433,20 @@
       "initiative": "Initiative goal"
     }
   },
+  "ticketDetailsPanel": {
+    "titleFallback": "Ticket details",
+    "loading": "Loading ticket...",
+    "restricted": "This security ticket requires additional clearance to view.",
+    "factStatus": "Status",
+    "factPriority": "Priority",
+    "factType": "Type",
+    "factCreated": "Created",
+    "factUpdated": "Updated",
+    "factDue": "Due",
+    "descriptionHeading": "Description",
+    "noDescription": "No description provided.",
+    "viewPr": "View pull request"
+  },
   "agentOps": {
     "loading": "Loading…",
     "close": "Close",
@@ -22409,6 +22428,7 @@
     "founderMetricRefreshed": "Metric refreshed: {title}",
     "founderTriggerEvaluated": "Trigger evaluated: {title}",
     "sessionActionCluster": {
+      "run": "Run this canvas",
       "history": "Canvas history",
       "inspect": "Canvas tools",
       "live": "Live and recording",

@@ -6,3 +6,4 @@ export * from './Field';
 export * from './Icon';
 export * from './PageHeader';
 export * from './Surface';
+export * from './SplitButton';

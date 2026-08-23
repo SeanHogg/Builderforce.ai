@@ -1947,14 +1947,18 @@
       "principal": "首席"
     },
     "timezone": "时区（IANA）",
+    "timezonePlaceholder": "America/New_York",
     "maxConcurrentWip": "最大并行进行中任务数",
     "weeklyCapacity": "每周产能（小时）",
     "dailyCapacity": "每日产能（点数）",
     "responseSla": "响应 SLA（小时）",
     "rampFactor": "适应系数（0–1）",
     "skills": "技能（以逗号分隔的标签）",
+    "skillsPlaceholder": "react, typescript, postgres",
     "focusAreas": "关注领域",
+    "focusAreasPlaceholder": "前端、账单结算",
     "preferredTaskTypes": "偏好的任务类型",
+    "preferredTaskTypesPlaceholder": "缺陷修复、新功能",
     "saveProfile": "保存档案"
   },
   "legal": {
@@ -17428,6 +17432,20 @@
       "initiative": "举措目标"
     }
   },
+  "ticketDetailsPanel": {
+    "titleFallback": "工单详情",
+    "loading": "正在加载工单...",
+    "restricted": "此安全工单需要额外权限才能查看。",
+    "factStatus": "状态",
+    "factPriority": "优先级",
+    "factType": "类型",
+    "factCreated": "创建时间",
+    "factUpdated": "更新时间",
+    "factDue": "截止时间",
+    "descriptionHeading": "描述",
+    "noDescription": "未提供描述。",
+    "viewPr": "查看拉取请求"
+  },
   "agentOps": {
     "loading": "加载中…",
     "close": "关闭",
@@ -22409,6 +22427,7 @@
     "founderMetricRefreshed": "指标已刷新：{title}",
     "founderTriggerEvaluated": "触发条件已评估：{title}",
     "sessionActionCluster": {
+      "run": "运行此画布",
       "history": "画布历史",
       "inspect": "画布工具",
       "live": "通话与录制",

@@ -1947,14 +1947,18 @@
       "principal": "Principal"
     },
     "timezone": "Zona horaria (IANA)",
+    "timezonePlaceholder": "America/New_York",
     "maxConcurrentWip": "Máx. trabajo en curso simultáneo",
     "weeklyCapacity": "Capacidad semanal (h)",
     "dailyCapacity": "Capacidad diaria (puntos)",
     "responseSla": "SLA de respuesta (h)",
     "rampFactor": "Factor de adaptación (0–1)",
     "skills": "Habilidades (etiquetas separadas por comas)",
+    "skillsPlaceholder": "react, typescript, postgres",
     "focusAreas": "Áreas de enfoque",
+    "focusAreasPlaceholder": "frontend, facturación",
     "preferredTaskTypes": "Tipos de tarea preferidos",
+    "preferredTaskTypesPlaceholder": "corrección de errores, función",
     "saveProfile": "Guardar perfil"
   },
   "legal": {
@@ -17428,6 +17432,20 @@
       "initiative": "Objetivo de la iniciativa"
     }
   },
+  "ticketDetailsPanel": {
+    "titleFallback": "Detalles del ticket",
+    "loading": "Cargando ticket...",
+    "restricted": "Este ticket de seguridad requiere autorización adicional para verlo.",
+    "factStatus": "Estado",
+    "factPriority": "Prioridad",
+    "factType": "Tipo",
+    "factCreated": "Creado",
+    "factUpdated": "Actualizado",
+    "factDue": "Vence",
+    "descriptionHeading": "Descripción",
+    "noDescription": "No se proporcionó ninguna descripción.",
+    "viewPr": "Ver solicitud de extracción"
+  },
   "agentOps": {
     "loading": "Cargando…",
     "close": "Cerrar",
@@ -22409,6 +22427,7 @@
     "founderMetricRefreshed": "Métrica actualizada: {title}",
     "founderTriggerEvaluated": "Disparador evaluado: {title}",
     "sessionActionCluster": {
+      "run": "Ejecutar este lienzo",
       "history": "Historial del lienzo",
       "inspect": "Herramientas del lienzo",
       "live": "En directo y grabación",

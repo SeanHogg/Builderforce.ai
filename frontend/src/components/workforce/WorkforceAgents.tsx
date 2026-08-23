@@ -34,6 +34,7 @@ import {
   type PendingInvitation,
 } from '@/lib/auth';
 import { RoleGate } from '@/components/RoleGate';
+import { SplitButton } from '@/components/ui/SplitButton';
 import { ROLE_LABEL, usePermission, type TenantRole } from '@/lib/rbac';
 import type { PublishedAgent } from '@/lib/types';
 import { AgentHostSlideOutPanel } from '@/components/AgentHostSlideOutPanel';
@@ -88,9 +89,6 @@ import { useFormat } from "@/i18n/useFormat";
 
 type AgentKind = 'cloud' | 'host';
 
-// "Add agent" split button: primary action + caret that opens the configured quickstart.
-const splitMain: React.CSSProperties = { padding: '8px 14px', fontSize: 13, fontWeight: 600, background: 'var(--accent)', color: 'var(--text-on-accent)', border: 'none', borderTopLeftRadius: 8, borderBottomLeftRadius: 8, cursor: 'pointer' };
-const splitCaret: React.CSSProperties = { padding: '8px 10px', fontSize: 11, fontWeight: 700, background: 'var(--accent)', color: 'var(--text-on-accent)', border: 'none', borderLeft: '1px solid rgba(255,255,255,0.25)', borderTopRightRadius: 8, borderBottomRightRadius: 8, cursor: 'pointer', lineHeight: 1 };
 // "Invite" (a person) — secondary to the coral "+ Agent" split button.
 const inviteBtn: React.CSSProperties = { padding: '8px 14px', fontSize: 13, fontWeight: 600, background: 'transparent', color: 'var(--accent)', border: '1px solid var(--accent)', borderRadius: 'var(--radius-md)', cursor: 'pointer', whiteSpace: 'nowrap' };
 
@@ -106,9 +104,6 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
   const tWf = useTranslations('workforce');
   const tAdd = useTranslations('workforceAddAgent');
   const tc = useTranslations('common');
-
-  // --- "Connect a new agent" quickstart popover (caret on the split button) -
-  const [quickstartOpen, setQuickstartOpen] = useState(false);
 
   // Card | List view mode (session-only) — same shared toggle as every other
   // collection page. Defaults to the card grid.
@@ -422,29 +417,21 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
             <button type="button" onClick={() => setInviteOpen(true)} style={inviteBtn}>{tWf('inviteAction')}</button>
           </RoleGate>
         )}
-        <div style={{ position: 'relative', display: 'inline-flex' }}>
-          <RoleGate capability="agents.create">
-          <button type="button" onClick={() => openCreate('cloud')} style={splitMain}>{tWf('addAgentAction')}</button>
-          </RoleGate>
-          <button
-            type="button"
-            onClick={() => setQuickstartOpen((o) => !o)}
-            style={splitCaret}
-            aria-label={tWf('quickstartAria')}
-            aria-haspopup="dialog"
-            aria-expanded={quickstartOpen}
-          >
-            ▾
-          </button>
-          {quickstartOpen && (
+        <SplitButton
+          size="sm"
+          primaryLabel={tWf('addAgentAction')}
+          onPrimary={() => openCreate('cloud')}
+          primaryWrapper={(button) => <RoleGate capability="agents.create">{button}</RoleGate>}
+          menuAriaLabel={tWf('quickstartAria')}
+          renderMenu={(close) => (
             <ConfiguredQuickstartPopover
               workgroupName={tenant?.name ?? tWf('workgroupFallback')}
               workgroupSlug={tenant?.slug}
               tenantToken={tenantToken}
-              onClose={() => setQuickstartOpen(false)}
+              onClose={close}
             />
           )}
-        </div>
+        />
         </div>
       </div>
       <p style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 16 }}>

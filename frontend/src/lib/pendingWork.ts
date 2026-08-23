@@ -180,9 +180,11 @@ export function invalidateRecentCanvases(): void {
   invalidateClientCache(RECENT_CACHE_PREFIX);
 }
 
-export function fetchRecentCanvases(): Promise<CreationSessionSummary[]> {
+/** `projectId` scopes the read (tied sessions + unfiled, per GET /creation-sessions);
+ *  omit or pass `null` for the tenant-wide, unfiltered list. */
+export function fetchRecentCanvases(projectId?: number | null): Promise<CreationSessionSummary[]> {
   const tenant = scopeKey();
-  return getOrSetClientCached(`${RECENT_CACHE_PREFIX}${tenant}`, () => creationSessionsApi.list('active')
+  return getOrSetClientCached(`${RECENT_CACHE_PREFIX}${tenant}:${projectId ?? 'all'}`, () => creationSessionsApi.list('active', projectId)
     .then((result) => {
       const sessions = [...result.sessions].sort((a, b) => b.lastActivityAt.localeCompare(a.lastActivityAt));
       return sessions;

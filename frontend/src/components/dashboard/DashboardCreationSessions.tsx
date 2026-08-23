@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { brain, creationSessionsApi, workflowDefinitions, type BrainChat, type CreationSessionSummary, type WorkflowDefinitionSummary } from '@/lib/builderforceApi';
+import { brain, creationSessionFoldersApi, creationSessionsApi, workflowDefinitions, type BrainChat, type CreationSessionSummary, type WorkflowDefinitionSummary } from '@/lib/builderforceApi';
 import { trackActivity } from '@/lib/activity/tracker';
 import { useTranslations } from 'next-intl';
 import { fetchProjects, listIdeProjects, listMyAgents } from '@/lib/api';
@@ -189,8 +189,9 @@ export function DashboardCreationSessions() {
     await creationSessionsApi.update(session.id, { title });
     reload();
   };
-  const moveSession = async (session: CreationSessionSummary, folder: string | null) => {
-    await creationSessionsApi.update(session.id, { folder });
+  const moveSession = async (session: CreationSessionSummary, folderName: string | null) => {
+    const folderId = folderName ? (await creationSessionFoldersApi.ensure(folderName)).folder.id : null;
+    await creationSessionsApi.update(session.id, { folderId });
     reload();
   };
   const mergeSession = async (session: CreationSessionSummary, sourceId: string) => {
@@ -244,13 +245,13 @@ export function DashboardCreationSessions() {
         {!session.preview?.objects?.length && <span style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', color: 'var(--text-muted)', fontSize: 12 }}>{t('blankCanvasEmpty')}</span>}
       </div>
       <div style={{ padding: libraryView === 'table' ? '11px 14px' : 14 }}><strong style={{ display: 'block', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{session.pinned && <Icon name="sparkles" size={14} />} {session.title}{session.unread ? ` · ${t('unreadBadge')}` : ''}</strong>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 8 }}>{(session.preview?.kinds ?? []).slice(0, 5).map((kind) => <small key={kind} style={{ border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: '2px 6px' }}>{kind}</small>)}{(session.projectIds ?? []).map((id) => <small key={id} style={{ borderRadius: 'var(--radius-lg)', padding: '2px 6px', background: 'var(--surface-sunken)' }}>{t('projectBadge', { id })}</small>)}</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 8 }}>{(session.preview?.kinds ?? []).slice(0, 5).map((kind) => <small key={kind} style={{ border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: '2px 6px' }}>{kind}</small>)}{(session.projectIds ?? []).map((id) => <small key={id} style={{ borderRadius: 'var(--radius-lg)', padding: '2px 6px', background: 'var(--surface-sunken)' }}>{projects.find((project) => project.id === id)?.name ?? t('projectBadge', { id })}</small>)}</div>
         <span style={{ display: 'flex', justifyContent: 'space-between', marginTop: 9, color: 'var(--text-secondary)', fontSize: 12 }}><span>{t('sessionObjectsPeople', { objects: session.preview?.objectCount ?? 0, people: session.collaboratorCount ?? 1 })}{running ? ` · ${t('sessionRunning', { count: running })}` : ''}</span><span>{fmt.date(session.lastActivityAt)}</span></span>
-        {session.folder && <small style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)', marginTop: 7, color: 'var(--text-muted)' }}><Icon name="folder" size={13} /> {session.folder}</small>}
+        {session.folderName && <small style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)', marginTop: 7, color: 'var(--text-muted)' }}><Icon name="folder" size={13} /> {session.folderName}</small>}
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10 }}>
           <SessionManagementControls
-            session={session}
-            mergeCandidates={status === 'active' ? sessions.filter((candidate) => candidate.id !== session.id && candidate.status === 'active') : []}
+            session={{ id: session.id, title: session.title, folder: session.folderName }}
+            mergeCandidates={status === 'active' ? sessions.filter((candidate) => candidate.id !== session.id && candidate.status === 'active').map((candidate) => ({ id: candidate.id, title: candidate.title, folder: candidate.folderName })) : []}
             onRename={(title) => renameSession(session, title)}
             onMove={(folder) => moveSession(session, folder)}
             onMerge={status === 'active' ? (sourceId) => mergeSession(session, sourceId) : undefined}
@@ -283,9 +284,9 @@ export function DashboardCreationSessions() {
     {loading || resourcesLoading ? <div style={{ padding: 36, color: 'var(--text-secondary)' }}>{t('loadingCreations')}</div> : visible.length === 0 && resourceItems.length === 0 ?
       <button onClick={createBlank} style={{ width: '100%', minHeight: 220, border: '1px dashed var(--border-default)', borderRadius: 'var(--radius-xl)', background: 'var(--surface-raised)', color: 'var(--text-secondary)', cursor: 'pointer' }}><strong style={{ display: 'block', color: 'var(--text-primary)', fontSize: 18, marginBottom: 6 }}>{t('blankCanvas')}</strong>{t('blankCanvasHint')}</button> :
       <div aria-label={t('libraryLabel')} data-view={libraryView} style={{ display: 'grid', gridTemplateColumns: libraryView === 'card' ? 'repeat(auto-fill, minmax(260px, 1fr))' : '1fr', gap: libraryView === 'card' ? 16 : 8 }}>
-        {[...new Set(visible.map((session) => session.folder || ''))].map((folder) => <section key={folder || '__unfiled'} style={{ display: 'contents' }}>
+        {[...new Set(visible.map((session) => session.folderName || ''))].map((folder) => <section key={folder || '__unfiled'} style={{ display: 'contents' }}>
           {folder && <h3 className="ui-text-card-title" style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: 'var(--space-2)', margin: '8px 0 0', color: 'var(--text-secondary)' }}><Icon name="folder" size={16} /> {folder}</h3>}
-          {renderSessionItems(visible.filter((session) => (session.folder || '') === folder))}
+          {renderSessionItems(visible.filter((session) => (session.folderName || '') === folder))}
         </section>)}
         {resourceItems.map((item) => <button key={item.key} type="button" onClick={() => void item.open()} style={{ minHeight: libraryView === 'card' ? 132 : 70, display: 'grid', gridTemplateColumns: libraryView === 'table' ? '42px minmax(0, 1fr) auto' : '1fr', alignItems: 'center', gap: libraryView === 'table' ? 12 : 0, padding: libraryView === 'table' ? '12px 16px' : 15, textAlign: 'left', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', background: 'var(--surface-raised)', color: 'var(--text-primary)', cursor: 'pointer' }}>
           <span aria-hidden style={{ display: 'grid', placeItems: 'center', width: libraryView === 'table' ? 36 : 'auto', height: libraryView === 'table' ? 36 : 'auto', borderRadius: 'var(--radius-md)', background: libraryView === 'table' ? 'var(--surface-sunken)' : 'transparent' }}><Icon source={item.icon} size={22} /></span>

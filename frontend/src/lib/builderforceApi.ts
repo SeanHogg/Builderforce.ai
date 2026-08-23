@@ -9222,7 +9222,11 @@ export interface CreationTemplate { id: string; name: string; description: strin
 export interface CreationSessionInvitation { id: string; email: string; role: CreationSessionSummary['role']; expiresAt: string; acceptedAt: string | null; revokedAt: string | null; createdAt: string }
 
 export const creationSessionsApi = {
-  list: (status: 'active' | 'archived' = 'active'): Promise<{ sessions: CreationSessionSummary[] }> => request(`/api/creation-sessions?status=${status}`),
+  list: (status: 'active' | 'archived' = 'active', projectId?: number | null): Promise<{ sessions: CreationSessionSummary[] }> => {
+    const params = new URLSearchParams({ status });
+    if (projectId != null) params.set('projectId', String(projectId));
+    return request(`/api/creation-sessions?${params}`);
+  },
   search: (input: { q: string; status?: 'active' | 'archived'; kind?: string; projectId?: number; collaborator?: string; limit?: number }) => {
     const params = new URLSearchParams({ q: input.q });
     if (input.status) params.set('status', input.status);
@@ -9242,9 +9246,13 @@ export const creationSessionsApi = {
   attributedOutcomes: (id: string): Promise<AttributedOutcomes> => request(`/api/creation-sessions/${encodeURIComponent(id)}/attributed-outcomes`),
   recordOutcome: (id: string, body: { correlationId: string; action: string; phase: 'started' | 'succeeded' | 'failed' | 'validated' | 'reused'; actorType?: 'user' | 'agent' | 'brain' | 'system'; actorRef?: string; projectId?: number; metricKey?: string; metricValue?: number; unit?: string; artifactId?: string; durationMs?: number; costUsdMillicents?: number; metadata?: unknown }) =>
     request<{ recorded: boolean; duplicate: boolean }>(`/api/creation-sessions/${encodeURIComponent(id)}/outcomes`, { method: 'POST', body: JSON.stringify(body) }),
-  update: (id: string, body: { title?: string; description?: string | null; folder?: string | null; status?: 'active' | 'archived'; preview?: unknown; mode?: string }) =>
+  update: (id: string, body: { title?: string; description?: string | null; folderId?: string | null; status?: 'active' | 'archived'; preview?: unknown; mode?: string }) =>
     request<CreationSessionSummary>(`/api/creation-sessions/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(body) }),
   remove: (id: string) => request<{ session: { id: string; status: 'deleted' }; recoverable: true }>(`/api/creation-sessions/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  linkProject: (id: string, projectId: number) =>
+    request<{ sessionId: string; projectId: number }>(`/api/creation-sessions/${encodeURIComponent(id)}/projects`, { method: 'POST', body: JSON.stringify({ projectId }) }),
+  unlinkProject: (id: string, projectId: number) =>
+    request<{ sessionId: string; projectId: number }>(`/api/creation-sessions/${encodeURIComponent(id)}/projects/${projectId}`, { method: 'DELETE' }),
   preview: (id: string) => request<{ sessionId: string; title: string; revision: number; preview: CreationSessionSummary['preview']; lastActivityAt: string }>(`/api/creation-sessions/${encodeURIComponent(id)}/preview`),
   export: (id: string) => request<{ format: string; exportedAt: string; session: Record<string, unknown>; objects: CreationSessionObject[]; connections: CreationSessionConnection[]; timeline: CreationTimelineMessage[] }>(`/api/creation-sessions/${encodeURIComponent(id)}/export`),
   events: (id: string, after = 0) => request<{ events: Array<Record<string, unknown>>; revision: number; hasMore: boolean }>(`/api/creation-sessions/${encodeURIComponent(id)}/events?after=${Math.max(0, Math.floor(after))}`),
@@ -9319,6 +9327,25 @@ export const creationSessionsApi = {
     request<CreationProjectPrdContext>(`/api/creation-sessions/${encodeURIComponent(id)}/projects/${projectId}/prd-context`),
   openResource: (resourceType: 'chat' | 'workflow' | 'agent', resourceId: string | number) =>
     request<{ sessionId: string; objectId: string; created: boolean }>(`/api/creation-sessions/resources/${resourceType}/${encodeURIComponent(String(resourceId))}/open`, { method: 'POST' }),
+};
+
+export interface CreationSessionFolder {
+  id: string;
+  name: string;
+  projectId: number | null;
+  createdAt: string;
+  sessionCount: number;
+}
+
+export const creationSessionFoldersApi = {
+  list: () => request<{ folders: CreationSessionFolder[] }>('/api/creation-sessions/folders'),
+  /** Find-or-create by name — returns the existing folder (200) if the name is
+   *  already taken rather than erroring, so callers never need to pre-check. */
+  ensure: (name: string, projectId?: number | null) =>
+    request<{ folder: CreationSessionFolder }>('/api/creation-sessions/folders', { method: 'POST', body: JSON.stringify({ name, projectId }) }),
+  update: (id: string, body: { name?: string; projectId?: number | null }) =>
+    request<{ folder: CreationSessionFolder }>(`/api/creation-sessions/folders/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  remove: (id: string) => request<{ deleted: true }>(`/api/creation-sessions/folders/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 };
 
 

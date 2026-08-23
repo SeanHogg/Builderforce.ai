@@ -206,7 +206,7 @@ export function MemberProfileEditor({ kind, refId, name, tasks, onClose, onSaved
             <div style={row}>
               <div>
                 <label style={label}>{t('timezone')}</label>
-                <input style={field} placeholder="America/New_York" value={p.timezone ?? ''} onChange={(e) => set('timezone', e.target.value || null)} />
+                <input style={field} placeholder={t('timezonePlaceholder')} value={p.timezone ?? ''} onChange={(e) => set('timezone', e.target.value || null)} />
               </div>
               <div>
                 <label style={label}>{t('maxConcurrentWip')}</label>
@@ -238,16 +238,16 @@ export function MemberProfileEditor({ kind, refId, name, tasks, onClose, onSaved
 
             <div>
               <label style={label}>{t('skills')}</label>
-              <input style={field} placeholder="react, typescript, postgres" value={skillsText} onChange={(e) => setSkillsText(e.target.value)} />
+              <input style={field} placeholder={t('skillsPlaceholder')} value={skillsText} onChange={(e) => setSkillsText(e.target.value)} />
             </div>
             <div style={row}>
               <div>
                 <label style={label}>{t('focusAreas')}</label>
-                <input style={field} placeholder="frontend, billing" value={focusText} onChange={(e) => setFocusText(e.target.value)} />
+                <input style={field} placeholder={t('focusAreasPlaceholder')} value={focusText} onChange={(e) => setFocusText(e.target.value)} />
               </div>
               <div>
                 <label style={label}>{t('preferredTaskTypes')}</label>
-                <input style={field} placeholder="bugfix, feature" value={taskTypesText} onChange={(e) => setTaskTypesText(e.target.value)} />
+                <input style={field} placeholder={t('preferredTaskTypesPlaceholder')} value={taskTypesText} onChange={(e) => setTaskTypesText(e.target.value)} />
               </div>
             </div>
 

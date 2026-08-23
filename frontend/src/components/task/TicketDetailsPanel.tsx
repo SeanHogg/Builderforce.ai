@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { tasksApi, type Task } from '@/lib/builderforceApi';
 import { useFormat } from "@/i18n/useFormat";
@@ -14,6 +15,7 @@ export interface TicketDetailsPanelProps {
 /** Reusable, read-only ticket drill-down for contextual links outside the board. */
 export function TicketDetailsPanel({ taskId, onClose }: TicketDetailsPanelProps) {
   const fmt = useFormat();
+  const t = useTranslations('ticketDetailsPanel');
   const [task, setTask] = useState<Task | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -28,26 +30,26 @@ export function TicketDetailsPanel({ taskId, onClose }: TicketDetailsPanelProps)
     void tasksApi.get(taskId).then(
       (result) => { if (active) setTask(result); },
       (reason: unknown) => {
-        if (active) setError(reason instanceof Error ? reason.message : 'Failed to load ticket');
+        if (active) setError(reason instanceof Error ? reason.message : t('loading'));
       },
     ).finally(() => { if (active) setLoading(false); });
 
     return () => { active = false; };
-  }, [taskId]);
+  }, [taskId, t]);
 
   const facts = task ? [
-    ['Status', task.status],
-    ['Priority', task.priority],
-    ['Type', task.taskType],
-    ['Created', fmt.dateTime(task.createdAt)],
-    ['Updated', fmt.dateTime(task.updatedAt)],
-    ['Due', fmt.dateTime(task.dueDate)],
+    [t('factStatus'), task.status],
+    [t('factPriority'), task.priority],
+    [t('factType'), task.taskType],
+    [t('factCreated'), fmt.dateTime(task.createdAt)],
+    [t('factUpdated'), fmt.dateTime(task.updatedAt)],
+    [t('factDue'), fmt.dateTime(task.dueDate)],
   ] : [];
 
   return (
-    <SlideOutPanel open={taskId != null} onClose={onClose} title={task ? `${task.key} · ${task.title}` : 'Ticket details'} widthStorageKey="ticket-details">
+    <SlideOutPanel open={taskId != null} onClose={onClose} title={task ? `${task.key} · ${task.title}` : t('titleFallback')} widthStorageKey="ticket-details">
       <div style={{ padding: 20 }}>
-        {loading && <div className="text-muted">Loading ticket...</div>}
+        {loading && <div className="text-muted">{t('loading')}</div>}
         {error && (
           <div style={{ padding: 12, border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', background: 'var(--danger-bg)' }}>
             {error}
@@ -57,7 +59,7 @@ export function TicketDetailsPanel({ taskId, onClose }: TicketDetailsPanelProps)
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
             {task.restricted ? (
               <div style={{ padding: 12, border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)' }}>
-                This security ticket requires additional clearance to view.
+                {t('restricted')}
               </div>
             ) : (
               <>
@@ -70,14 +72,14 @@ export function TicketDetailsPanel({ taskId, onClose }: TicketDetailsPanelProps)
                   ))}
                 </div>
                 <section>
-                  <h3 style={{ margin: '0 0 8px', fontSize: 13 }}>Description</h3>
+                  <h3 style={{ margin: '0 0 8px', fontSize: 13 }}>{t('descriptionHeading')}</h3>
                   <div style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-                    {task.description || 'No description provided.'}
+                    {task.description || t('noDescription')}
                   </div>
                 </section>
                 {task.githubPrUrl && (
                   <a href={task.githubPrUrl} target="_blank" rel="noopener noreferrer" className="btn-ghost" style={{ alignSelf: 'flex-start' }}>
-                    View pull request{task.githubPrNumber ? ` #${task.githubPrNumber}` : ''}
+                    {t('viewPr')}{task.githubPrNumber ? ` #${task.githubPrNumber}` : ''}
                   </a>
                 )}
               </>
