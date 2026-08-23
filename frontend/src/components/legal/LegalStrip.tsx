@@ -24,26 +24,34 @@ export function LegalStrip({ className }: { className: string }) {
   return (
     <>
       <div className={className} role="group" aria-label={t('navLabel')}>
-        <span>
-          <span className="legal-corner-brand">{BRAND.name} </span>© {BRAND.year}
+        {/* The one thing this strip is worth reading at a glance. Everything
+            else below it — build versions, the two legal links — is chrome an
+            operator consults on purpose, never at a glance, so it is set back
+            a size and a shade rather than competing with the copyright line. */}
+        <span className="nav-legal__copyright">
+          <span className="legal-corner-brand">{BRAND.name}</span> © {BRAND.year}
         </span>
-        <ProductUpdatesTrigger
-          appVersion={appVersion}
-          apiVersion={apiVersion}
-          className="legal-corner-link"
-        />
-        <LegalDocLink
-          type="terms"
-          docVersion={termsVersion}
-          className="legal-corner-link"
-          onOpen={setModalType}
-        />
-        <LegalDocLink
-          type="privacy"
-          docVersion={privacyVersion}
-          className="legal-corner-link"
-          onOpen={setModalType}
-        />
+        <span className="nav-legal__meta">
+          <ProductUpdatesTrigger
+            appVersion={appVersion}
+            apiVersion={apiVersion}
+            className="legal-corner-link"
+          />
+          <LegalDocLink
+            type="terms"
+            docVersion={termsVersion}
+            className="legal-corner-link"
+            onOpen={setModalType}
+            compact
+          />
+          <LegalDocLink
+            type="privacy"
+            docVersion={privacyVersion}
+            className="legal-corner-link"
+            onOpen={setModalType}
+            compact
+          />
+        </span>
       </div>
 
       <LegalDocModal type={modalType} legal={legal} onClose={() => setModalType(null)} />

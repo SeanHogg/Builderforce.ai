@@ -35,12 +35,16 @@ export default function LegalDocLink({
   docVersion,
   className,
   onOpen,
+  compact = false,
 }: {
   type: LegalDocType;
   /** Published version of the document, undefined until the docs load. */
   docVersion?: string;
   className: string;
   onOpen: (type: LegalDocType) => void;
+  /** One-word title ("Terms"/"Policy") for a rail too narrow for the full
+   *  instrument name. Same document, same href — just named shorter. */
+  compact?: boolean;
 }) {
   const t = useTranslations('legal');
 
@@ -55,7 +59,7 @@ export default function LegalDocLink({
         onOpen(type);
       }}
     >
-      {t(legalDocTitleKey(type))}
+      {t(legalDocTitleKey(type, compact))}
       {docVersion ? <span className="legal-doc-version"> (v{docVersion})</span> : null}
     </Link>
   );

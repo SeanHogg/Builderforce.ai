@@ -51,8 +51,15 @@ export function legalDocHref(type: LegalDocType): string {
 }
 
 /** The catalog key holding a document's title. Shared so the nav, the page
- *  heading and the footer link cannot drift into three names for one document. */
-export function legalDocTitleKey(type: LegalDocType): 'termsTitle' | 'privacyTitle' {
+ *  heading and the footer link cannot drift into three names for one document.
+ *  `compact` selects the one-word form ("Terms"/"Policy") for rails too narrow
+ *  for the full instrument name ("Terms of Use"/"Privacy Policy") — the link
+ *  still points at the same document, just named shorter. */
+export function legalDocTitleKey(
+  type: LegalDocType,
+  compact = false,
+): 'termsTitle' | 'privacyTitle' | 'termsShortTitle' | 'privacyShortTitle' {
+  if (compact) return type === 'terms' ? 'termsShortTitle' : 'privacyShortTitle';
   return type === 'terms' ? 'termsTitle' : 'privacyTitle';
 }
 

@@ -1590,7 +1590,13 @@ html[data-theme='light'] .nebula {
 }
 
 .nav-main {
-  flex: 1;
+  /* Sized to its own content (sessions + stage list), not stretched to fill
+     the rail — a flex-grow:1 here reserved the rail's full leftover height
+     even when every stage was collapsed, leaving a blank band above the
+     footer. flex-shrink stays 1 so, when content genuinely overflows the
+     rail's height, this still yields first and .nav-section scrolls
+     internally instead of pushing the footer off-screen. */
+  flex: 0 1 auto;
   display: flex;
   flex-direction: column;
   overflow-y: hidden;
@@ -1664,18 +1670,34 @@ html[data-theme='light'] .nebula {
 .nav-legal {
   flex-shrink: 0;
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 8px;
+  flex-direction: column;
+  gap: 2px;
   padding: 10px 10px 2px;
   margin-top: 8px;
   border-top: 1px solid var(--border);
-  color: var(--muted);
-  font-size: var(--font-size-eyebrow);
   line-height: 1.5;
 }
 
-.nav-legal > * + *::before {
+/* The only line here worth reading without stopping to look. */
+.nav-legal__copyright {
+  color: var(--text-secondary);
+  font-size: var(--font-size-small);
+  font-weight: 600;
+}
+
+/* Build versions + Terms/Policy — chrome, so it is set back a size and a
+   shade from the copyright line above it, and wraps rather than pushing the
+   rail wider. */
+.nav-legal__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  color: var(--muted);
+  font-size: var(--font-size-eyebrow);
+}
+
+.nav-legal__meta > * + *::before {
   content: '·';
   margin-right: 8px;
   color: var(--border);
@@ -1818,6 +1840,17 @@ html[data-theme='light'] .nebula {
 
 .nav-sessions__item {
   font-weight: 500;
+}
+
+/* The one session on screen right now — stronger than a destination's own
+   `.nav-item.active` (that treatment reads fine surrounded by its siblings'
+   plain rows, but here it sat next to nothing but the New canvas button and
+   read as just another outlined box). Solid accent fill plus the live dot's
+   colour repeated in the border is what makes it unmistakably "this one, now". */
+.nav-sessions__item.active {
+  background: var(--accent-subtle);
+  border-color: var(--accent);
+  font-weight: 700;
 }
 
 .nav-sessions__item .nav-item-label {

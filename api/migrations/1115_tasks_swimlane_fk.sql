@@ -109,12 +109,21 @@ DO $$ BEGIN
       FOR EACH ROW EXECUTE FUNCTION relink_tasks_to_swimlane();
 
     -- Backfill every existing ticket from its project's board.
+    --
+    -- The joins to `b` and `s` cannot live in ON clauses here: FROM-list JOINs are
+    -- resolved before the target table `x` is in scope, so `s.key = x.status` inside
+    -- an ON clause fails with "invalid reference to FROM-clause entry for table x".
+    -- Postgres only lets UPDATE...FROM correlate with the target table in WHERE, so
+    -- the FROM list is a plain cross join and every join predicate — including the
+    -- ones that don't mention `x` — moves to WHERE instead.
     UPDATE tasks x
        SET swimlane_id = s.id
-      FROM projects p
-      JOIN boards b ON b.id = COALESCE(p.primary_board_id, (SELECT b2.id FROM boards b2 WHERE b2.project_id = p.id LIMIT 1))
-      JOIN swimlanes s ON s.board_id = b.id AND s.key = x.status
-     WHERE x.project_id = p.id AND x.swimlane_id IS DISTINCT FROM s.id;
+      FROM projects p, boards b, swimlanes s
+     WHERE x.project_id = p.id
+       AND b.id = COALESCE(p.primary_board_id, (SELECT b2.id FROM boards b2 WHERE b2.project_id = p.id LIMIT 1))
+       AND s.board_id = b.id
+       AND s.key = x.status
+       AND x.swimlane_id IS DISTINCT FROM s.id;
 
     -- Lane-scoped reads (the rename cascade, "tickets in this lane", the orphan
     -- census) lead with the lane, so they are an index scan rather than a filter

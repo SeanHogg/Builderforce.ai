@@ -1960,6 +1960,8 @@
   "legal": {
     "termsTitle": "使用条款",
     "privacyTitle": "隐私政策",
+    "termsShortTitle": "条款",
+    "privacyShortTitle": "政策",
     "published": "发布于 {date}",
     "loading": "加载中…",
     "close": "关闭",

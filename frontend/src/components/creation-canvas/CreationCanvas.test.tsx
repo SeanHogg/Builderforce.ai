@@ -1121,7 +1121,11 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
     render(<CreationCanvas sessionId="workflow-widget-run-test" persistence="local" />);
 
     expect(screen.queryByRole('button', { name: 'Run' })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Run Fall campaign workflow' }));
+    // RUN IS A SESSION ACTION NOW, not a button on a card. The `workflow` card became a
+    // `frame` bounding real `flowStep` objects — the flow is a REGION of the board, so
+    // there is no one card left to hang Run off and it belongs beside the other worded
+    // actions that act on the whole canvas.
+    fireEvent.click(within(screen.getByTestId('canvas-handoff')).getByRole('button', { name: 'Run workflow' }));
 
     expect(await screen.findByText('Save this workflow')).toBeInTheDocument();
     expect(screen.queryByText('Workflow completed')).not.toBeInTheDocument();

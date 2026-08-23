@@ -1960,6 +1960,8 @@
   "legal": {
     "termsTitle": "Nutzungsbedingungen",
     "privacyTitle": "Datenschutzrichtlinie",
+    "termsShortTitle": "Bedingungen",
+    "privacyShortTitle": "Richtlinie",
     "published": "Veröffentlicht am {date}",
     "loading": "Wird geladen…",
     "close": "Schließen",

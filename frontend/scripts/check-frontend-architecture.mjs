@@ -30,6 +30,16 @@
  * and therefore has nowhere to put a reason. So a raise is justified HERE, in
  * prose, and a raise with no entry below is a raise nobody argued for:
  *
+ *   912 → 913 (`useClientFiles`, 2026-08-23) — a RECONCILIATION, not new work.
+ *   The commit that recorded 912 (the tax-reporting pass below) committed a tree
+ *   that already held 913 — independently recounted by grepping `src` directly,
+ *   which matches the CI ratchet and not the number that commit wrote down. No
+ *   file in the working tree changed to produce this entry; the baseline was
+ *   simply off by one from the moment it was written, and deploys failed on the
+ *   gap until now. Left uncorrected in the changelog above rather than editing
+ *   that entry's arithmetic, since the entry's file list and reasoning are still
+ *   accurate — only the total it landed on was wrong.
+ *
  *   887 → 912 (`useClientFiles`, 2026-08-23) — three of the +25 are this pass's:
  *   `TaxProfileForm`, `TaxReportPanel` and `TaxCenter` (all under
  *   `components/tax/`), the tax-reporting feature (PRD 19 item 4). Same shape as

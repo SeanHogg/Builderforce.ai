@@ -15,6 +15,7 @@ import { AUTHORED_FRAME_BORDER, AUTHORED_FRAME_FILL, STICKY_COLORS } from '@/dom
 import { frameMemberIds, type FrameBox } from '@/domains/canvas/domain/canvasFrame';
 import { FlowStepBody, FlowStepOutletRail, flowStepHasNamedOutlets } from './FlowStepBody';
 import { FrameBody } from './FrameBody';
+import { FlowExecutionSettings } from './FlowExecutionSettings';
 import { CanvasClockBody } from './CanvasClockBody';
 import { CanvasTransclusionBody } from './CanvasTransclusionBody';
 import { CanvasComponentBody } from './CanvasComponentBody';
@@ -946,12 +947,12 @@ function WorkflowBody({ data }: { data: CreationNodeData }) {
   const steps = Array.isArray(data.steps)
     ? data.steps.slice(0, 12).map((step, index) => asRecord(step, { title: typeof step === 'string' ? step : t('stepIndex', { index: index + 1 }) }))
     : [];
-  const target = optionLabel(data.runTarget, { builderforce: 'BuilderForce.AI', 'campaign-strategist': 'Campaign Strategist' }, 'BuilderForce.AI');
-  const approval = optionLabel(data.approvalMode, { required: t('approvalRequired'), autonomous: t('fullyAutonomous') }, t('approvalRequired'));
   const linked = typeof data.resourceId === 'string' && data.resourceId.startsWith('workflow:');
   return (
     <div className={styles.configurableBody}>
-      <div className={styles.widgetSettings}><span><small>{t('executionTarget')}</small><b>{target}</b></span><span><small>{t('approvalMode')}</small><b>{approval}</b></span></div>
+      {/* The same readout the SECTION draws — one component, because a legacy card and
+          the frame that replaced it must not disagree about what a run would do. */}
+      <FlowExecutionSettings data={data} />
       {steps.length === 0 ? (
         // No invented stages. An empty workflow states that it is empty and what
         // it needs — the placeholder list that used to render here read as real

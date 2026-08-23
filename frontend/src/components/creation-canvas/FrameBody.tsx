@@ -1,6 +1,7 @@
 // No 'use client': rendered only inside `CreationNode.tsx`'s client boundary.
 import { useTranslations } from 'next-intl';
 import { isFrameCollapsed } from '@/domains/canvas/domain/canvasFrame';
+import { FlowExecutionSettings } from './FlowExecutionSettings';
 import type { CreationNodeData } from './types';
 import styles from './CreationCanvas.module.css';
 
@@ -53,6 +54,11 @@ export function FrameBody({ data, memberCount, onToggleCollapsed, onOpen }: Fram
     <div className={styles.frameBody} data-collapsed={collapsed ? 'true' : 'false'} data-testid="canvas-frame-body">
       {!collapsed && <strong>{String(data.framePurpose || tNode('arrangeObjects'))}</strong>}
       {!collapsed && <p>{data.subtitle || tNode('frameFallback')}</p>}
+      {/* A section that bounds a FLOW says where it runs and whether it may run
+          unattended — the two facts that decide what Run does, on the object Run acts
+          on. It renders nothing on an ordinary bounding box, so a frame full of cards
+          is not captioned with an execution target it does not have. */}
+      {!collapsed && <FlowExecutionSettings data={data} />}
       <div className={`${styles.frameActions} nodrag`}>
         <span className={styles.frameCount}>{t('holds', { count: memberCount })}</span>
         {onToggleCollapsed && <button

@@ -305,6 +305,7 @@ import { outletForHandle } from '@/domains/workflow/domain/stepOutlets';
 import { nodeKindLabel } from '@/domains/workflow/domain/stepCatalog';
 import { boundingRect, frameCollapsePatch, frameMemberIds, isFrameCollapsed } from '@/domains/canvas/domain/canvasFrame';
 import { toFrameBox, useFramedBoard } from './useFramedBoard';
+import { resolveCanvasFlowNode } from './canvasFlowTarget';
 import { FlowStepInspector } from './FlowStepInspector';
 import { FrameFlowSection } from './FrameFlowSection';
 import { EvermindBuildPanel } from '@/domains/workflow/presentation/EvermindBuildPanel';
@@ -9511,16 +9512,18 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
 
   /** Resolve which workflow node an action applies to: the one named, else the
    *  selection, else the only one on the board. Shared by build and run. */
-  const resolveWorkflowNode = useCallback((workflowId?: string) => {
+  const resolveWorkflowNode = useCallback(
     // A FRAME that holds a built flow is as runnable as a legacy `workflow` card: the
     // definition id lives on whichever object stands for the flow, and since the board
-    // became the workflow that object is the section that bounds it. Asked as one
-    // predicate so Run means the same thing wherever it is pressed.
-    const runnable = (node: CreationFlowNode) => node.data.kind === 'workflow'
-      || (node.data.kind === 'frame' && typeof node.data.resourceId === 'string' && node.data.resourceId.startsWith('workflow:'));
-    const requested = typeof workflowId === 'string' ? nodes.find((node) => node.id === workflowId && runnable(node)) : null;
-    return requested ?? (selectedNode && runnable(selectedNode) ? selectedNode : nodes.find(runnable)) ?? null;
-  }, [nodes, selectedNode]);
+    // became the workflow that object is the section that bounds it.
+    //
+    // The predicate itself lives in `canvasFlowTarget.ts` because the SESSION ACTION has
+    // to ask the same question — Run must be offered for exactly the objects Run can act
+    // on, and two copies of "is this a flow" is how a button gets shown for one object
+    // and then runs another.
+    (workflowId?: string) => resolveCanvasFlowNode(nodes, { preferredId: workflowId, selected: selectedNode }),
+    [nodes, selectedNode],
+  );
 
   /**
    * THE BOARD, COMPILED — turn the steps inside a frame into a real definition.
@@ -11480,6 +11483,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       // panel that is always mounted rather than mounting one — closing the sheet
       // mid-walkthrough must not throw the walkthrough away.
       talktrack: act(() => setTalktrackOpen((value) => !value), talktrackOpen),
+      // RUN THIS BOARD'S FLOW. Offered only when there IS one — the same predicate Run
+      // resolves with, so the button is never shown for a board it would then refuse.
+      // A section that has never been compiled is built first; `runWorkflow` owns that
+      // and says why on the object.
+      run: { ...act(() => runWorkflow()), available: resolveWorkflowNode() !== null },
       share: act(() => setShareOpen((value) => !value), shareOpen),
       // The whole board, not a card: an application is the session, and this is the
       // door that was previously reachable only from a selected object's inspector

@@ -50,6 +50,7 @@ export type CanvasSessionActionId =
   | 'fullscreen'
   | 'call'
   | 'talktrack'
+  | 'run'
   | 'share'
   | 'publish';
 
@@ -214,8 +215,24 @@ export const CANVAS_SESSION_ACTIONS: readonly CanvasSessionActionDef[] = [
   //
   // It needs OBJECTS for the same reason the scorecard does: "make this real" over a
   // conversation with nothing on it has nothing to make real.
-  { id: 'prove', cluster: 'session', order: 7, chrome: 'labelled', state: 'none', phone: 'menu', labelKey: 'proveThisIdea', titleKey: 'proveThisIdeaTitle', needs: 'objects' },
-  { id: 'share', cluster: 'session', order: 8, chrome: 'labelled', state: 'expanded', phone: 'menu', labelKey: 'share', titleKey: 'inviteCollaborators' },
+  //
+  // RUN — and the reason it is HERE rather than on the object.
+  //
+  // It used to be a button drawn on the `workflow` card. Then the card became what it
+  // always stood for: a `frame` bounding real `flowStep` objects, because the board IS
+  // the workflow. There is no longer one card to hang Run off — the flow is a region of
+  // the board — so the control belongs to the SESSION, beside the other worded actions
+  // that act on the whole canvas.
+  //
+  // It withdraws (`available: false`) on a board with no flow on it, rather than sitting
+  // lit up with nothing to run; the host decides that from the same predicate Run itself
+  // resolves with (`canvasFlowTarget.ts`), so the button cannot be offered for one object
+  // and then act on another. Pressing it on a section that has never been compiled BUILDS
+  // it first — `runWorkflow` has always said so, and this is the door that makes that
+  // sentence reachable again.
+  { id: 'run', cluster: 'session', order: 7, chrome: 'labelled', state: 'none', phone: 'menu', labelKey: 'runWorkflow', needs: 'objects' },
+  { id: 'prove', cluster: 'session', order: 8, chrome: 'labelled', state: 'none', phone: 'menu', labelKey: 'proveThisIdea', titleKey: 'proveThisIdeaTitle', needs: 'objects' },
+  { id: 'share', cluster: 'session', order: 9, chrome: 'labelled', state: 'expanded', phone: 'menu', labelKey: 'share', titleKey: 'inviteCollaborators' },
   // Publish sits beside Share because they are the two ways work leaves this canvas —
   // one brings a person IN, one puts the result where strangers can reach it.
   //
@@ -225,7 +242,7 @@ export const CANVAS_SESSION_ACTIONS: readonly CanvasSessionActionDef[] = [
   // three clicks deep, framed as commerce, and invisible until you had clicked the right
   // card. It opens the SAME release lifecycle that button does — one gate, two doors —
   // scoped to the whole board, which is the scope an application actually has.
-  { id: 'publish', cluster: 'session', order: 9, chrome: 'labelled', state: 'expanded', phone: 'menu', labelKey: 'publishCanvas', titleKey: 'publishCanvasTitle' },
+  { id: 'publish', cluster: 'session', order: 10, chrome: 'labelled', state: 'expanded', phone: 'menu', labelKey: 'publishCanvas', titleKey: 'publishCanvasTitle' },
 ];
 
 const BY_ID = new Map<CanvasSessionActionId, CanvasSessionActionDef>(
