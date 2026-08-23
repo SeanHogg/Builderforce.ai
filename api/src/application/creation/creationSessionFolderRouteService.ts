@@ -9,6 +9,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import { authMiddleware } from '../../presentation/middleware/authMiddleware';
 import { scope } from '../../presentation/routes/segmentTrackerRoutes';
 import { creationSessionFolders, projects } from '../../infrastructure/database/schema';
+import { scopedToSegment } from '../../infrastructure/database/tenantScope';
 import type { Db } from '../../infrastructure/database/connection';
 import type { HonoEnv } from '../../env';
 
@@ -103,15 +104,18 @@ export function createCreationSessionFolderRoutes(db: Db): Hono<HonoEnv> {
       }
     }
     const [updated] = await db.update(creationSessionFolders).set(patch)
-      .where(eq(creationSessionFolders.id, folder.id)).returning();
+      .where(scopedToSegment(creationSessionFolders, tenantId, segmentId, eq(creationSessionFolders.id, folder.id)))
+      .returning();
     return c.json({ folder: updated });
   });
 
   router.delete('/:id', async (c) => {
     const folder = await requireFolder(c);
     if (!folder) return c.json({ error: 'Folder not found' }, 404);
+    const { tenantId, segmentId } = scope(c);
     // Member sessions fall back to unfiled via ON DELETE SET NULL — no manual cleanup.
-    await db.delete(creationSessionFolders).where(eq(creationSessionFolders.id, folder.id));
+    await db.delete(creationSessionFolders)
+      .where(scopedToSegment(creationSessionFolders, tenantId, segmentId, eq(creationSessionFolders.id, folder.id)));
     return c.json({ deleted: true });
   });
 
