@@ -1590,18 +1590,36 @@ html[data-theme='light'] .nebula {
 }
 
 .nav-main {
-  /* Sized to its own content (sessions + stage list), not stretched to fill
-     the rail — a flex-grow:1 here reserved the rail's full leftover height
-     even when every stage was collapsed, leaving a blank band above the
-     footer. flex-shrink stays 1 so, when content genuinely overflows the
-     rail's height, this still yields first and .nav-section scrolls
-     internally instead of pushing the footer off-screen. */
+  /* Sized to its own content (sessions + stage list), never stretched to fill the
+     rail. Growing it hands the leftover height to the stage list, which spaces its
+     own rows down the rail instead of keeping them together under their headings.
+     The rail's bottom cluster is pinned by its own auto margin (.nav-rail-bottom),
+     so the leftover height becomes empty space BETWEEN the two — which is what
+     the corner wanted all along. flex-shrink stays 1 so, when content genuinely
+     overflows the rail's height, this still yields first and .nav-section scrolls
+     internally instead of pushing the bottom cluster off-screen. */
   flex: 0 1 auto;
   display: flex;
   flex-direction: column;
   overflow-y: hidden;
   overflow-x: hidden;
   min-height: 0;
+}
+
+/* The rail's bottom-left corner: the sign-in offer, the usage meters and the
+   copyright/legal strip, held down there by one auto margin rather than three
+   rules that would each have to know which siblings happened to render. Empty on
+   the collapsed icon rail, where none of the three has room. */
+.nav-rail-bottom {
+  margin-top: auto;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.nav-rail-bottom:empty {
+  display: none;
 }
 
 .nav-footer {

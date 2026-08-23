@@ -262,35 +262,52 @@ export default function Sidebar({ collapsed, onToggleCollapsed, mobileOpen = fal
           </div>
         </div>
 
-        {/* The one thing a signed-out visitor's rail is missing: the way to keep
-            what they are making. Their board is real and local-first, so this is
-            an offer rather than a wall.
-            NOT on a stage route: the canvas already makes the same offer, in the
-            same colour the "keep your work" state uses, from the top-right CTA
-            (`MarketingHeader`) — a second copy of it down here would be the same
-            offer made twice in two different visual languages on one screen. */}
-        {!collapsed && !isAuthenticated && !onStage && (
-          <div className="nav-footer">
-            <ButtonLink href={signInHref(pathname)} variant="primary" size="sm" block>
-              {ts('signInToKeep')}
-            </ButtonLink>
-          </div>
-        )}
+        {/* THE BOTTOM OF THE RAIL — pinned there, not trailing the stage list.
 
-        {/* Usage/consumption meters — the left menu's own "USAGE" section
-            (per hired.video), sitting above the legal menu rather than
-            floating over the board. Collapsed to the icon rail there is no
-            room for it, same rule as the session list and legal strip. */}
-        {!collapsed && <UsageMeter />}
+            These three are the shell chrome an operator looks for at the bottom
+            left corner, so that is where they are drawn, however short the stage
+            list above them happens to be. The pin is a `margin-top:auto` on THIS
+            box rather than a `flex-grow` on `.nav-main`, and the difference is
+            the whole bug: growing the nav hands the leftover height to the stage
+            list, which then spaces its own rows out down the rail; putting it in
+            a margin leaves both the list and this cluster at their natural size
+            and lets the empty space sit between them, where nobody reads it.
 
-        {/* Copyright + version + Terms/Privacy, always in the rail rather than
-            floating a full-width strip under the whole frame or riding the
-            docked Brain panel's footer — the far-left menu is where an operator
-            already looks for the shell's own chrome, and keeping it here means
-            it never competes with the board for the frame's bottom edge, on a
-            stage route or otherwise. Collapsed to the icon rail there is no
-            room for it, same rule as the session list above. */}
-        {!collapsed && <LegalStrip className="nav-legal" />}
+            One box because all three are optional — the icon rail drops every one
+            of them, a signed-in operator drops the CTA, a stage route drops it too
+            — and whichever survive still have to end up at the bottom. A rule that
+            named one of them would pin the wrong element the moment it was absent. */}
+        <div className="nav-rail-bottom">
+          {/* The one thing a signed-out visitor's rail is missing: the way to keep
+              what they are making. Their board is real and local-first, so this is
+              an offer rather than a wall.
+              NOT on a stage route: the canvas already makes the same offer, in the
+              same colour the "keep your work" state uses, from the top-right CTA
+              (`MarketingHeader`) — a second copy of it down here would be the same
+              offer made twice in two different visual languages on one screen. */}
+          {!collapsed && !isAuthenticated && !onStage && (
+            <div className="nav-footer">
+              <ButtonLink href={signInHref(pathname)} variant="primary" size="sm" block>
+                {ts('signInToKeep')}
+              </ButtonLink>
+            </div>
+          )}
+
+          {/* Usage/consumption meters — the left menu's own "USAGE" section
+              (per hired.video), sitting above the legal menu rather than
+              floating over the board. Collapsed to the icon rail there is no
+              room for it, same rule as the session list and legal strip. */}
+          {!collapsed && <UsageMeter />}
+
+          {/* Copyright + version + Terms/Privacy, always in the rail rather than
+              floating a full-width strip under the whole frame or riding the
+              docked Brain panel's footer — the far-left menu is where an operator
+              already looks for the shell's own chrome, and keeping it here means
+              it never competes with the board for the frame's bottom edge, on a
+              stage route or otherwise. Collapsed to the icon rail there is no
+              room for it, same rule as the session list above. */}
+          {!collapsed && <LegalStrip className="nav-legal" />}
+        </div>
       </nav>
     </>
   );
