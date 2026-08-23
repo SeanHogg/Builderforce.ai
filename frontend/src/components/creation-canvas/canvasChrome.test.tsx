@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 
@@ -113,6 +114,40 @@ describe('the canvas chrome rule', () => {
     const every = (['pill', 'chips', 'topRight', 'bar'] as const).flatMap((place) => canvasChromeSlotsIn(place));
     expect(every).not.toContain('save');
     expect(every).toContain('saveState');
+  });
+});
+
+/**
+ * THE SHARED PALETTE BLOCK PAINTS NOTHING.
+ *
+ * `.canvasPalette` exists so the handoff row keeps the board's tokens after it is
+ * portalled into the application header, and it is a SECOND SELECTOR on the shell's
+ * token block rather than a copy of it. That is right for custom properties and
+ * catastrophic for anything else: for one release the block also carried
+ * `background: var(--canvas-board-background)` and `height: calc(100vh - …)`, so the
+ * portalled toolbar drew an opaque 360 x 1009 board-coloured panel over the canvas —
+ * a floating row wearing the whole board's clothes, covering the surface switcher and
+ * most of the objects.
+ *
+ * Read from the stylesheet rather than from a rendered element on purpose: jsdom does
+ * not do layout, so the only way to catch "this rule paints" is to look at the rule.
+ */
+describe('the canvas palette shared with the header', () => {
+  it('carries custom properties and nothing that paints or lays out', async () => {
+    // Path from the vitest root (`frontend/`), not `import.meta.url`: the dom
+    // environment rewrites module URLs to a non-file scheme and `readFile` refuses them.
+    const css = await readFile('src/components/creation-canvas/CreationCanvas.module.css', 'utf8');
+    const start = css.indexOf('.canvasShell,\n.canvasPalette {');
+    expect(start).toBeGreaterThan(-1);
+    const block = css.slice(start, css.indexOf('\n}', start));
+
+    const offenders = block
+      .split('\n')
+      .map((line) => line.trim())
+      // Declarations only: skip the selector, comments and blank lines.
+      .filter((line) => /^[a-z-]+ *:/i.test(line))
+      .filter((line) => !line.startsWith('--'));
+    expect(offenders).toEqual([]);
   });
 });
 

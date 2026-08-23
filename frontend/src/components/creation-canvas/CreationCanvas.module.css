@@ -122,6 +122,19 @@
      the author's colour, not a themed surface. */
   --canvas-ink-on-light: #10203a;
   --canvas-ink-on-dark: #f7faff;
+}
+
+/* ── TOKENS ABOVE, THE SHELL ITSELF HERE ──────────────────────────────────────────
+   Split deliberately, and this comment is the guard on it: everything above is a custom
+   property and NOTHING above paints. `.canvasPalette` shares that block so the handoff
+   row keeps the board's palette after it is portalled into the application header, and
+   the moment a paint or layout declaration is added up there it lands on that row too.
+   It did: `background: var(--canvas-board-background)` and `height: 100vh - topbar` were
+   inside the shared block for one release, so the portalled row drew an opaque
+   360 × 1009 board-coloured panel over the canvas — a floating toolbar wearing the
+   whole board's clothes. Layout and paint belong to the shell, which is the only element
+   that IS the board. */
+.canvasShell {
   height: calc(100vh - var(--shell-topbar-height, 58px));
   min-height: 620px;
   overflow: hidden;

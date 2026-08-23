@@ -11487,11 +11487,18 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       // panel that is always mounted rather than mounting one — closing the sheet
       // mid-walkthrough must not throw the walkthrough away.
       talktrack: act(() => setTalktrackOpen((value) => !value), talktrackOpen),
-      // RUN THIS BOARD'S FLOW. Offered only when there IS one — the same predicate Run
-      // resolves with, so the button is never shown for a board it would then refuse.
-      // A section that has never been compiled is built first; `runWorkflow` owns that
-      // and says why on the object.
-      run: { ...act(() => runWorkflow()), available: resolveWorkflowNode() !== null },
+      // RUN THIS BOARD'S FLOW. ALWAYS OFFERED — never withdrawn for a board that has no
+      // flow on it yet.
+      //
+      // It was gated on `resolveWorkflowNode() !== null` for one pass, which meant a
+      // fresh board simply had no Run button and nothing said why. That is the failure
+      // `canvasKindSettings` already names for the section's own Build/Run pair: "neither
+      // is hidden when the frame holds no steps — the compiler's own message is a better
+      // answer than a control that silently is not there." A control that vanishes cannot
+      // teach; `runWorkflow` answers `noticeNeedWorkflow` and that sentence is the point.
+      //
+      // A section that has never been compiled is built first; `runWorkflow` owns that.
+      run: act(() => runWorkflow()),
       share: act(() => setShareOpen((value) => !value), shareOpen),
       // The whole board, not a card: an application is the session, and this is the
       // door that was previously reachable only from a selected object's inspector
