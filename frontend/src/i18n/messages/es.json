@@ -1697,6 +1697,7 @@
     "home": "Volver al inicio"
   },
   "common": {
+    "unfiled": "Sin archivar",
     "deleteRoadmapItemConfirm": "¿Eliminar este elemento de la hoja de ruta?",
     "removeAgentFromProjectConfirm": "¿Quitar «{name}» de este proyecto? Se borrarán sus capacidades por agente.",
     "unpairNodeConfirm": "¿Desvincular el nodo «{name}»? Esto lo desconectará.",
@@ -24082,7 +24083,29 @@
     "untitled": "Lienzo sin título",
     "draft": "Borrador",
     "draftHint": "Guardado solo en este navegador: inicia sesión para conservarlo",
-    "signInToKeep": "Inicia sesión para conservar tu trabajo"
+    "signInToKeep": "Inicia sesión para conservar tu trabajo",
+    "manage": "Gestionar sesiones y carpetas",
+    "manageAria": "Gestionar sesiones",
+    "tiedToProject": "En este proyecto"
+  },
+  "sessionManagePanel": {
+    "title": "Sesiones y carpetas",
+    "allSessions": "Todas las sesiones",
+    "loading": "Cargando…",
+    "emptySessions": "Aún no hay sesiones",
+    "renameFolderLabel": "Nombre de la carpeta",
+    "renameFolder": "Cambiar nombre de la carpeta",
+    "deleteFolder": "Eliminar carpeta",
+    "deleteFolderTitle": "¿Eliminar carpeta?",
+    "deleteFolderMessage": "Se eliminará \"{name}\". Las sesiones que contiene quedarán sin archivar; no se elimina nada.",
+    "save": "Guardar",
+    "folderProjectLabel": "Proyecto de {name}",
+    "noProject": "Sin proyecto",
+    "newFolder": "Nueva carpeta",
+    "sessionFolderLabel": "Carpeta de {title}",
+    "untieProject": "Quitar {project}",
+    "tieToProjectLabel": "Vincular {title} a un proyecto",
+    "tieToProject": "+ Vincular a un proyecto"
   },
   "shellPanel": {
     "crumb": "Espacio de trabajo",

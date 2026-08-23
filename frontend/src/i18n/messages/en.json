@@ -24083,7 +24083,29 @@
     "untitled": "Untitled canvas",
     "draft": "Draft",
     "draftHint": "Saved in this browser only — sign in to keep it",
-    "signInToKeep": "Sign in to keep your work"
+    "signInToKeep": "Sign in to keep your work",
+    "manage": "Manage sessions & folders",
+    "manageAria": "Manage sessions",
+    "tiedToProject": "In this project"
+  },
+  "sessionManagePanel": {
+    "title": "Sessions & folders",
+    "allSessions": "All sessions",
+    "loading": "Loading…",
+    "emptySessions": "No sessions yet",
+    "renameFolderLabel": "Folder name",
+    "renameFolder": "Rename folder",
+    "deleteFolder": "Delete folder",
+    "deleteFolderTitle": "Delete folder?",
+    "deleteFolderMessage": "\"{name}\" will be removed. Sessions inside it become unfiled — nothing is deleted.",
+    "save": "Save",
+    "folderProjectLabel": "Project for {name}",
+    "noProject": "No project",
+    "newFolder": "New folder",
+    "sessionFolderLabel": "Folder for {title}",
+    "untieProject": "Remove {project}",
+    "tieToProjectLabel": "Tie {title} to a project",
+    "tieToProject": "+ Tie to project"
   },
   "shellPanel": {
     "crumb": "Workspace",

@@ -1697,6 +1697,7 @@
     "home": "Retour à l’accueil"
   },
   "common": {
+    "unfiled": "Non classé",
     "deleteRoadmapItemConfirm": "Supprimer cet élément de la feuille de route ?",
     "removeAgentFromProjectConfirm": "Retirer « {name} » de ce projet ? Ses capacités par agent seront effacées.",
     "unpairNodeConfirm": "Dissocier le nœud « {name} » ? Cela le déconnectera.",
@@ -24082,7 +24083,29 @@
     "untitled": "Tableau sans titre",
     "draft": "Brouillon",
     "draftHint": "Enregistré uniquement dans ce navigateur — connectez-vous pour le conserver",
-    "signInToKeep": "Connectez-vous pour conserver votre travail"
+    "signInToKeep": "Connectez-vous pour conserver votre travail",
+    "manage": "Gérer les sessions et les dossiers",
+    "manageAria": "Gérer les sessions",
+    "tiedToProject": "Dans ce projet"
+  },
+  "sessionManagePanel": {
+    "title": "Sessions et dossiers",
+    "allSessions": "Toutes les sessions",
+    "loading": "Chargement…",
+    "emptySessions": "Aucune session pour l'instant",
+    "renameFolderLabel": "Nom du dossier",
+    "renameFolder": "Renommer le dossier",
+    "deleteFolder": "Supprimer le dossier",
+    "deleteFolderTitle": "Supprimer le dossier ?",
+    "deleteFolderMessage": "« {name} » sera supprimé. Les sessions qu'il contient deviennent non classées — rien n'est supprimé.",
+    "save": "Enregistrer",
+    "folderProjectLabel": "Projet pour {name}",
+    "noProject": "Aucun projet",
+    "newFolder": "Nouveau dossier",
+    "sessionFolderLabel": "Dossier pour {title}",
+    "untieProject": "Retirer {project}",
+    "tieToProjectLabel": "Associer {title} à un projet",
+    "tieToProject": "+ Associer à un projet"
   },
   "shellPanel": {
     "crumb": "Espace de travail",

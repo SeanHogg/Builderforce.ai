@@ -1697,6 +1697,7 @@
     "home": "返回首页"
   },
   "common": {
+    "unfiled": "未归档",
     "deleteRoadmapItemConfirm": "删除此路线图项？",
     "removeAgentFromProjectConfirm": "将“{name}”从此项目中移除？其各自的智能体能力将被清除。",
     "unpairNodeConfirm": "取消配对节点“{name}”？这将断开其连接。",
@@ -24082,7 +24083,29 @@
     "untitled": "未命名画布",
     "draft": "草稿",
     "draftHint": "仅保存在此浏览器中 —— 登录后才会保留",
-    "signInToKeep": "登录以保存你的工作"
+    "signInToKeep": "登录以保存你的工作",
+    "manage": "管理会话和文件夹",
+    "manageAria": "管理会话",
+    "tiedToProject": "在此项目中"
+  },
+  "sessionManagePanel": {
+    "title": "会话与文件夹",
+    "allSessions": "所有会话",
+    "loading": "加载中……",
+    "emptySessions": "暂无会话",
+    "renameFolderLabel": "文件夹名称",
+    "renameFolder": "重命名文件夹",
+    "deleteFolder": "删除文件夹",
+    "deleteFolderTitle": "删除文件夹？",
+    "deleteFolderMessage": "将移除“{name}”。其中的会话会变为未归档状态——不会删除任何内容。",
+    "save": "保存",
+    "folderProjectLabel": "{name} 的项目",
+    "noProject": "无项目",
+    "newFolder": "新建文件夹",
+    "sessionFolderLabel": "{title} 的文件夹",
+    "untieProject": "移除 {project}",
+    "tieToProjectLabel": "将 {title} 关联到项目",
+    "tieToProject": "+ 关联到项目"
   },
   "shellPanel": {
     "crumb": "工作区",

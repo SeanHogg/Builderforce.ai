@@ -59,7 +59,7 @@ export function createCreationSessionFolderRoutes(db: Db): Hono<HonoEnv> {
   router.post('/', async (c) => {
     const { tenantId, segmentId } = scope(c);
     const userId = c.get('userId') as string;
-    const body = await c.req.json<FolderBody>().catch(() => ({}));
+    const body: FolderBody = await c.req.json<FolderBody>().catch(() => ({}));
     const name = cleanFolderName(body.name);
     if (!name) return c.json({ error: 'A folder name is required' }, 400);
     let projectId: number | null = null;
@@ -84,7 +84,7 @@ export function createCreationSessionFolderRoutes(db: Db): Hono<HonoEnv> {
     const folder = await requireFolder(c);
     if (!folder) return c.json({ error: 'Folder not found' }, 404);
     const { tenantId, segmentId } = scope(c);
-    const body = await c.req.json<FolderBody>().catch(() => ({}));
+    const body: FolderBody = await c.req.json<FolderBody>().catch(() => ({}));
     const patch: Partial<typeof creationSessionFolders.$inferInsert> = { updatedAt: new Date() };
     if (body.name !== undefined) {
       const name = cleanFolderName(body.name);

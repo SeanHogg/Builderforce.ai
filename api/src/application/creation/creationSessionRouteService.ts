@@ -1734,7 +1734,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
   router.post('/:id/projects', async (c) => {
     const access = await requireSession(c, 'editor');
     if (!access) return c.json({ error: 'Session not found or not editable' }, 404);
-    const body = await c.req.json<{ projectId?: number }>().catch(() => ({}));
+    const body: { projectId?: number } = await c.req.json<{ projectId?: number }>().catch(() => ({}));
     const projectId = Number(body.projectId);
     if (!Number.isInteger(projectId) || projectId <= 0) return c.json({ error: 'Invalid project id' }, 400);
     const projectSegment = access.session.segmentId == null ? isNull(projects.segmentId) : eq(projects.segmentId, access.session.segmentId);

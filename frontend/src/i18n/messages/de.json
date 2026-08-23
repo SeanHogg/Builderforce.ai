@@ -24083,7 +24083,29 @@
     "untitled": "Unbenanntes Canvas",
     "draft": "Entwurf",
     "draftHint": "Nur in diesem Browser gespeichert – melde dich an, um es zu behalten",
-    "signInToKeep": "Melde dich an, um deine Arbeit zu behalten"
+    "signInToKeep": "Melde dich an, um deine Arbeit zu behalten",
+    "manage": "Sitzungen & Ordner verwalten",
+    "manageAria": "Sitzungen verwalten",
+    "tiedToProject": "In diesem Projekt"
+  },
+  "sessionManagePanel": {
+    "title": "Sitzungen & Ordner",
+    "allSessions": "Alle Sitzungen",
+    "loading": "Wird geladen …",
+    "emptySessions": "Noch keine Sitzungen",
+    "renameFolderLabel": "Ordnername",
+    "renameFolder": "Ordner umbenennen",
+    "deleteFolder": "Ordner löschen",
+    "deleteFolderTitle": "Ordner löschen?",
+    "deleteFolderMessage": "„{name}“ wird entfernt. Sitzungen darin werden nicht abgelegt – nichts wird gelöscht.",
+    "save": "Speichern",
+    "folderProjectLabel": "Projekt für {name}",
+    "noProject": "Kein Projekt",
+    "newFolder": "Neuer Ordner",
+    "sessionFolderLabel": "Ordner für {title}",
+    "untieProject": "{project} entfernen",
+    "tieToProjectLabel": "{title} einem Projekt zuordnen",
+    "tieToProject": "+ Projekt zuordnen"
   },
   "shellPanel": {
     "crumb": "Workspace",
