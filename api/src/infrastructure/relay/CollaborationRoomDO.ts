@@ -326,8 +326,9 @@ export class CollaborationRoomDO implements DurableObject {
     const clientIds = [...new Set([...(session.clientIds ?? []), ...added])];
     try {
       ws.serializeAttachment({ ...session, clientIds });
-    } catch {
+    } catch (error) {
       // A socket that will not take an attachment is closing; the timeout sweeps it.
+      this.reportError(error, { operation: 'rememberAwarenessClients' });
     }
   }
 
@@ -362,7 +363,8 @@ export class CollaborationRoomDO implements DurableObject {
   private sessionFor(ws: WebSocket): SessionInfo | null {
     try {
       return (ws.deserializeAttachment() as SessionInfo | null) ?? null;
-    } catch {
+    } catch (error) {
+      this.reportError(error, { operation: 'sessionFor' });
       return null;
     }
   }
@@ -370,8 +372,9 @@ export class CollaborationRoomDO implements DurableObject {
   private send(ws: WebSocket, payload: Uint8Array | string): void {
     try {
       if (ws.readyState === WebSocket.READY_STATE_OPEN) ws.send(payload as never);
-    } catch {
+    } catch (error) {
       // A socket that refuses a send is already gone; the close handler cleans it up.
+      this.reportError(error, { operation: 'send' });
     }
   }
 

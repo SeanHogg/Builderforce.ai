@@ -88,8 +88,8 @@ export function SettingsTab({ board, projectId, onSaved }: { board: Board; proje
   return (
     <div style={{ ...sectionPad, display: 'flex', flexDirection: 'column', gap: 14, maxWidth: 420 }}>
       <div style={{ paddingBottom: 14, borderBottom: '1px solid var(--border-subtle)' }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{t('templateHeading')}</div>
-        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 3 }}>{t('templateHint')}</div>
+        <div style={{ fontSize: 'var(--font-size-small)', fontWeight: 600, color: 'var(--text-primary)' }}>{t('templateHeading')}</div>
+        <div style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', marginTop: 3 }}>{t('templateHint')}</div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8, flexWrap: 'wrap' }}>
           <Select
             value={selectedTemplateId}
@@ -111,22 +111,22 @@ export function SettingsTab({ board, projectId, onSaved }: { board: Board; proje
             </button>
           </RoleGate>
         </div>
-        {templateError && <div style={{ marginTop: 6, fontSize: 12, color: 'var(--danger)' }}>{templateError}</div>}
+        {templateError && <div style={{ marginTop: 6, fontSize: 'var(--font-size-eyebrow)', color: 'var(--danger)' }}>{templateError}</div>}
       </div>
-      <label style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+      <label style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)' }}>
         {t('boardNameLabel')}
         <input style={{ ...inputStyle, width: '100%', marginTop: 4 }} value={name} onChange={(e) => setName(e.target.value)} />
       </label>
       {/* Autonomy is implicit now: a lane with agents + an auto gate advances on
           its own; a human gate waits. There is no board-level autonomous toggle. */}
-      <label style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+      <label style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)' }}>
         {t('maxConcurrent')}
         <input type="number" min={1} style={{ ...inputStyle, width: 120, marginTop: 4 }} value={maxConcurrent} onChange={(e) => setMaxConcurrent(Number(e.target.value))} />
       </label>
 
       {/* Hide tickets sitting in a terminal (Done) lane so the board shows only
           live work. Display-only — the tickets and their history are untouched. */}
-      <label style={{ fontSize: 13, color: 'var(--text-secondary)', display: 'flex', gap: 8, alignItems: 'center' }}>
+      <label style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)', display: 'flex', gap: 8, alignItems: 'center' }}>
         <input type="checkbox" checked={hideDoneItems} onChange={(e) => setHideDoneItems(e.target.checked)} />
         {t('hideDoneItems')}
       </label>
@@ -136,11 +136,11 @@ export function SettingsTab({ board, projectId, onSaved }: { board: Board; proje
           for non-managers) — the same control the board banner points to when it
           blocks a run. Off = the override: high/urgent work runs without approval. */}
       <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 14 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 6 }}>
+        <div style={{ fontSize: 'var(--font-size-small)', fontWeight: 600, color: 'var(--text-primary)', marginBottom: 6 }}>
           {t('approvalHeading')}
         </div>
         <RoleGate capability="board.manageApproval" variant="block">
-          <label style={{ fontSize: 13, color: 'var(--text-secondary)', display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+          <label style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)', display: 'flex', gap: 8, alignItems: 'flex-start' }}>
             <input
               type="checkbox"
               checked={requireApproval}
@@ -149,7 +149,7 @@ export function SettingsTab({ board, projectId, onSaved }: { board: Board; proje
             />
             <span>
               {t('approvalToggle')}
-              <span style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+              <span style={{ display: 'block', fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', marginTop: 2 }}>
                 {requireApproval ? t('approvalOnHint') : t('approvalOffHint')}
               </span>
             </span>
@@ -159,8 +159,8 @@ export function SettingsTab({ board, projectId, onSaved }: { board: Board; proje
 
       {/* Standup turn timer — drives the ceremony round-table's "who's next". */}
       <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 14 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>{t('standupTimer')}</div>
-        <label style={{ fontSize: 13, color: 'var(--text-secondary)', display: 'block' }}>
+        <div style={{ fontSize: 'var(--font-size-small)', fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>{t('standupTimer')}</div>
+        <label style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)', display: 'block' }}>
           {t('mode')}
           <Select
             style={{ ...inputStyle, width: '100%', marginTop: 4 }}
@@ -172,14 +172,14 @@ export function SettingsTab({ board, projectId, onSaved }: { board: Board; proje
           </Select>
         </label>
         {turnMode === 'timeboxed' && (
-          <label style={{ fontSize: 13, color: 'var(--text-secondary)', display: 'block', marginTop: 10 }}>
+          <label style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)', display: 'block', marginTop: 10 }}>
             {t('secondsPerPerson')}
             <input type="number" min={10} step={5} style={{ ...inputStyle, width: 120, marginTop: 4 }} value={turnSeconds} onChange={(e) => setTurnSeconds(Number(e.target.value))} />
           </label>
         )}
-        <label style={{ fontSize: 13, color: 'var(--text-secondary)', display: 'block', marginTop: 10 }}>
+        <label style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)', display: 'block', marginTop: 10 }}>
           {t('wipCapLabel')}
-          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{t('wipCapHint')}</div>
+          <div style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', marginTop: 2 }}>{t('wipCapHint')}</div>
           <input
             type="number"
             min={1}

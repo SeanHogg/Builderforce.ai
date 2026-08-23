@@ -1,3 +1,151 @@
+## ✅ RESOLVED 2026-08-23 — External MCP is now a real client (protocol, OAuth, consent); per-surface tool catalog; VS Code auto-link confirmed already live
+
+Three roadmap items closed in one pass — the first two required real implementation
+work, the third turned out to already be fixed and just hadn't been removed from the
+register.
+
+**1. `tenant_mcp_extensions` becomes a real external-MCP client** *(was: "deferred by
+decision" — the entry itself named exactly what had to be built first: a real
+protocol, a credential vault, per-tool consent, 3-legged OAuth)*. All four landed:
+
+- **Real wire protocol.** New `application/llm/mcp/mcpWireClient.ts` speaks actual
+  MCP — JSON-RPC 2.0 Streamable HTTP (`initialize` → `notifications/initialized` →
+  `tools/list`/`tools/call`, SSE-or-JSON response, cursor pagination) — and falls
+  back to the original Builderforce-shaped `{url}/tools` + `{url}/call` REST pair for
+  every server already registered against it. `protocol: 'auto'` probes once and the
+  answer is remembered on the row (`tenant_mcp_extensions.protocol`, migration
+  `1116`) so the probe is paid once per server, not once per catalog load.
+- **Credential vault (3-legged OAuth).** New `mcp/mcpOAuth.ts` (RFC 8414/9728
+  discovery, RFC 7591 dynamic client registration as a public client, PKCE S256,
+  RFC 8707 resource binding) + `mcp/mcpOAuthConnect.ts` (the connect/callback flow,
+  structured exactly like `application/shared/providerOAuthConnect` — signed CSRF
+  `state`, `safeReturnTo`) + `mcp/mcpExtensionAuth.ts` (resolves the live
+  `Authorization` header, refreshing and re-sealing a stale grant in place, clearing
+  it on a terminal 400/401 refusal). Grants are sealed with the SAME
+  `oauthTokenVault` primitive mailbox/drive/calendar connections use — never the
+  static-secret path re-purposed. New routes:
+  `GET .../mcp-extensions/:id/oauth/connect`, `DELETE .../:id/oauth`, and the public
+  `GET /api/mcp-oauth/callback`. Static bearer secrets still work as a fallback.
+- **Per-tool consent.** New `mcp/mcpToolConsent.ts` — `tenant_mcp_extensions.allowed_tools`
+  (migration `1116`, `null` = every tool, the pre-consent default) is enforced on
+  BOTH the advertise path (`listToolsForTenant` filters) and the call path
+  (`callMcpTool` throws `McpToolNotConsentedError`), so a tool a server adds later is
+  not silently granted and a model that remembers an old name can't reach a withheld
+  tool either. `PATCH .../mcp-extensions/:id` takes `allowedTools`.
+- Every SSRF guard that already covered the legacy fetch (`assertSafeUrl`,
+  `resolveAndAssertPublic` DNS-rebinding re-check, `redirect: 'manual'`) now also
+  covers the MCP transport and every OAuth discovery/registration/token fetch —
+  same guard, one more caller each.
+- The guest/landing composer's fixed local action vocabulary
+  (`restrictGuestTools`) is UNCHANGED and deliberately so: an anonymous
+  pre-signup visitor must not reach a tenant's external systems regardless of how
+  safe the client is, so this was never actually blocked on "real MCP" — it's a
+  separate, standing product decision.
+
+**2. Per-surface tool catalog** (the ~290/363-tool full-catalog-every-turn cost).
+New `application/llm/toolSurfaces.ts` — a `?surface=` param on both
+`GET /v1/mcp/tools` and `POST /mcp` narrows what `listGatewayMcpTools` advertises:
+`full` (unchanged default), `delivery` (projects/tickets/boards/specs/OKRs, no
+platform administration), `agent` (the existing `CLOUD_AGENT_PLATFORM_TOOLS`
+allowlist), `readonly` (only tools that declare `mutates: false`/`readOnlyHint`),
+`platform` (first-party only, no connectors/extensions), `connectors` (only the
+tenant's connected connector actions). An unknown surface id is a 400, not a silent
+`full` — `GET /v1/mcp/surfaces` publishes the registry. `agent-runtime`'s
+`connectors_list` tool now asks for `?surface=connectors` instead of downloading and
+discarding the whole catalog on every call. The two curated cloud-agent allowlists
+moved out of `builtinMcpService.ts` into a new light `cloudAgentToolset.ts` (beside
+`toolNaming.ts`'s `BUILTIN_EXTENSION_ID`) so the surface registry — and anything else
+that only needs to know WHICH tools a policy grants — doesn't have to import the
+whole catalog module to read a list of ids. Our own Brain's PER-TURN trim
+(`brain-embedded/selectTools`, unaffected) stays the finer-grained mechanism for our
+own surfaces; this is the coarse, connect-time mechanism a third-party MCP client
+(which lists once and advertises forever) actually needs.
+
+**3. VS Code native chat participant auto-link — already fixed, roadmap was stale.**
+The entry named `clients/vscode/src/agent.ts runAgent`, which no longer exists: the
+native `@builderforce` participant is `chatParticipant.ts` → `nativeBrainRun.ts`
+(`runNativeBrain`), and `runNativeBrain` calls `runBrainLoop` directly
+(`nativeBrainRun.ts`) — the SAME shared loop (`brainRunStore.ts startRun`, exported
+as `runBrainLoop`) that contains `autoLinkCreatedItem`. This was resolved by the
+2026-07-11 loop-unification close-out (`agent.ts`'s duplicate `streamTurn` was
+deleted then) and the file was later renamed; the roadmap entry just never got
+removed. No code change needed — verified by tracing the call chain and confirming
+`autoLinkCreatedItem` runs unconditionally inside `runLoop` for every create-tool
+call, regardless of which surface drives it.
+
+**Verified.** `npm run type-check` clean (tsc + tsgo). New tests:
+`toolSurfaces.test.ts` (10), `mcp/mcpWireClient.test.ts` (9, incl. the real
+JSON-RPC/SSE/pagination/auth-challenge/fallback paths), `mcp/mcpOAuth.test.ts` (24,
+incl. discovery same-origin rejection and PKCE), `mcp/mcpToolConsent.test.ts`;
+`mcpExtensionService.test.ts` extended for consent + auto-protocol-detection.
+`check:layering`, `check:migrations`, `check:schema`, `check:prompt-tools`,
+`check:signature-duplication` all pass for every file this touched.
+`check:tenant-scope` caught a real gap of its own — `rememberProtocol`'s UPDATE
+was missing the tenant predicate — fixed with `scopedToTenant` in the same pass.
+Full `api/src/application/llm/` + the two mcp route test files: 1215 tests green.
+
+---
+
+## ✅ RESOLVED 2026-08-23 — Tax reporting: the last missing piece of the payout stack (PRD 19 item 4)
+
+`PayoutAccountService`, `withdrawalMethods.ts`, escrow release and `earningsLedger.ts`
+already moved real money through `ledger_entries`. The one piece hired.video's
+`TaxReportingService` had that this platform did not was the 1099-NEC year-end report
+and the AES-GCM tax-ID vault behind it — a platform that pays people cannot produce a
+filing without it.
+
+**Where the facts live.** No new table for the tax profile: it is a `party_roles` row
+with `role = 'payee'`, the same primitive PRD 20 already uses for nineteen other
+profile shapes. The existing `uq_party_roles_role` index already enforces one tax
+profile per person per workspace with zero new DDL, and the non-secret W-9/W-8 facts
+(entity type, legal name, address, residency, id type, last-4, form-submitted-at) sit
+in `attrs`.
+
+**Where the secret lives, and the bug fixed to put it there.** The tax ID itself never
+touches the profile row — it is a `credentials` row, sealed by the existing
+per-tenant AES-256-GCM `credentialCrypto`, with `purpose = 'tax_id'` and a new
+`subjectRef` column identifying the person it belongs to (a W-9 can be submitted before
+any payout destination exists, and one person may hold several). That exposed a real
+defect: `uq_credentials_purpose` was `(tenant_id, connection_id, purpose)` over a
+NULLABLE `connection_id`, and Postgres treats NULLs as distinct in a unique index —
+so a connection-less credential had no uniqueness at all. Migration `1117` adds
+`subject_ref` plus two partial unique indexes that cannot fight (one WHERE
+`connection_id IS NOT NULL`, one WHERE it IS NULL), so a retried W-9 submission can no
+longer seal a second tax ID under the same subject.
+
+**The report.** `idx_ledger_entries_payout_year` (also 1117) serves the all-recipients
+year scan the pre-existing account-keyed index could not answer. `taxThreshold.ts` is
+the pure domain logic — US 1099-NEC at $600 or more (inclusive, not `>`), non-US
+reportable from the first dollar with no floor, single-member LLC filing as an
+individual (a disregarded entity) — with 20 unit tests pinning the boundaries.
+`taxReport.ts` builds the year in exactly two queries (one grouped ledger aggregate,
+one batched profile load — never N+1), takes the payout **magnitude** since the two
+ledger writers (direct payout, escrow release) don't agree on sign, and is cached
+behind a version token (`taxCacheVersion.ts`) that both the profile-save path and the
+payout-write path bump. `blockedRecipients` counts reportable recipients whose profile
+is still incomplete — the number that matters operationally, since each one is a
+filing that cannot actually be submitted.
+
+**Routes and UI.** `/api/tax` (self-service profile, manager-gated report + CSV via
+`requireRole(MANAGER)`); frontend `/billing/tax` as a fourth `BillingClient` view
+(`tax.viewReport` capability, `<RoleGate variant="block">` around the report exactly
+like every other manager-only panel), `TaxProfileForm` / `TaxReportPanel` / `TaxCenter`
+under `components/tax/`, full i18n across all five catalogues.
+
+**Files:** `api/migrations/1117_tax_profile_and_payout_year.sql` +
+`schema/kernel.ts` mirrors · `domain/finance/taxThreshold.ts` (+ 20 tests) ·
+`application/finance/{taxProfile,taxReport,taxCacheVersion}.ts` (+ 13 + 9 tests) ·
+`presentation/routes/taxRoutes.ts`, mounted in `index.ts` · `PayoutAccountService.ts`
+now bumps the tax-report cache on a real payout insert · frontend
+`lib/taxApi.ts`, `components/tax/*`, `app/billing/tax/page.tsx`, `BillingClient.tsx`
+(fourth tab), `lib/rbac.ts` (`tax.viewReport`), all five i18n catalogues.
+
+Also finished in the same pass: the CSV consolidation left mid-migration by a prior
+session (`finops/auditReport.ts` and `insights/complianceInsights.ts` were calling
+a deleted `esc` closure and not importing `csvMatrix` — both fixed, `tsc --noEmit`
+clean).
+
+
 ## ✅ RESOLVED 2026-08-23 — A canvas document can carry underline, colour, font, size and alignment
 
 Three Gap Register entries closed together because they shared one root cause: a canvas

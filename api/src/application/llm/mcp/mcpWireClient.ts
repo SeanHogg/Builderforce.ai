@@ -120,7 +120,8 @@ async function readJsonRpcBody(res: Response): Promise<Record<string, unknown> |
       const parsed = JSON.parse(line.slice(5).trim()) as Record<string, unknown>;
       if ('result' in parsed || 'error' in parsed) latest = parsed;
     } catch {
-      /* a partial or non-JSON frame is not a result */
+      // A partial or non-JSON frame is not a result — skip it and keep scanning.
+      continue;
     }
   }
   return latest;

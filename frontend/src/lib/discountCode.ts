@@ -15,5 +15,8 @@ export function retainDiscountCode(value: string): void {
   try {
     if (code) localStorage.setItem(DISCOUNT_CODE_STORAGE_KEY, code);
     else localStorage.removeItem(DISCOUNT_CODE_STORAGE_KEY);
-  } catch { /* storage can be disabled; the current form value still works */ }
+  } catch {
+    // Storage can be disabled; the current form value still works.
+    return;
+  }
 }
