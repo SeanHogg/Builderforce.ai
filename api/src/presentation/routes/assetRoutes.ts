@@ -1,11 +1,10 @@
 import { Hono, type Context } from 'hono';
 import type { Env, HonoEnv } from '../../env';
 import { authMiddleware } from '../middleware/authMiddleware';
-import { isKeyOwnedByTenant } from '../../domain/shared/r2Keys';
-import { signUpload } from '../../infrastructure/auth/uploadSign';
 import {
   readAssetByKey,
   readTenantAsset,
+  signTenantAsset,
   storeTenantAsset,
   type AssetRejection,
 } from '../../application/assets/tenantAssetStore';
@@ -90,10 +89,11 @@ export async function handleTenantAssetRead(c: Context<HonoEnv>) {
 export async function handleAssetSign(c: Context<HonoEnv>) {
   const tenantId = c.get('tenantId') as number;
   const { key } = await c.req.json<{ key?: string }>();
-  if (!isKeyOwnedByTenant(key, tenantId)) return c.json({ error: 'Not found' }, 404);
   const secret = (c.env as Env).JWT_SECRET;
   if (!secret) return c.json({ error: 'Signing not configured' }, 503);
-  return c.json(await signUpload(key, secret));
+  const signed = await signTenantAsset(key, tenantId, secret);
+  if (!signed) return c.json({ error: 'Not found' }, 404);
+  return c.json(signed);
 }
 
 export function createAssetRoutes(): Hono<HonoEnv> {

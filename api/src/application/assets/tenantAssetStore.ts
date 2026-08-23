@@ -1,4 +1,5 @@
 import { isKeyOwnedByTenant } from '../../domain/shared/r2Keys';
+import { signUpload } from '../../infrastructure/auth/uploadSign';
 
 /**
  * THE ASSET PIPELINE — one upload, one read, one policy, for every surface.
@@ -160,6 +161,20 @@ export async function readAssetByKey(
   if (!bucket) return 'unconfigured';
   if (!key) return 'not-found';
   return objectResponse(bucket, key);
+}
+
+/**
+ * A short-lived signed URL for one owned object — see {@link signUpload} for why
+ * a time-boxed link exists alongside the durable `GET /api/assets/*` one.
+ * Returns `null` when the key does not belong to `tenantId` (caller reports 404).
+ */
+export async function signTenantAsset(
+  key: string | undefined,
+  tenantId: number,
+  secret: string,
+): Promise<{ exp: number; sig: string } | null> {
+  if (!isKeyOwnedByTenant(key, tenantId)) return null;
+  return signUpload(key, secret);
 }
 
 async function objectResponse(bucket: R2Bucket, key: string): Promise<Response | 'not-found'> {
