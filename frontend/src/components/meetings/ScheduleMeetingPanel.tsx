@@ -145,7 +145,7 @@ export function ScheduleMeetingPanel({
   const slotFmt = new Intl.DateTimeFormat(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 
   return (
-    <SlideOutPanel open={open} onClose={onClose} title={startNow && !presetAt ? t('startNowTitle') : t('scheduleTitle')}>
+    <SlideOutPanel open={open} onClose={onClose} title={startNow && !presetAt ? t('startNowTitle') : t('scheduleTitle')} widthStorageKey="schedule-meeting">
       <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
         <div>
           <label style={label}>{t('kind')}</label>

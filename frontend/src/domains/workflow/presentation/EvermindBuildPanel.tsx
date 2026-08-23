@@ -117,7 +117,7 @@ export function EvermindBuildPanel({ open, onClose, graph, workflowName, project
   const firstFailLabel = result?.firstFailure?.label;
 
   return (
-    <SlideOutPanel open={open} onClose={onClose} title={t('title')} width="min(560px, 96vw)">
+    <SlideOutPanel open={open} onClose={onClose} title={t('title')} width="wide" widthStorageKey="evermind-build">
       <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
         <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>{t('subtitle')}</p>
 

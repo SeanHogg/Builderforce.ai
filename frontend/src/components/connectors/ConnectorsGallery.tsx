@@ -213,6 +213,7 @@ export function ConnectorsGallery({ search = '', viewMode = 'card' }: { search?:
           open={!!activeKey}
           onClose={() => setActiveKey(null)}
           title={active.name}
+          widthStorageKey="connector-detail"
           tabs={[
             { id: 'connect', label: t('panel.connections') },
             { id: 'actions', label: t('panel.actions') },

@@ -102,7 +102,8 @@ export function AvailabilityEditor({
       open
       onClose={onClose}
       title={t('availabilityTitle')}
-      width="min(560px, 96vw)"
+      width="sheet"
+      widthStorageKey="availability"
       headerActions={
         <button type="button" onClick={applyWeekdayDefault} style={{ fontSize: 12, fontWeight: 600, color: 'var(--coral-bright)', background: 'none', border: 'none', cursor: 'pointer' }}>{t('weekdayDefault')}</button>
       }

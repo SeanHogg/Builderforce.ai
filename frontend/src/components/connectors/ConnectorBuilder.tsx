@@ -201,6 +201,7 @@ export function ConnectorBuilder({ open, editKey, onClose, onSaved }: {
       open={open}
       onClose={onClose}
       title={editKey ? t('builder.editTitle', { key: editKey }) : t('builder.newTitle')}
+      widthStorageKey="connector-builder"
       tabs={editKey ? undefined : [
         { id: 'import', label: t('builder.tabImport') },
         { id: 'manifest', label: t('builder.tabManifest') },

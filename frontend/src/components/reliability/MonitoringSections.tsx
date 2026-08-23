@@ -716,7 +716,7 @@ function MonitorPanel({
   const showSignalUrl = signalUrl && (monitorType === 'webhook' || monitorType === 'heartbeat');
 
   return (
-    <SlideOutPanel open onClose={onClose} title={isNew ? t('newMonitor') : t('editMonitor')} width="min(560px, 96vw)">
+    <SlideOutPanel open onClose={onClose} title={isNew ? t('newMonitor') : t('editMonitor')} width="wide" widthStorageKey="monitor-detail">
       <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
         <SectionError error={error} />
         {loading ? <SectionLoading label={t('loading')} /> : (

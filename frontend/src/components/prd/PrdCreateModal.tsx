@@ -44,7 +44,7 @@ export function PrdCreateModal({
   };
 
   return (
-    <SlideOutPanel open onClose={onClose} title={t('title')} width="min(720px, 96vw)">
+    <SlideOutPanel open onClose={onClose} title={t('title')} width="wide" widthStorageKey="prd-create">
       <div
         style={{
           padding: 20,

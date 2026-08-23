@@ -15351,6 +15351,20 @@
     "emptyState": "暂无路线图项目。使用“添加项目”创建一个。",
     "deleteItem": "删除项目"
   },
+  "roadmapItemPanel": {
+    "editTitle": "编辑路线图项",
+    "newTitle": "新建路线图项",
+    "titleLabel": "标题",
+    "titlePlaceholder": "交付内容？",
+    "titleRequired": "标题为必填项。",
+    "horizonLabel": "时间范围",
+    "statusLabel": "状态",
+    "themeLabel": "主题",
+    "themePlaceholder": "可选分组",
+    "targetDateLabel": "目标日期",
+    "saveChanges": "保存更改",
+    "create": "创建"
+  },
   "agentCapabilities": {
     "failedLoadAgents": "加载代理失败",
     "failedAddAgent": "添加代理失败",

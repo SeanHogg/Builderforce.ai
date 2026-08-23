@@ -15351,6 +15351,20 @@
     "emptyState": "No roadmap items yet. Use “Add item” to create one.",
     "deleteItem": "Delete item"
   },
+  "roadmapItemPanel": {
+    "editTitle": "Edit roadmap item",
+    "newTitle": "New roadmap item",
+    "titleLabel": "Title",
+    "titlePlaceholder": "What ships?",
+    "titleRequired": "Title is required.",
+    "horizonLabel": "Horizon",
+    "statusLabel": "Status",
+    "themeLabel": "Theme",
+    "themePlaceholder": "Optional grouping",
+    "targetDateLabel": "Target date",
+    "saveChanges": "Save changes",
+    "create": "Create"
+  },
   "agentCapabilities": {
     "failedLoadAgents": "Failed to load agents",
     "failedAddAgent": "Failed to add agent",

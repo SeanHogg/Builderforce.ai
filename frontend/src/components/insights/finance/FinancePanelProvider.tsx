@@ -49,7 +49,8 @@ export function FinancePanelProvider({ children }: { children: ReactNode }) {
       <SlideOutPanel
         open={panel != null}
         onClose={close}
-        width="min(960px, 96vw)"
+        width="wide"
+        widthStorageKey="finance-insights"
         title={panel ? t(panel.titleKey) : ''}
         tabs={tabs}
         activeTabId={active ?? undefined}

@@ -23,7 +23,7 @@ export function BuilderProjectsSlideOutPanel({
 }) {
   const t = useTranslations('ide');
   return (
-    <SlideOutPanel open={open} onClose={onClose} title={t('yourIdeProjects')} width="min(460px, 96vw)">
+    <SlideOutPanel open={open} onClose={onClose} title={t('yourIdeProjects')} width="sheet" widthStorageKey="builder-projects">
       <div style={{ padding: 16 }}>
         <BuilderProjectsContent
           highlightStorageProjectId={currentStorageProjectId}

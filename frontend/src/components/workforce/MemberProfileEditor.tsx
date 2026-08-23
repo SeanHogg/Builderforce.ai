@@ -130,7 +130,8 @@ export function MemberProfileEditor({ kind, refId, name, tasks, onClose, onSaved
           <div style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 400 }}>{t('subtitle', { kind: kind.replace('_', ' ') })}</div>
         </div>
       }
-      width="min(560px, 96vw)"
+      width="wide"
+      widthStorageKey="member-profile"
       tabs={[
         { id: 'overview', label: t('tabs.overview') },
         { id: 'timeLogs', label: t('tabs.timeLogs') },

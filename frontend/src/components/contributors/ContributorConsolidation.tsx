@@ -205,7 +205,8 @@ export function ContributorConsolidation() {
         open={preview != null}
         onClose={() => setPreview(null)}
         title={t('confirmMerge')}
-        width="min(560px, 96vw)"
+        width="wide"
+        widthStorageKey="contributor-merge-preview"
       >
         {preview && (
           <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>

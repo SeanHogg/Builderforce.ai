@@ -48,7 +48,7 @@ export function UpgradeModal({
   };
 
   return (
-    <SlideOutPanel open={error != null} onClose={onClose} title={title} width="min(480px, 96vw)">
+    <SlideOutPanel open={error != null} onClose={onClose} title={title} width="sheet" widthStorageKey="upgrade">
       <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <div

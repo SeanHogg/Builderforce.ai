@@ -65,7 +65,7 @@ export function PrdReviewModal({
   const t = useTranslations('artifactReview');
   const tc = useTranslations('common');
   return (
-    <SlideOutPanel open onClose={onCancel} title={t('prdTitle')} width="min(720px, 96vw)">
+    <SlideOutPanel open onClose={onCancel} title={t('prdTitle')} width="wide" widthStorageKey="artifact-review-prd">
       <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
         <div style={{ fontSize: 13, lineHeight: 1.6 }}>
           <ChatMessageContent content={prd} />
@@ -102,7 +102,7 @@ export function TasksReviewModal({
   const t = useTranslations('artifactReview');
   const tc = useTranslations('common');
   return (
-    <SlideOutPanel open onClose={onCancel} title={t('tasksTitle', { count: titles.length })} width="min(720px, 96vw)">
+    <SlideOutPanel open onClose={onCancel} title={t('tasksTitle', { count: titles.length })} width="wide" widthStorageKey="artifact-review-tasks">
       <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
         <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, lineHeight: 1.5 }}>
           {titles.map((title, i) => (

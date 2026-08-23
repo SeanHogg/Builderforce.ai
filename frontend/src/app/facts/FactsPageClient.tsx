@@ -176,7 +176,7 @@ export default function FactsPageClient() {
         )
       )}
 
-      <SlideOutPanel open={panelOpen} onClose={() => setPanelOpen(false)} title={editing ? t('editFact') : t('newFact')}>
+      <SlideOutPanel open={panelOpen} onClose={() => setPanelOpen(false)} title={editing ? t('editFact') : t('newFact')} widthStorageKey="facts-editor">
         <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
           <Field label={t('colSubject')}>
             <input className="input" value={draft.subject} onChange={(e) => setDraft({ ...draft, subject: e.target.value })} placeholder={t('subjectPlaceholder')} />

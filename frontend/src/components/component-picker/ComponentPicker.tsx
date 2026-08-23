@@ -52,7 +52,7 @@ export function ComponentPicker({
   const groups = useComponentCatalog(mount, q);
 
   return (
-    <SlideOutPanel open={open} onClose={onClose} title={title} width="min(640px, 96vw)">
+    <SlideOutPanel open={open} onClose={onClose} title={title} width="wide" widthStorageKey="component-picker">
       <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 18 }}>
         <input
           value={q}

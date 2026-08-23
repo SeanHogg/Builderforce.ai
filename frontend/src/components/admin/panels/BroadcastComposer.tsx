@@ -128,6 +128,7 @@ export function BroadcastComposer({
       open={open}
       onClose={onClose}
       title={broadcast ? t('editTitle') : t('composeTitle')}
+      widthStorageKey="broadcast-composer"
       headerActions={
         <button type="button" className="btn-primary" onClick={() => void save()} disabled={saving}>
           {saving ? t('saving') : t('save')}

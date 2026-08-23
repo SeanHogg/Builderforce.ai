@@ -15,9 +15,11 @@ import {
   brainChats,
   brainChatMessages,
   creationSessionEvents,
+  creationSessionFolders,
   creationSessionMembers,
   creationSessionObjects,
   creationSessionProjectLinks,
+  SESSION_PROJECT_LINK_REFERENCE,
   creationSessionSnapshots,
   creationSessionTemplates,
   creationSessionTimeline,
@@ -149,7 +151,7 @@ export function creationKindForModality(modality: string): CreationObjectKind {
 }
 
 type CreateSessionBody = { title?: string; description?: string; initialPrompt?: string; projectIds?: number[] };
-type PatchSessionBody = { title?: string; description?: string | null; folder?: string | null; status?: string; preview?: unknown; mode?: string };
+type PatchSessionBody = { title?: string; description?: string | null; folderId?: string | null; status?: string; preview?: unknown; mode?: string };
 type SaveGraphBody = { objects?: GraphObjectInput[]; connections?: GraphConnectionInput[]; viewport?: unknown; expectedRevision?: number };
 type InviteBody = { userId?: string; email?: string; role?: string; expiresInHours?: number };
 type CommentBody = { body?: string; objectId?: string | null; parentCommentId?: string | null; mentions?: string[]; anchor?: unknown };
@@ -653,12 +655,16 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     const userId = c.get('userId') as string;
     const status = c.req.query('status') === 'archived' ? 'archived' : 'active';
     const limit = Math.min(100, Math.max(1, Number(c.req.query('limit') ?? 30)));
+    const projectId = Number(c.req.query('projectId'));
+    const hasProjectFilter = Number.isInteger(projectId) && projectId > 0;
     const rows = await db
       .select({
         id: creationSessions.id,
         title: creationSessions.title,
         description: creationSessions.description,
-        folder: creationSessions.folder,
+        folderId: creationSessions.folderId,
+        folderName: creationSessionFolders.name,
+        folderProjectId: creationSessionFolders.projectId,
         status: creationSessions.status,
         preview: creationSessions.preview,
         revision: creationSessions.canvasRevision,
@@ -675,10 +681,22 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
         eq(creationSessionMembers.sessionId, creationSessions.id),
         eq(creationSessionMembers.userId, userId),
       ))
+      .leftJoin(creationSessionFolders, eq(creationSessionFolders.id, creationSessions.folderId))
       .where(and(
         eq(creationSessions.tenantId, tenantId),
         eq(creationSessions.segmentId, segmentId),
         eq(creationSessions.status, status),
+        // Project scope: sessions explicitly tied to the project (directly, or
+        // via a tied folder), PLUS untagged sessions — nothing disappears from
+        // the sidebar just because it hasn't been organized yet.
+        hasProjectFilter ? or(
+          eq(creationSessionFolders.projectId, projectId),
+          sql`EXISTS (SELECT 1 FROM creation_session_project_links project_filter WHERE project_filter.session_id = ${creationSessions}.id AND project_filter.project_id = ${projectId})`,
+          and(
+            sql`${creationSessionFolders.projectId} IS NULL`,
+            sql`NOT EXISTS (SELECT 1 FROM creation_session_project_links any_project WHERE any_project.session_id = ${creationSessions}.id)`,
+          ),
+        ) : undefined,
       ))
       .orderBy(desc(creationSessions.lastActivityAt))
       .limit(limit);
@@ -727,7 +745,9 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       id: creationSessions.id,
       title: creationSessions.title,
       description: creationSessions.description,
-      folder: creationSessions.folder,
+      folderId: creationSessions.folderId,
+      folderName: creationSessionFolders.name,
+      folderProjectId: creationSessionFolders.projectId,
       status: creationSessions.status,
       preview: creationSessions.preview,
       revision: creationSessions.canvasRevision,
@@ -745,6 +765,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
         eq(creationSessionMembers.sessionId, creationSessions.id),
         eq(creationSessionMembers.userId, userId),
       ))
+      .leftJoin(creationSessionFolders, eq(creationSessionFolders.id, creationSessions.folderId))
       .where(and(
         eq(creationSessions.tenantId, tenantId),
         eq(creationSessions.segmentId, segmentId),
@@ -1672,7 +1693,18 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     const patch: Partial<typeof creationSessions.$inferInsert> = { updatedBy: c.get('userId') as string, updatedAt: new Date(), lastActivityAt: new Date() };
     if (body.title !== undefined) patch.title = cleanTitle(body.title);
     if (body.description !== undefined) patch.description = body.description == null ? null : String(body.description).slice(0, 2_000);
-    if (body.folder !== undefined) patch.folder = body.folder == null || !String(body.folder).trim() ? null : String(body.folder).trim().slice(0, 120);
+    if (body.folderId !== undefined) {
+      if (body.folderId == null) {
+        patch.folderId = null;
+      } else {
+        const folderSegment = access.session.segmentId == null ? isNull(creationSessionFolders.segmentId) : eq(creationSessionFolders.segmentId, access.session.segmentId);
+        const [folder] = await db.select({ id: creationSessionFolders.id }).from(creationSessionFolders).where(and(
+          eq(creationSessionFolders.id, body.folderId), eq(creationSessionFolders.tenantId, access.session.tenantId), folderSegment,
+        )).limit(1);
+        if (!folder) return c.json({ error: 'Folder not found' }, 404);
+        patch.folderId = folder.id;
+      }
+    }
     if (body.status === 'active' || body.status === 'archived') {
       patch.status = body.status;
       patch.archivedAt = body.status === 'archived' ? new Date() : null;
@@ -1694,6 +1726,39 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     });
     c.executionCtx.waitUntil(bumpPublicCanvasVersion(c.env, access.session.tenantId));
     return c.json(updated);
+  });
+
+  /** Tie/untie a session to a Project directly (independent of any folder tie).
+   *  Always `linkKind = 'reference'` — the `'app'` identity link written by
+   *  convert-to-app is a different fact and this endpoint must never touch it. */
+  router.post('/:id/projects', async (c) => {
+    const access = await requireSession(c, 'editor');
+    if (!access) return c.json({ error: 'Session not found or not editable' }, 404);
+    const body = await c.req.json<{ projectId?: number }>().catch(() => ({}));
+    const projectId = Number(body.projectId);
+    if (!Number.isInteger(projectId) || projectId <= 0) return c.json({ error: 'Invalid project id' }, 400);
+    const projectSegment = access.session.segmentId == null ? isNull(projects.segmentId) : eq(projects.segmentId, access.session.segmentId);
+    const [project] = await db.select({ id: projects.id }).from(projects).where(and(
+      eq(projects.id, projectId), eq(projects.tenantId, access.session.tenantId), projectSegment,
+    )).limit(1);
+    if (!project) return c.json({ error: 'Project not found' }, 404);
+    await db.insert(creationSessionProjectLinks).values({
+      sessionId: access.session.id, projectId, addedBy: c.get('userId') as string,
+    }).onConflictDoNothing();
+    return c.json({ sessionId: access.session.id, projectId }, 201);
+  });
+
+  router.delete('/:id/projects/:projectId', async (c) => {
+    const access = await requireSession(c, 'editor');
+    if (!access) return c.json({ error: 'Session not found or not editable' }, 404);
+    const projectId = Number(c.req.param('projectId'));
+    if (!Number.isInteger(projectId) || projectId <= 0) return c.json({ error: 'Invalid project id' }, 400);
+    await db.delete(creationSessionProjectLinks).where(and(
+      eq(creationSessionProjectLinks.sessionId, access.session.id),
+      eq(creationSessionProjectLinks.projectId, projectId),
+      eq(creationSessionProjectLinks.linkKind, SESSION_PROJECT_LINK_REFERENCE),
+    ));
+    return c.json({ sessionId: access.session.id, projectId });
   });
 
   router.delete('/:id', async (c) => {
@@ -1872,7 +1937,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       eventType: 'session.duplicated',
       eventPayload: { sourceSessionId: access.session.id },
       viewport: access.session.viewport,
-      columns: { description: access.session.description, folder: access.session.folder },
+      columns: { description: access.session.description, folderId: access.session.folderId },
     }).map((write) => write.statement);
     if (timeline.length) statements.push(db.insert(creationSessionTimeline).values(timeline.map((message) => ({ sessionId, clientMessageId: message.clientMessageId, messageRole: message.messageRole, body: message.body, metadata: message.metadata, createdBy: userId }))));
     const projectLinks = await db.select({ projectId: creationSessionProjectLinks.projectId }).from(creationSessionProjectLinks).where(and(eq(creationSessionProjectLinks.sessionId, access.session.id), copyableLinkFilter));
@@ -1977,7 +2042,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       eventPayload: { parentSessionId: access.session.id, baseRevision: access.session.canvasRevision },
       viewport: access.session.viewport,
       columns: {
-        description: access.session.description, folder: access.session.folder,
+        description: access.session.description, folderId: access.session.folderId,
         branchParentSessionId: access.session.id, branchBaseRevision: access.session.canvasRevision,
       },
     }).map((write) => write.statement);

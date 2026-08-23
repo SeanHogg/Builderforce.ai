@@ -74,7 +74,7 @@ export function ReportErrorProvider({ children }: { children: React.ReactNode })
   return (
     <ReportErrorContext.Provider value={value}>
       {children}
-      <SlideOutPanel open={open} onClose={close} title={t('title')} width="min(460px, 96vw)">
+      <SlideOutPanel open={open} onClose={close} title={t('title')} width="sheet" widthStorageKey="report-error">
         <form onSubmit={submit} style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
           <p style={{ margin: 0, fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)', lineHeight: 1.5 }}>{t('intro')}</p>
 

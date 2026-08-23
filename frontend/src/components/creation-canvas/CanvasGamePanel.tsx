@@ -102,7 +102,7 @@ export function CanvasGamePanel({ open, onClose, projectId, game, onNotice }: Ca
     [published],
   );
 
-  return <SlideOutPanel open={open} onClose={onClose} title={t('title')} width="min(620px, 96vw)">
+  return <SlideOutPanel open={open} onClose={onClose} title={t('title')} width="wide" widthStorageKey="canvas-game">
     <div className={styles.gamePanel}>
       {projectId == null && <p className={styles.gamePanelNotice}>{t('needProject')}</p>}
       {!game && <p className={styles.gamePanelNotice}>{t('needGame')}</p>}

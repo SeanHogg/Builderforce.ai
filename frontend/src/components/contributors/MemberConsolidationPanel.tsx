@@ -101,7 +101,7 @@ export function MemberConsolidationPanel({
   const survivorName = matchedContributors.find((x) => x.contributor.id === survivorId)?.contributor.displayName ?? '';
 
   return (
-    <SlideOutPanel open={open} onClose={onClose} title={t('title')}>
+    <SlideOutPanel open={open} onClose={onClose} title={t('title')} widthStorageKey="member-consolidation">
       <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
         {error && <div style={{ ...sectionStyle, borderColor: 'var(--danger)', color: 'var(--danger)' }}>{error}</div>}
 

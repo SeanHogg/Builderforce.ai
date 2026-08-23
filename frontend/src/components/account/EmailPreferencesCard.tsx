@@ -265,7 +265,7 @@ export default function EmailPreferencesCard() {
 
       {/* Detail surface = SlideOutPanel, never a modal (modals are for terminal /
           destructive approvals only). */}
-      <SlideOutPanel open={detailOpen} onClose={() => setDetailOpen(false)} title={t('emailPrefs.whatWeSend')}>
+      <SlideOutPanel open={detailOpen} onClose={() => setDetailOpen(false)} title={t('emailPrefs.whatWeSend')} widthStorageKey="email-preferences">
         <div style={{ display: 'grid', gap: 20, fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
           <section>
             <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 6px' }}>

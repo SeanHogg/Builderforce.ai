@@ -52,6 +52,7 @@ export function DeliveryPanelProvider({ children }: { children: ReactNode }) {
         open={def != null}
         onClose={close}
         width={def?.width}
+        widthStorageKey="delivery-insights"
         title={def ? t(def.titleKey) : undefined}
         tabs={tabs}
         activeTabId={active ?? undefined}

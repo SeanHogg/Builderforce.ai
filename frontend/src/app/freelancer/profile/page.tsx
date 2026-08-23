@@ -374,7 +374,7 @@ export default function FreelancerProfilePage() {
 
       {/* Preview: exactly what employers see, rendered from unsaved editor state. */}
       {previewProfile && (
-        <SlideOutPanel open={previewOpen} onClose={() => setPreviewOpen(false)} title={t('profile.previewTitle')} width="min(680px, 96vw)">
+        <SlideOutPanel open={previewOpen} onClose={() => setPreviewOpen(false)} title={t('profile.previewTitle')} width="wide" widthStorageKey="freelancer-profile-preview">
           <div style={{ padding: 20 }}>
             <TalentProfileView profile={previewProfile} resumeEmptyNote={t('resume.empty')} />
           </div>

@@ -56,7 +56,8 @@ export function LegalHistoryDrawer({ context, onClose }: LegalHistoryDrawerProps
       open={!!context}
       onClose={onClose}
       title={`${t('legal.history.title')} · ${label}`}
-      width="min(760px, 96vw)"
+      width="wide"
+      widthStorageKey="legal-history"
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         {loading && <div className="text-muted" style={{ fontSize: 13 }}>{t('legal.history.loading')}</div>}

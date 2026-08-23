@@ -67,7 +67,7 @@ export function OnboardingProgressPill() {
         {t('label', { pct })}
       </button>
 
-      <SlideOutPanel open={open} onClose={() => setOpen(false)} title={t('panelTitle')} width="min(440px, 96vw)">
+      <SlideOutPanel open={open} onClose={() => setOpen(false)} title={t('panelTitle')} width="sheet" widthStorageKey="onboarding-progress">
         <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>

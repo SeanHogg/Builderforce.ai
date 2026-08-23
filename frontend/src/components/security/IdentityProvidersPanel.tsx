@@ -538,6 +538,7 @@ export default function IdentityProvidersPanel() {
         open={ssoDraft != null}
         onClose={() => setSsoDraft(null)}
         title={ssoEditingId ? t('editConnection') : t('addConnection')}
+        widthStorageKey="identity-sso"
       >
         {ssoDraft && (
           <div style={{ padding: 16 }}>
@@ -602,6 +603,7 @@ export default function IdentityProvidersPanel() {
         open={ltiDraft != null}
         onClose={() => setLtiDraft(null)}
         title={ltiEditingId ? t('editRegistration') : t('addRegistration')}
+        widthStorageKey="identity-lti"
       >
         {ltiDraft && (
           <div style={{ padding: 16 }}>

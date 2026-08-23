@@ -42,7 +42,7 @@ export function VisitorJourneyDrawer({
   if (!visitorId) return null;
 
   return (
-    <SlideOutPanel open onClose={onClose} title={t('journeyTitle')} width="wide">
+    <SlideOutPanel open onClose={onClose} title={t('journeyTitle')} width="wide" widthStorageKey="visitor-journey">
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         <code
           style={{

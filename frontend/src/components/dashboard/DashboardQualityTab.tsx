@@ -69,7 +69,7 @@ export function DashboardQualityTab() {
         <QualityCollectorsManager key={refreshKey} />
       </RoleGate>
 
-      <SlideOutPanel open={open} onClose={() => setOpen(false)} title={t('quality.newCollector')}>
+      <SlideOutPanel open={open} onClose={() => setOpen(false)} title={t('quality.newCollector')} widthStorageKey="quality-new-collector">
         <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
           <p style={{ margin: 0, fontSize: 13, color: 'var(--text-secondary)' }}>{t('quality.createHint')}</p>
           <label style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13, color: 'var(--text-secondary)' }}>

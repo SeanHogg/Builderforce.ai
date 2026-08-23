@@ -605,7 +605,7 @@ export function GrowthClient() {
         </section>
       </div>
 
-      <SlideOutPanel open={composerOpen} onClose={() => setComposerOpen(false)} title={t('composer.title')}>
+      <SlideOutPanel open={composerOpen} onClose={() => setComposerOpen(false)} title={t('composer.title')} widthStorageKey="growth-composer">
         <div style={{ display: 'grid', gap: 12 }}>
           <label style={{ display: 'grid', gap: 4 }}>
             <span style={muted}>{t('campaigns.nameLabel')}</span>

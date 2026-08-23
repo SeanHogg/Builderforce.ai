@@ -408,6 +408,7 @@ export default function PolicyPacksPanel() {
         open={creating || openPack != null}
         onClose={closePanel}
         title={creating ? t('newPack') : openPack?.name}
+        widthStorageKey="policy-pack"
       >
         {packDraft && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>

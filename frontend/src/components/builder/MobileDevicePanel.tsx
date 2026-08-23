@@ -78,7 +78,7 @@ export function MobileDevicePanel({ open, onClose, projectId, onGoToPublish }: M
   }, [target, copy]);
 
   return (
-    <SlideOutPanel open={open} onClose={onClose} title={t('device.panelTitle')} width="min(420px, 96vw)">
+    <SlideOutPanel open={open} onClose={onClose} title={t('device.panelTitle')} width="sheet" widthStorageKey="mobile-device-preview">
       <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 18, color: 'var(--text-primary)' }}>
         <p style={{ margin: 0, fontSize: 13, lineHeight: 1.55, color: 'var(--text-secondary)' }}>
           {t('device.panelIntro')}

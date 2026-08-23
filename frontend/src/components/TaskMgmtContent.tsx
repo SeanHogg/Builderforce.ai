@@ -50,6 +50,7 @@ import { useBoardConfig } from './board/useBoardConfig';
 import { useBoardLiveRuns } from './board/useBoardLiveRuns';
 import { useRealtimeRoom } from '@/lib/embed/useRealtimeRoom';
 import { SlideOutPanel } from './SlideOutPanel';
+import { PanelWidthControl, resolvePanelWidth, usePanelWidth, type PanelWidth } from './panelWidthControl';
 import { ReleasePicker } from './ReleasePicker';
 import { DelayReasonTag } from './DelayReasonTag';
 import { MoveToBoardControl } from './MoveToBoardControl';
@@ -246,6 +247,7 @@ export function TaskMgmtContent({
   });
   const [saving, setSaving] = useState(false);
   const [drawerTask, setDrawerTask] = useState<Task | null>(null);
+  const { effectiveWidth: drawerWidth, showControl: showDrawerWidthControl, chooseWidth: chooseDrawerWidth } = usePanelWidth('task-detail', 'wide');
   const [dragTaskId, setDragTaskId] = useState<string>('');
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [bulkStatus, setBulkStatus] = useState<string>('');
@@ -1857,7 +1859,8 @@ export function TaskMgmtContent({
         open={showModal}
         onClose={() => setShowModal(false)}
         title={editTarget ? tTask('editTask') : tTask('newTask')}
-        width="min(560px, 96vw)"
+        width="wide"
+        widthStorageKey="task-form"
       >
         <div style={{ padding: 20 }}>
             <form onSubmit={handleSave} style={{ display: 'grid', gap: 14 }}>
@@ -2077,7 +2080,8 @@ export function TaskMgmtContent({
               top: 0,
               right: 0,
               bottom: 0,
-              width: 'min(864px, 96vw)',
+              width: resolvePanelWidth(drawerWidth),
+              maxWidth: '100%',
               borderLeft: '1px solid var(--border-subtle)',
               boxShadow: '-8px 0 24px rgba(0,0,0,0.2)',
               zIndex: 10003,
@@ -2161,6 +2165,9 @@ export function TaskMgmtContent({
                 </svg>
                 <span className="drawer-action-label">{tTask('lifecycleAction')}</span>
               </button>
+              )}
+              {showDrawerWidthControl && (
+                <PanelWidthControl value={drawerWidth as PanelWidth} onChange={chooseDrawerWidth} />
               )}
               {!drawerTask.restricted && (
               <button
@@ -2731,7 +2738,8 @@ export function TaskMgmtContent({
           open={prdOpen}
           onClose={() => setPrdOpen(false)}
           title={`PRD${effectiveProjectName ? ` · ${effectiveProjectName}` : ''}`}
-          width="min(720px, 96vw)"
+          width="wide"
+          widthStorageKey="task-prd"
         >
           <TaskPrdTab projectId={effectiveProjectId} />
         </SlideOutPanel>

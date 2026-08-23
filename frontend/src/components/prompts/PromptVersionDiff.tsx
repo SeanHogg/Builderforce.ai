@@ -68,7 +68,7 @@ export function PromptVersionDiff({ promptId, open, onClose }: PromptVersionDiff
   const stat = useMemo(() => diffStat(rows), [rows]);
 
   return (
-    <SlideOutPanel open={open} onClose={onClose} title={t('title')} width="min(760px, 96vw)">
+    <SlideOutPanel open={open} onClose={onClose} title={t('title')} width="wide" widthStorageKey="prompt-version-diff">
       <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
         {error && <div style={{ color: 'var(--danger)' }}>{error}</div>}
         {!versions && !error && <div style={{ color: 'var(--text-muted)' }}>{t('loading')}</div>}

@@ -90,7 +90,8 @@ export function EmulationLauncherProvider({ children }: { children: React.ReactN
         open={target != null}
         onClose={close}
         title={t('emulate.title')}
-        width="min(560px, 96vw)"
+        width="wide"
+        widthStorageKey="emulation-launcher"
       >
         {target && (
           <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>

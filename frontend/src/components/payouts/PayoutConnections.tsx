@@ -197,6 +197,7 @@ export function PayoutConnections({ returnTo, search = '', onChanged }: PayoutCo
         onClose={() => { setFormProvider(null); setDraft({}); }}
         title={formProvider ? t('connectTitle', { provider: formProvider.label }) : ''}
         crumb={t('crumb')}
+        widthStorageKey="payout-connect"
       >
         <form
           onSubmit={(event) => { event.preventDefault(); void submitFields(); }}

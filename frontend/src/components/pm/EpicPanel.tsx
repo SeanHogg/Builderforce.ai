@@ -102,7 +102,7 @@ export function EpicPanel({ open, epic, projectId, onClose, onSaved }: EpicPanel
   };
 
   return (
-    <SlideOutPanel open={open} onClose={onClose} title={isEdit ? t('editEpic') : t('newEpic')}>
+    <SlideOutPanel open={open} onClose={onClose} title={isEdit ? t('editEpic') : t('newEpic')} widthStorageKey="epic">
       <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
         {isEdit && (
           <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>{epic!.key}</div>

@@ -217,6 +217,7 @@ export function IntegrationsGallery({ search = '', viewMode = 'card' }: { search
           open={!!activeProvider}
           onClose={() => setActiveProvider(null)}
           title={activeMeta.label}
+          widthStorageKey="integration-config"
           tabs={[
             { id: 'credentials', label: t('panel.credentials') },
             { id: 'connections', label: t('panel.connections') },

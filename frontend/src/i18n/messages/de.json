@@ -15351,6 +15351,20 @@
     "emptyState": "Noch keine Roadmap-Elemente. Verwende „Element hinzufügen“, um eines zu erstellen.",
     "deleteItem": "Element löschen"
   },
+  "roadmapItemPanel": {
+    "editTitle": "Roadmap-Element bearbeiten",
+    "newTitle": "Neues Roadmap-Element",
+    "titleLabel": "Titel",
+    "titlePlaceholder": "Was wird geliefert?",
+    "titleRequired": "Titel ist erforderlich.",
+    "horizonLabel": "Horizont",
+    "statusLabel": "Status",
+    "themeLabel": "Thema",
+    "themePlaceholder": "Optionale Gruppierung",
+    "targetDateLabel": "Zieldatum",
+    "saveChanges": "Änderungen speichern",
+    "create": "Erstellen"
+  },
   "agentCapabilities": {
     "failedLoadAgents": "Agenten konnten nicht geladen werden",
     "failedAddAgent": "Agent konnte nicht hinzugefügt werden",

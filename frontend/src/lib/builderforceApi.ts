@@ -8998,7 +8998,11 @@ export interface CreationSessionSummary {
   id: string;
   title: string;
   description: string | null;
-  folder?: string | null;
+  folderId?: string | null;
+  folderName?: string | null;
+  /** The tied folder's own Project tie, if any — distinct from `projectIds`,
+   *  which is the session's own direct ties. */
+  folderProjectId?: number | null;
   status: 'active' | 'archived' | 'deleted';
   preview: { objectCount?: number; kinds?: string[]; objects?: Array<{ id: string; kind: string; x: number; y: number; title: string; status?: string; resourceType?: string; resourceId?: string }> } | null;
   revision: number;

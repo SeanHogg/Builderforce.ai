@@ -654,7 +654,7 @@ export function ModelsExplorer({ search, viewMode }: { search: string; viewMode:
       )}
 
       {/* Slide-out detail panel */}
-      <SlideOutPanel open={detail != null} onClose={() => setDetail(null)} title={detail?.name}>
+      <SlideOutPanel open={detail != null} onClose={() => setDetail(null)} title={detail?.name} widthStorageKey="marketplace-model-detail">
         {detail && <ModelDetail record={detail} />}
       </SlideOutPanel>
 
@@ -675,7 +675,8 @@ export function ModelsExplorer({ search, viewMode }: { search: string; viewMode:
         open={compareOpen && selectedModels.length >= 2}
         onClose={() => setCompareOpen(false)}
         title={t('compare.comparingCount', { count: selectedModels.length })}
-        width="min(720px, 96vw)"
+        width="wide"
+        widthStorageKey="marketplace-model-compare"
       >
         <CompareTable models={selectedModels} />
       </SlideOutPanel>

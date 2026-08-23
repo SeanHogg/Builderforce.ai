@@ -301,6 +301,7 @@ export default function GuestSessionsPanel() {
         open={!!openVisitor}
         onClose={() => setOpenVisitor(null)}
         title={t('drawerTitle')}
+        widthStorageKey="guest-session-detail"
         headerActions={openVisitor && (
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <GuestSessionCopyButton session={openVisitor} compact />

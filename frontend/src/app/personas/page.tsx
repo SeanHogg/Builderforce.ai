@@ -547,7 +547,7 @@ export default function PersonasPage() {
         </>
       )}
 
-      <SlideOutPanel open={createOpen} onClose={() => setCreateOpen(false)} title={t('newPersonaShort')} width="min(560px, 96vw)">
+      <SlideOutPanel open={createOpen} onClose={() => setCreateOpen(false)} title={t('newPersonaShort')} width="sheet" widthStorageKey="personas-new">
         <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div>
                 <label className="label">{t('formName')}</label>

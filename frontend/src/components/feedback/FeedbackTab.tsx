@@ -131,7 +131,7 @@ export function FeedbackTab() {
         }
       `}</style>
 
-      <SlideOutPanel open={open} onClose={close} title={t('form.title')} width="min(460px, 96vw)">
+      <SlideOutPanel open={open} onClose={close} title={t('form.title')} width="sheet" widthStorageKey="feedback-form">
         <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
           {done ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'flex-start' }}>

@@ -395,6 +395,7 @@ export function CeremonyHistoryPanel({ projectId }: { projectId: number }) {
       <SlideOutPanel
         open={!!openSession}
         onClose={() => setOpenId(null)}
+        widthStorageKey="ceremony-history-detail"
         title={openSession
           ? t('detailTitle', {
               kind: t(`kind.${openSession.kind}`),

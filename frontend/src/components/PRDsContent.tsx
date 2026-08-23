@@ -360,7 +360,8 @@ export function PRDsContent({
       <SlideOutPanel
         open={!!selectedSpec}
         onClose={() => setSelectedSpec(null)}
-        width="min(1100px, 92vw)"
+        width="full"
+        widthStorageKey="prds-detail"
         title={selectedSpec && (
           <div>
             <div style={{ fontWeight: 700, fontSize: 16 }}>{selectedSpec.goal}</div>

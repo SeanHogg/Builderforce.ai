@@ -20,6 +20,7 @@ import { useConfirm } from '@/components/ConfirmProvider';
 import PersonalitySummary from '@/components/PersonalitySummary';
 import PersonalityUsagePanel from '@/components/PersonalityUsagePanel';
 import { useAssignedRoles } from '@/lib/useAssignedRoles';
+import { PanelWidthControl, resolvePanelWidth, usePanelWidth, type PanelWidth } from '@/components/panelWidthControl';
 import {
   CloudAgentDetailsFields,
   CloudAgentRuntimeFields,
@@ -47,8 +48,8 @@ const BASE_TAB_IDS: CloudAgentPanelTab[] = ['details', 'runtime', 'personality',
 const OWNER_PERF_TAB_ID: CloudAgentPanelTab = 'performance';
 
 const panelOverlayStyle: React.CSSProperties = { position: 'fixed', inset: 0, zIndex: 9998 };
-const panelDrawerStyle: React.CSSProperties = {
-  position: 'fixed', top: 0, right: 0, bottom: 0, width: 'min(620px, 96vw)', maxWidth: '100%',
+const panelDrawerBaseStyle: React.CSSProperties = {
+  position: 'fixed', top: 0, right: 0, bottom: 0, maxWidth: '100%',
   borderLeft: '1px solid var(--border-subtle)', boxShadow: '-8px 0 24px rgba(0,0,0,0.2)',
   zIndex: 9999, display: 'flex', flexDirection: 'column', background: 'var(--bg-base)',
 };
@@ -112,6 +113,7 @@ export function CloudAgentSlideOutPanel({
   const [form, setForm] = useState<CloudAgentFormState>(() => formFromAgent(agent));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const { effectiveWidth, showControl: showWidthControl, chooseWidth } = usePanelWidth('cloud-agent', 'wide');
 
   // The workspace job-role(s) this agent is pinned to (Workforce → Roles). Shown
   // in the header so the panel surfaces the assignment, not just its identity.
@@ -229,7 +231,7 @@ export function CloudAgentSlideOutPanel({
   return (
     <>
       <div className="project-panel-overlay slide-panel-overlay" role="presentation" style={panelOverlayStyle} onClick={onClose} aria-hidden />
-      <div className="project-panel-drawer slide-panel-drawer" style={panelDrawerStyle} role="dialog" aria-label={t('ariaPanel')}>
+      <div className="project-panel-drawer slide-panel-drawer" style={{ ...panelDrawerBaseStyle, width: resolvePanelWidth(effectiveWidth) }} role="dialog" aria-label={t('ariaPanel')}>
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '16px 20px', borderBottom: '1px solid var(--border-subtle)', flexShrink: 0, flexWrap: 'wrap' }}>
           <button type="button" onClick={onClose} aria-label={t('ariaClose')} style={{ width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', background: 'var(--bg-base)', color: 'var(--text-secondary)', cursor: 'pointer' }}>
@@ -260,6 +262,9 @@ export function CloudAgentSlideOutPanel({
           {agent.published
             ? <span className="badge-green">{t('statusPublished')}</span>
             : <span style={{ fontSize: 'var(--font-size-eyebrow)', padding: '2px 8px', borderRadius: 'var(--radius-full)', background: 'var(--bg-elevated)', color: 'var(--muted)' }}>{t('statusDraft')}</span>}
+          {showWidthControl && (
+            <PanelWidthControl value={effectiveWidth as PanelWidth} onChange={chooseWidth} />
+          )}
           {canDeleteAgent(agent) && (
             <button type="button" onClick={remove} disabled={saving} style={{ ...btnSubtle, color: 'var(--error-text)' }}>{tc('delete')}</button>
           )}

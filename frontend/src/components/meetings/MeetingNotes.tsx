@@ -21,7 +21,7 @@ export function MeetingNotes({
   onClose: () => void;
 }) {
   return (
-    <SlideOutPanel open={open} onClose={onClose} title={title}>
+    <SlideOutPanel open={open} onClose={onClose} title={title} widthStorageKey="meeting-notes">
       <div style={{ padding: 20 }}>
         {/* Mounted only while open, so closing and reopening re-reads a meeting that
             may have been summarized in the meantime. */}

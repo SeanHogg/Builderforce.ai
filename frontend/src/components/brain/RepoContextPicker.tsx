@@ -85,7 +85,7 @@ export function RepoContextPicker({ sources, onPick, onClose }: {
   };
 
   return (
-    <SlideOutPanel open onClose={onClose} title={t('title')} width="min(560px, 96vw)">
+    <SlideOutPanel open onClose={onClose} title={t('title')} width="wide" widthStorageKey="repo-context-picker">
       <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '14px 20px', borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
           {sources.length > 1 && (

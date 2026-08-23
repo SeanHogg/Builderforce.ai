@@ -35,7 +35,7 @@ export function RateClientButton({ engagementId, clientName }: { engagementId: s
         
         <Icon source="★" size="1em" /> {t('rate')}
       </button>
-      <SlideOutPanel open={open} onClose={() => setOpen(false)} title={clientName ? t('titleNamed', { name: clientName }) : t('title')} width="min(420px, 96vw)">
+      <SlideOutPanel open={open} onClose={() => setOpen(false)} title={clientName ? t('titleNamed', { name: clientName }) : t('title')} width="sheet" widthStorageKey="rate-client">
         <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
           {done ? (
             <div style={{ color: 'rgba(34,197,94,0.95)', fontSize: 14, fontWeight: 600 }}>{t('thanks')} ✓</div>

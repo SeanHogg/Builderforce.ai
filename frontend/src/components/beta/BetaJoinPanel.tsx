@@ -95,6 +95,7 @@ export default function BetaJoinPanel({
         open={open}
         onClose={onClose}
         width="wide"
+        widthStorageKey="beta-join"
         crumb={t('crumb')}
         title={beta.title}
         zIndex={zIndex}

@@ -15351,6 +15351,20 @@
     "emptyState": "Aún no hay elementos en la hoja de ruta. Usa «Añadir elemento» para crear uno.",
     "deleteItem": "Eliminar elemento"
   },
+  "roadmapItemPanel": {
+    "editTitle": "Editar elemento de la hoja de ruta",
+    "newTitle": "Nuevo elemento de la hoja de ruta",
+    "titleLabel": "Título",
+    "titlePlaceholder": "¿Qué se entrega?",
+    "titleRequired": "El título es obligatorio.",
+    "horizonLabel": "Horizonte",
+    "statusLabel": "Estado",
+    "themeLabel": "Tema",
+    "themePlaceholder": "Agrupación opcional",
+    "targetDateLabel": "Fecha objetivo",
+    "saveChanges": "Guardar cambios",
+    "create": "Crear"
+  },
   "agentCapabilities": {
     "failedLoadAgents": "Error al cargar los agentes",
     "failedAddAgent": "Error al añadir el agente",

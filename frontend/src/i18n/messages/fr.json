@@ -15351,6 +15351,20 @@
     "emptyState": "Aucun élément de feuille de route pour l’instant. Utilisez « Ajouter un élément » pour en créer un.",
     "deleteItem": "Supprimer l’élément"
   },
+  "roadmapItemPanel": {
+    "editTitle": "Modifier l’élément de la feuille de route",
+    "newTitle": "Nouvel élément de la feuille de route",
+    "titleLabel": "Titre",
+    "titlePlaceholder": "Qu’est-ce qui est livré ?",
+    "titleRequired": "Le titre est obligatoire.",
+    "horizonLabel": "Horizon",
+    "statusLabel": "Statut",
+    "themeLabel": "Thème",
+    "themePlaceholder": "Regroupement facultatif",
+    "targetDateLabel": "Date cible",
+    "saveChanges": "Enregistrer les modifications",
+    "create": "Créer"
+  },
   "agentCapabilities": {
     "failedLoadAgents": "Échec du chargement des agents",
     "failedAddAgent": "Échec de l'ajout de l'agent",

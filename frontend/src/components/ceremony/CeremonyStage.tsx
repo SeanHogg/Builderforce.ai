@@ -744,7 +744,7 @@ function CeremonyStageInner({
       )}
 
       {/* Lightweight task detail */}
-      <SlideOutPanel open={!!drawerTask} onClose={() => setDrawerTask(null)} title={drawerTask?.title ?? ''}>
+      <SlideOutPanel open={!!drawerTask} onClose={() => setDrawerTask(null)} title={drawerTask?.title ?? ''} widthStorageKey="ceremony-task-detail">
         {drawerTask && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 16, fontSize: 13, color: 'var(--text-secondary)' }}>
             <div style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>{drawerTask.key}</div>
@@ -764,12 +764,12 @@ function CeremonyStageInner({
       </SlideOutPanel>
 
       {/* Scorecard (agile stats) for a clicked seat — power meter "expanded". */}
-      <SlideOutPanel open={!!scorecardMember} onClose={() => setScorecardMember(null)} title={scorecardMember ? t('scorecardTitle', { name: scorecardMember.name }) : ''}>
+      <SlideOutPanel open={!!scorecardMember} onClose={() => setScorecardMember(null)} title={scorecardMember ? t('scorecardTitle', { name: scorecardMember.name }) : ''} widthStorageKey="ceremony-scorecard">
         {scorecardMember && <ScorecardPanel member={scorecardMember} />}
       </SlideOutPanel>
 
       {/* Assigned work (briefcase) for a clicked seat. */}
-      <SlideOutPanel open={!!assignedMember} onClose={() => setAssignedMember(null)} title={assignedMember ? t('assignedTitle', { name: assignedMember.name }) : ''}>
+      <SlideOutPanel open={!!assignedMember} onClose={() => setAssignedMember(null)} title={assignedMember ? t('assignedTitle', { name: assignedMember.name }) : ''} widthStorageKey="ceremony-assigned-work">
         {assignedMember && (
           <AssignedWorkPanel
             member={assignedMember}

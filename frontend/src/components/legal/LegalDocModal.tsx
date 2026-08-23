@@ -38,7 +38,8 @@ export default function LegalDocModal({ type, legal, onClose, zIndex }: LegalDoc
     <SlideOutPanel
       open={type !== null}
       onClose={onClose}
-      width="min(920px, 96vw)"
+      width="wide"
+      widthStorageKey="legal-doc"
       title={`${doc?.title ?? modalTitle}${doc?.version ? ` · v${doc.version}` : ''}`}
       {...(zIndex != null ? { zIndex } : {})}
     >

@@ -125,7 +125,7 @@ export function DecompositionCleanupPanel({
     reason === 'not-a-work-item' ? t('reason.notAWorkItem') : t('reason.duplicateSibling');
 
   return (
-    <SlideOutPanel open={open} onClose={onClose} title={t('title')} width="wide">
+    <SlideOutPanel open={open} onClose={onClose} title={t('title')} width="wide" widthStorageKey="decomposition-cleanup">
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minWidth: 0 }}>
         <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
           {t('intro')}

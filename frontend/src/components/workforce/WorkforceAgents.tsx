@@ -753,7 +753,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
 
       {/* Invite a teammate slide-out */}
       {tenant && tenantToken && (
-        <SlideOutPanel open={inviteOpen} onClose={() => setInviteOpen(false)} title={tWf('inviteTeammate')}>
+        <SlideOutPanel open={inviteOpen} onClose={() => setInviteOpen(false)} title={tWf('inviteTeammate')} widthStorageKey="workforce-invite">
           <div style={{ padding: 20 }}>
             <InviteTeamMembers
               tenantId={String(tenant.id)}
@@ -819,7 +819,8 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
         open={dialogOpen}
         onClose={closeDialog}
         title={newHost ? tAdd('registeredTitle') : tAdd('title')}
-        width="min(480px, 96vw)"
+        width="sheet"
+        widthStorageKey="workforce-add-agent"
       >
         <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
           {newHost ? (

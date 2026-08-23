@@ -233,7 +233,7 @@ function DetailPanel({
   t: ReturnType<typeof useTranslations>; formatWhen: (atMs: number) => string;
 }) {
   return (
-    <SlideOutPanel open={entry != null} onClose={onClose} title={t('detailTitle')}>
+    <SlideOutPanel open={entry != null} onClose={onClose} title={t('detailTitle')} widthStorageKey="evermind-learning-detail">
       {entry && (
         <div style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>

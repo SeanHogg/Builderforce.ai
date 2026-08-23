@@ -52,6 +52,7 @@ export function DevexPanelProvider({ children }: { children: ReactNode }) {
         open={def != null}
         onClose={close}
         width={def?.width}
+        widthStorageKey="devex-insights"
         title={def ? t(def.titleKey) : undefined}
         tabs={tabs}
         activeTabId={active ?? undefined}

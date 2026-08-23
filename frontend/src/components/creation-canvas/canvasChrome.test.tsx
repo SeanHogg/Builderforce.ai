@@ -177,6 +177,12 @@ describe('the collapsed session bar', () => {
     const handoff = screen.getByTestId('canvas-handoff');
     expect(screen.getByTestId('canvas-chrome-slot')).toContainElement(handoff);
     expect(handoff).toHaveAttribute('data-hosted', 'header');
+    // The rest of the canvas chrome is UNMOVED. Only the handoff row was portalled, so
+    // the surface switcher and the session pill stay where they float on the board —
+    // asserted here because "I extracted the right subtree" is otherwise invisible until
+    // someone opens the app and finds the top of the canvas empty.
+    expect(screen.getByRole('group', { name: 'Canvas view' })).toBeInTheDocument();
+    expect(screen.getByTestId('canvas-session-title')).toBeInTheDocument();
     // Drawn ONCE. A portal that left a copy behind would be the two bars again.
     expect(screen.getAllByTestId('canvas-handoff')).toHaveLength(1);
 

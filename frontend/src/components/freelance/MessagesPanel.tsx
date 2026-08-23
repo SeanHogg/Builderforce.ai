@@ -165,7 +165,8 @@ export function MessagesPanel({ open, onClose, side, context }: {
           <span aria-hidden>‹</span>{conversation ? counterpartName(conversation) : t('title')}
         </button>
       ) : t('title')}
-      width="min(520px, 96vw)"
+      width="wide"
+      widthStorageKey="freelance-messages"
     >
       <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
         {error && <div style={{ color: 'var(--danger)', fontSize: 'var(--font-size-small)', padding: '8px 16px' }}>{error}</div>}

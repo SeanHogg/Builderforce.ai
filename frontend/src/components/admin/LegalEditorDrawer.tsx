@@ -102,7 +102,8 @@ export function LegalEditorDrawer({ context, onClose, onPublished }: LegalEditor
       open={!!context}
       onClose={onClose}
       title={`${mode === 'edit' ? t('common.edit') : t('legal.newVersion')} · ${label}`}
-      width="min(680px, 96vw)"
+      width="wide"
+      widthStorageKey="legal-editor"
       headerActions={
         <button
           type="button"

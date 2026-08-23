@@ -46,6 +46,7 @@ export function TwilioCanvasSetup({ active }: { active: boolean }) {
       title={t('title')}
       crumb={t('crumb')}
       width="sheet"
+      widthStorageKey="canvas-twilio-setup"
       zIndex={10010}
     >
       <section className={styles.guide} aria-label={t('guideTitle')}>

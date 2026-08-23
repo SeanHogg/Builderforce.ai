@@ -274,6 +274,7 @@ export function GuidedSetupPanel({ templateKey, templateName, open, onClose }: {
       // than competing with the step the person is answering.
       crumb={outputs ? t('installed') : t('progress', { done: progress.done, total: progress.total })}
       width="sheet"
+      widthStorageKey="guided-setup"
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 18, padding: 4 }}>
         {error && (

@@ -1302,7 +1302,7 @@ export function ProviderKeysSettings({
           {activeProvider && (() => {
             const p = PROVIDERS.find((item) => item.id === activeProvider)!;
             return (
-              <SlideOutPanel open onClose={() => setActiveProvider(null)} title={p.label}>
+              <SlideOutPanel open onClose={() => setActiveProvider(null)} title={p.label} widthStorageKey="provider-connection">
                 <div style={{ padding: 20 }}>
                   <ProviderConnectionCard
                     config={p}
@@ -1320,7 +1320,7 @@ export function ProviderKeysSettings({
             );
           })()}
 
-          <SlideOutPanel open={openRouterOpen} onClose={() => setOpenRouterOpen(false)} title="OpenRouter">
+          <SlideOutPanel open={openRouterOpen} onClose={() => setOpenRouterOpen(false)} title="OpenRouter" widthStorageKey="provider-openrouter">
             <div style={{ padding: 20 }}>
               <OpenRouterConnectionsPanel
                 connections={openRouterConnections}
@@ -1332,7 +1332,7 @@ export function ProviderKeysSettings({
             </div>
           </SlideOutPanel>
 
-          <SlideOutPanel open={priorityOpen} onClose={() => onPriorityClose?.()} title={t('precedence.title')}>
+          <SlideOutPanel open={priorityOpen} onClose={() => onPriorityClose?.()} title={t('precedence.title')} widthStorageKey="provider-precedence">
             <div style={{ padding: 20 }}>
               <PrecedencePanel order={order} labels={precedenceLabels} onReorder={persistOrder} t={t} />
             </div>

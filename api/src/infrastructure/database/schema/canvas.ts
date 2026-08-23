@@ -1399,6 +1399,26 @@ export const rehearsalSteps = pgTable('rehearsal_steps', {
 // Creation Sessions (migration 0388)
 // ---------------------------------------------------------------------------
 
+/** A folder for organizing Creation Sessions (migration 1118). Real entity
+ *  rather than a free-text label on the session: that was the same mistake
+ *  {@link creationSessionProjectLinks} already reasons about — a folder's
+ *  name and its optional Project tie are both facts about the FOLDER, and
+ *  storing them per-session would let sessions in the "same" folder disagree. */
+export const creationSessionFolders = pgTable('creation_session_folders', {
+  id:         uuid('id').primaryKey().defaultRandom(),
+  tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:  uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  name:       varchar('name', { length: 120 }).notNull(),
+  /** Every session filed into this folder is, by that fact, tied to this Project. */
+  projectId:  integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  createdBy:  varchar('created_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+  updatedAt:  timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  uqName: uniqueIndex('uq_creation_session_folders_name').on(t.tenantId, t.segmentId, sql`lower(${t.name})`),
+  byProject: index('idx_creation_session_folders_project').on(t.projectId, t.createdAt),
+}));
+
 /** A durable, tenant-owned infinite canvas. A Project is optional context, not
  *  the owner of the session; project associations live in the link table below. */
 export const creationSessions = pgTable('creation_sessions', {
@@ -1407,7 +1427,7 @@ export const creationSessions = pgTable('creation_sessions', {
   segmentId:      uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
   title:          varchar('title', { length: 255 }).notNull().default('Untitled session'),
   description:    text('description'),
-  folder:         varchar('folder', { length: 120 }),
+  folderId:       uuid('folder_id').references(() => creationSessionFolders.id, { onDelete: 'set null' }),
   status:         varchar('status', { length: 16 }).notNull().default('active'),
   /** What this canvas session is FOR (0409) — 'chat' (a conversation: read, reason,
    *  answer, author objects) or 'work' (an execution: turn the conclusion into a
@@ -1429,7 +1449,7 @@ export const creationSessions = pgTable('creation_sessions', {
   byTenantActivity: index('idx_creation_sessions_tenant_activity').on(t.tenantId, t.status, t.lastActivityAt),
   byCreator: index('idx_creation_sessions_creator').on(t.createdBy, t.lastActivityAt),
   bySegment: index('idx_creation_sessions_segment').on(t.tenantId, t.segmentId, t.lastActivityAt),
-  byFolder: index('idx_creation_sessions_tenant_folder').on(t.tenantId, t.segmentId, t.folder, t.lastActivityAt),
+  byFolder: index('idx_creation_sessions_tenant_folder').on(t.tenantId, t.segmentId, t.folderId, t.lastActivityAt),
 }));
 
 export const creationSessionObjects = pgTable('creation_session_objects', {

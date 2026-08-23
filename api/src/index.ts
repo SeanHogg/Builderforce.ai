@@ -146,6 +146,7 @@ import { createSpecRoutes }         from './presentation/routes/specRoutes';
 import { createWorkflowRoutes }     from './presentation/routes/workflowRoutes';
 import { createWorkflowDefinitionRoutes } from './presentation/routes/workflowDefinitionRoutes';
 import { createCreationSessionRoutes } from './presentation/routes/creationSessionRoutes';
+import { createCreationSessionFolderRoutes } from './application/creation/creationSessionFolderRouteService';
 import { createPublicResumeRoutes } from './presentation/routes/publicResumeRoutes';
 import { createPublicProspectRoutes } from './presentation/routes/publicProspectRoutes';
 import { createSellMotionRoutes } from './presentation/routes/sellMotionRoutes';
@@ -933,6 +934,9 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/specs',    createPrdRoutes(db));
   app.route('/api/workflows', createWorkflowRoutes(db));
   app.route('/api/workflow-definitions', createWorkflowDefinitionRoutes(db));
+  // Mounted before the broader '/api/creation-sessions' below so the more
+  // specific '/folders' path can't be shadowed by that router's own '/:id'.
+  app.route('/api/creation-sessions/folders', createCreationSessionFolderRoutes(db));
   app.route('/api/creation-sessions', createCreationSessionRoutes(db));
   app.route('/api/public/resumes', createPublicResumeRoutes((token) => resolvePublicResume(db, token)));
   // The seller's half of the sell motion: read a call, assemble a trust packet, provision

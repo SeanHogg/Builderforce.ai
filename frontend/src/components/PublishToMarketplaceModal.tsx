@@ -70,7 +70,7 @@ export function PublishToMarketplaceModal({
   };
 
   return (
-    <SlideOutPanel open onClose={onClose} title={t('publish.modalTitle')} width="min(560px, 96vw)">
+    <SlideOutPanel open onClose={onClose} title={t('publish.modalTitle')} width="sheet" widthStorageKey="marketplace-publish">
       <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
         <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>{t('publish.modalSubtitle')}</p>
 

@@ -57,7 +57,8 @@ export function BoardConfigPanel({ open, onClose, projectId, projectName, initia
       open={open}
       onClose={onClose}
       title={t('title')}
-      width="min(720px, 96vw)"
+      width="wide"
+      widthStorageKey="board-config"
       tabs={CONFIG_TABS.map((id) => ({ id, label: t(`tab.${id}`) }))}
       activeTabId={tab}
       onTabChange={(next) => setTab(next as ConfigTab)}

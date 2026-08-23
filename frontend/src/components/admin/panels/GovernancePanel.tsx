@@ -77,7 +77,8 @@ export default function GovernancePanel() {
         open={governanceEditId !== null}
         onClose={() => { setGovernanceEditId(null); setGovernanceEditContent(''); }}
         title={t('governance.editGovernance')}
-        width="min(640px, 96vw)"
+        width="wide"
+        widthStorageKey="governance-edit"
       >
         <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
           <p className="text-muted" style={{ fontSize: 12, margin: 0 }}>

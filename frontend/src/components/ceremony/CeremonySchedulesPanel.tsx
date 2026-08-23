@@ -292,7 +292,8 @@ export function CeremonySchedulesPanel({ projectId }: { projectId: number }) {
         open={panelOpen}
         onClose={() => setPanelOpen(false)}
         title={form.id ? t('editSchedule') : t('newSchedule')}
-        width="min(520px, 96vw)"
+        width="wide"
+        widthStorageKey="ceremony-schedule"
       >
         <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div>

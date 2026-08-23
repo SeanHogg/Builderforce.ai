@@ -124,7 +124,8 @@ export function BuilderProjectDetailsModal({
     <SlideOutPanel
       open
       onClose={onClose}
-      width="min(480px, 96vw)"
+      width="sheet"
+      widthStorageKey="builder-project-details"
       title={<span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><span aria-hidden><Icon source={m.icon} size={20} /></span> {t('ideProjectSettings')}</span>}
     >
       <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>

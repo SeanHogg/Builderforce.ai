@@ -190,7 +190,8 @@ export default function ArtifactAssigner({ artifactType, artifactSlug, artifactN
         open={open}
         onClose={() => setOpen(false)}
         title={t('title', { name: artifactName || artifactSlug })}
-        width="min(480px, 96vw)"
+        width="sheet"
+        widthStorageKey="artifact-assigner"
       >
         <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
           {error && <div style={{ color: 'var(--error-text)', fontSize: 'var(--font-size-small)' }}>{error}</div>}

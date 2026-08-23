@@ -250,7 +250,7 @@ export interface NewCreationSession {
   /** The owner's own camera, when it differs from the board's (a claim carries one). */
   memberViewport?: unknown;
   /**
-   * Extra columns on the `creation_sessions` row — `description`, `folder`, and
+   * Extra columns on the `creation_sessions` row — `description`, `folderId`, and
    * the branch lineage a fork records. Deliberately open: they are per-caller
    * FACTS about the new board, not variations on how it is written.
    */

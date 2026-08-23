@@ -191,7 +191,7 @@ export default function RfpContent() {
         )
       )}
 
-      <SlideOutPanel open={panelOpen} onClose={() => setPanelOpen(false)} title={t('newRequest')}>
+      <SlideOutPanel open={panelOpen} onClose={() => setPanelOpen(false)} title={t('newRequest')} widthStorageKey="rfp-new-request">
         <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
           <Field label={t('field.title')}>
             <input className="input" value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} placeholder={t('field.titlePlaceholder')} />
@@ -248,7 +248,7 @@ export default function RfpContent() {
         </div>
       </SlideOutPanel>
 
-      <SlideOutPanel open={brandOpen} onClose={() => setBrandOpen(false)} title={t('brand.yours')}>
+      <SlideOutPanel open={brandOpen} onClose={() => setBrandOpen(false)} title={t('brand.yours')} widthStorageKey="rfp-brand">
         <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
           {brand ? (
             <>

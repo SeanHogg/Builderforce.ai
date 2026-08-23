@@ -253,7 +253,7 @@ export function TeamsView() {
   return (
     <>
       {/* Create slide-out */}
-      <SlideOutPanel open={createOpen} onClose={() => setCreateOpen(false)} title={t('new')}>
+      <SlideOutPanel open={createOpen} onClose={() => setCreateOpen(false)} title={t('new')} widthStorageKey="teams-create">
         <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div>
             <label style={labelStyle}>{t('name')}</label>
@@ -293,6 +293,7 @@ export function TeamsView() {
         open={selectedId !== null}
         onClose={closeTeam}
         title={detail?.name ?? t('titleFallback')}
+        widthStorageKey="teams-manage"
         headerActions={
           detail ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

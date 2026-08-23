@@ -249,7 +249,7 @@ function CreateIncidentPanel({ t, tc, canManage, open, onClose, onCreated }: Sec
   };
 
   return (
-    <SlideOutPanel open={open} onClose={onClose} title={t('newIncident')}>
+    <SlideOutPanel open={open} onClose={onClose} title={t('newIncident')} widthStorageKey="incidents-new">
       <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
         <SectionError error={error} />
         <Field label={t('fieldTitle')}>
@@ -321,7 +321,7 @@ function IncidentDetailPanel({ t, tc, canManage, incidentId, onClose, onChanged 
   );
 
   return (
-    <SlideOutPanel open onClose={onClose} title={incident ? `${t('warRoomTitle')} — ${incident.title}` : t('warRoomTitle')} width="min(680px, 96vw)">
+    <SlideOutPanel open onClose={onClose} title={incident ? `${t('warRoomTitle')} — ${incident.title}` : t('warRoomTitle')} width="wide" widthStorageKey="incidents-war-room">
       <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
         {loading && <SectionLoading label={tc('loading')} />}
         <SectionError error={error} />
@@ -882,7 +882,7 @@ function OnCallSection({ t, tc, canManage }: SectionProps) {
         )
       )}
 
-      <SlideOutPanel open={createOpen} onClose={() => setCreateOpen(false)} title={t('newRotation')}>
+      <SlideOutPanel open={createOpen} onClose={() => setCreateOpen(false)} title={t('newRotation')} widthStorageKey="incidents-rotation">
         <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
           <Field label={t('rotationName')}>
             <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
@@ -1063,7 +1063,7 @@ function EscalationSection({ t, tc, canManage }: SectionProps) {
         )
       )}
 
-      <SlideOutPanel open={createOpen} onClose={() => setCreateOpen(false)} title={t('newPolicy')}>
+      <SlideOutPanel open={createOpen} onClose={() => setCreateOpen(false)} title={t('newPolicy')} widthStorageKey="incidents-policy">
         <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
           <Field label={t('policyName')}>
             <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
@@ -1166,7 +1166,7 @@ function ContactsSection({ t, tc, canManage }: SectionProps) {
         )
       )}
 
-      <SlideOutPanel open={panelOpen} onClose={() => setPanelOpen(false)} title={editing ? t('editContact') : t('newContact')}>
+      <SlideOutPanel open={panelOpen} onClose={() => setPanelOpen(false)} title={editing ? t('editContact') : t('newContact')} widthStorageKey="incidents-contact">
         <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
           <SectionError error={error} />
           <Field label={t('contactName')}>

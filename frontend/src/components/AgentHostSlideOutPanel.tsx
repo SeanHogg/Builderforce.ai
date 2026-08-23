@@ -19,6 +19,7 @@ import { AgentHostNodesContent } from './AgentHostNodesContent';
 import { useTranslations } from 'next-intl';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { useFormat } from "@/i18n/useFormat";
+import { PanelWidthControl, resolvePanelWidth, usePanelWidth, type PanelWidth } from '@/components/panelWidthControl';
 
 export type AgentHostPanelTab =
   | 'details'
@@ -75,12 +76,11 @@ const panelOverlayStyle: React.CSSProperties = {
   zIndex: 9998,
 };
 
-const panelDrawerStyle: React.CSSProperties = {
+const panelDrawerBaseStyle: React.CSSProperties = {
   position: 'fixed',
   top: 0,
   right: 0,
   bottom: 0,
-  width: 'min(620px, 96vw)',
   maxWidth: '100%',
   borderLeft: '1px solid var(--border-subtle)',
   boxShadow: '-8px 0 24px rgba(0,0,0,0.2)',
@@ -113,6 +113,7 @@ export function AgentHostSlideOutPanel({
   const [activeTab, setActiveTab] = useState<AgentHostPanelTab>(initialTab);
   const [savingDefault, setSavingDefault] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const { effectiveWidth, showControl: showWidthControl, chooseWidth } = usePanelWidth('agent-host', 'wide');
 
   useEffect(() => {
     if (open) setActiveTab(initialTab);
@@ -190,7 +191,7 @@ export function AgentHostSlideOutPanel({
       />
       <div
         className="project-panel-drawer slide-panel-drawer"
-        style={panelDrawerStyle}
+        style={{ ...panelDrawerBaseStyle, width: resolvePanelWidth(effectiveWidth) }}
         role="dialog"
         aria-label={t('dialogAriaLabel')}
       >
@@ -301,6 +302,9 @@ export function AgentHostSlideOutPanel({
                 {savingDefault ? t('setting') : t('setAsDefault')}
               </button>
             ))}
+          {showWidthControl && (
+            <PanelWidthControl value={effectiveWidth as PanelWidth} onChange={chooseWidth} />
+          )}
           <button
             type="button"
             onClick={handleDeregister}

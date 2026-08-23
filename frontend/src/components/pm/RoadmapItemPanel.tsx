@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { Select } from '@/components/Select';
 import type { TrackerRow } from '@/lib/builderforceApi';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
@@ -27,6 +28,8 @@ const fieldStyle: React.CSSProperties = {
 };
 
 export function RoadmapItemPanel({ open, item, projectId, onClose, onSaved }: RoadmapItemPanelProps) {
+  const t = useTranslations('roadmapItemPanel');
+  const tc = useTranslations('common');
   const isEdit = item != null;
   const [title, setTitle] = useState(item ? rstr(item, 'title') : '');
   const [horizon, setHorizon] = useState(item ? rstr(item, 'horizon') || 'now' : 'now');
@@ -37,7 +40,7 @@ export function RoadmapItemPanel({ open, item, projectId, onClose, onSaved }: Ro
   const [error, setError] = useState<string | null>(null);
 
   const save = async () => {
-    if (!title.trim()) { setError('Title is required.'); return; }
+    if (!title.trim()) { setError(t('titleRequired')); return; }
     setBusy(true);
     setError(null);
     const body: Record<string, unknown> = {
@@ -60,40 +63,40 @@ export function RoadmapItemPanel({ open, item, projectId, onClose, onSaved }: Ro
   };
 
   return (
-    <SlideOutPanel open={open} onClose={onClose} title={isEdit ? 'Edit roadmap item' : 'New roadmap item'}>
+    <SlideOutPanel open={open} onClose={onClose} title={isEdit ? t('editTitle') : t('newTitle')} widthStorageKey="roadmap-item">
       <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
         <div>
-          <label style={labelStyle} htmlFor="rm-title">Title</label>
-          <input id="rm-title" value={title} onChange={(e) => setTitle(e.target.value)} style={fieldStyle} placeholder="What ships?" />
+          <label style={labelStyle} htmlFor="rm-title">{t('titleLabel')}</label>
+          <input id="rm-title" value={title} onChange={(e) => setTitle(e.target.value)} style={fieldStyle} placeholder={t('titlePlaceholder')} />
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           <div>
-            <label style={labelStyle} htmlFor="rm-horizon">Horizon</label>
+            <label style={labelStyle} htmlFor="rm-horizon">{t('horizonLabel')}</label>
             <Select id="rm-horizon" value={horizon} onChange={(e) => setHorizon(e.target.value)} style={fieldStyle}>
               {ROADMAP_HORIZONS.map((h) => <option key={h.key} value={h.key}>{h.label}</option>)}
             </Select>
           </div>
           <div>
-            <label style={labelStyle} htmlFor="rm-status">Status</label>
+            <label style={labelStyle} htmlFor="rm-status">{t('statusLabel')}</label>
             <Select id="rm-status" value={status} onChange={(e) => setStatus(e.target.value)} style={fieldStyle}>
               {ROADMAP_STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
             </Select>
           </div>
         </div>
         <div>
-          <label style={labelStyle} htmlFor="rm-theme">Theme</label>
-          <input id="rm-theme" value={theme} onChange={(e) => setTheme(e.target.value)} style={fieldStyle} placeholder="Optional grouping" />
+          <label style={labelStyle} htmlFor="rm-theme">{t('themeLabel')}</label>
+          <input id="rm-theme" value={theme} onChange={(e) => setTheme(e.target.value)} style={fieldStyle} placeholder={t('themePlaceholder')} />
         </div>
         <div>
-          <label style={labelStyle} htmlFor="rm-target">Target date</label>
+          <label style={labelStyle} htmlFor="rm-target">{t('targetDateLabel')}</label>
           <input id="rm-target" type="date" value={targetDate} onChange={(e) => setTargetDate(e.target.value)} style={fieldStyle} />
         </div>
         {error && <div style={{ color: 'var(--danger)', fontSize: 13 }}>{error}</div>}
         <div style={{ display: 'flex', gap: 8 }}>
           <button type="button" onClick={save} disabled={busy} style={{ padding: '8px 18px', borderRadius: 'var(--radius-sm)', border: 'none', background: 'var(--coral-bright)', color: 'var(--text-on-accent)', fontWeight: 600, cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1 }}>
-            {isEdit ? 'Save changes' : 'Create'}
+            {isEdit ? t('saveChanges') : t('create')}
           </button>
-          <button type="button" onClick={onClose} style={{ padding: '8px 18px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer' }}>Cancel</button>
+          <button type="button" onClick={onClose} style={{ padding: '8px 18px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer' }}>{tc('cancel')}</button>
         </div>
       </div>
     </SlideOutPanel>

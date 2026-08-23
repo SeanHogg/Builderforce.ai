@@ -266,7 +266,7 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }} data-tour="demo-board">
       {/* New Project panel */}
-      <SlideOutPanel open={showForm} onClose={() => setShowForm(false)} title={t('newProjectTitle')} width="min(480px, 96vw)">
+      <SlideOutPanel open={showForm} onClose={() => setShowForm(false)} title={t('newProjectTitle')} width="sheet" widthStorageKey="projects-new">
         <form onSubmit={handleCreate} style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div>
             <label className="block text-sm mb-1" style={{ color: 'var(--text-secondary)' }}>

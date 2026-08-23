@@ -27,7 +27,7 @@ export function EmbedConsentModal({ version, onAgree, onCancel }: Props) {
   const t = useTranslations('embedConsent');
   const tc = useTranslations('common');
   return (
-    <SlideOutPanel open onClose={onCancel} title={t('title')} width="min(560px, 96vw)">
+    <SlideOutPanel open onClose={onCancel} title={t('title')} width="sheet" widthStorageKey="embed-consent">
       <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
         <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
           <p style={{ marginTop: 0 }}>

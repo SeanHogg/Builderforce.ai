@@ -107,7 +107,7 @@ export default function WhatsNewPanel({ open, onClose }: { open: boolean; onClos
 
   return (
     <>
-      <SlideOutPanel open={open} onClose={onClose} title={t('title')} width="wide">
+      <SlideOutPanel open={open} onClose={onClose} title={t('title')} width="wide" widthStorageKey="whats-new">
         <div className={styles.catalog}>
           <div className={styles.intro}>
             <span className="ui-eyebrow">{t('eyebrow')}</span>

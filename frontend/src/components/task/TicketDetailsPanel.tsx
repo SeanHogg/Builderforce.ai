@@ -45,7 +45,7 @@ export function TicketDetailsPanel({ taskId, onClose }: TicketDetailsPanelProps)
   ] : [];
 
   return (
-    <SlideOutPanel open={taskId != null} onClose={onClose} title={task ? `${task.key} · ${task.title}` : 'Ticket details'}>
+    <SlideOutPanel open={taskId != null} onClose={onClose} title={task ? `${task.key} · ${task.title}` : 'Ticket details'} widthStorageKey="ticket-details">
       <div style={{ padding: 20 }}>
         {loading && <div className="text-muted">Loading ticket...</div>}
         {error && (

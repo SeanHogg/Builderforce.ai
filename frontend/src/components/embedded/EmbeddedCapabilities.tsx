@@ -179,7 +179,7 @@ export function EmbeddedCapabilities() {
 
     {tab === 'surfaces' && <EmbedIntegrationSettings />}
 
-    {pending && <SlideOutPanel open onClose={() => setPending(null)} title={t('consent.enableTitle', { feature: t(`features.${pending}.name`) })} width="min(560px, 96vw)">
+    {pending && <SlideOutPanel open onClose={() => setPending(null)} title={t('consent.enableTitle', { feature: t(`features.${pending}.name`) })} width="sheet" widthStorageKey="embedded-consent">
       <div className={styles.consentBody}><p>{t(`features.${pending}.consent`)}</p><p>{t('consent.auditNotice', { version: config?.customerConsentRequiredVersion ?? 1 })}</p><div className={styles.consentActions}><button type="button" className={styles.secondary} onClick={() => setPending(null)}>{t('cancel')}</button><button type="button" className={styles.primary} onClick={() => void setFeature(pending, true, true)}>{t('consent.agree')}</button></div></div>
     </SlideOutPanel>}
   </div>;

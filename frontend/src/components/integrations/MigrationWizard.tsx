@@ -202,7 +202,8 @@ export function MigrationWizard({ open, onClose, provider, providerLabel, creden
       open={open}
       onClose={close}
       title={t('migration.title', { provider: providerLabel })}
-      width="min(820px, 98vw)"
+      width="wide"
+      widthStorageKey="integration-migration"
       side={side}
       tabs={tabs}
       activeTabId={step}

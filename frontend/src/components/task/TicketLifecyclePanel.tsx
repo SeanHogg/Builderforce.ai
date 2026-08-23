@@ -242,7 +242,8 @@ export function TicketLifecyclePanel({ taskId, onClose }: TicketLifecyclePanelPr
       open={taskId != null}
       onClose={onClose}
       zIndex={DRAWER_STACK_BASE}
-      width="min(720px, 96vw)"
+      width="wide"
+      widthStorageKey="ticket-lifecycle"
       title={data ? `${data.key} · ${t('title')}` : t('title')}
     >
       <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
