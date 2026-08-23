@@ -3,6 +3,7 @@ import { describe, expect, it, vi, afterEach } from 'vitest';
 import {
   configureCaughtErrorReporter,
   resetCaughtErrorReporterForTests,
+  type CaughtErrorSink,
 } from './caughtErrorReporter';
 import { createDurableErrorReporter } from './durableErrorReporter';
 
@@ -14,7 +15,7 @@ afterEach(() => {
 describe('createDurableErrorReporter', () => {
   it('delivers through the DO host waitUntil, which a bare report inside a DO cannot', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    const sink = vi.fn(async () => undefined);
+    const sink = vi.fn<CaughtErrorSink>(async () => undefined);
     configureCaughtErrorReporter(sink);
 
     const pending: Promise<unknown>[] = [];
@@ -45,7 +46,7 @@ describe('createDurableErrorReporter', () => {
 
   it('stamps the bound source on every call site', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    const sink = vi.fn(async () => undefined);
+    const sink = vi.fn<CaughtErrorSink>(async () => undefined);
     configureCaughtErrorReporter(sink);
 
     const pending: Promise<unknown>[] = [];
