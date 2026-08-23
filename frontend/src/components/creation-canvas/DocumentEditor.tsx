@@ -50,6 +50,12 @@ import {
  * ends without a blur — a closed tab, a dragged card — still keeps the edit. */
 const AUTOSAVE_MS = 1200;
 
+/** `<input type="color">` accepts only a literal `#rrggbb`, never `var()` — the
+ * swatch states this until the author picks a colour of their own, which is then
+ * persisted as their value (see `DRAWING_FALLBACK_HEX` in `CreationCanvas.tsx`,
+ * the same consumer-can't-read-a-token exemption). */
+const TEXT_COLOR_FALLBACK_HEX = '#111827';
+
 /** Inline marks the browser's own editing commands produce, and which
  * `richText` reads back — emphasis as markdown, underline as an attribute span. */
 const INLINE_COMMANDS = [
@@ -390,7 +396,7 @@ export function DocumentEditor({ markdown, label, scale = 'card', onCommit }: Do
           className={styles.docColorInput}
           aria-label={t('textColor')}
           title={t('textColor')}
-          defaultValue={getComputedStyle(document.documentElement).getPropertyValue('--text-primary').trim() || '#111827'}
+          defaultValue={TEXT_COLOR_FALLBACK_HEX}
           onMouseDown={(event) => event.stopPropagation()}
           onChange={(event) => applyMarks({ color: event.target.value }, event.target.value)}
         />

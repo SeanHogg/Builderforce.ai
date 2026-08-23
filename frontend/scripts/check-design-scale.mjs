@@ -264,6 +264,10 @@ const COLOUR_EXEMPT = [
   // of the default stroke token until the author picks a colour of their own —
   // which we then persist as THEIR value. One constant, `DRAWING_FALLBACK_HEX`.
   /^components\/creation-canvas\/CreationCanvas\.tsx$/,
+  // The document editor's text-colour swatch, on the same grounds: one named
+  // constant, `TEXT_COLOR_FALLBACK_HEX`, until the author picks a colour of
+  // their own, which is then persisted as theirs.
+  /^components\/creation-canvas\/DocumentEditor\.tsx$/,
   // Third-party BRAND marks. WhatsApp green is WhatsApp's; it does not flip
   // because the viewer picked light mode.
   /^app\/agents\/integrations\/page\.tsx$/,

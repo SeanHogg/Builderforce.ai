@@ -45,7 +45,7 @@ const gutterButtonStyle: CSSProperties = {
   background: 'var(--surface-2)',
   color: 'var(--text-muted)',
   cursor: 'pointer',
-  fontSize: 11,
+  fontSize: 'var(--font-size-eyebrow)',
   lineHeight: 1,
   display: 'flex',
   alignItems: 'center',
@@ -69,7 +69,7 @@ function BlockCursorRail({ peers }: { peers: readonly BlockPeer[] }) {
         top: 0,
         bottom: 0,
         width: 3,
-        borderRadius: 2,
+        borderRadius: 'var(--radius-sm)',
         background: peers[0]!.color,
       }}
       title={peers.map((peer) => peer.name).join(', ')}
