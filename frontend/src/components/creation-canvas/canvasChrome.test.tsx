@@ -14,6 +14,7 @@ import {
   readCanvasBarCollapsed,
   writeCanvasBarCollapsed,
 } from '@/lib/canvasChrome';
+import { CanvasChromeSlotProvider, CanvasChromeSlotTarget } from '@/lib/canvas/CanvasChromeSlot';
 import { CreationCanvas } from './CreationCanvas';
 
 /**
@@ -153,6 +154,50 @@ describe('the collapsed session bar', () => {
     // The roster survives INSIDE the command bar — the element the collapse acts on —
     // which is the whole reason `canvasChrome.ts` places it there.
     expect(within(screen.getByTestId('canvas-command-bar')).getByLabelText('Active collaborators')).toBe(roster);
+  });
+
+  /**
+   * ── THE ROW LIVES IN THE HEADER ────────────────────────────────────────────────
+   * The canvas used to float its own card in the top-right corner, fourteen pixels
+   * under an application header that ran the full width of the window — two bars of
+   * controls in one corner, which the operator read (correctly) as one thing drawn
+   * twice. The row is portalled into the header's slot instead.
+   *
+   * Asserted through the DOM rather than through a flag, because the whole claim is
+   * about WHERE the node ends up.
+   */
+  it('hands its doors-out row to the header when the shell offers a slot', () => {
+    render(
+      <CanvasChromeSlotProvider>
+        <header><CanvasChromeSlotTarget className="canvas-chrome-slot" /></header>
+        <CreationCanvas sessionId="chrome-slot-test" persistence="local" />
+      </CanvasChromeSlotProvider>,
+    );
+
+    const handoff = screen.getByTestId('canvas-handoff');
+    expect(screen.getByTestId('canvas-chrome-slot')).toContainElement(handoff);
+    expect(handoff).toHaveAttribute('data-hosted', 'header');
+    // Drawn ONCE. A portal that left a copy behind would be the two bars again.
+    expect(screen.getAllByTestId('canvas-handoff')).toHaveLength(1);
+
+    // …and it still WORKS from up there: the share panel is a child of the row, so it
+    // anchors to the button that opened it wherever that button was drawn.
+    fireEvent.click(within(handoff).getByRole('button', { name: 'Invite' }));
+    expect(within(handoff).getByRole('dialog', { name: 'Invite collaborators' })).toBeInTheDocument();
+  });
+
+  /**
+   * The fallback is not a nicety — the VS Code webview, the `/embed` tree and every
+   * component test render the canvas with no header above it. A surface must not lose
+   * its only route to Invite and Publish by having nowhere to consolidate into.
+   */
+  it('keeps the row in its own corner on a surface that offers no header', () => {
+    render(<CreationCanvas sessionId="chrome-slot-fallback-test" persistence="local" />);
+
+    const handoff = screen.getByTestId('canvas-handoff');
+    expect(handoff).toHaveAttribute('data-hosted', 'canvas');
+    expect(screen.queryByTestId('canvas-chrome-slot')).toBeNull();
+    expect(within(handoff).getByRole('button', { name: 'Invite' })).toBeInTheDocument();
   });
 
   /** A collapse with no way back is a one-way door, so the toggle is the one control

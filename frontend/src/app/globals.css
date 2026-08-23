@@ -4419,6 +4419,23 @@ select.input option {
 
 /* Right cluster */
 .mh-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; margin-left: auto; }
+
+/* ── THE BOARD'S CONTROLS, IN THE ONE BAR ─────────────────────────────────────────
+   The container both headers offer the canvas (`lib/canvas/CanvasChromeSlot.tsx`).
+   The canvas portals its Make it real / Invite / Publish / ••• row in here, so the
+   window carries ONE row of controls instead of the header plus a second card floating
+   fourteen pixels under it.
+
+   Deliberately almost styleless: the row brings its own layout and its own palette, and
+   everything this needs to say is "you are in a bar now". `:empty` is what keeps it
+   honest on every screen with no board on the stage — the headers hold no boolean about
+   whether a canvas exists, and this is why they do not need one. */
+.canvas-chrome-slot { display: flex; align-items: center; min-width: 0; }
+.canvas-chrome-slot:empty { display: none; }
+/* The sheets that drop out of this row (Invite, the ••• menu, Templates) are absolutely
+   positioned against it and hang BELOW the bar, so neither header may clip its overflow.
+   Both leave it at the initial `visible` today — this is the reason not to change that. */
+.topbar-right .canvas-chrome-slot, .mh-right .canvas-chrome-slot { margin-right: 2px; }
 .mh-signin {
   font-family: var(--font-display);
   font-size: 0.9rem;

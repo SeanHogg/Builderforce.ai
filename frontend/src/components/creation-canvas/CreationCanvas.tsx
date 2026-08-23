@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentType, type CSSProperties, type PointerEvent } from 'react';
+import { createPortal } from 'react-dom';
 import dynamic from 'next/dynamic';
 import {
   addEdge,
@@ -24,6 +25,7 @@ import type { Canvas3DMove, Canvas3DViewProps } from '@/components/canvas/Canvas
 import { Canvas3DControlsProvider, useCanvas3DControls } from '@/components/canvas/canvas3dControls';
 import { canvasSurfaceDefinition, readCanvasSurface, writeCanvasSurface, type CanvasSurfaceId } from '@/lib/canvasSurfaces';
 import { canvasChromeShows, readCanvasBarCollapsed, writeCanvasBarCollapsed } from '@/lib/canvasChrome';
+import { useCanvasChromeSlot } from '@/lib/canvas/CanvasChromeSlot';
 import { canvasApp } from '@/lib/canvasApp';
 import { isTypingTarget } from '@/lib/keyboardTarget';
 import { canvasNodeMessages, canvasNodeSettingsPanel, canvasPersonOrigin, isCanvasPersonKind, type CanvasNodePanelId } from '@/lib/canvasNodeAffordances';
@@ -1080,6 +1082,15 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * bar arriving expanded for one frame is the safe direction to be wrong in.
    */
   const [barCollapsed, setBarCollapsedState] = useState(false);
+  /**
+   * The header's container for this board's handoff row, when a header offered one.
+   *
+   * `null` in the VS Code webview, the embed and a bare component test — those keep
+   * the floating corner card, because a surface with no header has nowhere to
+   * consolidate INTO. See `lib/canvas/CanvasChromeSlot.tsx` for why the seam is a DOM
+   * slot rather than a context full of handlers.
+   */
+  const chromeSlot = useCanvasChromeSlot();
   useEffect(() => { setBarCollapsedState(readCanvasBarCollapsed()); }, []);
   /**
    * Where the prompt lives — floating, docked into Brain, or closed. Read in an effect
@@ -11491,58 +11502,32 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     };
   })();
 
-  return (
-    // Published to the whole shell, not just the board: the Brain surface's controls
-    // render in three places and each needs the same answer to "is there a board to move
-    // this conversation into?". One provider, read where it is needed.
-    <CanvasSurfaceProvider value={surface}>
-    {/* Same reasoning for the card-act runner: a card's action button is drawn deep in
-        the inspector, and handing it a callback would have meant one more entry in a
-        prop list that already carries fifty. Published once, read where it is needed. */}
-    <CardActProvider runner={runCardActOnObject}>
-    <div
-      ref={shellRef}
-      className={`${styles.canvasShell} app-full-height`}
-      data-fullscreen={fullscreen ? 'true' : 'false'}
-      style={{
-        // The dock owns one edge of the board; every other floating panel is pushed in
-        // by exactly its width so nothing can ever sit underneath it.
-        //
-        // Declared on the SHELL rather than on the board, which is where it used to live:
-        // the chrome now floats as a sibling of the board rather than inside it, so a
-        // reservation that only the board could see would have let the session pill and
-        // the command bar be the two things that DO sit underneath the dock.
-        '--brain-dock-left': `${brainDock.side === 'left' ? brainDockReserved : 0}px`,
-        '--brain-dock-right': `${brainDock.side === 'right' ? brainDockReserved : 0}px`,
-      } as CSSProperties}
-    >
-      {/* ── THE FLOATING CHROME ────────────────────────────────────────────────────
-          There is no chrome band any more. The board takes the whole shell and each
-          piece of chrome floats over it in the region `lib/canvasChrome.ts` gives it:
-          what this canvas IS (top left), how it is READ (top centre), how work LEAVES
-          it (top right), and what you DO to it (the one bar, bottom centre).
-
-          The band this replaced was 54px of full-width surface holding a title, a
-          switcher, seven buttons, a roster and a save button — mostly empty space
-          between things with nothing to do with each other, drawn ABOVE a hard line
-          that made the board start below the chrome rather than run behind it. */}
-      <CanvasSessionPill
-        title={title}
-        onTitleChange={setTitle}
-        onTitleCommit={() => { if (persistence === 'server') void creationSessionsApi.update(sessionId, { title }).then(() => setNotice(t('saved'))).catch(() => setNotice(t('titleSaveFailed'))); }}
-        notice={notice}
-        // A board that lives only on this device has no connection to report, and
-        //  is that absence rather than a fifth connection state — so it is
-        // narrowed away here rather than given a label the pill would have to invent.
-        realtimeState={realtimeState === 'local' ? undefined : realtimeState}
-      />
-      {/* Which surface this canvas is read through, ON the canvas rather than in a bar
-          across it. The phone's copy of this decision lives in the board's control
-          column; the stylesheet keeps exactly one on screen. */}
-      {canvasChromeShows('surfaces', barCollapsed) && <div className={`${styles.floatCard} ${styles.surfaceChips}`}>
-        <CanvasSurfaceSwitcher surface={surface} onChange={setSurface} variant="header" />
-      </div>}
-      <div ref={topChromeSpaceRef} className={`${styles.floatCard} ${styles.topRightCard}`} data-testid="canvas-handoff">
+  /**
+   * THE BOARD'S DOORS OUT — Make it real, Invite, Publish, and the overflow that holds
+   * everything a phone cannot fit.
+   *
+   * Built here rather than inline because it is rendered in one of TWO places: the
+   * header's slot when the shell offers one, and the canvas's own top-right corner when
+   * it does not. Same element, same state, same menus anchored to the same triggers —
+   * `createPortal` moves the DOM node and nothing else, which is why the share panel and
+   * the ••• sheet keep working without either of them knowing where they ended up.
+   *
+   * See `lib/canvas/CanvasChromeSlot.tsx` for why the corner emptied out.
+   */
+  const handoffChrome = (
+      <div
+        // Measured ONLY while it floats over the board. Hosted in the header it is not
+        // over the board at all, so the band the board reserves for top chrome collapses:
+        // `useChromeSpace` publishes 0px the moment this ref stops being handed the node,
+        // exactly as the composer's does when the prompt moves into the Brain panel.
+        ref={chromeSlot ? undefined : topChromeSpaceRef}
+        // The canvas owns its palette, so the row CARRIES it rather than inheriting the
+        // header's — the menus that hang off these buttons are canvas surfaces wherever
+        // the buttons happen to be drawn.
+        className={chromeSlot ? `${styles.canvasPalette} ${styles.headerChrome}` : `${styles.floatCard} ${styles.topRightCard}`}
+        data-testid="canvas-handoff"
+        data-hosted={chromeSlot ? 'header' : 'canvas'}
+      >
           {/* The two doors OUT of this canvas — bring a person in, or put the result
               where strangers can reach it. They are the only worded actions in the
               registry and they are here for the same reason they are worded: a glyph
@@ -11655,6 +11640,60 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             {!!framePresets.length && <><h4>{t('reusableFrames')}</h4>{framePresets.map((preset) => <button key={preset.id} onClick={() => addFramePreset(preset)}><b>{preset.name}</b><small><span>{t('privateCustomFrame')}</span> · {t('thisDevice')}</small></button>)}</>}
           </div>}
       </div>
+  );
+
+  return (
+    // Published to the whole shell, not just the board: the Brain surface's controls
+    // render in three places and each needs the same answer to "is there a board to move
+    // this conversation into?". One provider, read where it is needed.
+    <CanvasSurfaceProvider value={surface}>
+    {/* Same reasoning for the card-act runner: a card's action button is drawn deep in
+        the inspector, and handing it a callback would have meant one more entry in a
+        prop list that already carries fifty. Published once, read where it is needed. */}
+    <CardActProvider runner={runCardActOnObject}>
+    <div
+      ref={shellRef}
+      className={`${styles.canvasShell} app-full-height`}
+      data-fullscreen={fullscreen ? 'true' : 'false'}
+      style={{
+        // The dock owns one edge of the board; every other floating panel is pushed in
+        // by exactly its width so nothing can ever sit underneath it.
+        //
+        // Declared on the SHELL rather than on the board, which is where it used to live:
+        // the chrome now floats as a sibling of the board rather than inside it, so a
+        // reservation that only the board could see would have let the session pill and
+        // the command bar be the two things that DO sit underneath the dock.
+        '--brain-dock-left': `${brainDock.side === 'left' ? brainDockReserved : 0}px`,
+        '--brain-dock-right': `${brainDock.side === 'right' ? brainDockReserved : 0}px`,
+      } as CSSProperties}
+    >
+      {/* ── THE FLOATING CHROME ────────────────────────────────────────────────────
+          There is no chrome band any more. The board takes the whole shell and each
+          piece of chrome floats over it in the region `lib/canvasChrome.ts` gives it:
+          what this canvas IS (top left), how it is READ (top centre), how work LEAVES
+          it (top right), and what you DO to it (the one bar, bottom centre).
+
+          The band this replaced was 54px of full-width surface holding a title, a
+          switcher, seven buttons, a roster and a save button — mostly empty space
+          between things with nothing to do with each other, drawn ABOVE a hard line
+          that made the board start below the chrome rather than run behind it. */}
+      <CanvasSessionPill
+        title={title}
+        onTitleChange={setTitle}
+        onTitleCommit={() => { if (persistence === 'server') void creationSessionsApi.update(sessionId, { title }).then(() => setNotice(t('saved'))).catch(() => setNotice(t('titleSaveFailed'))); }}
+        notice={notice}
+        // A board that lives only on this device has no connection to report, and
+        //  is that absence rather than a fifth connection state — so it is
+        // narrowed away here rather than given a label the pill would have to invent.
+        realtimeState={realtimeState === 'local' ? undefined : realtimeState}
+      />
+      {/* Which surface this canvas is read through, ON the canvas rather than in a bar
+          across it. The phone's copy of this decision lives in the board's control
+          column; the stylesheet keeps exactly one on screen. */}
+      {canvasChromeShows('surfaces', barCollapsed) && <div className={`${styles.floatCard} ${styles.surfaceChips}`}>
+        <CanvasSurfaceSwitcher surface={surface} onChange={setSurface} variant="header" />
+      </div>}
+      {chromeSlot ? createPortal(handoffChrome, chromeSlot) : handoffChrome}
 
       {/* THE object panel — config, schedule, messages or persona short, or the object's
           whole inspector wide, from one shell anchored to one card.

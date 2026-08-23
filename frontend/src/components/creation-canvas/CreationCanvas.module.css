@@ -1,4 +1,10 @@
-.canvasShell {
+/* `.canvasPalette` is the SECOND selector on this block, never a copy of it.
+   The handoff row is portalled into the application header (see `CanvasChromeSlot`), so
+   it renders outside `.canvasShell` and would otherwise inherit the shell's tokens — a
+   canvas menu drawn in the shell's palette, which is the exact collapse the note below
+   describes. Two selectors, one definition: the row cannot drift from the board. */
+.canvasShell,
+.canvasPalette {
   /* The Canvas follows the shell's light-theme brand hierarchy: primary actions,
      focus treatments and object-picker glyphs are brand blue on paper. */
   --canvas-accent: var(--coral-bright);
@@ -226,6 +232,29 @@
    padding step past it, which would push it back to 46px and make the min-height above
    a floor the other two met and this one cleared. */
 .topRightCard { top:14px; right:calc(14px + var(--brain-dock-right, 0px)); gap:6px; padding:4px 6px; }
+
+/* ── THE SAME ROW, HOSTED IN THE HEADER ───────────────────────────────────────────
+   `.topRightCard` above is the FALLBACK now: the surfaces with no header of their own
+   (the VS Code webview, the embed, a bare component test) still float it in the corner.
+   Everywhere else the shell offers a slot and the row is portalled into it, which is
+   what stopped the window carrying two bars of controls fourteen pixels apart.
+
+   In the header it stops being a card. It has no border, no plate and no shadow of its
+   own — the header IS the surface, and a bordered card inside a bar is the doubled
+   chrome all over again, one level in. What it keeps is `position:relative`, because
+   the menus that hang off these buttons anchor with `right:0; top:42px` and that offset
+   has to resolve against the ROW rather than against whatever the header's own layout
+   happens to position. */
+.headerChrome { position:relative; display:flex; align-items:center; gap:6px; }
+/* Nothing on the stage ⇒ nothing here. Said with `:empty` rather than with a "is there
+   a board" boolean handed to the header, so the header never learns what a board is. */
+.headerChrome:empty { display:none; }
+/* The menus keep their own plate, and it must sit ABOVE the header's stacking context
+   rather than inside it — a sheet that opens behind the bar that spawned it is worse
+   than one that does not open. */
+.headerChrome > .moreMenu,
+.headerChrome > .shareMenu,
+.headerChrome > .templateMenu { z-index:60; }
 
 /* ── WHERE ANYTHING UNDER THE TOP CHROME STARTS ───────────────────────────────────
    The three cards on this line float at z-index 20. Everything that opens beneath them
@@ -2897,6 +2926,13 @@
      this correct for the next chrome as well. */
   .sessionActionCluster > [data-phone='menu'],
   .sessionActionSolo > [data-phone='menu'] { display:none; }
+  /* THE SAME DECLARATION, NOW THAT THE ROW IS IN THE HEADER. `phone:'menu'` has always
+     meant "on a phone this action lives in the ••• sheet", and the sheet already draws
+     every one of them (`.moreMenuPhoneOnly`). The corner card was the one chrome that
+     ignored the declaration and kept three worded buttons on a 360px screen; hosted in
+     a header that has already given up its nav and its CTAs, it cannot. What is left is
+     ••• — which is the route to all three, and the only one that fits. */
+  .headerChrome > [data-phone='menu'] { display:none; }
   /* An empty cluster still draws its gap, so it stands down as a whole. */
   .sessionActionCluster:not(:has([data-phone='bar'])),
   .sessionActionSolo:not(:has([data-phone='bar'])) { display:none; }
@@ -3280,7 +3316,8 @@
 /* The Canvas is a workspace, so its dark theme uses layered ink surfaces instead
    of the marketing site's near-black background. This keeps hierarchy visible
    without turning cards and controls into bright white islands. */
-:global(html:not([data-theme='light'])) .canvasShell {
+:global(html:not([data-theme='light'])) .canvasShell,
+:global(html:not([data-theme='light'])) .canvasPalette {
   /* Dark uses the brighter blue rung needed to carry on ink. */
   --canvas-accent:#3978f6;
   --canvas-board:#09111f;

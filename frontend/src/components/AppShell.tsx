@@ -20,6 +20,10 @@ import { ShellIndex } from './shell/ShellIndex';
 import { ShellPanel } from './shell/ShellPanel';
 import { TeamBar } from './team/TeamBar';
 import { useOptionalActiveCanvas } from '@/lib/canvas/ActiveCanvasContext';
+// The canvas draws its own handoff row INTO the header (see CanvasChromeSlot): the
+// provider has to sit above both the header that offers the container and the stage
+// that fills it, which is exactly this frame and nothing narrower.
+import { CanvasChromeSlotProvider } from '@/lib/canvas/CanvasChromeSlot';
 // A reference page whose title is DATA (a diagnostic, named by the API catalog)
 // tells the panel what to call it; the provider is the wire between them and has
 // to sit above BOTH the panel and the page it frames.
@@ -88,6 +92,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <ReferenceChromeProvider>
+    <CanvasChromeSlotProvider>
     <div className="app-frame">
       <EmulationBar />
       {/* The open beta on offer, if this person has not answered it yet. In flow
@@ -174,6 +179,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           here — see its own doc. */}
       <MobileBottomNav />
     </div>
+    </CanvasChromeSlotProvider>
     </ReferenceChromeProvider>
   );
 }

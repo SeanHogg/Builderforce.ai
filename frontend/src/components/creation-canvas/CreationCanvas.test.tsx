@@ -1210,10 +1210,12 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
     expect(build).toHaveAttribute('aria-expanded', 'false');
     expect(screen.queryByRole('button', { name: 'Workflow' })).not.toBeInTheDocument();
 
-    fireEvent.change(screen.getByRole('textbox', { name: 'Search object types…' }), { target: { value: 'Workflow' } });
-    expect(screen.getByRole('button', { name: 'Workflow' })).toBeInTheDocument();
+    // Searching for 'Workflow' should NOT find it: it is a LEGACY kind, filtered from
+    // all palette and available-objects views. The test pivots to 'Website' instead.
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search object types…' }), { target: { value: 'Website' } });
+    expect(screen.getByRole('button', { name: 'Website' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Clear search' }));
-    expect(screen.queryByRole('button', { name: 'Workflow' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Website' })).not.toBeInTheDocument();
     await waitFor(() => expect(localStorage.getItem('builderforce:create:palette-collapsed-groups')).toContain('Build'));
 
     first.unmount();
