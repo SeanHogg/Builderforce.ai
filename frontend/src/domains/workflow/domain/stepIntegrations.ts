@@ -2,7 +2,8 @@ import type { WorkflowNodeKind } from '@/lib/builderforceApi';
 
 /**
  * Integration registry — the catalog of MCP servers, LLM platforms, and
- * data-collection sources the builder palette exposes as droppable nodes.
+ * data-collection sources every step palette exposes as droppable steps — the standalone builder's and the
+ * Creation Canvas's object picker alike.
  *
  * Each integration is a *preset* over one of three generic node kinds:
  *   - `llm`     → call a model provider through the Builderforce gateway
@@ -10,7 +11,9 @@ import type { WorkflowNodeKind } from '@/lib/builderforceApi';
  *   - `trigger` → a data-collection / marketing entry point
  *
  * Keeping integrations here (data, not bespoke node kinds) keeps the contract
- * union small while the palette stays rich and searchable. The list is seeded
+ * union small while the palette stays rich and searchable. It sits beside
+ * `stepCatalog.ts` in the domain, and for the same reason: two presentation trees
+ * and the board compiler all read it. The list is seeded
  * here and expanded from the `mcp-integration-research` registry.
  */
 

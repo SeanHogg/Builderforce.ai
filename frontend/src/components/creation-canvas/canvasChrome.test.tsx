@@ -32,7 +32,7 @@ describe('the canvas chrome rule', () => {
   it('keeps every status slot and drops every control when folded', () => {
     // Expanded, everything is on screen — a collapse that changes nothing when off
     // would make the whole table unfalsifiable.
-    for (const slot of ['title', 'saveState', 'roster', 'surfaces', 'actions', 'handoff', 'surfaceControls', 'surfaceStatus', 'save'] as const) {
+    for (const slot of ['title', 'saveState', 'roster', 'surfaces', 'actions', 'handoff', 'surfaceControls', 'surfaceStatus'] as const) {
       expect(canvasChromeShows(slot, false)).toBe(true);
     }
 
@@ -47,7 +47,6 @@ describe('the canvas chrome rule', () => {
     expect(canvasChromeShows('actions', true)).toBe(false);
     expect(canvasChromeShows('handoff', true)).toBe(false);
     expect(canvasChromeShows('surfaceControls', true)).toBe(false);
-    expect(canvasChromeShows('save', true)).toBe(false);
   });
 
   /** The two halves of a runtime's contribution land on opposite sides on purpose: an
@@ -74,7 +73,7 @@ describe('the canvas chrome rule', () => {
   it('gives every slot exactly one floating region', () => {
     const placed = (['pill', 'chips', 'topRight', 'bar'] as const).flatMap((place) => canvasChromeSlotsIn(place));
     expect([...placed].sort()).toEqual(
-      ['actions', 'handoff', 'roster', 'saveState', 'surfaceControls', 'surfaceStatus', 'surfaces', 'save', 'title'].sort(),
+      ['actions', 'handoff', 'roster', 'saveState', 'surfaceControls', 'surfaceStatus', 'surfaces', 'title'].sort(),
     );
     // No slot in two regions.
     expect(new Set(placed).size).toBe(placed.length);
@@ -100,6 +99,19 @@ describe('the canvas chrome rule', () => {
   it('separates the two doors out of the canvas from the buttons that act on it', () => {
     expect(canvasChromePlace('handoff')).toBe('topRight');
     expect(canvasChromePlace('actions')).toBe('bar');
+  });
+
+  /**
+   * THE CANVAS DOES NOT OFFER TO SAVE. Keeping a local board means taking an account,
+   * and the header CTA already makes that offer — so a `save` slot here would be the
+   * second bar on one screen saying the same word, which is what this registry exists
+   * to prevent. `saveState` stays: reporting where the board lives is a FACT, and the
+   * fact is not the offer.
+   */
+  it('has no save slot, because the header is the one place that offers to keep the work', () => {
+    const every = (['pill', 'chips', 'topRight', 'bar'] as const).flatMap((place) => canvasChromeSlotsIn(place));
+    expect(every).not.toContain('save');
+    expect(every).toContain('saveState');
   });
 });
 

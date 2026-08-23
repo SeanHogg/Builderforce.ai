@@ -289,8 +289,36 @@ export function createWorkflowDefinitionRoutes(db: Db): Hono<HonoEnv> {
   router.post('/', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const segmentId = c.get('segmentId') ?? null;
-    const body = await c.req.json<{ name?: string; description?: string; definition?: unknown } & RunTargetInput>();
+    const body = await c.req.json<{
+      name?: string;
+      description?: string;
+      definition?: unknown;
+      /** The canvas's own two-value select ('builderforce' | 'campaign-strategist'). */
+      runTarget?: string;
+      /** The canvas's own gate ('autonomous' | 'required'). */
+      approvalMode?: string;
+    } & RunTargetInput>();
     if (!body.name || !body.name.trim()) return c.json({ error: 'name is required' }, 400);
+
+    // ── THE CANVAS'S AUTHORED RUN TARGET, ON THIS ROUTE TOO ────────────────────
+    // `/from-canvas` has always resolved the friendly two-value select; this route
+    // took only the stored columns. That was fine while the canvas compiled through
+    // `/from-canvas`, and stopped being fine when the board itself became the
+    // definition: a flow built from a canvas SECTION posts a whole graph here, and
+    // without this it landed with `runtime: 'host'` and no host — a definition that
+    // saves, shows as built, and refuses at run time with "choose a run target"
+    // pointing at a control the section does not have. Resolved through the same
+    // helper, so the two doors cannot name different agents for the same words.
+    let target = coerceRunTarget(
+      typeof body.runTarget === 'string' && body.runTarget
+        ? { ...body, runTargetRuntime: body.runTargetRuntime ?? 'cloud' }
+        : body,
+    );
+    if (typeof body.runTarget === 'string' && body.runTarget) {
+      const resolved = await resolveCanvasRunTarget(db, tenantId, body.runTarget);
+      if (!resolved.ok) return c.json({ error: resolved.error, code: 'workflow_run_target_unresolved' }, 400);
+      target = resolved.target;
+    }
 
     const row = await createWorkflowDefinition(db, c.env as Env, {
       tenantId,
@@ -299,7 +327,8 @@ export function createWorkflowDefinitionRoutes(db: Db): Hono<HonoEnv> {
       description: body.description ?? null,
       projectId: body.projectId ?? null,
       definition: coerceDefinition(body.definition),
-      target: coerceRunTarget(body),
+      target,
+      approvalMode: coerceApprovalMode(body.approvalMode),
       executionScope: body.executionScope ?? null,
     });
     return c.json(row, 201);
@@ -477,7 +506,14 @@ export function createWorkflowDefinitionRoutes(db: Db): Hono<HonoEnv> {
   router.patch('/:id', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
-    const body = await c.req.json<{ name?: string; description?: string; definition?: unknown } & RunTargetInput>();
+    const body = await c.req.json<{
+      name?: string;
+      description?: string;
+      definition?: unknown;
+      /** The canvas's own two-value select — see the create route. */
+      runTarget?: string;
+      approvalMode?: string;
+    } & RunTargetInput>();
 
     const [existing] = await db
       .select()
@@ -485,15 +521,24 @@ export function createWorkflowDefinitionRoutes(db: Db): Hono<HonoEnv> {
       .where(and(eq(workflowDefinitions.id, id), eq(workflowDefinitions.tenantId, tenantId)));
     if (!existing) return c.json({ error: 'Workflow definition not found' }, 404);
 
+    const canvasTarget = typeof body.runTarget === 'string' && body.runTarget ? body.runTarget : '';
     const runTargetTouched =
+      canvasTarget !== '' ||
       body.runTargetRuntime !== undefined ||
       body.runTargetAgentHostId !== undefined ||
       body.runTargetCloudAgentRef !== undefined;
-    const target = coerceRunTarget({
+    let target = coerceRunTarget({
       runTargetRuntime: body.runTargetRuntime ?? existing.runTargetRuntime,
       runTargetAgentHostId: body.runTargetAgentHostId ?? existing.runTargetAgentHostId,
       runTargetCloudAgentRef: body.runTargetCloudAgentRef ?? existing.runTargetCloudAgentRef,
     });
+    // A REBUILD from the canvas re-sends the section's authored target, so an edit to
+    // that control lands on the same definition rather than only on the first save.
+    if (canvasTarget) {
+      const resolved = await resolveCanvasRunTarget(db, tenantId, canvasTarget);
+      if (!resolved.ok) return c.json({ error: resolved.error, code: 'workflow_run_target_unresolved' }, 400);
+      target = resolved.target;
+    }
 
     await db
       .update(workflowDefinitions)
@@ -503,6 +548,7 @@ export function createWorkflowDefinitionRoutes(db: Db): Hono<HonoEnv> {
         ...(body.projectId !== undefined ? { projectId: body.projectId } : {}),
         ...(body.definition !== undefined ? { definition: JSON.stringify(coerceDefinition(body.definition)) } : {}),
         ...(runTargetTouched ? target : {}),
+        ...(body.approvalMode !== undefined ? { approvalMode: coerceApprovalMode(body.approvalMode) } : {}),
         // The project binding drives scope; an explicit executionScope only
         // applies when the binding itself isn't being changed.
         ...(body.projectId !== undefined || body.executionScope !== undefined

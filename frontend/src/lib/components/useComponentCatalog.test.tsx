@@ -6,6 +6,7 @@
 import { describe, it, expect } from 'vitest';
 import { renderHook } from '@testing-library/react';
 import { useComponentCatalog, useComponentLabel } from './useComponentCatalog';
+import type { ComponentMount } from './types';
 
 /**
  * REFERENTIAL STABILITY, WHICH IS A CORRECTNESS PROPERTY HERE AND NOT A
@@ -69,11 +70,17 @@ describe('useComponentCatalog', () => {
   });
 
   it('changes with the mount, so two mounts cannot share a cached answer', () => {
-    const { result, rerender } = renderHook(({ m }: { m: 'canvas' | 'dashboard' }) => useComponentCatalog(m, ''), {
-      initialProps: { m: 'canvas' as const },
+    // `renderHook` infers its prop type from `initialProps`, NOT from the
+    // callback's annotation — so `{ m: 'canvas' as const }` narrowed the whole
+    // hook to the literal `'canvas'` and the rerender below could not type-check
+    // against it. Annotating the props type once, here, is what lets both mounts
+    // through; the `as const` was doing the opposite of what it looked like.
+    const props: { m: ComponentMount } = { m: 'canvas' };
+    const { result, rerender } = renderHook(({ m }: { m: ComponentMount }) => useComponentCatalog(m, ''), {
+      initialProps: props,
     });
     const canvas = result.current;
-    rerender({ m: 'dashboard' as const });
+    rerender({ m: 'dashboard' });
     expect(result.current).not.toBe(canvas);
   });
 });

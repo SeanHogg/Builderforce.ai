@@ -1,0 +1,91 @@
+/**
+ * The step editor's own chrome.
+ *
+ * Every value is a theme token, so the same form reads correctly in the builder's
+ * dark shell and in the canvas inspector's light one — the inline `#fff`-adjacent
+ * literals it replaced only ever looked right in one of them.
+ */
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.identity {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.identity b {
+  display: block;
+  font-size: var(--font-size-small);
+  font-weight: 700;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+.identity small {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--font-size-eyebrow);
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
+.field {
+  display: block;
+  min-width: 0;
+  font-size: var(--font-size-eyebrow);
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.input {
+  box-sizing: border-box;
+  width: 100%;
+  margin-top: 3px;
+  padding: 7px 9px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--bg-deep);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--font-size-small);
+}
+/* A native option list paints with its own colours, not the control's — see the
+   `native-select-option-contrast` rule: without this the menu is unreadable in
+   whichever theme the control's background did not come from. */
+.input option {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
+.textarea {
+  min-height: 64px;
+  resize: vertical;
+  font-family: inherit;
+}
+
+.activation {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 9px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-deep);
+}
+.activationHeading {
+  font-size: var(--font-size-eyebrow);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.activationNote {
+  font-size: var(--font-size-eyebrow);
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}

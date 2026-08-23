@@ -132,8 +132,20 @@ for (const filePath of files) {
   // name both. That is the catalog itself and every module it spreads in.
   if (rel === CATALOG_FILE || CATALOG_MODULES.has(rel)) continue;
 
+  // A file that vanished BETWEEN the directory walk above and this read is not a
+  // violation — it is a race, and this repo has concurrent writers. Crashing on it
+  // reds a deploy for a file that no longer exists to be wrong. Any other read error
+  // still throws, because an unreadable file that IS there is a real problem.
+  let text;
+  try {
+    text = fs.readFileSync(filePath, 'utf8');
+  } catch (error) {
+    if (error.code === 'ENOENT') continue;
+    throw error;
+  }
+
   const sourceFile = ts.createSourceFile(
-    filePath, fs.readFileSync(filePath, 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS,
+    filePath, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS,
   );
 
   /**

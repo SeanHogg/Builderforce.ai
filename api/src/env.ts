@@ -769,6 +769,16 @@ export interface Vars {
    * import. Absent on unauthenticated paths, so callers must fall back.
    */
   db?: Db;
+  /**
+   * The `connections` row an xAPI request authenticated with, set by
+   * `createLrsAuthMiddleware`. Present only under `/xapi/*`, and only when the
+   * Basic credential resolved — `tenantId` is set alongside it, which is what
+   * lets the per-tenant rate limiter see a surface that carries no Bearer token.
+   */
+  lrsConnectionId?: number;
+  /** Why an xAPI request did NOT authenticate. Carried so the router can answer
+   *  401 vs 403 without repeating the credential lookup. */
+  lrsAuthFailure?: { ok: false; status: 401 | 403; detail: string };
 }
 
 /** Combined Hono environment type used across the app. */

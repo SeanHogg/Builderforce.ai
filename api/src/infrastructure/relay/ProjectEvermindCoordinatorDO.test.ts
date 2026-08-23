@@ -461,43 +461,37 @@ describe('/contribution — the pollable teach status', () => {
   });
 });
 
-describe('/learn — the stale-baseVersion guard', () => {
+describe('/learn — the retired pre-diffed weight-delta door', () => {
   const learn = (body: unknown) =>
     new Request('https://coordinator/learn', { method: 'POST', body: JSON.stringify(body) });
 
-  it('rejects a delta whose base no longer matches, and names the current head', async () => {
+  it('is gone: a delta push 404s and queues nothing', async () => {
+    // The door never had a caller — every real learning path posts raw text to
+    // /learn-text and is adapted+diffed inside drain(). Keeping a second, untested
+    // producer entry point alive is what let `kind: 'delta'` stay a shape the merge
+    // loop had to branch on forever. This asserts the retirement, so a future change
+    // that re-adds the route has to re-add the contract deliberately.
     const { doInstance, map } = makeDO();
     mocks.head.mockResolvedValue({ version: 8, ref: 'ref-8', mode: 'connected' });
 
-    const res = await doInstance.fetch(learn({ tenantId: 1, projectId: 2, diff: 'AAAA', baseVersion: 7 }));
+    const res = await doInstance.fetch(learn({ tenantId: 1, projectId: 2, diff: 'AAAA', baseVersion: 8 }));
 
-    expect(res.status).toBe(409);
-    // The head number is the whole point: a producer cannot rebase without being told
-    // what to rebase ONTO. This is the contract the on-prem delta producer recovers on.
-    expect(await res.json()).toMatchObject({ ok: false, headVersion: 8 });
-    // Nothing was queued — a stale diff must never reach the merge.
+    expect(res.status).toBe(404);
     expect(map.get('pending')).toBeUndefined();
   });
 
-  it('accepts the SAME delta once it is rebased onto the current head', async () => {
+  it('still routes /learn-text, whose path ends in the retired one', async () => {
+    // `endsWith('/learn')` would have matched '/learn-text' too had the checks been
+    // ordered the other way; removing one must not strand the other.
     const { doInstance } = makeDO();
     mocks.head.mockResolvedValue({ version: 8, ref: 'ref-8', mode: 'connected' });
 
-    const res = await doInstance.fetch(learn({ tenantId: 1, projectId: 2, diff: 'AAAA', baseVersion: 8, label: 'ticket 12' }));
+    const res = await doInstance.fetch(new Request('https://coordinator/learn-text', {
+      method: 'POST',
+      body: JSON.stringify({ tenantId: 1, projectId: 2, text: 'a run long enough to be trainable text' }),
+    }));
 
     expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({ ok: true, queued: 1, contributionId: 1, baseVersion: 8 });
-  });
-
-  it('refuses on an unseeded project and on a frozen one, without queueing', async () => {
-    const { doInstance, map } = makeDO();
-
-    mocks.head.mockResolvedValue({ version: 0, ref: null, mode: 'connected' });
-    expect((await doInstance.fetch(learn({ tenantId: 1, projectId: 2, diff: 'AAAA', baseVersion: 0 }))).status).toBe(409);
-
-    mocks.head.mockResolvedValue({ version: 3, ref: 'ref-3', mode: 'offline-frozen' });
-    expect((await doInstance.fetch(learn({ tenantId: 1, projectId: 2, diff: 'AAAA', baseVersion: 3 }))).status).toBe(423);
-
-    expect(map.get('pending')).toBeUndefined();
+    expect(await res.json()).toMatchObject({ ok: true, queued: 1, baseVersion: 8 });
   });
 });

@@ -236,6 +236,35 @@ function emit(v: unknown): string {
 }
 
 /**
+ * The `{{ json <path> }}` span prefix — emit a JSON *literal* rather than text.
+ *
+ * ── WHY IT EXISTS ────────────────────────────────────────────────────────────
+ * {@link emit} deliberately returns a string UNQUOTED, because the ordinary use of
+ * a span is to splice a value into prose (`Hello {{ name }}`). That makes it
+ * impossible to build a JSON document out of spans, which is exactly what an
+ * authored INPUT MAPPING is: a step that declares `order → $.order`, `who →
+ * customer.email` is asking for `{"order": …, "who": …}` to be handed to the next
+ * step. Writing `{"who": "{{ customer.email }}"}` almost works and then produces
+ * invalid JSON the first time an address, a name or a message body contains a
+ * quote — a mapping that silently corrupts one payload in fifty is worse than one
+ * that does not exist.
+ *
+ * `{{ json customer.email }}` emits `"a@b.com"` (quoted), `{{ json order }}` emits
+ * the whole object, and a missing path emits `null` rather than the empty string,
+ * because a hole in a JSON document has to be a JSON value.
+ */
+const JSON_SPAN = /^json\s+/;
+
+function renderSpan(ctx: ExprContext, span: string): string {
+  const path = span.trim();
+  if (JSON_SPAN.test(path)) {
+    const resolved = resolvePath(ctx, path.replace(JSON_SPAN, '').trim());
+    return JSON.stringify(resolved === undefined ? null : resolved);
+  }
+  return emit(resolvePath(ctx, path));
+}
+
+/**
  * Render a `transform` expression against a context.
  * - empty expression           → pass the raw input text through unchanged.
  * - contains `{{ path }}` spans → template substitution of each span.
@@ -245,8 +274,31 @@ export function renderTransform(expression: string, inputText: string, ctx: Expr
   const expr = (expression ?? '').trim();
   if (!expr) return inputText;
   if (expr.includes('{{')) {
-    return expr.replace(/\{\{\s*([^}]+?)\s*\}\}/g, (_m, path: string) => emit(resolvePath(ctx, path.trim())));
+    return expr.replace(/\{\{\s*([^}]+?)\s*\}\}/g, (_m, span: string) => renderSpan(ctx, span));
   }
   const resolved = resolvePath(ctx, expr);
   return resolved === undefined ? '' : emit(resolved);
+}
+
+/**
+ * Render a VALUE a person typed into a config field — a variable's value, a
+ * declared output capture — where the field is a literal unless it says otherwise.
+ *
+ * ── WHY THIS IS NOT `renderTransform` ────────────────────────────────────────
+ * `renderTransform` treats an expression with no `{{ }}` in it as a bare PATH, which
+ * is right for a transform step (its whole job is to reshape the payload) and wrong
+ * for a value field: `Set variable greeting = hello` means the word "hello", and
+ * under path semantics it would resolve to nothing and store the empty string.
+ *
+ * ── WHY IT IS NOT `renderTemplate` EITHER ────────────────────────────────────
+ * `renderTemplate` substitutes only `{{input}}` — the WHOLE upstream payload. So a
+ * step could capture everything or nothing, and "remember the order id" had to be
+ * spelled as a transform step feeding a set-variable step. Every span form
+ * `renderTransform` understands works here, including `{{ json … }}`, and a field
+ * with no span is still the literal it reads as.
+ */
+export function renderValueTemplate(value: string, inputText: string, ctx: ExprContext): string {
+  const text = value ?? '';
+  if (!text.includes('{{')) return text;
+  return text.replace(/\{\{\s*([^}]+?)\s*\}\}/g, (_m, span: string) => renderSpan(ctx, span));
 }

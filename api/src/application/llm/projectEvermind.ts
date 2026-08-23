@@ -763,37 +763,6 @@ export interface LearnDispatchResult {
 }
 
 /**
- * Push a weight-delta learning contribution to a project's coordinator (the only
- * writer). `diffB64` is a base64 serialized RowDelta (from the engine's
- * `diffCheckpoints(base, adapted)`); `baseVersion` is the head the agent pulled.
- * Returns a structured result so callers (gateway route / cloud finalize) can
- * surface "stale base" / "frozen" / "not seeded" honestly. No-op (503) when the
- * coordinator binding is unset.
- */
-export async function dispatchProjectEvermindLearn(
-  env: Env,
-  tenantId: number,
-  projectId: number,
-  diffB64: string,
-  baseVersion: number,
-  weight?: number,
-  /** Optional provenance (run/ticket) shown on the delta's inspection row — a diff has
-   *  no text, so this is what makes it inspectable. Text-path uses `prompt` instead. */
-  label?: string | null,
-): Promise<LearnDispatchResult> {
-  const stub = coordinatorStub(env, tenantId, projectId);
-  if (!stub) return { ok: false, status: 503, body: { error: 'concurrent learning not configured (no coordinator binding)' } };
-  const labelTrimmed = (label ?? '').trim();
-  const res = await stub.fetch('https://coordinator/learn', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ tenantId, projectId, diff: diffB64, baseVersion, ...(weight != null ? { weight } : {}), ...(labelTrimmed ? { label: labelTrimmed.slice(0, 800) } : {}) }),
-  });
-  const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-  return { ok: res.ok, status: res.status, body };
-}
-
-/**
  * The UNIFIED producer entry point: push RAW RUN TEXT to a project's coordinator.
  * The coordinator (single writer) adapts the base on the text and merges the delta
  * IN ITS ALARM — off the request path — so every surface (IDE, cloud, on-prem) is a
@@ -965,7 +934,8 @@ export type ProjectEvermindContributionState = 'pending' | 'merged' | 'dropped' 
 export interface ProjectEvermindContributionStatus {
   contributionId: number;
   state: ProjectEvermindContributionState;
-  /** 'text' = a run/exemplar; 'delta' = a pre-diffed weight delta. Absent when unknown. */
+  /** 'text' = a run/exemplar — the only value written today. 'delta' (a pre-diffed
+   *  weight delta) is LEGACY-READ-ONLY; its producer door was retired. Absent when unknown. */
   kind?: 'text' | 'delta';
   /** The version this contribution merged INTO (present only when `merged`). */
   version?: number;

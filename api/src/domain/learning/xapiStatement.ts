@@ -76,18 +76,6 @@ export type ParsedStatement =
   | { ok: true; statement: XapiStatement }
   | { ok: false; problems: StatementProblem[] };
 
-/** The ADL verbs a learning surface actually renders. Open — a custom verb IRI is
- *  legal and is stored — but these are the ones with meaning to the progress
- *  rollup, so they are named rather than string-matched at three call sites. */
-export const ADL_VERBS = {
-  experienced: 'http://adlnet.gov/expapi/verbs/experienced',
-  attempted:   'http://adlnet.gov/expapi/verbs/attempted',
-  completed:   'http://adlnet.gov/expapi/verbs/completed',
-  passed:      'http://adlnet.gov/expapi/verbs/passed',
-  failed:      'http://adlnet.gov/expapi/verbs/failed',
-  progressed:  'http://adlnet.gov/expapi/verbs/progressed',
-} as const;
-
 /** Statements per POST. The standard sets no ceiling, so this is an abuse bound
  *  on an authenticated but externally-driven write path. */
 export const MAX_STATEMENTS_PER_POST = 100;
@@ -158,6 +146,29 @@ export function parseStatement(
 export function actorKey(actor: XapiActor): string {
   const { kind, value } = actor.identifier;
   return `${kind}:${value}`;
+}
+
+/**
+ * Parse a standalone Agent — the `agent` query parameter the statement query and
+ * all three document resources take.
+ *
+ * The SAME rules as an actor inside a statement, because it is the same thing:
+ * an agent identified one way in a statement and another way in a State query
+ * must resolve to one key, or a course reads back a document it did not write.
+ * Accepts the JSON object or its string encoding, which is how the parameter
+ * actually travels in a URL.
+ */
+export function parseAgent(input: unknown): XapiActor | null {
+  let value = input;
+  if (typeof value === 'string') {
+    try {
+      value = JSON.parse(value);
+    } catch {
+      return null;
+    }
+  }
+  const problems: StatementProblem[] = [];
+  return parseActor(value, problems);
 }
 
 function parseActor(input: unknown, problems: StatementProblem[]): XapiActor | null {

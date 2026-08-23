@@ -1618,7 +1618,7 @@ export const PRODUCT_CAPABILITY_PROOF: Record<string, CapabilityProof> = {
   'Session Library': { status: 'beta', dataBoundary: 'workspace-cloud', prerequisites: ['account'], evidence: ['frontend/src/lib/builderforceApi.ts', 'frontend/src/components/creation-sessions/SessionManagementControls.tsx'], lastVerified: '2026-08-22' },
   'Workflows & Evaluation': { status: 'beta', dataBoundary: 'hybrid', prerequisites: ['account'], evidence: ['frontend/src/lib/creationCanvasAi.test.ts'], lastVerified: '2026-08-04' },
   'Websites, Data & Prototypes': { status: 'beta', dataBoundary: 'hybrid', prerequisites: [], evidence: ['frontend/src/components/creation-canvas/creationObjectRegistry.ts'], lastVerified: '2026-08-04' },
-  'Evermind, LLM & Voice': { status: 'beta', dataBoundary: 'hybrid', prerequisites: ['supported WebGPU device for local training'], evidence: ['frontend/src/components/workflow-builder/EvermindBuildPanel.tsx'], lastVerified: '2026-08-04' },
+  'Evermind, LLM & Voice': { status: 'beta', dataBoundary: 'hybrid', prerequisites: ['supported WebGPU device for local training'], evidence: ['frontend/src/domains/workflow/presentation/EvermindBuildPanel.tsx'], lastVerified: '2026-08-04' },
   'Creation Canvas for VS Code': { status: 'beta', dataBoundary: 'hybrid', prerequisites: ['VS Code extension', 'account for shared sessions'], evidence: ['packages/creation-canvas-contract/src/index.ts'], lastVerified: '2026-08-04' },
   'Workflow Execution': { status: 'beta', dataBoundary: 'workspace-cloud', prerequisites: ['account'], evidence: ['frontend/src/components/WorkflowDagView.tsx'], lastVerified: '2026-08-04' },
   'Projects / Tasks': { status: 'available', dataBoundary: 'workspace-cloud', prerequisites: ['account'], evidence: ['frontend/src/components/TaskMgmtContent.tsx'], lastVerified: '2026-08-04' },
@@ -1711,7 +1711,7 @@ export const MARKETING_CLAIMS: readonly MarketingClaim[] = [
     status: 'beta',
     scope: 'Named WebGPU operations on compatible devices',
     dataBoundaries: ['browser', 'hybrid'],
-    evidence: ['frontend/src/components/workflow-builder/EvermindBuildPanel.tsx'],
+    evidence: ['frontend/src/domains/workflow/presentation/EvermindBuildPanel.tsx'],
     owner: 'AI Studio', lastReviewed: '2026-08-04', reviewBy: '2026-11-02', complianceReview: 'required',
   },
   {

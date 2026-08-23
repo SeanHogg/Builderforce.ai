@@ -7,6 +7,14 @@ import { useAuth } from '@/lib/AuthContext';
 import { useCanvasCapabilities } from '@/lib/canvasCapabilitiesApi';
 import { creationPaletteGroupsFor } from './creationObjectRegistry';
 import { STENCIL_PACKS, stencilChoice, type PaletteChoice } from '@/lib/canvasStencils';
+import {
+  NODE_GROUPS, NODE_GROUP_KEYS, NODE_KINDS, nodeKindBlurb, nodeKindLabel, type NodeGroup,
+} from '@/domains/workflow/domain/stepCatalog';
+import {
+  INTEGRATIONS, INTEGRATION_CATEGORIES, INTEGRATION_CATEGORY_KEYS, integrationIcon,
+} from '@/domains/workflow/domain/stepIntegrations';
+import { integrationDescription } from '@/domains/workflow/domain/stepCatalogI18n';
+import { integrationStepChoice, stepChoice } from '@/domains/workflow/domain/flowStepObject';
 import styles from './CreationCanvas.module.css';
 
 /**
@@ -34,6 +42,22 @@ import styles from './CreationCanvas.module.css';
  * `parsePaletteChoice` are for — a declared vocabulary with a parser rather than an
  * ad-hoc encoding, and the reason nothing outside that module splits the string.
  *
+ * ── THE THIRD CATALOGUE: STEPS ──────────────────────────────────────
+ * Every executable step — Flow Control, Tools, Text Parser, AI Agents, LLM Logic,
+ * and the whole integration preset list — comes from the SAME catalog the standalone
+ * builder's palette reads (`stepCatalog.ts` / `stepIntegrations.ts`). Not a copy of
+ * it, and not a canvas-flavoured subset: one set of components, offered wherever a
+ * person is building something, which is what makes the canvas the workflow rather
+ * than a place you go to open one.
+ *
+ * They are one canvas kind (`flowStep`) with the step as a VALUE, encoded through
+ * `stepChoice` / `integrationStepChoice` — same declared-prefix rule as stencils, and
+ * again nothing outside `flowStepObject.ts` splits the string.
+ *
+ * Steps come LAST, after the object groups and the stencil packs: a person opening
+ * the palette is choosing what to make far more often than which step to run, and a
+ * rail that opened on "Flow Control" would bury the thing the board is for.
+ *
  * The search/filter/keyboard-close/outside-click interaction itself lives in the shared
  * `SearchPicker` — the workflow builder's step picker needs the exact same behaviour over
  * a completely different catalog, so only the catalog mapping and the canvas's own theme
@@ -52,6 +76,8 @@ export interface CanvasObjectPickerProps {
    */
   fromNodeId?: string;
   onPick: (choice: PaletteChoice, fromNodeId?: string) => void;
+  /** Carry a row onto the board and drop it where it belongs. See `SearchPicker`. */
+  onDragStart?: (choice: PaletteChoice, event: React.DragEvent<HTMLButtonElement>) => void;
   onClose: () => void;
 }
 
@@ -66,11 +92,15 @@ const PICKER_CLASS_NAMES = {
   empty: styles.anchoredPanelEmpty,
 };
 
-export function CanvasObjectPicker({ anchor, group, fromNodeId, onPick, onClose }: CanvasObjectPickerProps) {
+export function CanvasObjectPicker({ anchor, group, fromNodeId, onPick, onDragStart, onClose }: CanvasObjectPickerProps) {
   const t = useTranslations('creationCanvas');
   const tPicker = useTranslations('creationCanvas.picker');
   const tStencil = useTranslations('creationCanvas.stencil');
   const tPack = useTranslations('creationCanvas.stencilPack');
+  // The step catalog names itself out of the builder's namespace — the same keys the
+  // standalone palette reads, because they name the same steps.
+  const tStep = useTranslations('evermindBuild');
+  const tWorkflow = useTranslations('workflowBuilder');
   // The picker decides its own contents rather than being handed a boolean: a signed-out
   // board has no access control, so it does not advertise the restricted-by-default
   // kinds. `authReady` guards the first hydrated frame, where `isAuthenticated` is
@@ -111,8 +141,32 @@ export function CanvasObjectPicker({ anchor, group, fromNodeId, onPick, onClose 
           description: tPack(`${pack.labelKey}Description` as 'flowchartDescription'),
         })),
       })),
+      ...NODE_GROUPS.map((group: NodeGroup) => ({
+        key: `step-group:${group}`,
+        label: tStep(`nodeGroup.${NODE_GROUP_KEYS[group]}` as 'nodeGroup.trigger'),
+        items: NODE_KINDS.filter((meta) => meta.group === group).map((meta) => ({
+          kind: stepChoice(meta.kind) as PaletteChoice,
+          icon: meta.icon,
+          label: nodeKindLabel(meta, tStep),
+          description: nodeKindBlurb(meta, tStep),
+        })),
+      })).filter((section) => section.items.length > 0),
+      ...INTEGRATION_CATEGORIES
+        .slice()
+        .sort((a, b) => a.order - b.order)
+        .map((category) => ({
+          key: `step-integration:${category.id}`,
+          label: tStep(`integrationCategory.${INTEGRATION_CATEGORY_KEYS[category.id]}`),
+          items: INTEGRATIONS.filter((integ) => integ.category === category.id).map((integ) => ({
+            kind: integrationStepChoice(integ.id) as PaletteChoice,
+            icon: integrationIcon(integ),
+            label: integ.label,
+            description: integrationDescription(tWorkflow, integ.description),
+          })),
+        }))
+        .filter((section) => section.items.length > 0),
     ],
-    [t, tPack, tStencil, signedIn, capabilities],
+    [t, tPack, tStencil, tStep, tWorkflow, signedIn, capabilities],
   );
 
   return (
@@ -130,6 +184,7 @@ export function CanvasObjectPicker({ anchor, group, fromNodeId, onPick, onClose 
       testIdPrefix="canvas-picker"
       dialogTestId="canvas-object-picker"
       onPick={(choice) => onPick(choice, fromNodeId)}
+      {...(onDragStart ? { onDragStart } : {})}
       onClose={onClose}
     />
   );

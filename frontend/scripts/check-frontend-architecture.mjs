@@ -30,6 +30,29 @@
  * and therefore has nowhere to put a reason. So a raise is justified HERE, in
  * prose, and a raise with no entry below is a raise nobody argued for:
  *
+ *   881 → 887 (`useClientFiles`, 2026-08-23) — the eight learning components:
+ *   `LearningView`, `PathDirectory`, `PathDetailPanel`, `PathProgressMeter`,
+ *   `CourseCatalogue`, `PrerequisiteEditor`, `LrsCredentialPanel` and
+ *   `LrsForwardingTargetForm` (all under `components/learning/`).
+ *
+ *   Same argument as the employer-review entry below, and the same shape: each is
+ *   interactive at its root (a create form, a reorder control, a select that
+ *   writes an edge, a revoke behind a confirm) and each owns its own fetching and
+ *   its own entitlement, so any of them can be mounted on a canvas card or a
+ *   dashboard with no edits. `/learning` itself is a Server Component over one
+ *   client island — `useClientPages`, the number that measures the actual harm,
+ *   did not move.
+ *
+ *   The directive stays on every one of them deliberately. It is not there because
+ *   today's only importer happens to be a client component; it is there because
+ *   these are shared surfaces that mount on canvas and inside embedded apps, where
+ *   the parent is a Server Component and stripping it would break the mount.
+ *
+ *   The +6 rather than +8 is arithmetic on a moving tree, not two missing files:
+ *   the page-splitting pass argued in the entry below had two more removals land
+ *   after its number was recorded, so the settled tally was 879 and this pass took
+ *   it to 887.
+ *
  *   876 → 881 (`useClientFiles`, 2026-08-22) — a NET +5 that is the residue of a
  *   good refactor, and the clearest case yet that counting FILES penalises the
  *   move this ratchet exists to encourage. 133 files entered the tally and 51

@@ -84,6 +84,12 @@ const BASE_CREATION_OBJECT_REGISTRY = [
   // cannot run yet. Saying 'Ready' here is how an empty card came to look like a
   // configured one; the body's empty state and this status now agree.
   { kind: 'workflow', label: 'Workflow', icon: '⌘', group: 'Build', createData: () => ({ kind: 'workflow', title: 'Untitled workflow', status: 'Draft' }) },
+  // ONE executable step. It is placed from the STEP catalog rather than from this
+  // palette entry — the picker offers all ~60 kinds and seeds `stepKind` (see
+  // `flowStepObject.ts`) — so the entry here exists to give the kind a label, an
+  // icon and a group everywhere an object is named rather than drawn. A bare one
+  // defaults to the step that needs no configuration to mean something.
+  { kind: 'flowStep', label: 'Step', icon: '▸', group: 'Build', createData: () => ({ kind: 'flowStep', title: 'Step', stepKind: 'agent', stepConfig: { role: 'code-creator', task: '' }, stepInputs: [], stepOutputs: [] }) },
   { kind: 'website', label: 'Website', icon: '◎', group: 'Build', createData: () => ({ kind: 'website', title: 'Website concept', status: 'Draft' }) },
   { kind: 'build', label: 'Builder', icon: '▶', group: 'Build', createData: () => ({ kind: 'build', title: 'New build', status: 'Choose a type', modality: DEFAULT_MODALITY }) },
   { kind: 'chat', label: 'Chat', icon: '●', group: 'Build', createData: () => ({ kind: 'chat', title: 'Brain' }) },
@@ -300,7 +306,7 @@ const CAPABILITIES: Partial<Record<CreationObjectKind, string>> = {
   evermind: 'evermind',
 };
 const ACTIONS: Partial<Record<CreationObjectKind, readonly string[]>> = {
-  workflow: ['edit', 'build', 'run'], website: ['edit', 'preview', 'publish'], prototype: ['edit', 'preview'],
+  workflow: ['edit', 'build', 'run'], flowStep: ['edit', 'run'], website: ['edit', 'preview', 'publish'], prototype: ['edit', 'preview'],
   // Opening the Builder IS the adapter: run, checks, terminal and publish all
   // happen inside the Builder surface it mounts, so they are not advertised here as
   // separate canvas-side actions that nothing implements.
@@ -364,6 +370,10 @@ const BASE_MUTABLE_FIELDS = {
   // object to a real, runnable tenant resource is the compile endpoint's job,
   // not something an LLM patch may assert.
   workflow: ['content', 'steps', 'approvalMode', 'runTarget'],
+  // The step itself, its typed config, and the two declared data contracts the
+  // compiler lowers into real nodes. Brain authors all four: "add a switch on
+  // status" is a patch, not a modal. See `flowStepObject.ts` for each shape.
+  flowStep: ['stepKind', 'stepConfig', 'stepInputs', 'stepOutputs'],
   // `abTestKey`/`variantKey` are the SPLIT half of the `experiment` binding: an
   // experiment names the test, and the page names which arm of it this page IS. Without
   // the pair, "bind experiment to `ab_tests`" would give the card a live exposure count

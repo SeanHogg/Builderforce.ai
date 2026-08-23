@@ -21,6 +21,7 @@
 
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { sha256Hex } from '../../infrastructure/crypto/digest';
+import { timingSafeEqual } from '../../infrastructure/crypto/constantTime';
 
 /** How a handler proves who called it. Declared per handler, never inferred. */
 export const VERIFY_KINDS = ['none', 'twilio', 'stripe', 'shopify', 'shared-secret'] as const;
@@ -77,14 +78,6 @@ export const STRIPE_TIMESTAMP_TOLERANCE_SECONDS = 300;
 export type VerifyResult =
   | { ok: true }
   | { ok: false; reason: string };
-
-/** Length-checked, byte-folding comparison. No early return on a mismatch. */
-export function timingSafeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return diff === 0;
-}
 
 function toBase64(bytes: ArrayBuffer): string {
   return btoa(String.fromCharCode(...new Uint8Array(bytes)));
@@ -293,3 +286,8 @@ export async function verifySharedSecret(args: {
     return { ok: false, reason: 'Signature verification failed' };
   }
 }
+
+/** Re-exported so the verifiers and their tests keep one import site. The
+ *  implementation moved to `infrastructure/crypto/constantTime` when a second
+ *  caller (the LRS Basic credential) needed it. */
+export { timingSafeEqual };

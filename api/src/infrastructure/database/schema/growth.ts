@@ -1062,6 +1062,15 @@ export const adCampaigns = pgTable('ad_campaigns', {
   status:       varchar('status', { length: 16 }).notNull().default('draft'),
   startsAt:     timestamp('starts_at'),
   endsAt:       timestamp('ends_at'),
+  /**
+   * THE TAG THIS PLATFORM OWNS (1113). Minted once from the campaign's IMMUTABLE
+   * identity — network plus the network's own id — and never re-derived, because the
+   * readable half is the campaign NAME and a name is mutable: re-deriving after a
+   * rename would split one campaign's history into two that each look half as
+   * effective. Deliberately omitted from the sync's conflict branch for that reason.
+   * NULL means the campaign predates owned tagging. See `adUtm.ts`.
+   */
+  utmCampaign:  varchar('utm_campaign', { length: 120 }),
   createdAt:    timestamp('created_at').notNull().defaultNow(),
   updatedAt:    timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [

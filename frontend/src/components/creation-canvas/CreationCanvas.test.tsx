@@ -77,13 +77,6 @@ vi.mock('@xyflow/react', async () => {
   };
 });
 
-vi.mock('@/components/workflow-builder/WorkflowBuilder', () => ({
-  WorkflowBuilder: ({ onSaved, onRunStarted }: { onSaved?: (id: string, name: string) => void; onRunStarted?: (id: number) => void }) => <div>
-    <button type="button" onClick={() => onSaved?.('workflow-updated', 'Updated campaign workflow')}>Save embedded workflow</button>
-    <button type="button" onClick={() => onRunStarted?.(91)}>Run embedded workflow</button>
-  </div>,
-}));
-
 /**
  * THIS FILE IS PRICED ABOVE THE PROJECT CEILING, AND SAYS SO.
  *
@@ -1138,8 +1131,15 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
   it('gates durable guest actions with account creation while preserving local creation', () => {
     render(<CreationCanvas sessionId="account-gate-test" persistence="local" />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Save & collaborate' }));
-    expect(screen.getByRole('dialog', { name: 'Create an account to save and collaborate' })).toBeInTheDocument();
+    // THE CANVAS NO LONGER CARRIES ITS OWN SAVE BUTTON. Keeping a guest board means
+    // taking an account, and the header CTA already offers exactly that ("Keep your
+    // work"); a second control on the board was two bars on one screen competing over
+    // the same word. The gate itself is unchanged — it is reached from the durable
+    // actions that genuinely need a saved session.
+    expect(screen.queryByRole('button', { name: 'Save & collaborate' })).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Make it real' }));
+    expect(screen.getByRole('dialog', { name: 'Create an account to make this real' })).toBeInTheDocument();
     // The gate's two ways in are the SHARED <GuestSignupCta> links — the same pair
     // the Brain surface offers a guest who has spent their free turns — and each
     // carries this canvas through auth so the board is still there afterwards.
@@ -1168,17 +1168,24 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
     expect(screen.queryByRole('dialog', { name: 'Invite collaborators' })).not.toBeInTheDocument();
   });
 
-  it('edits and runs a canonical workflow in an isolated Canvas focus editor', () => {
-    render(<CreationCanvas sessionId="workflow-focus-test" persistence="local" />);
-    fireEvent.click(screen.getByText('Fall campaign workflow'));
-    fireEvent.click(screen.getByRole('button', { name: 'Show everything about this object' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Edit Workflow on Canvas' }));
+  /**
+   * The board IS the workflow. This used to assert the opposite — that a workflow card
+   * opened a MODAL holding a second canvas — and that editor is gone: a step is an
+   * object on this board, configured in this board's inspector.
+   */
+  it('places an executable step from the palette and configures it in place', () => {
+    render(<CreationCanvas sessionId="flow-step-test" persistence="local" />);
 
-    expect(screen.getByRole('dialog', { name: 'Workflow focus editor' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Save embedded workflow' }));
-    expect(screen.getByDisplayValue('Updated campaign workflow')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Run embedded workflow' }));
-    expect(screen.getByText('Workflow run 91 started')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Step' }));
+
+    expect(screen.getByDisplayValue('Step')).toBeInTheDocument();
+    // The four questions a step in a graph answers — what it does, its paths, its data
+    // in and out, and what it is wired to — are asked on the board, not in a dialog.
+    const inspector = screen.getByTestId('flow-step-inspector');
+    expect(within(inspector).getByText('Data in')).toBeInTheDocument();
+    expect(within(inspector).getByText('Data out')).toBeInTheDocument();
+    expect(within(inspector).getByText('Connections')).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Workflow focus editor' })).not.toBeInTheDocument();
   });
 
   it('adds a selected object from the palette', () => {

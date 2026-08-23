@@ -44,8 +44,10 @@ export async function verifySecret(value: string, storedHash: string): Promise<b
  *   - `whsec` — Outbound-webhook signing secret (`webhook_subscriptions.secret`)
  *   - `bfq` — Quality error-ingest key, per source (`error_sources.key_hash`)
  *   - `bff` — Product Feedback ingest key, per project collector (`feedback_collectors.key_hash`)
+ *   - `bfx` — xAPI LRS Basic credential, both halves (`connections.external_account`
+ *             for the public key, `credentials` for the sealed secret)
  */
-export function generateApiKey(prefix: 'bfa' | 'clk' | 'clu' | 'bfk' | 'whsec' | 'bfq' | 'bff'): string {
+export function generateApiKey(prefix: 'bfa' | 'clk' | 'clu' | 'bfk' | 'whsec' | 'bfq' | 'bff' | 'bfx'): string {
   const bytes = crypto.getRandomValues(new Uint8Array(16));
   const hex   = Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('');
   return `${prefix}_${hex}`;

@@ -637,7 +637,8 @@
       "salesProgramme": "Programme commercial",
       "developers": "Développeurs",
       "earnings": "Revenus",
-      "disputes": "Litiges"
+      "disputes": "Litiges",
+      "learning": "Formation"
     },
     "tab": {
       "projects": "Projets",
@@ -15156,7 +15157,16 @@
         "blurb": "Transcrit un fichier audio, ou le traduit directement en anglais — véritable appel à l'API Whisper (configuré par l'opérateur, pas encore de clé propre par locataire)."
       }
     },
-    "statusRunPendingApproval": "Ce workflow doit être approuvé avant de pouvoir s'exécuter. Une demande d'approbation a été envoyée."
+    "statusRunPendingApproval": "Ce workflow doit être approuvé avant de pouvoir s'exécuter. Une demande d'approbation a été envoyée.",
+    "deleteNode": "Supprimer le nœud",
+    "activation": {
+      "heading": "Activation",
+      "webhook": "URL du webhook",
+      "webhookSigned": "URL du webhook (signer avec X-Signature)",
+      "inboundEmail": "Adresse e-mail entrante",
+      "nextRun": "Prochaine exécution : {when}",
+      "last": "Dernière : {status}"
+    }
   },
   "chunkError": {
     "recovering": "Mise à jour vers la dernière version…",
@@ -18650,7 +18660,6 @@
     "exitPresentation": "Quitter la présentation",
     "share": "Inviter",
     "run": "Exécuter",
-    "saveCollaborate": "Enregistrer et collaborer",
     "addToCanvas": "Ajouter au Canevas",
     "searchObjectTypes": "Rechercher des types d'objets…",
     "askBrain": "Interroger Brain sur ce canevas",
@@ -18943,7 +18952,8 @@
       "stopwatch": "Chronomètre",
       "transclusion": "Transclusion",
       "calendar": "Calendrier",
-      "component": "Composant"
+      "component": "Composant",
+      "flowStep": "Étape"
     },
     "twilioSetup": {
       "title": "Intégration Twilio",
@@ -19053,7 +19063,6 @@
       "learning": "Apprentissage…",
       "writing": "Rédaction…"
     },
-    "save": "Enregistrer",
     "invite": "Inviter",
     "retry": "Réessayer",
     "dismiss": "Ignorer",
@@ -19158,7 +19167,6 @@
     "gateBenefitKeep": "Conservez toute cette session locale",
     "gateBenefitUnlock": "Débloquez des ressources durables et l’historique",
     "gateBenefitCollaborate": "Collaborez avec votre équipe",
-    "gateSaveTitle": "Créez un compte pour enregistrer et collaborer",
     "gateSaveSessionTitle": "Créez un compte pour enregistrer cette session",
     "gateSaveBody": "Déplacez cette session locale vers un espace tenant sécurisé sans perdre ses objets, sa conversation ni sa mise en page.",
     "gateMetricsTitle": "Créez un compte pour mesurer la valeur livrée",
@@ -19191,11 +19199,6 @@
     "tourBody4": "Connectez deux objets pour définir une vraie relation de données, contrôle, référence, présentation ou livraison.",
     "tourBody5": "Partagez la session, commentez les objets et voyez les curseurs en direct sans déplacer la vue des autres.",
     "tourBody6": "Les projets sont facultatifs. N’en ajoutez un que pour transformer un artefact en tâche et assigner un agent.",
-    "workflowFocusEditor": "Éditeur de workflow",
-    "closeWorkflowEditor": "Fermer l’éditeur de workflow",
-    "editWorkflowOnCanvas": "Modifier le workflow sur la toile",
-    "editWorkflowHint": "Les modifications sont enregistrées dans la définition canonique du workflow.",
-    "workflowSaved": "Workflow enregistré depuis cette session",
     "evermindAdapterStudio": "Studio d’adaptateurs Evermind",
     "closeAdapterStudio": "Fermer le studio d’adaptateurs",
     "trainEvermindOnCanvas": "Entraîner Evermind sur la toile",
@@ -22494,7 +22497,8 @@
       "account": "Compte financier suivant les soldes et les transactions.",
       "sticky": "Note autocollante libre pour noter rapidement une idée sur le canevas.",
       "stopwatch": "Mesurez le temps réellement passé. Tout le monde voit la même horloge.",
-      "transclusion": "Affichez ici un autre document de connaissance, en direct — pas une copie."
+      "transclusion": "Affichez ici un autre document de connaissance, en direct — pas une copie.",
+      "flowStep": "Une étape exécutable — appel de modèle, intégration, décision — reliée aux étapes qui l’entourent."
     },
     "previewWidth": "Largeur d'aperçu",
     "viewportName": {
@@ -22978,7 +22982,61 @@
         "url": "URL"
       }
     },
-    "componentId": "ID du composant"
+    "componentId": "ID du composant",
+    "flowStep": {
+      "dataIn": "Données entrantes",
+      "dataInHint": "Nommez ce que reçoit cette étape et indiquez où chaque valeur est lue dans les données précédentes.",
+      "dataOut": "Données sortantes",
+      "dataOutHint": "Nommez ce que publie cette étape. Les étapes suivantes le lisent avec Obtenir la variable.",
+      "outlets": "Chemins",
+      "outletsHint": "Chaque chemin a son propre point de connexion sur la carte. Seul le chemin correspondant s’exécute.",
+      "outletName": "Nom",
+      "outletCondition": "Condition",
+      "outletConditionHint": "status == \"ready\"",
+      "outletMatch": "Correspond à",
+      "outletMatchHint": "ready",
+      "addOutlet": "Ajouter un chemin",
+      "removeOutlet": "Supprimer le chemin {name}",
+      "bindingKey": "Nom",
+      "bindingFrom": "Lire depuis",
+      "bindingFromHint": "order.id",
+      "addBinding": "Ajouter un champ",
+      "removeBinding": "Supprimer {key}",
+      "outputKey": "Nom",
+      "outputFrom": "Prendre depuis",
+      "outputFromHint": "order.id",
+      "connections": "Connexions",
+      "noConnections": "Rien n’est encore relié à cette étape.",
+      "removeConnection": "Déconnecter {name}",
+      "needsSetup": "À configurer",
+      "built": "Compilé",
+      "untitledFlow": "Flux sans titre",
+      "framePurpose": "Les étapes de ce flux",
+      "framedForBuild": "Ces étapes ont été encadrées pour que le flux puisse être compilé.",
+      "notBuiltYet": "Ce workflow n’a pas encore été compilé, il n’y a donc rien à ouvrir.",
+      "opening": "Ouverture du workflow sur le canevas…",
+      "opened": "{count, plural, one {# étape ouverte sur le canevas.} other {# étapes ouvertes sur le canevas.}}",
+      "frameHolds": "{count, plural, =0 {Aucune étape dans cette section pour l’instant.} one {# étape dans cette section.} other {# étapes dans cette section.}}",
+      "flowNamedAfterFrame": "Le workflow compilé porte le nom de cette section : {name}."
+    },
+    "flowIssue": {
+      "noSteps": "Ce flux n’a encore aucune étape à exécuter.",
+      "llmNeedsPrompt": "Cette étape de modèle a besoin d’un prompt.",
+      "connectorNeedsConnector": "Cette étape d’intégration a besoin d’un connecteur, par exemple Twilio.",
+      "connectorNeedsAction": "Cette étape a besoin d’une action sur {connector}.",
+      "agentNeedsTask": "Cette étape d’agent a besoin d’une tâche à exécuter."
+    },
+    "frameSection": {
+      "holds": "{count, plural, =0 {Vide} one {# objet} other {# objets}}",
+      "collapse": "Réduire",
+      "expand": "Développer",
+      "open": "Ouvrir",
+      "exit": "Quitter la section",
+      "section": "Section"
+    },
+    "openWorkflowOnCanvas": "Ouvrir sur le canevas",
+    "buildFlow": "Compiler le flux",
+    "runFlow": "Exécuter le flux"
   },
   "canvasCommands": {
     "cleanLayout": "Réorganiser la toile",
@@ -27014,6 +27072,124 @@
         "pending": "En attente",
         "rejected": "Refusé"
       }
+    }
+  },
+  "learning": {
+    "tabs": {
+      "label": "Sections de formation",
+      "paths": "Parcours",
+      "catalogue": "Catalogue",
+      "lrs": "Registre d’apprentissage"
+    },
+    "common": {
+      "saving": "Enregistrement…",
+      "loading": "Chargement…",
+      "cancel": "Annuler"
+    },
+    "status": {
+      "draft": "Brouillon",
+      "published": "Publié",
+      "retired": "Retiré",
+      "enrolled": "Inscrit",
+      "in_progress": "En cours",
+      "completed": "Terminé",
+      "expired": "Expiré",
+      "withdrawn": "Abandonné"
+    },
+    "paths": {
+      "title": "Parcours de formation",
+      "intro": "Un parcours ordonne des cours. S’y inscrire inscrit l’apprenant à chacun des cours qu’il contient.",
+      "empty": "Aucun parcours pour l’instant.",
+      "courseCount": "{count, plural, one {# cours} other {# cours}}",
+      "newLabel": "Nouveau parcours",
+      "newPlaceholder": "ex. Intégration des ingénieurs",
+      "create": "Créer le parcours",
+      "failed": "Impossible de charger les parcours.",
+      "createFailed": "Impossible de créer le parcours."
+    },
+    "progress": {
+      "label": "Progression du parcours",
+      "count": "{completed} sur {total} terminés"
+    },
+    "detail": {
+      "failed": "Impossible de charger ce parcours.",
+      "enroll": "M’inscrire",
+      "enrollFailed": "Impossible de vous inscrire à ce parcours.",
+      "publish": "Publier",
+      "retire": "Retirer",
+      "statusFailed": "Impossible de modifier le statut du parcours.",
+      "sequence": "Ordre des cours",
+      "noCourses": "Ce parcours ne contient encore aucun cours.",
+      "unknownCourse": "Cours supprimé",
+      "moveUp": "Monter",
+      "moveDown": "Descendre",
+      "remove": "Retirer du parcours",
+      "addCourse": "Ajouter un cours",
+      "addCoursePlaceholder": "Choisir un cours…",
+      "saveOrder": "Enregistrer l’ordre",
+      "orderFailed": "Impossible d’enregistrer l’ordre des cours.",
+      "unsaved": "Modifications non enregistrées"
+    },
+    "catalogue": {
+      "title": "Catalogue de cours",
+      "intro": "Tous les cours, et si vous pouvez déjà les commencer.",
+      "empty": "Aucun cours pour l’instant.",
+      "failed": "Impossible de charger le catalogue.",
+      "open": "Prêt à commencer",
+      "unlocked": "Accessible",
+      "locked": "Verrouillé",
+      "blockedBy": "À terminer d’abord : {courses}",
+      "markComplete": "Marquer comme terminé",
+      "completeFailed": "Impossible d’enregistrer la fin de ce cours."
+    },
+    "prerequisites": {
+      "title": "Prérequis",
+      "intro": "Ce qui doit être terminé avant que ce cours ne se débloque. Distinct de l’ordre d’affichage d’un parcours.",
+      "empty": "Ce cours n’a aucun prérequis.",
+      "failed": "Impossible de charger les prérequis.",
+      "add": "Ajouter un prérequis",
+      "addPlaceholder": "Choisir un cours…",
+      "addFailed": "Impossible d’ajouter ce prérequis.",
+      "remove": "Retirer le prérequis",
+      "removeFailed": "Impossible de retirer ce prérequis.",
+      "inPaths": "Fait partie de : {paths}"
+    },
+    "lrs": {
+      "title": "Registre d’apprentissage (LRS)",
+      "intro": "Le point d’accès xAPI auquel un outil auteur envoie ses déclarations, et les clés qui l’authentifient.",
+      "endpoint": "Point d’accès",
+      "empty": "Aucun identifiant pour l’instant.",
+      "failed": "Impossible de charger les identifiants.",
+      "issue": "Émettre un identifiant",
+      "issueFailed": "Impossible d’émettre l’identifiant.",
+      "newLabel": "Nom de l’identifiant",
+      "newPlaceholder": "ex. Création sous Storyline",
+      "secretOnce": "Copiez-les maintenant : le secret ne sera plus jamais affiché.",
+      "revoke": "Révoquer",
+      "revokeTitle": "Révoquer cet identifiant ?",
+      "revokeConfirm": "« {label} » cessera de fonctionner immédiatement, et tout ce qui l’utilise cessera d’enregistrer.",
+      "revokeFailed": "Impossible de révoquer cet identifiant.",
+      "direction": {
+        "inbound": "Entrant",
+        "outbound": "Réacheminement"
+      },
+      "status": {
+        "connected": "Actif",
+        "inactive": "Inactif"
+      }
+    },
+    "target": {
+      "open": "Réacheminer vers un autre LRS",
+      "title": "Destination de réacheminement",
+      "intro": "Chaque déclaration acceptée par ce registre est aussi envoyée au point d’accès ci-dessous.",
+      "label": "Nom",
+      "labelPlaceholder": "ex. LRS de l’entreprise",
+      "endpoint": "Point d’accès",
+      "endpointPlaceholder": "https://lrs.example.com/xapi",
+      "key": "Clé",
+      "secret": "Secret",
+      "save": "Ajouter la destination",
+      "failed": "Impossible d’ajouter cette destination."
     }
   }
 }

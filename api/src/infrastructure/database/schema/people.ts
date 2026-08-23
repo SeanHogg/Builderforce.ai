@@ -468,9 +468,12 @@ export const lrsDocuments = pgTable('lrs_documents', {
   tenantId:    integer('tenant_id').notNull(),
   /** 'state' | 'activity_profile' | 'agent_profile'. */
   scope:       varchar('scope', { length: 24 }).notNull(),
-  activityId:  varchar('activity_id', { length: 320 }),
-  agentKey:    varchar('agent_key', { length: 320 }),
-  registration: varchar('registration', { length: 64 }),
+  /** The three addressing dimensions are '' when the scope does not use them,
+   *  never NULL: two NULLs are DISTINCT in a Postgres unique index, so a nullable
+   *  key would let the same Activity Profile be written twice (migration 1114). */
+  activityId:  varchar('activity_id', { length: 320 }).notNull().default(''),
+  agentKey:    varchar('agent_key', { length: 320 }).notNull().default(''),
+  registration: varchar('registration', { length: 64 }).notNull().default(''),
   documentId:  varchar('document_id', { length: 255 }).notNull(),
   contentType: varchar('content_type', { length: 128 }),
   content:     jsonb('content'),
@@ -478,5 +481,7 @@ export const lrsDocuments = pgTable('lrs_documents', {
   createdAt:   timestamp('created_at').notNull().defaultNow(),
   updatedAt:   timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
-  uniqueIndex('uq_lrs_documents_key').on(t.tenantId, t.scope, t.activityId, t.agentKey, t.documentId),
+  uniqueIndex('uq_lrs_documents_key')
+    .on(t.tenantId, t.scope, t.activityId, t.agentKey, t.registration, t.documentId),
+  index('idx_lrs_documents_scope').on(t.tenantId, t.scope, t.activityId, t.agentKey, t.updatedAt),
 ]);

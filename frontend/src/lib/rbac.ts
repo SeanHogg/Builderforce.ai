@@ -187,6 +187,13 @@ export const CAPABILITIES = {
   // tool-call seam. Reads are open to any member (you may see the posture you run
   // under); authoring mirrors the API's requireRole(MANAGER) on every write.
   'policies.manage':         'manager',
+
+  // Learning paths, prerequisites and the workspace's own LRS. Everybody may see
+  // the catalogue, their locks and their own progress — that is what a learner
+  // comes for. Authoring a curriculum, enrolling somebody else and minting an
+  // xAPI credential are manager+, mirroring the requireRole(MANAGER) split on
+  // /api/learning.
+  'learning.manage':         'manager',
 } as const satisfies Record<string, TenantRole>;
 
 export type Capability = keyof typeof CAPABILITIES;

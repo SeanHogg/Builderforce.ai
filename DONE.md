@@ -1,3 +1,518 @@
+## ✅ RESOLVED 2026-08-23 — Learning paths are edges, an xAPI statement is an activity_log row, and an LRS credential is a connection
+
+The LMS core landed in migration 0420 with nine tables and no application layer. The remainder PRD 18
+§T6 named — "learning PATHS and the xAPI LRS" — is now built end to end: application layer, HTTP
+surface, typed client, UI in five locales. It added **one column and five indexes**, because the
+coverage map had already decided that everything else here is an existing shape.
+
+### 1. A path IS a course
+
+`learning_paths` is "merged into a sibling", and the sibling is `courses`: the source table's columns
+ARE this one's — slug, title, summary, status, published_at, author_ref, price. What differs is what
+it CONTAINS, and that is an edge, not a column. So `courses.kind` ('course' | 'path') is the whole
+schema change (migration 1112).
+
+Folding it in is not a saving of one table; it is what makes a path enrollable, certifiable and
+sellable for free. `course_enrollments`, `course_certificates` and `course_checkouts` all key on
+`course_id`, so a path that IS a course row inherits every one of them. A separate `learning_paths`
+table would have needed `learning_path_enrollments`, `learning_path_certificates` and
+`learning_path_checkouts` beside it — which is exactly the four tables the source product had.
+
+A path's courses are `relations` rows (`kind='contains'`, ordered by `position`) — the kernel table
+shipped with PRD 20 naming this exact case and, until this pass, had never been written to.
+`ObjectRelations.ts` is its first writer: `linkObjects` / `unlinkObjects` / `setOrderedMembers` /
+`listRelatedFrom` / `listRelatedTo` / `loadEdges` / `countRelatedFrom`, with cycle refusal on
+`depends_on`/`blocks` over the pure DAG arithmetic in `domain/kernel/graphCycle.ts`.
+
+Order lives on the EDGE because the same course sits third in one path and first in another. On the
+course it would be one fact contradicting itself. And `setPathCourses` replaces the WHOLE sequence
+rather than offering add/remove/move, because three endpoints that each mutate one edge is how two
+people reordering at once produce an order neither of them chose.
+
+Prerequisites are a SECOND edge kind (`depends_on`) over the same courses, kept deliberately apart
+from `contains`: a path says what order courses are DISPLAYED in, a prerequisite says what must be
+FINISHED first, and the same course has one prerequisite in every path it appears in. `gateCourses`
+answers "which of these may this learner start, and what blocks the rest" in two queries and
+arithmetic — the obvious per-card version is an N+1 that gets slower exactly as a curriculum gets
+richer.
+
+### 2. An xAPI statement is `actor · verb · object` — which is `activity_log`'s shape
+
+Both of the source product's statement tables (`xapi_statements`, `lrs_statements`) map to the
+`event_log` primitive. The coverage TSV had them pointed at `ledger_entry`; that was corrected in the
+same pass, because a statement is not money-shaped and nothing had been built against the old target.
+
+The conformance win is an index that already existed. xAPI requires a statement id to be immutable
+and a repeated PUT of the same id to be idempotent rather than a duplicate — and
+`idx_activity_log_event_key` is already UNIQUE. Storing the statement id as
+`event_key = 'xapi:<id>'` makes the DATABASE enforce the standard's rule. The alternative is
+read-then-write, which two concurrent PUTs of the same statement both win.
+
+`lrsStatements.ts` owns its own INSERT rather than going through `recordActivity`, deliberately: that
+writer is best-effort and swallows failures, which is right for an audit line beside a mutation and
+wrong for an LRS, where answering 200 to a POST you did not store is a conformance failure. It shares
+`toActivityRow`, so the two can only ever disagree about error handling.
+
+Two columns are hashed (`actor_ref`, `target_id`) because an actor identifier and an activity IRI are
+both unbounded strings that need an INDEXED equality lookup; the originals are never lost — they are
+in `metadata`, and `metadata.statement` is the exact document that arrived, which is what lets a GET
+return what was PUT. A statement whose activity IRI resolves to one of this workspace's own courses
+also carries `object_id`, resolved in ONE batched lookup for the whole POST, so LRS statements appear
+on the course's `/api/objects/:id/activity` timeline instead of only inside the LRS.
+
+`domain/learning/xapiStatement.ts` is the parse, and it is total: a statement either satisfies every
+rule downstream readers depend on or it is rejected with the field named. The rule worth stating is
+"exactly one inverse-functional identifier" — two identifiers is an authoring tool that has confused
+two people, and picking one at random is how the wrong learner gets the certificate.
+
+### 3. An LRS credential — in both directions — is a `connections` row
+
+`lrs_credentials` → the `credential` primitive; `external_lrs_targets` → folded into a sibling. They
+land in the same place because they are the same fact seen from two ends: a named party, an endpoint,
+a status and a secret. Inbound, we issue the secret and somebody else holds it. Outbound, they issued
+it and we hold it. Nothing else differs, so nothing else is modelled — `config.direction` says which
+end the row is.
+
+That buys the whole connection surface for free: a listing that shows connected/revoked, an expiry
+sweep, and one encrypted store. The secret goes through the existing `connectionApiKey` sealing path
+rather than a second one — a static Basic password IS a static API key, which is the case that
+module's docstring exists to cover.
+
+Authenticating an inbound request is a DECLARED cross-tenant read
+(`acrossTenants(connections, 'share_token', …)`): the request carries `Authorization: Basic` and
+nothing else, because the authoring tool that sends it has never heard of a workspace — resolving the
+tenant IS the authentication. It is deliberately uncached, because the gap between "revoke" and "the
+key stops working" would otherwise be the cache TTL.
+
+Forwarding is live rather than a stored intent: `lrsForwarding.ts` POSTs each accepted batch to every
+connected outbound target, concurrently, after the response (`waitUntil`) — making the client wait on
+a third party would turn a stored statement into a timeout, and an xAPI client answers a timeout by
+retrying. A failure is recorded on the connection (`last_error` + `expired`) rather than queued, so a
+broken LRS target shows as broken on the same screen as a broken mailbox.
+
+### 4. Two defects found in the existing DDL, and fixed (migration 1114)
+
+**`uq_lrs_documents_key` did not do its job.** It spanned two NULLABLE columns, and in Postgres two
+NULLs are DISTINCT in a unique index — so the constraint whose entire purpose is to make a document
+PUT idempotent silently permitted a second row for every Activity Profile (no agent) and every Agent
+Profile (no activity). The three addressing columns are now `NOT NULL DEFAULT ''`, so "absent" is a
+value the index can compare, and `registration` joined the key because the specification says a State
+document is addressed by activity + agent + registration + stateId — leaving it out made a learner's
+second attempt overwrite their first.
+
+**`connections` had no index that could answer the LRS lookup.** `uq_connections_account` and
+`idx_connections_tenant` both lead with `tenant_id`, and the inbound authentication has no tenant to
+lead with. Without `idx_connections_lrs_key` (partial, `WHERE vendor = 'lrs'`) every statement POST on
+the deployment sequentially scanned the whole connection table.
+
+### 5. The HTTP surface, and why there are three routers
+
+`/api/learning` — paths, member ordering, prerequisites, enrolment, progress, and the gated
+catalogue. `/api/learning` again — LRS key management, merged onto the same prefix by Hono. And
+`/xapi` — the standard itself, which is NOT under `/api` and NOT behind `authMiddleware`, because it
+is consumed by authoring tools that will never hold a session JWT and will call it
+`<endpoint>/statements` whatever we would have preferred.
+
+The three xAPI document resources (State, Activity Profile, Agent Profile) are registered from a
+table rather than written out three times — they differ only in which parts of the address they use,
+and three near-copies is how the `If-Match` handling ends up correct on State and missing on Agent
+Profile. RFC 7232 preconditions live in the application layer, including the rule that is easy to
+miss and impossible to notice: a PUT over an EXISTING document carrying neither `If-Match` nor
+`If-None-Match` is a 409, because the client cannot know what it is overwriting.
+
+`createLrsAuthMiddleware` resolves the Basic credential BEFORE the rate limiter, and that ordering is
+load-bearing: `rateLimitMiddleware` throttles per tenant and resolves one from a JWT or a machine
+key, neither of which an xAPI client sends — so an LRS whose handlers did their own authentication
+would have been the one authenticated, externally-driven write path on the deployment with no rate
+limit at all.
+
+### 6. Two primitives extracted, every duplicate migrated
+
+`infrastructure/crypto/digest.ts` — `sha256Hex` / `sha256Fingerprint` / `sha256Base64Url`. Eleven
+modules had written the same three lines, several with a quiet `.slice(…)` that was really an
+undocumented collision budget. All eleven migrated in the same pass (career/references,
+career/resumeAi, ide/siteAuth, ide/siteTraffic, llm/anthropicOAuth, llm/responseCache,
+llm/vendors/awsSigV4, sourcing/sourcingFeed, studio/voiceCloneService, webSearch/crawlerService,
+backend/webhookVerification).
+
+`infrastructure/crypto/constantTime.ts` — `timingSafeEqual`, lifted out of
+`application/backend/webhookVerification` when the second real caller arrived. It is not about
+webhooks; a learning module reaching for a secret compare has no business importing a module named
+for them.
+
+`activityLog.ts` gained `recordActivityBatch` (one INSERT and one version bump per tenant, closing an
+N+1 on the visitor-unload path), `eventKey` on its input, and `'visitor'` / `'learner'` in its actor
+union.
+
+### 7. The surface
+
+`/learning` — a Server Component over one client island, with three tabs: paths (directory + detail
+with reorder, publish and enrol), catalogue (every course with this learner's locks, one call, and
+the prerequisite editor beside it), and record store (the endpoint, the keys, and the forwarding
+target form). Eight components under `components/learning/`, each owning its own fetching, its own
+entitlement and its own empty state, so any of them drops onto a canvas card with no edits.
+
+`learning.manage` joined the capability map, mirroring the `requireRole(MANAGER)` split on the API:
+everybody sees the catalogue, their locks and their own progress; authoring a curriculum, enrolling
+somebody else and minting an xAPI credential are manager+. Every string is in all five catalogues
+with real translations; every colour and size is a token; every width is fluid.
+
+### 8. Dead code removed, and one guard repaired
+
+`sequenceCourses` had no caller, so the catalogue now reads in the order a curriculum is meant to be
+TAKEN in rather than alphabetically — a course listed above the one it requires is a list arguing
+with its own badges. `pathsContaining` had no caller, so `GET /courses/:id/paths` exposes it and the
+prerequisite editor says which paths a course belongs to; it is the SAME `contains` edge read the
+other way, not a second stored fact, so the two can never disagree. `isRelationKind`, `ADL_VERBS` and
+`isDocumentScope` had no caller and no prospect of one, and were deleted.
+
+`check-trigger-palette-parity.mjs` was repaired twice in one pass, which is the finding. It pointed
+at `components/workflow-builder/nodeKinds.ts`; that file had become
+`domains/workflow/domain/stepCatalog.ts`, and mid-pass the catalogue split again and the trigger step
+landed in `stepKinds/connect.ts`. Each move left the guard throwing instead of comparing — a check
+that fails loudly is at least honest, but for two moves nobody was checking that a trigger the
+builder OFFERS is one the runtime can FIRE. It is now pinned to the file that declares the FIELD
+rather than to the catalogue's entry point, so the next re-shuffle does not disarm it.
+
+**Verification:** api 26/26 guards, frontend 17/17 guards, both type-checks clean, 101 tests green
+across `application/learning`, `domain/learning`, `domain/kernel` and the webhook-verification suite
+the constant-time extraction touched.
+
+---
+
+## ✅ RESOLVED 2026-08-23 — The canvas IS the workflow: steps are objects, frames are containers, and the modal editor is gone
+
+A workflow used to be a CARD on the board that opened a modal holding a second canvas — its own
+palette, its own node renderer, its own selection model — over a board that already had all three.
+The board could draw the work and not the flow, because the flow lived somewhere else. It does not
+any more.
+
+### 1. One step is one object
+
+`flowStep` is a new canvas kind, and there is exactly ONE of it for the ~60 step kinds in the
+catalog: which step it is, is a VALUE (`stepKind`), not a kind — the same rule that makes a new
+industry a `discipline` value. Sixty kinds would have meant sixty registry entries, sixty palette
+labels in five locales and sixty branches in the node renderer, all of which already exist once in
+the step catalog.
+
+The catalog itself MOVED, because it now has three consumers instead of one:
+`components/workflow-builder/nodeKinds.ts` → `domains/workflow/domain/stepCatalog.ts`,
+`integrations.ts` → `stepIntegrations.ts`, `workflowBuilderI18n.ts` → `stepCatalogI18n.ts`, and
+`configSummary` moved out of `BuilderNode.tsx` into the catalog for the same reason — four surfaces
+say what a step is configured to do, and a canvas card importing a summary out of another component
+tree is how the second copy gets written. Every importer was migrated in the same pass; no shims.
+
+The canvas object picker gained the whole catalog as a THIRD vocabulary beside object kinds and
+stencil presets (`step:` / `stepIntegration:` prefixes, parsed only by `flowStepObject.ts`), and
+`SearchPicker` gained drag — so a step is carried out of the picker and put down where it goes,
+rather than placed in the middle and then dragged. Clicking, inserting after a card, and dropping
+all decode through ONE `choiceSeed`.
+
+### 2. A decision draws its paths
+
+`stepOutlets.ts` projects a `router`/`switch`/`branch` step's config into named OUTLETS, one
+connection point per path, drawn along the bottom of the card — and such a step renders no
+right-hand handle at all, because it has no unconditional "and then". Drawing an arm out of a case
+labels the edge with that outlet, which is what the executor prunes on
+(`WorkflowDefEdge.label`); before this, every arm left from the same dot and each one needed a
+`filter` step re-testing what the switch had already decided.
+
+The config is the single stored truth (the executor reads `routes`/`cases`/`fallback` and nothing
+else parses them); outlets are derived, and the inspector's editor folds an edit back into the same
+config. Outlet ids are POSITIONAL so a rename cannot silently detach an edge. `sourceHandle` /
+`targetHandle` now round-trip through persistence — they rode only in React Flow's memory, so a
+saved board came back with every arm of every switch attached to the first outlet: the graph still
+ran, and ran the wrong branch.
+
+### 3. A frame is a container, not a rectangle
+
+`domains/canvas/domain/canvasFrame.ts` gives the `frame` kind what it never had: membership
+(geometric — the centre inside the rectangle, smallest enclosing frame wins, so it cannot drift the
+way a stored member list does), collapse (members hidden, connections re-pointed at the chip so a
+put-away section still reads as part of the flow), drag-carries-contents, and OPEN — the section
+alone, at the size of a screen. That last one is the canvas within a canvas that replaced the modal:
+the same board showing one section, so the palette, Brain, undo, presence and the inspector all keep
+working inside it.
+
+### 4. The board compiles itself
+
+`compileBoardFlow.ts` lowers the steps in a section into a runnable `WorkflowDefinition`: the
+objects are the nodes, the connections are the edges, the outlet an arm was drawn from is the label.
+It refuses an underspecified step the same way `canvasWorkflowSpec.ts` always has — a graph that
+runs, reports success and does nothing that was asked for is worse than one that will not build —
+and each unbuildable step says what it needs ON THE CARD.
+
+DATA IN and DATA OUT are contracts, not notes: inputs lower to a `transform` step in front of the
+node, outputs to a `set-variables` step after it. Two API primitives made that honest rather than
+decorative — a `{{ json … }}` span that emits a JSON literal (so a mapping survives a value
+containing a quote), and `renderValueTemplate`, which treats a value field as a literal unless it
+carries a span, so a declared output can capture a PATH instead of only the whole payload.
+
+A section carries the two controls a workflow needs to run — run target and approval mode — and
+`POST`/`PATCH /api/workflow-definitions` now resolve the canvas's friendly target the way
+`/from-canvas` always did. Without that a built section saved with `runtime: 'host'` and no host:
+built, unrunnable, and pointing at a control it did not have.
+
+### 5. The old builder is deleted, and its one unique capability moved
+
+`/workflows/builder` has redirected to the canvas since before this change, so once the modal went,
+`WorkflowBuilder.tsx`, `BuilderNode.tsx`, `NodeConfigPanel.tsx` and `WorkflowNodePicker.tsx` had no
+reachable caller and are gone (~1,100 lines). What was NOT dead is the Evermind BUILD runner — those
+steps do not run in the cloud at all, they run in the browser on this device's GPU — so
+`EvermindBuildPanel` moved to `domains/workflow/presentation/` and opens from the frame that bounds
+the build steps, with the two starting pipelines offered on an empty section. `StepConfigForm` is
+the shared editor extracted out of the deleted panel: how a step is configured is not a property of
+where it is drawn.
+
+A legacy `workflow` card is not stranded: "Open on canvas" UNPACKS its saved definition into real
+step objects inside a frame, labeled edges reattached to the outlets their labels name, and the
+definition id moves to the frame — an open, not a fork.
+
+**Verified:** 257 frontend domain tests, 174 API workflow tests, both typecheckers clean, i18n and
+canvas-kind-label guards green, all new copy in EN/ZH/ES/FR/DE.
+
+## ✅ RESOLVED 2026-08-23 — Ad sets and ads get a service, an API and owned UTM tagging; guest fixtures reach the money lenses; the kind-label guard moves to the contract
+
+Four roadmap items closed by building, three closed by verifying they were already true, and
+two defects found and fixed on the way.
+
+### 1. The ad-set and ad levels: nine networks implemented them, nothing consumed them
+
+`AdsProvider` has carried `listAdSets` / `createAdSet` / `updateAdSet` / `listAds` / `createAd` /
+`updateAd` and the targeting vocabulary since 0470, and every one of the nine networks implements
+all six. A grep outside `networks/` returned exactly ONE hit: the default ad set
+`adsService.createAdCampaign` composes so a campaign on Reddit or X can deliver at all. `ad_sets`
+and `ads` existed and were written by nobody. So a campaign could be created and then targeted only
+through that one default set, and the audience a caller named in `AdSetDraft.targeting` had no
+surface that could name it.
+
+**`application/advertising/adSetService.ts`** is that surface. Read/create/update at both levels,
+mirroring what the network reports into `ad_sets` / `ads` on the way past — the same
+network-is-the-source-of-truth shape `adInsightsSync` uses for campaigns, so `ad_insights` can hang
+off a real foreign key and a panel can render without a provider round trip. One query for the
+parents and one for the ids after the upserts; never a `returning` per row, which on a driver with
+no pipelining is a round trip per ad set.
+
+It is a SEPARATE module, not more of `adsService.ts`: that file owns the account and the campaign,
+this one owns the two levels below, and one reason to change each. What it does NOT do is
+re-implement the write envelope — `write` and `callerFor` are now exported from `adsService` and
+used verbatim, because a second copy is how one level starts reporting `retryable` differently from
+the level above it.
+
+**`presentation/routes/adSetRoutes.ts`** mounts on the same `/api/ads` prefix, so the code split is
+invisible to a caller: `GET/POST /adsets`, `PATCH /adsets/:externalId`, `GET/POST /ads`,
+`PATCH /ads/:externalId`. Reads are DEVELOPER-level, every write is MANAGER-gated — an ad set
+carries the daily budget on most networks, so creating one is exactly as expensive a mistake as
+creating a campaign. Ad sets and ads are created PAUSED unless explicitly launched, the same rule
+campaigns already follow: writing an ad set down is never the same act as starting to spend.
+
+### 2. `adUtm.ts` had zero callers, and the tag it derives had nowhere to live
+
+The module has been in the tree since the ports landed, complete with a careful argument for why
+matching GA4's `sessionCampaignName` against `ad_campaigns.name` does not work — the first rename
+splits one campaign's history into two that each look half as effective, and nobody can tell that is
+what happened. It had **zero callers**, and its own docstring referenced an `adLedger.upsertAdCampaign`
+that does not exist.
+
+It is wired now, and the tagging happens in `adSetService.createAd` — BEFORE any adapter sees the
+URL. That placement is the point: the alternative is nine adapters each tagging their own URLs,
+which is nine chances to ship an untagged campaign, and the one that forgets is discovered a month
+later as a gap in a report.
+
+**Migration 1113** adds `ad_campaigns.utm_campaign`, and the column is necessary rather than
+convenient. `utmCampaignFor(network, externalId, name)` looks deterministic — the digest half comes
+from network plus the network's own id, both immutable — but the readable prefix is `slugify(name)`,
+and **a name is mutable**. Re-deriving after somebody renames a campaign in Meta's console yields a
+different string for the same campaign, which is precisely the failure the tag exists to prevent.
+So it is written once, by `ensureCampaignUtmTag`, whose UPDATE carries `utm_campaign IS NULL` in the
+predicate rather than relying on the read above it: two ads created at once both see null, only one
+write may land, and the loser re-reads instead of overwriting a tag already live on a URL clicks are
+carrying.
+
+`adInsightsSync.importCampaigns`'s conflict branch omits the column, and that omission is now
+commented as load-bearing — it refreshes everything else from the network deliberately, and this one
+field is ours, not theirs. The column is nullable because a backfill would mint tags that appear in
+no URL any click will ever carry: NULL means "predates owned tagging", which is the honest state.
+
+An ad adds `utm_content` naming itself, so two creatives in one campaign are comparable without a
+second tagging scheme. 15 tests pin the contract: no clobbering a param the caller wrote, idempotent
+under retry, query strings and fragments intact, an unparseable URL returned UNCHANGED (an untagged
+click is a gap in a report; a corrupted destination is money spent landing nowhere), and a rename
+NOT changing an existing tag.
+
+### 3. Guest fixture coverage: 10 endpoints → 16
+
+`financeFixtures.ts` adds the five highest-value reads the roadmap named, plus the PMO rollup:
+`/api/insights/finance`, `/api/insights/compliance`, `/api/insights/allocation`, `/api/agents`,
+`/api/pmo/tree`, `/api/pmo/rollup`. A signed-out visitor opening `/insights/finance` saw an empty
+chart under a banner promising them a sample workspace, which reads as "this product does not
+measure spend" rather than as "you are not signed in".
+
+Every figure is DERIVED from `sampleDailySeries` and `sampleTasks` — the same two sources the
+Delivery and Engineering lenses read — and the tests assert that by re-computing rather than
+restating: finance spend IS the series total, cost-per-merged-PR is a quotient of two totals it
+cannot drift from, capex + opex sums to cost, category hours sum to total hours, the compliance
+tool tally sums back to the events it counted, and the PMO rollup's spend is the same number the
+finance lens reports. A fixture whose Finance lens and whose board disagree is a demo that argues
+with itself, and the visitor who spots it has learned something true about how carefully we build.
+
+Two judgement calls worth recording: `paidOverflowUsd` is 0 rather than invented, because a
+fictional overflow charge is the one number here a visitor could reasonably be annoyed to discover
+was made up; and `budgets` is empty rather than seeded, because an imaginary budget makes the
+variance column fiction. The `/api/agents` fixture deliberately omits the human seat — offering it
+would put the visitor in their own assignee picker as a bot.
+
+### 4. The canvas kind-label assertion moves to the contract it protects
+
+A kind added to `CREATION_OBJECT_KINDS` with no `creationCanvas.object.*` entry ships as the raw
+dotted key in all five languages at once. It has happened twice — thirteen kinds on 2026-08-19,
+`brandKit` and `audience` on 2026-08-20.
+
+The assertion existed, inside `messages.test.ts`, and was wrong on two counts. It read
+`CREATION_OBJECT_REGISTRY` — the FRONTEND's list — while the defect it catches is a change to the
+CONTRACT package; that the two lists agree is already asserted, once, by
+`creationObjectRegistry.test.ts`. And it lived in a 484-line suite that imports five ~892 KB
+catalogs and takes ~20s, which nobody runs while editing a contract.
+
+**`scripts/check-canvas-kind-labels.mjs`** is sourced from the contract, runs in milliseconds inside
+`pnpm run check`, and therefore runs in the Deploy frontend job — so a contract-package change now
+fails the deploy that would have shipped an unlabelled kind. Proved non-vacuous by deleting one
+`de` label and watching it name the kind and the locale. 211 kinds, all labelled. The duplicate
+vitest case and its now-dead import are deleted.
+
+The assertion deliberately does NOT move into the contract package: the catalogs live in `frontend`,
+so an assertion there would make the contract import its own consumer — a dependency edge pointing
+the wrong way. The contract declares the vocabulary; the surface that renders it owns proving it has
+words.
+
+### 5. Two defects found and fixed on the way
+
+**A type error red at HEAD.** `useComponentCatalog.test.tsx` failed `tsgo` with
+`Type '"dashboard"' is not assignable to type '"canvas"'` — `renderHook` infers its prop type from
+`initialProps`, not from the callback's annotation, so `{ m: 'canvas' as const }` narrowed the whole
+hook to that one literal. The `as const` was doing the opposite of what it looked like. Annotating
+the props type once fixes it; `tsgo --noEmit` is clean.
+
+**A guard that crashes on a concurrent write.** `check-prompt-tool-names.mjs` walks the frontend
+tree and then reads each file, and threw an unhandled `ENOENT` when a file was deleted between the
+walk and the read. This repo has concurrent writers, so that is a real race, and it reds a deploy
+for a file that no longer exists to be wrong. A vanished file is now skipped; any other read error
+still throws, because an unreadable file that IS there is a real problem.
+
+### 6. Three entries that were already true, verified against source and removed
+
+- **`evaluateTaskAutoRun` does not model the lane REQUIREMENT gate** — it does.
+  `enforceLaneRequirements` takes a `dryRun` flag added for exactly this, and the evaluator probes
+  the gate read-only rather than forking its quorum, manifest-state and blocking rules. The
+  alternative — a second implementation living in the evaluator — is the two-verdicts-that-disagree
+  problem the probe was built to end.
+- **Resident tickets never auto-run — add a "run lane now"/backfill** — `laneResidentBackfill.ts`
+  exists and is wired into `boardRoutes` twice, as a fire-and-forget on staffing and as an explicit
+  endpoint.
+- **No integration test for assign→dispatch→run** — `assignDispatchRun.integration.test.ts` walks
+  the chain end to end with only the edges mocked.
+
+What remains of that cluster is one line, and it is a decision rather than an implementation: the
+backlog lane seeds `gate:'auto'`, and making it `gate:'human'` changes the behaviour of every
+built-in template on live boards. It stays in the register, named as the operator's call.
+
+---
+
+## ✅ RESOLVED 2026-08-23 — Historical BYO rows: the backfill could never have run, and the ledger turns out to be clean
+
+The register said historical `byo = false` rows needed a backfill that re-infers BYO from
+`tenant_llm_provider_keys` + the row's model vendor, and that the inference was lossy enough to
+need "an explicit operator decision on the cutoff". `api/scripts/backfill-byo-usage.mjs` existed and
+was wired to `npm run backfill:byo-usage`. It had never worked, and the cutoff turns out not to be
+the open question the entry thought it was.
+
+### The script could not run at all — either query, with or without `--tenant`
+
+Both of its `SELECT`s interpolated a nested tagged template as a query FRAGMENT:
+
+```js
+${tenantFilter ? primarySql`WHERE tenant_id = ${tenantFilter}` : primarySql``}
+```
+
+`@neondatabase/serverless`'s tagged template takes `(strings: TemplateStringsArray, ...params: any[])`
+— parameters only; it has no fragment composition (that is `postgres.js` / Drizzle's `sql`). The
+nested tag was therefore bound as a *value*, producing `SELECT … FROM tenant_llm_provider_keys $1`.
+The no-filter branch is the same shape, so the failure was unconditional. Rewritten on the driver's
+ordinary `sql(text, params)` form.
+
+### `created_at` on a credential DOES survive rotation, so the cutoff was never needed
+
+The old header asserted "there is no timestamp on the credential row that survives rotation (an
+upsert overwrites `created_at`'s meaning)" and made `--cutoff` a required global guess on that basis.
+That is wrong: `setTenantProviderKey` / `setTenantProviderOAuth` upsert with
+`set: { id, key_enc, auth_type, updated_at }` and **never touch `created_at`**. It is `id` that is
+re-minted per rotation (0953). So `created_at` means "when this tenant first connected this
+provider", and the false positive the entry worried about — a key connected *after* the call — is now
+excluded **per tenant and per provider by construction**, not approximated by one hand-picked date.
+`--cutoff` is gone (it errors with an explanation); `--since` is an optional extra lower bound.
+
+### A missing upper bound would have corrupted correct rows
+
+There was no upper bound at all. After the provenance fix deployed, `byo = false` is the ledger's
+*authoritative* answer that the platform paid — indistinguishable by row shape from a pre-fix BYO
+row. Running the old script would have re-attributed correctly-recorded platform-funded rows and
+zeroed real revenue. `--until` (the deploy date) is now required with no default, and every dry run
+prints corroboration: how many rows already carry provenance and the earliest one's date, with a
+warning when `--until` sits after it.
+
+### Zeroing the cost wiped a fee the tenant genuinely owes
+
+It set `cost_usd_millicents = 0` flat. `computeRecordedCostMillicents` keeps
+`PREMIUM_REQUEST_SURCHARGE_MILLICENTS` on a BYO row — the flat routing fee for our metered
+OpenRouter product is independent of whose key paid the vendor. The UPDATE now re-derives it
+per row (`CASE WHEN premium THEN … ELSE 0 END`), and reads the constant out of `usageLedger.ts`
+rather than re-typing it.
+
+### `byo_credential_id` is left NULL by default
+
+The old script stamped each provider's *current* credential id. That id is re-minted on every
+rotation, so writing it claims a key instance that may never have paid — corrupting exactly the
+per-key-instance history 0953 exists to provide. NULL states honestly "BYO, instance unknown";
+`--stamp-credential` opts in for a cohort known not to have rotated.
+
+### The hand-copied provider map is gone
+
+The script carried its own `PROVIDER_BY_VENDOR` literal with a comment admitting it mirrored
+`llmProviderCatalog.ts`. That is the duplication `normalizeByoProvider` was already burned by once
+(its old copy had lost `xai-oauth`, so SuperGrok-funded rows were stamped with a provider matching no
+credential and dropped out of the tenant's breakdown). Two new self-contained modules replace it:
+
+- **`scripts/lib/tsSource.mjs`** — lexical TypeScript-source reader (brace matching that skips
+  strings and comments, plus numeric-constant reads). Same rationale as `lib/drizzleSchema.mjs`:
+  scripts run unbuilt, so they read source rather than import it.
+- **`scripts/lib/byoProviderMap.mjs`** — derives vendor→provider from `PROVIDER_VENDOR_MAP` +
+  `byoVendorIdFor`'s OAuth aliases, the standalone routing prefixes from `VENDOR_PREFIXES`, and bare
+  model-id *families* from each single-vendor module's `CATALOG`. Families rather than exact catalog
+  ids on purpose — this reads history, and `claude-sonnet-4-6` names thousands of ledger rows the
+  catalog no longer lists. OpenRouter `<org>/<slug>` ids are never matched.
+
+`src/application/llm/byoProviderMap.test.ts` (9 tests) pins the derivation against the real modules:
+every derived vendor id must equal `providerForVendor`'s answer, every `(provider, authType)` pair
+`byoVendorIdFor` can produce must round-trip, every family must trace to a real `getCatalog()` entry,
+and the surcharge read must equal the exported constant. A parser that silently returned nothing
+would otherwise make the backfill report a clean run.
+
+### The measured answer: nothing to correct
+
+Dry-run over the whole ledger (read-only; `--apply` withheld): **63,477 rows, 62,268 already
+`byo = true`, earliest 2026-07-14 — the earliest row in the table.** The provenance fix has been live
+for the entire life of this data. All 1,209 `byo = false` rows name pool models no tenant holds a
+credential for (`@cf/*`, `nvidia/*`, `openrouter/*`, `deepseek/*`, `minimaxai/*`, `google/*`,
+`poolside/*`, `fluxapi/*`, plus 10 `googleai/*` rows against six credentials — minimax, kimi, openai,
+anthropic, moonshot, xai — that include no Google key). Zero attributable rows in every window tried.
+
+So no tenant in this database was over-charged. The exposure the entry described is real in shape but
+empty in fact, and the tool that proves it now runs, is guarded, and reports its own inference.
+
+`npm run typecheck:native` clean; `npm run check` 26/26 guards; 9/9 new tests pass.
+
+---
+
 ## ✅ RESOLVED 2026-08-22 — Roadmap re-verified against the running code: three fixes, seven entries that were already true
 
 A review pass over `ROADMAP.md` that did two things: closed what was cheap to close, and cut the
@@ -1755,6 +2270,17 @@ the properties that made the extraction worth doing: the picker offers only what
 renders the caller's errand for every row, searches on the visible label AND on the id a board card
 stores, and says so when nothing matches instead of showing bare headings. The real-catalog assertions
 go through the existing shared `realCatalogTranslator` rather than a sixth hand-rolled resolver.
+
+**A defect this pass shipped, and the guard that now stands where it was.** `useComponentLabel` was
+written returning a fresh arrow function per render, and this same pass put it into
+`WidgetBrainBridge`'s `useMemo` dependency array — the render loop that starved every `next/link`
+navigation on the site, written up in full above. None of the tests here could have caught it: every
+one asserted what the hooks RETURN, and the return values were correct throughout; the defect lived in
+the identity of the function carrying them. `lib/components/useComponentCatalog.test.tsx` now asserts
+that identity directly — `useComponentLabel` holds one identity across renders, `useComponentCatalog`
+returns the same array until the mount or the normalised query actually changes — and it sits beside
+the hooks rather than in the one consumer that happened to expose the symptom, so the next consumer to
+put either into a dependency array does not have to rediscover it.
 
 ## ✅ RESOLVED 2026-08-22 — One component registry with three mounts, and a published app that can read its owner's business
 

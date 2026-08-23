@@ -102,6 +102,14 @@ async function importCampaigns(
         set: {
           // The NETWORK is the source of truth for everything a network owns. A local
           // edit that was never pushed is not a fact about the campaign.
+          //
+          // `utmCampaign` is the ONE deliberate exception, and its absence from this
+          // branch is load-bearing rather than an oversight (migration 1113). The tag
+          // is OURS, not the network's: it is minted once from the campaign's immutable
+          // identity and is already live on destination URLs that clicks are carrying.
+          // Refreshing it here would re-derive it from the campaign's CURRENT name, so
+          // a rename in Meta's console would silently split one campaign's history into
+          // two that each look half as effective. See `adSetService.ensureCampaignUtmTag`.
           name: campaign.name || campaign.externalId,
           objective: campaign.objective,
           nativeObjective: campaign.nativeObjective,

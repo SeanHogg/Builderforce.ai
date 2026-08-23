@@ -182,6 +182,24 @@ export function signInHref(next?: string): string {
   return target ? `/login?next=${encodeURIComponent(target)}` : '/login';
 }
 
+/**
+ * THE way IN — `/register` carrying where the person was standing.
+ *
+ * The sibling of `signInHref`, and here for the same reason: a guest is offered an
+ * account from more than one surface (the header CTA once this browser holds a local
+ * board, the canvas account gate, the guest wall), and every one of them has to bring
+ * the visitor back to the work they were doing. Hand-built `/register?next=…` strings
+ * disagreed about encoding exactly the way the login ones did.
+ *
+ * Claiming a local board does NOT depend on this — `claimPendingDrafts` works off the
+ * local-draft index precisely so a dropped `next` is never data loss — but landing back
+ * on the board you were keeping is the difference between "kept" and "kept somewhere".
+ */
+export function registerHref(next?: string): string {
+  const target = next ?? (isBrowser() ? window.location.pathname + window.location.search : '');
+  return target ? `/register?next=${encodeURIComponent(target)}` : '/register';
+}
+
 // ---------------------------------------------------------------------------
 // Centralized 401 (invalid/expired token) handling — redirect to login
 // ---------------------------------------------------------------------------

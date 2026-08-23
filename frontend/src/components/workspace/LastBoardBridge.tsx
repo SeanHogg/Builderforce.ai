@@ -80,7 +80,9 @@ function markResumed(): void {
  * Local even for a signed-in person, deliberately. Creating a server canvas as a
  * side effect of opening Settings would file a row in their library that they
  * never asked for and would have to delete; a local board costs them nothing and
- * becomes real the moment they use it and press Save & collaborate.
+ * becomes real the moment they take an account — the header CTA turns into "Keep
+ * your work" as soon as this browser holds one, and that is the only place the
+ * offer is made.
  *
  * The gate is `rendersAppShell`, and that is the part that protects the public
  * surface. A signed-OUT visitor on a reference page (`/product-management`,

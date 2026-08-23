@@ -4,7 +4,7 @@
  *
  * ── THE DEFECT THIS EXISTS TO STOP ───────────────────────────────────────────────
  * The workflow builder's trigger node renders its choices from a literal option list in
- * `frontend/src/components/workflow-builder/nodeKinds.ts`. The runtime decides what is
+ * `frontend/src/domains/workflow/domain/stepKinds/connect.ts`. The runtime decides what is
  * real from `ACTIVATABLE_TRIGGER_TYPES` in `api/src/domain/workflowTriggers.ts`: only a
  * type in that list gets a `workflow_triggers` row at save, and only a row can ever fire.
  *
@@ -31,13 +31,20 @@ import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, '../..');
-const PALETTE = resolve(repoRoot, 'frontend/src/components/workflow-builder/nodeKinds.ts');
+// Was `frontend/src/components/workflow-builder/nodeKinds.ts`, then
+// `domains/workflow/domain/stepCatalog.ts`, and now the per-family split beneath
+// it — the trigger step lives in the `connect` family. The path has moved twice
+// without the guard moving with it, and both times the symptom was the same: this
+// check threw instead of comparing anything. It is pinned to the FIELD's file
+// rather than to the catalogue's entry point so the next re-shuffle of the
+// catalogue does not silently disarm it.
+const PALETTE = resolve(repoRoot, 'frontend/src/domains/workflow/domain/stepKinds/connect.ts');
 const DOMAIN = resolve(repoRoot, 'api/src/domain/workflowTriggers.ts');
 
 /** The `triggerType` select's `options: [...]` array in the palette. */
 function paletteTriggerTypes(source) {
   const anchor = source.indexOf("key: 'triggerType'");
-  if (anchor === -1) throw new Error("nodeKinds.ts no longer declares a 'triggerType' field");
+  if (anchor === -1) throw new Error("stepKinds/connect.ts no longer declares a 'triggerType' field");
   const optionsAt = source.indexOf('options: [', anchor);
   if (optionsAt === -1) throw new Error("the 'triggerType' field no longer declares options");
   const close = source.indexOf(']', optionsAt);

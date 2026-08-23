@@ -637,7 +637,8 @@
       "salesProgramme": "Programa de ventas",
       "developers": "Desarrolladores",
       "earnings": "Ingresos",
-      "disputes": "Disputas"
+      "disputes": "Disputas",
+      "learning": "Formación"
     },
     "tab": {
       "projects": "Proyectos",
@@ -15156,7 +15157,16 @@
         "blurb": "Transcribe un archivo de audio, o tradúcelo directamente al inglés — llamada real a la API de Whisper (configurada por el operador, sin clave propia por inquilino todavía)."
       }
     },
-    "statusRunPendingApproval": "Este flujo de trabajo necesita aprobación antes de ejecutarse. Se envió una solicitud de aprobación."
+    "statusRunPendingApproval": "Este flujo de trabajo necesita aprobación antes de ejecutarse. Se envió una solicitud de aprobación.",
+    "deleteNode": "Eliminar nodo",
+    "activation": {
+      "heading": "Activación",
+      "webhook": "URL del webhook",
+      "webhookSigned": "URL del webhook (firma con X-Signature)",
+      "inboundEmail": "Dirección de correo entrante",
+      "nextRun": "Próxima ejecución: {when}",
+      "last": "Última: {status}"
+    }
   },
   "chunkError": {
     "recovering": "Actualizando a la última versión…",
@@ -18650,7 +18660,6 @@
     "exitPresentation": "Salir de la presentación",
     "share": "Invitar",
     "run": "Ejecutar",
-    "saveCollaborate": "Guardar y colaborar",
     "addToCanvas": "Añadir al Lienzo",
     "searchObjectTypes": "Buscar tipos de objeto…",
     "askBrain": "Pregunta a Brain sobre este lienzo",
@@ -18943,7 +18952,8 @@
       "stopwatch": "Cronómetro",
       "transclusion": "Transclusión",
       "calendar": "Calendario",
-      "component": "Componente"
+      "component": "Componente",
+      "flowStep": "Paso"
     },
     "twilioSetup": {
       "title": "Integración de Twilio",
@@ -19053,7 +19063,6 @@
       "learning": "Aprendiendo…",
       "writing": "Escribiendo…"
     },
-    "save": "Guardar",
     "invite": "Invitar",
     "retry": "Reintentar",
     "dismiss": "Descartar",
@@ -19158,7 +19167,6 @@
     "gateBenefitKeep": "Conserva toda esta sesión local",
     "gateBenefitUnlock": "Desbloquea recursos duraderos e historial",
     "gateBenefitCollaborate": "Colabora con tu equipo",
-    "gateSaveTitle": "Crea una cuenta para guardar y colaborar",
     "gateSaveSessionTitle": "Crea una cuenta para guardar esta sesión",
     "gateSaveBody": "Mueve esta sesión local a un espacio de trabajo seguro del tenant sin perder objetos, conversación ni diseño.",
     "gateMetricsTitle": "Crea una cuenta para medir el valor entregado",
@@ -19191,11 +19199,6 @@
     "tourBody4": "Conecta dos objetos para definir una relación real de datos, control, referencia, presentación o entrega.",
     "tourBody5": "Comparte la sesión, comenta objetos y ve cursores en vivo sin mover la vista de nadie más.",
     "tourBody6": "Los proyectos son opcionales. Añade uno solo cuando quieras convertir un artefacto en una tarea y asignar un agente.",
-    "workflowFocusEditor": "Editor de enfoque del flujo de trabajo",
-    "closeWorkflowEditor": "Cerrar el editor de flujo de trabajo",
-    "editWorkflowOnCanvas": "Editar el flujo de trabajo en el lienzo",
-    "editWorkflowHint": "Los cambios se guardan en la definición canónica del flujo de trabajo.",
-    "workflowSaved": "Flujo de trabajo guardado desde esta sesión",
     "evermindAdapterStudio": "Estudio de adaptadores Evermind",
     "closeAdapterStudio": "Cerrar el estudio de adaptadores",
     "trainEvermindOnCanvas": "Entrenar Evermind en el lienzo",
@@ -22494,7 +22497,8 @@
       "account": "Cuenta financiera que registra saldos y transacciones.",
       "sticky": "Nota adhesiva libre para apuntar ideas rápidas en el lienzo.",
       "stopwatch": "Mide cuánto dura algo de verdad. Todos ven el mismo reloj.",
-      "transclusion": "Muestra aquí otro documento de conocimiento, en vivo, no una copia."
+      "transclusion": "Muestra aquí otro documento de conocimiento, en vivo, no una copia.",
+      "flowStep": "Un paso ejecutable —una llamada a un modelo, una integración, una decisión— conectado a los pasos que lo rodean."
     },
     "previewWidth": "Ancho de vista previa",
     "viewportName": {
@@ -22978,7 +22982,61 @@
         "url": "URL"
       }
     },
-    "componentId": "ID de componente"
+    "componentId": "ID de componente",
+    "flowStep": {
+      "dataIn": "Datos de entrada",
+      "dataInHint": "Nombra lo que recibe este paso e indica de dónde se lee cada valor en los datos anteriores.",
+      "dataOut": "Datos de salida",
+      "dataOutHint": "Nombra lo que publica este paso. Los pasos posteriores lo leen con Obtener variable.",
+      "outlets": "Rutas",
+      "outletsHint": "Cada ruta tiene su propio punto de conexión en la tarjeta. Solo se ejecuta la que coincide.",
+      "outletName": "Nombre",
+      "outletCondition": "Condición",
+      "outletConditionHint": "status == \"ready\"",
+      "outletMatch": "Coincide con",
+      "outletMatchHint": "ready",
+      "addOutlet": "Añadir ruta",
+      "removeOutlet": "Eliminar la ruta {name}",
+      "bindingKey": "Nombre",
+      "bindingFrom": "Leer de",
+      "bindingFromHint": "order.id",
+      "addBinding": "Añadir campo",
+      "removeBinding": "Eliminar {key}",
+      "outputKey": "Nombre",
+      "outputFrom": "Tomar de",
+      "outputFromHint": "order.id",
+      "connections": "Conexiones",
+      "noConnections": "Todavía no hay nada conectado a este paso.",
+      "removeConnection": "Desconectar {name}",
+      "needsSetup": "Falta configurar",
+      "built": "Compilado",
+      "untitledFlow": "Flujo sin título",
+      "framePurpose": "Los pasos de este flujo",
+      "framedForBuild": "Se enmarcaron estos pasos para poder compilar el flujo.",
+      "notBuiltYet": "Este flujo de trabajo aún no se ha compilado, así que no hay nada que abrir.",
+      "opening": "Abriendo el flujo de trabajo en el lienzo…",
+      "opened": "{count, plural, one {Se abrió # paso en el lienzo.} other {Se abrieron # pasos en el lienzo.}}",
+      "frameHolds": "{count, plural, =0 {Todavía no hay pasos en esta sección.} one {# paso en esta sección.} other {# pasos en esta sección.}}",
+      "flowNamedAfterFrame": "El flujo de trabajo compilado toma el nombre de esta sección: {name}."
+    },
+    "flowIssue": {
+      "noSteps": "Este flujo todavía no tiene pasos que ejecutar.",
+      "llmNeedsPrompt": "Este paso de modelo necesita un prompt.",
+      "connectorNeedsConnector": "Este paso de integración necesita un conector, por ejemplo Twilio.",
+      "connectorNeedsAction": "Este paso necesita una acción en {connector}.",
+      "agentNeedsTask": "Este paso de agente necesita una tarea que realizar."
+    },
+    "frameSection": {
+      "holds": "{count, plural, =0 {Vacío} one {# objeto} other {# objetos}}",
+      "collapse": "Contraer",
+      "expand": "Expandir",
+      "open": "Abrir",
+      "exit": "Salir de la sección",
+      "section": "Sección"
+    },
+    "openWorkflowOnCanvas": "Abrir en el lienzo",
+    "buildFlow": "Compilar flujo",
+    "runFlow": "Ejecutar flujo"
   },
   "canvasCommands": {
     "cleanLayout": "Ordenar el diseño del lienzo",
@@ -27014,6 +27072,124 @@
         "pending": "Pendiente",
         "rejected": "Rechazada"
       }
+    }
+  },
+  "learning": {
+    "tabs": {
+      "label": "Secciones de formación",
+      "paths": "Itinerarios",
+      "catalogue": "Catálogo",
+      "lrs": "Registro de aprendizaje"
+    },
+    "common": {
+      "saving": "Guardando…",
+      "loading": "Cargando…",
+      "cancel": "Cancelar"
+    },
+    "status": {
+      "draft": "Borrador",
+      "published": "Publicado",
+      "retired": "Retirado",
+      "enrolled": "Inscrito",
+      "in_progress": "En curso",
+      "completed": "Completado",
+      "expired": "Caducado",
+      "withdrawn": "Abandonado"
+    },
+    "paths": {
+      "title": "Itinerarios formativos",
+      "intro": "Un itinerario ordena cursos. Inscribirse en él inscribe a la persona en todos los cursos que contiene.",
+      "empty": "Todavía no hay itinerarios.",
+      "courseCount": "{count, plural, one {# curso} other {# cursos}}",
+      "newLabel": "Nuevo itinerario",
+      "newPlaceholder": "p. ej. Incorporación para ingeniería",
+      "create": "Crear itinerario",
+      "failed": "No se han podido cargar los itinerarios.",
+      "createFailed": "No se ha podido crear el itinerario."
+    },
+    "progress": {
+      "label": "Progreso del itinerario",
+      "count": "{completed} de {total} completados"
+    },
+    "detail": {
+      "failed": "No se ha podido cargar este itinerario.",
+      "enroll": "Inscribirme",
+      "enrollFailed": "No se ha podido inscribirte en este itinerario.",
+      "publish": "Publicar",
+      "retire": "Retirar",
+      "statusFailed": "No se ha podido cambiar el estado del itinerario.",
+      "sequence": "Orden de los cursos",
+      "noCourses": "Este itinerario aún no tiene cursos.",
+      "unknownCourse": "Curso eliminado",
+      "moveUp": "Subir",
+      "moveDown": "Bajar",
+      "remove": "Quitar del itinerario",
+      "addCourse": "Añadir un curso",
+      "addCoursePlaceholder": "Elige un curso…",
+      "saveOrder": "Guardar el orden",
+      "orderFailed": "No se ha podido guardar el orden de los cursos.",
+      "unsaved": "Cambios sin guardar"
+    },
+    "catalogue": {
+      "title": "Catálogo de cursos",
+      "intro": "Todos los cursos, y si ya puedes empezarlos.",
+      "empty": "Todavía no hay cursos.",
+      "failed": "No se ha podido cargar el catálogo.",
+      "open": "Listo para empezar",
+      "unlocked": "Disponible",
+      "locked": "Bloqueado",
+      "blockedBy": "Termina antes: {courses}",
+      "markComplete": "Marcar como completado",
+      "completeFailed": "No se ha podido registrar que terminaste este curso."
+    },
+    "prerequisites": {
+      "title": "Requisitos previos",
+      "intro": "Lo que hay que terminar antes de desbloquear este curso. Distinto del orden de un itinerario.",
+      "empty": "Este curso no tiene requisitos previos.",
+      "failed": "No se han podido cargar los requisitos previos.",
+      "add": "Añadir un requisito previo",
+      "addPlaceholder": "Elige un curso…",
+      "addFailed": "No se ha podido añadir ese requisito previo.",
+      "remove": "Quitar el requisito previo",
+      "removeFailed": "No se ha podido quitar ese requisito previo.",
+      "inPaths": "Forma parte de: {paths}"
+    },
+    "lrs": {
+      "title": "Registro de aprendizaje (LRS)",
+      "intro": "El endpoint xAPI al que una herramienta de autoría envía sus declaraciones, y las claves que lo autentican.",
+      "endpoint": "Endpoint",
+      "empty": "Todavía no hay credenciales.",
+      "failed": "No se han podido cargar las credenciales.",
+      "issue": "Emitir credencial",
+      "issueFailed": "No se ha podido emitir la credencial.",
+      "newLabel": "Nombre de la credencial",
+      "newPlaceholder": "p. ej. Autoría con Storyline",
+      "secretOnce": "Cópialas ahora: el secreto no se vuelve a mostrar.",
+      "revoke": "Revocar",
+      "revokeTitle": "¿Revocar esta credencial?",
+      "revokeConfirm": "«{label}» dejará de funcionar de inmediato y todo lo que la use dejará de registrar.",
+      "revokeFailed": "No se ha podido revocar la credencial.",
+      "direction": {
+        "inbound": "Entrante",
+        "outbound": "Reenvío"
+      },
+      "status": {
+        "connected": "Activa",
+        "inactive": "Inactiva"
+      }
+    },
+    "target": {
+      "open": "Reenviar a otro LRS",
+      "title": "Destino de reenvío",
+      "intro": "Cada declaración que acepta este registro se envía también al endpoint de abajo.",
+      "label": "Nombre",
+      "labelPlaceholder": "p. ej. LRS corporativo",
+      "endpoint": "Endpoint",
+      "endpointPlaceholder": "https://lrs.example.com/xapi",
+      "key": "Clave",
+      "secret": "Secreto",
+      "save": "Añadir destino",
+      "failed": "No se ha podido añadir ese destino de reenvío."
     }
   }
 }

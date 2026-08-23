@@ -637,7 +637,8 @@
       "salesProgramme": "Vertriebsprogramm",
       "developers": "Entwickler",
       "earnings": "Einnahmen",
-      "disputes": "Streitfälle"
+      "disputes": "Streitfälle",
+      "learning": "Lernen"
     },
     "tab": {
       "projects": "Projekte",
@@ -15156,7 +15157,16 @@
         "blurb": "Transkribiert eine Audiodatei oder übersetzt sie direkt ins Englische — echter Whisper-API-Aufruf (vom Betreiber konfiguriert, noch kein mandantenspezifischer eigener Schlüssel)."
       }
     },
-    "statusRunPendingApproval": "Dieser Workflow muss vor der Ausführung genehmigt werden. Eine Genehmigungsanfrage wurde gesendet."
+    "statusRunPendingApproval": "Dieser Workflow muss vor der Ausführung genehmigt werden. Eine Genehmigungsanfrage wurde gesendet.",
+    "deleteNode": "Knoten löschen",
+    "activation": {
+      "heading": "Aktivierung",
+      "webhook": "Webhook-URL",
+      "webhookSigned": "Webhook-URL (mit X-Signature signieren)",
+      "inboundEmail": "Eingehende E-Mail-Adresse",
+      "nextRun": "Nächster Lauf: {when}",
+      "last": "Zuletzt: {status}"
+    }
   },
   "chunkError": {
     "recovering": "Aktualisierung auf die neueste Version…",
@@ -18650,7 +18660,6 @@
     "exitPresentation": "Präsentation beenden",
     "share": "Einladen",
     "run": "Ausführen",
-    "saveCollaborate": "Speichern und zusammenarbeiten",
     "addToCanvas": "Zum Canvas hinzufügen",
     "searchObjectTypes": "Objekttypen durchsuchen…",
     "askBrain": "Brain zu diesem Canvas fragen",
@@ -18943,7 +18952,8 @@
       "stopwatch": "Stoppuhr",
       "transclusion": "Transklusion",
       "calendar": "Kalender",
-      "component": "Komponente"
+      "component": "Komponente",
+      "flowStep": "Schritt"
     },
     "twilioSetup": {
       "title": "Twilio-Integration",
@@ -19053,7 +19063,6 @@
       "learning": "Lernt…",
       "writing": "Schreibt…"
     },
-    "save": "Speichern",
     "invite": "Einladen",
     "retry": "Erneut versuchen",
     "dismiss": "Ausblenden",
@@ -19158,7 +19167,6 @@
     "gateBenefitKeep": "Diese lokale Sitzung vollständig behalten",
     "gateBenefitUnlock": "Dauerhafte Ressourcen und Verlauf freischalten",
     "gateBenefitCollaborate": "Mit Ihrem Team zusammenarbeiten",
-    "gateSaveTitle": "Konto erstellen, um zu speichern und zusammenzuarbeiten",
     "gateSaveSessionTitle": "Konto erstellen, um diese Sitzung zu speichern",
     "gateSaveBody": "Verschieben Sie diese lokale Sitzung in einen sicheren Tenant-Arbeitsbereich, ohne Objekte, Konversation oder Layout zu verlieren.",
     "gateMetricsTitle": "Konto erstellen, um den gelieferten Wert zu messen",
@@ -19191,11 +19199,6 @@
     "tourBody4": "Verbinden Sie zwei Objekte, um eine echte Daten-, Steuerungs-, Referenz-, Präsentations- oder Lieferbeziehung zu definieren.",
     "tourBody5": "Teilen Sie die Sitzung, kommentieren Sie Objekte und sehen Sie Live-Cursor, ohne die Ansicht anderer zu verschieben.",
     "tourBody6": "Projekte sind optional. Fügen Sie eines nur hinzu, wenn Sie ein Artefakt in eine Aufgabe verwandeln und einen Agent zuweisen möchten.",
-    "workflowFocusEditor": "Workflow-Fokuseditor",
-    "closeWorkflowEditor": "Workflow-Editor schließen",
-    "editWorkflowOnCanvas": "Workflow auf der Leinwand bearbeiten",
-    "editWorkflowHint": "Änderungen werden in der kanonischen Workflow-Definition gespeichert.",
-    "workflowSaved": "Workflow aus dieser Sitzung gespeichert",
     "evermindAdapterStudio": "Evermind-Adapterstudio",
     "closeAdapterStudio": "Adapterstudio schließen",
     "trainEvermindOnCanvas": "Evermind auf der Leinwand trainieren",
@@ -22494,7 +22497,8 @@
       "account": "Ein Finanzkonto zur Verfolgung von Salden und Transaktionen.",
       "sticky": "Freies Notizzettel für schnelle Gedanken auf der Arbeitsfläche.",
       "stopwatch": "Miss, wie lange etwas wirklich dauert. Alle sehen dieselbe Uhr.",
-      "transclusion": "Zeig hier ein anderes Wissensdokument, live – keine Kopie davon."
+      "transclusion": "Zeig hier ein anderes Wissensdokument, live – keine Kopie davon.",
+      "flowStep": "Ein ausführbarer Schritt — Modellaufruf, Integration oder Entscheidung — verbunden mit den Schritten daneben."
     },
     "previewWidth": "Vorschaubreite",
     "viewportName": {
@@ -22978,7 +22982,61 @@
         "url": "URL"
       }
     },
-    "componentId": "Komponenten-ID"
+    "componentId": "Komponenten-ID",
+    "flowStep": {
+      "dataIn": "Eingehende Daten",
+      "dataInHint": "Benennen Sie, was dieser Schritt erhält, und woher jeder Wert in den vorherigen Daten gelesen wird.",
+      "dataOut": "Ausgehende Daten",
+      "dataOutHint": "Benennen Sie, was dieser Schritt veröffentlicht. Spätere Schritte lesen es mit „Variable lesen“.",
+      "outlets": "Pfade",
+      "outletsHint": "Jeder Pfad hat einen eigenen Verbindungspunkt auf der Karte. Nur der zutreffende Pfad läuft.",
+      "outletName": "Name",
+      "outletCondition": "Bedingung",
+      "outletConditionHint": "status == \"ready\"",
+      "outletMatch": "Entspricht Wert",
+      "outletMatchHint": "ready",
+      "addOutlet": "Pfad hinzufügen",
+      "removeOutlet": "Pfad {name} entfernen",
+      "bindingKey": "Name",
+      "bindingFrom": "Lesen aus",
+      "bindingFromHint": "order.id",
+      "addBinding": "Feld hinzufügen",
+      "removeBinding": "{key} entfernen",
+      "outputKey": "Name",
+      "outputFrom": "Entnehmen aus",
+      "outputFromHint": "order.id",
+      "connections": "Verbindungen",
+      "noConnections": "Mit diesem Schritt ist noch nichts verbunden.",
+      "removeConnection": "Verbindung zu {name} trennen",
+      "needsSetup": "Einrichtung nötig",
+      "built": "Erstellt",
+      "untitledFlow": "Unbenannter Ablauf",
+      "framePurpose": "Die Schritte dieses Ablaufs",
+      "framedForBuild": "Diese Schritte wurden gerahmt, damit der Ablauf erstellt werden kann.",
+      "notBuiltYet": "Dieser Workflow wurde noch nicht erstellt, es gibt also nichts zu öffnen.",
+      "opening": "Workflow wird auf der Leinwand geöffnet…",
+      "opened": "{count, plural, one {# Schritt auf der Leinwand geöffnet.} other {# Schritte auf der Leinwand geöffnet.}}",
+      "frameHolds": "{count, plural, =0 {Noch keine Schritte in diesem Bereich.} one {# Schritt in diesem Bereich.} other {# Schritte in diesem Bereich.}}",
+      "flowNamedAfterFrame": "Der erstellte Workflow trägt den Namen dieses Bereichs: {name}."
+    },
+    "flowIssue": {
+      "noSteps": "Dieser Ablauf hat noch keine Schritte zum Ausführen.",
+      "llmNeedsPrompt": "Dieser Modellschritt braucht einen Prompt.",
+      "connectorNeedsConnector": "Dieser Integrationsschritt braucht einen Connector, zum Beispiel Twilio.",
+      "connectorNeedsAction": "Dieser Schritt braucht eine Aktion auf {connector}.",
+      "agentNeedsTask": "Dieser Agentenschritt braucht eine auszuführende Aufgabe."
+    },
+    "frameSection": {
+      "holds": "{count, plural, =0 {Leer} one {# Objekt} other {# Objekte}}",
+      "collapse": "Einklappen",
+      "expand": "Ausklappen",
+      "open": "Öffnen",
+      "exit": "Bereich verlassen",
+      "section": "Bereich"
+    },
+    "openWorkflowOnCanvas": "Auf der Leinwand öffnen",
+    "buildFlow": "Ablauf erstellen",
+    "runFlow": "Ablauf ausführen"
   },
   "canvasCommands": {
     "cleanLayout": "Leinwand-Layout aufräumen",
@@ -27014,6 +27072,124 @@
         "pending": "Offen",
         "rejected": "Abgelehnt"
       }
+    }
+  },
+  "learning": {
+    "tabs": {
+      "label": "Lernbereiche",
+      "paths": "Lernpfade",
+      "catalogue": "Katalog",
+      "lrs": "Lernaufzeichnungsspeicher"
+    },
+    "common": {
+      "saving": "Wird gespeichert…",
+      "loading": "Wird geladen…",
+      "cancel": "Abbrechen"
+    },
+    "status": {
+      "draft": "Entwurf",
+      "published": "Veröffentlicht",
+      "retired": "Stillgelegt",
+      "enrolled": "Angemeldet",
+      "in_progress": "In Bearbeitung",
+      "completed": "Abgeschlossen",
+      "expired": "Abgelaufen",
+      "withdrawn": "Zurückgezogen"
+    },
+    "paths": {
+      "title": "Lernpfade",
+      "intro": "Ein Lernpfad bringt Kurse in eine Reihenfolge. Wer sich anmeldet, wird zu jedem enthaltenen Kurs angemeldet.",
+      "empty": "Noch keine Lernpfade.",
+      "courseCount": "{count, plural, one {# Kurs} other {# Kurse}}",
+      "newLabel": "Neuer Lernpfad",
+      "newPlaceholder": "z. B. Onboarding für Entwicklung",
+      "create": "Lernpfad anlegen",
+      "failed": "Die Lernpfade konnten nicht geladen werden.",
+      "createFailed": "Der Lernpfad konnte nicht angelegt werden."
+    },
+    "progress": {
+      "label": "Fortschritt im Lernpfad",
+      "count": "{completed} von {total} abgeschlossen"
+    },
+    "detail": {
+      "failed": "Dieser Lernpfad konnte nicht geladen werden.",
+      "enroll": "Mich anmelden",
+      "enrollFailed": "Die Anmeldung zu diesem Lernpfad war nicht möglich.",
+      "publish": "Veröffentlichen",
+      "retire": "Stilllegen",
+      "statusFailed": "Der Status des Lernpfads konnte nicht geändert werden.",
+      "sequence": "Reihenfolge der Kurse",
+      "noCourses": "Dieser Lernpfad enthält noch keine Kurse.",
+      "unknownCourse": "Gelöschter Kurs",
+      "moveUp": "Nach oben",
+      "moveDown": "Nach unten",
+      "remove": "Aus dem Lernpfad entfernen",
+      "addCourse": "Kurs hinzufügen",
+      "addCoursePlaceholder": "Kurs auswählen…",
+      "saveOrder": "Reihenfolge speichern",
+      "orderFailed": "Die Reihenfolge konnte nicht gespeichert werden.",
+      "unsaved": "Nicht gespeicherte Änderungen"
+    },
+    "catalogue": {
+      "title": "Kurskatalog",
+      "intro": "Alle Kurse — und ob Sie sie schon beginnen dürfen.",
+      "empty": "Noch keine Kurse.",
+      "failed": "Der Katalog konnte nicht geladen werden.",
+      "open": "Kann begonnen werden",
+      "unlocked": "Freigeschaltet",
+      "locked": "Gesperrt",
+      "blockedBy": "Zuerst abschließen: {courses}",
+      "markComplete": "Als abgeschlossen markieren",
+      "completeFailed": "Der Abschluss dieses Kurses konnte nicht erfasst werden."
+    },
+    "prerequisites": {
+      "title": "Voraussetzungen",
+      "intro": "Was abgeschlossen sein muss, bevor dieser Kurs freigeschaltet wird. Unabhängig von der Reihenfolge im Lernpfad.",
+      "empty": "Dieser Kurs hat keine Voraussetzungen.",
+      "failed": "Die Voraussetzungen konnten nicht geladen werden.",
+      "add": "Voraussetzung hinzufügen",
+      "addPlaceholder": "Kurs auswählen…",
+      "addFailed": "Diese Voraussetzung konnte nicht hinzugefügt werden.",
+      "remove": "Voraussetzung entfernen",
+      "removeFailed": "Diese Voraussetzung konnte nicht entfernt werden.",
+      "inPaths": "Teil von: {paths}"
+    },
+    "lrs": {
+      "title": "Lernaufzeichnungsspeicher (LRS)",
+      "intro": "Der xAPI-Endpunkt, an den ein Autorenwerkzeug seine Statements sendet, und die Schlüssel, die ihn absichern.",
+      "endpoint": "Endpunkt",
+      "empty": "Noch keine Zugangsdaten.",
+      "failed": "Die Zugangsdaten konnten nicht geladen werden.",
+      "issue": "Zugangsdaten ausstellen",
+      "issueFailed": "Die Zugangsdaten konnten nicht ausgestellt werden.",
+      "newLabel": "Name der Zugangsdaten",
+      "newPlaceholder": "z. B. Storyline-Autorenwerkzeug",
+      "secretOnce": "Jetzt kopieren — das Geheimnis wird nie wieder angezeigt.",
+      "revoke": "Widerrufen",
+      "revokeTitle": "Diese Zugangsdaten widerrufen?",
+      "revokeConfirm": "„{label}“ funktioniert sofort nicht mehr, und alles, was sie verwendet, hört auf aufzuzeichnen.",
+      "revokeFailed": "Die Zugangsdaten konnten nicht widerrufen werden.",
+      "direction": {
+        "inbound": "Eingehend",
+        "outbound": "Weiterleitung"
+      },
+      "status": {
+        "connected": "Aktiv",
+        "inactive": "Inaktiv"
+      }
+    },
+    "target": {
+      "open": "An ein anderes LRS weiterleiten",
+      "title": "Weiterleitungsziel",
+      "intro": "Jedes Statement, das dieser Speicher annimmt, geht zusätzlich an den Endpunkt unten.",
+      "label": "Name",
+      "labelPlaceholder": "z. B. Unternehmens-LRS",
+      "endpoint": "Endpunkt",
+      "endpointPlaceholder": "https://lrs.example.com/xapi",
+      "key": "Schlüssel",
+      "secret": "Geheimnis",
+      "save": "Ziel hinzufügen",
+      "failed": "Dieses Weiterleitungsziel konnte nicht hinzugefügt werden."
     }
   }
 }

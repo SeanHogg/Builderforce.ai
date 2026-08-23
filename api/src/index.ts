@@ -196,6 +196,11 @@ import { createDriveRoutes }        from './presentation/routes/driveRoutes';
 import { createLedgerRoutes }       from './presentation/routes/ledgerRoutes';
 import { createSocialRoutes }       from './presentation/routes/socialRoutes';
 import { createAdsRoutes }         from './presentation/routes/adsRoutes';
+import { createAdSetRoutes }      from './presentation/routes/adSetRoutes';
+import { createLearningRoutes }   from './presentation/routes/learningRoutes';
+import { createLrsCredentialRoutes } from './presentation/routes/lrsCredentialRoutes';
+import { createLrsRoutes }        from './presentation/routes/lrsRoutes';
+import { createLrsAuthMiddleware } from './presentation/middleware/lrsAuthMiddleware';
 import { createMeasurementRoutes } from './presentation/routes/measurementRoutes';
 import { createYouTubeRoutes }      from './presentation/routes/youtubeRoutes';
 import { maybeHandlePreviewIngress } from './application/runtime/previewIngress';
@@ -490,6 +495,13 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // The remote MCP server runs the same billable tools as /v1/mcp/call, and is
   // reachable by any third-party MCP client, so it takes the same limit.
   app.use('/mcp',   rateLimitMiddleware as Parameters<typeof app.use>[1]);
+  // The xAPI endpoint carries authenticated, externally-driven WRITES from
+  // authoring tools that send neither a JWT nor a machine key — so the limiter
+  // above would see an anonymous caller and fall through. `createLrsAuthMiddleware`
+  // resolves the Basic credential to a tenant FIRST, which is what gives the
+  // limiter something to throttle; registration order here is load-bearing.
+  app.use('/xapi/*', createLrsAuthMiddleware(db) as Parameters<typeof app.use>[1]);
+  app.use('/xapi/*', rateLimitMiddleware as Parameters<typeof app.use>[1]);
   // Emulation token interception — runs before authMiddleware in each router.
   // When X-Emulation-Token is present, validates the emulation JWT, enforces
   // read-only mode, and sets userId/tenantId/role from the emulation identity.
@@ -857,8 +869,18 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/social',   createSocialRoutes(db));
   // Paid media and its measurement — the other two thirds of the CMO's surface.
   app.route('/api/ads',         createAdsRoutes(db));
+  app.route('/api/ads',         createAdSetRoutes(db));
   // `/api/analytics` is TEAM performance; marketing measurement is its own surface.
   app.route('/api/measurement', createMeasurementRoutes(db));
+  // Learning: paths (ordered `relations` edges over courses), prerequisites and
+  // enrolment. The LRS's own key management shares the prefix — a caller should
+  // not have to know the two were written as separate routers.
+  app.route('/api/learning', createLearningRoutes(db));
+  app.route('/api/learning', createLrsCredentialRoutes(db));
+  // The xAPI endpoint itself is NOT under /api and NOT behind authMiddleware:
+  // it is a standard, spoken by authoring tools that hold a Basic credential and
+  // never a session. This prefix is the endpoint a customer pastes into them.
+  app.route('/xapi',         createLrsRoutes(db));
   app.route('/api/youtube',  createYouTubeRoutes(db));
   app.route('/api/roi',      createRoiRoutes(db));
   app.route('/api/pmo',      createPmoRoutes(db));

@@ -1,16 +1,16 @@
 /**
- * The workflow builder's catalog strings, in the reader's language.
+ * The step catalog's own strings, in the reader's language.
  *
  * ── WHY AN ACCESSOR AND NOT A `labelKey` ON EVERY ROW ───────────────────────
- * `nodeKinds.ts` declares 182 `ConfigField.label`s and 82 `placeholder`s, and
- * `integrations.ts` declares 94 preset descriptions and 351 operation labels.
+ * `stepCatalog.ts` declares 182 `ConfigField.label`s and 82 `placeholder`s, and
+ * `stepIntegrations.ts` declares 94 preset descriptions and 351 operation labels.
  * Threading a key through every one of those rows would double the catalog's
  * size and give a future author two things to keep in step — which is how the
  * node-kind labels came to be half-translated in the first place.
  *
  * So the KEY IS DERIVED from the English text, in exactly one place
  * ({@link i18nSlug}). A row keeps its English string as the source of both the
- * key and the fallback, and `workflowBuilderI18n.test.ts` asserts that every
+ * key and the fallback, and `stepCatalogI18n.test.ts` asserts that every
  * derived key exists in ALL FIVE catalogs — so a new field without a
  * translation fails the suite instead of quietly shipping English into zh, es,
  * fr and de.

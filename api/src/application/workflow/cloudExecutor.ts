@@ -83,7 +83,7 @@ import { loadGoogleCredential } from '../integrations/googleCredential';
 import { sendGmail, searchGoogleDrive, readGoogleDriveFileText } from '../integrations/googleOAuth';
 import { tenantProxyForPlan, byoAwareModel } from '../llm/tenantProxy';
 import { recordProxyUsage } from '../llm/usageLedger';
-import { contextFromInput, evaluateBool, renderTransform } from '../../domain/workflowExpr';
+import { contextFromInput, evaluateBool, renderTransform, renderValueTemplate } from '../../domain/workflowExpr';
 import {
   regexMatch, htmlToText, htmlTable, htmlElements, matchElements,
   matchPatternAdvanced, replaceText, chunkText, convertEncoding,
@@ -521,7 +521,11 @@ export async function executeCloudNode(
       if (!usageCtx) throw new Error('The Set Variable node needs a tenant context to store state');
       const key = typeof node.config.key === 'string' ? node.config.key.trim() : '';
       if (!key) throw new Error('Set Variable needs a key');
-      const value = renderTemplate(typeof node.config.value === 'string' ? node.config.value : '{{input}}', inputText);
+      // `renderValueTemplate`, not `renderTemplate`: a value field is a literal
+      // unless it carries a span, and every span form is available — so a declared
+      // output capture can name a PATH (`{{ order.id }}`) instead of being able to
+      // store only the whole upstream payload. See its own doc comment.
+      const value = renderValueTemplate(typeof node.config.value === 'string' ? node.config.value : '{{input}}', inputText, contextFromInput(inputText));
       await setWorkflowVariable(usageCtx.db, usageCtx.tenantId, 'run', usageCtx.workflowId, key, value);
       return { output: value };
     }
@@ -572,8 +576,11 @@ export async function executeCloudNode(
         }
       }
       const written: Record<string, string> = {};
+      // One context for the whole map — parsing the payload once per node, not once
+      // per key, on what is routinely the widest node in a graph.
+      const valuesCtx = contextFromInput(inputText);
       for (const [key, raw] of Object.entries(values)) {
-        const value = renderTemplate(String(raw ?? ''), inputText);
+        const value = renderValueTemplate(String(raw ?? ''), inputText, valuesCtx);
         await setWorkflowVariable(usageCtx.db, usageCtx.tenantId, 'run', usageCtx.workflowId, key, value);
         written[key] = value;
       }

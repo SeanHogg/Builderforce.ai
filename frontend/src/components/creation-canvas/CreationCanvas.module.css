@@ -232,15 +232,15 @@
    was anchored to the same `top:14px` they are, so the chrome was drawn straight over
    it. The details panel is where that bit hardest: it opens at `top:14px; right:14px`,
    exactly where the top-right card is, so its own expand and close buttons sat
-   underneath Share / Publish / Save & collaborate — the panel could be opened and then
+   underneath Share / Publish / More — the panel could be opened and then
    not shut. History, the change set and the merge sheet share that corner and that bug.
 
    ONE band answers it for all of them, the way `--canvas-command-bar-space` answers the
    bottom. `--canvas-top-chrome-space` is the top-right card's real bottom edge plus its
    clearance, MEASURED by `useChromeSpace` and written onto the shell as an inline style
    (see `CreationCanvas.tsx`) — the card's height is not a number this file can state,
-   because it changes with a wrapped save button, with whatever the surface contributes
-   to `handoff`, and when the bar is collapsed. What stays here is the value used before
+   because it changes with whatever the surface contributes to `handoff`, and when the
+   bar is collapsed. What stays here is the value used before
    the first measurement lands (server render, and any browser without `ResizeObserver`);
    the inline property wins the moment it does. */
 .canvasShell { --canvas-top-chrome-space:64px; }  /* 14px corner + the 44px row + 6px clearance */
@@ -337,12 +337,6 @@
 .hostActions .secondaryButton:hover,.hostActions .secondaryButton:focus-visible { z-index:1; background:var(--canvas-hover); outline:none; }
 .hostActions .secondaryButton:disabled { opacity:.45; cursor:not-allowed; }
 .hostActions .secondaryButton[aria-busy='true'] { opacity:.6; }
-.saveButtonShort { display:none; }
-/* `.secondaryButton` sets padding but no height, so on desktop the Save button's
-   box came out a couple of px shorter than Share/Publish (`.sessionActionLabelled`,
-   min-height:34px) and More (`.iconAction`, height:34px) beside it in `.topRightCard`.
-   Pin it to the same 34px the rest of that row uses. */
-.saveButton { display:inline-flex; align-items:center; min-height:34px; }
 
 /* ── Session actions ───────────────────────────────────────────────────────────────
    The other half of the session bar, and the same argument the surface switcher makes:
@@ -1810,6 +1804,69 @@
   min-height:0; height:100%; text-align:center;
 }
 .frameBody { min-height:220px; display:grid; align-content:start; gap:5px; padding:4px; color:#5d527d; }
+/* A frame is a CONTAINER now, not a rectangle with a caption:it counts what it
+   holds, it can be put away, and it can be opened on its own. Collapsed it drops
+   the caption entirely — a chip that still reserved 220px of height would defeat
+   the point of collapsing it. */
+.frameBody[data-collapsed="true"] { min-height:0; }
+.frameActions { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin-top:auto; padding-top:4px; }
+.frameActions button { padding:3px 8px; border:1px solid var(--canvas-line); border-radius:var(--radius-sm); background:var(--canvas-panel); color:var(--canvas-ink); font:inherit; font-size:9px; font-weight:600; cursor:pointer; }
+.frameActions button:hover,.frameActions button:focus-visible { background:var(--canvas-hover); }
+.frameCount { font-size:9px; font-weight:600; color:var(--canvas-muted); }
+
+/* ── ONE EXECUTABLE STEP ─────────────────────────────────────────────────────
+   The card body for a `flowStep`. Everything is a `--canvas-*` token, which is
+   what makes the same card legible on the light board and the dark one without a
+   second rule set restating it. */
+.flowStep { display:grid; align-content:start; gap:6px; min-width:0; }
+.flowStepFamily { font-size:8px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; color:var(--canvas-accent); }
+.flowStepSummary { margin:0; overflow-wrap:anywhere; font-size:10px; line-height:1.45; color:var(--canvas-muted); }
+.flowStepChip { justify-self:start; padding:2px 7px; border-radius:999px; background:color-mix(in srgb, var(--canvas-accent) 14%, var(--canvas-panel)); color:var(--canvas-accent-ink); font-size:8px; font-weight:700; }
+.flowStepContract { display:grid; gap:4px; margin:0; }
+.flowStepContract > div { display:flex; gap:6px; min-width:0; }
+.flowStepContract dt { flex:none; font-size:8px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:var(--canvas-muted); }
+.flowStepContract dd { margin:0; overflow-wrap:anywhere; font-size:9px; color:var(--canvas-ink); }
+
+/* The decision, drawn. One connection point per outlet, along the bottom, in the
+   order the executor evaluates them — see `FlowStepBody` for why the bottom and
+   why such a step draws no right-hand handle at all. `auto-fit` rather than a
+   fixed track count for the same reason `.workflowSteps` uses it:a switch has as
+   many cases as it has. */
+.flowStepOutlets { display:grid; grid-template-columns:repeat(auto-fit, minmax(74px, 1fr)); gap:6px; margin-top:2px; }
+.flowStepOutlet { position:relative; display:grid; gap:2px; padding:5px 6px 11px; border:1px solid var(--canvas-line); border-radius:var(--radius-sm); background:var(--canvas-panel-muted); }
+.flowStepOutlet b { overflow-wrap:anywhere; font-size:9px; color:var(--canvas-ink); }
+.flowStepOutlet small { overflow-wrap:anywhere; font-size:8px; color:var(--canvas-muted); }
+.flowStepOutlet[data-fallback="true"] { border-style:dashed; }
+.flowStepOutletHandle { position:absolute!important; left:50%!important; bottom:-5px!important; width:9px!important; height:9px!important; border:2px solid var(--canvas-panel)!important; background:var(--canvas-accent)!important; transform:translateX(-50%); }
+
+/* The step inspector — the four questions asked of a step, plus its connections. */
+.flowInspector { display:grid; gap:14px; min-width:0; }
+.flowSection { display:grid; gap:6px; min-width:0; }
+.flowSection h4 { margin:0; font-size:10px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:var(--canvas-ink); }
+.flowSection > p { margin:0; font-size:9px; line-height:1.45; color:var(--canvas-muted); }
+.flowRows { display:grid; gap:6px; min-width:0; }
+.flowRow { display:flex; flex-wrap:wrap; align-items:end; gap:6px; padding:7px; border:1px solid var(--canvas-line); border-radius:var(--radius-sm); background:var(--canvas-panel-muted); }
+.flowRow[data-fallback="true"] { border-style:dashed; }
+.flowRow label { display:grid; flex:1 1 118px; gap:3px; min-width:0; }
+.flowRow label span { font-size:8px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:var(--canvas-muted); }
+.flowRow input { min-width:0; padding:5px 7px; border:1px solid var(--canvas-line); border-radius:var(--radius-sm); background:var(--canvas-panel); color:var(--canvas-ink); font:inherit; font-size:10px; }
+.flowRow > button { flex:none; padding:4px 8px; border:1px solid var(--canvas-line); border-radius:var(--radius-sm); background:var(--canvas-panel); color:var(--canvas-muted); font:inherit; cursor:pointer; }
+.flowAdd { justify-self:start; padding:5px 10px; border:1px dashed var(--canvas-line); border-radius:var(--radius-sm); background:transparent; color:var(--canvas-accent-ink); font:inherit; font-size:10px; font-weight:600; cursor:pointer; }
+.flowConnections { display:grid; gap:4px; margin:0; padding:0; list-style:none; }
+.flowConnections li { display:flex; flex-wrap:wrap; align-items:center; gap:6px; min-width:0; font-size:10px; }
+.flowConnections i { flex:none; color:var(--canvas-muted); font-style:normal; }
+.flowConnections li > button:first-of-type { flex:1 1 auto; min-width:0; overflow-wrap:anywhere; padding:0; border:0; background:transparent; color:var(--canvas-accent-ink); font:inherit; text-align:left; cursor:pointer; }
+.flowConnections em { flex:none; padding:1px 6px; border-radius:999px; background:color-mix(in srgb, var(--canvas-accent) 14%, var(--canvas-panel)); color:var(--canvas-accent-ink); font-size:8px; font-style:normal; font-weight:700; }
+.flowConnections li > button + button { flex:none; padding:1px 6px; border:1px solid var(--canvas-line); border-radius:var(--radius-sm); background:var(--canvas-panel); color:var(--canvas-muted); font:inherit; cursor:pointer; }
+
+/* Working on one section at the size of a screen — the breadcrumb that says you
+   are inside a frame, and the way back out. It replaced the modal workflow editor,
+   so it deliberately does not look like a dialog:the board is still the board. */
+.frameFocusBar { position:absolute; z-index:17; top:var(--canvas-top-chrome-space); left:50%; display:flex; align-items:center; gap:10px; padding:7px 12px; border:1px solid var(--canvas-line); border-radius:999px; background:var(--canvas-panel); box-shadow:0 10px 30px rgba(60,48,36,.16); transform:translateX(-50%); }
+.frameFocusBar b { overflow-wrap:anywhere; font-size:11px; color:var(--canvas-ink); }
+.frameFocusBar span { font-size:10px; color:var(--canvas-muted); }
+.frameFocusBar button { padding:4px 10px; border:1px solid var(--canvas-line); border-radius:999px; background:var(--canvas-panel-muted); color:var(--canvas-ink); font:inherit; font-size:10px; font-weight:600; cursor:pointer; }
+.frameFocusBar button:hover,.frameFocusBar button:focus-visible { background:var(--canvas-hover); }
 .canvasToolActive { border-color:#5b5ce2!important; background:#eeebff!important; color:#503cc9!important; }
 .templateMenu { position:absolute; z-index:18; right:0; top:42px; width:330px; max-height:70vh; overflow:auto; padding:12px; border:1px solid var(--canvas-line); border-radius:var(--radius-lg); background:#fff; box-shadow:0 18px 55px rgba(60,48,36,.18); }
 .templateMenu header { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }.templateMenu header button { border:0;background:transparent;font-size:18px;cursor:pointer; }
@@ -2809,7 +2866,7 @@
      the prompt. */
   .flowWrap :global(.react-flow) { height:calc(100% - var(--composer-space)); }
   .node { max-width:calc(100vw - 32px); }
-  .mobileAction { display:inline-flex; min-width:36px; min-height:36px; align-items:center; justify-content:center; padding:7px 8px; }.mobileAction span { display:none; }.primaryButton,.saveButton { min-height:36px; padding:7px 10px; font-size:10px; }.saveButton { display:inline-flex; align-items:center; }.saveButtonFull { display:none; }.saveButtonShort { display:inline; }
+  .mobileAction { display:inline-flex; min-width:36px; min-height:36px; align-items:center; justify-content:center; padding:7px 8px; }.mobileAction span { display:none; }.primaryButton { min-height:36px; padding:7px 10px; font-size:10px; }
   /* The sheet is now the phone's ONLY route to five session actions, so it stops being
      a two-column grid of 28px rows. One column, one 40px target per row, and it may
      scroll — a menu that runs off the bottom of a phone is a menu with a hidden half. */

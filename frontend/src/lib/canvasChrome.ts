@@ -55,9 +55,7 @@ export type CanvasChromeSlot =
   /** A runtime's own controls — an app surface's Run/Stop and its readings. */
   | 'surfaceControls'
   /** A runtime's own report — where it is running, and whether it is. */
-  | 'surfaceStatus'
-  /** Sign-up gate for a board saved only to this device. */
-  | 'save';
+  | 'surfaceStatus';
 
 export type CanvasChromeKind = 'status' | 'control';
 
@@ -89,9 +87,12 @@ export type CanvasChromePlace = 'pill' | 'chips' | 'topRight' | 'bar';
 /**
  * Which each slot is. The whole rule is this table plus the predicate under it.
  *
- * `save` is a control even though it looks like a state: pressing it opens the account
- * gate, and a button you can press is a control however much its label reads as a fact.
- * `saveState` beside it is the fact, and that is the one that stays.
+ * There is no `save` slot, and its absence is a decision rather than an omission. A board
+ * held only on this device is kept by taking an account, and the header already makes
+ * exactly that offer — the green CTA turns into "Keep your work" the moment this browser
+ * holds a local board. A second button on the canvas saying the same word put two bars on
+ * one screen competing to be the way to save. `saveState` in the pill still reports where
+ * the board lives, because that is a fact and not a control.
  */
 const SLOT_KIND: Readonly<Record<CanvasChromeSlot, CanvasChromeKind>> = {
   title: 'status',
@@ -102,7 +103,6 @@ const SLOT_KIND: Readonly<Record<CanvasChromeSlot, CanvasChromeKind>> = {
   actions: 'control',
   handoff: 'control',
   surfaceControls: 'control',
-  save: 'control',
 };
 
 /**
@@ -123,7 +123,6 @@ const SLOT_PLACE: Readonly<Record<CanvasChromeSlot, CanvasChromePlace>> = {
   handoff: 'topRight',
   surfaceControls: 'bar',
   surfaceStatus: 'bar',
-  save: 'topRight',
 };
 
 export function canvasChromeKind(slot: CanvasChromeSlot): CanvasChromeKind {

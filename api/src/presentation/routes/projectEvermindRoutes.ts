@@ -48,7 +48,6 @@ import {
   setProjectEvermindMode,
   setProjectEvermindInference,
   setProjectEvermindTeacher,
-  dispatchProjectEvermindLearn,
   dispatchProjectEvermindLearnText,
   getProjectEvermindContributions,
   getProjectEvermindContributionStatus,
@@ -246,21 +245,6 @@ async function artifactCore(env: Env, db: Db, tenantId: number, projectId: numbe
   });
 }
 
-async function learnCore(env: Env, db: Db, tenantId: number, projectId: number, c: Context): Promise<Response> {
-  if (!(await ownsProject(db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
-  const inheritedBlock = await refuseInheritedWrite(env, db, tenantId, projectId);
-  if (inheritedBlock) return inheritedBlock;
-  const body = (await c.req.json<{ diff?: unknown; baseVersion?: unknown; weight?: unknown; label?: unknown }>().catch(() => ({}))) as {
-    diff?: unknown; baseVersion?: unknown; weight?: unknown; label?: unknown;
-  };
-  const diff = typeof body.diff === 'string' ? body.diff : '';
-  const baseVersion = typeof body.baseVersion === 'number' ? body.baseVersion : NaN;
-  if (!diff || !Number.isInteger(baseVersion)) return json({ error: 'diff (base64) and baseVersion are required' }, 400);
-  const label = typeof body.label === 'string' ? body.label : undefined;
-  const result = await dispatchProjectEvermindLearn(env, tenantId, projectId, diff, baseVersion, typeof body.weight === 'number' ? body.weight : undefined, label);
-  return json(result.body, result.status);
-}
-
 /**
  * Text-path learn — the UNIFIED producer door. A surface (IDE/cloud/on-prem) POSTs
  * raw run text; the coordinator adapts+diffs it IN ITS ALARM, so no caller pays
@@ -346,7 +330,6 @@ export function createProjectEvermindRoutes(db: Db): Hono<HonoEnv> {
   router.post('/:projectId/evermind/recall', (c) => recallCore(c.env as Env, db, t(c), pid(c), c));
   router.get('/:projectId/evermind/model', (c) => artifactCore(c.env as Env, db, t(c), pid(c), c.req.query('version'), 'model.evermind'));
   router.get('/:projectId/evermind/tokenizer', (c) => artifactCore(c.env as Env, db, t(c), pid(c), c.req.query('version'), 'tokenizer.json'));
-  router.post('/:projectId/evermind/learn', (c) => learnCore(c.env as Env, db, t(c), pid(c), c));
   router.post('/:projectId/evermind/learn-text', (c) => learnTextCore(c.env as Env, db, t(c), pid(c), c));
   /** Import a batch of raw memories (VS Code "Import from builderforce-memory") + flush. */
   router.post('/:projectId/evermind/extract-memories', requireRole(TenantRole.MANAGER), (c) => extractMemoriesCore(c.env as Env, db, t(c), pid(c), c));
@@ -753,11 +736,6 @@ export function createProjectEvermindAgentRoutes(db: Db): Hono<HonoEnv> {
     const tenantId = await auth(c);
     if (tenantId == null) return json({ error: 'unauthorized' }, 401);
     return artifactCore(c.env as Env, db, tenantId, pid(c), c.req.query('version'), 'tokenizer.json');
-  });
-  router.post('/:projectId/evermind/learn', async (c) => {
-    const tenantId = await auth(c);
-    if (tenantId == null) return json({ error: 'unauthorized' }, 401);
-    return learnCore(c.env as Env, db, tenantId, pid(c), c);
   });
   router.post('/:projectId/evermind/learn-text', async (c) => {
     const tenantId = await auth(c);

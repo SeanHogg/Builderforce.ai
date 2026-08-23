@@ -3,8 +3,8 @@ import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
 import { pageMetadata } from '@/lib/seo';
 import FeatureCard from '../FeatureCard';
-import { NODE_KINDS, NODE_GROUPS } from '@/components/workflow-builder/nodeKinds';
-import { INTEGRATIONS, INTEGRATION_CATEGORIES } from '@/components/workflow-builder/integrations';
+import { NODE_KINDS, NODE_GROUPS } from '@/domains/workflow/domain/stepCatalog';
+import { INTEGRATIONS, INTEGRATION_CATEGORIES } from '@/domains/workflow/domain/stepIntegrations';
 import { Icon } from '@/components/ui/Icon';
 
 export const runtime = 'edge';

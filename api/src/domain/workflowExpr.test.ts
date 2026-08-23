@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { contextFromInput, evaluateBool, renderTransform } from './workflowExpr';
+import { contextFromInput, evaluateBool, renderTransform, renderValueTemplate } from './workflowExpr';
 
 describe('contextFromInput', () => {
   it('exposes top-level fields of a JSON object payload', () => {
@@ -95,5 +95,42 @@ describe('renderTransform', () => {
 
   it('emits empty string for an unresolved bare path', () => {
     expect(renderTransform('nope', '', ctx)).toBe('');
+  });
+});
+
+describe('{{ json … }} spans', () => {
+  const ctx = contextFromInput('{"email":"a\\"b@c.com","order":{"id":7},"n":3}');
+
+  it('emits a string as a QUOTED JSON literal, so a mapping stays valid JSON', () => {
+    // The whole reason the prefix exists: an unquoted splice breaks the document
+    // the first time a value contains a quote.
+    const mapped = renderTransform('{"who": {{ json email }}}', '', ctx);
+    expect(JSON.parse(mapped)).toEqual({ who: 'a"b@c.com' });
+  });
+
+  it('emits objects and numbers as themselves', () => {
+    expect(JSON.parse(renderTransform('{"o": {{ json order }}, "n": {{ json n }}}', '', ctx)))
+      .toEqual({ o: { id: 7 }, n: 3 });
+  });
+
+  it('emits null for a missing path, because a hole in JSON must be a JSON value', () => {
+    expect(JSON.parse(renderTransform('{"x": {{ json nope }}}', '', ctx))).toEqual({ x: null });
+  });
+});
+
+describe('renderValueTemplate', () => {
+  const ctx = contextFromInput('{"order":{"id":7},"status":"ready"}');
+
+  it('leaves a literal alone (where renderTransform would read it as a path)', () => {
+    expect(renderValueTemplate('hello', 'raw', ctx)).toBe('hello');
+    expect(renderTransform('hello', 'raw', ctx)).toBe('');
+  });
+
+  it('substitutes a path span, which is what lets an output capture name a field', () => {
+    expect(renderValueTemplate('{{ order.id }}', '', ctx)).toBe('7');
+  });
+
+  it('still substitutes {{input}} exactly as renderTemplate did', () => {
+    expect(renderValueTemplate('{{input}}', 'the payload', contextFromInput('the payload'))).toBe('the payload');
   });
 });

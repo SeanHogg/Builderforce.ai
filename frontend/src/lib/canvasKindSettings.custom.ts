@@ -16,6 +16,11 @@ import { registerKindSettings } from './canvasKindSettings';
 import { WEB_PAGE_KINDS } from './canvasWebPage';
 import { CREATIVE_GENERATOR_KINDS } from './creationObjectGroups';
 
+// ONE executable step. Its inspector asks the four questions a step in a GRAPH has to
+// answer — what it does, which named path each outlet takes, what data comes in, what
+// data goes out — and the last three are about its edges, which no declared field can
+// express. See `FlowStepInspector`.
+registerKindSettings({ kinds: ['flowStep'], marketplace: { sellable: () => false }, fields: [], actions: [], custom: { component: 'flowStep' } });
 registerKindSettings({ kinds: ['evaluation'], marketplace: { sellable: () => true }, fields: [], actions: [], custom: { component: 'evaluation' } });
 registerKindSettings({ kinds: ['release'], marketplace: { sellable: () => true }, fields: [], actions: [], custom: { component: 'release' } });
 registerKindSettings({ kinds: ['website', 'prototype'], marketplace: { sellable: () => true }, fields: [], actions: [], custom: { component: 'website' } });

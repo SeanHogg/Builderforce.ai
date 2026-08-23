@@ -31,6 +31,7 @@ import type { Env } from '../../env';
 import { courseEnrollments, courses } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { linkObjects, listRelatedFrom, unlinkObjects, loadEdges, type RelationRefusal } from '../kernel/ObjectRelations';
+import { listCourses } from './learningPaths';
 import { topoOrder } from '../../domain/kernel/graphCycle';
 
 /** A course, and whether this learner may start it. */
@@ -164,4 +165,109 @@ async function titlesForObjects(
   return new Map(rows
     .filter((r): r is typeof r & { objectId: string } => r.objectId !== null)
     .map((r) => [r.objectId, { courseId: r.id, title: r.title }]));
+}
+
+// ---------------------------------------------------------------------------
+// The id-shaped facade the HTTP surface uses.
+//
+// Everything above takes OBJECT ids, because that is what an edge endpoint is.
+// A caller holds `courses.id`, and translating between the two at every route
+// handler would put the same two-line lookup — and the same three ways of
+// getting it wrong — into six places. These four are that translation, once.
+// ---------------------------------------------------------------------------
+
+export type PrerequisiteIdRefusal =
+  | PrerequisiteRefusal
+  | { ok: false; reason: 'unknown_course'; detail: string };
+
+/** `courses.id` → its registry object id, for courses in this workspace only. */
+async function objectIdsFor(
+  db: Db, tenantId: number, ids: number[],
+): Promise<Map<number, string>> {
+  if (ids.length === 0) return new Map();
+  const rows = await db.select({ id: courses.id, objectId: courses.objectId })
+    .from(courses)
+    .where(scopedToTenant(courses, tenantId, inArray(courses.id, ids))!);
+  return new Map(rows
+    .filter((r): r is typeof r & { objectId: string } => r.objectId !== null)
+    .map((r) => [r.id, r.objectId]));
+}
+
+export async function addPrerequisiteByCourseId(
+  db: Db, env: Env, tenantId: number, courseId: number, prerequisiteId: number,
+): Promise<{ ok: true } | PrerequisiteIdRefusal> {
+  if (courseId === prerequisiteId) {
+    return { ok: false, reason: 'would_cycle', detail: 'a course cannot be its own prerequisite' };
+  }
+  const objectIds = await objectIdsFor(db, tenantId, [courseId, prerequisiteId]);
+  const from = objectIds.get(courseId);
+  const to = objectIds.get(prerequisiteId);
+  if (!from || !to) {
+    return { ok: false, reason: 'unknown_course', detail: 'both ids must be courses in this workspace' };
+  }
+  return addPrerequisite(db, env, tenantId, from, to);
+}
+
+export async function removePrerequisiteByCourseId(
+  db: Db, env: Env, tenantId: number, courseId: number, prerequisiteId: number,
+): Promise<boolean> {
+  const objectIds = await objectIdsFor(db, tenantId, [courseId, prerequisiteId]);
+  const from = objectIds.get(courseId);
+  const to = objectIds.get(prerequisiteId);
+  if (!from || !to) return false;
+  return removePrerequisite(db, env, tenantId, from, to);
+}
+
+export async function prerequisitesOfCourseId(
+  db: Db, env: Env, tenantId: number, courseId: number,
+): Promise<Array<{ courseId: number; objectId: string; title: string }> | null> {
+  const objectIds = await objectIdsFor(db, tenantId, [courseId]);
+  const from = objectIds.get(courseId);
+  if (!from) return null;
+  return prerequisitesOf(db, env, tenantId, from);
+}
+
+/**
+ * Every course in the workspace with this learner's lock state on it.
+ *
+ * The whole catalogue in one call, because that is how it is rendered: a course
+ * list showing which are open is one gate computation over one edge load, and
+ * asking per card is the N+1 {@link gateCourses} exists to avoid. Courses that
+ * were never registered as objects cannot carry an edge and are therefore always
+ * unlocked — they are included rather than hidden, since a missing registration
+ * is our bug and must not remove a course from a learner's catalogue.
+ */
+export async function gatesForLearner(
+  db: Db, env: Env, tenantId: number, learnerRef: string,
+): Promise<CourseGate[]> {
+  const all = await listCourses(db, tenantId);
+  const registered = all.filter((c): c is typeof c & { objectId: string } => c.objectId !== null);
+
+  const [gated, sequence] = await Promise.all([
+    gateCourses(db, env, {
+      tenantId,
+      learnerRef,
+      courses: registered.map((c) => ({ courseId: c.id, objectId: c.objectId, title: c.title })),
+    }),
+    // The order a curriculum is meant to be TAKEN in, which is the order a
+    // catalogue showing locks should read in: a course listed above the one it
+    // requires is a list that argues with its own badges. Alphabetical is what
+    // `listCourses` gives, and it is the right default only where no edges exist —
+    // `sequenceCourses` returns exactly that when the graph is empty.
+    sequenceCourses(db, tenantId, registered.map((c) => c.objectId)),
+  ]);
+
+  const byId = new Map(gated.map((g) => [g.courseId, g]));
+  const rank = new Map(sequence.map((objectId, index) => [objectId, index]));
+  const fallback = (course: typeof all[number]): CourseGate => ({
+    courseId: course.id, objectId: '', title: course.title, unlocked: true, blockedBy: [],
+  });
+
+  // Unregistered courses cannot carry an edge and so have no rank. They sort last
+  // rather than being hidden — a missing registration is our bug, and it must not
+  // remove a course from a learner's catalogue.
+  return [...all]
+    .sort((a, b) => (rank.get(a.objectId ?? '') ?? Number.MAX_SAFE_INTEGER)
+      - (rank.get(b.objectId ?? '') ?? Number.MAX_SAFE_INTEGER))
+    .map((c) => byId.get(c.id) ?? fallback(c));
 }

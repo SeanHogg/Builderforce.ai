@@ -267,6 +267,12 @@ export const NAV_GROUPS: NavGroup[] = [
   { id: 'finance', labelKey: 'group.finance', icon: '💰', href: '/seat/finance', match: ['/seat/finance'], seat: 'CFO', stage: 'run' },
   { id: 'revenue', labelKey: 'group.revenue', icon: '📈', href: '/seat/revenue', match: ['/seat/revenue'], seat: 'CRO', stage: 'run' },
   { id: 'people', labelKey: 'group.people', icon: '🧑‍🤝‍🧑', href: '/seat/people', match: ['/seat/people'], seat: 'HR', stage: 'run' },
+  // Learning keeps `/learning` rather than resolving to a generic domain view, for
+  // the reason stated on Growth and Hiring: where a real product surface exists it
+  // wins, and one destination may not have two hrefs. The surface is curricula
+  // (paths over courses), the prerequisite-gated catalogue, and the workspace's own
+  // xAPI Learning Record Store.
+  { id: 'learning', labelKey: 'group.learning', icon: '🎓', href: '/learning', match: ['/learning'], seat: 'HR', stage: 'run' },
   {
     // Hiring keeps `/hiring` rather than resolving to `/seat/hiring`, for the reason
     // stated on Growth two rows up: where a real product surface exists it wins over the

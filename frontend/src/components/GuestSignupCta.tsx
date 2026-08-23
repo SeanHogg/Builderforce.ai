@@ -3,7 +3,7 @@
 import { useTranslations } from 'next-intl';
 import { ButtonLink } from '@/components/ui/Button';
 import { Icon } from '@/components/ui/Icon';
-import { signInHref } from '@/lib/auth';
+import { registerHref, signInHref } from '@/lib/auth';
 import styles from './GuestSignupCta.module.css';
 
 /**
@@ -50,10 +50,9 @@ export function GuestSignupCta({ prompt, title, body, layout = 'wall' }: GuestSi
   if (!prompt) return null;
 
   const { next, onAccept } = prompt;
-  const registerHref = next ? `/register?next=${encodeURIComponent(next)}` : '/register';
   const actions = (
     <div className={styles.actions}>
-      <ButtonLink href={registerHref} variant="primary" size="sm" onClick={onAccept}>
+      <ButtonLink href={registerHref(next)} variant="primary" size="sm" onClick={onAccept}>
         {t('createFreeAccount')}
       </ButtonLink>
       <ButtonLink href={signInHref(next)} variant="secondary" size="sm">

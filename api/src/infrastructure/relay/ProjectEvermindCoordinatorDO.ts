@@ -53,8 +53,6 @@ import type { Env } from '../../env';
 const DEBOUNCE_MS = 15_000;
 /** Hard cap on queued contributions (oldest dropped past this) — cost guard. */
 const MAX_PENDING = 512;
-/** Max accepted serialized-delta size (~8 MB) — a runaway push is rejected up front. */
-const MAX_DIFF_BYTES = 8 * 1024 * 1024;
 /** Max accepted run-text length (chars) — a text-path push is capped up front. */
 const MAX_TEXT_CHARS = 8000;
 /** Chars of a text entry actually fed to one adaptation pass (rest is context). */
@@ -110,21 +108,15 @@ const EVAL_POINTS_MAX = 40;
 
 interface PendingEntry {
   id: number;
-  /** The head version this delta/text was taken against (must match at merge time). */
+  /** The head version this text was taken against (must match at merge time). */
   baseVersion: number;
-  /** base64 serialized RowDelta (diff-path); undefined for a text-path entry. */
-  diffB64?: string;
-  /** Raw run text (text-path) the coordinator adapts+diffs IN THE ALARM; the
-   *  unified producer path so IDE/cloud/on-prem never pay training CPU themselves. */
+  /** Raw run text the coordinator adapts+diffs IN THE ALARM; the unified producer
+   *  path so IDE/cloud/on-prem never pay training CPU themselves. */
   text?: string;
   /** Optional task prompt (the ticket) the run addressed. When present AND a teacher
    *  is pinned, the teacher ANSWERS this prompt so the SSM learns (task → ideal
    *  answer) rather than refining the raw output. */
   prompt?: string;
-  /** Optional provenance for a DIFF-path contribution (which run/ticket produced the
-   *  delta) — text-path entries carry their task in {@link prompt}, but a pre-diffed
-   *  weight delta has no text, so this is the only thing that makes it inspectable. */
-  label?: string;
   /** Optional sample weight (e.g. tokens learned) for the FedAvg merge. */
   weight: number;
 }
@@ -144,16 +136,6 @@ interface CoordMeta {
   projectId: number;
 }
 
-interface LearnBody {
-  tenantId: number;
-  projectId: number;
-  baseVersion: number;
-  diff: string; // base64 serialized RowDelta
-  weight?: number;
-  /** Optional provenance shown on the delta's inspection row (run/ticket). */
-  label?: string;
-}
-
 interface LearnTextBody {
   tenantId: number;
   projectId: number;
@@ -170,7 +152,10 @@ interface RecentEntry {
   /** Stable unique id (the source contribution's sequence id) — lets the console
    *  target a specific learned memory (e.g. highlight it on a Validate recall). */
   id: number;
-  /** 'text' = a run/exemplar adapted here; 'delta' = a pre-diffed weight delta. */
+  /** 'text' = a run/exemplar adapted here — the ONLY value written today.
+   *  'delta' (a pre-diffed weight delta) is LEGACY-READ-ONLY: the door that produced
+   *  it was retired, so nothing writes it, but ring rows are never rewritten and the
+   *  console still has to render any that a live DO carries. */
   kind: 'text' | 'delta';
   /** The version this contribution was merged INTO (head.version + 1 at merge time). */
   version: number;
@@ -314,13 +299,6 @@ const EVAL_KEY = 'eval';
 /** Per-version eval points (the ▲/▼ history). */
 const EVAL_POINTS_KEY = 'evalPoints';
 
-function decodeBase64(b64: string): ArrayBuffer {
-  const bin = atob(b64);
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-  return out.buffer;
-}
-
 /** Per-isolate cache of the loaded head model for recall embedding, keyed by the
  *  immutable version ref (a new merge writes a new ref, so this can't serve stale
  *  weights). Module-scoped so it survives across recall requests on the same isolate. */
@@ -340,7 +318,6 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
     if (request.method === 'POST' && url.pathname.endsWith('/learn-text')) return this.handleLearnText(request);
-    if (request.method === 'POST' && url.pathname.endsWith('/learn')) return this.handleLearn(request);
     if (request.method === 'POST' && url.pathname.endsWith('/flush')) return this.handleFlush();
     if (request.method === 'GET' && url.pathname.endsWith('/recent')) return this.handleRecent(request);
     if (request.method === 'GET' && url.pathname.endsWith('/contribution')) return this.handleContribution(request);
@@ -614,7 +591,7 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
     const pending = (await this.state.storage.get<PendingEntry[]>(PENDING_KEY)) ?? [];
     const queued = pending.find((e) => e.id === id);
     if (queued) {
-      return this.json({ status: 'pending', contributionId: id, kind: queued.diffB64 ? 'delta' : 'text', queued: pending.length });
+      return this.json({ status: 'pending', contributionId: id, kind: 'text', queued: pending.length });
     }
     // Neither queued nor stored. A merge consumed it and it never became a memory —
     // reported as its own state rather than folded into `pending` (which would leave a
@@ -802,38 +779,6 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
     await this.state.storage.put(EVAL_POINTS_KEY, next);
   }
 
-  private async handleLearn(request: Request): Promise<Response> {
-    const body = (await request.json().catch(() => null)) as LearnBody | null;
-    if (!body || typeof body.tenantId !== 'number' || typeof body.projectId !== 'number' || typeof body.diff !== 'string') {
-      return this.json({ ok: false, error: 'tenantId, projectId, diff required' }, 400);
-    }
-    if (body.diff.length > MAX_DIFF_BYTES) {
-      return this.json({ ok: false, error: 'delta too large' }, 413);
-    }
-
-    const head = await getProjectEvermindHead(this.env, this.db, body.tenantId, body.projectId);
-    if (head.version === 0) {
-      return this.json({ ok: false, error: 'project Evermind not seeded — no base model to learn against' }, 409);
-    }
-    // Phase 5 mode guard: a frozen model is read-only — never accept a write-back.
-    if (head.mode === 'offline-frozen') {
-      return this.json({ ok: false, error: 'project Evermind is offline-frozen (read-only); learning disabled', mode: head.mode }, 423);
-    }
-    // A diff taken against a now-stale base can't be element-merged safely — tell
-    // the agent the current head so it rebases and re-pushes next run.
-    if (typeof body.baseVersion === 'number' && body.baseVersion !== head.version) {
-      return this.json({ ok: false, error: 'stale base — rebase against current head', headVersion: head.version }, 409);
-    }
-
-    const label = typeof body.label === 'string' && body.label.trim() ? body.label.trim().slice(0, RECENT_PROMPT_CHARS) : undefined;
-    const { queued, dropped, contributionId } = await this.enqueue(body.tenantId, body.projectId, head.version, {
-      diffB64: body.diff,
-      ...(label ? { label } : {}),
-      weight: typeof body.weight === 'number' && body.weight > 0 ? body.weight : 1,
-    });
-    return this.json({ ok: true, queued, contributionId, baseVersion: head.version, ...(dropped ? { dropped } : {}) });
-  }
-
   /**
    * Text-path learn — the UNIFIED producer entry point. Enqueue raw run text; the
    * ALARM adapts the base on it and merges the delta, so the fit runs HERE in the
@@ -871,7 +816,7 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
     tenantId: number,
     projectId: number,
     baseVersion: number,
-    entry: { diffB64?: string; text?: string; prompt?: string; label?: string; weight: number },
+    entry: { text?: string; prompt?: string; weight: number },
   ): Promise<{ queued: number; dropped: number; contributionId: number }> {
     await this.state.storage.put(META_KEY, { tenantId, projectId } satisfies CoordMeta);
     const seq = ((await this.state.storage.get<number>(SEQ_KEY)) ?? 0) + 1;
@@ -882,10 +827,8 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
       id: seq,
       baseVersion,
       weight: entry.weight,
-      ...(entry.diffB64 ? { diffB64: entry.diffB64 } : {}),
       ...(entry.text ? { text: entry.text } : {}),
       ...(entry.prompt ? { prompt: entry.prompt } : {}),
-      ...(entry.label ? { label: entry.label } : {}),
     });
     // Cost guard: cap the queue, dropping the OLDEST contributions if a project is
     // firehosing learns faster than the debounce can merge them.
@@ -969,31 +912,24 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
       const tok = new BPETokenizer();
       if (isLM) tok.loadFromObjects(tokenizer.vocab, tokenizer.merges);
 
-      // Build the batch of weight deltas to FedAvg. Diff-path entries decode
-      // directly; text-path entries are ADAPTED here (fresh base copy → fit → diff)
-      // — the fit that IDE/cloud/on-prem deliberately don't run on their own.
+      // Build the batch of weight deltas to FedAvg. Entries are ADAPTED here (fresh
+      // base copy → fit → diff) — the fit that IDE/cloud/on-prem deliberately don't
+      // run on their own. This is the ONLY way a contribution becomes weights: the
+      // pre-diffed delta door was retired, so nothing arrives already differenced.
       // Per-alarm fit cap — env-tunable (EVERMIND_MAX_FITS_PER_ALARM) so the DO's
       // per-alarm CPU envelope can be lowered without a code change.
       const maxFits = Math.max(1, Math.trunc(Number(this.env.EVERMIND_MAX_FITS_PER_ALARM)) || MAX_FITS_PER_ALARM);
       // Resolve the effective (budget-gated) teacher ONCE per alarm — the token scan
       // is a per-tenant aggregate constant across this batch, so it must not run per
       // entry. null unless a teacher is pinned AND there's trainable text to distil.
-      const effectiveTeacher: EffectiveTeacher = (isLM && usable.some((e) => !e.diffB64 && !!e.text))
+      const effectiveTeacher: EffectiveTeacher = (isLM && usable.some((e) => !!e.text))
         ? await resolveEvermindTeacherModel(this.env, this.db, tenantId, head.teacherModel)
         : { model: null, reason: 'not_pinned' };
       const diffs: ArrayBuffer[] = [];
       const weights: number[] = [];
       let textFits = 0;
       for (const e of usable) {
-        if (e.diffB64) {
-          diffs.push(decodeBase64(e.diffB64));
-          weights.push(e.weight);
-          processedIds.push(e.id);
-          // A pre-diffed delta has no text; its `label` (run/ticket provenance) is what
-          // makes the row inspectable — surface it in the same `prompt` slot text entries
-          // use, so the console/Learnings render it without a special case.
-          mergedMeta.push({ id: e.id, kind: 'delta', weight: e.weight, ...(e.label ? { prompt: e.label.slice(0, RECENT_PROMPT_CHARS) } : {}) });
-        } else if (e.text && isLM) {
+        if (e.text && isLM) {
           if (textFits >= maxFits) continue; // defer — leave queued for next alarm
           processedIds.push(e.id); // consumed even if it yields no trainable window
           // Teacher distillation: when a (budget-gated) frontier teacher is in effect,

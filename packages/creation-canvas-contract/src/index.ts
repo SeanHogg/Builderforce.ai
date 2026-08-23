@@ -527,6 +527,21 @@ export function renameLegacyKind(kind: string): string {
 }
 
 export const CREATION_OBJECT_KINDS = [
+  /**
+   * ONE EXECUTABLE STEP, ON THE BOARD.
+   *
+   * `workflow` is the old shape: a card standing in for a graph that lived somewhere
+   * else, edited in a modal that opened a second canvas on top of the first. A
+   * `flowStep` is that graph said once — one step is one object, connected with the
+   * board's own connections, grouped with the board's own frames, and compiled from
+   * what is actually drawn (`compileBoardFlow.ts`). The canvas IS the workflow.
+   *
+   * There is exactly ONE kind for ~60 step kinds: which step it is, is a VALUE
+   * (`stepKind`, from the step catalog), not a kind — the same rule that makes a new
+   * industry a `discipline` value rather than a new vocabulary. `workflow` remains for
+   * boards authored before this and for a card that points at a saved definition.
+   */
+  'flowStep',
   'workflow', 'project', 'website', 'build', 'dashboard', 'chat', 'agent', 'staff', 'evaluation', 'dataset',
   'table', 'spreadsheet', 'chart', 'map', 'report', 'kpi', 'prototype', 'code', 'browser', 'llm', 'voice', 'video',
   'image', 'animation', 'podcast', 'comic', 'game', 'cad', 'model3d', 'resume', 'template',

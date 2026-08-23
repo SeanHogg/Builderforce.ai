@@ -12,6 +12,9 @@ import {
   EMPTY_SPEC_BOARD, makeSpecDeriveBoard, specKindReadsBoard, type SpecDeriveBoard,
 } from '@/lib/specObjects';
 import { AUTHORED_FRAME_BORDER, AUTHORED_FRAME_FILL, STICKY_COLORS } from '@/domains/canvas/domain/authoredColors';
+import { frameMemberIds, type FrameBox } from '@/domains/canvas/domain/canvasFrame';
+import { FlowStepBody, FlowStepOutletRail, flowStepHasNamedOutlets } from './FlowStepBody';
+import { FrameBody } from './FrameBody';
 import { CanvasClockBody } from './CanvasClockBody';
 import { CanvasTransclusionBody } from './CanvasTransclusionBody';
 import { CanvasComponentBody } from './CanvasComponentBody';
@@ -2577,6 +2580,15 @@ type CreationNodeProps = NodeProps<CreationFlowNode> & {
    * non-draggable there rather than draggable-and-silently-inert.
    */
   onMoveDeal?: (nodeId: string, dealId: number, stage: string) => void;
+  /**
+   * Show ONE frame's section on its own — a canvas within a canvas.
+   *
+   * Deliberately not `onOpenSurface`: a surface is a different READING of the whole
+   * board (a calendar, an app, a 3D space), and this is the same reading of less of
+   * it. It is what replaced the modal workflow editor, which was a second canvas
+   * over a board that already was one.
+   */
+  onOpenFrame?: (nodeId: string) => void;
 };
 
 /** Object kinds whose body IS a document. Registry kinds, so a new document-like
@@ -2673,6 +2685,49 @@ function useCalendarBoardObjects(enabled: boolean): readonly { id: string; data:
   );
 }
 
+/**
+ * How many objects a frame currently holds.
+ *
+ * Gated exactly like {@link useBoardNeighbours} and {@link useCalendarBoardObjects}, and
+ * for the same reason — this is a subscription to every node on the board, so every
+ * card that is not a frame must never take it. It returns a NUMBER rather than the ids,
+ * which is what keeps the comparison a primitive one: a frame re-renders when its count
+ * changes and not when anything inside it is edited.
+ *
+ * A collapsed frame is measured at the size it was BEFORE it was put away
+ * (`frameExpandedWidth/Height`). Measuring the chip instead would find nothing inside
+ * it, and the count would read zero for exactly the state where it is the only thing
+ * the card can say.
+ */
+function useFrameMemberCount(id: string, enabled: boolean): number {
+  return useStore((state) => {
+    if (!enabled) return 0;
+    const boxes: FrameBox[] = [];
+    for (const node of state.nodeLookup.values()) {
+      // A store entry mid-transition (and a test double) can be missing `data`
+      // entirely. A card that throws while COUNTING what a frame holds would take
+      // the whole board down over a number, so an unreadable entry is simply not a
+      // member — the count is a reading, not an invariant.
+      const data = (node.data ?? {}) as CreationNodeData;
+      if (typeof data.kind !== 'string') continue;
+      const collapsed = data.kind === 'frame' && data.frameCollapsed === true;
+      const expandedWidth = Number(data.frameExpandedWidth);
+      const expandedHeight = Number(data.frameExpandedHeight);
+      boxes.push({
+        id: node.id,
+        kind: data.kind,
+        position: node.position,
+        size: {
+          width: collapsed && expandedWidth > 0 ? expandedWidth : (node.measured?.width ?? node.width ?? 260),
+          height: collapsed && expandedHeight > 0 ? expandedHeight : (node.measured?.height ?? node.height ?? 150),
+        },
+        data: data as unknown as Record<string, unknown>,
+      });
+    }
+    return frameMemberIds(id, boxes).length;
+  });
+}
+
 function useSpecDeriveBoard(kind: CreationObjectKind): SpecDeriveBoard {
   const neighbours = useBoardNeighbours(specKindReadsBoard(kind));
   return useMemo(
@@ -2713,10 +2768,11 @@ function DensityIcon({ density }: { density: CanvasNodeDensity }) {
   </svg>;
 }
 
-export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenDetails, onOpenBuiltinAgent, onEditData, onExport, onOpenPanel, onInsertFrom, onOpenSurface, onRevealObject, onMoveDeal }: CreationNodeProps) {
+export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenDetails, onOpenBuiltinAgent, onEditData, onExport, onOpenPanel, onInsertFrom, onOpenSurface, onRevealObject, onMoveDeal, onOpenFrame }: CreationNodeProps) {
   const t = useTranslations('creationCanvas.node');
   const specBoard = useSpecDeriveBoard(data.kind);
   const calendarBoard = useCalendarBoardObjects(data.kind === 'calendar' && data.source === 'board');
+  const frameMemberCount = useFrameMemberCount(id, data.kind === 'frame');
   const isWide = ['workflow', 'website', 'prototype', 'guidedTour', 'dashboard', 'chart', 'map', 'report', 'evaluation', 'diagnostics', 'roadmap', 'slides', 'document', 'diagram', 'prd', 'knowledge', 'code', 'table', 'spreadsheet', 'featureSummary', 'mockupSet', 'evermind', 'projectComparison', 'frame', 'pitch', 'pitchScorecard', 'pitchQa', 'pitchApplication', 'course',
     // A model, a lineage flow and a check suite are all read across, not down.
     'erd', 'lineage', 'dataQuality', 'dataContract', 'datasource',
@@ -2737,7 +2793,7 @@ export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenD
   // creative kinds did: a studio tile followed by a second, redundant block
   // repeating the same authored text. They are folded in from the one set that
   // already lists them, so a new creative kind cannot reintroduce the same bug.
-  const specialized = new Set(['workflow','website','build','prototype','guidedTour','dashboard','chart','map','report','evaluation','diagnostics','agent','staff','chat','dataset','table','spreadsheet','kpi','voice','video','note','project','roadmap','task','mockup','mockupSet','featureSummary','evermind','projectComparison','standup','drawing','frame','release','file','document','prd','knowledge','slides','diagram','pitch','pitchScorecard','pitchQa','pitchApplication','course','practice','game','resume','socialFeed','socialPost','socialCampaign','erd','datasource','dataContract','dataQuality','metric','lineage','testPlan','testCase','testRun','defect','sticky','timer','stopwatch','transclusion','component', ...SPEC_KINDS, ...CREATIVE_STUDIO_KINDS, ...WEB_PAGE_KINDS]);
+  const specialized = new Set(['workflow','website','build','prototype','guidedTour','dashboard','chart','map','report','evaluation','diagnostics','agent','staff','chat','dataset','table','spreadsheet','kpi','voice','video','note','project','roadmap','task','mockup','mockupSet','featureSummary','evermind','projectComparison','standup','drawing','frame','release','file','document','prd','knowledge','slides','diagram','pitch','pitchScorecard','pitchQa','pitchApplication','course','practice','game','resume','socialFeed','socialPost','socialCampaign','erd','datasource','dataContract','dataQuality','metric','lineage','testPlan','testCase','testRun','defect','sticky','timer','stopwatch','transclusion','component','flowStep', ...SPEC_KINDS, ...CREATIVE_STUDIO_KINDS, ...WEB_PAGE_KINDS]);
   const authoredSize = useAuthoredNodeSize(id);
   const frameStyle = data.kind === 'frame' ? { background: String(data.frameColor || AUTHORED_FRAME_FILL), borderColor: String(data.frameBorder || AUTHORED_FRAME_BORDER) } : undefined;
   // The author's pigment, applied the same way the frame's is. Both are colours a
@@ -2845,7 +2901,13 @@ export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenD
       {affordances}
       {insertButton}
       <span className={styles.nodeOrbName}><b>{data.title}</b>{data.status && <small>{data.status}</small>}</span>
-      <Handle type="source" position={Position.Right} className={styles.handle} />
+      {/* A step that DECIDES draws its continuations along the bottom, one per named
+          outlet (see `FlowStepOutletRail`). It gets no right-hand handle at all, because
+          it has no unconditional "and then" — offering one would let an author draw an
+          arm the executor can never take, which is the failure outlets exist to end. */}
+      {flowStepHasNamedOutlets(data)
+        ? <FlowStepOutletRail data={data} />
+        : <Handle type="source" position={Position.Right} className={styles.handle} />}
     </article>
   );
 
@@ -2979,7 +3041,13 @@ export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenD
         {data.kind === 'pitchApplication' && <PitchApplicationBody data={data} />}
         {data.kind === 'standup' && <StandupBody data={data} />}
         {data.kind === 'drawing' && <DrawingBody data={data} {...(onEditData ? { onEdit: (patch: Partial<CreationNodeData>) => onEditData(id, patch) } : {})} />}
-        {data.kind === 'frame' && <div className={styles.frameBody}><strong>{String(data.framePurpose || t('arrangeObjects'))}</strong><p>{data.subtitle || t('frameFallback')}</p></div>}
+        {data.kind === 'frame' && <FrameBody
+          data={data}
+          memberCount={frameMemberCount}
+          {...(onEditData ? { onToggleCollapsed: () => onEditData(id, { frameCollapsed: data.frameCollapsed !== true }) } : {})}
+          {...(onOpenFrame ? { onOpen: () => onOpenFrame(id) } : {})}
+        />}
+        {data.kind === 'flowStep' && <FlowStepBody data={data} />}
         {/* The two clocks, from ONE component: a countdown and a count-up are the same
             machine read from opposite ends. The `timer` kind shipped as a card with the
             string "05:00" in its status and no way to start it; this is the running
@@ -3021,7 +3089,13 @@ export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenD
             nothing when there is no prose to read. */}
         <ReadAloud text={canvasProseText(data)} className={styles.readAloudButton} />
       </div>
-      <Handle type="source" position={Position.Right} className={styles.handle} />
+      {/* A step that DECIDES draws its continuations along the bottom, one per named
+          outlet (see `FlowStepOutletRail`). It gets no right-hand handle at all, because
+          it has no unconditional "and then" — offering one would let an author draw an
+          arm the executor can never take, which is the failure outlets exist to end. */}
+      {flowStepHasNamedOutlets(data)
+        ? <FlowStepOutletRail data={data} />
+        : <Handle type="source" position={Position.Right} className={styles.handle} />}
     </article>
   );
 }

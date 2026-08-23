@@ -176,7 +176,7 @@ import '@seanhogg/builderforce-brain-ui/styles.css';
 import { ProjectEvermindPanel } from '@/components/builder/ProjectEvermindPanel';
 import { EvermindValidationProvider } from '@/components/builder/EvermindValidationContext';
 import { getProjectEvermindContributions, getProjectEvermindHead, recallProjectEvermind, teachProjectEvermindFromText, type ProjectEvermindContributions, type ProjectEvermindHead } from '@/lib/projectEvermindApi';
-import { isAwaitingApprovalExecution, type WorkflowApprovalMode } from '@/lib/builderforceApi';
+import { isAwaitingApprovalExecution, type WorkflowApprovalMode, type WorkflowDefinitionGraph } from '@/lib/builderforceApi';
 import { hiringApi } from '@/lib/hiringApi';
 import { screenCandidates } from '@/lib/canvasResumeScreening';
 import { guestLimitRefusal, type GuestLimitRefusal } from '@/lib/guestLimit';
@@ -290,7 +290,17 @@ import { Icon } from '@/components/ui/Icon';
 import { appendImageToDrawioCanvas, createDrawioImageCanvas } from '@/lib/drawioImageCanvas';
 import { convertGraphSource, diagramConvertSource, diagramConvertTargets } from '@/lib/canvasDiagramConvert';
 import { DIAGRAM_TARGETS, diagramNotation } from '@/lib/diagramNotations';
-import { WorkflowBuilder } from '@/components/workflow-builder/WorkflowBuilder';
+import { compileBoardFlow } from '@/domains/workflow/domain/compileBoardFlow';
+import { boardFlowFromDefinition } from '@/domains/workflow/domain/boardFlowFromDefinition';
+import { loadTemplateGraph } from '@/lib/evermindBuild';
+import { isStepChoice, parseStepChoice, stepConfigOf, stepKindOf } from '@/domains/workflow/domain/flowStepObject';
+import { outletForHandle } from '@/domains/workflow/domain/stepOutlets';
+import { nodeKindLabel } from '@/domains/workflow/domain/stepCatalog';
+import { boundingRect, frameCollapsePatch, frameMemberIds, isFrameCollapsed } from '@/domains/canvas/domain/canvasFrame';
+import { toFrameBox, useFramedBoard } from './useFramedBoard';
+import { FlowStepInspector } from './FlowStepInspector';
+import { FrameFlowSection } from './FrameFlowSection';
+import { EvermindBuildPanel } from '@/domains/workflow/presentation/EvermindBuildPanel';
 import { VoiceOutput } from '@/components/builder/VoiceOutput';
 import { useVoiceStudio } from '@/lib/voiceStudio';
 import { CopyButton } from '@/components/CopyButton';
@@ -941,6 +951,9 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const tFiles = useTranslations('creationCanvas.files');
   const tMiro = useTranslations('creationCanvas.miro');
   const tSocial = useTranslations('creationCanvas.social');
+  // The step catalog names itself out of the builder's namespace — the same keys the
+  // standalone palette reads, because they name the same steps.
+  const tStep = useTranslations('evermindBuild');
   const tAds = useTranslations('canvas.ads');
   const tImport = useTranslations('creationCanvas.import');
   // The facilitation vocabulary. Its own namespace rather than `creationCanvas.poll.*`
@@ -1347,7 +1360,16 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   }, [liveSession]);
   const [branchParentId, setBranchParentId] = useState<string | null>(null);
   const [mergeReview, setMergeReview] = useState<MergeReview | null>(null);
-  const [workflowFocus, setWorkflowFocus] = useState<{ nodeId: string; definitionId: string | null } | null>(null);
+  /**
+   * The section being worked on alone — a canvas within a canvas.
+   *
+   * This replaced `workflowFocus`, which mounted the standalone workflow builder in a
+   * modal over the board: a SECOND canvas, with its own palette, node renderer and
+   * selection model, drawn on top of a board that already had all three. Focusing a
+   * frame is the same board showing one section, so everything that works on the board
+   * — the palette, Brain, undo, presence, the inspector — works inside it unchanged.
+   */
+  const [frameFocus, setFrameFocus] = useState<string | null>(null);
   const [trainingFocus, setTrainingFocus] = useState<{ nodeId: string; projectId: number | string; localOnly: boolean } | null>(null);
   // The Builder object whose workspace is open on top of the board.
   const [buildFocus, setBuildFocus] = useState<{ nodeId: string; storageProjectId: number } | null>(null);
@@ -2636,10 +2658,40 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    */
   const nodesRef = useRef<CreationFlowNode[]>([]);
   nodesRef.current = nodes;
+  /**
+   * The framed reading of the board — who is inside which frame — as a ref.
+   *
+   * Same treatment, for the same reason, as `nodesRef` above: the drag handler needs
+   * the newest containment and must keep a stable identity, and the containment is
+   * derived far below it (`useFramedBoard`, which reads the fully decorated nodes). A
+   * dependency instead of a ref would either reorder the whole component or hand React
+   * Flow a new handler on every board edit.
+   */
+  const framedBoardRef = useRef<{ memberIdsOf: (frameId: string) => string[] }>({ memberIdsOf: () => [] });
+  /** The connections, on the same terms as `nodesRef` — what a compile reads. */
+  const edgesRef = useRef<Edge[]>([]);
+  edgesRef.current = edges;
 
   const updateNodeData = useCallback((nodeId: string, patch: Partial<CreationNodeData>) => {
     if (!cardsEditable) return;
-    setNodes((current) => current.map((node) => node.id === nodeId ? { ...node, data: { ...node.data, ...patch } } : node));
+    setNodes((current) => current.map((node) => {
+      if (node.id !== nodeId) return node;
+      const data = { ...node.data, ...patch };
+      // A frame putting itself away is not only a fact ABOUT the frame — it is a
+      // different-sized object on the board, and size lives on the node, not in its
+      // data. Handled here rather than through a second callback so that every route
+      // that collapses a frame (the card, Brain, a keyboard shortcut) resizes it, and
+      // so `frameExpandedWidth/Height` is written by exactly one piece of code.
+      if (node.data.kind === 'frame' && 'frameCollapsed' in patch) {
+        const measured = canvasNodeDimensions(node);
+        const collapse = frameCollapsePatch(
+          { id: node.id, kind: 'frame', position: node.position, size: measured, data: node.data as unknown as Record<string, unknown> },
+          patch.frameCollapsed === true,
+        );
+        return { ...node, style: { ...node.style, ...collapse.size }, data: { ...data, ...collapse.data } as CreationNodeData };
+      }
+      return { ...node, data };
+    }));
     noteSaveState(t('noticeSavingChanges'));
     const target = nodesRef.current.find((node) => node.id === nodeId);
     const campaignId = Number(target?.data.campaignId);
@@ -2895,6 +2947,25 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setNotice(t('objectsAligned', { count: placements.size }));
   }, [canEdit, nodes, selectionIds, setNodes, t]);
 
+  /**
+   * Work on one section alone — a canvas within a canvas.
+   *
+   * Everything outside the frame is hidden (not removed — see `useFramedBoard`), the
+   * viewport fits what is left, and the board is otherwise exactly the board: same
+   * palette, same Brain, same undo, same presence. That is the whole difference from
+   * the modal editor this replaced, which had its own of each.
+   */
+  const openFrame = useCallback((frameId: string) => {
+    setFrameFocus(frameId);
+    setNodePanel(null);
+    // After the hidden flags land, or the fit measures the whole board.
+    window.setTimeout(() => { void flowRef.current?.fitView({ padding: 0.14, minZoom: CANVAS_FIT_MIN_ZOOM }); }, 0);
+  }, []);
+  const exitFrame = useCallback(() => {
+    setFrameFocus(null);
+    window.setTimeout(() => { void flowRef.current?.fitView({ padding: 0.12, minZoom: CANVAS_FIT_MIN_ZOOM }); }, 0);
+  }, []);
+
   const frameSelection = useCallback(() => {
     const ids = new Set(selectionIds());
     const chosen = nodes.filter((node) => ids.has(node.id));
@@ -3102,7 +3173,15 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const connectionProps = useMemo(() => flowConnectionProps(coarsePointer ? 'coarse' : 'fine'), [coarsePointer]);
 
   const onConnect = useCallback((connection: Connection) => {
-    setEdges((current) => addEdge({ ...connection, id: crypto.randomUUID(), ...edgeVisuals(connectionStyle), data: { connectionKind, connectionStyle }, label: connectionKind }, current));
+    // An arm drawn out of a step that DECIDES is labeled with the outlet it left, not
+    // with the board's connection kind: that label is what the executor prunes on
+    // (`WorkflowDefEdge.label`), and it is what the arrow has to READ as, because
+    // "reference" on the arm out of a switch case tells nobody which case it is.
+    const from = nodes.find((node) => node.id === connection.source);
+    const outlet = from?.data.kind === 'flowStep'
+      ? outletForHandle(stepKindOf(from.data), stepConfigOf(from.data), connection.sourceHandle)
+      : null;
+    setEdges((current) => addEdge({ ...connection, id: crypto.randomUUID(), ...edgeVisuals(connectionStyle), data: { connectionKind, connectionStyle }, label: outlet?.name || connectionKind }, current));
     trackActivity('creation_connection_added', { sessionId, metadata: { clientSurface: canvasSurface(), connectionKind } });
     const source = nodes.find((node) => node.id === connection.source);
     const target = nodes.find((node) => node.id === connection.target);
@@ -3187,14 +3266,25 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const onCanvasNodesChange = useCallback((changes: Parameters<typeof onNodesChange>[0]) => {
     const moves = changes.flatMap((change) => change.type === 'position' && change.position ? [{ id: change.id, position: change.position }] : []);
     if (!moves.length) { onNodesChange(changes); return; }
+    // Anything React Flow is ALREADY moving. A selected card inside a frame that is
+    // being dragged gets its own position change from the library, and adding a
+    // follower for it would apply the delta twice — the card would drift out of the
+    // section at double speed, which is worse than not carrying it at all.
+    const alreadyMoving = new Set(moves.map((move) => move.id));
     const followers = moves.flatMap((move) => {
       const source = nodes.find((node) => node.id === move.id);
       if (!source) return [];
       const dx = move.position.x - source.position.x;
       const dy = move.position.y - source.position.y;
       if (!dx && !dy) return [];
+      // An annotation follows the object it marks up; a FRAME carries everything
+      // inside it. Both are "this moved, so did that", which is why they are resolved
+      // in one pass — a frame full of annotated cards must not move its members and
+      // leave their marks behind.
+      const carried = source.data.kind === 'frame' ? new Set(framedBoardRef.current.memberIdsOf(move.id)) : null;
       return nodes
-        .filter((node) => node.data.kind === 'drawing' && node.data.annotatesId === move.id)
+        .filter((node) => !alreadyMoving.has(node.id)
+          && ((node.data.kind === 'drawing' && node.data.annotatesId === move.id) || carried?.has(node.id)))
         .map((node) => ({ id: node.id, type: 'position' as const, position: { x: node.position.x + dx, y: node.position.y + dy } }));
     });
     onNodesChange(followers.length ? [...changes, ...followers] : changes);
@@ -3342,15 +3432,31 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * an object" — and the reason the board could previously only be built by prompting.
    * Without one it is the bar's plain add, which is `addAtCenter` unchanged.
    */
+  /**
+   * ONE decode of a palette choice, for every way of placing one.
+   *
+   * The palette hands back THREE vocabularies through one string: an object kind, a
+   * stencil (a preset of the untyped card — `canvasStencils.ts`), and a step (one of
+   * the ~60 executable kinds, or an integration preset over one — `flowStepObject.ts`).
+   * Each has its own declared prefix and its own parser, and this is the only place
+   * that asks all three, so clicking a row, inserting after a card and dragging onto
+   * the board cannot disagree about what was chosen.
+   */
+  const choiceSeed = useCallback((choice: PaletteChoice): { kind: CreationObjectKind; seed?: Partial<CreationNodeData>; size?: { width: number; height: number } } => {
+    if (isStepChoice(choice)) {
+      // Named in the author's language once, at creation — a step's title is workflow
+      // data they then own, not chrome that re-translates under them.
+      const step = parseStepChoice(choice, (meta) => nodeKindLabel(meta, tStep));
+      if (step) return { kind: 'flowStep', seed: step as Partial<CreationNodeData> };
+    }
+    const picked = parsePaletteChoice(choice);
+    if (picked) return { kind: 'sticky', seed: stencilSeed(picked.stencil) as Partial<CreationNodeData>, size: stencilSize(picked.stencil) };
+    return { kind: choice as CreationObjectKind };
+  }, [tStep]);
+
   const pickObject = useCallback((choice: PaletteChoice, fromNodeId?: string) => {
     setObjectPicker(null);
-    // A stencil is a PRESET of the untyped card, not a kind — see `canvasStencils.ts`.
-    // Decoded once, here, so nothing downstream has to know that the palette hands back
-    // two vocabularies through one key.
-    const picked = parsePaletteChoice(choice);
-    const kind = (picked ? 'sticky' : choice) as CreationObjectKind;
-    const seed = picked ? (stencilSeed(picked.stencil) as Partial<CreationNodeData>) : undefined;
-    const size = picked ? stencilSize(picked.stencil) : undefined;
+    const { kind, seed, size } = choiceSeed(choice);
     if (!fromNodeId) { addAtCenter(kind, seed, size); return; }
     if (!canEdit) { setNotice(t('roleCannotEdit')); return; }
     const source = nodes.find((node) => node.id === fromNodeId);
@@ -3366,7 +3472,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     if (node.data.kind !== 'chat') openNodeInspector(node.id);
     setNotice(t('objectAdded', { title: node.data.title }));
     trackActivity('creation_object_added', { sessionId, metadata: { clientSurface: canvasSurface(), objectKinds: [kind] } });
-  }, [addAtCenter, canEdit, connectionKind, nodes, openNodeInspector, sessionId, setEdges, setNodes, t]);
+  }, [addAtCenter, canEdit, choiceSeed, connectionKind, nodes, openNodeInspector, sessionId, setEdges, setNodes, t]);
 
   /**
    * ONE credential check in front of every social tool.
@@ -4194,10 +4300,14 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     // drag is one way in, never the only one.
     const teammate = teammateFromDrag(event.dataTransfer);
     if (teammate) { seatTeammate(teammate, point); return; }
-    const kind = event.dataTransfer.getData(DND_MIME) as CreationObjectKind;
+    // The palette rail and the picker both drag a palette CHOICE, not a bare kind:
+    // a step and a stencil are as droppable as an object, and decoding them here
+    // through the same `choiceSeed` the click path uses is what stops "dropped" and
+    // "clicked" producing different objects from the same row.
+    const choice = event.dataTransfer.getData(DND_MIME);
     // A link dragged from a browser tab or another app carries no object kind —
     // it lands as a live Web page panel, which is what a dropped URL means.
-    if (!kind && point) {
+    if (!choice && point) {
       const dropped = normalizeWebPageUrl(event.dataTransfer.getData('text/uri-list').split('\n')[0] || event.dataTransfer.getData('text/plain'));
       if (dropped) {
         const page = newNode('browser', point);
@@ -4207,12 +4317,15 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         return;
       }
     }
-    if (!kind || !point) return;
+    if (!choice || !point) return;
+    const { kind, seed, size } = choiceSeed(choice);
     const node = newNode(kind, point);
     if (kind === 'guidedTour') node.data = { ...node.data, ...localizedTourDefaults() };
+    if (seed) node.data = { ...node.data, ...seed };
+    if (size) node.style = { ...node.style, ...size };
     setNodes((current) => [...current, node]);
     setSelectedId(node.id); setSelectedIds([node.id]); openNodeInspector(node.id);
-  }, [addFilesToCanvas, canEdit, localizedTourDefaults, openNodeInspector, setNodes, t]);
+  }, [addFilesToCanvas, canEdit, choiceSeed, localizedTourDefaults, openNodeInspector, setNodes, t]);
 
   /**
    * Convert an object into a diagram, in any notation that can be written.
@@ -9420,8 +9533,14 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   /** Resolve which workflow node an action applies to: the one named, else the
    *  selection, else the only one on the board. Shared by build and run. */
   const resolveWorkflowNode = useCallback((workflowId?: string) => {
-    const requested = typeof workflowId === 'string' ? nodes.find((node) => node.id === workflowId && node.data.kind === 'workflow') : null;
-    return requested ?? (selectedNode?.data.kind === 'workflow' ? selectedNode : nodes.find((node) => node.data.kind === 'workflow')) ?? null;
+    // A FRAME that holds a built flow is as runnable as a legacy `workflow` card: the
+    // definition id lives on whichever object stands for the flow, and since the board
+    // became the workflow that object is the section that bounds it. Asked as one
+    // predicate so Run means the same thing wherever it is pressed.
+    const runnable = (node: CreationFlowNode) => node.data.kind === 'workflow'
+      || (node.data.kind === 'frame' && typeof node.data.resourceId === 'string' && node.data.resourceId.startsWith('workflow:'));
+    const requested = typeof workflowId === 'string' ? nodes.find((node) => node.id === workflowId && runnable(node)) : null;
+    return requested ?? (selectedNode && runnable(selectedNode) ? selectedNode : nodes.find(runnable)) ?? null;
   }, [nodes, selectedNode]);
 
   /**
@@ -9433,9 +9552,256 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * runnable — in which case the per-step reasons are written onto the node and
    * shown on the card.
    */
+  /**
+   * THE BOARD, COMPILED — turn the steps inside a frame into a real definition.
+   *
+   * This is what "the canvas is the workflow" cashes out to. There is no separate
+   * document being edited somewhere else and no modal to open: the objects on the
+   * board ARE the graph, the connections between them ARE the edges, and the outlet
+   * an arm was drawn from IS the label the executor prunes on.
+   *
+   * The FRAME is the unit, because a board holds more than one flow and a section is
+   * how a person says which steps belong together. Running with no frame at all draws
+   * one round the steps first — the alternative is either refusing (a board full of
+   * steps that will not run) or compiling every step on the board into one graph (a
+   * flow nobody authored).
+   *
+   * All-or-nothing on issues, for the same reason `canvasWorkflowSpec.ts` refuses an
+   * underspecified step: a graph that runs, reports success and does nothing that was
+   * asked for is worse than one that will not build. Each unbuildable step SAYS what
+   * it needs, on the card, so the board is the error report too.
+   */
+  const buildFlowFromFrame = useCallback(async (frameId: string): Promise<string | null> => {
+    if (persistence === 'local') {
+      requireAccount('workflow', t('buildWorkflowGateTitle'), t('buildWorkflowGate'));
+      return null;
+    }
+    const board = nodesRef.current;
+    const frame = board.find((node) => node.id === frameId);
+    if (!frame) return null;
+    const memberIds = new Set(framedBoardRef.current.memberIdsOf(frameId));
+    const objects = board
+      .filter((node) => memberIds.has(node.id))
+      .map((node) => ({ id: node.id, position: node.position, data: node.data as unknown as Record<string, unknown> }));
+    const connections = edgesRef.current
+      .filter((edge) => memberIds.has(edge.source) && memberIds.has(edge.target))
+      .map((edge) => ({ id: edge.id, source: edge.source, target: edge.target, sourceHandle: edge.sourceHandle ?? null }));
+
+    const { definition, issues, compiledCount } = compileBoardFlow(objects, connections);
+    if (issues.length > 0) {
+      const explain = (issue: (typeof issues)[number]) => t(`flowIssue.${issue.messageKey}` as 'flowIssue.noSteps', issue.values ?? {});
+      const blocked = new Map(issues.filter((issue) => issue.objectId).map((issue) => [issue.objectId, explain(issue)]));
+      setNodes((current) => current.map((node) => blocked.has(node.id)
+        ? { ...node, data: { ...node.data, status: t('flowStep.needsSetup'), flowStepIssue: blocked.get(node.id) } }
+        : node));
+      setNotice(explain(issues[0]!));
+      updateNodeData(frameId, { status: t('flowStep.needsSetup') });
+      return null;
+    }
+    // A step that WAS blocked and is now fine must stop saying so — a stale error on a
+    // card is indistinguishable from a live one.
+    setNodes((current) => current.map((node) => (memberIds.has(node.id) && node.data.flowStepIssue
+      ? { ...node, data: { ...node.data, flowStepIssue: undefined, status: '' } }
+      : node)));
+
+    const projectId = canvasProjectNodes(board).map((node) => canvasProjectId(node.data))[0] ?? null;
+    const name = frame.data.title || t('flowStep.untitledFlow');
+    const linked = typeof frame.data.resourceId === 'string' && frame.data.resourceId.startsWith('workflow:')
+      ? frame.data.resourceId.slice('workflow:'.length)
+      : '';
+    try {
+      // The section's own two controls travel WITH the graph, exactly as the legacy
+      // card's did: a section reading "Approval required" that compiled to a definition
+      // with no gate would run unapproved (see migration 1092), and one with no run
+      // target saves as built and refuses at run time. `builderforce` is the default
+      // because a canvas flow runs on the hosted cloud runtime unless somebody says
+      // otherwise — the same default `/from-canvas` applies.
+      const runTarget = typeof frame.data.runTarget === 'string' && frame.data.runTarget ? frame.data.runTarget : 'builderforce';
+      const approvalMode = frame.data.approvalMode === 'required' || frame.data.approvalMode === 'autonomous'
+        ? (frame.data.approvalMode as WorkflowApprovalMode)
+        : undefined;
+      const saved = linked
+        ? await workflowDefinitions.update(linked, { name, definition, runTarget, ...(approvalMode ? { approvalMode } : {}) })
+        : await workflowDefinitions.create({ name, definition, runTarget, ...(approvalMode ? { approvalMode } : {}), ...(projectId != null ? { projectId } : {}) });
+      updateNodeData(frameId, {
+        resourceId: `workflow:${saved.id}`,
+        resourceSubtype: 'definition',
+        workflowExecutable: true,
+        workflowStepCount: compiledCount,
+        status: t('flowStep.built'),
+      });
+      setNotice(t('noticeWorkflowBuilt', { count: compiledCount }));
+      return saved.id;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : t('noticeWorkflowNotRunnable');
+      updateNodeData(frameId, { status: t('flowStep.needsSetup') });
+      setNotice(message);
+      return null;
+    }
+  }, [persistence, requireAccount, setNodes, setNotice, t, updateNodeData]);
+
+  /**
+   * Build the flow the person is looking at, drawing the section first if there is none.
+   *
+   * A frame is the unit a flow is built from, and requiring one before anything can run
+   * would make the first flow somebody draws fail for a reason that is about bookkeeping
+   * rather than about their work. So the steps get a frame round them — which is what
+   * they meant — and then it builds.
+   */
+  const buildFlow = useCallback((nodeId?: string): Promise<string | null> => {
+    const board = nodesRef.current;
+    const target = nodeId ? board.find((node) => node.id === nodeId) : null;
+    if (target?.data.kind === 'frame') return buildFlowFromFrame(target.id);
+    const steps = board.filter((node) => node.data.kind === 'flowStep');
+    if (steps.length === 0) { setNotice(t('flowIssue.noSteps')); return Promise.resolve(null); }
+    const rect = boundingRect(steps.map((node) => ({
+      id: node.id, kind: node.data.kind, position: node.position, size: canvasNodeDimensions(node), data: node.data as unknown as Record<string, unknown>,
+    })), 60);
+    const frame = newNode('frame', { x: rect.x, y: rect.y });
+    frame.style = { width: rect.width, height: rect.height };
+    frame.zIndex = -1;
+    frame.data = { ...frame.data, title: t('flowStep.untitledFlow'), framePurpose: t('flowStep.framePurpose') };
+    setNodes((current) => [frame, ...current]);
+    setNotice(t('flowStep.framedForBuild'));
+    // The frame has to exist on the board before its membership can be read — the
+    // containment is geometric, and geometry is what the next render establishes.
+    return new Promise((resolve) => { window.setTimeout(() => { void buildFlowFromFrame(frame.id).then(resolve); }, 0); });
+  }, [buildFlowFromFrame, setNodes, setNotice, t]);
+
+  /**
+   * The section whose steps are being run IN THE BROWSER, and the graph they compile to.
+   *
+   * Evermind BUILD steps do not run in the cloud at all — they run here, on this
+   * device's GPU, through `lib/evermindBuild.ts`. That runner had exactly one door, a
+   * panel inside the standalone workflow builder, and it moved with the capability
+   * rather than being deleted alongside the shell that used to host it.
+   */
+  const [evermindBuild, setEvermindBuild] = useState<{ name: string; projectId: number | null; graph: WorkflowDefinitionGraph } | null>(null);
+
+  const openEvermindBuild = useCallback((frameId: string) => {
+    const board = nodesRef.current;
+    const frame = board.find((node) => node.id === frameId);
+    if (!frame) return;
+    const memberIds = new Set(framedBoardRef.current.memberIdsOf(frameId));
+    const { definition, issues } = compileBoardFlow(
+      board.filter((node) => memberIds.has(node.id)).map((node) => ({ id: node.id, position: node.position, data: node.data as unknown as Record<string, unknown> })),
+      edgesRef.current
+        .filter((edge) => memberIds.has(edge.source) && memberIds.has(edge.target))
+        .map((edge) => ({ id: edge.id, source: edge.source, target: edge.target, sourceHandle: edge.sourceHandle ?? null })),
+    );
+    // The in-browser runner compiles the graph itself, so an unbuildable step has to be
+    // reported the same way the cloud path reports it rather than reaching the engine.
+    if (issues.length > 0) { setNotice(t(`flowIssue.${issues[0]!.messageKey}` as 'flowIssue.noSteps', issues[0]!.values ?? {})); return; }
+    const projectId = canvasProjectNodes(board).map((node) => canvasProjectId(node.data))[0] ?? null;
+    setEvermindBuild({ name: frame.data.title || t('flowStep.untitledFlow'), projectId, graph: definition });
+  }, [setNotice, t]);
+
+  /**
+   * Lay a starting Evermind pipeline out inside a frame.
+   *
+   * Eight steps nobody wants to place by hand, wired in the order the engine runs them,
+   * dropped INSIDE the section that will build them — which is what makes the frame the
+   * unit of a flow rather than a decoration around one.
+   */
+  const loadEvermindTemplate = useCallback((frameId: string, templateId: 'train-llm' | 'teach-code') => {
+    const frame = nodesRef.current.find((node) => node.id === frameId);
+    if (!frame) return;
+    setNotice(t('flowStep.opening'));
+    void loadTemplateGraph(templateId).then((graph) => {
+      const unpacked = boardFlowFromDefinition(graph, { x: frame.position.x + 40, y: frame.position.y + 60 });
+      const idByRef = new Map<string, string>();
+      const stepNodes = unpacked.steps.map((step) => {
+        const node = newNode('flowStep', step.position);
+        idByRef.set(step.ref, node.id);
+        node.data = { ...node.data, ...step.data } as CreationNodeData;
+        return node;
+      });
+      setNodes((current) => current.map((node) => (node.id === frameId
+        // The section grows to hold what was just put in it — containment is geometric,
+        // so a frame that did not cover its own pipeline would not own it.
+        ? { ...node, style: { ...node.style, width: Math.max(Number(node.style?.width) || 0, unpacked.frame.size.width + 80), height: Math.max(Number(node.style?.height) || 0, unpacked.frame.size.height + 80) } }
+        : node)).concat(stepNodes));
+      setEdges((current) => [
+        ...current,
+        ...unpacked.connections.flatMap((connection) => {
+          const source = idByRef.get(connection.sourceRef);
+          const dest = idByRef.get(connection.targetRef);
+          return source && dest ? [{ id: crypto.randomUUID(), source, target: dest, type: connectionKind }] : [];
+        }),
+      ]);
+      setNotice(t('flowStep.opened', { count: stepNodes.length }));
+    }).catch((error: Error) => setNotice(error.message));
+  }, [connectionKind, setEdges, setNodes, setNotice, t]);
+
+  /**
+   * OPEN A SAVED WORKFLOW ON THE BOARD — the migration path for every definition
+   * authored before the canvas was the workflow.
+   *
+   * The card is REPLACED by the section it was standing in for: a frame holding one
+   * `flowStep` object per node, wired the way the definition was wired, with a labeled
+   * edge reattached to the outlet its label names. Replaced rather than kept beside it,
+   * because a card and the steps it stands for both on the board is two editable copies
+   * of one graph, and the one that would be saved is whichever was touched last.
+   *
+   * The definition id moves to the frame, so Build and Run keep pointing at the same
+   * row and this is an OPEN rather than a fork.
+   */
+  const unpackWorkflow = useCallback((workflowId?: string) => {
+    const target = resolveWorkflowNode(workflowId);
+    if (!target || target.data.kind !== 'workflow') { setNotice(t('noticeNeedWorkflow')); return; }
+    const definitionId = typeof target.data.resourceId === 'string' && target.data.resourceId.startsWith('workflow:')
+      ? target.data.resourceId.slice('workflow:'.length)
+      : '';
+    if (!definitionId) { setNotice(t('flowStep.notBuiltYet')); return; }
+    setNotice(t('flowStep.opening'));
+    void workflowDefinitions.get(definitionId).then((detail) => {
+      const unpacked = boardFlowFromDefinition(detail.definition, target.position);
+      const frame = newNode('frame', unpacked.frame.position);
+      frame.style = { width: unpacked.frame.size.width, height: unpacked.frame.size.height };
+      frame.zIndex = -1;
+      frame.data = {
+        ...frame.data,
+        title: detail.name,
+        framePurpose: t('flowStep.framePurpose'),
+        resourceId: `workflow:${detail.id}`,
+        resourceSubtype: 'definition',
+        workflowExecutable: true,
+      };
+      const idByRef = new Map<string, string>();
+      const stepNodes = unpacked.steps.map((step) => {
+        const node = newNode('flowStep', step.position);
+        idByRef.set(step.ref, node.id);
+        node.data = { ...node.data, ...step.data } as CreationNodeData;
+        return node;
+      });
+      setNodes((current) => [frame, ...current.filter((node) => node.id !== target.id), ...stepNodes]);
+      setEdges((current) => [
+        ...current.filter((edge) => edge.source !== target.id && edge.target !== target.id),
+        ...unpacked.connections.flatMap((connection) => {
+          const source = idByRef.get(connection.sourceRef);
+          const dest = idByRef.get(connection.targetRef);
+          return source && dest ? [{
+            id: crypto.randomUUID(),
+            source,
+            target: dest,
+            type: connectionKind,
+            ...(connection.sourceHandle ? { sourceHandle: connection.sourceHandle } : {}),
+            ...(connection.label ? { label: connection.label } : {}),
+          }] : [];
+        }),
+      ]);
+      setSelectedId(frame.id); setSelectedIds([frame.id]);
+      setNotice(t('flowStep.opened', { count: stepNodes.length }));
+    }).catch((error: Error) => setNotice(error.message));
+  }, [connectionKind, resolveWorkflowNode, setEdges, setNodes, setNotice, t]);
+
   const compileWorkflow = useCallback(async (workflowId?: string): Promise<string | null> => {
     const target = resolveWorkflowNode(workflowId);
     if (!target) { setNotice(t('noticeNeedWorkflow')); return null; }
+    // A frame's steps ARE the definition — there is no authored `steps` list to lower.
+    // Dispatched here rather than at each call site so Run, the card's Build and Brain's
+    // `canvas_build_workflow` all reach the right compiler.
+    if (target.data.kind === 'frame') return buildFlowFromFrame(target.id);
     // Compiling creates a tenant-owned, runnable resource, so a local draft has
     // to become an account first — the same gate saving a collaborator uses.
     if (persistence !== 'server') {
@@ -9483,7 +9849,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       setNotice(message);
       return null;
     }
-  }, [nodes, patchWorkflowNode, persistence, requireAccount, resolveWorkflowNode, t]);
+  }, [buildFlowFromFrame, nodes, patchWorkflowNode, persistence, requireAccount, resolveWorkflowNode, t]);
 
   const runWorkflow = useCallback((workflowId?: string) => {
     if (!canRun) { setNotice(t('noticeNeedRunnerAccess')); return; }
@@ -10476,7 +10842,6 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * is currently hiding — a mode that quietly resurrects hidden objects would
    * report a different canvas than the one the user is working on.
    */
-  const threeDNodes = useMemo(() => renderedNodes.filter((node) => node.hidden !== true), [renderedNodes]);
   /** Paints `taskDependencyAnalysis`'s critical path onto the board: the `blocks`
    *  edges connecting two critical-path tasks get a heavier, accented stroke instead
    *  of the shared default — the first per-edge styling this board does, so it is
@@ -10484,6 +10849,15 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const renderedEdges = useMemo(() => edges.map((edge) => edge.data?.connectionKind === 'blocks' && criticalPathTaskIds.has(edge.source) && criticalPathTaskIds.has(edge.target)
     ? { ...edge, animated: true, style: { ...edge.style, stroke: 'var(--error-text)', strokeWidth: 3 } }
     : edge), [edges, criticalPathTaskIds]);
+  /**
+   * Frames, applied. Collapsed sections hide what they hold (and their connections
+   * re-point at the chip), and a focused frame shows only its own section — the
+   * canvas within a canvas. See `useFramedBoard`.
+   */
+  const framedBoard = useFramedBoard(renderedNodes, renderedEdges, frameFocus);
+  // eslint-disable-next-line react-hooks/refs
+  framedBoardRef.current = framedBoard;
+  const threeDNodes = useMemo(() => framedBoard.nodes.filter((node) => node.hidden !== true), [framedBoard]);
   const describeThreeD = useCallback((node: CreationFlowNode): Canvas3DDescriptor => {
     const definition = creationObjectDefinition(node.data.kind);
     const comparisonModel = typeof node.data.comparisonModel === 'string' ? node.data.comparisonModel : '';
@@ -10692,13 +11066,13 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   // a per-token dependency here would hand React Flow a new nodeTypes object and
   // remount every Object on the board on every streamed word.
   const canvasNodeTypes = useMemo<NodeTypes>(() => ({
-    creation: (props) => <CreationNode {...props} canRun={canRun} onRun={runWorkflowFromNode} onExport={exportFromNode} onOpenBuiltinAgent={openBuiltinAgentSurfaceFromNode} onOpenPanel={openNodePanel} onInsertFrom={openInsertPicker} onOpenSurface={(nodeId, surface) => setSurface(surface, nodeId)} onRevealObject={revealObject} {...(cardsEditable ? { onEditData: updateNodeData, onMoveDeal: moveDealFromNode } : {})} onOpenDetails={(nodeId, focus) => {
+    creation: (props) => <CreationNode {...props} canRun={canRun} onRun={runWorkflowFromNode} onExport={exportFromNode} onOpenBuiltinAgent={openBuiltinAgentSurfaceFromNode} onOpenPanel={openNodePanel} onInsertFrom={openInsertPicker} onOpenSurface={(nodeId, surface) => setSurface(surface, nodeId)} onOpenFrame={openFrame} onRevealObject={revealObject} {...(cardsEditable ? { onEditData: updateNodeData, onMoveDeal: moveDealFromNode } : {})} onOpenDetails={(nodeId, focus) => {
       setDiagnosticsOpen(false); setHistoryOpen(false); setOutcomeMetricsOpen(false);
       // Asking for a specific section (knowledge, test, evaluation, delivery) is asking
       // for the WIDE panel directly — the short one has no such section to scroll to.
       setSelectedId(nodeId); setSelectedIds([nodeId]); openNodeInspector(nodeId, focus || null);
     }} />,
-  }), [canRun, cardsEditable, exportFromNode, moveDealFromNode, openBuiltinAgentSurfaceFromNode, openInsertPicker, openNodeInspector, openNodePanel, runWorkflowFromNode, setSurface, updateNodeData]);
+  }), [canRun, cardsEditable, exportFromNode, moveDealFromNode, openBuiltinAgentSurfaceFromNode, openFrame, openInsertPicker, openNodeInspector, openNodePanel, runWorkflowFromNode, setSurface, updateNodeData]);
   const buildDiagnostics = useCallback(async () => buildCreationCanvasDiagnosticsReport({
     sessionId, title, persistence, role: sessionRole, revision: revision.current, realtimeState,
     // Objects are passed WHOLE: the report decides which fields explain whether
@@ -11208,7 +11582,14 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
               acts on the board, a word opens somewhere else. */}
           <CanvasSessionActions variant="handoff" surface={surface} collapsed={barCollapsed} handlers={sessionActionHandlers} />
           {canvasChromeShows('actions', barCollapsed) && <button className={`${styles.secondaryButton} ${styles.iconAction}`} aria-expanded={moreOpen} aria-label={t('moreActions')} title={t('moreActions')} onClick={() => { setMoreOpen((value) => !value); setShareOpen(false); }}><MoreActionsIcon /></button>}
-          {canvasChromeShows('save', barCollapsed) && persistence === 'local' && <button className={`${styles.secondaryButton} ${styles.saveButton}`} aria-label={t('saveCollaborate')} onClick={() => requireAccount('save', t('gateSaveTitle'), t('gateSaveBody'))}><span className={styles.saveButtonFull}>{t('saveCollaborate')}</span><span className={styles.saveButtonShort} aria-hidden>{t('save')}</span></button>}
+          {/* NO SAVE BUTTON HERE. A guest board is kept by taking an account, and the
+              header already offers exactly that — its CTA becomes "Keep your work" as
+              soon as this browser holds a local board (`MarketingHeader`). Carrying a
+              second "Save & collaborate" on the canvas put two bars on one screen
+              competing to be the way to save the same thing, and the canvas copy was
+              the one nobody could reach from anywhere else in the product. The pill
+              still SAYS where the board lives; saying it is not the same as offering
+              it twice. */}
           {moreOpen && <div className={styles.moreMenu} data-testid="canvas-more-menu" aria-label={t('moreActions')}>
             {/* First, because these are the session-bar actions a phone gave up its
                 room for — including the only way to invite anybody, which used to be
@@ -11347,7 +11728,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           expanded={expanded}
           onToggleExpanded={() => setNodePanel((current) => (current ? { ...current, expanded: !current.expanded } : current))}
           onOpenSurface={(surface) => setSurface(surface, nodePanel.nodeId)}
-        >{expanded ? <Inspector node={target} nodes={nodes} edges={edges} focus={inspectorFocus} timeline={timeline} brainTrace={brainTrace} sessionId={sessionId} persistence={persistence} role={sessionRole} editable={canEdit && !lockBlocked} members={members} onChange={(patch) => updateNodeData(target.id, patch)} onWebsiteViewportChange={(viewport) => updateWebsiteViewport(target.id, viewport)} onRun={runWorkflow} onPublishWebsite={() => publishWebsite(target.id)} onOpenBuild={() => openBuild(target.id)} onAttachBuild={(ide) => attachBuild(target.id, ide)} onDeleteBuildWorkspace={() => deleteBuildWorkspace(target.id)} onBuildWebsiteWithCode={() => buildWebsiteWithCode(target.id)} creatingBuild={creatingBuild} onGenerateVideo={() => generateVideo(target.id)} onRunCreativeAction={(action) => runCreativeAction(target.id, action)} onShipGame={() => openGamePanel(target.id)} onPublishListing={() => openPublishPanel(target.id)} onOpenReleases={() => openReleasesPanel(target.id)} onEditWorkflow={() => setWorkflowFocus({ nodeId: target.id, definitionId: target.data.resourceId?.startsWith('workflow:') ? target.data.resourceId.slice('workflow:'.length) : null })} onBuildWorkflow={() => { void compileWorkflow(target.id); }} onSaveAgent={saveAgent} onOpenBuiltinAgent={(intent) => openBuiltinAgentSurfaceFromNode(target.id, intent)} onAddAgentKnowledge={(content) => addAgentKnowledge(target.id, content)} onRunAgentTest={(testPrompt, expected) => runAgentTest(target.id, testPrompt, expected)} onSaveFramePreset={saveFramePreset} onExpandProject={expandProject} onLoadProjectQuality={loadProjectQuality} onCompareProjects={compareProjects} onDeliverMockup={deliverMockup} onExpandMockupSet={expandMockupSet} onImportDataset={importDataset} onVisualizeDataset={visualizeDataset} onPlotDataset={plotDataset} onProfileDataset={profileDataset} onAttachEvermindProject={attachEvermindProject} onExpandEvermindPipeline={expandEvermindPipeline} onTrainEvermind={openEvermindTraining} onStartStandup={startStandup} onConvertDiagram={async (format, diagramId) => { const result = await convertObjectToDiagram(target.id, format, diagramId); return result.ok ? t(diagramId && diagramId !== '__new__' ? 'diagramAddedStatus' : 'diagramCreatedStatus') : result.error || t('drawioAppendFailed'); }} onExportArtifact={(action) => exportArtifact(target.id, action)} onAskBrain={(request) => { openBrainDock(); evaluateCanvas(request); }} onResumeTailor={tailorResumeFromNode} onResumeDetach={detachResumeFromNode} onResumeShare={createResumeShare} onResumeSharesList={listResumeShares} onResumeShareRevoke={revokeResumeShare} /> : null}</CanvasNodePanel>;
+        >{expanded ? <Inspector node={target} nodes={nodes} edges={edges} focus={inspectorFocus} timeline={timeline} brainTrace={brainTrace} sessionId={sessionId} persistence={persistence} role={sessionRole} editable={canEdit && !lockBlocked} members={members} onChange={(patch) => updateNodeData(target.id, patch)} onWebsiteViewportChange={(viewport) => updateWebsiteViewport(target.id, viewport)} onRun={() => runWorkflow(target.id)} onPublishWebsite={() => publishWebsite(target.id)} onOpenBuild={() => openBuild(target.id)} onAttachBuild={(ide) => attachBuild(target.id, ide)} onDeleteBuildWorkspace={() => deleteBuildWorkspace(target.id)} onBuildWebsiteWithCode={() => buildWebsiteWithCode(target.id)} creatingBuild={creatingBuild} onGenerateVideo={() => generateVideo(target.id)} onRunCreativeAction={(action) => runCreativeAction(target.id, action)} onShipGame={() => openGamePanel(target.id)} onPublishListing={() => openPublishPanel(target.id)} onOpenReleases={() => openReleasesPanel(target.id)} onUnpackWorkflow={() => unpackWorkflow(target.id)} onBuildWorkflow={() => { void compileWorkflow(target.id); }} onBuildFlow={() => { void buildFlow(target.id); }} onOpenEvermindBuild={() => openEvermindBuild(target.id)} onLoadEvermindTemplate={(templateId) => loadEvermindTemplate(target.id, templateId)} onRemoveConnection={(edgeId) => setEdges((current) => current.filter((edge) => edge.id !== edgeId))} onSaveAgent={saveAgent} onOpenBuiltinAgent={(intent) => openBuiltinAgentSurfaceFromNode(target.id, intent)} onAddAgentKnowledge={(content) => addAgentKnowledge(target.id, content)} onRunAgentTest={(testPrompt, expected) => runAgentTest(target.id, testPrompt, expected)} onSaveFramePreset={saveFramePreset} onExpandProject={expandProject} onLoadProjectQuality={loadProjectQuality} onCompareProjects={compareProjects} onDeliverMockup={deliverMockup} onExpandMockupSet={expandMockupSet} onImportDataset={importDataset} onVisualizeDataset={visualizeDataset} onPlotDataset={plotDataset} onProfileDataset={profileDataset} onAttachEvermindProject={attachEvermindProject} onExpandEvermindPipeline={expandEvermindPipeline} onTrainEvermind={openEvermindTraining} onStartStandup={startStandup} onConvertDiagram={async (format, diagramId) => { const result = await convertObjectToDiagram(target.id, format, diagramId); return result.ok ? t(diagramId && diagramId !== '__new__' ? 'diagramAddedStatus' : 'diagramCreatedStatus') : result.error || t('drawioAppendFailed'); }} onExportArtifact={(action) => exportArtifact(target.id, action)} onAskBrain={(request) => { openBrainDock(); evaluateCanvas(request); }} onResumeTailor={tailorResumeFromNode} onResumeDetach={detachResumeFromNode} onResumeShare={createResumeShare} onResumeSharesList={listResumeShares} onResumeShareRevoke={revokeResumeShare} /> : null}</CanvasNodePanel>;
       })()}
 
       {/* ONE picker, two doors: a node's `+` (insert, connected) and the command
@@ -11358,6 +11739,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         {...(objectPicker.group ? { group: objectPicker.group } : {})}
         {...(objectPicker.fromNodeId ? { fromNodeId: objectPicker.fromNodeId } : {})}
         onPick={pickObject}
+        // Carry a row out of the picker and put it where it goes. On a board, WHERE
+        // something lands is half the authoring — a picker that could only be clicked
+        // made every placement a click followed by a drag.
+        onDragStart={(choice, event) => { event.dataTransfer.setData(DND_MIME, choice); event.dataTransfer.effectAllowed = 'copy'; }}
         onClose={() => setObjectPicker(null)}
       />}
 
@@ -11585,12 +11970,20 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           <button onClick={togglePlacementLock} disabled={!canEdit}>{effectiveSelectedIds.some((id) => nodes.find((node) => node.id === id)?.data.placementLocked !== true) ? t('lock') : t('unlock')}</button>
           <button onClick={toggleHidden} disabled={!canEdit}>{t('hide')}</button>
         </div>}
+        {/* You are inside a section, and here is the way out. A bar rather than a
+            dialog on purpose: the board is still the board, and every control that
+            worked a moment ago still works. */}
+        {frameFocus && <div className={styles.frameFocusBar} role="status" data-testid="canvas-frame-focus">
+          <b>{nodes.find((node) => node.id === frameFocus)?.data.title || t('frameSection.section')}</b>
+          <span>{t('frameSection.holds', { count: framedBoard.memberIdsOf(frameFocus).length })}</span>
+          <button type="button" onClick={exitFrame}>{t('frameSection.exit')}</button>
+        </div>}
         {loadingSession && <div className={styles.canvasSkeleton} role="status" aria-live="polite"><span /><span /><span /><b>{t('loadingSession')}</b></div>}
         {surfaceDef.showsObjects && nodes.length > 100 && <div className={styles.performanceNotice} role="status"><strong>{t('largeSession', { count: nodes.length })}</strong><span>{t('largeSessionHint')}</span><button type="button" onClick={openPalette}>{t('frame')}</button></div>}
         <BrainSurfaceProvider value={brainSurface}>
         <ReactFlow<CreationFlowNode, Edge>
-          nodes={renderedNodes}
-          edges={renderedEdges}
+          nodes={framedBoard.nodes}
+          edges={framedBoard.edges}
           nodeTypes={canvasNodeTypes}
           onNodesChange={onCanvasNodesChange}
           onEdgesChange={onEdgesChange}
@@ -11890,11 +12283,17 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           </div>
         </section>}
 
-        {workflowFocus && <section className={styles.workflowFocus} role="dialog" aria-modal="true" aria-label={t('workflowFocusEditor')}>
-          <header><div><strong>{t('editWorkflowOnCanvas')}</strong><small>{t('editWorkflowHint')}</small></div><button type="button" onClick={() => setWorkflowFocus(null)} aria-label={t('closeWorkflowEditor')}>×</button></header>
-          <div className={styles.workflowFocusBody}><ReactFlowProvider><WorkflowBuilder definitionId={workflowFocus.definitionId} embedded onSaved={(definitionId, name) => { setWorkflowFocus((current) => current ? { ...current, definitionId } : current); setNodes((current) => current.map((node) => node.id === workflowFocus.nodeId ? { ...node, data: { ...node.data, title: name, resourceId: `workflow:${definitionId}`, workflowExecutable: true, resourceSubtype: 'definition', status: 'Saved' } } : node)); setNotice(t('workflowSaved')); }} onRunStarted={(workflowId) => { setNodes((current) => current.map((node) => node.id === workflowFocus.nodeId ? { ...node, data: { ...node.data, status: 'Running', workflowRunId: workflowId } } : node)); setNotice(t('noticeWorkflowRunStarted', { id: workflowId })); }} /></ReactFlowProvider></div>
-        </section>}
 
+        {/* The in-browser Evermind runner, over the section that holds the build steps.
+            A panel rather than a modal, like every other canvas surface — the board it
+            is reporting on stays visible behind it. */}
+        {evermindBuild && <EvermindBuildPanel
+          open
+          onClose={() => setEvermindBuild(null)}
+          graph={evermindBuild.graph}
+          workflowName={evermindBuild.name}
+          projectId={evermindBuild.projectId}
+        />}
         {trainingFocus && <section className={styles.workflowFocus} role="dialog" aria-modal="true" aria-label={t('evermindAdapterStudio')}>
           <header><div><strong>{t('trainEvermindOnCanvas')}</strong><small>{t('trainEvermindHint')}</small></div><button type="button" onClick={() => setTrainingFocus(null)} aria-label={t('closeAdapterStudio')}>×</button></header>
           <div className={styles.workflowFocusBody} style={{ overflow: 'auto', background: 'var(--bg-elevated)', justifyContent: 'center', padding: 20 }}>
@@ -12121,7 +12520,7 @@ function GuidedTourInspector({ node, nodes, onChange }: { node: CreationFlowNode
   </section>;
 }
 
-function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId, persistence, role, editable, members, onChange, onWebsiteViewportChange, onRun, onPublishWebsite, onOpenBuild, onAttachBuild, onDeleteBuildWorkspace, onBuildWebsiteWithCode, creatingBuild, onGenerateVideo, onRunCreativeAction, onShipGame, onPublishListing, onOpenReleases, onEditWorkflow, onBuildWorkflow, onSaveAgent, onOpenBuiltinAgent, onAddAgentKnowledge, onRunAgentTest, onSaveFramePreset, onExpandProject, onLoadProjectQuality, onCompareProjects, onDeliverMockup, onExpandMockupSet, onImportDataset, onVisualizeDataset, onPlotDataset, onProfileDataset, onAttachEvermindProject, onExpandEvermindPipeline, onTrainEvermind, onStartStandup, onConvertDiagram, onExportArtifact, onAskBrain, onResumeTailor, onResumeDetach, onResumeShare, onResumeSharesList, onResumeShareRevoke }: { node: CreationFlowNode; nodes: CreationFlowNode[]; edges: Edge[]; focus: 'knowledge' | 'test' | 'evaluation' | 'delivery' | null; timeline: CanvasTimelineMessage[]; brainTrace: BrainTraceEvent[]; sessionId: string; persistence: 'local' | 'server'; role: CreationSessionSummary['role']; editable: boolean; members: CreationSessionDetail['members']; onChange: (patch: Partial<CreationNodeData>) => void; onWebsiteViewportChange: (viewport: 'desktop' | 'tablet' | 'mobile') => void; onRun: () => void; onPublishWebsite: () => void; onOpenBuild: () => void; onAttachBuild: (ide: IdeProject) => void; onDeleteBuildWorkspace: () => void; onBuildWebsiteWithCode: () => void; creatingBuild: boolean; onGenerateVideo: () => void; onRunCreativeAction: (action: string) => void; onShipGame: () => void; onPublishListing: () => void; onOpenReleases: () => void; onEditWorkflow: () => void; onBuildWorkflow: () => void; onSaveAgent: () => void; onOpenBuiltinAgent: (intent: BuiltinAgentSurfaceIntent) => void; onAddAgentKnowledge: (content: string) => void; onRunAgentTest: (testPrompt: string, expected: string) => void | Promise<void>; onSaveFramePreset: () => void; onExpandProject: () => void; onLoadProjectQuality: () => void; onCompareProjects: () => void; onDeliverMockup: () => void; onExpandMockupSet: () => void; onImportDataset: (file: File) => void | Promise<void>; onVisualizeDataset: () => void; onPlotDataset: () => void; onProfileDataset: (nodeId: string) => void; onAttachEvermindProject: () => void; onExpandEvermindPipeline: () => void; onTrainEvermind: () => void; onStartStandup: () => void; onConvertDiagram: (format: string, diagramId?: string) => Promise<string>; onExportArtifact: (action: CanvasExportAction) => Promise<string>;
+function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId, persistence, role, editable, members, onChange, onWebsiteViewportChange, onRun, onPublishWebsite, onOpenBuild, onAttachBuild, onDeleteBuildWorkspace, onBuildWebsiteWithCode, creatingBuild, onGenerateVideo, onRunCreativeAction, onShipGame, onPublishListing, onOpenReleases, onUnpackWorkflow, onBuildWorkflow, onBuildFlow, onRemoveConnection, onOpenEvermindBuild, onLoadEvermindTemplate, onSaveAgent, onOpenBuiltinAgent, onAddAgentKnowledge, onRunAgentTest, onSaveFramePreset, onExpandProject, onLoadProjectQuality, onCompareProjects, onDeliverMockup, onExpandMockupSet, onImportDataset, onVisualizeDataset, onPlotDataset, onProfileDataset, onAttachEvermindProject, onExpandEvermindPipeline, onTrainEvermind, onStartStandup, onConvertDiagram, onExportArtifact, onAskBrain, onResumeTailor, onResumeDetach, onResumeShare, onResumeSharesList, onResumeShareRevoke }: { node: CreationFlowNode; nodes: CreationFlowNode[]; edges: Edge[]; focus: 'knowledge' | 'test' | 'evaluation' | 'delivery' | null; timeline: CanvasTimelineMessage[]; brainTrace: BrainTraceEvent[]; sessionId: string; persistence: 'local' | 'server'; role: CreationSessionSummary['role']; editable: boolean; members: CreationSessionDetail['members']; onChange: (patch: Partial<CreationNodeData>) => void; onWebsiteViewportChange: (viewport: 'desktop' | 'tablet' | 'mobile') => void; onRun: () => void; onPublishWebsite: () => void; onOpenBuild: () => void; onAttachBuild: (ide: IdeProject) => void; onDeleteBuildWorkspace: () => void; onBuildWebsiteWithCode: () => void; creatingBuild: boolean; onGenerateVideo: () => void; onRunCreativeAction: (action: string) => void; onShipGame: () => void; onPublishListing: () => void; onOpenReleases: () => void; onUnpackWorkflow: () => void; onBuildWorkflow: () => void; onBuildFlow: () => void; onRemoveConnection: (edgeId: string) => void; onOpenEvermindBuild: () => void; onLoadEvermindTemplate: (templateId: 'train-llm' | 'teach-code') => void; onSaveAgent: () => void; onOpenBuiltinAgent: (intent: BuiltinAgentSurfaceIntent) => void; onAddAgentKnowledge: (content: string) => void; onRunAgentTest: (testPrompt: string, expected: string) => void | Promise<void>; onSaveFramePreset: () => void; onExpandProject: () => void; onLoadProjectQuality: () => void; onCompareProjects: () => void; onDeliverMockup: () => void; onExpandMockupSet: () => void; onImportDataset: (file: File) => void | Promise<void>; onVisualizeDataset: () => void; onPlotDataset: () => void; onProfileDataset: (nodeId: string) => void; onAttachEvermindProject: () => void; onExpandEvermindPipeline: () => void; onTrainEvermind: () => void; onStartStandup: () => void; onConvertDiagram: (format: string, diagramId?: string) => Promise<string>; onExportArtifact: (action: CanvasExportAction) => Promise<string>;
   /** The ONE route from the inspector back to Brain. Learning controls compose
    *  their own request text (see LearningControls.tsx) rather than each adding a
    *  callback to a panel that already takes forty. */
@@ -12218,6 +12617,15 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
       setActionStatus(error instanceof Error ? error.message : t('taskUpdateFailed'));
     }
   };
+  // What this frame holds, through the SAME containment the board draws with — not a
+  // second geometry rule that could disagree with the one on screen.
+  const frameMembers = kind === 'frame'
+    ? (() => {
+      const boxes = nodes.map(toFrameBox);
+      const memberIds = new Set(frameMemberIds(node.id, boxes));
+      return nodes.filter((candidate) => memberIds.has(candidate.id));
+    })()
+    : [];
   const runArtifactAction = async (action: CanvasExportAction) => {
     setActionStatus(t('preparing'));
     setActionStatus(await onExportArtifact(action));
@@ -12225,7 +12633,8 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
   // Everything a `custom.component` section might read, computed once per render —
   // see `KindSectionProps` for why this is one bag rather than eleven prop lists.
   const kindSectionProps: KindSectionProps = {
-    node, nodes, data: node.data, editable, persistence, onChange,
+    node, nodes, edges, onRemoveConnection, frameMembers, onOpenEvermindBuild, onLoadEvermindTemplate,
+    data: node.data, editable, persistence, onChange,
     isBuiltinAgent, isBuiltinManager, isExistingAgent, connectedAgentKnowledge,
     agentTools, availableAgentTools, knowledgeDraft, setKnowledgeDraft,
     onOpenBuiltinAgent, onAddAgentKnowledge, onRunAgentTest, onSaveAgent,
@@ -12248,8 +12657,9 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
     loadProjectQuality: onLoadProjectQuality,
     expandProject: onExpandProject,
     compareProjects: onCompareProjects,
-    editWorkflow: onEditWorkflow,
+    unpackWorkflow: onUnpackWorkflow,
     buildWorkflow: onBuildWorkflow,
+    buildFlow: onBuildFlow,
     run: onRun,
     startStandup: onStartStandup,
     expandMockupSet: onExpandMockupSet,
@@ -12398,6 +12808,20 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
 interface KindSectionProps {
   node: CreationFlowNode;
   nodes: CreationFlowNode[];
+  /** The board's connections. A step is defined as much by what it is wired to as by
+   *  its own config, which is the first time a section has needed them. */
+  edges: Edge[];
+  /** What a frame holds, at any depth. Empty for every other kind. Resolved through
+   *  the SAME containment the board draws with (`toFrameBox` + `frameMemberIds`), so
+   *  the section cannot count something the board does not consider inside. */
+  frameMembers: CreationFlowNode[];
+  /** Run this section's Evermind BUILD steps in the browser. */
+  onOpenEvermindBuild: () => void;
+  /** Lay a starting Evermind pipeline out inside this section. */
+  onLoadEvermindTemplate: (templateId: 'train-llm' | 'teach-code') => void;
+  /** Cut one connection. Same channel the board uses, so a connection removed in
+   *  words and one removed by selecting the arrow are the same operation. */
+  onRemoveConnection: (edgeId: string) => void;
   data: CreationNodeData;
   editable: boolean;
   persistence: 'local' | 'server';
@@ -12739,6 +13163,26 @@ function CreativeGeneratorSection({ data, onChange, onRunCreativeAction, onShipG
  *  entries that were already components (`guidedTour`… `pitch`) are adapted to the
  *  shared `KindSectionProps` shape so every entry in this table has the same call. */
 const KIND_DETAIL_SECTIONS: Record<string, (props: KindSectionProps) => JSX.Element | null> = {
+  frame: ({ node, frameMembers, editable, onOpenEvermindBuild, onLoadEvermindTemplate }) => (
+    <FrameFlowSection
+      node={node}
+      members={frameMembers}
+      editable={editable}
+      onOpenEvermindBuild={onOpenEvermindBuild}
+      onLoadEvermindTemplate={onLoadEvermindTemplate}
+    />
+  ),
+  flowStep: ({ node, nodes, edges, editable, onChange, onRemoveConnection }) => (
+    <FlowStepInspector
+      nodeId={node.id}
+      data={node.data}
+      nodes={nodes}
+      edges={edges}
+      editable={editable}
+      onChange={onChange}
+      {...(editable ? { onRemoveConnection } : {})}
+    />
+  ),
   agent: AgentInspectorSection,
   evaluation: EvaluationInspectorSection,
   release: ReleaseInspectorSection,

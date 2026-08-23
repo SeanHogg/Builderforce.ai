@@ -637,7 +637,8 @@
       "salesProgramme": "销售计划",
       "developers": "开发者",
       "earnings": "收益",
-      "disputes": "争议"
+      "disputes": "争议",
+      "learning": "学习"
     },
     "tab": {
       "projects": "项目",
@@ -15156,7 +15157,16 @@
         "blurb": "转录一个音频文件，或将其直接翻译为英语——真实的 Whisper API 调用（由运营方配置，目前尚无租户自带密钥选项）。"
       }
     },
-    "statusRunPendingApproval": "此工作流需要获得批准才能运行。审批请求已发送。"
+    "statusRunPendingApproval": "此工作流需要获得批准才能运行。审批请求已发送。",
+    "deleteNode": "删除节点",
+    "activation": {
+      "heading": "激活方式",
+      "webhook": "Webhook 地址",
+      "webhookSigned": "Webhook 地址（请用 X-Signature 签名）",
+      "inboundEmail": "接收邮件地址",
+      "nextRun": "下次运行：{when}",
+      "last": "上次：{status}"
+    }
   },
   "chunkError": {
     "recovering": "正在更新到最新版本…",
@@ -18650,7 +18660,6 @@
     "exitPresentation": "退出演示",
     "share": "邀请",
     "run": "运行",
-    "saveCollaborate": "保存并协作",
     "addToCanvas": "添加到画布",
     "searchObjectTypes": "搜索对象类型…",
     "askBrain": "就此画布询问 Brain",
@@ -18943,7 +18952,8 @@
       "stopwatch": "秒表",
       "transclusion": "嵌入文档",
       "calendar": "日历",
-      "component": "组件"
+      "component": "组件",
+      "flowStep": "步骤"
     },
     "twilioSetup": {
       "title": "Twilio 集成",
@@ -19053,7 +19063,6 @@
       "learning": "学习中…",
       "writing": "书写中…"
     },
-    "save": "保存",
     "invite": "邀请",
     "retry": "重试",
     "dismiss": "忽略",
@@ -19158,7 +19167,6 @@
     "gateBenefitKeep": "保留整个本地会话",
     "gateBenefitUnlock": "解锁持久资源与历史记录",
     "gateBenefitCollaborate": "与团队协作",
-    "gateSaveTitle": "创建账户以保存并协作",
     "gateSaveSessionTitle": "创建账户以保存此会话",
     "gateSaveBody": "将此本地会话移入安全的租户工作区，不会丢失其对象、对话或布局。",
     "gateMetricsTitle": "创建账户以衡量交付价值",
@@ -19191,11 +19199,6 @@
     "tourBody4": "连接两个对象即可定义真实的数据、控制、引用、展示或交付关系。",
     "tourBody5": "分享会话、对对象评论，并查看实时光标，而不会移动他人的视图。",
     "tourBody6": "项目是可选的。只有当你想把工件变成任务并分配智能体时才添加。",
-    "workflowFocusEditor": "工作流聚焦编辑器",
-    "closeWorkflowEditor": "关闭工作流编辑器",
-    "editWorkflowOnCanvas": "在画布上编辑工作流",
-    "editWorkflowHint": "更改会保存到规范的工作流定义中。",
-    "workflowSaved": "已从此会话保存工作流",
     "evermindAdapterStudio": "Evermind 适配器工作室",
     "closeAdapterStudio": "关闭适配器工作室",
     "trainEvermindOnCanvas": "在画布上训练 Evermind",
@@ -22494,7 +22497,8 @@
       "account": "追踪余额与交易记录的财务账户。",
       "sticky": "用于在画布上随手记录想法的便签。",
       "stopwatch": "记录某件事实际花了多久。所有人看到的是同一个计时。",
-      "transclusion": "在这里实时显示另一篇知识文档 —— 而不是它的副本。"
+      "transclusion": "在这里实时显示另一篇知识文档 —— 而不是它的副本。",
+      "flowStep": "一个可执行步骤——模型调用、集成调用或分支判断——与周围的步骤相连。"
     },
     "previewWidth": "预览宽度",
     "viewportName": {
@@ -22978,7 +22982,61 @@
         "url": "链接"
       }
     },
-    "componentId": "组件 ID"
+    "componentId": "组件 ID",
+    "flowStep": {
+      "dataIn": "输入数据",
+      "dataInHint": "为该步骤接收的数据命名，并指定每个值从上游负载的哪个位置读取。",
+      "dataOut": "输出数据",
+      "dataOutHint": "为该步骤发布的数据命名。后续步骤可通过“获取变量”读取。",
+      "outlets": "分支路径",
+      "outletsHint": "每条路径在卡片上都有独立的连接点，只有匹配的那条会执行。",
+      "outletName": "名称",
+      "outletCondition": "条件",
+      "outletConditionHint": "status == \"ready\"",
+      "outletMatch": "匹配值",
+      "outletMatchHint": "ready",
+      "addOutlet": "添加路径",
+      "removeOutlet": "删除路径 {name}",
+      "bindingKey": "名称",
+      "bindingFrom": "读取自",
+      "bindingFromHint": "order.id",
+      "addBinding": "添加字段",
+      "removeBinding": "删除 {key}",
+      "outputKey": "名称",
+      "outputFrom": "取自",
+      "outputFromHint": "order.id",
+      "connections": "连接",
+      "noConnections": "该步骤尚未连接任何内容。",
+      "removeConnection": "断开与 {name} 的连接",
+      "needsSetup": "需要配置",
+      "built": "已构建",
+      "untitledFlow": "未命名流程",
+      "framePurpose": "该流程的步骤",
+      "framedForBuild": "已为这些步骤创建框架，以便构建流程。",
+      "notBuiltYet": "该工作流尚未构建，因此没有可打开的内容。",
+      "opening": "正在画布上打开该工作流…",
+      "opened": "{count, plural, other {已在画布上打开 # 个步骤。}}",
+      "frameHolds": "{count, plural, =0 {该区域还没有步骤。} other {该区域有 # 个步骤。}}",
+      "flowNamedAfterFrame": "构建出的工作流将以该区域命名：{name}。"
+    },
+    "flowIssue": {
+      "noSteps": "该流程还没有可运行的步骤。",
+      "llmNeedsPrompt": "该模型步骤需要一个提示词。",
+      "connectorNeedsConnector": "该集成步骤需要选择一个连接器，例如 Twilio。",
+      "connectorNeedsAction": "该步骤需要选择 {connector} 上的一个操作。",
+      "agentNeedsTask": "该智能体步骤需要一个要执行的任务。"
+    },
+    "frameSection": {
+      "holds": "{count, plural, =0 {空} other {# 个对象}}",
+      "collapse": "折叠",
+      "expand": "展开",
+      "open": "打开",
+      "exit": "退出该区域",
+      "section": "区域"
+    },
+    "openWorkflowOnCanvas": "在画布上打开",
+    "buildFlow": "构建流程",
+    "runFlow": "运行流程"
   },
   "canvasCommands": {
     "cleanLayout": "整理画布布局",
@@ -27014,6 +27072,124 @@
         "pending": "待审核",
         "rejected": "已拒绝"
       }
+    }
+  },
+  "learning": {
+    "tabs": {
+      "label": "学习板块",
+      "paths": "学习路径",
+      "catalogue": "课程目录",
+      "lrs": "学习记录库"
+    },
+    "common": {
+      "saving": "保存中…",
+      "loading": "加载中…",
+      "cancel": "取消"
+    },
+    "status": {
+      "draft": "草稿",
+      "published": "已发布",
+      "retired": "已停用",
+      "enrolled": "已报名",
+      "in_progress": "进行中",
+      "completed": "已完成",
+      "expired": "已过期",
+      "withdrawn": "已退出"
+    },
+    "paths": {
+      "title": "学习路径",
+      "intro": "路径把课程排成顺序。报名路径即报名其中的每一门课程。",
+      "empty": "尚无学习路径。",
+      "courseCount": "{count, plural, other {# 门课程}}",
+      "newLabel": "新建路径",
+      "newPlaceholder": "例如：工程师入职培训",
+      "create": "创建路径",
+      "failed": "无法加载学习路径。",
+      "createFailed": "无法创建该路径。"
+    },
+    "progress": {
+      "label": "路径进度",
+      "count": "已完成 {completed} / {total}"
+    },
+    "detail": {
+      "failed": "无法加载该路径。",
+      "enroll": "报名",
+      "enrollFailed": "无法为你报名该路径。",
+      "publish": "发布",
+      "retire": "停用",
+      "statusFailed": "无法更改路径状态。",
+      "sequence": "课程顺序",
+      "noCourses": "该路径尚未包含课程。",
+      "unknownCourse": "已删除的课程",
+      "moveUp": "上移",
+      "moveDown": "下移",
+      "remove": "从路径中移除",
+      "addCourse": "添加课程",
+      "addCoursePlaceholder": "选择课程…",
+      "saveOrder": "保存顺序",
+      "orderFailed": "无法保存课程顺序。",
+      "unsaved": "有未保存的更改"
+    },
+    "catalogue": {
+      "title": "课程目录",
+      "intro": "全部课程，以及你现在是否可以开始学习。",
+      "empty": "尚无课程。",
+      "failed": "无法加载课程目录。",
+      "open": "可以开始",
+      "unlocked": "已解锁",
+      "locked": "已锁定",
+      "blockedBy": "请先完成：{courses}",
+      "markComplete": "标记为完成",
+      "completeFailed": "无法记录你已完成该课程。"
+    },
+    "prerequisites": {
+      "title": "先修要求",
+      "intro": "解锁该课程前必须完成的内容。与路径的显示顺序无关。",
+      "empty": "该课程没有先修要求。",
+      "failed": "无法加载先修要求。",
+      "add": "添加先修课程",
+      "addPlaceholder": "选择课程…",
+      "addFailed": "无法添加该先修课程。",
+      "remove": "移除先修课程",
+      "removeFailed": "无法移除该先修课程。",
+      "inPaths": "所属路径：{paths}"
+    },
+    "lrs": {
+      "title": "学习记录库",
+      "intro": "创作工具发送 xAPI 语句的接入地址，以及用于认证的密钥。",
+      "endpoint": "接入地址",
+      "empty": "尚无凭据。",
+      "failed": "无法加载凭据。",
+      "issue": "签发凭据",
+      "issueFailed": "无法签发凭据。",
+      "newLabel": "凭据名称",
+      "newPlaceholder": "例如：Storyline 创作工具",
+      "secretOnce": "请立即复制——密钥不会再次显示。",
+      "revoke": "吊销",
+      "revokeTitle": "要吊销该凭据吗？",
+      "revokeConfirm": "“{label}”将立即失效，使用它的一切都会停止记录。",
+      "revokeFailed": "无法吊销该凭据。",
+      "direction": {
+        "inbound": "接收",
+        "outbound": "转发"
+      },
+      "status": {
+        "connected": "启用中",
+        "inactive": "未启用"
+      }
+    },
+    "target": {
+      "open": "转发到其他学习记录库",
+      "title": "转发目标",
+      "intro": "本记录库接收的每条语句都会同时发送到下面的地址。",
+      "label": "名称",
+      "labelPlaceholder": "例如：企业学习记录库",
+      "endpoint": "接入地址",
+      "endpointPlaceholder": "https://lrs.example.com/xapi",
+      "key": "密钥 ID",
+      "secret": "密钥",
+      "save": "添加目标",
+      "failed": "无法添加该转发目标。"
     }
   }
 }

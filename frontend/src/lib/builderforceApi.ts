@@ -1147,7 +1147,20 @@ export const workflowDefinitions = {
   /** Activatable triggers + their activation state (webhook URL, next run, …). */
   triggers: (id: string) =>
     request<{ triggers: WorkflowTriggerInfo[] }>(`/api/workflow-definitions/${id}/triggers`).then((r) => r.triggers),
-  create: (body: { name: string; description?: string; definition?: WorkflowDefinitionGraph } & WorkflowProjectBinding & Partial<WorkflowRunTargetFields>) =>
+  /**
+   * Create a definition from a graph the caller already has — which is what the
+   * Creation Canvas posts once a SECTION of steps has been compiled
+   * (`compileBoardFlow`). `runTarget`/`approvalMode` are the canvas's own two
+   * controls, resolved server-side exactly as `fromCanvas` resolves them; without
+   * them a canvas-built definition saved with no runtime and refused at run time.
+   */
+  create: (body: {
+    name: string;
+    description?: string;
+    definition?: WorkflowDefinitionGraph;
+    runTarget?: string;
+    approvalMode?: WorkflowApprovalMode;
+  } & WorkflowProjectBinding & Partial<WorkflowRunTargetFields>) =>
     request<WorkflowDefinitionSummary>('/api/workflow-definitions', {
       method: 'POST',
       body: JSON.stringify(body),
@@ -1171,7 +1184,13 @@ export const workflowDefinitions = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
-  update: (id: string, body: { name?: string; description?: string; definition?: WorkflowDefinitionGraph } & WorkflowProjectBinding & Partial<WorkflowRunTargetFields>) =>
+  update: (id: string, body: {
+    name?: string;
+    description?: string;
+    definition?: WorkflowDefinitionGraph;
+    runTarget?: string;
+    approvalMode?: WorkflowApprovalMode;
+  } & WorkflowProjectBinding & Partial<WorkflowRunTargetFields>) =>
     request<WorkflowDefinitionDetail>(`/api/workflow-definitions/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(body),

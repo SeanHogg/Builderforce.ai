@@ -637,7 +637,8 @@
       "salesProgramme": "Sales programme",
       "developers": "Developers",
       "earnings": "Earnings",
-      "disputes": "Disputes"
+      "disputes": "Disputes",
+      "learning": "Learning"
     },
     "tab": {
       "projects": "Projects",
@@ -15156,7 +15157,16 @@
         "blurb": "Transcribe an audio file, or translate it directly to English — real Whisper API call (operator-configured, no per-tenant BYO key yet)."
       }
     },
-    "statusRunPendingApproval": "This workflow needs approval before it can run. An approval request has been sent."
+    "statusRunPendingApproval": "This workflow needs approval before it can run. An approval request has been sent.",
+    "deleteNode": "Delete node",
+    "activation": {
+      "heading": "Activation",
+      "webhook": "Webhook URL",
+      "webhookSigned": "Webhook URL (sign with X-Signature)",
+      "inboundEmail": "Inbound email address",
+      "nextRun": "Next run: {when}",
+      "last": "Last: {status}"
+    }
   },
   "chunkError": {
     "recovering": "Updating to the latest version…",
@@ -18650,7 +18660,6 @@
     "exitPresentation": "Exit presentation",
     "share": "Invite",
     "run": "Run",
-    "saveCollaborate": "Save & collaborate",
     "addToCanvas": "Add to canvas",
     "searchObjectTypes": "Search object types…",
     "askBrain": "Ask Brain about this canvas",
@@ -18943,7 +18952,8 @@
       "stopwatch": "Stopwatch",
       "transclusion": "Transclusion",
       "calendar": "Calendar",
-      "component": "Component"
+      "component": "Component",
+      "flowStep": "Step"
     },
     "twilioSetup": {
       "title": "Twilio integration",
@@ -19053,7 +19063,6 @@
       "learning": "Learning…",
       "writing": "Writing…"
     },
-    "save": "Save",
     "invite": "Invite",
     "retry": "Retry",
     "dismiss": "Dismiss",
@@ -19158,7 +19167,6 @@
     "gateBenefitKeep": "Keep this entire local session",
     "gateBenefitUnlock": "Unlock durable resources and history",
     "gateBenefitCollaborate": "Collaborate with your team",
-    "gateSaveTitle": "Create an account to save and collaborate",
     "gateSaveSessionTitle": "Create an account to save this session",
     "gateSaveBody": "Move this local session into a secure tenant workspace without losing its objects, conversation, or layout.",
     "gateMetricsTitle": "Create an account to measure delivered value",
@@ -19191,11 +19199,6 @@
     "tourBody4": "Connect two objects to define a real data, control, reference, presentation, or delivery relationship.",
     "tourBody5": "Share the session, comment on objects, and see live cursors without moving anyone else’s viewport.",
     "tourBody6": "Projects are optional. Add one only when you want to turn an artifact into a Task and assign an Agent.",
-    "workflowFocusEditor": "Workflow focus editor",
-    "closeWorkflowEditor": "Close workflow editor",
-    "editWorkflowOnCanvas": "Edit Workflow on Canvas",
-    "editWorkflowHint": "Changes save to the canonical Workflow definition.",
-    "workflowSaved": "Workflow saved from this Session",
     "evermindAdapterStudio": "Evermind adapter studio",
     "closeAdapterStudio": "Close adapter studio",
     "trainEvermindOnCanvas": "Train Evermind on Canvas",
@@ -22494,7 +22497,8 @@
       "account": "A financial account tracking balances and transactions.",
       "sticky": "Freeform sticky note for quick thoughts on the canvas.",
       "stopwatch": "Time how long something actually takes. Everyone watching sees the same clock.",
-      "transclusion": "Show another knowledge document here, live — not a copy of it."
+      "transclusion": "Show another knowledge document here, live — not a copy of it.",
+      "flowStep": "One executable step — a model call, an integration, a decision — wired to the steps around it."
     },
     "previewWidth": "Preview width",
     "viewportName": {
@@ -22978,7 +22982,61 @@
         "url": "URL"
       }
     },
-    "componentId": "Component id"
+    "componentId": "Component id",
+    "flowStep": {
+      "dataIn": "Data in",
+      "dataInHint": "Name what this step receives, and where each value is read from in the payload before it.",
+      "dataOut": "Data out",
+      "dataOutHint": "Name what this step publishes. Later steps read these with Get variable.",
+      "outlets": "Paths",
+      "outletsHint": "Each path is its own connection point on the card. Only the path that matches runs.",
+      "outletName": "Name",
+      "outletCondition": "Condition",
+      "outletConditionHint": "status == \"ready\"",
+      "outletMatch": "Matches value",
+      "outletMatchHint": "ready",
+      "addOutlet": "Add path",
+      "removeOutlet": "Remove the path {name}",
+      "bindingKey": "Name",
+      "bindingFrom": "Read from",
+      "bindingFromHint": "order.id",
+      "addBinding": "Add field",
+      "removeBinding": "Remove {key}",
+      "outputKey": "Name",
+      "outputFrom": "Take from",
+      "outputFromHint": "order.id",
+      "connections": "Connections",
+      "noConnections": "Nothing is wired to this step yet.",
+      "removeConnection": "Disconnect {name}",
+      "needsSetup": "Needs setup",
+      "built": "Built",
+      "untitledFlow": "Untitled flow",
+      "framePurpose": "The steps of this flow",
+      "framedForBuild": "Framed these steps so the flow can be built.",
+      "notBuiltYet": "This workflow has not been built yet, so there is nothing to open.",
+      "opening": "Opening the workflow on the canvas…",
+      "opened": "{count, plural, one {Opened # step on the canvas.} other {Opened # steps on the canvas.}}",
+      "frameHolds": "{count, plural, =0 {No steps in this section yet.} one {# step in this section.} other {# steps in this section.}}",
+      "flowNamedAfterFrame": "The built workflow is named after this section: {name}."
+    },
+    "flowIssue": {
+      "noSteps": "This flow has no steps to run yet.",
+      "llmNeedsPrompt": "This model step needs a prompt.",
+      "connectorNeedsConnector": "This integration step needs a connector, for example Twilio.",
+      "connectorNeedsAction": "This step needs an action on {connector}.",
+      "agentNeedsTask": "This agent step needs a task to carry out."
+    },
+    "frameSection": {
+      "holds": "{count, plural, =0 {Empty} one {# object} other {# objects}}",
+      "collapse": "Collapse",
+      "expand": "Expand",
+      "open": "Open",
+      "exit": "Exit section",
+      "section": "Section"
+    },
+    "openWorkflowOnCanvas": "Open on canvas",
+    "buildFlow": "Build flow",
+    "runFlow": "Run flow"
   },
   "canvasCommands": {
     "cleanLayout": "Clean up canvas layout",
@@ -27014,6 +27072,124 @@
         "pending": "Pending",
         "rejected": "Rejected"
       }
+    }
+  },
+  "learning": {
+    "tabs": {
+      "label": "Learning sections",
+      "paths": "Paths",
+      "catalogue": "Catalogue",
+      "lrs": "Record store"
+    },
+    "common": {
+      "saving": "Saving...",
+      "loading": "Loading...",
+      "cancel": "Cancel"
+    },
+    "status": {
+      "draft": "Draft",
+      "published": "Published",
+      "retired": "Retired",
+      "enrolled": "Enrolled",
+      "in_progress": "In progress",
+      "completed": "Completed",
+      "expired": "Expired",
+      "withdrawn": "Withdrawn"
+    },
+    "paths": {
+      "title": "Learning paths",
+      "intro": "A path sequences courses. Enrolling in one enrols the learner in every course it contains.",
+      "empty": "No learning paths yet.",
+      "courseCount": "{count, plural, one {# course} other {# courses}}",
+      "newLabel": "New path",
+      "newPlaceholder": "e.g. Onboarding for engineers",
+      "create": "Create path",
+      "failed": "Could not load the learning paths.",
+      "createFailed": "Could not create the path."
+    },
+    "progress": {
+      "label": "Path progress",
+      "count": "{completed} of {total} complete"
+    },
+    "detail": {
+      "failed": "Could not load this path.",
+      "enroll": "Enrol me",
+      "enrollFailed": "Could not enrol you in this path.",
+      "publish": "Publish",
+      "retire": "Retire",
+      "statusFailed": "Could not change the path status.",
+      "sequence": "Course order",
+      "noCourses": "This path has no courses yet.",
+      "unknownCourse": "Removed course",
+      "moveUp": "Move up",
+      "moveDown": "Move down",
+      "remove": "Remove from path",
+      "addCourse": "Add a course",
+      "addCoursePlaceholder": "Choose a course...",
+      "saveOrder": "Save order",
+      "orderFailed": "Could not save the course order.",
+      "unsaved": "Unsaved changes"
+    },
+    "catalogue": {
+      "title": "Course catalogue",
+      "intro": "Every course, and whether you may start it yet.",
+      "empty": "No courses yet.",
+      "failed": "Could not load the catalogue.",
+      "open": "Ready to start",
+      "unlocked": "Open",
+      "locked": "Locked",
+      "blockedBy": "Finish first: {courses}",
+      "markComplete": "Mark complete",
+      "completeFailed": "Could not record that you finished this course."
+    },
+    "prerequisites": {
+      "title": "Prerequisites",
+      "intro": "What must be finished before this course unlocks. Separate from a path's display order.",
+      "empty": "This course has no prerequisites.",
+      "failed": "Could not load the prerequisites.",
+      "add": "Add a prerequisite",
+      "addPlaceholder": "Choose a course...",
+      "addFailed": "Could not add that prerequisite.",
+      "remove": "Remove prerequisite",
+      "removeFailed": "Could not remove that prerequisite.",
+      "inPaths": "Part of: {paths}"
+    },
+    "lrs": {
+      "title": "Learning Record Store",
+      "intro": "The xAPI endpoint an authoring tool sends statements to, and the keys that authenticate it.",
+      "endpoint": "Endpoint",
+      "empty": "No credentials yet.",
+      "failed": "Could not load the credentials.",
+      "issue": "Issue credential",
+      "issueFailed": "Could not issue a credential.",
+      "newLabel": "Credential name",
+      "newPlaceholder": "e.g. Storyline authoring",
+      "secretOnce": "Copy these now — the secret is never shown again.",
+      "revoke": "Revoke",
+      "revokeTitle": "Revoke this credential?",
+      "revokeConfirm": "“{label}” will stop working immediately, and anything using it will stop recording.",
+      "revokeFailed": "Could not revoke that credential.",
+      "direction": {
+        "inbound": "Inbound",
+        "outbound": "Forwarding"
+      },
+      "status": {
+        "connected": "Active",
+        "inactive": "Inactive"
+      }
+    },
+    "target": {
+      "open": "Forward to another LRS",
+      "title": "Forwarding target",
+      "intro": "Every statement this store accepts is also sent to the endpoint below.",
+      "label": "Name",
+      "labelPlaceholder": "e.g. Corporate LRS",
+      "endpoint": "Endpoint",
+      "endpointPlaceholder": "https://lrs.example.com/xapi",
+      "key": "Key",
+      "secret": "Secret",
+      "save": "Add target",
+      "failed": "Could not add that forwarding target."
     }
   }
 }

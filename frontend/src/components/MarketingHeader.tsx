@@ -17,6 +17,7 @@ import {
 } from '@/lib/publicDestinations';
 import { seatHueVar, type SeatOrPlatform } from '@/lib/seats';
 import { isNavItemActive } from '@/lib/nav';
+import { registerHref } from '@/lib/auth';
 import { rendersAppShell } from '@/lib/shellRouting';
 import { useMobileNav } from '@/lib/useMobileNav';
 import { listLocalCreationSessions } from '@/domains/canvas/infrastructure/localCanvasStore';
@@ -299,6 +300,14 @@ export default function MarketingHeader() {
    * it, the honest offer is "keep this", not "start something" — the offer only
    * exists once there is something to lose, and it replaces the bottom-left
    * "Sign in to keep your work" strip this same review removed from the rail.
+   *
+   * ── AND WHY IT IS THE ONLY ONE ────────────────────────────────────────────────
+   * The canvas used to float its own "Save & collaborate" in the top-right card, so
+   * a guest board carried two controls, in two bars, one screen apart, both offering
+   * to save the same thing — and the canvas one was unreachable from anywhere else
+   * in the product. That button is gone (`lib/canvasChrome.ts` no longer has a
+   * `save` slot) and this is what it consolidated into. Which makes the `next` below
+   * load-bearing: this is now the door, so it has to come back to the board.
    */
   const [hasLocalWork, setHasLocalWork] = useState(false);
   useEffect(() => {
@@ -353,7 +362,7 @@ export default function MarketingHeader() {
           <ThemeToggleButton />
           <Link href="/login" className="mh-signin">{tc('signIn')}</Link>
           {inProduct
-            ? <Link href="/register" className={`mh-cta${keepingWork ? ' mh-cta-keep' : ''}`}>{tc(keepingWork ? 'keepYourWork' : 'getStarted')}</Link>
+            ? <Link href={registerHref(pathname)} className={`mh-cta${keepingWork ? ' mh-cta-keep' : ''}`}>{tc(keepingWork ? 'keepYourWork' : 'getStarted')}</Link>
             : <Link href="/create/new" className="mh-cta">{t('openCanvas')}</Link>}
           <button type="button" className="mh-hamburger" onClick={open ? closeNav : openNav} aria-label={t('toggleMenu')} aria-expanded={open}>
             {open ? (
@@ -397,7 +406,7 @@ export default function MarketingHeader() {
         <div className="mh-drawer-cta">
           <Link href="/login" className="mh-signin" onClick={closeNav}>{tc('signIn')}</Link>
           {inProduct
-            ? <Link href="/register" className={`mh-cta${keepingWork ? ' mh-cta-keep' : ''}`} onClick={closeNav}>{tc(keepingWork ? 'keepYourWork' : 'getStarted')}</Link>
+            ? <Link href={registerHref(pathname)} className={`mh-cta${keepingWork ? ' mh-cta-keep' : ''}`} onClick={closeNav}>{tc(keepingWork ? 'keepYourWork' : 'getStarted')}</Link>
             : <Link href="/create/new" className="mh-cta" onClick={closeNav}>{t('openCanvas')}</Link>}
         </div>
       </div>

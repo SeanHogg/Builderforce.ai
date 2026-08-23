@@ -48,7 +48,11 @@ registerKindSettings({
     },
   ],
   actions: [
-    { name: 'editOnCanvas', labelKey: 'editWorkflowOnCanvas', style: 'primary', handler: 'editWorkflow' },
+    // "Open on canvas" UNPACKS the definition into real step objects inside a frame,
+    // and the card is replaced by the section it was standing in for. It used to open
+    // a modal that mounted a second canvas over this one; the board is the editor now,
+    // so opening one means putting it ON the board. See `boardFlowFromDefinition.ts`.
+    { name: 'openOnCanvas', labelKey: 'openWorkflowOnCanvas', style: 'primary', handler: 'unpackWorkflow' },
     { name: 'build', labelKey: 'buildWorkflow', style: 'primary', handler: 'buildWorkflow' },
     { name: 'run', labelKey: 'runWorkflow', style: 'primary', handler: 'run' },
   ],
@@ -145,8 +149,32 @@ registerKindSettings({
     // one. Advanced rather than basic for exactly that reason — it is the field you
     // go looking for, not one you have to answer to make a frame.
     { name: 'presentationOrder', control: 'number', section: 'advanced', labelKey: 'presentationOrder', surface: 'full', min: 1, fallbackKey: 'presentationOrderHint' },
+    // A section of steps IS a workflow, so it carries the two controls a workflow has
+    // always needed to actually run: WHERE it runs, and whether a human gates it. They
+    // are the same two the `workflow` card declares above — the same option values,
+    // resolved by the same endpoint — because they are the same question asked of the
+    // thing that now bounds a flow. Without them a built section saved with no runtime
+    // and refused at run time, pointing at a control it did not have.
+    { name: 'runTarget', control: 'select', section: 'advanced', labelKey: 'executionTarget', surface: 'full',
+      options: [{ value: 'builderforce', label: 'BuilderForce.AI' }, { value: 'campaign-strategist', label: 'Campaign Strategist' }] },
+    { name: 'approvalMode', control: 'select', section: 'advanced', labelKey: 'approvalMode', surface: 'full',
+      options: [{ value: 'required', labelKey: 'approvalRequiredBeforePublish' }, { value: 'autonomous', labelKey: 'fullyAutonomous' }] },
   ],
-  actions: [{ name: 'savePreset', labelKey: 'saveReusableFrame', style: 'primary', handler: 'saveFramePreset' }],
+  // A frame holds a SECTION, and a section of steps is a workflow — so the two
+  // actions a flow needs live on the thing that bounds it. Build compiles the steps
+  // inside this frame into a real definition; Run executes what was built. Neither is
+  // hidden when the frame holds no steps: the compiler's own message ("this flow has
+  // no steps") is a better answer than a control that silently is not there.
+  actions: [
+    { name: 'buildFlow', labelKey: 'buildFlow', style: 'primary', handler: 'buildFlow' },
+    { name: 'runFlow', labelKey: 'runFlow', style: 'primary', handler: 'run' },
+    { name: 'savePreset', labelKey: 'saveReusableFrame', style: 'primary', handler: 'saveFramePreset' },
+  ],
+  // What the section HOLDS, when what it holds is a flow — the step count, the
+  // in-browser Evermind runner for a section of build steps, and the pipelines an
+  // empty one can start from. None of it is a declarable field: every answer is
+  // computed from the objects inside the frame. See `FrameFlowSection`.
+  custom: { component: 'frame' },
 });
 
 // `document`/`prd`/`knowledge`/`note`/`report` share one label; `slides` is registered

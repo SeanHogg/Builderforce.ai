@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { i18nSlug, isRoutedCatalogString, configFieldLabel, configFieldPlaceholder, integrationDescription, integrationOperationLabel } from './workflowBuilderI18n';
-import { I18N_NODE_KIND_SLUG, NODE_GROUPS, NODE_GROUP_KEYS, NODE_KINDS } from './nodeKinds';
-import { INTEGRATION_CATEGORIES, INTEGRATION_CATEGORY_KEYS, INTEGRATIONS } from './integrations';
+import { i18nSlug, isRoutedCatalogString, configFieldLabel, configFieldPlaceholder, integrationDescription, integrationOperationLabel } from './stepCatalogI18n';
+import { I18N_NODE_KIND_SLUG, NODE_GROUPS, NODE_GROUP_KEYS, NODE_KINDS } from '@/domains/workflow/domain/stepCatalog';
+import { INTEGRATION_CATEGORIES, INTEGRATION_CATEGORY_KEYS, INTEGRATIONS } from '@/domains/workflow/domain/stepIntegrations';
 
 const LOCALES = ['en', 'zh', 'es', 'fr', 'de'] as const;
 
 function messages(locale: string): Record<string, unknown> {
-  const file = join(__dirname, '..', '..', 'i18n', 'messages', `${locale}.json`);
+  const file = join(__dirname, '..', '..', '..', 'i18n', 'messages', `${locale}.json`);
   return JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>;
 }
 

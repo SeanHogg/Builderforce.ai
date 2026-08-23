@@ -56,10 +56,6 @@ export const RELATION_KINDS = [
 ] as const;
 export type RelationKind = (typeof RELATION_KINDS)[number];
 
-export function isRelationKind(value: string): value is RelationKind {
-  return (RELATION_KINDS as readonly string[]).includes(value);
-}
-
 /** Kinds that describe SEQUENCE, where a cycle is unreadable rather than merely
  *  odd. `contains` is absent on purpose: a containment loop is prevented by the
  *  self-edge check alone, and a diamond ("this lesson appears in two modules")

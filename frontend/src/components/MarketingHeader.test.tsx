@@ -34,7 +34,11 @@ describe('the marketing header CTA on a canvas route', () => {
     const ctas = screen.getAllByRole('link', { name: 'Keep your work' });
     expect(ctas.length).toBeGreaterThan(0);
     for (const cta of ctas) {
-      expect(cta.getAttribute('href')).toBe('/register');
+      // It carries the board back. This CTA is now the ONLY offer to keep a guest
+      // board — the canvas dropped its own "Save & collaborate" so one screen stopped
+      // holding two bars saying the same word — so landing back on the canvas after
+      // sign-up is this link's job, not a nicety.
+      expect(cta.getAttribute('href')).toBe('/register?next=%2Fcreate%2Flocal-session-1');
       // Never the same visual language as the plain invitation — the offer only
       // exists once there is something to lose.
       expect(cta.className).toContain('mh-cta-keep');

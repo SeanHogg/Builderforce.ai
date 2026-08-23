@@ -136,6 +136,17 @@ function edgeFromPersisted(connection: PersistedCanvasConnection): Edge {
       : {}),
     label: connection.label ?? undefined,
     animated: !!metadata.animated,
+    // WHICH OUTLET the connection leaves from, restored.
+    //
+    // A step that decides has one connection point per named path (`stepOutlets.ts`),
+    // and the handle an edge is attached to is what says which arm was drawn. It rode
+    // only in React Flow's in-memory `sourceHandle`, so a saved board came back with
+    // every arm of every switch attached to the first outlet — the graph still ran, and
+    // ran the wrong branch. It is stored beside `rendererType`/`connectionStyle` because
+    // it is the same class of fact: how the connection ATTACHES, as opposed to `kind`,
+    // which is what it means.
+    ...(typeof metadata.sourceHandle === 'string' ? { sourceHandle: metadata.sourceHandle } : {}),
+    ...(typeof metadata.targetHandle === 'string' ? { targetHandle: metadata.targetHandle } : {}),
     data: { connectionKind: connection.kind || 'reference', connectionStyle: style },
   };
 }
@@ -245,6 +256,9 @@ export function persistedGraphFromBoard(
         animated: !!edge.animated,
         rendererType: typeof edge.type === 'string' ? edge.type : 'smoothstep',
         connectionStyle: readConnectionStyle((edge.data as { connectionStyle?: unknown } | undefined)?.connectionStyle),
+        // The read half is `edgeFromPersisted`, ten lines up, and its comment argues why.
+        ...(edge.sourceHandle ? { sourceHandle: edge.sourceHandle } : {}),
+        ...(edge.targetHandle ? { targetHandle: edge.targetHandle } : {}),
       },
     })),
     ...(board.viewport ? { viewport: board.viewport } : {}),

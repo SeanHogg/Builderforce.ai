@@ -156,7 +156,7 @@ export async function resolveAdAccount(
 // ---------------------------------------------------------------------------
 
 /** Bind one account to the connector runtime — the only way this module talks out. */
-const callerFor = (db: Db, env: Env, tenantId: number, account: ResolvedAdAccount, actorKind: 'agent' | 'user') =>
+export const callerFor = (db: Db, env: Env, tenantId: number, account: ResolvedAdAccount, actorKind: 'agent' | 'user') =>
   accounts.callerFor(db, env, tenantId, account, actorKind);
 
 /** Who this account is and what currency it bills in — cached; every read needs it. */
@@ -276,7 +276,13 @@ export type AdWriteOutcome<T> =
   | { ok: true; account: AdAccountView; result: T }
   | { ok: false; account: AdAccountView; error: string; retryable: boolean };
 
-async function write<T>(
+/**
+ * Authenticate, run, invalidate, classify — the ONE write envelope for every level
+ * of this API. Exported because `adSetService` writes at the ad-set and ad levels
+ * and must not re-answer "what does a failed ad write look like": a second copy is
+ * how one level starts reporting `retryable` differently from the level above it.
+ */
+export async function write<T>(
   db: Db, env: Env, tenantId: number, account: ResolvedAdAccount,
   operation: string,
   run: (identity: AdAccountIdentity) => Promise<T>,

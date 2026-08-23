@@ -1,0 +1,373 @@
+/*
+ * Learning paths, the gated catalogue, and the workspace's LRS keys.
+ *
+ * Same two rules the employers, phone and sourcing surfaces follow: every colour
+ * and size is a token — no literal hex, not even as a `var()` fallback, because a
+ * fallback paints identically in both themes — and every width is fluid, so the
+ * same markup is two columns on a desktop and one at 360px with no horizontal
+ * scroll.
+ */
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+  gap: clamp(0.75rem, 2vw, 1.25rem);
+  align-items: start;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: clamp(0.875rem, 2vw, 1.25rem);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.cardTitle {
+  margin: 0;
+  font-size: var(--font-size-eyebrow);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.cardHint,
+.empty {
+  margin: 0;
+  font-size: var(--font-size-small);
+  color: var(--text-secondary);
+}
+
+.error {
+  margin: 0;
+  font-size: var(--font-size-small);
+  color: var(--error-text);
+}
+
+/* ── Fields ───────────────────────────────────────────────────────────────── */
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.label {
+  font-size: var(--font-size-field-label);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.input,
+.select {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.5rem 0.625rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: var(--font-size-body);
+  /* A comfortable target on a phone; also stops iOS zooming the viewport. */
+  min-height: 2.25rem;
+}
+
+.input:focus-visible,
+.select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* A native <option> inherits nothing from its <select> on Windows, so it needs
+   its own opaque pair or it renders black-on-black in the dark theme. */
+.select option {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.button {
+  padding: 0.4rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-interactive);
+  color: var(--text-primary);
+  font-size: var(--font-size-small);
+  font-weight: 600;
+  cursor: pointer;
+  min-height: 2.25rem;
+}
+
+.button:hover:not(:disabled) {
+  background: var(--surface-interactive-hover);
+}
+
+.button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.buttonPrimary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--text-inverse);
+}
+
+.buttonPrimary:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.buttonDanger {
+  color: var(--danger-text);
+  border-color: var(--danger-border);
+}
+
+/* ── Rows ─────────────────────────────────────────────────────────────────── */
+
+.scroller {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  /* Only the list scrolls, and only vertically — the page never does. */
+  max-height: 28rem;
+  overflow-y: auto;
+  min-width: 0;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.625rem;
+  width: 100%;
+  padding: 0.5rem 0.625rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  text-align: start;
+  cursor: pointer;
+  min-width: 0;
+}
+
+.row:hover {
+  background: var(--bg-hover);
+}
+
+.row[aria-current='true'] {
+  border-color: var(--accent);
+  background: var(--accent-subtle);
+}
+
+.rowStatic {
+  cursor: default;
+}
+
+.rowStatic:hover {
+  background: var(--bg-surface);
+}
+
+.rowBody {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-width: 0;
+}
+
+.rowTitle {
+  font-size: var(--font-size-body);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.rowNote {
+  font-size: var(--font-size-small);
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.rowMeta {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  flex-shrink: 0;
+  font-size: var(--font-size-small);
+  color: var(--text-secondary);
+}
+
+/* ── Badges ───────────────────────────────────────────────────────────────── */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.125rem 0.4rem;
+  border-radius: 9999px;
+  border: 1px solid var(--border);
+  background: var(--bg-muted);
+  color: var(--text-secondary);
+  font-size: var(--font-size-field-label);
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.badgeOk {
+  border-color: var(--success-border);
+  background: var(--success-bg);
+  color: var(--success-text);
+}
+
+.badgeWarn {
+  border-color: var(--danger-border);
+  background: var(--danger-bg);
+  color: var(--danger-text);
+}
+
+/* ── Progress ─────────────────────────────────────────────────────────────── */
+
+.meter {
+  width: 100%;
+  height: 0.5rem;
+  border-radius: 9999px;
+  background: var(--bg-muted);
+  overflow: hidden;
+}
+
+.meterFill {
+  height: 100%;
+  border-radius: 9999px;
+  background: var(--accent);
+  transition: width 200ms ease;
+}
+
+.meterLabel {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: var(--font-size-small);
+  color: var(--text-secondary);
+}
+
+/* ── Ordered members ──────────────────────────────────────────────────────── */
+
+.orderRow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.625rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-surface);
+  min-width: 0;
+}
+
+.orderIndex {
+  flex-shrink: 0;
+  width: 1.5rem;
+  text-align: center;
+  font-size: var(--font-size-small);
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.orderTitle {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: var(--font-size-body);
+  overflow-wrap: anywhere;
+}
+
+.orderControls {
+  display: flex;
+  gap: 0.25rem;
+  flex-shrink: 0;
+}
+
+.iconButton {
+  min-width: 2rem;
+  min-height: 2rem;
+  padding: 0 0.375rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-interactive);
+  color: var(--text-primary);
+  font-size: var(--font-size-small);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.iconButton:hover:not(:disabled) {
+  background: var(--surface-interactive-hover);
+}
+
+.iconButton:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ── The secret, shown once ───────────────────────────────────────────────── */
+
+.secret {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  padding: 0.625rem;
+  border: 1px solid var(--success-border);
+  border-radius: 8px;
+  background: var(--success-bg);
+}
+
+.secretValue {
+  font-family: var(--bf-font-mono);
+  font-size: var(--font-size-small);
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.mono {
+  font-family: var(--bf-font-mono);
+  font-size: var(--font-size-small);
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+/* ── Tabs ─────────────────────────────────────────────────────────────────── */
+
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  margin-bottom: clamp(0.75rem, 2vw, 1.25rem);
+}
+
+.tab {
+  padding: 0.4rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 9999px;
+  background: var(--surface-interactive);
+  color: var(--text-secondary);
+  font-size: var(--font-size-small);
+  font-weight: 600;
+  cursor: pointer;
+  min-height: 2.25rem;
+}
+
+.tab[aria-selected='true'] {
+  background: var(--accent-subtle);
+  border-color: var(--accent);
+  color: var(--text-primary);
+}

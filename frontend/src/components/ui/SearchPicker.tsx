@@ -69,6 +69,17 @@ export interface SearchPickerProps<K extends string> {
   testIdPrefix: string;
   dialogTestId?: string;
   onPick: (kind: K) => void;
+  /**
+   * Carry a row out of the picker and put it down somewhere.
+   *
+   * Optional, because "choose one and it lands in the middle" is a complete
+   * interaction and some catalogs have nowhere to be dropped. Where a surface DOES
+   * have a place — a board where where-you-drop-it is the point — a picker whose
+   * rows can only be clicked forces every placement to be followed by a drag, which
+   * is the interaction this exists to remove. The picker stays open during the drag
+   * so several steps can be laid out in a row.
+   */
+  onDragStart?: (kind: K, event: React.DragEvent<HTMLButtonElement>) => void;
   onClose: () => void;
 }
 
@@ -86,6 +97,7 @@ export function SearchPicker<K extends string>({
   testIdPrefix,
   dialogTestId,
   onPick,
+  onDragStart,
   onClose,
 }: SearchPickerProps<K>) {
   const [query, setQuery] = useState('');
@@ -166,6 +178,8 @@ export function SearchPicker<K extends string>({
               data-locked={item.locked ? 'true' : undefined}
               disabled={item.locked}
               {...(item.locked && item.lockedReason ? { title: item.lockedReason } : {})}
+              draggable={!!onDragStart && !item.locked}
+              {...(onDragStart && !item.locked ? { onDragStart: (event: React.DragEvent<HTMLButtonElement>) => onDragStart(item.kind, event) } : {})}
               onClick={() => onPick(item.kind)}
             >
               <span className={classNames.icon} aria-hidden><Icon source={item.icon} size={18} /></span>

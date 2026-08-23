@@ -307,6 +307,10 @@ export const connections = pgTable('connections', {
 }, (t) => [
   uniqueIndex('uq_connections_account').on(t.tenantId, t.userId, t.vendor, t.capability, t.externalAccount),
   index('idx_connections_tenant').on(t.tenantId, t.capability, t.status),
+  // An inbound xAPI request carries a Basic key and no tenant — resolving the
+  // workspace IS the authentication, so that one lookup has no tenant predicate
+  // to lead with. Partial to `vendor = 'lrs'` (migration 1114).
+  index('idx_connections_lrs_key').on(t.externalAccount).where(sql`vendor = 'lrs'`),
 ]);
 
 /**
