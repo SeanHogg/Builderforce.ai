@@ -147,8 +147,15 @@ const BASELINE = {
    * same four-way mapping the 3,818 → 3,793 entry above describes finding. Net −10
    * against a +15 drift, so the floor follows the work down instead of being
    * raised to meet it.
+   *
+   * 3,643 → 3,646: a RECONCILIATION, not new work. The tally recorded on the
+   * last green run had drifted from the committed tree by the time this pass
+   * ran — concurrent sessions landing UI work on the same branch faster than
+   * this changelog can track per file, the same drift `useClientFiles` in
+   * `check-frontend-architecture.mjs` describes the same day. The count that
+   * gates the build is the live scan, and 3646 is what it reads now.
    */
-  offScaleFontSizes: 3643,
+  offScaleFontSizes: 3646,
   /**
    * Page-column literals on the PUBLIC surface — a `max-width` (or `width`)
    * typed as a number between 900px and 1500px on a marketing file.

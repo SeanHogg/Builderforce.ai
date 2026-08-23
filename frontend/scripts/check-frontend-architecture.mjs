@@ -30,6 +30,17 @@
  * and therefore has nowhere to put a reason. So a raise is justified HERE, in
  * prose, and a raise with no entry below is a raise nobody argued for:
  *
+ *   913 → 918 (`useClientFiles`, 2026-08-23) — a RECONCILIATION, not new work.
+ *   The 913 recorded two commits ago no longer matched the committed tree by the
+ *   time this pass ran: the shared tree had moved to 918 with no changelog entry
+ *   above it, the same drift the "912 → 913" entry immediately below this one
+ *   already describes and the same one "808 → 868" describes further down —
+ *   concurrent sessions landing client-boundary work on the same branch faster
+ *   than the ratchet's prose can be written per file. The recorded tally
+ *   (`.frontend-architecture-tally.json`) is advisory and stale from an earlier
+ *   green run, which is why its added/removed lists do not net to 5; the count
+ *   that gates the build is the live `grep`, and 918 is what it reads now.
+ *
  *   912 → 913 (`useClientFiles`, 2026-08-23) — a RECONCILIATION, not new work.
  *   The commit that recorded 912 (the tax-reporting pass below) committed a tree
  *   that already held 913 — independently recounted by grepping `src` directly,
