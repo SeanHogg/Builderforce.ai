@@ -21,9 +21,15 @@
  * A hook rather than an effect in the panel because it is the one thing in there
  * that WRITES, and a panel that renders four tabs should not also be the module
  * that creates boards.
+ *
+ * Because it writes, it asks the SAME question the lane editor's gate asks —
+ * `board.manageLanes` — rather than taking a `canEdit` prop. A read-only member
+ * opening the panel sees the board as it is; a self-heal that fires on their
+ * behalf would only produce a 403 they cannot act on.
  */
 import { useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { usePermission } from '@/lib/rbac';
 import { boardsApi, type Board } from '@/lib/builderforceApi';
 
 export function useBoardProvisioning({
@@ -46,6 +52,7 @@ export function useBoardProvisioning({
   reload: () => void;
 }): { provisioning: boolean; provisionError: string | null } {
   const t = useTranslations('boardConfig');
+  const { allowed: canWrite } = usePermission('board.manageLanes');
   const [provisioning, setProvisioning] = useState(false);
   const [provisionError, setProvisionError] = useState<string | null>(null);
   const healedBoard = useRef<string | null>(null);
@@ -53,6 +60,7 @@ export function useBoardProvisioning({
   useEffect(() => {
     if (!open) { setProvisionError(null); healedBoard.current = null; return; }
     if (loading || error || provisioning || provisionError) return;
+    if (!canWrite) return;
     if (!board) {
       setProvisioning(true);
       boardsApi
@@ -71,7 +79,7 @@ export function useBoardProvisioning({
         .catch((e) => setProvisionError(e instanceof Error ? e.message : t('errSetupLanes')))
         .finally(() => setProvisioning(false));
     }
-  }, [open, loading, error, board, laneCount, provisioning, provisionError, projectId, projectName, reload, t]);
+  }, [open, loading, error, board, laneCount, provisioning, provisionError, projectId, projectName, reload, t, canWrite]);
 
   return { provisioning, provisionError };
 }

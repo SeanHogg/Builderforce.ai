@@ -104,6 +104,14 @@ export const CAPABILITIES = {
   // per-field requireRole(MANAGER) check on PATCH /api/boards/:id.
   'board.manageApproval': 'manager',
 
+  // The board's COLUMNS — adding, renaming, reordering, merging away a swimlane,
+  // and re-homing the tickets left in no column. Mirrors requireRole(DEVELOPER) on
+  // the POST/PATCH/DELETE /api/boards/:id/swimlanes routes. DEVELOPER for the same
+  // reason `runtime.execute` is: shaping the board you work on is the working
+  // team's job, while the governance controls above stay a tier higher. A lane
+  // edit re-files every ticket in it, which is why a viewer must not reach it.
+  'board.manageLanes':    'developer',
+
   // Ceremony cadence — create/edit/delete the recurring standup & planning
   // schedules the cron sweep runs. Mirrors the API's requireRole(MANAGER) on the
   // POST/PATCH/DELETE /api/agile/ceremonies/schedules routes (reads are open).

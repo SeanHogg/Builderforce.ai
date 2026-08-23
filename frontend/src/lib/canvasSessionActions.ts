@@ -49,6 +49,7 @@ export type CanvasSessionActionId =
   | 'diagnostics'
   | 'fullscreen'
   | 'call'
+  | 'talktrack'
   | 'share'
   | 'publish';
 
@@ -183,6 +184,22 @@ export const CANVAS_SESSION_ACTIONS: readonly CanvasSessionActionDef[] = [
   // be one decision with two homes — the failure this registry exists to prevent.
   { id: 'call', cluster: 'live', order: 5, chrome: 'icon', state: 'none', phone: 'menu', labelKey: 'startCall', titleKey: 'startCallTitle' },
   //
+  // TALKTRACK — the recording of this board, beside the live version of it.
+  //
+  // It sits in the `live` cluster with the call rather than with share/publish
+  // because the decision it belongs to is "am I explaining this board to somebody
+  // right now" — a call is that synchronously, a talktrack asynchronously, and the
+  // second is the one that leaves something behind. Grouping it with Share would
+  // have said it was a distribution control, and the recording is not distributed
+  // by making it: it becomes a `video` object on the board like anything else the
+  // canvas produces, and leaves by whichever door that object then takes.
+  //
+  // It needs nothing from the surface, deliberately. A walkthrough is a screen
+  // recording of whatever is on screen, which is as true of a running app or a 3D
+  // space as it is of the board — and the conversation surface is where somebody is
+  // most likely to be explaining what they just asked for.
+  { id: 'talktrack', cluster: 'live', order: 6, chrome: 'icon', state: 'expanded', phone: 'menu', labelKey: 'recordTalktrack', titleKey: 'recordTalktrackTitle' },
+  //
   // PROVE IT — the act the whole method turns on, and the one the product had no
   // door for from a board.
   //
@@ -197,8 +214,8 @@ export const CANVAS_SESSION_ACTIONS: readonly CanvasSessionActionDef[] = [
   //
   // It needs OBJECTS for the same reason the scorecard does: "make this real" over a
   // conversation with nothing on it has nothing to make real.
-  { id: 'prove', cluster: 'session', order: 6, chrome: 'labelled', state: 'none', phone: 'menu', labelKey: 'proveThisIdea', titleKey: 'proveThisIdeaTitle', needs: 'objects' },
-  { id: 'share', cluster: 'session', order: 7, chrome: 'labelled', state: 'expanded', phone: 'menu', labelKey: 'share', titleKey: 'inviteCollaborators' },
+  { id: 'prove', cluster: 'session', order: 7, chrome: 'labelled', state: 'none', phone: 'menu', labelKey: 'proveThisIdea', titleKey: 'proveThisIdeaTitle', needs: 'objects' },
+  { id: 'share', cluster: 'session', order: 8, chrome: 'labelled', state: 'expanded', phone: 'menu', labelKey: 'share', titleKey: 'inviteCollaborators' },
   // Publish sits beside Share because they are the two ways work leaves this canvas —
   // one brings a person IN, one puts the result where strangers can reach it.
   //
@@ -208,7 +225,7 @@ export const CANVAS_SESSION_ACTIONS: readonly CanvasSessionActionDef[] = [
   // three clicks deep, framed as commerce, and invisible until you had clicked the right
   // card. It opens the SAME release lifecycle that button does — one gate, two doors —
   // scoped to the whole board, which is the scope an application actually has.
-  { id: 'publish', cluster: 'session', order: 8, chrome: 'labelled', state: 'expanded', phone: 'menu', labelKey: 'publishCanvas', titleKey: 'publishCanvasTitle' },
+  { id: 'publish', cluster: 'session', order: 9, chrome: 'labelled', state: 'expanded', phone: 'menu', labelKey: 'publishCanvas', titleKey: 'publishCanvasTitle' },
 ];
 
 const BY_ID = new Map<CanvasSessionActionId, CanvasSessionActionDef>(

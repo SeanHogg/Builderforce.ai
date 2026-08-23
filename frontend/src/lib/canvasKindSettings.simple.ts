@@ -113,7 +113,13 @@ registerKindSettings({
   marketplace: { sellable: () => false },
   hintKey: 'standupHint',
   fields: [],
-  actions: [{ name: 'gather', labelKey: 'gatherStandup', style: 'primary', handler: 'startStandup' }],
+  actions: [
+    { name: 'gather', labelKey: 'gatherStandup', style: 'primary', handler: 'startStandup' },
+    // The other end of the ceremony. `gather` convenes it; this reads the minutes back
+    // and places the action items as tasks, so the board holds what the meeting decided
+    // and not only that it was called.
+    { name: 'minutes', labelKey: 'pullStandupMinutes', handler: 'pullStandupMinutes' },
+  ],
 });
 
 registerKindSettings({

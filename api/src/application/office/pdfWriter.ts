@@ -23,6 +23,7 @@
  * documents that most need a PDF are co-branded documents, not plain text.
  */
 
+import { richFontPdfFamily, type RichAlign } from '@builderforce/creation-canvas-contract';
 import { parseMarkdownBlocks, parseInlineRuns, type MdBlock, type MdRun } from './markdownBlocks';
 import {
   PDF_FONT_SLOTS, fontNamesFor, slotFor, measureBytes,
@@ -79,6 +80,11 @@ function toRgb(value: string | undefined, fallback: RGB): RGB {
   if (!m) return fallback;
   const n = parseInt(m[1] as string, 16);
   return { r: ((n >> 16) & 255) / 255, g: ((n >> 8) & 255) / 255, b: (n & 255) / 255 };
+}
+
+/** A run's own colour, or nothing — a run that named none inherits the block's. */
+function optionalRgb(value: string | undefined): RGB | undefined {
+  return value && HEX6.test(value.trim()) ? toRgb(value, WHITE) : undefined;
 }
 
 const fillOp = (c: RGB): string => `${c.r.toFixed(3)} ${c.g.toFixed(3)} ${c.b.toFixed(3)} rg`;
@@ -142,27 +148,46 @@ function literal(bytes: readonly number[]): string {
 
 // ── run tokenisation + wrapping ──────────────────────────────────────────────
 
-interface Piece { bytes: number[]; slot: PdfFontSlot; width: number }
+/**
+ * One measured token.
+ *
+ * It carries its own size, colour and underline rather than taking the block's,
+ * because a canvas document may put any of the three on a RUN. A piece is
+ * therefore drawable on its own — which is what lets a line hold 24pt red text
+ * beside 10pt body text and still wrap correctly.
+ */
+interface Piece { bytes: number[]; slot: PdfFontSlot; width: number; size: number; color?: RGB; underline?: boolean }
 interface Line { pieces: Piece[]; width: number }
 interface RunStyle { bold?: boolean; italic?: boolean; code?: boolean }
+/** What a run paints with, when it says so itself. */
+interface RunInk { color?: RGB; underline?: boolean }
 
-function piecesFor(text: string, style: RunStyle, family: PdfFontFamily, size: number): Piece[] {
-  const slot = slotFor(!!style.bold, !!style.italic, !!style.code);
+function piecesFor(text: string, style: RunStyle, family: PdfFontFamily, size: number, ink: RunInk = {}): Piece[] {
+  const slot = slotFor(!!style.bold, !!style.italic, style.code ? 'mono' : family);
   return text
     .split(/(\s+)/)
     .filter((tok) => tok !== '')
     .map((tok) => {
       const bytes = winAnsi(tok);
-      return { bytes, slot, width: measureBytes(bytes, family, slot, size) };
+      return {
+        bytes, slot, size, width: measureBytes(bytes, slot, size),
+        ...(ink.color ? { color: ink.color } : {}),
+        ...(ink.underline ? { underline: true } : {}),
+      };
     });
 }
 
 function runsToPieces(runs: MdRun[], family: PdfFontFamily, size: number, force?: RunStyle): Piece[] {
-  return runs.flatMap((r) => piecesFor(r.text, {
-    bold: force?.bold ?? r.bold,
-    italic: force?.italic ?? r.italic,
-    code: force?.code ?? r.code,
-  }, family, size));
+  return runs.flatMap((r) => {
+    const color = optionalRgb(r.color);
+    return piecesFor(
+      r.text,
+      { bold: force?.bold ?? r.bold, italic: force?.italic ?? r.italic, code: force?.code ?? r.code },
+      r.code ? 'mono' : richFontPdfFamily(r.font) ?? family,
+      r.size ?? size,
+      { ...(color ? { color } : {}), ...(r.underline ? { underline: true } : {}) },
+    );
+  });
 }
 
 /**
@@ -170,7 +195,7 @@ function runsToPieces(runs: MdRun[], family: PdfFontFamily, size: number, force?
  * broken at the character that overflows, so a long URL wraps instead of
  * bleeding past the margin.
  */
-function wrap(tokens: Piece[], family: PdfFontFamily, size: number, maxWidth: number): Line[] {
+function wrap(tokens: Piece[], maxWidth: number): Line[] {
   const width = Math.max(24, maxWidth);
   const lines: Line[] = [];
   let cur: Line = { pieces: [], width: 0 };
@@ -186,15 +211,15 @@ function wrap(tokens: Piece[], family: PdfFontFamily, size: number, maxWidth: nu
       let bytes: number[] = [];
       let run = 0;
       for (const b of tok.bytes) {
-        const w = measureBytes([b], family, tok.slot, size);
+        const w = measureBytes([b], tok.slot, tok.size);
         if (cur.width + run + w > width && (bytes.length > 0 || cur.pieces.length > 0)) {
-          if (bytes.length) { cur.pieces.push({ bytes, slot: tok.slot, width: run }); cur.width += run; }
+          if (bytes.length) { cur.pieces.push({ ...tok, bytes, width: run }); cur.width += run; }
           push();
           bytes = []; run = 0;
         }
         bytes.push(b); run += w;
       }
-      if (bytes.length) { cur.pieces.push({ bytes, slot: tok.slot, width: run }); cur.width += run; }
+      if (bytes.length) { cur.pieces.push({ ...tok, bytes, width: run }); cur.width += run; }
       continue;
     }
 
@@ -244,21 +269,39 @@ class PdfLayout {
     this.ops.push(`${strokeOp(color)} ${weight} w ${x1.toFixed(2)} ${y1.toFixed(2)} m ${x2.toFixed(2)} ${y2.toFixed(2)} l S`);
   }
 
-  /** Draw one already-wrapped line at an absolute baseline, no cursor movement. */
+  /** The tallest piece on a line — what its leading has to clear. */
+  private static lineSize(line: Line, size: number): number {
+    return line.pieces.reduce((tallest, piece) => Math.max(tallest, piece.size), size);
+  }
+
+  /** Draw one already-wrapped line at an absolute baseline, no cursor movement.
+   *  Each piece paints in its own size and colour, and underlines itself: an
+   *  underline is a rule under exactly the words that carry it, so it stops
+   *  where the run stops rather than running to the end of the line. */
   private drawLineAt(line: Line, x: number, baseline: number, size: number, color: RGB): void {
     let cursor = x;
     for (const p of line.pieces) {
-      this.text(cursor, baseline, size, p.slot, color, p.bytes);
+      const ink = p.color ?? color;
+      this.text(cursor, baseline, p.size, p.slot, ink, p.bytes);
+      if (p.underline && p.bytes.some((b) => b !== 0x20)) {
+        const drop = baseline - p.size * 0.12;
+        this.rule(cursor, drop, cursor + p.width, drop, ink, Math.max(0.4, p.size * 0.05));
+      }
       cursor += p.width;
     }
   }
 
-  /** Draw wrapped lines from the cursor down, paginating as needed. */
-  private drawLines(lines: Line[], x: number, size: number, color: RGB): void {
-    const lead = size * LEADING;
+  /** Draw wrapped lines from the cursor down, paginating as needed. `align`
+   *  shifts each line inside `width`, which is how a centred or right-aligned
+   *  paragraph is drawn without a second layout pass. */
+  private drawLines(lines: Line[], x: number, size: number, color: RGB, align?: RichAlign, width = CONTENT_W): void {
     for (const ln of lines) {
+      const tallest = PdfLayout.lineSize(ln, size);
+      const lead = tallest * LEADING;
       this.ensure(lead);
-      this.drawLineAt(ln, x, this.y - size, size, color);
+      const slack = Math.max(0, width - ln.width);
+      const offset = align === 'center' ? slack / 2 : align === 'right' ? slack : 0;
+      this.drawLineAt(ln, x + offset, this.y - tallest, tallest, color);
       this.y -= lead;
     }
   }
@@ -272,24 +315,24 @@ class PdfLayout {
     if (badge) {
       const valueBytes = winAnsi(badge.value);
       const labelBytes = winAnsi(badge.label);
-      const vw = measureBytes(valueBytes, t.family, 'F2', 16);
-      const lw = measureBytes(labelBytes, t.family, 'F1', 7.5);
+      const vw = measureBytes(valueBytes, slotFor(true, false, t.family), 16);
+      const lw = measureBytes(labelBytes, slotFor(false, false, t.family), 7.5);
       badgeWidth = Math.max(vw, lw) + 26;
       const bx = PAGE_W - MARGIN_X - badgeWidth;
       const by = PAGE_H - BANNER_H + 20;
       this.rect(bx, by, badgeWidth, 52, WHITE);
-      this.text(bx + 13, by + 34, 7.5, 'F1', t.secondary, labelBytes);
-      this.text(bx + 13, by + 12, 16, 'F2', t.accent, valueBytes);
+      this.text(bx + 13, by + 34, 7.5, slotFor(false, false, t.family), t.secondary, labelBytes);
+      this.text(bx + 13, by + 12, 16, slotFor(true, false, t.family), t.accent, valueBytes);
     }
 
     const titleWidth = CONTENT_W - (badgeWidth ? badgeWidth + 24 : 0);
     let ty = PAGE_H - 44;
-    for (const ln of wrap(piecesFor(title, { bold: true }, t.family, SIZE.title), t.family, SIZE.title, titleWidth).slice(0, 2)) {
+    for (const ln of wrap(piecesFor(title, { bold: true }, t.family, SIZE.title), titleWidth).slice(0, 2)) {
       this.drawLineAt(ln, MARGIN_X, ty, SIZE.title, WHITE);
       ty -= SIZE.title * 1.2;
     }
     if (subtitle) {
-      for (const ln of wrap(piecesFor(subtitle, {}, t.family, SIZE.subtitle), t.family, SIZE.subtitle, titleWidth).slice(0, 2)) {
+      for (const ln of wrap(piecesFor(subtitle, {}, t.family, SIZE.subtitle), titleWidth).slice(0, 2)) {
         this.drawLineAt(ln, MARGIN_X, ty, SIZE.subtitle, WHITE);
         ty -= SIZE.subtitle * 1.3;
       }
@@ -297,13 +340,15 @@ class PdfLayout {
     this.y = PAGE_H - BANNER_H - 26;
   }
 
-  heading(level: 1 | 2 | 3, text: string): void {
+  heading(level: 1 | 2 | 3, text: string, align?: RichAlign): void {
     const t = this.theme;
     const size = (level === 1 ? SIZE.h1 : level === 2 ? SIZE.h2 : SIZE.h3) * t.scale;
     const color = level === 3 ? t.secondary : t.accent;
     this.ensure(size * 3);
     this.y -= size * 0.7;
-    this.drawLines(wrap(piecesFor(text, { bold: true }, t.family, size), t.family, size, CONTENT_W), MARGIN_X, size, color);
+    // A heading's own runs may carry marks too, so it goes through the same run
+    // reader as body text rather than being drawn as one bold string.
+    this.drawLines(wrap(runsToPieces(parseInlineRuns(text), t.family, size, { bold: true }), CONTENT_W), MARGIN_X, size, color, align);
     if (level === 1) {
       this.y -= 3;
       this.rule(MARGIN_X, this.y, MARGIN_X + CONTENT_W, this.y, t.rule, 1.2);
@@ -311,23 +356,23 @@ class PdfLayout {
     this.y -= size * 0.35;
   }
 
-  paragraph(text: string): void {
+  paragraph(text: string, align?: RichAlign): void {
     const t = this.theme;
     const size = SIZE.body * t.scale;
-    this.drawLines(wrap(runsToPieces(parseInlineRuns(text), t.family, size), t.family, size, CONTENT_W), MARGIN_X, size, t.text);
+    this.drawLines(wrap(runsToPieces(parseInlineRuns(text), t.family, size), CONTENT_W), MARGIN_X, size, t.text, align);
     this.y -= size * 0.45;
   }
 
-  list(items: string[], ordered: boolean): void {
+  list(items: string[], ordered: boolean, align?: RichAlign): void {
     const t = this.theme;
     const size = SIZE.body * t.scale;
     const indent = 18;
     items.forEach((item, i) => {
       const marker = ordered ? winAnsi(`${i + 1}.`) : [BULLET];
-      const lines = wrap(runsToPieces(parseInlineRuns(item), t.family, size), t.family, size, CONTENT_W - indent);
+      const lines = wrap(runsToPieces(parseInlineRuns(item), t.family, size), CONTENT_W - indent);
       this.ensure(size * LEADING);
-      this.text(MARGIN_X + 3, this.y - size, size, 'F1', t.secondary, marker);
-      this.drawLines(lines, MARGIN_X + indent, size, t.text);
+      this.text(MARGIN_X + 3, this.y - size, size, slotFor(false, false, t.family), t.secondary, marker);
+      this.drawLines(lines, MARGIN_X + indent, size, t.text, align, CONTENT_W - indent);
     });
     this.y -= size * 0.5;
   }
@@ -337,7 +382,7 @@ class PdfLayout {
     const size = SIZE.code;
     const lead = size * 1.35;
     const lines = text.replace(/\r\n?/g, '\n').split('\n')
-      .flatMap((raw) => wrap(piecesFor(raw || ' ', { code: true }, t.family, size), t.family, size, CONTENT_W - 20));
+      .flatMap((raw) => wrap(piecesFor(raw || ' ', { code: true }, t.family, size), CONTENT_W - 20));
 
     // Draw the panel per page-slice, so a fence spanning a page break keeps its
     // ground on both pages instead of losing it on the second.
@@ -370,7 +415,7 @@ class PdfLayout {
     // Column widths track natural content width, floored so no column collapses.
     const natural = Array.from({ length: cols }, (_, i) => {
       const samples = [head[i] ?? '', ...rows.slice(0, 40).map((r) => r[i] ?? '')];
-      return Math.max(...samples.map((s) => measureBytes(winAnsi(s), t.family, 'F1', size))) + 16;
+      return Math.max(...samples.map((s) => measureBytes(winAnsi(s), slotFor(false, false, t.family), size))) + 16;
     });
     const min = CONTENT_W / (cols * 3);
     const floored = natural.map((n) => Math.max(min, n));
@@ -379,7 +424,7 @@ class PdfLayout {
 
     const drawRow = (cells: string[], header: boolean): void => {
       const wrapped = cells.map((cell, i) =>
-        wrap(runsToPieces(parseInlineRuns(cell), t.family, size, header ? { bold: true } : undefined), t.family, size, (widths[i] as number) - 12));
+        wrap(runsToPieces(parseInlineRuns(cell), t.family, size, header ? { bold: true } : undefined), (widths[i] as number) - 12));
       const height = Math.max(...wrapped.map((w) => w.length)) * size * 1.35 + 8;
       this.ensure(height);
       const top = this.y;
@@ -413,13 +458,14 @@ function latin1Bytes(s: string): Uint8Array {
 
 function footerOps(theme: ResolvedTheme, footer: string | undefined, page: number, total: number): string {
   const y = 34;
+  const slot = slotFor(false, false, theme.family);
   const parts: string[] = [`${strokeOp(theme.rule)} 0.6 w ${MARGIN_X} ${y + 14} m ${MARGIN_X + CONTENT_W} ${y + 14} l S`];
   if (footer) {
-    parts.push(`BT ${fillOp(theme.muted)} /F1 ${SIZE.foot} Tf 1 0 0 1 ${MARGIN_X} ${y} Tm ${literal(winAnsi(footer))} Tj ET`);
+    parts.push(`BT ${fillOp(theme.muted)} /${slot} ${SIZE.foot} Tf 1 0 0 1 ${MARGIN_X} ${y} Tm ${literal(winAnsi(footer))} Tj ET`);
   }
   const bytes = winAnsi(`${page} / ${total}`);
-  const w = measureBytes(bytes, theme.family, 'F1', SIZE.foot);
-  parts.push(`BT ${fillOp(theme.muted)} /F1 ${SIZE.foot} Tf 1 0 0 1 ${(MARGIN_X + CONTENT_W - w).toFixed(2)} ${y} Tm ${literal(bytes)} Tj ET`);
+  const w = measureBytes(bytes, slot, SIZE.foot);
+  parts.push(`BT ${fillOp(theme.muted)} /${slot} ${SIZE.foot} Tf 1 0 0 1 ${(MARGIN_X + CONTENT_W - w).toFixed(2)} ${y} Tm ${literal(bytes)} Tj ET`);
   return parts.join('\n');
 }
 
@@ -432,9 +478,9 @@ export function renderPdf(spec: PdfDocumentSpec): Uint8Array {
 
   for (const block of spec.blocks) {
     switch (block.kind) {
-      case 'heading': layout.heading(block.level, block.text); break;
-      case 'paragraph': layout.paragraph(block.text); break;
-      case 'list': layout.list(block.items, block.ordered); break;
+      case 'heading': layout.heading(block.level, block.text, block.align); break;
+      case 'paragraph': layout.paragraph(block.text, block.align); break;
+      case 'list': layout.list(block.items, block.ordered, block.align); break;
       case 'table': layout.table(block.head, block.rows); break;
       case 'code': layout.code(block.text); break;
       default: break;
@@ -449,7 +495,7 @@ export function renderPdf(spec: PdfDocumentSpec): Uint8Array {
   // Fixed object numbering: 1 catalog, 2 pages, 3..8 fonts, then page/content pairs.
   const FONT_BASE = 3;
   const PAGE_BASE = FONT_BASE + PDF_FONT_SLOTS.length;
-  const names = fontNamesFor(theme.family);
+  const names = fontNamesFor();
   const resources = `<< /Font << ${PDF_FONT_SLOTS.map((slot, i) => `/${slot} ${FONT_BASE + i} 0 R`).join(' ')} >> >>`;
 
   const objects: string[] = [];

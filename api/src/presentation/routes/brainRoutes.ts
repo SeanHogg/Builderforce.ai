@@ -13,7 +13,6 @@ import { isValidRoomCode } from '../../application/guest/guestToken';
 import { isValidVisitorId } from '../../application/marketing/MarketingService';
 import { claimGuestRoom } from '../../application/guest/guestRoomClient';
 import { rateLimitMiddleware } from '../middleware/rateLimitMiddleware';
-import { signUpload } from '../../infrastructure/auth/uploadSign';
 import { fetchWebDocumentCached } from '../../application/web/webFetch';
 import { recordOutboundFetch, enforceOutboundFetchCap } from '../../application/web/outboundFetchLedger';
 import { agentHosts, users, chatTicketLinks } from '../../infrastructure/database/schema';
@@ -24,8 +23,7 @@ import { notify } from '../../application/notifications/notify';
 import { sendChatInviteEmail } from '../../infrastructure/email/EmailService';
 import { sendTransactionalEmail } from '../../application/email/sendEmail';
 import { headerHints } from '../../application/email/emailLocaleResolver';
-import { wildcardPath } from './wildcardPath';
-import { isKeyOwnedByTenant } from '../../domain/shared/r2Keys';
+import { handleAssetRead, handleAssetSign, handleAssetUpload } from './assetRoutes';
 import type { Env, HonoEnv } from '../../env';
 import type { BrainService, BrainTraceEventInput } from '../../application/brain/BrainService';
 import { learnFromPersistedTurns } from '../../application/brain/brainEvermindLearning';
@@ -745,95 +743,16 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
     return c.json(result);
   });
 
-  // POST /upload — upload file to R2, returns the object URL
-  router.post('/upload', async (c) => {
-    const env = c.env as { UPLOADS?: R2Bucket };
-    if (!env.UPLOADS) return c.json({ error: 'File storage not configured' }, 503);
-
-    const tenantId = c.get('tenantId') as number;
-    const userId = c.get('userId') as string;
-
-    const formData = await c.req.formData();
-    const file = formData.get('file') as File | null;
-    if (!file) return c.json({ error: 'No file provided' }, 400);
-
-    // Video renders are intentionally larger than ordinary Brain attachments.
-    // Keep one tenant-scoped R2 path, with a bounded demo-friendly ceiling.
-    const maxBytes = file.type.startsWith('video/') ? 100 * 1024 * 1024 : 10 * 1024 * 1024;
-    if (file.size > maxBytes) {
-      return c.json({ error: `File too large (max ${maxBytes / 1024 / 1024}MB)` }, 400);
-    }
-
-    // Allowed MIME types
-    const allowedTypes = [
-      'image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/svg+xml',
-      'application/pdf',
-      'text/plain', 'text/markdown', 'text/csv',
-      'application/json',
-      'video/webm', 'video/mp4',
-      // Office OpenXML — deck templates (.pptx) to fill, plus .docx/.xlsx.
-      'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    ];
-    // Browsers sometimes send octet-stream for .pptx/.docx/.xlsx — allow by extension too.
-    const ext = (file.name.split('.').pop() ?? '').toLowerCase();
-    const allowedExts = ['pptx', 'docx', 'xlsx'];
-    if (!allowedTypes.includes(file.type) && !allowedExts.includes(ext)) {
-      return c.json({ error: `File type ${file.type} not allowed` }, 400);
-    }
-
-    const key = `${tenantId}/${userId}/${Date.now()}-${crypto.randomUUID().slice(0, 8)}.${ext || 'bin'}`;
-
-    await env.UPLOADS.put(key, file.stream(), {
-      httpMetadata: { contentType: file.type },
-      customMetadata: { originalName: file.name, tenantId: String(tenantId) },
-    });
-
-    return c.json({
-      key,
-      name: file.name,
-      type: file.type,
-      size: file.size,
-    }, 201);
-  });
-
-  // POST /uploads/sign — mint a short-lived signed URL for an uploaded object so
-  // an upstream LLM provider can fetch it (vision) without the tenant token. Used
-  // only for images too large to inline as a data URL.
-  router.post('/uploads/sign', async (c) => {
-    const tenantId = c.get('tenantId') as number;
-    const { key } = await c.req.json<{ key?: string }>();
-    if (!isKeyOwnedByTenant(key, tenantId)) {
-      return c.json({ error: 'Not found' }, 404);
-    }
-    const secret = (c.env as { JWT_SECRET?: string }).JWT_SECRET;
-    if (!secret) return c.json({ error: 'Signing not configured' }, 503);
-    const { exp, sig } = await signUpload(key, secret);
-    return c.json({ exp, sig });
-  });
-
-  // GET /uploads/:key+ — serve an uploaded file from R2
-  router.get('/uploads/*', async (c) => {
-    const env = c.env as { UPLOADS?: R2Bucket };
-    if (!env.UPLOADS) return c.json({ error: 'File storage not configured' }, 503);
-
-    const tenantId = c.get('tenantId') as number;
-    const key = wildcardPath(c);
-
-    // Scope: files must belong to this tenant
-    if (!isKeyOwnedByTenant(key, tenantId)) {
-      return c.json({ error: 'Not found' }, 404);
-    }
-
-    const obj = await env.UPLOADS.get(key);
-    if (!obj) return c.json({ error: 'Not found' }, 404);
-
-    const headers = new Headers();
-    headers.set('Content-Type', obj.httpMetadata?.contentType ?? 'application/octet-stream');
-    headers.set('Cache-Control', 'public, max-age=31536000, immutable');
-    return new Response(obj.body, { headers });
-  });
+  // ── Assets ────────────────────────────────────────────────────────────────
+  // These three are the PLATFORM asset pipeline under the Brain's historical
+  // names. The policy — ceiling, allow-list, key layout, tenant ownership — lives
+  // in `application/assets/tenantAssetStore.ts` and is served at `/api/assets`;
+  // these URLs stay because published clients (the VS Code extension,
+  // brain-embedded) already call them, and are delegations rather than a second
+  // copy so the two cannot answer differently.
+  router.post('/upload', handleAssetUpload);
+  router.post('/uploads/sign', handleAssetSign);
+  router.get('/uploads/*', handleAssetRead);
 
   // POST /projects/:id/memory-sync — push consolidated project memory to all tenant agentHosts
   router.post('/projects/:id/memory-sync', async (c) => {

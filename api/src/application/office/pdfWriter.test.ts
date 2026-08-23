@@ -39,8 +39,11 @@ describe('markdownToPdf', () => {
     expect(text.startsWith('%PDF-1.4')).toBe(true);
     expect(text.trimEnd().endsWith('%%EOF')).toBe(true);
     const objects = assertXrefOffsets(text);
-    // 1 catalog + 1 pages + 6 fonts + 1 page + 1 content stream.
-    expect(objects).toBe(10);
+    // 1 catalog + 1 pages + 12 fonts + 1 page + 1 content stream. Twelve, not
+    // six: every family's four faces are always mapped, because a run may name
+    // its own font (`[words]{font=Georgia}`) and cannot be drawn in a face the
+    // resource dictionary does not carry.
+    expect(objects).toBe(16);
     expect(text).toContain('/Type /Catalog');
     expect(text).toContain('/BaseFont /Helvetica');
     expect(text).toContain('/Encoding /WinAnsiEncoding');

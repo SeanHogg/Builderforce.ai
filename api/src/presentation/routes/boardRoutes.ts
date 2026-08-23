@@ -312,7 +312,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
   // boards left empty by a pre-transaction creation failure (the "config panel
   // says No swimlanes yet, board still shows columns" bug). onConflictDoNothing
   // guards the UNIQUE(board_id, key) constraint if two heals race.
-  router.post('/:boardId/swimlanes/ensure-defaults', async (c) => {
+  router.post('/:boardId/swimlanes/ensure-defaults', requireRole(TenantRole.DEVELOPER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const boardId = c.req.param('boardId');
     const [board] = await db
@@ -342,7 +342,11 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
     return c.json({ swimlanes: lanes, seeded: true });
   });
 
-  router.post('/:boardId/swimlanes', async (c) => {
+  // A lane edit RE-FILES every ticket in it (create shifts nothing, but rename moves
+  // each resident's status and delete merges them away), so the write half of board
+  // configuration is DEVELOPER — the tier `runtime.execute` uses, and the tier the
+  // `board.manageLanes` capability advertises in the editor. Reads stay open.
+  router.post('/:boardId/swimlanes', requireRole(TenantRole.DEVELOPER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const boardId = c.req.param('boardId');
     if (!(await assertBoard(tenantId, boardId))) return c.json({ error: 'Board not found' }, 404);
@@ -402,7 +406,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
     return c.json(row, 201);
   });
 
-  router.patch('/:boardId/swimlanes/:laneId', async (c) => {
+  router.patch('/:boardId/swimlanes/:laneId', requireRole(TenantRole.DEVELOPER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const boardId = c.req.param('boardId');
     const laneId = c.req.param('laneId');
@@ -481,7 +485,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
   // it the automatic policy applies (the lowest-position non-terminal survivor). Until
   // the parameter existed, folding `Ready` into `To Do` silently sent its tickets
   // wherever the policy pointed, which is a different board than the operator asked for.
-  router.delete('/:boardId/swimlanes/:laneId', async (c) => {
+  router.delete('/:boardId/swimlanes/:laneId', requireRole(TenantRole.DEVELOPER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const boardId = c.req.param('boardId');
     const laneId = c.req.param('laneId');

@@ -35,3 +35,13 @@
 export function advertisedName(tool: string): string {
   return `builtin_${tool.replace(/[^a-zA-Z0-9]+/g, '_')}`;
 }
+
+/**
+ * Sentinel `extensionId` the gateway routes to the in-process platform catalog.
+ *
+ * It lives beside {@link advertisedName} because the two answer the same question —
+ * how a first-party tool is ADDRESSED — and every consumer that classifies a catalog
+ * entry by source needs it without importing `builtinMcpService` (and its whole
+ * dependency graph) to read one string. Re-exported from there for existing callers.
+ */
+export const BUILTIN_EXTENSION_ID = 'builtin';

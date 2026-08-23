@@ -32,6 +32,7 @@ import { edgeVisuals, readConnectionStyle } from '@/lib/canvasConnectionStyle';
 import { CANVAS_BOARD_INVARIANTS_BY_KEY, type CanvasBoardInvariantKey } from '@/lib/canvas/boundedContexts';
 import { specRefKey } from '@/lib/specObjects';
 import type { CanvasObject, CanvasObjectData, CreationObjectKind } from './canvasObject';
+import { parseResourceRef } from './resourceRef';
 
 /**
  * The board. Objects and the connections between them, and nothing else — a
@@ -224,14 +225,14 @@ export function persistedGraphFromBoard(
 ): PersistableCanvasGraph {
   return {
     objects: board.nodes.map((node) => {
-      const [resourceType, ...resourceParts] = (typeof node.data.resourceId === 'string' ? node.data.resourceId : '').split(':');
+      const ref = parseResourceRef(node.data.resourceId);
       const width = node.measured?.width ?? node.width ?? node.style?.width;
       const height = node.measured?.height ?? node.height ?? node.style?.height;
       return {
         id: node.id,
         kind: node.data.kind,
-        resourceType: resourceParts.length ? resourceType! : null,
-        resourceId: resourceParts.length ? resourceParts.join(':') : null,
+        resourceType: ref?.type ?? null,
+        resourceId: ref?.id ?? null,
         canvasData: {
           x: node.position.x,
           y: node.position.y,

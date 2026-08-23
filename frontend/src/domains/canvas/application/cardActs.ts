@@ -17,12 +17,14 @@
  * point: the branch that used to be forgotten is the branch that no longer exists.
  */
 
+import { CEREMONY_CARD_ACTS } from '@/domains/ceremony/application/ceremonyActs';
 import { FOUNDER_OPS_CARD_ACTS } from '@/domains/finance/application/founderOpsActs';
 import { HIRING_CARD_ACTS } from '@/domains/hiring/application/employmentHandover';
 import { TEACHING_CARD_ACTS } from '@/domains/teaching/application/academicActs';
 import type { CardAct } from './CardAct';
 
 export const CARD_ACTS: readonly CardAct[] = [
+  ...CEREMONY_CARD_ACTS,
   ...FOUNDER_OPS_CARD_ACTS,
   ...HIRING_CARD_ACTS,
   ...TEACHING_CARD_ACTS,

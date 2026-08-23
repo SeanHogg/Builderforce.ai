@@ -262,6 +262,7 @@ import { createAgentAssignmentRoutes } from './presentation/routes/agentAssignme
 import { createSecurityReviewRoutes } from './presentation/routes/securityReviewRoutes';
 import { createKnowledgeRoutes } from './presentation/routes/knowledgeRoutes';
 import { createCollabRoutes } from './presentation/routes/collabRoutes';
+import { createAssetRoutes } from './presentation/routes/assetRoutes';
 import { createKnowledgeMarketRoutes } from './presentation/routes/knowledgeMarketRoutes';
 import { createCreationListingRoutes, createPublicListingRoutes } from './presentation/routes/creationListingRoutes';
 import { createStageSandboxRoutes } from './presentation/routes/stageSandboxRoutes';
@@ -1114,6 +1115,9 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // Real-time co-editing (Yjs over CollaborationRoomDO). One route, because
   // y-websocket appends the room name to the base URL: /api/collab/<scope>:<id>.
   app.route('/api/collab',            createCollabRoutes(db));
+  // The platform asset pipeline (upload → tenant-scoped R2 → URL). `/api/brain/upload`
+  // is the same handlers under the Brain's historical name, for published clients.
+  app.route('/api/assets',            createAssetRoutes());
   app.route('/api/knowledge-market',  createKnowledgeMarketRoutes(db)); // PUBLIC browse (logged-out)
 
   // Selling what you built on the canvas. Two mounts because they are two auth

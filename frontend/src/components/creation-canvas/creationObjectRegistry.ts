@@ -528,7 +528,13 @@ const BASE_MUTABLE_FIELDS = {
   video: ['content', 'prompt', 'videoUrl', 'duration', 'modelSlug', 'maxFrames', 'frameCount', 'videoWidth', 'videoHeight', 'generatedFrames', 'mediaKind', 'capabilityId', 'videoTimeline', 'videoSources', 'selectedVideoClipId', 'renderedVideoUrl', 'renderedVideoStorageKey', 'renderedVideoMimeType', 'youtubeVideoId', 'youtubeUrl', 'youtubePrivacyStatus',
     // A video with no captions cannot lawfully be distributed to a class (WCAG 1.2.2),
     // and until this field existed the board had nowhere to record that they exist.
-    'captionsUrl'],
+    'captionsUrl',
+    // A RECORDED walkthrough carries two things an imported file cannot: when each
+    // sentence was said, and which seconds are worth returning to. `talktrack` holds
+    // both (see `talktrack.ts`); `transcript` is the same narration flattened to
+    // prose, which is what Brain reads and what a search matches — the same pairing
+    // `podcast` and `voice` already have.
+    'talktrack', 'transcript'],
   image: ['content', 'prompt', 'mediaKind', 'capabilityId', 'provider', 'templateId', 'outputFormat', 'outputUrl', 'thumbnailUrl', 'mcpServer', 'mcpTool', 'mcpArguments'],
   animation: ['content', 'prompt', 'mediaKind', 'capabilityId', 'provider', 'templateId', 'outputFormat', 'outputUrl', 'thumbnailUrl', 'duration', 'mcpServer', 'mcpTool', 'mcpArguments'],
   podcast: ['content', 'prompt', 'mediaKind', 'capabilityId', 'provider', 'templateId', 'outputFormat', 'outputUrl', 'duration', 'transcript', 'mcpServer', 'mcpTool', 'mcpArguments'],

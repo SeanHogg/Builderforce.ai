@@ -61,7 +61,10 @@ export const CONNECTED_CANVAS_ACTIONS: Partial<Record<CreationObjectKind, readon
   // `build` compiles the authored steps into a real workflow definition; `run`
   // executes one. Run builds first when needed, so Brain can call either.
   workflow: ['build', 'run'], dataset: ['visualize', 'plot', 'profile'], project: ['expand', 'compare'],
-  mockup: ['deliver'], mockupSet: ['expand', 'deliver'], standup: ['start'],
+  // `start` convenes the ceremony; `minutes` reads back what it produced and places the
+  // meeting's action items on the board. Both are connected — the board could open a
+  // stand-up and never read one, which is why the second is here.
+  mockup: ['deliver'], mockupSet: ['expand', 'deliver'], standup: ['start', 'minutes'],
   evermind: ['train', 'evaluate', 'publish'],
   // The facilitation acts. All four are CONNECTED: `publish` mints the join address and
   // opens voting, and the other three steer a live poll through the same endpoint the

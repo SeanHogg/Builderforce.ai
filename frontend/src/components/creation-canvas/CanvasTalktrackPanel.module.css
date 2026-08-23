@@ -1,0 +1,48 @@
+.panel { display: grid; gap: var(--space-3); color: var(--text-primary); }
+
+.lead { margin: 0; color: var(--text-secondary); font-size: 0.85rem; line-height: 1.5; }
+
+.controls { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+
+.controls button {
+  min-height: 2.25rem;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  font: inherit;
+  cursor: pointer;
+}
+.controls button:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.primary { border-color: var(--accent) !important; background: var(--accent) !important; color: var(--text-on-accent) !important; }
+.stop { border-color: var(--danger-border) !important; color: var(--danger-text) !important; }
+
+/* The recording state has to be legible without colour alone — a dot that pulses
+   and a live elapsed time, so it reads the same to anyone who cannot see the hue. */
+.elapsed { display: inline-flex; align-items: center; gap: var(--space-2); font-variant-numeric: tabular-nums; color: var(--text-secondary); }
+.dot { width: 0.55rem; height: 0.55rem; border-radius: var(--radius-full); background: var(--danger-text); animation: pulse 1.4s ease-in-out infinite; }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+@media (prefers-reduced-motion: reduce) { .dot { animation: none; } }
+
+.section { display: grid; gap: var(--space-2); border: 1px solid var(--border); border-radius: var(--radius-md); padding: var(--space-3); background: var(--surface); }
+.section > h3 { margin: 0; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); }
+
+.transcript { display: grid; gap: var(--space-1); max-height: 16rem; overflow-y: auto; margin: 0; padding: 0; list-style: none; }
+.transcript li { display: grid; grid-template-columns: 3.5rem minmax(0, 1fr); gap: var(--space-2); font-size: 0.85rem; line-height: 1.45; }
+.transcript time { color: var(--text-secondary); font-variant-numeric: tabular-nums; font-size: var(--font-size-field-label); padding-top: 0.2rem; }
+.interim { color: var(--text-secondary); font-style: italic; }
+
+.moments { display: grid; gap: var(--space-1); margin: 0; padding: 0; list-style: none; }
+.moments li { display: grid; grid-template-columns: 3.5rem minmax(0, 1fr); gap: var(--space-2); font-size: 0.85rem; }
+.moments time { color: var(--accent); font-variant-numeric: tabular-nums; font-size: var(--font-size-field-label); padding-top: 0.2rem; }
+
+.empty { margin: 0; color: var(--text-secondary); font-size: 0.85rem; }
+.status { margin: 0; color: var(--text-secondary); font-size: 0.85rem; }
+.problem { margin: 0; color: var(--danger-text); font-size: 0.85rem; }
+
+@media (max-width: 480px) {
+  .controls button { flex: 1 1 100%; }
+  .transcript li, .moments li { grid-template-columns: 3rem minmax(0, 1fr); }
+}

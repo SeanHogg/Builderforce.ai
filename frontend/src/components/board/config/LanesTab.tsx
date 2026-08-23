@@ -8,6 +8,14 @@
  * what each lane DOES on entry (`LaneActionRow`), and what a card must satisfy
  * before it may enter (`LaneRequirementsRow`). Each is its own file, so a change
  * to one is not a change to the tab.
+ *
+ * A lane has TWO names. `name` is the label on the column; `key` is the status
+ * every ticket in it holds. Only the first used to be editable, because changing
+ * the second would have stranded every resident ticket on a status no lane
+ * defined and there was no way to even find them again. `tasks.swimlane_id`
+ * (migration 1115) made the lane's residents a reference, so the server can carry
+ * them — and the board's other lane-key pointers — through a rename; the editor
+ * reports what moved. `OrphanedTicketsRow` handles the tickets already stranded.
  */
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
@@ -18,10 +26,12 @@ import {
   boardsApi,
   workflowDefinitions,
   type Board,
+  type LaneRenameResult,
   type Swimlane,
   type SwimlaneAgent,
   type WorkflowDefinitionSummary,
 } from '@/lib/builderforceApi';
+import { OrphanedTicketsRow } from './OrphanedTicketsRow';
 import { LaneActionRow } from './LaneActionRow';
 import { LaneRequirementsRow } from './LaneRequirementsRow';
 import { LaneAgentList } from './LaneAgentList';
@@ -36,6 +46,9 @@ export function LanesTab({ board, lanes, agentsByLane, reload }: {
   const [adding, setAdding] = useState(false);
   /** Per-lane merge target for the delete-as-merge flow, keyed by lane id. */
   const [mergeTarget, setMergeTarget] = useState<Record<string, string>>({});
+  /** What the last rename moved, and what a rejected one said — keyed by lane id. */
+  const [renamed, setRenamed] = useState<Record<string, LaneRenameResult>>({});
+  const [keyError, setKeyError] = useState<Record<string, string>>({});
   // Workflow definitions are the targets for a lane's "Run workflow" action.
   // Loaded once for the whole tab (not per lane) to avoid an N+1.
   const [workflows, setWorkflows] = useState<WorkflowDefinitionSummary[]>([]);
@@ -45,21 +58,16 @@ export function LanesTab({ board, lanes, agentsByLane, reload }: {
     return () => { live = false; };
   }, []);
 
-  // Derive a unique, stable lane key from the name — this is the status a task
-  // holds while sitting in the lane, so it must be unique on the board.
-  const keyFor = (name: string): string => {
-    const base = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'lane';
-    const existing = new Set(lanes.map((l) => l.key));
-    if (!existing.has(base)) return base;
-    let i = 2;
-    while (existing.has(`${base}_${i}`)) i += 1;
-    return `${base}_${i}`;
-  };
-
+  // The KEY is minted server-side from the name. It used to be derived here from
+  // whatever lane list the browser happened to be holding, which is a uniqueness
+  // check against a stale snapshot — two people adding a column at once, or one
+  // person adding a second before a reload, both land on the same key and hit
+  // UNIQUE(board_id, key) as a 500. The server's check and its insert see the
+  // same rows, and there is one implementation of what a lane key looks like.
   const addLane = async () => {
     const name = laneName.trim();
     if (!name) return;
-    await boardsApi.swimlanes.create(board.id, { key: keyFor(name), name, position: lanes.length });
+    await boardsApi.swimlanes.create(board.id, { name, position: lanes.length });
     setLaneName(''); setAdding(false); reload();
   };
   /**
@@ -76,6 +84,22 @@ export function LanesTab({ board, lanes, agentsByLane, reload }: {
     reload();
   };
   const patchLane = async (id: string, body: Record<string, unknown>) => { await boardsApi.swimlanes.patch(board.id, id, body); reload(); };
+  /**
+   * Rename the lane's KEY — the status its tickets hold. The server normalises the
+   * input, refuses a collision with a sibling column, and moves every resident
+   * ticket plus the board's other lane-key pointers in one operation; what it
+   * moved is reported back so the operator is not left guessing what a rename did.
+   */
+  const renameKey = async (lane: Swimlane, requested: string) => {
+    setKeyError((e) => { const next = { ...e }; delete next[lane.id]; return next; });
+    try {
+      const updated = await boardsApi.swimlanes.patch(board.id, lane.id, { key: requested });
+      if (updated.renamed) setRenamed((r) => ({ ...r, [lane.id]: updated.renamed! }));
+      reload();
+    } catch (e) {
+      setKeyError((prev) => ({ ...prev, [lane.id]: e instanceof Error ? e.message : t('errRenameKey') }));
+    }
+  };
   // Swap a lane's position with its neighbour to reorder the board columns.
   const moveLane = async (index: number, dir: -1 | 1) => {
     const target = lanes[index + dir];
@@ -87,10 +111,15 @@ export function LanesTab({ board, lanes, agentsByLane, reload }: {
   };
 
   return (
-    <div style={sectionPad}>
+    // EVERY control below WRITES, and a lane edit re-files every ticket in the lane,
+    // so the whole tab is gated on `board.manageLanes` — the capability the API's
+    // requireRole(DEVELOPER) on the swimlane routes mirrors. Dimmed, never hidden:
+    // a read-only member still sees how the board is configured and who to ask.
+    <RoleGate capability="board.manageLanes" variant="block" style={sectionPad}>
       <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
         {t('lanesIntro')}
       </div>
+      <OrphanedTicketsRow board={board} lanes={lanes} reload={reload} />
       {lanes.length === 0 && <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('noLanes')}</div>}
       {lanes.map((lane, index) => (
         <div key={lane.id} style={{ border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 14, marginBottom: 12 }}>
@@ -104,6 +133,16 @@ export function LanesTab({ board, lanes, agentsByLane, reload }: {
               defaultValue={lane.name}
               title={t('laneNameTitle')}
               onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== lane.name) patchLane(lane.id, { name: v }); }}
+            />
+            {/* The KEY, beside the name it belongs to. Monospace because it is a
+                token a person types into filters, automations and the API — not a
+                label — and rendering it like prose is how it gets mistaken for one. */}
+            <input
+              style={{ ...inputStyle, fontFamily: 'var(--font-mono, monospace)', width: 150, minWidth: 110 }}
+              defaultValue={lane.key}
+              title={t('laneKeyTitle')}
+              aria-label={t('laneKey')}
+              onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== lane.key) renameKey(lane, v); }}
             />
             <Select value={lane.gate} onChange={(e) => patchLane(lane.id, { gate: e.target.value })} style={inputStyle} title={t('gate')}>
               <option value="auto">{t('gateAuto')}</option>
@@ -143,6 +182,17 @@ export function LanesTab({ board, lanes, agentsByLane, reload }: {
             )}
             <button type="button" style={{ ...btnSubtle, color: 'var(--danger)' }} onClick={() => removeLane(lane.id)}>{t('delete')}</button>
           </div>
+          {/* A RENAME MOVED OTHER PEOPLE'S DATA — every resident ticket's status, and
+              the board's other pointers at this key. Say what it touched rather than
+              leaving the operator to open the board and count. */}
+          {keyError[lane.id] && (
+            <div role="alert" style={{ marginTop: 8, fontSize: 12, color: 'var(--danger)' }}>{keyError[lane.id]}</div>
+          )}
+          {renamed[lane.id] && !keyError[lane.id] && (
+            <div role="status" style={{ marginTop: 8, fontSize: 12, color: 'var(--text-muted)' }}>
+              {t('laneKeyRenamed', { count: renamed[lane.id]!.movedTasks, key: renamed[lane.id]!.key })}
+            </div>
+          )}
           {/* AN UNSTAFFED AUTO-GATED LANE IS A MISCONFIGURATION, and it must LOOK like
               one. Measured: only 3 of 61 auto-gated lanes carried any agent assignment,
               so autonomy fell through to the ticket's owner — and 466 of 821 tickets
@@ -175,7 +225,7 @@ export function LanesTab({ board, lanes, agentsByLane, reload }: {
       ) : (
         <button type="button" style={btnPrimary} onClick={() => setAdding(true)}>{t('addSwimlane')}</button>
       )}
-    </div>
+    </RoleGate>
   );
 }
 

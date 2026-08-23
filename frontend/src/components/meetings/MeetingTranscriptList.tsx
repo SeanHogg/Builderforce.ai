@@ -41,7 +41,7 @@ export function MeetingTranscriptList({
         </div>
       )}
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {showTranscript && <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4, color: 'var(--text-muted)' }}>
           {t('transcript')}
         </div>
@@ -64,7 +64,7 @@ export function MeetingTranscriptList({
             ))}
           </div>
         )}
-      </div>
+      </div>}
     </div>
   );
 }

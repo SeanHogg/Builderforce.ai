@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslations, useFormatter } from 'next-intl';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
+import { MeetingMinutesPanel } from '@/components/meetings/MeetingMinutesPanel';
 import { ViewToggle } from '@/components/ViewToggle';
 import { Select } from '@/components/Select';
 import { usePermission } from '@/lib/rbac';
@@ -141,10 +142,15 @@ function AttendanceRow({
         </div>
       </div>
 
-      {/* Provenance — why this reads the way it does, without anyone knowing the rules. */}
+      {/* Provenance — why this reads the way it does, without anyone knowing the rules.
+          Keyed off the source rather than branched on it: this was a two-way ternary that
+          fell through to "corrected by a manager", so the day a THIRD source arrived
+          (`rsvp`, a person declining the invitation) every declined seat claimed a manager
+          had asserted it — the one line whose whole job is to say where a verdict came
+          from, naming the wrong origin. A lookup cannot fall through. */}
       {source !== 'derived' && (
         <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
-          {source === 'pto' ? t('sourcePto') : t('sourceManual')}
+          {t(`source.${source}`)}
           {p.attendanceNote ? ` — ${p.attendanceNote}` : ''}
         </div>
       )}
@@ -158,6 +164,7 @@ function SessionDetail({ sessionId }: { sessionId: string }) {
   const format = useFormatter();
   const [participants, setParticipants] = useState<CeremonyParticipant[]>([]);
   const [journal, setJournal] = useState<CeremonyJournalEvent[]>([]);
+  const [meetingId, setMeetingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -169,6 +176,7 @@ function SessionDetail({ sessionId }: { sessionId: string }) {
         if (cancelled) return;
         setParticipants([...(d.participants ?? [])].sort((a, b) => a.turnOrder - b.turnOrder));
         setJournal(d.journal ?? []);
+        setMeetingId(d.session?.meetingId ?? null);
         setError(null);
       })
       .catch((e: unknown) => { if (!cancelled) setError(e instanceof Error ? e.message : t('errorLoad')); })
@@ -213,6 +221,15 @@ function SessionDetail({ sessionId }: { sessionId: string }) {
             ))}
           </ol>
         )}
+      </section>
+
+      {/* What was SAID. The record of a ceremony used to stop at what the platform did
+          to the board; the minutes and the transcript lived on the companion meeting and
+          were reachable only from the meetings list, so the one page answering "what
+          happened at Tuesday's standup" could not show what anyone talked about. Same
+          component the meetings list opens — the record has one implementation. */}
+      <section>
+        <MeetingMinutesPanel meetingId={meetingId} />
       </section>
     </div>
   );

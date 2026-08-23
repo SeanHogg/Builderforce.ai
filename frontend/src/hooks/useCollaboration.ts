@@ -3,24 +3,25 @@
 import { useEffect, useRef, useState } from 'react';
 import * as Y from 'yjs';
 import { WebsocketProvider } from 'y-websocket';
+import {
+  collabColorFor,
+  collabParams,
+  collabRoom,
+  collabSocketBase,
+} from '@/domains/collab/infrastructure/collabTransport';
 
 /**
- * The collab WS lives in the separate `worker/` deployment (CollaborationRoom
- * Durable Object), NOT the api worker. Without a dedicated endpoint, y-websocket
- * defaulted to `${NEXT_PUBLIC_WORKER_URL}/api/collab` → fell back to the api
- * worker URL (no collab route) → connection refused → reconnect loop with no
- * backoff → infinite console spam.
+ * An IDE project's shared buffer.
  *
- * Make collab opt-in: set NEXT_PUBLIC_COLLAB_WS_URL to the collab endpoint
- * (e.g. wss://collab.builderforce.ai). When unset, the hook is inert — no WS
- * attempted, no spam, no silent failure mode.
+ * The room used to be unreachable: it pointed at a second Worker script that has
+ * never been deployed, behind an `NEXT_PUBLIC_COLLAB_WS_URL` nobody sets, and the
+ * hook logged "collaboration disabled" and returned. The room is part of the api
+ * Worker now and the URL is derived from the API origin — see
+ * `domains/collab/infrastructure/collabTransport.ts`.
+ *
+ * The server admits `project:<id>` only for a project in the caller's workspace,
+ * so a room name is no longer a bare integer anyone could guess into.
  */
-function getCollabWsUrl(): string | null {
-  const explicit = process.env.NEXT_PUBLIC_COLLAB_WS_URL;
-  if (explicit && explicit.trim()) return explicit.replace(/\/+$/, '');
-  return null;
-}
-
 export function useCollaboration(projectId: string | number, userId: string) {
   const docRef = useRef<Y.Doc | null>(null);
   const providerRef = useRef<WebsocketProvider | null>(null);
@@ -29,20 +30,16 @@ export function useCollaboration(projectId: string | number, userId: string) {
 
   useEffect(() => {
     if (!roomId || !userId) return;
-    const wsBase = getCollabWsUrl();
-    if (!wsBase) {
-      // Collab not configured for this environment — log once, do nothing.
-      // eslint-disable-next-line no-console
-      console.info(
-        '[builderforce] Real-time collaboration disabled: set NEXT_PUBLIC_COLLAB_WS_URL to enable.',
-      );
-      return;
-    }
+    const wsBase = collabSocketBase();
+    const params = collabParams({ name: `User ${userId.slice(0, 6)}`, color: collabColorFor(userId) });
+    // No API origin, or no session yet — an upgrade would 401 into a reconnect
+    // loop, so stay inert. Editing continues locally.
+    if (!wsBase || !params) return;
 
     const doc = new Y.Doc();
     docRef.current = doc;
 
-    const provider = new WebsocketProvider(wsBase, roomId, doc, { connect: true });
+    const provider = new WebsocketProvider(wsBase, collabRoom('project', roomId), doc, { connect: true, params });
     providerRef.current = provider;
 
     provider.on('status', ({ status }: { status: string }) => {
@@ -52,7 +49,7 @@ export function useCollaboration(projectId: string | number, userId: string) {
     provider.awareness.setLocalState({
       userId,
       name: `User ${userId.slice(0, 6)}`,
-      color: `#${Math.floor(Math.random() * 0xFFFFFF).toString(16).padStart(6, '0')}`,
+      color: collabColorFor(userId),
     });
 
     return () => {

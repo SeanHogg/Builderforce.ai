@@ -245,6 +245,16 @@ export function StartCallIcon() {
   </svg>;
 }
 
+/** Record a narrated walkthrough: a record dot inside the board's own frame.
+ *  Deliberately NOT the headset {@link StartCallIcon} draws — a call is people
+ *  talking to each other, a talktrack is one person recording the board. */
+export function RecordTalktrackIcon() {
+  return <svg viewBox="0 0 16 16" aria-hidden="true">
+    <rect x="1.6" y="2.9" width="12.8" height="9.4" rx="1.6" fill="none" stroke="currentColor" strokeWidth="1.3" />
+    <circle cx="8" cy="7.6" r="2.5" fill="currentColor" />
+  </svg>;
+}
+
 /** Everything else this session can do. */
 export function MoreActionsIcon() {
   return <svg viewBox="0 0 16 16" aria-hidden="true">

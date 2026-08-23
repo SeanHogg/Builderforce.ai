@@ -47,7 +47,19 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
+
+/**
+ * Every path below is anchored HERE rather than at `process.cwd()`.
+ *
+ * Run from anywhere but `api/`, the CWD-relative roots this used to build all missed,
+ * and the two `.filter(existsSync)` calls turned that into a PASS over zero files — a
+ * guard reporting OK because it read nothing. Deriving the roots from the module's own
+ * location is what the checks manifest already says a guard should do.
+ */
+const apiRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const repoRoot = path.resolve(apiRoot, '..');
 
 /**
  * Roots scanned for TypeScript prompts.
@@ -60,8 +72,17 @@ import ts from 'typescript';
  * `creative.compose`, `sales.workspace_get`, `meetings.schedule`) that appear nowhere in
  * the model's tool list, the fourth instance of this defect.
  */
-const TS_ROOTS = [path.resolve('src'), path.resolve('..', 'frontend', 'src')].filter((dir) => fs.existsSync(dir));
+const TS_ROOTS = [path.resolve(apiRoot, 'src'), path.resolve(repoRoot, 'frontend', 'src')];
 const CATALOG_FILE = path.join('src', 'application', 'llm', 'builtinMcpService.ts');
+
+const missingRoots = TS_ROOTS.filter((dir) => !fs.existsSync(dir));
+if (missingRoots.length) {
+  console.error(
+    'check-prompt-tool-names: a scanned root is missing, so this guard would pass over ' +
+    `nothing:\n${missingRoots.map((d) => `  • ${d}`).join('\n')}`,
+  );
+  process.exit(1);
+}
 
 const advertisedName = (tool) => `builtin_${tool.replace(/[^a-zA-Z0-9]+/g, '_')}`;
 
@@ -89,20 +110,20 @@ function readToolIds(text, into) {
 const CATALOG_MODULES = new Set();
 
 function loadCatalogIds() {
-  const catalogText = fs.readFileSync(path.resolve(CATALOG_FILE), 'utf8');
+  const catalogText = fs.readFileSync(path.resolve(apiRoot, CATALOG_FILE), 'utf8');
   const ids = new Set();
   readToolIds(catalogText, ids);
 
   // Names that are spread into an array literal somewhere in the catalog.
   const spread = new Set([...catalogText.matchAll(/\.\.\.([A-Z][A-Z0-9_]*),/g)].map((m) => m[1]));
-  const dir = path.dirname(path.resolve(CATALOG_FILE));
+  const dir = path.dirname(path.resolve(apiRoot, CATALOG_FILE));
   for (const m of catalogText.matchAll(/import\s*\{([^}]+)\}\s*from\s*'\.\/([A-Za-z0-9_]+)'/g)) {
     const names = m[1].split(',').map((n) => n.trim().split(/\s+as\s+/)[0].trim());
     if (!names.some((n) => spread.has(n))) continue;
     const file = path.join(dir, `${m[2]}.ts`);
     if (!fs.existsSync(file)) continue;
     readToolIds(fs.readFileSync(file, 'utf8'), ids);
-    CATALOG_MODULES.add(path.relative(process.cwd(), file));
+    CATALOG_MODULES.add(path.relative(apiRoot, file));
   }
   return ids;
 }
@@ -127,7 +148,7 @@ for (const root of TS_ROOTS) walk(root);
 
 const violations = [];
 for (const filePath of files) {
-  const rel = path.relative(process.cwd(), filePath);
+  const rel = path.relative(apiRoot, filePath);
   // The catalog modules define the ids and the mapping; they are the files that must
   // name both. That is the catalog itself and every module it spreads in.
   if (rel === CATALOG_FILE || CATALOG_MODULES.has(rel)) continue;
@@ -311,7 +332,7 @@ function isSearchPattern(text, start) {
 
 const sqlFiles = [];
 for (const dir of MIGRATION_DIRS) {
-  const full = path.resolve(dir);
+  const full = path.resolve(apiRoot, dir);
   if (!fs.existsSync(full)) continue;
   for (const name of fs.readdirSync(full)) {
     if (name.endsWith('.sql')) sqlFiles.push(path.join(full, name));
@@ -319,7 +340,7 @@ for (const dir of MIGRATION_DIRS) {
 }
 
 for (const filePath of sqlFiles) {
-  const rel = path.relative(process.cwd(), filePath);
+  const rel = path.relative(apiRoot, filePath);
   const raw = fs.readFileSync(filePath, 'utf8');
   const text = stripSqlComments(raw);
   const exempt = replaceNeedleRanges(text);
@@ -351,10 +372,10 @@ for (const filePath of sqlFiles) {
 // "Unknown tool" and the CI job reports a Builderforce error nobody can trace
 // back to a rename here. So: every `builtin_*` literal in a shipped client must
 // be the advertised name of a real catalog tool.
-const CLIENT_FILES = [path.resolve('..', 'actions', 'dispatch-agent', 'dispatch.mjs')].filter((f) => fs.existsSync(f));
+const CLIENT_FILES = [path.resolve(repoRoot, 'actions', 'dispatch-agent', 'dispatch.mjs')].filter((f) => fs.existsSync(f));
 
 for (const filePath of CLIENT_FILES) {
-  const rel = path.relative(path.resolve('..'), filePath).replace(/\\/g, '/');
+  const rel = path.relative(repoRoot, filePath).replace(/\\/g, '/');
   const text = fs.readFileSync(filePath, 'utf8');
   const seen = new Set();
   for (const m of text.matchAll(/'(builtin_[a-z0-9_]+)'/g)) {

@@ -69,6 +69,7 @@ import { applyCanvas3DMoves, canvas3dDepthOffset, type Canvas3DDescriptor } from
 import { CanvasOutlinePanel } from './CanvasOutlinePanel';
 import { CanvasFilesPanel } from './CanvasFilesPanel';
 import { CanvasMiroPanel } from './CanvasMiroPanel';
+import { CanvasTalktrackPanel } from './CanvasTalktrackPanel';
 import type { MiroBoardSummary, MiroImportResult } from '@/lib/miroImport';
 import { CanvasSocialPanel } from './CanvasSocialPanel';
 import { CanvasAdsPanel } from './CanvasAdsPanel';
@@ -1390,6 +1391,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   // form, and "which version is on sale and is the next one fit to be" is a
   // lifecycle. An empty string means the whole board.
   const [releaseFocus, setReleaseFocus] = useState<string | null>(null);
+  const [talktrackOpen, setTalktrackOpen] = useState(false);
   const [creatingBuild, setCreatingBuild] = useState(false);
   const [framePresets, setFramePresets] = useState<FramePreset[]>([]);
   const [serverTemplates, setServerTemplates] = useState<ServerCreationTemplate[]>([]);
@@ -11506,6 +11508,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       // A local canvas opens the SAME share sheet a saved one does. It used to open a
       // sign-up gate, which answered a question nobody asked: they wanted to show
       // someone the board, not to create an account.
+      // The recorder keeps recording while its panel is shut, so this toggles a
+      // panel that is always mounted rather than mounting one — closing the sheet
+      // mid-walkthrough must not throw the walkthrough away.
+      talktrack: act(() => setTalktrackOpen((value) => !value), talktrackOpen),
       share: act(() => setShareOpen((value) => !value), shareOpen),
       // The whole board, not a card: an application is the session, and this is the
       // door that was previously reachable only from a selected object's inspector
@@ -12210,6 +12216,16 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           game={gamePanelTarget.game}
           onNotice={setNotice}
         />}
+        {/* Always mounted: a walkthrough survives its own panel being closed. */}
+        <CanvasTalktrackPanel
+          open={talktrackOpen}
+          onClose={() => setTalktrackOpen(false)}
+          boardTitle={title}
+          focus={selectedNode ? { id: selectedNode.id, title: selectedNode.data.title } : null}
+          disabled={!canEdit || lockBlocked}
+          onCapture={addHostCapture}
+          onNotice={setNotice}
+        />
         {publishFocus !== null && sessionId && <CanvasPublishPanel
           open
           onClose={() => setPublishFocus(null)}
@@ -12662,6 +12678,7 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
     buildFlow: onBuildFlow,
     run: onRun,
     startStandup: onStartStandup,
+    pullStandupMinutes: () => onRunCardAct('minutes'),
     expandMockupSet: onExpandMockupSet,
     deliverMockup: onDeliverMockup,
     saveFramePreset: onSaveFramePreset,
