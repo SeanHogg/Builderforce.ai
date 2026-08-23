@@ -9,7 +9,6 @@ import { LOCALES, DEFAULT_LOCALE, type Locale } from './config';
 import { STALL_CAUSES, PROVIDER_PROBE_STATES } from '@/lib/builderforceApi';
 import { CAMPAIGN_BLOCKERS } from '@/lib/growthApi';
 import { HEALTH_SIGNALS } from '@/lib/pm/portfolioHealth';
-import { CREATION_OBJECT_REGISTRY } from '@/components/creation-canvas/creationObjectRegistry';
 import { CREATION_TEMPLATES } from '@/components/creation-canvas/creationTemplates';
 import {
   NAV_GROUPS,
@@ -282,13 +281,15 @@ describe('message catalogs', () => {
     expect(keys.filter((key) => t(key as never) === key)).toEqual([]);
   });
 
-  it.each(LOCALES)('%s labels every creation canvas object kind', (locale) => {
-    const t = createTranslator({ locale, messages: CATALOGS[locale] });
-    const missing = CREATION_OBJECT_REGISTRY
-      .map(({ kind }) => kind)
-      .filter((kind) => t(`creationCanvas.object.${kind}` as never) === `creationCanvas.object.${kind}`);
-    expect(missing).toEqual([]);
-  });
+  // Canvas object-kind labels are asserted by `scripts/check-canvas-kind-labels.mjs`,
+  // not here. The case that stood in this spot read `CREATION_OBJECT_REGISTRY` — the
+  // frontend's list — while the defect it exists to catch is a kind added to the
+  // CONTRACT package. That the two lists agree is already asserted, once, by
+  // `creationObjectRegistry.test.ts`; what was missing was an assertion sourced from
+  // the contract itself and fast enough that a contract author runs it. The guard is
+  // both, and runs in the deploy chain, so a contract-package change now fails the
+  // release that would have shipped an unlabelled kind rather than reding a suite in
+  // a package its author was not editing.
 
   it.each(LOCALES)('%s labels every resume template', (locale) => {
     const t = createTranslator({ locale, messages: CATALOGS[locale] });

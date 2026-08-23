@@ -16,6 +16,7 @@
     "lint": "eslint .",
     "check:api-transport": "node scripts/check-api-transport.mjs",
     "check:design-tokens": "node scripts/check-design-tokens.mjs",
+    "check:canvas-kind-labels": "node scripts/check-canvas-kind-labels.mjs",
     "check:architecture": "node scripts/check-frontend-architecture.mjs",
     "check:edge-runtime": "node scripts/check-edge-runtime.mjs",
     "check:i18n-keys": "node scripts/check-i18n-keys.mjs",

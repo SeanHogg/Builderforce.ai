@@ -19,6 +19,7 @@ export default [
   ['check:declared-deps', 'check-declared-deps.mjs'],
   ['check:methodology', 'check-methodology.mjs'],
   ['check:canvas-glossary', 'check-canvas-glossary.mjs'],
+  ['check:canvas-kind-labels', 'check-canvas-kind-labels.mjs'],
   ['check:layering', 'check-layering.mjs'],
   ['check:primitives', 'check-primitive-duplication.mjs'],
   // The repo-wide silent-catch ratchet, narrowed to this package's tree so the
