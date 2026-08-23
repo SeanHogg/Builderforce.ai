@@ -69,6 +69,12 @@ export const CAPABILITIES = {
   // side and a signed launch on the other.
   'identity.manageProviders': 'manager',
 
+  // Year-end 1099 report: every recipient's legal name, address and tax-id
+  // last-four in one file. Manager+, mirroring requireRole(MANAGER) on
+  // GET /api/tax/report/:year (+ its CSV). A payee's OWN tax profile has no
+  // capability gate — it's self-service, same as any own-account form.
+  'tax.viewReport':       'manager',
+
   // Workforce
   'agents.create':        'manager',
   'agents.manage':        'manager',

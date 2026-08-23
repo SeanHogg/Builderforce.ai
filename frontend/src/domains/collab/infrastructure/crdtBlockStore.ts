@@ -176,6 +176,16 @@ export function createCrdtBlockStore(doc: Y.Doc, origin: unknown = 'local'): Blo
       }, origin);
     },
 
+    replaceAll(next) {
+      const seed = next.length > 0 ? next : [emptyBlock()];
+      // ONE transaction: every peer sees the replacement as a single change
+      // rather than as a moment where the document has no blocks at all.
+      doc.transact(() => {
+        if (array.length > 0) array.delete(0, array.length);
+        array.insert(0, seed.map(toYBlock));
+      }, origin);
+    },
+
     destroy() {
       array.unobserveDeep(onChange);
       listeners.clear();

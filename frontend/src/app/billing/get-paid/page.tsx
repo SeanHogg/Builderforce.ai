@@ -10,7 +10,7 @@ export const metadata = pageMetadata({
   path: '/billing/get-paid',
 });
 
-/** The same console, opened on the money-IN view — one component, three routes. */
+/** The same console, opened on the money-IN view — one component, four routes. */
 export default function BillingGetPaidPage() {
   return (
     <Suspense fallback={null}>

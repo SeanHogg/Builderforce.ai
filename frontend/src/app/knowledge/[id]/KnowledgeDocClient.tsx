@@ -1,7 +1,7 @@
 'use client';
 
 import { Icon } from '@/components/ui/Icon';
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { DocumentMarkdown } from '@/components/DocumentMarkdown';
@@ -11,7 +11,9 @@ import PageContainer from '@/components/PageContainer';
 import { Select } from '@/components/Select';
 import { usePermission } from '@/lib/rbac';
 import { useAuth } from '@/lib/AuthContext';
-import { useDocCollaboration } from '@/hooks/useDocCollaboration';
+import { useBlockDocument, type BlockDocument } from '@/domains/collab/presentation/useBlockDocument';
+import { BlockEditor } from '@/components/knowledge/BlockEditor';
+import { parseMarkdownToBlocks } from '@/domains/collab/domain/blockDocument';
 import {
   knowledgeApi,
   type KnowledgeDocDetail,
@@ -60,41 +62,35 @@ export default function KnowledgeDocClient({ docId }: { docId: string }) {
   const [mode, setMode] = useState<'edit' | 'preview'>('preview');
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
   const dirtyRef = useRef(false);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  // Caret to restore after a remote collaborative edit re-renders the textarea.
-  const pendingCaretRef = useRef<number | null>(null);
 
-  const collab = useDocCollaboration(docId, {
+  // `content` here is a SEED, not the live value — once mounted, `blockDoc.markdown`
+  // is the document. `ready` gates the hook's own setup until the real content has
+  // loaded (see useBlockDocument's doc comment): without it the offline fallback
+  // store would be built from the empty string this state starts at and never
+  // rebuilt once the fetch resolves.
+  const blockDoc = useBlockDocument('knowledge', docId, {
     userId: user?.id ?? '',
     name: user?.name || user?.email || 'Teammate',
     initialContent: content,
+    ready: doc !== null,
   });
 
-  // Adopt remote collaborative edits into the editor content. Guard against an
-  // empty freshly-seeded room clobbering content we just loaded from the API:
-  // only adopt a non-empty remote value, or when our own buffer is still empty.
-  useEffect(() => {
-    if (!collab.enabled || collab.value === null || collab.value === content) return;
-    if (collab.value.length === 0 && content.length > 0) return;
-    // Capture the caret so the incoming remote edit doesn't kick it to the end.
-    const ta = textareaRef.current;
-    if (ta && document.activeElement === ta) pendingCaretRef.current = ta.selectionStart;
-    setContent(collab.value);
-    dirtyRef.current = true;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [collab.value, collab.enabled]);
-
-  // Restore the caret after a remote-driven content change (best-effort; only
-  // ever set on the collaborative path, so single-user editing is untouched).
-  useLayoutEffect(() => {
-    if (pendingCaretRef.current == null) return;
-    const ta = textareaRef.current;
-    if (ta) {
-      const pos = Math.min(pendingCaretRef.current, content.length);
-      ta.setSelectionRange(pos, pos);
-    }
-    pendingCaretRef.current = null;
-  }, [content]);
+  // Every mutation the EDITOR routes through here marks the document dirty for
+  // autosave, in one place rather than at each call site (`BlockEditor`, AI
+  // assist, the analysis panel's "apply flow"). A change that arrives from a
+  // PEER — via the CRDT, never through this wrapper — deliberately does NOT mark
+  // dirty: it already reached the server through whoever typed it, and every
+  // connected client autosaving on every remote keystroke would be a PATCH storm
+  // proportional to participants × keystrokes.
+  const editorDoc: BlockDocument = {
+    ...blockDoc,
+    setText: (id, text) => { dirtyRef.current = true; blockDoc.setText(id, text); },
+    setAttrs: (id, attrs) => { dirtyRef.current = true; blockDoc.setAttrs(id, attrs); },
+    insertAfter: (afterId, block) => { dirtyRef.current = true; return blockDoc.insertAfter(afterId, block); },
+    remove: (id) => { dirtyRef.current = true; blockDoc.remove(id); },
+    move: (id, delta) => { dirtyRef.current = true; blockDoc.move(id, delta); },
+    replaceAll: (next) => { dirtyRef.current = true; blockDoc.replaceAll(next); },
+  };
 
   const reload = useCallback(() => {
     knowledgeApi
@@ -116,7 +112,11 @@ export default function KnowledgeDocClient({ docId }: { docId: string }) {
     reload();
   }, [reload]);
 
-  // Debounced autosave (anyone with edit access to this document).
+  // Debounced autosave (anyone with edit access to this document). Fires on every
+  // `blockDoc.markdown` change — including a PEER's, since the CRDT store's
+  // snapshot changes either way — but only ever WRITES when `dirtyRef` is set,
+  // which `editorDoc`'s wrapper reserves for edits this client made. A remote
+  // change bails out below at no cost beyond the effect re-running.
   useEffect(() => {
     if (!doc || !canEdit || !dirtyRef.current) return;
     setSaveState('saving');
@@ -125,7 +125,7 @@ export default function KnowledgeDocClient({ docId }: { docId: string }) {
         await knowledgeApi.update(docId, {
           title: title.trim() || doc.title,
           summary,
-          content,
+          content: blockDoc.markdown,
           docType,
           requiresAck,
         });
@@ -139,14 +139,7 @@ export default function KnowledgeDocClient({ docId }: { docId: string }) {
     }, 900);
     return () => clearTimeout(handle);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [title, summary, content, docType, requiresAck, tags]);
-
-  const onContentChange = (next: string) => {
-    dirtyRef.current = true;
-    if (collab.enabled) collab.setValue(next);
-    else setContent(next);
-    if (collab.enabled) setContent(next);
-  };
+  }, [title, summary, blockDoc.markdown, docType, requiresAck, tags]);
 
   const markDirty = <T,>(setter: (v: T) => void) => (v: T) => {
     dirtyRef.current = true;
@@ -184,7 +177,7 @@ export default function KnowledgeDocClient({ docId }: { docId: string }) {
           ← {t('backToList')}
         </Link>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <PresenceBar collab={collab} t={t} />
+          <PresenceBar collab={blockDoc} t={t} />
           {saveState !== 'idle' && (
             <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
               {saveState === 'saving' ? t('saving') : t('saved')}
@@ -244,22 +237,27 @@ export default function KnowledgeDocClient({ docId }: { docId: string }) {
         <AiAssist
           docType={docType}
           title={title}
-          existingContent={content}
+          existingContent={blockDoc.markdown}
           t={t}
           onApply={(text, replace) => {
-            onContentChange(replace ? text : `${content}\n\n${text}`);
+            if (replace) {
+              editorDoc.replaceAll(parseMarkdownToBlocks(text));
+            } else {
+              let afterId = editorDoc.blocks[editorDoc.blocks.length - 1]?.id ?? null;
+              for (const block of parseMarkdownToBlocks(text)) afterId = editorDoc.insertAfter(afterId, block);
+            }
             setMode('edit');
           }}
         />
       )}
 
       {/* AI process analysis (editors) */}
-      {canEdit && content.trim() && (
+      {canEdit && blockDoc.markdown.trim() && (
         <AnalyzePanel
           docId={docId}
           t={t}
           onApplyFlow={(flow) => {
-            onContentChange(flow);
+            editorDoc.replaceAll(parseMarkdownToBlocks(flow));
             setMode('edit');
           }}
         />
@@ -280,10 +278,7 @@ export default function KnowledgeDocClient({ docId }: { docId: string }) {
       </div>
 
       {mode === 'edit' && canEdit ? (
-        <textarea
-          ref={textareaRef}
-          value={content}
-          onChange={(e) => onContentChange(e.target.value)}
+        <div
           style={{
             width: '100%',
             minHeight: 420,
@@ -291,14 +286,10 @@ export default function KnowledgeDocClient({ docId }: { docId: string }) {
             borderRadius: 'var(--radius-lg)',
             border: '1px solid var(--border)',
             background: 'var(--surface-2)',
-            color: 'inherit',
-            fontFamily: 'ui-monospace, monospace',
-            fontSize: 14,
-            lineHeight: 1.6,
-            resize: 'vertical',
           }}
-          placeholder={t('contentPlaceholder')}
-        />
+        >
+          <BlockEditor doc={editorDoc} t={t} />
+        </div>
       ) : (
         <article
           style={{
@@ -309,8 +300,8 @@ export default function KnowledgeDocClient({ docId }: { docId: string }) {
             minHeight: 200,
           }}
         >
-          {content.trim() ? (
-            <DocumentMarkdown content={content} />
+          {blockDoc.markdown.trim() ? (
+            <DocumentMarkdown content={blockDoc.markdown} />
           ) : (
             <span style={{ color: 'var(--text-muted)' }}>{t('emptyContent')}</span>
           )}
@@ -492,7 +483,7 @@ function PresenceBar({
   collab,
   t,
 }: {
-  collab: ReturnType<typeof useDocCollaboration>;
+  collab: BlockDocument;
   t: ReturnType<typeof useTranslations>;
 }) {
   if (!collab.enabled) return null;

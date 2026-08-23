@@ -34,6 +34,14 @@ export interface BlockStore {
   remove(id: string): void;
   /** Move a block by `delta` positions, clamped to the document. */
   move(id: string, delta: number): void;
+  /**
+   * Replace the WHOLE document in one step — AI assist replacing a draft, a
+   * template being applied. Deliberately not "remove everything then insert" at
+   * the call site: on the CRDT store that would be one transaction per removed
+   * block interleaved with whatever a peer is doing at that moment, where this
+   * is one.
+   */
+  replaceAll(blocks: readonly DocumentBlock[]): void;
   /** Release anything the store holds. Safe to call twice. */
   destroy(): void;
 }
@@ -117,6 +125,9 @@ export function createLocalBlockStore(initial: readonly DocumentBlock[]): BlockS
       const [moved] = next.splice(target.from, 1);
       next.splice(target.to, 0, moved!);
       commit(next);
+    },
+    replaceAll(next) {
+      commit(next.length > 0 ? [...next] : [emptyBlock()]);
     },
     destroy() {
       listeners.clear();

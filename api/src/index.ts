@@ -77,7 +77,7 @@ import { createInnovationRoutes }  from './presentation/routes/innovationRoutes'
 import { createSeamRoutes }        from './presentation/routes/seamRoutes';
 import { createBiRoutes }          from './presentation/routes/biRoutes';
 import { createTenantApiKeyRoutes } from './presentation/routes/tenantApiKeyRoutes';
-import { createMcpExtensionRoutes } from './presentation/routes/mcpExtensionRoutes';
+import { createMcpExtensionRoutes, createMcpOAuthCallbackRoutes } from './presentation/routes/mcpExtensionRoutes';
 import { createAuthRoutes }        from './presentation/routes/authRoutes';
 import { createOAuthRoutes }       from './presentation/routes/oauthRoutes';
 import { createPasskeyLoginRoutes, createPasskeyRoutes } from './presentation/routes/passkeyRoutes';
@@ -915,6 +915,10 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/mcp',          createMcpServerRoutes());
   app.route('/api/tenants/:tenantId/api-keys', createTenantApiKeyRoutes(db));
   app.route('/api/tenants/:tenantId/mcp-extensions', createMcpExtensionRoutes(db));
+  // PUBLIC — the redirect target every registered MCP server's authorization
+  // server sends the browser back to. Authenticated by the signed `state`, not a
+  // session (see mcpExtensionRoutes.ts's module doc).
+  app.route('/api/mcp-oauth/callback', createMcpOAuthCallbackRoutes(db));
   app.route('/api/agents',   createAgentRoutes(agentService));
   app.route('/api/agent-registrations', createAgentRegistrationRoutes(new AgentRegistrationService(db, auditRepo)));
   app.route('/api/skills',   createSkillRoutes(agentService));

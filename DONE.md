@@ -1,3 +1,78 @@
+## ✅ RESOLVED 2026-08-23 — The ad-set and ad levels finally reach the canvas
+
+`CanvasAdsPanel` edited campaigns only: a caller with a budget and an objective could
+launch a campaign on the board, then had to leave it and call `/api/ads/adsets` directly
+to say WHO the money was spent on. The service, the routes and the UTM stamp had shipped
+earlier the same day with nothing above them.
+
+The panel was also the thing blocking its own second level — six jobs of state (accounts,
+campaigns, connect form, launch form, insights, and now ad sets) in one 432-line
+component, the shape the no-god-classes rule exists to catch before a fourth job made it
+worse. It is now a SHELL (`CanvasAdsPanel.tsx`, 70 lines: a title, a tab strip, the open
+tab) over five self-contained tabs/tiers under `frontend/src/components/creation-canvas/ads/`,
+mirroring the server's own `adsService` / `adSetService` split: `AdAccountsTab`,
+`AdCampaignsTab`, `AdInsightsTab`, and the two new levels, `AdSetTier` → `AdSetRow` →
+`AdTier`. Each owns its own reads and entitlement decisions and drops into a second
+surface with zero edits — the test that rule states directly.
+
+**The audience is real, not a free-text box.** `AdTargetingFields` offers only the
+dimensions the CHOSEN network's account declares in `targetingDimensions` (new on
+`AdAccountView`/`AdNetworkOption`, server-published from `AdsProvider` alongside
+`requiresAdSet`/`requiresCreativeRef` via `capabilitiesOf()` in `adsService.ts`) — a
+network with no device targeting has no device checkbox here, never a disabled one that
+400s on submit. Validation is not re-implemented: the enums (`AD_PLACEMENTS`,
+`AD_DEVICES`, `AD_GENDERS`, the age bounds) are mirrored as TYPES in the new
+`frontend/src/lib/adSetsApi.ts` client, and the server's one `parseTargeting` is still the
+judge. `AdSetRow` shows the audience as a sentence (`AdTargetingSummary`, via a new
+`Formatter.list()` on the canonical `useFormat()`) rather than a raw object, states
+"Everyone" explicitly for an untargeted set rather than going silent, and re-targeting is
+a full REPLACEMENT of the spec — seeded from the network's own report, never a merge —
+because every network replaces at this level and a partial patch would silently widen an
+audience. `AdTier` asks Pinterest/X (`requiresCreativeRef`) for a post/pin id instead of
+copy they cannot author, and echoes the UTM tag a created ad's clicks will actually carry.
+
+Nine ad networks now, not eight: `microsoft` had shipped as the ninth `AdsProvider` and
+`AD_NETWORKS` entry on the API but the frontend's own `AdNetwork` union, `AD_NETWORKS`
+array and per-network glyph table had not been told, so a Microsoft Advertising account
+would have rendered with no glyph and failed the exhaustive-by-type record. Fixed at the
+same seam that surfaced it.
+
+**Three duplications came out along the way, per [[no-technical-debt-rule]]:**
+- **The network glyph table existed THREE times** (ads, social, and a five-network subset
+  in `CreationNode`'s feed tiles) and had already drifted — the node's copy fell back to
+  a generic diamond for six networks a real feed tile can hold. Now one
+  `frontend/src/lib/networkGlyph.ts`, typed over the UNION of both vocabularies, so an
+  eleventh network fails to compile there instead of rendering unlabelled.
+- **The tab strip markup was hand-written twice** (ads, social) and both were silently
+  broken: the stylesheet highlighted `[aria-pressed='true']`, which a `role="tab"` never
+  sets, so neither panel showed which tab was selected. One `PanelTabs.tsx` now owns the
+  markup, the keyboard contract (arrow/Home/End navigation, roving tabindex), and the CSS
+  selector gained an `[aria-selected='true']` pair so the fix reaches both consumers and
+  every future tab strip.
+- **The `busy`/`error`/`notice` async-action dance was six near-identical copies** in the
+  old panel alone. `frontend/src/hooks/usePanelTask.ts` is now the one shape: `run()`
+  clears both messages before starting and reduces a thrown `Error` to its own message;
+  `fail()` lets a form state a refusal it caught itself (an empty budget) in the same
+  place and with the same clearing rule.
+
+Reads go through one shared client cache, `useAdAccounts.ts` (over the existing
+`infrastructure/http/readThrough.ts`, the same primitive `useTeamRoster` uses), so N tiers
+mounted in one commit cost ONE `/api/ads/accounts` + `/api/ads/networks` round trip, and
+connecting or disconnecting an account invalidates it so a just-removed account cannot
+still be offered as a launch target.
+
+Nine new `ads.*` MCP tools (`list_ad_sets`, `create_ad_set`, `update_ad_set`, `list_ads`,
+`create_ad`, `update_ad`) went into `builtinMcpService.ts` alongside the route, in the
+same vocabulary an agent and the canvas form now share. The three reads joined
+`CLOUD_AGENT_PLATFORM_TOOLS` in `cloudAgentToolset.ts`; every write stayed off it for the
+same reason `ads.create_campaign` is off it — on most networks the ad set is where the
+budget actually lives, so it is no safer than the campaign.
+
+Localized in all five catalogs (`canvas.ads.targeting`, `canvas.ads.adSets`,
+`canvas.ads.adTier`). `api/src/application/advertising/adSetService.test.ts` and the
+`adsProviders`/`cloudAgentToolset` suites pass unchanged; `npx eslint` on every new/changed
+file is clean.
+
 ## ✅ RESOLVED 2026-08-23 — The board can now record itself: Talktrack
 
 The canvas could edit a video and render one and never make one — the single most common

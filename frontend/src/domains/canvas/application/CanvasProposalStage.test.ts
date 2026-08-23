@@ -5,7 +5,7 @@
 
 import { describe, expect, it } from 'vitest';
 import type { Edge } from '@xyflow/react';
-import { CanvasProposalStage } from './CanvasProposalStage';
+import { CanvasProposalStage, type CanvasObjectFactory } from './CanvasProposalStage';
 import type { CanvasObject, CreationObjectKind } from '../domain/canvasObject';
 
 function object(id: string, kind = 'note'): CanvasObject {
@@ -16,9 +16,18 @@ function edge(id: string, source: string, target: string): Edge {
   return { id, source, target };
 }
 
+/** A grid factory: every object lands 100px below the last, so placement is assertable. */
+const factory: CanvasObjectFactory = {
+  defaults: (kind) => ({ kind, title: kind }),
+  position: (against, requested, narrow, _kind) => (
+    narrow ? { x: 0, y: against.length * 100 } : { x: requested.x ?? 0, y: requested.y ?? 0 }
+  ),
+  narrow: () => true,
+};
+
 function stageOver(nodes: CanvasObject[] = [], edges: Edge[] = []) {
   let counter = 0;
-  return new CanvasProposalStage({ nodes: () => nodes, edges: () => edges }, () => `change-${++counter}`);
+  return new CanvasProposalStage({ nodes: () => nodes, edges: () => edges }, factory, () => `id-${++counter}`);
 }
 
 describe('CanvasProposalStage', () => {
@@ -49,7 +58,7 @@ describe('CanvasProposalStage', () => {
 
   it('reads the board live rather than freezing it at construction', () => {
     const nodes = [object('first')];
-    const stage = new CanvasProposalStage({ nodes: () => nodes, edges: () => [] });
+    const stage = new CanvasProposalStage({ nodes: () => nodes, edges: () => [] }, factory);
     nodes.push(object('second'));
 
     expect(stage.nodes().map((node) => node.id)).toEqual(['first', 'second']);
@@ -67,12 +76,49 @@ describe('CanvasProposalStage', () => {
     stage.deleteConnection('Unlink', 'e1');
 
     expect(stage.list().map((change) => change.id)).toEqual([
-      'change-1', 'change-2', 'change-3', 'change-4', 'change-5', 'change-6', 'change-7', 'change-8',
+      'id-1', 'id-2', 'id-3', 'id-4', 'id-5', 'id-6', 'id-7', 'id-8',
     ]);
     expect(stage.list().map((change) => change.type)).toEqual([
       'object.add', 'object.update', 'object.delete', 'object.layout',
       'object.action', 'connection.add', 'connection.update', 'connection.delete',
     ]);
+  });
+
+  it('places each new object against the board AND what this turn already staged', () => {
+    const stage = stageOver([object('committed')]);
+
+    const first = stage.createObject('note');
+    expect(first.position).toEqual({ x: 0, y: 100 });
+    stage.addObject('Add first', first);
+
+    // The bug this ends: a tool that captured the board before the previous tool
+    // staged its object placed the second one on top of the first.
+    const second = stage.createObject('note');
+    expect(second.position).toEqual({ x: 0, y: 200 });
+  });
+
+  it('gives a new object the kind registry defaults and a minted id', () => {
+    const stage = stageOver();
+    const made = stage.createObject('note');
+
+    expect(made).toMatchObject({ id: 'id-1', type: 'creation', data: { kind: 'note', title: 'note' } });
+  });
+
+  it('stages a connection with the board edge style and the given kind', () => {
+    const stage = stageOver();
+    const made = stage.connect('Link', 'a', 'b', { kind: 'data', label: 'joined', animated: true });
+
+    expect(made).toMatchObject({ id: 'id-1', source: 'a', target: 'b', type: 'smoothstep', label: 'joined', animated: true, data: { connectionKind: 'data' } });
+    expect(stage.list()).toHaveLength(1);
+    expect(stage.hasConnection('id-1')).toBe(true);
+  });
+
+  it('leaves label and animated off a connection that did not ask for them', () => {
+    const stage = stageOver();
+    const made = stage.connect('Link', 'a', 'b', { kind: 'reference' });
+
+    expect('label' in made).toBe(false);
+    expect('animated' in made).toBe(false);
   });
 
   it('drains the turn and starts the next one empty', () => {

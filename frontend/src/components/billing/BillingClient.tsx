@@ -26,6 +26,11 @@
  *     where WE send money, a merchant account is where a CUSTOMER sends it. Filing
  *     the second under the first is how a founder comes to look for "how do I
  *     invoice somebody" under a heading about their own bank details.
+ *   - Tax (`/billing/tax`)           — a payee's own W-9/W-8, and (manager+) the
+ *     year-end 1099 report. Its own tab rather than a Payouts section because the
+ *     audiences differ: every payee fills the form, only a manager reads the
+ *     report — folding it under Payouts would put a manager-only aggregate one
+ *     click from a page every payee already has a reason to open.
  */
 
 import { useCallback, useEffect, useState } from 'react';
@@ -43,6 +48,7 @@ import { getStoredTenant } from '@/lib/auth';
 import { billingApi, type BillingSubscription } from '@/lib/billingApi';
 import { cardValidationApi, type CardValidationState } from '@/lib/builderforceApi';
 import { payoutsApi, type PayoutRecord } from '@/lib/payoutsApi';
+import { TaxCenter } from '@/components/tax/TaxCenter';
 import { useLocale } from 'next-intl';
 import { useMoneyFormat } from '@/lib/useMoneyFormat';
 import { useFormat } from "@/i18n/useFormat";
@@ -63,7 +69,7 @@ const rowStyle: React.CSSProperties = {
   display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 'var(--font-size-body)', padding: '6px 0',
 };
 
-export type BillingView = 'account' | 'payouts' | 'getPaid';
+export type BillingView = 'account' | 'payouts' | 'getPaid' | 'tax';
 
 export default function BillingClient({ view = 'account' }: { view?: BillingView }) {
   const { formatCents } = useMoneyFormat();
@@ -145,6 +151,7 @@ export default function BillingClient({ view = 'account' }: { view?: BillingView
     { id: 'account', label: t('accountTab'), icon: '💳', href: '/billing' },
     { id: 'payouts', label: t('payoutsTab'), icon: '🏦', href: '/billing/payouts' },
     { id: 'getPaid', label: t('getPaidTab'), icon: '📥', href: '/billing/get-paid' },
+    { id: 'tax', label: t('taxTab'), icon: '🧾', href: '/billing/tax' },
   ];
 
   const renderAccount = () => (
@@ -316,7 +323,10 @@ export default function BillingClient({ view = 'account' }: { view?: BillingView
       <p style={{ fontSize: 'var(--font-size-body)', color: 'var(--text-muted)', margin: '0 0 20px' }}>{t('intro')}</p>
       <DestinationIndex items={subTabs} activeId={view} ariaLabel={t('subnavLabel')} />
       {error && <p role="alert" style={{ color: 'var(--coral-bright)', fontSize: 'var(--font-size-body)', marginBottom: 14 }}>{error}</p>}
-      {view === 'payouts' ? renderPayouts() : view === 'getPaid' ? renderGetPaid() : renderAccount()}
+      {view === 'payouts' ? renderPayouts()
+        : view === 'getPaid' ? renderGetPaid()
+        : view === 'tax' ? <TaxCenter />
+        : renderAccount()}
     </PageContainer>
   );
 }

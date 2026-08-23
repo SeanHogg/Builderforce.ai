@@ -298,7 +298,7 @@ import { compileBoardFlow } from '@/domains/workflow/domain/compileBoardFlow';
 import { boardFlowFromDefinition, type UnpackedFlow } from '@/domains/workflow/domain/boardFlowFromDefinition';
 import { flowStepsFromCanvasSteps } from '@/domains/workflow/domain/flowStepsFromCanvasSteps';
 import { loadTemplateGraph } from '@/lib/evermindBuild';
-import { isStepChoice, parseStepChoice, stepConfigOf, stepKindOf } from '@/domains/workflow/domain/flowStepObject';
+import { createFlowStepData, isStepChoice, parseStepChoice, stepConfigOf, stepKindOf } from '@/domains/workflow/domain/flowStepObject';
 import { outletForHandle } from '@/domains/workflow/domain/stepOutlets';
 import { nodeKindLabel } from '@/domains/workflow/domain/stepCatalog';
 import { boundingRect, frameCollapsePatch, frameMemberIds, isFrameCollapsed } from '@/domains/canvas/domain/canvasFrame';
@@ -833,10 +833,20 @@ const SEED = {
   sarah: '00000000-0000-4000-8000-000000000005', jordan: '00000000-0000-4000-8000-000000000006',
   agent: '00000000-0000-4000-8000-000000000007', workflowWebsite: '00000000-0000-4000-8000-000000000008',
   websiteDashboard: '00000000-0000-4000-8000-000000000009',
+  workflowTrigger: '00000000-0000-4000-8000-00000000000a', workflowDraft: '00000000-0000-4000-8000-00000000000b',
+  workflowPublish: '00000000-0000-4000-8000-00000000000c', workflowTriggerDraft: '00000000-0000-4000-8000-00000000000d',
+  workflowDraftPublish: '00000000-0000-4000-8000-00000000000e',
 };
 
 const INITIAL_NODES: CreationFlowNode[] = [
-  { id: SEED.workflow, type: 'creation', position: { x: 80, y: 55 }, data: { kind: 'workflow', title: 'Fall campaign workflow', status: 'Ready' } },
+  // A SECTION, not a legacy `workflow` card: the canvas IS the workflow, so the
+  // seeded flow is a frame holding the steps it runs. Sized to stay clear of the
+  // website seeded at x=610 — frame containment reads a step's CENTRE against this
+  // rect, so the frame's right edge has to end well short of it.
+  { id: SEED.workflow, type: 'creation', position: { x: 80, y: 45 }, style: { width: 480, height: 260 }, zIndex: -1, data: { kind: 'frame', title: 'Fall campaign workflow', framePurpose: 'The steps of this flow' } },
+  { id: SEED.workflowTrigger, type: 'creation', position: { x: 100, y: 95 }, style: { width: 140, height: 150 }, data: createFlowStepData('trigger', 'Weekday cadence') as CreationNodeData },
+  { id: SEED.workflowDraft, type: 'creation', position: { x: 260, y: 95 }, style: { width: 140, height: 150 }, data: { ...(createFlowStepData('agent', 'Draft campaign copy') as CreationNodeData), stepConfig: { role: 'code-creator', task: 'Draft the fall campaign email and landing copy from the brief.' } } },
+  { id: SEED.workflowPublish, type: 'creation', position: { x: 420, y: 95 }, style: { width: 140, height: 150 }, data: createFlowStepData('output', 'Publish landing page') as CreationNodeData },
   { id: SEED.website, type: 'creation', position: { x: 610, y: 45 }, data: { kind: 'website', title: 'Campaign landing page', status: 'Draft' } },
   { id: SEED.dashboard, type: 'creation', position: { x: 1140, y: 55 }, data: { kind: 'dashboard', title: 'Campaign forecast' } },
   // The Brain Object is 390px wide once the conversation is placed INSIDE it, so
@@ -849,6 +859,8 @@ const INITIAL_NODES: CreationFlowNode[] = [
 ];
 
 const INITIAL_EDGES: Edge[] = [
+  { id: SEED.workflowTriggerDraft, source: SEED.workflowTrigger, target: SEED.workflowDraft, type: 'smoothstep', data: { connectionKind: 'control' } },
+  { id: SEED.workflowDraftPublish, source: SEED.workflowDraft, target: SEED.workflowPublish, type: 'smoothstep', data: { connectionKind: 'control' } },
   { id: SEED.workflowWebsite, source: SEED.workflow, target: SEED.website, label: 'publishes', type: 'smoothstep', data: { connectionKind: 'control' } },
   { id: SEED.websiteDashboard, source: SEED.website, target: SEED.dashboard, label: 'measures', type: 'smoothstep', data: { connectionKind: 'data' } },
 ];
@@ -2692,7 +2704,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * sees the CURRENT board rather than whichever one the memo captured.
    */
   const stageRef = useRef<CanvasProposalStage | null>(null);
-  stageRef.current ??= new CanvasProposalStage({ nodes: () => nodesRef.current, edges: () => edgesRef.current });
+  stageRef.current ??= new CanvasProposalStage(
+    { nodes: () => nodesRef.current, edges: () => edgesRef.current },
+    { defaults: createDefaultCreationData, position: nextCanvasObjectPosition, narrow: () => typeof window !== 'undefined' && window.innerWidth <= 760 },
+  );
   const stage = stageRef.current;
 
   const updateNodeData = useCallback((nodeId: string, patch: Partial<CreationNodeData>) => {
@@ -3542,12 +3557,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       // Actionable rather than a bare failure: the fix is one panel away.
       return { ok: false, error: tSocial('noAccountsHint') };
     }
-    const node = newNode('socialFeed', nextCanvasObjectPosition(
-      stage.nodes(),
-      { ...(opts.x != null ? { x: opts.x } : {}), ...(opts.y != null ? { y: opts.y } : {}) },
-      typeof window !== 'undefined' && window.innerWidth <= 760,
-      'socialFeed',
-    ));
+    const node = stage.createObject('socialFeed', { ...(opts.x != null ? { x: opts.x } : {}), ...(opts.y != null ? { y: opts.y } : {}) });
     node.data = {
       ...node.data,
       title: opts.title?.trim().slice(0, 160) || tSocial('feedTitle'),
@@ -3971,15 +3981,29 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       }).catch((error) => setNotice(error instanceof Error ? error.message : t('noticeExpandProjectFailed')));
       return;
     }
+    // A SECTION, not a legacy `workflow` card: the canvas IS the workflow. Sized so
+    // its steps' centres stay inside it and the 'Next delivery task' card seeded
+    // below it stays clear — see `INITIAL_NODES`' own frame for the same accounting.
+    const deliveryFramePosition = { x: project.position.x + 850, y: project.position.y - 150 };
     const related: CreationFlowNode[] = [
       { id: crypto.randomUUID(), type: 'creation', position: { x: project.position.x + 330, y: project.position.y - 150 }, data: { kind: 'dashboard', title: `${project.data.title} health` } },
       { id: crypto.randomUUID(), type: 'creation', position: { x: project.position.x + 330, y: project.position.y + 100 }, data: { kind: 'roadmap', title: `${project.data.title} roadmap`, status: 'Live' } },
-      { id: crypto.randomUUID(), type: 'creation', position: { x: project.position.x + 850, y: project.position.y - 120 }, data: { kind: 'workflow', title: 'Delivery workflow', status: 'Ready' } },
+      { id: crypto.randomUUID(), type: 'creation', position: deliveryFramePosition, style: { width: 380, height: 220 }, zIndex: -1, data: { kind: 'frame', title: 'Delivery workflow', framePurpose: t('flowStep.framePurpose') } },
       { id: crypto.randomUUID(), type: 'creation', position: { x: project.position.x + 850, y: project.position.y + 150 }, data: { kind: 'task', title: 'Next delivery task', status: 'Ready', role: 'Campaign Strategist' } },
     ];
     const additions = related.filter((candidate) => !nodes.some((node) => node.data.kind === candidate.data.kind && node.data.title === candidate.data.title));
-    setNodes((current) => [...current, ...additions]);
-    setEdges((current) => [...current, ...additions.map((candidate) => ({ id: crypto.randomUUID(), source: project.id, target: candidate.id, type: 'smoothstep' }))]);
+    // The frame's own steps, added only when the frame itself was — re-expanding an
+    // already-present section must not duplicate what is already inside it.
+    const deliveryFrame = additions.find((candidate) => candidate.data.kind === 'frame' && candidate.data.title === 'Delivery workflow');
+    const deliveryTrigger: CreationFlowNode | null = deliveryFrame ? { id: crypto.randomUUID(), type: 'creation', position: { x: deliveryFramePosition.x + 30, y: deliveryFramePosition.y + 50 }, style: { width: 140, height: 150 }, data: createFlowStepData('trigger', 'Sprint cadence') as CreationNodeData } : null;
+    const deliveryTask: CreationFlowNode | null = deliveryFrame ? { id: crypto.randomUUID(), type: 'creation', position: { x: deliveryFramePosition.x + 200, y: deliveryFramePosition.y + 50 }, style: { width: 140, height: 150 }, data: createFlowStepData('agent', 'Ship next task') as CreationNodeData } : null;
+    const deliverySteps = [deliveryTrigger, deliveryTask].filter((step): step is CreationFlowNode => step !== null);
+    setNodes((current) => [...current, ...additions, ...deliverySteps]);
+    setEdges((current) => [
+      ...current,
+      ...additions.map((candidate) => ({ id: crypto.randomUUID(), source: project.id, target: candidate.id, type: 'smoothstep' })),
+      ...(deliveryTrigger && deliveryTask ? [{ id: crypto.randomUUID(), source: deliveryTrigger.id, target: deliveryTask.id, type: 'smoothstep', data: { connectionKind: 'control' } }] : []),
+    ]);
     setNotice(t('noticeRelationshipsAdded'));
     trackActivity('creation_project_expanded', { sessionId, metadata: { clientSurface: canvasSurface(), projectId: Number.isInteger(projectId) ? projectId : undefined } });
   }, [nodes, persistence, selectedNode, sessionId, setEdges, setNodes]);
@@ -4205,18 +4229,31 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       setNotice(t('noticeDatasetStepOne'));
       return;
     }
-    const specs: Array<{ kind: CreationObjectKind; title: string; status: string; x: number; y: number; step: number; instruction: string; detail?: Partial<CreationNodeData> }> = [
+    const specs: Array<{ kind: CreationObjectKind; title: string; status: string; x: number; y: number; step: number; instruction: string; detail?: Partial<CreationNodeData>; pipelineSteps?: Array<{ title: string; status: string }> }> = [
       { kind: 'dataset', title: `${selectedNode.data.title} training corpus`, status: 'Start here', x: -430, y: -20, step: 1, instruction: 'Select this card, then import a CSV or TSV in Details.' },
-      { kind: 'workflow', title: 'Tokenize examples', status: 'Waiting for data', x: -430, y: 250, step: 2, instruction: 'Review the corpus, then run tokenization.', detail: { steps: [{ title: 'Inspect corpus', status: 'Waiting' }, { title: 'Build vocabulary', status: 'Waiting' }, { title: 'Verify tokens', status: 'Waiting' }] } },
-      { kind: 'workflow', title: 'Distil & tune', status: 'Waiting for tokens', x: -20, y: 250, step: 3, instruction: 'Choose self-learning or a teacher, then adapt the model.', detail: { steps: [{ title: 'Choose teacher', status: 'Waiting' }, { title: 'Create exemplars', status: 'Waiting' }, { title: 'Adapt weights', status: 'Waiting' }, { title: 'Save version', status: 'Waiting' }] } },
+      // A guided STAGE is a section too: what used to be a `workflow` card's
+      // display-only `steps` list (cosmetic status lines, never compiler input) is
+      // now a frame holding one status-only `flowStep` per line — see below.
+      { kind: 'frame', title: 'Tokenize examples', status: 'Waiting for data', x: -430, y: 250, step: 2, instruction: 'Review the corpus, then run tokenization.', pipelineSteps: [{ title: 'Inspect corpus', status: 'Waiting' }, { title: 'Build vocabulary', status: 'Waiting' }, { title: 'Verify tokens', status: 'Waiting' }] },
+      { kind: 'frame', title: 'Distil & tune', status: 'Waiting for tokens', x: -20, y: 250, step: 3, instruction: 'Choose self-learning or a teacher, then adapt the model.', pipelineSteps: [{ title: 'Choose teacher', status: 'Waiting' }, { title: 'Create exemplars', status: 'Waiting' }, { title: 'Adapt weights', status: 'Waiting' }, { title: 'Save version', status: 'Waiting' }] },
       { kind: 'evaluation', title: 'Quality gate', status: 'Waiting for version', x: 800, y: 15, step: 4, instruction: 'Test learned answers before enabling replies.', detail: { verdict: 'Awaiting trained version', gaps: ['Run readiness prompts', 'Compare held-out loss', 'Approve the version'], recommendations: ['Complete distillation and tuning first.', 'Check regression against prior learnings.', 'Publish only after the model is coherent.'] } },
       { kind: 'dashboard', title: 'Learning telemetry', status: 'Waiting for run', x: 800, y: 300, step: 5, instruction: 'Observe loss, weight movement, and learned examples.', detail: { kpis: [{ label: 'Loss', value: '—', trend: 'After first run' }, { label: 'Weights moved', value: '—', trend: 'After first run' }, { label: 'Examples learned', value: '0', trend: 'No run yet' }], chartLabels: ['No training runs yet'], chartValues: [0] } },
     ];
     const created = specs.map((spec) => {
       const node = newNode(spec.kind, { x: selectedNode.position.x + spec.x, y: selectedNode.position.y + spec.y });
-      node.data = { ...node.data, ...spec.detail, title: spec.title, status: spec.status, modelPipelineFor: selectedNode.id, pipelineStep: spec.step, pipelineStart: spec.step === 1, pipelineInstruction: spec.instruction };
+      node.data = { ...node.data, ...spec.detail, title: spec.title, status: spec.status, modelPipelineFor: selectedNode.id, pipelineStep: spec.step, pipelineStart: spec.step === 1, pipelineInstruction: spec.instruction, ...(spec.kind === 'frame' ? { framePurpose: spec.instruction } : {}) };
+      if (spec.kind === 'frame') { node.style = { width: 380, height: 70 + (spec.pipelineSteps?.length ?? 0) * 54 }; node.zIndex = -1; }
       return node;
     });
+    // One status-only `flowStep` per cosmetic line, positioned inside the stage
+    // frame it belongs to. `pipelineStep`/`modelPipelineFor` (not any board wiring)
+    // are what drive this walkthrough, so these carry no connections of their own.
+    const stageSteps = specs.flatMap((spec, index) => (spec.pipelineSteps ?? []).map((line, lineIndex) => {
+      const node = newNode('flowStep', { x: created[index]!.position.x + 20, y: created[index]!.position.y + 60 + lineIndex * 54 });
+      node.style = { width: 340, height: 46 };
+      node.data = { ...node.data, ...createFlowStepData('agent', line.title), status: line.status, modelPipelineFor: selectedNode.id };
+      return node;
+    }));
     const [dataset, tokenizer, tuning, evaluation, telemetry] = created;
     const sequence = [
       { source: dataset!.id, target: tokenizer!.id, label: '1 · examples' },
@@ -4225,10 +4262,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       { source: selectedNode.id, target: evaluation!.id, label: '4 · test' },
       { source: evaluation!.id, target: telemetry!.id, label: '5 · observe' },
     ];
-    setNodes((current) => [...current.map((node) => node.id === selectedNode.id ? { ...node, data: { ...node.data, pipelineExpanded: true } } : node), ...created]);
+    setNodes((current) => [...current.map((node) => node.id === selectedNode.id ? { ...node, data: { ...node.data, pipelineExpanded: true } } : node), ...created, ...stageSteps]);
     setEdges((current) => [...current, ...sequence.map((edge) => ({ ...edge, id: crypto.randomUUID(), type: 'smoothstep', animated: true, markerEnd: { type: MarkerType.ArrowClosed } }))]);
     setSelectedId(dataset!.id); setSelectedIds([dataset!.id]); openNodeInspector(dataset!.id);
-    window.setTimeout(() => void flowRef.current?.fitView({ nodes: [selectedNode, ...created].map((node) => ({ id: node.id })), padding: .16, duration: 400 }), 0);
+    window.setTimeout(() => void flowRef.current?.fitView({ nodes: [selectedNode, ...created, ...stageSteps].map((node) => ({ id: node.id })), padding: .16, duration: 400 }), 0);
     setNotice(t('noticeDatasetStepOne'));
   }, [nodes, openNodeInspector, selectedNode, setEdges, setNodes]);
 
@@ -4515,8 +4552,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * the click path, so both routes leave identical state.
    */
   const createBuildForTool = useCallback(async (input: { title: string; modality: ProjectModality }): Promise<BoundCanvasBuild> => {
-    const narrowViewport = typeof window !== 'undefined' && window.innerWidth <= 760;
-    const node = newNode('build', nextCanvasObjectPosition(stage.nodes(), {}, narrowViewport, 'build'));
+    const node = stage.createObject('build');
     const ide = await createCanvasBuild({ title: input.title, modality: input.modality });
     const patch = canvasBuildPatch(ide);
     node.data = { ...node.data, ...patch, title: input.title };
@@ -4558,8 +4594,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       }));
     },
     addObject: (kind, fields, at) => {
-      const narrowViewport = typeof window !== 'undefined' && window.innerWidth <= 760;
-      const node = newNode(kind as CreationObjectKind, nextCanvasObjectPosition(stage.nodes(), at ?? {}, narrowViewport, kind as CreationObjectKind));
+      const node = stage.createObject(kind as CreationObjectKind, at ?? {});
       node.data = { ...node.data, ...sanitizeCreationObjectPatch(kind as CreationObjectKind, fields) } as CreationNodeData;
       stage.addObject(String(fields.title ?? node.data.title), node);
       return { objectId: node.id };
@@ -4619,7 +4654,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     asset: CanvasImageAsset,
     options: { title: string; prompt?: string; at?: { x?: number; y?: number } },
   ): CreationFlowNode => {
-    const node = newNode('image', nextCanvasObjectPosition(stage.nodes(), options.at ?? {}, typeof window !== 'undefined' && window.innerWidth <= 760, 'image'));
+    const node = stage.createObject('image', options.at ?? {});
     const mimeType = asset.url.startsWith('data:image/png') || /\.png(?:$|[?#])/i.test(asset.url) ? 'image/png'
       : asset.url.startsWith('data:image/webp') || /\.webp(?:$|[?#])/i.test(asset.url) ? 'image/webp' : 'image/jpeg';
     const extension = mimeType === 'image/png' ? 'png' : mimeType === 'image/webp' ? 'webp' : 'jpg';
@@ -4902,8 +4937,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         stage.updateObject(t('founderCompanySynced', { title: String(fields.title) }), existing.id, patch);
         return { ok: true, proposed: true, companyFound: true, object: { id: existing.id, kind: 'company', title: fields.title, updated: true } };
       }
-      const isNarrow = typeof window !== 'undefined' && window.innerWidth <= 760;
-      const node = newNode('company', nextCanvasObjectPosition(stage.nodes(), args, isNarrow, 'company'));
+      const node = stage.createObject('company', args);
       node.data = { ...node.data, ...patch } as CreationNodeData;
       stage.addObject(t('founderCompanySynced', { title: String(fields.title) }), node);
       return { ok: true, proposed: true, companyFound: true, object: { id: node.id, kind: 'company', title: fields.title } };
@@ -4963,8 +4997,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         regionName: market,
       });
       const patch = sanitizeCreationObjectPatch('map', fields);
-      const isNarrow = typeof window !== 'undefined' && window.innerWidth <= 760;
-      const node = newNode('map', nextCanvasObjectPosition(stage.nodes(), args, isNarrow, 'map'));
+      const node = stage.createObject('map', args);
       node.data = { ...node.data, ...patch } as CreationNodeData;
       stage.addObject(t('founderCompetitorMapProposal', { title }), node);
       return {
@@ -5248,12 +5281,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       // DIFFERENT designs rather than the same template repeated to reach a number.
       const templateIds = [...new Set([...requested, ...RESUME_TEMPLATES.map((template) => template.id)])].slice(0, Math.max(count, requested.length));
 
-      const narrowViewport = typeof window !== 'undefined' && window.innerWidth <= 760;
       const variants = resumeTemplateVariants(document, templateIds, { title: String(source.data.title || '') });
       const created: Array<{ id: string; templateId: string; title: string }> = [];
       for (const variant of variants) {
-        const placed = stage.nodes();
-        const node = newNode('resume', nextCanvasObjectPosition(placed, {}, narrowViewport, 'resume'));
+        const node = stage.createObject('resume');
         node.data = {
           ...node.data,
           ...resumeNodePatch(variant.family),
@@ -5355,8 +5386,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const title = String(args.title ?? '').trim() || embedded || fileName || String(source.data.title || t('resumeEditor.untitledVersion'));
       const family = createResumeFamily({ title, markdown, document });
 
-      const narrowViewport = typeof window !== 'undefined' && window.innerWidth <= 760;
-      const node = newNode('resume', nextCanvasObjectPosition(all, { x: source.position.x + 460, y: source.position.y }, narrowViewport, 'resume'));
+      const node = stage.createObject('resume', { x: source.position.x + 460, y: source.position.y });
       node.data = { ...node.data, ...resumeNodePatch(family), title, status: t('resumeEditor.statusOriginal') };
       node.style = { width: 560, height: 620 };
       stage.addObject(t('resumeImportedFrom', { title: String(source.data.title || '') }), node);
@@ -5450,8 +5480,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         return { error: `Reading the file failed: ${error instanceof Error ? error.message : String(error)}` };
       }
 
-      const narrowViewport = typeof window !== 'undefined' && window.innerWidth <= 760;
-      const node = newNode('document', nextCanvasObjectPosition(all, { x: source.position.x + 460, y: source.position.y }, narrowViewport, 'document'));
+      const node = stage.createObject('document', { x: source.position.x + 460, y: source.position.y });
       node.data = {
         ...node.data,
         title: String(args.title ?? '').trim() || fileName.replace(/\.[^.]+$/, '') || String(source.data.title || 'Document'),
@@ -6047,7 +6076,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         stage.updateObject(`Update ${kind} “${title}”`, existing.id, patch);
         return { ...payload, proposed: true, materialized: { id: existing.id, kind, title, updated: true } };
       }
-      const node = newNode(kind, nextCanvasObjectPosition(stage.nodes(), { x: target.position.x + 460, y: target.position.y }, typeof window !== 'undefined' && window.innerWidth <= 760, kind));
+      const node = stage.createObject(kind, { x: target.position.x + 460, y: target.position.y });
       node.data = { ...node.data, ...patch };
       if (kind === 'table') node.style = { width: 720, height: 460 };
       if (kind === 'map') node.style = { width: 420, height: 380 };
@@ -6193,7 +6222,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         return { ...payload, object: { id: existing.id, kind: 'erd', title, updated: true } };
       }
       const anchor = inferredFrom ? all.find((node) => node.id === inferredFrom.id) : undefined;
-      const node = newNode('erd', nextCanvasObjectPosition(all, anchor ? { x: anchor.position.x + 460, y: anchor.position.y } : args, typeof window !== 'undefined' && window.innerWidth <= 760, 'erd'));
+      const node = stage.createObject('erd', anchor ? { x: anchor.position.x + 460, y: anchor.position.y } : args);
       node.data = { ...node.data, ...patch };
       node.style = { width: 760, height: 560 };
       stage.addObject(`Create data model “${title}”`, node);
@@ -6239,7 +6268,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       if (!args.materialize) return payload;
       if (!canEdit) return { ...payload, error: 'The current session role cannot edit this canvas' };
       const title = `${target.data.title} ${format === 'mermaid' ? 'diagram source' : `DDL (${dialect})`}`;
-      const node = newNode('code', nextCanvasObjectPosition(all, { x: target.position.x + 800, y: target.position.y }, typeof window !== 'undefined' && window.innerWidth <= 760, 'code'));
+      const node = stage.createObject('code', { x: target.position.x + 800, y: target.position.y });
       node.data = { ...node.data, ...sanitizeCreationObjectPatch('code', {
         title, code: output, language: format === 'mermaid' ? 'mermaid' : 'sql',
         status: format === 'mermaid' ? 'Diagram source' : `${model.entities.length} tables`,
@@ -6308,7 +6337,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       }
 
       const title = (args.title || `${left.data.title} × ${right.data.title}`).trim().slice(0, 160);
-      const node = newNode('table', nextCanvasObjectPosition(all, { x: Math.max(left.position.x, right.position.x) + 460, y: left.position.y }, typeof window !== 'undefined' && window.innerWidth <= 760, 'table'));
+      const node = stage.createObject('table', { x: Math.max(left.position.x, right.position.x) + 460, y: left.position.y });
       node.data = { ...node.data, ...sanitizeCreationObjectPatch('table', {
         title, columns: result.columns, rows: result.rows.slice(0, MAX_MATERIALIZED_ROWS), rowCount: result.rowCount,
         sampleRows: result.rows.slice(0, 8),
@@ -6458,7 +6487,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         stage.updateObject(`Update contract “${title}”`, existing.id, fields);
         return { ...payload, object: { id: existing.id, kind: 'dataContract', title, updated: true } };
       }
-      const node = newNode('dataContract', nextCanvasObjectPosition(all, { x: dataset.position.x + 460, y: dataset.position.y + 300 }, typeof window !== 'undefined' && window.innerWidth <= 760, 'dataContract'));
+      const node = stage.createObject('dataContract', { x: dataset.position.x + 460, y: dataset.position.y + 300 });
       node.data = { ...node.data, ...fields };
       stage.addObject(`Add contract “${title}”`, node);
       stage.addConnection(
@@ -6538,7 +6567,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         stage.updateObject(`Re-run quality on ${dataset.data.title}`, existing.id, fields);
         return { ...payload, object: { id: existing.id, kind: 'dataQuality', title, updated: true } };
       }
-      const node = newNode('dataQuality', nextCanvasObjectPosition(all, { x: dataset.position.x + 920, y: dataset.position.y + 300 }, typeof window !== 'undefined' && window.innerWidth <= 760, 'dataQuality'));
+      const node = stage.createObject('dataQuality', { x: dataset.position.x + 920, y: dataset.position.y + 300 });
       node.data = { ...node.data, ...fields };
       stage.addObject(`Add quality checks “${title}”`, node);
       stage.addConnection(
@@ -6611,7 +6640,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         metricId = existing.id;
         stage.updateObject(`Update metric “${definition.name}”`, existing.id, metricFields);
       } else {
-        const node = newNode('metric', nextCanvasObjectPosition(all, { x: dataset.position.x + 460, y: dataset.position.y - 260 }, typeof window !== 'undefined' && window.innerWidth <= 760, 'metric'));
+        const node = stage.createObject('metric', { x: dataset.position.x + 460, y: dataset.position.y - 260 });
         node.data = { ...node.data, ...metricFields };
         metricId = node.id;
         stage.addObject(`Define metric “${definition.name}”`, node);
@@ -6638,7 +6667,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
 
       // The artifact stores `metricId`, not a literal — which is what makes the
       // definition load-bearing rather than decorative.
-      const artifact = newNode(materializeAs, nextCanvasObjectPosition(stage.nodes(), { x: dataset.position.x + 920, y: dataset.position.y - 260 }, typeof window !== 'undefined' && window.innerWidth <= 760, materializeAs));
+      const artifact = stage.createObject(materializeAs, { x: dataset.position.x + 920, y: dataset.position.y - 260 });
       artifact.data = { ...artifact.data, ...sanitizeCreationObjectPatch(materializeAs, materializeAs === 'kpi'
         ? {
           title: definition.name, value: formatMetricValue(value.value, definition),
@@ -6719,7 +6748,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         stage.updateObject('Refresh lineage', existing.id, fields);
         return { ...payload, proposed: true, object: { id: existing.id, kind: 'lineage', title, updated: true } };
       }
-      const node = newNode('lineage', nextCanvasObjectPosition(all, {}, typeof window !== 'undefined' && window.innerWidth <= 760, 'lineage'));
+      const node = stage.createObject('lineage');
       node.data = { ...node.data, ...fields };
       stage.addObject('Trace lineage', node);
       return { ...payload, proposed: true, object: { id: node.id, kind: 'lineage', title, created: true } };
@@ -6792,7 +6821,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           ? `${failures.length} of ${cells.length} cells failed: ${failures.map((output) => output.error).join(' · ').slice(0, 300)}`
           : `Ran ${cells.length} cell${cells.length === 1 ? '' : 's'} over ${fmt.number(source.rows.length)} rows of ${String(target.data.title)}.`,
       });
-      const node = newNode('notebook', nextCanvasObjectPosition(all, {}, typeof window !== 'undefined' && window.innerWidth <= 760, 'notebook'));
+      const node = stage.createObject('notebook');
       node.data = { ...node.data, ...fields };
       stage.addObject('Run notebook', node);
 
@@ -6816,7 +6845,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             producedAt: new Date().toISOString(),
             summary: `Computed by notebook cell ${output.cellId}.`,
           });
-          const child = newNode('chart', nextCanvasObjectPosition([...all, node], {}, typeof window !== 'undefined' && window.innerWidth <= 760, 'chart'));
+          const child = stage.createObject('chart');
           child.data = { ...child.data, ...childFields };
           stage.addObject(`Chart from ${output.cellId}`, child);
           promoted.push({ id: child.id, kind: 'chart', cellId: output.cellId });
@@ -6884,7 +6913,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         stage.updateObject('Refresh training run', existing.id, fields);
         return { ok: true, proposed: true, object: { id: existing.id, kind: 'trainingRun', title, updated: true }, run: lowered };
       }
-      const node = newNode('trainingRun', nextCanvasObjectPosition(all, {}, typeof window !== 'undefined' && window.innerWidth <= 760, 'trainingRun'));
+      const node = stage.createObject('trainingRun');
       node.data = { ...node.data, ...fields };
       stage.addObject('Add training run', node);
       return { ok: true, proposed: true, object: { id: node.id, kind: 'trainingRun', title, created: true }, run: lowered };
@@ -6930,7 +6959,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         status: `${scored} of ${comparison.rows.length} scored`,
         summary: `${comparison.rows.length} runs ranked on ${comparison.rankBy}. ${scored < comparison.rows.length ? `${comparison.rows.length - scored} have not been evaluated.` : 'All runs evaluated.'}`,
       });
-      const node = newNode('runComparison', nextCanvasObjectPosition(all, {}, typeof window !== 'undefined' && window.innerWidth <= 760, 'runComparison'));
+      const node = stage.createObject('runComparison');
       node.data = { ...node.data, ...fields };
       stage.addObject('Compare runs', node);
       return { ok: true, proposed: true, object: { id: node.id, kind: 'runComparison', title, created: true }, comparison };
@@ -6980,7 +7009,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         status: `0 of ${samples.length} labelled`,
         summary: `${samples.length} rows sampled from ${fmt.number(source.rows.length)} for review. Nothing is labelled yet, so this set cannot score anything.`,
       });
-      const node = newNode('labelSet', nextCanvasObjectPosition(all, {}, typeof window !== 'undefined' && window.innerWidth <= 760, 'labelSet'));
+      const node = stage.createObject('labelSet');
       node.data = { ...node.data, ...fields };
       stage.addObject('Sample for labels', node);
       return { ok: true, proposed: true, object: { id: node.id, kind: 'labelSet', title, created: true }, sampled: samples.length, of: source.rows.length };
@@ -7041,7 +7070,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         // slope through a trend.
         summary: `Projected ${result.forecast.length} periods at ${result.slope >= 0 ? '+' : ''}${result.slope} per period, R² ${result.r2}${result.r2 < 0.5 ? ' — a weak fit, so treat the projection as a direction rather than a number' : ''}. ${result.anomalies.length} anomal${result.anomalies.length === 1 ? 'y' : 'ies'} against the trend.`,
       });
-      const node = newNode('chart', nextCanvasObjectPosition(all, {}, typeof window !== 'undefined' && window.innerWidth <= 760, 'chart'));
+      const node = stage.createObject('chart');
       node.data = { ...node.data, ...fields };
       stage.addObject('Forecast series', node);
       return { ok: true, proposed: true, object: { id: node.id, kind: 'chart', title, created: true }, ...result };
@@ -7229,10 +7258,9 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       }
       if (!schema.tables.length) return { error: `${source.name} reported no tables${args.dataset ? ` in dataset "${args.dataset}"` : ''}.` };
 
-      const all = stage.nodes();
       const fetchedAt = new Date().toISOString();
       const title = (args.title || source.name).trim().slice(0, 160);
-      const node = newNode('datasource', nextCanvasObjectPosition(all, args, typeof window !== 'undefined' && window.innerWidth <= 760, 'datasource'));
+      const node = stage.createObject('datasource', args);
       node.data = { ...node.data, ...sanitizeCreationObjectPatch('datasource', {
         title, tables: schema.tables, relationships: schema.relationships, scanned: schema.scanned,
         status: `${schema.tables.length} tables`,
@@ -7255,7 +7283,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const issues = validateDataModel(model);
       const summary = dataModelSummary(model, issues);
       const modelTitle = `${title} schema`;
-      const modelNode = newNode('erd', nextCanvasObjectPosition([...all, node], { x: node.position.x + 460, y: node.position.y }, typeof window !== 'undefined' && window.innerWidth <= 760, 'erd'));
+      const modelNode = stage.createObject('erd', { x: node.position.x + 460, y: node.position.y });
       modelNode.data = { ...modelNode.data, ...sanitizeCreationObjectPatch('erd', {
         title: modelTitle, dataModel: model, dialect: 'postgres', ddl: dataModelDdl(model, 'postgres'), mermaid: dataModelMermaid(model), issues,
         status: `${summary.entities} entities`,
@@ -7339,7 +7367,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             ...(materializeAs === 'dataset' ? { profile: profileTabular({ columns: result.columns, rows: result.rows }) } : {}),
           };
 
-      const node = newNode(materializeAs, nextCanvasObjectPosition(all, bound ? { x: bound.position.x + 460, y: bound.position.y + 300 } : {}, typeof window !== 'undefined' && window.innerWidth <= 760, materializeAs));
+      const node = stage.createObject(materializeAs, bound ? { x: bound.position.x + 460, y: bound.position.y + 300 } : {});
       node.data = { ...node.data, ...sanitizeCreationObjectPatch(materializeAs, { ...fields, ...provenance, fetchedAt }) };
       if (materializeAs === 'table' || materializeAs === 'dataset') node.style = { width: 720, height: 460 };
       stage.addObject(`Add ${materializeAs} “${title}”`, node);
@@ -7408,8 +7436,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         return { error: error instanceof Error ? error.message : 'That mailbox could not be read.' };
       }
 
-      const narrowViewport = typeof window !== 'undefined' && window.innerWidth <= 760;
-      const node = newNode('inbox', nextCanvasObjectPosition(stage.nodes(), args, narrowViewport, 'inbox'));
+      const node = stage.createObject('inbox', args);
       const unreadCount = read.triage.filter((m) => m.unread).length;
       node.data = {
         ...node.data,
@@ -7503,12 +7530,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         return { error: error instanceof Error ? error.message : 'That message could not be read.' };
       }
 
-      const node = newNode('email', nextCanvasObjectPosition(
-        stage.nodes(),
-        { x: source.position.x + 500, y: source.position.y },
-        typeof window !== 'undefined' && window.innerWidth <= 760,
-        'email',
-      ));
+      const node = stage.createObject('email', { x: source.position.x + 500, y: source.position.y });
       node.data = {
         ...node.data,
         title: message.subject,
@@ -7699,12 +7721,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const post = posts.find((item) => String(item.id) === String(args.postId));
       if (!post) return { error: 'That post is not in this feed — refresh it, or pin one of the posts it lists.' };
 
-      const node = newNode('socialPost', nextCanvasObjectPosition(
-        stage.nodes(),
-        { x: source.position.x + 500, y: source.position.y },
-        typeof window !== 'undefined' && window.innerWidth <= 760,
-        'socialPost',
-      ));
+      const node = stage.createObject('socialPost', { x: source.position.x + 500, y: source.position.y });
       node.data = { ...node.data, ...socialPostNodeData(post) };
       node.style = { width: 420, height: 420 };
       stage.addObject(`Pin ${post.network} post`, node);
@@ -7819,9 +7836,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         return { error: error instanceof Error ? error.message : 'That campaign could not be drafted.' };
       }
 
-      const node = newNode('socialCampaign', nextCanvasObjectPosition(
-        stage.nodes(), args, typeof window !== 'undefined' && window.innerWidth <= 760, 'socialCampaign',
-      ));
+      const node = stage.createObject('socialCampaign', args);
       node.data = { ...node.data, ...socialCampaignNodeData(created.campaign) };
       node.style = { width: 440, height: 460 };
       stage.addObject(`Add social campaign “${created.campaign.name}”`, node);
@@ -7953,8 +7968,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         }
       }
 
-      const narrowViewport = typeof window !== 'undefined' && window.innerWidth <= 760;
-      const node = newNode('diagnostics', nextCanvasObjectPosition(stage.nodes(), args, narrowViewport, 'diagnostics'));
+      const node = stage.createObject('diagnostics', args);
       node.data = {
         ...node.data,
         title: definition.name,
@@ -8122,7 +8136,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         return accountGateResult(CANVAS_GAME_TOOL, CANVAS_GAME_ACCOUNT_GATE);
       }
 
-      const node = newNode('game', nextCanvasObjectPosition(stage.nodes(), args, typeof window !== 'undefined' && window.innerWidth <= 760, 'game'));
+      const node = stage.createObject('game', args);
       const gameTitle = typeof args.title === 'string' && args.title.trim() ? args.title.trim().slice(0, 160) : brief.slice(0, 60);
       const seed: CreationNodeData = { ...node.data, kind: 'game', title: gameTitle, prompt: brief, gamePlatform: platform };
 
@@ -8195,8 +8209,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       if (unmeasured) return unmeasured;
       const updateTarget = duplicateAddUpdateTarget(prompt, args.kind, nodes, effectiveSelectedIds);
       if (updateTarget) return { error: `This is a correction to selected ${args.kind} ${updateTarget.id}. Call canvas_update_object for that object instead of creating a duplicate.` };
-      const narrowViewport = typeof window !== 'undefined' && window.innerWidth <= 760;
-      const node = newNode(args.kind, nextCanvasObjectPosition(stage.nodes(), args, narrowViewport, args.kind));
+      const node = stage.createObject(args.kind, args);
       if (args.kind === 'guidedTour') node.data = { ...node.data, ...localizedTourDefaults() };
       let authored = sanitizeCreationObjectPatch(args.kind, { ...((args.fields && typeof args.fields === 'object') ? args.fields : {}), title: args.title, subtitle: args.subtitle, status: args.status });
       if (args.kind === 'resume') authored = initializeResumeFromPatch(typeof authored.title === 'string' ? authored.title : node.data.title, authored);
@@ -8531,8 +8544,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       });
       if (!built.cases.length) return { error: 'Nothing to test — pass routes, page html, or at least one scenario.' };
 
-      const isNarrow = typeof window !== 'undefined' && window.innerWidth <= 760;
-      const planNode = newNode('testPlan', nextCanvasObjectPosition(stage.nodes(), {}, isNarrow, 'testPlan'));
+      const planNode = stage.createObject('testPlan');
       planNode.data = {
         ...planNode.data,
         ...sanitizeCreationObjectPatch('testPlan', {
@@ -8545,11 +8557,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       stage.addObject(`Add test plan “${built.plan.title}”`, planNode);
 
       for (const [index, testCase] of built.cases.entries()) {
-        const caseNode = newNode('testCase', nextCanvasObjectPosition(
-          stage.nodes(),
-          { x: planNode.position.x + 520, y: planNode.position.y + index * 260 },
-          isNarrow, 'testCase',
-        ));
+        const caseNode = stage.createObject('testCase', { x: planNode.position.x + 520, y: planNode.position.y + index * 260 });
         caseNode.data = {
           ...caseNode.data,
           ...sanitizeCreationObjectPatch('testCase', {
@@ -8651,12 +8659,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const route = typeof args.route === 'string' ? args.route.slice(0, 200) : String(source?.data.route ?? '');
       const targetUrl = typeof args.targetUrl === 'string' ? args.targetUrl.slice(0, 400) : String(source?.data.targetUrl ?? '');
 
-      const isNarrow = typeof window !== 'undefined' && window.innerWidth <= 760;
-      const node = newNode('defect', nextCanvasObjectPosition(
-        all,
-        source ? { x: source.position.x + 520, y: source.position.y + 120 } : {},
-        isNarrow, 'defect',
-      ));
+      const node = stage.createObject('defect', source ? { x: source.position.x + 520, y: source.position.y + 120 } : {});
       node.data = {
         ...node.data,
         ...sanitizeCreationObjectPatch('defect', {
@@ -8701,8 +8704,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       if (html.trim().length < 40) return { error: 'Pass the fetched page HTML — fetch the page first, then audit it.' };
       const audit = auditPageHtml(html, url);
 
-      const isNarrow = typeof window !== 'undefined' && window.innerWidth <= 760;
-      const node = newNode('diagnostics', nextCanvasObjectPosition(stage.nodes(), {}, isNarrow, 'diagnostics'));
+      const node = stage.createObject('diagnostics');
       const failed = audit.findings.filter((item) => item.count > 0);
       node.data = {
         ...node.data,
@@ -8756,12 +8758,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         ...(args.includeInvalid === false ? { includeInvalid: false } : {}),
       });
 
-      const isNarrow = typeof window !== 'undefined' && window.innerWidth <= 760;
-      const node = newNode('dataset', nextCanvasObjectPosition(
-        stage.nodes(),
-        { x: dataset.position.x + 460, y: dataset.position.y + 320 },
-        isNarrow, 'dataset',
-      ));
+      const node = stage.createObject('dataset', { x: dataset.position.x + 460, y: dataset.position.y + 320 });
       node.data = {
         ...node.data,
         ...sanitizeCreationObjectPatch('dataset', {
@@ -8859,12 +8856,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         ...(run.errorMessage ? { errorMessage: run.errorMessage } : {}),
       }));
 
-      const isNarrow = typeof window !== 'undefined' && window.innerWidth <= 760;
-      const runNode = newNode('testRun', nextCanvasObjectPosition(
-        stage.nodes(),
-        { x: plan.position.x, y: plan.position.y + 340 },
-        isNarrow, 'testRun',
-      ));
+      const runNode = stage.createObject('testRun', { x: plan.position.x, y: plan.position.y + 340 });
       const summary = summarizeRun(results);
       runNode.data = {
         ...runNode.data,
@@ -8886,11 +8878,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       // Every failure becomes a defect, fingerprinted the same way an Agentic Tester
       // finding is — so the same break reported twice is one defect.
       for (const [index, result] of results.filter((item) => item.status === 'failed' || item.status === 'error').slice(0, 10).entries()) {
-        const defectNode = newNode('defect', nextCanvasObjectPosition(
-          stage.nodes(),
-          { x: runNode.position.x + 520, y: runNode.position.y + index * 240 },
-          isNarrow, 'defect',
-        ));
+        const defectNode = stage.createObject('defect', { x: runNode.position.x + 520, y: runNode.position.y + index * 240 });
         defectNode.data = {
           ...defectNode.data,
           ...sanitizeCreationObjectPatch('defect', {

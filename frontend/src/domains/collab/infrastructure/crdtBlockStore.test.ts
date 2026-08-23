@@ -79,6 +79,15 @@ describe.each([
     store.setAttrs(id, { label: 'new alt' });
     expect(store.snapshot()[0]!.attrs).toEqual({ label: 'new alt', url: 'https://cdn/a.png' });
   });
+
+  it('replaces the whole document, and never with nothing', () => {
+    const store = make(parseMarkdownToBlocks('old one\n\nold two'));
+    store.replaceAll(parseMarkdownToBlocks('new'));
+    expect(store.snapshot().map((b) => b.text)).toEqual(['new']);
+    store.replaceAll([]);
+    expect(store.snapshot()).toHaveLength(1);
+    expect(store.snapshot()[0]!.text).toBe('');
+  });
 });
 
 describe('the per-block CRDT', () => {

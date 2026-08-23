@@ -10,7 +10,7 @@ export const metadata = pageMetadata({
   path: '/billing/payouts',
 });
 
-/** The same console, opened on its payouts view — one component, two routes. */
+/** The same console, opened on its payouts view — one component, four routes. */
 export default function BillingPayoutsPage() {
   return (
     <Suspense fallback={null}>

@@ -159,6 +159,8 @@ export async function callGatewayMcpTool(
     tool: call.tool,
     arguments: call.arguments,
     keyMaterial: ctx.keyMaterial,
+    // Needed to open a sealed OAuth grant, if this server uses one.
+    env: ctx.env,
   });
 }
 
