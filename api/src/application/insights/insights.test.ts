@@ -88,7 +88,7 @@ describe('compliance', () => {
       { ts: '2026-06-23T00:00:00.000Z', toolName: 'say "hi"', risk: 'normal', category: 'tool', agent: 'host:1', executionId: 10, durationMs: 5 },
     ];
     const csv = evidencePackToCsv(rows);
-    expect(csv.split('\n')[0]).toBe('ts,tool,risk,category,agent,execution_id,duration_ms');
+    expect(csv.split('\n')[0]).toBe('"ts","tool","risk","category","agent","execution_id","duration_ms"');
     expect(csv).toContain('"say ""hi"""');
   });
 });

@@ -18,9 +18,9 @@
     "durable-object-direct-report": 0
   },
   "worker/src": {
-    "empty-catch": 2,
+    "empty-catch": 0,
     "empty-promise-catch": 0,
-    "console-only": 17,
+    "console-only": 15,
     "durable-object-direct-report": 0
   }
 }
