@@ -91,8 +91,15 @@ const BASELINE = {
    * white-on-white card is not a style opinion, it is an invisible card, so they
    * became `color-mix(… var(--bg-surface) …)`, `var(--coral-bright)` and
    * `var(--text-on-accent)` in the same pass as the strings.
+   *
+   * 177 -> 176 (2026-08-23) — net of two unrelated passes. `workflow-builder/page.tsx`
+   * (-3), `ContentAssignmentsContent.tsx` (-3), `ShowcaseGrid.tsx` (-2),
+   * `CanvasBoard.tsx` (-2) and eight more single-instance files named their
+   * families and moved onto tokens (-19 total); `GateHint.tsx` and the new
+   * `EvermindBuildPanel.tsx` each added one legitimate `rgba()` inside a
+   * `color-mix()`/`box-shadow` expression the guard still counts (+2 total).
    */
-  themeLockedColours: 177,
+  themeLockedColours: 176,
   /**
    * ONE, and it is `UnreadBadge`'s `borderRadius: size` — a live expression, not a
    * literal, so there is no scale step to name. Came down from 6 when the résumé
