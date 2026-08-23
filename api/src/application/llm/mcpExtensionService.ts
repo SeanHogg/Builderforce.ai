@@ -194,9 +194,23 @@ function advertisedName(extensionId: string, tool: string): string {
 }
 
 /**
- * Fetch + merge the tools of every ENABLED extension for a tenant. Calls each
- * MCP server's `GET {serverUrl}/tools` server-to-server. An extension that errors
- * or times out is skipped (best-effort) so one bad server can't break the Brain.
+ * Fetch + merge the tools of every ENABLED extension for a tenant.
+ *
+ * Each server is spoken to through {@link ./mcp/mcpWireClient}, which speaks REAL
+ * MCP (JSON-RPC `tools/list`) and falls back to the legacy Builderforce REST shape,
+ * so a third-party server and one written against our old docs both work. Whichever
+ * transport answered is REMEMBERED on the row, so the probe is paid once per server
+ * rather than on every catalog load.
+ *
+ * Two filters ride along, both of which used to be absent:
+ *   • per-tool CONSENT — a server's tools are advertised only if the tenant approved
+ *     them ({@link ./mcp/mcpToolConsent});
+ *   • the advertised `mutates` flag, taken from the spec's `readOnlyHint` when the
+ *     server declares one — otherwise left undefined, which every client already
+ *     treats as mutating (confirm-before-write).
+ *
+ * An extension that errors, times out or needs an authorization we do not hold is
+ * SKIPPED rather than thrown, so one bad server cannot empty the Brain's catalog.
  */
 export async function listToolsForTenant(
   db: Db,
@@ -205,8 +219,8 @@ export async function listToolsForTenant(
   fetchImpl: typeof fetch = fetch,
   /** When provided, the merged tool list is served through the read-through cache
    *  (L1 + AUTH_CACHE_KV, 60s) so opening the Brain doesn't hit every customer MCP
-   *  server's `/tools` on each mount [1406]. Invalidated by extension mutations via
-   *  {@link invalidateMcpToolsCache}. Omit (e.g. unit tests) to always fetch live. */
+   *  server's tool listing on each mount [1406]. Invalidated by extension mutations
+   *  via {@link invalidateMcpToolsCache}. Omit (e.g. unit tests) to always fetch live. */
   env?: Env,
 ): Promise<McpToolEntry[]> {
   const load = async (): Promise<McpToolEntry[]> => {
@@ -219,28 +233,28 @@ export async function listToolsForTenant(
     await Promise.all(
       rows.map(async (row) => {
         try {
-          // DNS-rebinding re-check just before the authed fetch (see helper doc).
-          await assertServerUrlLiveSafe(row.serverUrl);
-          const headers: Record<string, string> = { Accept: 'application/json' };
-          if (row.secretEnc) {
-            headers.Authorization = `Bearer ${await decryptSecretFromStorage(row.secretEnc, keyMaterial)}`;
-          }
-          const res = await fetchImpl(`${row.serverUrl.replace(/\/$/, '')}/tools`, { headers, redirect: 'manual' });
-          if (!res.ok) return;
-          const body = (await res.json()) as { tools?: Array<{ name?: string; description?: string; parameters?: Record<string, unknown> }> };
-          for (const t of body.tools ?? []) {
-            if (!t.name) continue;
+          const authorization = await resolveAuthorization(db, env, row, keyMaterial);
+          const listed = await listRemoteTools({
+            serverUrl: row.serverUrl,
+            authorization,
+            protocol: row.protocol as McpProtocol,
+            fetchImpl,
+          });
+          await rememberProtocol(db, row, listed.protocol);
+          for (const tool of filterConsentedTools(row.allowedTools, listed.tools)) {
             all.push({
               extensionId: row.id,
-              tool: t.name,
-              name: advertisedName(row.id, t.name),
-              description: t.description ?? '',
-              parameters: t.parameters ?? { type: 'object', properties: {} },
+              tool: tool.name,
+              name: advertisedName(row.id, tool.name),
+              description: tool.description,
+              parameters: tool.parameters,
+              // Only an explicit read-only hint may claim non-mutating; a server
+              // that says nothing stays undefined, which clients read as "confirm".
+              ...(tool.readOnlyHint === true ? { mutates: false } : {}),
             });
           }
         } catch (error) {
-          /* skip unreachable / malformed extension */
-        
+          /* skip unreachable / unauthorized / malformed extension */
           reportCaughtError(error, { source: "application/llm/mcpExtensionService.ts", operation: "load" });
         }
       }),
@@ -252,13 +266,37 @@ export async function listToolsForTenant(
   return getOrSetCached(env, mcpToolsCacheKey(tenantId), load, { kvTtlSeconds: 60, l1TtlMs: 30_000 });
 }
 
+/** Persist the transport that actually answered, so `auto` probes only once. */
+async function rememberProtocol(
+  db: Db,
+  row: typeof tenantMcpExtensions.$inferSelect,
+  resolved: 'mcp' | 'legacy',
+): Promise<void> {
+  if (row.protocol === resolved) return;
+  await db
+    .update(tenantMcpExtensions)
+    .set({ protocol: resolved })
+    .where(eq(tenantMcpExtensions.id, row.id));
+}
+
 /**
  * Relay a single tool call to the owning extension's MCP server, server-to-server.
- * Returns the parsed JSON result. Throws on unknown extension or transport error.
+ *
+ * Consent is re-checked HERE and not only on the advertise path: a model that
+ * remembers a tool name from an earlier turn, or any caller reaching the relay
+ * directly, must not be able to drive a tool the tenant withheld.
  */
 export async function callMcpTool(
   db: Db,
-  args: { tenantId: number; extensionId: string; tool: string; arguments: unknown; keyMaterial: string },
+  args: {
+    tenantId: number;
+    extensionId: string;
+    tool: string;
+    arguments: unknown;
+    keyMaterial: string;
+    /** Needed to open a sealed OAuth grant; without it only the static bearer works. */
+    env?: Env;
+  },
   fetchImpl: typeof fetch = fetch,
 ): Promise<unknown> {
   const [row] = await db
@@ -268,21 +306,19 @@ export async function callMcpTool(
     .limit(1);
   if (!row || !row.enabled) throw new Error('Unknown or disabled MCP extension');
 
-  // DNS-rebinding re-check just before the authed fetch (see helper doc).
-  await assertServerUrlLiveSafe(row.serverUrl);
-  const headers: Record<string, string> = { 'Content-Type': 'application/json', Accept: 'application/json' };
-  if (row.secretEnc) {
-    headers.Authorization = `Bearer ${await decryptSecretFromStorage(row.secretEnc, args.keyMaterial)}`;
-  }
-  const res = await fetchImpl(`${row.serverUrl.replace(/\/$/, '')}/call`, {
-    method: 'POST',
-    headers,
-    redirect: 'manual',
-    body: JSON.stringify({ tool: args.tool, arguments: args.arguments ?? {} }),
-  });
-  if (!res.ok) {
-    throw new Error(`MCP extension returned ${res.status}`);
-  }
-  // Best-effort lastUsedAt bookkeeping is left to the caller via waitUntil.
-  return res.json().catch(() => ({}));
+  assertToolConsented(row.allowedTools, args.tool);
+
+  const authorization = await resolveAuthorization(db, args.env, row, args.keyMaterial);
+  const { protocol, result } = await callRemoteTool(
+    {
+      serverUrl: row.serverUrl,
+      authorization,
+      protocol: row.protocol as McpProtocol,
+      fetchImpl,
+    },
+    args.tool,
+    args.arguments,
+  );
+  await rememberProtocol(db, row, protocol);
+  return result;
 }

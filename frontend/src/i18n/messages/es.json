@@ -452,7 +452,15 @@
     "respReviewer": "Revisor",
     "respContributor": "Colaborador",
     "required": "Obligatorio",
-    "addRequirement": "Añadir requisito"
+    "addRequirement": "Añadir requisito",
+    "laneKey": "Clave de la columna",
+    "laneKeyTitle": "El estado que tienen los tickets mientras están en esta columna. Renombrarla mueve todos los tickets de la columna y reapunta todo lo que la tenga como destino.",
+    "laneKeyRenamed": "Renombrada a {key}: {count, plural, one {se movió # ticket} other {se movieron # tickets}}.",
+    "errRenameKey": "No se pudo renombrar la clave de esta columna",
+    "orphanedTickets": "{count, plural, one {# ticket no está} other {# tickets no están}} en ninguna columna, así que no se les aplica ninguna puerta, agente ni requisito y no pueden empezar por sí solos.",
+    "orphanedAdopt": "Moverlos",
+    "orphanedAdoptInto": "Mover los tickets varados a",
+    "orphanedAdoptIntoTitle": "La columna a la que se mueven los tickets varados. Elige una columna por la que aún fluya el trabajo: Hecho o una columna de aparcamiento volvería a ocultarlos."
   },
   "integrations": {
     "gallery": {
@@ -14326,7 +14334,8 @@
     "pastMeetings": "Reuniones anteriores",
     "minutesAvailable": "Acta lista",
     "viewNotes": "Ver notas",
-    "calendarLabel": "Calendario de reuniones"
+    "calendarLabel": "Calendario de reuniones",
+    "noMinutesYet": "No se capturó nada en esta reunión, así que no hay acta."
   },
   "brainLauncher": {
     "open": "Abrir el asistente Brain",
@@ -17099,12 +17108,16 @@
       "unknown": "Desconocido",
       "present": "Presente",
       "absent": "No asistió",
-      "excused": "Opcional"
+      "excused": "Justificado"
     },
     "errorCorrect": "No se pudo actualizar la asistencia.",
     "correctAria": "Asistencia de {name}",
-    "sourcePto": "De baja aprobada",
-    "sourceManual": "Corregido por un mánager"
+    "source": {
+      "derived": "Registrado desde la sala",
+      "manual": "Corregido por un responsable",
+      "pto": "De permiso aprobado",
+      "rsvp": "Rechazó la invitación"
+    }
   },
   "observability": {
     "agents": "Agentes",
@@ -22364,7 +22377,7 @@
     "sessionActionCluster": {
       "history": "Historial del lienzo",
       "inspect": "Herramientas del lienzo",
-      "live": "Llamada",
+      "live": "En directo y grabación",
       "session": "Compartir y publicar"
     },
     "moreMenuSessionActions": "Este lienzo",
@@ -23161,7 +23174,47 @@
     },
     "openWorkflowOnCanvas": "Abrir en el lienzo",
     "buildFlow": "Compilar flujo",
-    "runFlow": "Ejecutar flujo"
+    "runFlow": "Ejecutar flujo",
+    "recordTalktrack": "Grabar recorrido",
+    "recordTalktrackTitle": "Graba un recorrido narrado de este lienzo",
+    "talktrack": {
+      "title": "Grabar recorrido",
+      "lead": "Comparte esta pestaña y nárrala. Lo que digas se transcribe sobre la marcha, los momentos clave se convierten en capítulos y la grabación aterriza en el tablero como un vídeo que puedes recortar, subtitular y publicar.",
+      "start": "Empezar a grabar",
+      "stop": "Parar y añadir al tablero",
+      "mark": "Marcar momento clave",
+      "markObject": "Marcar: {title}",
+      "markedMoment": "Momento clave",
+      "keyMoments": "Momentos clave",
+      "noMomentsYet": "Aún no has marcado nada. Marca un momento mientras hablas, o deja que las pausas de tu narración encuentren los capítulos.",
+      "transcriptHeading": "Transcripción",
+      "listening": "Escuchando…",
+      "saving": "Guardando el recorrido…",
+      "added": "Recorrido añadido al tablero en {chapters} capítulos.",
+      "status": "{chapters} capítulos",
+      "objectTitle": "Recorrido de {board}",
+      "opening": "Apertura",
+      "unsupported": "Este navegador no puede grabar la pantalla. Chrome, Edge y Firefox de escritorio sí pueden.",
+      "noTranscription": "Este navegador no transcribe voz, así que el recorrido se grabará sin subtítulos.",
+      "readOnly": "Puedes grabar, pero este lienzo es de solo lectura: pide acceso de edición para añadirle el recorrido.",
+      "captureFailed": "No se pudo compartir la pantalla. Revisa el permiso del navegador e inténtalo de nuevo.",
+      "nothingRecorded": "No se grabó nada.",
+      "storeFailed": "No se pudo guardar el recorrido.",
+      "openers": "así que,ahora,a continuación,por aquí,sigamos,lo importante,lo clave,por último,vamos a,aquí es donde"
+    },
+    "pullStandupMinutes": "Traer el acta al lienzo",
+    "standupGatheredSummary": "{count} participantes reunidos. Brain preguntará a cada persona por su progreso, bloqueos y próximas acciones.",
+    "noticeStandupStarted": "Daily en directo iniciada",
+    "noticeStandupNeverConvened": "Esta daily aún no se ha celebrado. Reúne al equipo para empezar.",
+    "noticeStandupStillRunning": "Esta daily sigue en curso. El acta se escribe cuando termina.",
+    "noticeStandupNoMeeting": "Esta daily no tuvo sala de reunión, así que no se capturó nada.",
+    "noticeStandupNotSummarized": "Aún no hay acta. Genérala primero desde el registro de la reunión.",
+    "noticeStandupNothingCaptured": "No se capturó nada en esta daily, así que no hay acta.",
+    "noticeStandupNoActionItems": "El acta no registró ninguna acción pendiente.",
+    "noticeStandupActionItemsAlreadyOnBoard": "{count, plural, one {La acción ya está en el lienzo} other {Las # acciones ya están en el lienzo}}",
+    "noticeStandupActionItemsPlaced": "{count, plural, one {# acción añadida al lienzo} other {# acciones añadidas al lienzo}}",
+    "noticeStandupMinutesNeedsAccount": "Inicia sesión para leer el acta de una daily",
+    "noticeStandupMinutesFailed": "No se pudo leer el acta de la daily"
   },
   "canvasCommands": {
     "cleanLayout": "Ordenar el diseño del lienzo",

@@ -79,25 +79,46 @@ export interface TokenResponse {
 }
 
 /**
+ * The OAuth client this deployment presents at the token endpoint.
+ *
+ * `clientSecret` is OPTIONAL because a PUBLIC client is a real, spec-legal case:
+ * an MCP server's authorization server may register us dynamically (RFC 7591)
+ * with `token_endpoint_auth_method: none`, and sending an empty `client_secret`
+ * form field is rejected by strict authorization servers. `extra` carries the
+ * per-flow parameters the base grant does not define — PKCE's `code_verifier`
+ * and RFC 8707's `resource` — so there is still exactly ONE token exchange in
+ * the codebase rather than a second copy per protocol.
+ */
+export interface TokenClient {
+  tokenUrl: string;
+  clientId: string;
+  clientSecret?: string;
+}
+
+function tokenForm(cfg: TokenClient, fields: Record<string, string>, extra?: Record<string, string>): URLSearchParams {
+  return new URLSearchParams({
+    client_id: cfg.clientId,
+    ...(cfg.clientSecret ? { client_secret: cfg.clientSecret } : {}),
+    ...fields,
+    ...(extra ?? {}),
+  });
+}
+
+/**
  * Exchange an authorization code for tokens (RFC 6749 §4.1.3). Returns the raw
  * token set including `refresh_token`/`expires_in`/`scope` when the provider
  * supplies them.
  */
 export async function exchangeCodeForTokens(
-  cfg: { tokenUrl: string; clientId: string; clientSecret: string },
+  cfg: TokenClient,
   code: string,
   redirectUri: string,
+  extra?: Record<string, string>,
 ): Promise<TokenResponse> {
   const res = await fetch(cfg.tokenUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
-    body: new URLSearchParams({
-      client_id: cfg.clientId,
-      client_secret: cfg.clientSecret,
-      code,
-      redirect_uri: redirectUri,
-      grant_type: 'authorization_code',
-    }),
+    body: tokenForm(cfg, { code, redirect_uri: redirectUri, grant_type: 'authorization_code' }, extra),
   });
   if (!res.ok) throw new Error(`Token exchange failed: ${res.status}`);
   const data = (await res.json()) as TokenResponse;
@@ -110,18 +131,14 @@ export async function exchangeCodeForTokens(
  * omit a new refresh_token (keep the old one); Microsoft rotates it.
  */
 export async function refreshAccessToken(
-  cfg: { tokenUrl: string; clientId: string; clientSecret: string },
+  cfg: TokenClient,
   refreshToken: string,
+  extra?: Record<string, string>,
 ): Promise<TokenResponse> {
   const res = await fetch(cfg.tokenUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
-    body: new URLSearchParams({
-      client_id: cfg.clientId,
-      client_secret: cfg.clientSecret,
-      refresh_token: refreshToken,
-      grant_type: 'refresh_token',
-    }),
+    body: tokenForm(cfg, { refresh_token: refreshToken, grant_type: 'refresh_token' }, extra),
   });
   if (!res.ok) throw new Error(`Token refresh failed: ${res.status}`);
   const data = (await res.json()) as TokenResponse;

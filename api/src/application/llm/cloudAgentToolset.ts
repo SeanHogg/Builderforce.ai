@@ -72,10 +72,12 @@ export const CLOUD_AGENT_PLATFORM_TOOLS: readonly string[] = [
   // and draft a campaign; `social.publish` and `social_campaign.publish` speak in
   // public as the brand with nobody in the loop to stop them, so they stay off.
   'social.list_accounts', 'social.read_feed', 'social_campaign.list', 'social_campaign.create',
-  // Paid media: an autonomous run may LOOK at what is running and what it cost, but
-  // `ads.create_campaign`, `ads.update_campaign` and `ads.sync` are absent — the first
-  // two move real money and the third rewrites the ledger the first two are judged by.
-  'ads.list_accounts', 'ads.list_campaigns', 'ads.insights',
+  // Paid media: an autonomous run may LOOK at what is running, WHO it is aimed at and
+  // what it cost, all three levels of it — but every write is absent. `create_campaign`
+  // / `create_ad_set` / `create_ad` and their `update_*` siblings move real money (on
+  // most networks the AD SET is where the budget lives, so that one is no safer than
+  // the campaign), and `ads.sync` rewrites the ledger the others are judged by.
+  'ads.list_accounts', 'ads.list_campaigns', 'ads.list_ad_sets', 'ads.list_ads', 'ads.insights',
   // Measurement is entirely read-only, so all of it is safe here.
   'measurement.list_properties', 'measurement.overview', 'measurement.breakdown',
   // Project knowledge, files, review

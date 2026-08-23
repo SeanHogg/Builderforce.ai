@@ -166,9 +166,10 @@ export class CollaborationRoomDO implements DurableObject {
       return new Response('Expected WebSocket', { status: 426 });
     }
 
-    const pair = new WebSocketPair();
-    const [client, server] = Object.values(pair);
+    const { 0: client, 1: server } = new WebSocketPair();
 
+    // `acceptWebSocket`, not `accept()`: this is a HIBERNATABLE socket, which is
+    // the whole reason session state rides on the socket rather than in a field.
     this.state.acceptWebSocket(server);
 
     // WHO, decided by the route. `relayToRoom` strips any copy the client sent and

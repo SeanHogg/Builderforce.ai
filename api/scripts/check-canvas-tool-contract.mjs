@@ -35,7 +35,15 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
+
+/**
+ * Anchored at this module rather than at `process.cwd()` — the same reason
+ * `check-prompt-tool-names.mjs` is: a guard whose inputs are found only when it is
+ * launched from `api/` is a guard the next runner disarms by accident.
+ */
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 /**
  * Every source file that DECLARES canvas actions.
@@ -48,28 +56,28 @@ import ts from 'typescript';
  * new family adds one line here.
  */
 const CANVAS_FILES = [
-  path.resolve('..', 'frontend', 'src', 'components', 'creation-canvas', 'CreationCanvas.tsx'),
-  path.resolve('..', 'frontend', 'src', 'lib', 'canvasBuildTools.ts'),
-  path.resolve('..', 'frontend', 'src', 'lib', 'canvasFounderOpsTools.ts'),
-  path.resolve('..', 'frontend', 'src', 'lib', 'canvasEquityTools.ts'),
+  path.resolve(repoRoot, 'frontend', 'src', 'components', 'creation-canvas', 'CreationCanvas.tsx'),
+  path.resolve(repoRoot, 'frontend', 'src', 'lib', 'canvasBuildTools.ts'),
+  path.resolve(repoRoot, 'frontend', 'src', 'lib', 'canvasFounderOpsTools.ts'),
+  path.resolve(repoRoot, 'frontend', 'src', 'lib', 'canvasEquityTools.ts'),
   // These three were declaring canvas tools that this guard never saw, which is the
   // instruction above going unfollowed rather than a limitation: five tools
   // (`canvas_legal_document_*`, `canvas_request_signature`) were advertised by the canvas
   // and named nowhere in the contract, so rule 1 was simply not being applied to them.
-  path.resolve('..', 'frontend', 'src', 'lib', 'canvasDataRoomTools.ts'),
-  path.resolve('..', 'frontend', 'src', 'lib', 'canvasDocumentTemplateTools.ts'),
-  path.resolve('..', 'frontend', 'src', 'lib', 'canvasLegalDocumentTools.ts'),
+  path.resolve(repoRoot, 'frontend', 'src', 'lib', 'canvasDataRoomTools.ts'),
+  path.resolve(repoRoot, 'frontend', 'src', 'lib', 'canvasDocumentTemplateTools.ts'),
+  path.resolve(repoRoot, 'frontend', 'src', 'lib', 'canvasLegalDocumentTools.ts'),
   // The legal seat's RECORD projection (`canvas_sync_legal`), added with the three
   // record kinds it fills. Listed the same day it was written, because a family absent
   // from this array makes the guard pass VACUOUSLY — its tools are unclassified, which
   // means they are advertised to a guest board rather than account-gated, and nothing
   // says so. That is exactly how the five `canvas_legal_document_*`/`canvas_request_
   // signature` tools three lines up went a release without rule 1 applying to them.
-  path.resolve('..', 'frontend', 'src', 'lib', 'canvasLegalRecordTools.ts'),
-  path.resolve('..', 'frontend', 'src', 'lib', 'canvasSignatureTools.ts'),
-  path.resolve('..', 'frontend', 'src', 'lib', 'canvasSellMotionTools.ts'),
+  path.resolve(repoRoot, 'frontend', 'src', 'lib', 'canvasLegalRecordTools.ts'),
+  path.resolve(repoRoot, 'frontend', 'src', 'lib', 'canvasSignatureTools.ts'),
+  path.resolve(repoRoot, 'frontend', 'src', 'lib', 'canvasSellMotionTools.ts'),
 ];
-const CONTRACT_FILE = path.resolve('..', 'packages', 'creation-canvas-contract', 'src', 'canvasTools.ts');
+const CONTRACT_FILE = path.resolve(repoRoot, 'packages', 'creation-canvas-contract', 'src', 'canvasTools.ts');
 
 for (const file of [...CANVAS_FILES, CONTRACT_FILE]) {
   if (!fs.existsSync(file)) {
@@ -196,7 +204,7 @@ for (const [name, description] of declarations) {
 // A prompt block wrapped in `persistence === 'server'` is exempt, because that block
 // does not exist on an anonymous board — that is how the BUILDING SOFTWARE paragraph
 // legitimately names the seven account-required build tools.
-const PROMPT_FILE = path.resolve('..', 'frontend', 'src', 'lib', 'creationCanvasAi.ts');
+const PROMPT_FILE = path.resolve(repoRoot, 'frontend', 'src', 'lib', 'creationCanvasAi.ts');
 
 /** True when this node sits inside the true-branch of a `persistence === 'server'`
  *  conditional — i.e. the text only reaches a signed-in board. */

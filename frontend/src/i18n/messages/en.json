@@ -452,7 +452,15 @@
     "respReviewer": "Reviewer",
     "respContributor": "Contributor",
     "required": "Required",
-    "addRequirement": "Add requirement"
+    "addRequirement": "Add requirement",
+    "laneKey": "Column key",
+    "laneKeyTitle": "The status tickets hold while they sit in this column. Renaming it moves every ticket in the column and re-points anything that targets it.",
+    "laneKeyRenamed": "Renamed to {key} — {count, plural, one {# ticket moved} other {# tickets moved}}.",
+    "errRenameKey": "Could not rename this column key",
+    "orphanedTickets": "{count, plural, one {# ticket is} other {# tickets are}} in no column at all, so no gate, agent or requirement applies to them and they cannot start on their own.",
+    "orphanedAdopt": "Move them",
+    "orphanedAdoptInto": "Move stranded tickets into",
+    "orphanedAdoptIntoTitle": "The column the stranded tickets move to. Pick a column work still flows through — Done or a parking column would hide them again."
   },
   "integrations": {
     "gallery": {
@@ -14326,7 +14334,8 @@
     "pastMeetings": "Past meetings",
     "minutesAvailable": "Minutes ready",
     "viewNotes": "View notes",
-    "calendarLabel": "Meetings calendar"
+    "calendarLabel": "Meetings calendar",
+    "noMinutesYet": "Nothing was captured in this meeting, so there are no minutes."
   },
   "brainLauncher": {
     "open": "Open Brain assistant",
@@ -17099,12 +17108,16 @@
       "unknown": "Unknown",
       "present": "Present",
       "absent": "Missed it",
-      "excused": "Optional"
+      "excused": "Excused"
     },
     "errorCorrect": "Could not update attendance.",
     "correctAria": "Attendance for {name}",
-    "sourcePto": "On approved leave",
-    "sourceManual": "Corrected by a manager"
+    "source": {
+      "derived": "Recorded from the room",
+      "manual": "Corrected by a manager",
+      "pto": "On approved leave",
+      "rsvp": "Declined the invitation"
+    }
   },
   "observability": {
     "agents": "Agents",
@@ -22364,7 +22377,7 @@
     "sessionActionCluster": {
       "history": "Canvas history",
       "inspect": "Canvas tools",
-      "live": "Call",
+      "live": "Live and recording",
       "session": "Share and publish"
     },
     "moreMenuSessionActions": "This canvas",
@@ -23161,7 +23174,47 @@
     },
     "openWorkflowOnCanvas": "Open on canvas",
     "buildFlow": "Build flow",
-    "runFlow": "Run flow"
+    "runFlow": "Run flow",
+    "recordTalktrack": "Record walkthrough",
+    "recordTalktrackTitle": "Record a narrated walkthrough of this canvas",
+    "talktrack": {
+      "title": "Record walkthrough",
+      "lead": "Share this tab and talk over it. What you say is transcribed as you go, key moments become chapters, and the recording lands on the board as a video you can trim, caption and publish.",
+      "start": "Start recording",
+      "stop": "Stop and add to board",
+      "mark": "Mark key moment",
+      "markObject": "Mark: {title}",
+      "markedMoment": "Key moment",
+      "keyMoments": "Key moments",
+      "noMomentsYet": "Nothing marked yet. Mark a moment as you talk, or let the pauses in your narration find the chapters.",
+      "transcriptHeading": "Transcript",
+      "listening": "Listening…",
+      "saving": "Saving the walkthrough…",
+      "added": "Walkthrough added to the board in {chapters} chapters.",
+      "status": "{chapters} chapters",
+      "objectTitle": "Walkthrough of {board}",
+      "opening": "Opening",
+      "unsupported": "This browser cannot record a screen. Chrome, Edge and Firefox on a desktop can.",
+      "noTranscription": "This browser cannot transcribe speech, so the walkthrough will be recorded without captions.",
+      "readOnly": "You can record, but this canvas is read-only — ask for edit access to add the walkthrough to it.",
+      "captureFailed": "The screen could not be shared. Check the browser permission and try again.",
+      "nothingRecorded": "Nothing was recorded.",
+      "storeFailed": "The walkthrough could not be saved.",
+      "openers": "so,next,now,over here,moving on,the key thing,importantly,finally,let us,this is where"
+    },
+    "pullStandupMinutes": "Pull minutes onto the board",
+    "standupGatheredSummary": "{count} participants gathered. Brain will ask each person for progress, blockers and next actions.",
+    "noticeStandupStarted": "Live stand-up started",
+    "noticeStandupNeverConvened": "This stand-up has not been held yet. Gather the team to start it.",
+    "noticeStandupStillRunning": "This stand-up is still running. Its minutes are written once it ends.",
+    "noticeStandupNoMeeting": "This stand-up had no meeting room, so nothing was captured.",
+    "noticeStandupNotSummarized": "No minutes yet. Generate them from the meeting record first.",
+    "noticeStandupNothingCaptured": "Nothing was captured at this stand-up, so there are no minutes.",
+    "noticeStandupNoActionItems": "The minutes recorded no open action items.",
+    "noticeStandupActionItemsAlreadyOnBoard": "{count, plural, one {The action item is already on the board} other {All # action items are already on the board}}",
+    "noticeStandupActionItemsPlaced": "{count, plural, one {Placed # action item on the board} other {Placed # action items on the board}}",
+    "noticeStandupMinutesNeedsAccount": "Sign in to read a stand-up’s minutes",
+    "noticeStandupMinutesFailed": "Could not read the stand-up minutes"
   },
   "canvasCommands": {
     "cleanLayout": "Clean up canvas layout",

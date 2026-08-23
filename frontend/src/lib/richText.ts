@@ -13,7 +13,24 @@
  * construct `markdownToHtml` produces, `htmlToMarkdown` turns back into the
  * markdown it came from. That is the property that makes editing lossless —
  * opening a document and closing it without typing must not rewrite it.
+ *
+ * ── THE FOUR THINGS MARKDOWN CANNOT SPELL ───────────────────────────────────
+ * Underline, colour, font and alignment have no markdown syntax, which is why
+ * the toolbar used to stop where it stopped. They are carried instead by the
+ * attribute spans `richFormat.ts` defines — `[the words]{u color=#c0392b}`, and
+ * `{align=center}` on a block — which this module renders to HTML on the way in
+ * and normalises a `contenteditable`'s own output back into on the way out. A
+ * browser will hand back `<font color>`, `<span style="color:…">` or a
+ * `text-align` on whichever element it felt like; all of it lands as the one
+ * vocabulary every other reader parses.
  */
+
+import {
+  hasRichMarks, isRichAlign, mergeRichMarks, normalizeRichColor, normalizeRichFont, readRichBlock,
+  richAlignFromCss, richMarksCss, richMarksFromCss, richSizeFromFontElement, sameRichMarks,
+  splitRichSpans, wrapRichSpan, writeRichBlock,
+  type RichAlign, type RichMarks,
+} from '@builderforce/creation-canvas-contract';
 
 const HTML_ESCAPES: Readonly<Record<string, string>> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' };
 
@@ -38,9 +55,27 @@ const COMMENT = /^<!--([\s\S]*?)-->$/;
  * collide with the text around it. */
 const MASK = '\u0000';
 
-/** Inline markdown → inline HTML. Code spans are masked out FIRST: `**` inside
- * backticks is literal text, not emphasis. */
+/** The marks a span carries, as the HTML an editing surface understands.
+ * Underline is a `<u>` element rather than a CSS declaration because that is
+ * what the browser's own underline command toggles and reports. */
+function markedHtml(html: string, marks: RichMarks): string {
+  if (!hasRichMarks(marks)) return html;
+  const inner = marks.underline ? `<u>${html}</u>` : html;
+  // Escaped, not interpolated raw: a font stack quotes any family with a space
+  // in it, and an unescaped `"` ends the attribute early — which silently drops
+  // every declaration after the font.
+  const css = richMarksCss({ ...marks, underline: false });
+  return css ? `<span style="${escapeHtml(css)}">${inner}</span>` : inner;
+}
+
+/** Inline markdown → inline HTML, attribute spans included. */
 function inlineToHtml(raw: string): string {
+  return splitRichSpans(raw).map((segment) => markedHtml(emphasisToHtml(segment.text), segment.marks)).join('');
+}
+
+/** Emphasis, links, images and code within ONE unmarked stretch. Code spans are
+ * masked out FIRST: `**` inside backticks is literal text, not emphasis. */
+function emphasisToHtml(raw: string): string {
   const codes: string[] = [];
   const masked = raw.replace(CODE_SPAN, (_match, code: string) => {
     codes.push(code);
@@ -60,7 +95,7 @@ function inlineToHtml(raw: string): string {
   return html.replace(new RegExp(`${MASK}(\\d+)${MASK}`, 'g'), (_match, index: string) => `<code>${escapeHtml(codes[Number(index)] ?? '')}</code>`);
 }
 
-type ListEntry = { depth: number; ordered: boolean; text: string };
+type ListEntry = { depth: number; ordered: boolean; text: string; align?: RichAlign };
 
 /** Nested lists, rendered by recursing on indentation depth rather than by
  * juggling an open-tag stack — the stack version is where mismatched `</ul>`
@@ -70,6 +105,8 @@ function listToHtml(entries: readonly ListEntry[], start: number, depth: number)
   const items: string[] = [];
   let index = start;
   let open: string | null = null;
+  let openAlign: RichAlign | undefined;
+  const close = (): void => { if (open !== null) items.push(`<li${alignAttribute(openAlign)}>${open}</li>`); };
   while (index < entries.length && entries[index]!.depth >= depth) {
     const entry = entries[index]!;
     if (entry.depth > depth) {
@@ -79,12 +116,13 @@ function listToHtml(entries: readonly ListEntry[], start: number, depth: number)
       continue;
     }
     if (entry.ordered !== ordered) break;
-    if (open !== null) items.push(open);
+    close();
     open = inlineToHtml(entry.text);
+    openAlign = entry.align;
     index += 1;
   }
-  if (open !== null) items.push(open);
-  return [`<${ordered ? 'ol' : 'ul'}>${items.map((item) => `<li>${item}</li>`).join('')}</${ordered ? 'ol' : 'ul'}>`, index];
+  close();
+  return [`<${ordered ? 'ol' : 'ul'}>${items.join('')}</${ordered ? 'ol' : 'ul'}>`, index];
 }
 
 function tableRow(line: string): string[] {
@@ -95,6 +133,12 @@ function tableRow(line: string): string[] {
  * what {@link htmlToMarkdown} writes back out. */
 function listDepth(indent: string): number {
   return Math.floor(indent.replace(/\t/g, '  ').length / 2);
+}
+
+/** A block's alignment, as the style attribute an editable surface shows and
+ * the browser's own alignment commands toggle. */
+function alignAttribute(align: RichAlign | undefined): string {
+  return align && align !== 'left' ? ` style="text-align:${align}"` : '';
 }
 
 /**
@@ -135,7 +179,9 @@ export function markdownToHtml(markdown: string): string {
 
     const heading = HEADING.exec(line);
     if (heading) {
-      blocks.push(`<h${heading[1]!.length}>${inlineToHtml(heading[2]!)}</h${heading[1]!.length}>`);
+      const level = heading[1]!.length;
+      const block = readRichBlock(heading[2]!);
+      blocks.push(`<h${level}${alignAttribute(block.align)}>${inlineToHtml(block.text)}</h${level}>`);
       index += 1;
       continue;
     }
@@ -165,8 +211,13 @@ export function markdownToHtml(markdown: string): string {
       while (index < lines.length) {
         const bullet = BULLET.exec(lines[index]!);
         const ordered = ORDERED.exec(lines[index]!);
-        if (bullet) entries.push({ depth: listDepth(bullet[1]!), ordered: false, text: bullet[2]! });
-        else if (ordered) entries.push({ depth: listDepth(ordered[1]!), ordered: true, text: ordered[3]! });
+        if (bullet) {
+          const item = readRichBlock(bullet[2]!);
+          entries.push({ depth: listDepth(bullet[1]!), ordered: false, text: item.text, ...(item.align ? { align: item.align } : {}) });
+        } else if (ordered) {
+          const item = readRichBlock(ordered[3]!);
+          entries.push({ depth: listDepth(ordered[1]!), ordered: true, text: item.text, ...(item.align ? { align: item.align } : {}) });
+        }
         else break;
         index += 1;
       }
@@ -185,7 +236,8 @@ export function markdownToHtml(markdown: string): string {
       paragraph.push(lines[index]!.trim());
       index += 1;
     }
-    blocks.push(`<p>${inlineToHtml(paragraph.join('\n')).replace(/\n/g, '<br>')}</p>`);
+    const block = readRichBlock(paragraph.join('\n'));
+    blocks.push(`<p${alignAttribute(block.align)}>${inlineToHtml(block.text).replace(/\n/g, '<br>')}</p>`);
   }
   return blocks.join('');
 }
@@ -201,29 +253,80 @@ const EMPHASIS: Readonly<Record<string, string>> = {
   STRONG: '**', B: '**', EM: '*', I: '*', DEL: '~~', S: '~~', STRIKE: '~~',
 };
 
-function inlineMarkdown(nodes: readonly ChildNode[]): string {
-  return nodes.map((node) => {
-    if (node.nodeType === 3) return (node.textContent ?? '').replace(MARKDOWN_SPECIALS, '\\$1');
-    if (node.nodeType !== 1) return '';
+/** A stretch of inline markdown and the marks the DOM had around it. */
+interface InlineLeaf { text: string; marks: RichMarks }
+
+/** The marks an element declares ITSELF — its tag, its style, and the legacy
+ * `<font>` attributes a browser's own colour and size commands still emit. */
+function elementMarks(element: Element): RichMarks {
+  const tag = element.tagName;
+  let marks: RichMarks = tag === 'U' || tag === 'INS' ? { underline: true } : {};
+  marks = mergeRichMarks(marks, richMarksFromCss(element.getAttribute('style') ?? ''));
+  if (tag !== 'FONT') return marks;
+  const color = normalizeRichColor(element.getAttribute('color'));
+  const font = normalizeRichFont(element.getAttribute('face'));
+  const size = richSizeFromFontElement(element.getAttribute('size') ?? '');
+  return mergeRichMarks(marks, {
+    ...(color ? { color } : {}), ...(font ? { font } : {}), ...(size ? { size } : {}),
+  });
+}
+
+/** The block alignment an element declares, however the engine spelled it. */
+function elementAlign(element: Element): RichAlign | undefined {
+  const attribute = (element.getAttribute('align') ?? '').toLowerCase();
+  return richAlignFromCss(element.getAttribute('style') ?? '') ?? (isRichAlign(attribute) ? attribute : undefined);
+}
+
+/** Wrap in an emphasis marker with the surrounding whitespace left OUTSIDE it:
+ * `**bold **` is not emphasis in markdown, it is two literal asterisks. */
+function emphasize(text: string, marker: string): string {
+  const parts = /^(\s*)([\s\S]*?)(\s*)$/.exec(text);
+  const inner = parts?.[2] ?? '';
+  // `<b></b>` left behind by an undone format must not emit bare `****`.
+  return inner ? `${parts![1]}${marker}${inner}${marker}${parts![3]}` : text;
+}
+
+/**
+ * Flatten inline DOM into leaves, each carrying the marks in force where it sits.
+ *
+ * Flattened rather than wrapped in place because the stored form puts the span
+ * OUTSIDE the emphasis (`[**bold**]{u}`) while a browser nests them in whichever
+ * order the commands were pressed, and because two marks on one word must become
+ * ONE span — `[[word]{u}]{color=#c0392b}` is not a span, it is a bracket the
+ * reader cannot pair.
+ */
+function inlineLeaves(nodes: readonly ChildNode[], marks: RichMarks): InlineLeaf[] {
+  return nodes.flatMap((node): InlineLeaf[] => {
+    if (node.nodeType === 3) return [{ text: (node.textContent ?? '').replace(MARKDOWN_SPECIALS, '\\$1'), marks }];
+    if (node.nodeType !== 1) return [];
     const element = node as Element;
     const children = Array.from(element.childNodes);
     const tag = element.tagName;
-    if (tag === 'BR') return '\n';
-    if (tag === 'IMG') return `![${(element.getAttribute('alt') ?? '').replace(/[[\]]/g, '')}](${element.getAttribute('src') ?? ''})`;
-    if (tag === 'CODE') return `\`${(element.textContent ?? '').replace(/`/g, '')}\``;
+    if (tag === 'BR') return [{ text: '\n', marks }];
+    if (tag === 'IMG') return [{ text: `![${(element.getAttribute('alt') ?? '').replace(/[[\]]/g, '')}](${element.getAttribute('src') ?? ''})`, marks }];
+    if (tag === 'CODE') return [{ text: `\`${(element.textContent ?? '').replace(/`/g, '')}\``, marks }];
     if (tag === 'A') {
       const href = element.getAttribute('href') ?? '';
       const text = inlineMarkdown(children) || href;
-      return href ? `[${text}](${href})` : text;
+      return [{ text: href ? `[${text}](${href})` : text, marks }];
     }
+    const own = mergeRichMarks(marks, elementMarks(element));
     const wrap = EMPHASIS[tag];
-    if (wrap) {
-      const text = inlineMarkdown(children);
-      // `<b></b>` left behind by an undone format must not emit bare `****`.
-      return text.trim() ? `${wrap}${text}${wrap}` : text;
-    }
-    return inlineMarkdown(children);
-  }).join('');
+    const leaves = inlineLeaves(children, own);
+    return wrap ? leaves.map((leaf) => ({ ...leaf, text: emphasize(leaf.text, wrap) })) : leaves;
+  });
+}
+
+function inlineMarkdown(nodes: readonly ChildNode[], marks: RichMarks = {}): string {
+  const merged: InlineLeaf[] = [];
+  for (const leaf of inlineLeaves(nodes, marks)) {
+    const last = merged[merged.length - 1];
+    if (last && sameRichMarks(last.marks, leaf.marks)) last.text += leaf.text;
+    else merged.push({ ...leaf });
+  }
+  // A span never straddles a line break: the block readers work a line at a time,
+  // so a `[` on one line and its `]` on the next is a span nobody can pair.
+  return merged.map((leaf) => leaf.text.split('\n').map((part) => wrapRichSpan(part, leaf.marks)).join('\n')).join('');
 }
 
 function listMarkdown(list: Element, depth: number): string {
@@ -232,7 +335,7 @@ function listMarkdown(list: Element, depth: number): string {
   return Array.from(list.children).filter((child) => child.tagName === 'LI').map((item, position) => {
     const nested = Array.from(item.children).filter((child) => child.tagName === 'UL' || child.tagName === 'OL');
     const own = Array.from(item.childNodes).filter((child) => !nested.includes(child as Element));
-    const text = inlineMarkdown(own).replace(/\s+/g, ' ').trim();
+    const text = writeRichBlock(inlineMarkdown(own).replace(/\s+/g, ' ').trim(), elementAlign(item));
     const sub = nested.map((child) => listMarkdown(child, depth + 1)).join('\n');
     return `${indent}${ordered ? `${position + 1}. ` : '- '}${text}${sub ? `\n${sub}` : ''}`;
   }).join('\n');
@@ -278,7 +381,7 @@ function blocksToMarkdown(nodes: readonly ChildNode[]): string[] {
     const children = Array.from(element.childNodes);
     if (/^H[1-6]$/.test(tag)) {
       const text = inlineMarkdown(children).replace(/\s+/g, ' ').trim();
-      if (text) blocks.push(`${'#'.repeat(Number(tag[1]))} ${text}`);
+      if (text) blocks.push(`${'#'.repeat(Number(tag[1]))} ${writeRichBlock(text, elementAlign(element))}`);
       continue;
     }
     if (tag === 'UL' || tag === 'OL') { const list = listMarkdown(element, 0); if (list) blocks.push(list); continue; }
@@ -303,7 +406,7 @@ function blocksToMarkdown(nodes: readonly ChildNode[]): string[] {
         continue;
       }
       const text = inlineMarkdown(children).replace(/[ \t]+/g, ' ').replace(/ ?\n ?/g, '\n').trim();
-      if (text) blocks.push(text);
+      if (text) blocks.push(writeRichBlock(text, elementAlign(element)));
       continue;
     }
     if (BLOCK_TAGS.has(tag)) { blocks.push(...blocksToMarkdown(children)); continue; }
@@ -326,16 +429,22 @@ export function htmlToMarkdown(html: string): string {
   if (typeof DOMParser === 'undefined') return '';
   const parsed = new DOMParser().parseFromString(`<!doctype html><body>${html}</body>`, 'text/html');
   parsed.body.querySelectorAll('script,style,meta,link').forEach((element) => element.remove());
-  // Editing commands leave presentational wrappers behind; unwrap them to their
-  // semantic equivalent so a bolded run survives the round trip.
+  // Editing commands leave presentational wrappers behind. The emphasis they
+  // express becomes a semantic element INSIDE the wrapper rather than replacing
+  // it — the same `<span>` may also carry a colour, a font or a size, and those
+  // are read off the element itself.
   parsed.body.querySelectorAll('span,font').forEach((element) => {
-    const weight = element.getAttribute('style') ?? '';
-    const replacement = /font-weight\s*:\s*(bold|[6-9]00)/i.test(weight) ? 'strong'
-      : /font-style\s*:\s*italic/i.test(weight) ? 'em'
-        : /line-through/i.test(weight) ? 'del' : null;
-    const target = replacement ? parsed.createElement(replacement) : parsed.createDocumentFragment();
-    while (element.firstChild) target.appendChild(element.firstChild);
-    element.replaceWith(target);
+    const style = element.getAttribute('style') ?? '';
+    const semantics = [
+      /font-weight\s*:\s*(bold|[6-9]00)/i.test(style) ? 'strong' : '',
+      /font-style\s*:\s*italic/i.test(style) ? 'em' : '',
+      /line-through/i.test(style) ? 'del' : '',
+    ].filter(Boolean);
+    for (const name of semantics) {
+      const wrapper = parsed.createElement(name);
+      while (element.firstChild) wrapper.appendChild(element.firstChild);
+      element.appendChild(wrapper);
+    }
   });
   return blocksToMarkdown(Array.from(parsed.body.childNodes)).join('\n\n').replace(/\n{3,}/g, '\n\n').trim();
 }

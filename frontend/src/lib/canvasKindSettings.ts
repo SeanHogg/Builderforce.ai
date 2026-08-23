@@ -93,6 +93,18 @@ export interface SettingsField {
   toPatch?: (value: unknown) => Record<string, unknown>;
 }
 
+/**
+ * The reserved `handler` that runs this action through the CARD ACT REGISTRY
+ * (`domains/canvas/application/cardActs.ts`) rather than through a named function in the
+ * inspector's closure, passing the action's own `name` as the act.
+ *
+ * Every act in that registry used to be reachable only from Brain's pending-action
+ * dispatcher, so a kind that wanted a BUTTON for one had to add a bespoke callback to
+ * the inspector — a per-case branch in the very place the registry was built to stop
+ * growing. Declaring this instead needs no wiring at all.
+ */
+export const CARD_ACT_HANDLER = 'cardAct';
+
 export interface SettingsAction {
   name: string;
   /** i18n key under `creationCanvas`. */
@@ -101,7 +113,9 @@ export interface SettingsAction {
   /** Key into the inspector's local handler map — see `KindDetailsInspector`. Kept a
    *  string (not a function reference) so the MANIFEST stays data: which actions exist,
    *  in which order, and when they apply is declared here, while the actual side-
-   *  effecting function stays where it always lived, in `CreationCanvas`'s closure. */
+   *  effecting function stays where it always lived, in `CreationCanvas`'s closure.
+   *  {@link CARD_ACT_HANDLER} is the one reserved value, dispatching to the card-act
+   *  registry with `name` as the act. */
   handler: string;
   visible?: (data: CreationNodeData) => boolean;
   disabled?: (data: CreationNodeData) => boolean;

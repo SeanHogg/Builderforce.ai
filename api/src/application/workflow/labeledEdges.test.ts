@@ -12,7 +12,6 @@
  */
 import { describe, expect, it } from 'vitest';
 import { outletTaken, prunedByEdgeLabel } from './cloudExecutor';
-import { compileCanvasWorkflowSteps } from '../../domain/canvasWorkflowSpec';
 import { compileDefinition, yamlToDefinition } from '../../domain/workflowGraph';
 
 const dep = (id: string, output: string, status = 'completed') => ({ id, status, output });
@@ -120,34 +119,63 @@ describe('the graph carries labels end to end', () => {
   });
 });
 
-describe('a canvas list after a branch is the TAKEN path', () => {
-  it('labels the edge leaving an explicit branch step', () => {
-    const { definition } = compileCanvasWorkflowSteps([
-      { title: 'Only if paid', kind: 'branch', condition: 'order.paid' },
-      { title: 'Charge the card', connector: 'stripe', action: 'charge' },
-    ]);
-    expect(definition.edges.find((e) => e.source === 's1')?.label).toBe('true');
+describe('a labeled arm runs only when the branch took it', () => {
+  // The END-TO-END shape the canvas now produces. A section of steps is lowered by
+  // `frontend/src/domains/workflow/domain/compileBoardFlow.ts` — the one compiler —
+  // and what arrives here is a definition, so that is what these build. (The
+  // authored-list lowering that used to be tested through this file lived in a
+  // SECOND compiler on the server, `canvasWorkflowSpec.ts`, and is gone; its labeling
+  // rule is now covered by `flowStepsFromCanvasSteps.test.ts` beside the compiler
+  // that owns it.) What must not regress is what the EXECUTOR does with the labels.
+  const branchArms = yamlToDefinition([
+    'nodes:',
+    '  - id: b',
+    '    kind: branch',
+    '  - id: charge',
+    '    kind: connector',
+    '  - id: email',
+    '    kind: connector',
+    'edges:',
+    '  - source: b',
+    '    target: charge',
+    '    label: "true"',
+    '  - source: b',
+    '    target: email',
+    '    label: "false"',
+  ].join('\n'));
+
+  it('runs the arm the branch took and prunes the other', () => {
+    const compiled = compileDefinition(branchArms);
+    const charge = compiled.find((step) => step.nodeId === 'charge')!;
+    const email = compiled.find((step) => step.nodeId === 'email')!;
+    const wentTrue = [dep('b', JSON.stringify({ $branch: true }))];
+    expect(prunedByEdgeLabel(charge.edgeLabels, wentTrue)).toBe(false);
+    expect(prunedByEdgeLabel(email.edgeLabels, wentTrue)).toBe(true);
   });
 
-  it('leaves a bare condition as a filter, which already prunes on its own', () => {
-    // `inferKind` resolves a bare `condition` to `filter`, and a filter whose
-    // predicate fails drops its payload and cancels its whole downstream cone.
-    // Labelling that edge would add a second, redundant gate on the same test.
-    const { definition } = compileCanvasWorkflowSteps([
-      { title: 'Only if paid', condition: 'order.paid' },
-      { title: 'Charge the card', connector: 'stripe', action: 'charge' },
-    ]);
-    expect(definition.nodes.find((n) => n.id === 's1')?.kind).toBe('filter');
-    expect(definition.edges.find((e) => e.source === 's1')?.label).toBeUndefined();
-  });
-
-  it('leaves every other edge unconditional', () => {
-    // Labelling an ordinary edge would hand the executor an outlet to prune on
-    // for a node that publishes none.
-    const { definition } = compileCanvasWorkflowSteps([
-      { title: 'Send the SMS', connector: 'twilio', action: 'send_sms' },
-      { title: 'Post to Slack', connector: 'slack', action: 'post_message' },
-    ]);
-    expect(definition.edges.every((e) => e.label === undefined)).toBe(true);
+  it('leaves an UNLABELED graph running both successors, exactly as before', () => {
+    // THE compatibility invariant, asserted on a whole graph rather than a single
+    // call: a filter's own predicate is what prunes its arm, and a definition that
+    // never named an outlet must not acquire one here.
+    const compiled = compileDefinition(yamlToDefinition([
+      'nodes:',
+      '  - id: f',
+      '    kind: filter',
+      '  - id: sms',
+      '    kind: connector',
+      '  - id: slack',
+      '    kind: connector',
+      'edges:',
+      '  - source: f',
+      '    target: sms',
+      '  - source: f',
+      '    target: slack',
+    ].join('\n')));
+    const ran = [dep('f', JSON.stringify({ ok: true }))];
+    for (const nodeId of ['sms', 'slack']) {
+      const step = compiled.find((candidate) => candidate.nodeId === nodeId)!;
+      expect(step).not.toHaveProperty('edgeLabels');
+      expect(prunedByEdgeLabel(step.edgeLabels, ran)).toBe(false);
+    }
   });
 });

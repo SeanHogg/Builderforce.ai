@@ -23,8 +23,13 @@ const TOOLS = [
 const calls: Array<{ extensionId: string; tool: string; arguments?: unknown }> = [];
 let toolThrows = false;
 
+let lastSurface: unknown;
+
 vi.mock('../../application/llm/mcpGateway', () => ({
-  listGatewayMcpTools: async () => TOOLS,
+  listGatewayMcpTools: async (ctx: { surface?: unknown }) => {
+    lastSurface = ctx.surface;
+    return TOOLS;
+  },
   resolveGatewayMcpTool: (tools: typeof TOOLS, name: string) => tools.find((t) => t.name === name) ?? null,
   callGatewayMcpTool: async (_ctx: unknown, call: { extensionId: string; tool: string; arguments?: unknown }) => {
     calls.push(call);
@@ -72,6 +77,22 @@ describe('mcpServerRoutes — JSON-RPC 2.0 / Streamable HTTP', () => {
     expect(result.tools[0].inputSchema).toEqual({ type: 'object', properties: {} });
     expect(result.tools[0].annotations.readOnlyHint).toBe(false);
     expect(result.tools[1].annotations.readOnlyHint).toBe(true);
+  });
+
+  it('passes the endpoint URL ?surface= through to the gateway', async () => {
+    lastSurface = undefined;
+    const res = await createMcpServerRoutes().request('/?surface=delivery', rpc({ jsonrpc: '2.0', id: 21, method: 'tools/list' }), ENV);
+    expect(res.status).toBe(200);
+    expect(lastSurface).toBe('delivery');
+  });
+
+  it('rejects an unknown surface instead of silently advertising everything', async () => {
+    const res = await createMcpServerRoutes().request('/?surface=deliverey', rpc({ jsonrpc: '2.0', id: 22, method: 'tools/list' }), ENV);
+    expect(res.status).toBe(400);
+    const body = await res.json() as any;
+    expect(body.error.message).toContain('deliverey');
+    // The error names the ids that DO exist, so a misconfigured client can fix itself.
+    expect(body.error.data.surfaces.map((s: any) => s.id)).toContain('delivery');
   });
 
   it('tools/call dispatches by the ADVERTISED name and returns MCP content blocks', async () => {

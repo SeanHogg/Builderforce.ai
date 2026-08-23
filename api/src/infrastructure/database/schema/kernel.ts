@@ -259,6 +259,12 @@ export const ledgerEntries = pgTable('ledger_entries', {
   uniqueIndex('uq_ledger_entries_reference').on(t.tenantId, t.denomination, t.reference),
   index('idx_ledger_entries_account').on(t.tenantId, t.accountKind, t.accountRef, t.denomination, t.occurredAt),
   index('idx_ledger_entries_object').on(t.objectId),
+  // The 1099 year-end scan groups EVERY recipient's payouts over a calendar
+  // year, so it has no `account_ref` to lead with and the index above cannot
+  // serve it. Partial, because money that actually moved is a small minority of
+  // ledger rows beside every grant, spend and hold (1117).
+  index('idx_ledger_entries_payout_year').on(t.tenantId, t.denomination, t.occurredAt)
+    .where(sql`entry_kind = 'payout'`),
 ]);
 
 /**
@@ -330,7 +336,12 @@ export const credentials = pgTable('credentials', {
   id:           serial('id').primaryKey(),
   tenantId:     integer('tenant_id').notNull(),
   connectionId: integer('connection_id').references(() => connections.id, { onDelete: 'cascade' }),
-  /** 'oauth' | 'api_key' | 'basic' | 'signing' | 'webhook_secret'. */
+  /** Who the secret belongs to when it belongs to no CONNECTION — a user id for
+   *  `purpose = 'tax_id'`. A W-9 can be submitted before any payout destination
+   *  exists and a person may hold several, so a tax ID is anchored on the PERSON
+   *  (migration 1117). Exactly one of `connectionId` / `subjectRef` is set. */
+  subjectRef:   varchar('subject_ref', { length: 64 }),
+  /** 'oauth' | 'api_key' | 'basic' | 'signing' | 'webhook_secret' | 'tax_id'. */
   purpose:      varchar('purpose', { length: 32 }).notNull().default('oauth'),
   /** Sealed with the shared per-tenant AES-256-GCM credential crypto. Never a bare secret. */
   secretEnc:    text('secret_enc').notNull(),
@@ -342,7 +353,15 @@ export const credentials = pgTable('credentials', {
   createdAt:    timestamp('created_at').notNull().defaultNow(),
   updatedAt:    timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
-  uniqueIndex('uq_credentials_purpose').on(t.tenantId, t.connectionId, t.purpose),
+  // Both partial, and they cannot overlap. `connection_id` is nullable and
+  // Postgres treats NULLs as DISTINCT in a unique index, so the original
+  // unqualified index enforced nothing whatsoever on connection-less rows —
+  // a retried `tax_id` write would have sealed a SECOND secret under the same
+  // subject and every later read would have picked one arbitrarily (1117).
+  uniqueIndex('uq_credentials_purpose').on(t.tenantId, t.connectionId, t.purpose)
+    .where(sql`connection_id IS NOT NULL`),
+  uniqueIndex('uq_credentials_subject_purpose').on(t.tenantId, t.subjectRef, t.purpose)
+    .where(sql`connection_id IS NULL AND subject_ref IS NOT NULL`),
   index('idx_credentials_expiry').on(t.status, t.expiresAt),
 ]);
 

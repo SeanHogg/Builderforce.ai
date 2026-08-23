@@ -140,7 +140,9 @@ export function richColorHex(color: string): string {
  * attribute.
  */
 export function normalizeRichFont(value: string | null | undefined): string | undefined {
-  const raw = (value ?? '').trim().replace(/^["']|["']$/g, '').split(',')[0]?.trim() ?? '';
+  // First family, THEN unquote: a stack is `"Times New Roman", Times, serif`, so
+  // stripping the outer quotes before the split leaves one hanging on the name.
+  const raw = (value ?? '').split(',')[0]?.trim().replace(/^["']|["']$/g, '').trim() ?? '';
   return raw && raw.length <= 48 && /^[\w .+-]+$/.test(raw) ? raw : undefined;
 }
 
@@ -353,11 +355,14 @@ export interface RichBlock {
  * Read (and remove) a block attribute suffix.
  *
  * Only a suffix that parses as this vocabulary is taken — a line ending in
- * `{ok}` or in a snippet of JSON keeps its braces and its meaning.
+ * `{ok}` or in a snippet of JSON keeps its braces and its meaning. A group that
+ * closes an inline span is not a block suffix either: `A [stressed]{u}` ends in
+ * braces, and reading them as the paragraph's own would underline nothing and
+ * leave the bracket showing.
  */
 export function readRichBlock(text: string): RichBlock {
   const match = BLOCK_SUFFIX.exec(text);
-  if (!match) return { text, marks: {} };
+  if (!match || text.slice(0, match.index).endsWith(']')) return { text, marks: {} };
   const { marks, align, recognised } = parseRichAttributes(match[1]!);
   if (!recognised) return { text, marks: {} };
   return { text: text.slice(0, match.index), ...(align ? { align } : {}), marks };

@@ -118,9 +118,12 @@ import {
   type MaterializeResult,
 } from '@/domains/canvas/application/MaterializeDataset';
 import { CARD_ACTS } from '@/domains/canvas/application/cardActs';
+import { parseResourceRef } from '@/domains/canvas/domain/resourceRef';
+import { CardActProvider, useCardActRunnerFor, type CardActBoardBinding } from './cardActRunner';
+import { KindDetailsActions } from './KindDetailsActions';
 import { syncSocialCampaign as syncCampaignUseCase } from '@/domains/marketing/application/SyncSocialCampaign';
 import { socialCampaignGateway } from '@/domains/marketing/infrastructure/socialCampaignGateway';
-import { cardActFor, runCardAct } from '@/domains/canvas/application/CardAct';
+import { cardActFor } from '@/domains/canvas/application/CardAct';
 import {
   boardSignature,
   createCanvasNotices,
@@ -182,7 +185,6 @@ import { hiringApi } from '@/lib/hiringApi';
 import { screenCandidates } from '@/lib/canvasResumeScreening';
 import { guestLimitRefusal, type GuestLimitRefusal } from '@/lib/guestLimit';
 import { GuestSignupCta, type GuestSignupPrompt } from '@/components/GuestSignupCta';
-import { ApiRequestError } from '@/lib/apiClient';
 import { captureCanvasScreenshot, resolveCanvasImage, type CanvasImageAsset, type CanvasImageResolveMode } from '@/lib/canvasImageAssets';
 import { createProject, evaluateModel, fetchProjects, publishSite } from '@/lib/api';
 import { computeProjectHealth } from '@/lib/projectHealth';
@@ -292,7 +294,8 @@ import { appendImageToDrawioCanvas, createDrawioImageCanvas } from '@/lib/drawio
 import { convertGraphSource, diagramConvertSource, diagramConvertTargets } from '@/lib/canvasDiagramConvert';
 import { DIAGRAM_TARGETS, diagramNotation } from '@/lib/diagramNotations';
 import { compileBoardFlow } from '@/domains/workflow/domain/compileBoardFlow';
-import { boardFlowFromDefinition } from '@/domains/workflow/domain/boardFlowFromDefinition';
+import { boardFlowFromDefinition, type UnpackedFlow } from '@/domains/workflow/domain/boardFlowFromDefinition';
+import { flowStepsFromCanvasSteps } from '@/domains/workflow/domain/flowStepsFromCanvasSteps';
 import { loadTemplateGraph } from '@/lib/evermindBuild';
 import { isStepChoice, parseStepChoice, stepConfigOf, stepKindOf } from '@/domains/workflow/domain/flowStepObject';
 import { outletForHandle } from '@/domains/workflow/domain/stepOutlets';
@@ -370,7 +373,6 @@ import { CANVAS_VIEWPORTS, canvasViewport, websiteBeforePatch } from '@builderfo
 import { deleteIdeProject, listIdeProjects } from '@/lib/api';
 import { CREATIVE_GENERATOR_KINDS } from '@/lib/creationObjectGroups';
 import {
-  kindSettingsActions,
   kindSettingsFields,
   kindSettingsManifest,
   kindSettingsSellable,
@@ -4264,12 +4266,12 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     if (!people.length) { setNotice(t('noticeNeedPeopleOnCanvas')); return; }
     const participants = people.map((node) => ({
       kind: node.data.kind === 'agent' ? 'agent' : 'human',
-      ref: node.data.resourceId?.split(':').slice(1).join(':') || node.id,
+      ref: parseResourceRef(node.data.resourceId)?.id || node.id,
       name: node.data.title,
       focus: node.data.focus || node.data.subtitle || 'No current focus recorded',
     }));
     const applyStandup = (resourceId?: string) => {
-      setNodes((current) => current.map((node) => node.id === selectedNode.id ? { ...node, data: { ...node.data, status: resourceId ? 'Live' : 'Draft', participants, resourceId: resourceId || node.data.resourceId, summary: `${participants.length} participants gathered. Brain will ask each person for progress, blockers, and next actions, then create follow-up work on this canvas.` } } : node));
+      setNodes((current) => current.map((node) => node.id === selectedNode.id ? { ...node, data: { ...node.data, status: resourceId ? 'Live' : 'Draft', participants, resourceId: resourceId || node.data.resourceId, summary: resourceId ? undefined : t('standupGatheredSummary', { count: participants.length }) } } : node));
       setEdges((current) => [...current, ...people.filter((person) => !current.some((edge) => edge.source === person.id && edge.target === selectedNode.id)).map((person) => ({ id: crypto.randomUUID(), source: person.id, target: selectedNode.id, label: 'joins', type: 'smoothstep' }))]);
     };
     const project = canvasProjectNodes(nodes)[0];
@@ -4279,13 +4281,13 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       void ceremonySessionsApi.start(projectId, 'standup', participants.map(({ kind, ref, name }) => ({ kind, ref, name }))).then((result) => {
         const ceremonyId = result.session?.id;
         applyStandup(ceremonyId ? `ceremony:${ceremonyId}` : undefined);
-        setNotice(ceremonyId ? 'Live stand-up started' : t('noticeStandupFramePrepared'));
+        setNotice(ceremonyId ? t('noticeStandupStarted') : t('noticeStandupFramePrepared'));
       }).catch((error) => setNotice(error instanceof Error ? error.message : t('noticeStartStandupFailed')));
       return;
     }
     applyStandup();
     setNotice(t('noticeNeedProjectForStandup'));
-  }, [nodes, persistence, requireAccount, selectedNode, setEdges, setNodes]);
+  }, [nodes, persistence, requireAccount, selectedNode, setEdges, setNodes, t]);
 
   const onDrop = useCallback((event: React.DragEvent) => {
     event.preventDefault();
@@ -9525,13 +9527,6 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setNotice(t('noticeChangesRejected'));
   }, []);
 
-  /** Merge a patch into one node's data. Run/compile state is written by the
-   *  app, not the user, so this deliberately skips the `cardsEditable` gate that
-   *  `updateNodeData` applies to inspector edits. */
-  const patchWorkflowNode = useCallback((targetId: string, patch: Partial<CreationNodeData>) => {
-    setNodes((current) => current.map((node) => node.id === targetId ? { ...node, data: { ...node.data, ...patch } } : node));
-  }, [setNodes]);
-
   /** Resolve which workflow node an action applies to: the one named, else the
    *  selection, else the only one on the board. Shared by build and run. */
   const resolveWorkflowNode = useCallback((workflowId?: string) => {
@@ -9617,7 +9612,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       // with no gate would run unapproved (see migration 1092), and one with no run
       // target saves as built and refuses at run time. `builderforce` is the default
       // because a canvas flow runs on the hosted cloud runtime unless somebody says
-      // otherwise — the same default `/from-canvas` applies.
+      // otherwise, and the canvas offers no host picker to say it with.
       const runTarget = typeof frame.data.runTarget === 'string' && frame.data.runTarget ? frame.data.runTarget : 'builderforce';
       const approvalMode = frame.data.approvalMode === 'required' || frame.data.approvalMode === 'autonomous'
         ? (frame.data.approvalMode as WorkflowApprovalMode)
@@ -9736,38 +9731,57 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   }, [connectionKind, setEdges, setNodes, setNotice, t]);
 
   /**
-   * OPEN A SAVED WORKFLOW ON THE BOARD — the migration path for every definition
-   * authored before the canvas was the workflow.
+   * OPEN A LEGACY WORKFLOW CARD ON THE BOARD — the migration path for every workflow
+   * authored before the canvas WAS the workflow.
    *
    * The card is REPLACED by the section it was standing in for: a frame holding one
-   * `flowStep` object per node, wired the way the definition was wired, with a labeled
-   * edge reattached to the outlet its label names. Replaced rather than kept beside it,
+   * `flowStep` object per step, wired the way the flow was wired, with a labeled edge
+   * reattached to the outlet its label names. Replaced rather than kept beside it,
    * because a card and the steps it stands for both on the board is two editable copies
    * of one graph, and the one that would be saved is whichever was touched last.
    *
-   * The definition id moves to the frame, so Build and Run keep pointing at the same
-   * row and this is an OPEN rather than a fork.
+   * ── TWO SOURCES, ONE PLACEMENT ───────────────────────────────────────────────
+   * A card either points at a SAVED definition (it was built once) or carries an
+   * AUTHORED step list that never was. Both lower to the same board section —
+   * `boardFlowFromDefinition` for the saved graph, `flowStepsFromCanvasSteps` for the
+   * authored list — so the placement below is written once. That authored list used to
+   * be lowered SERVER-side by `POST /api/workflow-definitions/from-canvas`: a SECOND
+   * compiler, for a card whose only editor was a modal that no longer exists, producing
+   * a definition nobody could then open or change. Opening is the only thing that
+   * happens to a legacy card now, and the board's compiler is the only one.
+   *
+   * The definition id moves to the frame when there is one, so Build and Run keep
+   * pointing at the same row and this is an OPEN rather than a fork.
    */
   const unpackWorkflow = useCallback((workflowId?: string) => {
     const target = resolveWorkflowNode(workflowId);
     if (!target || target.data.kind !== 'workflow') { setNotice(t('noticeNeedWorkflow')); return; }
-    const definitionId = typeof target.data.resourceId === 'string' && target.data.resourceId.startsWith('workflow:')
-      ? target.data.resourceId.slice('workflow:'.length)
-      : '';
-    if (!definitionId) { setNotice(t('flowStep.notBuiltYet')); return; }
-    setNotice(t('flowStep.opening'));
-    void workflowDefinitions.get(definitionId).then((detail) => {
-      const unpacked = boardFlowFromDefinition(detail.definition, target.position);
+    const targetId = target.id;
+    /**
+     * Draw the section this card stood for, and delete the card.
+     *
+     * `runTarget` and `approvalMode` travel WITH it. They used to be dropped here, so a
+     * card reading "Approval required" unpacked into a section that compiled to a
+     * definition with NO gate and ran unapproved — the failure migration 1092 exists to
+     * prevent. The frame declares the same two controls the card does (see
+     * `canvasKindSettings.simple.ts`), so carrying them across is a copy of one value,
+     * not a translation between two vocabularies.
+     */
+    const placeFlow = (unpacked: UnpackedFlow, title: string, definitionId: string) => {
       const frame = newNode('frame', unpacked.frame.position);
       frame.style = { width: unpacked.frame.size.width, height: unpacked.frame.size.height };
       frame.zIndex = -1;
       frame.data = {
         ...frame.data,
-        title: detail.name,
+        title,
         framePurpose: t('flowStep.framePurpose'),
-        resourceId: `workflow:${detail.id}`,
-        resourceSubtype: 'definition',
-        workflowExecutable: true,
+        ...(typeof target.data.runTarget === 'string' && target.data.runTarget ? { runTarget: target.data.runTarget } : {}),
+        ...(target.data.approvalMode === 'required' || target.data.approvalMode === 'autonomous'
+          ? { approvalMode: target.data.approvalMode }
+          : {}),
+        ...(definitionId
+          ? { resourceId: `workflow:${definitionId}`, resourceSubtype: 'definition', workflowExecutable: true }
+          : {}),
       };
       const idByRef = new Map<string, string>();
       const stepNodes = unpacked.steps.map((step) => {
@@ -9776,9 +9790,9 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         node.data = { ...node.data, ...step.data } as CreationNodeData;
         return node;
       });
-      setNodes((current) => [frame, ...current.filter((node) => node.id !== target.id), ...stepNodes]);
+      setNodes((current) => [frame, ...current.filter((node) => node.id !== targetId), ...stepNodes]);
       setEdges((current) => [
-        ...current.filter((edge) => edge.source !== target.id && edge.target !== target.id),
+        ...current.filter((edge) => edge.source !== targetId && edge.target !== targetId),
         ...unpacked.connections.flatMap((connection) => {
           const source = idByRef.get(connection.sourceRef);
           const dest = idByRef.get(connection.targetRef);
@@ -9794,64 +9808,53 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       ]);
       setSelectedId(frame.id); setSelectedIds([frame.id]);
       setNotice(t('flowStep.opened', { count: stepNodes.length }));
-    }).catch((error: Error) => setNotice(error.message));
+    };
+
+    const definitionId = typeof target.data.resourceId === 'string' && target.data.resourceId.startsWith('workflow:')
+      ? target.data.resourceId.slice('workflow:'.length)
+      : '';
+    if (definitionId) {
+      setNotice(t('flowStep.opening'));
+      void workflowDefinitions.get(definitionId)
+        .then((detail) => placeFlow(boardFlowFromDefinition(detail.definition, target.position), detail.name, detail.id))
+        .catch((error: Error) => setNotice(error.message));
+      return;
+    }
+    // Never built, so there is no saved graph and the authored list IS the flow. A step
+    // that names no action becomes one that SAYS what it still needs, on the board,
+    // rather than being refused — refusing would strand the intention in JSON that no
+    // surface can edit, which is the failure this whole change is about.
+    const authored = Array.isArray(target.data.steps) ? target.data.steps : [];
+    if (authored.length === 0) { setNotice(t('flowStep.nothingToOpen')); return; }
+    placeFlow(
+      flowStepsFromCanvasSteps(authored, target.position, {
+        untitledStep: (position: number) => t('flowStep.untitledStep', { position }),
+      }),
+      target.data.title || t('flowStep.untitledFlow'),
+      '',
+    );
   }, [connectionKind, resolveWorkflowNode, setEdges, setNodes, setNotice, t]);
 
+  /**
+   * BUILD WHAT IS DRAWN — and there is exactly one thing that compiles a canvas.
+   *
+   * A frame's steps ARE the definition, so a frame is dispatched to the board compiler.
+   * Dispatched HERE rather than at each call site so Run, the section's own Build and
+   * Brain's `canvas_build_workflow` all reach the same one.
+   *
+   * A legacy `workflow` card has no build path of its own any more. Its authored list
+   * was lowered by a second compiler on the server for a card whose only editor was a
+   * modal that no longer exists, so building one minted a definition that nobody could
+   * subsequently open or change. It is OPENED onto the board first, and from there it is
+   * an ordinary section that this compiler builds like any other.
+   */
   const compileWorkflow = useCallback(async (workflowId?: string): Promise<string | null> => {
     const target = resolveWorkflowNode(workflowId);
     if (!target) { setNotice(t('noticeNeedWorkflow')); return null; }
-    // A frame's steps ARE the definition — there is no authored `steps` list to lower.
-    // Dispatched here rather than at each call site so Run, the card's Build and Brain's
-    // `canvas_build_workflow` all reach the right compiler.
     if (target.data.kind === 'frame') return buildFlowFromFrame(target.id);
-    // Compiling creates a tenant-owned, runnable resource, so a local draft has
-    // to become an account first — the same gate saving a collaborator uses.
-    if (persistence !== 'server') {
-      requireAccount('workflow', t('buildWorkflowGateTitle'), t('buildWorkflowGate'));
-      return null;
-    }
-    const targetId = target.id;
-    setNotice(t('noticeWorkflowBuilding'));
-    patchWorkflowNode(targetId, { status: 'Building', workflowIssues: [] });
-    try {
-      // Bind the definition to the canvas's project when there is one, so the
-      // compiled workflow lands in the same scope as the rest of this board's work.
-      const projectId = canvasProjectNodes(nodes).map((node) => canvasProjectId(node.data))[0] ?? null;
-      // The card's two authored controls travel WITH the steps. They used to be
-      // rendered and dropped, so a canvas reading "Approval required" compiled to a
-      // definition with no gate and ran unapproved — see migration 1092.
-      const definition = await workflowDefinitions.fromCanvas({
-        name: target.data.title || 'Canvas workflow',
-        steps: target.data.steps,
-        ...(typeof target.data.content === 'string' && target.data.content ? { description: target.data.content } : {}),
-        ...(projectId != null ? { projectId } : {}),
-        ...(typeof target.data.runTarget === 'string' && target.data.runTarget ? { runTarget: target.data.runTarget } : {}),
-        ...(target.data.approvalMode === 'required' || target.data.approvalMode === 'autonomous'
-          ? { approvalMode: target.data.approvalMode as WorkflowApprovalMode }
-          : {}),
-      });
-      patchWorkflowNode(targetId, {
-        resourceId: `workflow:${definition.id}`,
-        resourceSubtype: 'definition',
-        workflowExecutable: true,
-        workflowIssues: [],
-        workflowStepCount: definition.compiledCount,
-        status: 'Built',
-      });
-      setNotice(t('noticeWorkflowBuilt', { count: definition.compiledCount }));
-      return definition.id;
-    } catch (error) {
-      // `details.issues` is the per-step explanation the compile endpoint
-      // returns; without it the card can only say "failed", which is what made
-      // the previous behaviour impossible to act on.
-      const details = error instanceof ApiRequestError ? error.details as { issues?: unknown } | undefined : undefined;
-      const issues = Array.isArray(details?.issues) ? details.issues : [];
-      const message = error instanceof Error ? error.message : t('noticeWorkflowNotRunnable');
-      patchWorkflowNode(targetId, { status: 'Needs setup', workflowIssues: issues });
-      setNotice(message);
-      return null;
-    }
-  }, [buildFlowFromFrame, nodes, patchWorkflowNode, persistence, requireAccount, resolveWorkflowNode, t]);
+    setNotice(t('flowStep.openToBuild'));
+    return null;
+  }, [buildFlowFromFrame, resolveWorkflowNode, setNotice, t]);
 
   const runWorkflow = useCallback((workflowId?: string) => {
     if (!canRun) { setNotice(t('noticeNeedRunnerAccess')); return; }
@@ -10570,29 +10573,21 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * checking, because the chain it sits in is synchronous and "did an act answer"
    * has to be known before the next `else if` is considered.
    */
-  const runCardActOnObject = useCallback(async (objectId: string, action: string) => {
-    const outcome = await runCardAct(CARD_ACTS, {
-      objectId,
-      action,
-      persistence,
-      t: canvasText,
-      board: { objects: nodesRef.current, create: newNode },
-    });
-    if (!outcome) return;
-    const { patch, add } = outcome;
-    if (patch || add) {
-      setNodes((current) => {
-        const patched = patch
-          ? current.map((node) => (node.id === objectId ? { ...node, data: { ...node.data, ...patch } } : node))
-          : current;
-        return add ? [...patched, ...add.nodes] : patched;
-      });
-      if (add?.edges.length) setEdges((current) => [...current, ...add.edges]);
-    }
-    setNotice(outcome.notice);
-    // The slow half — an LMS score push — replaces the sentence when it lands.
-    if (outcome.settle) void outcome.settle.then(setNotice);
-  }, [persistence, setEdges, setNodes, setNotice, t]);
+  // The runner itself now lives in `cardActRunner.tsx` and is PUBLISHED to the board
+  // rather than held in this closure, so a surface that wants a button for an act reads
+  // it from context instead of being handed a callback threaded through the inspector's
+  // prop list. This binding is the only thing that stays here: applying an outcome is
+  // still the one place the board is mutated on an act's behalf.
+  const cardActBoard = useMemo<CardActBoardBinding>(() => ({
+    objects: () => nodesRef.current,
+    create: newNode,
+    setNodes,
+    setEdges,
+    setNotice,
+    persistence,
+    t: canvasText,
+  }), [persistence, setEdges, setNodes, setNotice, canvasText]);
+  const runCardActOnObject = useCardActRunnerFor(cardActBoard);
 
 
   /**
@@ -10685,7 +10680,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     // each one a place to forget the next kind that offers the same act. They are
     // registry entries now (`domains/canvas/application/cardActs.ts`), so this is
     // one lookup and the chain stops growing.
-    else if (cardActFor(CARD_ACTS, target.data.kind, pending.action)) void runCardActOnObject(target.id, pending.action);
+    else if (cardActFor(CARD_ACTS, target.data.kind, pending.action)) runCardActOnObject(target.id, pending.action);
     else if (pending.action === 'export') void exportArtifact(target.id, defaultExportAction(target.data.kind)).then(setNotice);
     else if (target.data.kind === 'slides' && pending.action === 'present') setPresentMode(true);
     else if (target.data.kind === 'evermind' && pending.action === 'publish') {
@@ -11539,6 +11534,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     // render in three places and each needs the same answer to "is there a board to move
     // this conversation into?". One provider, read where it is needed.
     <CanvasSurfaceProvider value={surface}>
+    {/* Same reasoning for the card-act runner: a card's action button is drawn deep in
+        the inspector, and handing it a callback would have meant one more entry in a
+        prop list that already carries fifty. Published once, read where it is needed. */}
+    <CardActProvider runner={runCardActOnObject}>
     <div
       ref={shellRef}
       className={`${styles.canvasShell} app-full-height`}
@@ -12499,6 +12498,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         onStepChange={prepareTourStep}
       />
     </div>
+    </CardActProvider>
     </CanvasSurfaceProvider>
   );
 }
@@ -12678,7 +12678,6 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
     buildFlow: onBuildFlow,
     run: onRun,
     startStandup: onStartStandup,
-    pullStandupMinutes: () => onRunCardAct('minutes'),
     expandMockupSet: onExpandMockupSet,
     deliverMockup: onDeliverMockup,
     saveFramePreset: onSaveFramePreset,
@@ -12766,7 +12765,7 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
       {/* The panel decides for itself whether this object has anything to
           convert, and to which notations — so no kind list is maintained here. */}
       <DiagramConvertPanel node={node} nodes={nodes} onConvert={onConvertDiagram} />
-      <KindDetailsActions kind={kind} data={node.data} editable={editable} handlers={detailsActionHandlers} />
+      <KindDetailsActions objectId={node.id} kind={kind} data={node.data} editable={editable} handlers={detailsActionHandlers} />
       {!kindSettingsManifest(kind) && !isSpecObjectKind(kind) && kind !== 'chat' && <p className={styles.inspectorHint}>{t('objectLiveHint')}</p>}
       </fieldset> : <ActivityInspector sessionId={sessionId} objectId={node.id} data={node.data} persistence={persistence} role={role} members={members} />}
       {/* Where the evidence behind THIS object is shown — for every kind that
@@ -13236,28 +13235,6 @@ function KindDetailsFields({ kind, data, editable, onChange }: {
     {fields.map((field) => <SettingsFieldControl key={field.name} field={field} data={data} editable={editable} variant="full" translate={(key) => t(key as never)} onChange={onChange} />)}
     {manifest?.hintKey && <p className={styles.inspectorHint}>{t(manifest.hintKey as never)}</p>}
   </>;
-}
-
-/** A kind's declared actions, rendered as buttons wired through the ONE handler map the
- *  inspector builds from the functions it already receives as props — the manifest says
- *  which actions exist and when; the function each one calls stays exactly what it was. */
-function KindDetailsActions({ kind, data, editable, handlers }: {
-  kind: string; data: CreationNodeData; editable: boolean; handlers: Record<string, () => void>;
-}) {
-  const t = useTranslations('creationCanvas');
-  const actions = kindSettingsActions(kind, data);
-  if (!actions.length) return null;
-  return <>{actions.map((action) => {
-    const handler = handlers[action.handler];
-    if (!handler) return null;
-    return <button
-      key={action.name}
-      type="button"
-      className={action.style === 'primary' ? styles.fullButton : styles.secondaryFullButton}
-      disabled={!editable || (action.disabled ? action.disabled(data) : false)}
-      onClick={handler}
-    >{t(action.labelKey as never)}</button>;
-  })}</>;
 }
 
 /**

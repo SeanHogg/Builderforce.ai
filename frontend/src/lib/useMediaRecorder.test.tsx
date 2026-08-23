@@ -6,19 +6,27 @@ import { saveBinaryFile } from './api';
 
 vi.mock('./api', () => ({ saveBinaryFile: vi.fn(async () => undefined) }));
 
+/**
+ * The browser's recorder, stubbed. It dispatches `stop` through
+ * `addEventListener` because that is how the real one delivers it and how
+ * `useStreamRecorder` waits for the final chunk — a stub that only supported the
+ * `onstop` property would pass while the product dropped the last second of every
+ * recording.
+ */
 class RecorderStub {
   static isTypeSupported = () => true;
   state: RecordingState = 'inactive';
   mimeType = 'video/webm';
   ondataavailable: ((event: BlobEvent) => void) | null = null;
-  onstop: (() => void) | null = null;
   onerror: (() => void) | null = null;
+  private listeners: Record<string, (() => void)[]> = {};
   constructor(_stream: MediaStream, options?: MediaRecorderOptions) { if (options?.mimeType) this.mimeType = options.mimeType; }
+  addEventListener(type: string, handler: () => void) { (this.listeners[type] ??= []).push(handler); }
   start() { this.state = 'recording'; }
   stop() {
     this.state = 'inactive';
     this.ondataavailable?.({ data: new Blob(['video'], { type: this.mimeType }) } as BlobEvent);
-    this.onstop?.();
+    for (const handler of this.listeners.stop ?? []) handler();
   }
 }
 

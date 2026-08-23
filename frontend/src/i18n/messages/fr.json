@@ -452,7 +452,15 @@
     "respReviewer": "Relecteur",
     "respContributor": "Contributeur",
     "required": "Requis",
-    "addRequirement": "Ajouter une exigence"
+    "addRequirement": "Ajouter une exigence",
+    "laneKey": "Clé de la colonne",
+    "laneKeyTitle": "L'état que portent les tickets tant qu'ils sont dans cette colonne. La renommer déplace tous les tickets de la colonne et redirige tout ce qui la cible.",
+    "laneKeyRenamed": "Renommée en {key} — {count, plural, one {# ticket déplacé} other {# tickets déplacés}}.",
+    "errRenameKey": "Impossible de renommer la clé de cette colonne",
+    "orphanedTickets": "{count, plural, one {# ticket n'est} other {# tickets ne sont}} dans aucune colonne : aucune porte, aucun agent et aucune exigence ne s'y applique, et ils ne peuvent pas démarrer seuls.",
+    "orphanedAdopt": "Les déplacer",
+    "orphanedAdoptInto": "Déplacer les tickets orphelins vers",
+    "orphanedAdoptIntoTitle": "La colonne vers laquelle les tickets orphelins sont déplacés. Choisissez une colonne où le travail circule encore — Terminé ou une colonne de parking les masquerait à nouveau."
   },
   "integrations": {
     "gallery": {
@@ -14326,7 +14334,8 @@
     "pastMeetings": "Réunions passées",
     "minutesAvailable": "Compte rendu prêt",
     "viewNotes": "Voir les notes",
-    "calendarLabel": "Calendrier des réunions"
+    "calendarLabel": "Calendrier des réunions",
+    "noMinutesYet": "Rien n’a été capturé pendant cette réunion, il n’y a donc pas de compte rendu."
   },
   "brainLauncher": {
     "open": "Ouvrir l’assistant Brain",
@@ -17099,12 +17108,16 @@
       "unknown": "Inconnu",
       "present": "Présent",
       "absent": "Absent",
-      "excused": "Facultatif"
+      "excused": "Excusé"
     },
     "errorCorrect": "Impossible de mettre à jour la présence.",
     "correctAria": "Présence de {name}",
-    "sourcePto": "En congé approuvé",
-    "sourceManual": "Corrigé par un manager"
+    "source": {
+      "derived": "Enregistré depuis la salle",
+      "manual": "Corrigé par un manager",
+      "pto": "En congé approuvé",
+      "rsvp": "A décliné l’invitation"
+    }
   },
   "observability": {
     "agents": "Agents",
@@ -22364,7 +22377,7 @@
     "sessionActionCluster": {
       "history": "Historique de la toile",
       "inspect": "Outils de la toile",
-      "live": "Appel",
+      "live": "Direct et enregistrement",
       "session": "Partager et publier"
     },
     "moreMenuSessionActions": "Cette toile",
@@ -23161,7 +23174,47 @@
     },
     "openWorkflowOnCanvas": "Ouvrir sur le canevas",
     "buildFlow": "Compiler le flux",
-    "runFlow": "Exécuter le flux"
+    "runFlow": "Exécuter le flux",
+    "recordTalktrack": "Enregistrer une visite",
+    "recordTalktrackTitle": "Enregistrez une visite commentée de ce canevas",
+    "talktrack": {
+      "title": "Enregistrer une visite",
+      "lead": "Partagez cet onglet et commentez-le. Vos paroles sont transcrites au fil de l’eau, les moments clés deviennent des chapitres, et l’enregistrement arrive sur le tableau sous forme de vidéo que vous pouvez couper, sous-titrer et publier.",
+      "start": "Démarrer l’enregistrement",
+      "stop": "Arrêter et ajouter au tableau",
+      "mark": "Marquer un moment clé",
+      "markObject": "Marquer : {title}",
+      "markedMoment": "Moment clé",
+      "keyMoments": "Moments clés",
+      "noMomentsYet": "Rien de marqué pour l’instant. Marquez un moment en parlant, ou laissez les pauses de votre commentaire trouver les chapitres.",
+      "transcriptHeading": "Transcription",
+      "listening": "Écoute en cours…",
+      "saving": "Enregistrement de la visite…",
+      "added": "Visite ajoutée au tableau en {chapters} chapitres.",
+      "status": "{chapters} chapitres",
+      "objectTitle": "Visite de {board}",
+      "opening": "Ouverture",
+      "unsupported": "Ce navigateur ne peut pas enregistrer l’écran. Chrome, Edge et Firefox sur ordinateur le peuvent.",
+      "noTranscription": "Ce navigateur ne transcrit pas la parole : la visite sera enregistrée sans sous-titres.",
+      "readOnly": "Vous pouvez enregistrer, mais ce canevas est en lecture seule — demandez l’accès en écriture pour y ajouter la visite.",
+      "captureFailed": "Le partage d’écran a échoué. Vérifiez l’autorisation du navigateur et réessayez.",
+      "nothingRecorded": "Rien n’a été enregistré.",
+      "storeFailed": "La visite n’a pas pu être enregistrée.",
+      "openers": "donc,ensuite,maintenant,ici,passons,le point clé,surtout,enfin,allons,c’est là que"
+    },
+    "pullStandupMinutes": "Importer le compte rendu sur le tableau",
+    "standupGatheredSummary": "{count} participants réunis. Brain interrogera chacun sur son avancement, ses blocages et ses prochaines actions.",
+    "noticeStandupStarted": "Mêlée en direct démarrée",
+    "noticeStandupNeverConvened": "Cette mêlée n’a pas encore eu lieu. Réunissez l’équipe pour la lancer.",
+    "noticeStandupStillRunning": "Cette mêlée est encore en cours. Le compte rendu est rédigé à la fin.",
+    "noticeStandupNoMeeting": "Cette mêlée n’avait pas de salle, rien n’a donc été capturé.",
+    "noticeStandupNotSummarized": "Pas encore de compte rendu. Générez-le d’abord depuis l’enregistrement de la réunion.",
+    "noticeStandupNothingCaptured": "Rien n’a été capturé pendant cette mêlée, il n’y a donc pas de compte rendu.",
+    "noticeStandupNoActionItems": "Le compte rendu ne mentionne aucune action ouverte.",
+    "noticeStandupActionItemsAlreadyOnBoard": "{count, plural, one {L’action est déjà sur le tableau} other {Les # actions sont déjà sur le tableau}}",
+    "noticeStandupActionItemsPlaced": "{count, plural, one {# action placée sur le tableau} other {# actions placées sur le tableau}}",
+    "noticeStandupMinutesNeedsAccount": "Connectez-vous pour lire le compte rendu d’une mêlée",
+    "noticeStandupMinutesFailed": "Impossible de lire le compte rendu de la mêlée"
   },
   "canvasCommands": {
     "cleanLayout": "Réorganiser la toile",

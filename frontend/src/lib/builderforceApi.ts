@@ -1149,8 +1149,13 @@ export const workflowDefinitions = {
    * Create a definition from a graph the caller already has — which is what the
    * Creation Canvas posts once a SECTION of steps has been compiled
    * (`compileBoardFlow`). `runTarget`/`approvalMode` are the canvas's own two
-   * controls, resolved server-side exactly as `fromCanvas` resolves them; without
-   * them a canvas-built definition saved with no runtime and refused at run time.
+   * controls, resolved server-side; without them a canvas-built definition saved with
+   * no runtime and was refused at run time.
+   *
+   * This is the ONLY door from a canvas to a definition. There used to be a second,
+   * `POST /from-canvas`, which lowered a legacy card's authored `steps` server-side —
+   * a compiler for an object whose editor had been deleted. It and its card's Build
+   * action are gone; a legacy card is opened onto the board and built from there.
    */
   create: (body: {
     name: string;
@@ -1160,25 +1165,6 @@ export const workflowDefinitions = {
     approvalMode?: WorkflowApprovalMode;
   } & WorkflowProjectBinding & Partial<WorkflowRunTargetFields>) =>
     request<WorkflowDefinitionSummary>('/api/workflow-definitions', {
-      method: 'POST',
-      body: JSON.stringify(body),
-    }),
-  /**
-   * Compile a Creation Canvas workflow object's authored `steps` into a real,
-   * runnable definition. All-or-nothing: on 400 the thrown `ApiRequestError`
-   * carries `details.issues` naming each step that is not runnable and why.
-   */
-  fromCanvas: (body: {
-    name: string;
-    description?: string;
-    steps: unknown;
-    triggerType?: string;
-    /** The canvas Workflow card's own run-target select, resolved server-side. */
-    runTarget?: string;
-    /** The canvas Workflow card's own gate. Stored on the definition and enforced at run. */
-    approvalMode?: WorkflowApprovalMode;
-  } & WorkflowProjectBinding & Partial<WorkflowRunTargetFields>) =>
-    request<WorkflowDefinitionDetail & { compiledCount: number }>('/api/workflow-definitions/from-canvas', {
       method: 'POST',
       body: JSON.stringify(body),
     }),
@@ -8232,7 +8218,9 @@ export const boardsApi = {
     /** Seed the default status-mirroring lanes when a board has none. Idempotent. */
     ensureDefaults: (boardId: string): Promise<Swimlane[]> =>
       request<{ swimlanes: Swimlane[] }>(`/api/boards/${boardId}/swimlanes/ensure-defaults`, { method: 'POST' }).then((r) => r.swimlanes ?? []),
-    create: (boardId: string, body: Partial<LaneWriteBody> & { key: string; name: string }): Promise<Swimlane> =>
+    /** `key` is OPTIONAL: the server mints it from `name` (uniquely, against the rows
+     *  it is about to insert into) rather than the caller guessing from a stale list. */
+    create: (boardId: string, body: Partial<LaneWriteBody> & { name: string }): Promise<Swimlane> =>
       request(`/api/boards/${boardId}/swimlanes`, { method: 'POST', body: JSON.stringify(body) }),
     patch: (boardId: string, laneId: string, body: Partial<LaneWriteBody>): Promise<SwimlanePatched> =>
       request(`/api/boards/${boardId}/swimlanes/${laneId}`, { method: 'PATCH', body: JSON.stringify(body) }),

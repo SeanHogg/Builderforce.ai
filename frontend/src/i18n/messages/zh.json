@@ -452,7 +452,15 @@
     "respReviewer": "评审人",
     "respContributor": "参与者",
     "required": "必需",
-    "addRequirement": "添加要求"
+    "addRequirement": "添加要求",
+    "laneKey": "列标识",
+    "laneKeyTitle": "工单位于此列时所持有的状态。重命名它会移动该列中的所有工单，并重新指向所有以它为目标的配置。",
+    "laneKeyRenamed": "已重命名为 {key} — 移动了 {count} 个工单。",
+    "errRenameKey": "无法重命名此列标识",
+    "orphanedTickets": "有 {count} 个工单不属于任何一列，因此没有任何关卡、代理或要求适用于它们，它们也无法自行启动。",
+    "orphanedAdopt": "移动它们",
+    "orphanedAdoptInto": "将滞留工单移入",
+    "orphanedAdoptIntoTitle": "滞留工单要移入的列。请选择工作仍会流经的列——“完成”或停放列会让它们再次被隐藏。"
   },
   "integrations": {
     "gallery": {
@@ -14326,7 +14334,8 @@
     "pastMeetings": "历史会议",
     "minutesAvailable": "纪要已就绪",
     "viewNotes": "查看纪要",
-    "calendarLabel": "会议日历"
+    "calendarLabel": "会议日历",
+    "noMinutesYet": "此会议未记录任何内容，因此没有纪要。"
   },
   "brainLauncher": {
     "open": "打开 Brain 助手",
@@ -17099,12 +17108,16 @@
       "unknown": "未知",
       "present": "出席",
       "absent": "缺席",
-      "excused": "非必需"
+      "excused": "已免出席"
     },
     "errorCorrect": "无法更新出席记录。",
     "correctAria": "{name} 的出席情况",
-    "sourcePto": "已批准的休假",
-    "sourceManual": "由管理者更正"
+    "source": {
+      "derived": "根据会议室记录",
+      "manual": "由经理修正",
+      "pto": "已批准休假",
+      "rsvp": "已拒绝邀请"
+    }
   },
   "observability": {
     "agents": "代理",
@@ -22364,7 +22377,7 @@
     "sessionActionCluster": {
       "history": "画布历史",
       "inspect": "画布工具",
-      "live": "通话",
+      "live": "通话与录制",
       "session": "共享与发布"
     },
     "moreMenuSessionActions": "此画布",
@@ -23161,7 +23174,47 @@
     },
     "openWorkflowOnCanvas": "在画布上打开",
     "buildFlow": "构建流程",
-    "runFlow": "运行流程"
+    "runFlow": "运行流程",
+    "recordTalktrack": "录制讲解",
+    "recordTalktrackTitle": "录制这块画布的语音讲解",
+    "talktrack": {
+      "title": "录制讲解",
+      "lead": "共享此标签页并配音讲解。讲话内容会实时转写，关键时刻会成为章节，录制结果会作为视频落在画布上，可裁剪、加字幕并发布。",
+      "start": "开始录制",
+      "stop": "停止并添加到画布",
+      "mark": "标记关键时刻",
+      "markObject": "标记：{title}",
+      "markedMoment": "关键时刻",
+      "keyMoments": "关键时刻",
+      "noMomentsYet": "尚未标记任何内容。讲解时可随手标记，或让讲述中的停顿自动划分章节。",
+      "transcriptHeading": "转写文字",
+      "listening": "正在聆听…",
+      "saving": "正在保存讲解…",
+      "added": "讲解已添加到画布，共 {chapters} 个章节。",
+      "status": "{chapters} 个章节",
+      "objectTitle": "{board} 的讲解",
+      "opening": "开场",
+      "unsupported": "此浏览器无法录制屏幕。桌面版 Chrome、Edge 和 Firefox 可以。",
+      "noTranscription": "此浏览器无法转写语音，因此讲解将不带字幕录制。",
+      "readOnly": "你可以录制，但此画布为只读——请申请编辑权限后再添加讲解。",
+      "captureFailed": "无法共享屏幕。请检查浏览器权限后重试。",
+      "nothingRecorded": "没有录到任何内容。",
+      "storeFailed": "讲解保存失败。",
+      "openers": "那么,接下来,现在,这里,继续说,关键在于,重要的是,最后,我们来,这就是"
+    },
+    "pullStandupMinutes": "将会议纪要拉入画布",
+    "standupGatheredSummary": "已集合 {count} 名参与者。Brain 将逐一询问每人的进展、阻碍和下一步行动。",
+    "noticeStandupStarted": "实时站会已开始",
+    "noticeStandupNeverConvened": "此站会尚未召开。集合团队以开始。",
+    "noticeStandupStillRunning": "此站会仍在进行。结束后才会生成纪要。",
+    "noticeStandupNoMeeting": "此站会没有会议室，因此未记录任何内容。",
+    "noticeStandupNotSummarized": "尚无纪要。请先从会议记录生成。",
+    "noticeStandupNothingCaptured": "此站会未记录任何内容，因此没有纪要。",
+    "noticeStandupNoActionItems": "纪要中没有未完成的行动项。",
+    "noticeStandupActionItemsAlreadyOnBoard": "{count, plural, other {全部 # 项行动项已在画布上}}",
+    "noticeStandupActionItemsPlaced": "{count, plural, other {已将 # 项行动项放入画布}}",
+    "noticeStandupMinutesNeedsAccount": "登录后可查看站会纪要",
+    "noticeStandupMinutesFailed": "无法读取站会纪要"
   },
   "canvasCommands": {
     "cleanLayout": "整理画布布局",

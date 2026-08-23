@@ -129,11 +129,6 @@ function objectDetailLines(data: Record<string, unknown>): string[] {
     out.push(`    runnable: ${linked && data.workflowExecutable !== false ? 'yes' : 'no'} (definition ${linked ? resourceId.slice('workflow:'.length) : 'not linked'})`);
     for (const [i, step] of steps.slice(0, 12).entries()) out.push(`      ${stepSummary(step, i)}`);
     if (steps.length > 12) out.push(`      … +${steps.length - 12} more steps`);
-    const issues = Array.isArray(data.workflowIssues) ? data.workflowIssues : [];
-    for (const issue of issues.slice(0, 6)) {
-      const record = asRecord(issue);
-      out.push(`    issue: ${str(record.title) || `step ${String(record.step ?? '?')}`} — ${capText(str(record.message), 200)}`);
-    }
     if (str(data.workflowRunId)) out.push(`    lastRun: ${str(data.workflowRunId)} (${str(data.workflowRunStatus) || 'unknown'})`);
   }
   return out;

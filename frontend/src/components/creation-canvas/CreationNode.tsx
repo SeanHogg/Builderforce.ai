@@ -112,6 +112,8 @@ import { useFormat } from "@/i18n/useFormat";
  *  exported because this file uses the name itself — `export … from` re-exports
  *  without binding anything in local scope. */
 import type { CanvasObject } from '@/domains/canvas/domain/canvasObject';
+import { resourceIdOfType } from '@/domains/canvas/domain/resourceRef';
+import { CeremonyOutcome } from '@/components/ceremony/CeremonyOutcome';
 export type CreationFlowNode = CanvasObject;
 
 /**
@@ -946,9 +948,6 @@ function WorkflowBody({ data }: { data: CreationNodeData }) {
     : [];
   const target = optionLabel(data.runTarget, { builderforce: 'BuilderForce.AI', 'campaign-strategist': 'Campaign Strategist' }, 'BuilderForce.AI');
   const approval = optionLabel(data.approvalMode, { required: t('approvalRequired'), autonomous: t('fullyAutonomous') }, t('approvalRequired'));
-  // Compile issues from the last build attempt, surfaced on the card itself so
-  // "why will this not run" is answered where the Run button is.
-  const issues = Array.isArray(data.workflowIssues) ? data.workflowIssues.slice(0, 4) : [];
   const linked = typeof data.resourceId === 'string' && data.resourceId.startsWith('workflow:');
   return (
     <div className={styles.configurableBody}>
@@ -982,14 +981,6 @@ function WorkflowBody({ data }: { data: CreationNodeData }) {
             </div>
           );
         })}</div>
-      )}
-      {issues.length > 0 && (
-        <div className={styles.workflowIssues} role="status">
-          {issues.map((issue, index) => {
-            const record = asRecord(issue, {});
-            return <small key={index}>{`${record.title ? `${String(record.title)}: ` : ''}${String(record.message ?? issue)}`}</small>;
-          })}
-        </div>
       )}
     </div>
   );
@@ -2200,12 +2191,28 @@ function PitchApplicationBody({ data }: { data: CreationNodeData }) {
   </div>;
 }
 
+/**
+ * A stand-up card: who is seated, and — once it has actually been held — what came of it.
+ *
+ * The card used to show `data.summary` unconditionally, and `data.summary` on a convened
+ * stand-up is the sentence stamped on at CONVENING time ("Brain will ask each person for
+ * progress, blockers and next actions"). It survived the meeting unchanged, so the board
+ * went on promising a stand-up that had already happened. Once a ceremony exists the
+ * OUTCOME replaces it, read live from the ceremony and its companion meeting rather than
+ * copied onto the card — attendance is correctable afterwards, and a copy is exactly what
+ * a correction leaves behind.
+ */
 function StandupBody({ data }: { data: CreationNodeData }) {
   const t = useTranslations('creationCanvas.node');
   const participants = Array.isArray(data.participants) ? data.participants as Array<Record<string, unknown>> : [];
+  const ceremonyId = resourceIdOfType(data.resourceId, 'ceremony');
   return <div className={styles.standupBody}>
     <div className={styles.standupRoster}>{participants.length ? participants.map((person, index) => <span key={`${person.ref}-${index}`}><i>{String(person.name || '?').slice(0, 1)}</i><b>{String(person.name || t('participant'))}</b><small>{String(person.kind || t('human'))}</small></span>) : <p>{t('standupFallback')}</p>}</div>
-    {typeof data.summary === 'string' && <div className={styles.standupSummary}><b>{t('brainFacilitator')}</b><p>{data.summary}</p></div>}
+    {ceremonyId
+      // The outcome decides its own visibility: nothing at all while the stand-up is
+      // still running, which is when the round table is the surface to be looking at.
+      ? <div className={styles.standupSummary}><CeremonyOutcome ceremonyId={ceremonyId} showTranscript={false} /></div>
+      : typeof data.summary === 'string' && <div className={styles.standupSummary}><b>{t('brainFacilitator')}</b><p>{data.summary}</p></div>}
   </div>;
 }
 

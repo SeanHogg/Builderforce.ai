@@ -62,7 +62,12 @@ async function fetchConnectorEntries(): Promise<GatewayToolEntry[] | { error: st
   const gw = resolveGateway();
   if ("error" in gw) return gw;
   try {
-    const res = await fetch(`${gw.base}/llm/v1/mcp/tools`, {
+    // `?surface=connectors` asks the gateway for the connector source ALONE. Without
+    // it this call downloaded the entire platform catalog (300+ tool definitions with
+    // full JSON-Schemas) on every `connectors_list`, only to throw all of it away one
+    // line later. The client-side filter stays as the belt: a gateway too old to know
+    // the parameter ignores it and answers with everything, which must still be correct.
+    const res = await fetch(`${gw.base}/llm/v1/mcp/tools?surface=connectors`, {
       headers: { Accept: "application/json", Authorization: `Bearer ${gw.apiKey}` },
       signal: AbortSignal.timeout(GATEWAY_TIMEOUT_MS),
     });

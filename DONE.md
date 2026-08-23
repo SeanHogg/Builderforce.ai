@@ -1,3 +1,35 @@
+## ✅ RESOLVED 2026-08-23 — A cross-package contract that a file move turned into an ENOENT
+
+The api test suite went red on `dataProviderCatalog.test.ts`, which reads the frontend
+integration palette off disk to prove every Data/Marketing tile resolves to a backend
+provider spec. It read `frontend/src/components/workflow-builder/integrations.ts`, and
+that directory no longer exists: the palette moved to
+[stepIntegrations.ts](./frontend/src/domains/workflow/domain/stepIntegrations.ts) when the
+canvas absorbed the modal workflow builder. The parity assertion did not fail — it never
+ran. `check-trigger-palette-parity.mjs` carried the same rot in its fix-it message, which
+told the reader to edit `workflow-builder/nodeKinds.ts`, deleted two moves ago.
+
+The path is now read through one place,
+[scripts/lib/frontendSource.mjs](./api/scripts/lib/frontendSource.mjs): it resolves
+repo-relative paths from the module's own location, and on a miss it names the CONTRACT
+that just went blind, says re-point rather than delete, and searches `frontend/src` for
+the file — by stem, so a rename that prefixes the name (`integrations.ts` →
+`stepIntegrations.ts`) is still found and the message carries the new path. Every api-side
+reader of a single pinned frontend file goes through it: the provider palette parity test,
+[check-trigger-palette-parity.mjs](./api/scripts/check-trigger-palette-parity.mjs),
+[fundingRounds.test.ts](./api/src/application/finance/fundingRounds.test.ts) and
+[pipelineProjection.test.ts](./api/src/application/revenue/pipelineProjection.test.ts).
+
+Two guards in the same family were one CWD away from the harsher version of this bug.
+`check-prompt-tool-names.mjs` built its scan roots with `path.resolve('src')` and
+`path.resolve('..', 'frontend', 'src')` and then `.filter(existsSync)` — run from
+anywhere but `api/`, both roots vanish and the guard reports OK over zero files.
+`check-canvas-tool-contract.mjs` resolved a dozen frontend paths the same way. Both now
+derive their roots from `import.meta.url`, and the prompt guard exits 1 on a missing root
+instead of passing vacuously. Output is byte-identical run from `api/`, and identical
+again run from the repo root and from an unrelated directory, which it could not do
+before.
+
 ## ✅ RESOLVED 2026-08-23 — A declined invitation is an answer, and the ceremony now reads it
 
 The RSVP endpoint and `meeting_attendees.response` had existed since 0292 with nothing in the

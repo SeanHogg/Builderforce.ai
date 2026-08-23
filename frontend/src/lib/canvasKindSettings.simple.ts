@@ -6,7 +6,7 @@
  * `canvasKindSettings.ts`: a kind gets a component only when it genuinely needs one.
  */
 
-import { registerKindSettings } from './canvasKindSettings';
+import { CARD_ACT_HANDLER, registerKindSettings } from './canvasKindSettings';
 import { AUTHORED_FRAME_BORDER, AUTHORED_FRAME_FILL } from '@/domains/canvas/domain/authoredColors';
 import { DOCUMENT_EDITOR_KINDS } from './creationObjectGroups';
 import { DIAGRAM_TARGETS } from './diagramNotations';
@@ -53,7 +53,10 @@ registerKindSettings({
     // a modal that mounted a second canvas over this one; the board is the editor now,
     // so opening one means putting it ON the board. See `boardFlowFromDefinition.ts`.
     { name: 'openOnCanvas', labelKey: 'openWorkflowOnCanvas', style: 'primary', handler: 'unpackWorkflow' },
-    { name: 'build', labelKey: 'buildWorkflow', style: 'primary', handler: 'buildWorkflow' },
+    // No Build. Building a CARD lowered its authored `steps` through a second compiler
+    // on the server, so a card that could not be edited nevertheless minted definitions
+    // — and the section it becomes when opened is what the one compiler builds. Run
+    // stays because a card already linked to a definition is still runnable as it is.
     { name: 'run', labelKey: 'runWorkflow', style: 'primary', handler: 'run' },
   ],
 });
@@ -117,8 +120,16 @@ registerKindSettings({
     { name: 'gather', labelKey: 'gatherStandup', style: 'primary', handler: 'startStandup' },
     // The other end of the ceremony. `gather` convenes it; this reads the minutes back
     // and places the action items as tasks, so the board holds what the meeting decided
-    // and not only that it was called.
-    { name: 'minutes', labelKey: 'pullStandupMinutes', handler: 'pullStandupMinutes' },
+    // and not only that it was called. Offered only once a ceremony exists — before
+    // that there is nothing to read, and a button whose only answer is "this stand-up
+    // was never convened" is a button that should not be drawn.
+    {
+      name: 'minutes',
+      labelKey: 'pullStandupMinutes',
+      style: 'secondary',
+      handler: CARD_ACT_HANDLER,
+      visible: (data) => typeof data.resourceId === 'string' && data.resourceId.startsWith('ceremony:'),
+    },
   ],
 });
 

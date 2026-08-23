@@ -277,6 +277,23 @@ export const tenantMcpExtensions = pgTable('tenant_mcp_extensions', {
   serverUrl:        text('server_url').notNull(),
   /** AES-GCM-encrypted bearer secret sent to the MCP server. NULL = no auth. */
   secretEnc:        text('secret_enc'),
+  /** Which wire protocol this server speaks: `auto` (probe once, then remember),
+   *  `mcp` (JSON-RPC 2.0 Streamable HTTP — the specification) or `legacy` (the
+   *  Builderforce-shaped `/tools` + `/call` REST pair). Migration 1116. */
+  protocol:         varchar('protocol', { length: 16 }).notNull().default('auto'),
+  /** Tool names the tenant has consented to. NULL = every tool the server
+   *  advertises (the pre-consent meaning, kept for existing rows). */
+  allowedTools:     jsonb('allowed_tools').$type<string[]>(),
+  /** Sealed OAuth CLIENT REGISTRATION — discovered endpoints, the dynamically
+   *  registered client, and the in-flight PKCE verifier. Survives token refresh. */
+  oauthEnc:         text('oauth_enc'),
+  oauthIv:          text('oauth_iv'),
+  /** Sealed OAuth GRANT (access + refresh token), via `oauthTokenVault` — the same
+   *  shape mailbox/drive/calendar connections use. Rewritten on every refresh. */
+  tokenEnc:         text('token_enc'),
+  tokenIv:          text('token_iv'),
+  /** When a human completed the consent — the honest "is this connected?". */
+  oauthConnectedAt: timestamp('oauth_connected_at', { withTimezone: true }),
   enabled:          boolean('enabled').notNull().default(true),
   createdByUserId:  varchar('created_by_user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
   lastUsedAt:       timestamp('last_used_at', { withTimezone: true }),

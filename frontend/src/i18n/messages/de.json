@@ -452,7 +452,15 @@
     "respReviewer": "Prüfer",
     "respContributor": "Mitwirkender",
     "required": "Erforderlich",
-    "addRequirement": "Anforderung hinzufügen"
+    "addRequirement": "Anforderung hinzufügen",
+    "laneKey": "Spaltenschlüssel",
+    "laneKeyTitle": "Der Status, den Tickets tragen, solange sie in dieser Spalte liegen. Ihn umzubenennen verschiebt jedes Ticket der Spalte und richtet alles neu aus, was auf sie zeigt.",
+    "laneKeyRenamed": "Umbenannt in {key} — {count, plural, one {# Ticket verschoben} other {# Tickets verschoben}}.",
+    "errRenameKey": "Der Spaltenschlüssel konnte nicht umbenannt werden",
+    "orphanedTickets": "{count, plural, one {# Ticket liegt} other {# Tickets liegen}} in gar keiner Spalte — es greift also weder Gate noch Agent noch Anforderung, und von selbst starten können sie nicht.",
+    "orphanedAdopt": "Verschieben",
+    "orphanedAdoptInto": "Gestrandete Tickets verschieben nach",
+    "orphanedAdoptIntoTitle": "Die Spalte, in die die gestrandeten Tickets wandern. Wählen Sie eine Spalte, durch die Arbeit noch fließt — Fertig oder eine Parkspalte würde sie erneut verstecken."
   },
   "integrations": {
     "gallery": {
@@ -14326,7 +14334,8 @@
     "pastMeetings": "Vergangene Meetings",
     "minutesAvailable": "Protokoll bereit",
     "viewNotes": "Notizen ansehen",
-    "calendarLabel": "Besprechungskalender"
+    "calendarLabel": "Besprechungskalender",
+    "noMinutesYet": "In diesem Meeting wurde nichts erfasst, daher gibt es kein Protokoll."
   },
   "brainLauncher": {
     "open": "Brain-Assistent öffnen",
@@ -17099,12 +17108,16 @@
       "unknown": "Unbekannt",
       "present": "Anwesend",
       "absent": "Gefehlt",
-      "excused": "Optional"
+      "excused": "Entschuldigt"
     },
     "errorCorrect": "Anwesenheit konnte nicht aktualisiert werden.",
     "correctAria": "Anwesenheit von {name}",
-    "sourcePto": "Im genehmigten Urlaub",
-    "sourceManual": "Von einem Manager korrigiert"
+    "source": {
+      "derived": "Aus dem Raum erfasst",
+      "manual": "Von einer Führungskraft korrigiert",
+      "pto": "Im genehmigten Urlaub",
+      "rsvp": "Einladung abgelehnt"
+    }
   },
   "observability": {
     "agents": "Agenten",
@@ -22364,7 +22377,7 @@
     "sessionActionCluster": {
       "history": "Leinwandverlauf",
       "inspect": "Leinwand-Werkzeuge",
-      "live": "Anruf",
+      "live": "Live und Aufnahme",
       "session": "Teilen und veröffentlichen"
     },
     "moreMenuSessionActions": "Diese Leinwand",
@@ -23161,7 +23174,47 @@
     },
     "openWorkflowOnCanvas": "Auf der Leinwand öffnen",
     "buildFlow": "Ablauf erstellen",
-    "runFlow": "Ablauf ausführen"
+    "runFlow": "Ablauf ausführen",
+    "recordTalktrack": "Rundgang aufnehmen",
+    "recordTalktrackTitle": "Einen kommentierten Rundgang durch dieses Canvas aufnehmen",
+    "talktrack": {
+      "title": "Rundgang aufnehmen",
+      "lead": "Teile diesen Tab und sprich dazu. Was du sagst, wird laufend transkribiert, wichtige Stellen werden zu Kapiteln, und die Aufnahme landet als Video auf dem Board – zum Schneiden, Untertiteln und Veröffentlichen.",
+      "start": "Aufnahme starten",
+      "stop": "Stoppen und aufs Board legen",
+      "mark": "Wichtige Stelle markieren",
+      "markObject": "Markieren: {title}",
+      "markedMoment": "Wichtige Stelle",
+      "keyMoments": "Wichtige Stellen",
+      "noMomentsYet": "Noch nichts markiert. Markiere eine Stelle beim Sprechen – oder lass die Pausen in deiner Erzählung die Kapitel finden.",
+      "transcriptHeading": "Transkript",
+      "listening": "Höre zu …",
+      "saving": "Rundgang wird gespeichert …",
+      "added": "Rundgang mit {chapters} Kapiteln aufs Board gelegt.",
+      "status": "{chapters} Kapitel",
+      "objectTitle": "Rundgang durch {board}",
+      "opening": "Auftakt",
+      "unsupported": "Dieser Browser kann den Bildschirm nicht aufnehmen. Chrome, Edge und Firefox am Desktop können es.",
+      "noTranscription": "Dieser Browser transkribiert keine Sprache – der Rundgang wird ohne Untertitel aufgenommen.",
+      "readOnly": "Du kannst aufnehmen, aber dieses Canvas ist schreibgeschützt – bitte um Bearbeitungsrechte, um den Rundgang hinzuzufügen.",
+      "captureFailed": "Der Bildschirm konnte nicht geteilt werden. Prüfe die Browser-Berechtigung und versuche es erneut.",
+      "nothingRecorded": "Es wurde nichts aufgenommen.",
+      "storeFailed": "Der Rundgang konnte nicht gespeichert werden.",
+      "openers": "also,als nächstes,jetzt,hier drüben,weiter,entscheidend ist,wichtig ist,zum schluss,lass uns,hier ist"
+    },
+    "pullStandupMinutes": "Protokoll auf das Board holen",
+    "standupGatheredSummary": "{count} Teilnehmende versammelt. Brain fragt jede Person nach Fortschritt, Blockern und nächsten Schritten.",
+    "noticeStandupStarted": "Live-Stand-up gestartet",
+    "noticeStandupNeverConvened": "Dieses Stand-up hat noch nicht stattgefunden. Versammle das Team, um es zu starten.",
+    "noticeStandupStillRunning": "Dieses Stand-up läuft noch. Das Protokoll entsteht nach dem Ende.",
+    "noticeStandupNoMeeting": "Dieses Stand-up hatte keinen Meetingraum, es wurde also nichts erfasst.",
+    "noticeStandupNotSummarized": "Noch kein Protokoll. Erzeuge es zuerst aus der Meeting-Aufzeichnung.",
+    "noticeStandupNothingCaptured": "In diesem Stand-up wurde nichts erfasst, daher gibt es kein Protokoll.",
+    "noticeStandupNoActionItems": "Das Protokoll enthält keine offenen Aufgaben.",
+    "noticeStandupActionItemsAlreadyOnBoard": "{count, plural, one {Die Aufgabe ist bereits auf dem Board} other {Alle # Aufgaben sind bereits auf dem Board}}",
+    "noticeStandupActionItemsPlaced": "{count, plural, one {# Aufgabe auf dem Board platziert} other {# Aufgaben auf dem Board platziert}}",
+    "noticeStandupMinutesNeedsAccount": "Melde dich an, um das Protokoll eines Stand-ups zu lesen",
+    "noticeStandupMinutesFailed": "Das Stand-up-Protokoll konnte nicht gelesen werden"
   },
   "canvasCommands": {
     "cleanLayout": "Leinwand-Layout aufräumen",

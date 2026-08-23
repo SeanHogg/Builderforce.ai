@@ -46,8 +46,6 @@ import { evaluateWorkflowRunApprovalGate } from '../../application/workflow/work
 import { notifyApprovalRequested } from '../../application/approval/approvalNotifier';
 import { syncDefinitionTriggers } from '../../application/workflow/triggerSync';
 import { bumpEventTriggerListeners } from '../../application/workflow/eventTriggers';
-import { compileCanvasWorkflowSteps, connectorActionIndex } from '../../domain/canvasWorkflowSpec';
-import { connectorActionCatalog } from '../../application/connectors/connectorActionCatalog';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
@@ -300,15 +298,16 @@ export function createWorkflowDefinitionRoutes(db: Db): Hono<HonoEnv> {
     } & RunTargetInput>();
     if (!body.name || !body.name.trim()) return c.json({ error: 'name is required' }, 400);
 
-    // ── THE CANVAS'S AUTHORED RUN TARGET, ON THIS ROUTE TOO ────────────────────
-    // `/from-canvas` has always resolved the friendly two-value select; this route
-    // took only the stored columns. That was fine while the canvas compiled through
-    // `/from-canvas`, and stopped being fine when the board itself became the
-    // definition: a flow built from a canvas SECTION posts a whole graph here, and
-    // without this it landed with `runtime: 'host'` and no host — a definition that
-    // saves, shows as built, and refuses at run time with "choose a run target"
-    // pointing at a control the section does not have. Resolved through the same
-    // helper, so the two doors cannot name different agents for the same words.
+    // ── THE CANVAS'S AUTHORED RUN TARGET ───────────────────────────────────────
+    // The canvas posts a friendly two-value select ('builderforce' | the agent), not
+    // the stored columns. This route took only the columns, which was fine while a
+    // second endpoint (`/from-canvas`) did the resolving for the canvas, and stopped
+    // being fine when the board itself became the definition: a flow built from a
+    // canvas SECTION posts a whole graph HERE, and without this it landed with
+    // `runtime: 'host'` and no host — a definition that saves, shows as built, and
+    // refuses at run time with "choose a run target", pointing at a control the
+    // section does not have. `/from-canvas` has since been deleted, so this is the
+    // one door a canvas compiles through and the resolution lives on it.
     let target = coerceRunTarget(
       typeof body.runTarget === 'string' && body.runTarget
         ? { ...body, runTargetRuntime: body.runTargetRuntime ?? 'cloud' }
@@ -359,83 +358,6 @@ export function createWorkflowDefinitionRoutes(db: Db): Hono<HonoEnv> {
       target: coerceRunTarget({}),
     });
     return c.json(row, 201);
-  });
-
-  // POST /from-canvas — compile a Creation Canvas workflow object's authored
-  // `steps` into a real, runnable definition and return it, so a canvas workflow
-  // stops being a drawing. Registered before /:id; `/from-canvas` is a distinct
-  // path so there is no collision.
-  //
-  // It is deliberately ALL-OR-NOTHING. Compiling the steps that happen to resolve
-  // and dropping the rest would hand back a definition that runs green while
-  // silently omitting what the author asked for — the same false-completeness
-  // this endpoint exists to end. Every unresolved step comes back as an `issue`
-  // naming the step and what it needs, which is what the canvas shows the user.
-  router.post('/from-canvas', async (c) => {
-    const tenantId = c.get('tenantId') as number;
-    const segmentId = c.get('segmentId') ?? null;
-    const body = await c.req.json<{
-      name?: string;
-      description?: string;
-      steps?: unknown;
-      triggerType?: string;
-      /** The canvas Workflow card's own two-value select ('builderforce' | 'campaign-strategist'). */
-      runTarget?: string;
-      /** The canvas Workflow card's own gate ('autonomous' | 'required'). */
-      approvalMode?: string;
-    } & RunTargetInput>();
-    if (!body.name || !body.name.trim()) return c.json({ error: 'name is required' }, 400);
-
-    // Validated against the tenant's LIVE catalog — an authored "twilio/send_sms"
-    // is checked against the connectors they can actually call, so a typo or an
-    // unconnected integration fails here with a fixable message instead of at
-    // run time with a stack trace.
-    const catalog = await connectorActionCatalog(db, c.env as Env, tenantId);
-    const compiled = compileCanvasWorkflowSteps(body.steps, {
-      catalog: connectorActionIndex(catalog),
-      ...(body.triggerType ? { triggerType: body.triggerType } : {}),
-    });
-    if (compiled.issues.length > 0) {
-      return c.json({
-        error: 'This workflow is not runnable yet.',
-        code: 'workflow_not_runnable',
-        details: { issues: compiled.issues },
-      }, 400);
-    }
-    const invalid = validateDefinition(compiled.definition);
-    if (invalid) return c.json({ error: invalid, code: 'workflow_invalid_graph', details: { issues: [] } }, 400);
-
-    // The card's authored run target, resolved into the columns the platform
-    // stores. Unresolvable is a 400 rather than a quiet fall-back to the generic
-    // cloud runtime: this endpoint is all-or-nothing, and compiling a definition
-    // that runs on a different agent than the card names is the same false
-    // completeness the issue list exists to prevent.
-    let target = coerceRunTarget({ ...body, runTargetRuntime: body.runTargetRuntime ?? 'cloud' });
-    if (typeof body.runTarget === 'string' && body.runTarget) {
-      const resolved = await resolveCanvasRunTarget(db, tenantId, body.runTarget);
-      if (!resolved.ok) {
-        return c.json({ error: resolved.error, code: 'workflow_run_target_unresolved', details: { issues: [] } }, 400);
-      }
-      target = resolved.target;
-    }
-
-    const row = await createWorkflowDefinition(db, c.env as Env, {
-      tenantId,
-      segmentId,
-      name: body.name,
-      description: body.description ?? null,
-      projectId: body.projectId ?? null,
-      definition: compiled.definition,
-      // Canvas workflows default to the builderforce-hosted cloud runtime: the
-      // canvas offers no host picker, and a `host` default would compile a
-      // definition whose very first run fails on a missing agentHost.
-      target,
-      // The card's "Approval required" is CONFIGURATION from here on: the run
-      // endpoint reads this column and opens a real approval (1092).
-      approvalMode: coerceApprovalMode(body.approvalMode),
-      executionScope: body.executionScope ?? null,
-    });
-    return c.json({ ...row, definition: compiled.definition, compiledCount: compiled.compiledCount, issues: [] }, 201);
   });
 
   // GET /:id — full definition (graph included)

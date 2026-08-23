@@ -72,18 +72,37 @@ export interface CreationObjectDefinition {
    * (title, subtitle, status) are added automatically. */
   mutableFields: readonly string[];
   allowedConnections: readonly CreationConnectionKind[];
+  /**
+   * A kind that still RESOLVES but is no longer CREATABLE.
+   *
+   * `creationObjectDefinition()` throws on an unknown kind, so a kind that saved boards
+   * still contain has to stay in the registry to be rendered, named and inspected. What
+   * a legacy kind loses is the PALETTE: nothing new may author one. "Does this kind
+   * exist" and "may somebody place it" were the same question while every kind was
+   * both, and this is where they part.
+   */
+  legacy?: boolean;
   /** The AI snapshot of one object. `board` is what its COMPUTED fields read — a
    *  gradebook's mean comes from the submissions beside it — and is optional so a
    *  single-object read stays a one-argument call. See `creationObjectContext`. */
   contextAdapter: (data: CreationNodeData, board?: SpecDeriveBoard) => Record<string, unknown>;
 }
-type BaseCreationObjectDefinition = Pick<CreationObjectDefinition, 'kind' | 'label' | 'icon' | 'group' | 'createData'>;
+type BaseCreationObjectDefinition = Pick<CreationObjectDefinition, 'kind' | 'label' | 'icon' | 'group' | 'createData'> & Partial<Pick<CreationObjectDefinition, 'legacy'>>;
 
 const BASE_CREATION_OBJECT_REGISTRY = [
-  // A new workflow has no steps, so it is NOT 'Ready' — it is a draft that
-  // cannot run yet. Saying 'Ready' here is how an empty card came to look like a
-  // configured one; the body's empty state and this status now agree.
-  { kind: 'workflow', label: 'Workflow', icon: '⌘', group: 'Build', createData: () => ({ kind: 'workflow', title: 'Untitled workflow', status: 'Draft' }) },
+  /**
+   * THE OLD SHAPE — RESOLVABLE, NOT CREATABLE.
+   *
+   * A `workflow` card stood in for a graph that lived somewhere else, and the only
+   * editor it ever had was a modal that has since been deleted. Placing one today would
+   * mint an object nobody can author, so it is off the palette (`legacy`). The KIND
+   * stays registered because every board saved before this still holds one and has to
+   * render, name and inspect it; its own action is now "Open on canvas", which replaces
+   * the card with the section it was always standing in for (`unpackWorkflow`).
+   *
+   * A flow is authored as `flowStep` objects inside a frame — the entry below.
+   */
+  { kind: 'workflow', label: 'Workflow', icon: '⌘', group: 'Build', legacy: true, createData: () => ({ kind: 'workflow', title: 'Untitled workflow', status: 'Draft' }) },
   // ONE executable step. It is placed from the STEP catalog rather than from this
   // palette entry — the picker offers all ~60 kinds and seeds `stepKind` (see
   // `flowStepObject.ts`) — so the entry here exists to give the kind a label, an
@@ -306,7 +325,10 @@ const CAPABILITIES: Partial<Record<CreationObjectKind, string>> = {
   evermind: 'evermind',
 };
 const ACTIONS: Partial<Record<CreationObjectKind, readonly string[]>> = {
-  workflow: ['edit', 'build', 'run'], flowStep: ['edit', 'run'], website: ['edit', 'preview', 'publish'], prototype: ['edit', 'preview'],
+  // No 'build'. A legacy card is OPENED onto the board and built as the SECTION it
+  // becomes; building the card itself lowered its authored list through a second,
+  // server-side compiler, which is the thing this kind's deprecation removes.
+  workflow: ['edit', 'run'], flowStep: ['edit', 'run'], website: ['edit', 'preview', 'publish'], prototype: ['edit', 'preview'],
   // Opening the Builder IS the adapter: run, checks, terminal and publish all
   // happen inside the Builder surface it mounts, so they are not advertised here as
   // separate canvas-side actions that nothing implements.
@@ -363,13 +385,13 @@ const ACTIONS: Partial<Record<CreationObjectKind, readonly string[]>> = {
 };
 
 const BASE_MUTABLE_FIELDS = {
-  // `steps` is the authored spec the compiler lowers into a real definition —
-  // each step may carry connector/action/input, a prompt, or an agent role. See
-  // api/src/domain/canvasWorkflowSpec.ts for the shape it compiles to. Brain
-  // still cannot set `resourceId` or `workflowExecutable`: linking a canvas
-  // object to a real, runnable tenant resource is the compile endpoint's job,
-  // not something an LLM patch may assert.
-  workflow: ['content', 'steps', 'approvalMode', 'runTarget'],
+  // NOT `steps`. Brain authored a free-form step list here while a server-side
+  // compiler existed to lower it. That compiler is gone, so a list written onto a card
+  // with no editor would be an instruction with no surface — Brain authors `flowStep`
+  // objects instead (below), which is what "add a switch on status" should have drawn
+  // all along. The two controls stay writable because a legacy card carries them onto
+  // the frame when it is opened.
+  workflow: ['content', 'approvalMode', 'runTarget'],
   // The step itself, its typed config, and the two declared data contracts the
   // compiler lowers into real nodes. Brain authors all four: "add a switch on
   // status" is a patch, not a modal. See `flowStepObject.ts` for each shape.
@@ -944,7 +966,11 @@ export function availableCreationObjects(
 ): readonly CreationObjectDefinition[] {
   const signedIn = options?.signedIn ?? true;
   return CREATION_OBJECT_REGISTRY.filter((definition) => (
-    (!definition.capability || capabilities.has(definition.capability))
+    // A LEGACY kind is not on offer at all. Not an entitlement and not a guest rule:
+    // the kind has no editor left, so there is nothing to unlock and nothing to
+    // upgrade to — which is why it is filtered here rather than locked below.
+    !definition.legacy
+    && (!definition.capability || capabilities.has(definition.capability))
     // The same guest rule `creationPaletteGroupsFor` applies, asked from the contract
     // rather than copied, so the palette and the capability set cannot disagree about
     // what a signed-out visitor may author.
@@ -962,7 +988,7 @@ export const CREATION_PALETTE_GROUPS = ([
   'Build', 'Data', 'Knowledge', 'Insights', 'Work', 'Quality', 'Teaching', 'Research',
   'Pitch', 'People', 'Hiring', 'Career', 'Operations', 'Revenue', 'Agents', 'Models', 'Collaborate', 'Integrations',
 ] as const satisfies readonly CreationObjectGroup[])
-  .map((group) => ({ group, items: CREATION_OBJECT_REGISTRY.filter((definition) => definition.group === group) }));
+  .map((group) => ({ group, items: CREATION_OBJECT_REGISTRY.filter((definition) => definition.group === group && !definition.legacy) }));
 
 /** A palette entry, plus whether this caller may actually place it. `locked` is set only
  *  by {@link creationPaletteGroupsFor}; the raw groups never carry it. */

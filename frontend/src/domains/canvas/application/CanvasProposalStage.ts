@@ -1,0 +1,162 @@
+/**
+ * THE PROPOSAL STAGE — one turn's worth of intended board changes.
+ *
+ * ── THE DUPLICATION THIS ENDS ───────────────────────────────────────────────
+ * A Brain turn does not write the board. It STAGES `ProposedCanvasChange`s and
+ * the review step (or auto-apply) commits them. Every canvas tool therefore has
+ * to answer the same two questions before it can do anything:
+ *
+ *   1. "Where do I put this?" — which needs the board PLUS everything earlier
+ *      tools in this same turn already staged, or two tools called in one turn
+ *      lay their objects on top of each other.
+ *   2. "Does this id resolve?" — which needs the same union, or a tool cannot
+ *      connect to an object the previous tool call just created.
+ *
+ * Both were re-derived by hand at every call site. In `CreationCanvas.tsx` that
+ * was 58 copies of
+ *
+ *     const staged = proposalBuffer.current.flatMap(
+ *       (change) => change.type === 'object.add' ? [change.node] : []);
+ *     const all = [...nodes, ...staged];
+ *
+ * — three of which spelled it `stagedNodes`, one of which forgot the staged
+ * EDGES half, and 93 separate `crypto.randomUUID()` calls to mint change ids.
+ * A tool that forgot the union silently placed objects on top of each other,
+ * which is a bug you can only see by looking at the board.
+ *
+ * So the union is not a convention any more. `nodes()` and `edges()` on this
+ * class ALWAYS mean board-plus-staged; there is no accessor that returns the
+ * un-staged board, because no tool has ever wanted one.
+ *
+ * ── WHY A CLASS AND NOT A HOOK ──────────────────────────────────────────────
+ * The buffer outlives no render — it is filled during one turn and drained by
+ * the review step — and the tools that write to it are pure functions over an
+ * injected context (see `lib/canvasBuildTools.ts` and its siblings). Making this
+ * a class keeps every tool module unit-testable without React, and keeps the
+ * component's job down to owning the ref.
+ */
+
+import type { Edge } from '@xyflow/react';
+import type { CreationConnectionKind } from '@builderforce/creation-canvas-contract';
+import type { CanvasObject, CanvasObjectData } from '../domain/canvasObject';
+import type { ProposedCanvasChange } from '../domain/canvasChange';
+
+/**
+ * The committed board, read live. A function rather than a value because a
+ * stage is constructed once per turn while `nodes`/`edges` change under it —
+ * capturing the array would freeze the tools' view of the board at turn start.
+ */
+export interface CanvasStageBoard {
+  nodes: () => readonly CanvasObject[];
+  edges: () => readonly Edge[];
+}
+
+/** Mints change ids. Injectable so tests get stable ids without stubbing globals. */
+export type ChangeIdFactory = () => string;
+
+export class CanvasProposalStage {
+  private buffer: ProposedCanvasChange[] = [];
+
+  constructor(
+    private readonly board: CanvasStageBoard,
+    private readonly nextId: ChangeIdFactory = () => crypto.randomUUID(),
+  ) {}
+
+  /** Board objects PLUS everything staged this turn. The only object view tools get. */
+  nodes(): CanvasObject[] {
+    return [...this.board.nodes(), ...this.stagedNodes()];
+  }
+
+  /** Board connections PLUS everything staged this turn. */
+  edges(): Edge[] {
+    return [...this.board.edges(), ...this.stagedEdges()];
+  }
+
+  /** Just the objects this turn proposed, in the order they were proposed. */
+  stagedNodes(): CanvasObject[] {
+    return this.buffer.flatMap((change) => (change.type === 'object.add' ? [change.node] : []));
+  }
+
+  /** Just the connections this turn proposed. */
+  stagedEdges(): Edge[] {
+    return this.buffer.flatMap((change) => (change.type === 'connection.add' ? [change.edge] : []));
+  }
+
+  /** Resolve an object id against the board and this turn's staged additions. */
+  object(objectId: string | undefined | null): CanvasObject | null {
+    if (!objectId) return null;
+    return this.nodes().find((node) => node.id === objectId) ?? null;
+  }
+
+  /** Resolve a connection id against the board and this turn's staged additions. */
+  connection(connectionId: string | undefined | null): Edge | null {
+    if (!connectionId) return null;
+    return this.edges().find((edge) => edge.id === connectionId) ?? null;
+  }
+
+  hasObject(objectId: string): boolean {
+    return this.object(objectId) !== null;
+  }
+
+  hasConnection(connectionId: string): boolean {
+    return this.connection(connectionId) !== null;
+  }
+
+  addObject(label: string, node: CanvasObject): void {
+    this.buffer.push({ id: this.nextId(), type: 'object.add', label, node });
+  }
+
+  updateObject(label: string, objectId: string, patch: Partial<CanvasObjectData>): void {
+    this.buffer.push({ id: this.nextId(), type: 'object.update', label, objectId, patch });
+  }
+
+  deleteObject(label: string, objectId: string): void {
+    this.buffer.push({ id: this.nextId(), type: 'object.delete', label, objectId });
+  }
+
+  layoutObject(
+    label: string,
+    objectId: string,
+    layout: { position?: { x: number; y: number }; width?: number; height?: number; hidden?: boolean; locked?: boolean },
+  ): void {
+    this.buffer.push({ id: this.nextId(), type: 'object.layout', label, objectId, ...layout });
+  }
+
+  invokeAction(label: string, objectId: string, action: string): void {
+    this.buffer.push({ id: this.nextId(), type: 'object.action', label, objectId, action });
+  }
+
+  addConnection(label: string, edge: Edge): void {
+    this.buffer.push({ id: this.nextId(), type: 'connection.add', label, edge });
+  }
+
+  updateConnection(label: string, connectionId: string, patch: { label?: string; kind?: CreationConnectionKind }): void {
+    this.buffer.push({ id: this.nextId(), type: 'connection.update', label, connectionId, patch });
+  }
+
+  deleteConnection(label: string, connectionId: string): void {
+    this.buffer.push({ id: this.nextId(), type: 'connection.delete', label, connectionId });
+  }
+
+  /** How many changes this turn has proposed. */
+  get size(): number {
+    return this.buffer.length;
+  }
+
+  /** Everything proposed this turn, for the review list. */
+  list(): readonly ProposedCanvasChange[] {
+    return this.buffer;
+  }
+
+  /** Hand the turn's changes to the review step and start the next turn empty. */
+  drain(): ProposedCanvasChange[] {
+    const changes = this.buffer;
+    this.buffer = [];
+    return changes;
+  }
+
+  /** Abandon everything staged. Used when a turn is aborted rather than reviewed. */
+  reset(): void {
+    this.buffer = [];
+  }
+}

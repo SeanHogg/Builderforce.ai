@@ -110,6 +110,12 @@ export const TOOL_SURFACES: readonly ToolSurfaceDefinition[] = [
     builtin: { kind: 'all' },
     sources: ['builtin'],
   },
+  {
+    id: 'connectors',
+    description: 'Only the actions of the connectors this workspace has connected.',
+    builtin: { kind: 'all' },
+    sources: ['connectors'],
+  },
 ];
 
 /** What a caller gets when it names no surface. */
