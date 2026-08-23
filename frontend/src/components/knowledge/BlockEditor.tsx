@@ -86,7 +86,7 @@ function PeerChips({ peers }: { peers: readonly BlockPeer[] }) {
           key={peer.userId}
           title={peer.name}
           style={{
-            fontSize: 10,
+            fontSize: 'var(--font-size-field-label)',
             fontWeight: 600,
             padding: '2px 6px',
             borderRadius: 'var(--radius-full)',
@@ -115,7 +115,7 @@ function TextBlockInput({
   placeholder: string;
 }) {
   const kind = textBlockKind(block.text);
-  const fontSize = kind === 'heading' ? 18 : 14;
+  const fontSize = kind === 'heading' ? 'var(--font-size-card-title)' : 'var(--font-size-body)';
   const fontWeight = kind === 'heading' ? 700 : 400;
   const ref = useRef<HTMLTextAreaElement>(null);
 
@@ -186,13 +186,13 @@ function MediaBlockCard({
       ) : block.type === 'video' && url ? (
         <video src={url} controls style={{ maxHeight: 200, maxWidth: 320, borderRadius: 'var(--radius-sm)' }} />
       ) : (
-        <span style={{ fontSize: 24 }}><Icon source="📄" size="1em" /></span>
+        <span style={{ fontSize: 'var(--font-size-section)' }}><Icon source="📄" size="1em" /></span>
       )}
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <div style={{ fontSize: 'var(--font-size-small)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {block.attrs.label || url || t('blockEmptyMedia')}
         </div>
-        {!url && <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('blockUploadPrompt')}</div>}
+        {!url && <div style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)' }}>{t('blockUploadPrompt')}</div>}
       </div>
       <button type="button" onClick={(e) => { e.stopPropagation(); inputRef.current?.click(); }} style={gutterButtonStyle} title={t('blockReplace')}>
         <Icon source="⤒" size="0.9em" />
@@ -283,7 +283,7 @@ export function BlockEditor({ doc, t, readOnly }: BlockEditorProps) {
                 />
               )}
               {uploadingId === block.id && (
-                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('blockUploading')}</div>
+                <div style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)' }}>{t('blockUploading')}</div>
               )}
             </div>
             {!readOnly && (
@@ -335,7 +335,7 @@ function BlockToolbar({
         style={{ display: 'none' }}
         onChange={(e) => { const file = e.target.files?.[0]; if (file) onAddMedia(file); e.target.value = ''; }}
       />
-      <span style={{ fontSize: 11, color: 'var(--text-muted)', alignSelf: 'center' }}>{t('blockDropHint')}</span>
+      <span style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', alignSelf: 'center' }}>{t('blockDropHint')}</span>
     </div>
   );
 }
