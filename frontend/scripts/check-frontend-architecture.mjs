@@ -30,6 +30,18 @@
  * and therefore has nowhere to put a reason. So a raise is justified HERE, in
  * prose, and a raise with no entry below is a raise nobody argued for:
  *
+ *   920 → 921 (`useClientFiles`, 2026-08-25) — the company-graph band on `/`.
+ *   ONE file, `components/home/FounderGraphSection.tsx`, and the directive is
+ *   the homepage's runtime rather than the band's interactivity — the identical
+ *   reason `AboutAppSection` carries one and states in its own header comment:
+ *   `/` is a server component that must stay statically prerenderable, so
+ *   reading copy through `getTranslations()` would touch the locale cookie and
+ *   turn the highest-traffic route into a per-request function. The band takes
+ *   no state, no effect and no event handler; it renders `home.founderGraph`
+ *   through the shared home primitives and the same `Icon`/`seatTint` pair the
+ *   rail uses. `useClientPages` is unchanged at 32 — `app/page.tsx` stays a
+ *   server component.
+ *
  *   918 → 920 (`useClientFiles`, 2026-08-25) — the investor destination (IN-3).
  *   TWO files, and the pair is the minimum the surface can be built from rather
  *   than the number it happened to land on. `components/investor/InvestorClient.tsx`

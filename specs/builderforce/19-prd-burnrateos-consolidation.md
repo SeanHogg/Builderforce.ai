@@ -21,6 +21,15 @@ sufficient evidence for shutting down BurnRateOS.
 
 ### Executive verdict
 
+> **DIRECTIVE CHANGE — 2026-08-25.** The operator directive is now **deprecation of
+> `burnrateos.com`**, which is a parity obligation: every source capability must be built or
+> explicitly retired, because a capability that is neither is lost at shutdown. This **supersedes
+> the scoping half of the 2026-08-10 selective-extraction decision** (§0, DONE.md) — that decision's
+> engineering conclusions stand, its *boundary* does not. **[§9](#9--deprecation-parity-audit--2026-08-25)
+> is the inventory, the mapping and the gap register the new directive requires**, and it is the
+> authority on what is left to build. The gates in this section remain the authority on shutdown
+> readiness.
+
 **Do not redirect or terminate `burnrateos.com` yet.** Builderforce has completed most of the
 *destination-model* work, but not the source-data move or most feature behavior:
 
@@ -264,11 +273,14 @@ EntityBrowser” do not satisfy them.
 - [ ] **Data gate:** run idempotent ETL against a production snapshot; publish per-table source,
   transformed, inserted, merged, rejected and orphan counts plus financial totals and attachment
   checksums; rerun to prove zero duplicates.
-- [ ] **Extraction gate:** every feature used by an active BurnRateOS tenant is classified by the
-  IDEA → REAL boundary: an extracted capability has a tested Builderforce workflow and transformed
-  data; a non-target has an explicit customer-approved retirement/export. Do not activate the
-  **181 registry-only** tables (99 of them BurnRateOS-origin) merely to reduce a metric; generic
-  CRUD and unused source DDL are not product requirements.
+- [ ] **Extraction gate — now measured, see [§9](#9--deprecation-parity-audit--2026-08-25):** every
+  feature used by an active BurnRateOS tenant is classified, and under the deprecation directive the
+  classification is binary — an extracted capability has a tested Builderforce workflow and
+  transformed data, or it has an explicit customer-approved retirement/export. §9 resolves all 106
+  source modules: **44 at full parity, 45 partial, 6 gap, 11 stateless**, leaving **64 `build`
+  items** in [`burnrate-parity.tsv`](../data-model/burnrate-parity.tsv). All 64 already have a
+  Drizzle declaration, so none of them is a schema request. Closing them is what closes this gate;
+  activating a registry-only table merely to move the adoption meter still does not.
 - [x] **C-suite Canvas execution gate:** map all 48 CxO intents to existing Creation Canvas
   objects/actions; retain searchable legacy ids; give each an evidence/operation/output/completion
   contract; fail outcomes that do not mutate an allowed artifact; test exact coverage; add no tables.
@@ -734,11 +746,188 @@ actual shutdown readiness.
 
 Two honest qualifications, both decisions rather than gaps:
 
-1. **Not every feature or table survives, by design.** The extraction boundary above is now the
-   product decision: IDEA → REAL capabilities move into an existing owner; duplicate application
-   structure is retired; non-target customer data is exported rather than used to justify schema.
+1. **Not every feature or table survives — but under the 2026-08-25 deprecation directive, each
+   casualty now needs a NAMED decision rather than a boundary.** Duplicate application structure is
+   still retired and non-target data is still exported rather than used to justify schema; what
+   changed is that "outside the IDEA → REAL boundary" is no longer by itself a reason not to build.
+   [§9](#9--deprecation-parity-audit--2026-08-25) carries the resulting register: 64 build, 6
+   transform, 4 retire.
 2. **§5 lists seven decisions** — tenancy axis, web push, three either/or capability calls, the
    credits-vs-caps pricing model, and the Neon tier. Each changes what gets built. §3.2 closed the
    tenancy decision on 2026-08-10 — `burnrateTenantCompanyMapping.ts` implements the planner and row
    resolver and `audit-burnrate-tenancy.mjs` validates it read-only — so what remains there is
    supplying the production account map and applying its output, not an unresolved design.
+
+---
+
+## 9 · Deprecation parity audit — 2026-08-25
+
+### 9.0 The directive changed, and this section is what changed with it
+
+**The operator directive is now DEPRECATION of `burnrateos.com`, and deprecation is a parity
+obligation.** The 2026-08-10 decision recorded in §0 and in DONE.md — a selective IDEA → REAL
+extraction, explicitly "not a 404-model/262-page port" — is **superseded for scoping purposes**. It
+is not deleted, because it is a recorded operator decision and because most of its engineering
+conclusions survive intact (no second invitation economy, no parallel schema, no duplicate provider
+product). What does not survive is its *boundary*: under selective extraction, a BurnRateOS
+capability with no Builderforce owner was **out of scope by definition**. Under deprecation, the
+same capability is a **gap that must be closed or explicitly retired with customer approval**.
+There is no third option, because when the source is switched off, a capability that is neither
+built nor retired is simply lost.
+
+This section is the inventory, the mapping and the gap register that the deprecation directive
+requires. Everything in it is measured from source, not asserted, and both registers are committed
+so the numbers are reproducible rather than a snapshot.
+
+### 9.1 Step 1 — the full scope of `burnrateos.com`, measured
+
+Measured at BurnRateOS `cc23b2139e5846228fc255952cbf3bc733437668`:
+
+| Surface | Count | How it was measured |
+|---|---|---|
+| API route modules | **106** | `api/src/worker/routes/**/*.ts`, excluding `__tests__` |
+| API endpoints | **1,739** | `.get/.post/.put/.patch/.delete/.all` registrations, deduplicated per module |
+| Frontend `<Route>` paths | **481** unique | `App.tsx` |
+| — real destinations | **348** | routes whose element is not a `<Navigate>` |
+| — legacy redirects | **133** | already self-deprecated inside BurnRateOS |
+| Frontend domains | **20** | `frontend/src/domains/*` |
+| Frontend page components | **337** | `*.tsx` under a `pages` path |
+| Prisma models | **404** | `model ` declarations in `schema.prisma` |
+| Durable Objects · crons · queues | 3 · 2 · 1 | §7.3 |
+
+The earlier "262 pages" figure counted only the nine product domains and excluded `system` (52),
+`auth` (13) and `account` (10). **348 real routes is the deprecation surface**, not 262: a redirect
+that returns 404 after shutdown is as broken as a missing feature.
+
+The ten largest modules carry 660 of the 1,739 endpoints — `operationalCadence` (91),
+`productManagement` (86), `businessIntelligence` (83), `investors` (80), `systemAdmin` (77),
+`governance` (67), `billing` (52), `kanban` (45), `investorIntelligence` (42), `scratchPad` (39).
+
+For comparison, Builderforce at `95bedac24fb7d9d2702d4aecdb65cd668b3f3364` has **226 route modules,
+3,887 endpoints and 188 pages**. The destination is larger than the source; the question this
+section answers is not *capacity* but *coverage*.
+
+### 9.2 Step 2 — the mapping, and how parity is decided without guessing
+
+Mapping 106 modules by name similarity would be a guess. The method used instead is evidence-driven
+and mechanical, and it works because BurnRateOS writes **raw SQL**, so every route module names the
+tables it touches in its own source:
+
+1. For each BurnRateOS route module, extract the tables it reads or writes
+   (`FROM|JOIN|INTO|UPDATE <table>`).
+2. Resolve each table through [`source-to-target.tsv`](./data-model/source-to-target.tsv) to its
+   Builderforce target and disposition.
+3. A `primitive` / `merged` / `session` / `flatten` disposition means the row was absorbed by a
+   kernel primitive, which is feature-reached by construction. Only a `keep` target can sit
+   unreached.
+4. A `keep` target is **reached** unless it appears in
+   [`.table-adoption-baseline.txt`](../../api/scripts/.table-adoption-baseline.txt), which is the
+   existing, CI-maintained list of tables that *only* the generic entity layer touches.
+5. A module's parity is the share of its tables whose targets are reached.
+
+This deliberately reuses the adoption checker rather than inventing a second definition of
+"migrated". "Opens in `EntityBrowser`" already does not count as adoption anywhere else in this
+repository, and it does not count here.
+
+**Result across 106 modules** — committed as
+[`burnrate-modules.tsv`](./data-model/burnrate-modules.tsv):
+
+| Verdict | Modules | Meaning |
+|---|---|---|
+| **Full parity (100%)** | **44** | every table the module touches is reached by a Builderforce feature path |
+| **Partial (1–99%)** | **45** | the capability exists but part of its data has no feature path |
+| **Gap (0%)** | **6** | `landingPages`, `system`, `blog`, `breakEven`, `freeTools`, `lookups` |
+| No table evidence | 11 | `health`, `sitemap`, `auth/geo`, `widgetJs`, `hrWidgetJs`, `hrPanel`, `coach`, `dedup`, `featureAdoption`, `numberPorting`, `v1Hr` — stateless proxies, embeddable JS, or delegating shims |
+
+The 11 no-evidence modules were read individually rather than assumed: none holds state of its own.
+`numberPorting` is covered by the `phoneVoip → retire_port_out` decision; the two `widgetJs` modules
+serve embeddable script and are a real surface obligation tracked under `embed_widget_layout` below.
+
+**Partial is the important verdict, and it is why a module-level "mapped" column would have lied.**
+`productManagement` is 38% — features, requests, roadmap and experiments land on existing owners,
+while A/B testing, release plans and heatmap-backed feedback do not. Reporting that module as
+"mapped to PMO" would have hidden five capabilities.
+
+### 9.3 Step 3 — the gap register, which is the build backlog
+
+Deduplicating every unreached target across all 106 modules gives **74 distinct Builderforce targets
+that a BurnRateOS route module depends on and that no Builderforce feature path reaches**. Committed
+as [`burnrate-parity.tsv`](./data-model/burnrate-parity.tsv), classified against cutover policy v1:
+
+| Disposition | Count | Meaning |
+|---|---|---|
+| **`build`** | **64** | no Builderforce owner and no retirement decision — must be built to deprecate |
+| `transform` | 6 | a Builderforce owner is already canonical; the source rows transform onto it |
+| `retire` | 4 | already decided in `burnrateCutoverPolicy.json`; export, do not rebuild |
+
+`transform` is `billing_plans`, `plan_features`, `business_pricing_models`, `pricing_simulations`,
+`system_features` (all `pricing → transform_existing`; `PlanLimits.ts` and
+`pricingConfiguration.ts` stay canonical and are not in scope to change) and `payment_methods`
+(`stripe → retain_reconcile`). `retire` is `affiliate_referrals` and `referral_entries`
+(`affiliates → retire_export`), `ai_voice_agent_calls` (`phoneVoip → retire_port_out`) and
+`blog_posts` (`blogContent → transform_existing` onto `knowledge_documents`).
+
+**The single most important finding: all 74 targets already have a Drizzle declaration.** Verified
+against `schema/*.ts` — zero of them need new schema. The entire deprecation backlog is application
+code and surfaces over tables that already exist, which is exactly what
+`burnrateCutoverPolicy.json`'s `newTablesAllowed: false` asserts, and it is the same shape the
+2026-08-22 hired.video mapping audit found for PRD 18. **A gap here is a missing feature path, never
+a missing table.**
+
+#### The 64 `build` items by domain
+
+| Domain | n | Targets |
+|---|---|---|
+| **Growth & marketing** | **18** | `landing_pages`, `landing_page_blocks`, `website_pages`, `marketing_seo_pages`, `marketing_content_items`, `marketing_emails`, `nurture_flows`, `ab_tests`, `ab_test_variants`, `customer_journeys`, `journey_touchpoints`, `marketing_heatmap_pages`, `marketing_heatmap_screenshots`, `brand_kits`, `embed_widget_layout`, `learn_videos`, `podcast_outreach`, `waitlist_entries` |
+| **Revenue & CRM** | **9** | `ri_icps`, `ri_prospects`, `ri_sequences`, `ri_ids`, `deal_flow_opportunities`, `contact_experiences`, `contact_educations`, `contact_compensations`, `saved_contact_searches` |
+| **Commerce** | **8** | `booking_hosts`, `booking_services`, `booking_reservations`, `agency_brandings`, `agency_clients`, `consultant_consultations`, `consultant_knowledge_docs`, `card_decks` |
+| **Delivery & work** | **6** | `action_items`, `kanban_columns`, `release_plans`, `task_effort_estimates`, `sprint_financial_impact`, `approval_actions` |
+| **Identity & tenancy** | **5** | `user_terms_agreements`, `onboarding_flows`, `onboarding_progress`, `stage_lookup`, `region_waitlist` |
+| **Finance** | **5** | `break_even_scenarios`, `churn_predictions`, `monte_carlo_simulations`, `payback_period`, `saved_calculations` |
+| **Agents & runtime** | **4** | `ai_tool_calls`, `ai_competitors`, `ai_email_classifications`, `enrichment_cache` |
+| **Investor & portfolio** | **3** | `investor_peer_comparables`, `scratch_pad_attachments`, `modules` |
+| **Support & knowledge** | **2** | `customer_engagement_feedback_widgets`, `support_articles` |
+| **People & HR** | **2** | `hr_emergency_contacts`, `health_dimensions` |
+| **Hiring** | **1** | `cohort_retention` |
+| **Platform & observability** | **1** | `uptime_monitors` |
+
+#### Sequencing, by how many source modules a target unblocks
+
+`user_terms_agreements` (4 modules), `action_items` (3), `churn_predictions` (3),
+`customer_engagement_feedback_widgets` (3), `marketing_heatmap_pages` (3),
+`deal_flow_opportunities` (2), `investor_peer_comparables` (2), `onboarding_flows` (2),
+`break_even_scenarios` (2), `ai_tool_calls` (2), `customer_journeys` (2) come first: each closes
+part of more than one BurnRateOS module, so the parity percentage of several modules moves per unit
+of work. Growth & marketing is the largest single block at 18 and the one that most needs a product
+decision before code, because `landing_pages` / `website_pages` / `marketing_seo_pages` overlap the
+existing `sites` and `siteManage` owners and must merge onto them rather than beside them — §2 is
+the register that governs that, and it still governs.
+
+### 9.4 What this section does NOT change
+
+- **No new tables.** `newTablesAllowed: false` stands, and the audit above shows it is achievable.
+- **§2 capability ownership still governs.** A gap being real is not permission to create a second
+  owner. Every item lands on the owner §2 names.
+- **PRD 21 still owns the experience.** Each closed gap arrives as a **panel over the mounted
+  canvas**, never as a standalone page, and never as a horizontal tab bar.
+- **Pricing is out of scope.** `PlanLimits.ts` and `pricingConfiguration.ts` are an operator
+  decision; the six `transform` rows reconcile *onto* them.
+- **The Claim-to-Proof gate still binds public copy.** Closing all 64 items would still not license
+  the word "migrated": no BurnRateOS source rows have moved, and the Data gate in the implementation
+  audit is still open.
+- **Behaviour parity is not data parity.** This section closes the *extraction* gate. The
+  *identity*, *data*, *provider*, *runtime*, *billing*, *cutover* and *rollback* gates are untouched
+  by it, and the ETL those gates need still does not exist in this repository.
+
+### 9.5 Reproducing this audit
+
+Both registers are regenerated from source, never hand-edited:
+
+```powershell
+cd api
+node scripts/check-burnrate-parity.mjs            # verifies the committed registers still match source
+node scripts/check-burnrate-parity.mjs --update    # regenerates them after a gap is closed
+```
+
+The checker is the meter for this section: as each of the 64 items gains a feature path, the
+`build` count falls, and it must never rise silently.

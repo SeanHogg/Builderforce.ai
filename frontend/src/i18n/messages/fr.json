@@ -8244,6 +8244,14 @@
         "answer": "Ce sont des spécialistes qui occupent un rôle dans votre équipe : CFO, CMO, CTO et autres. Ils apparaissent au bas de chaque canevas à côté des personnes invitées. Ajoutez-en un au tableau : il lit le travail, prend en charge la mission et produit une modification que vous pouvez examiner."
       },
       {
+        "question": "D’où viennent les chiffres de mon deck ?",
+        "answer": "De votre comptabilité. Connectez Stripe, Xero ou QuickBooks et les chiffres de trésorerie, de burn, d’ARR et de cohortes sont calculés à partir des transactions et portent la date à laquelle ils ont été lus — un chiffre sans source est ainsi signalé avant qu’un investisseur ne le trouve, au lieu d’être ressaisi dans une diapositive et de vieillir en silence."
+      },
+      {
+        "question": "Qui peut voir ma data room ?",
+        "answer": "Uniquement les personnes que vous invitez, aux conditions que vous fixez : un NDA à signer, un filigrane à leur nom, une date d’expiration et le relevé de chaque fichier ouvert. L’accès est accordé à l’investisseur et non à un dossier, si bien qu’une seule révocation porte sur toutes les salles et mises à jour — et elle peut intervenir à tout moment."
+      },
+      {
         "question": "Puis-je utiliser mon propre modèle ?",
         "answer": "Oui. Connectez votre propre compte fournisseur et votre travail s’y exécutera. Si un espace n’a aucune connexion, le routage de la plateforme choisit un modèle et le coût est imputé au compteur de l’espace de travail."
       },
@@ -8391,16 +8399,16 @@
     },
     "about": {
       "eyebrow": "À propos de l’application",
-      "title": "Ce que fait Builderforce.ai",
-      "lead": "Builderforce.ai est une application web qui transforme une idée en réalisation concrète. Vous décrivez ce que vous voulez sur un canevas visuel, et votre équipe, accompagnée d’agents IA, le conçoit, le construit, le relit et le livre — sites web, workflows, documents, analyses de données et produits — dans un seul espace de travail plutôt que dans une dizaine d’outils séparés.",
+      "title": "Ce que Builderforce.ai fait pour un fondateur",
+      "lead": "Builderforce.ai est une application web pour transformer une idée en entreprise. Vous décrivez ce que vous voulez sur un canevas visuel, et votre équipe et des agents IA le conçoivent, le construisent, le relisent et le livrent — le produit, les workflows, les chiffres et les documents qu’un investisseur demande — dans un seul espace de travail au lieu d’une douzaine d’outils déconnectés.",
       "points": [
         {
           "title": "Ouvrez-la sans créer de compte",
           "body": "Chaque page de ce site, ainsi qu’un véritable canevas dans lequel vous pouvez écrire, est accessible à tous. Vous ne vous connectez que pour enregistrer votre travail, inviter des collègues ou connecter un outil."
         },
         {
-          "title": "Des humains et des agents IA dans la même équipe",
-          "body": "Les agents sont recrutés dans un espace de travail comme des collègues. Ils prennent des tickets, font le travail et la renvoient pour relecture : c’est une personne qui décide de ce qui part en production."
+          "title": "Fonder seul, ce n’est pas avoir un directeur financier — c’est avoir le poste.",
+          "body": "Les agents sont recrutés dans un espace de travail comme des coéquipiers et occupent un rôle — CFO, CMO, CTO, CEO. Ils prennent le travail, le réalisent et le rendent pour relecture, si bien qu’une personne décide de ce qui part réellement en production. Le poste est déjà là quand vous recrutez la personne qui l’occupera."
         },
         {
           "title": "Connectez les outils que vous utilisez déjà",
@@ -8410,6 +8418,30 @@
       "dataNote": "L’accès aux comptes connectés est accordé par espace de travail, utilisé uniquement pour les fonctionnalités que vous activez, et révocable à tout moment.",
       "privacyLink": "Politique de confidentialité",
       "termsLink": "Conditions d’utilisation"
+    },
+    "founderGraph": {
+      "eyebrow": "Ce qui tient l’ensemble",
+      "title": "Créez librement. Levez des fonds avec contrôle.",
+      "lead": "Une fiche entreprise à laquelle tout se rattache : les projets qui la construisent, les investisseurs qui l’observent et les fichiers auxquels ils ont droit.",
+      "nodes": [
+        {
+          "title": "L’entreprise",
+          "body": "Stade, secteur, effectif, ARR et valorisation sur une seule fiche : la même entreprise partout où elle apparaît, pour que rien ne finisse avec deux orthographes."
+        },
+        {
+          "title": "Une entreprise, plusieurs projets",
+          "body": "Rattachez un projet ou dix à une entreprise. Ce que vous construisez et le récit que vous en faites cessent d’être deux systèmes distincts."
+        },
+        {
+          "title": "Invité dans l’entreprise, pas dans un dossier",
+          "body": "Un NDA, une identité de filigrane, une date d’expiration et une révocation, qui portent sur chaque salle et chaque mise à jour. Révoquer un accès est une décision, pas une recherche."
+        },
+        {
+          "title": "La salle, et ce qui lui manque",
+          "body": "Un accès sous NDA, filigrané et daté, avec le relevé de chaque fichier ouvert. Un document obligatoire encore en attente est un manque — et sa catégorie nomme le poste qui le comble."
+        }
+      ],
+      "note": "Chacun de ces éléments est un objet sur le même canevas. Ouvrez-en un et votre session continue derrière."
     }
   },
   "shoppingCart": {

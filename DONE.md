@@ -1,3 +1,29 @@
+## ✅ RESOLVED 2026-08-25 — `marketing_sessions` is a `keep`, not a `metric_fact`, and the headline number absorbed it
+
+The roadmap carried this as **blocked on an operator decision** because correcting the row moves the
+distinct-`keep` count off the number PRD 20 §3 rests on. That decision has been taken and applied:
+`source-to-target.tsv` files `marketing_sessions` as `keep`, `EXPECTED.keeps` in
+[`check-model-coverage.mjs`](./api/scripts/check-model-coverage.mjs) reads **363**, the reconciliation
+is **25 kernel + 363 = 388**, and PRD 20 §3.3 carries the retraction in full under "Retracted".
+
+**Why the original target was impossible rather than merely awkward.** `metric_facts` declares
+`tenant_id NOT NULL`, and a marketing session is written **before an account exists** — there is no
+tenant to scope it to. And the row is an *entity*, not a derived number: an opaque visitor id,
+first-touch attribution, a conversion pointer to `users`, and a per-UTC-day guest allowance counter
+that is authoritative rather than computed. What legitimately becomes a `metric_facts` row is the
+**daily aggregate over** these rows. The same argument covers `marketing_session_prompts` (0434),
+which hangs off the same pre-tenant `visitor_id`.
+
+The table also moved `identity.ts` → `growth.ts`, and the docstring at
+[`growth.ts:1436`](./api/src/infrastructure/database/schema/growth.ts#L1436) names the price: a
+counted `growth -> identity` edge for `convertedUserId`, accepted rather than routed, because a
+polymorphic pointer at the one write in the funnel that must not dangle is the worse trade.
+
+**Evidence:** `check-model-coverage` reports 1130 source tables mapped, 0 unaccounted, and target
+schema **363/363 (100.0%)**; `pnpm check` 26/26.
+
+---
+
 ## ✅ RESOLVED 2026-08-25 — IN-3: the `investor` rail row is a destination, not a one-line row
 
 **What was wrong.** Every destination the founder framing leans on declares a `tabs` array in [navGroups.ts](./frontend/src/lib/navGroups.ts); `investor` was a single line pointing at `/seat/investor` with nothing under it. `companies` has been a registered kind since migration 0422, so the generic entity path already reached it — but a table viewer answers "what columns does this row have", and the founder's question is "what is the state of my raise". The surfaces the framing promises had nowhere to mount.

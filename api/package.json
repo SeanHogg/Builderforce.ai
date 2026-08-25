@@ -44,7 +44,8 @@
     "check:table-adoption": "node scripts/check-table-adoption.mjs",
     "models:refresh": "node scripts/refresh-model-snapshot.mjs",
     "models:check": "node scripts/refresh-model-snapshot.mjs --check",
-    "backfill:byo-usage": "node scripts/backfill-byo-usage.mjs"
+    "backfill:byo-usage": "node scripts/backfill-byo-usage.mjs",
+    "check:burnrate-parity": "node scripts/check-burnrate-parity.mjs"
   },
   "dependencies": {
     "@cloudflare/containers": "^0.3.7",

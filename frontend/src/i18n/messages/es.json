@@ -8244,6 +8244,14 @@
         "answer": "Son especialistas que desempeñan un rol en tu equipo: CFO, CMO, CTO y otros. Aparecen en la parte inferior de cada lienzo junto a las personas invitadas. Lleva uno al tablero y leerá el trabajo, asumirá la tarea y producirá un cambio que podrás revisar."
       },
       {
+        "question": "¿De dónde salen las cifras de mi presentación?",
+        "answer": "De tu contabilidad. Conecta Stripe, Xero o QuickBooks y las cifras de pista de efectivo, quema, ARR y cohortes se calculan a partir de las transacciones y llevan la fecha en que se leyeron, de modo que una cifra sin fuente detrás se señala antes de que la encuentre un inversor, en lugar de acabar tecleada en una diapositiva y quedándose obsoleta en silencio."
+      },
+      {
+        "question": "¿Quién puede ver mi sala de datos?",
+        "answer": "Solo las personas que invites, en los términos que fijes: un NDA que firmar, una marca de agua con su nombre, una fecha de caducidad y un registro de cada archivo que abrieron. El acceso se concede al inversor y no a una carpeta, así que una sola revocación alcanza todas las salas y actualizaciones, y puede revocarse en cualquier momento."
+      },
+      {
         "question": "¿Puedo usar mi propio modelo?",
         "answer": "Sí. Conecta tu propia cuenta de proveedor y el trabajo se ejecutará en ella. Si un espacio no tiene conexión, el enrutamiento de la plataforma elige un modelo y el coste se carga al medidor del espacio de trabajo."
       },
@@ -8391,16 +8399,16 @@
     },
     "about": {
       "eyebrow": "Acerca de la aplicación",
-      "title": "Qué hace Builderforce.ai",
-      "lead": "Builderforce.ai es una aplicación web para convertir una idea en algo terminado. Describes lo que quieres en un lienzo visual y tu equipo, junto con agentes de IA, lo diseña, construye, revisa y entrega — sitios web, flujos de trabajo, documentos, informes de datos y productos — en un solo espacio de trabajo en lugar de una docena de herramientas desconectadas.",
+      "title": "Qué hace Builderforce.ai para un fundador",
+      "lead": "Builderforce.ai es una aplicación web para convertir una idea en una empresa. Describes lo que quieres en un lienzo visual, y tu equipo y agentes de IA lo diseñan, lo construyen, lo revisan y lo entregan — el producto, los flujos de trabajo, las cifras y los documentos que pide un inversor — en un solo espacio de trabajo en lugar de una docena de herramientas desconectadas.",
       "points": [
         {
           "title": "Ábrelo sin crear una cuenta",
           "body": "Todas las páginas de este sitio, y un lienzo real en el que puedes escribir, están disponibles para cualquiera. Solo inicias sesión cuando quieres guardar tu trabajo, invitar a compañeros o conectar una herramienta."
         },
         {
-          "title": "Personas y agentes de IA en un mismo equipo",
-          "body": "Los agentes se contratan en un espacio de trabajo como si fueran compañeros. Toman tickets, hacen el trabajo y lo devuelven para revisión, de modo que una persona decide qué se publica."
+          "title": "Un fundador en solitario no tiene un CFO. Tiene el puesto de CFO.",
+          "body": "Los agentes se contratan en un espacio de trabajo como compañeros de equipo y ocupan un rol — CFO, CMO, CTO, CEO. Toman el trabajo, lo hacen y lo devuelven para revisión, así que una persona decide qué se publica. El puesto ya está ahí cuando contratas a la persona que lo ocupará."
         },
         {
           "title": "Conecta las herramientas que ya usas",
@@ -8410,6 +8418,30 @@
       "dataNote": "El acceso a las cuentas conectadas se concede por espacio de trabajo, se usa solo para las funciones que actives y puede revocarse en cualquier momento.",
       "privacyLink": "Política de privacidad",
       "termsLink": "Términos del servicio"
+    },
+    "founderGraph": {
+      "eyebrow": "Lo que lo mantiene unido",
+      "title": "Crea con libertad. Levanta capital con control.",
+      "lead": "Un único registro de empresa del que cuelga todo: los proyectos que la construyen, los inversores que la observan y los archivos que pueden ver.",
+      "nodes": [
+        {
+          "title": "La empresa",
+          "body": "Etapa, sector, plantilla, ARR y valoración en un solo registro: la misma empresa allí donde aparezca, para que nada acabe con dos formas de escribirse."
+        },
+        {
+          "title": "Una empresa, muchos proyectos",
+          "body": "Asigna un proyecto o diez a una empresa. Lo que construyes y la historia que cuentas sobre ello dejan de ser dos sistemas distintos."
+        },
+        {
+          "title": "Invitado a la empresa, no a una carpeta",
+          "body": "Un NDA, una identidad de marca de agua, una caducidad y una revocación, que alcanzan cada sala y cada actualización. Revocar el acceso es una decisión, no una búsqueda."
+        },
+        {
+          "title": "La sala, y lo que le falta",
+          "body": "Acceso con NDA, marca de agua y caducidad, con registro de cada archivo abierto. Un documento obligatorio aún pendiente es un hueco, y su categoría nombra el puesto que lo cierra."
+        }
+      ],
+      "note": "Cada uno de estos es un objeto en el mismo lienzo. Abre uno y tu sesión sigue corriendo detrás."
     }
   },
   "shoppingCart": {

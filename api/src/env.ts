@@ -10,6 +10,11 @@ export interface Env {
    * ledgers). When omitted during local/test rollout, the primary connection is
    * used for backwards compatibility. */
   NEON_TRANSACTIONAL_DATABASE_URL?: string;
+  /** Self-hosted Neon SQL endpoint for the HTTP driver, e.g.
+   * "http://db-proxy:4444/sql". Local development only — it lets the driver
+   * talk to the Postgres container from docker-compose.yml instead of Neon.
+   * Leave unbound in production, where the endpoint is derived from the host. */
+  NEON_FETCH_ENDPOINT?: string;
   /** Comma-separated allowed CORS origins, e.g. "https://builderforce.ai" */
   CORS_ORIGINS: string;
   /** "production" | "development" */

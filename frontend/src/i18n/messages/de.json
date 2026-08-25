@@ -8244,6 +8244,14 @@
         "answer": "Es sind Spezialisten mit einer Rolle in Ihrem Team—CFO, CMO, CTO und weitere. Sie befinden sich am unteren Rand jedes Canvas neben den eingeladenen Personen. Ziehen Sie einen auf das Board: Er liest die Arbeit, übernimmt den Auftrag und erstellt eine Änderung, die Sie prüfen können."
       },
       {
+        "question": "Woher kommen die Zahlen in meinem Pitchdeck?",
+        "answer": "Aus Ihrer Buchhaltung. Verbinden Sie Stripe, Xero oder QuickBooks, und Runway, Burn, ARR und Kohortenwerte werden aus den Transaktionen berechnet und tragen das Datum, an dem sie gelesen wurden — eine Zahl ohne Quelle wird so markiert, bevor ein Investor sie findet, statt in eine Folie getippt zu werden und still zu veralten."
+      },
+      {
+        "question": "Wer kann meinen Datenraum sehen?",
+        "answer": "Nur die Personen, die Sie einladen, zu den Bedingungen, die Sie festlegen: eine zu unterzeichnende NDA, ein Wasserzeichen mit ihrem Namen, ein Ablaufdatum und ein Protokoll jeder geöffneten Datei. Der Zugriff wird dem Investor erteilt und nicht einem Ordner, sodass ein einziger Widerruf jeden Raum und jedes Update erreicht — und er ist jederzeit möglich."
+      },
+      {
         "question": "Kann ich mein eigenes Modell verwenden?",
         "answer": "Ja. Verbinden Sie Ihr eigenes Anbieterkonto, und Ihre Arbeit wird darüber ausgeführt. Hat ein Arbeitsbereich keine Verbindung, wählt das Plattform-Routing ein Modell und die Kosten werden dem Arbeitsbereich zugeordnet."
       },
@@ -8391,16 +8399,16 @@
     },
     "about": {
       "eyebrow": "Über die App",
-      "title": "Was Builderforce.ai macht",
-      "lead": "Builderforce.ai ist eine Webanwendung, die aus einer Idee ein fertiges Ergebnis macht. Sie beschreiben auf einer visuellen Leinwand, was Sie wollen, und Ihr Team entwirft, baut, prüft und liefert es gemeinsam mit KI-Agenten — Websites, Workflows, Dokumente, Datenauswertungen und Produkte — in einem einzigen Arbeitsbereich statt in einem Dutzend getrennter Werkzeuge.",
+      "title": "Was Builderforce.ai für Gründer tut",
+      "lead": "Builderforce.ai ist eine Webanwendung, die aus einer Idee ein Unternehmen macht. Sie beschreiben auf einer visuellen Leinwand, was Sie wollen, und Ihr Team und KI-Agenten entwerfen, bauen, prüfen und liefern es — das Produkt, die Workflows, die Zahlen und die Dokumente, nach denen ein Investor fragt — in einem Arbeitsbereich statt in einem Dutzend getrennter Tools.",
       "points": [
         {
           "title": "Ohne Konto nutzbar",
           "body": "Jede Seite dieser Website und eine echte Leinwand, in die Sie schreiben können, steht allen offen. Sie melden sich erst an, wenn Sie Ihre Arbeit speichern, Teammitglieder einladen oder ein Werkzeug verbinden möchten."
         },
         {
-          "title": "Menschen und KI-Agenten in einem Team",
-          "body": "Agenten werden wie Teammitglieder in einen Arbeitsbereich eingestellt. Sie nehmen Tickets an, erledigen die Arbeit und geben sie zur Prüfung zurück — was veröffentlicht wird, entscheidet ein Mensch."
+          "title": "Wer allein gründet, hat keinen CFO — sondern den CFO-Platz.",
+          "body": "Agenten werden wie Teammitglieder in einen Arbeitsbereich aufgenommen und übernehmen eine Rolle — CFO, CMO, CTO, CEO. Sie nehmen die Arbeit auf, erledigen sie und geben sie zur Prüfung zurück, sodass ein Mensch entscheidet, was tatsächlich ausgeliefert wird. Der Platz ist schon da, wenn Sie den Menschen einstellen, der ihn ausfüllt."
         },
         {
           "title": "Verbinden Sie die Werkzeuge, die Sie bereits nutzen",
@@ -8410,6 +8418,30 @@
       "dataNote": "Der Zugriff auf verbundene Konten wird pro Arbeitsbereich erteilt, nur für die von Ihnen aktivierten Funktionen genutzt und kann jederzeit widerrufen werden.",
       "privacyLink": "Datenschutzerklärung",
       "termsLink": "Nutzungsbedingungen"
+    },
+    "founderGraph": {
+      "eyebrow": "Was alles zusammenhält",
+      "title": "Frei erschaffen. Kontrolliert Kapital aufnehmen.",
+      "lead": "Ein Unternehmensdatensatz, an dem alles hängt — die Projekte, die es bauen, die Investoren, die es beobachten, und die Dateien, die sie sehen dürfen.",
+      "nodes": [
+        {
+          "title": "Das Unternehmen",
+          "body": "Phase, Branche, Teamgröße, ARR und Bewertung auf einem Datensatz — dasselbe Unternehmen, wo immer es auftaucht, damit nichts zwei Schreibweisen seiner selbst bekommt."
+        },
+        {
+          "title": "Ein Unternehmen, viele Projekte",
+          "body": "Ordnen Sie einem Unternehmen ein Projekt zu oder zehn. Was Sie bauen und die Geschichte, die Sie darüber erzählen, sind nicht länger zwei getrennte Systeme."
+        },
+        {
+          "title": "Eingeladen zum Unternehmen, nicht zu einem Ordner",
+          "body": "Eine NDA, eine Wasserzeichen-Identität, ein Ablaufdatum und ein Widerruf — für jeden Raum und jedes Update. Zugriff zu entziehen ist eine Entscheidung, keine Suche."
+        },
+        {
+          "title": "Der Raum — und was darin fehlt",
+          "body": "NDA-geschützter, mit Wasserzeichen versehener, ablaufender Zugriff samt Protokoll jeder geöffneten Datei. Ein noch ausstehendes Pflichtdokument ist eine Lücke — und seine Kategorie benennt den Platz, der sie schließt."
+        }
+      ],
+      "note": "Jedes davon ist ein Objekt auf derselben Leinwand. Öffnen Sie eines, und Ihre Sitzung läuft dahinter weiter."
     }
   },
   "shoppingCart": {

@@ -1,0 +1,75 @@
+disposition	target	domain	source_tables	br_modules	br_endpoints	note
+build	ai_competitors	Agents & runtime	ai_competitors	aiProductivity	27	
+build	ai_email_classifications	Agents & runtime	ai_email_classifications	aiProductivity	27	
+build	ai_tool_calls	Agents & runtime	ai_tool_calls	ai usageTracking	27	
+build	enrichment_cache	Agents & runtime	enrichment_cache	governance	67	
+build	agency_brandings	Commerce	agency_brandings	agency	8	
+build	agency_clients	Commerce	agency_clients	agency	8	
+build	booking_hosts	Commerce	booking_hosts	bookings	26	
+build	booking_reservations	Commerce	booking_reservations	bookings	26	
+build	booking_services	Commerce	booking_services	bookings	26	
+build	card_decks	Commerce	card_decks	planningPoker	28	
+build	consultant_consultations	Commerce	consultant_consultations	consultant	17	
+build	consultant_knowledge_docs	Commerce	consultant_knowledge_docs	consultant	17	
+build	action_items	Delivery & work	action_items	operationalCadence pitchDeck retrospectives	161	
+build	approval_actions	Delivery & work	approval_actions	governance	67	
+build	kanban_columns	Delivery & work	kanban_columns	kanban	45	
+build	release_plans	Delivery & work	release_plans	productManagement	86	
+build	sprint_financial_impact	Delivery & work	sprint_financial_impact	agileCost	11	
+build	task_effort_estimates	Delivery & work	task_effort_estimates	agileCost	11	
+build	break_even_scenarios	Finance	break_even_scenarios	breakEven predictiveAnalytics	11	
+build	churn_predictions	Finance	churn_predictions	analytics predictiveAnalytics salesGrowth	60	
+build	monte_carlo_simulations	Finance	monte_carlo_simulations	predictiveAnalytics	3	
+build	payback_period	Finance	payback_period	businessIntelligence	83	
+build	saved_calculations	Finance	saved_calculations	freeTools	3	
+build	ab_test_variants	Growth & marketing	ab_test_variants	productManagement	86	
+build	ab_tests	Growth & marketing	ab_tests	productManagement	86	
+build	brand_kits	Growth & marketing	brand_kits	pitchDeck	32	
+build	customer_journeys	Growth & marketing	customer_journeys	analytics customerEngagement	68	
+build	embed_widget_layout	Growth & marketing	embed_widget_layout	embed	38	
+build	journey_touchpoints	Growth & marketing	journey_touchpoints	analytics	34	
+build	landing_page_blocks	Growth & marketing	landing_page_blocks	landingPages	11	
+build	landing_pages	Growth & marketing	landing_pages	landingPages	11	
+build	learn_videos	Growth & marketing	learn_videos	growth	15	
+build	marketing_content_items	Growth & marketing	marketing_content_items	marketingGrowth	32	
+build	marketing_emails	Growth & marketing	marketing_emails	marketing	10	
+build	marketing_heatmap_pages	Growth & marketing	marketing_heatmap_pages	embed heatmaps productManagement	147	
+build	marketing_heatmap_screenshots	Growth & marketing	marketing_heatmap_screenshots	heatmaps	23	
+build	marketing_seo_pages	Growth & marketing	marketing_seo_pages	marketingGrowth	32	
+build	nurture_flows	Growth & marketing	nurture_flows	nurtureFlows	13	
+build	podcast_outreach	Growth & marketing	podcast_outreach	growth	15	
+build	waitlist_entries	Growth & marketing	waitlist_entries	growth	15	
+build	website_pages	Growth & marketing	website_pages	landingPages	11	
+build	cohort_retention	Hiring	cohort_retention	analytics	34	
+build	onboarding_flows	Identity & tenancy	onboarding_flows	embed onboarding	48	
+build	onboarding_progress	Identity & tenancy	onboarding_progress	onboarding	10	
+build	region_waitlist	Identity & tenancy	region_waitlist	systemAdmin/security	7	
+build	stage_lookup	Identity & tenancy	stage_lookup	lookups system	12	
+build	user_terms_agreements	Identity & tenancy	user_terms_agreements	auth embed systemAdmin terms	151	
+build	investor_peer_comparables	Investor & portfolio	investor_peer_comparables	investorIntelligence pitchDeck	74	
+build	modules	Investor & portfolio	modules	systemAdmin	77	
+build	scratch_pad_attachments	Investor & portfolio	scratch_pad_attachments	scratchPad	39	
+build	health_dimensions	People & HR	health_dimensions	investorIntelligence	42	
+build	hr_emergency_contacts	People & HR	hr_emergency_contacts	hrAdmin	14	
+build	uptime_monitors	Platform & observability	uptime_monitors	uptime	6	
+build	contact_compensations	Revenue & CRM	contact_compensations	contacts	24	
+build	contact_educations	Revenue & CRM	contact_educations	contacts	24	
+build	contact_experiences	Revenue & CRM	contact_experiences	contacts	24	
+build	deal_flow_opportunities	Revenue & CRM	deal_flow_opportunities	businessIntelligence investors	163	
+build	ri_icps	Revenue & CRM	ri_icps	revenueIntelligence	19	
+build	ri_ids	Revenue & CRM	ri_ids	revenueIntelligence	19	
+build	ri_prospects	Revenue & CRM	ri_prospects	revenueIntelligence	19	
+build	ri_sequences	Revenue & CRM	ri_sequences	revenueIntelligence	19	
+build	saved_contact_searches	Revenue & CRM	saved_contact_searches	contacts	24	
+build	customer_engagement_feedback_widgets	Support & knowledge	customer_engagement_feedback_widgets	customerEngagement productManagement publicWidgets	122	
+build	support_articles	Support & knowledge	support_articles	knowledgeBase	9	
+transform	billing_plans	Finance	billing_plans	ai billing pricingAggregator systemAdmin	141	pricing → transform_existing (PlanLimits/pricingConfiguration is canonical)
+transform	business_pricing_models	Finance	business_pricing_models	businessIntelligence pitchDeck pricingAggregator	118	pricing → transform_existing
+transform	payment_methods	Finance	payment_methods	billing	52	providers → stripe retain_reconcile
+transform	plan_features	Finance	plan_features	pricing pricingAggregator	26	pricing → transform_existing
+transform	pricing_simulations	Finance	pricing_simulations	businessIntelligence	83	pricing → transform_existing
+transform	system_features	Platform & observability	system_features	accounts embed featureVoting pricing pricingAggregator system systemAdmin usageTracking	202	pricing → transform_existing (feature gating is canonical in BF)
+retire	ai_voice_agent_calls	Agents & runtime	ai_voice_agent_calls	aiProductivity	27	phoneVoip → retire_port_out (SignalWire)
+retire	affiliate_referrals	Growth & marketing	affiliate_referrals	customerEngagement	34	affiliates → retire_export
+retire	blog_posts	Growth & marketing	blog_posts	blog	9	blogContent → transform_existing (knowledge_documents)
+retire	referral_entries	Growth & marketing	referral_entries	referrals	4	affiliates → retire_export

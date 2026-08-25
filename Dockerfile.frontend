@@ -47,6 +47,9 @@ COPY scripts/ /repo/scripts/
 # every route reaching that component fails to compile with "Module not found".
 # In the deps stage so both the dev and production targets inherit it.
 COPY packages/creation-canvas-contract /repo/packages/creation-canvas-contract
+COPY packages/canvas-widget-protocol /repo/packages/canvas-widget-protocol
+COPY packages/ide-templates /repo/packages/ide-templates
+COPY packages/ide-file-contract /repo/packages/ide-file-contract
 WORKDIR /repo/frontend
 COPY frontend/package.json frontend/pnpm-lock.yaml* ./
 RUN corepack enable && corepack prepare pnpm@10.23.0 --activate

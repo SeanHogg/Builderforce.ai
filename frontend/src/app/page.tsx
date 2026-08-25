@@ -2,6 +2,7 @@ import JsonLd from '@/components/JsonLd';
 import { homepageSchema } from '@/lib/structured-data';
 import { DemoShowcase } from '@/components/demo/DemoShowcase';
 import { AboutAppSection } from '@/components/home/AboutAppSection';
+import { FounderGraphSection } from '@/components/home/FounderGraphSection';
 import { LandingCanvasHero } from '@/components/home/LandingCanvasHero';
 import { MeetCarousel } from '@/components/home/MeetCarousel';
 import { TensionBeat } from '@/components/home/TensionBeat';
@@ -23,7 +24,8 @@ import { NewsletterSignupSection } from '@/components/marketing/NewsletterSignup
  *
  * The order below is a narrative: start on the canvas → say plainly what the
  * application is → name the problem and resolve it into a workflow → see what
- * it is → watch it work → price → objections → act. Product discovery and
+ * it is → say what holds it together → watch it work → price → objections →
+ * act. Product discovery and
  * comparison now live on the dedicated product page, where visitors are asking
  * for that depth. Numbering survives in exactly one place, "How it works",
  * because those three steps genuinely are a sequence.
@@ -59,17 +61,23 @@ export default function LandingPage() {
         {/* 4 · WHAT IT IS — the rotating Create → Evermind → governed-delivery story. */}
         <MeetCarousel />
 
-        {/* 5 · SEE IT RUN */}
+        {/* 5 · WHAT HOLDS IT TOGETHER — "what it is" (above) and "see it run"
+            (below) both leave a founder's question open: what connects a board
+            full of objects to a round they can close. One company record does,
+            and this band names its four edges. */}
+        <FounderGraphSection />
+
+        {/* 6 · SEE IT RUN */}
         <DemoShowcase />
 
-        {/* 6 · WHAT IT COSTS */}
+        {/* 7 · WHAT IT COSTS */}
         <HomePricingSection />
 
-        {/* 7 · OBJECTIONS — answered immediately before the ask, which is where
+        {/* 8 · OBJECTIONS — answered immediately before the ask, which is where
             they actually surface. */}
         <HomeFaqSection />
 
-        {/* 8 · THE ASK */}
+        {/* 9 · THE ASK */}
         <CreationCtaSection />
 
         {/* Secondary. Below the ask on purpose — these used to sit between the

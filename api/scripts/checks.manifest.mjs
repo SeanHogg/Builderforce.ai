@@ -37,6 +37,7 @@ export default [
   ['check:trigger-palette', 'check-trigger-palette-parity.mjs'],
   ['check:no-burnrate-runtime', 'check-no-burnrate-runtime.mjs'],
   ['check:burnrate-policy', 'check-burnrate-cutover-policy.mjs'],
+  ['check:burnrate-parity', 'check-burnrate-parity.mjs'],
   ['audit:burnrate-cutover', 'audit-burnrate-cutover.mjs', '--validate-only'],
   ['audit:burnrate-tenancy', 'audit-burnrate-tenancy.mjs', '--validate-only'],
 ];

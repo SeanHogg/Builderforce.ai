@@ -8244,6 +8244,14 @@
         "answer": "Specialists that hold a role on your team—a CFO, a CMO, a CTO, and others. They sit along the bottom of every canvas beside the people you invited. Bring one onto the board and it reads the work, takes the assignment, and produces a change you can review."
       },
       {
+        "question": "Where do the numbers in my deck come from?",
+        "answer": "Your ledger. Connect Stripe, Xero or QuickBooks and the runway, burn, ARR and cohort figures are computed from the transactions and carry the date they were read — so a figure with no source behind it is flagged before an investor finds it, rather than being retyped into a slide and quietly going stale."
+      },
+      {
+        "question": "Who can see my data room?",
+        "answer": "Only the people you invite, on the terms you set: an NDA to sign, a watermark carrying their name, an expiry date, and a record of every file they opened. Access is granted to the investor rather than to a folder, so one revocation reaches every room and update — and it can be revoked at any time."
+      },
+      {
         "question": "Can I use my own model?",
         "answer": "Yes. Connect your own provider account and your work runs on it. When a workspace has no connection, the platform’s routing picks a model and the cost lands against your workspace meter."
       },
@@ -8391,16 +8399,16 @@
     },
     "about": {
       "eyebrow": "About the app",
-      "title": "What Builderforce.ai does",
-      "lead": "Builderforce.ai is a web application for turning an idea into a finished thing. You describe what you want on a visual canvas, and your team and AI agents design, build, review, and deliver it — websites, workflows, documents, data stories, and products — in one workspace instead of a dozen disconnected tools.",
+      "title": "What Builderforce.ai does for a founder",
+      "lead": "Builderforce.ai is a web application for turning an idea into a company. You describe what you want on a visual canvas, and your team and AI agents design, build, review and deliver it — the product, the workflows, the numbers and the documents an investor asks for — in one workspace instead of a dozen disconnected tools.",
       "points": [
         {
           "title": "Open it without an account",
           "body": "Every page on this site, and a working canvas you can type into, is available to anyone. You sign in only when you want to save your work, invite teammates, or connect a tool."
         },
         {
-          "title": "People and AI agents on one team",
-          "body": "Agents are hired into a workspace like teammates. They pick up tickets, do the work, and hand it back for review, so a person decides what actually ships."
+          "title": "A solo founder does not have a CFO. They have the CFO seat.",
+          "body": "Agents are hired into a workspace like teammates and hold a role — CFO, CMO, CTO, CEO. They pick up the work, do it, and hand it back for review, so a person decides what actually ships. The seat is already there when you hire the human who fills it."
         },
         {
           "title": "Connect the tools you already use",
@@ -8410,6 +8418,30 @@
       "dataNote": "Connected-account access is granted per workspace, used only for the features you switch on, and can be revoked at any time.",
       "privacyLink": "Privacy policy",
       "termsLink": "Terms of service"
+    },
+    "founderGraph": {
+      "eyebrow": "What holds it together",
+      "title": "Create freely. Raise with control.",
+      "lead": "One company record everything hangs off — the projects building it, the investors watching it, and the files they are allowed to see.",
+      "nodes": [
+        {
+          "title": "The company",
+          "body": "Stage, sector, headcount, ARR and valuation on one record — the same company wherever it appears, so nothing ends up with two spellings of itself."
+        },
+        {
+          "title": "One company, many projects",
+          "body": "Assign one project or ten to a company. What you are building and the story you tell about it stop being two different systems."
+        },
+        {
+          "title": "Invited to the company, not to a folder",
+          "body": "One NDA, one watermark identity, one expiry and one revocation, reaching every room and every update. Revoking access is a decision, not a search."
+        },
+        {
+          "title": "The room, and what is missing from it",
+          "body": "NDA-gated, watermarked, expiring access with a record of every file opened. A required document still outstanding is a gap — and its category names the seat that closes it."
+        }
+      ],
+      "note": "Every one of these is an object on the same canvas. Open one and your session keeps running behind it."
     }
   },
   "shoppingCart": {

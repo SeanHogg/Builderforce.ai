@@ -26,6 +26,17 @@ const nodeSafeFromHtmlIsomorphic = require.resolve(
   { paths: [require('fs').realpathSync(path.join(__dirname, 'node_modules/rehype-katex'))] },
 );
 
+/**
+ * The same entry, expressed relative to the project root.
+ *
+ * `turbopack.resolveAlias` interprets every value as project-relative, so the
+ * absolute path above arrives as `./repo/frontend/...` and fails to resolve
+ * ("server relative imports are not implemented yet"). Only the webpack alias
+ * may take the absolute form.
+ */
+const nodeSafeFromHtmlIsomorphicRelative =
+  './' + path.relative(__dirname, nodeSafeFromHtmlIsomorphic).split(path.sep).join('/');
+
 // next-intl: points the plugin at the per-request locale/message resolver.
 const withNextIntl = createNextIntlPlugin('./src/i18n/request.ts');
 /**
@@ -85,7 +96,7 @@ const nextConfig = {
       // turbopack aliases are global rather than per-runtime. The default entry
       // works in every runtime, so the only cost is a slightly larger dev client
       // bundle — and dev SSR now behaves like production.
-      'hast-util-from-html-isomorphic': nodeSafeFromHtmlIsomorphic,
+      'hast-util-from-html-isomorphic': nodeSafeFromHtmlIsomorphicRelative,
       'react-markdown': './node_modules/react-markdown/index.js',
       'remark-gfm': './node_modules/remark-gfm/index.js',
       sharp: './src/lib/turbopackEmptyModule.ts',

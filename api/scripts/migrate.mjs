@@ -11,7 +11,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { neon } from '@neondatabase/serverless';
+import { neon, neonConfig } from '@neondatabase/serverless';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -48,6 +48,13 @@ if (!NEON_DATABASE_URL) {
 // ---------------------------------------------------------------------------
 // Connect
 // ---------------------------------------------------------------------------
+
+// Local development runs Postgres behind a proxy that speaks Neon's HTTP SQL
+// protocol (see docker-compose.yml). Without this the driver would derive its
+// endpoint from the connection host and never reach the container.
+if (process.env.NEON_FETCH_ENDPOINT?.trim()) {
+  neonConfig.fetchEndpoint = process.env.NEON_FETCH_ENDPOINT.trim();
+}
 
 const sql = neon(NEON_DATABASE_URL);
 

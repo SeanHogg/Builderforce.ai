@@ -28,6 +28,7 @@ volumes:
   sdk-dist:
   studio-dist:
   studio-embedded-dist:
+  pg-data:
 
 services:
   # ---------------------------------------------------------------------------
@@ -84,6 +85,61 @@ services:
       start_period: 90s
 
   # ---------------------------------------------------------------------------
+  # Local database substitution for Neon.
+  #
+  # The Worker reaches Postgres through @neondatabase/serverless, which is an
+  # HTTP client rather than a TCP one, so pointing it at a bare `postgres`
+  # container cannot work. `db-proxy` speaks Neon's HTTP SQL protocol on :4444
+  # and forwards to plain Postgres, so the driver, the schema and every query
+  # run locally exactly as they do against Neon.
+  #
+  # The production path is unchanged: the only difference is NEON_FETCH_ENDPOINT
+  # in api/.dev.vars, which is unset — and therefore inert — in production.
+  #
+  # The connection host MUST be db.localtest.me: the proxy authenticates by
+  # hostname and its Caddy front end pins that name as the TLS server name.
+  # The network alias below makes it resolve to `db` inside the compose network.
+  # ---------------------------------------------------------------------------
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: main
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    networks:
+      default:
+        aliases:
+          - db.localtest.me
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d main"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 10s
+
+  db-proxy:
+    image: ghcr.io/timowilhelm/local-neon-http-proxy:main
+    environment:
+      PG_CONNECTION_STRING: postgres://postgres:postgres@db:5432/main
+    ports:
+      - "4444:4444"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      # A plain TCP probe: any HTTP request without Neon auth headers makes the
+      # proxy log a user error every interval, which buries real failures.
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/4444"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 10s
+
+  # ---------------------------------------------------------------------------
   # API worker (wrangler dev)
   # workerd is pre-pulled at image-build time (Dockerfile.api deps stage).
   # ---------------------------------------------------------------------------
@@ -114,6 +170,9 @@ services:
       - ./packages/canvas-widget-protocol/src:/repo/packages/canvas-widget-protocol/src:ro
       - ./packages/ide-templates/src:/repo/packages/ide-templates/src:ro
       - ./packages/ide-file-contract/src:/repo/packages/ide-file-contract/src:ro
+    depends_on:
+      db-proxy:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -q --spider http://localhost:8787/health || exit 1"]
       interval: 10s
@@ -143,7 +202,10 @@ services:
       - "3000:3000"
     volumes:
       - ./frontend/src:/repo/frontend/src
-      - ./frontend/public:/repo/frontend/public:ro
+      # NOT read-only: the frontend's `dev` script runs
+      # scripts/publish-message-catalogs.mjs, which regenerates
+      # public/i18n/ (gitignored) before next dev boots.
+      - ./frontend/public:/repo/frontend/public
       - ./frontend/next.config.js:/repo/frontend/next.config.js:ro
       - ./sdk:/repo/sdk
       - ./studio:/repo/studio
@@ -160,8 +222,11 @@ services:
       - ./packages/brain-ui:/repo/packages/brain-ui:ro
       - ./builderforce-embedded:/repo/builderforce-embedded:ro
       - ./voice:/repo/voice:ro
-      # tsconfig path alias (not an npm dep) that CreationCanvas.tsx imports.
+      # tsconfig path aliases (not npm deps) that frontend/src imports.
       - ./packages/creation-canvas-contract/src:/repo/packages/creation-canvas-contract/src:ro
+      - ./packages/canvas-widget-protocol/src:/repo/packages/canvas-widget-protocol/src:ro
+      - ./packages/ide-templates/src:/repo/packages/ide-templates/src:ro
+      - ./packages/ide-file-contract/src:/repo/packages/ide-file-contract/src:ro
     depends_on:
       api:
         condition: service_healthy
