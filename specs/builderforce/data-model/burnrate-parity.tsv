@@ -11,11 +11,6 @@ build	booking_services	Commerce	booking_services	bookings	26
 build	card_decks	Commerce	card_decks	planningPoker	28	
 build	consultant_consultations	Commerce	consultant_consultations	consultant	17	
 build	consultant_knowledge_docs	Commerce	consultant_knowledge_docs	consultant	17	
-build	break_even_scenarios	Finance	break_even_scenarios	breakEven predictiveAnalytics	11	
-build	churn_predictions	Finance	churn_predictions	analytics predictiveAnalytics salesGrowth	60	
-build	monte_carlo_simulations	Finance	monte_carlo_simulations	predictiveAnalytics	3	
-build	payback_period	Finance	payback_period	businessIntelligence	83	
-build	saved_calculations	Finance	saved_calculations	freeTools	3	
 build	ab_test_variants	Growth & marketing	ab_test_variants	productManagement	86	
 build	ab_tests	Growth & marketing	ab_tests	productManagement	86	
 build	brand_kits	Growth & marketing	brand_kits	pitchDeck	32	

@@ -28,12 +28,10 @@ boost_checkouts
 boosts
 bottleneck_analysis
 brand_kits
-break_even_scenarios
 business_pricing_models
 candidate_interactions
 capacity_heatmaps
 card_decks
-churn_predictions
 cities
 cohort_retention
 communication_tracking
@@ -103,7 +101,6 @@ marketing_heatmap_screenshots
 metric_thresholds
 model_locks
 modules
-monte_carlo_simulations
 nurture_flows
 onboarding_checklists
 onboarding_flows
@@ -115,7 +112,6 @@ operator_certifications
 outplacement_packages
 page_embed_videos
 partner_program_opt_ins
-payback_period
 payment_methods
 people_headcount_plans
 people_tenants
@@ -146,10 +142,7 @@ ri_icps
 ri_ids
 ri_prospects
 ri_sequences
-roi_timeline_entries
-saved_calculations
 saved_contact_searches
-scenario_assumptions
 scorm_cmi_states
 scratch_pad_attachments
 screening_template_items
