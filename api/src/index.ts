@@ -160,6 +160,7 @@ import { createConsentRoutes, createLegalDocumentRoutes, createPublicLegalDocume
 import { createDataRoomRoutes, createPublicDataRoomRoutes } from './presentation/routes/dataRoomRoutes';
 import { createInvestorRoutes, createPublicInvestorRoutes } from './presentation/routes/investorRoutes';
 import { createWebSurfaceRoutes, createPublicWebSurfaceRoutes } from './presentation/routes/webSurfaceRoutes';
+import { createDeliveryFlowRoutes } from './presentation/routes/deliveryFlowRoutes';
 import { createDocumentTemplateRoutes } from './presentation/routes/documentTemplateRoutes';
 import { createPayableRoutes, createPublicInvoiceRoutes } from './presentation/routes/payableRoutes';
 import { createEquityRoutes } from './presentation/routes/equityRoutes';
@@ -1000,6 +1001,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // fundraising pack, which is `rfpService` company-scoped rather than forked (IN-4).
   app.route('/api/investor',          createInvestorRoutes(db, toolService, auditRunner, taskService));
   app.route('/api/web',               createWebSurfaceRoutes(db));
+  app.route('/api/delivery-flow',     createDeliveryFlowRoutes(db));
   // The founders' agreement, the IP assignment, the vesting schedule and the NDA —
   // ONE registry, rendered or sent through the signature engine (FO-D5).
   app.route('/api/document-templates', createDocumentTemplateRoutes(db));

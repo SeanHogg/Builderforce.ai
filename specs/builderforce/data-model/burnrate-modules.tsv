@@ -9,7 +9,6 @@ agency	8	3	1	33	agency_brandings agency_clients
 productManagement	86	8	3	38	ab_test_variants ab_tests customer_engagement_feedback_widgets marketing_heatmap_pages release_plans
 growth	15	5	2	40	learn_videos podcast_outreach waitlist_entries
 predictiveAnalytics	3	5	2	40	break_even_scenarios churn_predictions monte_carlo_simulations
-agileCost	11	4	2	50	sprint_financial_impact task_effort_estimates
 onboarding	10	4	2	50	onboarding_flows onboarding_progress
 knowledgeBase	9	2	1	50	support_articles
 publicWidgets	2	2	1	50	customer_engagement_feedback_widgets
@@ -22,7 +21,6 @@ marketing	10	3	2	67	marketing_emails
 marketingGrowth	32	3	2	67	marketing_content_items
 nurtureFlows	13	3	2	67	nurture_flows
 referrals	4	3	2	67	referral_entries
-retrospectives	38	3	2	67	action_items
 salesGrowth	23	3	2	67	churn_predictions
 uptime	6	3	2	67	uptime_monitors
 analytics	34	14	10	71	churn_predictions cohort_retention customer_journeys journey_touchpoints
@@ -37,16 +35,16 @@ hrAdmin	14	5	4	80	hr_emergency_contacts
 businessIntelligence	83	22	18	82	business_pricing_models deal_flow_opportunities payback_period pricing_simulations
 embed	38	24	20	83	embed_widget_layout marketing_heatmap_pages onboarding_flows system_features
 pricing	23	12	10	83	plan_features system_features
-pitchDeck	32	25	21	84	action_items brand_kits business_pricing_models investor_peer_comparables
 usageTracking	18	13	11	85	ai_tool_calls system_features
+pitchDeck	32	25	22	88	brand_kits business_pricing_models investor_peer_comparables
 billing	52	16	14	88	billing_plans payment_methods
 accounts	24	8	7	88	system_features
 investorIntelligence	42	19	17	89	health_dimensions investor_peer_comparables
-governance	67	18	16	89	approval_actions enrichment_cache
 systemAdmin	77	34	31	91	billing_plans modules system_features
 scratchPad	39	13	12	92	scratch_pad_attachments
 investors	80	14	13	93	deal_flow_opportunities
-operationalCadence	91	16	15	94	action_items
+governance	67	18	17	94	enrichment_cache
+operationalCadence	91	16	16	100	
 auth	30	12	12	100	
 dashboard	8	10	10	100	
 businessProfiles	18	7	7	100	
@@ -57,6 +55,7 @@ phone	14	6	6	100
 supportTickets	18	6	6	100	
 impersonation	10	5	5	100	
 revenueAnalytics	6	5	5	100	
+agileCost	11	4	4	100	
 commsOps	11	4	4	100	
 teams	20	4	4	100	
 crmDeals	7	3	3	100	
@@ -64,6 +63,7 @@ expenses	6	3	3	100
 guest	1	3	3	100	
 landingPages	11	3	3	100	
 push	9	3	3	100	
+retrospectives	38	3	3	100	
 sourcingExtractor	3	3	3	100	
 users	4	3	3	100	
 aiCredits	5	2	2	100	

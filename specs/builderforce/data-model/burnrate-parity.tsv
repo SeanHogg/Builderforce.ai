@@ -11,12 +11,6 @@ build	booking_services	Commerce	booking_services	bookings	26
 build	card_decks	Commerce	card_decks	planningPoker	28	
 build	consultant_consultations	Commerce	consultant_consultations	consultant	17	
 build	consultant_knowledge_docs	Commerce	consultant_knowledge_docs	consultant	17	
-build	action_items	Delivery & work	action_items	operationalCadence pitchDeck retrospectives	161	
-build	approval_actions	Delivery & work	approval_actions	governance	67	
-build	kanban_columns	Delivery & work	kanban_columns	kanban	45	
-build	release_plans	Delivery & work	release_plans	productManagement	86	
-build	sprint_financial_impact	Delivery & work	sprint_financial_impact	agileCost	11	
-build	task_effort_estimates	Delivery & work	task_effort_estimates	agileCost	11	
 build	break_even_scenarios	Finance	break_even_scenarios	breakEven predictiveAnalytics	11	
 build	churn_predictions	Finance	churn_predictions	analytics predictiveAnalytics salesGrowth	60	
 build	monte_carlo_simulations	Finance	monte_carlo_simulations	predictiveAnalytics	3	
@@ -58,6 +52,8 @@ build	ri_sequences	Revenue & CRM	ri_sequences	revenueIntelligence	19
 build	saved_contact_searches	Revenue & CRM	saved_contact_searches	contacts	24	
 build	customer_engagement_feedback_widgets	Support & knowledge	customer_engagement_feedback_widgets	customerEngagement productManagement publicWidgets	122	
 build	support_articles	Support & knowledge	support_articles	knowledgeBase	9	
+transform	kanban_columns	Delivery & work	kanban_columns	kanban	45	duplicate of swimlanes, which carries agents, gates and parking semantics
+transform	release_plans	Delivery & work	release_plans	productManagement	86	duplicate of product_releases, which is already feature-reached
 transform	billing_plans	Finance	billing_plans	ai billing pricingAggregator systemAdmin	141	pricing → transform_existing (PlanLimits/pricingConfiguration is canonical)
 transform	business_pricing_models	Finance	business_pricing_models	businessIntelligence pitchDeck pricingAggregator	118	pricing → transform_existing
 transform	payment_methods	Finance	payment_methods	billing	52	providers → stripe retain_reconcile

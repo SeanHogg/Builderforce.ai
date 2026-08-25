@@ -8,7 +8,6 @@
 ab_test_segments
 ab_test_variants
 ab_tests
-action_items
 activity_feed
 affiliate_referrals
 agency_brandings
@@ -18,7 +17,6 @@ ai_email_classifications
 ai_tool_calls
 ai_voice_agent_calls
 answer_cache
-approval_actions
 asset_inspections
 availability_slots
 billing_plans
@@ -159,7 +157,6 @@ service_agreements
 service_assets
 session_discussions
 sign_offs
-sprint_financial_impact
 stage_lookup
 stock_media_assets
 studio_async_interviews
@@ -167,7 +164,6 @@ support_articles
 sync_agenda_items
 sync_conflict_resolutions
 system_features
-task_effort_estimates
 task_time_entries
 timesheets
 uptime_monitors
