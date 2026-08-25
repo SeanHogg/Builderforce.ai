@@ -39,9 +39,6 @@ community_resources
 competencies
 consultant_consultations
 consultant_knowledge_docs
-contact_compensations
-contact_educations
-contact_experiences
 contact_field_provenance
 content_audiences
 content_locations
@@ -55,7 +52,6 @@ custom_kpis
 customer_engagement_feedback_widgets
 customer_journeys
 dashboard_layouts
-deal_flow_opportunities
 email_campaigns
 embed_widget_layout
 employer_branding_pages
@@ -138,11 +134,7 @@ region_waitlist
 release_plans
 report_approvals
 retained_search_firms
-ri_icps
-ri_ids
-ri_prospects
 ri_sequences
-saved_contact_searches
 scorm_cmi_states
 scratch_pad_attachments
 screening_template_items

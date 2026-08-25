@@ -36,15 +36,6 @@ build	scratch_pad_attachments	Investor & portfolio	scratch_pad_attachments	scrat
 build	health_dimensions	People & HR	health_dimensions	investorIntelligence	42	
 build	hr_emergency_contacts	People & HR	hr_emergency_contacts	hrAdmin	14	
 build	uptime_monitors	Platform & observability	uptime_monitors	uptime	6	
-build	contact_compensations	Revenue & CRM	contact_compensations	contacts	24	
-build	contact_educations	Revenue & CRM	contact_educations	contacts	24	
-build	contact_experiences	Revenue & CRM	contact_experiences	contacts	24	
-build	deal_flow_opportunities	Revenue & CRM	deal_flow_opportunities	businessIntelligence investors	163	
-build	ri_icps	Revenue & CRM	ri_icps	revenueIntelligence	19	
-build	ri_ids	Revenue & CRM	ri_ids	revenueIntelligence	19	
-build	ri_prospects	Revenue & CRM	ri_prospects	revenueIntelligence	19	
-build	ri_sequences	Revenue & CRM	ri_sequences	revenueIntelligence	19	
-build	saved_contact_searches	Revenue & CRM	saved_contact_searches	contacts	24	
 build	customer_engagement_feedback_widgets	Support & knowledge	customer_engagement_feedback_widgets	customerEngagement productManagement publicWidgets	122	
 build	support_articles	Support & knowledge	support_articles	knowledgeBase	9	
 transform	kanban_columns	Delivery & work	kanban_columns	kanban	45	duplicate of swimlanes, which carries agents, gates and parking semantics
@@ -55,6 +46,7 @@ transform	payment_methods	Finance	payment_methods	billing	52	providers → strip
 transform	plan_features	Finance	plan_features	pricing pricingAggregator	26	pricing → transform_existing
 transform	pricing_simulations	Finance	pricing_simulations	businessIntelligence	83	pricing → transform_existing
 transform	system_features	Platform & observability	system_features	accounts embed featureVoting pricing pricingAggregator system systemAdmin usageTracking	202	pricing → transform_existing (feature gating is canonical in BF)
+transform	ri_sequences	Revenue & CRM	ri_sequences	revenueIntelligence	19	duplicate of the canvas-object cadence sequenceRunner.ts already runs as a sweep
 retire	ai_voice_agent_calls	Agents & runtime	ai_voice_agent_calls	aiProductivity	27	phoneVoip → retire_port_out (SignalWire)
 retire	affiliate_referrals	Growth & marketing	affiliate_referrals	customerEngagement	34	affiliates → retire_export
 retire	blog_posts	Growth & marketing	blog_posts	blog	9	blogContent → transform_existing (knowledge_documents)

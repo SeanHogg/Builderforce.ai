@@ -162,6 +162,7 @@ import { createInvestorRoutes, createPublicInvestorRoutes } from './presentation
 import { createWebSurfaceRoutes, createPublicWebSurfaceRoutes } from './presentation/routes/webSurfaceRoutes';
 import { createDeliveryFlowRoutes } from './presentation/routes/deliveryFlowRoutes';
 import { createScenarioRoutes } from './presentation/routes/scenarioRoutes';
+import { createRevenueIntelRoutes } from './presentation/routes/revenueIntelRoutes';
 import { createDocumentTemplateRoutes } from './presentation/routes/documentTemplateRoutes';
 import { createPayableRoutes, createPublicInvoiceRoutes } from './presentation/routes/payableRoutes';
 import { createEquityRoutes } from './presentation/routes/equityRoutes';
@@ -1004,6 +1005,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/web',               createWebSurfaceRoutes(db));
   app.route('/api/delivery-flow',     createDeliveryFlowRoutes(db));
   app.route('/api/scenarios',         createScenarioRoutes(db));
+  app.route('/api/revenue-intel',     createRevenueIntelRoutes(db));
   // The founders' agreement, the IP assignment, the vesting schedule and the NDA —
   // ONE registry, rendered or sent through the signature engine (FO-D5).
   app.route('/api/document-templates', createDocumentTemplateRoutes(db));

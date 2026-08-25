@@ -106,6 +106,7 @@ const TRANSFORM = {
   // to prevent. Their rows transform onto the existing owner.
   kanban_columns: 'duplicate of swimlanes, which carries agents, gates and parking semantics',
   release_plans: 'duplicate of product_releases, which is already feature-reached',
+  ri_sequences: 'duplicate of the canvas-object cadence sequenceRunner.ts already runs as a sweep',
 };
 
 // ── derive from the BurnRateOS source tree, when it is present ──────────────

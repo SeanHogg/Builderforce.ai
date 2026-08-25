@@ -2,7 +2,6 @@ br_module	endpoints	tables_touched	tables_reached	parity_pct	gap_targets
 system	11	2	0	0	stage_lookup system_features
 blog	9	1	0	0	blog_posts
 lookups	1	1	0	0	stage_lookup
-revenueIntelligence	19	6	2	33	ri_icps ri_ids ri_prospects ri_sequences
 agency	8	3	1	33	agency_brandings agency_clients
 productManagement	86	8	3	38	ab_test_variants ab_tests customer_engagement_feedback_widgets marketing_heatmap_pages release_plans
 growth	15	5	2	40	learn_videos podcast_outreach waitlist_entries
@@ -19,7 +18,6 @@ marketingGrowth	32	3	2	67	marketing_content_items
 nurtureFlows	13	3	2	67	nurture_flows
 referrals	4	3	2	67	referral_entries
 uptime	6	3	2	67	uptime_monitors
-contacts	24	14	10	71	contact_compensations contact_educations contact_experiences saved_contact_searches
 customerEngagement	34	11	8	73	affiliate_referrals customer_engagement_feedback_widgets customer_journeys
 ai	9	8	6	75	ai_tool_calls billing_plans
 kanban	45	4	3	75	kanban_columns
@@ -30,17 +28,19 @@ featureVoting	8	5	4	80	system_features
 hrAdmin	14	5	4	80	hr_emergency_contacts
 embed	38	24	20	83	embed_widget_layout marketing_heatmap_pages onboarding_flows system_features
 pricing	23	12	10	83	plan_features system_features
+revenueIntelligence	19	6	5	83	ri_sequences
 usageTracking	18	13	11	85	ai_tool_calls system_features
-businessIntelligence	83	22	19	86	business_pricing_models deal_flow_opportunities pricing_simulations
 pitchDeck	32	25	22	88	brand_kits business_pricing_models investor_peer_comparables
 billing	52	16	14	88	billing_plans payment_methods
 accounts	24	8	7	88	system_features
 investorIntelligence	42	19	17	89	health_dimensions investor_peer_comparables
 systemAdmin	77	34	31	91	billing_plans modules system_features
+businessIntelligence	83	22	20	91	business_pricing_models pricing_simulations
 scratchPad	39	13	12	92	scratch_pad_attachments
-investors	80	14	13	93	deal_flow_opportunities
 governance	67	18	17	94	enrichment_cache
 operationalCadence	91	16	16	100	
+contacts	24	14	14	100	
+investors	80	14	14	100	
 auth	30	12	12	100	
 dashboard	8	10	10	100	
 businessProfiles	18	7	7	100	
