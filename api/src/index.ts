@@ -156,10 +156,15 @@ import { resolvePublicResume } from './application/creation/publicResumeProjecti
 import { createFormRoutes, createPublicFormRoutes } from './presentation/routes/formRoutes';
 import { createPollRoutes, createPublicPollRoutes } from './presentation/routes/pollRoutes';
 import { createSignatureRoutes, createPublicSignatureRoutes } from './presentation/routes/signatureRoutes';
-import { createLegalDocumentRoutes, createPublicLegalDocumentRoutes } from './presentation/routes/legalDocumentRoutes';
+import { createConsentRoutes, createLegalDocumentRoutes, createPublicLegalDocumentRoutes } from './presentation/routes/legalDocumentRoutes';
 import { createDataRoomRoutes, createPublicDataRoomRoutes } from './presentation/routes/dataRoomRoutes';
 import { createInvestorRoutes, createPublicInvestorRoutes } from './presentation/routes/investorRoutes';
 import { createWebSurfaceRoutes, createPublicWebSurfaceRoutes } from './presentation/routes/webSurfaceRoutes';
+import { createDeliveryFlowRoutes } from './presentation/routes/deliveryFlowRoutes';
+import { createScenarioRoutes } from './presentation/routes/scenarioRoutes';
+import { createRevenueIntelRoutes } from './presentation/routes/revenueIntelRoutes';
+import { createGrowthOpsRoutes } from './presentation/routes/growthOpsRoutes';
+import { createPracticeOpsRoutes, createPublicSupportRoutes } from './presentation/routes/practiceOpsRoutes';
 import { createDocumentTemplateRoutes } from './presentation/routes/documentTemplateRoutes';
 import { createPayableRoutes, createPublicInvoiceRoutes } from './presentation/routes/payableRoutes';
 import { createEquityRoutes } from './presentation/routes/equityRoutes';
@@ -986,12 +991,14 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // PRD 19 §9 — the tenant's web surface. The public half carries the tenant in the
   // path because the visitor a landing page exists to convert has no session.
   app.route('/api/public/web', createPublicWebSurfaceRoutes(db));
+  app.route('/api/public/practice-ops', createPublicSupportRoutes(db));
   // The workspace halves.
   app.route('/api/forms',             createFormRoutes(db));
   // The FACILITATOR's half of the same store — publish, steer, and read the tally.
   app.route('/api/polls',             createPollRoutes(db));
   app.route('/api/signatures',        createSignatureRoutes(db));
   app.route('/api/legal-documents',   createLegalDocumentRoutes(db));
+  app.route('/api/legal-documents',   createConsentRoutes(db));
   // The data room's own share flow, and what the firm actually read.
   app.route('/api/data-rooms',        createDataRoomRoutes(db));
   // The founder's side of the raise: the company as a destination, the projects it
@@ -999,6 +1006,11 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // fundraising pack, which is `rfpService` company-scoped rather than forked (IN-4).
   app.route('/api/investor',          createInvestorRoutes(db, toolService, auditRunner, taskService));
   app.route('/api/web',               createWebSurfaceRoutes(db));
+  app.route('/api/delivery-flow',     createDeliveryFlowRoutes(db));
+  app.route('/api/scenarios',         createScenarioRoutes(db));
+  app.route('/api/revenue-intel',     createRevenueIntelRoutes(db));
+  app.route('/api/growth-ops',        createGrowthOpsRoutes(db));
+  app.route('/api/practice-ops',      createPracticeOpsRoutes(db));
   // The founders' agreement, the IP assignment, the vesting schedule and the NDA —
   // ONE registry, rendered or sent through the signature engine (FO-D5).
   app.route('/api/document-templates', createDocumentTemplateRoutes(db));

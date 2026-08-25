@@ -48,7 +48,7 @@ import {
 } from '../../infrastructure/auth/MfaService';
 import { revokeTenantApiKeyByRawKey } from '../../application/llm/tenantApiKeyService';
 import { issueVerificationCode, verifyVerificationCode, type VerifyResult } from '../../application/auth/EmailVerificationService';
-import { checkTermsAcceptance, invalidateAcceptedTermsVersion } from '../../application/legal/termsAcceptance';
+import { checkTermsAcceptance, invalidateAcceptedTermsVersion, recordAcceptance } from '../../application/legal/termsAcceptance';
 import { getActiveLegalDoc } from '../../application/legal/legalDocsService';
 import { sanitizePsychometricProfile } from '../../application/persona/psychometricCatalog';
 import { provisionForHireProfile } from '../../application/freelance/provisionForHire';
@@ -473,26 +473,16 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
       return c.json({ error: `Active terms version is ${terms.version}` }, 409);
     }
 
-    await db
-      .insert(userLegalAcceptances)
-      .values({
-        userId,
-        documentType: 'terms',
-        version: terms.version,
-      })
-      .onConflictDoUpdate({
-        target: [userLegalAcceptances.userId, userLegalAcceptances.documentType],
-        set: {
-          version: terms.version,
-          acceptedAt: sql`now()`,
-          updatedAt: sql`now()`,
-        },
-      });
-
-    // The auth middlewares serve this from the read-through cache, so the accept
-    // MUST invalidate it — otherwise the user keeps getting 428 until the TTL
-    // lapses, on the one screen that is supposed to unblock them.
-    await invalidateAcceptedTermsVersion(c.env, userId);
+    // ONE call writes the gate row, the evidence row and the cache invalidation
+    // (PRD 19 §9). Doing the three separately is how they drift, and a trail
+    // missing exactly the acceptances someone later disputes is worse than none.
+    //
+    // The evidence comes from the REQUEST, not the body: an IP and a user agent
+    // the client can set are not evidence of anything.
+    await recordAcceptance(db, c.env, userId, 'terms', terms.version, {
+      ipAddress: c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? null,
+      userAgent: (c.req.header('user-agent') ?? '').slice(0, 500) || null,
+    });
 
     return c.json({
       acceptedVersion: terms.version,
