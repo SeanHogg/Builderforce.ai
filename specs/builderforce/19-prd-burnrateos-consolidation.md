@@ -277,7 +277,7 @@ EntityBrowser” do not satisfy them.
   feature used by an active BurnRateOS tenant is classified, and under the deprecation directive the
   classification is binary — an extracted capability has a tested Builderforce workflow and
   transformed data, or it has an explicit customer-approved retirement/export. §9 resolves all 106
-  source modules: **44 at full parity, 45 partial, 6 gap, 11 stateless**, leaving **64 `build`
+  source modules: **45 at full parity, 45 partial, 5 gap, 11 stateless**, leaving **60 `build`
   items** in [`burnrate-parity.tsv`](../data-model/burnrate-parity.tsv). All 64 already have a
   Drizzle declaration, so none of them is a schema request. Closing them is what closes this gate;
   activating a registry-only table merely to move the adoption meter still does not.
@@ -750,7 +750,7 @@ Two honest qualifications, both decisions rather than gaps:
    casualty now needs a NAMED decision rather than a boundary.** Duplicate application structure is
    still retired and non-target data is still exported rather than used to justify schema; what
    changed is that "outside the IDEA → REAL boundary" is no longer by itself a reason not to build.
-   [§9](#9--deprecation-parity-audit--2026-08-25) carries the resulting register: 64 build, 6
+   [§9](#9--deprecation-parity-audit--2026-08-25) carries the resulting register: 60 build, 6
    transform, 4 retire.
 2. **§5 lists seven decisions** — tenancy axis, web push, three either/or capability calls, the
    credits-vs-caps pricing model, and the Neon tier. Each changes what gets built. §3.2 closed the
@@ -834,9 +834,9 @@ repository, and it does not count here.
 
 | Verdict | Modules | Meaning |
 |---|---|---|
-| **Full parity (100%)** | **44** | every table the module touches is reached by a Builderforce feature path |
+| **Full parity (100%)** | **45** | every table the module touches is reached by a Builderforce feature path |
 | **Partial (1–99%)** | **45** | the capability exists but part of its data has no feature path |
-| **Gap (0%)** | **6** | `landingPages`, `system`, `blog`, `breakEven`, `freeTools`, `lookups` |
+| **Gap (0%)** | **5** | `system`, `blog`, `breakEven`, `freeTools`, `lookups` |
 | No table evidence | 11 | `health`, `sitemap`, `auth/geo`, `widgetJs`, `hrWidgetJs`, `hrPanel`, `coach`, `dedup`, `featureAdoption`, `numberPorting`, `v1Hr` — stateless proxies, embeddable JS, or delegating shims |
 
 The 11 no-evidence modules were read individually rather than assumed: none holds state of its own.
@@ -850,13 +850,14 @@ while A/B testing, release plans and heatmap-backed feedback do not. Reporting t
 
 ### 9.3 Step 3 — the gap register, which is the build backlog
 
-Deduplicating every unreached target across all 106 modules gives **74 distinct Builderforce targets
-that a BurnRateOS route module depends on and that no Builderforce feature path reaches**. Committed
-as [`burnrate-parity.tsv`](./data-model/burnrate-parity.tsv), classified against cutover policy v1:
+Deduplicating every unreached target across all 106 modules gives the distinct Builderforce targets
+that a BurnRateOS route module depends on and that no Builderforce feature path reaches. The audit
+opened at **74**; **70** remain after §9.6. Committed as
+[`burnrate-parity.tsv`](./data-model/burnrate-parity.tsv), classified against cutover policy v1:
 
 | Disposition | Count | Meaning |
 |---|---|---|
-| **`build`** | **64** | no Builderforce owner and no retirement decision — must be built to deprecate |
+| **`build`** | **60** | no Builderforce owner and no retirement decision — must be built to deprecate |
 | `transform` | 6 | a Builderforce owner is already canonical; the source rows transform onto it |
 | `retire` | 4 | already decided in `burnrateCutoverPolicy.json`; export, do not rebuild |
 
@@ -874,11 +875,11 @@ code and surfaces over tables that already exist, which is exactly what
 2026-08-22 hired.video mapping audit found for PRD 18. **A gap here is a missing feature path, never
 a missing table.**
 
-#### The 64 `build` items by domain
+#### The remaining `build` items by domain
 
 | Domain | n | Targets |
 |---|---|---|
-| **Growth & marketing** | **18** | `landing_pages`, `landing_page_blocks`, `website_pages`, `marketing_seo_pages`, `marketing_content_items`, `marketing_emails`, `nurture_flows`, `ab_tests`, `ab_test_variants`, `customer_journeys`, `journey_touchpoints`, `marketing_heatmap_pages`, `marketing_heatmap_screenshots`, `brand_kits`, `embed_widget_layout`, `learn_videos`, `podcast_outreach`, `waitlist_entries` |
+| **Growth & marketing** | **14** | `marketing_content_items`, `marketing_emails`, `nurture_flows`, `ab_tests`, `ab_test_variants`, `customer_journeys`, `journey_touchpoints`, `marketing_heatmap_pages`, `marketing_heatmap_screenshots`, `brand_kits`, `embed_widget_layout`, `learn_videos`, `podcast_outreach`, `waitlist_entries` *(the four web-surface targets closed — §9.6)* |
 | **Revenue & CRM** | **9** | `ri_icps`, `ri_prospects`, `ri_sequences`, `ri_ids`, `deal_flow_opportunities`, `contact_experiences`, `contact_educations`, `contact_compensations`, `saved_contact_searches` |
 | **Commerce** | **8** | `booking_hosts`, `booking_services`, `booking_reservations`, `agency_brandings`, `agency_clients`, `consultant_consultations`, `consultant_knowledge_docs`, `card_decks` |
 | **Delivery & work** | **6** | `action_items`, `kanban_columns`, `release_plans`, `task_effort_estimates`, `sprint_financial_impact`, `approval_actions` |
@@ -898,10 +899,9 @@ a missing table.**
 `deal_flow_opportunities` (2), `investor_peer_comparables` (2), `onboarding_flows` (2),
 `break_even_scenarios` (2), `ai_tool_calls` (2), `customer_journeys` (2) come first: each closes
 part of more than one BurnRateOS module, so the parity percentage of several modules moves per unit
-of work. Growth & marketing is the largest single block at 18 and the one that most needs a product
-decision before code, because `landing_pages` / `website_pages` / `marketing_seo_pages` overlap the
-existing `sites` and `siteManage` owners and must merge onto them rather than beside them — §2 is
-the register that governs that, and it still governs.
+of work. Growth & marketing was the largest single block at 18, and its web-surface question — `landing_pages`
+/ `website_pages` / `marketing_seo_pages` overlapping the existing `sites` and `siteManage` owners —
+is **answered in §9.6** rather than left open. §2 still governs every remaining item.
 
 ### 9.4 What this section does NOT change
 
@@ -918,6 +918,52 @@ the register that governs that, and it still governs.
 - **Behaviour parity is not data parity.** This section closes the *extraction* gate. The
   *identity*, *data*, *provider*, *runtime*, *billing*, *cutover* and *rollback* gates are untouched
   by it, and the ETL those gates need still does not exist in this repository.
+
+### 9.6 Closed — the web surface, and what "merge" means in practice
+
+**`landing_pages` · `landing_page_blocks` · `website_pages` · `marketing_seo_pages` — 74 → 70.**
+`landingPages` moves 0% → **100%** parity and `marketingGrowth` 33% → 67%; full-parity modules go
+44 → 45 and zero-parity modules 6 → 5.
+
+**Merge means ONE combined feature, not a port beside the existing one.** The rule applied here, and
+to be applied to the remaining 60: compare the two sides, keep the more mature one, and add only
+what the other has that it lacks. Builderforce was the more mature side and kept everything it
+already had — kernel `objects` registration (`landing_page` is a registered kind, so a page is
+addressable by the id every other object uses), `shell_kind` so the renderer is resolved rather than
+remembered, `campaign_id` + `goal_metric` so a page is an attributable part of a campaign, and the
+publish/release, custom-domain and traffic pipeline `siteManageRoutes` already owns for a project's
+hosted site.
+
+BurnRateOS's `landingPages` module (426 lines, 11 endpoints) contributed exactly the behaviour
+Builderforce had schema for and no path to: the block-based builder, the website page's navigation
+tree (`nav_label` / `nav_position` / `parent_path`) and its canonical-path decision, and the
+unauthenticated read of a published page. **What did not come across was its second notion of a
+"site" and its plain per-table CRUD** — importing those would have produced two answers to "what
+does this tenant publish", which is the outcome §2 exists to prevent.
+
+Three tables stayed three tables. The `landing_pages` docstring already argued that pairing — a
+landing page has a campaign, a conversion goal and a lifespan in weeks; a website page has a
+navigation position and a permanent URL SEO depends on — and merging them is how a campaign page
+ends up in the sitemap. One owner and one service, not one table.
+
+**Shipped:** [`webSurface.ts`](../../api/src/application/marketing/webSurface.ts) (the rules) and
+[`webSurfaceRoutes.ts`](../../api/src/presentation/routes/webSurfaceRoutes.ts) (`/api/web` authoring,
+`/api/public/web` reading), 27 tests, zero new tables, zero migrations.
+
+Four decisions worth carrying forward, because each is a defect the straight port would have shipped:
+
+1. **Publication is a transition, not a column write.** `publishLandingPage` stamps `published_at` in
+   the same statement that sets `live`, and `updateLandingPage` cannot write `status` at all — so a
+   live page with no publication time is unrepresentable rather than merely unlikely.
+2. **Leaving `live` is two different events.** The caller must say `ended` (campaign over, numbers
+   final) or `draft` (coming back); the route rejects anything else rather than defaulting, because
+   a default turns "this campaign is over" into "still editing" in every later report.
+3. **Reordering blocks parks at negative positions first.** `position` is UNIQUE per page, so
+   writing final positions directly collides the instant two blocks swap. Two passes inside one
+   transaction; the negative window is outside any real block's range.
+4. **The public read cannot be talked into serving a draft.** It filters `status` and `ends_at`
+   inside the query, takes no actor, and has no argument that relaxes either — so no future call
+   site can reuse it for an authoring view and quietly publish drafts.
 
 ### 9.5 Reproducing this audit
 

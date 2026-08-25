@@ -1,5 +1,4 @@
 br_module	endpoints	tables_touched	tables_reached	parity_pct	gap_targets
-landingPages	11	3	0	0	landing_page_blocks landing_pages website_pages
 system	11	2	0	0	stage_lookup system_features
 blog	9	1	0	0	blog_posts
 breakEven	8	1	0	0	break_even_scenarios
@@ -7,7 +6,6 @@ freeTools	3	1	0	0	saved_calculations
 lookups	1	1	0	0	stage_lookup
 revenueIntelligence	19	6	2	33	ri_icps ri_ids ri_prospects ri_sequences
 agency	8	3	1	33	agency_brandings agency_clients
-marketingGrowth	32	3	1	33	marketing_content_items marketing_seo_pages
 productManagement	86	8	3	38	ab_test_variants ab_tests customer_engagement_feedback_widgets marketing_heatmap_pages release_plans
 growth	15	5	2	40	learn_videos podcast_outreach waitlist_entries
 predictiveAnalytics	3	5	2	40	break_even_scenarios churn_predictions monte_carlo_simulations
@@ -22,6 +20,7 @@ bookings	26	8	5	63	booking_hosts booking_reservations booking_services
 consultant	17	6	4	67	consultant_consultations consultant_knowledge_docs
 heatmaps	23	6	4	67	marketing_heatmap_pages marketing_heatmap_screenshots
 marketing	10	3	2	67	marketing_emails
+marketingGrowth	32	3	2	67	marketing_content_items
 nurtureFlows	13	3	2	67	nurture_flows
 referrals	4	3	2	67	referral_entries
 retrospectives	38	3	2	67	action_items
@@ -64,6 +63,7 @@ teams	20	4	4	100
 crmDeals	7	3	3	100	
 expenses	6	3	3	100	
 guest	1	3	3	100	
+landingPages	11	3	3	100	
 push	9	3	3	100	
 sourcingExtractor	3	3	3	100	
 users	4	3	3	100	

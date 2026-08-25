@@ -12,27 +12,14 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { neon, neonConfig } from '@neondatabase/serverless';
+import { splitSqlStatements } from './lib/splitSqlStatements.mjs';
+import { loadDotEnv } from './lib/loadDotEnv.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
 // ---------------------------------------------------------------------------
 // Load .env (NEON_DATABASE_URL is a secret, never committed)
 // ---------------------------------------------------------------------------
-
-function loadDotEnv(path) {
-  try {
-    const text = readFileSync(path, 'utf8');
-    for (const line of text.split('\n')) {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith('#')) continue;
-      const eq = trimmed.indexOf('=');
-      if (eq === -1) continue;
-      const key = trimmed.slice(0, eq).trim();
-      const val = trimmed.slice(eq + 1).trim().replace(/^["']|["']$/g, '');
-      if (key && !process.env[key]) process.env[key] = val;
-    }
-  } catch { /* file not found – that's fine */ }
-}
 
 loadDotEnv(join(here, '../.env'));
 
@@ -58,110 +45,6 @@ if (process.env.NEON_FETCH_ENDPOINT?.trim()) {
 
 const sql = neon(NEON_DATABASE_URL);
 
-function splitSqlStatements(input) {
-  const statements = [];
-  let current = '';
-  let i = 0;
-  let inSingle = false;
-  let inDouble = false;
-  let inLineComment = false;
-  let inBlockComment = false;
-  let dollarTag = null;
-
-  while (i < input.length) {
-    const ch = input[i];
-    const next = input[i + 1];
-
-    if (inLineComment) {
-      current += ch;
-      if (ch === '\n') inLineComment = false;
-      i += 1;
-      continue;
-    }
-
-    if (inBlockComment) {
-      current += ch;
-      if (ch === '*' && next === '/') {
-        current += '/';
-        i += 2;
-        inBlockComment = false;
-      } else {
-        i += 1;
-      }
-      continue;
-    }
-
-    if (!inSingle && !inDouble && dollarTag !== null) {
-      if (input.startsWith(dollarTag, i)) {
-        current += dollarTag;
-        i += dollarTag.length;
-        dollarTag = null;
-      } else {
-        current += ch;
-        i += 1;
-      }
-      continue;
-    }
-
-    if (!inSingle && !inDouble && ch === '-' && next === '-') {
-      current += '--';
-      i += 2;
-      inLineComment = true;
-      continue;
-    }
-
-    if (!inSingle && !inDouble && ch === '/' && next === '*') {
-      current += '/*';
-      i += 2;
-      inBlockComment = true;
-      continue;
-    }
-
-    if (!inDouble && ch === "'") {
-      if (inSingle && next === "'") {
-        current += "''";
-        i += 2;
-        continue;
-      }
-      inSingle = !inSingle;
-      current += ch;
-      i += 1;
-      continue;
-    }
-
-    if (!inSingle && ch === '"') {
-      inDouble = !inDouble;
-      current += ch;
-      i += 1;
-      continue;
-    }
-
-    if (!inSingle && !inDouble && ch === '$') {
-      const match = input.slice(i).match(/^\$[A-Za-z0-9_]*\$/);
-      if (match) {
-        dollarTag = match[0];
-        current += dollarTag;
-        i += dollarTag.length;
-        continue;
-      }
-    }
-
-    if (!inSingle && !inDouble && dollarTag === null && ch === ';') {
-      const trimmed = current.trim();
-      if (trimmed) statements.push(trimmed);
-      current = '';
-      i += 1;
-      continue;
-    }
-
-    current += ch;
-    i += 1;
-  }
-
-  const final = current.trim();
-  if (final) statements.push(final);
-  return statements;
-}
 
 // ---------------------------------------------------------------------------
 // Migration tracking table

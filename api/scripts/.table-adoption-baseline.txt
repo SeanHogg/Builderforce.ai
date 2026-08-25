@@ -92,8 +92,6 @@ job_websites
 journey_touchpoints
 kanban_columns
 kpi_formulas
-landing_page_blocks
-landing_pages
 learn_videos
 learning_cohorts
 legal_document_acceptances
@@ -105,7 +103,6 @@ marketing_content_items
 marketing_emails
 marketing_heatmap_pages
 marketing_heatmap_screenshots
-marketing_seo_pages
 metric_thresholds
 model_locks
 modules
@@ -180,7 +177,6 @@ user_terms_agreements
 validation_data_imports
 videos
 waitlist_entries
-website_pages
 whitelabel_tenants
 work_estimates
 workflow_actions

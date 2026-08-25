@@ -159,6 +159,7 @@ import { createSignatureRoutes, createPublicSignatureRoutes } from './presentati
 import { createLegalDocumentRoutes, createPublicLegalDocumentRoutes } from './presentation/routes/legalDocumentRoutes';
 import { createDataRoomRoutes, createPublicDataRoomRoutes } from './presentation/routes/dataRoomRoutes';
 import { createInvestorRoutes, createPublicInvestorRoutes } from './presentation/routes/investorRoutes';
+import { createWebSurfaceRoutes, createPublicWebSurfaceRoutes } from './presentation/routes/webSurfaceRoutes';
 import { createDocumentTemplateRoutes } from './presentation/routes/documentTemplateRoutes';
 import { createPayableRoutes, createPublicInvoiceRoutes } from './presentation/routes/payableRoutes';
 import { createEquityRoutes } from './presentation/routes/equityRoutes';
@@ -982,6 +983,9 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // (IN-2). Every rule is enforced in `companyInvestorAccess.ts` and, under it, in
   // the same `dataRoomSharing.ts` resolve the room's own link flows through.
   app.route('/api/public/investor', createPublicInvestorRoutes(db));
+  // PRD 19 §9 — the tenant's web surface. The public half carries the tenant in the
+  // path because the visitor a landing page exists to convert has no session.
+  app.route('/api/public/web', createPublicWebSurfaceRoutes(db));
   // The workspace halves.
   app.route('/api/forms',             createFormRoutes(db));
   // The FACILITATOR's half of the same store — publish, steer, and read the tally.
@@ -994,6 +998,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // owns (IN-1), the investors invited to IT rather than to a room (IN-2), and the
   // fundraising pack, which is `rfpService` company-scoped rather than forked (IN-4).
   app.route('/api/investor',          createInvestorRoutes(db, toolService, auditRunner, taskService));
+  app.route('/api/web',               createWebSurfaceRoutes(db));
   // The founders' agreement, the IP assignment, the vesting schedule and the NDA —
   // ONE registry, rendered or sent through the signature engine (FO-D5).
   app.route('/api/document-templates', createDocumentTemplateRoutes(db));

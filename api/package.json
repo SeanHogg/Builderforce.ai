@@ -4,12 +4,13 @@
   "private": true,
   "scripts": {
     "dev": "wrangler dev",
+    "db:bootstrap": "node scripts/bootstrap-db.mjs && node scripts/migrate.mjs --transactional",
     "db:migrate": "node scripts/migrate.mjs && node scripts/migrate.mjs --transactional",
     "deploy": "npm run db:migrate && npm run deploy:worker",
     "deploy:worker": "wrangler deploy",
     "secrets:from-env": "node scripts/set-secrets-from-env.mjs",
-    "db:generate": "npx drizzle-kit@0.30.6 generate",
-    "db:push": "npx drizzle-kit@0.30.6 push",
+    "db:generate": "drizzle-kit generate",
+    "db:push": "drizzle-kit push",
     "type-check": "node ../scripts/run-checks.mjs scripts/typecheck.manifest.mjs",
     "check:source-package-graph": "node ../scripts/check-source-package-graph.mjs",
     "check:schema": "node scripts/check-schema-drift.mjs",
@@ -67,6 +68,7 @@
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260305.0",
     "@typescript/native-preview": "7.0.0-dev.20260627.2",
+    "drizzle-kit": "0.30.6",
     "typescript": "^6.0.3",
     "vitest": "^4.0.18",
     "wrangler": "^4.120.1"

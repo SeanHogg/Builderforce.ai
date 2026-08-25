@@ -841,7 +841,9 @@ export interface FaqItem {
   answer: string;
 }
 
-/** Homepage FAQ — 10 Q&As for rich snippet coverage */
+/** Homepage FAQ — 33 Q&As for rich snippet coverage. NOT the rendered list:
+ *  the page renders `home.homepageFaq` from the five locale catalogs. This one is
+ *  the crawler's, which is why it is English-only and longer. */
 export const HOMEPAGE_FAQ: FaqItem[] = [
   {
     question: 'What is Evermind?',
@@ -966,6 +968,18 @@ export const HOMEPAGE_FAQ: FaqItem[] = [
   {
     question: 'Can I buy or sell a Kanban board template?',
     answer: 'Yes. Package a delivery process — lanes, required roles, review gates, and a recommended roster — as a Kanban template and publish it to the marketplace to sell or share. Any team can install a proven template into a project in one click and inherit a governed, role-gated workflow instead of building one from scratch.',
+  },
+  // The founder/investor pair. These two also ship as `home.homepageFaq` in all
+  // five catalogs, because they are the ones a visitor actually reads on the
+  // page; the copies here are the crawler's, which is why this list is English
+  // and un-translated (see the header above).
+  {
+    question: 'Where do the numbers in my pitch deck come from?',
+    answer: 'Your ledger. Connect Stripe, Xero or QuickBooks and the runway, burn, ARR and cohort figures are computed from the transactions and carry the date they were read — so a figure with no source behind it is flagged before an investor finds it, rather than being retyped into a slide and quietly going stale.',
+  },
+  {
+    question: 'Who can see my data room?',
+    answer: 'Only the people you invite, on the terms you set: an NDA to sign, a watermark carrying their name, an expiry date, and a record of every file they opened. Access is granted to the investor rather than to a folder, so one revocation reaches every room and update — and it can be revoked at any time.',
   },
 ];
 

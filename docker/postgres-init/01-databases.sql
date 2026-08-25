@@ -1,0 +1,11 @@
+-- Production runs two separate Neon databases: the primary one, and an
+-- operational one bound to NEON_TRANSACTIONAL_DATABASE_URL (logs, audit,
+-- telemetry, processing ledgers). They are NOT interchangeable — each owns its
+-- own copy of tables like llm_usage_log, created by different DDL. Collapsing
+-- them into one database locally makes the transactional migrations fail:
+-- 0005 casts llm_usage_log.metadata from TEXT to jsonb, and the primary
+-- schema already declares that column as jsonb.
+--
+-- Postgres runs this file only when the data directory is first initialised,
+-- so it will not fire against an existing pg-data volume.
+CREATE DATABASE transactional;

@@ -28,18 +28,14 @@ build	brand_kits	Growth & marketing	brand_kits	pitchDeck	32
 build	customer_journeys	Growth & marketing	customer_journeys	analytics customerEngagement	68	
 build	embed_widget_layout	Growth & marketing	embed_widget_layout	embed	38	
 build	journey_touchpoints	Growth & marketing	journey_touchpoints	analytics	34	
-build	landing_page_blocks	Growth & marketing	landing_page_blocks	landingPages	11	
-build	landing_pages	Growth & marketing	landing_pages	landingPages	11	
 build	learn_videos	Growth & marketing	learn_videos	growth	15	
 build	marketing_content_items	Growth & marketing	marketing_content_items	marketingGrowth	32	
 build	marketing_emails	Growth & marketing	marketing_emails	marketing	10	
 build	marketing_heatmap_pages	Growth & marketing	marketing_heatmap_pages	embed heatmaps productManagement	147	
 build	marketing_heatmap_screenshots	Growth & marketing	marketing_heatmap_screenshots	heatmaps	23	
-build	marketing_seo_pages	Growth & marketing	marketing_seo_pages	marketingGrowth	32	
 build	nurture_flows	Growth & marketing	nurture_flows	nurtureFlows	13	
 build	podcast_outreach	Growth & marketing	podcast_outreach	growth	15	
 build	waitlist_entries	Growth & marketing	waitlist_entries	growth	15	
-build	website_pages	Growth & marketing	website_pages	landingPages	11	
 build	cohort_retention	Hiring	cohort_retention	analytics	34	
 build	onboarding_flows	Identity & tenancy	onboarding_flows	embed onboarding	48	
 build	onboarding_progress	Identity & tenancy	onboarding_progress	onboarding	10	
