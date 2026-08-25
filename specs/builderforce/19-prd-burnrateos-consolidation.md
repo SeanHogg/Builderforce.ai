@@ -273,14 +273,16 @@ EntityBrowser” do not satisfy them.
 - [ ] **Data gate:** run idempotent ETL against a production snapshot; publish per-table source,
   transformed, inserted, merged, rejected and orphan counts plus financial totals and attachment
   checksums; rerun to prove zero duplicates.
-- [ ] **Extraction gate — now measured, see [§9](#9--deprecation-parity-audit--2026-08-25):** every
-  feature used by an active BurnRateOS tenant is classified, and under the deprecation directive the
-  classification is binary — an extracted capability has a tested Builderforce workflow and
-  transformed data, or it has an explicit customer-approved retirement/export. §9 resolves all 106
-  source modules: **45 at full parity, 45 partial, 5 gap, 11 stateless**, leaving **60 `build`
-  items** in [`burnrate-parity.tsv`](../data-model/burnrate-parity.tsv). All 64 already have a
-  Drizzle declaration, so none of them is a schema request. Closing them is what closes this gate;
-  activating a registry-only table merely to move the adoption meter still does not.
+- [x] **Extraction gate — MEASURED AND CLOSED 2026-08-25, see [§9](#9--deprecation-parity-audit--2026-08-25):**
+  every feature used by an active BurnRateOS tenant is classified, and under the deprecation
+  directive the classification is binary — an extracted capability has a tested Builderforce
+  workflow, or it has an explicit customer-approved retirement/export. §9 resolves all 106 source
+  modules: **76 at full parity, 18 partial, 1 gap, 11 stateless**, and
+  [`burnrate-parity.tsv`](../data-model/burnrate-parity.tsv) now reads **build 0 · transform 9 ·
+  retire 4**. Every one of the 18 partial modules is partial only in `transform`/`retire` targets —
+  pricing, affiliates, blog, phone, and the three duplicates §9.7 found. **Zero new tables were
+  added.** **CAVEAT, and it is the distinction this whole PRD draws:** this closes the BEHAVIOUR
+  half. The *data* half — the Data gate below — is untouched, and no BurnRateOS row has moved.
 - [x] **C-suite Canvas execution gate:** map all 48 CxO intents to existing Creation Canvas
   objects/actions; retain searchable legacy ids; give each an evidence/operation/output/completion
   contract; fail outcomes that do not mutate an allowed artifact; test exact coverage; add no tables.
@@ -750,8 +752,8 @@ Two honest qualifications, both decisions rather than gaps:
    casualty now needs a NAMED decision rather than a boundary.** Duplicate application structure is
    still retired and non-target data is still exported rather than used to justify schema; what
    changed is that "outside the IDEA → REAL boundary" is no longer by itself a reason not to build.
-   [§9](#9--deprecation-parity-audit--2026-08-25) carries the resulting register: 60 build, 6
-   transform, 4 retire.
+   [§9](#9--deprecation-parity-audit--2026-08-25) carries the resulting register, now **0 build, 9
+   transform, 4 retire** — every casualty is a named decision rather than an omission.
 2. **§5 lists seven decisions** — tenancy axis, web push, three either/or capability calls, the
    credits-vs-caps pricing model, and the Neon tier. Each changes what gets built. §3.2 closed the
    tenancy decision on 2026-08-10 — `burnrateTenantCompanyMapping.ts` implements the planner and row
@@ -834,9 +836,9 @@ repository, and it does not count here.
 
 | Verdict | Modules | Meaning |
 |---|---|---|
-| **Full parity (100%)** | **45** | every table the module touches is reached by a Builderforce feature path |
-| **Partial (1–99%)** | **45** | the capability exists but part of its data has no feature path |
-| **Gap (0%)** | **5** | `system`, `blog`, `breakEven`, `freeTools`, `lookups` |
+| **Full parity (100%)** | **76** | every table the module touches is reached by a Builderforce feature path |
+| **Partial (1–99%)** | **18** | the remainder of each is a `transform` or `retire` target, not unbuilt work |
+| **Gap (0%)** | **1** | `blog` — `blogContent → transform_existing` onto `knowledge_documents` |
 | No table evidence | 11 | `health`, `sitemap`, `auth/geo`, `widgetJs`, `hrWidgetJs`, `hrPanel`, `coach`, `dedup`, `featureAdoption`, `numberPorting`, `v1Hr` — stateless proxies, embeddable JS, or delegating shims |
 
 The 11 no-evidence modules were read individually rather than assumed: none holds state of its own.
@@ -850,14 +852,15 @@ while A/B testing, release plans and heatmap-backed feedback do not. Reporting t
 
 ### 9.3 Step 3 — the gap register, which is the build backlog
 
-Deduplicating every unreached target across all 106 modules gives the distinct Builderforce targets
-that a BurnRateOS route module depends on and that no Builderforce feature path reaches. The audit
-opened at **74**; **70** remain after §9.6. Committed as
+Deduplicating every unreached target across all 106 modules gave the distinct Builderforce targets
+that a BurnRateOS route module depends on and that no Builderforce feature path reached. The audit
+opened at **74**. **All 60 `build` items are now closed** (§9.6, §9.7); the 13 rows that remain are
+the ones a decision, not a build, disposes of. Committed as
 [`burnrate-parity.tsv`](./data-model/burnrate-parity.tsv), classified against cutover policy v1:
 
 | Disposition | Count | Meaning |
 |---|---|---|
-| **`build`** | **60** | no Builderforce owner and no retirement decision — must be built to deprecate |
+| **`build`** | **0** | **closed 2026-08-25** — see §9.7 |
 | `transform` | 6 | a Builderforce owner is already canonical; the source rows transform onto it |
 | `retire` | 4 | already decided in `burnrateCutoverPolicy.json`; export, do not rebuild |
 
@@ -964,6 +967,64 @@ Four decisions worth carrying forward, because each is a defect the straight por
 4. **The public read cannot be talked into serving a draft.** It filters `status` and `ends_at`
    inside the query, takes no actor, and has no argument that relaxes either — so no future call
    site can reuse it for an authoring view and quietly publish drafts.
+
+### 9.7 Closed — the remaining 60, and what doing the merge properly revealed
+
+**`build` reached 0 on 2026-08-25.** All 106 source modules resolve: **76 at full parity, 18
+partial, 1 gap, 11 stateless**. Every partial and the single gap is partial only in a
+`transform`/`retire` target — there is no unbuilt capability left in the register. Consolidation
+tables reached by a feature path moved **177 → 245**; registry-only **181 → 113**.
+
+**Zero new tables. Zero migrations.** §9.3's headline claim held for all 60 items, which is the
+strongest evidence that the mapping was right: not one gap turned out to be a schema request.
+
+| Batch | Targets closed | Landed on |
+|---|---|---|
+| Web surface | 4 (+0) | `marketing/webSurface.ts` |
+| Consent | 2 (+0) | extended `legal/termsAcceptance.ts` |
+| Delivery flow | 4 (+0) | `delivery/actionItems.ts`, `delivery/agileCost.ts`, `approval/approvalChain.ts` |
+| Scenario + churn | 5 (+2) | `finance/scenarioModelling.ts`, `finance/churnPrediction.ts` |
+| Contact depth + revenue intel | 9 (+0) | `sales/contactProfile.ts`, `sales/revenueIntelligence.ts` |
+| Growth ops + arrival | 18 (+4) | `marketing/{experimentation,contentStudio,pageInsight,waitlist}.ts`, `tenant/onboardingFlows.ts`, `kernel/platformVocabulary.ts` |
+| Practice ops | 18 (+0) | `commerce/{bookings,agencyPractice}.ts`, `agent/aiOperations.ts`, `people/peopleInsight.ts`, `investor/portfolioIntel.ts`, `support/customerSurface.ts` |
+
+The `(+n)` are tables the register did NOT name that had to be closed anyway, because the register
+lists what BurnRateOS *touched* rather than what a coherent feature *needs*: `scenario_assumptions`
+and `roi_timeline_entries` (a scenario with no inputs is not a scenario), `onboarding_checklists`
+and `onboarding_tasks` (a flow with no steps), `ab_test_segments`, and `countries`.
+
+#### Three duplicates the merge found, which a name-matching audit would have built twice
+
+The most valuable output of doing this by comparing MATURITY rather than by matching names is the
+work that did **not** happen. Three register rows moved from `build` to `transform` because the
+Builderforce owner was already richer, and building them would have given the platform two answers
+to one question — the outcome §2 exists to prevent:
+
+| Target | Existing owner | Why it wins |
+|---|---|---|
+| `kanban_columns` | `swimlanes` | Carries agents, `gate`/`gate_source`, parking-vs-terminal semantics and completion ranking. `kanban_columns` adds only a colour token. |
+| `release_plans` | `product_releases` | Same shape, already feature-reached. |
+| `ri_sequences` | the canvas-object cadence | `sequenceRunner.ts` runs cadences as a sweep over "who is due" rather than a timer per person, an argument that module makes at length and that this schema has already applied twice. A second sequence table means two answers to "what is about to be sent to this person". |
+
+#### The pattern, for anyone extending this
+
+Every batch followed §9.6's rule — compare, keep the more mature side, add only the delta — and the
+recurring shapes are worth naming because they are what "merged properly" looks like rather than
+"ported":
+
+1. **A gate keeps its hot path; the audit trail is added beside it.** Consent's cached
+   `checkTermsAcceptance` was untouched; what it could not do — survive an audit, or record that a
+   *company* agreed — became the evidence row and the organisation binding, written by the same call
+   so they cannot drift.
+2. **A result that needs a sample refuses to report before it has one.** A/B lift, a heatmap, and a
+   churn model all return null-with-a-reason rather than a number that looks like a finding.
+3. **A derived verdict is derived, never stored.** Approval outcome, funnel percent and implied
+   valuation are computed from rows, so nothing can disagree with them.
+4. **An exclusive flag is enforced by its writer, in a transaction.** Scenario baseline, default ICP,
+   default brand kit, current estimate, current role, primary emergency contact — six instances of
+   the same defect, closed the same way.
+5. **A number whose provenance is weak says so.** Scenario provenance is `declared`, compensation
+   carries `confidence`, a churn score requires a `model`, and a valuation states its method.
 
 ### 9.5 Reproducing this audit
 

@@ -164,6 +164,7 @@ import { createDeliveryFlowRoutes } from './presentation/routes/deliveryFlowRout
 import { createScenarioRoutes } from './presentation/routes/scenarioRoutes';
 import { createRevenueIntelRoutes } from './presentation/routes/revenueIntelRoutes';
 import { createGrowthOpsRoutes } from './presentation/routes/growthOpsRoutes';
+import { createPracticeOpsRoutes, createPublicSupportRoutes } from './presentation/routes/practiceOpsRoutes';
 import { createDocumentTemplateRoutes } from './presentation/routes/documentTemplateRoutes';
 import { createPayableRoutes, createPublicInvoiceRoutes } from './presentation/routes/payableRoutes';
 import { createEquityRoutes } from './presentation/routes/equityRoutes';
@@ -990,6 +991,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // PRD 19 §9 — the tenant's web surface. The public half carries the tenant in the
   // path because the visitor a landing page exists to convert has no session.
   app.route('/api/public/web', createPublicWebSurfaceRoutes(db));
+  app.route('/api/public/practice-ops', createPublicSupportRoutes(db));
   // The workspace halves.
   app.route('/api/forms',             createFormRoutes(db));
   // The FACILITATOR's half of the same store — publish, steer, and read the tally.
@@ -1008,6 +1010,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/scenarios',         createScenarioRoutes(db));
   app.route('/api/revenue-intel',     createRevenueIntelRoutes(db));
   app.route('/api/growth-ops',        createGrowthOpsRoutes(db));
+  app.route('/api/practice-ops',      createPracticeOpsRoutes(db));
   // The founders' agreement, the IP assignment, the vesting schedule and the NDA —
   // ONE registry, rendered or sent through the signature engine (FO-D5).
   app.route('/api/document-templates', createDocumentTemplateRoutes(db));

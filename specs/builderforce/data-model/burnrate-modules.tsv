@@ -1,56 +1,53 @@
 br_module	endpoints	tables_touched	tables_reached	parity_pct	gap_targets
 blog	9	1	0	0	blog_posts
-agency	8	3	1	33	agency_brandings agency_clients
-knowledgeBase	9	2	1	50	support_articles
-publicWidgets	2	2	1	50	customer_engagement_feedback_widgets
 system	11	2	1	50	system_features
 pricingAggregator	3	9	5	56	billing_plans business_pricing_models plan_features system_features
-aiProductivity	27	7	4	57	ai_competitors ai_email_classifications ai_voice_agent_calls
-bookings	26	8	5	63	booking_hosts booking_reservations booking_services
-consultant	17	6	4	67	consultant_consultations consultant_knowledge_docs
 referrals	4	3	2	67	referral_entries
-uptime	6	3	2	67	uptime_monitors
-ai	9	8	6	75	ai_tool_calls billing_plans
-productManagement	86	8	6	75	customer_engagement_feedback_widgets release_plans
 kanban	45	4	3	75	kanban_columns
-planningPoker	28	4	3	75	card_decks
 featureVoting	8	5	4	80	system_features
-hrAdmin	14	5	4	80	hr_emergency_contacts
-customerEngagement	34	11	9	82	affiliate_referrals customer_engagement_feedback_widgets
 pricing	23	12	10	83	plan_features system_features
 revenueIntelligence	19	6	5	83	ri_sequences
-usageTracking	18	13	11	85	ai_tool_calls system_features
+aiProductivity	27	7	6	86	ai_voice_agent_calls
 billing	52	16	14	88	billing_plans payment_methods
 accounts	24	8	7	88	system_features
-investorIntelligence	42	19	17	89	health_dimensions investor_peer_comparables
-systemAdmin	77	34	31	91	billing_plans modules system_features
+ai	9	8	7	88	billing_plans
+productManagement	86	8	7	88	release_plans
 businessIntelligence	83	22	20	91	business_pricing_models pricing_simulations
-pitchDeck	32	25	23	92	business_pricing_models investor_peer_comparables
-scratchPad	39	13	12	92	scratch_pad_attachments
-analytics	34	14	13	93	cohort_retention
-governance	67	18	17	94	enrichment_cache
+customerEngagement	34	11	10	91	affiliate_referrals
+usageTracking	18	13	12	92	system_features
+systemAdmin	77	34	32	94	billing_plans system_features
+pitchDeck	32	25	24	96	business_pricing_models
 embed	38	24	23	96	system_features
+investorIntelligence	42	19	19	100	
+governance	67	18	18	100	
 operationalCadence	91	16	16	100	
+analytics	34	14	14	100	
 contacts	24	14	14	100	
 investors	80	14	14	100	
+scratchPad	39	13	13	100	
 auth	30	12	12	100	
 dashboard	8	10	10	100	
+bookings	26	8	8	100	
 businessProfiles	18	7	7	100	
 marketplace	15	7	7	100	
 companies	16	6	6	100	
+consultant	17	6	6	100	
 financial	26	6	6	100	
 heatmaps	23	6	6	100	
 phone	14	6	6	100	
 supportTickets	18	6	6	100	
 growth	15	5	5	100	
+hrAdmin	14	5	5	100	
 impersonation	10	5	5	100	
 predictiveAnalytics	3	5	5	100	
 revenueAnalytics	6	5	5	100	
 agileCost	11	4	4	100	
 commsOps	11	4	4	100	
 onboarding	10	4	4	100	
+planningPoker	28	4	4	100	
 systemAdmin/security	7	4	4	100	
 teams	20	4	4	100	
+agency	8	3	3	100	
 crmDeals	7	3	3	100	
 expenses	6	3	3	100	
 guest	1	3	3	100	
@@ -62,17 +59,20 @@ push	9	3	3	100
 retrospectives	38	3	3	100	
 salesGrowth	23	3	3	100	
 sourcingExtractor	3	3	3	100	
+uptime	6	3	3	100	
 users	4	3	3	100	
 aiCredits	5	2	2	100	
 contact	6	2	2	100	
 emailConfig	4	2	2	100	
 hrLegal	14	2	2	100	
 invoicing	9	2	2	100	
+knowledgeBase	9	2	2	100	
 leadForms	8	2	2	100	
 migrate	8	2	2	100	
 notifications	8	2	2	100	
 oauth	2	2	2	100	
 portfolioComms	14	2	2	100	
+publicWidgets	2	2	2	100	
 soc2	9	2	2	100	
 terms	6	2	2	100	
 v1Contacts	8	2	2	100	

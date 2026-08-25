@@ -1,25 +1,4 @@
 disposition	target	domain	source_tables	br_modules	br_endpoints	note
-build	ai_competitors	Agents & runtime	ai_competitors	aiProductivity	27	
-build	ai_email_classifications	Agents & runtime	ai_email_classifications	aiProductivity	27	
-build	ai_tool_calls	Agents & runtime	ai_tool_calls	ai usageTracking	27	
-build	enrichment_cache	Agents & runtime	enrichment_cache	governance	67	
-build	agency_brandings	Commerce	agency_brandings	agency	8	
-build	agency_clients	Commerce	agency_clients	agency	8	
-build	booking_hosts	Commerce	booking_hosts	bookings	26	
-build	booking_reservations	Commerce	booking_reservations	bookings	26	
-build	booking_services	Commerce	booking_services	bookings	26	
-build	card_decks	Commerce	card_decks	planningPoker	28	
-build	consultant_consultations	Commerce	consultant_consultations	consultant	17	
-build	consultant_knowledge_docs	Commerce	consultant_knowledge_docs	consultant	17	
-build	cohort_retention	Hiring	cohort_retention	analytics	34	
-build	investor_peer_comparables	Investor & portfolio	investor_peer_comparables	investorIntelligence pitchDeck	74	
-build	modules	Investor & portfolio	modules	systemAdmin	77	
-build	scratch_pad_attachments	Investor & portfolio	scratch_pad_attachments	scratchPad	39	
-build	health_dimensions	People & HR	health_dimensions	investorIntelligence	42	
-build	hr_emergency_contacts	People & HR	hr_emergency_contacts	hrAdmin	14	
-build	uptime_monitors	Platform & observability	uptime_monitors	uptime	6	
-build	customer_engagement_feedback_widgets	Support & knowledge	customer_engagement_feedback_widgets	customerEngagement productManagement publicWidgets	122	
-build	support_articles	Support & knowledge	support_articles	knowledgeBase	9	
 transform	kanban_columns	Delivery & work	kanban_columns	kanban	45	duplicate of swimlanes, which carries agents, gates and parking semantics
 transform	release_plans	Delivery & work	release_plans	productManagement	86	duplicate of product_releases, which is already feature-reached
 transform	billing_plans	Finance	billing_plans	ai billing pricingAggregator systemAdmin	141	pricing → transform_existing (PlanLimits/pricingConfiguration is canonical)
