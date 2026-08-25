@@ -13,7 +13,6 @@ agileCost	11	4	2	50	sprint_financial_impact task_effort_estimates
 onboarding	10	4	2	50	onboarding_flows onboarding_progress
 knowledgeBase	9	2	1	50	support_articles
 publicWidgets	2	2	1	50	customer_engagement_feedback_widgets
-terms	6	2	1	50	user_terms_agreements
 pricingAggregator	3	9	5	56	billing_plans business_pricing_models plan_features system_features
 aiProductivity	27	7	4	57	ai_competitors ai_email_classifications ai_voice_agent_calls
 bookings	26	8	5	63	booking_hosts booking_reservations booking_services
@@ -33,22 +32,22 @@ ai	9	8	6	75	ai_tool_calls billing_plans
 kanban	45	4	3	75	kanban_columns
 planningPoker	28	4	3	75	card_decks
 systemAdmin/security	7	4	3	75	region_waitlist
-embed	38	24	19	79	embed_widget_layout marketing_heatmap_pages onboarding_flows system_features user_terms_agreements
 featureVoting	8	5	4	80	system_features
 hrAdmin	14	5	4	80	hr_emergency_contacts
 businessIntelligence	83	22	18	82	business_pricing_models deal_flow_opportunities payback_period pricing_simulations
+embed	38	24	20	83	embed_widget_layout marketing_heatmap_pages onboarding_flows system_features
 pricing	23	12	10	83	plan_features system_features
 pitchDeck	32	25	21	84	action_items brand_kits business_pricing_models investor_peer_comparables
 usageTracking	18	13	11	85	ai_tool_calls system_features
-systemAdmin	77	34	30	88	billing_plans modules system_features user_terms_agreements
 billing	52	16	14	88	billing_plans payment_methods
 accounts	24	8	7	88	system_features
 investorIntelligence	42	19	17	89	health_dimensions investor_peer_comparables
 governance	67	18	16	89	approval_actions enrichment_cache
+systemAdmin	77	34	31	91	billing_plans modules system_features
 scratchPad	39	13	12	92	scratch_pad_attachments
-auth	30	12	11	92	user_terms_agreements
 investors	80	14	13	93	deal_flow_opportunities
 operationalCadence	91	16	15	94	action_items
+auth	30	12	12	100	
 dashboard	8	10	10	100	
 businessProfiles	18	7	7	100	
 marketplace	15	7	7	100	
@@ -78,6 +77,7 @@ notifications	8	2	2	100
 oauth	2	2	2	100	
 portfolioComms	14	2	2	100	
 soc2	9	2	2	100	
+terms	6	2	2	100	
 v1Contacts	8	2	2	100	
 agileSurvival	10	1	1	100	
 auth/security	11	1	1	100	

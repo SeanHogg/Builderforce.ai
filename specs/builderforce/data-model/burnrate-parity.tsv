@@ -41,7 +41,6 @@ build	onboarding_flows	Identity & tenancy	onboarding_flows	embed onboarding	48
 build	onboarding_progress	Identity & tenancy	onboarding_progress	onboarding	10	
 build	region_waitlist	Identity & tenancy	region_waitlist	systemAdmin/security	7	
 build	stage_lookup	Identity & tenancy	stage_lookup	lookups system	12	
-build	user_terms_agreements	Identity & tenancy	user_terms_agreements	auth embed systemAdmin terms	151	
 build	investor_peer_comparables	Investor & portfolio	investor_peer_comparables	investorIntelligence pitchDeck	74	
 build	modules	Investor & portfolio	modules	systemAdmin	77	
 build	scratch_pad_attachments	Investor & portfolio	scratch_pad_attachments	scratchPad	39	

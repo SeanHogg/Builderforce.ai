@@ -19,6 +19,18 @@
  */
 
 import { Hono } from 'hono';
+import {
+  DOCUMENT_KINDS,
+  TermsError,
+  acceptanceHistory,
+  bindOrganisation,
+  currentAcceptances,
+  isDocumentKind,
+  recordAcceptance,
+  supersedeEarlierVersions,
+  tenantComplianceSummary,
+  type DocumentKind,
+} from '../../application/legal/termsAcceptance';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
 import type { Env, HonoEnv } from '../../env';
@@ -182,6 +194,100 @@ export function createLegalDocumentRoutes(db: Db): Hono<HonoEnv> {
 
 /** The external recipient's read. No session — the token in the path is the
  *  credential, exactly as the signer's and the form respondent's are. */
+/**
+ * Consent — the compliance half of the terms feature (PRD 19 §9).
+ *
+ * The GATE lives in `authMiddleware` and answers one question fast: must this
+ * user accept before we serve them. These routes answer the questions an AUDIT
+ * asks, which the gate structurally cannot: what was agreed, in what order, from
+ * where, and which legal entity is bound.
+ *
+ *   GET  /api/legal-documents/consent/me            my standing acceptances    member
+ *   GET  /api/legal-documents/consent/me/history    the full trail, superseded included
+ *   POST /api/legal-documents/consent/accept        accept one document        member
+ *   GET  /api/legal-documents/consent/tenant        the workspace's compliance member
+ *   POST /api/legal-documents/consent/bind          bind the ORGANISATION      MANAGER
+ *   POST /api/legal-documents/consent/supersede     publish a version          MANAGER
+ *
+ * MANAGER on bind and supersede: binding names a legal entity, and superseding
+ * re-gates every user on the platform. Neither is an ordinary member edit.
+ */
+export function createConsentRoutes(db: Db): Hono<HonoEnv> {
+  const router = new Hono<HonoEnv>();
+  router.use('*', authMiddleware);
+
+  const consent = async (run: () => Promise<Response>): Promise<Response> => {
+    try {
+      return await run();
+    } catch (error) {
+      if (error instanceof TermsError) {
+        return Response.json({ error: error.message }, { status: error.status });
+      }
+      throw error;
+    }
+  };
+
+  const kindOf = (v: unknown): DocumentKind => {
+    if (!isDocumentKind(v)) throw new TermsError('kind must be one of: ' + DOCUMENT_KINDS.join(', '), 400);
+    return v;
+  };
+
+  router.get('/consent/me', (c) => consent(async () =>
+    Response.json({ acceptances: await currentAcceptances(db, String(c.get('userId') ?? '')) })));
+
+  router.get('/consent/me/history', (c) => consent(async () =>
+    Response.json({ history: await acceptanceHistory(db, String(c.get('userId') ?? '')) })));
+
+  router.post('/consent/accept', (c) => consent(async () => {
+    const body = await c.req.json<Record<string, unknown>>();
+    // Evidence is taken from the request, never from the body — an IP a client
+    // can set is not evidence.
+    const result = await recordAcceptance(
+      db,
+      c.env as Env,
+      String(c.get('userId') ?? ''),
+      kindOf(body.kind),
+      String(body.version ?? ''),
+      {
+        tenantId: (c.get('tenantId') as number | undefined) ?? null,
+        ipAddress: c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? null,
+        userAgent: (c.req.header('user-agent') ?? '').slice(0, 500) || null,
+        documentHash: typeof body.documentHash === 'string' ? body.documentHash : null,
+      },
+    );
+    return Response.json(result);
+  }));
+
+  router.get('/consent/tenant', (c) => consent(async () =>
+    Response.json(await tenantComplianceSummary(db, c.get('tenantId') as number))));
+
+  router.post('/consent/bind', requireRole(TenantRole.MANAGER), (c) => consent(async () => {
+    const body = await c.req.json<Record<string, unknown>>();
+    return Response.json(await bindOrganisation(
+      db,
+      c.env as Env,
+      c.get('tenantId') as number,
+      await resolveActorFromContext(c.env as Env, db, c),
+      {
+        kind: kindOf(body.kind),
+        version: String(body.version ?? ''),
+        signatoryRef: String(body.signatoryRef ?? c.get('userId') ?? ''),
+        signatoryTitle: typeof body.signatoryTitle === 'string' ? body.signatoryTitle : null,
+        legalEntityName: typeof body.legalEntityName === 'string' ? body.legalEntityName : null,
+      },
+    ));
+  }));
+
+  router.post('/consent/supersede', requireRole(TenantRole.MANAGER), (c) => consent(async () => {
+    const body = await c.req.json<Record<string, unknown>>();
+    return Response.json(await supersedeEarlierVersions(
+      db, c.env as Env, kindOf(body.kind), String(body.version ?? ''),
+    ));
+  }));
+
+  return router;
+}
+
 export function createPublicLegalDocumentRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
 

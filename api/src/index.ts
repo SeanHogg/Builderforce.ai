@@ -156,7 +156,7 @@ import { resolvePublicResume } from './application/creation/publicResumeProjecti
 import { createFormRoutes, createPublicFormRoutes } from './presentation/routes/formRoutes';
 import { createPollRoutes, createPublicPollRoutes } from './presentation/routes/pollRoutes';
 import { createSignatureRoutes, createPublicSignatureRoutes } from './presentation/routes/signatureRoutes';
-import { createLegalDocumentRoutes, createPublicLegalDocumentRoutes } from './presentation/routes/legalDocumentRoutes';
+import { createConsentRoutes, createLegalDocumentRoutes, createPublicLegalDocumentRoutes } from './presentation/routes/legalDocumentRoutes';
 import { createDataRoomRoutes, createPublicDataRoomRoutes } from './presentation/routes/dataRoomRoutes';
 import { createInvestorRoutes, createPublicInvestorRoutes } from './presentation/routes/investorRoutes';
 import { createWebSurfaceRoutes, createPublicWebSurfaceRoutes } from './presentation/routes/webSurfaceRoutes';
@@ -992,6 +992,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/polls',             createPollRoutes(db));
   app.route('/api/signatures',        createSignatureRoutes(db));
   app.route('/api/legal-documents',   createLegalDocumentRoutes(db));
+  app.route('/api/legal-documents',   createConsentRoutes(db));
   // The data room's own share flow, and what the firm actually read.
   app.route('/api/data-rooms',        createDataRoomRoutes(db));
   // The founder's side of the raise: the company as a destination, the projects it

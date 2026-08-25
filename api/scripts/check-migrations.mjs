@@ -92,6 +92,11 @@ const IGNORED_DIRS = new Set(['node_modules', '.git', '.next', 'dist', '.wrangle
 const ALLOWED_SQL_FILES = new Set([
   // Hand-run rollback for the claw→builderforce rename; never auto-applied.
   'api/scripts/rollback-0078-claw-rename.sql',
+  // Docker's postgres entrypoint script. It CREATEs the two databases — the
+  // primary and the transactional one — so it necessarily runs before either
+  // migration runner has a database to connect to. Numbering it would be wrong:
+  // it is not a schema change, it is the container that holds the schemas.
+  'docker/postgres-init/01-databases.sql',
   // The standalone `worker/` package owns its own schema and applies it with
   // worker/scripts/migrate.ts — a different database and a different runner.
   'worker/schema.sql',
