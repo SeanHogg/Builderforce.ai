@@ -16,7 +16,7 @@
 import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
-import { extensionPackages, extensionVersions, extensionReviewStages, tenants } from '../../infrastructure/database/schema';
+import { catalogItems, extensionPackages, extensionVersions, extensionReviewStages, tenants } from '../../infrastructure/database/schema';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { PublisherError, requirePublisher } from './publishers';
@@ -56,9 +56,22 @@ export interface PackageView {
   listingState: ListingState | string;
   currentVersionId: string | null;
   catalogItemId: string | null;
+  /**
+   * Whether this listing is on sale, and from what.
+   *
+   * NOT derivable from `catalogItemId`: clearing a price list leaves the
+   * catalogue row in place (past orders name it) and drops its visibility, so a
+   * package can carry an id and be free. A page that read the id as "paid" would
+   * put a price badge on a free extension the first time a publisher took one
+   * off sale.
+   */
+  pricing: { paid: boolean; fromCents: number | null; currency: string };
   installCount: number;
   updatedAt: string | null;
 }
+
+/** What a package with no price list is. One value, so the shape is total. */
+const FREE: PackageView['pricing'] = { paid: false, fromCents: null, currency: 'USD' };
 
 export interface VersionView {
   id: string;
@@ -75,7 +88,11 @@ export interface VersionView {
 
 type PublisherRow = typeof tenants.$inferSelect;
 
-function toPackageView(row: PackageRow, publisher?: PublisherRow | null): PackageView {
+function toPackageView(
+  row: PackageRow,
+  publisher?: PublisherRow | null,
+  pricing: PackageView['pricing'] = FREE,
+): PackageView {
   return {
     id: row.id,
     tenantId: row.tenantId,
@@ -93,6 +110,7 @@ function toPackageView(row: PackageRow, publisher?: PublisherRow | null): Packag
     listingState: row.listingState,
     currentVersionId: row.currentVersionId,
     catalogItemId: row.catalogItemId,
+    pricing,
     installCount: row.installCount,
     updatedAt: row.updatedAt ? new Date(row.updatedAt).toISOString() : null,
   };
@@ -512,9 +530,19 @@ export async function listPublicCatalog(db: Db, env: Env): Promise<PackageView[]
     CATALOG_CACHE_KEY,
     async () => {
       const rows = await db
-        .select({ pkg: extensionPackages, publisher: tenants })
+        .select({
+          pkg: extensionPackages,
+          publisher: tenants,
+          listingPriceCents: catalogItems.priceCents,
+          listingCurrency: catalogItems.currency,
+          listingVisibility: catalogItems.visibility,
+        })
         .from(extensionPackages)
         .innerJoin(tenants, eq(tenants.id, extensionPackages.tenantId))
+        // LEFT, because most listings are free and have no catalogue row at all.
+        // An INNER join here would quietly delete every free package from the
+        // catalogue that the install picker and `/integrations` both read.
+        .leftJoin(catalogItems, eq(catalogItems.id, extensionPackages.catalogItemId))
         .where(acrossTenants(
           extensionPackages,
           'public_catalogue',
@@ -522,7 +550,13 @@ export async function listPublicCatalog(db: Db, env: Env): Promise<PackageView[]
           sql`${tenants.publisherSuspendedAt} is null`,
         ))
         .orderBy(desc(extensionPackages.installCount));
-      return rows.map((r) => toPackageView(r.pkg, r.publisher));
+      return rows.map((r) => toPackageView(r.pkg, r.publisher, {
+        // `visibility` and not the id: clearing a price list keeps the row and
+        // drops it to `private`, which is exactly "no longer on sale".
+        paid: r.listingVisibility === 'public',
+        fromCents: r.listingPriceCents ?? null,
+        currency: r.listingCurrency ?? 'USD',
+      }));
     },
     { kvTtlSeconds: 300, l1TtlMs: 60_000 },
   );

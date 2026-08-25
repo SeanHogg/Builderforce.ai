@@ -31,6 +31,7 @@ import {
 } from '../../application/shared/providerOAuthConnect';
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 import { PayoutAccountService } from '../../application/payouts/PayoutAccountService';
+import { userAccount } from '../../application/kernel/ledgerAccount';
 import {
   describePayoutProviders,
   getPayoutProvider,
@@ -167,8 +168,8 @@ export function createPayoutRoutes(db: Db): Hono<HonoEnv> {
   });
 
   r.get('/history', async (c) => c.json({
-    payouts: await service(c).payouts(c.get('tenantId') as number, c.get('userId') as string, Number(c.req.query('limit') ?? 50)),
-    paidCents: await service(c).paidCents(c.get('tenantId') as number, c.get('userId') as string),
+    payouts: await service(c).payouts(c.get('tenantId') as number, userAccount(c.get('userId') as string), Number(c.req.query('limit') ?? 50)),
+    paidCents: await service(c).paidCents(c.get('tenantId') as number, userAccount(c.get('userId') as string)),
   }));
 
   return r;

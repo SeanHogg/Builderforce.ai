@@ -9,6 +9,7 @@ import {
   buildSalesReport, earnedCommissionCents, isSalesReportWindow, recentReferrals, windowStart,
 } from '../../application/sales/salesReports';
 import { PayoutAccountService } from '../../application/payouts/PayoutAccountService';
+import { userAccount } from '../../application/kernel/ledgerAccount';
 
 const STAGES = new Set(['new', 'contacted', 'qualified', 'meeting', 'proposal', 'won', 'lost']);
 const CAMPAIGN_STATUSES = new Set(['draft', 'scheduled', 'active', 'complete']);
@@ -217,8 +218,8 @@ export function createSalesRoutes(db: SalesWorkspaceDb): Hono<HonoEnv> {
     const tenantId = c.get('tenantId') as number;
     const earned = await earnedCommissionCents(db, tenantId, target.id);
     const [balance, history, accounts] = await Promise.all([
-      payouts.balance(tenantId, target.id, earned),
-      payouts.payouts(tenantId, target.id),
+      payouts.balance(tenantId, userAccount(target.id), earned),
+      payouts.payouts(tenantId, userAccount(target.id)),
       payouts.list(tenantId, target.id),
     ]);
     return c.json({ balance, payouts: history, accounts });

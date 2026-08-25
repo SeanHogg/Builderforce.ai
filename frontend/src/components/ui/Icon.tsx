@@ -57,6 +57,15 @@ const LEGACY_ICON: Record<string, IconName> = {
   knowledge: 'knowledge', settings: 'settings', admin: 'admin', sales: 'insights', 'sales-admin': 'admin',
   'freelancer-dashboard': 'home', 'freelancer-profile': 'person', 'freelancer-gigs': 'search',
   'freelancer-workspace': 'tools', 'freelancer-timecard': 'clock',
+  // The rest of the rail. `NavIcon` resolves a row by its GROUP ID, and an id
+  // with no entry here and no same-named path falls through to `apps` — so
+  // thirteen destinations, Investors and Finance among them, all drew the same
+  // four-square glyph and the rail read as one undifferentiated block. The rows
+  // a founder is sold on were the ones with no icon of their own.
+  inbox: 'mail', finance: 'billing', revenue: 'arrow-up-right', learning: 'brain',
+  hiring: 'person', career: 'document', investor: 'briefcase', governance: 'shield',
+  support: 'message', embedded: 'code', marketplace: 'apps', developers: 'tools',
+  disputes: 'flag',
 };
 
 const PATHS: Record<IconName, ReactNode> = {

@@ -1,0 +1,348 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #050810; color: #f0f4ff; -webkit-font-smoothing: antialiased; }
+    * { box-sizing: border-box; }
+    .mono { font-family: 'SF Mono', 'Fira Code', 'JetBrains Mono', monospace; }
+    .dot { width: 6px; height: 6px; border-radius: 9999px; flex-shrink: 0; }
+    .panel { border: 1px solid rgba(136,146,176,0.15); border-radius: 10px; background: #0a0f1a; }
+    .cap { font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: #5a6480; margin-bottom: 9px; }
+    /* The rail's one icon language: 24-box line art, 1.8 stroke, inheriting the row colour. */
+    .ic { width: 17px; height: 17px; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .ic-sm { width: 15px; height: 15px; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .row { display: flex; align-items: center; gap: 10px; height: 29px; padding: 0 9px; border-radius: 6px; font-size: 12.5px; color: #8892b0; }
+    .row .sd { margin-left: auto; }
+    .grp { font-size: 9.5px; letter-spacing: 0.14em; text-transform: uppercase; color: #5a6480; padding: 0 9px; margin: 11px 0 4px; display: flex; align-items: center; gap: 7px; }
+    .crow { display: flex; align-items: center; justify-content: center; height: 29px; border-radius: 6px; color: #8892b0; }
+    .tab { display: flex; align-items: center; gap: 9px; height: 30px; padding: 0 10px; border-radius: 6px; font-size: 12.5px; color: #8892b0; }
+    .tab.on { background: rgba(124,131,253,0.14); color: #f0f4ff; }
+    .mlink { display: flex; gap: 10px; padding: 7px 9px; border-radius: 7px; }
+    .mt { font-size: 12.5px; font-weight: 600; color: #f0f4ff; }
+    .mg { font-size: 10.5px; color: #5a6480; line-height: 1.35; margin-top: 1px; display: block; }
+    .cnt { margin-left: auto; font-size: 9px; padding: 1px 5px; border-radius: 4px; }
+  </style>
+</helmet>
+
+<!-- ═══ the icon set, lifted verbatim from frontend/src/components/ui/Icon.tsx ═══ -->
+<svg width="0" height="0" style="position: absolute" aria-hidden="true"><defs>
+  <symbol id="i-sparkles" viewBox="0 0 24 24"><path d="M12 3 9.8 9.8 3 12l6.8 2.2L12 21l2.2-6.8L21 12l-6.8-2.2L12 3Z"/></symbol>
+  <symbol id="i-project" viewBox="0 0 24 24"><rect x="3.5" y="4" width="17" height="16" rx="2"/><path d="M8 4v16M8 9h12M8 14h12"/></symbol>
+  <symbol id="i-people" viewBox="0 0 24 24"><path d="M16 20v-1.8a3.7 3.7 0 0 0-3.7-3.7H7.7A3.7 3.7 0 0 0 4 18.2V20"/><circle cx="10" cy="8" r="3.2"/><path d="M16 5.2a3.2 3.2 0 0 1 0 6.2M20 20v-1.8a3.7 3.7 0 0 0-2.8-3.6"/></symbol>
+  <symbol id="i-code" viewBox="0 0 24 24"><path d="m8 9-3 3 3 3M16 9l3 3-3 3M14 5l-4 14"/></symbol>
+  <symbol id="i-quality" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="13" rx="6"/><path d="M8 9h8M12 10v9M6 13H3M21 13h-3M9 4l1 2M15 4l-1 2"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M6 16.5h12l-1.6-2.1V10a4.4 4.4 0 0 0-8.8 0v4.4L6 16.5Z"/><path d="M10 19a2.2 2.2 0 0 0 4 0"/></symbol>
+  <symbol id="i-knowledge" viewBox="0 0 24 24"><path d="M4 5.5A3.5 3.5 0 0 1 7.5 2H11v18H7.5A3.5 3.5 0 0 0 4 23V5.5ZM20 5.5A3.5 3.5 0 0 0 16.5 2H13v18h3.5A3.5 3.5 0 0 1 20 23V5.5Z"/></symbol>
+  <symbol id="i-megaphone" viewBox="0 0 24 24"><path d="M4 13.5v-3l14-5v13l-14-5Z"/><path d="M8 15v4h4v-2.5M18 10a3 3 0 0 1 0 4"/></symbol>
+  <symbol id="i-mail" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m4 7 8 6 8-6"/></symbol>
+  <symbol id="i-billing" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18M7 15h3"/></symbol>
+  <symbol id="i-arrow-up-right" viewBox="0 0 24 24"><path d="M7 17 17 7M9 7h8v8"/></symbol>
+  <symbol id="i-briefcase" viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V4h8v3M3 12h18M10 12v2h4v-2"/></symbol>
+  <symbol id="i-brain" viewBox="0 0 24 24"><path d="M12 5.5A4 4 0 0 0 5.5 9a4 4 0 0 0 2 7.5A4 4 0 0 0 12 19M12 5.5A4 4 0 0 1 18.5 9a4 4 0 0 1-2 7.5A4 4 0 0 1 12 19M12 5.5V19M8 9.5h4M12 14.5h4"/></symbol>
+  <symbol id="i-person" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4.5 21a7.5 7.5 0 0 1 15 0"/></symbol>
+  <symbol id="i-document" viewBox="0 0 24 24"><path d="M6 2h8l4 4v16H6V2Z"/><path d="M14 2v5h5M9 12h6M9 16h6"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 4.5 6v5c0 4.7 3.2 8.2 7.5 10 4.3-1.8 7.5-5.3 7.5-10V6L12 3Z"/><path d="M9.5 12 11 13.5l3.5-3.5"/></symbol>
+  <symbol id="i-message" viewBox="0 0 24 24"><path d="M4 5h16v12H9l-5 4V5Z"/></symbol>
+  <symbol id="i-flag" viewBox="0 0 24 24"><path d="M5 21V4M5 5h12l-2 4 2 4H5"/></symbol>
+  <symbol id="i-insights" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></symbol>
+  <symbol id="i-apps" viewBox="0 0 24 24"><rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><rect x="14" y="14" width="6" height="6" rx="1"/></symbol>
+  <symbol id="i-tools" viewBox="0 0 24 24"><path d="m14.5 6.5 3-3 3 3-3 3M13 8l-9.5 9.5V21H7l9.5-9.5"/></symbol>
+  <symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3A1.7 1.7 0 0 0 14 21v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14h-.2v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3A1.7 1.7 0 0 0 10 3v-.2h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9A1.7 1.7 0 0 0 21 10h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"/></symbol>
+  <symbol id="i-admin" viewBox="0 0 24 24"><path d="M12 3 4.5 6v5c0 4.7 3.2 8.2 7.5 10 4.3-1.8 7.5-5.3 7.5-10V6L12 3Z"/><path d="M9.5 12 11 13.5l3.5-3.5"/></symbol>
+  <symbol id="i-canvas" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 3v18M8 9h13"/></symbol>
+  <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><path d="m15.2 8.8 4-4M16.8 4.8h2.4v2.4"/></symbol>
+  <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18"/></symbol>
+  <symbol id="i-video" viewBox="0 0 24 24"><rect x="3" y="6" width="13" height="12" rx="2"/><path d="m16 10 5-3v10l-5-3"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+  <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.5.5l2-2a5 5 0 0 0-7-7l-1.2 1.2"/><path d="M14 11a5 5 0 0 0-7.5-.5l-2 2a5 5 0 0 0 7 7l1.2-1.2"/></symbol>
+  <symbol id="i-heart" viewBox="0 0 24 24"><path d="M20.8 5.8a5 5 0 0 0-7.1 0L12 7.5l-1.7-1.7a5 5 0 0 0-7.1 7.1L12 21l8.8-8.1a5 5 0 0 0 0-7.1Z"/></symbol>
+  <symbol id="i-chevron-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-chevron-left" viewBox="0 0 24 24"><path d="m15 6-6 6 6 6"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v3"/></symbol>
+  <symbol id="i-workspace" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 9v11"/></symbol>
+</defs></svg>
+
+<div style="width: 1440px; height: 1280px; background: #050810; padding: 26px 28px; overflow: hidden; display: flex; flex-direction: column; gap: 18px">
+
+  <div style="flex-shrink: 0">
+    <div class="mono" style="font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; color: #4d9eff; margin-bottom: 6px">Navigation · expanded</div>
+    <h1 style="margin: 0 0 5px; font-size: 21px; font-weight: 700; letter-spacing: -0.025em">The whole menu, open</h1>
+    <p style="margin: 0; font-size: 12.5px; color: #8892b0; line-height: 1.5; max-width: 112ch">Every destination in <span class="mono" style="color: #f0f4ff">NAV_GROUPS</span>, drawn in the rail's one icon language — 24-box line art at 1.8 stroke, inheriting the row colour, never an OS-dependent emoji. Rows group by the arc and carry their owning <span class="mono" style="color: #f0f4ff">SEAT</span> as a trailing dot. Signed in, a row opens <em style="font-style: normal; color: #00e5cc">over</em> the board — the session keeps running.</p>
+  </div>
+
+  <div style="flex: 1; min-height: 0; display: grid; grid-template-columns: 252px 76px minmax(0, 1fr); gap: 18px">
+
+    <!-- ── A · rail expanded, complete ─────────────────────────────────── -->
+    <div style="display: flex; flex-direction: column; min-height: 0">
+      <div class="mono cap">Expanded · 240px</div>
+      <div class="panel" style="flex: 1; display: flex; flex-direction: column; overflow: hidden">
+
+        <div style="height: 50px; flex-shrink: 0; display: flex; align-items: center; gap: 9px; padding: 0 13px; border-bottom: 1px solid rgba(136,146,176,0.15)">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M6 3h7a5 5 0 0 1 0 10H6z" stroke="#4d9eff" stroke-width="2" stroke-linejoin="round"/><path d="M6 13h8a5 5 0 0 1 0 8H6z" stroke="#00e5cc" stroke-width="2" stroke-linejoin="round"/></svg>
+          <span style="font-size: 13px; font-weight: 700; letter-spacing: -0.02em">BuilderForce</span>
+          <svg class="ic-sm" style="margin-left: auto; color: #5a6480"><use href="#i-chevron-left"/></svg>
+        </div>
+
+        <div style="padding: 10px 10px 3px; flex-shrink: 0">
+          <div style="display: flex; align-items: center; gap: 9px; height: 36px; padding: 0 9px; border: 1px solid rgba(136,146,176,0.15); border-radius: 8px; background: rgba(255,255,255,0.03)">
+            <div style="width: 20px; height: 20px; border-radius: 5px; background: linear-gradient(135deg,#4d9eff,#1e40af); display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; color: #050810">NV</div>
+            <div style="flex: 1; min-width: 0"><div style="font-size: 11.5px; font-weight: 600">Northvale Labs</div><div class="mono" style="font-size: 8.5px; color: #5a6480">Seed · raising</div></div>
+            <svg class="ic-sm" style="width: 12px; height: 12px; color: #5a6480"><use href="#i-chevron-down"/></svg>
+          </div>
+        </div>
+
+        <div style="flex: 1; padding: 0 10px 8px; overflow: hidden">
+
+          <div class="grp"><span class="dot" style="background: #fbbf24"></span>Idea</div>
+          <div class="row"><svg class="ic"><use href="#i-sparkles"/></svg>Create<span class="dot sd" style="background: #4d9eff"></span></div>
+
+          <div class="grp"><span class="dot" style="background: #4d9eff"></span>Make</div>
+          <div class="row"><svg class="ic"><use href="#i-project"/></svg>Projects<span class="mono cnt" style="background: rgba(136,146,176,0.14); color: #8892b0">3</span><span class="dot" style="margin-left: 7px; background: #7c83fd"></span></div>
+          <div class="row" style="background: rgba(124,131,253,0.13); color: #f0f4ff"><svg class="ic"><use href="#i-people"/></svg>Talent / Workforce<span class="dot sd" style="background: #7c83fd"></span></div>
+          <div class="row"><svg class="ic"><use href="#i-code"/></svg>Embedded<span class="dot sd" style="background: #38bdf8"></span></div>
+          <div class="row"><svg class="ic"><use href="#i-quality"/></svg>Quality<span class="dot sd" style="background: #38bdf8"></span></div>
+          <div class="row"><svg class="ic"><use href="#i-alert"/></svg>Reliability<span class="dot sd" style="background: #38bdf8"></span></div>
+          <div class="row"><svg class="ic"><use href="#i-knowledge"/></svg>Knowledge<span class="dot sd" style="background: #8b5cf6"></span></div>
+
+          <div class="grp"><span class="dot" style="background: #34d399"></span>Run</div>
+          <div class="row"><svg class="ic"><use href="#i-megaphone"/></svg>Growth<span class="dot sd" style="background: #ec4899"></span></div>
+          <div class="row"><svg class="ic"><use href="#i-mail"/></svg>Inbox<span class="mono cnt" style="background: rgba(236,72,153,0.18); color: #ec4899">7</span><span class="dot" style="margin-left: 7px; background: #ec4899"></span></div>
+          <div class="row"><svg class="ic"><use href="#i-billing"/></svg>Finance<span class="dot sd" style="background: #34d399"></span></div>
+          <div class="row"><svg class="ic"><use href="#i-arrow-up-right"/></svg>Revenue<span class="dot sd" style="background: #fbbf24"></span></div>
+          <div class="row"><svg class="ic"><use href="#i-briefcase"/></svg>Investors<span class="mono cnt" style="background: rgba(0,229,204,0.16); color: #00e5cc">4</span><span class="dot" style="margin-left: 7px; background: #a78bfa"></span></div>
+          <div class="row"><svg class="ic"><use href="#i-people"/></svg>People<span class="dot sd" style="background: #14b8a6"></span></div>
+          <div class="row"><svg class="ic"><use href="#i-brain"/></svg>Learning<span class="dot sd" style="background: #14b8a6"></span></div>
+          <div class="row"><svg class="ic"><use href="#i-person"/></svg>Hiring<span class="dot sd" style="background: #f97316"></span></div>
+          <div class="row"><svg class="ic"><use href="#i-document"/></svg>Résumé<span class="dot sd" style="background: #f97316"></span></div>
+          <div class="row"><svg class="ic"><use href="#i-shield"/></svg>Governance<span class="dot sd" style="background: #ff6b6b"></span></div>
+          <div class="row"><svg class="ic"><use href="#i-message"/></svg>Support<span class="dot sd" style="background: #8b5cf6"></span></div>
+          <div class="row"><svg class="ic"><use href="#i-flag"/></svg>Disputes<span class="dot sd" style="background: #34d399"></span></div>
+
+          <div class="grp"><span class="dot" style="background: #a78bfa"></span>Measure</div>
+          <div class="row"><svg class="ic"><use href="#i-insights"/></svg>Insights<span class="dot sd" style="background: #5a6480"></span></div>
+
+          <div class="grp"><span class="dot" style="background: #ec4899"></span>Market</div>
+          <div class="row"><svg class="ic"><use href="#i-apps"/></svg>Marketplace<span class="dot sd" style="background: #5a6480"></span></div>
+          <div class="row"><svg class="ic"><use href="#i-tools"/></svg>Developers<span class="dot sd" style="background: #5a6480"></span></div>
+
+          <div class="grp"><span class="dot" style="background: #f97316"></span>Expand</div>
+          <div class="row"><svg class="ic"><use href="#i-insights"/></svg>Sales Hub<span class="dot sd" style="background: #fbbf24"></span></div>
+
+          <div class="grp"><span class="dot" style="background: #5a6480"></span>Admin</div>
+          <div class="row"><svg class="ic"><use href="#i-settings"/></svg>Settings<span class="dot sd" style="background: #5a6480"></span></div>
+          <div class="row"><svg class="ic"><use href="#i-admin"/></svg>Admin<span class="dot sd" style="background: #5a6480"></span></div>
+        </div>
+
+        <div style="padding: 9px 11px; border-top: 1px solid rgba(136,146,176,0.15); flex-shrink: 0">
+          <div class="mono" style="display: flex; justify-content: space-between; font-size: 8.5px; color: #5a6480; margin-bottom: 4px"><span>AI tokens</span><span>38%</span></div>
+          <div style="height: 3px; border-radius: 9999px; background: rgba(255,255,255,0.08); overflow: hidden"><div style="width: 38%; height: 100%; background: #4d9eff"></div></div>
+          <div class="mono" style="display: flex; justify-content: space-between; font-size: 8.5px; color: #5a6480; margin: 7px 0 4px"><span>Run budget</span><span>61%</span></div>
+          <div style="height: 3px; border-radius: 9999px; background: rgba(255,255,255,0.08); overflow: hidden"><div style="width: 61%; height: 100%; background: #00e5cc"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── B · rail collapsed ──────────────────────────────────────────── -->
+    <div style="display: flex; flex-direction: column; min-height: 0">
+      <div class="mono cap" style="white-space: nowrap">Collapsed · 64</div>
+      <div class="panel" style="flex: 1; width: 64px; display: flex; flex-direction: column; overflow: hidden">
+        <div style="height: 50px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; border-bottom: 1px solid rgba(136,146,176,0.15)">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M6 3h7a5 5 0 0 1 0 10H6z" stroke="#4d9eff" stroke-width="2" stroke-linejoin="round"/><path d="M6 13h8a5 5 0 0 1 0 8H6z" stroke="#00e5cc" stroke-width="2" stroke-linejoin="round"/></svg>
+        </div>
+        <div style="padding: 10px 8px 3px; flex-shrink: 0; display: flex; justify-content: center">
+          <div style="width: 28px; height: 28px; border-radius: 6px; background: linear-gradient(135deg,#4d9eff,#1e40af); display: flex; align-items: center; justify-content: center; font-size: 9.5px; font-weight: 700; color: #050810">NV</div>
+        </div>
+        <div style="flex: 1; padding: 0 8px 8px; overflow: hidden">
+          <div style="height: 1px; background: #fbbf24; opacity: 0.5; margin: 12px 4px 5px"></div>
+          <div class="crow"><svg class="ic"><use href="#i-sparkles"/></svg></div>
+          <div style="height: 1px; background: #4d9eff; opacity: 0.5; margin: 12px 4px 5px"></div>
+          <div class="crow"><svg class="ic"><use href="#i-project"/></svg></div>
+          <div class="crow" style="background: rgba(124,131,253,0.13); color: #f0f4ff"><svg class="ic"><use href="#i-people"/></svg></div>
+          <div class="crow"><svg class="ic"><use href="#i-code"/></svg></div>
+          <div class="crow"><svg class="ic"><use href="#i-quality"/></svg></div>
+          <div class="crow"><svg class="ic"><use href="#i-alert"/></svg></div>
+          <div class="crow"><svg class="ic"><use href="#i-knowledge"/></svg></div>
+          <div style="height: 1px; background: #34d399; opacity: 0.5; margin: 12px 4px 5px"></div>
+          <div class="crow"><svg class="ic"><use href="#i-megaphone"/></svg></div>
+          <div class="crow" style="position: relative"><svg class="ic"><use href="#i-mail"/></svg><span style="position: absolute; top: 2px; right: 7px; width: 5px; height: 5px; border-radius: 9999px; background: #ec4899"></span></div>
+          <div class="crow"><svg class="ic"><use href="#i-billing"/></svg></div>
+          <div class="crow"><svg class="ic"><use href="#i-arrow-up-right"/></svg></div>
+          <div class="crow" style="position: relative"><svg class="ic"><use href="#i-briefcase"/></svg><span style="position: absolute; top: 2px; right: 7px; width: 5px; height: 5px; border-radius: 9999px; background: #00e5cc"></span></div>
+          <div class="crow"><svg class="ic"><use href="#i-people"/></svg></div>
+          <div class="crow"><svg class="ic"><use href="#i-brain"/></svg></div>
+          <div class="crow"><svg class="ic"><use href="#i-person"/></svg></div>
+          <div class="crow"><svg class="ic"><use href="#i-document"/></svg></div>
+          <div class="crow"><svg class="ic"><use href="#i-shield"/></svg></div>
+          <div class="crow"><svg class="ic"><use href="#i-message"/></svg></div>
+          <div class="crow"><svg class="ic"><use href="#i-flag"/></svg></div>
+          <div style="height: 1px; background: #a78bfa; opacity: 0.5; margin: 12px 4px 5px"></div>
+          <div class="crow"><svg class="ic"><use href="#i-insights"/></svg></div>
+          <div style="height: 1px; background: #ec4899; opacity: 0.5; margin: 12px 4px 5px"></div>
+          <div class="crow"><svg class="ic"><use href="#i-apps"/></svg></div>
+          <div class="crow"><svg class="ic"><use href="#i-tools"/></svg></div>
+          <div style="height: 1px; background: #f97316; opacity: 0.5; margin: 12px 4px 5px"></div>
+          <div class="crow"><svg class="ic"><use href="#i-insights"/></svg></div>
+          <div style="height: 1px; background: rgba(136,146,176,0.4); margin: 12px 4px 5px"></div>
+          <div class="crow"><svg class="ic"><use href="#i-settings"/></svg></div>
+          <div class="crow"><svg class="ic"><use href="#i-admin"/></svg></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── C · flyout index, mega-menu, drawer, keys ───────────────────── -->
+    <div style="min-height: 0; display: flex; flex-direction: column; gap: 15px">
+
+      <!-- destination index flyout -->
+      <div style="flex-shrink: 0">
+        <div class="mono cap">Destination index — a row's sub-views, opened</div>
+        <div style="display: grid; grid-template-columns: 316px minmax(0,1fr); gap: 14px">
+          <div class="panel" style="padding: 12px; background: #1a2332">
+            <div style="display: flex; align-items: center; gap: 9px; padding: 0 4px 10px; border-bottom: 1px solid rgba(136,146,176,0.15); margin-bottom: 8px">
+              <svg class="ic" style="color: #7c83fd"><use href="#i-people"/></svg>
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: -0.015em">Talent / Workforce</span>
+              <span class="dot" style="margin-left: auto; background: #7c83fd"></span>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2px 8px">
+              <div class="tab on"><svg class="ic-sm"><use href="#i-people"/></svg>Workforce</div>
+              <div class="tab"><svg class="ic-sm"><use href="#i-person"/></svg>Roles</div>
+              <div class="tab"><svg class="ic-sm"><use href="#i-people"/></svg>Teams</div>
+              <div class="tab"><svg class="ic-sm"><use href="#i-video"/></svg>Meetings</div>
+              <div class="tab"><svg class="ic-sm"><use href="#i-calendar"/></svg>Calendar</div>
+              <div class="tab"><svg class="ic-sm"><use href="#i-people"/></svg>Talent</div>
+              <div class="tab"><svg class="ic-sm"><use href="#i-sparkles"/></svg>Rewards</div>
+              <div class="tab"><svg class="ic-sm"><use href="#i-brain"/></svg>Co-founder</div>
+              <div class="tab"><svg class="ic-sm"><use href="#i-insights"/></svg>Performance</div>
+              <div class="tab"><svg class="ic-sm"><use href="#i-billing"/></svg>Plan</div>
+              <div class="tab"><svg class="ic-sm"><use href="#i-message"/></svg>Chats</div>
+              <div class="tab"><svg class="ic-sm"><use href="#i-check"/></svg>Approvals</div>
+              <div class="tab"><svg class="ic-sm"><use href="#i-quality"/></svg>QA</div>
+              <div class="tab"><svg class="ic-sm"><use href="#i-link"/></svg>Coordination</div>
+              <div class="tab"><svg class="ic-sm"><use href="#i-brain"/></svg>Memory</div>
+              <div class="tab"><svg class="ic-sm"><use href="#i-video"/></svg>Rehearsal</div>
+            </div>
+          </div>
+
+          <div class="panel" style="padding: 14px 16px">
+            <div class="mono" style="font-size: 9.5px; letter-spacing: 0.12em; text-transform: uppercase; color: #5a6480; margin-bottom: 9px">Why it is a column, not a tab bar</div>
+            <div style="font-size: 12px; line-height: 1.65; color: #8892b0">Sixteen sub-views. A horizontal tab bar holds five before it truncates or scrolls, and the ones it hides are the ones a founder came for — <span style="color: #f0f4ff">Meetings</span>, <span style="color: #f0f4ff">Co-founder</span>, <span style="color: #f0f4ff">Performance</span>, <span style="color: #f0f4ff">Plan</span>. The index runs down the panel's left edge instead, so every sub-view is visible at once and the count is allowed to grow.</div>
+            <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(136,146,176,0.13); font-size: 12px; line-height: 1.65; color: #8892b0">This is also where the Team plan starts. <span style="color: #f0f4ff">Roles</span>, <span style="color: #f0f4ff">Teams</span> and <span style="color: #f0f4ff">Approvals</span> are the rows a founder reaches for the first time they need a second pair of hands — and inviting that person is the moment the workspace stops being one seat.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- public Learn mega-menu, open -->
+      <div style="flex-shrink: 0">
+        <div class="mono cap">Public header — Learn menu, open</div>
+        <div class="panel" style="overflow: hidden">
+          <div style="height: 46px; display: flex; align-items: center; gap: 20px; padding: 0 16px; border-bottom: 1px solid rgba(136,146,176,0.13)">
+            <div style="display: flex; align-items: center; gap: 8px">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M6 3h7a5 5 0 0 1 0 10H6z" stroke="#4d9eff" stroke-width="2" stroke-linejoin="round"/><path d="M6 13h8a5 5 0 0 1 0 8H6z" stroke="#00e5cc" stroke-width="2" stroke-linejoin="round"/></svg>
+              <span style="font-size: 13px; font-weight: 700; letter-spacing: -0.025em">Builderforce<span style="color: #5a6480">.ai</span></span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 2px; font-size: 12.5px">
+              <span style="padding: 6px 10px; color: #8892b0">Product</span>
+              <span style="display: flex; align-items: center; gap: 5px; padding: 6px 10px; border-radius: 6px; background: rgba(0,229,204,0.12); color: #f0f4ff">Learn<svg class="ic-sm" style="width: 11px; height: 11px; color: #00e5cc"><use href="#i-chevron-down"/></svg></span>
+              <span style="padding: 6px 10px; color: #8892b0">Features</span>
+              <span style="padding: 6px 10px; color: #8892b0">Marketplace</span>
+              <span style="padding: 6px 10px; color: #8892b0">Pricing</span>
+            </div>
+            <span style="margin-left: auto; display: flex; align-items: center; height: 30px; padding: 0 13px; border-radius: 7px; background: linear-gradient(135deg,#4d9eff,#1e40af); font-size: 12px; font-weight: 600; color: #050810">Open the canvas →</span>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 14px 12px 10px">
+            <div>
+              <div class="mono" style="font-size: 9.5px; letter-spacing: 0.14em; text-transform: uppercase; color: #5a6480; padding: 0 9px 7px; display: flex; align-items: center; gap: 7px"><span class="dot" style="background: #fbbf24"></span>Read</div>
+              <div class="mlink"><svg class="ic-sm" style="margin-top: 2px; color: #4d9eff"><use href="#i-document"/></svg><span><span class="mt">Blog</span><span class="mg">How the product gets built.</span></span></div>
+              <div class="mlink"><svg class="ic-sm" style="margin-top: 2px; color: #a78bfa"><use href="#i-brain"/></svg><span><span class="mt">Evermind</span><span class="mg">The model behind the agents.</span></span></div>
+              <div class="mlink"><svg class="ic-sm" style="margin-top: 2px; color: #5a6480"><use href="#i-insights"/></svg><span><span class="mt">Compare</span><span class="mg">Against the tools you use now.</span></span></div>
+            </div>
+            <div>
+              <div class="mono" style="font-size: 9.5px; letter-spacing: 0.14em; text-transform: uppercase; color: #5a6480; padding: 0 9px 7px; display: flex; align-items: center; gap: 7px"><span class="dot" style="background: #00e5cc"></span>Prove</div>
+              <div class="mlink"><svg class="ic-sm" style="margin-top: 2px; color: #4d9eff"><use href="#i-target"/></svg><span><span class="mt">Diagnostics</span><span class="mg">A result before you sign up.</span></span></div>
+              <div class="mlink"><svg class="ic-sm" style="margin-top: 2px; color: #ff6b6b"><use href="#i-shield"/></svg><span><span class="mt">SOC 2</span><span class="mg">Controls, evidence and subprocessors.</span></span></div>
+              <div class="mlink"><svg class="ic-sm" style="margin-top: 2px; color: #5a6480"><use href="#i-billing"/></svg><span><span class="mt">Models</span><span class="mg">What runs, and what it costs.</span></span></div>
+            </div>
+            <div>
+              <div class="mono" style="font-size: 9.5px; letter-spacing: 0.14em; text-transform: uppercase; color: #5a6480; padding: 0 9px 7px; display: flex; align-items: center; gap: 7px"><span class="dot" style="background: #4d9eff"></span>Build with</div>
+              <div class="mlink"><svg class="ic-sm" style="margin-top: 2px; color: #14b8a6"><use href="#i-knowledge"/></svg><span><span class="mt">Tutorials</span><span class="mg">Courses that end on a working board.</span></span></div>
+              <div class="mlink"><svg class="ic-sm" style="margin-top: 2px; color: #38bdf8"><use href="#i-code"/></svg><span><span class="mt">Embedded</span><span class="mg">Put the product inside your own app.</span></span></div>
+              <div class="mlink"><svg class="ic-sm" style="margin-top: 2px; color: #8b5cf6"><use href="#i-sparkles"/></svg><span><span class="mt">Prompts &amp; skills</span><span class="mg">Reusable, and yours.</span></span></div>
+            </div>
+          </div>
+          <div style="padding: 10px 21px; border-top: 1px solid rgba(136,146,176,0.12); background: rgba(255,255,255,0.015); font-size: 11px; color: #5a6480; line-height: 1.5">Read anywhere. The evidence pages — diagnostics, SOC 2, Evermind — open over your board, so you can answer an auditor without closing what you were building.</div>
+        </div>
+      </div>
+
+      <!-- drawer + keys -->
+      <div style="flex: 1; min-height: 0; display: grid; grid-template-columns: 224px minmax(0,1fr); gap: 14px">
+
+        <div style="display: flex; flex-direction: column">
+          <div class="mono cap">Mobile · drawer</div>
+          <div class="panel" style="flex: 1; padding: 12px; overflow: hidden">
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 0 3px 10px; border-bottom: 1px solid rgba(136,146,176,0.14)">
+              <span style="font-size: 12.5px; font-weight: 600">Menu</span>
+              <svg class="ic-sm" style="color: #8892b0"><use href="#i-close"/></svg>
+            </div>
+            <div style="padding-top: 8px">
+              <div class="row" style="height: 34px; font-size: 13px; color: #f0f4ff"><svg class="ic-sm" style="color: #5a6480"><use href="#i-apps"/></svg>Product<svg class="ic-sm" style="margin-left: auto; width: 12px; height: 12px; color: #5a6480"><use href="#i-chevron-down"/></svg></div>
+              <div class="row" style="height: 34px; font-size: 13px; color: #f0f4ff"><svg class="ic-sm" style="color: #5a6480"><use href="#i-knowledge"/></svg>Learn<svg class="ic-sm" style="margin-left: auto; width: 12px; height: 12px; color: #5a6480"><use href="#i-chevron-down"/></svg></div>
+              <div class="row" style="height: 34px; font-size: 13px; color: #f0f4ff"><svg class="ic-sm" style="color: #5a6480"><use href="#i-sparkles"/></svg>Features</div>
+              <div class="row" style="height: 34px; font-size: 13px; color: #f0f4ff"><svg class="ic-sm" style="color: #5a6480"><use href="#i-tools"/></svg>Marketplace</div>
+              <div class="row" style="height: 34px; font-size: 13px; color: #f0f4ff"><svg class="ic-sm" style="color: #5a6480"><use href="#i-billing"/></svg>Pricing</div>
+              <div style="margin-top: 12px; height: 38px; border-radius: 8px; background: linear-gradient(135deg,#4d9eff,#1e40af); display: flex; align-items: center; justify-content: center; font-size: 12.5px; font-weight: 600; color: #050810">Open the canvas →</div>
+              <div style="margin-top: 8px; height: 38px; border-radius: 8px; border: 1px solid rgba(136,146,176,0.2); display: flex; align-items: center; justify-content: center; gap: 7px; font-size: 12.5px; color: #f0f4ff"><svg class="ic-sm"><use href="#i-lock"/></svg>Sign in</div>
+            </div>
+          </div>
+        </div>
+
+        <div style="display: flex; flex-direction: column">
+          <div class="mono cap">Keys — the two hue families the menu uses</div>
+          <div class="panel" style="flex: 1; padding: 14px 16px; display: flex; flex-direction: column; gap: 13px">
+            <div>
+              <div class="mono" style="font-size: 9.5px; letter-spacing: 0.12em; text-transform: uppercase; color: #5a6480; margin-bottom: 8px">Stage — the group a row sits in</div>
+              <div style="display: flex; flex-wrap: wrap; gap: 7px">
+                <span style="display: flex; align-items: center; gap: 6px; font-size: 11px; color: #8892b0; padding: 4px 9px; border-radius: 9999px; border: 1px solid rgba(136,146,176,0.16)"><span class="dot" style="background: #fbbf24"></span>Idea</span>
+                <span style="display: flex; align-items: center; gap: 6px; font-size: 11px; color: #8892b0; padding: 4px 9px; border-radius: 9999px; border: 1px solid rgba(136,146,176,0.16)"><span class="dot" style="background: #4d9eff"></span>Make</span>
+                <span style="display: flex; align-items: center; gap: 6px; font-size: 11px; color: #8892b0; padding: 4px 9px; border-radius: 9999px; border: 1px solid rgba(136,146,176,0.16)"><span class="dot" style="background: #34d399"></span>Run</span>
+                <span style="display: flex; align-items: center; gap: 6px; font-size: 11px; color: #8892b0; padding: 4px 9px; border-radius: 9999px; border: 1px solid rgba(136,146,176,0.16)"><span class="dot" style="background: #a78bfa"></span>Measure</span>
+                <span style="display: flex; align-items: center; gap: 6px; font-size: 11px; color: #8892b0; padding: 4px 9px; border-radius: 9999px; border: 1px solid rgba(136,146,176,0.16)"><span class="dot" style="background: #ec4899"></span>Market</span>
+                <span style="display: flex; align-items: center; gap: 6px; font-size: 11px; color: #8892b0; padding: 4px 9px; border-radius: 9999px; border: 1px solid rgba(136,146,176,0.16)"><span class="dot" style="background: #f97316"></span>Expand</span>
+                <span style="display: flex; align-items: center; gap: 6px; font-size: 11px; color: #8892b0; padding: 4px 9px; border-radius: 9999px; border: 1px solid rgba(136,146,176,0.16)"><span class="dot" style="background: #5a6480"></span>Admin</span>
+              </div>
+            </div>
+            <div>
+              <div class="mono" style="font-size: 9.5px; letter-spacing: 0.12em; text-transform: uppercase; color: #5a6480; margin-bottom: 8px">Seat — the trailing dot on the row</div>
+              <div style="display: flex; flex-wrap: wrap; gap: 7px">
+                <span style="display: flex; align-items: center; gap: 6px; font-size: 11px; color: #8892b0; padding: 4px 9px; border-radius: 9999px; border: 1px solid rgba(136,146,176,0.16)"><span class="dot" style="background: #a78bfa"></span>CEO</span>
+                <span style="display: flex; align-items: center; gap: 6px; font-size: 11px; color: #8892b0; padding: 4px 9px; border-radius: 9999px; border: 1px solid rgba(136,146,176,0.16)"><span class="dot" style="background: #34d399"></span>CFO</span>
+                <span style="display: flex; align-items: center; gap: 6px; font-size: 11px; color: #8892b0; padding: 4px 9px; border-radius: 9999px; border: 1px solid rgba(136,146,176,0.16)"><span class="dot" style="background: #fbbf24"></span>CRO</span>
+                <span style="display: flex; align-items: center; gap: 6px; font-size: 11px; color: #8892b0; padding: 4px 9px; border-radius: 9999px; border: 1px solid rgba(136,146,176,0.16)"><span class="dot" style="background: #ec4899"></span>CMO</span>
+                <span style="display: flex; align-items: center; gap: 6px; font-size: 11px; color: #8892b0; padding: 4px 9px; border-radius: 9999px; border: 1px solid rgba(136,146,176,0.16)"><span class="dot" style="background: #38bdf8"></span>CTO</span>
+                <span style="display: flex; align-items: center; gap: 6px; font-size: 11px; color: #8892b0; padding: 4px 9px; border-radius: 9999px; border: 1px solid rgba(136,146,176,0.16)"><span class="dot" style="background: #7c83fd"></span>Manager</span>
+                <span style="display: flex; align-items: center; gap: 6px; font-size: 11px; color: #8892b0; padding: 4px 9px; border-radius: 9999px; border: 1px solid rgba(136,146,176,0.16)"><span class="dot" style="background: #14b8a6"></span>HR</span>
+                <span style="display: flex; align-items: center; gap: 6px; font-size: 11px; color: #8892b0; padding: 4px 9px; border-radius: 9999px; border: 1px solid rgba(136,146,176,0.16)"><span class="dot" style="background: #f97316"></span>Recruiter</span>
+                <span style="display: flex; align-items: center; gap: 6px; font-size: 11px; color: #8892b0; padding: 4px 9px; border-radius: 9999px; border: 1px solid rgba(136,146,176,0.16)"><span class="dot" style="background: #ff6b6b"></span>Security</span>
+                <span style="display: flex; align-items: center; gap: 6px; font-size: 11px; color: #8892b0; padding: 4px 9px; border-radius: 9999px; border: 1px solid rgba(136,146,176,0.16)"><span class="dot" style="background: #8b5cf6"></span>Support</span>
+                <span style="display: flex; align-items: center; gap: 6px; font-size: 11px; color: #8892b0; padding: 4px 9px; border-radius: 9999px; border: 1px solid rgba(136,146,176,0.16)"><span class="dot" style="background: #4d9eff"></span>Brain</span>
+                <span style="display: flex; align-items: center; gap: 6px; font-size: 11px; color: #8892b0; padding: 4px 9px; border-radius: 9999px; border: 1px solid rgba(136,146,176,0.16)"><span class="dot" style="background: #5a6480"></span>Platform</span>
+              </div>
+            </div>
+            <div style="margin-top: auto; padding-top: 11px; border-top: 1px solid rgba(136,146,176,0.13); font-size: 11.5px; line-height: 1.6; color: #5a6480">
+              Thirteen of these rows — Investors and Finance among them — had no icon of their own and all drew the generic four-square glyph, because <span class="mono" style="color: #8892b0">NavIcon</span> resolves a row by its group id and an unmapped id falls through to <span class="mono" style="color: #8892b0">apps</span>. Each now has one. A row shows a count only when the number is actionable: unread in Inbox, live projects in Projects, investors waiting on you in Investors.
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

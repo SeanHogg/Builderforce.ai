@@ -118,6 +118,31 @@ describe('the calendar contract', () => {
     expect(events[1]?.field).toBe('renewsAt');
     expect(events.every((event) => event.sourceId === 'board')).toBe(true);
   });
+
+  /**
+   * A COMPUTED deadline is drawn and not dragged. A contract's next obligation is the
+   * earliest of several rows rather than a column, so accepting a move would write a date
+   * onto the card that nothing reads while the row it summarises stayed where it was.
+   * Omitting `field` is what makes it read-only — `calendarSources` already refuses to
+   * write an event without one — and `details` names the row so the entry still says
+   * WHICH obligation is due.
+   */
+  it('draws an obligation coming due, and refuses to let it be dragged', () => {
+    const [event] = boardCalendarEvents([{
+      id: 'n4',
+      kind: 'contract',
+      title: 'Acme MSA',
+      data: {
+        obligations: [
+          { reference: 'SUPPORT-Q', obligation: 'Quarterly support fee', due: '2026-09-30', status: 'pending' },
+          { reference: 'HOSTING-M', obligation: 'Monthly hosting', due: '2026-08-18', status: 'pending' },
+        ],
+      },
+    }]);
+    expect(event?.startISO).toBe(new Date('2026-08-18').toISOString());
+    expect(event?.field).toBeUndefined();
+    expect(event?.details).toContain('Monthly hosting');
+  });
 });
 
 describe('the Calendar component', () => {

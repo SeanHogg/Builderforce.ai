@@ -6,7 +6,13 @@ import es from './messages/es.json';
 import fr from './messages/fr.json';
 import de from './messages/de.json';
 import { LOCALES, DEFAULT_LOCALE, type Locale } from './config';
-import { STALL_CAUSES, PROVIDER_PROBE_STATES } from '@/lib/builderforceApi';
+import {
+  STALL_CAUSES,
+  PROVIDER_PROBE_STATES,
+  PARTNER_TRACK_KEYS,
+  PARTNER_BENEFIT_KEYS,
+  PARTNER_AUDIENCE_KEYS,
+} from '@/lib/builderforceApi';
 import { CAMPAIGN_BLOCKERS } from '@/lib/growthApi';
 import { HEALTH_SIGNALS } from '@/lib/pm/portfolioHealth';
 import { CREATION_TEMPLATES } from '@/components/creation-canvas/creationTemplates';
@@ -215,6 +221,41 @@ describe('message catalogs', () => {
     const quickStart = CATALOGS[locale].quickStart as Record<string, unknown> | undefined;
     expect(quickStart).toBeDefined();
     expect(Object.keys(quickStart ?? {}).sort()).toEqual([...QUICK_START_KEYS].sort());
+  });
+
+  /**
+   * The partner-program vocabularies (PRD 24 §6 Phase C).
+   *
+   * The server sends KEYS — `programs.benefit.featuredPlacement` — and this page
+   * renders whatever it is sent, so a key nobody translated appears in the middle
+   * of a partner-facing page as its own dotted name. These three lists are the
+   * frontend half of a contract whose other half is the API's
+   * `partnerPrograms.test.ts`; between them they assert agreement over the WHOLE
+   * domain, which is what CONTRIBUTING §1 asks for when two components genuinely
+   * cannot be merged into one.
+   */
+  it.each(LOCALES)('%s labels every partner track, audience and benefit', (locale) => {
+    const t = createTranslator({ locale, messages: CATALOGS[locale] });
+    const unresolved = (key: string) => t(key as never) === key;
+    const missing = [
+      ...PARTNER_TRACK_KEYS.map((k) => `developerPortal.programs.track.${k}`),
+      ...PARTNER_AUDIENCE_KEYS.map((k) => `developerPortal.programs.audience.${k}`),
+      ...PARTNER_BENEFIT_KEYS.map((k) => `developerPortal.programs.benefit.${k}`),
+    ].filter(unresolved);
+    expect(missing).toEqual([]);
+  });
+
+  /**
+   * An install's subscription state is rendered the same way, from the same kind
+   * of server-sent value, with the same failure mode.
+   */
+  it.each(LOCALES)('%s labels every install subscription state', (locale) => {
+    const t = createTranslator({ locale, messages: CATALOGS[locale] });
+    const missing = ['active', 'past_due', 'cancelled'].filter((state) => {
+      const key = `developerPortal.installed.subscription.${state}`;
+      return t(key as never) === key;
+    });
+    expect(missing).toEqual([]);
   });
 
   it.each(LOCALES)('%s labels every manager stall cause', (locale) => {

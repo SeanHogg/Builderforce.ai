@@ -22,7 +22,7 @@
 
 import {
   isExtensionScope,
-  meetsVerification,
+  mayCharge,
   SENSITIVE_SCOPES,
   SUBMITTABLE_KINDS,
   type PublisherState,
@@ -230,7 +230,7 @@ export function reviewVersion(input: ReviewInput): ReviewOutcome {
   // PRD 24 §9, decision 2: identity verification is what lets a publisher charge.
   // Checked here rather than at checkout because the honest moment to refuse is
   // before a price is advertised, not after a customer tries to pay it.
-  if (input.paid && !meetsVerification(String(input.verificationState), 'identity_verified')) {
+  if (input.paid && !mayCharge(String(input.verificationState))) {
     findings.push(fail('paid_requires_identity', 'a paid listing requires an identity-verified publisher'));
   } else if (input.paid) {
     findings.push(pass('paid_requires_identity', 'publisher is identity-verified'));

@@ -33,13 +33,18 @@ export {
   TRIGGER_COMPARATORS,
   dateValue,
   daysUntil,
+  deadlineDetailOf,
+  deadlineValueOf,
   evaluateBoardTriggers,
   evaluateTrigger,
   isDateComparator,
+  isVirtualDeadlineField,
+  nextOpenObligation,
   numericValue,
   resolveDeadlineField,
 } from '@builderforce/creation-canvas-contract';
 export type {
+  OpenObligation,
   ResolvedTrigger,
   TriggerBoardObject,
   TriggerComparator,

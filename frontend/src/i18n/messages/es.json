@@ -737,7 +737,13 @@
       "mail": "Correo",
       "phone": "Teléfono",
       "sourcing": "Captación",
-      "employers": "Empleadores"
+      "employers": "Empleadores",
+      "companies": "Empresas",
+      "round": "La ronda",
+      "investorList": "Inversores",
+      "dataRoom": "Sala de datos",
+      "diligence": "Diligencia",
+      "pack": "Dosier"
     },
     "primaryAria": "Principal",
     "destination": {
@@ -20645,6 +20651,7 @@
         "obligationRef": "Ref. de obligación",
         "contractObligation": "Obligación contractual",
         "obligationCoverage": "Cobertura de obligaciones",
+        "nextObligationAt": "Próxima obligación",
         "significance": "Significación",
         "leadInvestor": "Inversor principal",
         "roundStatus": "Estado de la ronda",
@@ -21389,6 +21396,7 @@
         "distribution": "Publicado en",
         "postingUrl": "URL de la oferta",
         "applicantCount": "Candidaturas",
+        "postingId": "ID de la oferta",
         "steps": "Pasos",
         "audience": "Audiencia",
         "enrolled": "Inscritos",
@@ -25531,7 +25539,8 @@
       "label": "Secciones del portal",
       "installed": "Instaladas",
       "catalog": "Catálogo",
-      "publish": "Publicar"
+      "publish": "Publicar",
+      "earnings": "Ingresos"
     },
     "errors": {
       "load": "No se pudo cargar el portal para desarrolladores.",
@@ -25548,7 +25557,19 @@
       "uninstall": "Desinstalar",
       "uninstallTitle": "¿Desinstalar {name}?",
       "uninstallBody": "Sus herramientas dejarán de ofrecerse a tus agentes de inmediato. Se conserva la configuración de conexión, así que al reinstalar se restaura.",
-      "uninstallAction": "Desinstalar"
+      "uninstallAction": "Desinstalar",
+      "plan": "Plan: {plan}",
+      "subscription": {
+        "active": "Activo",
+        "past_due": "Pago fallido",
+        "cancelled": "Cancelado"
+      },
+      "usage": "{units} {unit} este periodo · {amount} hasta ahora",
+      "viewUsage": "Uso",
+      "cancelPlan": "Cancelar plan",
+      "cancelPlanTitle": "¿Cancelar tu plan de {name}?",
+      "cancelPlanBody": "El uso ya registrado en este periodo se facturará en tu próxima factura. La extensión deja de funcionar de inmediato, pero se conserva tu configuración por si vuelves a suscribirte.",
+      "cancelPlanAction": "Cancelar plan"
     },
     "catalog": {
       "title": "Extensiones disponibles",
@@ -25557,7 +25578,13 @@
       "verified": "Verificado",
       "installs": "{count} espacios de trabajo",
       "install": "Instalar",
-      "installed": "Instalada"
+      "installed": "Instalada",
+      "perMonth": "{price}/mes",
+      "perYear": "{price}/año",
+      "perUnit": "{price} por {unit}",
+      "choosePlan": "Elige un plan",
+      "subscribe": "Suscribirse",
+      "planIncluded": "{units} {unit} incluidas, después {price} cada una"
     },
     "install": {
       "confirmTitle": "¿Instalar {name}?",
@@ -25566,7 +25593,10 @@
       "confirmSensitive": "Esto incluye modificar tus datos: {scopes}",
       "confirmAction": "Instalar",
       "unknownPublisher": "un editor sin verificar",
-      "noScopes": "nada"
+      "noScopes": "nada",
+      "confirmPrice": "Plan: {plan} — {price}",
+      "confirmSubscribe": "Suscribirse e instalar",
+      "paidNotice": "Se cobra en la factura que ya tiene este espacio de trabajo. No necesitas una cuenta con el editor."
     },
     "publish": {
       "registerTitle": "Regístrate como editor",
@@ -25606,7 +25636,77 @@
       "specInvalidJson": "Eso no es JSON válido.",
       "submit": "Enviar a revisión",
       "reviewPassed": "Revisión superada: ya puedes publicar esta versión.",
-      "reviewFailed": "La revisión encontró problemas. Corrígelos y envía una versión nueva."
+      "reviewFailed": "La revisión encontró problemas. Corrígelos y envía una versión nueva.",
+      "plans": {
+        "title": "Precios",
+        "hint": "Los clientes eligen un plan en tu ficha y se les cobra en la factura que ya tienen: nunca crean una cuenta contigo. Déjalo vacío para que la extensión sea gratuita.",
+        "needsIdentity": "Se requiere verificación de identidad antes de poder cobrar por un paquete.",
+        "loadFailed": "No se pudo cargar la lista de precios.",
+        "empty": "Sin planes: esta extensión es gratuita.",
+        "newPlan": "Nuevo plan",
+        "code": "Código",
+        "name": "Nombre del plan",
+        "price": "Precio recurrente",
+        "interval": "Facturación",
+        "month": "Mensual",
+        "year": "Anual",
+        "unitLabel": "Nombre de la unidad",
+        "unitPlaceholder": "llamada",
+        "included": "Unidades incluidas",
+        "meteredRate": "Precio por unidad adicional",
+        "add": "Añadir un plan",
+        "remove": "Quitar",
+        "save": "Guardar precios"
+      }
+    },
+    "earnings": {
+      "title": "Ingresos",
+      "loading": "Cargando…",
+      "loadFailed": "No se pudieron cargar tus ingresos.",
+      "available": "Disponible para retirar",
+      "earned": "Ganado en total",
+      "paid": "Ya retirado",
+      "underThreshold": "Te quedas con todo lo que ganes hasta {threshold} de ingresos acumulados.",
+      "standardRate": "Nuestra parte es del {percent}% ahora que has superado {threshold} de ingresos acumulados.",
+      "noDestination": "Designa un destino de pago para este espacio de trabajo antes de retirar.",
+      "destinationLabel": "Destino de pago",
+      "destinationPlaceholder": "Id de la cuenta conectada",
+      "saveDestination": "Guardar destino",
+      "payout": "Retirar {amount}",
+      "nothing": "Nada que retirar todavía",
+      "notAPublisher": "Registra este espacio de trabajo como editor para ver los ingresos."
+    },
+    "programs": {
+      "title": "Programas de socios",
+      "yourTrack": "Tu vía: {track}",
+      "featured": "Destacado",
+      "arrangedWithUs": "Las vías se acuerdan con nosotros, no se activan desde esta página: habla con tu contacto. Publicar por tu cuenta no requiere ninguna vía y conservas el 100% de tus ingresos por debajo del umbral.",
+      "automatic": "Incluido",
+      "manual": "Por acuerdo",
+      "track": {
+        "none": "Autoservicio",
+        "technology": "Socio tecnológico",
+        "solutions": "Socio de soluciones"
+      },
+      "audience": {
+        "selfServe": "Cualquiera que publique una extensión",
+        "vendors": "Proveedores de producto y plataforma",
+        "agencies": "Agencias y consultoras"
+      },
+      "benefit": {
+        "openRegistration": "Regístrate y publica sin solicitud",
+        "zeroRevShare": "Conserva el 100% por debajo del umbral",
+        "directoryListing": "Aparece en el directorio de integraciones",
+        "installAnalytics": "Analítica de instalaciones de tus paquetes",
+        "featuredPlacement": "Posición destacada en el directorio",
+        "nativeBilling": "Clientes facturados en su factura existente",
+        "installWebhooks": "Eventos de instalación enviados a tu servidor",
+        "coMarketing": "Publicación de lanzamiento y changelog conjuntos",
+        "engineeringSupport": "Horas de ingeniería mientras desarrollas",
+        "leadMatchmaking": "Contacto con clientes que buscan tu trabajo",
+        "revShare": "Participación en los ingresos de lo que vendes",
+        "enterpriseIntroductions": "Presentaciones a implantaciones empresariales"
+      }
     }
   },
   "publicForm": {
@@ -27522,5 +27622,173 @@
     "statusBelowThreshold": "Por debajo del umbral",
     "statusReady": "Listo para presentar",
     "statusIncomplete": "Perfil incompleto"
+  },
+  "investor": {
+    "title": "Inversores",
+    "subtitle": "La ronda como lugar: la empresa, el trabajo vinculado a ella, quién tiene acceso y qué diligencia sigue abierta.",
+    "common": {
+      "loading": "Cargando…",
+      "cancel": "Cancelar",
+      "saving": "Guardando…",
+      "dismiss": "Descartar",
+      "company": "Empresa",
+      "pickCompany": "Elige una empresa para ver esto.",
+      "noCompanies": "Añade primero una empresa: todas las vistas de aquí tratan de una."
+    },
+    "error": {
+      "companies": "No se han podido cargar las empresas.",
+      "company": "No se ha podido cargar esa empresa.",
+      "createCompany": "No se ha podido crear la empresa.",
+      "attachProject": "No se ha podido vincular ese proyecto.",
+      "detachProject": "No se ha podido desvincular ese proyecto.",
+      "invite": "No se ha podido enviar la invitación.",
+      "revoke": "No se ha podido revocar ese acceso.",
+      "shareRoom": "No se ha podido crear el enlace a la sala.",
+      "buildPack": "No se ha podido generar el dosier."
+    },
+    "companies": {
+      "title": "Empresas",
+      "blurb": "Una empresa, los proyectos que la construyen, las salas que mantiene y la ronda que está levantando.",
+      "add": "Añadir empresa",
+      "create": "Crear empresa",
+      "name": "Nombre",
+      "website": "Sitio web",
+      "stage": "Etapa",
+      "sector": "Sector",
+      "empty": "Todavía no hay empresas. Añade una para empezar una ronda.",
+      "noFacts": "Aún no se han introducido datos",
+      "projectCount": "Proyectos: {count}",
+      "roomCount": "Salas: {count}",
+      "gapCount": "Huecos abiertos: {count}",
+      "workTitle": "Lo que posee {name}",
+      "workBlurb": "Vincular un proyecto es una decisión, nunca una coincidencia de nombres: aquí nada adivina qué trabajo pertenece a qué empresa.",
+      "readiness": "Diligencia lista: {percent}%",
+      "noProjects": "Ningún proyecto vinculado. El dosier no puede enumerar lo que se está construyendo hasta que lo haya.",
+      "attachLabel": "Vincular un proyecto",
+      "attachPlaceholder": "Elige un proyecto…",
+      "attach": "Vincular",
+      "detach": "Desvincular",
+      "nothingToAttach": "Todos los proyectos de este espacio ya pertenecen a una empresa."
+    },
+    "round": {
+      "title": "La ronda — {name}",
+      "blurb": "La ronda, junto a las cuatro cosas que la deciden.",
+      "readiness": "Diligencia lista",
+      "readinessHint": "Documentos obligatorios resueltos sobre documentos obligatorios.",
+      "openGaps": "Huecos abiertos",
+      "openGapsHint": "Documentos obligatorios que un inversor pidió y no ha recibido.",
+      "investors": "Inversores con acceso",
+      "investorsHint": "{signed} han pasado el NDA.",
+      "projects": "Proyectos vinculados",
+      "projectsHint": "Lo que el dosier puede enumerar como construido.",
+      "empty": "Aún no hay ronda registrada. Añade una oportunidad desde la vista de entidades para seguir aquí sus términos.",
+      "noTerms": "Sin términos registrados",
+      "ask": "Objetivo {currency} {amount}",
+      "preMoney": "Pre-money {currency} {amount}",
+      "declaredNotice": "Cada importe aquí es un valor introducido en la empresa o en la oportunidad. Nada de esta página se calcula a partir de una contabilidad conectada."
+    },
+    "investors": {
+      "title": "Inversores — {name}",
+      "blurb": "A un inversor se le invita a la empresa, no a una sala. Un NDA, una identidad de marca de agua, una caducidad y una revocación alcanzan todas las salas de esta empresa, las de hoy y las de mañana.",
+      "invite": "Invitar a un inversor",
+      "name": "Nombre",
+      "email": "Correo",
+      "expires": "El acceso termina",
+      "purpose": "Finalidad",
+      "ndaNotice": "El NDA se envía primero y el enlace queda ligado a él. Una firma cubre todas las salas de esta empresa.",
+      "send": "Enviar invitación",
+      "mintedTitle": "Invitación enviada a {email}",
+      "mintedOnce": "Este enlace se muestra una vez. Solo se guarda su hash, así que no puede recuperarse: cópialo ahora.",
+      "mintedNdaPending": "El NDA se ha enviado por correo. Nada se abre hasta que se firme.",
+      "mintedNdaNone": "No hacía falta NDA, así que el enlace abre de inmediato.",
+      "mintedWatermarkRefusedDownload": "Se han rechazado las descargas porque una sala de esta empresa aplica marca de agua.",
+      "empty": "Aún no se ha invitado a ningún inversor a esta empresa.",
+      "expiresOn": "termina {date}",
+      "activity": "Aperturas {opens} · documentos {views}",
+      "revoke": "Revocar",
+      "revokeScope": "Esto termina su acceso a todas las salas de esta empresa.",
+      "revokeConfirm": "Revocar en todas partes",
+      "readTitle": "Lo que han leído de verdad",
+      "readBlurb": "A través de todas las salas de esta empresa, para que la respuesta sea una persona y no un archivo.",
+      "views": "Vistas: {count}",
+      "state": {
+        "active": "Activo",
+        "revoked": "Revocado",
+        "expired": "Caducado"
+      },
+      "nda": {
+        "not-required": "Sin NDA",
+        "pending": "NDA pendiente",
+        "signed": "NDA firmado",
+        "declined": "NDA rechazado",
+        "expired": "NDA caducado"
+      }
+    },
+    "dataRoom": {
+      "title": "Sala de datos — {name}",
+      "blurb": "Un enlace de sala abre exactamente una sala. Úsalo para quien deba ver una cosa; invita a un inversor a la empresa cuando deba verlo todo.",
+      "empty": "Esta empresa aún no tiene salas de datos.",
+      "noPurpose": "Sin finalidad registrada",
+      "readiness": "Listo {percent}%",
+      "nda": "NDA obligatorio",
+      "watermark": "Con marca de agua",
+      "links": "Enlaces activos: {count}",
+      "share": "Compartir esta sala",
+      "unstampable": "{count} archivos entregados no admiten la marca de agua en su formato, así que solo pueden abrirse en una pestaña.",
+      "recipientName": "Nombre del destinatario",
+      "recipientEmail": "Correo del destinatario",
+      "sendLink": "Enviar enlace",
+      "oneRoomOnly": "Este enlace abre solo esta sala. No alcanza la siguiente sala, ni la actualización, ni el dosier.",
+      "mintedTitle": "Enlace de sala creado",
+      "mintedOnce": "Se muestra una vez. Solo se guarda su hash, así que no puede recuperarse: cópialo ahora.",
+      "mintedWatermarkRefusedDownload": "Se han rechazado las descargas porque esta sala aplica marca de agua."
+    },
+    "diligence": {
+      "title": "Diligencia — {name}",
+      "blurb": "Cada línea es un documento obligatorio que un inversor pidió y no ha recibido. El puesto nombrado al lado es el que lo cierra.",
+      "readiness": "Listo {percent}%",
+      "empty": "No queda nada obligatorio pendiente. Todos los documentos obligatorios se han entregado, aceptado o dispensado.",
+      "seatHeading": "{seat} — {count} abiertos",
+      "unownedHeading": "Sin asignar — {count} abiertos",
+      "openSeat": "Abrir {seat}",
+      "due": "vence {date}",
+      "requested": "Solicitado",
+      "notice": "Los huecos se listan en vez de ocultarse. Una sala que mostrara solo los archivos existentes escondería justo el hueco para el que se construyó."
+    },
+    "pack": {
+      "title": "Dosier de financiación — {name}",
+      "blurb": "El deck, el plan, los riesgos y las cifras, compuestos a partir de esta empresa: sus proyectos, su ronda y su diligencia abierta.",
+      "groundOn": "Fundamentar la lectura de capacidades en",
+      "groundAuto": "El proyecto actualizado más recientemente",
+      "groundNone": "Ningún proyecto: escribirlo desde cero",
+      "audience": "Dirigido a",
+      "emphasis": "Empezar por",
+      "noProjects": "Esta empresa no tiene ningún proyecto vinculado, así que el dosier no puede enumerar lo que se construye. Vincula uno en Empresas.",
+      "gapsWarning": "Esta empresa tiene {count} huecos de diligencia abiertos. El dosier los nombra, porque un inversor los encontrará de todos modos.",
+      "build": "Generar el dosier",
+      "building": "Generando…",
+      "builtTitle": "Dosier generado",
+      "projectsCited": "Proyectos citados: {count}",
+      "openGaps": "Huecos abiertos nombrados: {count}",
+      "open": "Abrir",
+      "pdf": "PDF",
+      "empty": "Aún no se ha generado ningún dosier para esta empresa.",
+      "generatedOn": "Generado {date}"
+    }
+  },
+  "investorGrant": {
+    "eyebrow": "Acceso de inversor",
+    "loading": "Cargando…",
+    "invalid": "Ese enlace ya no es válido. Pide uno nuevo a quien te lo envió.",
+    "addressed": "Compartido con {name}.",
+    "expires": "El acceso termina el {date}.",
+    "ndaHelp": "La solicitud de firma se te envió por correo junto con la invitación. Una firma cubre todas las salas de esta empresa: fírmala y recarga esta página.",
+    "roomsLabel": "Salas que puedes abrir: {count}",
+    "noRooms": "Esta empresa aún no tiene salas abiertas para ti. Tu acceso sigue vigente; vuelve más adelante.",
+    "noPurpose": "Sin finalidad registrada",
+    "watermarked": "con marca de agua",
+    "open": "Abrir",
+    "reopen": "Recargar",
+    "futureRooms": "Este enlace es a la empresa, no a una sala: las salas añadidas más tarde aparecerán aquí sin una nueva invitación."
   }
 }

@@ -737,7 +737,13 @@
       "mail": "Mail",
       "phone": "Phone",
       "sourcing": "Sourcing",
-      "employers": "Employers"
+      "employers": "Employers",
+      "companies": "Companies",
+      "round": "The Round",
+      "investorList": "Investors",
+      "dataRoom": "Data room",
+      "diligence": "Diligence",
+      "pack": "Pack"
     },
     "primaryAria": "Primary",
     "destination": {
@@ -20645,6 +20651,7 @@
         "obligationRef": "Obligation ref",
         "contractObligation": "Contract obligation",
         "obligationCoverage": "Obligation coverage",
+        "nextObligationAt": "Next obligation due",
         "significance": "Significance",
         "leadInvestor": "Lead investor",
         "roundStatus": "Round status",
@@ -21389,6 +21396,7 @@
         "distribution": "Published to",
         "postingUrl": "Posting URL",
         "applicantCount": "Applicants",
+        "postingId": "Posting ID",
         "steps": "Steps",
         "audience": "Audience",
         "enrolled": "Enrolled",
@@ -25531,7 +25539,8 @@
       "label": "Portal sections",
       "installed": "Installed",
       "catalog": "Catalog",
-      "publish": "Publish"
+      "publish": "Publish",
+      "earnings": "Earnings"
     },
     "errors": {
       "load": "Could not load the developer portal.",
@@ -25548,7 +25557,19 @@
       "uninstall": "Uninstall",
       "uninstallTitle": "Uninstall {name}?",
       "uninstallBody": "Its tools stop being offered to your agents straight away. Your connection settings are kept, so reinstalling restores them.",
-      "uninstallAction": "Uninstall"
+      "uninstallAction": "Uninstall",
+      "plan": "Plan: {plan}",
+      "subscription": {
+        "active": "Active",
+        "past_due": "Payment failed",
+        "cancelled": "Cancelled"
+      },
+      "usage": "{units} {unit} this period · {amount} so far",
+      "viewUsage": "Usage",
+      "cancelPlan": "Cancel plan",
+      "cancelPlanTitle": "Cancel your {name} plan?",
+      "cancelPlanBody": "Usage already recorded this period is billed on your next invoice. The extension stops working straight away, but your settings are kept so you can resubscribe.",
+      "cancelPlanAction": "Cancel plan"
     },
     "catalog": {
       "title": "Available extensions",
@@ -25557,7 +25578,13 @@
       "verified": "Verified",
       "installs": "{count} workspaces",
       "install": "Install",
-      "installed": "Installed"
+      "installed": "Installed",
+      "perMonth": "{price}/month",
+      "perYear": "{price}/year",
+      "perUnit": "{price} per {unit}",
+      "choosePlan": "Choose a plan",
+      "subscribe": "Subscribe",
+      "planIncluded": "{units} {unit} included, then {price} each"
     },
     "install": {
       "confirmTitle": "Install {name}?",
@@ -25566,7 +25593,10 @@
       "confirmSensitive": "This includes changing your data: {scopes}",
       "confirmAction": "Install",
       "unknownPublisher": "an unverified publisher",
-      "noScopes": "nothing"
+      "noScopes": "nothing",
+      "confirmPrice": "Plan: {plan} — {price}",
+      "confirmSubscribe": "Subscribe and install",
+      "paidNotice": "You are billed on this workspace’s existing invoice. You do not need an account with the publisher."
     },
     "publish": {
       "registerTitle": "Register as a publisher",
@@ -25606,7 +25636,77 @@
       "specInvalidJson": "That is not valid JSON.",
       "submit": "Submit for review",
       "reviewPassed": "Review passed — you can publish this version.",
-      "reviewFailed": "Review found problems. Fix these and submit a new version."
+      "reviewFailed": "Review found problems. Fix these and submit a new version.",
+      "plans": {
+        "title": "Pricing",
+        "hint": "Customers pick a plan on your listing and are billed on the invoice they already have — they never create an account with you. Leave this empty to keep the extension free.",
+        "needsIdentity": "Identity verification is required before you can charge for a package.",
+        "loadFailed": "Could not load the price list.",
+        "empty": "No plans — this extension is free.",
+        "newPlan": "New plan",
+        "code": "Code",
+        "name": "Plan name",
+        "price": "Recurring price",
+        "interval": "Billed",
+        "month": "Monthly",
+        "year": "Yearly",
+        "unitLabel": "Unit name",
+        "unitPlaceholder": "call",
+        "included": "Units included",
+        "meteredRate": "Price per extra unit",
+        "add": "Add a plan",
+        "remove": "Remove",
+        "save": "Save pricing"
+      }
+    },
+    "earnings": {
+      "title": "Earnings",
+      "loading": "Loading…",
+      "loadFailed": "Could not load your earnings.",
+      "available": "Available to withdraw",
+      "earned": "Earned all time",
+      "paid": "Already withdrawn",
+      "underThreshold": "You keep everything you earn until {threshold} in lifetime earnings.",
+      "standardRate": "Our share is {percent}% now that you have passed {threshold} in lifetime earnings.",
+      "noDestination": "Nominate a payout destination for this workspace before withdrawing.",
+      "destinationLabel": "Payout destination",
+      "destinationPlaceholder": "Connected account id",
+      "saveDestination": "Save destination",
+      "payout": "Withdraw {amount}",
+      "nothing": "Nothing to withdraw yet",
+      "notAPublisher": "Register this workspace as a publisher to see earnings."
+    },
+    "programs": {
+      "title": "Partner programs",
+      "yourTrack": "Your track: {track}",
+      "featured": "Featured",
+      "arrangedWithUs": "Tracks are arranged with us rather than joined from this page — talk to your contact. Self-serve publishing needs no track and keeps 100% of your revenue below the threshold.",
+      "automatic": "Built in",
+      "manual": "By arrangement",
+      "track": {
+        "none": "Self-serve",
+        "technology": "Technology partner",
+        "solutions": "Solutions partner"
+      },
+      "audience": {
+        "selfServe": "Anyone publishing an extension",
+        "vendors": "Product and platform vendors",
+        "agencies": "Agencies and consultancies"
+      },
+      "benefit": {
+        "openRegistration": "Register and publish with no application",
+        "zeroRevShare": "Keep 100% below the lifetime threshold",
+        "directoryListing": "Listed in the integrations directory",
+        "installAnalytics": "Install analytics for your own packages",
+        "featuredPlacement": "Featured placement in the directory",
+        "nativeBilling": "Customers billed on their existing invoice",
+        "installWebhooks": "Install events delivered to your server",
+        "coMarketing": "Joint launch post and changelog",
+        "engineeringSupport": "Engineering hours while you build",
+        "leadMatchmaking": "Matched with clients looking for your work",
+        "revShare": "Revenue share on what you sell",
+        "enterpriseIntroductions": "Introductions to enterprise implementations"
+      }
     }
   },
   "publicForm": {
@@ -27522,5 +27622,173 @@
     "statusBelowThreshold": "Below threshold",
     "statusReady": "Ready to file",
     "statusIncomplete": "Profile incomplete"
+  },
+  "investor": {
+    "title": "Investors",
+    "subtitle": "The raise as a place: the company, the work attached to it, who has access, and what diligence is still open.",
+    "common": {
+      "loading": "Loading…",
+      "cancel": "Cancel",
+      "saving": "Saving…",
+      "dismiss": "Dismiss",
+      "company": "Company",
+      "pickCompany": "Pick a company to see this.",
+      "noCompanies": "Add a company first — every view here is about one."
+    },
+    "error": {
+      "companies": "The companies could not be loaded.",
+      "company": "That company could not be loaded.",
+      "createCompany": "The company could not be created.",
+      "attachProject": "That project could not be attached.",
+      "detachProject": "That project could not be detached.",
+      "invite": "The invitation could not be sent.",
+      "revoke": "That access could not be revoked.",
+      "shareRoom": "The room link could not be created.",
+      "buildPack": "The pack could not be built."
+    },
+    "companies": {
+      "title": "Companies",
+      "blurb": "A company, the projects building it, the rooms it holds and the round it is raising.",
+      "add": "Add a company",
+      "create": "Create company",
+      "name": "Name",
+      "website": "Website",
+      "stage": "Stage",
+      "sector": "Sector",
+      "empty": "No companies yet. Add one to start a raise.",
+      "noFacts": "No details entered yet",
+      "projectCount": "Projects: {count}",
+      "roomCount": "Rooms: {count}",
+      "gapCount": "Open gaps: {count}",
+      "workTitle": "What {name} owns",
+      "workBlurb": "Attaching a project is a decision, never a name match — nothing here guesses which work belongs to which company.",
+      "readiness": "Diligence ready: {percent}%",
+      "noProjects": "No projects attached. A pack cannot enumerate what is being built until one is.",
+      "attachLabel": "Attach a project",
+      "attachPlaceholder": "Choose a project…",
+      "attach": "Attach",
+      "detach": "Detach",
+      "nothingToAttach": "Every project in this workspace already belongs to a company."
+    },
+    "round": {
+      "title": "The round — {name}",
+      "blurb": "The raise, beside the four things that decide it.",
+      "readiness": "Diligence ready",
+      "readinessHint": "Required documents settled, over required documents.",
+      "openGaps": "Open gaps",
+      "openGapsHint": "Required documents an investor asked for and has not received.",
+      "investors": "Investors with access",
+      "investorsHint": "{signed} past the NDA.",
+      "projects": "Projects attached",
+      "projectsHint": "What the pack can enumerate as being built.",
+      "empty": "No round recorded yet. Add an opportunity from the entity view to track terms here.",
+      "noTerms": "No terms recorded",
+      "ask": "Ask {currency} {amount}",
+      "preMoney": "Pre-money {currency} {amount}",
+      "declaredNotice": "Every amount here is a value entered on the company or the opportunity. Nothing on this page is computed from connected accounting books."
+    },
+    "investors": {
+      "title": "Investors — {name}",
+      "blurb": "An investor is invited to the company, not to a room. One NDA, one watermark identity, one expiry and one revocation reach every room this company has and every room it will have.",
+      "invite": "Invite an investor",
+      "name": "Name",
+      "email": "Email",
+      "expires": "Access ends",
+      "purpose": "Purpose",
+      "ndaNotice": "An NDA is sent first and the link is bound to it. One signature covers every room on this company.",
+      "send": "Send invitation",
+      "mintedTitle": "Invitation sent to {email}",
+      "mintedOnce": "This link is shown once. Only its hash is stored, so it cannot be read back — copy it now.",
+      "mintedNdaPending": "The NDA has been emailed. Nothing opens until it is signed.",
+      "mintedNdaNone": "No NDA was required, so the link opens immediately.",
+      "mintedWatermarkRefusedDownload": "Downloads were refused because a room on this company watermarks.",
+      "empty": "No investors have been invited to this company yet.",
+      "expiresOn": "ends {date}",
+      "activity": "Opens {opens} · documents {views}",
+      "revoke": "Revoke",
+      "revokeScope": "This ends their access to every room on this company.",
+      "revokeConfirm": "Revoke everywhere",
+      "readTitle": "What they actually read",
+      "readBlurb": "Across every room this company holds, so the answer is a person rather than a file.",
+      "views": "Views: {count}",
+      "state": {
+        "active": "Active",
+        "revoked": "Revoked",
+        "expired": "Expired"
+      },
+      "nda": {
+        "not-required": "No NDA",
+        "pending": "NDA pending",
+        "signed": "NDA signed",
+        "declined": "NDA declined",
+        "expired": "NDA lapsed"
+      }
+    },
+    "dataRoom": {
+      "title": "Data room — {name}",
+      "blurb": "A room link opens exactly one room. Use it for somebody who should see one thing; invite an investor to the company when they should see all of it.",
+      "empty": "This company holds no data rooms yet.",
+      "noPurpose": "No purpose recorded",
+      "readiness": "Ready {percent}%",
+      "nda": "NDA required",
+      "watermark": "Watermarked",
+      "links": "Live links: {count}",
+      "share": "Share this room",
+      "unstampable": "{count} provided files cannot carry the watermark in their format, so they can only ever be opened in a tab.",
+      "recipientName": "Recipient name",
+      "recipientEmail": "Recipient email",
+      "sendLink": "Send link",
+      "oneRoomOnly": "This link opens this room only. It does not reach the next room, the update or the pack.",
+      "mintedTitle": "Room link created",
+      "mintedOnce": "Shown once. Only its hash is stored, so it cannot be read back — copy it now.",
+      "mintedWatermarkRefusedDownload": "Downloads were refused because this room watermarks."
+    },
+    "diligence": {
+      "title": "Diligence — {name}",
+      "blurb": "Each line is a required document an investor asked for and has not received. The seat named beside it is the one that closes it.",
+      "readiness": "Ready {percent}%",
+      "empty": "Nothing required is outstanding. Every required document has been provided, accepted or waived.",
+      "seatHeading": "{seat} — {count} open",
+      "unownedHeading": "Unassigned — {count} open",
+      "openSeat": "Open {seat}",
+      "due": "due {date}",
+      "requested": "Requested",
+      "notice": "Gaps are listed rather than hidden. A room that showed only the files that exist would hide the hole it was built to close."
+    },
+    "pack": {
+      "title": "Fundraising pack — {name}",
+      "blurb": "The deck, the plan, the risks and the numbers, composed from this company: its projects, its round and its open diligence.",
+      "groundOn": "Ground the capability read on",
+      "groundAuto": "The most recently updated project",
+      "groundNone": "No project — write it greenfield",
+      "audience": "Addressed to",
+      "emphasis": "Lead with",
+      "noProjects": "No project is attached to this company, so the pack cannot enumerate what is being built. Attach one under Companies.",
+      "gapsWarning": "This company has {count} open diligence gaps. The pack names them, because an investor will find them either way.",
+      "build": "Build the pack",
+      "building": "Building…",
+      "builtTitle": "Pack built",
+      "projectsCited": "Projects cited: {count}",
+      "openGaps": "Open gaps named: {count}",
+      "open": "Open",
+      "pdf": "PDF",
+      "empty": "No pack has been built for this company yet.",
+      "generatedOn": "Generated {date}"
+    }
+  },
+  "investorGrant": {
+    "eyebrow": "Investor access",
+    "loading": "Loading…",
+    "invalid": "That link is no longer valid. Ask the sender for a new one.",
+    "addressed": "Shared with {name}.",
+    "expires": "Access ends {date}.",
+    "ndaHelp": "The signing request was emailed to you when the invitation was sent. One signature covers every room on this company — sign it and reload this page.",
+    "roomsLabel": "Rooms you can open: {count}",
+    "noRooms": "This company has no rooms open to you yet. Your access still stands; check back.",
+    "noPurpose": "No purpose recorded",
+    "watermarked": "watermarked",
+    "open": "Open",
+    "reopen": "Reload",
+    "futureRooms": "This link is to the company, not to one room — rooms added later appear here without a new invitation."
   }
 }

@@ -54,12 +54,35 @@ export const WEBHOOK_EVENTS = [
   'canvas.item.created',
   'canvas.item.updated',
   'canvas.item.deleted',
+  // ── Marketplace installs, delivered to the PUBLISHER (PRD 24 §5.4 step 3) ──
+  //
+  // The third event vocabulary on this one emitter, and the same argument as the
+  // canvas six: what a vendor needs is a wider event list and a subscription in
+  // their own workspace, not a second delivery loop with a second signing scheme
+  // and a second answer to "did that one land".
+  //
+  // Namespaced `extension.*` because "installation" on its own is ambiguous on a
+  // platform where a tenant also installs canvas widgets and connectors.
+  //
+  // THE SUBSCRIPTION IS THE PUBLISHER'S AND THE INSTALL IS SOMEBODY ELSE'S. That
+  // is the whole asymmetry a marketplace webhook has: the emit is addressed to
+  // the vendor's tenant, and the payload therefore carries a TENANT-OPAQUE
+  // install id rather than the installing workspace's identity. A vendor learns
+  // that an install happened and what plan it is on; they do not learn who the
+  // customer is unless the customer tells them.
+  'extension.installation.created',
+  'extension.installation.updated',
+  'extension.installation.removed',
 ] as const;
 
 /** The canvas subset, for the surfaces that only offer those (the widget docs,
  *  the `/api/v1/webhooks` catalogue). Derived from the list above so a new canvas
  *  event cannot be added to one and forgotten in the other. */
 export const CANVAS_WEBHOOK_EVENTS = WEBHOOK_EVENTS.filter((e) => e.startsWith('canvas.'));
+
+/** The publisher subset, for the developer portal's subscription picker. Derived
+ *  from the same list for the same reason. */
+export const EXTENSION_WEBHOOK_EVENTS = WEBHOOK_EVENTS.filter((e) => e.startsWith('extension.'));
 
 export type WebhookEvent = (typeof WEBHOOK_EVENTS)[number];
 

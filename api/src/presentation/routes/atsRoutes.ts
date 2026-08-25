@@ -1,6 +1,10 @@
 /**
  * The ATS surface — /api/ats/*
  *
+ *   GET    /postings?status=                 — the tenant's requisitions with their REAL
+ *                                              application counts (FO-B3)
+ *   POST   /postings                         — resolve a canvas `jobPosting` card to its
+ *                                              `job_postings` row, minting it once
  *   POST   /applications                     — admit a candidate AND record the application
  *   GET    /applications?jobPostingId=&status= — the applications for a posting
  *   GET    /applications/:id                 — one application, with the résumé projection,
@@ -48,6 +52,7 @@ import {
   readApplication,
   recordApplication,
 } from '../../application/hiring/applications';
+import { listCanvasPostings, syncCanvasPosting } from '../../application/hiring/postings';
 import { listPipelines, pipelineBoard, moveCandidate } from '../../application/hiring/pipeline';
 import {
   createInterviewKit,
@@ -114,6 +119,64 @@ export function createAtsRoutes(db: Db): Hono<HonoEnv> {
     kitStageKinds: INTERVIEW_KIT_STAGE_KINDS,
     offerStatuses: OFFER_STATUSES,
   }));
+
+  // ── Postings (FO-B3) ───────────────────────────────────────────────────────────
+  //
+  // The requisition, with the applications actually counted against it. This is the
+  // read the canvas `jobPosting` card refreshes from, and it is here rather than on
+  // `/api/jobs` for the reason the two surfaces are split at all: `/api/jobs` is the
+  // MARKETPLACE door — public browse, proposals, bids — while a requisition's
+  // applicant volume is the Recruiter's working number. The counts come from
+  // `job_applications`, which is this domain's table.
+
+  /**
+   * Every posting this workspace holds, with its real application counts.
+   *
+   * DEVELOPER, like every other read here: knowing how many people applied is not an
+   * accountable act. The projection carries no candidate identities at all — it is
+   * counts and a source breakdown — so it is also the read that is safe to put on a
+   * board somebody may later share.
+   */
+  r.get('/postings', requireRole(TenantRole.DEVELOPER), async (c) => {
+    try {
+      return c.json({
+        postings: await listCanvasPostings(db, scope(c as never), {
+          status: c.req.query('status') || null,
+        }),
+      });
+    } catch (error) {
+      return failed(c, 'listCanvasPostings', error);
+    }
+  });
+
+  /**
+   * Resolve a canvas card to its posting — minting the row the first time.
+   *
+   * MANAGER, and only because of the create half: publishing a requisition commits the
+   * workspace to a hire, and it is the same gate `POST /api/jobs` sits behind. A body
+   * carrying `postingId` performs no write at all, but it shares the endpoint because
+   * the CALLER cannot know which of the two it is doing — a canvas card either has an
+   * id or it does not, and splitting that into two endpoints would make the tool
+   * decide, which is the decision that must not be got wrong.
+   *
+   * The response is the same projection `GET /postings` returns, so the board is
+   * redrawn from the response that performed the write rather than from a second read
+   * that could disagree with it.
+   */
+  r.post('/postings', requireRole(TenantRole.MANAGER), async (c) => {
+    const input = await body<{ postingId: string; draft: Record<string, unknown> }>(c);
+    try {
+      const result = await syncCanvasPosting(db, c.env as Env, {
+        tenantId: scope(c as never),
+        actorUserId: c.get('userId') ?? '',
+        postingId: asString(input.postingId),
+        draft: (input.draft ?? {}) as Parameters<typeof syncCanvasPosting>[2]['draft'],
+      });
+      return c.json(result, result.created ? 201 : 200);
+    } catch (error) {
+      return failed(c, 'syncCanvasPosting', error);
+    }
+  });
 
   // ── Applications ───────────────────────────────────────────────────────────────
 

@@ -35,6 +35,7 @@ import { requirePublicApiKey } from '../../application/publicApi/publicApiAuth';
 import { createPublicCanvasRoutes } from '../../application/publicApi/publicCanvasApiService';
 import { createPublicWebhookRoutes } from '../../application/publicApi/publicWebhookApiService';
 import { createPublicWidgetRoutes } from '../../application/publicApi/publicWidgetApiService';
+import { createPublicExtensionRoutes } from '../../application/publicApi/publicExtensionApiService';
 
 // ---------------------------------------------------------------------------
 // Factory
@@ -50,6 +51,11 @@ export function createPublicApiRoutes(db: Db): Hono<HonoEnv> {
   router.route('/', createPublicCanvasRoutes(db));
   router.route('/', createPublicWebhookRoutes(db));
   router.route('/', createPublicWidgetRoutes(db));
+  // ── The marketplace VENDOR surface (PRD 24 §5.3/§5.4) ────────────────────
+  // The install-token exchange and the metered-usage report. Mounted here for
+  // the same reason as the three above: one credential, one origin allowlist,
+  // one rate limiter for every machine caller on this platform.
+  router.route('/', createPublicExtensionRoutes(db));
 
   // ── Public read endpoints (tenant API key, `read:catalog`) ────────────────
 

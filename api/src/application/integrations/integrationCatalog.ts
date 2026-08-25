@@ -119,6 +119,17 @@ export interface IntegrationCatalogEntry {
   publisher?: { slug: string; name: string };
   /** The listing to open, for a published package. Absent on a first-party entry. */
   listingSlug?: string;
+  /**
+   * Whether a published package costs money, and from what.
+   *
+   * Absent on a first-party entry, where the question is the PLAN and not the
+   * integration — none of our own ports is separately priced, so a `paid: false`
+   * on one would answer a question nobody asked and imply the distinction exists
+   * across the whole page. On an ecosystem entry it is the buyer's first
+   * question, and a directory that made them open the listing to find out is one
+   * they stop trusting.
+   */
+  pricing?: { paid: boolean; fromCents: number | null; currency: string };
 }
 
 /** Total map — adding a `BoardProviderCategory` without a home fails to compile. */
@@ -386,6 +397,7 @@ export function packageToCatalogEntry(pkg: {
   categories: string[];
   publisher: { slug: string; name: string } | null;
   spec?: Record<string, unknown> | null;
+  pricing?: { paid: boolean; fromCents: number | null; currency: string };
 }): IntegrationCatalogEntry {
   const actions = Array.isArray((pkg.spec as { actions?: unknown } | undefined)?.actions)
     ? ((pkg.spec as { actions: Array<{ method?: string; mutates?: boolean }> }).actions)
@@ -399,6 +411,11 @@ export function packageToCatalogEntry(pkg: {
     direction: pkg.kind === 'connector' && writes ? 'two-way' : 'import',
     capabilities: [],
     ...(pkg.publisher ? { publisher: { slug: pkg.publisher.slug, name: pkg.publisher.name } } : {}),
+    // Omitted rather than defaulted when the caller has no pricing to give: an
+    // absent field reads as "unknown", and a fabricated `paid: false` reads as
+    // "free" — and only one of those is honest about a projection built from a
+    // read that did not include the price.
+    ...(pkg.pricing ? { pricing: pkg.pricing } : {}),
     listingSlug: pkg.slug,
   };
 }

@@ -1,0 +1,185 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #050810; color: #f0f4ff; -webkit-font-smoothing: antialiased; }
+    a { color: #00e5cc; text-decoration: none; } a:hover { color: #4d9eff; }
+    .mono { font-family: 'SF Mono', 'Fira Code', 'JetBrains Mono', monospace; }
+    .dot { width: 6px; height: 6px; border-radius: 9999px; flex-shrink: 0; }
+    .row { display: flex; align-items: center; gap: 10px; height: 32px; padding: 0 10px; border-radius: 6px; font-size: 13px; color: #8892b0; }
+    .grp { font-size: 10px; letter-spacing: 0.13em; text-transform: uppercase; color: #5a6480; padding: 0 10px; margin: 14px 0 6px; display: flex; align-items: center; gap: 7px; }
+    .obj { position: absolute; border: 1px solid rgba(136,146,176,0.15); border-radius: 10px; background: rgba(10,15,26,0.9); box-shadow: 0 10px 30px rgba(0,0,0,0.35); }
+    .objhd { display: flex; align-items: center; gap: 7px; padding: 8px 11px; border-bottom: 1px solid rgba(136,146,176,0.12); }
+    .objk { font-size: 9.5px; letter-spacing: 0.09em; text-transform: uppercase; }
+  </style>
+</helmet>
+
+<div style="width: 1440px; height: 900px; display: flex; background: #050810; overflow: hidden">
+
+  <!-- LEFT NAV 240 -->
+  <div style="width: 240px; flex-shrink: 0; border-right: 1px solid rgba(136,146,176,0.15); background: #0a0f1a; display: flex; flex-direction: column; z-index: 3">
+    <div style="height: 56px; flex-shrink: 0; display: flex; align-items: center; gap: 9px; padding: 0 14px; border-bottom: 1px solid rgba(136,146,176,0.15)">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M6 3h7a5 5 0 0 1 0 10H6z" stroke="#4d9eff" stroke-width="2" stroke-linejoin="round"/><path d="M6 13h8a5 5 0 0 1 0 8H6z" stroke="#00e5cc" stroke-width="2" stroke-linejoin="round"/></svg>
+      <span style="font-size: 14px; font-weight: 700; letter-spacing: -0.02em">BuilderForce</span>
+    </div>
+    <div style="padding: 12px 12px 4px">
+      <div style="display: flex; align-items: center; gap: 9px; height: 40px; padding: 0 10px; border: 1px solid rgba(136,146,176,0.15); border-radius: 8px; background: rgba(255,255,255,0.03)">
+        <div style="width: 22px; height: 22px; border-radius: 5px; background: linear-gradient(135deg,#4d9eff,#1e40af); display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; color: #050810">NV</div>
+        <div style="flex: 1; min-width: 0"><div style="font-size: 12.5px; font-weight: 600">Northvale</div><div class="mono" style="font-size: 9.5px; color: #5a6480">Seed · raising</div></div>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="m7 9 5 5 5-5" stroke="#5a6480" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+    </div>
+    <div style="flex: 1; overflow: hidden; padding: 4px 12px 12px">
+      <div class="grp"><span class="dot" style="background: #fbbf24"></span>Idea</div>
+      <div class="row" style="background: rgba(77,158,255,0.12); color: #f0f4ff"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M12 3v3m0 12v3M3 12h3m12 0h3M5.6 5.6l2.1 2.1m8.6 8.6 2.1 2.1m0-12.8-2.1 2.1M7.7 16.3l-2.1 2.1" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>Canvas<span class="dot" style="margin-left: auto; background: #4d9eff"></span></div>
+      <div class="grp"><span class="dot" style="background: #4d9eff"></span>Make</div>
+      <div class="row"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M4 20V9m5 11V5m5 15v-8m5 8V7" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>Fundraise<span class="mono" style="margin-left: auto; font-size: 9.5px; padding: 2px 6px; border-radius: 4px; background: rgba(0,229,204,0.16); color: #00e5cc">3</span><span class="dot" style="background: #a78bfa"></span></div>
+      <div class="row"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="16" rx="2" stroke="currentColor" stroke-width="1.8"/><path d="M9 4v16" stroke="currentColor" stroke-width="1.8"/></svg>Projects<span class="dot" style="margin-left: auto; background: #7c83fd"></span></div>
+      <div class="row"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><circle cx="9" cy="8" r="3" stroke="currentColor" stroke-width="1.8"/><path d="M3 20a6 6 0 0 1 12 0" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>Workforce<span class="dot" style="margin-left: auto; background: #7c83fd"></span></div>
+      <div class="grp"><span class="dot" style="background: #34d399"></span>Run</div>
+      <div class="row"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M12 2v20M17 6H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>Finance<span class="dot" style="margin-left: auto; background: #34d399"></span></div>
+      <div class="row"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M6 21V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>Legal<span class="dot" style="margin-left: auto; background: #a78bfa"></span></div>
+      <div class="grp"><span class="dot" style="background: #a78bfa"></span>Measure</div>
+      <div class="row"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M4 20V10m5 10V4m5 16v-7m5 7V8" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>Insights</div>
+    </div>
+    <div style="padding: 12px; border-top: 1px solid rgba(136,146,176,0.15)">
+      <div class="mono" style="display: flex; justify-content: space-between; font-size: 9.5px; color: #5a6480; margin-bottom: 6px"><span>AI tokens</span><span>38%</span></div>
+      <div style="height: 3px; border-radius: 9999px; background: rgba(255,255,255,0.08); overflow: hidden"><div style="width: 38%; height: 100%; background: #4d9eff"></div></div>
+    </div>
+  </div>
+
+  <!-- CANVAS -->
+  <div style="flex: 1; min-width: 0; position: relative; display: flex; flex-direction: column">
+
+    <div style="height: 56px; flex-shrink: 0; display: flex; align-items: center; gap: 14px; padding: 0 20px; border-bottom: 1px solid rgba(136,146,176,0.15); background: rgba(10,15,26,0.92); z-index: 2">
+      <div class="mono" style="display: flex; align-items: center; gap: 8px; font-size: 11.5px"><span style="color: #5a6480">Canvas</span><span style="color: #2a3441">/</span><span style="color: #f0f4ff">Seed raise</span></div>
+      <div style="flex: 1"></div>
+      <div style="display: flex; align-items: center; gap: 3px; padding: 3px; border: 1px solid rgba(136,146,176,0.15); border-radius: 7px; background: rgba(255,255,255,0.03)">
+        <div style="width: 26px; height: 24px; display: flex; align-items: center; justify-content: center; border-radius: 5px; background: rgba(255,255,255,0.08)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="m4 4 6 16 2.5-6.5L19 11z" stroke="#f0f4ff" stroke-width="1.8" stroke-linejoin="round"/></svg></div>
+        <div style="width: 26px; height: 24px; display: flex; align-items: center; justify-content: center; border-radius: 5px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><rect x="4" y="5" width="16" height="14" rx="2" stroke="#5a6480" stroke-width="1.8"/></svg></div>
+        <div style="width: 26px; height: 24px; display: flex; align-items: center; justify-content: center; border-radius: 5px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M4 12h16M12 4v16" stroke="#5a6480" stroke-width="1.8" stroke-linecap="round"/></svg></div>
+      </div>
+      <span class="mono" style="font-size: 10.5px; color: #5a6480">72%</span>
+      <div style="display: flex; gap: 5px">
+        <span style="width: 22px; height: 22px; border-radius: 9999px; background: #7c83fd"></span>
+        <span style="width: 22px; height: 22px; border-radius: 9999px; background: #34d399"></span>
+      </div>
+    </div>
+
+    <!-- board -->
+    <div style="flex: 1; position: relative; overflow: hidden; background-image: radial-gradient(rgba(136,146,176,0.10) 1px, transparent 1px); background-size: 26px 26px; background-position: -1px -1px">
+
+      <!-- connector lines -->
+      <svg style="position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none" fill="none">
+        <path d="M266 176 L 366 176" stroke="rgba(136,146,176,0.3)" stroke-width="1.5"/>
+        <path d="M266 236 C 320 236, 320 300, 366 300" stroke="rgba(136,146,176,0.3)" stroke-width="1.5"/>
+        <path d="M266 296 C 310 296, 310 424, 366 424" stroke="rgba(136,146,176,0.3)" stroke-width="1.5"/>
+        <path d="M600 300 C 660 300, 660 200, 716 200" stroke="rgba(0,229,204,0.45)" stroke-width="1.5"/>
+        <path d="M600 300 C 660 300, 660 400, 716 400" stroke="rgba(0,229,204,0.45)" stroke-width="1.5"/>
+      </svg>
+
+      <!-- company -->
+      <div class="obj" style="left: 46px; top: 132px; width: 220px">
+        <div class="objhd"><span class="dot" style="background: #a78bfa"></span><span class="mono objk" style="color: #a78bfa">Company</span></div>
+        <div style="padding: 11px">
+          <div style="font-size: 14px; font-weight: 700; margin-bottom: 3px">Northvale</div>
+          <div class="mono" style="font-size: 10px; color: #5a6480">Delaware C-Corp · 2023</div>
+        </div>
+      </div>
+
+      <!-- liveMetric ARR -->
+      <div class="obj" style="left: 366px; top: 128px; width: 234px; border-color: rgba(0,229,204,0.35)">
+        <div class="objhd" style="border-color: rgba(0,229,204,0.2)"><span class="dot" style="background: #00e5cc"></span><span class="mono objk" style="color: #00e5cc">Live metric</span><span class="mono" style="margin-left: auto; font-size: 9px; color: #5a6480">4h</span></div>
+        <div style="padding: 11px">
+          <div style="display: flex; align-items: baseline; gap: 8px"><span style="font-size: 24px; font-weight: 800; letter-spacing: -0.03em">$1.42M</span><span class="mono" style="font-size: 10.5px; color: #00e5cc">+11%</span></div>
+          <div class="mono" style="font-size: 10px; color: #5a6480; margin-top: 3px">ARR · binding stripe.mrr</div>
+        </div>
+      </div>
+
+      <!-- liveMetric runway -->
+      <div class="obj" style="left: 366px; top: 252px; width: 234px">
+        <div class="objhd"><span class="dot" style="background: #00e5cc"></span><span class="mono objk" style="color: #00e5cc">Live metric</span><span class="mono" style="margin-left: auto; font-size: 9px; color: #5a6480">4h</span></div>
+        <div style="padding: 11px">
+          <div style="display: flex; align-items: baseline; gap: 8px"><span style="font-size: 24px; font-weight: 800; letter-spacing: -0.03em">14.2</span><span style="font-size: 12px; color: #8892b0">months</span></div>
+          <div class="mono" style="font-size: 10px; color: #5a6480; margin-top: 3px">Runway · cash ÷ net burn</div>
+        </div>
+      </div>
+
+      <!-- capTable -->
+      <div class="obj" style="left: 366px; top: 376px; width: 234px">
+        <div class="objhd"><span class="dot" style="background: #34d399"></span><span class="mono objk" style="color: #34d399">Cap table</span></div>
+        <div style="padding: 11px">
+          <div style="font-size: 13px; font-weight: 600; margin-bottom: 7px">12,410,000 <span class="mono" style="font-size: 10px; color: #5a6480; font-weight: 400">fully diluted</span></div>
+          <div style="display: flex; height: 6px; border-radius: 9999px; overflow: hidden"><div style="width: 58%; background: #4d9eff"></div><div style="width: 22%; background: #00e5cc"></div><div style="width: 12%; background: #a78bfa"></div><div style="width: 8%; background: rgba(136,146,176,0.3)"></div></div>
+        </div>
+      </div>
+
+      <!-- fundingRound (selected) -->
+      <div class="obj" style="left: 716px; top: 128px; width: 258px; border-color: #4d9eff; box-shadow: 0 0 0 3px rgba(77,158,255,0.18), 0 14px 36px rgba(0,0,0,0.45)">
+        <div class="objhd" style="border-color: rgba(77,158,255,0.25)"><span class="dot" style="background: #a78bfa"></span><span class="mono objk" style="color: #a78bfa">Funding round</span><span class="mono" style="margin-left: auto; font-size: 9px; padding: 1px 5px; border-radius: 3px; background: rgba(0,229,204,0.16); color: #00e5cc">open</span></div>
+        <div style="padding: 11px; display: flex; flex-direction: column; gap: 8px">
+          <div style="font-size: 14px; font-weight: 700">Seed · target $3.5M</div>
+          <div style="display: flex; gap: 14px">
+            <div><div class="mono" style="font-size: 9px; color: #5a6480">COMMITTED</div><div style="font-size: 15px; font-weight: 700">$1.1M</div></div>
+            <div><div class="mono" style="font-size: 9px; color: #5a6480">IN DILIGENCE</div><div style="font-size: 15px; font-weight: 700">4 funds</div></div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 7px; padding: 7px 9px; border-radius: 6px; background: rgba(77,158,255,0.12)">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M4 20V9m5 11V5m5 15v-8m5 8V7" stroke="#4d9eff" stroke-width="2" stroke-linecap="round"/></svg>
+            <span style="font-size: 11.5px; color: #4d9eff; font-weight: 600">Open the pack</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- dataRoom -->
+      <div class="obj" style="left: 716px; top: 348px; width: 258px">
+        <div class="objhd"><span class="dot" style="background: #fbbf24"></span><span class="mono objk" style="color: #fbbf24">Data room</span></div>
+        <div style="padding: 11px; display: flex; flex-direction: column; gap: 8px">
+          <div style="font-size: 13px; font-weight: 600">18 of 22 provided</div>
+          <div style="height: 4px; border-radius: 9999px; background: rgba(255,255,255,0.08); overflow: hidden"><div style="width: 82%; height: 100%; background: #fbbf24"></div></div>
+          <div class="mono" style="font-size: 10px; color: #fbbf24">2 legal · 1 people · 1 commercial outstanding</div>
+        </div>
+      </div>
+
+      <!-- trigger -->
+      <div class="obj" style="left: 1030px; top: 200px; width: 216px; border-color: rgba(0,229,204,0.35)">
+        <div class="objhd" style="border-color: rgba(0,229,204,0.2)"><span class="dot" style="background: #00e5cc"></span><span class="mono objk" style="color: #00e5cc">Trigger · breached</span></div>
+        <div style="padding: 11px">
+          <div style="font-size: 12px; line-height: 1.45; color: #f0f4ff">ARR changed by more than 10% — 3 artifacts quote it</div>
+          <div class="mono" style="font-size: 10px; color: #5a6480; margin-top: 6px">watches ARR · changes-by 10</div>
+        </div>
+      </div>
+
+      <!-- agent chip -->
+      <div style="position: absolute; left: 1030px; top: 400px; display: flex; align-items: center; gap: 8px; padding: 7px 11px; border: 1px solid rgba(167,139,250,0.35); border-radius: 9999px; background: rgba(167,139,250,0.1)">
+        <span class="dot" style="background: #a78bfa"></span>
+        <span class="mono" style="font-size: 10.5px; color: #a78bfa">CFO agent · drafting the snapshot</span>
+      </div>
+
+      <!-- ── BOTTOM-CENTRE COMPOSER ── -->
+      <div style="position: absolute; left: 50%; bottom: 24px; transform: translateX(-50%); width: 620px">
+        <div style="border: 1px solid rgba(136,146,176,0.28); border-radius: 12px; background: rgba(10,15,26,0.96); padding: 12px 13px 10px; box-shadow: 0 18px 50px rgba(0,0,0,0.55)">
+          <div style="display: flex; align-items: flex-start; gap: 10px">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="margin-top: 2px; flex-shrink: 0"><path d="M12 3v3m0 12v3M3 12h3m12 0h3M5.6 5.6l2.1 2.1m8.6 8.6 2.1 2.1" stroke="#4d9eff" stroke-width="1.9" stroke-linecap="round"/></svg>
+            <div style="flex: 1; font-size: 13.5px; color: #5a6480">Ask about this company, or describe what to build…</div>
+            <div style="width: 28px; height: 28px; border-radius: 7px; background: rgba(255,255,255,0.08); display: flex; align-items: center; justify-content: center"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M12 19V5m0 0-6 6m6-6 6 6" stroke="#5a6480" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          </div>
+          <div style="display: flex; gap: 6px; margin-top: 10px">
+            <div class="mono" style="height: 24px; display: flex; align-items: center; padding: 0 9px; border-radius: 5px; background: rgba(255,255,255,0.05); font-size: 10.5px; color: #8892b0">Build the pack</div>
+            <div class="mono" style="height: 24px; display: flex; align-items: center; padding: 0 9px; border-radius: 5px; background: rgba(255,255,255,0.05); font-size: 10.5px; color: #8892b0">What will they ask?</div>
+            <div class="mono" style="height: 24px; display: flex; align-items: center; padding: 0 9px; border-radius: 5px; background: rgba(255,255,255,0.05); font-size: 10.5px; color: #8892b0">Close the gaps</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

@@ -50,6 +50,7 @@ import { verifyPaidCheckout } from '../finance/verifiedCheckout';
 import { ListingError, invalidateListingCaches, recordInstall } from './creationListings';
 import { chargeAllHostedAppMaintenance, sellerMaintenanceCostCents } from './appMaintenanceCost';
 import { USD_CENTS } from '../kernel/denominations';
+import { userAccount } from '../kernel/ledgerAccount';
 
 
 /** The platform's cut ONCE A SELLER IS PAST THE THRESHOLD. 15%, overridable. */
@@ -868,7 +869,7 @@ export async function sellerEarnings(
     resolveTakeRateBps(db, env, { tenantId, ref: userId }),
   ]);
   const balance = await new PayoutAccountService(db, env)
-    .balance(tenantId, userId, Math.max(0, earnedCents - maintenanceCostCents));
+    .balance(tenantId, userAccount(userId), Math.max(0, earnedCents - maintenanceCostCents));
   // `balance.earnedCents` is the NET figure `PayoutAccountService` computed
   // available-from; overridden back to gross here so this field keeps meaning
   // "what this seller has sold", matching what `resolveTakeRateBps` reads.
@@ -895,8 +896,9 @@ export async function payoutSellerBalance(
     return { ok: false, amountCents: 0, error: 'There is nothing available to pay out' };
   }
   const result = await new PayoutAccountService(db, env).pay({
-    userId,
     tenantId,
+    account: userAccount(userId),
+    destination: { defaultForUserId: userId },
     amountCents: earnings.availableCents,
     reference: `mp-payout:${tenantId}:${userId}:${earnings.earnedCents}`,
     memo: 'Marketplace earnings',

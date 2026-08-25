@@ -1,0 +1,21 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html", "x": 0, "y": 0, "w": 1440, "h": 5200, "title": "Marketing homepage", "print": "flow" },
+    { "file": "MenuExpanded.dc.html", "x": 1560, "y": 0, "w": 1440, "h": 1280, "title": "The menu, expanded" },
+    { "file": "Navigation.dc.html", "x": 1560, "y": 1440, "w": 880, "h": 900, "title": "Navigation · founder rung 0" },
+    { "file": "Canvas.dc.html", "x": 0, "y": 5340, "w": 1440, "h": 900, "title": "Canvas — the entry point" },
+    { "file": "Evidence.dc.html", "x": 1560, "y": 5340, "w": 1440, "h": 900, "title": "Panel · sheet 25%" },
+    { "file": "FundraisePack.dc.html", "x": 0, "y": 6360, "w": 1440, "h": 900, "title": "Panel · wide 60%" },
+    { "file": "DataRoom.dc.html", "x": 1560, "y": 6360, "w": 1440, "h": 900, "title": "Panel · full 84vw" }
+  ],
+  "annotations": [
+    { "id": "brief", "x": 0, "y": -230, "w": 660, "text": "BuilderForce — founder + investor\n\nThis is the CURRENT homepage, reframed — not a replacement. Same eight-beat order the real page runs (canvas hero → about the app → problem/workflow → platform tour → see it run → pricing → objections → the ask), same voice, same tokens from frontend/src/app/globals.css. What changed is who the copy is addressed to.\n\nStatic mockups, not a clickable prototype." },
+    { "id": "menu-note", "x": 1560, "y": -230, "w": 660, "text": "THE MENU, EXPANDED. All 25 destinations of NAV_GROUPS, grouped by the arc, each carrying its owning seat as a trailing dot — plus the collapsed 64px rail, a destination's sixteen-item vertical index, the public Learn mega-menu, and the mobile drawer. The Product mega-menu is shown open on the homepage header itself." },
+    { "id": "nav-note", "x": 1560, "y": 1350, "w": 620, "text": "The same rail as a founder first meets it: rung 0 only. Rows appear as the company earns them rather than being dimmed and dangled." },
+    { "id": "canvas-note", "x": 0, "y": 5170, "w": 620, "text": "THE ENTRY POINT. Founder objects on a pan/zoom board — company, live metrics, cap table, funding round, data room, a breached trigger — with the composer bottom-centre. Every destination below opens OVER this, never instead of it." },
+    { "id": "sheet-note", "x": 1560, "y": 5170, "w": 620, "text": "SlideOutPanel width=\"sheet\" (25%). The board stays fully readable behind it — which is the point of the width scale: closing the panel is a decision, not a rescue." },
+    { "id": "wide-note", "x": 0, "y": 6190, "w": 620, "text": "width=\"wide\" (60%). Sub-views are a vertical INDEX COLUMN down the panel's left edge, not a horizontal tab bar — fourteen items fit vertically and a tab bar cannot hold them." },
+    { "id": "full-note", "x": 1560, "y": 6190, "w": 620, "text": "width=\"full\" (84vw), not 94% — a usable strip of canvas survives. The retention mechanic is visible here: a required document at 'requested' is a gap, and its category names the seat that closes it." }
+  ],
+  "launch": { "view": "canvas" }
+}

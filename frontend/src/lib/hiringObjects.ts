@@ -157,6 +157,24 @@ export const HIRING_OBJECT_SPECS: readonly SpecObjectSpec[] = [
     defaultStatus: 'draft',
     actions: ['draft', 'distribute', 'refresh'],
     fields: [
+      {
+        // ── FO-B3's foundation: the identity, not the title ──────────────────────
+        // The `account` card's `partyRef` for a requisition. `applicantCount` below is
+        // documented as read from the hiring domain, and the only OTHER way to reach
+        // the applications of a card headed "Senior React Engineer" is to match that
+        // string against `job_postings.title` — the string-matching defect FO-A1/FO-A2
+        // exist to remove, one domain over. Two requisitions titled alike would report
+        // each other's applicants, and the number would look like a fact.
+        //
+        // Bookkeeping rather than `derived`, matching `account.partyRef`: the model may
+        // not INVENT one, and `canvas_sync_job_posting` has to be able to write the id
+        // it just minted back onto the card in the same turn.
+        name: 'postingId',
+        render: 'stat',
+        label: 'postingId',
+        hint: 'The `job_postings` row this card IS, by id. Written by canvas_sync_job_posting and never by hand — an invented id resolves to nothing and a card without one has no applications to count. It is also the pipeline this posting\'s candidates move through, so `shortlist.postingRef` and the ATS board use the same value.',
+        bookkeeping: true,
+      },
       { name: 'level', render: 'stat', label: 'level', hint: 'Seniority as this company words it — "Senior (L5)", "Staff", "Graduate".' },
       { name: 'location', render: 'stat', label: 'location', hint: 'Location and working pattern: "Berlin — hybrid, 2 days" or "Remote (EU timezones)". Both, because the second is what candidates filter on.' },
       { name: 'employmentType', render: 'stat', label: 'employmentType', hint: 'permanent | fixed-term | contract | part-time | internship.' },
@@ -176,7 +194,7 @@ export const HIRING_OBJECT_SPECS: readonly SpecObjectSpec[] = [
         bookkeeping: true,
       },
       { name: 'postingUrl', render: 'stat', label: 'postingUrl', hint: 'The canonical public URL of the posting on the careers site.', bookkeeping: true },
-      { name: 'applicantCount', render: 'stat', label: 'applicantCount', hint: 'Applications received, read from the hiring domain.', bookkeeping: true },
+      { name: 'applicantCount', render: 'stat', label: 'applicantCount', hint: 'Applications received — a COUNT of `job_applications` joined on this card\'s `postingId`, written by canvas_sync_job_posting. Never type it: a hand-entered applicant number is the one figure on a requisition that gets quoted to a hiring manager, and a card with no `postingId` has nothing to count.', bookkeeping: true },
       SUMMARY_FIELD,
     ],
   },
@@ -188,7 +206,7 @@ export const HIRING_OBJECT_SPECS: readonly SpecObjectSpec[] = [
     defaultStatus: 'notRanked',
     actions: ['rank', 'advance', 'reject'],
     fields: [
-      { name: 'postingRef', render: 'stat', label: 'postingRef', hint: 'The job posting every candidate here was ranked against, by id. A ranking with no posting behind it is an opinion.', bookkeeping: true },
+      { name: 'postingRef', render: 'stat', label: 'postingRef', hint: 'The job posting every candidate here was ranked against, by id — the `postingId` off that `jobPosting` card, which is also its ATS pipeline. A ranking with no posting behind it is an opinion.', bookkeeping: true },
       { name: 'method', render: 'text', label: 'method', hint: 'How the ranking was produced, in one paragraph a rejected candidate could be shown. Name the signals used and the ones deliberately ignored.' },
       {
         name: 'ranked',

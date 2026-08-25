@@ -29,6 +29,7 @@
 import type {
   BusinessPhoneCheckoutOpts,
   ConnectedAccountStatus,
+  InvoiceItemOpts,
   InvoicePaymentLinkOpts,
   PaymentProvider,
   CheckoutSessionOpts,
@@ -521,6 +522,52 @@ export class StripeProvider implements PaymentProvider {
     return couponId;
   }
 
+  /**
+   * A pending line on the customer's next invoice.
+   *
+   * Deliberately does NOT create or finalise an invoice. Stripe sweeps pending
+   * items onto the next invoice the customer's subscription generates, which is
+   * precisely the behaviour PRD 24 §5.4 asks for — the customer gets one bill,
+   * with the extension's usage on it, and no second payment moment.
+   *
+   * The idempotency key is passed to Stripe rather than merely being remembered
+   * here, so a retried sweep is refused at the processor even if this Worker has
+   * no memory of the first attempt.
+   */
+  async addInvoiceItem(opts: InvoiceItemOpts): Promise<{ itemId: string } | null> {
+    // Returns null rather than throwing: the caller is a billing sweep, and a
+    // deployment with no Stripe key must still be able to CLOSE a period and
+    // record what was owed. Throwing here would stop the meter as well as the bill.
+    if (!this.config.secretKey) return null;
+    if (!Number.isInteger(opts.amountCents) || opts.amountCents <= 0) return null;
+
+    const params = new URLSearchParams({
+      customer: opts.externalCustomerId,
+      amount: String(opts.amountCents),
+      currency: opts.currency.trim().toLowerCase(),
+      description: opts.description.slice(0, 500),
+    });
+    for (const [key, value] of Object.entries(opts.metadata)) {
+      params.set(`metadata[${key}]`, value);
+    }
+
+    const res = await fetch('https://api.stripe.com/v1/invoiceitems', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${this.config.secretKey}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Idempotency-Key': opts.idempotencyKey,
+      },
+      body: params.toString(),
+    });
+    if (!res.ok) {
+      const err = await res.json() as { error?: { message?: string } };
+      throw new Error(`Stripe invoice item error: ${err?.error?.message ?? res.status}`);
+    }
+    const item = await res.json() as { id: string };
+    return { itemId: item.id };
+  }
+
   async createCardValidationSession(opts: CardValidationSessionOpts): Promise<CardValidationSessionResult> {
     // Stripe Checkout in `setup` mode collects + validates a card (a $0 SetupIntent)
     // without charging — the exact "validate a card on file" flow. On completion Stripe
@@ -783,6 +830,20 @@ export class StripeProvider implements PaymentProvider {
           return addonType ? { type: addonType, purchaseKind: 'business_phone', activationCents: Number(meta['activationCents']), monthlyCents: Number(meta['monthlyCents']), ...(Number.isInteger(rawTenantId) && rawTenantId > 0 ? { tenantId: rawTenantId } : {}), externalCustomerId: customer, externalSubscriptionId: obj['id'] as string, raw: event } : null;
         }
 
+        // A MARKETPLACE EXTENSION plan, not the workspace's own. Branched here
+        // for the same reason the add-on above is: falling through would let a
+        // vendor subscription's status change move the customer's BuilderForce
+        // plan, so a failed card on a $9 payroll connector would downgrade the
+        // whole workspace.
+        if (meta['purchaseKind'] === 'extension_plan') {
+          const extType = status === 'active' || status === 'trialing' ? 'extension.subscription.activated'
+            : status === 'past_due' || status === 'unpaid' ? 'extension.subscription.past_due'
+              : status === 'canceled' ? 'extension.subscription.cancelled' : null;
+          return extType
+            ? { type: extType, purchaseKind: 'extension_plan', externalCustomerId: customer, externalSubscriptionId: obj['id'] as string, raw: event }
+            : null;
+        }
+
         // Only statuses that carry an actual billing verdict may move the tenant's
         // plan. Anything else (incomplete, paused, …) is acknowledged and ignored —
         // treating them as a renewal would activate a plan that was never paid for.
@@ -803,6 +864,16 @@ export class StripeProvider implements PaymentProvider {
         if (meta['purchaseKind'] === 'business_phone') {
           const rawTenantId = Number(meta['tenantId']);
           return { type: 'addon.cancelled', purchaseKind: 'business_phone', activationCents: Number(meta['activationCents']), monthlyCents: Number(meta['monthlyCents']), ...(Number.isInteger(rawTenantId) && rawTenantId > 0 ? { tenantId: rawTenantId } : {}), externalCustomerId: obj['customer'] as string, externalSubscriptionId: obj['id'] as string, raw: event };
+        }
+        // Same branch, same reason as `customer.subscription.updated` above.
+        if (meta['purchaseKind'] === 'extension_plan') {
+          return {
+            type: 'extension.subscription.cancelled',
+            purchaseKind: 'extension_plan',
+            externalCustomerId: obj['customer'] as string,
+            externalSubscriptionId: obj['id'] as string,
+            raw: event,
+          };
         }
         return {
           type: 'subscription.cancelled',

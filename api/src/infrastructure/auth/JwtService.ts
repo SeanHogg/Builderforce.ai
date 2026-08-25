@@ -73,6 +73,69 @@ async function importKey(secret: string): Promise<CryptoKey> {
 // ---------------------------------------------------------------------------
 
 /**
+ * SIGN ANY CLAIM SET — the HS256 machine, written once.
+ *
+ * This file used to hold three byte-identical copies of the four lines below
+ * (session, web, emulation), and a fourth token type — the install-scoped token a
+ * marketplace vendor calls us with (PRD 24 §5.3) — would have made four. A
+ * duplicated signer is not merely untidy: it is four places a `typ` header, an
+ * algorithm confusion check or a clock-skew tolerance has to be fixed, and the one
+ * that is missed keeps accepting what the others have learned to refuse.
+ *
+ * The claim TYPES stay separate and stay specific, because what a token asserts is
+ * the domain's business. Only the crypto is shared.
+ */
+async function signClaims(claims: Record<string, unknown>, secret: string): Promise<string> {
+  const header = strToB64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
+  const body   = strToB64url(JSON.stringify(claims));
+  const input  = `${header}.${body}`;
+
+  const key = await importKey(secret);
+  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(input));
+
+  return `${input}.${b64urlEncode(sig)}`;
+}
+
+/**
+ * Verify a signature and expiry, and hand back the claims.
+ *
+ * The signature is checked BEFORE the body is parsed, which is the ordering that
+ * matters: a verifier that reads claims first has already acted on attacker-
+ * controlled JSON by the time it decides the token was forged.
+ */
+async function verifyClaims<T extends { exp: number }>(token: string, secret: string): Promise<T> {
+  const parts = token.split('.');
+  if (parts.length !== 3) throw new Error('Malformed token');
+
+  const [header, body, sig] = parts as [string, string, string];
+  const input = `${header}.${body}`;
+
+  const key = await importKey(secret);
+  const sigBytes = Uint8Array.from(
+    atob(sig.replace(/-/g, '+').replace(/_/g, '/')),
+    (c) => c.charCodeAt(0),
+  );
+  const valid = await crypto.subtle.verify('HMAC', key, sigBytes, new TextEncoder().encode(input));
+  if (!valid) throw new Error('Invalid token signature');
+
+  const payload = JSON.parse(b64urlToStr(body)) as T;
+  if (payload.exp < Math.floor(Date.now() / 1000)) throw new Error('Token expired');
+
+  return payload;
+}
+
+/** Sign a claim set that is not one of this file's own token types. */
+export async function signOpaqueJwt(claims: Record<string, unknown>, secret: string): Promise<string> {
+  return signClaims(claims, secret);
+}
+
+/** Verify a claim set signed by {@link signOpaqueJwt}. Signature and expiry only —
+ *  every claim inside is the caller's to check. */
+export async function verifyOpaqueJwt<T extends { exp: number }>(token: string, secret: string): Promise<T> {
+  return verifyClaims<T>(token, secret);
+}
+
+/**
  * Signs a JWT using HMAC-SHA-256 via the Web Crypto API.
  * Compatible with Cloudflare Workers (no Node.js required).
  */
@@ -89,15 +152,7 @@ export async function signJwt(
     iat: now,
     exp: now + expiresInSeconds,
   };
-
-  const header = strToB64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
-  const body   = strToB64url(JSON.stringify(full));
-  const input  = `${header}.${body}`;
-
-  const key = await importKey(secret);
-  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(input));
-
-  return `${input}.${b64urlEncode(sig)}`;
+  return signClaims(full as unknown as Record<string, unknown>, secret);
 }
 
 /**
@@ -105,31 +160,7 @@ export async function signJwt(
  * Throws if the signature is invalid or the token is expired.
  */
 export async function verifyJwt(token: string, secret: string): Promise<JwtPayload> {
-  const parts = token.split('.');
-  if (parts.length !== 3) throw new Error('Malformed token');
-
-  const header = parts[0]!;
-  const body   = parts[1]!;
-  const sig    = parts[2]!;
-  const input = `${header}.${body}`;
-
-  const key = await importKey(secret);
-  const sigBytes = Uint8Array.from(
-    atob(sig.replace(/-/g, '+').replace(/_/g, '/')),
-    (c) => c.charCodeAt(0),
-  );
-  const valid = await crypto.subtle.verify(
-    'HMAC',
-    key,
-    sigBytes,
-    new TextEncoder().encode(input),
-  );
-  if (!valid) throw new Error('Invalid token signature');
-
-  const payload: JwtPayload = JSON.parse(b64urlToStr(body));
-  if (payload.exp < Math.floor(Date.now() / 1000)) throw new Error('Token expired');
-
-  return payload;
+  return verifyClaims<JwtPayload>(token, secret);
 }
 
 // ---------------------------------------------------------------------------
@@ -165,35 +196,11 @@ export async function signWebJwt(
     exp: now + expiresInSeconds,
   };
 
-  const header = strToB64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
-  const body   = strToB64url(JSON.stringify(full));
-  const input  = `${header}.${body}`;
-
-  const key = await importKey(secret);
-  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(input));
-
-  return `${input}.${b64urlEncode(sig)}`;
+  return signClaims(full as unknown as Record<string, unknown>, secret);
 }
 
 export async function verifyWebJwt(token: string, secret: string): Promise<WebJwtPayload> {
-  const parts = token.split('.');
-  if (parts.length !== 3) throw new Error('Malformed token');
-
-  const [header, body, sig] = parts as [string, string, string];
-  const input = `${header}.${body}`;
-
-  const key = await importKey(secret);
-  const sigBytes = Uint8Array.from(
-    atob(sig.replace(/-/g, '+').replace(/_/g, '/')),
-    (c) => c.charCodeAt(0),
-  );
-  const valid = await crypto.subtle.verify('HMAC', key, sigBytes, new TextEncoder().encode(input));
-  if (!valid) throw new Error('Invalid token signature');
-
-  const payload: WebJwtPayload = JSON.parse(b64urlToStr(body));
-  if (payload.exp < Math.floor(Date.now() / 1000)) throw new Error('Token expired');
-
-  return payload;
+  return verifyClaims<WebJwtPayload>(token, secret);
 }
 
 export function decodeJwtPayload<T = Record<string, unknown>>(token: string): T {
@@ -248,14 +255,7 @@ export async function signEmulationJwt(
     exp:          now + 3600,  // 1 hour, non-renewable
   };
 
-  const header = strToB64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
-  const body   = strToB64url(JSON.stringify(full));
-  const input  = `${header}.${body}`;
-
-  const key = await importKey(secret);
-  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(input));
-
-  return `${input}.${b64urlEncode(sig)}`;
+  return signClaims(full as unknown as Record<string, unknown>, secret);
 }
 
 /**

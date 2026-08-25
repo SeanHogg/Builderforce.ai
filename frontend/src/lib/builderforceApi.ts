@@ -9828,6 +9828,38 @@ export type ExtensionVersion = {
   createdAt: string | null;
 };
 
+/**
+ * ONE PLAN on a paid listing (PRD 24 §5.4).
+ *
+ * `priceCents` and `meteredRateCents` may each be zero but never both — a plan
+ * that charges nothing either way is the free listing the package already is.
+ * `unitLabel` is the vendor's word for what they meter, and it is what appears
+ * on the customer's invoice line.
+ */
+export type ExtensionPlan = {
+  code: string;
+  name: string;
+  description: string | null;
+  priceCents: number;
+  interval: 'month' | 'year' | string;
+  includedUnits: number;
+  meteredRateCents: number;
+  unitLabel: string;
+};
+
+/** A package's price list, and the "from" the directory may quote. */
+export type ExtensionPricing = {
+  catalogItemId: string | null;
+  currency: string;
+  plans: ExtensionPlan[];
+  /** The cheapest RECURRING price. Null for a free listing AND for one whose
+   *  plans are all pure usage-based, which genuinely has no entry price. */
+  fromCents: number | null;
+};
+
+/** An install's standing with the money. `none` is a free install. */
+export type InstallSubscriptionState = 'none' | 'active' | 'past_due' | 'cancelled';
+
 export type ExtensionInstall = {
   id: string;
   packageId: string;
@@ -9840,6 +9872,9 @@ export type ExtensionInstall = {
   grantedScopes: string[];
   connectionId: string | null;
   disabled: boolean;
+  planCode: string | null;
+  subscriptionState: InstallSubscriptionState | string;
+  currentPeriodEndISO: string | null;
   /** Present when the publisher has shipped a newer head than this install runs. */
   update: { versionId: string; semver: string; addedScopes: string[]; auto: boolean } | null;
   createdAt: string | null;
@@ -9854,7 +9889,94 @@ export type InstallPreview = {
   scopes: string[];
   sensitiveScopes: string[];
   alreadyInstalled: boolean;
+  /** The plans on offer. Empty for a free package — and its emptiness is what
+   *  decides which install door this package goes through. */
+  plans: ExtensionPlan[];
+  currency: string;
+  paid: boolean;
 };
+
+/** What a workspace has earned from its extensions, and what is left to send. */
+export type PublisherEarnings = {
+  earnedCents: number;
+  paidCents: number;
+  availableCents: number;
+  takeRateBps: number;
+  thresholdCents: number;
+  /** True while the platform is taking nothing. Free until it is material. */
+  underThreshold: boolean;
+  /** Whether a destination is nominated at all — the difference between
+   *  "nothing to pay out" and "nowhere to pay it to". */
+  payoutConnected: boolean;
+};
+
+/**
+ * Every partner TRACK the server may name — mirrors the API's `PARTNER_TRACKS`.
+ *
+ * A runtime registry and not only a union, for the reason `STALL_CAUSES` above is:
+ * the message-catalog test can then prove every value the server may return has a
+ * label in all five locales, instead of a raw dotted key appearing mid-page the
+ * first time somebody is put in a track nobody translated.
+ */
+export const PARTNER_TRACK_KEYS = ['none', 'technology', 'solutions'] as const;
+
+/**
+ * Every benefit key `TRACK_DEFINITIONS` may send, in the same spirit.
+ *
+ * ── WHY THIS LIST EXISTS TWICE ──────────────────────────────────────────────
+ * The authority is the API's `application/developer/partnerPrograms.ts`, and the
+ * right answer to two components deriving the same thing is normally to delete one
+ * of them. These two genuinely cannot be merged — they are separate toolchains,
+ * and `check:source-package-graph` is the guard that says so. So this takes
+ * CONTRIBUTING's stated fallback: both sides assert agreement over the WHOLE
+ * domain rather than over a chosen handful. `messages.test.ts` proves every key
+ * here resolves in five locales; the API's `partnerPrograms.test.ts` proves the
+ * registry emits nothing outside this set. A key added on one side and not the
+ * other fails a test rather than rendering as `programs.benefit.newThing`.
+ */
+export const PARTNER_BENEFIT_KEYS = [
+  'openRegistration',
+  'zeroRevShare',
+  'directoryListing',
+  'installAnalytics',
+  'featuredPlacement',
+  'nativeBilling',
+  'installWebhooks',
+  'coMarketing',
+  'engineeringSupport',
+  'leadMatchmaking',
+  'revShare',
+  'enterpriseIntroductions',
+] as const;
+
+/** The audiences a track names. Same argument as the two lists above. */
+export const PARTNER_AUDIENCE_KEYS = ['selfServe', 'vendors', 'agencies'] as const;
+
+/** One thing a partner track gives, and what actually delivers it. */
+export type TrackBenefit = { key: string; mechanism: string; automated: boolean };
+export type TrackDefinition = { track: string; audienceKey: string; benefits: TrackBenefit[] };
+
+export type PartnerStanding = {
+  track: string;
+  featuredAtISO: string | null;
+  definition: TrackDefinition;
+  revShare: { bps: number; percent: number; thresholdCents: number; belowThresholdBps: number };
+  tracks: TrackDefinition[];
+};
+
+/** The open metered period on one install — what it would cost if it closed now. */
+export type OpenPeriod = {
+  installId: string;
+  planCode: string | null;
+  unitLabel: string;
+  units: number;
+  includedUnits: number;
+  projectedCents: number;
+  currency: string;
+  since: string | null;
+};
+
+export type UsageEvent = { usageId: string; units: number; note: string | null; occurredAtISO: string };
 
 /**
  * The kinds and scopes the server accepts, fetched rather than hardcoded.
@@ -9951,6 +10073,66 @@ export const developerApi = {
 
   uninstall: (installId: string): Promise<void> =>
     request(`/api/developer/installs/${installId}`, { method: 'DELETE' }).then(() => undefined),
+
+  // ── Plans — the publisher's price list (PRD 24 Phase 2) ────────────────
+  plans: (packageId: string): Promise<ExtensionPricing> =>
+    request<{ pricing: ExtensionPricing }>(`/api/developer/packages/${packageId}/plans`).then((r) => r.pricing),
+
+  /** PUT, not POST: a price list is replaced as a whole. An empty list makes
+   *  the package free again and takes the listing off sale. */
+  setPlans: (packageId: string, plans: ExtensionPlan[], currency?: string): Promise<ExtensionPricing> =>
+    request<{ pricing: ExtensionPricing }>(`/api/developer/packages/${packageId}/plans`, {
+      method: 'PUT',
+      body: JSON.stringify({ plans, currency }),
+    }).then((r) => r.pricing),
+
+  // ── Earnings ───────────────────────────────────────────────────────────
+  earnings: (): Promise<PublisherEarnings> =>
+    request<{ earnings: PublisherEarnings }>('/api/developer/earnings').then((r) => r.earnings),
+
+  setPayoutDestination: (connectionId: number | null): Promise<Publisher> =>
+    request<{ publisher: Publisher }>('/api/developer/earnings/destination', {
+      method: 'POST',
+      body: JSON.stringify({ connectionId }),
+    }).then((r) => r.publisher),
+
+  /** The amount is decided by the server from the ledger, never sent. */
+  payout: (): Promise<{ ok: boolean; amountCents: number; error?: string }> =>
+    request<{ ok: boolean; amountCents: number; error?: string }>('/api/developer/earnings/payout', { method: 'POST' }),
+
+  // ── Programs (PRD 24 Phase 4) ──────────────────────────────────────────
+  programs: (): Promise<PartnerStanding> =>
+    request<{ standing: PartnerStanding }>('/api/developer/programs').then((r) => r.standing),
+
+  // ── The paid install path ──────────────────────────────────────────────
+  /**
+   * Start a paid install.
+   *
+   * Returns a `checkoutUrl` to navigate to, OR an `installId` when the plan is
+   * pure usage-based and the workspace already has a validated card — there is
+   * nothing to charge today, and a $0.00 checkout page cannot be completed.
+   */
+  startPlanCheckout: (
+    input: { packageId: string; planCode: string; approvedScopes: string[]; returnUrl: string },
+  ): Promise<{ checkoutUrl: string | null; installId: string | null }> =>
+    request<{ checkoutUrl: string | null; installId: string | null }>('/api/developer/installs/checkout', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  /** Settle the checkout the redirect came back with. The install is created HERE. */
+  completePlanCheckout: (checkoutSessionId: string): Promise<{ installId: string; planName: string }> =>
+    request<{ subscription: { installId: string; planName: string } }>('/api/developer/installs/checkout/complete', {
+      method: 'POST',
+      body: JSON.stringify({ checkoutSessionId }),
+    }).then((r) => r.subscription),
+
+  /** Stop paying without uninstalling. Closes the open metered period first. */
+  cancelPlan: (installId: string): Promise<void> =>
+    request(`/api/developer/installs/${installId}/cancel-plan`, { method: 'POST' }).then(() => undefined),
+
+  usage: (installId: string): Promise<{ period: OpenPeriod; events: UsageEvent[] }> =>
+    request<{ period: OpenPeriod; events: UsageEvent[] }>(`/api/developer/installs/${installId}/usage`),
 };
 
 // ---------------------------------------------------------------------------

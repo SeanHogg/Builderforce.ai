@@ -467,13 +467,30 @@ export const tenants = pgTable('tenants', {
   publisherDomain:        varchar('publisher_domain', { length: 255 }),
   publisherVerificationToken: varchar('publisher_verification_token', { length: 64 }),
   publisherVerifiedAt:    timestamp('publisher_verified_at', { withTimezone: true }),
-  /** Cross-domain id into `connections` (capability='payout'). Deliberately NOT a
-   *  foreign key — payouts are the commerce domain's. */
-  publisherPayoutConnectionId: uuid('publisher_payout_connection_id'),
+  /** Cross-domain id into `connections` (capability='payout') — the destination
+   *  this WORKSPACE nominated, since a workspace has no `connections.user_id` of
+   *  its own. Deliberately NOT a foreign key: payouts are the commerce domain's.
+   *  Typed `uuid` from 0472 until 1119, which is when it got its first reader and
+   *  the mismatch with `connections.id` (a serial) became visible. */
+  publisherPayoutConnectionId: integer('publisher_payout_connection_id'),
   /** Standing a PUBLISHER down hides its listings everywhere at once. It is not
    *  `status`: a vendor whose listing broke a rule must not lose their own board. */
   publisherSuspendedAt:   timestamp('publisher_suspended_at', { withTimezone: true }),
   publisherSuspendedReason: text('publisher_suspended_reason'),
+  /**
+   * ── THE PROGRAM COLUMNS (PRD 24 §6 Phase C, migration 1119) ─────────────
+   * `none` | `technology` | `solutions` — `PARTNER_TRACKS`. A publisher is in at
+   * most one track, which is why this is one column and not two booleans: a
+   * vendor who is also an agency is two workspaces, the same answer §5.1 gives
+   * to every "but what if they are also an X" question here.
+   *
+   * `publisherFeaturedAt` is the Featured slot — the incentive the whole
+   * incentives ledger leads with. A TIMESTAMP rather than a boolean because
+   * "since when" is the question asked of every placement that was ever
+   * disputed, and a boolean cannot answer it.
+   */
+  publisherTrack:         varchar('publisher_track', { length: 24 }).notNull().default('none'),
+  publisherFeaturedAt:    timestamp('publisher_featured_at', { withTimezone: true }),
   settings:               text('settings'),   // JSON-as-text (jsonb avoided per existing convention)
   createdAt:              timestamp('created_at').notNull().defaultNow(),
   updatedAt:              timestamp('updated_at').notNull().defaultNow(),

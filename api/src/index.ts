@@ -158,6 +158,7 @@ import { createPollRoutes, createPublicPollRoutes } from './presentation/routes/
 import { createSignatureRoutes, createPublicSignatureRoutes } from './presentation/routes/signatureRoutes';
 import { createLegalDocumentRoutes, createPublicLegalDocumentRoutes } from './presentation/routes/legalDocumentRoutes';
 import { createDataRoomRoutes, createPublicDataRoomRoutes } from './presentation/routes/dataRoomRoutes';
+import { createInvestorRoutes, createPublicInvestorRoutes } from './presentation/routes/investorRoutes';
 import { createDocumentTemplateRoutes } from './presentation/routes/documentTemplateRoutes';
 import { createPayableRoutes, createPublicInvoiceRoutes } from './presentation/routes/payableRoutes';
 import { createEquityRoutes } from './presentation/routes/equityRoutes';
@@ -976,6 +977,11 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // — plus the NDA gate, both expiry clocks and the watermark, all enforced inside
   // `dataRoomSharing.ts` rather than at this seam (FO-E2).
   app.route('/api/public/data-rooms', createPublicDataRoomRoutes(db));
+  // A COMPANY grant is the same shape a fifth time — one token, no session — and
+  // the per-room shares it opens derive from it rather than being minted beside it
+  // (IN-2). Every rule is enforced in `companyInvestorAccess.ts` and, under it, in
+  // the same `dataRoomSharing.ts` resolve the room's own link flows through.
+  app.route('/api/public/investor', createPublicInvestorRoutes(db));
   // The workspace halves.
   app.route('/api/forms',             createFormRoutes(db));
   // The FACILITATOR's half of the same store — publish, steer, and read the tally.
@@ -984,6 +990,10 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/legal-documents',   createLegalDocumentRoutes(db));
   // The data room's own share flow, and what the firm actually read.
   app.route('/api/data-rooms',        createDataRoomRoutes(db));
+  // The founder's side of the raise: the company as a destination, the projects it
+  // owns (IN-1), the investors invited to IT rather than to a room (IN-2), and the
+  // fundraising pack, which is `rfpService` company-scoped rather than forked (IN-4).
+  app.route('/api/investor',          createInvestorRoutes(db, toolService, auditRunner, taskService));
   // The founders' agreement, the IP assignment, the vesting schedule and the NDA —
   // ONE registry, rendered or sent through the signature engine (FO-D5).
   app.route('/api/document-templates', createDocumentTemplateRoutes(db));

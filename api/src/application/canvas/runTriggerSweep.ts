@@ -120,8 +120,12 @@ export function describeTransition(resolved: ResolvedTrigger, breached: boolean)
     const when = observed < 0
       ? `${Math.abs(observed)} day${Math.abs(observed) === 1 ? '' : 's'} overdue`
       : observed === 0 ? 'due today' : `due in ${observed} day${observed === 1 ? '' : 's'}`;
+    // `deadlineDetail` names the ROW a computed deadline came from — a contract with four
+    // obligations breaching on the third reads "(obligation "Quarterly support fee"
+    // (SUPPORT-Q))" instead of "(nextObligationAt)", which is the difference between a
+    // digest line somebody can act on and one that sends them to open the board.
     return breached
-      ? `${what} is ${when} (${resolved.deadlineField}).`
+      ? `${what} is ${when} (${resolved.deadlineDetail ?? resolved.deadlineField}).`
       : `${what} is no longer inside the warning window (${when}).`;
   }
   const value = observed == null ? 'no value' : String(observed);

@@ -27,6 +27,7 @@ import {
   uuid,
   varchar,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import { tenants } from './identity';
 
 // =========================================================================
@@ -610,6 +611,42 @@ export const tenantExtensionInstalls = pgTable('tenant_extension_installs', {
   /** Cross-domain id into `connector_connections` — where the sealed credential is. */
   connectionId:   uuid('connection_id'),
   installedByUserId: varchar('installed_by_user_id', { length: 36 }),
+  /**
+   * ── THE PAID FACET (PRD 24 §5.4, migration 1119) ────────────────────────
+   * Six columns, every one functionally dependent on the install and 1:1 with
+   * the row — the same argument the publisher facet makes on `tenants`, applied
+   * to the other end of the transaction. An `extension_subscriptions` table
+   * would be a second answer to "is this install paid for", reachable only by a
+   * join that can return zero rows for an install that is definitely paid.
+   *
+   * What is deliberately NOT here: a price, a plan definition, an invoice line
+   * or a payout row. The plan a tenant picked is a CODE into the price list on
+   * the package's `catalog_items` row; the money is `orders` +
+   * `order_line_items` + `ledger_entries`. One fact, one place.
+   */
+  /** Which plan on the package's `catalog_items` price list. NULL = free install. */
+  planCode:       varchar('plan_code', { length: 48 }),
+  /** `none` | `active` | `past_due` | `cancelled` — `INSTALL_SUBSCRIPTION_STATES`. */
+  subscriptionState: varchar('subscription_state', { length: 24 }).notNull().default('none'),
+  /** The processor's subscription id. Opaque here; only the payment port reads it. */
+  subscriptionRef: varchar('subscription_ref', { length: 160 }),
+  /** When the paid period this install is inside ends, as the processor reports it. */
+  currentPeriodEnd: timestamp('current_period_end', { withTimezone: true }),
+  /**
+   * The start of the metering window not yet billed.
+   *
+   * The meter is `ledger_entries` in `extension_units` (see `denominations.ts`),
+   * which is an append-only history with no notion of "already invoiced". This
+   * column is the WATERMARK that gives it one: a period close sums usage at or
+   * after this instant, bills it, and moves the watermark to the close. Storing
+   * the watermark rather than deleting or flagging the usage rows is what keeps
+   * a disputed invoice reconcilable against the exact events that produced it.
+   */
+  meteredSince:   timestamp('metered_since', { withTimezone: true }),
+  /** Cross-domain id into `orders` — the most recent order that paid for this
+   *  install. Not an FK: `orders` is the commerce domain's, and an order must
+   *  survive the install being removed. */
+  lastOrderId:    integer('last_order_id'),
   /** Set instead of deleting: an uninstall must not orphan the call logs that
    *  reference it, and a reinstall should be able to see it happened before. */
   disabledAt:     timestamp('disabled_at', { withTimezone: true }),
@@ -618,6 +655,12 @@ export const tenantExtensionInstalls = pgTable('tenant_extension_installs', {
 }, (t) => [
   uniqueIndex('uq_tenant_extension_install').on(t.tenantId, t.packageId),
   index('idx_tenant_extension_installs_tenant').on(t.tenantId, t.disabledAt),
+  /** The billing sweep's own read: every live paid install, oldest window first.
+   *  It has no tenant to lead with — closing a period is a platform-wide pass —
+   *  so the indexes above cannot serve it. Partial, because paid installs are a
+   *  small minority of every install ever made. */
+  index('idx_tenant_extension_installs_billing').on(t.subscriptionState, t.meteredSince)
+    .where(sql`subscription_state <> 'none'`),
 ]);
 
 // ═══ LTI 1.3 — the LMS a course actually runs in ═══════════════════════════

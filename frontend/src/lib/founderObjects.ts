@@ -42,6 +42,7 @@ import {
   CONVERTIBLE_KINDS,
   EQUITY_INSTRUMENTS,
   VESTING_FREQUENCIES,
+  nextOpenObligation,
   type FounderObjectKind,
 } from '@builderforce/creation-canvas-contract';
 import {
@@ -742,7 +743,7 @@ export const FOUNDER_OBJECT_SPECS: readonly FounderObjectSpec[] = [
       // it, because it is evaluated while this vocabulary is still registering and the
       // other vocabularies may not have loaded yet.
       { name: 'watches', render: 'stat', label: 'watches', hint: 'Title of the object on this board that this trigger evaluates — a `liveMetric` for a numeric comparator, or any deadline-bearing object for a date one (contract, invoice, bill, fundingRound, obligation, policy, offer, assignment, grant, peerReview, legalEntity, ipAsset, legalMatter among them; canvas_evaluate_triggers names the full list).' },
-      { name: 'watchesField', render: 'stat', label: 'watchesField', hint: 'Which field on the watched object to read. Leave EMPTY unless the object has more than one deadline — the object\'s first declared deadline field is used, which is the right one for every kind that has only one.' },
+      { name: 'watchesField', render: 'stat', label: 'watchesField', hint: 'Which field on the watched object to read. Leave EMPTY unless the object has more than one deadline — the object\'s first declared deadline field is used, which is the right one for every kind that has only one. A `contract` is the kind that has two: empty watches `renewsAt` (the auto-renewal), and `nextObligationAt` watches the earliest obligation still owed. Watching both takes two triggers.' },
       { name: 'comparator', render: 'stat', label: 'comparator', hint: 'For a number: below | above | equals | changes-by. For a deadline: due-within (breaches when the date is `threshold` days away or closer, INCLUDING already past — the "warn me before" case) | overdue-by (breaches only once the date is `threshold` days past; 0 means the day after it lapses — the "chase it" case).' },
       { name: 'threshold', render: 'stat', label: 'threshold', hint: 'The number the comparator tests against. For a date comparator this is a number of DAYS, never a date — the date lives on the object being watched, which is what keeps the trigger true next quarter without being re-typed.' },
       { name: 'state', render: 'verdict', label: 'state', hint: 'armed | breached | muted. Written by canvas_evaluate_triggers.', bookkeeping: true },
@@ -1292,7 +1293,7 @@ export const FOUNDER_OBJECT_SPECS: readonly FounderObjectSpec[] = [
       counterpartyAccountField('counterparty'),
       { name: 'contractType', render: 'stat', label: 'contractType', hint: 'msa | sow | nda | employment | vendor | formation.' },
       { name: 'effectiveAt', render: 'stat', label: 'effectiveAt', hint: 'ISO start date.' },
-      { name: 'renewsAt', render: 'stat', label: 'renewsAt', hint: 'ISO renewal or expiry date — the field that makes a contract something the board can warn about. Bind a `trigger` with comparator "due-within" to be told before an auto-renewal rather than after it.', deadline: true },
+      { name: 'renewsAt', render: 'stat', label: 'renewsAt', hint: 'ISO renewal or expiry date — the field that makes a contract something the board can warn about. Bind a `trigger` with comparator "due-within" to be told before an auto-renewal rather than after it. A contract carries TWO clocks: this one, which is the default a trigger watches, and `nextObligationAt` below, which a trigger reaches by setting `watchesField` to it. One trigger cannot watch both — author two.', deadline: true },
       CURRENCY_FIELD,
       { name: 'valueAmount', render: 'stat', label: 'valueAmount', hint: MONEY_HINT },
       {
@@ -1300,7 +1301,24 @@ export const FOUNDER_OBJECT_SPECS: readonly FounderObjectSpec[] = [
         render: 'rows',
         label: 'obligations',
         columns: OBLIGATION_COLUMNS,
-        hint: `What this commits either side to, one row per clause somebody has to DO something about: {${OBLIGATION_COLUMNS.join(', ')}}. \`reference\` is the identity an \`invoice\` or a \`bill\` points at through its own \`obligationRef\` — an obligation without one can never be shown to have been discharged, which is what made this table prose. \`kind\` is receivable (we invoice for it) | payable (they bill us for it) | deliverable | report | notice; only the first two should ever produce a document, so a deliverable is never counted as un-invoiced revenue. \`cadence\` is once | monthly | quarterly | annual, \`amount\` is a plain number in this contract's \`currency\`, and \`status\` is pending | invoiced | met | waived | breached.`,
+        hint: `What this commits either side to, one row per clause somebody has to DO something about: {${OBLIGATION_COLUMNS.join(', ')}}. \`reference\` is the identity an \`invoice\` or a \`bill\` points at through its own \`obligationRef\` — an obligation without one can never be shown to have been discharged, which is what made this table prose. \`kind\` is receivable (we invoice for it) | payable (they bill us for it) | deliverable | report | notice; only the first two should ever produce a document, so a deliverable is never counted as un-invoiced revenue. \`cadence\` is once | monthly | quarterly | annual, \`amount\` is a plain number in this contract's \`currency\`, and \`status\` is pending | invoiced | met | waived | breached. \`due\` is what \`nextObligationAt\` counts down to, and \`status\` is what retires a row from that countdown — only \`met\` and \`waived\` do, because an obligation that has merely been \`invoiced\` is still owed.`,
+      },
+      {
+        name: 'nextObligationAt',
+        render: 'stat',
+        label: 'nextObligationAt',
+        // FO-G2 — the half that makes the repository LIVE rather than inspectable.
+        // `obligationCoverage` answers "has anything been raised against this" and
+        // answers it when somebody opens the card; a contract that says "invoice
+        // monthly for support" and holds no such invoice said nothing until then. This
+        // is the date a `trigger` binds to, and because `nextOpenObligation` is the
+        // shared engine's own function rather than a derivation local to this card, the
+        // nightly sweep reads the SAME date — which is the condition under which a
+        // deadline may be computed at all (see `VIRTUAL_DEADLINES` in the contract
+        // package for why `cliffAt` is written onto its card and this one is not).
+        hint: 'COMPUTED from `obligations` — the earliest `due` among the rows still owed, i.e. every row whose `status` is not met or waived. This is the date the board WARNS on: bind a `trigger` with comparator "due-within" and `watchesField` set to `nextObligationAt`, and the nightly sweep will say which obligation is coming due before it is missed rather than after. A cadence is never rolled forward — an obligation six months past reports six months overdue, because projecting the next instance would quietly turn a missed commitment into a comfortable future one.',
+        deadline: true,
+        derive: (data) => nextOpenObligation(data)?.due,
       },
       {
         name: 'obligationCoverage',

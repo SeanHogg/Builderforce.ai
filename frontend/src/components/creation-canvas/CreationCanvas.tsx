@@ -366,6 +366,7 @@ import { canvasFounderOpsActions, pipelineFieldsFrom, type CanvasFounderOpsConte
 import { canvasDataRoomActions } from '@/lib/canvasDataRoomTools';
 import { canvasDocumentTemplateActions } from '@/lib/canvasDocumentTemplateTools';
 import { canvasEquityActions } from '@/lib/canvasEquityTools';
+import { canvasHiringPostingActions } from '@/lib/canvasHiringPostingTools';
 import { canvasLegalDocumentActions } from '@/lib/canvasLegalDocumentTools';
 import { canvasLegalRecordActions } from '@/lib/canvasLegalRecordTools';
 import { canvasSellMotionActions } from '@/lib/canvasSellMotionTools';
@@ -546,6 +547,12 @@ const DEDICATED_ACTION_TOOLS: Readonly<Record<string, Readonly<Record<string, st
   },
   salesPipeline: { sync: 'canvas_sync_sales_pipeline' },
   fundingRound: { track: 'canvas_sync_funding_round' },
+  // FO-B3. `refresh` on a requisition means "re-count the applications", which needs
+  // the card's `postingId` and a real join — an argument the generic action seam cannot
+  // carry, and a number the generic seam must never let a model assert. `distribute` is
+  // deliberately absent: it needs a connected job board, and naming a tool that does not
+  // exist yet would be worse than the honest "no delivery adapter" answer.
+  jobPosting: { refresh: 'canvas_sync_job_posting' },
 };
 const WEBSITE_SECTION_SCHEMA = {
   type: 'object', required: ['id', 'kind'], additionalProperties: false,
@@ -4626,6 +4633,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    *  event, model a round. See `canvasEquityTools.ts` for why there is deliberately no
    *  tool that WRITES a cap table. */
   const canvasEquityActionList = useMemo<BrainAction[]>(() => canvasEquityActions(canvasOpsContext), [canvasOpsContext]);
+  /** The requisition, bound to its real `job_postings` row so `applicantCount` is a
+   *  COUNT and not a typed number (FO-B3). See `canvasHiringPostingTools.ts` for why one
+   *  tool covers both directions, and why it will not resolve a card by title. */
+  const canvasHiringPostingActionList = useMemo<BrainAction[]>(() => canvasHiringPostingActions(canvasOpsContext), [canvasOpsContext]);
   /** The secure legal-document vocabulary — share, revoke, request signature, sync.
    *  See `canvasLegalDocumentTools.ts` for why these are dedicated tools rather than
    *  routed through `canvas_invoke_object_action`. */
@@ -8918,8 +8929,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         ...(projectId == null ? { note: 'Published without a project. Add a project object to the canvas to file these under it, which is what gives them a run target and a persona.' } : {}),
       };
     },
-  }, ...canvasBuildActionList, ...canvasFounderOpsActionList, ...canvasEquityActionList, ...canvasDataRoomActionList, ...canvasDocumentTemplateActionList, ...canvasLegalDocumentActionList, ...canvasLegalRecordActionList, ...canvasSignatureActionList, ...canvasSellMotionActionList].filter((action) => persistence === 'server' || !canvasToolRequiresAccount(action.name))),
-  [canEdit, canvasBuildActionList, canvasDataRoomActionList, canvasDocumentTemplateActionList, canvasEquityActionList, canvasFounderOpsActionList, canvasLegalDocumentActionList, canvasLegalRecordActionList, canvasSellMotionActionList, canvasSignatureActionList, convertObjectToDiagram, edges, effectiveSelectedIds, localizedTourDefaults, nodes, persistence, prompt, requireAccount, resolveTabularTarget, resolvedScopeMode, scopedEdges, scopedNodeIds, scopedNodes, sessionId, socialAccountGate, tSocial]);
+  }, ...canvasBuildActionList, ...canvasFounderOpsActionList, ...canvasEquityActionList, ...canvasHiringPostingActionList, ...canvasDataRoomActionList, ...canvasDocumentTemplateActionList, ...canvasLegalDocumentActionList, ...canvasLegalRecordActionList, ...canvasSignatureActionList, ...canvasSellMotionActionList].filter((action) => persistence === 'server' || !canvasToolRequiresAccount(action.name))),
+  [canEdit, canvasBuildActionList, canvasDataRoomActionList, canvasDocumentTemplateActionList, canvasEquityActionList, canvasFounderOpsActionList, canvasHiringPostingActionList, canvasLegalDocumentActionList, canvasLegalRecordActionList, canvasSellMotionActionList, canvasSignatureActionList, convertObjectToDiagram, edges, effectiveSelectedIds, localizedTourDefaults, nodes, persistence, prompt, requireAccount, resolveTabularTarget, resolvedScopeMode, scopedEdges, scopedNodeIds, scopedNodes, sessionId, socialAccountGate, tSocial]);
 
   const addAgentKnowledge = useCallback((agentId: string, content: string) => {
     const agent = nodes.find((node) => node.id === agentId && node.data.kind === 'agent');

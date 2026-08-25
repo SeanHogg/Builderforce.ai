@@ -1,0 +1,160 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #050810; color: #f0f4ff; -webkit-font-smoothing: antialiased; }
+    * { box-sizing: border-box; }
+    .mono { font-family: 'SF Mono', 'Fira Code', 'JetBrains Mono', monospace; }
+    .ic { width: 17px; height: 17px; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .ic-sm { width: 15px; height: 15px; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .dot { width: 6px; height: 6px; border-radius: 9999px; flex-shrink: 0; }
+    .row { display: flex; align-items: center; gap: 10px; height: 32px; padding: 0 10px; border-radius: 6px; font-size: 13px; color: #8892b0; }
+    .grp { font-size: 10px; letter-spacing: 0.13em; text-transform: uppercase; color: #5a6480; padding: 0 10px; margin: 14px 0 6px; display: flex; align-items: center; gap: 7px; }
+    .cap { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: #5a6480; margin-bottom: 10px; }
+    .panel { border: 1px solid rgba(136,146,176,0.15); border-radius: 10px; background: #0a0f1a; }
+  </style>
+</helmet>
+
+<svg width="0" height="0" style="position: absolute" aria-hidden="true"><defs>
+  <symbol id="n-sparkles" viewBox="0 0 24 24"><path d="M12 3 9.8 9.8 3 12l6.8 2.2L12 21l2.2-6.8L21 12l-6.8-2.2L12 3Z"/></symbol>
+  <symbol id="n-project" viewBox="0 0 24 24"><rect x="3.5" y="4" width="17" height="16" rx="2"/><path d="M8 4v16M8 9h12M8 14h12"/></symbol>
+  <symbol id="n-people" viewBox="0 0 24 24"><path d="M16 20v-1.8a3.7 3.7 0 0 0-3.7-3.7H7.7A3.7 3.7 0 0 0 4 18.2V20"/><circle cx="10" cy="8" r="3.2"/><path d="M16 5.2a3.2 3.2 0 0 1 0 6.2M20 20v-1.8a3.7 3.7 0 0 0-2.8-3.6"/></symbol>
+  <symbol id="n-billing" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18M7 15h3"/></symbol>
+  <symbol id="n-briefcase" viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V4h8v3M3 12h18M10 12v2h4v-2"/></symbol>
+  <symbol id="n-insights" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></symbol>
+  <symbol id="n-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3A1.7 1.7 0 0 0 14 21v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14h-.2v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3A1.7 1.7 0 0 0 10 3v-.2h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9A1.7 1.7 0 0 0 21 10h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"/></symbol>
+  <symbol id="n-shield" viewBox="0 0 24 24"><path d="M12 3 4.5 6v5c0 4.7 3.2 8.2 7.5 10 4.3-1.8 7.5-5.3 7.5-10V6L12 3Z"/><path d="M9.5 12 11 13.5l3.5-3.5"/></symbol>
+  <symbol id="n-chevron-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="n-chevron-left" viewBox="0 0 24 24"><path d="m15 6-6 6 6 6"/></symbol>
+  <symbol id="n-template" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M9 9v11"/></symbol>
+</defs></svg>
+
+<div style="width: 880px; height: 900px; background: #050810; padding: 28px; overflow: hidden; display: flex; flex-direction: column; gap: 22px">
+
+  <div>
+    <div class="mono" style="font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; color: #4d9eff; margin-bottom: 7px">Navigation</div>
+    <h1 style="margin: 0 0 5px; font-size: 21px; font-weight: 700; letter-spacing: -0.02em">Left panel · what a founder meets first</h1>
+    <p style="margin: 0; font-size: 13px; color: #8892b0; line-height: 1.5; max-width: 64ch">Rung 0 of the same registry. Rows group by <span class="mono" style="color: #f0f4ff">STAGE</span> and carry their owning <span class="mono" style="color: #f0f4ff">SEAT</span> as a trailing dot. The other nineteen destinations appear as the company earns them.</p>
+  </div>
+
+  <div style="flex: 1; min-height: 0; display: grid; grid-template-columns: 248px 88px minmax(0, 1fr); gap: 20px">
+
+    <!-- expanded -->
+    <div style="display: flex; flex-direction: column">
+      <div class="mono cap">Expanded · 240px</div>
+      <div class="panel" style="flex: 1; display: flex; flex-direction: column; overflow: hidden">
+        <div style="height: 52px; flex-shrink: 0; display: flex; align-items: center; gap: 9px; padding: 0 14px; border-bottom: 1px solid rgba(136,146,176,0.15)">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none"><path d="M6 3h7a5 5 0 0 1 0 10H6z" stroke="#4d9eff" stroke-width="2" stroke-linejoin="round"/><path d="M6 13h8a5 5 0 0 1 0 8H6z" stroke="#00e5cc" stroke-width="2" stroke-linejoin="round"/></svg>
+          <span style="font-size: 13.5px; font-weight: 700; letter-spacing: -0.02em">BuilderForce</span>
+          <svg class="ic-sm" style="margin-left: auto; color: #5a6480"><use href="#n-chevron-left"/></svg>
+        </div>
+        <div style="padding: 11px 11px 4px">
+          <div style="display: flex; align-items: center; gap: 9px; height: 38px; padding: 0 10px; border: 1px solid rgba(136,146,176,0.15); border-radius: 8px; background: rgba(255,255,255,0.03)">
+            <div style="width: 21px; height: 21px; border-radius: 5px; background: linear-gradient(135deg,#4d9eff,#1e40af); display: flex; align-items: center; justify-content: center; font-size: 9.5px; font-weight: 700; color: #050810">NV</div>
+            <div style="flex: 1; min-width: 0"><div style="font-size: 12px; font-weight: 600">Northvale</div><div class="mono" style="font-size: 9px; color: #5a6480">Seed · raising</div></div>
+            <svg class="ic-sm" style="width: 12px; height: 12px; color: #5a6480"><use href="#n-chevron-down"/></svg>
+          </div>
+        </div>
+        <div style="flex: 1; padding: 2px 11px 10px; overflow: hidden">
+          <div class="grp"><span class="dot" style="background: #fbbf24"></span>Idea</div>
+          <div class="row" style="background: rgba(77,158,255,0.12); color: #f0f4ff"><svg class="ic"><use href="#n-sparkles"/></svg>Create<span class="dot" style="margin-left: auto; background: #4d9eff"></span></div>
+          <div class="grp"><span class="dot" style="background: #4d9eff"></span>Make</div>
+          <div class="row"><svg class="ic"><use href="#n-project"/></svg>Projects<span class="mono" style="margin-left: auto; font-size: 9.5px; padding: 2px 6px; border-radius: 4px; background: rgba(136,146,176,0.14); color: #8892b0">3</span><span class="dot" style="margin-left: 7px; background: #7c83fd"></span></div>
+          <div class="row"><svg class="ic"><use href="#n-people"/></svg>Talent / Workforce<span class="dot" style="margin-left: auto; background: #7c83fd"></span></div>
+          <div class="grp"><span class="dot" style="background: #34d399"></span>Run</div>
+          <div class="row"><svg class="ic"><use href="#n-billing"/></svg>Finance<span class="dot" style="margin-left: auto; background: #34d399"></span></div>
+          <div class="row"><svg class="ic"><use href="#n-briefcase"/></svg>Investors<span class="mono" style="margin-left: auto; font-size: 9.5px; padding: 2px 6px; border-radius: 4px; background: rgba(0,229,204,0.16); color: #00e5cc">4</span><span class="dot" style="margin-left: 7px; background: #a78bfa"></span></div>
+          <div class="row"><svg class="ic"><use href="#n-shield"/></svg>Governance<span class="dot" style="margin-left: auto; background: #ff6b6b"></span></div>
+          <div class="grp"><span class="dot" style="background: #a78bfa"></span>Measure</div>
+          <div class="row"><svg class="ic"><use href="#n-insights"/></svg>Insights<span class="dot" style="margin-left: auto; background: #5a6480"></span></div>
+          <div class="grp"><span class="dot" style="background: #5a6480"></span>Admin</div>
+          <div class="row"><svg class="ic"><use href="#n-settings"/></svg>Settings<span class="dot" style="margin-left: auto; background: #5a6480"></span></div>
+        </div>
+        <div style="padding: 11px; border-top: 1px solid rgba(136,146,176,0.15)">
+          <div class="mono" style="display: flex; justify-content: space-between; font-size: 9px; color: #5a6480; margin-bottom: 5px"><span>AI tokens</span><span>38%</span></div>
+          <div style="height: 3px; border-radius: 9999px; background: rgba(255,255,255,0.08); overflow: hidden"><div style="width: 38%; height: 100%; background: #4d9eff"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- collapsed -->
+    <div style="display: flex; flex-direction: column">
+      <div class="mono cap">64px</div>
+      <div class="panel" style="flex: 1; display: flex; flex-direction: column; align-items: center; padding: 0 0 12px; overflow: hidden">
+        <div style="height: 52px; display: flex; align-items: center"><svg width="19" height="19" viewBox="0 0 24 24" fill="none"><path d="M6 3h7a5 5 0 0 1 0 10H6z" stroke="#4d9eff" stroke-width="2" stroke-linejoin="round"/><path d="M6 13h8a5 5 0 0 1 0 8H6z" stroke="#00e5cc" stroke-width="2" stroke-linejoin="round"/></svg></div>
+        <div style="display: flex; flex-direction: column; gap: 4px; margin-top: 6px">
+          <div style="width: 40px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 6px; background: rgba(77,158,255,0.12); color: #4d9eff"><svg class="ic"><use href="#n-sparkles"/></svg></div>
+          <div style="width: 40px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 6px; color: #5a6480"><svg class="ic"><use href="#n-project"/></svg></div>
+          <div style="width: 40px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 6px; color: #5a6480"><svg class="ic"><use href="#n-people"/></svg></div>
+          <div style="width: 40px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 6px; color: #5a6480"><svg class="ic"><use href="#n-billing"/></svg></div>
+          <div style="position: relative; width: 40px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 6px; color: #5a6480"><svg class="ic"><use href="#n-briefcase"/></svg><span style="position: absolute; top: 3px; right: 4px; width: 6px; height: 6px; border-radius: 9999px; background: #00e5cc"></span></div>
+          <div style="width: 40px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 6px; color: #5a6480"><svg class="ic"><use href="#n-shield"/></svg></div>
+          <div style="width: 40px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 6px; color: #5a6480"><svg class="ic"><use href="#n-insights"/></svg></div>
+          <div style="width: 40px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 6px; color: #5a6480"><svg class="ic"><use href="#n-settings"/></svg></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- states + tokens -->
+    <div style="display: flex; flex-direction: column; gap: 18px; min-height: 0">
+
+      <div>
+        <div class="mono cap">Row states</div>
+        <div class="panel" style="padding: 10px">
+          <div class="row"><svg class="ic-sm"><use href="#n-template"/></svg>Default<span class="mono" style="margin-left: auto; font-size: 10px; color: #5a6480">#8892b0</span></div>
+          <div class="row" style="background: rgba(255,255,255,0.06); color: #f0f4ff"><svg class="ic-sm"><use href="#n-template"/></svg>Hover<span class="mono" style="margin-left: auto; font-size: 10px; color: #5a6480">white 6%</span></div>
+          <div class="row" style="background: rgba(77,158,255,0.12); color: #f0f4ff"><svg class="ic-sm"><use href="#n-template"/></svg>Active<span class="mono" style="margin-left: auto; font-size: 10px; color: #4d9eff">accent 12%</span></div>
+          <div class="row" style="opacity: .42"><svg class="ic-sm"><use href="#n-template"/></svg>Dimmed — rung not earned<span class="mono" style="margin-left: auto; font-size: 10px">42%</span></div>
+        </div>
+        <p style="margin: 8px 0 0; font-size: 11.5px; color: #5a6480; line-height: 1.5">A dim row is an invitation, never a secret — progressive disclosure gates state, not capability.</p>
+      </div>
+
+      <div>
+        <div class="mono cap">Stage hues · left panel grouping</div>
+        <div class="panel" style="padding: 12px; display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 9px">
+          <div style="display: flex; align-items: center; gap: 7px"><span class="dot" style="background: #fbbf24"></span><span style="font-size: 11.5px">Idea</span></div>
+          <div style="display: flex; align-items: center; gap: 7px"><span class="dot" style="background: #4d9eff"></span><span style="font-size: 11.5px">Make</span></div>
+          <div style="display: flex; align-items: center; gap: 7px"><span class="dot" style="background: #34d399"></span><span style="font-size: 11.5px">Run</span></div>
+          <div style="display: flex; align-items: center; gap: 7px"><span class="dot" style="background: #a78bfa"></span><span style="font-size: 11.5px">Measure</span></div>
+          <div style="display: flex; align-items: center; gap: 7px"><span class="dot" style="background: #ec4899"></span><span style="font-size: 11.5px">Market</span></div>
+          <div style="display: flex; align-items: center; gap: 7px"><span class="dot" style="background: #f97316"></span><span style="font-size: 11.5px">Expand</span></div>
+        </div>
+      </div>
+
+      <div style="flex: 1; min-height: 0">
+        <div class="mono cap">Seat hues · trailing dot</div>
+        <div class="panel" style="padding: 12px; display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 9px 10px">
+          <div style="display: flex; align-items: center; gap: 7px"><span class="dot" style="background: #a78bfa"></span><span style="font-size: 11.5px">CEO</span></div>
+          <div style="display: flex; align-items: center; gap: 7px"><span class="dot" style="background: #34d399"></span><span style="font-size: 11.5px">CFO</span></div>
+          <div style="display: flex; align-items: center; gap: 7px"><span class="dot" style="background: #fbbf24"></span><span style="font-size: 11.5px">CRO</span></div>
+          <div style="display: flex; align-items: center; gap: 7px"><span class="dot" style="background: #ec4899"></span><span style="font-size: 11.5px">CMO</span></div>
+          <div style="display: flex; align-items: center; gap: 7px"><span class="dot" style="background: #38bdf8"></span><span style="font-size: 11.5px">CTO</span></div>
+          <div style="display: flex; align-items: center; gap: 7px"><span class="dot" style="background: #eab308"></span><span style="font-size: 11.5px">CPO</span></div>
+          <div style="display: flex; align-items: center; gap: 7px"><span class="dot" style="background: #14b8a6"></span><span style="font-size: 11.5px">HR</span></div>
+          <div style="display: flex; align-items: center; gap: 7px"><span class="dot" style="background: #f97316"></span><span style="font-size: 11.5px">Recruiter</span></div>
+          <div style="display: flex; align-items: center; gap: 7px"><span class="dot" style="background: #ff6b6b"></span><span style="font-size: 11.5px">Security</span></div>
+          <div style="display: flex; align-items: center; gap: 7px"><span class="dot" style="background: #8b5cf6"></span><span style="font-size: 11.5px">Support</span></div>
+          <div style="display: flex; align-items: center; gap: 7px"><span class="dot" style="background: #7c83fd"></span><span style="font-size: 11.5px">Manager</span></div>
+          <div style="display: flex; align-items: center; gap: 7px"><span class="dot" style="background: #4d9eff"></span><span style="font-size: 11.5px">Brain</span></div>
+        </div>
+        <p style="margin: 8px 0 0; font-size: 11.5px; color: #5a6480; line-height: 1.5">Twelve seats consume eleven categorical hues plus the brand. A thirteenth needs a twelfth hue declared first.</p>
+      </div>
+
+    </div>
+  </div>
+
+  <div style="display: flex; gap: 22px; padding-top: 16px; border-top: 1px solid rgba(136,146,176,0.15)">
+    <div class="mono" style="font-size: 10.5px; color: #5a6480; line-height: 1.7"><span style="color: #8892b0">Nav</span> 240 / 64px<br><span style="color: #8892b0">Topbar</span> 56px · <span style="color: #8892b0">Footer</span> 44px</div>
+    <div class="mono" style="font-size: 10.5px; color: #5a6480; line-height: 1.7"><span style="color: #8892b0">Row</span> 32px · radius 6px<br><span style="color: #8892b0">Controls</span> 32 / 36 / 44px</div>
+    <div class="mono" style="font-size: 10.5px; color: #5a6480; line-height: 1.7"><span style="color: #8892b0">Icons</span> 24-box, 1.8 stroke<br>inherit the row colour — never emoji</div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

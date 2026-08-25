@@ -737,7 +737,13 @@
       "mail": "E-Mail",
       "phone": "Telefon",
       "sourcing": "Sourcing",
-      "employers": "Arbeitgeber"
+      "employers": "Arbeitgeber",
+      "companies": "Unternehmen",
+      "round": "Die Runde",
+      "investorList": "Investoren",
+      "dataRoom": "Datenraum",
+      "diligence": "Due Diligence",
+      "pack": "Paket"
     },
     "primaryAria": "Primär",
     "destination": {
@@ -20645,6 +20651,7 @@
         "obligationRef": "Verpflichtungs-Ref.",
         "contractObligation": "Vertragliche Verpflichtung",
         "obligationCoverage": "Abdeckung der Verpflichtungen",
+        "nextObligationAt": "Nächste Verpflichtung fällig",
         "significance": "Signifikanz",
         "leadInvestor": "Lead-Investor",
         "roundStatus": "Runden-Status",
@@ -21389,6 +21396,7 @@
         "distribution": "Veröffentlicht auf",
         "postingUrl": "Anzeigen-URL",
         "applicantCount": "Bewerbungen",
+        "postingId": "Ausschreibungs-ID",
         "steps": "Schritte",
         "audience": "Zielgruppe",
         "enrolled": "Aufgenommen",
@@ -25531,7 +25539,8 @@
       "label": "Portalbereiche",
       "installed": "Installiert",
       "catalog": "Katalog",
-      "publish": "Veröffentlichen"
+      "publish": "Veröffentlichen",
+      "earnings": "Einnahmen"
     },
     "errors": {
       "load": "Das Entwicklerportal konnte nicht geladen werden.",
@@ -25548,7 +25557,19 @@
       "uninstall": "Deinstallieren",
       "uninstallTitle": "{name} deinstallieren?",
       "uninstallBody": "Ihre Werkzeuge stehen deinen Agenten sofort nicht mehr zur Verfügung. Die Verbindungseinstellungen bleiben erhalten – eine Neuinstallation stellt sie wieder her.",
-      "uninstallAction": "Deinstallieren"
+      "uninstallAction": "Deinstallieren",
+      "plan": "Tarif: {plan}",
+      "subscription": {
+        "active": "Aktiv",
+        "past_due": "Zahlung fehlgeschlagen",
+        "cancelled": "Gekündigt"
+      },
+      "usage": "{units} {unit} in diesem Zeitraum · bisher {amount}",
+      "viewUsage": "Nutzung",
+      "cancelPlan": "Tarif kündigen",
+      "cancelPlanTitle": "Tarif für {name} kündigen?",
+      "cancelPlanBody": "Bereits erfasste Nutzung dieses Zeitraums erscheint auf Ihrer nächsten Rechnung. Die Erweiterung hört sofort auf zu arbeiten, Ihre Einstellungen bleiben aber für einen erneuten Abschluss erhalten.",
+      "cancelPlanAction": "Tarif kündigen"
     },
     "catalog": {
       "title": "Verfügbare Erweiterungen",
@@ -25557,7 +25578,13 @@
       "verified": "Verifiziert",
       "installs": "{count} Arbeitsbereiche",
       "install": "Installieren",
-      "installed": "Installiert"
+      "installed": "Installiert",
+      "perMonth": "{price}/Monat",
+      "perYear": "{price}/Jahr",
+      "perUnit": "{price} pro {unit}",
+      "choosePlan": "Tarif wählen",
+      "subscribe": "Abonnieren",
+      "planIncluded": "{units} {unit} inklusive, danach je {price}"
     },
     "install": {
       "confirmTitle": "{name} installieren?",
@@ -25566,7 +25593,10 @@
       "confirmSensitive": "Dazu gehört das Ändern deiner Daten: {scopes}",
       "confirmAction": "Installieren",
       "unknownPublisher": "ein nicht verifizierter Anbieter",
-      "noScopes": "nichts"
+      "noScopes": "nichts",
+      "confirmPrice": "Tarif: {plan} — {price}",
+      "confirmSubscribe": "Abonnieren und installieren",
+      "paidNotice": "Abgerechnet wird über die Rechnung, die dieser Arbeitsbereich ohnehin erhält. Ein Konto beim Anbieter ist nicht nötig."
     },
     "publish": {
       "registerTitle": "Als Anbieter registrieren",
@@ -25606,7 +25636,77 @@
       "specInvalidJson": "Das ist kein gültiges JSON.",
       "submit": "Zur Prüfung einreichen",
       "reviewPassed": "Prüfung bestanden – du kannst diese Version veröffentlichen.",
-      "reviewFailed": "Die Prüfung hat Probleme gefunden. Behebe sie und reiche eine neue Version ein."
+      "reviewFailed": "Die Prüfung hat Probleme gefunden. Behebe sie und reiche eine neue Version ein.",
+      "plans": {
+        "title": "Preise",
+        "hint": "Kundinnen und Kunden wählen einen Tarif auf Ihrem Eintrag und werden über ihre bestehende Rechnung abgerechnet — sie legen nie ein Konto bei Ihnen an. Leer lassen, damit die Erweiterung kostenlos bleibt.",
+        "needsIdentity": "Für kostenpflichtige Pakete ist eine Identitätsprüfung erforderlich.",
+        "loadFailed": "Preisliste konnte nicht geladen werden.",
+        "empty": "Keine Tarife — diese Erweiterung ist kostenlos.",
+        "newPlan": "Neuer Tarif",
+        "code": "Code",
+        "name": "Tarifname",
+        "price": "Wiederkehrender Preis",
+        "interval": "Abrechnung",
+        "month": "Monatlich",
+        "year": "Jährlich",
+        "unitLabel": "Name der Einheit",
+        "unitPlaceholder": "Aufruf",
+        "included": "Inkludierte Einheiten",
+        "meteredRate": "Preis je weiterer Einheit",
+        "add": "Tarif hinzufügen",
+        "remove": "Entfernen",
+        "save": "Preise speichern"
+      }
+    },
+    "earnings": {
+      "title": "Einnahmen",
+      "loading": "Wird geladen…",
+      "loadFailed": "Ihre Einnahmen konnten nicht geladen werden.",
+      "available": "Verfügbar zur Auszahlung",
+      "earned": "Insgesamt verdient",
+      "paid": "Bereits ausgezahlt",
+      "underThreshold": "Sie behalten alles, was Sie verdienen, bis zu {threshold} Gesamteinnahmen.",
+      "standardRate": "Unser Anteil beträgt {percent}%, seit Sie {threshold} Gesamteinnahmen überschritten haben.",
+      "noDestination": "Legen Sie ein Auszahlungsziel für diesen Arbeitsbereich fest, bevor Sie auszahlen.",
+      "destinationLabel": "Auszahlungsziel",
+      "destinationPlaceholder": "ID des verbundenen Kontos",
+      "saveDestination": "Ziel speichern",
+      "payout": "{amount} auszahlen",
+      "nothing": "Noch nichts auszuzahlen",
+      "notAPublisher": "Registrieren Sie diesen Arbeitsbereich als Anbieter, um Einnahmen zu sehen."
+    },
+    "programs": {
+      "title": "Partnerprogramme",
+      "yourTrack": "Ihr Programm: {track}",
+      "featured": "Hervorgehoben",
+      "arrangedWithUs": "Programme werden mit uns vereinbart und nicht auf dieser Seite beigetreten — sprechen Sie mit Ihrer Ansprechperson. Selbstständiges Veröffentlichen braucht kein Programm, und unterhalb der Schwelle behalten Sie 100% Ihrer Einnahmen.",
+      "automatic": "Eingebaut",
+      "manual": "Nach Vereinbarung",
+      "track": {
+        "none": "Selbstständig",
+        "technology": "Technologiepartner",
+        "solutions": "Lösungspartner"
+      },
+      "audience": {
+        "selfServe": "Alle, die eine Erweiterung veröffentlichen",
+        "vendors": "Produkt- und Plattformanbieter",
+        "agencies": "Agenturen und Beratungen"
+      },
+      "benefit": {
+        "openRegistration": "Ohne Bewerbung registrieren und veröffentlichen",
+        "zeroRevShare": "Unterhalb der Schwelle 100% behalten",
+        "directoryListing": "Im Integrationsverzeichnis gelistet",
+        "installAnalytics": "Installationsstatistiken zu Ihren Paketen",
+        "featuredPlacement": "Hervorgehobene Platzierung im Verzeichnis",
+        "nativeBilling": "Kunden über ihre bestehende Rechnung abgerechnet",
+        "installWebhooks": "Installationsereignisse an Ihren Server",
+        "coMarketing": "Gemeinsamer Launch-Beitrag und Changelog",
+        "engineeringSupport": "Engineering-Stunden während der Umsetzung",
+        "leadMatchmaking": "Vermittlung an Kunden, die Ihre Arbeit suchen",
+        "revShare": "Umsatzbeteiligung an Ihren Verkäufen",
+        "enterpriseIntroductions": "Kontakte zu Enterprise-Einführungen"
+      }
     }
   },
   "publicForm": {
@@ -27522,5 +27622,173 @@
     "statusBelowThreshold": "Unter der Schwelle",
     "statusReady": "Meldebereit",
     "statusIncomplete": "Profil unvollständig"
+  },
+  "investor": {
+    "title": "Investoren",
+    "subtitle": "Die Finanzierungsrunde als Ort: das Unternehmen, die zugeordnete Arbeit, wer Zugriff hat und welche Due Diligence noch offen ist.",
+    "common": {
+      "loading": "Wird geladen…",
+      "cancel": "Abbrechen",
+      "saving": "Wird gespeichert…",
+      "dismiss": "Schließen",
+      "company": "Unternehmen",
+      "pickCompany": "Wählen Sie ein Unternehmen, um dies zu sehen.",
+      "noCompanies": "Legen Sie zuerst ein Unternehmen an — jede Ansicht hier bezieht sich auf eines."
+    },
+    "error": {
+      "companies": "Die Unternehmen konnten nicht geladen werden.",
+      "company": "Dieses Unternehmen konnte nicht geladen werden.",
+      "createCompany": "Das Unternehmen konnte nicht angelegt werden.",
+      "attachProject": "Dieses Projekt konnte nicht zugeordnet werden.",
+      "detachProject": "Die Zuordnung dieses Projekts konnte nicht aufgehoben werden.",
+      "invite": "Die Einladung konnte nicht versendet werden.",
+      "revoke": "Dieser Zugriff konnte nicht widerrufen werden.",
+      "shareRoom": "Der Raum-Link konnte nicht erstellt werden.",
+      "buildPack": "Das Paket konnte nicht erstellt werden."
+    },
+    "companies": {
+      "title": "Unternehmen",
+      "blurb": "Ein Unternehmen, die Projekte, die es bauen, die Räume, die es hält, und die Runde, die es einwirbt.",
+      "add": "Unternehmen hinzufügen",
+      "create": "Unternehmen anlegen",
+      "name": "Name",
+      "website": "Website",
+      "stage": "Phase",
+      "sector": "Branche",
+      "empty": "Noch keine Unternehmen. Legen Sie eines an, um eine Runde zu starten.",
+      "noFacts": "Noch keine Angaben erfasst",
+      "projectCount": "Projekte: {count}",
+      "roomCount": "Räume: {count}",
+      "gapCount": "Offene Lücken: {count}",
+      "workTitle": "Was {name} gehört",
+      "workBlurb": "Ein Projekt zuzuordnen ist eine Entscheidung, niemals ein Namensabgleich — hier wird nicht geraten, welche Arbeit zu welchem Unternehmen gehört.",
+      "readiness": "Due Diligence bereit: {percent}%",
+      "noProjects": "Keine Projekte zugeordnet. Ein Paket kann erst dann aufführen, was gebaut wird.",
+      "attachLabel": "Projekt zuordnen",
+      "attachPlaceholder": "Projekt wählen…",
+      "attach": "Zuordnen",
+      "detach": "Lösen",
+      "nothingToAttach": "Jedes Projekt in diesem Workspace gehört bereits zu einem Unternehmen."
+    },
+    "round": {
+      "title": "Die Runde — {name}",
+      "blurb": "Die Finanzierungsrunde, neben den vier Dingen, die über sie entscheiden.",
+      "readiness": "Due Diligence bereit",
+      "readinessHint": "Erledigte Pflichtdokumente im Verhältnis zu allen Pflichtdokumenten.",
+      "openGaps": "Offene Lücken",
+      "openGapsHint": "Pflichtdokumente, die ein Investor angefordert und nicht erhalten hat.",
+      "investors": "Investoren mit Zugriff",
+      "investorsHint": "{signed} haben die NDA unterzeichnet.",
+      "projects": "Zugeordnete Projekte",
+      "projectsHint": "Was das Paket als gebaut aufführen kann.",
+      "empty": "Noch keine Runde erfasst. Legen Sie in der Entitätsansicht eine Opportunity an, um Konditionen hier zu verfolgen.",
+      "noTerms": "Keine Konditionen erfasst",
+      "ask": "Ziel {currency} {amount}",
+      "preMoney": "Pre-Money {currency} {amount}",
+      "declaredNotice": "Jeder Betrag hier ist ein am Unternehmen oder an der Opportunity erfasster Wert. Nichts auf dieser Seite wird aus angebundener Buchhaltung berechnet."
+    },
+    "investors": {
+      "title": "Investoren — {name}",
+      "blurb": "Ein Investor wird zum Unternehmen eingeladen, nicht zu einem Raum. Eine NDA, eine Wasserzeichen-Identität, ein Ablaufdatum und ein Widerruf gelten für jeden Raum dieses Unternehmens — heute und künftig.",
+      "invite": "Investor einladen",
+      "name": "Name",
+      "email": "E-Mail",
+      "expires": "Zugriff endet",
+      "purpose": "Zweck",
+      "ndaNotice": "Die NDA wird zuerst versendet und der Link daran gebunden. Eine Unterschrift deckt jeden Raum dieses Unternehmens ab.",
+      "send": "Einladung senden",
+      "mintedTitle": "Einladung an {email} gesendet",
+      "mintedOnce": "Dieser Link wird einmal angezeigt. Nur sein Hash wird gespeichert, er kann nicht erneut gelesen werden — kopieren Sie ihn jetzt.",
+      "mintedNdaPending": "Die NDA wurde per E-Mail versendet. Bis zur Unterschrift öffnet sich nichts.",
+      "mintedNdaNone": "Es war keine NDA erforderlich, der Link öffnet sofort.",
+      "mintedWatermarkRefusedDownload": "Downloads wurden abgelehnt, weil ein Raum dieses Unternehmens mit Wasserzeichen arbeitet.",
+      "empty": "Zu diesem Unternehmen wurden noch keine Investoren eingeladen.",
+      "expiresOn": "endet {date}",
+      "activity": "Öffnungen {opens} · Dokumente {views}",
+      "revoke": "Widerrufen",
+      "revokeScope": "Damit endet der Zugriff auf jeden Raum dieses Unternehmens.",
+      "revokeConfirm": "Überall widerrufen",
+      "readTitle": "Was tatsächlich gelesen wurde",
+      "readBlurb": "Über jeden Raum dieses Unternehmens hinweg, damit die Antwort eine Person ist und keine Datei.",
+      "views": "Aufrufe: {count}",
+      "state": {
+        "active": "Aktiv",
+        "revoked": "Widerrufen",
+        "expired": "Abgelaufen"
+      },
+      "nda": {
+        "not-required": "Keine NDA",
+        "pending": "NDA offen",
+        "signed": "NDA unterzeichnet",
+        "declined": "NDA abgelehnt",
+        "expired": "NDA abgelaufen"
+      }
+    },
+    "dataRoom": {
+      "title": "Datenraum — {name}",
+      "blurb": "Ein Raum-Link öffnet genau einen Raum. Nutzen Sie ihn für jemanden, der eine Sache sehen soll; laden Sie einen Investor zum Unternehmen ein, wenn er alles sehen soll.",
+      "empty": "Dieses Unternehmen hat noch keine Datenräume.",
+      "noPurpose": "Kein Zweck erfasst",
+      "readiness": "Bereit {percent}%",
+      "nda": "NDA erforderlich",
+      "watermark": "Mit Wasserzeichen",
+      "links": "Aktive Links: {count}",
+      "share": "Diesen Raum teilen",
+      "unstampable": "{count} bereitgestellte Dateien können in ihrem Format kein Wasserzeichen tragen und lassen sich daher nur im Tab öffnen.",
+      "recipientName": "Name des Empfängers",
+      "recipientEmail": "E-Mail des Empfängers",
+      "sendLink": "Link senden",
+      "oneRoomOnly": "Dieser Link öffnet nur diesen Raum. Er erreicht weder den nächsten Raum noch das Update oder das Paket.",
+      "mintedTitle": "Raum-Link erstellt",
+      "mintedOnce": "Einmalig angezeigt. Nur der Hash wird gespeichert, er kann nicht erneut gelesen werden — kopieren Sie ihn jetzt.",
+      "mintedWatermarkRefusedDownload": "Downloads wurden abgelehnt, weil dieser Raum mit Wasserzeichen arbeitet."
+    },
+    "diligence": {
+      "title": "Due Diligence — {name}",
+      "blurb": "Jede Zeile ist ein Pflichtdokument, das ein Investor angefordert und nicht erhalten hat. Der daneben genannte Sitz ist derjenige, der es schließt.",
+      "readiness": "Bereit {percent}%",
+      "empty": "Nichts Erforderliches ist offen. Jedes Pflichtdokument wurde bereitgestellt, angenommen oder erlassen.",
+      "seatHeading": "{seat} — {count} offen",
+      "unownedHeading": "Nicht zugewiesen — {count} offen",
+      "openSeat": "{seat} öffnen",
+      "due": "fällig {date}",
+      "requested": "Angefordert",
+      "notice": "Lücken werden aufgeführt statt verborgen. Ein Raum, der nur vorhandene Dateien zeigt, würde genau die Lücke verbergen, für die er gebaut wurde."
+    },
+    "pack": {
+      "title": "Finanzierungspaket — {name}",
+      "blurb": "Deck, Plan, Risiken und Zahlen, zusammengestellt aus diesem Unternehmen: seinen Projekten, seiner Runde und seiner offenen Due Diligence.",
+      "groundOn": "Fähigkeitsanalyse stützen auf",
+      "groundAuto": "Das zuletzt aktualisierte Projekt",
+      "groundNone": "Kein Projekt — auf der grünen Wiese schreiben",
+      "audience": "Adressiert an",
+      "emphasis": "Beginnen mit",
+      "noProjects": "Diesem Unternehmen ist kein Projekt zugeordnet, das Paket kann daher nicht aufführen, was gebaut wird. Ordnen Sie unter „Unternehmen“ eines zu.",
+      "gapsWarning": "Dieses Unternehmen hat {count} offene Due-Diligence-Lücken. Das Paket benennt sie, weil ein Investor sie ohnehin findet.",
+      "build": "Paket erstellen",
+      "building": "Wird erstellt…",
+      "builtTitle": "Paket erstellt",
+      "projectsCited": "Genannte Projekte: {count}",
+      "openGaps": "Benannte offene Lücken: {count}",
+      "open": "Öffnen",
+      "pdf": "PDF",
+      "empty": "Für dieses Unternehmen wurde noch kein Paket erstellt.",
+      "generatedOn": "Erstellt {date}"
+    }
+  },
+  "investorGrant": {
+    "eyebrow": "Investorenzugang",
+    "loading": "Wird geladen…",
+    "invalid": "Dieser Link ist nicht mehr gültig. Bitten Sie den Absender um einen neuen.",
+    "addressed": "Freigegeben für {name}.",
+    "expires": "Zugriff endet {date}.",
+    "ndaHelp": "Die Signaturanfrage wurde Ihnen mit der Einladung zugesendet. Eine Unterschrift deckt jeden Raum dieses Unternehmens ab — unterschreiben Sie und laden Sie diese Seite neu.",
+    "roomsLabel": "Räume, die Sie öffnen können: {count}",
+    "noRooms": "Dieses Unternehmen hat noch keine für Sie geöffneten Räume. Ihr Zugriff bleibt bestehen; schauen Sie später wieder vorbei.",
+    "noPurpose": "Kein Zweck erfasst",
+    "watermarked": "mit Wasserzeichen",
+    "open": "Öffnen",
+    "reopen": "Neu laden",
+    "futureRooms": "Dieser Link gilt dem Unternehmen, nicht einem Raum — später hinzugefügte Räume erscheinen hier ohne neue Einladung."
   }
 }

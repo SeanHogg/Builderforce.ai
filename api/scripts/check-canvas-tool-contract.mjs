@@ -76,6 +76,10 @@ const CANVAS_FILES = [
   path.resolve(repoRoot, 'frontend', 'src', 'lib', 'canvasLegalRecordTools.ts'),
   path.resolve(repoRoot, 'frontend', 'src', 'lib', 'canvasSignatureTools.ts'),
   path.resolve(repoRoot, 'frontend', 'src', 'lib', 'canvasSellMotionTools.ts'),
+  // The requisition's binding to its real `job_postings` row (FO-B3). Listed the same
+  // day it was written, for the reason the note above `canvasLegalRecordTools.ts` gives:
+  // a family absent from this array makes the guard pass VACUOUSLY.
+  path.resolve(repoRoot, 'frontend', 'src', 'lib', 'canvasHiringPostingTools.ts'),
 ];
 const CONTRACT_FILE = path.resolve(repoRoot, 'packages', 'creation-canvas-contract', 'src', 'canvasTools.ts');
 

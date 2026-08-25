@@ -171,6 +171,28 @@ export const projects = pgTable('projects', {
   /** The external website this project is configured to security-scan (migration
    *  0357). Set once, re-scanned on demand; NULL = no target configured yet. */
   securityTargetUrl: varchar('security_target_url', { length: 2048 }),
+  /**
+   * The COMPANY this project builds for (IN-1, migration 1120).
+   *
+   * The one-company-to-many-projects edge the investor framing rests on: a
+   * fundraising pack enumerates what is being built, a diligence answer cites the
+   * project that produced it, and a portfolio rolls delivery up to the company it
+   * belongs to. None of those were expressible while nothing here named a company.
+   *
+   * NULLABLE and never backfilled. Almost every existing project predates any
+   * `companies` row, and the only thing available to match them on is the NAME —
+   * which is precisely the string-matching defect FO-A1/FO-A2 exist to remove. A
+   * project belongs to a company when somebody says so; unknown reads as unknown.
+   *
+   * The FOREIGN KEY is real and lives in migration 1120 (`ON DELETE SET NULL` — a
+   * deleted company record must not delete the delivery history). It is kept OFF
+   * this declaration on purpose: `companies` is `schema/investor.ts`, and a
+   * `.references()` here would open a `delivery.ts -> investor.ts` edge that
+   * `check-domain-boundary` counts, buying nothing the database is not already
+   * enforcing. `data_room_shares.nda_signature_request_id` and
+   * `legal_document_files.signature_request_id` are the same call.
+   */
+  companyId:       integer('company_id'),
   createdAt:       timestamp('created_at').notNull().defaultNow(),
   updatedAt:       timestamp('updated_at').notNull().defaultNow(),
 });

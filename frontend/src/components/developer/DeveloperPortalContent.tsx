@@ -26,7 +26,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useTranslations } from 'next-intl';
+import { useFormatter, useTranslations } from 'next-intl';
 import PageContainer from '@/components/PageContainer';
 import { useConfirm } from '@/components/ConfirmProvider';
 import {
@@ -35,86 +35,40 @@ import {
   type ExtensionInstall,
   type ExtensionPackage,
   type ExtensionVersion,
+  type InstallPreview,
   type Publisher,
 } from '@/lib/builderforceApi';
+import { PublishTab } from './PublishTab';
+import { PublisherEarningsPanel } from './PublisherEarningsPanel';
+// The tokens both halves of this page draw from. Extracted when `PublishTab`
+// moved out and the two files started carrying identical copies of them.
+import {
+  buttonDanger,
+  buttonPrimary,
+  buttonQuiet,
+  card,
+  chip,
+  grid,
+  muted,
+  sectionTitle,
+} from './portalStyles';
 
-// ── Tokens only. Every colour here resolves in both themes. ─────────────────
-const card: React.CSSProperties = {
-  background: 'var(--bg-base)',
-  border: '1px solid var(--border-subtle)',
-  borderRadius: 'var(--radius-lg)',
-  padding: 20,
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 14,
-};
+type Tab = 'installed' | 'catalog' | 'publish' | 'earnings';
 
-const sectionTitle: React.CSSProperties = {
-  fontSize: 'var(--font-size-body)',
-  fontWeight: 700,
-  color: 'var(--text-primary)',
-};
+const TABS = ['installed', 'catalog', 'publish', 'earnings'] as const;
 
-const muted: React.CSSProperties = { fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)' };
-
-const buttonPrimary: React.CSSProperties = {
-  padding: '8px 14px',
-  fontSize: 'var(--font-size-small)',
-  fontWeight: 600,
-  background: 'var(--surface-interactive)',
-  color: 'var(--text-primary)',
-  border: '1px solid var(--border-subtle)',
-  borderRadius: 'var(--radius-md)',
-  cursor: 'pointer',
-  minHeight: 36,
-};
-
-const buttonQuiet: React.CSSProperties = {
-  ...buttonPrimary,
-  background: 'none',
-};
-
-const buttonDanger: React.CSSProperties = {
-  ...buttonQuiet,
-  color: 'var(--coral-bright)',
-  borderColor: 'var(--coral-bright)',
-};
-
-const input: React.CSSProperties = {
-  width: '100%',
-  padding: '8px 10px',
-  fontSize: 'var(--font-size-small)',
-  background: 'var(--bg-elevated, var(--bg-base))',
-  color: 'var(--text-primary)',
-  border: '1px solid var(--border-subtle)',
-  borderRadius: 'var(--radius-md)',
-  minHeight: 36,
-};
-
-/** Fluid grid — never a fixed px width that overflows a 360px viewport. */
-const grid: React.CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))',
-  gap: 14,
-};
-
-const chip = (tone: 'neutral' | 'good' | 'warn'): React.CSSProperties => ({
-  display: 'inline-block',
-  padding: '2px 8px',
-  fontSize: 'var(--font-size-eyebrow)',
-  fontWeight: 600,
-  borderRadius: 'var(--radius-full)',
-  border: '1px solid var(--border-subtle)',
-  color:
-    tone === 'good' ? 'var(--success-text)'
-    : tone === 'warn' ? 'var(--coral-bright)'
-    : 'var(--text-secondary)',
-  whiteSpace: 'nowrap',
-});
-
-type Tab = 'installed' | 'catalog' | 'publish';
-
-const TABS = ['installed', 'catalog', 'publish'] as const;
+/**
+ * Cents → the reader's own currency formatting.
+ *
+ * Declared once and used by every price on this page. A hand-rolled `${n/100}`
+ * is wrong in every locale but one, and a marketplace that shows a French buyer
+ * a dollar sign in front of a euro price has told them the wrong number.
+ */
+function useMoney() {
+  const format = useFormatter();
+  return (cents: number, currency: string) =>
+    format.number(cents / 100, { style: 'currency', currency: currency || 'USD', maximumFractionDigits: 2 });
+}
 
 /** `?tab=catalog` opens the portal on the catalogue.
  *
@@ -134,6 +88,12 @@ export function DeveloperPortalContent() {
   const tc = useTranslations('common');
   const confirm = useConfirm();
 
+  const money = useMoney();
+  const planPrice = (plan: { priceCents: number; interval: string; meteredRateCents: number; unitLabel: string }, currency: string): string =>
+    plan.priceCents > 0
+      ? t(`catalog.per${plan.interval === 'year' ? 'Year' : 'Month'}` as 'catalog.perMonth', { price: money(plan.priceCents, currency) })
+      : t('catalog.perUnit', { price: money(plan.meteredRateCents, currency), unit: plan.unitLabel });
+
   const [tab, setTab] = useState<Tab>(initialTab);
   const [contract, setContract] = useState<ExtensionContract | null>(null);
   const [publisher, setPublisher] = useState<Publisher | null>(null);
@@ -144,6 +104,16 @@ export function DeveloperPortalContent() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  /** The package whose plan chooser is open, and what installing it would grant.
+   *  A paid install cannot go through the one-click door — the plan has to be
+   *  chosen before there is anything to charge — so the card expands rather than
+   *  the button acting. */
+  const [choosing, setChoosing] = useState<{ pkg: ExtensionPackage; preview: InstallPreview } | null>(null);
+  const [chosenPlan, setChosenPlan] = useState<string>('');
+  /** What the metered period on one install costs so far. Fetched on demand:
+   *  most installs are free, and a list that fanned out a usage read per row
+   *  would be N requests for a screen most people never look at. */
+  const [usage, setUsage] = useState<Record<string, { units: number; unitLabel: string; projectedCents: number; currency: string }>>({});
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -171,6 +141,36 @@ export function DeveloperPortalContent() {
 
   useEffect(() => { void load(); }, [load]);
 
+  /**
+   * Settle a checkout the processor has just redirected back from.
+   *
+   * `?extension=<session id>` is what `startPlanCheckout` asked the processor to
+   * return with. The id is UNTRUSTED — it arrives from the address bar — and
+   * everything that authorises the install is read back from the processor by
+   * the server. This only hands it over and clears the query, so a refresh does
+   * not try to settle a session that is already settled.
+   */
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const session = params.get('extension');
+    if (!session || session === 'cancelled') return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        await developerApi.completePlanCheckout(session);
+        if (!cancelled) await load();
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : t('errors.action'));
+      } finally {
+        params.delete('extension');
+        const query = params.toString();
+        window.history.replaceState({}, '', `${window.location.pathname}${query ? `?${query}` : ''}`);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [load, t]);
+
   const installedPackageIds = useMemo(
     () => new Set(installs.filter((i) => !i.disabled).map((i) => i.packageId)),
     [installs],
@@ -192,6 +192,15 @@ export function DeveloperPortalContent() {
   // ── Install, with the consent step the grant depends on ──────────────────
   async function handleInstall(pkg: ExtensionPackage) {
     const preview = await developerApi.previewInstall(pkg.id);
+    // A PAID package cannot take the one-click path: there is a plan to choose
+    // and money to move, and the server refuses a free install of it outright.
+    // Opening the chooser rather than showing the consent dialogue is what keeps
+    // the two flows from looking identical up to the moment one of them fails.
+    if (preview.paid) {
+      setChoosing({ pkg, preview });
+      setChosenPlan(preview.plans[0]?.code ?? '');
+      return;
+    }
     const ok = await confirm({
       title: t('install.confirmTitle', { name: preview.packageName }),
       message: [
@@ -208,6 +217,70 @@ export function DeveloperPortalContent() {
     // approved set IS the requested set. The dialogue above is where the person
     // says no; there is no half-yes to encode.
     await run(`install:${pkg.id}`, () => developerApi.install(pkg.id, preview.scopes));
+  }
+
+  /**
+   * Start a paid install: confirm the scopes AND the price, then hand over.
+   *
+   * The consent screen says both things because they are one decision. A person
+   * approving `write:tickets` and a person agreeing to $9 a month are the same
+   * person in the same moment, and splitting them into two dialogues is how one
+   * of them gets clicked through.
+   */
+  async function handleSubscribe() {
+    if (!choosing) return;
+    const { pkg, preview } = choosing;
+    const plan = preview.plans.find((p) => p.code === chosenPlan);
+    if (!plan) return;
+    const ok = await confirm({
+      title: t('install.confirmTitle', { name: preview.packageName }),
+      message: [
+        t('install.confirmPublisher', { publisher: preview.publisherName ?? t('install.unknownPublisher') }),
+        t('install.confirmPrice', { plan: plan.name, price: planPrice(plan, preview.currency) }),
+        t('install.confirmScopes', { scopes: preview.scopes.join(', ') || t('install.noScopes') }),
+        preview.sensitiveScopes.length
+          ? t('install.confirmSensitive', { scopes: preview.sensitiveScopes.join(', ') })
+          : '',
+        t('install.paidNotice'),
+      ].filter(Boolean).join('\n\n'),
+      confirmLabel: t('install.confirmSubscribe'),
+    });
+    if (!ok) return;
+    await run(`subscribe:${pkg.id}`, async () => {
+      const start = await developerApi.startPlanCheckout({
+        packageId: pkg.id,
+        planCode: plan.code,
+        approvedScopes: preview.scopes,
+        returnUrl: window.location.href.split('?')[0] ?? window.location.href,
+      });
+      setChoosing(null);
+      // A pure usage plan on a card-validated workspace has nothing to charge
+      // today, so the server installed it outright and there is nowhere to go.
+      if (start.checkoutUrl) window.location.assign(start.checkoutUrl);
+    });
+  }
+
+  async function handleCancelPlan(install: ExtensionInstall) {
+    const ok = await confirm({
+      title: t('installed.cancelPlanTitle', { name: install.packageName }),
+      message: t('installed.cancelPlanBody'),
+      confirmLabel: t('installed.cancelPlanAction'),
+      destructive: true,
+    });
+    if (ok) await run(`cancel-plan:${install.id}`, () => developerApi.cancelPlan(install.id));
+  }
+
+  async function handleShowUsage(install: ExtensionInstall) {
+    const { period } = await developerApi.usage(install.id);
+    setUsage((prev) => ({
+      ...prev,
+      [install.id]: {
+        units: period.units,
+        unitLabel: period.unitLabel,
+        projectedCents: period.projectedCents,
+        currency: period.currency,
+      },
+    }));
   }
 
   async function handleUninstall(install: ExtensionInstall) {
@@ -278,6 +351,23 @@ export function DeveloperPortalContent() {
                       {t('installed.byPublisher', { publisher: i.publisherName ?? '—', version: i.semver })}
                     </p>
                     <p style={muted}>{t('installed.grants', { scopes: i.grantedScopes.join(', ') || '—' })}</p>
+                    {i.subscriptionState !== 'none' && (
+                      <p style={muted}>
+                        {t('installed.plan', { plan: i.planCode ?? '—' })}{' '}
+                        <span style={chip(i.subscriptionState === 'active' ? 'good' : 'warn')}>
+                          {t(`installed.subscription.${i.subscriptionState}` as 'installed.subscription.active')}
+                        </span>
+                      </p>
+                    )}
+                    {usage[i.id] && (
+                      <p style={muted}>
+                        {t('installed.usage', {
+                          units: usage[i.id]!.units,
+                          unit: usage[i.id]!.unitLabel,
+                          amount: money(usage[i.id]!.projectedCents, usage[i.id]!.currency),
+                        })}
+                      </p>
+                    )}
                     {i.update && (
                       <p style={{ ...muted, color: 'var(--coral-bright)' }}>
                         {i.update.auto
@@ -297,6 +387,21 @@ export function DeveloperPortalContent() {
                           onClick={() => void run(`update:${i.id}`, () => developerApi.updateInstall(i.id))}
                         >
                           {t('installed.update')}
+                        </button>
+                      )}
+                      {i.subscriptionState !== 'none' && (
+                        <button type="button" style={buttonQuiet} onClick={() => void handleShowUsage(i)}>
+                          {t('installed.viewUsage')}
+                        </button>
+                      )}
+                      {i.subscriptionState !== 'none' && i.subscriptionState !== 'cancelled' && (
+                        <button
+                          type="button"
+                          style={buttonQuiet}
+                          disabled={busy === `cancel-plan:${i.id}`}
+                          onClick={() => void handleCancelPlan(i)}
+                        >
+                          {t('installed.cancelPlan')}
                         </button>
                       )}
                       <button
@@ -345,6 +450,56 @@ export function DeveloperPortalContent() {
                     >
                       {installedPackageIds.has(p.id) ? t('catalog.installed') : t('catalog.install')}
                     </button>
+
+                    {/* The chooser expands the card it belongs to rather than
+                        opening a dialogue: the plans have to be COMPARED, and a
+                        confirm box that can only hold text cannot show a table. */}
+                    {choosing?.pkg.id === p.id && (
+                      <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        <strong style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-primary)' }}>
+                          {t('catalog.choosePlan')}
+                        </strong>
+                        {choosing.preview.plans.map((plan) => (
+                          <label key={plan.code} style={{ ...muted, display: 'flex', gap: 8, alignItems: 'flex-start', minHeight: 32 }}>
+                            <input
+                              type="radio"
+                              name={`plan-${p.id}`}
+                              value={plan.code}
+                              checked={chosenPlan === plan.code}
+                              onChange={() => setChosenPlan(plan.code)}
+                            />
+                            <span>
+                              <strong style={{ color: 'var(--text-primary)' }}>{plan.name}</strong>
+                              {' — '}
+                              {planPrice(plan, choosing.preview.currency)}
+                              {plan.meteredRateCents > 0 && plan.priceCents > 0 && (
+                                <>
+                                  {' · '}
+                                  {t('catalog.planIncluded', {
+                                    units: plan.includedUnits,
+                                    unit: plan.unitLabel,
+                                    price: money(plan.meteredRateCents, choosing.preview.currency),
+                                  })}
+                                </>
+                              )}
+                            </span>
+                          </label>
+                        ))}
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                          <button
+                            type="button"
+                            style={buttonPrimary}
+                            disabled={!chosenPlan || busy === `subscribe:${p.id}`}
+                            onClick={() => void handleSubscribe()}
+                          >
+                            {t('catalog.subscribe')}
+                          </button>
+                          <button type="button" style={buttonQuiet} onClick={() => setChoosing(null)}>
+                            {tc('cancel')}
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </article>
                 ))}
               </div>
@@ -361,246 +516,20 @@ export function DeveloperPortalContent() {
             contract={contract}
             busy={busy}
             onRun={run}
-            onLoadVersions={async (packageId) => {
+            onLoadVersions={async (packageId: string) => {
               const v = await developerApi.versions(packageId);
               setVersions((prev) => ({ ...prev, [packageId]: v }));
             }}
           />
         )}
+
+        {/* ── Earnings + programs ────────────────────────────────────── */}
+        {tab === 'earnings' && (
+          publisher
+            ? <PublisherEarningsPanel busy={busy} onRun={run} />
+            : <section style={card}><p style={muted}>{t('earnings.notAPublisher')}</p></section>
+        )}
       </div>
     </PageContainer>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Publish tab
-// ---------------------------------------------------------------------------
-
-type PublishTabProps = {
-  publisher: Publisher | null;
-  packages: ExtensionPackage[];
-  versions: Record<string, ExtensionVersion[]>;
-  contract: ExtensionContract | null;
-  busy: string | null;
-  onRun: (key: string, fn: () => Promise<unknown>) => Promise<void>;
-  onLoadVersions: (packageId: string) => Promise<void>;
-};
-
-/**
- * Registration, packages and submission.
- *
- * Decides its own visibility rather than being handed a `canPublish` boolean: it
- * knows whether the caller is a member of a publisher, so the consumer does not
- * have to compute it.
- */
-function PublishTab({ publisher, packages, versions, contract, busy, onRun, onLoadVersions }: PublishTabProps) {
-  const t = useTranslations('developerPortal');
-  const [pkgName, setPkgName] = useState('');
-  const [pkgKind, setPkgKind] = useState('connector');
-  const [specText, setSpecText] = useState('');
-  const [semver, setSemver] = useState('1.0.0');
-  const [scopes, setScopes] = useState<string[]>(['tools:call']);
-  const [target, setTarget] = useState<string>('');
-  const [submitResult, setSubmitResult] = useState<ExtensionVersion | null>(null);
-  const [specError, setSpecError] = useState<string | null>(null);
-
-  if (!publisher) {
-    return (
-      <section style={card}>
-        <h2 style={sectionTitle}>{t('publish.registerTitle')}</h2>
-        <p style={{ ...muted, maxWidth: '70ch' }}>{t('publish.registerBody')}</p>
-        <button
-          type="button"
-          style={buttonPrimary}
-          disabled={busy === 'register'}
-          onClick={() => void onRun('register', () => developerApi.register())}
-        >
-          {t('publish.register')}
-        </button>
-      </section>
-    );
-  }
-
-  const submit = async () => {
-    setSpecError(null);
-    let spec: unknown;
-    try {
-      spec = JSON.parse(specText);
-    } catch {
-      // Parsed here so a typo is a message beside the field rather than a failed
-      // request the publisher has to interpret.
-      setSpecError(t('publish.specInvalidJson'));
-      return;
-    }
-    await onRun('submit', async () => {
-      const res = await developerApi.submitVersion(target, { semver, spec, requestedScopes: scopes });
-      setSubmitResult(res.version);
-      await onLoadVersions(target);
-    });
-  };
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      <section style={card}>
-        <h2 style={sectionTitle}>{t('publish.publisherTitle')}</h2>
-        <p style={muted}>
-          {publisher.name} · <code>{publisher.slug}</code>{' '}
-          <span style={chip(publisher.state === 'identity_verified' ? 'good' : 'neutral')}>
-            {t(`publish.verification.${publisher.state}` as 'publish.verification.unverified')}
-          </span>
-        </p>
-        <p style={{ ...muted, maxWidth: '70ch' }}>{t('publish.verificationHint')}</p>
-      </section>
-
-      <section style={card}>
-        <h2 style={sectionTitle}>{t('publish.newPackageTitle')}</h2>
-        <div style={grid}>
-          <div>
-            <label style={muted} htmlFor="pkg-name">{t('publish.packageName')}</label>
-            <input id="pkg-name" style={input} value={pkgName} onChange={(e) => setPkgName(e.target.value)} />
-          </div>
-          <div>
-            <label style={muted} htmlFor="pkg-kind">{t('publish.packageKind')}</label>
-            <select id="pkg-kind" style={input} value={pkgKind} onChange={(e) => setPkgKind(e.target.value)}>
-              {(contract?.kinds ?? ['connector']).map((k) => (
-                // A native <option> needs its own opaque background and foreground:
-                // the popup is drawn by the OS and does not inherit the page's theme.
-                <option key={k} value={k} style={{ background: 'var(--bg-base)', color: 'var(--text-primary)' }}>
-                  {k}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-        <button
-          type="button"
-          style={buttonPrimary}
-          disabled={pkgName.trim().length < 2 || busy === 'create-package'}
-          onClick={() =>
-            void onRun('create-package', () =>
-              developerApi.createPackage({ kind: pkgKind, name: pkgName.trim() }),
-            )
-          }
-        >
-          {t('publish.createPackage')}
-        </button>
-      </section>
-
-      <section style={card}>
-        <h2 style={sectionTitle}>{t('publish.packagesTitle')}</h2>
-        {packages.length === 0 ? (
-          <p style={muted}>{t('publish.packagesEmpty')}</p>
-        ) : (
-          <div style={grid}>
-            {packages.map((p) => (
-              <article key={p.id} style={{ ...card, padding: 16 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
-                  <strong style={{ color: 'var(--text-primary)', fontSize: 'var(--font-size-small)' }}>{p.name}</strong>
-                  <span style={chip(p.listingState === 'listed' ? 'good' : 'neutral')}>
-                    {t(`publish.listing.${p.listingState}` as 'publish.listing.draft')}
-                  </span>
-                </div>
-                <p style={muted}>{p.kind} · <code>{p.slug}</code></p>
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  <button type="button" style={buttonQuiet} onClick={() => { setTarget(p.id); void onLoadVersions(p.id); }}>
-                    {t('publish.selectForSubmit')}
-                  </button>
-                  {p.listingState === 'listed' && (
-                    <button
-                      type="button"
-                      style={buttonQuiet}
-                      disabled={busy === `delist:${p.id}`}
-                      onClick={() => void onRun(`delist:${p.id}`, () => developerApi.setListingState(p.id, 'delisted'))}
-                    >
-                      {t('publish.delist')}
-                    </button>
-                  )}
-                </div>
-                {(versions[p.id] ?? []).map((v) => (
-                  <div key={v.id} style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 8 }}>
-                    <p style={muted}>
-                      <code>{v.semver}</code>{' '}
-                      <span style={chip(v.reviewState === 'approved' ? 'good' : 'warn')}>
-                        {t(`publish.review.${v.reviewState}` as 'publish.review.pending')}
-                      </span>
-                    </p>
-                    {v.reviewState === 'approved' && p.currentVersionId !== v.id && (
-                      <button
-                        type="button"
-                        style={buttonPrimary}
-                        disabled={busy === `publish:${v.id}`}
-                        onClick={() => void onRun(`publish:${v.id}`, () => developerApi.publishVersion(p.id, v.id))}
-                      >
-                        {t('publish.publishVersion')}
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </article>
-            ))}
-          </div>
-        )}
-      </section>
-
-      {target && (
-        <section style={card}>
-          <h2 style={sectionTitle}>{t('publish.submitTitle')}</h2>
-          <div style={grid}>
-            <div>
-              <label style={muted} htmlFor="semver">{t('publish.semver')}</label>
-              <input id="semver" style={input} value={semver} onChange={(e) => setSemver(e.target.value)} />
-            </div>
-            <fieldset style={{ border: 'none', padding: 0, margin: 0 }}>
-              <legend style={muted}>{t('publish.scopes')}</legend>
-              {(contract?.scopes ?? []).map((s) => (
-                <label key={s} style={{ ...muted, display: 'flex', gap: 8, alignItems: 'center', minHeight: 32 }}>
-                  <input
-                    type="checkbox"
-                    checked={scopes.includes(s)}
-                    onChange={(e) =>
-                      setScopes((prev) => (e.target.checked ? [...prev, s] : prev.filter((x) => x !== s)))
-                    }
-                  />
-                  <code>{s}</code>
-                </label>
-              ))}
-            </fieldset>
-          </div>
-          <label style={muted} htmlFor="spec">{t('publish.spec')}</label>
-          <textarea
-            id="spec"
-            style={{ ...input, minHeight: 220, fontFamily: 'var(--font-mono, monospace)' }}
-            value={specText}
-            onChange={(e) => setSpecText(e.target.value)}
-            placeholder={t('publish.specPlaceholder')}
-          />
-          {specError && <p role="alert" style={{ ...muted, color: 'var(--coral-bright)' }}>{specError}</p>}
-          <button type="button" style={buttonPrimary} disabled={busy === 'submit'} onClick={() => void submit()}>
-            {t('publish.submit')}
-          </button>
-
-          {submitResult && (
-            <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 12 }}>
-              <p style={{ ...sectionTitle, fontSize: 'var(--font-size-small)' }}>
-                {submitResult.reviewState === 'approved' ? t('publish.reviewPassed') : t('publish.reviewFailed')}
-              </p>
-              <ul style={{ margin: 0, paddingLeft: 18 }}>
-                {submitResult.reviewFindings.map((f, idx) => (
-                  <li
-                    key={`${f.check}-${idx}`}
-                    style={{
-                      ...muted,
-                      color: f.severity === 'fail' ? 'var(--coral-bright)' : 'var(--text-secondary)',
-                    }}
-                  >
-                    <code>{f.check}</code> — {f.message}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </section>
-      )}
-    </div>
   );
 }

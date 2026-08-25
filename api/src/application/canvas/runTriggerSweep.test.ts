@@ -123,7 +123,7 @@ describe('runTriggerSweep', () => {
 describe('describeTransition', () => {
   const base = (over: Partial<ResolvedTrigger>): ResolvedTrigger => ({
     triggerId: 't', triggerTitle: 'T', watchedId: 'w', watchedTitle: 'Acme MSA', watchedKind: 'contract',
-    deadlineField: 'renewsAt', comparator: 'due-within', threshold: 30, thenDo: [],
+    deadlineField: 'renewsAt', deadlineDetail: null, comparator: 'due-within', threshold: 30, thenDo: [],
     evaluation: { state: 'breached', observed: 12, reason: 'breached' },
     ...over,
   });
@@ -135,6 +135,22 @@ describe('describeTransition', () => {
     expect(describeTransition(base({ evaluation: { state: 'breached', observed: 0, reason: 'breached' } }), true)).toContain('due today');
     expect(describeTransition(base({ evaluation: { state: 'breached', observed: -9, reason: 'breached' } }), true)).toContain('9 days overdue');
     expect(describeTransition(base({ evaluation: { state: 'breached', observed: -1, reason: 'breached' } }), true)).toContain('1 day overdue');
+  });
+
+  /**
+   * FO-G2. A contract has more than one clock, so the field name is not enough: a digest
+   * saying "Acme MSA is due in 3 days (nextObligationAt)" is a line somebody has to open
+   * the board to understand, which is the round trip the sweep exists to remove.
+   */
+  it('names the obligation behind a computed deadline instead of the field', () => {
+    const line = describeTransition(base({
+      deadlineField: 'nextObligationAt',
+      deadlineDetail: 'obligation "Quarterly support fee" (SUPPORT-Q)',
+      evaluation: { state: 'breached', observed: 3, reason: 'breached' },
+    }), true);
+    expect(line).toContain('due in 3 days');
+    expect(line).toContain('Quarterly support fee');
+    expect(line).not.toContain('nextObligationAt');
   });
 
   it('says the value and the threshold for a numeric trigger', () => {

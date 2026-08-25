@@ -300,7 +300,36 @@ export const NAV_GROUPS: NavGroup[] = [
   // named, and put it in front of a colleague for review. A tab of `/seat/hiring` would
   // file "help me with my résumé" inside somebody else's funnel.
   { id: 'career', labelKey: 'group.career', icon: '📄', href: '/career', match: ['/career'], seat: 'Recruiter', stage: 'run' },
-  { id: 'investor', labelKey: 'group.investor', icon: '💼', href: '/seat/investor', match: ['/seat/investor'], seat: 'CEO', stage: 'run' },
+  {
+    // The flagship destination of the founder framing, and until IN-3 a one-line row
+    // with nothing under it: the surfaces the framing promises had nowhere to mount,
+    // and the generic entity browser that reaches `companies` is a table viewer, not
+    // a destination. The tab set is settled against IN-1 and IN-2 deliberately — the
+    // Companies view has a PROJECT list and an INVESTOR list to show because those two
+    // exist, rather than shipping empty and growing them.
+    //
+    // `/seat/investor` stays in `match` so the row still lights up on the generic
+    // entity view of the same domain, exactly as `hiring` keeps `/seat/hiring`.
+    id: 'investor', labelKey: 'group.investor', icon: 'briefcase', href: '/investor',
+    seat: 'CEO', stage: 'run',
+    match: ['/investor', '/seat/investor'],
+    tabKind: 'query', basePath: '/investor',
+    tabs: [
+      { id: '', labelKey: 'tab.companies', icon: 'workspace' },
+      // The raise itself — the `investment_opportunities` row, its ask and its stage.
+      { id: 'round', labelKey: 'tab.round', icon: 'target' },
+      // IN-2. Invited to the COMPANY, so one NDA, one watermark identity, one expiry
+      // and one revocation reach every room — which is why this is not a sub-view of
+      // the data room.
+      { id: 'investors', labelKey: 'tab.investorList', icon: 'people' },
+      { id: 'dataroom', labelKey: 'tab.dataRoom', icon: 'folder' },
+      // The retention mechanic: a REQUIRED document at `requested` is a gap, and its
+      // category names the seat that closes it.
+      { id: 'diligence', labelKey: 'tab.diligence', icon: 'check' },
+      // IN-4. `rfpService` company-scoped rather than forked.
+      { id: 'pack', labelKey: 'tab.pack', icon: 'document' },
+    ],
+  },
   { id: 'governance', labelKey: 'group.governance', icon: '🛡', href: '/seat/governance', match: ['/seat/governance'], seat: 'Security', stage: 'run' },
   { id: 'support', labelKey: 'group.support', icon: '💬', href: '/seat/support', match: ['/seat/support'], seat: 'Support', stage: 'run' },
   {

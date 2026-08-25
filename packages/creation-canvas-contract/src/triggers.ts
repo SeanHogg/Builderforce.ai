@@ -192,6 +192,83 @@ export function daysUntil(deadlineMs: number, nowMs: number): number {
 }
 
 // ---------------------------------------------------------------------------
+// A contract's obligations, as a deadline
+// ---------------------------------------------------------------------------
+
+/**
+ * One row of a `contract`'s `obligations` table, reduced to what a countdown needs.
+ *
+ * `due` is the ISO string VERBATIM rather than the parsed instant, because the value a
+ * trigger is judged against and the value a card prints have to be the same characters —
+ * a countdown that reports a date the row does not contain is a second answer.
+ */
+export interface OpenObligation {
+  /** The obligation's identity — what an `invoice` or a `bill` names in `obligationRef`. */
+  reference: string;
+  /** What is owed, for a sentence a reader recognises. Falls back to `reference`. */
+  obligation: string;
+  /** The row's `due`, verbatim. */
+  due: string;
+  /** `due` parsed, so a caller ordering several rows does not parse each one twice. */
+  dueMs: number;
+}
+
+/**
+ * The obligation statuses that are FINISHED, and are therefore not owed any more.
+ *
+ * `met` and `waived` and nothing else. `invoiced` is deliberately NOT here: an invoice
+ * having been raised is not the money having arrived, and retiring the countdown at the
+ * moment a document was created would silence exactly the obligations most likely to be
+ * forgotten — the ones already half-actioned. `breached` stays live for the same reason
+ * a missed deadline stays overdue rather than re-arming: it is still owed, and it is
+ * worse news than it was yesterday.
+ */
+const SETTLED_OBLIGATION_STATUSES: ReadonlySet<string> = new Set(['met', 'waived']);
+
+/**
+ * The next obligation on a contract that somebody still owes something on.
+ *
+ * ── WHY THIS IS AN ENGINE FUNCTION AND NOT A CARD DERIVATION ────────────────────
+ * `contract.obligations` is the one deadline in this vocabulary that lives in ROWS
+ * rather than in a field. Every other watchable date — `renewsAt`, `dueAt`, `cliffAt` —
+ * is a column the server sweep can read straight off a saved row, which is why the
+ * equity projection WRITES `cliffAt` onto the card instead of computing it at render
+ * time. An obligation has no projection to write it: the rows are authored on the board
+ * directly. So the choice was between a date the card shows and the sweep cannot see —
+ * the "armed on screen, breached in a digest" drift this module exists to prevent — and
+ * teaching the ENGINE to read it. This is that, and the frontend's `nextObligationAt`
+ * field calls this same function, so there is one rule and not two.
+ *
+ * ── WHAT IT DOES NOT DO: ROLL A CADENCE FORWARD ─────────────────────────────────
+ * A `monthly` obligation whose `due` is six months past does NOT advance to next month.
+ * It reports six months overdue, which is what it is. Projecting the next instance would
+ * invent a date the contract does not state and would silently convert a missed
+ * obligation into a comfortable future one — the exact failure a countdown exists to
+ * make impossible.
+ */
+export function nextOpenObligation(data: Record<string, unknown>): OpenObligation | null {
+  const rows = Array.isArray(data.obligations) ? data.obligations : [];
+  let best: OpenObligation | null = null;
+  for (const raw of rows) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue;
+    const row = raw as Record<string, unknown>;
+    if (SETTLED_OBLIGATION_STATUSES.has(String(row.status ?? '').trim().toLowerCase())) continue;
+    const due = String(row.due ?? '').trim();
+    const dueMs = dateValue(due);
+    if (dueMs === null) continue;
+    if (best && best.dueMs <= dueMs) continue;
+    const reference = String(row.reference ?? '').trim();
+    best = {
+      reference,
+      obligation: String(row.obligation ?? '').trim() || reference,
+      due,
+      dueMs,
+    };
+  }
+  return best;
+}
+
+// ---------------------------------------------------------------------------
 // Which field carries the deadline
 // ---------------------------------------------------------------------------
 
@@ -225,8 +302,62 @@ export const DEADLINE_FIELD_NAMES: readonly string[] = [
   // after the ownership dates and before `expiresAt` for the same reason `renewsAt` does:
   // a matter that also carries an expiry is judged against the ACTION, and the expiry is
   // the consequence of missing it rather than a second thing to watch.
-  'dueAt', 'renewsAt', 'closeTarget', 'cliffAt', 'maturesAt', 'reviewAt', 'deadlineAt', 'nextActionAt', 'expiresAt',
+  // `nextObligationAt` follows `renewsAt` DELIBERATELY. A contract carries both, and a
+  // board authored before this existed watches the renewal — putting the obligation first
+  // would silently repoint every trigger already on a contract at a different date. The
+  // renewal stays the default; an author who wants the obligation clock says so with
+  // `watchesField`, which is the field that exists for a kind with two deadlines.
+  'dueAt', 'renewsAt', 'nextObligationAt', 'closeTarget', 'cliffAt', 'maturesAt', 'reviewAt', 'deadlineAt', 'nextActionAt', 'expiresAt',
 ];
+
+/**
+ * The deadline fields that are COMPUTED from the watched object rather than stored on it.
+ *
+ * One entry, and the bar for a second is high: a virtual deadline is a date no saved row
+ * contains, so nothing can drag it, edit it, or write it back. It earns its place only
+ * where the date genuinely lives in rows — see {@link nextOpenObligation} for why a
+ * contract's obligations are that case and `cliffAt` is not.
+ */
+const VIRTUAL_DEADLINES: Readonly<Record<string, (data: Record<string, unknown>) => OpenObligation | null>> = {
+  nextObligationAt: nextOpenObligation,
+};
+
+/** Whether a deadline field is computed rather than stored — so a caller that WRITES a
+ *  date back (a calendar drag) can refuse instead of authoring a field nothing reads. */
+export function isVirtualDeadlineField(name: string): boolean {
+  return Object.prototype.hasOwnProperty.call(VIRTUAL_DEADLINES, name);
+}
+
+/**
+ * The value of one deadline field on one object.
+ *
+ * THE accessor, so the sweep, the canvas tool and the calendar cannot disagree about
+ * where a date comes from. A virtual field is computed and a stored one is read; the
+ * virtual map wins on its own names, which is what stops a stray `nextObligationAt`
+ * authored onto a card from shadowing the rows it is supposed to summarise.
+ */
+export function deadlineValueOf(data: Record<string, unknown>, field: string): unknown {
+  const virtual = VIRTUAL_DEADLINES[field];
+  return virtual ? virtual(data)?.due : data[field];
+}
+
+/**
+ * What a virtual deadline is a deadline FOR, in a clause a reader recognises.
+ *
+ * Null for a stored field, whose own name already says it ("renewsAt"). A contract with
+ * four obligations breaching on the third needs the row named: "due in 3 days
+ * (nextObligationAt)" sends somebody to open the board to find out which one, which is
+ * the round trip the sweep exists to remove.
+ */
+export function deadlineDetailOf(data: Record<string, unknown>, field: string): string | null {
+  const virtual = VIRTUAL_DEADLINES[field];
+  if (!virtual) return null;
+  const row = virtual(data);
+  if (!row) return null;
+  return row.obligation && row.reference && row.obligation !== row.reference
+    ? `obligation "${row.obligation}" (${row.reference})`
+    : `obligation "${row.obligation || row.reference}"`;
+}
 
 /**
  * Which field on a watched object carries its deadline.
@@ -235,7 +366,9 @@ export const DEADLINE_FIELD_NAMES: readonly string[] = [
  * to say which — and otherwise the first declared name actually PRESENT on the object is
  * used. "Present" means non-empty: an object with an empty `dueAt` and a filled
  * `renewsAt` resolves to the renewal rather than reporting no deadline, which is the
- * shape a half-filled card actually has.
+ * shape a half-filled card actually has. Presence is read through
+ * {@link deadlineValueOf}, so a computed deadline counts as present exactly when it
+ * resolves to a date — a contract whose obligations are all met has none.
  */
 export function resolveDeadlineField(
   data: Record<string, unknown>,
@@ -244,7 +377,7 @@ export function resolveDeadlineField(
   const named = typeof watchesField === 'string' ? watchesField.trim() : '';
   if (named) return named;
   return DEADLINE_FIELD_NAMES.find((name) => {
-    const value = data[name];
+    const value = deadlineValueOf(data, name);
     return value !== undefined && value !== null && String(value).trim() !== '';
   }) ?? null;
 }
@@ -364,6 +497,13 @@ export interface ResolvedTrigger {
   watchedKind: string | null;
   /** Which field the deadline was read from, for a date comparator. */
   deadlineField: string | null;
+  /**
+   * What a COMPUTED deadline is a deadline for — the obligation row behind a
+   * `nextObligationAt`. Null for a stored field, whose name says it already. Carried on
+   * the result rather than re-derived by each reporter, because the sweep writes its
+   * digest line after the board is out of scope.
+   */
+  deadlineDetail: string | null;
   comparator: string | null;
   threshold: unknown;
   /** What the author said should happen on breach. Carried through so a caller that
@@ -426,7 +566,7 @@ export function evaluateBoardTriggers(
       metricValue: watched?.data.value,
       previousValue: series.length > 1 ? series[series.length - 2]?.value : undefined,
       metricFound: !!watched,
-      deadlineValue: deadlineField ? watched?.data[deadlineField] : undefined,
+      deadlineValue: deadlineField && watched ? deadlineValueOf(watched.data, deadlineField) : undefined,
       nowMs,
     });
 
@@ -437,6 +577,7 @@ export function evaluateBoardTriggers(
       watchedTitle: watched?.title ?? null,
       watchedKind: watched?.kind ?? null,
       deadlineField,
+      deadlineDetail: deadlineField && watched ? deadlineDetailOf(watched.data, deadlineField) : null,
       comparator: typeof trigger.data.comparator === 'string' ? trigger.data.comparator : null,
       threshold: trigger.data.threshold ?? null,
       thenDo: Array.isArray(trigger.data.thenDo) ? trigger.data.thenDo : [],

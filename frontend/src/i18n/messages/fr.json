@@ -737,7 +737,13 @@
       "mail": "Courrier",
       "phone": "Téléphone",
       "sourcing": "Sourcing",
-      "employers": "Employeurs"
+      "employers": "Employeurs",
+      "companies": "Sociétés",
+      "round": "Le tour",
+      "investorList": "Investisseurs",
+      "dataRoom": "Data room",
+      "diligence": "Due diligence",
+      "pack": "Dossier"
     },
     "primaryAria": "Principale",
     "destination": {
@@ -20645,6 +20651,7 @@
         "obligationRef": "Réf. d'obligation",
         "contractObligation": "Obligation contractuelle",
         "obligationCoverage": "Couverture des obligations",
+        "nextObligationAt": "Prochaine obligation",
         "significance": "Signification statistique",
         "leadInvestor": "Investisseur principal",
         "roundStatus": "Statut du tour",
@@ -21389,6 +21396,7 @@
         "distribution": "Publiée sur",
         "postingUrl": "URL de l’offre",
         "applicantCount": "Candidatures",
+        "postingId": "ID de l'offre",
         "steps": "Étapes",
         "audience": "Audience",
         "enrolled": "Inscrits",
@@ -25531,7 +25539,8 @@
       "label": "Sections du portail",
       "installed": "Installées",
       "catalog": "Catalogue",
-      "publish": "Publier"
+      "publish": "Publier",
+      "earnings": "Revenus"
     },
     "errors": {
       "load": "Impossible de charger le portail développeur.",
@@ -25548,7 +25557,19 @@
       "uninstall": "Désinstaller",
       "uninstallTitle": "Désinstaller {name} ?",
       "uninstallBody": "Ses outils cessent immédiatement d'être proposés à vos agents. Vos réglages de connexion sont conservés : une réinstallation les restaure.",
-      "uninstallAction": "Désinstaller"
+      "uninstallAction": "Désinstaller",
+      "plan": "Forfait : {plan}",
+      "subscription": {
+        "active": "Actif",
+        "past_due": "Paiement échoué",
+        "cancelled": "Annulé"
+      },
+      "usage": "{units} {unit} sur cette période · {amount} à ce jour",
+      "viewUsage": "Utilisation",
+      "cancelPlan": "Résilier",
+      "cancelPlanTitle": "Résilier votre forfait {name} ?",
+      "cancelPlanBody": "L’utilisation déjà enregistrée sur cette période figurera sur votre prochaine facture. L’extension cesse de fonctionner immédiatement, mais vos réglages sont conservés en cas de réabonnement.",
+      "cancelPlanAction": "Résilier"
     },
     "catalog": {
       "title": "Extensions disponibles",
@@ -25557,7 +25578,13 @@
       "verified": "Vérifié",
       "installs": "{count} espaces de travail",
       "install": "Installer",
-      "installed": "Installée"
+      "installed": "Installée",
+      "perMonth": "{price}/mois",
+      "perYear": "{price}/an",
+      "perUnit": "{price} par {unit}",
+      "choosePlan": "Choisissez un forfait",
+      "subscribe": "S’abonner",
+      "planIncluded": "{units} {unit} incluses, puis {price} l’unité"
     },
     "install": {
       "confirmTitle": "Installer {name} ?",
@@ -25566,7 +25593,10 @@
       "confirmSensitive": "Cela inclut la modification de vos données : {scopes}",
       "confirmAction": "Installer",
       "unknownPublisher": "un éditeur non vérifié",
-      "noScopes": "rien"
+      "noScopes": "rien",
+      "confirmPrice": "Forfait : {plan} — {price}",
+      "confirmSubscribe": "S’abonner et installer",
+      "paidNotice": "La facturation se fait sur la facture que cet espace de travail reçoit déjà. Aucun compte chez l’éditeur n’est nécessaire."
     },
     "publish": {
       "registerTitle": "Inscrivez-vous comme éditeur",
@@ -25606,7 +25636,77 @@
       "specInvalidJson": "Ce n'est pas du JSON valide.",
       "submit": "Soumettre à la revue",
       "reviewPassed": "Revue réussie — vous pouvez publier cette version.",
-      "reviewFailed": "La revue a relevé des problèmes. Corrigez-les et soumettez une nouvelle version."
+      "reviewFailed": "La revue a relevé des problèmes. Corrigez-les et soumettez une nouvelle version.",
+      "plans": {
+        "title": "Tarifs",
+        "hint": "Les clients choisissent un forfait sur votre fiche et sont facturés sur la facture qu’ils reçoivent déjà — ils ne créent jamais de compte chez vous. Laissez vide pour que l’extension reste gratuite.",
+        "needsIdentity": "La vérification d’identité est requise avant de pouvoir facturer un paquet.",
+        "loadFailed": "Impossible de charger la grille tarifaire.",
+        "empty": "Aucun forfait — cette extension est gratuite.",
+        "newPlan": "Nouveau forfait",
+        "code": "Code",
+        "name": "Nom du forfait",
+        "price": "Prix récurrent",
+        "interval": "Facturation",
+        "month": "Mensuelle",
+        "year": "Annuelle",
+        "unitLabel": "Nom de l’unité",
+        "unitPlaceholder": "appel",
+        "included": "Unités incluses",
+        "meteredRate": "Prix par unité supplémentaire",
+        "add": "Ajouter un forfait",
+        "remove": "Retirer",
+        "save": "Enregistrer les tarifs"
+      }
+    },
+    "earnings": {
+      "title": "Revenus",
+      "loading": "Chargement…",
+      "loadFailed": "Impossible de charger vos revenus.",
+      "available": "Disponible au retrait",
+      "earned": "Gagné au total",
+      "paid": "Déjà retiré",
+      "underThreshold": "Vous conservez tout ce que vous gagnez jusqu’à {threshold} de revenus cumulés.",
+      "standardRate": "Notre part est de {percent}% depuis que vous avez dépassé {threshold} de revenus cumulés.",
+      "noDestination": "Désignez une destination de paiement pour cet espace de travail avant de retirer.",
+      "destinationLabel": "Destination de paiement",
+      "destinationPlaceholder": "Identifiant du compte connecté",
+      "saveDestination": "Enregistrer la destination",
+      "payout": "Retirer {amount}",
+      "nothing": "Rien à retirer pour l’instant",
+      "notAPublisher": "Enregistrez cet espace de travail comme éditeur pour voir les revenus."
+    },
+    "programs": {
+      "title": "Programmes partenaires",
+      "yourTrack": "Votre parcours : {track}",
+      "featured": "Mis en avant",
+      "arrangedWithUs": "Les parcours se conviennent avec nous et ne s’activent pas depuis cette page — parlez-en à votre contact. Publier en autonomie ne demande aucun parcours et vous conservez 100% de vos revenus sous le seuil.",
+      "automatic": "Intégré",
+      "manual": "Sur accord",
+      "track": {
+        "none": "Autonome",
+        "technology": "Partenaire technologique",
+        "solutions": "Partenaire solutions"
+      },
+      "audience": {
+        "selfServe": "Toute personne publiant une extension",
+        "vendors": "Éditeurs de produits et de plateformes",
+        "agencies": "Agences et cabinets de conseil"
+      },
+      "benefit": {
+        "openRegistration": "Inscrivez-vous et publiez sans dossier",
+        "zeroRevShare": "Conservez 100% sous le seuil",
+        "directoryListing": "Référencé dans l’annuaire des intégrations",
+        "installAnalytics": "Statistiques d’installation de vos paquets",
+        "featuredPlacement": "Mise en avant dans l’annuaire",
+        "nativeBilling": "Clients facturés sur leur facture existante",
+        "installWebhooks": "Événements d’installation envoyés à votre serveur",
+        "coMarketing": "Annonce de lancement et changelog conjoints",
+        "engineeringSupport": "Heures d’ingénierie pendant le développement",
+        "leadMatchmaking": "Mise en relation avec des clients qui cherchent votre expertise",
+        "revShare": "Partage des revenus sur ce que vous vendez",
+        "enterpriseIntroductions": "Introductions à des déploiements en entreprise"
+      }
     }
   },
   "publicForm": {
@@ -27522,5 +27622,173 @@
     "statusBelowThreshold": "Sous le seuil",
     "statusReady": "Prêt à déclarer",
     "statusIncomplete": "Profil incomplet"
+  },
+  "investor": {
+    "title": "Investisseurs",
+    "subtitle": "La levée comme un lieu : la société, le travail qui lui est rattaché, qui y a accès et quelle due diligence reste ouverte.",
+    "common": {
+      "loading": "Chargement…",
+      "cancel": "Annuler",
+      "saving": "Enregistrement…",
+      "dismiss": "Fermer",
+      "company": "Société",
+      "pickCompany": "Choisissez une société pour voir ceci.",
+      "noCompanies": "Ajoutez d’abord une société — toutes les vues ici portent sur une société."
+    },
+    "error": {
+      "companies": "Les sociétés n’ont pas pu être chargées.",
+      "company": "Cette société n’a pas pu être chargée.",
+      "createCompany": "La société n’a pas pu être créée.",
+      "attachProject": "Ce projet n’a pas pu être rattaché.",
+      "detachProject": "Ce projet n’a pas pu être détaché.",
+      "invite": "L’invitation n’a pas pu être envoyée.",
+      "revoke": "Cet accès n’a pas pu être révoqué.",
+      "shareRoom": "Le lien vers la salle n’a pas pu être créé.",
+      "buildPack": "Le dossier n’a pas pu être généré."
+    },
+    "companies": {
+      "title": "Sociétés",
+      "blurb": "Une société, les projets qui la construisent, les salles qu’elle détient et le tour qu’elle lève.",
+      "add": "Ajouter une société",
+      "create": "Créer la société",
+      "name": "Nom",
+      "website": "Site web",
+      "stage": "Stade",
+      "sector": "Secteur",
+      "empty": "Aucune société pour l’instant. Ajoutez-en une pour démarrer une levée.",
+      "noFacts": "Aucun détail saisi pour l’instant",
+      "projectCount": "Projets : {count}",
+      "roomCount": "Salles : {count}",
+      "gapCount": "Manques ouverts : {count}",
+      "workTitle": "Ce que possède {name}",
+      "workBlurb": "Rattacher un projet est une décision, jamais une correspondance de noms — rien ici ne devine quel travail appartient à quelle société.",
+      "readiness": "Due diligence prête : {percent}%",
+      "noProjects": "Aucun projet rattaché. Le dossier ne peut énumérer ce qui est construit tant qu’il n’y en a pas.",
+      "attachLabel": "Rattacher un projet",
+      "attachPlaceholder": "Choisir un projet…",
+      "attach": "Rattacher",
+      "detach": "Détacher",
+      "nothingToAttach": "Tous les projets de cet espace appartiennent déjà à une société."
+    },
+    "round": {
+      "title": "Le tour — {name}",
+      "blurb": "La levée, à côté des quatre choses qui la décident.",
+      "readiness": "Due diligence prête",
+      "readinessHint": "Documents obligatoires réglés, sur les documents obligatoires.",
+      "openGaps": "Manques ouverts",
+      "openGapsHint": "Documents obligatoires qu’un investisseur a demandés et n’a pas reçus.",
+      "investors": "Investisseurs avec accès",
+      "investorsHint": "{signed} ont passé le NDA.",
+      "projects": "Projets rattachés",
+      "projectsHint": "Ce que le dossier peut énumérer comme étant construit.",
+      "empty": "Aucun tour enregistré. Ajoutez une opportunité depuis la vue des entités pour en suivre les termes ici.",
+      "noTerms": "Aucun terme enregistré",
+      "ask": "Objectif {currency} {amount}",
+      "preMoney": "Pré-money {currency} {amount}",
+      "declaredNotice": "Chaque montant ici est une valeur saisie sur la société ou sur l’opportunité. Rien sur cette page n’est calculé depuis une comptabilité connectée."
+    },
+    "investors": {
+      "title": "Investisseurs — {name}",
+      "blurb": "Un investisseur est invité à la société, pas à une salle. Un NDA, une identité de filigrane, une expiration et une révocation atteignent chaque salle de cette société — celles d’aujourd’hui et celles à venir.",
+      "invite": "Inviter un investisseur",
+      "name": "Nom",
+      "email": "E-mail",
+      "expires": "L’accès prend fin",
+      "purpose": "Finalité",
+      "ndaNotice": "Le NDA part en premier et le lien y est rattaché. Une signature couvre chaque salle de cette société.",
+      "send": "Envoyer l’invitation",
+      "mintedTitle": "Invitation envoyée à {email}",
+      "mintedOnce": "Ce lien est affiché une seule fois. Seul son hachage est stocké, il ne peut donc pas être relu — copiez-le maintenant.",
+      "mintedNdaPending": "Le NDA a été envoyé par e-mail. Rien ne s’ouvre avant sa signature.",
+      "mintedNdaNone": "Aucun NDA n’était requis, le lien s’ouvre immédiatement.",
+      "mintedWatermarkRefusedDownload": "Les téléchargements ont été refusés car une salle de cette société applique un filigrane.",
+      "empty": "Aucun investisseur n’a encore été invité à cette société.",
+      "expiresOn": "fin {date}",
+      "activity": "Ouvertures {opens} · documents {views}",
+      "revoke": "Révoquer",
+      "revokeScope": "Cela met fin à leur accès à chaque salle de cette société.",
+      "revokeConfirm": "Révoquer partout",
+      "readTitle": "Ce qu’ils ont réellement lu",
+      "readBlurb": "À travers chaque salle de cette société, pour que la réponse soit une personne et non un fichier.",
+      "views": "Vues : {count}",
+      "state": {
+        "active": "Actif",
+        "revoked": "Révoqué",
+        "expired": "Expiré"
+      },
+      "nda": {
+        "not-required": "Pas de NDA",
+        "pending": "NDA en attente",
+        "signed": "NDA signé",
+        "declined": "NDA refusé",
+        "expired": "NDA expiré"
+      }
+    },
+    "dataRoom": {
+      "title": "Data room — {name}",
+      "blurb": "Un lien de salle ouvre exactement une salle. Utilisez-le pour quelqu’un qui doit voir une seule chose ; invitez un investisseur à la société quand il doit tout voir.",
+      "empty": "Cette société ne détient encore aucune data room.",
+      "noPurpose": "Aucune finalité enregistrée",
+      "readiness": "Prêt {percent}%",
+      "nda": "NDA requis",
+      "watermark": "Filigrané",
+      "links": "Liens actifs : {count}",
+      "share": "Partager cette salle",
+      "unstampable": "{count} fichiers fournis ne peuvent pas porter le filigrane dans leur format ; ils ne peuvent donc s’ouvrir que dans un onglet.",
+      "recipientName": "Nom du destinataire",
+      "recipientEmail": "E-mail du destinataire",
+      "sendLink": "Envoyer le lien",
+      "oneRoomOnly": "Ce lien n’ouvre que cette salle. Il n’atteint ni la salle suivante, ni la mise à jour, ni le dossier.",
+      "mintedTitle": "Lien de salle créé",
+      "mintedOnce": "Affiché une seule fois. Seul son hachage est stocké, il ne peut donc pas être relu — copiez-le maintenant.",
+      "mintedWatermarkRefusedDownload": "Les téléchargements ont été refusés car cette salle applique un filigrane."
+    },
+    "diligence": {
+      "title": "Due diligence — {name}",
+      "blurb": "Chaque ligne est un document obligatoire qu’un investisseur a demandé et n’a pas reçu. Le siège nommé à côté est celui qui le referme.",
+      "readiness": "Prêt {percent}%",
+      "empty": "Rien d’obligatoire n’est en attente. Chaque document requis a été fourni, accepté ou levé.",
+      "seatHeading": "{seat} — {count} ouverts",
+      "unownedHeading": "Non attribué — {count} ouverts",
+      "openSeat": "Ouvrir {seat}",
+      "due": "échéance {date}",
+      "requested": "Demandé",
+      "notice": "Les manques sont listés plutôt que masqués. Une salle qui ne montrerait que les fichiers existants cacherait précisément le manque pour lequel elle a été construite."
+    },
+    "pack": {
+      "title": "Dossier de levée — {name}",
+      "blurb": "Le deck, le plan, les risques et les chiffres, composés à partir de cette société : ses projets, son tour et sa due diligence ouverte.",
+      "groundOn": "Fonder la lecture des capacités sur",
+      "groundAuto": "Le projet mis à jour le plus récemment",
+      "groundNone": "Aucun projet — l’écrire de zéro",
+      "audience": "Adressé à",
+      "emphasis": "Commencer par",
+      "noProjects": "Aucun projet n’est rattaché à cette société ; le dossier ne peut donc pas énumérer ce qui est construit. Rattachez-en un sous Sociétés.",
+      "gapsWarning": "Cette société compte {count} manques de due diligence ouverts. Le dossier les nomme, car un investisseur les trouvera de toute façon.",
+      "build": "Générer le dossier",
+      "building": "Génération…",
+      "builtTitle": "Dossier généré",
+      "projectsCited": "Projets cités : {count}",
+      "openGaps": "Manques ouverts nommés : {count}",
+      "open": "Ouvrir",
+      "pdf": "PDF",
+      "empty": "Aucun dossier n’a encore été généré pour cette société.",
+      "generatedOn": "Généré le {date}"
+    }
+  },
+  "investorGrant": {
+    "eyebrow": "Accès investisseur",
+    "loading": "Chargement…",
+    "invalid": "Ce lien n’est plus valide. Demandez-en un nouveau à l’expéditeur.",
+    "addressed": "Partagé avec {name}.",
+    "expires": "L’accès prend fin le {date}.",
+    "ndaHelp": "La demande de signature vous a été envoyée par e-mail avec l’invitation. Une signature couvre chaque salle de cette société — signez, puis rechargez cette page.",
+    "roomsLabel": "Salles que vous pouvez ouvrir : {count}",
+    "noRooms": "Cette société n’a encore aucune salle ouverte pour vous. Votre accès reste valable ; revenez plus tard.",
+    "noPurpose": "Aucune finalité enregistrée",
+    "watermarked": "filigrané",
+    "open": "Ouvrir",
+    "reopen": "Recharger",
+    "futureRooms": "Ce lien vise la société, pas une salle — les salles ajoutées plus tard apparaîtront ici sans nouvelle invitation."
   }
 }

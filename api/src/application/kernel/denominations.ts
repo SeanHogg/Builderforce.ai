@@ -41,9 +41,32 @@ export const CAMPAIGN_CREDITS = 'campaign_credits';
  *  this rather than against a per-tenant balance table. */
 export const COMM_CREDITS = 'comm_credits';
 
+/**
+ * METERED UNITS OF A PUBLISHED EXTENSION, reported by the vendor that runs it.
+ *
+ * A unit's MEANING is the vendor's — a document signed, a payroll run, a lookup —
+ * and it is declared on the plan (`ExtensionPlan.unitLabel`), never here. What is
+ * platform-wide is that a unit is a countable thing one tenant consumed under one
+ * install, which is exactly what this ledger absorbs.
+ *
+ * It is a denomination rather than an `extension_usage_records` table for the
+ * reason the module header gives: a meter needs an append-only history, an
+ * idempotency key (`reference` — the vendor's own usage id, so a retried report
+ * cannot double-bill), a per-account sum and a period window. `ledger_entries`
+ * has all four, and its unique index makes the idempotency a database fact rather
+ * than a check somebody remembered to write.
+ *
+ * The ACCOUNT is the installing tenant and the REF is the install id, so a
+ * workspace running two paid extensions has two meters that cannot be confused for
+ * one another. Pricing happens once per period in `extensionBilling.ts`, which is
+ * the only place a unit ever meets a currency — a unit is not money and must never
+ * be reported as though it were.
+ */
+export const EXTENSION_UNITS = 'extension_units';
+
 /** Every denomination the platform recognises. A writer using a string outside
  *  this set is a bug, and {@link isDenomination} is how a boundary says so. */
-export const DENOMINATIONS = [USD_CENTS, POINTS, AI_CREDITS, CAMPAIGN_CREDITS, COMM_CREDITS] as const;
+export const DENOMINATIONS = [USD_CENTS, POINTS, AI_CREDITS, CAMPAIGN_CREDITS, COMM_CREDITS, EXTENSION_UNITS] as const;
 
 export type Denomination = (typeof DENOMINATIONS)[number];
 

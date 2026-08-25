@@ -1,5 +1,5 @@
 /**
- * `/api/developer` — the Developer Portal (PRD 24 Phase 1).
+ * `/api/developer` — the Developer Portal (PRD 24 Phases 1–4).
  *
  *   Publisher — the caller's WORKSPACE, because a developer is a tenant (0472)
  *     GET    /publisher                     this workspace as a publisher, or null
@@ -24,14 +24,34 @@
  *   Analytics (publisher-facing, AGGREGATE ONLY — see `installAnalytics.ts`)
  *     GET    /analytics                     installs, churn, version adoption, errors
  *
+ *   Plans + earnings (PRD 24 Phase 2 — the publisher's half of the money)
+ *     GET    /packages/:id/plans            the price list on the listing's catalog item
+ *     PUT    /packages/:id/plans            replace it (identity-verified publishers only)
+ *     GET    /earnings                      what this WORKSPACE has earned and may withdraw
+ *     POST   /earnings/destination          nominate where the workspace is paid
+ *     POST   /earnings/payout               send the available balance
+ *
+ *   Programs (PRD 24 Phase 4) — read-only; joining a track is an operator act
+ *     GET    /programs                      this publisher's track, and what each offers
+ *
  *   Catalog + installs (tenant-facing)
  *     GET    /catalog                       every listed package
  *     GET    /catalog/:slug                 one listing
  *     GET    /installs                      what this workspace has installed
  *     GET    /installs/preview/:packageId   the consent screen's data (writes nothing)
- *     POST   /installs                      install, with the approved scopes
+ *     POST   /installs                      install a FREE package, with the approved scopes
+ *     POST   /installs/checkout             start a PAID install — pick a plan, then pay
+ *     POST   /installs/checkout/complete    settle it; the install is created here
+ *     POST   /installs/:id/cancel-plan      stop paying (closes the open metered period)
+ *     GET    /installs/:id/usage            the open period and the reports behind it
  *     POST   /installs/:id/update           move to the head (refuses if scopes widened)
  *     DELETE /installs/:id                  uninstall
+ *
+ * The VENDOR's own API — the install-scoped token a publisher's integration
+ * server calls us with, and the usage it reports — is not here. It lives on
+ * `/api/v1` with every other credentialed machine surface, because a vendor
+ * authenticates with a key rather than a session and must not be routed through
+ * a door that assumes one. See `publicExtensionApiService.ts`.
  *
  * Preview and install are separate calls for the same reason `/plan` and `/build`
  * are separate on realizations: showing somebody what they are about to approve
@@ -58,6 +78,7 @@ import {
   beginDomainVerification,
   requirePublisher,
   publisherFor,
+  setPayoutDestination,
   PublisherError,
 } from '../../application/developer/publishers';
 import { verifyPublisherDomain } from '../../application/developer/domainVerification';
@@ -89,6 +110,16 @@ import {
   uninstallPackage,
   updateInstall,
 } from '../../application/developer/extensionInstalls';
+import { pricingForPackage, setPackagePlans } from '../../application/developer/extensionPlans';
+import { payoutPublisherBalance, publisherEarnings } from '../../application/developer/extensionEarnings';
+import { partnerStandingFor } from '../../application/developer/partnerPrograms';
+import {
+  cancelPlan,
+  completePlanCheckout,
+  startPlanCheckout,
+} from '../../application/developer/extensionCommerce';
+import { openPeriodFor } from '../../application/developer/extensionBilling';
+import { usageEvents } from '../../application/developer/extensionUsage';
 
 /** Map an application error onto its status once, rather than in fifteen handlers. */
 function fail(error: unknown): { body: { error: string }; status: 400 | 403 | 404 | 409 | 500 } {
@@ -442,6 +473,222 @@ export function createDeveloperRoutes(db: Db): Hono<HonoEnv> {
       const { body, status } = fail(error);
       return c.json(body, status);
     }
+  });
+
+  // ── Plans (PRD 24 Phase 2 — the publisher's price list) ───────────────────
+  //
+  // Nested under the package because a price list belongs to exactly one listing
+  // and has no identity apart from it — the same reason it is a `body` on that
+  // listing's `catalog_items` row rather than a table of its own.
+
+  router.get('/packages/:id/plans', async (c) => {
+    const { userId } = ctx(c);
+    if (!userId) return c.json({ error: 'Authentication required' }, 401);
+    try {
+      return c.json({ pricing: await pricingForPackage(db, c.req.param('id')) });
+    } catch (error) {
+      const { body, status } = fail(error);
+      return c.json(body, status);
+    }
+  });
+
+  /**
+   * PUT, not POST: the price list is replaced as a whole. Per-plan mutations
+   * would need their own ordering, their own conflict story and their own answer
+   * to "what happens to the installs on the plan you just deleted" — three
+   * problems that do not exist when the caller states the list it wants.
+   */
+  router.put('/packages/:id/plans', async (c) => {
+    const { userId, env } = ctx(c);
+    if (!userId) return c.json({ error: 'Authentication required' }, 401);
+    type Body = { plans?: unknown; currency?: string };
+    const body = await c.req.json<Body>().catch((): Body => ({}));
+    try {
+      const pricing = await setPackagePlans(db, env, {
+        packageId: c.req.param('id'),
+        actorUserId: userId,
+        plans: body.plans ?? [],
+        currency: body.currency,
+      });
+      return c.json({ pricing });
+    } catch (error) {
+      const { body: b, status } = fail(error);
+      return c.json(b, status);
+    }
+  });
+
+  // ── Earnings and payout ───────────────────────────────────────────────────
+  //
+  // No id in the path: the publisher is the caller's workspace, on the JWT. The
+  // BALANCE is the workspace's and not a person's, which is what makes an
+  // extension's revenue survive the person who shipped it leaving.
+
+  router.get('/earnings', async (c) => {
+    const { userId, tenantId, env } = ctx(c);
+    if (!userId || !tenantId) return c.json({ error: 'Authentication required' }, 401);
+    try {
+      await requirePublisher(db, tenantId, userId, 'manager');
+      return c.json({ earnings: await publisherEarnings(db, env, tenantId) });
+    } catch (error) {
+      const { body, status } = fail(error);
+      return c.json(body, status);
+    }
+  });
+
+  /**
+   * Nominate the connection this workspace's revenue is paid to.
+   *
+   * A workspace has no `connections.user_id` of its own, so it names its
+   * destination explicitly rather than having one inferred from whoever pressed
+   * the button — which would send a company's revenue to an employee.
+   */
+  router.post('/earnings/destination', async (c) => {
+    const { userId, tenantId, env } = ctx(c);
+    if (!userId || !tenantId) return c.json({ error: 'Authentication required' }, 401);
+    type Body = { connectionId?: number | null };
+    const body = await c.req.json<Body>().catch((): Body => ({}));
+    try {
+      // `owner`: this decides where the workspace's money leaves to, which is
+      // the highest-consequence action in this router.
+      await requirePublisher(db, tenantId, userId, 'owner');
+      return c.json({
+        publisher: await setPayoutDestination(db, env, {
+          tenantId,
+          userId,
+          connectionId: body.connectionId ?? null,
+        }),
+      });
+    } catch (error) {
+      const { body: b, status } = fail(error);
+      return c.json(b, status);
+    }
+  });
+
+  router.post('/earnings/payout', async (c) => {
+    const { userId, tenantId, env } = ctx(c);
+    if (!userId || !tenantId) return c.json({ error: 'Authentication required' }, 401);
+    try {
+      await requirePublisher(db, tenantId, userId, 'owner');
+      // The amount is the AVAILABLE balance computed server-side, never a number
+      // from the request: an endpoint that accepts an amount pays whatever a
+      // crafted request asks for.
+      const result = await payoutPublisherBalance(db, env, tenantId);
+      return c.json(result, result.ok ? 200 : 409);
+    } catch (error) {
+      const { body, status } = fail(error);
+      return c.json(body, status);
+    }
+  });
+
+  // ── Programs (PRD 24 Phase 4) ─────────────────────────────────────────────
+  //
+  // Read-only here on purpose. Joining a track is an operator decision
+  // (`POST /api/admin/publishers/:tenantId/track`) because §2.1's funnel has a
+  // human at the top and Featured placement's whole value is that not everybody
+  // has it. What a publisher may do is READ what the tracks offer, which is
+  // information they need before deciding whether to ask.
+
+  router.get('/programs', async (c) => {
+    const { userId, tenantId, env } = ctx(c);
+    if (!userId || !tenantId) return c.json({ error: 'Authentication required' }, 401);
+    try {
+      return c.json({ standing: await partnerStandingFor(db, env, tenantId, userId) });
+    } catch (error) {
+      const { body, status } = fail(error);
+      return c.json(body, status);
+    }
+  });
+
+  // ── Paid installs (PRD 24 §5.4 — the Vercel move) ─────────────────────────
+  //
+  // Separate from `POST /installs`, which installs a FREE package. A paid one
+  // cannot go through that door: installing first would leave a workspace holding
+  // a live scope grant on an extension nobody has paid for. The scopes the admin
+  // approved ride through the checkout instead, and the install is created when
+  // the money is confirmed — so an abandoned checkout leaves nothing behind.
+
+  router.post('/installs/checkout', async (c) => {
+    const { userId, tenantId, env } = ctx(c);
+    if (!userId || !tenantId) return c.json({ error: 'Authentication required' }, 401);
+    type Body = { packageId?: string; planCode?: string; approvedScopes?: string[]; returnUrl?: string };
+    const body = await c.req.json<Body>().catch((): Body => ({}));
+    if (!body.packageId || !body.planCode) return c.json({ error: 'packageId and planCode are required' }, 400);
+    if (!body.returnUrl) return c.json({ error: 'returnUrl is required' }, 400);
+    try {
+      const start = await startPlanCheckout(db, env, {
+        tenantId,
+        userId,
+        packageId: body.packageId,
+        planCode: body.planCode,
+        approvedScopes: body.approvedScopes ?? [],
+        returnUrl: body.returnUrl,
+      });
+      return c.json(start);
+    } catch (error) {
+      const { body: b, status } = fail(error);
+      return c.json(b, status);
+    }
+  });
+
+  router.post('/installs/checkout/complete', async (c) => {
+    const { userId, tenantId, env } = ctx(c);
+    if (!userId || !tenantId) return c.json({ error: 'Authentication required' }, 401);
+    type Body = { checkoutSessionId?: string };
+    const body = await c.req.json<Body>().catch((): Body => ({}));
+    if (!body.checkoutSessionId) return c.json({ error: 'checkoutSessionId is required' }, 400);
+    try {
+      const subscription = await completePlanCheckout(db, env, {
+        tenantId,
+        userId,
+        checkoutSessionId: body.checkoutSessionId,
+      });
+      return c.json({ subscription });
+    } catch (error) {
+      const { body: b, status } = fail(error);
+      return c.json(b, status);
+    }
+  });
+
+  /**
+   * Stop paying, without uninstalling.
+   *
+   * The open metered period is closed first — cancelling without billing what has
+   * already been consumed would hand the customer a free month by pressing Cancel
+   * on its last day, and hand the vendor the bill.
+   */
+  router.post('/installs/:id/cancel-plan', async (c) => {
+    const { userId, tenantId, env } = ctx(c);
+    if (!userId || !tenantId) return c.json({ error: 'Authentication required' }, 401);
+    try {
+      await cancelPlan(db, env, { tenantId, installId: c.req.param('id') });
+      return c.json({ ok: true });
+    } catch (error) {
+      const { body, status } = fail(error);
+      return c.json(body, status);
+    }
+  });
+
+  /**
+   * What the open metered period looks like RIGHT NOW.
+   *
+   * The number a customer wants before the invoice rather than on it, which is
+   * the whole reason usage-based billing frightens people. Computed through the
+   * same pricing function the period close uses, so the figure shown mid-month
+   * and the figure charged at the end cannot be derived two different ways.
+   */
+  router.get('/installs/:id/usage', async (c) => {
+    const { tenantId } = ctx(c);
+    if (!tenantId) return c.json({ error: 'Authentication required' }, 401);
+    const installId = c.req.param('id');
+    const period = await openPeriodFor(db, tenantId, installId);
+    if (!period) return c.json({ error: 'install not found' }, 404);
+    return c.json({
+      period,
+      // The individual reports behind the total — what a disputed line is settled
+      // with. Bounded: the answer to "what are these 40,000 units" is not 40,000
+      // rows in one response.
+      events: await usageEvents(db, tenantId, installId, period.since ? new Date(period.since) : null, 100),
+    });
   });
 
   return router;

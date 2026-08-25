@@ -737,7 +737,13 @@
       "mail": "邮件",
       "phone": "电话",
       "sourcing": "职位采集",
-      "employers": "雇主"
+      "employers": "雇主",
+      "companies": "公司",
+      "round": "本轮融资",
+      "investorList": "投资人",
+      "dataRoom": "数据室",
+      "diligence": "尽职调查",
+      "pack": "融资材料"
     },
     "primaryAria": "主导航",
     "destination": {
@@ -20645,6 +20651,7 @@
         "obligationRef": "义务编号",
         "contractObligation": "合同义务核对",
         "obligationCoverage": "义务履约情况",
+        "nextObligationAt": "下一项义务到期",
         "significance": "统计显著性",
         "leadInvestor": "领投方",
         "roundStatus": "轮次状态",
@@ -21389,6 +21396,7 @@
         "distribution": "发布渠道",
         "postingUrl": "职位链接",
         "applicantCount": "申请人数",
+        "postingId": "职位 ID",
         "steps": "步骤",
         "audience": "目标人群",
         "enrolled": "已加入",
@@ -25531,7 +25539,8 @@
       "label": "门户版块",
       "installed": "已安装",
       "catalog": "目录",
-      "publish": "发布"
+      "publish": "发布",
+      "earnings": "收益"
     },
     "errors": {
       "load": "无法加载开发者门户。",
@@ -25548,7 +25557,19 @@
       "uninstall": "卸载",
       "uninstallTitle": "卸载 {name}？",
       "uninstallBody": "其工具将立即停止提供给你的智能体。连接设置会保留，重新安装即可恢复。",
-      "uninstallAction": "卸载"
+      "uninstallAction": "卸载",
+      "plan": "方案：{plan}",
+      "subscription": {
+        "active": "生效中",
+        "past_due": "扣款失败",
+        "cancelled": "已取消"
+      },
+      "usage": "本周期 {units} {unit} · 目前 {amount}",
+      "viewUsage": "用量",
+      "cancelPlan": "取消方案",
+      "cancelPlanTitle": "取消 {name} 的方案？",
+      "cancelPlanBody": "本周期已记录的用量会计入下一张账单。扩展会立即停止工作，但设置会保留，方便你之后重新订阅。",
+      "cancelPlanAction": "取消方案"
     },
     "catalog": {
       "title": "可用扩展",
@@ -25557,7 +25578,13 @@
       "verified": "已验证",
       "installs": "{count} 个工作区",
       "install": "安装",
-      "installed": "已安装"
+      "installed": "已安装",
+      "perMonth": "{price}/月",
+      "perYear": "{price}/年",
+      "perUnit": "每 {unit} {price}",
+      "choosePlan": "选择方案",
+      "subscribe": "订阅",
+      "planIncluded": "含 {units} {unit}，超出部分每个 {price}"
     },
     "install": {
       "confirmTitle": "安装 {name}？",
@@ -25566,7 +25593,10 @@
       "confirmSensitive": "其中包括修改你的数据：{scopes}",
       "confirmAction": "安装",
       "unknownPublisher": "未验证的发布者",
-      "noScopes": "无"
+      "noScopes": "无",
+      "confirmPrice": "方案：{plan} — {price}",
+      "confirmSubscribe": "订阅并安装",
+      "paidNotice": "费用会计入本工作区已有的账单，你无需在发布者那里另开账户。"
     },
     "publish": {
       "registerTitle": "注册成为发布者",
@@ -25606,7 +25636,77 @@
       "specInvalidJson": "这不是有效的 JSON。",
       "submit": "提交审核",
       "reviewPassed": "审核通过 — 你可以发布此版本。",
-      "reviewFailed": "审核发现问题。请修复后提交新版本。"
+      "reviewFailed": "审核发现问题。请修复后提交新版本。",
+      "plans": {
+        "title": "定价",
+        "hint": "客户在你的列表页选择方案，费用计入他们已有的账单——他们不需要在你这里注册账户。留空即表示扩展免费。",
+        "needsIdentity": "收费前需要先完成身份验证。",
+        "loadFailed": "无法加载价格列表。",
+        "empty": "暂无方案——这个扩展是免费的。",
+        "newPlan": "新方案",
+        "code": "代码",
+        "name": "方案名称",
+        "price": "周期价格",
+        "interval": "计费周期",
+        "month": "按月",
+        "year": "按年",
+        "unitLabel": "计量单位名称",
+        "unitPlaceholder": "次调用",
+        "included": "包含用量",
+        "meteredRate": "超出单价",
+        "add": "添加方案",
+        "remove": "移除",
+        "save": "保存定价"
+      }
+    },
+    "earnings": {
+      "title": "收益",
+      "loading": "加载中…",
+      "loadFailed": "无法加载你的收益。",
+      "available": "可提现",
+      "earned": "累计收入",
+      "paid": "已提现",
+      "underThreshold": "累计收入达到 {threshold} 之前，你的收入全部归你。",
+      "standardRate": "你的累计收入已超过 {threshold}，我们的分成为 {percent}%。",
+      "noDestination": "提现前请先为本工作区指定收款账户。",
+      "destinationLabel": "收款账户",
+      "destinationPlaceholder": "已连接账户 ID",
+      "saveDestination": "保存收款账户",
+      "payout": "提现 {amount}",
+      "nothing": "暂时没有可提现金额",
+      "notAPublisher": "将本工作区注册为发布者后即可查看收益。"
+    },
+    "programs": {
+      "title": "合作伙伴计划",
+      "yourTrack": "你的类型：{track}",
+      "featured": "推荐位",
+      "arrangedWithUs": "合作类型由我们双方约定，不在此页面自助加入——请联系你的对接人。自助发布无需任何类型，且在门槛以下你可保留 100% 收入。",
+      "automatic": "已内置",
+      "manual": "需另行约定",
+      "track": {
+        "none": "自助发布",
+        "technology": "技术合作伙伴",
+        "solutions": "解决方案合作伙伴"
+      },
+      "audience": {
+        "selfServe": "任何发布扩展的人",
+        "vendors": "产品与平台厂商",
+        "agencies": "代理商与咨询公司"
+      },
+      "benefit": {
+        "openRegistration": "无需申请即可注册并发布",
+        "zeroRevShare": "门槛以下保留 100% 收入",
+        "directoryListing": "收录进集成目录",
+        "installAnalytics": "你自己包的安装分析",
+        "featuredPlacement": "目录中的推荐位",
+        "nativeBilling": "客户在已有账单上付费",
+        "installWebhooks": "安装事件推送到你的服务器",
+        "coMarketing": "联合发布文章与更新日志",
+        "engineeringSupport": "开发期间的工程支持时间",
+        "leadMatchmaking": "对接正在寻找你这类服务的客户",
+        "revShare": "销售收入分成",
+        "enterpriseIntroductions": "引荐企业级实施机会"
+      }
     }
   },
   "publicForm": {
@@ -27522,5 +27622,173 @@
     "statusBelowThreshold": "未达门槛",
     "statusReady": "可以申报",
     "statusIncomplete": "资料不完整"
+  },
+  "investor": {
+    "title": "投资人",
+    "subtitle": "把融资当成一个地方：公司、挂在它下面的工作、谁有访问权，以及还有哪些尽调没有补齐。",
+    "common": {
+      "loading": "加载中…",
+      "cancel": "取消",
+      "saving": "保存中…",
+      "dismiss": "关闭",
+      "company": "公司",
+      "pickCompany": "先选择一家公司才能看到这里的内容。",
+      "noCompanies": "请先添加一家公司——这里的每个视图都是围绕一家公司的。"
+    },
+    "error": {
+      "companies": "无法加载公司列表。",
+      "company": "无法加载该公司。",
+      "createCompany": "无法创建该公司。",
+      "attachProject": "无法关联该项目。",
+      "detachProject": "无法解除该项目的关联。",
+      "invite": "无法发送邀请。",
+      "revoke": "无法撤销该访问权。",
+      "shareRoom": "无法创建数据室链接。",
+      "buildPack": "无法生成融资材料。"
+    },
+    "companies": {
+      "title": "公司",
+      "blurb": "一家公司，以及正在构建它的项目、它持有的数据室和它正在进行的融资轮次。",
+      "add": "添加公司",
+      "create": "创建公司",
+      "name": "名称",
+      "website": "网站",
+      "stage": "阶段",
+      "sector": "行业",
+      "empty": "还没有公司。添加一家以开始融资。",
+      "noFacts": "尚未填写任何信息",
+      "projectCount": "项目：{count}",
+      "roomCount": "数据室：{count}",
+      "gapCount": "未补齐项：{count}",
+      "workTitle": "{name} 拥有的内容",
+      "workBlurb": "关联项目是一个决定，绝不是按名称匹配——这里不会去猜哪项工作属于哪家公司。",
+      "readiness": "尽调完成度：{percent}%",
+      "noProjects": "尚未关联项目。在关联之前，融资材料无法列举正在构建的内容。",
+      "attachLabel": "关联一个项目",
+      "attachPlaceholder": "选择项目…",
+      "attach": "关联",
+      "detach": "解除关联",
+      "nothingToAttach": "此工作区中的每个项目都已归属某家公司。"
+    },
+    "round": {
+      "title": "本轮融资 — {name}",
+      "blurb": "这轮融资，以及决定它的四件事。",
+      "readiness": "尽调完成度",
+      "readinessHint": "已办结的必备文件占全部必备文件的比例。",
+      "openGaps": "未补齐项",
+      "openGapsHint": "投资人已索取但尚未收到的必备文件。",
+      "investors": "拥有访问权的投资人",
+      "investorsHint": "其中 {signed} 位已完成保密协议。",
+      "projects": "已关联项目",
+      "projectsHint": "融资材料可以列举为“正在构建”的内容。",
+      "empty": "尚未记录融资轮次。请在实体视图中新增一个 opportunity，以便在此跟踪条款。",
+      "noTerms": "未记录条款",
+      "ask": "目标金额 {currency} {amount}",
+      "preMoney": "投前估值 {currency} {amount}",
+      "declaredNotice": "此处每个金额都是在公司或 opportunity 上录入的数值。本页没有任何数字来自已连接的会计账套。"
+    },
+    "investors": {
+      "title": "投资人 — {name}",
+      "blurb": "投资人是被邀请到公司，而不是某一个数据室。一份保密协议、一个水印身份、一个到期时间、一次撤销，覆盖这家公司现有和将来的每一个数据室。",
+      "invite": "邀请投资人",
+      "name": "姓名",
+      "email": "邮箱",
+      "expires": "访问截止",
+      "purpose": "用途",
+      "ndaNotice": "先发送保密协议，链接与之绑定。一次签署即覆盖这家公司的每一个数据室。",
+      "send": "发送邀请",
+      "mintedTitle": "邀请已发送至 {email}",
+      "mintedOnce": "此链接只显示一次。系统只保存它的哈希值，无法再次读取——请立即复制。",
+      "mintedNdaPending": "保密协议已通过邮件发出。在签署之前不会打开任何内容。",
+      "mintedNdaNone": "无需保密协议，链接可立即打开。",
+      "mintedWatermarkRefusedDownload": "由于这家公司的某个数据室启用了水印，下载已被拒绝。",
+      "empty": "尚未邀请任何投资人加入这家公司。",
+      "expiresOn": "{date} 截止",
+      "activity": "打开 {opens} 次 · 文档 {views} 次",
+      "revoke": "撤销",
+      "revokeScope": "这会终止其对这家公司每一个数据室的访问。",
+      "revokeConfirm": "全部撤销",
+      "readTitle": "他们实际读了什么",
+      "readBlurb": "跨这家公司的所有数据室统计，因此答案是一个人，而不是一个文件。",
+      "views": "查看：{count}",
+      "state": {
+        "active": "有效",
+        "revoked": "已撤销",
+        "expired": "已过期"
+      },
+      "nda": {
+        "not-required": "无需保密协议",
+        "pending": "保密协议待签",
+        "signed": "保密协议已签",
+        "declined": "保密协议被拒",
+        "expired": "保密协议已失效"
+      }
+    },
+    "dataRoom": {
+      "title": "数据室 — {name}",
+      "blurb": "数据室链接只打开这一个数据室。适合只需看一样东西的人；如果对方应当看到全部，请把投资人邀请到公司。",
+      "empty": "这家公司还没有数据室。",
+      "noPurpose": "未记录用途",
+      "readiness": "完成度 {percent}%",
+      "nda": "需要保密协议",
+      "watermark": "带水印",
+      "links": "有效链接：{count}",
+      "share": "分享此数据室",
+      "unstampable": "有 {count} 个已提供文件的格式无法承载水印，因此只能在标签页中打开。",
+      "recipientName": "接收人姓名",
+      "recipientEmail": "接收人邮箱",
+      "sendLink": "发送链接",
+      "oneRoomOnly": "此链接只打开这一个数据室，不会延伸到下一个数据室、投资人更新或融资材料。",
+      "mintedTitle": "数据室链接已创建",
+      "mintedOnce": "只显示一次。系统只保存它的哈希值，无法再次读取——请立即复制。",
+      "mintedWatermarkRefusedDownload": "由于此数据室启用了水印，下载已被拒绝。"
+    },
+    "diligence": {
+      "title": "尽职调查 — {name}",
+      "blurb": "每一行都是投资人已索取但尚未收到的必备文件。旁边标注的席位就是能把它补齐的那个席位。",
+      "readiness": "完成度 {percent}%",
+      "empty": "没有未完成的必备事项。所有必备文件都已提供、接受或豁免。",
+      "seatHeading": "{seat} — 未补齐 {count} 项",
+      "unownedHeading": "未分配 — 未补齐 {count} 项",
+      "openSeat": "打开{seat}",
+      "due": "{date} 到期",
+      "requested": "已索取",
+      "notice": "缺口是列出来的，而不是藏起来的。只显示已有文件的数据室，恰好会遮住它本该关闭的那个缺口。"
+    },
+    "pack": {
+      "title": "融资材料 — {name}",
+      "blurb": "BP、计划、风险与数字，均由这家公司自身的内容组成：它的项目、它的融资轮次和尚未补齐的尽调。",
+      "groundOn": "能力分析基于",
+      "groundAuto": "最近更新的项目",
+      "groundNone": "不选项目 — 从零撰写",
+      "audience": "面向",
+      "emphasis": "重点讲",
+      "noProjects": "这家公司没有关联任何项目，因此融资材料无法列举正在构建的内容。请在「公司」中关联一个。",
+      "gapsWarning": "这家公司有 {count} 处尽调缺口。融资材料会写明它们，因为投资人无论如何都会发现。",
+      "build": "生成融资材料",
+      "building": "生成中…",
+      "builtTitle": "已生成",
+      "projectsCited": "引用项目：{count}",
+      "openGaps": "写明的缺口：{count}",
+      "open": "打开",
+      "pdf": "PDF",
+      "empty": "尚未为这家公司生成过融资材料。",
+      "generatedOn": "生成于 {date}"
+    }
+  },
+  "investorGrant": {
+    "eyebrow": "投资人访问",
+    "loading": "加载中…",
+    "invalid": "该链接已失效。请向发送方索取新的链接。",
+    "addressed": "已分享给 {name}。",
+    "expires": "访问将于 {date} 结束。",
+    "ndaHelp": "签署请求已随邀请一并发送到您的邮箱。一次签署即覆盖这家公司的每一个数据室——签署后请刷新本页。",
+    "roomsLabel": "您可以打开的数据室：{count}",
+    "noRooms": "这家公司暂时没有对您开放的数据室。您的访问权仍然有效，稍后再来看看。",
+    "noPurpose": "未记录用途",
+    "watermarked": "带水印",
+    "open": "打开",
+    "reopen": "重新加载",
+    "futureRooms": "此链接指向的是公司而不是某一个数据室——之后新增的数据室会自动出现在这里，无需重新邀请。"
   }
 }

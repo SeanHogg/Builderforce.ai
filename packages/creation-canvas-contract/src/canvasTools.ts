@@ -447,6 +447,18 @@ export const ACCOUNT_REQUIRED_CANVAS_TOOLS = [
   // to anyone without an account.
   'canvas_measure_funnel',
   'canvas_offer_interview_slots',
+  // The REQUISITION, bound to its real `job_postings` row (FO-B3). Account-required for
+  // the sharpest version of the reason: one of its two paths CREATES a job posting in
+  // the workspace, and the other counts the applications recorded against one. A guest
+  // board has no requisition and nobody has applied to it — and unlike an image, there
+  // is no true one-sentence answer that becomes a capability on sign-up either, because
+  // an empty workspace has no postings to count.
+  //
+  // This is the tool that makes `jobPosting.applicantCount` a COUNT rather than a typed
+  // number, which is what `canvas_sync_account` did for the counterparty half of the
+  // board: the card carries `postingId`, and every application read joins on it instead
+  // of on a title two requisitions can share.
+  'canvas_sync_job_posting',
   // ── The build vocabulary (`lib/canvasBuildTools.ts`) ─────────────────────────
   // Creating, listing, reading, searching and editing the CODE behind a Builder
   // object. Account-required for the plainest possible reason: a workspace is

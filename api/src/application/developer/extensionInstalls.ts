@@ -30,7 +30,14 @@ import { acrossTenants, scopedToTenant } from '../../infrastructure/database/ten
 import { parseConnectorManifest, type ConnectorManifest } from '../connectors/connectorManifest';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { PublisherError } from './publishers';
-import { isExtensionScope, scopeUpgrade, SENSITIVE_SCOPES } from './extensionContract';
+import {
+  isExtensionScope,
+  scopeUpgrade,
+  SENSITIVE_SCOPES,
+  subscriptionEntitles,
+  type ExtensionPlan,
+} from './extensionContract';
+import { packagePricing } from './extensionPlans';
 import { installsCacheKey, invalidateInstalls, loadPackage, loadVersion } from './extensionRepository';
 
 export interface InstallView {
@@ -45,6 +52,12 @@ export interface InstallView {
   grantedScopes: string[];
   connectionId: string | null;
   disabled: boolean;
+  /** NULL for a free install. The plan code on the package's price list. */
+  planCode: string | null;
+  /** `none` | `active` | `past_due` | `cancelled` — `INSTALL_SUBSCRIPTION_STATES`. */
+  subscriptionState: string;
+  /** When the paid period ends, as the processor reports it. */
+  currentPeriodEndISO: string | null;
   /** Set when the publisher has shipped a newer head than this install runs. */
   update: { versionId: string; semver: string; addedScopes: string[]; auto: boolean } | null;
   createdAt: string | null;
@@ -76,6 +89,12 @@ export async function previewInstall(
   scopes: string[];
   sensitiveScopes: string[];
   alreadyInstalled: boolean;
+  /** The plans on offer. Empty for a free package — and its emptiness is what
+   *  decides which door an install goes through, below. */
+  plans: ExtensionPlan[];
+  currency: string;
+  /** True when this package can only be installed by picking a plan and paying. */
+  paid: boolean;
 }> {
   const pkg = await loadPackage(db, input.packageId);
   if (pkg.listingState !== 'listed') throw new PublisherError('this package is not available', 404);
@@ -95,6 +114,10 @@ export async function previewInstall(
     .limit(1);
 
   const scopes = version.requestedScopes ?? [];
+  // The consent screen and the install path read the SAME price list. A
+  // preview that said "free" while `installPackage` refused as paid would be a
+  // consent screen describing a transaction that cannot happen.
+  const pricing = await packagePricing(db, pkg);
   return {
     packageName: pkg.name,
     publisherName: publisher?.name ?? null,
@@ -103,6 +126,9 @@ export async function previewInstall(
     scopes,
     sensitiveScopes: scopes.filter((s) => isExtensionScope(s) && SENSITIVE_SCOPES.includes(s)),
     alreadyInstalled: Boolean(existing),
+    plans: pricing.plans,
+    currency: pricing.currency,
+    paid: pricing.plans.length > 0,
   };
 }
 
@@ -130,6 +156,23 @@ export async function installPackage(
     throw new PublisherError('this package is not available', 404);
   }
   const version = await loadVersion(db, pkg.currentVersionId);
+
+  // THE FREE DOOR MUST NOT OPEN A PAID PACKAGE.
+  //
+  // This function is reached by `POST /api/developer/installs`, whose whole job
+  // is a one-click install with no money in it. A paid package installed through
+  // it would be a live scope grant on an extension nobody has paid for — and it
+  // would look, to every consumer of `listInstalls`, exactly like a legitimate
+  // one. The paid door is `extensionCommerce.startPlanCheckout`, which creates
+  // the install only once the money is confirmed.
+  //
+  // Refusing here rather than in the route is deliberate: this is the function
+  // that writes the grant, and CONTRIBUTING §3 is explicit that a refusal must
+  // reach the code that would do the thing rather than be asserted in front of it.
+  const pricing = await packagePricing(db, pkg);
+  if (pricing.plans.length > 0) {
+    throw new PublisherError('this extension is paid — choose a plan to install it', 409);
+  }
 
   const requested = version.requestedScopes ?? [];
   const granted = requested.filter((s) => input.approvedScopes.includes(s));
@@ -332,6 +375,9 @@ export async function listInstalls(db: Db, env: Env, tenantId: number): Promise<
           grantedScopes: install.grantedScopes ?? [],
           connectionId: install.connectionId,
           disabled: install.disabledAt !== null,
+          planCode: install.planCode,
+          subscriptionState: install.subscriptionState,
+          currentPeriodEndISO: install.currentPeriodEnd ? new Date(install.currentPeriodEnd).toISOString() : null,
           update: head && upgrade
             ? { versionId: head.id, semver: head.semver, addedScopes: upgrade.added, auto: upgrade.auto }
             : null,
@@ -364,6 +410,12 @@ export async function installedConnectorManifests(
   for (const { install, version, pkg } of rows) {
     if (pkg.kind !== 'connector') continue;
     if (!(install.grantedScopes ?? []).includes('tools:call')) continue;
+    // A cancelled subscription stops the extension working everywhere at once,
+    // because this is the ONE read the agent tool catalog, the workflow action
+    // picker and the connector runtime all go through. `past_due` deliberately
+    // still works — see `subscriptionEntitles` for why a failed card must not
+    // switch off somebody's payroll integration the same hour.
+    if (install.subscriptionState !== 'none' && !subscriptionEntitles(install.subscriptionState)) continue;
     try {
       out.push({
         manifest: parseConnectorManifest(version.spec),

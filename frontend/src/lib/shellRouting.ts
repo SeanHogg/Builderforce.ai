@@ -81,9 +81,13 @@ function underPrefix(pathname: string, prefix: string): boolean {
  *
  * Trailing slashes throughout: these are the sub-trees, not the app routes above
  * them. `/references` is the requester's console and stays an app route; only
- * `/references/shared/<token>` is the referee's page.
+ * `/references/shared/<token>` is the referee's page. `/investor/shared/` is the
+ * same split a second time and for the same reason (IN-2): `/investor` is the
+ * FOUNDER's destination and stays an app route, while a fund opening a company
+ * grant has no session by construction — the token IS the credential — so the
+ * page it lands on must not carry the operator shell of a workspace it is not in.
  */
-const NO_CHROME_PREFIXES = ['/embed', '/webcontainer', '/auth/', '/book', '/deal', '/f/', '/p/', '/sign/', '/invoice/', '/resume/', '/data-rooms/shared/', '/legal-documents/shared/', '/references/shared/', '/lti/'];
+const NO_CHROME_PREFIXES = ['/embed', '/webcontainer', '/auth/', '/book', '/deal', '/f/', '/p/', '/sign/', '/invoice/', '/resume/', '/data-rooms/shared/', '/investor/shared/', '/legal-documents/shared/', '/references/shared/', '/lti/'];
 
 /**
  * The framed cross-origin surface — the VS Code webview and third-party hosts.

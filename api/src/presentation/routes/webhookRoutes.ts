@@ -24,6 +24,7 @@ import { recordBusinessPhoneEvent } from '../../application/tenant/businessPhone
 import { completeListingCheckout } from '../../application/marketplace/listingCommerce';
 import { settleInvoiceCheckout } from '../../application/finance/receivables';
 import { completeKnowledgeCheckout } from '../../application/knowledge/knowledgeCommerce';
+import { setSubscriptionState } from '../../application/developer/extensionBilling';
 import { fireEventTriggers } from '../../application/workflow/eventTriggers';
 import { invalidateContainerRunContexts } from '../../application/runtime/cloudAgentEngine';
 
@@ -221,6 +222,46 @@ export function createWebhookRoutes(
      * on `(tenant, catalog item, licensee)` makes the second arrival a no-op
      * rather than a second sale.
      */
+    /**
+     * A MARKETPLACE EXTENSION's subscription changed (PRD 24 §5.4).
+     *
+     * Addressed by the PROCESSOR's subscription id, which is what the install
+     * stored — a workspace can run several paid extensions under one Stripe
+     * customer, so the customer cannot identify which one this is about.
+     *
+     * `past_due` deliberately does NOT stop the extension working: switching
+     * somebody's payroll integration off the hour their card expired loses the
+     * marketplace both the customer and the vendor, and `subscriptionEntitles`
+     * encodes that. What ends the relationship is a cancellation.
+     *
+     * A `matched` of 0 is a normal outcome and not an error — it means this
+     * subscription belongs to something that is not an extension install (or to an
+     * install already removed), and the event is acknowledged either way. A
+     * webhook that 500s is a webhook the processor retries forever.
+     */
+    if (
+      event.type === 'extension.subscription.activated'
+      || event.type === 'extension.subscription.past_due'
+      || event.type === 'extension.subscription.cancelled'
+    ) {
+      const state = event.type === 'extension.subscription.activated' ? 'active'
+        : event.type === 'extension.subscription.past_due' ? 'past_due'
+          : 'cancelled';
+      try {
+        const matched = await setSubscriptionState(buildDatabase(c.env), c.env as Env, {
+          subscriptionRef: event.externalSubscriptionId,
+          state,
+        });
+        return c.json({ received: true, matched });
+      } catch (error) {
+        reportCaughtError(error, {
+          source: 'presentation/routes/webhookRoutes.ts',
+          operation: `extensionSubscription:${state}`,
+        });
+        return c.json({ received: true, matched: 0 });
+      }
+    }
+
     if (event.type === 'listing.purchased') {
       return settleOneOff(c, {
         operation: 'listingPurchase',

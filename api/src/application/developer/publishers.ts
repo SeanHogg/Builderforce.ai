@@ -28,7 +28,8 @@
 import { eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
-import { tenants } from '../../infrastructure/database/schema';
+import { connections, tenants } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { tenantRoleOf, tenantRoleAtLeast, type TenantRole } from '../tenant/tenantRoles';
 import { isPublisherState, publishes, type PublisherState } from './extensionContract';
@@ -241,6 +242,60 @@ export async function setPublisherState(
       publisherVerifiedAt: publishes(input.state) && input.state !== 'unverified' ? new Date() : null,
       updatedAt: new Date(),
     })
+    .where(eq(tenants.id, input.tenantId))
+    .returning();
+  if (!row) throw new PublisherError('workspace not found', 404);
+  await invalidatePublisher(env, input.tenantId);
+  return toPublisherView(row);
+}
+
+/**
+ * Nominate the payout destination this WORKSPACE's extension revenue leaves to.
+ *
+ * ── WHY A WORKSPACE NAMES ITS DESTINATION INSTEAD OF INHERITING ONE ─────────
+ * A person's payouts go to whichever of their connected accounts is flagged
+ * default — the money follows the person, and `connections.user_id` is how it is
+ * found. A publisher's revenue belongs to the COMPANY: `extension_packages` names
+ * no author, so the earning accrues to the workspace, and there is no
+ * `connections.user_id` that means "the workspace". Inferring one from whoever
+ * happens to press Pay Out would send a company's revenue to an employee.
+ *
+ * So the destination is stated once, by an owner, and stored on the facet —
+ * `tenants.publisher_payout_connection_id`, the column 0472 added and nothing
+ * read until there was revenue to send through it.
+ *
+ * The connection is verified to BELONG to this workspace and to be a payout
+ * connection before it is stored. Without that check, an owner could nominate any
+ * integer and the payout service — which scopes its own read to the tenant —
+ * would silently find nothing and refuse forever, with no way to tell that the
+ * number was the problem.
+ */
+export async function setPayoutDestination(
+  db: Db,
+  env: Env,
+  input: { tenantId: number; userId: string; connectionId: number | null },
+): Promise<PublisherView> {
+  await requirePublisher(db, input.tenantId, input.userId, 'owner');
+
+  if (input.connectionId !== null) {
+    const [connection] = await db
+      .select({ id: connections.id })
+      .from(connections)
+      .where(scopedToTenant(
+        connections,
+        input.tenantId,
+        eq(connections.id, input.connectionId),
+        eq(connections.capability, 'payout'),
+      ))
+      .limit(1);
+    if (!connection) {
+      throw new PublisherError('that payout destination is not connected to this workspace', 404);
+    }
+  }
+
+  const [row] = await db
+    .update(tenants)
+    .set({ publisherPayoutConnectionId: input.connectionId, updatedAt: new Date() })
     .where(eq(tenants.id, input.tenantId))
     .returning();
   if (!row) throw new PublisherError('workspace not found', 404);

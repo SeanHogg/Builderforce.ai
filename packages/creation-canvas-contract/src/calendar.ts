@@ -36,7 +36,7 @@
  * and the server can count a conflict with the same call the card does.
  */
 
-import { dateValue, resolveDeadlineField } from './triggers';
+import { dateValue, deadlineDetailOf, deadlineValueOf, isVirtualDeadlineField, resolveDeadlineField } from './triggers';
 
 // ---------------------------------------------------------------------------
 // The event
@@ -521,10 +521,18 @@ export function boardCalendarEvents(
     const field = scheduled !== null
       ? CALENDAR_PRIMARY_FIELD
       : resolveDeadlineField(object.data, object.data.watchesField);
-    const at = scheduled ?? (field ? dateValue(object.data[field]) : null);
+    const at = scheduled ?? (field ? dateValue(deadlineValueOf(object.data, field)) : null);
     if (at === null || !field) continue;
     const category = calendarCategoryForKind(object.kind);
-    const details = typeof object.data.summary === 'string' ? object.data.summary
+    // A COMPUTED deadline is drawn and not dragged. `field` is what the reschedule path
+    // writes back through, and a contract's next obligation is not a column — it is the
+    // earliest of several rows, so accepting a drag would write a date onto the card that
+    // nothing reads while the row it summarises stayed where it was. Omitting `field`
+    // makes the event read-only by the guard `calendarSources` already has, and the
+    // obligation is renamed in `details` so the entry still says WHICH one is due.
+    const virtual = isVirtualDeadlineField(field);
+    const details = virtual ? deadlineDetailOf(object.data, field) ?? undefined
+      : typeof object.data.summary === 'string' ? object.data.summary
       : typeof object.data.subtitle === 'string' ? object.data.subtitle : undefined;
     events.push({
       id: `board:${object.id}`,
@@ -532,7 +540,7 @@ export function boardCalendarEvents(
       sourceId: 'board',
       subject: String(object.title ?? object.data.title ?? '').trim() || object.kind,
       startISO: new Date(at).toISOString(),
-      field,
+      ...(virtual ? {} : { field }),
       ...(category ? { category } : {}),
       ...(details ? { details } : {}),
     });

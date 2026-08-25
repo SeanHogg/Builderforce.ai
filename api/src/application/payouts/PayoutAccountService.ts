@@ -42,6 +42,21 @@ import {
   type PayoutResult,
 } from './payoutProviders';
 import { USD_CENTS } from '../kernel/denominations';
+import type { LedgerAccount } from '../kernel/ledgerAccount';
+
+
+/**
+ * WHERE a payout goes — the other half of the pair `pay` takes.
+ *
+ * `defaultForUserId` is a PERSON's default destination, resolved here so a caller
+ * never has to know which of their connections is flagged. `connectionId` is one
+ * NOMINATED row, which is what a workspace balance needs: a workspace has no
+ * `connections.user_id` of its own, so it names its destination explicitly
+ * (`tenants.publisher_payout_connection_id`) instead of having one inferred.
+ */
+export type PayoutDestination =
+  | { defaultForUserId: string }
+  | { connectionId: number };
 
 
 /** A connected destination as any surface may see it — never a credential. */
@@ -295,12 +310,12 @@ export class PayoutAccountService {
   }
 
   /** Money that has actually left THIS workspace, newest first. */
-  async payouts(tenantId: number, userId: string, limit = 50): Promise<PayoutRecord[]> {
+  async payouts(tenantId: number, account: LedgerAccount, limit = 50): Promise<PayoutRecord[]> {
     const rows = await this.db.select().from(ledgerEntries)
       .where(and(
         eq(ledgerEntries.tenantId, tenantId),
-        eq(ledgerEntries.accountKind, 'user'),
-        eq(ledgerEntries.accountRef, userId),
+        eq(ledgerEntries.accountKind, account.kind),
+        eq(ledgerEntries.accountRef, account.ref),
         eq(ledgerEntries.entryKind, 'payout'),
         eq(ledgerEntries.denomination, USD_CENTS),
       ))
@@ -345,13 +360,13 @@ export class PayoutAccountService {
    * existing row correct with no backfill: an escrow release IS a payout to the
    * freelancer's balance, it is simply not a withdrawal.
    */
-  async paidCents(tenantId: number, userId: string): Promise<number> {
+  async paidCents(tenantId: number, account: LedgerAccount): Promise<number> {
     const [row] = await this.db.select({ total: sql<string>`coalesce(sum(abs(${ledgerEntries.amount})), 0)` })
       .from(ledgerEntries)
       .where(and(
         eq(ledgerEntries.tenantId, tenantId),
-        eq(ledgerEntries.accountKind, 'user'),
-        eq(ledgerEntries.accountRef, userId),
+        eq(ledgerEntries.accountKind, account.kind),
+        eq(ledgerEntries.accountRef, account.ref),
         eq(ledgerEntries.entryKind, 'payout'),
         eq(ledgerEntries.denomination, USD_CENTS),
         sql`(${ledgerEntries.reference} is null or ${ledgerEntries.reference} not like 'escrow:%')`,
@@ -361,26 +376,44 @@ export class PayoutAccountService {
 
   /** Earned − paid. `earnedCents` is the caller's domain fact (commission, an
    *  invoice total); this service never guesses at it. */
-  async balance(tenantId: number, userId: string, earnedCents: number): Promise<PayoutBalance> {
-    const paid = await this.paidCents(tenantId, userId);
+  async balance(tenantId: number, account: LedgerAccount, earnedCents: number): Promise<PayoutBalance> {
+    const paid = await this.paidCents(tenantId, account);
     return { earnedCents, paidCents: paid, availableCents: Math.max(0, earnedCents - paid) };
   }
 
   /**
-   * Send money to a person's default destination and record it.
+   * Send money to a destination and record it.
    *
    * `reference` is the idempotency key end to end: the vendor gets it (Stripe's
    * `Idempotency-Key`, PayPal's `sender_batch_id`) and the ledger's unique index
    * refuses a second row for it. A retried sweep therefore cannot pay twice at
    * either layer.
    *
-   * Falls back to the deployment's `PAYOUT_WEBHOOK_URL` when the earner has
-   * connected nothing — which is exactly what that seam was for before anyone
-   * could connect anything, so the old behaviour is preserved rather than removed.
+   * ── WHY THE ACCOUNT AND THE DESTINATION ARE SEPARATE PARAMETERS ────────────
+   * They used to be one `userId`, which silently asserted that the balance money
+   * leaves and the person whose bank details it goes to are the same party. For a
+   * freelancer they are. For a PUBLISHER they are not: an extension's earnings
+   * accrue to the workspace (`extension_packages` names no author, exactly as
+   * `ide_agents` does not), and the destination is the one connection that
+   * workspace nominated — `tenants.publisher_payout_connection_id`, a column that
+   * existed with nothing reading it until this parameter split let it be read.
+   *
+   * Both are REQUIRED rather than defaulted, because a payout that quietly picked
+   * "the user account" for a caller that meant the workspace would move real money
+   * out of a balance nobody was watching. The compiler asks the question.
+   *
+   * Falls back to the deployment's `PAYOUT_WEBHOOK_URL` when a person's default
+   * destination resolves to nothing — which is what that seam was for before
+   * anyone could connect anything, so the old behaviour is preserved rather than
+   * removed. A workspace destination has no such fallback: the legacy seam names
+   * a `freelancerUserId`, and there is no honest value for it here.
    */
   async pay(input: {
-    userId: string;
     tenantId: number;
+    /** WHOSE balance this leaves. Decides the account on the ledger receipt. */
+    account: LedgerAccount;
+    /** WHERE it goes: a nominated connection, or a person's default destination. */
+    destination: PayoutDestination;
     amountCents: number;
     currency?: string;
     reference: string;
@@ -391,13 +424,25 @@ export class PayoutAccountService {
     }
     const currency = (input.currency ?? 'USD').toUpperCase();
 
-    const [row] = await this.db.select().from(connections)
-      .where(and(
-        eq(connections.tenantId, input.tenantId),
-        eq(connections.userId, input.userId),
-        eq(connections.capability, PAYOUT),
-        IS_DEFAULT,
-      )).limit(1);
+    // Scoped to the tenant in BOTH branches, and not only for the guard's sake:
+    // a payout connection's credential is sealed under a tenant-derived key, so a
+    // row read from another workspace could not be opened here even if it were
+    // found. A nominated connection id that belongs to somebody else therefore
+    // resolves to nothing rather than to a mis-decryption.
+    const [row] = 'connectionId' in input.destination
+      ? await this.db.select().from(connections)
+        .where(and(
+          eq(connections.tenantId, input.tenantId),
+          eq(connections.id, input.destination.connectionId),
+          eq(connections.capability, PAYOUT),
+        )).limit(1)
+      : await this.db.select().from(connections)
+        .where(and(
+          eq(connections.tenantId, input.tenantId),
+          eq(connections.userId, input.destination.defaultForUserId),
+          eq(connections.capability, PAYOUT),
+          IS_DEFAULT,
+        )).limit(1);
 
     let result: PayoutResult;
     let providerName = 'webhook';
@@ -428,10 +473,10 @@ export class PayoutAccountService {
           ? { lastSyncedAt: new Date(), lastError: null, updatedAt: new Date() }
           : { lastError: result.error.slice(0, 500), updatedAt: new Date() })
         .where(and(eq(connections.tenantId, input.tenantId), eq(connections.id, row.id)));
-    } else if (isPayoutsConfigured(this.env)) {
+    } else if ('defaultForUserId' in input.destination && isPayoutsConfigured(this.env)) {
       const legacy = await createWebhookPayout(this.env, {
         invoiceId: input.reference, amountCents: input.amountCents, currency,
-        freelancerUserId: input.userId, tenantId: input.tenantId,
+        freelancerUserId: input.destination.defaultForUserId, tenantId: input.tenantId,
       });
       result = legacy.ok
         ? { ok: true, externalRef: legacy.externalRef ?? null, status: 'pending' }
@@ -446,8 +491,8 @@ export class PayoutAccountService {
     // the WHOLE operation idempotent, not just the vendor call.
     const inserted = await this.db.insert(ledgerEntries).values({
       tenantId: input.tenantId,
-      accountKind: 'user',
-      accountRef: input.userId,
+      accountKind: input.account.kind,
+      accountRef: input.account.ref,
       denomination: USD_CENTS,
       amount: String(input.amountCents),
       entryKind: 'payout',

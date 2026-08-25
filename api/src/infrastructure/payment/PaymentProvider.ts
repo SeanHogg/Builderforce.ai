@@ -122,6 +122,24 @@ export interface WebhookEvent {
     | 'addon.past_due'
     | 'addon.cancelled'
     /**
+     * A MARKETPLACE EXTENSION's subscription changed (PRD 24 §5.4).
+     *
+     * These are separate event types and not the `subscription.*` ones for the
+     * same reason `addon.*` are: a tenant's workspace can carry more than one
+     * recurring charge, and only ONE of them is the platform plan. An extension
+     * subscription arriving as `subscription.cancelled` would cancel the
+     * customer's BuilderForce plan because a vendor's card expired — the exact
+     * failure the business-phone branch in `parseWebhook` already exists to
+     * prevent, applied to the second thing that recurs.
+     *
+     * They are addressed by `externalSubscriptionId`, which is the identity the
+     * install stored, rather than by customer: one workspace can subscribe to
+     * several extensions under one Stripe customer.
+     */
+    | 'extension.subscription.activated'
+    | 'extension.subscription.past_due'
+    | 'extension.subscription.cancelled'
+    /**
      * A marketplace creation was paid for.
      *
      * The REDIRECT is the normal way that grant happens, and this is the reason
@@ -178,7 +196,7 @@ export interface WebhookEvent {
   discountRedemptionId?: string;
   /** Signed checkout/subscription metadata identifying the attributed referral. */
   salesReferralId?: string;
-  purchaseKind?: 'business_phone' | 'marketplace_listing' | 'knowledge_listing';
+  purchaseKind?: 'business_phone' | 'marketplace_listing' | 'knowledge_listing' | 'extension_plan';
   activationCents?: number;
   monthlyCents?: number;
   cartId?: string;
@@ -267,6 +285,36 @@ export interface InvoicePaymentLinkOpts {
   idempotencyKey: string;
 }
 
+/**
+ * A charge added to a customer's NEXT invoice rather than taken now (PRD 24 §5.4
+ * step 4).
+ *
+ * This is the one operation in this port that does not involve a hosted page,
+ * and that is exactly what makes it the Vercel move: the customer picked a plan
+ * once, and a month's metered usage of somebody else's extension then appears as
+ * a line on the invoice they already receive. Sending them to a checkout page for
+ * $4.12 of API calls is the second invoice §2.4 says kills a marketplace.
+ *
+ * It is an invoice ITEM and not a charge: pending items are swept onto the next
+ * invoice the subscription generates, so the platform never holds a card
+ * off-session and never has to reconcile a standalone payment against a
+ * subscription period.
+ *
+ * `idempotencyKey` is required, not optional. This is called from a sweep, sweeps
+ * retry, and the failure mode of a retried usage charge is billing a customer
+ * twice for the same month.
+ */
+export interface InvoiceItemOpts {
+  /** The processor's customer id — `tenants.external_customer_id`. */
+  externalCustomerId: string;
+  amountCents: number;
+  currency: string;
+  /** The line as the CUSTOMER reads it. It must name the extension and the units. */
+  description: string;
+  metadata: Record<string, string>;
+  idempotencyKey: string;
+}
+
 /** What the processor says about a connected account, as opposed to what our row claims. */
 export interface ConnectedAccountStatus {
   accountId: string;
@@ -343,6 +391,15 @@ export interface PaymentProvider {
 
   /** Cancel the active subscription for a tenant (called on downgrade to Free). */
   cancelSubscription(externalSubscriptionId: string): Promise<void>;
+
+  /**
+   * Put a charge on the customer's NEXT invoice instead of taking it now.
+   *
+   * Returns the item's processor id, or `null` when payments are not configured
+   * on this deployment — a `null` a caller must record rather than ignore, because
+   * the usage it describes was real and somebody still owes for it.
+   */
+  addInvoiceItem(opts: InvoiceItemOpts): Promise<{ itemId: string } | null>;
 
   /**
    * Detach a stored CARD so the processor no longer holds it. Called when a tenant

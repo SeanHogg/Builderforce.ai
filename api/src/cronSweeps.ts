@@ -63,6 +63,7 @@ import { runMonitorSweep } from './application/monitoring/runMonitorSweep';
 import { runAutonomousExecutionSweep } from './application/runtime/autonomousExecutionSweep';
 import { runManagerSweep } from './application/manager/runManagerSweep';
 import { runWebhookRetrySweep } from './application/seams/webhookService';
+import { runExtensionBillingSweep } from './application/developer/extensionBilling';
 import { runBoardSyncSweep } from './application/boardsync/runBoardSyncSweep';
 import { runPrMergeSweep } from './application/repos/prMergeSweep';
 import { runParkedWorkflowSweep } from './application/swimlane/resumeParkedWorkflows';
@@ -770,6 +771,26 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     run: async ({ env }) => {
       const redelivered = await runWebhookRetrySweep(env);
       return redelivered > 0 ? `redelivered=${redelivered}` : null;
+    },
+  },
+  {
+    key: 'extension-billing',
+    // DAILY, not frequent. A metered window is thirty days long, so the most a
+    // daily pass can be late is a day — and the alternative is scanning every
+    // paid install every few minutes to find the handful whose window has just
+    // turned over. The watermark IS the schedule (see `extensionBilling`), so a
+    // tick that closes nothing is a bounded indexed read and nothing else.
+    cadence: 'daily',
+    description: "Close each paid extension install's metered period: price the usage, invoice the tenant, credit the publisher.",
+    run: async ({ env }) => {
+      const r = await runExtensionBillingSweep(env);
+      // `uninvoiced` is reported even when it is the only thing that happened: a
+      // period that priced and credited but could not reach an invoice is money
+      // somebody owes with no line asking for it, which is an operator problem
+      // rather than a customer one and must not be silent.
+      return r.closed > 0 || r.uninvoiced > 0
+        ? `considered=${r.considered} closed=${r.closed} billedCents=${r.billedCents} uninvoiced=${r.uninvoiced}`
+        : null;
     },
   },
   {

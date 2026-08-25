@@ -30,6 +30,22 @@
  * and therefore has nowhere to put a reason. So a raise is justified HERE, in
  * prose, and a raise with no entry below is a raise nobody argued for:
  *
+ *   918 → 920 (`useClientFiles`, 2026-08-25) — the investor destination (IN-3).
+ *   TWO files, and the pair is the minimum the surface can be built from rather
+ *   than the number it happened to land on. `components/investor/InvestorClient.tsx`
+ *   is the ONE boundary for the founder-facing destination: it owns the company
+ *   selection, the five per-company reads and the `?tab=` dispatch, and its six
+ *   sub-views (`CompaniesView`, `RoundView`, `InvestorsView`, `DataRoomView`,
+ *   `DiligenceView`, `PackView`) carry NO directive of their own — they are
+ *   ordinary modules pulled across by being imported from it, which is the
+ *   "800 -> 798" tightening applied on the way in rather than paid for later.
+ *   `components/investor/InvestorGrantView.tsx` is the second and cannot be the
+ *   first: it is the unauthenticated page a FUND lands on, served under a
+ *   no-chrome prefix with no session and no shell, so it shares no tree with the
+ *   founder boundary and importing it from there would pull the operator surface
+ *   into a stranger’s bundle. Both route files stay server components, so
+ *   `useClientPages` is unchanged at 32.
+ *
  *   913 → 918 (`useClientFiles`, 2026-08-23) — a RECONCILIATION, not new work.
  *   The 913 recorded two commits ago no longer matched the committed tree by the
  *   time this pass ran: the shared tree had moved to 918 with no changelog entry

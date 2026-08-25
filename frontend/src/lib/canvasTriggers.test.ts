@@ -3,8 +3,11 @@ import {
   DEADLINE_FIELD_NAMES,
   dateValue,
   daysUntil,
+  deadlineValueOf,
   evaluateCanvasTriggers,
   evaluateTrigger,
+  isVirtualDeadlineField,
+  nextOpenObligation,
   numericValue,
   resolveDeadlineField,
   triggerUnboundHint,
@@ -344,6 +347,102 @@ describe('evaluateCanvasTriggers', () => {
 });
 
 // ---------------------------------------------------------------------------
+// FO-G2 — a contract's obligations, as a clock
+// ---------------------------------------------------------------------------
+
+/**
+ * The deadline that lives in ROWS.
+ *
+ * Every other watchable date is a column the sweep reads straight off a saved row. An
+ * obligation's `due` is one of several rows on a card nothing projects, so the engine
+ * computes it — which is the only way the board and the nightly sweep can agree about
+ * when the support fee is due, and the whole reason `nextObligationAt` is not a
+ * derivation local to the card.
+ */
+describe('a contract obligation as a deadline', () => {
+  const obligations = [
+    { reference: 'SLA-REPORT', obligation: 'Monthly SLA report', kind: 'report', due: inDays(40), status: 'pending' },
+    { reference: 'SUPPORT-Q', obligation: 'Quarterly support fee', kind: 'receivable', due: inDays(6), status: 'pending' },
+    { reference: 'SETUP', obligation: 'One-off setup fee', kind: 'receivable', due: inDays(2), status: 'met' },
+  ];
+  const msa = { id: 'c9', data: { kind: 'contract', title: 'Acme MSA', obligations } };
+  const watch = (over: Record<string, unknown> = {}) => ({
+    id: 't9',
+    data: { kind: 'trigger', title: 'Obligation watch', watches: 'Acme MSA', comparator: 'due-within', threshold: 7, watchesField: 'nextObligationAt', ...over },
+  });
+
+  it('reads the earliest obligation still owed', () => {
+    expect(nextOpenObligation(msa.data)).toMatchObject({ reference: 'SUPPORT-Q', due: inDays(6) });
+  });
+
+  /** `met` and `waived` retire a row. `invoiced` does NOT: a document having been raised
+   *  is not the money having arrived, and silencing the countdown there would mute the
+   *  obligations most likely to be forgotten — the half-actioned ones. */
+  it('retires a met or waived obligation and keeps an invoiced one', () => {
+    const invoiced = [{ reference: 'A', obligation: 'A', due: inDays(1), status: 'invoiced' }, ...obligations];
+    expect(nextOpenObligation({ obligations: invoiced })?.reference).toBe('A');
+    const settled = obligations.map((row) => ({ ...row, status: 'waived' }));
+    expect(nextOpenObligation({ obligations: settled })).toBeNull();
+  });
+
+  /** An obligation six months past reports six months overdue. Rolling the cadence
+   *  forward would invent a date the contract does not state and turn a missed
+   *  commitment into a comfortable future one. */
+  it('never rolls a cadence forward past a missed date', () => {
+    const late = [{ reference: 'M', obligation: 'Monthly fee', cadence: 'monthly', due: inDays(-180), status: 'pending' }];
+    expect(nextOpenObligation({ obligations: late })?.due).toBe(inDays(-180));
+  });
+
+  it('reports nothing for a contract with no obligation rows', () => {
+    expect(nextOpenObligation({ kind: 'contract', renewsAt: inDays(20) })).toBeNull();
+    expect(nextOpenObligation({ obligations: [{ reference: 'X', obligation: 'X', due: 'next quarter' }] })).toBeNull();
+  });
+
+  it('warns before the obligation falls due, and names which one', () => {
+    const [result] = evaluateCanvasTriggers([msa, watch()], NOW);
+    expect(result).toMatchObject({
+      watchedKind: 'contract',
+      deadlineField: 'nextObligationAt',
+      evaluation: { state: 'breached', observed: 6 },
+    });
+    expect(result.deadlineDetail).toBe('obligation "Quarterly support fee" (SUPPORT-Q)');
+  });
+
+  /**
+   * THE COMPATIBILITY RULE. A contract carries two clocks, and every trigger authored
+   * before this existed watches the renewal. `nextObligationAt` follows `renewsAt` in
+   * the resolution order so that stays true — an author reaches the obligation clock by
+   * naming it, which is what `watchesField` is for.
+   */
+  it('leaves the renewal as the default clock and reaches the obligation by name', () => {
+    const both = { id: 'c10', data: { ...msa.data, renewsAt: inDays(20) } };
+    expect(resolveDeadlineField(both.data)).toBe('renewsAt');
+    const [renewal] = evaluateCanvasTriggers([both, watch({ watchesField: '' })], NOW);
+    expect(renewal).toMatchObject({ deadlineField: 'renewsAt', evaluation: { state: 'armed', observed: 20 } });
+    const [obligation] = evaluateCanvasTriggers([both, watch()], NOW);
+    expect(obligation).toMatchObject({ deadlineField: 'nextObligationAt', evaluation: { state: 'breached', observed: 6 } });
+  });
+
+  /** A contract whose obligations are all settled carries no obligation clock at all —
+   *  "present" has to mean "resolves to a date", or a met contract would report a
+   *  deadline field with nothing behind it. */
+  it('resolves to no clock once every obligation is settled', () => {
+    const settled = { obligations: obligations.map((row) => ({ ...row, status: 'met' })) };
+    expect(resolveDeadlineField(settled)).toBeNull();
+  });
+
+  /** A stored field is read, a virtual one is computed, and the virtual map wins on its
+   *  own name — so a stray `nextObligationAt` typed onto a card cannot shadow the rows
+   *  it is supposed to summarise. */
+  it('never lets an authored value shadow the computed one', () => {
+    const shadowed = { ...msa.data, nextObligationAt: inDays(365) };
+    expect(deadlineValueOf(shadowed, 'nextObligationAt')).toBe(inDays(6));
+    expect(isVirtualDeadlineField('nextObligationAt')).toBe(true);
+    expect(isVirtualDeadlineField('renewsAt')).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // The drift guard
 // ---------------------------------------------------------------------------
 
@@ -374,7 +473,10 @@ describe('deadline declarations', () => {
     for (const kind of ['contract', 'invoice', 'bill', 'fundingRound', 'obligation', 'policy', 'offer']) {
       expect(kinds).toContain(kind);
     }
-    expect(specDeadlineFields('contract')).toEqual(['renewsAt']);
+    // ORDER, not just membership. A contract carries two clocks and an unconfigured
+    // trigger watches the first, so `renewsAt` leading is what keeps every trigger
+    // authored before the obligation clock existed pointed at the date it always was.
+    expect(specDeadlineFields('contract')).toEqual(['renewsAt', 'nextObligationAt']);
     expect(specDeadlineFields('competitor')).toEqual([]);
   });
 });

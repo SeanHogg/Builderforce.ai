@@ -20,6 +20,7 @@
 import { describe, expect, it } from 'vitest';
 import { escrowLedgerReference } from '../marketplace/escrow';
 import { PayoutAccountService } from './PayoutAccountService';
+import { userAccount } from '../kernel/ledgerAccount';
 
 /**
  * Capture the `where` clause of the single aggregate and answer with a total.
@@ -65,7 +66,7 @@ function aggregateDb(total: number) {
  * empty object states that rather than standing up a provider this test would not use.
  */
 function paidCents(db: unknown): Promise<number> {
-  return new PayoutAccountService(db as never, {} as never).paidCents(7, 'user-1');
+  return new PayoutAccountService(db as never, {} as never).paidCents(7, userAccount('user-1'));
 }
 
 describe('paidCents', () => {

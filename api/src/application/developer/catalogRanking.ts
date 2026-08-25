@@ -102,6 +102,25 @@ export interface ListingSignals {
   assurance: AssuranceTier;
   /** 0..1 text match. Ignored under the browse weighting. */
   relevance?: number;
+  /**
+   * The publisher holds a Featured slot (`tenants.publisher_featured_at`) — the
+   * incentive PRD 24 §6's ledger leads with.
+   *
+   * NOT a fifth weighted signal, and the distinction matters. The four signals
+   * above are all EVIDENCE about the listing: how many people run it, how
+   * recently it was reviewed, how hard it was checked, whether it matches what
+   * was typed. Featured is none of those — it is an editorial decision an
+   * operator made, and mixing it into the same sum would make the score a blend
+   * of measurement and endorsement that nobody could interpret. Worse, any weight
+   * large enough for Featured to be worth having would swamp a genuine match on a
+   * search, which is exactly how a marketplace's search stops being trusted.
+   *
+   * So it is a TIER applied by {@link rankListings}: featured listings sort ahead
+   * of the rest, and within each group the score decides. Featured buys placement;
+   * it does not buy a better score, and a reader asking "why is this one above
+   * mine?" gets one of two honest answers rather than an opaque number.
+   */
+  featured?: boolean;
 }
 
 const clamp01 = (n: number): number => (Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : 0);
@@ -158,18 +177,22 @@ export function rankListing(
 /**
  * Rank many listings and return them ordered, best first.
  *
- * Ties break on install count and then on the stable key, so the order is TOTAL:
- * a directory whose second page depends on the planner's row order shows the same
- * listing twice and hides another one entirely.
+ * Featured listings form the first tier and the score orders within each tier —
+ * see {@link ListingSignals.featured} for why placement is a tier rather than a
+ * weight. Ties then break on install count and finally on the stable key, so the
+ * order is TOTAL: a directory whose second page depends on the planner's row
+ * order shows the same listing twice and hides another one entirely.
  */
 export function rankListings<T extends { key: string; signals: ListingSignals }>(
   rows: readonly T[],
   mode: 'browse' | 'search',
   now: Date = new Date(),
 ): Array<T & { score: number }> {
+  const tier = (row: { signals: ListingSignals }): number => (row.signals.featured ? 1 : 0);
   return rows
     .map((row) => ({ ...row, score: rankListing(row.signals, mode, now) }))
     .sort((a, b) =>
+      tier(b) - tier(a) ||
       b.score - a.score ||
       b.signals.installs - a.signals.installs ||
       a.key.localeCompare(b.key));

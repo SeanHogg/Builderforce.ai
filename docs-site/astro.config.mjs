@@ -73,6 +73,7 @@ export default defineConfig({
         { label: 'Gateway', autogenerate: { directory: 'gateway' } },
         { label: 'CLI', autogenerate: { directory: 'cli' } },
         { label: 'Orchestration (Builderforce.ai)', autogenerate: { directory: 'link' } },
+        { label: 'Developer Portal', autogenerate: { directory: 'developers' } },
         { label: 'Reference', autogenerate: { directory: 'reference' } },
         { label: 'Help', autogenerate: { directory: 'help' } },
       ],

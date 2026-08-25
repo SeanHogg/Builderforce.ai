@@ -28,6 +28,13 @@ import { resolveAppBaseUrl, type Env, type HonoEnv } from '../../env';
 import { screenshotConfigured } from '../../application/web/webScreenshot';
 import { credentialSecret } from '../../application/integrations/credentialCrypto';
 import { superAdminMiddleware } from '../middleware/superAdminMiddleware';
+import {
+  PublisherError,
+  setPublisherState,
+  setPublisherSuspended,
+} from '../../application/developer/publishers';
+import { setPartnerTrack } from '../../application/developer/partnerPrograms';
+import { invalidatePublicCatalog } from '../../application/developer/extensionRepository';
 import { buildDatabase, buildTransactionalDatabase, type Db } from '../../infrastructure/database/connection';
 import { writeAdminAudit, type AdminAuditOpts } from '../../infrastructure/audit/adminAudit';
 import { parseJsonArray } from '../../domain/shared/json';
@@ -4005,6 +4012,100 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const ok = await revokeTenantApiKey(db, { tenantId, keyId, env: c.env });
     if (!ok) return c.json({ error: 'Key not found' }, 404);
     return c.json({ ok: true });
+  });
+
+  // ═══ PUBLISHERS — the decisions only an operator may make (PRD 24) ════════
+  //
+  // Three of the marketplace's states cannot be self-serve, and each for its own
+  // reason:
+  //
+  //   • `identity_verified` — it is what gates CHARGING MONEY (§9 decision 2,
+  //     `mayCharge`). A workspace that could promote itself past it would be a
+  //     workspace that could take payments by pressing a button. Domain
+  //     verification IS self-serve (`verifyPublisherDomain` does a real DNS
+  //     lookup and promotes on the result); identity is the tier that needs a
+  //     person to have looked at a document, so the endpoint records a decision
+  //     rather than performing a check.
+  //   • suspension — standing a vendor down hides every listing they have at once.
+  //   • a partner TRACK and Featured placement — §2.1's funnel has a human at the
+  //     top, and Featured's entire value is that not everybody has it.
+  //
+  // Every one is audited: these are the marketplace's trust decisions, and a
+  // trust decision nobody can attribute is one that will eventually be disputed.
+
+  router.post('/publishers/:tenantId/state', async (c) => {
+    const db = buildDatabase(c.env);
+    const tenantId = Number(c.req.param('tenantId'));
+    if (!Number.isFinite(tenantId)) return c.json({ error: 'Invalid tenantId' }, 400);
+    const body = await c.req.json<{ state?: string; note?: string }>().catch(() => ({} as { state?: string; note?: string }));
+    const actorId = c.get('userId') as string;
+    try {
+      const publisher = await setPublisherState(db, c.env as Env, { tenantId, state: body.state ?? '' });
+      await writeAdminAudit(db, 'PUBLISHER_STATE_SET', actorId, {
+        tenantId,
+        metadata: { state: publisher.state, note: body.note ?? null },
+      });
+      return c.json({ publisher });
+    } catch (error) {
+      return c.json(
+        { error: error instanceof Error ? error.message : 'Could not set the publisher state' },
+        error instanceof PublisherError ? error.status : 400,
+      );
+    }
+  });
+
+  router.post('/publishers/:tenantId/suspension', async (c) => {
+    const db = buildDatabase(c.env);
+    const tenantId = Number(c.req.param('tenantId'));
+    if (!Number.isFinite(tenantId)) return c.json({ error: 'Invalid tenantId' }, 400);
+    const body = await c.req.json<{ suspended?: boolean; reason?: string }>().catch(() => ({} as { suspended?: boolean; reason?: string }));
+    if (typeof body.suspended !== 'boolean') return c.json({ error: 'suspended must be true or false' }, 400);
+    const actorId = c.get('userId') as string;
+    try {
+      const publisher = await setPublisherSuspended(db, c.env as Env, {
+        tenantId,
+        suspended: body.suspended,
+        reason: body.reason ?? null,
+      });
+      // The catalogue caches a suspended publisher's listings out of existence,
+      // so the invalidation is part of the decision rather than a later sweep.
+      await invalidatePublicCatalog(c.env as Env);
+      await writeAdminAudit(db, body.suspended ? 'PUBLISHER_SUSPENDED' : 'PUBLISHER_RESTORED', actorId, {
+        tenantId,
+        metadata: { reason: body.reason ?? null },
+      });
+      return c.json({ publisher });
+    } catch (error) {
+      return c.json(
+        { error: error instanceof Error ? error.message : 'Could not change the suspension' },
+        error instanceof PublisherError ? error.status : 400,
+      );
+    }
+  });
+
+  router.post('/publishers/:tenantId/track', async (c) => {
+    const db = buildDatabase(c.env);
+    const tenantId = Number(c.req.param('tenantId'));
+    if (!Number.isFinite(tenantId)) return c.json({ error: 'Invalid tenantId' }, 400);
+    const body = await c.req.json<{ track?: string; featured?: boolean }>().catch(() => ({} as { track?: string; featured?: boolean }));
+    const actorId = c.get('userId') as string;
+    try {
+      const standing = await setPartnerTrack(db, c.env as Env, {
+        tenantId,
+        track: body.track ?? 'none',
+        featured: body.featured,
+      });
+      await writeAdminAudit(db, 'PUBLISHER_TRACK_SET', actorId, {
+        tenantId,
+        metadata: { track: standing.track, featured: standing.featuredAtISO !== null },
+      });
+      return c.json({ standing });
+    } catch (error) {
+      return c.json(
+        { error: error instanceof Error ? error.message : 'Could not set the partner track' },
+        error instanceof PublisherError ? error.status : 400,
+      );
+    }
   });
 
   return router;

@@ -388,6 +388,28 @@ describe('contract obligations', () => {
     expect(specFieldValue(fieldOn('invoice', 'contractObligation'), standalone, makeSpecDeriveBoard([standalone]))).toBeUndefined();
   });
 
+  /**
+   * The half that makes the repository LIVE rather than inspectable. `obligationCoverage`
+   * answers "has anything been raised against this" when somebody opens the card;
+   * `nextObligationAt` is the date a `trigger` binds to, so the board says the support fee
+   * is due before it is missed rather than after. It reads through the trigger engine's
+   * own `nextOpenObligation`, which is what lets the nightly sweep see the same date.
+   */
+  it('counts down to the earliest obligation still owed', () => {
+    const field = fieldOn('contract', 'nextObligationAt');
+    expect(field.deadline).toBe(true);
+    // 2026-09-05 (the SLA report) is earlier than either billable row. A commitment is a
+    // commitment whether or not money moves — `kind` decides what may be INVOICED, not
+    // what is owed.
+    expect(specFieldValue(field, MSA, makeSpecDeriveBoard([MSA]))).toBe('2026-09-05');
+    expect(founderMutableFields('contract')).not.toContain('nextObligationAt');
+  });
+
+  it('has no obligation clock once every row is met or waived', () => {
+    const settled = { ...MSA, obligations: MSA.obligations.map((row) => ({ ...row, status: 'met' })) };
+    expect(specFieldValue(fieldOn('contract', 'nextObligationAt'), settled, makeSpecDeriveBoard([settled]))).toBeUndefined();
+  });
+
   it('keeps every resolver read-only and every reference authorable', () => {
     for (const kind of ['invoice', 'bill'] as const) {
       expect(founderMutableFields(kind)).toContain('contractRef');

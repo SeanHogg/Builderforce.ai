@@ -38,6 +38,7 @@ import { and, asc, desc, eq, inArray, or, sql, type SQL } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import {
+  catalogItems,
   extensionCategories,
   extensionPackages,
   extensionReviewStages,
@@ -185,6 +186,20 @@ export interface DirectoryListing {
   reviewedAt: string | null;
   /** How far through the pipeline the head version got. The trust badge. */
   assurance: AssuranceTier;
+  /**
+   * The cheapest RECURRING price, or null when the listing is free (and also
+   * when every plan is pure usage-based, which genuinely has no entry price —
+   * see `fromCentsOf`). A directory that quoted a $0/month metered plan as
+   * "from free" would be the single most common way a marketplace listing lies.
+   */
+  fromCents: number | null;
+  currency: string;
+  /** True when the listing has any plan at all. Distinct from `fromCents`
+   *  being set, because a usage-only listing is paid and has no "from". */
+  paid: boolean;
+  /** The publisher holds a Featured slot. A placement TIER, not a score —
+   *  see `ListingSignals.featured`. Returned so the badge and the order agree. */
+  featured: boolean;
   /** 0..1, from `catalogRanking.rankListing`. Returned so the order is auditable. */
   score: number;
 }
@@ -267,10 +282,18 @@ export async function searchDirectory(db: Db, env: Env, input: DirectoryQuery): 
           headSemver: extensionVersions.semver,
           headPublishedAt: extensionVersions.publishedAt,
           headId: extensionVersions.id,
+          // The commercial half of a listing, from the row that owns it. LEFT
+          // joined because most listings are free and have no catalogue row at
+          // all — an INNER join here would quietly delete every free package
+          // from the directory.
+          listingPriceCents: catalogItems.priceCents,
+          listingCurrency: catalogItems.currency,
+          listingVisibility: catalogItems.visibility,
           relevance,
         })
         .from(extensionPackages)
         .innerJoin(tenants, eq(tenants.id, extensionPackages.tenantId))
+        .leftJoin(catalogItems, eq(catalogItems.id, extensionPackages.catalogItemId))
         // LEFT, not INNER: a listing whose head row somehow went missing must
         // still appear (scored as never-reviewed) rather than silently vanish
         // from the directory with no way for anyone to notice.
@@ -320,6 +343,7 @@ export async function searchDirectory(db: Db, env: Env, input: DirectoryQuery): 
               stageVerdicts: (r.headId && verdictsByVersion.get(r.headId)) || {},
             }),
             relevance: maxRelevance > 0 ? (Number(r.relevance) || 0) / maxRelevance : 0,
+            featured: r.publisher.publisherFeaturedAt !== null,
           },
         })),
         mode,
@@ -346,6 +370,14 @@ export async function searchDirectory(db: Db, env: Env, input: DirectoryQuery): 
           semver: row.headSemver ?? null,
           reviewedAt: row.headPublishedAt ? new Date(row.headPublishedAt).toISOString() : null,
           assurance: signals.assurance,
+          // Read from the price list already joined above rather than from a
+          // second query per row: a directory page that fanned out one
+          // `catalog_items` lookup per listing would be 24 round-trips for one
+          // screen.
+          fromCents: row.listingPriceCents ?? null,
+          currency: row.listingCurrency ?? 'USD',
+          paid: row.listingVisibility === 'public',
+          featured: signals.featured === true,
           score: Number(score.toFixed(4)),
         })),
       } satisfies DirectoryResult;

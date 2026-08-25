@@ -166,6 +166,55 @@ export interface AtsVocabulary {
   offerStatuses: string[];
 }
 
+/**
+ * A requisition as the canvas reads it — the FO-B3 projection.
+ *
+ * `postingId` is the identity and the ONLY thing a consumer joins on: the title is a
+ * display name, and matching applications to a card by it is the string-matching defect
+ * `canvas_sync_account` exists to remove. `pipelineRef` equals it by construction, which
+ * is what makes `shortlist.postingRef`, the ATS board and this card one key rather than
+ * three.
+ */
+export interface CanvasPosting {
+  postingId: string;
+  title: string;
+  /** open | closed | filled — the posting's own, verbatim. */
+  status: string;
+  postingType: string;
+  engagementType: string | null;
+  discipline: string | null;
+  specialty: string | null;
+  experienceLevel: string | null;
+  visibility: string;
+  pipelineRef: string;
+  applicantCount: number;
+  activeApplicantCount: number;
+  unreviewedCount: number;
+  rejectedCount: number;
+  sources: Array<{ source: string; count: number }>;
+  lastApplicationAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** What a canvas card contributes when it mints its posting. Deliberately the small
+ *  half of `job_postings`: the money band, the screening questions and the attachments
+ *  are authored on the marketplace surfaces that own them, and a board that could write
+ *  them would be a second requisition editor. */
+export interface CanvasPostingDraft {
+  title?: string;
+  description?: string | null;
+  requirements?: string | null;
+  discipline?: string | null;
+  specialty?: string | null;
+  skills?: string[];
+  postingType?: string;
+  engagementType?: string;
+  experienceLevel?: string;
+  projectLength?: string;
+  visibility?: 'public' | 'private';
+}
+
 export interface AtsPipelineSummary {
   pipelineRef: string;
   title: string | null;
@@ -327,6 +376,23 @@ const patch = <T>(path: string, payload: unknown): Promise<T> =>
 export const atsApi = {
   /** The vocabulary the server writes with. Read once per surface. */
   vocabulary: (): Promise<AtsVocabulary> => apiRequest<AtsVocabulary>('/api/ats/vocabulary'),
+
+  /**
+   * The requisition, and the applications actually counted against it (FO-B3).
+   *
+   * `sync` is the FO-A1-shaped half: given a card's `postingId` it resolves that row,
+   * and given no id it MINTS one from the draft and hands back the id the card then
+   * carries forever. Both return the same projection, so the caller redraws from the
+   * response that performed the write rather than from a second read.
+   */
+  postings: {
+    list: (opts: { status?: string } = {}): Promise<CanvasPosting[]> => {
+      const suffix = opts.status ? `?status=${encodeURIComponent(opts.status)}` : '';
+      return apiRequest<{ postings: CanvasPosting[] }>(`/api/ats/postings${suffix}`).then((r) => r.postings);
+    },
+    sync: (body: { postingId?: string | null; draft?: CanvasPostingDraft }): Promise<{ posting: CanvasPosting; created: boolean }> =>
+      post('/api/ats/postings', body),
+  },
 
   pipelines: (): Promise<AtsPipelineSummary[]> =>
     apiRequest<{ pipelines: AtsPipelineSummary[] }>('/api/ats/pipelines').then((r) => r.pipelines),
