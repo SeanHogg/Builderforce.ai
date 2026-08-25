@@ -11,25 +11,7 @@ build	booking_services	Commerce	booking_services	bookings	26
 build	card_decks	Commerce	card_decks	planningPoker	28	
 build	consultant_consultations	Commerce	consultant_consultations	consultant	17	
 build	consultant_knowledge_docs	Commerce	consultant_knowledge_docs	consultant	17	
-build	ab_test_variants	Growth & marketing	ab_test_variants	productManagement	86	
-build	ab_tests	Growth & marketing	ab_tests	productManagement	86	
-build	brand_kits	Growth & marketing	brand_kits	pitchDeck	32	
-build	customer_journeys	Growth & marketing	customer_journeys	analytics customerEngagement	68	
-build	embed_widget_layout	Growth & marketing	embed_widget_layout	embed	38	
-build	journey_touchpoints	Growth & marketing	journey_touchpoints	analytics	34	
-build	learn_videos	Growth & marketing	learn_videos	growth	15	
-build	marketing_content_items	Growth & marketing	marketing_content_items	marketingGrowth	32	
-build	marketing_emails	Growth & marketing	marketing_emails	marketing	10	
-build	marketing_heatmap_pages	Growth & marketing	marketing_heatmap_pages	embed heatmaps productManagement	147	
-build	marketing_heatmap_screenshots	Growth & marketing	marketing_heatmap_screenshots	heatmaps	23	
-build	nurture_flows	Growth & marketing	nurture_flows	nurtureFlows	13	
-build	podcast_outreach	Growth & marketing	podcast_outreach	growth	15	
-build	waitlist_entries	Growth & marketing	waitlist_entries	growth	15	
 build	cohort_retention	Hiring	cohort_retention	analytics	34	
-build	onboarding_flows	Identity & tenancy	onboarding_flows	embed onboarding	48	
-build	onboarding_progress	Identity & tenancy	onboarding_progress	onboarding	10	
-build	region_waitlist	Identity & tenancy	region_waitlist	systemAdmin/security	7	
-build	stage_lookup	Identity & tenancy	stage_lookup	lookups system	12	
 build	investor_peer_comparables	Investor & portfolio	investor_peer_comparables	investorIntelligence pitchDeck	74	
 build	modules	Investor & portfolio	modules	systemAdmin	77	
 build	scratch_pad_attachments	Investor & portfolio	scratch_pad_attachments	scratchPad	39	
