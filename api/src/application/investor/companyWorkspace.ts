@@ -9,7 +9,7 @@
  * which diligence answers are still missing, and which seat closes each one.
  *
  * ── WHAT IN-1 ADDED, AND WHY IT IS READ HERE ────────────────────────────────
- * `projects.company_id` (migration 1119). Before it, nothing in `schema/delivery.ts`
+ * `projects.company_id` (migration 1120). Before it, nothing in `schema/delivery.ts`
  * named a company, so the one-company-to-many-projects edge did not exist and the
  * three things that depend on it could not be built: a pack that enumerates what
  * is being built, a diligence answer that cites the project behind it, and a
