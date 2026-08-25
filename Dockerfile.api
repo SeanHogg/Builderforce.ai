@@ -38,15 +38,20 @@ RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
 RUN npx wrangler --version
 
 FROM deps AS dev
-# api/tsconfig.json maps three `@builderforce/*` specifiers to ../packages/*/src.
+# api/tsconfig.json maps eight `@builderforce/*` specifiers to ../packages/*/src.
 # They are tsconfig path aliases, NOT npm dependencies — no install brings them
 # in — so the sources have to exist at /repo/packages or esbuild cannot bundle
-# the Worker ("Could not resolve @builderforce/agent-tools"). All three are
+# the Worker ("Could not resolve @builderforce/agent-tools"). All eight are
 # dependency-free TypeScript; .dockerignore keeps node_modules/dist out.
 # Keep in sync with the `paths` block in api/tsconfig.json.
 COPY packages/agent-tools /repo/packages/agent-tools
 COPY packages/agent-stall /repo/packages/agent-stall
 COPY packages/creation-canvas-contract /repo/packages/creation-canvas-contract
+COPY packages/learned-routing /repo/packages/learned-routing
+COPY packages/run-context /repo/packages/run-context
+COPY packages/canvas-widget-protocol /repo/packages/canvas-widget-protocol
+COPY packages/ide-templates /repo/packages/ide-templates
+COPY packages/ide-file-contract /repo/packages/ide-file-contract
 WORKDIR /repo/api
 COPY api/ ./
 ENV NODE_ENV=development

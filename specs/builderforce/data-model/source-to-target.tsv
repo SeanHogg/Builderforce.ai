@@ -525,7 +525,7 @@ HV	enrichment_provider_calls	Revenue & CRM	keep	enrichment_provider_calls
 HV	gig_projects	Commerce	keep	gig_projects
 HV	gig_bids	Commerce	keep	gig_bids
 HV	gig_milestones	Commerce	primitive	work_item
-HV	gig_disputes	Commerce	keep	gig_disputes
+HV	gig_disputes	Commerce	keep	marketplace_disputes
 HV	gig_dispute_events	Commerce	primitive	event_log
 HV	photoreal_avatar_renders	Platform & observability	primitive	rendition
 HV	job_view_events	Hiring	primitive	event_log

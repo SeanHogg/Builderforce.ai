@@ -7,15 +7,17 @@ loop forward, completing the AI C-suite without copying BurnRateOS's application
 hired.video contributes the **Recruiter** and **HR** agents; BurnRateOS contributes **CEO, CFO,
 CRO, CMO, CPO, CISO** perspectives and selected domain behavior they need.
 
-## Implementation audit — 2026-08-10
+## Implementation audit — 2026-08-25
 
 This section reports the repository state, not the intended destination described by the rest of
 the PRD. A table in a migration, a row in the source-to-target map, a generic CRUD endpoint, a
 marketing page, and a working migrated feature are five different states. Only the last one is
 sufficient evidence for shutting down BurnRateOS.
 
-**Audit baseline:** Builderforce `6b9b31b89a4fc85ea351c16dbea5b02d4b7601b5` and BurnRateOS
-`708f0d8b1b0f9d59b091e23634257159d6777766`.
+**Audit baseline:** Builderforce `95bedac24fb7d9d2702d4aecdb65cd668b3f3364` and BurnRateOS
+`cc23b2139e5846228fc255952cbf3bc733437668`. The prior baseline was
+`6b9b31b89a4fc85ea351c16dbea5b02d4b7601b5` / `708f0d8b1b0f9d59b091e23634257159d6777766`
+(2026-08-10); deltas below are measured against it.
 
 ### Executive verdict
 
@@ -23,13 +25,20 @@ sufficient evidence for shutting down BurnRateOS.
 *destination-model* work, but not the source-data move or most feature behavior:
 
 - [`check-model-coverage.mjs`](../../api/scripts/check-model-coverage.mjs) passes: all **1,130**
-  distinct source tables are assigned a disposition and all **362/362** keep targets have a
-  Drizzle declaration. This proves design coverage, not migrated rows or behavior.
-- [`check-table-adoption.mjs`](../../api/scripts/check-table-adoption.mjs) reports **258** tables
-  created by migrations 0418+, **258** registered with the generic entity layer, **36**
-  reached by a feature path, and **222 registry-only**. Registration by
-  [`entityCatalog.ts`](../../api/src/application/domains/entityCatalog.ts) is deliberately excluded
-  from feature adoption by the checker.
+  distinct source tables are assigned a disposition and all **363/363** keep targets have a
+  Drizzle declaration — the target schema reached **100%** on 2026-08-25. The last gap was a stale
+  map row rather than missing work: `gig_disputes` was generalised into `marketplace_disputes` by
+  migration 0986 and the map still named the retired table. This proves design coverage, not
+  migrated rows or behavior.
+- [`check-table-adoption.mjs`](../../api/scripts/check-table-adoption.mjs) reports **358** tables
+  created by migrations 0418+, **358** registered with the generic entity layer, **177**
+  reached by a feature path (162 import, 44 raw SQL), and **181 registry-only**, 0 unreachable.
+  Registration by [`entityCatalog.ts`](../../api/src/application/domains/entityCatalog.ts) is
+  deliberately excluded from feature adoption by the checker. This is the migration-status meter
+  and it has moved: 36 → 177 feature-reached since 2026-08-10, against 100 more tables created.
+  **Of the 181 still registry-only, 99 originate in BurnRateOS** and 80 in hired.video; the
+  BurnRateOS remainder concentrates in Growth & marketing (25), Finance (16), Delivery & work (11)
+  and Revenue & CRM (10) — i.e. tracks B4, B1, B6 and B3.
 - Migrations 0418–0433 contain **245 `CREATE TABLE` statements and zero `INSERT ... SELECT` or
   `UPDATE` data transforms**. There is no BurnRateOS database extractor/loader, ID map, replay,
   reconciliation report, or rollback manifest in this repository.
@@ -258,8 +267,8 @@ EntityBrowser” do not satisfy them.
 - [ ] **Extraction gate:** every feature used by an active BurnRateOS tenant is classified by the
   IDEA → REAL boundary: an extracted capability has a tested Builderforce workflow and transformed
   data; a non-target has an explicit customer-approved retirement/export. Do not activate the
-  **222 registry-only** tables merely to reduce a metric; generic CRUD and unused source DDL are not
-  product requirements.
+  **181 registry-only** tables (99 of them BurnRateOS-origin) merely to reduce a metric; generic
+  CRUD and unused source DDL are not product requirements.
 - [x] **C-suite Canvas execution gate:** map all 48 CxO intents to existing Creation Canvas
   objects/actions; retain searchable legacy ids; give each an evidence/operation/output/completion
   contract; fail outcomes that do not mutate an allowed artifact; test exact coverage; add no tables.
@@ -318,8 +327,8 @@ also read-only and immutable (`flag: wx`).
 Expected at the audited baseline:
 
 ```text
-1130 source tables mapped, 0 unaccounted; target schema 362/362
-258 consolidation tables created; 36 feature-reached; 222 registry-only; 0 unreachable
+1130 source tables mapped, 0 unaccounted; target schema 363/363
+358 consolidation tables created; 177 feature-reached; 181 registry-only; 0 unreachable
 ```
 
 The first line is the architecture milestone. The second line is the migration-status meter and
@@ -729,6 +738,7 @@ Two honest qualifications, both decisions rather than gaps:
    product decision: IDEA → REAL capabilities move into an existing owner; duplicate application
    structure is retired; non-target customer data is exported rather than used to justify schema.
 2. **§5 lists seven decisions** — tenancy axis, web push, three either/or capability calls, the
-   credits-vs-caps pricing model, and the Neon tier. Each changes what gets built. The 2026-08-10
-   audit found that the implemented company/relationship model does not yet satisfy the tenancy
-   decision in §3.2, so that decision must be reconciled before production data is transformed.
+   credits-vs-caps pricing model, and the Neon tier. Each changes what gets built. §3.2 closed the
+   tenancy decision on 2026-08-10 — `burnrateTenantCompanyMapping.ts` implements the planner and row
+   resolver and `audit-burnrate-tenancy.mjs` validates it read-only — so what remains there is
+   supplying the production account map and applying its output, not an unresolved design.

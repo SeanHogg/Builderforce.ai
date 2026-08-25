@@ -103,12 +103,17 @@ services:
       - ./api/src:/repo/api/src:ro
       - ./api/wrangler.toml:/repo/api/wrangler.toml:ro
       - ./api/.dev.vars:/repo/api/.dev.vars:ro
-      # The three `@builderforce/*` tsconfig path aliases api/src imports. The
+      # The eight `@builderforce/*` tsconfig path aliases api/src imports. The
       # image bakes them too, but api/src is bind-mounted — without these the
       # mounted source could reference package code the image predates.
       - ./packages/agent-tools/src:/repo/packages/agent-tools/src:ro
       - ./packages/agent-stall/src:/repo/packages/agent-stall/src:ro
       - ./packages/creation-canvas-contract/src:/repo/packages/creation-canvas-contract/src:ro
+      - ./packages/learned-routing/src:/repo/packages/learned-routing/src:ro
+      - ./packages/run-context/src:/repo/packages/run-context/src:ro
+      - ./packages/canvas-widget-protocol/src:/repo/packages/canvas-widget-protocol/src:ro
+      - ./packages/ide-templates/src:/repo/packages/ide-templates/src:ro
+      - ./packages/ide-file-contract/src:/repo/packages/ide-file-contract/src:ro
     healthcheck:
       test: ["CMD-SHELL", "wget -q --spider http://localhost:8787/health || exit 1"]
       interval: 10s

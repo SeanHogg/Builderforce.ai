@@ -10,8 +10,6 @@ ab_test_variants
 ab_tests
 action_items
 activity_feed
-ad_sets
-ads
 affiliate_referrals
 agency_brandings
 agency_clients
@@ -42,7 +40,6 @@ cities
 cohort_retention
 communication_tracking
 community_resources
-companies
 competencies
 consultant_consultations
 consultant_knowledge_docs
@@ -55,10 +52,8 @@ content_locations
 countries
 course_certificates
 course_checkouts
-course_enrollments
 course_lessons
 course_modules
-courses
 creator_youtube_ingests
 custom_kpis
 customer_engagement_feedback_widgets
@@ -106,7 +101,6 @@ list_items
 lists
 lms_connectors
 lms_course_publishes
-lrs_documents
 marketing_content_items
 marketing_emails
 marketing_heatmap_pages
@@ -151,7 +145,6 @@ recruiter_agent_followups
 recruiter_outreach_sequences
 referral_entries
 region_waitlist
-relations
 release_plans
 report_approvals
 retained_search_firms
