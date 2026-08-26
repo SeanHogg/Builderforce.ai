@@ -1,4 +1,27 @@
-## ✅ RESOLVED 2026-08-25 — Layer 1: `studio`'s engine gains webdit as a second generation path
+## ✅ RESOLVED 2026-08-26 — Guest fixture for the dashboard's Ideas tab (founder's journey)
+
+The gap left by the founder's-journey pass (same day) is closed: a signed-out visitor now sees a
+real sample idea on `/dashboard`'s Ideas tab instead of the CTA-to-sign-up empty state.
+
+**What was added.** `domains/guest/domain/sampleWorkspace.ts` gained one new domain shape,
+`SampleIdeaSession` (with a `SAMPLE_IDEA_SESSION` constant) — a Creation Session mid-Prove: one
+proof that already met its bar (a "would you pay $6 for 2-hour delivery?" wizard-of-oz check) and a
+newer one still awaiting a verdict (a waitlist smoke test). A new wire-adapter module,
+`infrastructure/fixtures/founderJourneyFixtures.ts`, shapes that into the two JSON envelopes
+`GET /api/creation-sessions` and `GET /api/realizations` actually return, and registers both in
+`guestFixtureRegistry.ts` alongside the other five fixture modules.
+
+**Why `/api/investor/companies` deliberately stayed unfixtured.** `useFounderJourney` computes
+`stage: 'run'` the moment any owned (non-portfolio) company exists, and `stage: 'idea'` otherwise.
+Adding a sample company would flip the guest's journey position to Run by accident — the opposite
+of the "in-progress idea" a visitor is meant to see here. The existing behavior (a read with no
+fixture 401s anonymously and resolves to an empty array via the client's own `.catch(() => [])`) is
+already the correct answer for this endpoint, not a residual gap — closing the other two entries is
+what makes that fall-through land the journey on Idea rather than an unmarked "no signal yet".
+
+**Verification.** `npx tsgo --noEmit` clean. `vitest run src/domains/guest` — 4/4 files, 31/31 tests
+(including the fixture-id-uniqueness assertion the registry's own test enforces). Frontend guard
+manifest — 17/17.
 
 The gap-register entry tracking `webdit/` as a standalone prototype never wired into `studio/`'s
 real video-generation pipeline is resolved for the engine side: `studio`'s `VideoEngine` now

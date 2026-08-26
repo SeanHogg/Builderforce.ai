@@ -249,3 +249,53 @@ const COMPLETED: ReadonlySet<SampleTaskStatus> = new Set<SampleTaskStatus>(['don
 export function isSampleTaskCompleted(status: SampleTaskStatus): boolean {
   return COMPLETED.has(status);
 }
+
+/**
+ * The one idea a guest is exploring on the founder's-journey arc — the Creation
+ * Session `useFounderJourney` and the dashboard's Ideas tab both read. Nova
+ * Commerce is deliberately still an active idea here rather than a graduated
+ * company: `investorApi.companies.list` has no guest fixture (an honest empty
+ * list is the correct answer — the visitor has not raised anything yet), so the
+ * journey lands on Idea by construction, and this is the session that fills it.
+ */
+export interface SampleIdeaRealization {
+  targetKey: 'clickable-prototype' | 'wizard-of-oz' | 'smoke-test';
+  title: string;
+  status: 'planned' | 'building' | 'built' | 'failed';
+  verdict: 'met' | 'missed' | 'abandoned' | null;
+  createdDayOffset: DayOffset;
+}
+
+export interface SampleIdeaSession {
+  id: string;
+  title: string;
+  description: string;
+  createdDayOffset: DayOffset;
+  lastActivityDayOffset: DayOffset;
+  /** Attempts so far, most recent first — the same order `/api/realizations` answers in. */
+  realizations: SampleIdeaRealization[];
+}
+
+export const SAMPLE_IDEA_SESSION: SampleIdeaSession = {
+  id: 'sample-idea-same-day-delivery',
+  title: 'Same-day local delivery add-on',
+  description: 'Would shoppers within 5 miles pay extra for delivery inside two hours? Testing before building the routing and driver logistics.',
+  createdDayOffset: -6,
+  lastActivityDayOffset: -1,
+  realizations: [
+    {
+      targetKey: 'smoke-test',
+      title: 'Same-day delivery waitlist page',
+      status: 'built',
+      verdict: null,
+      createdDayOffset: -1,
+    },
+    {
+      targetKey: 'wizard-of-oz',
+      title: '"Would you pay $6 for 2-hour delivery?" checkout prompt',
+      status: 'built',
+      verdict: 'met',
+      createdDayOffset: -4,
+    },
+  ],
+};

@@ -19,6 +19,7 @@ import { insightsFixtures } from './fixtures/insightsFixtures';
 import { dashboardFixtures } from './fixtures/dashboardFixtures';
 import { reliabilityFixtures } from './fixtures/reliabilityFixtures';
 import { financeFixtures } from './fixtures/financeFixtures';
+import { founderJourneyFixtures } from './fixtures/founderJourneyFixtures';
 
 const FIXTURES: GuestFixture[] = [
   ...deliveryFixtures,
@@ -26,6 +27,7 @@ const FIXTURES: GuestFixture[] = [
   ...dashboardFixtures,
   ...reliabilityFixtures,
   ...financeFixtures,
+  ...founderJourneyFixtures,
 ];
 
 /** Exported for the ratchet that asserts ids are unique. */

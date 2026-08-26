@@ -161,11 +161,17 @@ export const MODEL_REGISTRY: Record<DiffusionModelId, ModelDescriptor> = {
     // CLIP-L swap the original placeholder comment assumed (see
     // webdit/converter/src/architectures/cogvideox.ts's header comment for
     // the full real-weights writeup). fp32 (not fp16) because CPU export
-    // tracing needs it; that plus the real T5-XXL size makes this bundle
-    // multiple GB — heavier in the browser than the original 8GB estimate
-    // assumed. Bumped accordingly; still a rough estimate (no in-browser
-    // measurement yet).
-    minVramMb: 16 * 1024,
+    // tracing needs it (PyTorch CPU doesn't run fp16 matmul); that plus the
+    // real T5-XXL size makes the actual uploaded graph+external-data total
+    // ~26.6 GB (dit 7.05 GB, text encoder 19.05 GB, vae 0.50 GB — MEASURED
+    // from the real 2026-08 export, not estimated). This is almost
+    // certainly too large for real-world WebGPU/browser use on typical
+    // consumer VRAM (8-24 GB) — flagging honestly rather than
+    // under-stating it: the bundle is genuinely wired end-to-end and
+    // verified numerically correct, but practical in-browser usability
+    // would need a follow-up fp16-graph pass (post-export precision
+    // conversion) or real quantization-aware export, neither done here.
+    minVramMb: 28 * 1024,
     defaultSteps: 50,
     defaultGuidance: 6.0,
     defaultFrames: 49,
