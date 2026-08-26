@@ -756,11 +756,15 @@
       "make": "Crear",
       "run": "Operar",
       "measure": "Medir",
-      "market": "Mercado",
+      "reach": "Alcance",
       "admin": "Administración",
       "notYet": "aún no",
       "lockHint": "Inicia sesión para usarlo",
       "expand": "Expandir"
+    },
+    "journey": {
+      "label": "El viaje del fundador",
+      "openDashboard": "Abrir panel"
     }
   },
   "alerts": {
@@ -4634,18 +4638,47 @@
       "workforceOnline": "Talento / Equipo en línea",
       "workingNow": "{count} trabajando ahora"
     },
+    "loading": "Cargando…",
     "tabs": {
+      "ideas": "Ideas",
       "projects": "Proyectos",
+      "business": "Negocio",
+      "interviews": "Entrevistas",
+      "research": "Investigación",
+      "profile": "Perfil",
       "workforce": "Talento / Equipo",
       "quality": "Calidad",
-      "knowledge": "Conocimiento",
-      "create": "Crear"
+      "knowledge": "Conocimiento"
     },
     "ideas": {
       "loading": "Cargando chats…",
       "empty": "Aún no hay chats de lluvia de ideas.",
       "start": "Empezar a idear",
       "untitled": "Chat sin título"
+    },
+    "interviews": {
+      "titlePlaceholder": "¿Qué aprendiste?",
+      "participantPlaceholder": "¿Con quién hablaste?",
+      "notesPlaceholder": "Notas de la conversación…",
+      "add": "Añadir entrevista",
+      "empty": "Aún no hay entrevistas registradas.",
+      "delete": "Eliminar",
+      "confirmDelete": "¿Eliminar esta entrevista?"
+    },
+    "research": {
+      "titlePlaceholder": "¿Qué descubriste?",
+      "sourceUrlPlaceholder": "URL de la fuente (opcional)",
+      "bodyPlaceholder": "Notas, citas, cifras…",
+      "add": "Añadir nota",
+      "empty": "Aún no hay notas de investigación.",
+      "delete": "Eliminar",
+      "confirmDelete": "¿Eliminar esta nota de investigación?",
+      "sourceLink": "Ver fuente"
+    },
+    "business": {
+      "empty": "Tu primera empresa aparecerá aquí en cuanto una idea se convierta en negocio.",
+      "view": "Ver",
+      "summary": "{projects} proyectos · {arr} ARR"
     },
     "quality": {
       "newCollector": "Nuevo colector",
@@ -16687,6 +16720,10 @@
         "title": "Comparar",
         "tagline": "Frente a las herramientas que usas hoy."
       },
+      "method": {
+        "title": "Método",
+        "tagline": "Leer, Probar, Construir — el ciclo detrás del arco."
+      },
       "diagnostics": {
         "title": "Diagnósticos",
         "tagline": "Un resultado antes de registrarte."
@@ -25385,7 +25422,7 @@
       "make": "Constrúyelo.",
       "run": "Opéralo como una empresa.",
       "measure": "¿Está funcionando?",
-      "market": "Vende, compra, contrata, hazte encontrar.",
+      "reach": "Vende, compra, contrata, hazte encontrar.",
       "expand": "Hazlo crecer.",
       "admin": "Ajustes."
     },
@@ -25450,6 +25487,25 @@
     "youAreHere": "Estás aquí",
     "cardAction": "Abrir en el lienzo →",
     "cardActionFor": "Abrir {name} en el lienzo"
+  },
+  "method": {
+    "seo": {
+      "title": "De la idea a lo real — el método detrás de Builderforce",
+      "description": "Cuatro etapas dicen dónde estás. Tres actos dicen qué haces. Leer, Probar, Construir — el ciclo que convierte una idea en algo que puedes abrir, con una condición de fracaso fijada antes de construir y no después de ver el resultado."
+    },
+    "hero": {
+      "eyebrow": "El método",
+      "title": "De la idea a lo real",
+      "lead": "El viaje de cada fundador por Builderforce sigue el mismo arco — Idea, Crear, Operar, Medir — y el mismo ciclo interno mientras aún está en Idea: Leer, Probar, Construir. Este es ese método, completo.",
+      "primaryCta": "Empezar gratis",
+      "secondaryCta": "Ver qué incluye"
+    },
+    "cta": {
+      "eyebrow": "¿Listo?",
+      "title": "Empieza con una idea",
+      "body": "Sin plan, sin servidor, sin configuración — pega lo que estás pensando y conviértelo en una especificación en menos de un minuto.",
+      "primary": "Empezar gratis"
+    }
   },
   "sell": {
     "seo": {

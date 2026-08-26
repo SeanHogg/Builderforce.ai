@@ -2,6 +2,7 @@ import type { LoadedBundle } from "./bundle";
 import { makeScheduler } from "./scheduler";
 import {
   applyClassifierFreeGuidance,
+  latentFramesToPixelFrames,
   makeNoiseLatent,
   splitFrames,
 } from "./tensor-ops";
@@ -43,7 +44,7 @@ export async function runDenoiseLoop(
   const latentT = latent.dims[2]!;
   const latentH = latent.dims[3]!;
   const latentW = latent.dims[4]!;
-  const outFrames = latentT * m.vaeCompression.temporal;
+  const outFrames = latentFramesToPixelFrames(latentT, m.vaeCompression);
   const outHeight = latentH * m.vaeCompression.spatial;
   const outWidth = latentW * m.vaeCompression.spatial;
   return {
@@ -58,6 +59,12 @@ async function encodeText(
   bundle: LoadedBundle,
   prompt: string,
 ): Promise<import("./types").MutableTensor> {
-  const { inputIds, attentionMask } = bundle.tokenizer.encode(prompt);
+  // Always pad/truncate to manifest.textEncoder.maxTokens — see the
+  // HfTokenizer.encode doc comment in bundle.ts for why a fixed length
+  // matters (learned absolute position embeddings over [text; visual]).
+  const { inputIds, attentionMask } = bundle.tokenizer.encode(
+    prompt,
+    bundle.manifest.textEncoder.maxTokens,
+  );
   return bundle.textEncoder.run(inputIds, attentionMask);
 }

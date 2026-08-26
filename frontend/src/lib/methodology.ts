@@ -16,7 +16,7 @@
  *
  * ── THE TWO HALVES ──────────────────────────────────────────────────────────
  *
- *   THE ARC   Idea → Make → Run → Measure (→ Market → Expand)
+ *   THE ARC   Idea → Make → Run → Measure (→ Reach → Expand)
  *             Where you are. Owned by `STAGES`; this file does not restate it,
  *             it points at it, so a seventh stage cannot appear in one place and
  *             not the other.
@@ -85,7 +85,7 @@ export const LOOP_CLOSES_IN: Stage = 'measure';
  * The four stages the method is normally SOLD as.
  *
  * A subset of `STAGES`, and a subset with a reason rather than an omission:
- * Market and Expand are what a business does once it has something that works,
+ * Reach and Expand are what a business does once it has something that works,
  * and Admin is settings. Somebody deciding whether to start is choosing between
  * these four. `/features` still renders the whole arc from `STAGES` — this list
  * is for the surfaces that have one paragraph, not a table.

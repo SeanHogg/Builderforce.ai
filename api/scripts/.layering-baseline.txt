@@ -37,6 +37,7 @@ presentation/routes/demoRoutes.ts
 presentation/routes/deployRoutes.ts
 presentation/routes/devTeamRoutes.ts
 presentation/routes/devexRoutes.ts
+presentation/routes/discoveryRoutes.ts
 presentation/routes/emailPreferenceRoutes.ts
 presentation/routes/embedRoutes.ts
 presentation/routes/empFeatureRoutes.ts

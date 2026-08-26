@@ -756,11 +756,15 @@
       "make": "Bauen",
       "run": "Betreiben",
       "measure": "Messen",
-      "market": "Markt",
+      "reach": "Reichweite",
       "admin": "Verwaltung",
       "notYet": "noch nicht",
       "lockHint": "Zum Nutzen anmelden",
       "expand": "Ausbauen"
+    },
+    "journey": {
+      "label": "Der Weg des Gründers",
+      "openDashboard": "Dashboard öffnen"
     }
   },
   "alerts": {
@@ -4634,18 +4638,47 @@
       "workforceOnline": "Talent / Team online",
       "workingNow": "{count} arbeiten gerade"
     },
+    "loading": "Wird geladen…",
     "tabs": {
+      "ideas": "Ideen",
       "projects": "Projekte",
+      "business": "Unternehmen",
+      "interviews": "Interviews",
+      "research": "Recherche",
+      "profile": "Profil",
       "workforce": "Talent / Team",
       "quality": "Qualität",
-      "knowledge": "Wissen",
-      "create": "Erstellen"
+      "knowledge": "Wissen"
     },
     "ideas": {
       "loading": "Chats werden geladen…",
       "empty": "Noch keine Brainstorming-Chats.",
       "start": "Brainstorming starten",
       "untitled": "Unbenannter Chat"
+    },
+    "interviews": {
+      "titlePlaceholder": "Was hast du gelernt?",
+      "participantPlaceholder": "Mit wem hast du gesprochen?",
+      "notesPlaceholder": "Notizen zum Gespräch…",
+      "add": "Interview hinzufügen",
+      "empty": "Noch keine Interviews erfasst.",
+      "delete": "Löschen",
+      "confirmDelete": "Dieses Interview löschen?"
+    },
+    "research": {
+      "titlePlaceholder": "Was hast du herausgefunden?",
+      "sourceUrlPlaceholder": "Quelle-URL (optional)",
+      "bodyPlaceholder": "Notizen, Zitate, Zahlen…",
+      "add": "Notiz hinzufügen",
+      "empty": "Noch keine Recherchenotizen.",
+      "delete": "Löschen",
+      "confirmDelete": "Diese Recherchenotiz löschen?",
+      "sourceLink": "Quelle ansehen"
+    },
+    "business": {
+      "empty": "Dein erstes Unternehmen erscheint hier, sobald eine Idee zum Unternehmen wird.",
+      "view": "Ansehen",
+      "summary": "{projects} Projekte · {arr} ARR"
     },
     "quality": {
       "newCollector": "Neuer Collector",
@@ -16687,6 +16720,10 @@
         "title": "Vergleich",
         "tagline": "Gegen die Tools, die du heute nutzt."
       },
+      "method": {
+        "title": "Methode",
+        "tagline": "Lesen, Beweisen, Bauen — die Schleife hinter dem Bogen."
+      },
       "diagnostics": {
         "title": "Diagnosen",
         "tagline": "Ein Ergebnis, bevor du dich anmeldest."
@@ -25385,7 +25422,7 @@
       "make": "Bauen Sie es.",
       "run": "Betreiben Sie es als Unternehmen.",
       "measure": "Funktioniert es?",
-      "market": "Verkaufen, kaufen, einstellen, gefunden werden.",
+      "reach": "Verkaufen, kaufen, einstellen, gefunden werden.",
       "expand": "Lassen Sie es wachsen.",
       "admin": "Einstellungen."
     },
@@ -25450,6 +25487,25 @@
     "youAreHere": "Sie sind hier",
     "cardAction": "Im Canvas öffnen →",
     "cardActionFor": "{name} im Canvas öffnen"
+  },
+  "method": {
+    "seo": {
+      "title": "Idee zu real — die Methode hinter Builderforce",
+      "description": "Vier Stufen sagen, wo du bist. Drei Akte sagen, was du tust. Lesen, Beweisen, Bauen — die Schleife, die aus einer Idee etwas macht, das du öffnen kannst, mit einer Abbruchbedingung, die vor dem Bau festgelegt wird, nicht danach."
+    },
+    "hero": {
+      "eyebrow": "Die Methode",
+      "title": "Idee zu real",
+      "lead": "Jede Gründerreise durch Builderforce folgt demselben Bogen — Idee, Bauen, Betreiben, Messen — und derselben inneren Schleife, solange du noch bei der Idee bist: Lesen, Beweisen, Bauen. Das ist die vollständige Methode.",
+      "primaryCta": "Kostenlos starten",
+      "secondaryCta": "Was ist enthalten"
+    },
+    "cta": {
+      "eyebrow": "Bereit?",
+      "title": "Beginne mit einer Idee",
+      "body": "Kein Plan, kein Server, kein Setup — füge ein, was du im Kopf hast, und lies es in unter einer Minute in eine Spezifikation um.",
+      "primary": "Kostenlos starten"
+    }
   },
   "sell": {
     "seo": {

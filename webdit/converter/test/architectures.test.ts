@@ -68,9 +68,20 @@ describe("ltx2Distilled uses rectified-flow scheduler", () => {
   });
 });
 
-describe("cogvideox2b uses Euler scheduler (DDIM-style training)", () => {
-  it("matches CogVideoX training parameterization", () => {
-    expect(cogvideox2b.buildManifest("f16").scheduler).toBe("euler");
+describe("cogvideox2b uses its real training parameterization", () => {
+  it("matches CogVideoXDDIMScheduler (v-prediction, zero-SNR-rescaled, discrete timesteps)", () => {
+    expect(cogvideox2b.buildManifest("f16").scheduler).toBe("ddim-vpred-zsnr");
+  });
+
+  it("uses the real T5-XXL text encoder (not a CLIP-L swap)", () => {
+    const textEncoder = cogvideox2b.buildManifest("f16").textEncoder;
+    expect(textEncoder.kind).toBe("t5-xxl");
+    expect(textEncoder.embedDim).toBe(4096);
+    expect(textEncoder.maxTokens).toBe(226);
+  });
+
+  it("declares its VAE as causal (13 latent frames -> 49 pixel frames, not 52)", () => {
+    expect(cogvideox2b.buildManifest("f16").vaeCompression.causal).toBe(true);
   });
 });
 

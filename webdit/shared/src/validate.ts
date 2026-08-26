@@ -26,6 +26,7 @@ export const KNOWN_SCHEDULERS: ReadonlyArray<SchedulerKind> = [
   "flow-match-rect",
   "euler",
   "dpm++-2m",
+  "ddim-vpred-zsnr",
 ];
 
 export const KNOWN_TEXT_ENCODERS: ReadonlyArray<TextEncoderKind> = [
@@ -63,6 +64,9 @@ export function validateManifest(value: unknown): WebDiTManifest {
   for (const k of ["spatial", "temporal"] as const) {
     assertNumber(value.vaeCompression[k], `manifest.vaeCompression.${k}`);
   }
+  if (value.vaeCompression.causal !== undefined) {
+    assertBoolean(value.vaeCompression.causal, "manifest.vaeCompression.causal");
+  }
 
   assertObject(value.patchSize, "manifest.patchSize");
   for (const k of ["d", "h", "w"] as const) {
@@ -90,6 +94,11 @@ export function validateManifest(value: unknown): WebDiTManifest {
   ] as const) {
     assertString(value.files[k], `manifest.files.${k}`);
   }
+  for (const k of ["ditGraphData", "textEncoderGraphData", "vaeGraphData"] as const) {
+    if (value.files[k] !== undefined) {
+      assertString(value.files[k], `manifest.files.${k}`);
+    }
+  }
   assertArray(value.files.ditWeightShards, "manifest.files.ditWeightShards");
   for (let i = 0; i < value.files.ditWeightShards.length; i++) {
     assertString(value.files.ditWeightShards[i], `manifest.files.ditWeightShards[${i}]`);
@@ -113,6 +122,12 @@ function assertString(v: unknown, path: string): asserts v is string {
 function assertNumber(v: unknown, path: string): asserts v is number {
   if (typeof v !== "number" || !Number.isFinite(v)) {
     throw new Error(`${path}: expected finite number, got ${describe(v)}`);
+  }
+}
+
+function assertBoolean(v: unknown, path: string): asserts v is boolean {
+  if (typeof v !== "boolean") {
+    throw new Error(`${path}: expected boolean, got ${describe(v)}`);
   }
 }
 

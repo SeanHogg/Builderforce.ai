@@ -45,14 +45,15 @@ import type { SeatOrPlatform } from './seats';
  * when a signed-in person opens one it mounts as a panel over the board rather
  * than throwing them out of their session (§11.4.5).
  *
- * `expand` is the arc's last productive step and the newest: GROWTH is "put it
+ * `expand` is the arc's last productive step and the newest: REACH is "put it
  * in front of people", EXPAND is "grow the business off the back of it" — the
  * referral and sales-associate programme, where somebody sells Builderforce
  * itself. It sat under RUN, which read as day-to-day operations and is the one
  * thing selling the product is not. (Renamed from `market` — it collided with
- * the unrelated Marketplace commerce surface.)
+ * the unrelated Marketplace commerce surface. `growth` was considered next but
+ * collided with the existing CMO destination at `/growth`, so `reach` won.)
  */
-export const STAGES = ['idea', 'make', 'run', 'measure', 'growth', 'expand', 'admin'] as const;
+export const STAGES = ['idea', 'make', 'run', 'measure', 'reach', 'expand', 'admin'] as const;
 export type Stage = (typeof STAGES)[number];
 
 /**
@@ -398,14 +399,14 @@ export const NAV_GROUPS: NavGroup[] = [
   // gallery, and it is offered from the starting-point picker under every
   // prompt bar. A second door beside the marketplace would suggest a second
   // catalogue, which is precisely what the consolidation removed.
-  { id: 'marketplace', labelKey: 'group.marketplace', icon: '🛒', href: '/marketplace', match: ['/marketplace', '/talent', '/templates'], seat: 'platform', stage: 'growth' },
+  { id: 'marketplace', labelKey: 'group.marketplace', icon: '🛒', href: '/marketplace', match: ['/marketplace', '/talent', '/templates'], seat: 'platform', stage: 'reach' },
   // The SUPPLY side of that same door (PRD 24). `/marketplace` is where you buy
   // what the platform and its sellers made; `/developers` is where a vendor
   // becomes one of those sellers, and where an admin sees what this workspace has
   // installed. A separate destination rather than a marketplace tab because its
   // audience is a company that may not be a customer at all — which is the whole
   // premise of a publisher being distinct from a tenant.
-  { id: 'developers', labelKey: 'group.developers', icon: '🧩', href: '/developers', match: ['/developers'], seat: 'platform', stage: 'growth' },
+  { id: 'developers', labelKey: 'group.developers', icon: '🧩', href: '/developers', match: ['/developers'], seat: 'platform', stage: 'reach' },
   // Escrow mediation, from the workspace's side. Owned by the CFO because what a
   // ruling decides is where held money goes, and filed under RUN rather than ADMIN
   // because a dispute is live work with a counterparty waiting on it, not a setting.
@@ -564,7 +565,7 @@ export function groupsForStage(groups: readonly NavGroup[], stage: Stage): NavGr
 export const FOR_HIRE_NAV_GROUPS: NavGroup[] = [
   { id: 'freelancer-dashboard', labelKey: 'group.myDashboard', icon: '🏠', href: '/freelancer/dashboard', match: ['/freelancer/dashboard'], seat: 'platform', stage: 'make' },
   { id: 'freelancer-profile', labelKey: 'group.myProfile', icon: '👤', href: '/freelancer/profile', match: ['/freelancer/profile'], seat: 'platform', stage: 'make' },
-  { id: 'freelancer-gigs', labelKey: 'group.findWork', icon: '🔎', href: '/marketplace?family=talent&kind=gig', match: ['/marketplace', '/freelancer/gigs'], seat: 'platform', stage: 'growth' },
+  { id: 'freelancer-gigs', labelKey: 'group.findWork', icon: '🔎', href: '/marketplace?family=talent&kind=gig', match: ['/marketplace', '/freelancer/gigs'], seat: 'platform', stage: 'reach' },
   { id: 'freelancer-workspace', labelKey: 'group.myWorkspace', icon: '🛠', href: '/freelancer/workspace', match: ['/freelancer/workspace'], seat: 'platform', stage: 'make' },
   { id: 'freelancer-timecard', labelKey: 'group.timecard', icon: '⏱', href: '/freelancer/timecard', match: ['/freelancer/timecard'], seat: 'platform', stage: 'make' },
   // What I have earned, what the platform took, and where the money goes. A

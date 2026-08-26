@@ -17,8 +17,8 @@ The fifteen tools now live at [/tools](/tools) take the other approach. Each one
   "kind": "stack",
   "title": "What the fifteen actually do",
   "bands": [
-    { "label": "Score against an ATS", "note": "What a screening system can and cannot extract from your file, and which sections it loses.", "hue": "growth" },
-    { "label": "Match to one posting", "note": "Your evidence against the requirements THIS employer wrote, not a generic rubric.", "hue": "growth" },
+    { "label": "Score against an ATS", "note": "What a screening system can and cannot extract from your file, and which sections it loses.", "hue": "reach" },
+    { "label": "Match to one posting", "note": "Your evidence against the requirements THIS employer wrote, not a generic rubric.", "hue": "reach" },
     { "label": "Tailor for an application", "note": "An anchored plan against that posting — what to lead with, what to cut, what you have no evidence for.", "hue": "make" },
     { "label": "Plan a route to a target role", "note": "The gap between where you are and the job you want, with the projection behind it.", "hue": "idea" },
     { "label": "Prepare for the interview", "note": "A question set built from the posting, with the rubric each answer is scored against.", "hue": "prove" },
@@ -46,7 +46,7 @@ That is also why the tailoring tool is anchored to one posting rather than produ
   "rows": [
     { "label": "Roles covered", "value": 16, "note": "16", "hue": "measure" },
     { "label": "Cities", "value": 14, "note": "14", "hue": "run" },
-    { "label": "Addresses in the guide", "value": 240, "note": "240", "hue": "growth" }
+    { "label": "Addresses in the guide", "value": 240, "note": "240", "hue": "reach" }
   ],
   "caption": "Role × city pages, each one a real reading rather than a template with two words swapped. Bounded on purpose: a guide that can answer anything answers most things badly."
 }
@@ -70,7 +70,7 @@ That last detail matters more than it sounds. An alert that quietly disagrees wi
   "title": "Two ways to hold a job search",
   "columns": [
     { "title": "A document per answer", "hue": "muted", "items": ["Readable once", "Nothing can be counted", "Nothing can be compared", "The pipeline lives in your head"] },
-    { "title": "Objects on a board", "hue": "growth", "items": ["Applications, postings, interviews, variants", "Connected to each other", "Countable — how many are waiting on me?", "Alerts that use the same rules as the search"] }
+    { "title": "Objects on a board", "hue": "reach", "items": ["Applications, postings, interviews, variants", "Connected to each other", "Countable — how many are waiting on me?", "Alerts that use the same rules as the search"] }
   ],
   "caption": "The same argument that made the founder seat work, applied to the seat with the most visitors and the least company behind them."
 }

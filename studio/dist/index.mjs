@@ -1786,6 +1786,13 @@ function collectBundleFilePaths(manifest) {
     manifest.files.vaeGraph,
     manifest.files.vaeWeights
   ];
+  for (const rel of [
+    manifest.files.ditGraphData,
+    manifest.files.textEncoderGraphData,
+    manifest.files.vaeGraphData
+  ]) {
+    if (rel) paths.push(rel);
+  }
   if (manifest.backend === "ort") {
     const dir = manifest.files.tokenizer.endsWith("/") ? manifest.files.tokenizer : `${manifest.files.tokenizer}/`;
     paths.push(`${dir}tokenizer.json`, `${dir}tokenizer_config.json`);

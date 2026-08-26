@@ -46,6 +46,7 @@ import {
 } from '@/lib/canvasConnectionStyle';
 import { CanvasSurfaceRouter } from './CanvasSurfaceRouter';
 import { CanvasFacilitateSurface } from './CanvasFacilitateSurface';
+import { CanvasJourneyChip } from './CanvasJourneyChip';
 import { publishPoll, setPollState } from '@/lib/pollApi';
 import { pollJoinUrl, pollPublishBody } from '@/lib/pollObject';
 import { CanvasCalendarSurface } from './CanvasCalendarSurface';
@@ -11763,6 +11764,15 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           column; the stylesheet keeps exactly one on screen. */}
       {canvasChromeShows('surfaces', barCollapsed) && <div className={`${styles.floatCard} ${styles.surfaceChips}`}>
         <CanvasSurfaceSwitcher surface={surface} onChange={setSurface} variant="header" />
+      </div>}
+      {/* Where this session sits on the founder's journey — a STATUS chip, so
+          it survives a collapsed bar where `surfaces` (a control) does not.
+          Its own row rather than nested inside `.surfaceChips`: nesting it
+          there would fold it away with the surface switcher on collapse,
+          which is exactly the status/control mix-up this registry exists to
+          prevent. */}
+      {canvasChromeShows('journeyChip', barCollapsed) && <div className={`${styles.floatCard} ${styles.journeyChipCard}`}>
+        <CanvasJourneyChip />
       </div>}
       {chromeSlot ? createPortal(handoffChrome, chromeSlot) : handoffChrome}
 

@@ -30,6 +30,27 @@
  * and therefore has nowhere to put a reason. So a raise is justified HERE, in
  * prose, and a raise with no entry below is a raise nobody argued for:
  *
+ *   922 → 929 (`useClientFiles`, 2026-08-26) — the dashboard's founder's-journey
+ *   IA rework: `JourneyStrip.tsx`/`ActRail.tsx` (the Idea/Make/Run/Measure strip
+ *   and the Read/Prove/Build loop, `/dashboard`), three new tab bodies
+ *   (`BusinessTab.tsx`, `InterviewsTab.tsx`, `ResearchTab.tsx`), the TopBar's
+ *   `JourneyPill.tsx` and the canvas's `CanvasJourneyChip.tsx`. All seven are
+ *   genuinely client-only — live data fetched with hooks (`useFounderJourney`),
+ *   `IntersectionObserver` for the strip's scroll-compact state, editable forms
+ *   for the two discovery trackers, a slide-out panel for the pill — with no
+ *   server-render fallback to keep them off this count. `useClientPages` is
+ *   unchanged at 32 — none of the seven is a page.
+ *
+ *   921 → 922 (`useClientFiles`, 2026-08-25) — `lib/usePointerResize.ts`, the
+ *   Founders Journey pass. ONE hook, extracted from the drag-to-resize handlers
+ *   that `BrainDock` (width) and `SessionList` (height) had each written inline
+ *   for the same "capture the pointer, clamp the delta, release, arrow-key
+ *   nudge" mechanism. Both callers were already client boundaries of their own,
+ *   so this is a net-new file rather than a moved directive; it is client-only
+ *   by construction (`PointerEvent`, `setPointerCapture`) and has no server
+ *   equivalent to fall back to. `useClientPages` is unchanged at 32 — neither
+ *   caller is a page.
+ *
  *   920 → 921 (`useClientFiles`, 2026-08-25) — the company-graph band on `/`.
  *   ONE file, `components/home/FounderGraphSection.tsx`, and the directive is
  *   the homepage's runtime rather than the band's interactivity — the identical

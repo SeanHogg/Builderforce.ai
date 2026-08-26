@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   applyClassifierFreeGuidance,
+  latentFramesToPixelFrames,
   makeNoiseLatent,
   splitFrames,
 } from "../src/tensor-ops";
@@ -72,6 +73,24 @@ describe("splitFrames", () => {
 
   it("throws on size mismatch with the expected element count", () => {
     expect(() => splitFrames(new Float32Array(5), 1, 2, 2)).toThrow(/expected 12/);
+  });
+});
+
+describe("latentFramesToPixelFrames", () => {
+  it("uses the plain multiplicative formula when causal is absent (pre-existing manifests)", () => {
+    expect(latentFramesToPixelFrames(13, { spatial: 8, temporal: 4 })).toBe(52);
+  });
+
+  it("uses the plain multiplicative formula when causal is explicitly false", () => {
+    expect(latentFramesToPixelFrames(13, { spatial: 8, temporal: 4, causal: false })).toBe(52);
+  });
+
+  it("uses the causal first-frame-free formula when causal is true — cogvideox-2b's real case: 13 latent frames -> 49 pixel frames, not 52", () => {
+    expect(latentFramesToPixelFrames(13, { spatial: 8, temporal: 4, causal: true })).toBe(49);
+  });
+
+  it("causal formula: a single latent frame decodes to exactly 1 pixel frame (no compression on the first frame)", () => {
+    expect(latentFramesToPixelFrames(1, { spatial: 8, temporal: 4, causal: true })).toBe(1);
   });
 });
 

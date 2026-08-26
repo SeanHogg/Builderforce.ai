@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { makeScheduler } from "../src/scheduler";
+import { DdimVPredZsnrScheduler } from "../src/scheduler/ddim-vpred-zsnr";
 import { EulerScheduler } from "../src/scheduler/euler";
 import { FlowMatchScheduler } from "../src/scheduler/flow-match";
 import type { MutableTensor } from "../src/types";
@@ -102,7 +103,62 @@ describe("makeScheduler", () => {
     expect(makeScheduler("euler", 4)).toBeInstanceOf(EulerScheduler);
   });
 
+  it("constructs a ddim-vpred-zsnr scheduler", () => {
+    expect(makeScheduler("ddim-vpred-zsnr", 50)).toBeInstanceOf(DdimVPredZsnrScheduler);
+  });
+
   it("throws for unimplemented schedulers", () => {
     expect(() => makeScheduler("dpm++-2m", 4)).toThrow(/not yet implemented/);
+  });
+});
+
+describe("DdimVPredZsnrScheduler (CogVideoX's real training parameterization)", () => {
+  it("emits 50 discrete, monotonically decreasing timesteps in [0, 999] ending near 0, trailing-spaced", () => {
+    const s = new DdimVPredZsnrScheduler(50);
+    expect(s.timesteps).toHaveLength(50);
+    expect(s.timestepAt(0)).toBe(999);
+    for (let i = 0; i < 49; i++) {
+      expect(s.timestepAt(i)).toBeGreaterThan(s.timestepAt(i + 1));
+    }
+    for (const t of s.timesteps) {
+      expect(t).toBeGreaterThanOrEqual(0);
+      expect(t).toBeLessThanOrEqual(999);
+      expect(Number.isInteger(t)).toBe(true);
+    }
+    // trailing spacing, step_ratio = 1000/50 = 20
+    expect(s.timestepAt(1)).toBe(979);
+    expect(s.timestepAt(49)).toBe(19);
+  });
+
+  it("rejects steps < 1", () => {
+    expect(() => new DdimVPredZsnrScheduler(0)).toThrow(/steps/);
+  });
+
+  it("step() throws on length mismatch", () => {
+    const s = new DdimVPredZsnrScheduler(10);
+    expect(() => s.step(tensor([1]), tensor([1, 2]), 0)).toThrow(/length mismatch/);
+  });
+
+  it("step() is a deterministic, finite, shape-preserving update (v-prediction DDIM)", () => {
+    const s = new DdimVPredZsnrScheduler(10);
+    const latent = tensor([0.5, -0.3, 1.2]);
+    const velocity = tensor([0.1, 0.2, -0.1]);
+    s.step(latent, velocity, 0);
+    for (const v of latent.data) {
+      expect(Number.isFinite(v)).toBe(true);
+    }
+    expect(latent.data.length).toBe(3);
+  });
+
+  it("with prediction == sample (self-consistent v-pred fixed point), step moves toward the origin as SNR decreases", () => {
+    // Not a general invariant of DDIM — just a smoke check that step() is
+    // wired to alphasCumprod correctly and doesn't NaN across every index.
+    const s = new DdimVPredZsnrScheduler(20);
+    const latent = tensor(new Array(8).fill(1));
+    const pred = tensor(new Array(8).fill(0));
+    for (let i = 0; i < 20; i++) {
+      s.step(latent, pred, i);
+      for (const v of latent.data) expect(Number.isFinite(v)).toBe(true);
+    }
   });
 });

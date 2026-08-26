@@ -1,4 +1,19 @@
-import type { MutableTensor, WebDiTManifest } from "./types";
+import type { MutableTensor, VaeCompression, WebDiTManifest } from "./types";
+
+/**
+ * Converts a latent frame count to the VAE-decoded pixel frame count.
+ * Pulled out of `runDenoiseLoop` (ort-runner.ts) so the arithmetic — easy to
+ * get wrong, and silently wrong until a real generation throws a shape
+ * mismatch in `splitFrames` — has its own direct unit tests. See
+ * `VaeCompression.causal`'s doc comment in `@webdit/shared` for why a causal
+ * 3D VAE (CogVideoX, and per their published architectures LTX-2/Wan2.5/
+ * Mochi-1 too) needs a different formula than the naive `latentT * temporal`.
+ */
+export function latentFramesToPixelFrames(latentT: number, vaeCompression: VaeCompression): number {
+  return vaeCompression.causal
+    ? (latentT - 1) * vaeCompression.temporal + 1
+    : latentT * vaeCompression.temporal;
+}
 
 /**
  * Classifier-free guidance: out = uncond + guidance * (cond - uncond).

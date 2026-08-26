@@ -85,6 +85,21 @@ export async function listRealizations(db: Db, tenantId: number, limit = 50): Pr
   return rows.map(toRealizationView);
 }
 
+/** A session's own proofs, most recent first — the signal `useFounderJourney`
+ *  reads to place a Creation Session on the Read → Prove → Build loop. */
+export async function getRealizationsForSession(
+  db: Db,
+  tenantId: number,
+  sessionId: string,
+): Promise<RealizationView[]> {
+  const rows = await db
+    .select()
+    .from(realizations)
+    .where(scopedToTenant(realizations, tenantId, eq(realizations.sessionId, sessionId)))
+    .orderBy(desc(realizations.createdAt));
+  return rows.map(toRealizationView);
+}
+
 export async function getRealization(db: Db, tenantId: number, id: string): Promise<Row | null> {
   const [row] = await db
     .select()

@@ -354,7 +354,7 @@
   --stage-make: var(--coral-bright);
   --stage-run: var(--emerald-bright);
   --stage-measure: var(--violet-bright);
-  --stage-growth: var(--pink-bright);
+  --stage-reach: var(--pink-bright);
   /* EXPAND had no hue for as long as the stage existed. `STAGES` is iterated
      into `var(--stage-${stage})` by the left panel and by /features' arc table,
      and an undeclared custom property with no fallback is invalid at
@@ -4503,7 +4503,7 @@ select.input option {
 .nav-stage[data-stage='make'] .nav-stage__dot { background: var(--stage-make); }
 .nav-stage[data-stage='run'] .nav-stage__dot { background: var(--stage-run); }
 .nav-stage[data-stage='measure'] .nav-stage__dot { background: var(--stage-measure); }
-.nav-stage[data-stage='growth'] .nav-stage__dot { background: var(--stage-growth); }
+.nav-stage[data-stage='reach'] .nav-stage__dot { background: var(--stage-reach); }
 
 .nav-stage__hint {
   margin-left: auto;

@@ -756,11 +756,15 @@
       "make": "构建",
       "run": "运营",
       "measure": "衡量",
-      "market": "市场",
+      "reach": "触达",
       "admin": "管理",
       "notYet": "尚未开放",
       "lockHint": "登录后即可使用",
       "expand": "拓展"
+    },
+    "journey": {
+      "label": "创始人之旅",
+      "openDashboard": "打开仪表盘"
     }
   },
   "alerts": {
@@ -4634,18 +4638,47 @@
       "workforceOnline": "在线人才 / 团队",
       "workingNow": "{count} 个正在工作"
     },
+    "loading": "加载中……",
     "tabs": {
+      "ideas": "创意",
       "projects": "项目",
+      "business": "企业",
+      "interviews": "访谈",
+      "research": "调研",
+      "profile": "个人资料",
       "workforce": "人才 / 团队",
       "quality": "质量",
-      "knowledge": "知识库",
-      "create": "创建"
+      "knowledge": "知识库"
     },
     "ideas": {
       "loading": "正在加载对话……",
       "empty": "还没有头脑风暴对话。",
       "start": "开始头脑风暴",
       "untitled": "未命名对话"
+    },
+    "interviews": {
+      "titlePlaceholder": "你了解到了什么？",
+      "participantPlaceholder": "你和谁谈过？",
+      "notesPlaceholder": "对话记录……",
+      "add": "添加访谈",
+      "empty": "还没有记录任何访谈。",
+      "delete": "删除",
+      "confirmDelete": "删除此访谈？"
+    },
+    "research": {
+      "titlePlaceholder": "你发现了什么？",
+      "sourceUrlPlaceholder": "来源链接（可选）",
+      "bodyPlaceholder": "笔记、引用、数据……",
+      "add": "添加笔记",
+      "empty": "还没有调研笔记。",
+      "delete": "删除",
+      "confirmDelete": "删除此调研笔记？",
+      "sourceLink": "查看来源"
+    },
+    "business": {
+      "empty": "一旦创意成长为企业，你的第一家公司将显示在这里。",
+      "view": "查看",
+      "summary": "{projects} 个项目 · {arr} ARR"
     },
     "quality": {
       "newCollector": "新建采集器",
@@ -16687,6 +16720,10 @@
         "title": "对比",
         "tagline": "与你现在使用的工具对比。"
       },
+      "method": {
+        "title": "方法论",
+        "tagline": "阅读、验证、构建——弧线背后的循环。"
+      },
       "diagnostics": {
         "title": "诊断",
         "tagline": "注册之前先拿到结果。"
@@ -25385,7 +25422,7 @@
       "make": "把它做出来。",
       "run": "像一家公司那样运营它。",
       "measure": "它有效吗？",
-      "market": "销售、采购、招聘、被找到。",
+      "reach": "销售、采购、招聘、被找到。",
       "expand": "让它成长。",
       "admin": "设置。"
     },
@@ -25450,6 +25487,25 @@
     "youAreHere": "你在这里",
     "cardAction": "在画布中打开 →",
     "cardActionFor": "在画布中打开\"{name}\""
+  },
+  "method": {
+    "seo": {
+      "title": "从创意到现实——Builderforce 背后的方法论",
+      "description": "四个阶段说明你在哪里，三个环节说明你在做什么。阅读、验证、构建——这个循环把一个创意变成你可以打开的东西，失败条件在构建之前就已设定，而不是在结果出来之后。"
+    },
+    "hero": {
+      "eyebrow": "方法论",
+      "title": "从创意到现实",
+      "lead": "每一位创始人在 Builderforce 上的旅程都遵循同样的弧线——创意、构建、运营、衡量——以及在创意阶段的同一个内部循环：阅读、验证、构建。这就是完整的方法论。",
+      "primaryCta": "免费开始",
+      "secondaryCta": "查看包含内容"
+    },
+    "cta": {
+      "eyebrow": "准备好了吗？",
+      "title": "从一个创意开始",
+      "body": "无需计划、无需服务器、无需设置——粘贴你的想法，一分钟内就能读成一份规格说明。",
+      "primary": "免费开始"
+    }
   },
   "sell": {
     "seo": {

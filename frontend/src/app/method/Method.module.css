@@ -1,0 +1,27 @@
+.page { color: var(--text-primary); }
+
+.eyebrow { margin: 0; color: var(--coral-bright); font-size: var(--font-size-eyebrow); font-weight: 750; text-transform: uppercase; letter-spacing: .08em; }
+
+.hero { max-width: var(--marketing-max); margin: 0 auto; padding: 96px var(--marketing-gutter) 64px; text-align: center; }
+.hero h1 { max-width: 760px; margin: 14px auto 0; font-family: var(--font-display); font-size: var(--font-size-hero); line-height: .95; letter-spacing: -.05em; }
+.lede { max-width: 640px; margin: 22px auto 0; color: var(--text-secondary); font-size: var(--font-size-lede); line-height: 1.65; }
+
+.actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-top: 28px; }
+.primaryButton, .secondaryButton { display: inline-flex; align-items: center; justify-content: center; min-height: 50px; padding: 0 22px; border-radius: var(--radius-lg); font-weight: 750; text-decoration: none; transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease; }
+.primaryButton { color: var(--text-on-accent); background: linear-gradient(135deg, var(--coral-bright), var(--coral-dark)); box-shadow: 0 8px 26px var(--shadow-coral-mid); }
+.secondaryButton { color: var(--text-primary); background: var(--surface-card); border: 1px solid var(--border-subtle); }
+.primaryButton:hover, .secondaryButton:hover { transform: translateY(-2px); }
+.secondaryButton:hover { border-color: var(--border-accent); }
+
+.method { max-width: var(--marketing-max); margin: 0 auto; padding: 32px var(--marketing-gutter) 96px; }
+
+.cta { padding: 108px var(--marketing-gutter); text-align: center; background: var(--surface-inverse); color: var(--text-inverse); }
+.cta h2 { margin: 0; font-family: var(--font-display); font-size: var(--font-size-page-title); line-height: 1.04; letter-spacing: -.035em; }
+.cta > p:not(.eyebrow) { max-width: 620px; margin: 22px auto 0; color: color-mix(in srgb, currentColor 68%, transparent); font-size: var(--font-size-lede); line-height: 1.7; }
+.cta .actions { justify-content: center; }
+
+@media (max-width: 620px) {
+  .hero { padding-inline: 18px; }
+  .hero h1 { font-size: var(--font-size-hero); }
+  .method { padding-inline: 18px; }
+}

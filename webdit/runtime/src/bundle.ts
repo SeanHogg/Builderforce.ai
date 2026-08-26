@@ -1,9 +1,20 @@
 import { validateManifest, type QuantizedTensor, type WebDiTManifest } from "@webdit/shared";
 import type { DitRunner, TextEncoderRunner, VaeRunner } from "./runners";
 
-/** Minimal tokenizer surface the runtime depends on. */
+/** Minimal tokenizer surface the runtime depends on.
+ *  `maxLength`, when given, pads/truncates to EXACTLY that many tokens —
+ *  required by architectures with a learned (non-rotary) absolute position
+ *  embedding over the concatenated [text; visual] sequence (e.g. CogVideoX,
+ *  `use_rotary_positional_embeddings: false`): the visual patch positions are
+ *  trained assuming the text run always occupies the full
+ *  `manifest.textEncoder.maxTokens` slots, so a shorter, un-padded prompt
+ *  would shift every visual position embedding out of alignment. See
+ *  `encodeText` in `ort-runner.ts`, the single call site that supplies it. */
 export interface HfTokenizer {
-  encode(text: string): { inputIds: BigInt64Array; attentionMask: BigInt64Array };
+  encode(
+    text: string,
+    maxLength?: number,
+  ): { inputIds: BigInt64Array; attentionMask: BigInt64Array };
 }
 
 export interface LoadedBundle {
@@ -54,16 +65,35 @@ interface BundleLoadEnv {
 async function buildOrtBundle(env: BundleLoadEnv): Promise<LoadedBundle> {
   const ort = await import("onnxruntime-web/webgpu");
   const { OrtDitRunner, OrtTextEncoderRunner, OrtVaeRunner } = await import("./runners-ort");
-  const sessionOpts: import("onnxruntime-web/webgpu").InferenceSession.SessionOptions = {
-    executionProviders: ["webgpu"],
-    graphOptimizationLevel: "all",
-  };
   const m = env.manifest;
   const url = env.resolveUrl!;
+  const fetchExternalData = async (
+    relPath: string | undefined,
+  ): Promise<import("onnxruntime-web/webgpu").ExternalDataFileType[] | undefined> => {
+    if (!relPath) return undefined;
+    const res = await fetch(url(relPath));
+    if (!res.ok) throw new Error(`bundle: failed to fetch external data ${relPath}: ${res.status}`);
+    return [{ path: basename(relPath), data: new Uint8Array(await res.arrayBuffer()) }];
+  };
   const [ditSession, teSession, vaeSession, tokenizer] = await Promise.all([
-    ort.InferenceSession.create(url(m.files.ditGraph), sessionOpts),
-    ort.InferenceSession.create(url(m.files.textEncoderGraph), sessionOpts),
-    ort.InferenceSession.create(url(m.files.vaeGraph), sessionOpts),
+    (async () =>
+      ort.InferenceSession.create(url(m.files.ditGraph), {
+        executionProviders: ["webgpu"],
+        graphOptimizationLevel: "all",
+        externalData: await fetchExternalData(m.files.ditGraphData),
+      }))(),
+    (async () =>
+      ort.InferenceSession.create(url(m.files.textEncoderGraph), {
+        executionProviders: ["webgpu"],
+        graphOptimizationLevel: "all",
+        externalData: await fetchExternalData(m.files.textEncoderGraphData),
+      }))(),
+    (async () =>
+      ort.InferenceSession.create(url(m.files.vaeGraph), {
+        executionProviders: ["webgpu"],
+        graphOptimizationLevel: "all",
+        externalData: await fetchExternalData(m.files.vaeGraphData),
+      }))(),
     env.readTokenizer(),
   ]);
   const dit = new OrtDitRunner(ditSession);
@@ -185,15 +215,32 @@ async function buildOrtBundleFromBuffers(
 ): Promise<LoadedBundle> {
   const ort = await import("onnxruntime-web/webgpu");
   const { OrtDitRunner, OrtTextEncoderRunner, OrtVaeRunner } = await import("./runners-ort");
-  const sessionOpts: import("onnxruntime-web/webgpu").InferenceSession.SessionOptions = {
-    executionProviders: ["webgpu"],
-    graphOptimizationLevel: "all",
-  };
   const m = manifest;
+  const externalDataFor = async (
+    relPath: string | undefined,
+  ): Promise<import("onnxruntime-web/webgpu").ExternalDataFileType[] | undefined> => {
+    if (!relPath) return undefined;
+    return [{ path: basename(relPath), data: await readShard(relPath) }];
+  };
   const [ditSession, teSession, vaeSession, tokenizer] = await Promise.all([
-    ort.InferenceSession.create(await readShard(m.files.ditGraph), sessionOpts),
-    ort.InferenceSession.create(await readShard(m.files.textEncoderGraph), sessionOpts),
-    ort.InferenceSession.create(await readShard(m.files.vaeGraph), sessionOpts),
+    (async () =>
+      ort.InferenceSession.create(await readShard(m.files.ditGraph), {
+        executionProviders: ["webgpu"],
+        graphOptimizationLevel: "all",
+        externalData: await externalDataFor(m.files.ditGraphData),
+      }))(),
+    (async () =>
+      ort.InferenceSession.create(await readShard(m.files.textEncoderGraph), {
+        executionProviders: ["webgpu"],
+        graphOptimizationLevel: "all",
+        externalData: await externalDataFor(m.files.textEncoderGraphData),
+      }))(),
+    (async () =>
+      ort.InferenceSession.create(await readShard(m.files.vaeGraph), {
+        executionProviders: ["webgpu"],
+        graphOptimizationLevel: "all",
+        externalData: await externalDataFor(m.files.vaeGraphData),
+      }))(),
     loadHfTokenizerFromBuffers(m.files.tokenizer, files),
   ]);
   const dit = new OrtDitRunner(ditSession);
@@ -238,14 +285,24 @@ async function loadHfTokenizerFromBuffers(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const tok = new (PreTrainedTokenizer as any)(tokenizerJSON, tokenizerConfig);
   return {
-    encode(text: string) {
-      const out = tok(text) as Record<string, unknown>;
+    encode(text: string, maxLength?: number) {
+      const out = tok(text, tokenizerCallOptions(maxLength)) as Record<string, unknown>;
       return {
         inputIds: extractTokenIds(out.input_ids, "input_ids"),
         attentionMask: extractTokenIds(out.attention_mask, "attention_mask"),
       };
     },
   };
+}
+
+/** Shared by both HfTokenizer builders below — see the `HfTokenizer.encode`
+ *  doc comment for why fixed-length padding matters. `undefined` (no
+ *  `maxLength`) leaves the tokenizer's own default (no padding) behavior. */
+function tokenizerCallOptions(
+  maxLength: number | undefined,
+): { padding?: "max_length"; max_length?: number; truncation?: boolean } {
+  if (maxLength === undefined) return {};
+  return { padding: "max_length", max_length: maxLength, truncation: true };
 }
 
 /**
@@ -282,8 +339,8 @@ export async function loadHfTokenizer(dirUrl: string): Promise<HfTokenizer> {
   const url = dirUrl.endsWith("/") ? dirUrl : dirUrl + "/";
   const tok = await AutoTokenizer.from_pretrained(url);
   return {
-    encode(text: string) {
-      const out = tok(text) as Record<string, unknown>;
+    encode(text: string, maxLength?: number) {
+      const out = tok(text, tokenizerCallOptions(maxLength)) as Record<string, unknown>;
       return {
         inputIds: extractTokenIds(out.input_ids, "input_ids"),
         attentionMask: extractTokenIds(out.attention_mask, "attention_mask"),
@@ -298,9 +355,10 @@ export async function loadHfTokenizer(dirUrl: string): Promise<HfTokenizer> {
  * a fixed-length token sequence. Sufficient for integration tests.
  */
 async function loadMiniTokenizer(): Promise<HfTokenizer> {
-  const MAX = 8;
+  const DEFAULT_MAX = 8;
   return {
-    encode(text: string) {
+    encode(text: string, maxLength?: number) {
+      const MAX = maxLength ?? DEFAULT_MAX;
       const ids = new BigInt64Array(MAX);
       const mask = new BigInt64Array(MAX);
       for (let i = 0; i < MAX; i++) {
@@ -333,3 +391,12 @@ function extractTokenIds(value: unknown, name: string): BigInt64Array {
 
 /** Re-exported for callers that want the legacy name. */
 export const loadTokenizer = loadHfTokenizer;
+
+/** Last path segment — deliberately not `node:path` (this module also runs
+ *  in the browser). Used to turn a bundle-relative external-data path (e.g.
+ *  "graph/dit.onnx.data") into the bare filename ORT-Web's `externalData`
+ *  option matches against the `location` string embedded in the .onnx. */
+function basename(relPath: string): string {
+  const parts = relPath.split("/");
+  return parts[parts.length - 1]!;
+}

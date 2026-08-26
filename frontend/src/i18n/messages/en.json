@@ -756,11 +756,15 @@
       "make": "Make",
       "run": "Run",
       "measure": "Measure",
-      "market": "Market",
+      "reach": "Reach",
       "admin": "Admin",
       "notYet": "not yet",
       "lockHint": "Sign in to use this",
       "expand": "Expand"
+    },
+    "journey": {
+      "label": "Founder's journey",
+      "openDashboard": "Open dashboard"
     }
   },
   "alerts": {
@@ -4634,18 +4638,47 @@
       "workforceOnline": "Talent / Workforce online",
       "workingNow": "{count} working now"
     },
+    "loading": "Loading…",
     "tabs": {
+      "ideas": "Ideas",
       "projects": "Projects",
+      "business": "Business",
+      "interviews": "Interviews",
+      "research": "Research",
+      "profile": "Profile",
       "workforce": "Talent / Workforce",
       "quality": "Quality",
-      "knowledge": "Knowledge",
-      "create": "Create"
+      "knowledge": "Knowledge"
     },
     "ideas": {
       "loading": "Loading chats…",
       "empty": "No brainstorm chats yet.",
       "start": "Start brainstorming",
       "untitled": "Untitled chat"
+    },
+    "interviews": {
+      "titlePlaceholder": "What did you learn?",
+      "participantPlaceholder": "Who did you talk to?",
+      "notesPlaceholder": "Notes from the conversation…",
+      "add": "Add interview",
+      "empty": "No interviews logged yet.",
+      "delete": "Delete",
+      "confirmDelete": "Delete this interview?"
+    },
+    "research": {
+      "titlePlaceholder": "What did you find?",
+      "sourceUrlPlaceholder": "Source URL (optional)",
+      "bodyPlaceholder": "Notes, quotes, numbers…",
+      "add": "Add note",
+      "empty": "No research notes yet.",
+      "delete": "Delete",
+      "confirmDelete": "Delete this research note?",
+      "sourceLink": "View source"
+    },
+    "business": {
+      "empty": "Your first company appears here once an idea graduates.",
+      "view": "View",
+      "summary": "{projects} projects · {arr} ARR"
     },
     "quality": {
       "newCollector": "New collector",
@@ -16687,6 +16720,10 @@
         "title": "Compare",
         "tagline": "Against the tools you use now."
       },
+      "method": {
+        "title": "Method",
+        "tagline": "Read, Prove, Build — the loop behind the arc."
+      },
       "diagnostics": {
         "title": "Diagnostics",
         "tagline": "A result before you sign up."
@@ -25385,7 +25422,7 @@
       "make": "Build it.",
       "run": "Run it as a company.",
       "measure": "Is it working?",
-      "market": "Sell, buy, hire, be found.",
+      "reach": "Sell, buy, hire, be found.",
       "expand": "Grow it.",
       "admin": "Settings."
     },
@@ -25450,6 +25487,25 @@
     "youAreHere": "You are here",
     "cardAction": "Open on the canvas →",
     "cardActionFor": "Open {name} on the canvas"
+  },
+  "method": {
+    "seo": {
+      "title": "Idea to Real — the method behind Builderforce",
+      "description": "Four stages say where you are. Three acts say what you do. Read, Prove, Build — the loop that turns an idea into something you can open, with a kill condition set before it is built rather than after the result is in."
+    },
+    "hero": {
+      "eyebrow": "The method",
+      "title": "Idea to real",
+      "lead": "Every founder's journey through Builderforce follows the same arc — Idea, Make, Run, Measure — and the same inner loop while still in Idea: Read, Prove, Build. This is that method, in full.",
+      "primaryCta": "Start free",
+      "secondaryCta": "See what's included"
+    },
+    "cta": {
+      "eyebrow": "Ready?",
+      "title": "Start with an idea",
+      "body": "No plan, no server, no setup — paste what you're thinking and read it into a specification in under a minute.",
+      "primary": "Start free"
+    }
   },
   "sell": {
     "seo": {

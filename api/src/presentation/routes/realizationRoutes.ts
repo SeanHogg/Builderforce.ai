@@ -39,6 +39,7 @@ import {
   createRealization,
   deleteRealization,
   getRealization,
+  getRealizationsForSession,
   listRealizations,
   setRealizationOutcome,
   toRealizationView,
@@ -156,8 +157,14 @@ export function createRealizationRoutes(db: Db, runtimeService: RuntimeService):
     }
   });
 
-  router.get('/', async (c) =>
-    c.json({ realizations: await listRealizations(db, c.get('tenantId') as number) }));
+  router.get('/', async (c) => {
+    const sessionId = c.req.query('sessionId');
+    const tenantId = c.get('tenantId') as number;
+    const rows = sessionId
+      ? await getRealizationsForSession(db, tenantId, sessionId)
+      : await listRealizations(db, tenantId);
+    return c.json({ realizations: rows });
+  });
 
   /**
    * Choose a proof and plan it.

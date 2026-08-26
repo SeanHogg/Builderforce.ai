@@ -127,6 +127,10 @@ export const PUBLIC_DESTINATIONS: PublicDestination[] = [
   { id: 'blog', seat: 'CMO', icon: '📝', marketingHref: '/blog', appHref: '/blog', kind: 'link', placement: 'read', panel: false },
   { id: 'tutorials', seat: 'Support', icon: '🎓', marketingHref: '/tutorials', appHref: '/tutorials', kind: 'link', placement: 'read', panel: false },
   { id: 'compare', seat: 'CMO', icon: '⚖️', marketingHref: '/compare', appHref: '/compare', kind: 'link', placement: 'read', panel: false },
+  // The method itself, named as its own page rather than left embedded only in
+  // `/features`/`/about`/`/pricing`/`/sell-builderforce`. Non-panel like its
+  // Read ▾ siblings: reading the method is long-form, not a mid-turn lookup.
+  { id: 'method', seat: 'platform', icon: '🧭', marketingHref: '/method', appHref: '/dashboard', kind: 'link', placement: 'read', panel: false },
   // ── Learn ▾ · PROVE — evidence surfaces. These ARE panels: "can I show my
   //    auditor the controls" is a question you ask mid-turn, not instead of one.
   { id: 'diagnostics', seat: 'Manager', icon: '🩺', marketingHref: '/tools', appHref: '/insights/compliance', kind: 'link', placement: 'prove', panel: true },
@@ -309,7 +313,7 @@ export const FOOTER_COLUMNS: FooterColumn[] = [
   // Pricing — not an article you go and read afterwards.
   { titleKey: 'colProduct', ids: ['canvas', 'marketplace', 'features', 'pricing', 'compare', 'about'] },
   { titleKey: 'colPlatform', ids: ['evermind', 'ref.integrations', 'embedded', 'models', 'prompts'] },
-  { titleKey: 'colLearn', ids: ['blog', 'tutorials', 'diagnostics', 'soc2', 'media'] },
+  { titleKey: 'colLearn', ids: ['method', 'blog', 'tutorials', 'diagnostics', 'soc2', 'media'] },
   { titleKey: 'colGetStarted', ids: ['demo', 'sell', 'signIn'] },
 ];
 

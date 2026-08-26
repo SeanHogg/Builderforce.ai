@@ -106,4 +106,40 @@ describe("validateManifest", () => {
       expect(() => validateManifest(m)).not.toThrow();
     }
   });
+
+  it("accepts vaeCompression without a causal field (pre-existing manifests)", () => {
+    expect(() => validateManifest(clone())).not.toThrow();
+  });
+
+  it("accepts vaeCompression.causal true or false", () => {
+    for (const causal of [true, false]) {
+      const m = clone();
+      (m.vaeCompression as Record<string, unknown>).causal = causal;
+      expect(() => validateManifest(m)).not.toThrow();
+    }
+  });
+
+  it("rejects a non-boolean vaeCompression.causal", () => {
+    const m = clone();
+    (m.vaeCompression as Record<string, unknown>).causal = "yes";
+    expect(() => validateManifest(m)).toThrow(/vaeCompression\.causal/);
+  });
+
+  it("accepts manifests without any *GraphData fields (self-contained graphs)", () => {
+    expect(() => validateManifest(clone())).not.toThrow();
+  });
+
+  it("accepts *GraphData fields when they're strings", () => {
+    const m = clone();
+    (m.files as Record<string, unknown>).ditGraphData = "graph/dit/model.onnx.data";
+    (m.files as Record<string, unknown>).textEncoderGraphData = "graph/text_encoder/model.onnx.data";
+    (m.files as Record<string, unknown>).vaeGraphData = "graph/vae/decoder.onnx.data";
+    expect(() => validateManifest(m)).not.toThrow();
+  });
+
+  it("rejects a non-string ditGraphData", () => {
+    const m = clone();
+    (m.files as Record<string, unknown>).ditGraphData = 42;
+    expect(() => validateManifest(m)).toThrow(/ditGraphData/);
+  });
 });

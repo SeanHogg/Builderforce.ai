@@ -55,7 +55,12 @@ export type CanvasChromeSlot =
   /** A runtime's own controls — an app surface's Run/Stop and its readings. */
   | 'surfaceControls'
   /** A runtime's own report — where it is running, and whether it is. */
-  | 'surfaceStatus';
+  | 'surfaceStatus'
+  /** Where this session sits on the founder's journey (Idea/Make/Run/Measure),
+   *  and the Read/Prove/Build act while still in Idea. A report, not a control —
+   *  it names a fact the same way `surfaceStatus` does, it just names a fact
+   *  about the FOUNDER rather than about a runtime. */
+  | 'journeyChip';
 
 export type CanvasChromeKind = 'status' | 'control';
 
@@ -99,6 +104,7 @@ const SLOT_KIND: Readonly<Record<CanvasChromeSlot, CanvasChromeKind>> = {
   saveState: 'status',
   roster: 'status',
   surfaceStatus: 'status',
+  journeyChip: 'status',
   surfaces: 'control',
   actions: 'control',
   handoff: 'control',
@@ -123,6 +129,7 @@ const SLOT_PLACE: Readonly<Record<CanvasChromeSlot, CanvasChromePlace>> = {
   handoff: 'topRight',
   surfaceControls: 'bar',
   surfaceStatus: 'bar',
+  journeyChip: 'chips',
 };
 
 export function canvasChromeKind(slot: CanvasChromeSlot): CanvasChromeKind {

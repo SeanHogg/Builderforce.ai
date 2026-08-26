@@ -16,9 +16,41 @@ interface RawTensorMeta {
   data_offsets: [number, number];
 }
 
+/**
+ * Node's `fs/promises.readFile` refuses files over 2 GiB (`ERR_FS_FILE_TOO_LARGE`)
+ * regardless of available memory — a real limit that only ever surfaces with
+ * a real model checkpoint (every architecture adapter's own synthetic test
+ * fixtures are tiny). A real DiT or text-encoder safetensors file routinely
+ * exceeds 2 GiB (cogvideox-2b's is 3.4 GB; T5-XXL's is far bigger), so read
+ * in chunks via a raw file handle instead of the single-shot convenience API.
+ */
+const CHUNK_BYTES = 512 * 1024 * 1024;
+
 export async function readSafetensors(path: string): Promise<SafetensorsTensor[]> {
-  const buf = await fs.readFile(path);
+  const buf = await readFileNoSizeLimit(path);
   return parseSafetensors(buf);
+}
+
+/** Exported for tests — `chunkBytes` lets a test exercise the multi-chunk
+ *  path without needing an actual multi-hundred-MB fixture file. */
+export async function readFileNoSizeLimit(path: string, chunkBytes = CHUNK_BYTES): Promise<Buffer> {
+  const handle = await fs.open(path, "r");
+  try {
+    const { size } = await handle.stat();
+    const buf = Buffer.allocUnsafe(size);
+    let offset = 0;
+    while (offset < size) {
+      const length = Math.min(chunkBytes, size - offset);
+      const { bytesRead } = await handle.read({ buffer: buf, offset, length, position: offset });
+      if (bytesRead === 0) {
+        throw new Error(`safetensors: unexpected EOF reading ${path} at byte ${offset}/${size}`);
+      }
+      offset += bytesRead;
+    }
+    return buf;
+  } finally {
+    await handle.close();
+  }
 }
 
 export function parseSafetensors(buf: Uint8Array): SafetensorsTensor[] {

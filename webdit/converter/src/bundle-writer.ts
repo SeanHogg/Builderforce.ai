@@ -32,9 +32,28 @@ export async function writeBundle(inputs: BundleInputs): Promise<WebDiTManifest>
   const vaeShard = packSingleShard(inputs.vaeWeights);
 
   const ditShardPaths = ditShards.map((_, i) => `weights/dit_shard_${i}.bin`);
+
+  // A graph whose embedded weights exceed ONNX's ~2GB single-protobuf-file
+  // limit is exported with an external-data companion — by convention,
+  // `<graph>.data` sitting next to the .onnx file itself (see the exporter
+  // that produced `inputs.graphs.*`). Detect + carry each one through to
+  // `manifest.files.*GraphData` (see the shared type's doc comment) so the
+  // runtime knows to fetch it and hand it to ORT-Web's `externalData` option.
+  const [ditGraphData, textEncoderGraphData, vaeGraphData] = await Promise.all([
+    externalDataRelPath(inputs.graphs.dit, "dit"),
+    externalDataRelPath(inputs.graphs.textEncoder, "text_encoder"),
+    externalDataRelPath(inputs.graphs.vae, "vae"),
+  ]);
+
   const finalManifest: WebDiTManifest = validateManifest({
     ...inputs.manifest,
-    files: { ...inputs.manifest.files, ditWeightShards: ditShardPaths },
+    files: {
+      ...inputs.manifest.files,
+      ditWeightShards: ditShardPaths,
+      ditGraphData,
+      textEncoderGraphData,
+      vaeGraphData,
+    },
   });
 
   await Promise.all([
@@ -47,6 +66,9 @@ export async function writeBundle(inputs: BundleInputs): Promise<WebDiTManifest>
       fs.writeFile(path.join(inputs.output, ditShardPaths[i]!), s.bytes),
     ),
     copyDir(inputs.tokenizerDir, path.join(inputs.output, finalManifest.files.tokenizer)),
+    copyExternalData(inputs.graphs.dit, ditGraphData, inputs.output),
+    copyExternalData(inputs.graphs.textEncoder, textEncoderGraphData, inputs.output),
+    copyExternalData(inputs.graphs.vae, vaeGraphData, inputs.output),
   ]);
 
   await fs.writeFile(
@@ -55,6 +77,50 @@ export async function writeBundle(inputs: BundleInputs): Promise<WebDiTManifest>
   );
 
   return finalManifest;
+}
+
+/**
+ * `<graphSrcPath>.data` next to the source graph, if present — returns the
+ * bundle-relative path it should land at, or `undefined` if there's no
+ * companion (the graph is self-contained).
+ *
+ * Lands at `graph/<slot>/<basename>.data`, namespaced by `slot` — NOT a flat
+ * `graph/<basename>.data` — because two source graphs can legitimately share
+ * a basename (the HF `diffusers` layout names both the DiT and the text
+ * encoder graph `model.onnx`, differing only by parent directory; see
+ * `defaults.ts`'s `diffusersSourceLayout`), and bundle-writer only ever
+ * COPIES bytes — it never rewrites the ONNX protobuf, so the exporter's
+ * embedded `location` string (its own external-data file's basename — e.g.
+ * torch.onnx.export's default is `<exported-filename>.data`) stays whatever
+ * it was at export time. Two same-named companions would collide in a flat
+ * `graph/` directory; the `slot` subfolder keeps them apart. This is safe
+ * because ORT-Web's `externalData` lookup is scoped per-`InferenceSession`
+ * (see `runtime/src/bundle.ts`) — the dit session and the text-encoder
+ * session can each independently resolve a same-named "model.onnx.data" key
+ * against their OWN bytes without conflict; only the bundle's on-disk/R2
+ * storage path needs to be unique, not the logical name ORT sees.
+ */
+async function externalDataRelPath(
+  graphSrcPath: string,
+  slot: "dit" | "text_encoder" | "vae",
+): Promise<string | undefined> {
+  try {
+    await fs.access(graphSrcPath + ".data");
+    return `graph/${slot}/${path.basename(graphSrcPath)}.data`;
+  } catch {
+    return undefined;
+  }
+}
+
+async function copyExternalData(
+  graphSrcPath: string,
+  destRelPath: string | undefined,
+  output: string,
+): Promise<void> {
+  if (!destRelPath) return;
+  const dest = path.join(output, destRelPath);
+  await fs.mkdir(path.dirname(dest), { recursive: true });
+  await fs.copyFile(graphSrcPath + ".data", dest);
 }
 
 async function mkdirs(root: string, subdirs: string[]): Promise<void> {

@@ -65,7 +65,7 @@ Three decisions in that escalation are worth stating, because they are where thi
   "kind": "stack",
   "title": "Things that now complete rather than stall",
   "bands": [
-    { "label": "A résumé", "note": "Dropped as a PDF or a Word file, read directly, and restyled through the template engine — no third-party parse account, no retyping.", "hue": "growth" },
+    { "label": "A résumé", "note": "Dropped as a PDF or a Word file, read directly, and restyled through the template engine — no third-party parse account, no retyping.", "hue": "reach" },
     { "label": "A signed contract", "note": "Scanned, transcribed, and placed on the board beside the deal it belongs to.", "hue": "run" },
     { "label": "A statement or invoice", "note": "Read into figures you can put beside the rest of your money, instead of an attachment nobody opens.", "hue": "run" },
     { "label": "An old policy document", "note": "Image-only, decades old, and now searchable text you can quote in an answer.", "hue": "measure" }

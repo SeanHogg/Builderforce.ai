@@ -21,7 +21,7 @@ Escrow is the old answer: money committed, held, and released against agreed del
   "kind": "flow",
   "title": "The life of a milestone",
   "steps": [
-    { "label": "Fund", "note": "The client commits the amount. Until this happens the milestone is not startable — the whole point of the arrangement.", "hue": "growth", "tag": "client" },
+    { "label": "Fund", "note": "The client commits the amount. Until this happens the milestone is not startable — the whole point of the arrangement.", "hue": "reach", "tag": "client" },
     { "label": "Deliver", "note": "The contractor marks it delivered with whatever the deliverable was.", "hue": "make", "tag": "contractor" },
     { "label": "Accept or ask", "note": "The client accepts, or requests changes with a reason. Both are recorded; neither is a silence.", "hue": "run", "tag": "client" },
     { "label": "Release", "note": "The held amount moves. The balance, the five rolled-up totals and the history all come from the same read.", "hue": "measure" }

@@ -1,5 +1,8 @@
-import { describe, it, expect } from "vitest";
-import { parseSafetensors } from "../src/safetensors";
+import * as fs from "node:fs/promises";
+import * as os from "node:os";
+import * as path from "node:path";
+import { describe, it, expect, afterEach } from "vitest";
+import { parseSafetensors, readFileNoSizeLimit, readSafetensors } from "../src/safetensors";
 import { floatToHalf } from "../src/half";
 
 function buildSafetensors(
@@ -86,5 +89,64 @@ describe("parseSafetensors", () => {
   it("rejects truncated headers", () => {
     const blob = new Uint8Array(4); // too short
     expect(() => parseSafetensors(blob)).toThrow(/8-byte header/);
+  });
+});
+
+describe("readFileNoSizeLimit / readSafetensors (file I/O)", () => {
+  const tmpFiles: string[] = [];
+  afterEach(async () => {
+    await Promise.all(tmpFiles.splice(0).map((f) => fs.rm(f, { force: true })));
+  });
+
+  async function writeTmp(bytes: Uint8Array): Promise<string> {
+    const p = path.join(os.tmpdir(), `webdit-safetensors-${Math.random().toString(36).slice(2)}.bin`);
+    await fs.writeFile(p, bytes);
+    tmpFiles.push(p);
+    return p;
+  }
+
+  it("reads a file smaller than one chunk (single read() call)", async () => {
+    const data = new Uint8Array([1, 2, 3, 4, 5]);
+    const p = await writeTmp(data);
+    const buf = await readFileNoSizeLimit(p, 1024);
+    expect(Array.from(buf)).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  it("reads a file spanning multiple chunks and reconstructs it byte-for-byte", async () => {
+    // 10 chunks of 100 bytes each, deterministic content per chunk so a
+    // misaligned/duplicated/dropped chunk would be caught.
+    const data = new Uint8Array(1000);
+    for (let i = 0; i < data.length; i++) data[i] = i % 256;
+    const p = await writeTmp(data);
+    // Real usage always uses the module's real default (CHUNK_BYTES); this
+    // override just makes a ~1KB fixture exercise the same multi-chunk loop
+    // that a real multi-GB safetensors file exercises with the real default.
+    const buf = await readFileNoSizeLimit(p, 100);
+    expect(buf.byteLength).toBe(1000);
+    expect(Array.from(buf)).toEqual(Array.from(data));
+  });
+
+  it("reads a chunk size that doesn't evenly divide the file size", async () => {
+    const data = new Uint8Array(950);
+    for (let i = 0; i < data.length; i++) data[i] = (i * 7) % 256;
+    const p = await writeTmp(data);
+    const buf = await readFileNoSizeLimit(p, 100);
+    expect(Array.from(buf)).toEqual(Array.from(data));
+  });
+
+  it("readSafetensors reads a real file from disk and parses it (regression: must not use the 2 GiB-limited fs.readFile)", async () => {
+    const tensorData = new Float32Array([1, 2, -3, 4]);
+    const bytes = new Uint8Array(tensorData.buffer);
+    const header = { w: { dtype: "F32", shape: [2, 2], data_offsets: [0, bytes.byteLength] } };
+    const headerJson = new TextEncoder().encode(JSON.stringify(header));
+    const blob = new Uint8Array(8 + headerJson.byteLength + bytes.byteLength);
+    new DataView(blob.buffer).setBigUint64(0, BigInt(headerJson.byteLength), true);
+    blob.set(headerJson, 8);
+    blob.set(bytes, 8 + headerJson.byteLength);
+
+    const p = await writeTmp(blob);
+    const [t] = await readSafetensors(p);
+    expect(t!.name).toBe("w");
+    expect(Array.from(t!.data)).toEqual([1, 2, -3, 4]);
   });
 });

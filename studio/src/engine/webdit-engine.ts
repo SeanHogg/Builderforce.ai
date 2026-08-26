@@ -139,6 +139,17 @@ function collectBundleFilePaths(manifest: WebDiTManifest): string[] {
     manifest.files.vaeGraph,
     manifest.files.vaeWeights,
   ];
+  // ONNX external-data companions (see BundleFiles.ditGraphData's doc
+  // comment in @webdit/shared) — present only for graphs whose embedded
+  // weights exceed ONNX's ~2GB single-protobuf-file limit, e.g. cogvideox-2b's
+  // multi-GB DiT/text-encoder graphs.
+  for (const rel of [
+    manifest.files.ditGraphData,
+    manifest.files.textEncoderGraphData,
+    manifest.files.vaeGraphData,
+  ]) {
+    if (rel) paths.push(rel);
+  }
   if (manifest.backend === 'ort') {
     const dir = manifest.files.tokenizer.endsWith('/')
       ? manifest.files.tokenizer

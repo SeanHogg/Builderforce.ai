@@ -20,7 +20,6 @@ src/app/import/page.tsx 1
 src/app/inbox/InboxClient.tsx 2
 src/app/incidents/IncidentsPageClient.tsx 8
 src/app/insights/page.tsx 2
-src/app/knowledge/[id]/KnowledgeDocClient.tsx 1
 src/app/knowledge/KnowledgeClient.tsx 1
 src/app/login/LoginPageClient.tsx 2
 src/app/lti/deep-link/DeepLinkPickerClient.tsx 1
@@ -98,6 +97,7 @@ src/components/billing/CollectionsWorklist.tsx 1
 src/components/billing/MerchantAccount.tsx 1
 src/components/blog/BlogCover.tsx 1
 src/components/board/BoardConfigPanel.tsx 1
+src/components/board/config/OrphanedTicketsRow.tsx 1
 src/components/board/config/TeamsTab.tsx 1
 src/components/board/config/useBoardProvisioning.ts 1
 src/components/board/TeamMemberAvatarFilter.tsx 1
@@ -114,7 +114,7 @@ src/components/builder/EvermindStudioCenter.tsx 2
 src/components/builder/MobileDevicePanel.tsx 1
 src/components/builder/RepoSyncControl.tsx 1
 src/components/builder/VoiceOutput.tsx 1
-src/components/BuilderWorkspace.tsx 19
+src/components/BuilderWorkspace.tsx 18
 src/components/calendar/BoundCalendar.tsx 1
 src/components/calendar/Calendar.tsx 4
 src/components/calendar/CalendarEventDetail.tsx 1
@@ -123,6 +123,7 @@ src/components/career/ReviewQueuePanel.tsx 1
 src/components/CatalogInsightsBar.tsx 1
 src/components/ceremony/CeremoniesContent.tsx 1
 src/components/ceremony/CeremonyHistoryPanel.tsx 2
+src/components/ceremony/CeremonyOutcome.tsx 1
 src/components/ceremony/CeremonySchedulesPanel.tsx 2
 src/components/ceremony/CeremonyStage.tsx 3
 src/components/ceremony/ScorecardPanel.tsx 1
@@ -139,8 +140,11 @@ src/components/contributors/ContributorConsolidation.tsx 1
 src/components/contributors/ContributorsView.tsx 1
 src/components/contributors/MemberConsolidationPanel.tsx 2
 src/components/contributors/TenantActivityPanel.tsx 1
+src/components/creation-canvas/ads/AdCampaignsTab.tsx 3
+src/components/creation-canvas/ads/AdInsightsTab.tsx 1
+src/components/creation-canvas/ads/AdSetTier.tsx 1
+src/components/creation-canvas/ads/AdTier.tsx 1
 src/components/creation-canvas/BrainActivityView.tsx 1
-src/components/creation-canvas/CanvasAdsPanel.tsx 2
 src/components/creation-canvas/CanvasAppSurface.tsx 1
 src/components/creation-canvas/CanvasAttributedOutcomes.tsx 1
 src/components/creation-canvas/CanvasBuildPanel.tsx 1
@@ -215,7 +219,7 @@ src/components/manager/ManagerTodayDigest.tsx 2
 src/components/manager/WorkingCalendarSettings.tsx 1
 src/components/MarketingHeader.tsx 2
 src/components/meetings/CalendarConnectionsCard.tsx 1
-src/components/meetings/MeetingNotes.tsx 1
+src/components/meetings/MeetingMinutesPanel.tsx 1
 src/components/meetings/MeetingRoom.tsx 4
 src/components/meetings/MeetingsCalendar.tsx 1
 src/components/meetings/MeetingsContent.tsx 2
@@ -226,6 +230,7 @@ src/components/NotificationBell.tsx 1
 src/components/ObservabilityContent.tsx 5
 src/components/onboarding/SectionTour.tsx 1
 src/components/onboarding/useSectionTour.ts 2
+src/components/panelWidthControl.tsx 1
 src/components/payouts/PayoutConnections.tsx 2
 src/components/PersonaAssignmentsContent.tsx 1
 src/components/PersonalityUsagePanel.tsx 1
@@ -269,7 +274,8 @@ src/components/security/PolicyPacksPanel.tsx 2
 src/components/security/SecurityAuditPanel.tsx 1
 src/components/security/SecurityClient.tsx 1
 src/components/security/WebSecurityScanPanel.tsx 1
-src/components/SessionList.tsx 1
+src/components/session-management/SessionManagePanel.tsx 1
+src/components/SessionList.tsx 2
 src/components/settings/AgentExecutionControl.tsx 1
 src/components/settings/ApiKeysContent.tsx 1
 src/components/settings/ManagerDefaults.tsx 1
@@ -284,7 +290,7 @@ src/components/ShoppingCart.tsx 1
 src/components/Sidebar.tsx 1
 src/components/signature/SignerConsole.tsx 1
 src/components/SkillAssignmentsContent.tsx 1
-src/components/SlideOutPanel.tsx 2
+src/components/SlideOutPanel.tsx 1
 src/components/sourcecontrol/SourceControlContent.tsx 1
 src/components/stakeholder-alignment/StakeholderAlignmentPanel.tsx 1
 src/components/talent/JobInvitesPanel.tsx 1
@@ -297,6 +303,8 @@ src/components/task/TaskPrdTab.tsx 1
 src/components/task/TicketDetailsPanel.tsx 1
 src/components/task/TicketLifecyclePanel.tsx 1
 src/components/TaskMgmtContent.tsx 10
+src/components/tax/TaxProfileForm.tsx 1
+src/components/tax/TaxReportPanel.tsx 1
 src/components/teams/TeamsView.tsx 1
 src/components/templates/GuidedSetupPanel.tsx 1
 src/components/templates/TemplateGallery.tsx 1
@@ -309,7 +317,6 @@ src/components/UsageMeter.tsx 1
 src/components/UserDetailDrawer.tsx 1
 src/components/WhatsNewPanel.tsx 1
 src/components/widgets/registry-modules/observabilityWidgets.tsx 2
-src/components/workflow-builder/WorkflowBuilder.tsx 5
 src/components/WorkflowRunHistoryPanel.tsx 3
 src/components/WorkflowsContent.tsx 1
 src/components/workforce/CloudAgentSlideOutPanel.tsx 8
@@ -323,10 +330,11 @@ src/components/workspace/CanvasSwitcher.tsx 1
 src/components/workspace/CommandPalette.tsx 1
 src/components/workspace/PendingDraftsNotice.tsx 1
 src/domains/canvas/presentation/useSharedCanvasRoom.ts 15
-src/hooks/useDocCollaboration.ts 1
+src/hooks/useCanvasTalktrack.ts 1
 src/lib/betaPrograms.ts 1
 src/lib/brain/useQueuedTurns.ts 1
 src/lib/canvas/ActiveCanvasContext.tsx 1
+src/lib/canvas/CanvasChromeSlot.tsx 1
 src/lib/canvasCapabilitiesApi.ts 1
 src/lib/live/LiveSessionContext.tsx 3
 src/lib/NavigationFeaturesContext.tsx 2
@@ -338,6 +346,7 @@ src/lib/useAssignedRoles.ts 1
 src/lib/useAttention.ts 2
 src/lib/useCameraCapture.ts 1
 src/lib/useDisplayCapture.ts 1
+src/lib/useFounderJourney.ts 1
 src/lib/useGithubActionsReadiness.ts 1
 src/lib/useGuestRoom.ts 1
 src/lib/useLensPersona.ts 1
@@ -346,6 +355,7 @@ src/lib/useMediaRoom.ts 3
 src/lib/usePsychometricCatalog.ts 1
 src/lib/useScheduleDrag.ts 3
 src/lib/useSpeechCaptions.ts 2
+src/lib/useStreamRecorder.ts 1
 src/lib/useWorkforcePresence.ts 1
 src/lib/voiceStudio.ts 2
 src/lib/widgets/PinsProvider.tsx 1

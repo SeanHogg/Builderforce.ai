@@ -19,7 +19,7 @@ Hiring owned the funnel: posting, screening, interview, offer. People owned the 
   "kind": "flow",
   "title": "Offer → employee, in one step",
   "steps": [
-    { "label": "Signed offer", "note": "The trigger. Not an accepted verbal, not an offer at draft — a signed one.", "hue": "growth" },
+    { "label": "Signed offer", "note": "The trigger. Not an accepted verbal, not an offer at draft — a signed one.", "hue": "reach" },
     { "label": "Carry the facts across", "note": "Title, location and basis from the posting; skills and evidence from the candidate; start date from the offer. Nothing invented.", "hue": "run" },
     { "label": "Employee + lifecycle", "note": "The employment record and the onboarding plan, created together and joined back to the offer they came from.", "hue": "measure" }
   ],
@@ -49,7 +49,7 @@ The catalog could publish a requisition outward and read a pay run back, and had
     { "label": "Workday", "note": "Workers, org, assignments.", "hue": "run" },
     { "label": "BambooHR · HiBob · Personio", "note": "The mid-market three, each with its own idea of an employment record.", "hue": "run" },
     { "label": "SAP SuccessFactors", "note": "For the estates where the HR system predates the product it is describing.", "hue": "run" },
-    { "label": "Greenhouse", "note": "The ATS side — candidates and pipelines, read alongside the people they become.", "hue": "growth" },
+    { "label": "Greenhouse", "note": "The ATS side — candidates and pipelines, read alongside the people they become.", "hue": "reach" },
     { "label": "SCIM 2.0 directory", "note": "The generic reader, for everything not on this list.", "hue": "muted" }
   ],
   "caption": "Every action in the category is a READ, and a test fails the build if that ever stops being true."

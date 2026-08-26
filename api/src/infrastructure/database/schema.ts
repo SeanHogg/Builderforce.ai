@@ -31,3 +31,4 @@ export * from './schema/operations';
 // first of them. See `schema/legal.ts`.
 export * from './schema/legal';
 export * from './schema/search';
+export * from './schema/discovery';

@@ -51,6 +51,13 @@ export interface TrackerOpts {
    * key. Receives the tenantId so keys can be tenant-scoped.
    */
   bumpVersionKeys?: (tenantId: number) => string[];
+  /**
+   * Extra columns to set on CREATE that are never client-writable — an actor id
+   * read off the authenticated request, never off the body. Not part of `fields`,
+   * so no whitelist entry is needed and a client cannot override it by sending
+   * the same key; applied on insert only, never on update.
+   */
+  serverFieldsOnCreate?: (c: Context<HonoEnv>) => Record<string, unknown>;
 }
 
 /** Parse a positive integer `?project=` query param, else undefined (portfolio). */
@@ -157,7 +164,7 @@ function createTrackerRoutes(db: Db, table: any, opts: TrackerOpts): Hono<HonoEn
     }
     const written = pick(body, writeFields);
     const rows = (await db.insert(table)
-      .values({ ...written, tenantId, segmentId })
+      .values({ ...written, tenantId, segmentId, ...opts.serverFieldsOnCreate?.(c) })
       .returning()) as Array<Record<string, unknown>>;
     maybeEmit(c, db, opts, written, rows[0]);
     await invalidateTracker(c.env as Env, opts, tenantId, segmentId, rows[0]?.projectId);

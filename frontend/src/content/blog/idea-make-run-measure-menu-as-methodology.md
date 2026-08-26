@@ -23,7 +23,7 @@ So Builderforce groups its destinations by **where you are in the journey** inst
     { "label": "Make", "note": "Build it. — Projects, Workforce, Quality, Reliability, Knowledge, Embedded.", "hue": "make" },
     { "label": "Run", "note": "Run it as a company. — Finance, Revenue, People, Hiring, Investor, Governance, Support, Growth, Inbox.", "hue": "run" },
     { "label": "Measure", "note": "Is it working? — Insights: delivery, autonomy, finance, DevEx, compliance, alerts.", "hue": "measure" },
-    { "label": "Market", "note": "Sell, buy, hire, be found. — the Marketplace, a second front door.", "hue": "growth", "tag": "public" },
+    { "label": "Market", "note": "Sell, buy, hire, be found. — the Marketplace, a second front door.", "hue": "reach", "tag": "public" },
     { "label": "Expand", "note": "Grow it. — the referral and sales-associate programme.", "hue": "expand" }
   ],
   "caption": "Admin is the seventh and is deliberately dull. Nobody browses a product's settings before signing up."

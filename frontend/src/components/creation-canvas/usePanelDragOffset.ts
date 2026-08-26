@@ -26,7 +26,11 @@ function writeOffset(panelId: string, offset: PanelDragOffset): void {
   try {
     if (offset.x === 0 && offset.y === 0) window.localStorage.removeItem(STORAGE_PREFIX + panelId);
     else window.localStorage.setItem(STORAGE_PREFIX + panelId, JSON.stringify(offset));
-  } catch { /* storage can be unavailable in hardened contexts */ }
+  } catch {
+    // Storage can be unavailable in hardened contexts. Best-effort persistence;
+    // the offset just resets next session instead of failing the drag.
+    return;
+  }
 }
 
 interface DragSession {

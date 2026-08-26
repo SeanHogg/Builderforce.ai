@@ -12,10 +12,12 @@ import type { MambaStateSnapshot } from '../types';
  * generateWebDitClip's frame→mux conversion, exercised against the same
  * synthetic mini-test bundle webdit/runtime's own integration test builds
  * (real quantized shard bytes flowing through a real pure-JS forward pass —
- * the "mini" backend exists specifically so this needs no GPU/network). No
- * real webdit bundle exists yet (all 4 production models are `available:
- * false` — see MODEL_REGISTRY), so this is the only way to exercise the
- * webdit generation path end-to-end today.
+ * the "mini" backend exists specifically so this needs no GPU/network).
+ * cogvideox-2b now has a real "ort"-backend bundle uploaded to R2 (see
+ * MODEL_REGISTRY), but that backend needs a real WebGPU device (ORT-Web) —
+ * not available in vitest's node environment either — so the synthetic
+ * mini-backend bundle here remains the only way to exercise the webdit
+ * generation path end-to-end in this test suite.
  *
  * The browser APIs `generateWebDitClip` → `muxFramesToMp4` depend on
  * (ImageData / createImageBitmap / VideoFrame / VideoEncoder /

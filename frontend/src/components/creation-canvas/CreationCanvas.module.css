@@ -240,6 +240,16 @@
   transform:translateX(-50%);
 }
 
+/* Its own row, directly beneath the surface switcher's — a STATUS chip has to
+   keep its own position rather than share `.surfaceChips`'s box, which is a
+   CONTROL row that folds away on collapse (see CreationCanvas.tsx's comment
+   at the journeyChip render site). */
+.journeyChipCard {
+  top:calc(14px + var(--canvas-top-card-h) + 8px); padding:4px; gap:4px;
+  left:calc(50% + (var(--brain-dock-left, 0px) - var(--brain-dock-right, 0px)) / 2);
+  transform:translateX(-50%);
+}
+
 /* Padding-block 4px, not 6px: this is the card whose content SETS the row height, so
    its own box has to land ON `--canvas-top-card-h` (34 + 8 + 2 borders) rather than one
    padding step past it, which would push it back to 46px and make the min-height above

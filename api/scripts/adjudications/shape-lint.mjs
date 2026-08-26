@@ -583,4 +583,7 @@ export default {
   newsletter_events:
     '`activity_log` requires a NOT NULL `actor_type` and `verb`. A bounce or an open has no actor — a mail server did it, or nobody did — and the subject is a `newsletter_subscribers` row that is pre-tenant by construction (adjudicated under tenant-column). Two required columns with nothing to put in them.',
 
+  research_notes:
+    'the same wall as `coaching_notes`/`knowledge_document_tags`: `annotations.object_id` is NOT NULL into the canvas objects registry, and this row\'s parent — a project, or nothing at all — is not a registered object. A research note is deliberately collectible before any board exists: a founder pastes a competitor teardown or a market stat during Read, often before a Creation Session or a company does. There is no shape on any canvas this note is anchored to, so there is no `object_id` to supply. `annotations`\' other half — `kind` (comment/tag/like/vote/rating/reaction), `authorKind` and the publish/pending/rejected moderation state — also answers a different question: those are reactions to somebody else\'s object; a research note is a first-class discovery artifact the founder authored for themselves, later cited when Prove ranks a proof against it.',
+
 };

@@ -21,8 +21,15 @@ import { PulseSubmitCard } from '@/components/insights/PulseWidget';
 import { buildInsightDelta } from '@/components/dashboard/metricFormat';
 import { cumulativeDailySeries, dailyCounts } from '@/components/dashboard/seriesFromTimestamps';
 import { DashboardCreationLauncher, DashboardCreationSessions } from '@/components/dashboard/DashboardCreationSessions';
+import { DashboardIdeasTab } from '@/components/dashboard/DashboardIdeasTab';
 import { DashboardQualityTab } from '@/components/dashboard/DashboardQualityTab';
 import { DashboardKnowledgeTab } from '@/components/dashboard/DashboardKnowledgeTab';
+import { JourneyStrip } from '@/components/dashboard/JourneyStrip';
+import { ActRail } from '@/components/dashboard/ActRail';
+import { BusinessTab } from '@/components/dashboard/BusinessTab';
+import { InterviewsTab } from '@/components/dashboard/InterviewsTab';
+import { ResearchTab } from '@/components/dashboard/ResearchTab';
+import { ProfileIdentityCard } from '@/components/profile/ProfileIdentityCard';
 import { WorkforcePresenceStripView } from '@/components/workforce/WorkforcePresenceStrip';
 import { useWorkforcePresence } from '@/lib/useWorkforcePresence';
 import { agentHosts, tasksApi, approvalsApi, creationSessionsApi, type AgentHost } from '@/lib/builderforceApi';
@@ -31,7 +38,12 @@ import { WorkspacePanelList } from '@/components/workspace-canvas/WorkspacePanel
 import { usePublishReferenceChrome, usePublishReferenceSelect, useReferenceRailActive } from '@/lib/referenceChrome';
 import styles from './Dashboard.module.css';
 
-const DASHBOARD_TABS = ['create', 'projects', 'workforce', 'quality', 'knowledge'] as const;
+// The founder's journey (PRD: "Idea to Real"), not the generic Create/Projects
+// set it replaced. `ideas` absorbs the old `create` tab — the Idea-phase tabs
+// (business/interviews/research/profile) lead; workforce/quality/knowledge are
+// resequenced after them rather than removed, since they stay real destinations
+// once a tenant has something to run.
+const DASHBOARD_TABS = ['ideas', 'projects', 'business', 'interviews', 'research', 'profile', 'workforce', 'quality', 'knowledge'] as const;
 type DashboardTab = (typeof DASHBOARD_TABS)[number];
 
 /**
@@ -48,7 +60,10 @@ export default function DashboardPage() {
 
   const [projects, setProjects] = useState<Project[]>([]);
   const [agentHostList, setAgentHostList] = useState<AgentHost[]>([]);
-  const [loading, setLoading] = useState(true);
+  // A guest never fires the effect that flips this — there is no tenant to read
+  // — so it must not default to `true` here, or the metric tiles would show a
+  // permanent spinner instead of the honest empty state guests otherwise get.
+  const [loading, setLoading] = useState(isAuthenticated && hasTenant);
   const [prompt, setPrompt] = useState('');
   const [building, setBuilding] = useState(false);
   const [creationQuota, setCreationQuota] = useState<{ usage: number; limit: number } | null>(null);
@@ -57,14 +72,14 @@ export default function DashboardPage() {
   const [taskStats, setTaskStats] = useState<{ total: number; inProgress: number; done: number } | null>(null);
   const [taskDates, setTaskDates] = useState<string[]>([]);
 
-  // Create is the default home. Projects remain an optional organizational lens.
+  // Ideas is the default home — the Idea phase is where the journey starts.
   const tabParam = searchParams.get('tab');
   const activeTab: DashboardTab = (DASHBOARD_TABS as readonly string[]).includes(tabParam ?? '')
     ? (tabParam as DashboardTab)
-    : 'create';
+    : 'ideas';
   const selectTab = useCallback(
     (key: DashboardTab) => {
-      router.replace(key === 'create' ? '/dashboard' : `/dashboard?tab=${key}`, { scroll: false });
+      router.replace(key === 'ideas' ? '/dashboard' : `/dashboard?tab=${key}`, { scroll: false });
     },
     [router],
   );
@@ -192,9 +207,13 @@ export default function DashboardPage() {
 
   if (!allowed) return null;
 
-  // No tenant → the picker (a brand-new builder's named workspace is provisioned
-  // upstream by the onboarding gate, so this is the multi-workspace / fallback path).
-  if (!hasTenant) {
+  // Signed IN with no tenant → the picker (a brand-new builder's named workspace
+  // is provisioned upstream by the onboarding gate, so this is the multi-workspace
+  // / fallback path). A signed-OUT visitor is not sent here at all — `/dashboard`
+  // is guest-capable, and every read on this page already gates on `isAuthenticated
+  // && hasTenant`, degrading to the sample workspace's honest empty state per the
+  // guest-fixture registry rather than fetching nothing and crashing.
+  if (isAuthenticated && !hasTenant) {
     router.replace('/tenants?next=/dashboard');
     return null;
   }
@@ -223,14 +242,14 @@ export default function DashboardPage() {
     },
     ...metricPanels,
     { id: 'dashboard-pulse', title: t('panel.pulse'), subtitle: t('panel.pulseSubtitle'), icon: '♡', content: <PulseSubmitCard /> },
-    ...(activeTab === 'create' ? [{
+    ...(activeTab === 'ideas' ? [{
       id: 'dashboard-create', title: t('panel.create'), subtitle: t('panel.createSubtitle'), icon: '✦',
       content: <DashboardCreationLauncher />,
     } satisfies WorkspaceCanvasPanel] : []),
     {
-      id: activeTab === 'create' ? 'dashboard-artifacts' : `dashboard-view-${activeTab}`,
-      title: activeTab === 'create' ? t('panel.creations') : t(`tabs.${activeTab}`),
-      subtitle: activeTab === 'create' ? t('panel.creationsSubtitle') : t('panel.workspaceWidget'),
+      id: activeTab === 'ideas' ? 'dashboard-artifacts' : `dashboard-view-${activeTab}`,
+      title: activeTab === 'ideas' ? t('panel.creations') : t(`tabs.${activeTab}`),
+      subtitle: activeTab === 'ideas' ? t('panel.creationsSubtitle') : t('panel.workspaceWidget'),
       icon: activeTab === 'quality' ? '◆' : activeTab === 'knowledge' ? '▤' : '◇',
       content: <div className={styles.workspaceWidget}>
         {!railHasTabs && (
@@ -241,8 +260,16 @@ export default function DashboardPage() {
           ))}</nav>
         )}
         <div className={styles.workspaceContent}>
-          {activeTab === 'create' && <DashboardCreationSessions />}
+          {activeTab === 'ideas' && <>
+            <ActRail />
+            <DashboardIdeasTab limit={6} />
+            <DashboardCreationSessions />
+          </>}
           {activeTab === 'projects' && <ProjectsContent limit={6} viewAllHref="/projects" />}
+          {activeTab === 'business' && <BusinessTab />}
+          {activeTab === 'interviews' && <InterviewsTab />}
+          {activeTab === 'research' && <ResearchTab />}
+          {activeTab === 'profile' && <ProfileIdentityCard />}
           {activeTab === 'workforce' && <><WorkforcePresenceStripView presence={presence} /><WorkforceAgents tenantId={tenantId} /></>}
           {activeTab === 'quality' && <DashboardQualityTab />}
           {activeTab === 'knowledge' && <DashboardKnowledgeTab limit={8} />}
@@ -253,6 +280,7 @@ export default function DashboardPage() {
 
   return <>
     {showOnboarding && webToken && <OnboardingStepper webToken={webToken} tenantToken={tenantToken} tenant={tenant} initialProgress={onboardingProgress} onComplete={handleOnboardingComplete} onDismiss={handleOnboardingDismiss} />}
+    <JourneyStrip />
     <WorkspacePanelList panels={panels} />
   </>;
 }

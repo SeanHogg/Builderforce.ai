@@ -34,7 +34,7 @@ describe('the canvas chrome rule', () => {
   it('keeps every status slot and drops every control when folded', () => {
     // Expanded, everything is on screen — a collapse that changes nothing when off
     // would make the whole table unfalsifiable.
-    for (const slot of ['title', 'saveState', 'roster', 'surfaces', 'actions', 'handoff', 'surfaceControls', 'surfaceStatus'] as const) {
+    for (const slot of ['title', 'saveState', 'roster', 'surfaces', 'actions', 'handoff', 'surfaceControls', 'surfaceStatus', 'journeyChip'] as const) {
       expect(canvasChromeShows(slot, false)).toBe(true);
     }
 
@@ -43,6 +43,7 @@ describe('the canvas chrome rule', () => {
     expect(canvasChromeShows('saveState', true)).toBe(true);
     expect(canvasChromeShows('roster', true)).toBe(true);
     expect(canvasChromeShows('surfaceStatus', true)).toBe(true);
+    expect(canvasChromeShows('journeyChip', true)).toBe(true);
 
     // What you DO to it — gone.
     expect(canvasChromeShows('surfaces', true)).toBe(false);
@@ -62,7 +63,7 @@ describe('the canvas chrome rule', () => {
    *  the bar — and so this list cannot drift from what `canvasChromeShows` returns. */
   it('lists exactly the slots that survive', () => {
     const survivors = canvasChromeStatusSlots();
-    expect([...survivors].sort()).toEqual(['roster', 'saveState', 'surfaceStatus', 'title']);
+    expect([...survivors].sort()).toEqual(['journeyChip', 'roster', 'saveState', 'surfaceStatus', 'title']);
     for (const slot of survivors) expect(canvasChromeShows(slot, true)).toBe(true);
   });
   /**
@@ -75,7 +76,7 @@ describe('the canvas chrome rule', () => {
   it('gives every slot exactly one floating region', () => {
     const placed = (['pill', 'chips', 'topRight', 'bar'] as const).flatMap((place) => canvasChromeSlotsIn(place));
     expect([...placed].sort()).toEqual(
-      ['actions', 'handoff', 'roster', 'saveState', 'surfaceControls', 'surfaceStatus', 'surfaces', 'title'].sort(),
+      ['actions', 'handoff', 'journeyChip', 'roster', 'saveState', 'surfaceControls', 'surfaceStatus', 'surfaces', 'title'].sort(),
     );
     // No slot in two regions.
     expect(new Set(placed).size).toBe(placed.length);

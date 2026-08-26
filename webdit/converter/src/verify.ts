@@ -2,6 +2,7 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { validateManifest, type WebDiTManifest } from "@webdit/shared";
 import { parseBundleShard, type ShardSummary } from "./shard-format";
+import { readFileNoSizeLimit } from "./safetensors";
 
 export interface VerifyResult {
   manifest: WebDiTManifest;
@@ -29,6 +30,7 @@ export async function verifyBundle(bundleDir: string): Promise<VerifyResult> {
     assertExists(path.join(bundleDir, manifest.files.textEncoderGraph), "files.textEncoderGraph"),
     assertExists(path.join(bundleDir, manifest.files.vaeGraph), "files.vaeGraph"),
     assertExists(path.join(bundleDir, manifest.files.tokenizer), "files.tokenizer"),
+    ...optionalExternalDataChecks(bundleDir, manifest),
   ]);
 
   const shardSizes = new Map<string, number>();
@@ -93,7 +95,10 @@ async function readShard(bundleDir: string, relPath: string): Promise<ShardSumma
   const full = path.join(bundleDir, relPath);
   let buf: Uint8Array;
   try {
-    buf = await fs.readFile(full);
+    // Not fs.readFile — a real weight shard (e.g. a real T5-XXL text encoder's
+    // f16 shard) routinely exceeds Node's 2 GiB fs.readFile ceiling. See
+    // readFileNoSizeLimit's doc comment in safetensors.ts.
+    buf = await readFileNoSizeLimit(full);
   } catch (e) {
     throw new Error(`verify: failed to read shard ${relPath}: ${(e as Error).message}`);
   }
@@ -110,4 +115,24 @@ async function assertExists(p: string, label: string): Promise<void> {
   } catch {
     throw new Error(`verify: ${label} missing at ${p}`);
   }
+}
+
+/** `manifest.files.{dit,textEncoder,vae}GraphData` (see the shared type's
+ *  doc comment) are optional — present only for graphs whose embedded
+ *  weights needed an ONNX external-data companion. When declared, verify
+ *  the file actually landed, same rigor as the required graph/tokenizer
+ *  paths — a missing companion would otherwise only surface much later, as
+ *  an opaque ORT-Web load failure in the browser. */
+function optionalExternalDataChecks(
+  bundleDir: string,
+  manifest: WebDiTManifest,
+): Promise<void>[] {
+  const checks: Array<[string | undefined, string]> = [
+    [manifest.files.ditGraphData, "files.ditGraphData"],
+    [manifest.files.textEncoderGraphData, "files.textEncoderGraphData"],
+    [manifest.files.vaeGraphData, "files.vaeGraphData"],
+  ];
+  return checks
+    .filter((c): c is [string, string] => c[0] !== undefined)
+    .map(([rel, label]) => assertExists(path.join(bundleDir, rel), label));
 }

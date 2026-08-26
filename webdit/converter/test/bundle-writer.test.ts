@@ -125,4 +125,61 @@ describe("writeBundle", () => {
     expect(await fs.readFile(path.join(out, "tokenizer/tokenizer.json"), "utf-8")).toBe("{}");
     expect(await fs.readFile(path.join(out, "tokenizer/tokenizer_config.json"), "utf-8")).toBe("{}");
   });
+
+  it("has no ONNX external-data companions when none are present (self-contained graphs)", async () => {
+    const out = path.join(fix.dir, "out");
+    const manifest = await writeBundle({
+      output: out,
+      manifest: ltx2Distilled.buildManifest("f16"),
+      ditWeights: fakeWeights(),
+      textEncoderWeights: fakeWeights(),
+      vaeWeights: fakeWeights(),
+      graphs: {
+        dit: path.join(fix.dir, "src/dit.onnx"),
+        textEncoder: path.join(fix.dir, "src/text_encoder.onnx"),
+        vae: path.join(fix.dir, "src/vae.onnx"),
+      },
+      tokenizerDir: path.join(fix.dir, "src/tokenizer"),
+    });
+    expect(manifest.files.ditGraphData).toBeUndefined();
+    expect(manifest.files.textEncoderGraphData).toBeUndefined();
+    expect(manifest.files.vaeGraphData).toBeUndefined();
+  });
+
+  it("copies ONNX external-data companions and records them in the manifest — even when the DiT and text-encoder source graphs share a basename (the real diffusers layout: both named `model.onnx`, differing only by parent directory)", async () => {
+    // Same basename on purpose — this is what diffusersSourceLayout() actually
+    // produces (transformer/model.onnx, text_encoder/model.onnx). Without the
+    // per-slot subfolder in bundle-writer's external-data destination, these
+    // would collide in the bundle's flat graph/ directory.
+    await writeFile(path.join(fix.dir, "src2/transformer/model.onnx"), "FAKE_DIT_ONNX_2");
+    await writeFile(path.join(fix.dir, "src2/transformer/model.onnx.data"), "DIT_WEIGHTS_BLOB");
+    await writeFile(path.join(fix.dir, "src2/text_encoder/model.onnx"), "FAKE_TE_ONNX_2");
+    await writeFile(path.join(fix.dir, "src2/text_encoder/model.onnx.data"), "TE_WEIGHTS_BLOB");
+
+    const out = path.join(fix.dir, "out2");
+    const manifest = await writeBundle({
+      output: out,
+      manifest: ltx2Distilled.buildManifest("f16"),
+      ditWeights: fakeWeights(),
+      textEncoderWeights: fakeWeights(),
+      vaeWeights: fakeWeights(),
+      graphs: {
+        dit: path.join(fix.dir, "src2/transformer/model.onnx"),
+        textEncoder: path.join(fix.dir, "src2/text_encoder/model.onnx"),
+        vae: path.join(fix.dir, "src/vae.onnx"), // no companion for vae
+      },
+      tokenizerDir: path.join(fix.dir, "src/tokenizer"),
+    });
+
+    expect(manifest.files.ditGraphData).toBe("graph/dit/model.onnx.data");
+    expect(manifest.files.textEncoderGraphData).toBe("graph/text_encoder/model.onnx.data");
+    expect(manifest.files.vaeGraphData).toBeUndefined();
+
+    expect(await fs.readFile(path.join(out, manifest.files.ditGraphData!), "utf-8")).toBe(
+      "DIT_WEIGHTS_BLOB",
+    );
+    expect(await fs.readFile(path.join(out, manifest.files.textEncoderGraphData!), "utf-8")).toBe(
+      "TE_WEIGHTS_BLOB",
+    );
+  });
 });

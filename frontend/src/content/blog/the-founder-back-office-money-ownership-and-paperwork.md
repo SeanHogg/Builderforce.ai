@@ -23,7 +23,7 @@ The finance seat used to be one-directional by construction. Money could go out 
   "steps": [
     { "label": "Issue", "note": "Against a real customer account — not a name matched by spelling.", "hue": "run" },
     { "label": "Age", "note": "Days overdue computed from the due date. Never typed, because a stale ageing is worse than none.", "hue": "run", "tag": "computed" },
-    { "label": "Chase", "note": "One rung of a collections ladder, recorded once per step — so the same customer is never chased twice for the same thing.", "hue": "growth" },
+    { "label": "Chase", "note": "One rung of a collections ladder, recorded once per step — so the same customer is never chased twice for the same thing.", "hue": "reach" },
     { "label": "Record payment", "note": "What actually arrived, against what was owed.", "hue": "measure" }
   ],
   "caption": "Collections work with no record is collections work that gets done twice or not at all. The ladder is unique per invoice and step for exactly that reason."
@@ -73,7 +73,7 @@ Because the alternative is what everyone does: a finance tool that does not know
   "title": "One board, four distances from the work",
   "bands": [
     { "label": "The work", "note": "Cards, code, tickets, the thing being built.", "hue": "make" },
-    { "label": "The deal", "note": "Quotes, trials, mutual action plans — what is being sold, connected to what it sells.", "hue": "growth" },
+    { "label": "The deal", "note": "Quotes, trials, mutual action plans — what is being sold, connected to what it sells.", "hue": "reach" },
     { "label": "The money", "note": "Invoices, bills, collections, pay runs — computed from the rows, not typed on a card.", "hue": "run" },
     { "label": "The company", "note": "Ownership, instruments, the founding documents everything else assumes exists.", "hue": "measure" }
   ],

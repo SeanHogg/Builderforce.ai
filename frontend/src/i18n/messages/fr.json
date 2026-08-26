@@ -756,11 +756,15 @@
       "make": "Créer",
       "run": "Piloter",
       "measure": "Mesurer",
-      "market": "Marché",
+      "reach": "Portée",
       "admin": "Administration",
       "notYet": "pas encore",
       "lockHint": "Connectez-vous pour y accéder",
       "expand": "Développer"
+    },
+    "journey": {
+      "label": "Le parcours du fondateur",
+      "openDashboard": "Ouvrir le tableau de bord"
     }
   },
   "alerts": {
@@ -4634,18 +4638,47 @@
       "workforceOnline": "Talents / Équipe en ligne",
       "workingNow": "{count} au travail"
     },
+    "loading": "Chargement…",
     "tabs": {
+      "ideas": "Idées",
       "projects": "Projets",
+      "business": "Entreprise",
+      "interviews": "Entretiens",
+      "research": "Recherche",
+      "profile": "Profil",
       "workforce": "Talents / Équipe",
       "quality": "Qualité",
-      "knowledge": "Connaissances",
-      "create": "Créer"
+      "knowledge": "Connaissances"
     },
     "ideas": {
       "loading": "Chargement des discussions…",
       "empty": "Aucune discussion de brainstorming pour l’instant.",
       "start": "Commencer un brainstorming",
       "untitled": "Discussion sans titre"
+    },
+    "interviews": {
+      "titlePlaceholder": "Qu'avez-vous appris ?",
+      "participantPlaceholder": "À qui avez-vous parlé ?",
+      "notesPlaceholder": "Notes de la conversation…",
+      "add": "Ajouter un entretien",
+      "empty": "Aucun entretien enregistré pour l'instant.",
+      "delete": "Supprimer",
+      "confirmDelete": "Supprimer cet entretien ?"
+    },
+    "research": {
+      "titlePlaceholder": "Qu'avez-vous trouvé ?",
+      "sourceUrlPlaceholder": "URL de la source (facultatif)",
+      "bodyPlaceholder": "Notes, citations, chiffres…",
+      "add": "Ajouter une note",
+      "empty": "Aucune note de recherche pour l'instant.",
+      "delete": "Supprimer",
+      "confirmDelete": "Supprimer cette note de recherche ?",
+      "sourceLink": "Voir la source"
+    },
+    "business": {
+      "empty": "Votre première entreprise apparaîtra ici dès qu'une idée deviendra une entreprise.",
+      "view": "Voir",
+      "summary": "{projects} projets · {arr} ARR"
     },
     "quality": {
       "newCollector": "Nouveau collecteur",
@@ -16687,6 +16720,10 @@
         "title": "Comparer",
         "tagline": "Face aux outils que vous utilisez aujourd’hui."
       },
+      "method": {
+        "title": "Méthode",
+        "tagline": "Lire, Prouver, Construire — la boucle derrière l'arc."
+      },
       "diagnostics": {
         "title": "Diagnostics",
         "tagline": "Un résultat avant de créer un compte."
@@ -25385,7 +25422,7 @@
       "make": "Construisez-le.",
       "run": "Exploitez-le comme une entreprise.",
       "measure": "Est-ce que ça marche ?",
-      "market": "Vendez, achetez, recrutez, faites-vous trouver.",
+      "reach": "Vendez, achetez, recrutez, faites-vous trouver.",
       "expand": "Faites-le grandir.",
       "admin": "Paramètres."
     },
@@ -25450,6 +25487,25 @@
     "youAreHere": "Vous êtes ici",
     "cardAction": "Ouvrir dans le canevas →",
     "cardActionFor": "Ouvrir {name} dans le canevas"
+  },
+  "method": {
+    "seo": {
+      "title": "De l'idée au réel — la méthode derrière Builderforce",
+      "description": "Quatre étapes disent où vous en êtes. Trois actes disent ce que vous faites. Lire, Prouver, Construire — la boucle qui transforme une idée en quelque chose que vous pouvez ouvrir, avec une condition d'échec fixée avant la construction plutôt qu'après le résultat."
+    },
+    "hero": {
+      "eyebrow": "La méthode",
+      "title": "De l'idée au réel",
+      "lead": "Le parcours de chaque fondateur sur Builderforce suit le même arc — Idée, Construire, Exploiter, Mesurer — et la même boucle interne tant qu'il est encore à l'Idée : Lire, Prouver, Construire. Voici cette méthode, en entier.",
+      "primaryCta": "Commencer gratuitement",
+      "secondaryCta": "Voir ce qui est inclus"
+    },
+    "cta": {
+      "eyebrow": "Prêt ?",
+      "title": "Commencez avec une idée",
+      "body": "Aucun plan, aucun serveur, aucune configuration — collez ce à quoi vous pensez et transformez-le en spécification en moins d'une minute.",
+      "primary": "Commencer gratuitement"
+    }
   },
   "sell": {
     "seo": {

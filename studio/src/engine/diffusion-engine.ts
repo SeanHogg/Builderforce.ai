@@ -144,11 +144,28 @@ export const MODEL_REGISTRY: Record<DiffusionModelId, ModelDescriptor> = {
     id: 'cogvideox-2b',
     engine: 'webdit-dit',
     architecture: 'cogvideox-2b',
-    bundleUrl: null,
-    available: false,
-    // ~2B DiT (Tsinghua/Zhipu) + CLIP-L text encoder + VAE, fp16 — the
-    // smallest of the 4 DiT families (webdit/converter/src/architectures/cogvideox.ts).
-    minVramMb: 8 * 1024,
+    // A real bundle IS uploaded (2026-08) — `studio-weights/webdit/cogvideox-2b/`
+    // in the `builderforce-uploads` R2 bucket. This is the studio weights
+    // proxy's own base URL, NOT `.../webdit/cogvideox-2b` — the
+    // `webdit/<architecture>/` path segment is added by `webdit-engine.ts`'s
+    // `fetchBundleFile` (its `cacheKey`, `webdit/${architecture}/${relPath}`,
+    // is appended to this base by `getOrFetchWeight`'s r2-proxy resolver —
+    // see `weight-cache.ts`'s `resolveSource`). Setting this to the
+    // architecture-specific-looking URL the old comment on
+    // `WebDitModelDescriptor.bundleUrl` suggested would double the path
+    // segment and 404.
+    bundleUrl: 'https://api.builderforce.ai/api/studio/weights',
+    available: true,
+    // Real ~1.7B-param DiT (THUDM/CogVideoX-2b) + real T5-XXL text encoder
+    // (encoder-only, ~4.7B params) + VAE, all fp32 ONNX graphs — NOT the
+    // CLIP-L swap the original placeholder comment assumed (see
+    // webdit/converter/src/architectures/cogvideox.ts's header comment for
+    // the full real-weights writeup). fp32 (not fp16) because CPU export
+    // tracing needs it; that plus the real T5-XXL size makes this bundle
+    // multiple GB — heavier in the browser than the original 8GB estimate
+    // assumed. Bumped accordingly; still a rough estimate (no in-browser
+    // measurement yet).
+    minVramMb: 16 * 1024,
     defaultSteps: 50,
     defaultGuidance: 6.0,
     defaultFrames: 49,

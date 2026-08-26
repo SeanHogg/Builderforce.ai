@@ -158,20 +158,37 @@ describe('MODEL_REGISTRY × UNet input contract', () => {
 
 describe('MODEL_REGISTRY × webdit-dit entries', () => {
   const WEBDIT_IDS = ['cogvideox-2b', 'wan2.5', 'mochi-1', 'ltx2-distilled'] as const;
+  // cogvideox-2b has a real bundle uploaded (2026-08) — see the registry
+  // entry's comment. The other 3 are still unconverted.
+  const STILL_UNAVAILABLE_IDS = ['wan2.5', 'mochi-1', 'ltx2-distilled'] as const;
 
-  it('registers all 4 architectures as webdit-dit, unavailable, with no bundle URL', () => {
+  it('registers all 4 architectures as webdit-dit with sane sampling defaults', () => {
     for (const id of WEBDIT_IDS) {
       const d = MODEL_REGISTRY[id];
       expect(d.engine, `${id} engine`).toBe('webdit-dit');
       if (d.engine !== 'webdit-dit') continue; // narrows for TS below
-      expect(d.available, `${id} must not be available until a bundle is uploaded`).toBe(false);
-      expect(d.bundleUrl, `${id} must have no bundleUrl until a bundle is uploaded`).toBeNull();
       expect(d.architecture).toBe(id);
       expect(d.defaultSteps).toBeGreaterThan(0);
       expect(d.defaultFrames).toBeGreaterThan(0);
       expect(d.defaultWidth).toBeGreaterThan(0);
       expect(d.defaultHeight).toBeGreaterThan(0);
     }
+  });
+
+  it('the 3 not-yet-converted architectures stay unavailable with no bundle URL', () => {
+    for (const id of STILL_UNAVAILABLE_IDS) {
+      const d = MODEL_REGISTRY[id];
+      if (d.engine !== 'webdit-dit') continue; // narrows for TS below
+      expect(d.available, `${id} must not be available until a bundle is uploaded`).toBe(false);
+      expect(d.bundleUrl, `${id} must have no bundleUrl until a bundle is uploaded`).toBeNull();
+    }
+  });
+
+  it('cogvideox-2b has a real uploaded bundle: available, with a bundle URL', () => {
+    const d = MODEL_REGISTRY['cogvideox-2b'];
+    if (d.engine !== 'webdit-dit') throw new Error('unreachable');
+    expect(d.available).toBe(true);
+    expect(d.bundleUrl).toBe('https://api.builderforce.ai/api/studio/weights');
   });
 
   it('does not appear as a "lighter model" recommendation for a failing lcm-diffusion model', () => {

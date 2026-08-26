@@ -1,0 +1,76 @@
+.root { display: flex; flex-direction: column; gap: 16px; }
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  border-radius: var(--radius-lg, 12px);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-elevated);
+}
+
+.input, .textarea {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: var(--radius-md, 8px);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font: 400 var(--font-size-small)/1.4 var(--font-sans);
+  resize: vertical;
+}
+.input::placeholder, .textarea::placeholder { color: var(--text-muted); }
+
+.primaryButton {
+  align-self: flex-start;
+  padding: 8px 16px;
+  border-radius: var(--radius-md, 8px);
+  border: none;
+  background: var(--coral-bright);
+  color: var(--text-on-accent);
+  font: 700 var(--font-size-small)/1 var(--font-sans);
+  cursor: pointer;
+}
+.primaryButton:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.empty { margin: 0; padding: 20px 0; text-align: center; color: var(--text-muted); font-size: var(--font-size-small); }
+
+.list { display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 0; list-style: none; }
+
+.card {
+  padding: 12px 14px;
+  border-radius: var(--radius-lg, 12px);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-elevated);
+}
+
+.cardHead { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cardHead strong { flex: 1; min-width: 0; font: 700 var(--font-size-small)/1.3 var(--font-sans); color: var(--text-primary); }
+
+.badge {
+  padding: 2px 8px;
+  border-radius: var(--radius-full, 999px);
+  background: var(--surface-sunken, transparent);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  font-size: var(--font-size-eyebrow);
+  text-decoration: none;
+}
+
+.ghostButton {
+  padding: 4px 8px;
+  border-radius: var(--radius-md, 8px);
+  border: 1px solid var(--border-subtle);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--font-size-eyebrow);
+  cursor: pointer;
+}
+.ghostButton:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.cardBody { margin: 8px 0 0; color: var(--text-secondary); font-size: var(--font-size-small); line-height: 1.5; white-space: pre-wrap; }
+
+@media (max-width: 760px) {
+  .cardHead { align-items: flex-start; }
+}

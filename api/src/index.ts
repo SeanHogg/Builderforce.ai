@@ -60,6 +60,7 @@ import { createAtsRoutes }         from './presentation/routes/atsRoutes';
 import { createCalendarRoutes }    from './presentation/routes/calendarRoutes';
 import { createRoiRoutes }         from './presentation/routes/roiRoutes';
 import { createPmoRoutes }         from './presentation/routes/pmoRoutes';
+import { createDiscoveryRoutes }   from './presentation/routes/discoveryRoutes';
 import { createTimeRoutes }        from './presentation/routes/timeRoutes';
 import { createInsightsRoutes }    from './presentation/routes/insightsRoutes';
 import { createAiImpactRoutes }    from './presentation/routes/aiImpactRoutes';
@@ -897,6 +898,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/youtube',  createYouTubeRoutes(db));
   app.route('/api/roi',      createRoiRoutes(db));
   app.route('/api/pmo',      createPmoRoutes(db));
+  app.route('/api/discovery', createDiscoveryRoutes(db));
   app.route('/api/time',     createTimeRoutes(db));
   app.route('/api/insights',   createInsightsRoutes(db));
   // Additional insight lenses (each is its own router mounted on the same prefix;

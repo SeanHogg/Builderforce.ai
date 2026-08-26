@@ -20,6 +20,8 @@ import { ManagerStatusIndicator } from './ManagerStatusIndicator';
 import { TenantProjectSwitcher } from './TenantProjectSwitcher';
 import { CommandPalette } from './workspace/CommandPalette';
 import { OnboardingProgressPill } from './OnboardingProgressPill';
+import { JourneyPill } from './JourneyPill';
+import { useOnboardingPrompt } from '@/lib/onboarding';
 import { CanvasChromeSlotTarget } from '@/lib/canvas/CanvasChromeSlot';
 
 const PREVIEW_ROLES: PreviewRole[] = ['owner', 'manager', 'developer', 'viewer'];
@@ -31,6 +33,7 @@ export default function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
   const { logout, user, isAuthenticated, hasTenant } = useAuth();
   const { previewRole, startPreview, exitPreview } = useRolePreview();
   const { emulation } = useEmulation();
+  const { show: showOnboarding } = useOnboardingPrompt();
 
   const handleSignOut = () => {
     logout();
@@ -102,8 +105,11 @@ export default function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
         <CommandPalette />
 
         {/* New-account setup progress — self-gates to nothing once onboarding is
-            complete/dismissed or for non-owner members. */}
-        {isAuthenticated && <OnboardingProgressPill />}
+            complete/dismissed or for non-owner members. Once setup is done, the
+            same slot carries the founder's-journey pill instead — mutually
+            exclusive, never both, so the header never shows two chips fighting
+            for the same corner. */}
+        {isAuthenticated && (showOnboarding ? <OnboardingProgressPill /> : <JourneyPill />)}
 
         {/* Role preview — superadmin only, not during emulation */}
         {isAuthenticated && user?.isSuperadmin && !emulation && (
