@@ -148,7 +148,13 @@ const nextConfig = {
     // separate scheme-resolution path that `resolve.alias` cannot intercept,
     // unlike the bare `fs`/`path` core-module fallback. IgnorePlugin replaces
     // the matched request with an empty module before that path is reached.
-    config.plugins.push(new webpack.IgnorePlugin({ resourceRegExp: /^node:(fs\/promises|path)$/ }));
+    // `contextRegExp` scopes this to bundle.ts's own import: `vfile` (pulled
+    // in by rehype-katex, unrelated to webdit) re-exports `node:path` too, and
+    // an unscoped match broke that re-export's default export.
+    config.plugins.push(new webpack.IgnorePlugin({
+      resourceRegExp: /^node:(fs\/promises|path)$/,
+      contextRegExp: /@webdit[\\/]+runtime/,
+    }));
     // Silence unactionable "Critical dependency" warnings emitted from inside
     // third-party deps we don't control: @huggingface/transformers uses a
     // dynamic `require(expr)` and reads `import.meta` directly, and
