@@ -27,6 +27,7 @@ import {
   taskRepoBindings,
   taskTimeEntries,
 } from '../../../infrastructure/database/schema/delivery';
+import { customerInterviews, researchNotes } from '../../../infrastructure/database/schema/discovery';
 import { defineDomainEntities, entity } from '../entityDefinition';
 
 export const DELIVERY_ENTITIES = defineDomainEntities('delivery', [
@@ -60,4 +61,11 @@ export const DELIVERY_ENTITIES = defineDomainEntities('delivery', [
    *  a hand-edited `writes_count` or `pr_number` would claim a pull request nobody
    *  opened. */
   entity(taskRepoBindings, { readOnly: true }),
+  /** Customer discovery, the evidence a Realization is read against: a conversation
+   *  with a real person, and a note toward answering the idea's own question. Same
+   *  seat as `realizations` for the same reason (schema/discovery.ts's header) —
+   *  founder-authored, not builder-produced, so both are ordinary writable entities
+   *  rather than `readOnly`. */
+  customerInterviews,
+  researchNotes,
 ]);

@@ -30,7 +30,7 @@
   },
   "devDependencies": {
     "@mlc-ai/web-llm": "^0.2.0",
-    "@webdit/convert": "*",
+    "@webdit/convert": "file:../converter",
     "typescript": "^6.0.3",
     "vitest": "^2.1.0",
     "@typescript/native-preview": "7.0.0-dev.20260627.2"
