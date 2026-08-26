@@ -102,7 +102,7 @@ const nextConfig = {
       sharp: './src/lib/turbopackEmptyModule.ts',
     },
   },
-  webpack(config, { isServer }) {
+  webpack(config, { isServer, webpack }) {
     config.module.rules.push({
       test: /\.md$/,
       type: 'asset/source',
@@ -138,6 +138,17 @@ const nextConfig = {
       // small, and the browser is the one place it is correct.
       ...(isServer ? { 'hast-util-from-html-isomorphic$': nodeSafeFromHtmlIsomorphic } : {}),
     };
+    // @webdit/runtime's bundle.ts exports loadBundleFromDir — a Node-side
+    // loader used only by its own integration tests — alongside the
+    // browser-safe loadBundle/loadBundleFromBuffers this app actually calls.
+    // Its dynamic import("node:fs/promises")/("node:path") are never reached
+    // at runtime in the browser bundle (same reason onnxruntime-node/sharp are
+    // stubbed above), but webpack still needs to resolve every export of a
+    // module it pulls in — and a `node:`-scheme specifier is handled by a
+    // separate scheme-resolution path that `resolve.alias` cannot intercept,
+    // unlike the bare `fs`/`path` core-module fallback. IgnorePlugin replaces
+    // the matched request with an empty module before that path is reached.
+    config.plugins.push(new webpack.IgnorePlugin({ resourceRegExp: /^node:(fs\/promises|path)$/ }));
     // Silence unactionable "Critical dependency" warnings emitted from inside
     // third-party deps we don't control: @huggingface/transformers uses a
     // dynamic `require(expr)` and reads `import.meta` directly, and

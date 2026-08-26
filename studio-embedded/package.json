@@ -60,6 +60,11 @@
     "react": ">=18",
     "react-dom": ">=18"
   },
+  "dependencies": {
+    "@webdit/runtime": "file:../webdit/runtime",
+    "@webdit/shared": "file:../webdit/shared",
+    "@webdit/torch": "file:../webdit/torch"
+  },
   "devDependencies": {
     "@seanhogg/builderforce-studio": "file:../studio",
     "@testing-library/dom": "^10.4.1",

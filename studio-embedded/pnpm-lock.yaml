@@ -10,6 +10,16 @@ overrides:
 importers:
 
   .:
+    dependencies:
+      '@webdit/runtime':
+        specifier: file:../webdit/runtime
+        version: file:../webdit/runtime(@mlc-ai/web-llm@0.2.84)(@types/node@24.13.2)
+      '@webdit/shared':
+        specifier: file:../webdit/shared
+        version: file:../webdit/shared
+      '@webdit/torch':
+        specifier: file:../webdit/torch
+        version: file:../webdit/torch
     devDependencies:
       '@seanhogg/builderforce-studio':
         specifier: file:../studio
