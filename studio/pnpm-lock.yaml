@@ -17,6 +17,9 @@ importers:
       '@webdit/shared':
         specifier: file:../webdit/shared
         version: file:../webdit/shared
+      '@webdit/torch':
+        specifier: file:../webdit/torch
+        version: file:../webdit/torch
       mp4-muxer:
         specifier: ^5.2.2
         version: 5.2.2

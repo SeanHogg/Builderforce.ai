@@ -69,7 +69,8 @@
   "dependencies": {
     "mp4-muxer": "^5.2.2",
     "@webdit/shared": "file:../webdit/shared",
-    "@webdit/runtime": "file:../webdit/runtime"
+    "@webdit/runtime": "file:../webdit/runtime",
+    "@webdit/torch": "file:../webdit/torch"
   },
   "devDependencies": {
     "@huggingface/transformers": "^3.8.1",

@@ -2169,6 +2169,7 @@ snapshots:
       '@seanhogg/builderforce-sdk': 0.9.0
       '@webdit/runtime': file:../webdit/runtime(@mlc-ai/web-llm@0.2.84)(@types/node@24.13.2)
       '@webdit/shared': file:../webdit/shared
+      '@webdit/torch': file:../webdit/torch
       mp4-muxer: 5.2.2
       onnxruntime-web: 1.27.0
     transitivePeerDependencies:
